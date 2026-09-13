@@ -1,3 +1,5 @@
+// @concord-file writing-template-inventory
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 import { readFileSync, readdirSync, type Dirent } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Schema } from 'effect';

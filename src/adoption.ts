@@ -1,3 +1,5 @@
+// @concord-file adopted-document-links
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { posix } from 'node:path';
 import { ConcordError } from './shared.js';
 

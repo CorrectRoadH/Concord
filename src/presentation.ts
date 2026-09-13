@@ -1,3 +1,5 @@
+// @concord-file human-command-output
+// @concord-implements docs/feature/local-sdlc/README.md
 import { Predicate } from 'effect';
 
 const label = (key: string): string => key.replace(/([a-z])([A-Z])/gu, '$1 $2').replaceAll('-', ' ');
@@ -15,7 +17,7 @@ export function humanOutput(value: unknown): string {
     else lines.push('', 'Next: edit the author prose, then run concord check.');
     return lines.join('\n');
   }
-  if (value.operation === 'test-annotate' && typeof value.snippet === 'string') return value.snippet;
+  if ((value.operation === 'test-annotate' || value.operation === 'code-annotate') && typeof value.snippet === 'string') return value.snippet;
   if (value.operation === 'template-show' && typeof value.body === 'string') return value.body;
   if (value.scope === 'command') return [
     `Command ${String(value.commandOutcome)} — ${String(value.selectedCaseId)}`,
@@ -41,6 +43,8 @@ export function humanOutput(value: unknown): string {
           if (entry.state) lines.push(`    ${String(entry.memoryKind ?? entry.kind)}: ${String(entry.state)}`);
           if (entry.message) lines.push(`    ${String(entry.code ?? 'Finding')}: ${String(entry.message)}`);
           if (entry.evidence) lines.push(indent(humanOutput(entry.evidence), 4));
+        } else if (Predicate.isObject(entry) && typeof entry.file === 'string' && Array.isArray(entry.contracts)) {
+          lines.push(`  ${String(entry.id)} — ${entry.file}:${String(entry.line)}–${String(entry.endLine)} (${String(entry.scope)})`, ...entry.contracts.map(ref => `    Implements: ${String(ref)}`));
         } else if (Predicate.isObject(entry) && typeof entry.file === 'string') {
           lines.push(`  ${String(entry.id)} — ${entry.file}:${String(entry.line)}`, `    Contract: ${String(entry.contract)}`, `    Declaration: ${String(entry.status)}${entry.skipped ? ', skipped/todo' : ''}`);
           if (Array.isArray(entry.regressions)) for (const ref of entry.regressions) lines.push(`    Regression: ${String(ref)}`);
@@ -51,6 +55,7 @@ export function humanOutput(value: unknown): string {
     } else lines.push(`${label(key)}: ${scalar(item)}`);
   }
   if (value.operation === 'test-list' && Array.isArray(value.cases) && value.cases.length === 0) lines.push('Next: concord test annotate <id> --contract <Feature or Use Case path>', 'Place the output directly above a supported test declaration, then run concord check.');
+  if (value.operation === 'code-list' && Array.isArray(value.codes) && value.codes.length === 0) lines.push('Next: configure sourceRoots in concord.json, then use concord --skill code.');
   if (value.operation === 'check' && value.cases === 0) lines.push('No test annotations found. This checks document integrity; it does not establish test coverage.');
   return lines.join('\n');
 }

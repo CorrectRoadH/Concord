@@ -1,3 +1,5 @@
+// @concord-file shared-domain-contracts
+// @concord-implements docs/feature/local-sdlc/README.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
 
@@ -29,7 +31,7 @@ export const RunnerSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('command'), argv: Schema.NonEmptyArray(Text), sourceFiles: Strings, timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
 ]);
 export type Runner = typeof RunnerSchema.Type;
-export const ProjectSchema = Schema.Struct({ format: Schema.Literal('concord.project/v1'), projectId: Text, testRoots: Schema.Array(Text), runner: RunnerSchema });
+export const ProjectSchema = Schema.Struct({ format: Schema.Literal('concord.project/v1'), projectId: Text, testRoots: Schema.Array(Text), sourceRoots: Schema.optional(Schema.Array(Text)), runner: RunnerSchema });
 export type ProjectConfig = typeof ProjectSchema.Type;
 
 export interface Change { readonly path: string; readonly before: string | null; readonly after: string | null }

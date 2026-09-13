@@ -27,6 +27,10 @@ concord review render local-sdlc
 
 这些只读关系检查不执行 runner；只有显式 `concord test run <case-id>` 才产生 command evidence。最终仓库质量门仍是 `pnpm check`。command evidence 不是 NiceEval formal E2E，也不是逐测试覆盖率证明；repository profile 的 host、engine 与 formal proof 规则见对应 [Use Case](feature/local-sdlc/use-case/load-compatible-repository-profile.md)。
 
+## Connect implementation to contracts
+
+Configure sourceRoots in concord.json, or initialize with --source-root src (repeatable). Run concord --skill code for file, function and statement-region declarations. Use code annotate to generate comments, code locate <path> --line <n> to inspect all containing scopes, and trace show to reverse-query the contract. Code declarations describe implementation associations, not completion or test coverage.
+
 ## Choose the document that owns your intent
 
 - [Feature](feature/README.md): the adopted product contract, even when implementation is still catching up.

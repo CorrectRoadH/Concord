@@ -22,5 +22,8 @@
       "pnpm-lock.yaml"
     ],
     "timeoutMs": 120000
-  }
+  },
+  "sourceRoots": [
+    "src"
+  ]
 }

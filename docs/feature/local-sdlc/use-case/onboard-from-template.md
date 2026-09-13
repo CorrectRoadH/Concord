@@ -28,7 +28,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## Agent 按需指引
 
-在任意 cwd 使用 `concord --skill` 读取精简的技能入口，用 `concord --skill <topic>` 获取 init、document、test、memory、trace、recovery 或 repository 的完整用法。`concord --skill all` 提供完整离线资料；普通任务只读取相关主题。
+在任意 cwd 使用 `concord --skill` 读取精简的技能入口，用 `concord --skill <topic>` 获取 init、document、code、test、memory、trace、recovery 或 repository 的完整用法。`concord --skill all` 提供完整离线资料；普通任务只读取相关主题。
 
 技能来自安装包，不加载消费者配置或执行 host。未知主题和与 mutation 混用的参数必须明确失败且不产生写入。
 
@@ -38,3 +38,7 @@ feature: docs/feature/local-sdlc/README.md
 没有测试的仓库通过 `concord init --docs-only` 接入，配置保存 `testRoots: []`。Feature、Design、Roadmap 与 Engineering 仍可由 AI 使用具名命令维护，doctor 不要求空测试目录，也不建议伪造测试。`--docs-only` 与 `--test-root` 同用必须零写入失败。
 
 文档完整性检查通过只表示当前文档关联有效，不代表测试覆盖。以后有真实测试时在 concord.json 添加测试根，即可恢复发现与关联。
+
+## 可执行 quick start
+
+项目 README 提供从空 Git 仓库创建 Feature / Use Case、三种代码声明和真实 Node 测试的完整命令。打包验收直接执行安装包内 README 的 quick start，核对 3 条实现声明、1 条测试、真实 command pass 和按行定位结果，避免文档示例与公开入口漂移。

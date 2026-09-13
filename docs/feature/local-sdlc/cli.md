@@ -2,13 +2,17 @@
 
 ## 接入
 
-`concord --skill` 读取简短 Agent 入口；`--skill <topic>` 按 init/document/test/memory/trace/recovery/repository 展开具体命令，`--skill all` 提供全文。这个入口在任意 cwd 可读，不加载 host 或修改文件。
+`concord --skill` 读取简短 Agent 入口；`--skill <topic>` 按 init/document/code/test/memory/trace/recovery/repository 展开具体命令，`--skill all` 提供全文。这个入口在任意 cwd 可读，不加载 host 或修改文件。
 
 维护者先运行 `concord init`，再用 `doctor` 查看测试根和关联缺口。`template list/show` 可在尚未初始化的目录中查看随包模板。
 
 ## 规划与维护
 
 `feature`、`use-case`、`engineering`、`research`、`design` 与 `roadmap` 提供具名 create/list/show 操作；package page 通过 `page show/set` 使用整文件 digest 防止覆盖并发编辑。`author set` 只替换作者正文并保留工具 metadata。
+
+## 实现关联
+
+`init --source-root src` 可重复配置实现源码根；已有项目维护 `concord.json` 的可选 sourceRoots。`code annotate <id> --scope file|node|region --contract <ref>` 只生成注释，重复 contract 可关联多个契约。`code list/show` 检查声明，`code locate <path> --line <n>` 查询全部包含作用域。`trace show` 返回独立 codeDeclarations 和 implements 边；代码声明不代替测试或完成证明。完整语法见 `concord --skill code`。
 
 ## 测试与证据
 

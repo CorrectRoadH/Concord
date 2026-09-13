@@ -1,10 +1,16 @@
+// @concord-file derived-trace-and-review
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { scanAnnotations } from './annotations.js';
+import { scanCode, type CodeDeclaration } from './code.js';
 import { checkDocuments, findDocument, loadDocuments, resolveReference } from './documents.js';
 import { inspectResolutionEvidence } from './evidence.js';
 import { ConcordError, type AnnotatedCase, type DocumentRecord, type Finding, type Repository } from './shared.js';
 
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
-export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
+// @concord-code compile-current-trace
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
+export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean } = {}) {
   const documents = loadDocuments(repo);
   const annotations = scanAnnotations(repo, { cache });
   const findings: Finding[] = [...checkDocuments(repo, documents), ...annotations.findings];
@@ -32,10 +38,20 @@ export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 
       } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
     }
   }
+  // Implementation associations are independent of test declarations and fixed evidence.
+  const code = options.includeCode === false ? undefined : scanCode(repo);
+  const codeDeclarations: readonly CodeDeclaration[] = code?.codes ?? [];
+  findings.push(...(code?.findings ?? []));
+  for (const item of codeDeclarations) for (const target of item.contracts) {
+    try {
+      resolveReference(repo, documents, target, ['feature', 'use-case']);
+      edges.push({ from: `code:${item.id}`, to: target, relation: 'implements' });
+    } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
+  }
   const memories = documents.flatMap(doc => doc.metadata.kind === 'memory' && doc.metadata.resolution !== undefined
     ? [{ path: doc.path, evidenceLevel: doc.metadata.resolution.evidenceLevel, evidence: inspectResolutionEvidence(repo, doc.metadata.resolution) }]
     : []);
-  return { documents, annotations, edges, findings, memories };
+  return { documents, annotations, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, memories };
 }
 export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
   if (trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);
@@ -45,6 +61,8 @@ function belongsTo(repo: Repository, trace: ReturnType<typeof buildTrace>, selec
   const owner = resolveReference(repo, trace.documents, ref);
   return selectedPaths.has(owner.path) || (owner.metadata.kind === 'use-case' && selectedPaths.has(owner.metadata.feature));
 }
+// @concord-code query-contract-relations
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 export function traceShow(repo: Repository, selector: string, cache: 'use' | 'off' = 'use') {
   const trace = buildTrace(repo, cache); requireValidTrace(trace);
   const document = findDocument(trace.documents, selector);
@@ -54,20 +72,27 @@ export function traceShow(repo: Repository, selector: string, cache: 'use' | 'of
   for (const edge of incoming) relatedPaths.add(pathOf(edge.to));
   const outgoing = trace.edges.filter(e => relatedPaths.has(e.from));
   const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
-  return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), cache: trace.annotations.cache };
+  const codeIds = new Set(incoming.filter(e => e.from.startsWith('code:')).map(e => e.from.slice(5)));
+  const codeDeclarations = trace.codeDeclarations.filter(c => codeIds.has(c.id)).map(c => ({ ...c, matchedContracts: c.contracts.filter(ref => belongsTo(repo, trace, relatedPaths, ref)) }));
+  return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, cache: trace.annotations.cache };
 }
 export function selectCase(cases: readonly AnnotatedCase[], id: string): AnnotatedCase {
   const matches = cases.filter(c => c.id === id);
   if (matches.length !== 1) throw new ConcordError(matches.length ? 'CaseAmbiguous' : 'CaseNotFound', `Expected one case for ${id}, found ${matches.length}`);
   return matches[0]!;
 }
+// @concord-code render-contract-review
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 export function renderReview(repo: Repository, selector: string | undefined, cache: 'use' | 'off' = 'use'): string {
   const trace = buildTrace(repo, cache); requireValidTrace(trace);
   const docs: readonly DocumentRecord[] = selector ? [findDocument(trace.documents, selector)] : trace.documents;
   const selectedPaths = new Set(docs.map(d => d.path));
   const cases = selector ? trace.annotations.cases.filter(c => belongsTo(repo, trace, selectedPaths, c.contract) || c.regressions.some(r => belongsTo(repo, trace, selectedPaths, r))) : trace.annotations.cases;
-  const lines = ['# Concord review', '', 'This is local review material. Test annotations describe ownership; command evidence does not prove native case coverage.', '', '## Contracts and decisions', ''];
+  const codes = selector ? trace.codeDeclarations.filter(c => c.contracts.some(ref => belongsTo(repo, trace, selectedPaths, ref))) : trace.codeDeclarations;
+  const lines = ['# Concord review', '', 'This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe ownership; command evidence does not prove native case coverage.', '', '## Contracts and decisions', ''];
   for (const d of docs.filter(d => d.metadata.kind !== 'memory' && d.metadata.kind !== 'issue')) lines.push(`- [${d.metadata.title}](${d.path}) — ${d.metadata.kind}`);
+  lines.push('', '## Code declarations', '');
+  for (const c of codes) lines.push(`- **${c.id}** — [${c.file}:${c.line}–${c.endLine}](${c.file}#L${c.line}); ${c.scope}`, ...c.contracts.map(ref => `  - Implements: [${ref}](${ref})`));
   lines.push('', '## Test declarations', '');
   for (const c of cases) lines.push(`- **${c.id}** — [${c.file}:${c.line}](${c.file}#L${c.line}); ${c.status}${c.skipped ? ', skipped/todo' : ''}; contract: [${c.contract}](${c.contract})`, ...c.regressions.map(r => `  - Regression: [${r}](${r})`));
   lines.push('', '## Engineering memory', '');

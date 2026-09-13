@@ -1,3 +1,5 @@
+// @concord-file document-contract-operations
+// @concord-implements docs/feature/local-sdlc/README.md
 import { posix } from 'node:path';
 import { Predicate } from 'effect';
 import { parseDocument, stringify } from 'yaml';
@@ -236,6 +238,8 @@ export interface CreateDocumentInput {
   readonly dryRun?: boolean;
 }
 
+// @concord-code create-contract-owner
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
   const id = decode(Slug, input.id, 'id');
   const title = required(input.title, 'title');
@@ -320,6 +324,8 @@ export function decideDesign(repo: Repository, selector: string, selected: strin
   return changed(repo, 'decide-design', record, { ...record.metadata, decision: { selected: choice, reason: required(reason, 'reason'), at: now(), targets } }, record.body, dryRun);
 }
 
+// @concord-code adopt-roadmap-contract
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 export function adoptRoadmap(repo: Repository, selector: string, featureId: string, dryRun = false): MutationReceipt {
   const documents = loadDocuments(repo); const roadmap = findDocument(documents, selector, 'roadmap');
   if (roadmap.metadata.kind !== 'roadmap') throw new ConcordError('InvalidDocumentKind', selector);
@@ -381,6 +387,8 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   return repo.publish('adopt-roadmap', changes, dryRun);
 }
 
+// @concord-code record-memory-resolution
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 export function resolveMemory(repo: Repository, selector: string, kind: Resolution['kind'], reason: string, proof?: FixedProof, dryRun = false): MutationReceipt {
   const record = findDocument(loadDocuments(repo), selector, 'memory'); const metadata = memory(record); const at = now();
   const why = required(reason, 'reason');

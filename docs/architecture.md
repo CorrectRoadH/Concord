@@ -88,6 +88,20 @@ AST 识别必须核对受支持 runner import 的绑定，不因任意函数叫 
 
 缓存身份包含 projectId、root/privateDir（worktree）、testRoots/runner配置、完整路径集合、每文件字节摘要和解析器版本。无论冷热缓存，关系验证都使用当前 Markdown。fixed gate 从权威源码重新构建并核对，不信任 cache 的状态判断。
 
+## 代码归属声明
+
+Code Declaration 是维护者对实现与契约关系的显式声明，源文件是唯一 owner。独立 `code:<id> → exactRef` 的 `implements` 边不会成为测试声明、覆盖率、完成状态或 Problem fixed 证据。2026-09-13 的独立 Astra 设计挑战经过四项问答获得 PASS；裁决如下。
+
+`sourceRoots` 为严格配置中的可选路径数组，缺省 `[]`，构造和 init 沿用既有安全路径验证。仅扫描显式根内 JS/TS；允许与 testRoots 重叠，各 family 保留自己的标签语义。代码投影首版无持久缓存，每次核对扫描前后文件集合及摘要；SQLite 测试缓存和 evidence 协议保持原职责。
+
+三种 scope：文件头 `@concord-file`，紧邻支持的完整 AST 节点的 `@concord-code`，同一 statement-list 内非空连续语句的 `@concord-begin/end`。一个文件级 scope 或节点最多一份声明，多目标通过相邻 implements 表达。node 白名单为有 body 的函数声明/方法、类声明，以及单 identifier 且直接 arrow/function initializer 的变量语句。region 不嵌套、不截断表达式、不跨语句列表，但可以包含完整函数。所有 scope 可在允许的范围内完整包含，查询返回全部包含关系，不推断覆盖或继承。
+
+绑定和孤立标记诊断都消费真实 TS comment ranges，不能从裸文本行认领字符串、模板、正则或 JSX 伪标记。有真实代码标记且存在语法错误的文件不产生有效代码声明。起始块内 implements 必须连续相邻；具体语法与位置规则由 [使用指引](../skills/concord/references/code.md) 说明。
+
+目标沿用 owner/supporting-page/anchor 解析，仅拒绝重复 exactRef，不合并不同 anchor。Feature 反查汇总自身与 Use Case，按声明 ID 去重，保留匹配 exactRefs。ID 只在当前 code 集合唯一，不以行号充当持久身份。
+
+代码错误阻断 code/check/trace/review/doctor；test list/show/run 与 memory resolve 显式不包含代码投影，仍保留全部原有文档、测试关系和证据校验。evidence 不接收 code ID，完整源码及候选摘要不会因为新注释被剥离。公开打包入口验证三种 scope、反查与位置查询、源码变更、非法边界和此隔离行为。
+
 ## Repository profile
 
 `concord repo` 通过消费仓库声明的 host 使用原生 inventory 与正式证据，独立于上述通用 command evidence。源码注释、历史归档、固定执行副本的 v2 证据及既有 v1 历史读取规则见 [Repository profile](repository-profile.md)。包内 `concord --skill repository` 提供具体命令，不初始化通用项目或加载产品 host。

@@ -1,6 +1,6 @@
 ---
 name: concord
-description: 在本地 Git 仓库中使用 Concord 维护产品契约、测试注释与命令证据、工程 Memory、追踪关系和恢复流程；需要操作 Concord 文档或解释通用模式与 repository profile 边界时使用。
+description: 在本地 Git 仓库中使用 Concord 维护产品契约、代码归属、测试注释与命令证据、工程 Memory、追踪关系和恢复流程；需要操作 Concord 文档或解释通用模式与 repository profile 边界时使用。
 ---
 
 # Concord
@@ -13,6 +13,7 @@ Concord 把 Markdown 契约、测试声明旁的注释和工程 Memory 留在各
 
 - 首次接入、runner 配置或模板：运行 `concord --skill init`。
 - Feature、Use Case、Research、Design、Roadmap、Engineering 与正文更新：运行 `concord --skill document`。
+- 整文件、函数和代码段的实现关联与位置查询：运行 `concord --skill code`。
 - 测试注释、执行和 command evidence：运行 `concord --skill test`。
 - Problem、Decision、Insight 与生命周期：运行 `concord --skill memory`。
 - 关系检查、审阅材料与交接：运行 `concord --skill trace`。

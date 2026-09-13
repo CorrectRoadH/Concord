@@ -1,3 +1,6 @@
+// @concord-file project-onboarding
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 import { existsSync } from 'node:fs';
 import { loadDocuments, resolveReference } from './documents.js';
 import { scanAnnotations } from './annotations.js';
@@ -6,9 +9,10 @@ import { buildTrace } from './trace.js';
 
 
 export function doctor(repo: Repository) {
-  const { documents, annotations, findings } = buildTrace(repo, 'off');
+  const { documents, annotations, codeDeclarations, findings } = buildTrace(repo, 'off');
   const missingTestRoots = repo.config.testRoots.filter(path => !existsSync(repo.absolute(path)));
-  return { operation: 'doctor', ok: findings.length === 0, root: repo.root, node: process.version, configuration: repo.config, missingTestRoots, documents: documents.length, cases: annotations.cases.length, findings, nextSteps: repo.config.testRoots.length === 0 ? ['Maintain contracts with concord --skill document.', 'Run concord check to validate document integrity; this does not prove test coverage.', 'Add testRoots to concord.json when real tests exist.'] : annotations.cases.length === 0 ? ['Fill in a Feature and Use Case.', 'Use concord test annotate to connect an existing test.', 'Configure your runner in concord.json; doctor does not execute it.'] : ['Run concord check to validate all relations.', 'Run concord test run <id> to record command evidence.'] };
+  const missingSourceRoots = (repo.config.sourceRoots ?? []).filter(path => !existsSync(repo.absolute(path)));
+  return { operation: 'doctor', ok: findings.length === 0, root: repo.root, node: process.version, configuration: repo.config, missingTestRoots, missingSourceRoots, codeDeclarations: codeDeclarations.length, documents: documents.length, cases: annotations.cases.length, findings, nextSteps: repo.config.testRoots.length === 0 ? ['Maintain contracts with concord --skill document.', 'Run concord check to validate document integrity; this does not prove test coverage.', 'Add testRoots to concord.json when real tests exist.'] : annotations.cases.length === 0 ? ['Fill in a Feature and Use Case.', 'Use concord test annotate to connect an existing test.', 'Configure your runner in concord.json; doctor does not execute it.'] : ['Run concord check to validate all relations.', 'Run concord test run <id> to record command evidence.'] };
 }
 
 export function annotationSnippet(repo: Repository, id: string, contract: string, regressions: readonly string[]) {

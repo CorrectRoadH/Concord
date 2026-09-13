@@ -2,7 +2,11 @@
 
 ## 编译管线
 
-Concord 从严格 YAML frontmatter 的 Markdown owner 和 TypeScript AST 可识别的测试声明读取事实，解析 canonical path 与 anchor，验证目标类型、重复关系和循环，再生成 trace、review 与检查结果。SQLite 只缓存解析结果和投影，命中时仍严格解码并核对路径集合、摘要与版本。
+Concord 从严格 YAML frontmatter 的 Markdown owner 和 TypeScript AST 可识别的代码、测试声明读取事实，解析 canonical path 与 anchor，验证目标类型、重复关系和循环，再生成 trace、review 与检查结果。sourceRoots 与 testRoots 分别控制实现和测试扫描；代码声明实时回源，SQLite 只缓存测试投影，命中时仍严格解码并核对路径集合、摘要与版本。
+
+## 自举
+
+本项目的实现文件与关键函数直接声明各自的 Feature / Use Case。共享基础模块关联 Feature，具体行为关联八条 Use Case；repository profile 路由和注释渲染使用显式 region。selfhost 验收要求每条 Use Case 都存在真实实现和测试关联，源码旁的声明仍是唯一 owner，不另存模块到功能的映射表。
 
 ## 执行管线
 

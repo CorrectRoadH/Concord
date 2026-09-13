@@ -1,3 +1,6 @@
+// @concord-file canonical-contract-references
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { posix } from 'node:path';
 import { ConcordError, type DocumentKind, type DocumentRecord, type Repository } from './shared.js';
 

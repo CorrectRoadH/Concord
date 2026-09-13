@@ -1,3 +1,5 @@
+// @concord-file document-page-operations
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { posix } from 'node:path';
 import { ConcordError, digest, slug, type DocumentKind, type MutationReceipt, type Repository } from './shared.js';
 import { findDocument, loadDocuments, setAuthor } from './documents.js';

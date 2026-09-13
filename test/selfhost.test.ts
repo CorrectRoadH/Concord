@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { scanAnnotations } from '../dist/annotations.js';
+import { scanCode } from '../dist/code.js';
 import { loadDocuments } from '../dist/documents.js';
 import { ProjectSchema } from '../dist/shared.js';
 import { LocalRepository } from '../dist/storage.js';
@@ -20,6 +21,7 @@ test('current checkout configures a version-matched runner whose annotations sca
   const project = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root, 'concord.json'), 'utf8'));
   assert.equal(project.format, 'concord.project/v1');
   assert.deepEqual(project.testRoots, ['test']);
+  assert.deepEqual(project.sourceRoots, ['src']);
   assert.equal(project.runner.kind, 'command');
   if (project.runner.kind !== 'command') assert.fail('self-host runner must use explicit command argv');
   assert.deepEqual(project.runner.argv, ['node', '--import', 'tsx', '--test', '--test-name-pattern', '{pattern}', '{file}']);
@@ -36,6 +38,7 @@ test('current checkout configures a version-matched runner whose annotations sca
     cpSync(join(root, 'concord.json'), join(consumer, 'concord.json'));
     mkdirSync(join(consumer, 'test'));
     cpSync(join(root, 'test'), join(consumer, 'test'), { recursive: true });
+    cpSync(join(root, 'src'), join(consumer, 'src'), { recursive: true });
     mkdirSync(join(consumer, 'docs'));
     cpSync(join(root, 'docs/feature'), join(consumer, 'docs/feature'), { recursive: true });
     for (const sourceFile of ['tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']) {
@@ -46,9 +49,15 @@ test('current checkout configures a version-matched runner whose annotations sca
       const scan = scanAnnotations(repository);
       assert.deepEqual(scan.findings, []);
       const useCases = loadDocuments(repository).filter(document => document.metadata.kind === 'use-case');
-      assert.equal(useCases.length, 7);
+      assert.equal(useCases.length, 8);
       for (const useCase of useCases) {
         assert.ok(scan.cases.some(item => item.contract === useCase.path), `missing a real test relation for ${useCase.path}`);
+      }
+      const code = scanCode(repository);
+      assert.deepEqual(code.findings, []);
+      assert.deepEqual(new Set(code.codes.map(item => item.scope)), new Set(['file', 'node', 'region']));
+      for (const useCase of useCases) {
+        assert.ok(code.codes.some(item => item.contracts.includes(useCase.path)), `missing an implementation relation for ${useCase.path}`);
       }
     } finally {
       repository.close();

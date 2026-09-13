@@ -1,6 +1,12 @@
+// @concord-file generated-project-guide
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 export const onboardingGuide = `# Developing with Concord
 
 Concord connects current product contracts, real test declarations, and engineering memory.
+
+## Connect implementation to contracts
+
+Configure sourceRoots in concord.json, or initialize with --source-root src (repeatable). Run concord --skill code for file, function and statement-region declarations. Use code annotate to generate comments, code locate <path> --line <n> to inspect all containing scopes, and trace show to reverse-query the contract. Code declarations describe implementation associations, not completion or test coverage.
 
 ## Choose the document that owns your intent
 

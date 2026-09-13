@@ -1,3 +1,6 @@
+// @concord-file local-repository-storage
+// @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statfsSync, writeFileSync } from 'node:fs';
@@ -90,7 +93,7 @@ export class LocalRepository implements Repository {
     if (options.initialize && marker !== undefined) throw new ConcordError('ProjectExists', 'concord.json already exists');
     if (!options.initialize && marker === undefined && !options.recover) throw new ConcordError('ProjectNotFound', 'The selected worktree has no concord.json; run concord init');
     this.config = marker === undefined ? defaultConfig() : decode(ProjectSchema, JSON.parse(marker), 'concord.json');
-    for (const path of [...this.config.testRoots, ...this.config.runner.sourceFiles]) this.absolute(path);
+    for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...this.config.runner.sourceFiles]) this.absolute(path);
     try {
       if (options.recover) this.removeDeadLock();
       if (!this.noWrite) this.acquire();
@@ -152,6 +155,8 @@ export class LocalRepository implements Repository {
     try { const lock = jsonFile(path, LockSchema); if (lock.token === this.lockToken) rmSync(path); }
     finally { this.lockToken = undefined; }
   }
+  // @concord-code publish-guarded-documents
+  // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
   publish(operation: string, changes: readonly Change[], dryRun = false): MutationReceipt {
     if (changes.length === 0) return { operation, dryRun, changedPaths: [] };
     if (new Set(changes.map(c => c.path)).size !== changes.length) throw new ConcordError('InvalidChange', 'A path occurs more than once in the publication');
@@ -189,6 +194,8 @@ export class LocalRepository implements Repository {
     if (contents === null) { if (present(target)) { rmSync(target); syncDirectory(dirname(target)); } }
     else atomic(target, contents, mode);
   }
+  // @concord-code recover-document-publication
+  // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
   recover(): { operation: string; status: string; changedPaths: readonly string[] } {
     const path = join(this.privateDir, 'journal.json');
     if (!present(path)) return { operation: 'recover', status: 'clean', changedPaths: [] };
@@ -222,9 +229,11 @@ export class LocalRepository implements Repository {
   }
 }
 
-export function initialize(repo: Repository, dryRun = false, options: { testRoots?: readonly string[]; runner?: ProjectConfig['runner'] } = {}): MutationReceipt {
-  const config = decode(ProjectSchema, { ...repo.config, ...(options.testRoots ? { testRoots: options.testRoots } : {}), ...(options.runner ? { runner: options.runner } : {}) }, 'init configuration');
-  for (const path of [...config.testRoots, ...config.runner.sourceFiles]) repo.absolute(path);
+// @concord-code initialize-project-documents
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
+export function initialize(repo: Repository, dryRun = false, options: { testRoots?: readonly string[]; sourceRoots?: readonly string[]; runner?: ProjectConfig['runner'] } = {}): MutationReceipt {
+  const config = decode(ProjectSchema, { ...repo.config, ...(options.testRoots ? { testRoots: options.testRoots } : {}), ...(options.sourceRoots ? { sourceRoots: options.sourceRoots } : {}), ...(options.runner ? { runner: options.runner } : {}) }, 'init configuration');
+  for (const path of [...config.testRoots, ...(config.sourceRoots ?? []), ...config.runner.sourceFiles]) repo.absolute(path);
   const paths: Record<string, string> = { 'concord.json': `${JSON.stringify(config, null, 2)}\n`, 'docs/concord.md': onboardingGuide, ...projectTemplateFiles() };
   if (repo.read('docs/README.md') === undefined) paths['docs/README.md'] = '# Project documentation\n\nStart with [the Concord workflow](concord.md) and [the complete templates](_template/README.md).\n\n' + ['feature', 'roadmap', 'design', 'engineering', 'research', 'issues'].map(kind => `- [${kind}](${kind}/README.md)`).join('\n') + '\n- [Engineering memory](../memory/README.md)\n';
   const sections: Record<string, [string, string, string]> = {

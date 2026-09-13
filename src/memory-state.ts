@@ -1,3 +1,6 @@
+// @concord-file memory-lifecycle
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { ConcordError, type HistoryEntry, type MemoryMeta, type Resolution } from './shared.js';
 
 const required = (value: string, field: string): string => {
