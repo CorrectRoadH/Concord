@@ -109,6 +109,6 @@ const trace = Command.make('trace').pipe(Command.withDescription('Derive forward
 const review = Command.make('review').pipe(Command.withDescription('Generate local review material from current contracts and history.'),Command.withSubcommands([
   Command.make('render',{ref:Argument.string('reference').pipe(Argument.optional)},args=>withRepo((repo,s)=>sync(()=>renderReview(repo,Option.getOrUndefined(args.ref),cached(s.dryRun))))),
 ]));
-root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Run this worktree repository profile with its original contracts and formal evidence.')),init,recover,...(['feature','use-case','research','design','roadmap'] as const).map(docsGroup),author,memory,issue,test,cache,check,trace,review]),Command.run({version:'0.2.0'}),Effect.catch(cause=>Effect.sync(()=>{
+root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Run this worktree repository profile with its original contracts and formal evidence.')),init,recover,...(['feature','use-case','research','design','roadmap'] as const).map(docsGroup),author,memory,issue,test,cache,check,trace,review]),Command.run({version:'0.2.1'}),Effect.catch(cause=>Effect.sync(()=>{
   const error=failure(cause);process.stderr.write(`${JSON.stringify({ok:false,error:error.code,message:error.message,...(error.details===undefined?{}:{details:error.details})})}\n`);process.exitCode=1;
 })),Effect.provide(NodeServices.layer),Effect.provide(OwnedProcessLive),NodeRuntime.runMain);

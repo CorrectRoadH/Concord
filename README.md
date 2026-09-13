@@ -11,8 +11,8 @@ Concord 是面向开发者与 coding agent 的本地 SDLC 工具。它把“产�
 公开 Nix 发行入口与 Brew 共用同一份固定版本 Release，支持 Linux x86_64 和 aarch64：
 
 ```sh
-nix run github:CorrectRoadH/homebrew-tap#concord -- --help
-nix profile install github:CorrectRoadH/homebrew-tap#concord
+nix run 'git+https://github.com/CorrectRoadH/homebrew-tap?ref=main#concord' -- --help
+nix profile install 'git+https://github.com/CorrectRoadH/homebrew-tap?ref=main#concord'
 ```
 
 Nix 自动提供 Node.js 与 Git；仓库专用的 pnpm 等工具仍由消费环境管理。
@@ -137,7 +137,7 @@ cd /home/ctrdh/Code/Concord
 pnpm install --frozen-lockfile
 pnpm build
 npm pack --ignore-scripts
-npm install --prefix ~/.local/share/concord ./concord-sdlc-0.2.0.tgz
+npm install --prefix ~/.local/share/concord ./concord-sdlc-0.2.1.tgz
 export PATH="$HOME/.local/share/concord/node_modules/.bin:$PATH"
 concord --help
 ```
