@@ -1,42 +1,51 @@
 {
   "name": "concord-sdlc",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Contract, test evidence, and engineering memory for a repository's development lifecycle.",
   "type": "module",
   "private": true,
   "bin": {
-    "concord": "dist/cli.js"
+    "concord": "dist/entry.js"
   },
   "files": [
     "dist",
     "README.md",
     "docs",
     "NOTICE.md",
-    "npm-shrinkwrap.json"
+    "npm-shrinkwrap.json",
+    "repository"
   ],
   "engines": {
     "node": ">=24.15.0"
   },
   "packageManager": "pnpm@11.18.0",
   "scripts": {
-    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.repository.json && node -e \"const fs=require('node:fs');fs.rmSync('dist/repository/host-types',{recursive:true,force:true});fs.cpSync('repository/host-types','dist/repository/host-types',{recursive:true})\" && chmod +x dist/entry.js dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.repository.json --noEmit",
     "test": "pnpm build && node --test test/*.test.mjs",
     "check": "pnpm typecheck && pnpm test",
-    "concord": "node dist/cli.js",
-    "prepack": "pnpm build"
+    "concord": "node dist/entry.js"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.112",
     "effect": "4.0.0-rc.112",
     "yaml": "2.9.0",
     "typescript": "6.0.3",
-    "@effect/platform-node-shared": "4.0.0-rc.112"
+    "@effect/platform-node-shared": "4.0.0-rc.112",
+    "shiki": "4.3.0",
+    "tsx": "4.23.12"
   },
   "devDependencies": {
     "@types/node": "24.13.3"
   },
   "overrides": {
     "@effect/platform-node-shared": "4.0.0-rc.112"
+  },
+  "exports": {
+    "./repository/*": {
+      "types": "./dist/repository/*.d.ts",
+      "default": "./dist/repository/*.js"
+    },
+    "./package.json": "./package.json"
   }
 }

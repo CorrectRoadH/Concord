@@ -16,9 +16,9 @@ Concord 来源于 NiceEval revision `e1c66d31115208ceaae2f5bd4d730a7abf67048d` �
 | PR editor | 保留本地审阅中关联契约、测试与 Memory 的目标；使用 Concord 审阅格式 |
 | Issue 领域 | 提供本地 Observation 草稿与 Memory 关联，不冒充远端 GitHub 工作项状态 |
 
-NiceEval 原命令与数据保持原位。本次没有迁移旧数据或令 NiceEval 改用 Concord，也不提供旧格式兼容入口。
+通用模式拥有独立格式。Repository profile 另行迁入 NiceEval 的 104 个仓库工具模块，保留原领域与命令语义；NiceEval 的旧源码位置只转出 Concord 发布包，既有文档、sidecar、Memory 数据不改写。
 
-产品专属 Nx E2E discovery、candidate/Testkit injection、native runner inventory、formal red/green/takeover 证书、Mintlify、Netlify、Examples tier、下游链接和产品发布不进入 Concord。
+产品专属 Nx E2E discovery、candidate/Testkit injection、native runner inventory 与 formal red/green/takeover 执行仍由消费仓库 host 拥有。Repository profile 托管原有 Mint、Preview、Examples 和下游领域，按消费仓库配置和素材工作。Host 的 TypeScript 声明快照只定义接口，不包含 runner 实现。
 通用命令结果称为 `command` evidence，不继承 NiceEval 的 formal E2E、覆盖率或可靠性矩阵承诺。
 
 本地发布包不依赖原始 checkout。所有运行时 import、模板、schema 与 Agent 指引都由 Concord 自己提供。

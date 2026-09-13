@@ -110,6 +110,13 @@ pnpm check
 
 ## 安装与使用
 
+Linux 可以从 Homebrew tap 安装：
+
+```sh
+brew install CorrectRoadH/tap/concord
+```
+
+
 从这个仓库构建本地安装包，再安装到独立工具目录：
 
 ```sh
@@ -117,7 +124,7 @@ cd /home/ctrdh/Code/Concord
 pnpm install --frozen-lockfile
 pnpm build
 npm pack --ignore-scripts
-npm install --prefix ~/.local/share/concord ./concord-sdlc-0.1.0.tgz
+npm install --prefix ~/.local/share/concord ./concord-sdlc-0.2.0.tgz
 export PATH="$HOME/.local/share/concord/node_modules/.bin:$PATH"
 concord --help
 ```
@@ -152,6 +159,14 @@ concord review render
 本地数据库位于 Git-private 的 `concord/cache.sqlite`；收据位于独立的 `concord/evidence/`。克隆仓库后历史裁决仍保留，未复制的私有证据显示不可用。忽略文件、依赖环境和外部服务不属于 Git 候选摘要的完整性保证。
 
 `pnpm check` 执行类型检查、领域与恢复验证，并打包安装到临时目录运行真实 CLI 红绿闭环；首次安装验证可能下载锁定的 npm 依赖，不调用模型或产品服务。
+
+## NiceEval 仓库接入
+
+`concord repo` 承接 NiceEval 原有仓库维护命令。项目内继续使用 `pnpm run repo …`、`pnpm memory …`、`pnpm pr:body …` 等入口；这些脚本调用锁定版本的 Concord。
+
+此模式保留现有 Markdown、测试 sidecar、Memory 历史及 formal E2E 证据，不转换为通用模式的 command 收据。真实 inventory、candidate/Testkit 与 takeover 由消费仓库 host 拥有。全局 brew engine 与仓库锁定字节不同时会拒绝执行，提示使用项目入口。
+
+具体边界见 [Repository profile](docs/repository-profile.md)。
 
 ## 边界与资料
 
