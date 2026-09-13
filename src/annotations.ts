@@ -5,7 +5,7 @@ import { Schema } from 'effect';
 import * as ts from 'typescript';
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from './shared.js';
 
-const PARSER_VERSION = `typescript-ast/${ts.version}/concord-annotations-v1`;
+const PARSER_VERSION = `typescript-ast/${ts.version}/concord-annotations-v2`;
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 const FindingSchema = Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int) });
 const CachedSnapshotSchema = Schema.Struct({
@@ -106,14 +106,22 @@ function parseAnnotations(values: readonly string[], lines: readonly number[], p
   return { id, contract, regressions, status, used };
 }
 function annotationCommentLines(text: string, source: ts.SourceFile): number[] {
-  const scanner = ts.createScanner(ts.ScriptTarget.Latest, false, ts.LanguageVariant.Standard, text);
-  const lines: number[] = [];
-  for (;;) {
-    const token = scanner.scan();
-    if (token === ts.SyntaxKind.EndOfFileToken) return lines;
-    if (token !== ts.SyntaxKind.SingleLineCommentTrivia) continue;
-    if (/^\/\/\s*@concord-(?:case|contract|regression|status)\b/.test(scanner.getTokenText())) lines.push(lineAt(source, scanner.getTokenPos()));
-  }
+  const lines = new Set<number>();
+  const collect = (ranges: readonly ts.CommentRange[] | undefined): void => {
+    for (const range of ranges ?? []) {
+      if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia && /^\/\/\s*@concord-(?:case|contract|regression|status)\b/.test(text.slice(range.pos, range.end))) lines.add(lineAt(source, range.pos));
+    }
+  };
+  // The parser owns template/regex/JSX token boundaries. A context-free scanner
+  // can mistake template text following an interpolation for source comments.
+  const visit = (node: ts.Node): void => {
+    const children = node.getChildren(source);
+    if (children.length > 0) { for (const child of children) visit(child); return; }
+    collect(ts.getLeadingCommentRanges(text, node.getFullStart()));
+    collect(ts.getTrailingCommentRanges(text, node.end));
+  };
+  visit(source);
+  return [...lines].sort((a, b) => a - b);
 }
 function parseSource(input: Source): Parsed {
   const source = ts.createSourceFile(input.path, input.text, ts.ScriptTarget.Latest, true);

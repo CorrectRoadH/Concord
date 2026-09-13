@@ -27,9 +27,11 @@ import {
   supersededMemory,
 } from './memory-state.js';
 import { parseReference, resolveReference } from './refs.js';
+import { templateBody, TEMPLATE_PAGES } from './templates.js';
+import { rebaseAdoptedMarkdown } from './adoption.js';
 
-const ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/research', 'docs/issues', 'memory'] as const;
-const CONTRACT_KINDS: readonly DocumentKind[] = ['feature', 'use-case', 'roadmap'];
+const ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/research', 'docs/engineering', 'docs/issues', 'memory'] as const;
+const CONTRACT_KINDS: readonly DocumentKind[] = ['feature', 'use-case', 'roadmap', 'engineering'];
 const now = (): string => new Date().toISOString();
 
 function required(value: string | undefined, field: string): string {
@@ -79,6 +81,7 @@ function expectedPath(metadata: DocumentMeta, documents: readonly DocumentRecord
     case 'feature': return `docs/feature/${metadata.id}/README.md`;
     case 'roadmap': return `docs/roadmap/${metadata.id}/README.md`;
     case 'design': return `docs/design/${metadata.id}/README.md`;
+    case 'engineering': return `docs/engineering/${metadata.id}/README.md`;
     case 'research': return `docs/research/${metadata.id}.md`;
     case 'memory': return `memory/${metadata.id}.md`;
     case 'issue': return `docs/issues/${metadata.id}.md`;
@@ -224,7 +227,7 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
 export interface CreateDocumentInput {
   readonly id: string;
   readonly title: string;
-  readonly body: string;
+  readonly body?: string;
   readonly feature?: string;
   readonly observedAt?: string;
   readonly sources?: readonly string[];
@@ -236,7 +239,11 @@ export interface CreateDocumentInput {
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
   const id = decode(Slug, input.id, 'id');
   const title = required(input.title, 'title');
-  const body = authorBody(input.body);
+  if (input.feature !== undefined && kind !== 'use-case') throw new ConcordError('InvalidInput', 'feature is only valid for use-case');
+  if ((input.observedAt !== undefined || (input.sources?.length ?? 0) > 0) && kind !== 'research') throw new ConcordError('InvalidInput', 'observedAt and sources are only valid for research');
+  if ((input.alternatives?.length ?? 0) > 0 && kind !== 'design') throw new ConcordError('InvalidInput', 'alternatives are only valid for design');
+  if (input.memoryKind !== undefined && kind !== 'memory') throw new ConcordError('InvalidInput', 'memoryKind is only valid for memory');
+  const bodyFor = (name: string) => authorBody(input.body ?? templateBody(name, title));
   const createdAt = now();
   const documents = loadDocuments(repo);
   if (documents.some(document => document.metadata.kind === kind && document.metadata.id === id)) {
@@ -244,6 +251,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   }
   let path: string;
   let metadata: DocumentMeta;
+  let template: string = kind;
   switch (kind) {
     case 'feature': path = `docs/feature/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind }; break;
     case 'use-case': {
@@ -259,19 +267,39 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
       path = `docs/design/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]] };
       break;
     }
+    case 'engineering': path = `docs/engineering/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind }; break;
     case 'research': path = `docs/research/${id}.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, observedAt: required(input.observedAt, 'observedAt'), sources: input.sources ?? [] }; break;
     case 'memory': {
       const memoryKind = input.memoryKind;
       if (memoryKind === undefined) throw new ConcordError('InvalidInput', 'memoryKind is required');
       path = `memory/${id}.md`;
+      template = memoryKind;
       metadata = { format: 'concord.document/v1', id, title, createdAt, kind, memoryKind, state: memoryKind === 'problem' ? 'open' : 'current', epoch: 0, promotions: [], history: [] };
       break;
     }
     case 'issue': path = `docs/issues/${id}.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'draft', memories: [], history: [] }; break;
   }
-  if (repo.read(path) !== undefined) throw new ConcordError('DocumentExists', `${path} already exists`);
-  return repo.publish(`create-${kind}`, [{ path, before: null, after: render(metadata, body) }], input.dryRun ?? false);
+  const body = bodyFor(template);
+  const changes = [{ path, before: null, after: render(metadata, body) }];
+  const requested = TEMPLATE_PAGES;
+  const allowed = kind === 'feature' || kind === 'roadmap' || kind === 'engineering';
+  const add = (pagePath: string, name: string) => changes.push({ path: pagePath, before: null, after: authorBody(templateBody(name, title)) });
+  if (allowed) for (const page of requested) add(`${posix.dirname(path)}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
+  if (kind === 'design') {
+    add(`docs/design/${id}/GOALS.md`, 'goals'); add(`docs/design/${id}/LIMITS.md`, 'limits'); add(`docs/design/${id}/DECISION.md`, 'decision-record');
+    add(`docs/design/${id}/CASES.md`, 'cases');
+    const alternatives = metadata.kind === 'design' ? metadata.alternatives : [];
+    for (const alternative of alternatives) {
+      const base = `docs/design/${id}/plans/${alternative}`;
+      add(`${base}/README.md`, 'feature');
+      for (const page of requested) add(`${base}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
+    }
+  }
+  for (const change of changes) if (repo.read(change.path) !== undefined) throw new ConcordError('DocumentExists', `${change.path} already exists`);
+  return repo.publish(`create-${kind}`, changes, input.dryRun ?? false);
 }
+
+export { addPage, setPage, showPage } from './document-pages.js';
 
 export function setAuthor(repo: Repository, ref: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   const record = resolveReference(repo, loadDocuments(repo), ref);
@@ -301,10 +329,37 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   const at = now();
   const feature: DocumentMeta = { format: 'concord.document/v1', id, title: roadmap.metadata.title, createdAt: at, kind: 'feature', origin: roadmap.path };
   const adopted: DocumentMeta = { ...roadmap.metadata, state: 'adopted', adoptedAs: featurePath };
+  const roadmapDirectory = posix.dirname(roadmap.path);
+  const featureDirectory = posix.dirname(featurePath);
+  const sourcePaths = repo.files(roadmapDirectory).sort();
+  const observed = new Map<string, string>();
+  for (const sourcePath of sourcePaths) {
+    const source = repo.read(sourcePath);
+    if (source === undefined) throw new ConcordError('PreimageChanged', `${sourcePath} disappeared during adoption`);
+    observed.set(sourcePath, source);
+  }
+  if (observed.get(roadmap.path) === undefined || digest(observed.get(roadmap.path)!) !== roadmap.digest) throw new ConcordError('PreimageChanged', 'Roadmap owner changed during adoption planning');
+  const supporting = sourcePaths.filter(path => path !== roadmap.path);
+  for (const sourcePath of supporting) {
+    if (!sourcePath.endsWith('.md')) throw new ConcordError('UnsupportedAttachment', `Roadmap adoption only copies Markdown pages: ${sourcePath}`);
+    const source = observed.get(sourcePath)!;
+    if (/^(?:\uFEFF)?---(?:\r?\n|$)/u.test(source)) throw new ConcordError('NestedOwner', `Roadmap adoption refuses nested owner-like Markdown: ${sourcePath}`);
+    if (documents.some(document => document.path === sourcePath)) throw new ConcordError('NestedOwner', `Roadmap adoption refuses nested Concord owner: ${sourcePath}`);
+    const destination = `${featureDirectory}/${sourcePath.slice(roadmapDirectory.length + 1)}`;
+    if (repo.read(destination) !== undefined) throw new ConcordError('DocumentExists', `${destination} already exists`);
+  }
+  const featureBody = rebaseAdoptedMarkdown(roadmap.body, roadmap.path, featurePath, roadmapDirectory);
   const changes = [
-    { path: featurePath, before: null, after: render(feature, roadmap.body) },
-    { path: roadmap.path, before: preimage(repo, roadmap), after: render(adopted, roadmap.body) },
+    { path: featurePath, before: null, after: render(feature, featureBody) },
+    { path: roadmap.path, before: observed.get(roadmap.path)!, after: render(adopted, roadmap.body) },
   ];
+  for (const sourcePath of supporting) {
+    const source = observed.get(sourcePath)!;
+    const destination = `${featureDirectory}/${sourcePath.slice(roadmapDirectory.length + 1)}`;
+    // Same-content source writes preserve the observed preimage in the journal.
+    changes.push({ path: sourcePath, before: source, after: source });
+    changes.push({ path: destination, before: null, after: rebaseAdoptedMarkdown(source, sourcePath, destination, roadmapDirectory) });
+  }
   for (const record of documents) {
     if (record.metadata.kind !== 'memory') continue;
     const matching = record.metadata.promotions.filter(target => parseReference(target).path === roadmap.path);
@@ -319,6 +374,10 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
     };
     changes.push({ path: record.path, before: preimage(repo, record), after: render(metadata, record.body) });
   }
+  // Recheck after the entire plan, including link transforms and promotions.
+  const recaptured = repo.files(roadmapDirectory).sort();
+  if (recaptured.length !== sourcePaths.length || recaptured.some((path, index) => path !== sourcePaths[index])) throw new ConcordError('PreimageChanged', 'Roadmap source collection changed during adoption planning');
+  for (const sourcePath of sourcePaths) if (repo.read(sourcePath) !== observed.get(sourcePath)) throw new ConcordError('PreimageChanged', `${sourcePath} changed during adoption planning`);
   return repo.publish('adopt-roadmap', changes, dryRun);
 }
 

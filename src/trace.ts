@@ -41,12 +41,17 @@ export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
   if (trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);
 }
 const pathOf = (ref: string) => ref.split('#')[0]!;
+function belongsTo(repo: Repository, trace: ReturnType<typeof buildTrace>, selectedPaths: ReadonlySet<string>, ref: string): boolean {
+  const owner = resolveReference(repo, trace.documents, ref);
+  return selectedPaths.has(owner.path) || (owner.metadata.kind === 'use-case' && selectedPaths.has(owner.metadata.feature));
+}
 export function traceShow(repo: Repository, selector: string, cache: 'use' | 'off' = 'use') {
   const trace = buildTrace(repo, cache); requireValidTrace(trace);
   const document = findDocument(trace.documents, selector);
   const relatedPaths = new Set([document.path]);
   if (document.metadata.kind === 'feature') for (const doc of trace.documents) if (doc.metadata.kind === 'use-case' && pathOf(doc.metadata.feature) === document.path) relatedPaths.add(doc.path);
-  const incoming = trace.edges.filter(e => relatedPaths.has(pathOf(e.to)));
+  const incoming = trace.edges.filter(e => belongsTo(repo, trace, relatedPaths, e.to));
+  for (const edge of incoming) relatedPaths.add(pathOf(edge.to));
   const outgoing = trace.edges.filter(e => relatedPaths.has(e.from));
   const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
   return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), cache: trace.annotations.cache };
@@ -60,7 +65,7 @@ export function renderReview(repo: Repository, selector: string | undefined, cac
   const trace = buildTrace(repo, cache); requireValidTrace(trace);
   const docs: readonly DocumentRecord[] = selector ? [findDocument(trace.documents, selector)] : trace.documents;
   const selectedPaths = new Set(docs.map(d => d.path));
-  const cases = selector ? trace.annotations.cases.filter(c => selectedPaths.has(pathOf(c.contract)) || c.regressions.some(r => selectedPaths.has(pathOf(r))) || docs.some(d => d.metadata.kind === 'feature' && c.contract.startsWith(`${d.path.slice(0, -'README.md'.length)}use-case/`))) : trace.annotations.cases;
+  const cases = selector ? trace.annotations.cases.filter(c => belongsTo(repo, trace, selectedPaths, c.contract) || c.regressions.some(r => belongsTo(repo, trace, selectedPaths, r))) : trace.annotations.cases;
   const lines = ['# Concord review', '', 'This is local review material. Test annotations describe ownership; command evidence does not prove native case coverage.', '', '## Contracts and decisions', ''];
   for (const d of docs.filter(d => d.metadata.kind !== 'memory' && d.metadata.kind !== 'issue')) lines.push(`- [${d.metadata.title}](${d.path}) — ${d.metadata.kind}`);
   lines.push('', '## Test declarations', '');

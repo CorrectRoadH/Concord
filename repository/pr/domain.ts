@@ -4,6 +4,7 @@ import { dirname, extname, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Effect } from "effect";
 import { stringify as stringifyYaml } from "yaml";
+import { readPrTestDeclarations } from "./test-relations.js";
 
 import {
   editorInputFinding,
@@ -42,7 +43,6 @@ import {
   decodePrBodyEditorState,
   decodePrBodyInput,
   decodeTestDirective,
-  decodeTestRelations,
 } from "./schema.js";
 import { PrFileSystem, PrGit, PrGitHub, type PrBodyRequirements } from "./services.js";
 import { testingOwnerContracts } from "../docs/trace/compiler.js";
@@ -629,6 +629,7 @@ function defaultBase(): Effect.Effect<string, PrBodyError, PrGit> {
 function repositoryFile(
   root: string,
   path: string,
+  head?: string,
 ): Effect.Effect<Readonly<{ absolute: string; relative: string }>, PrBodyError, PrFileSystem> {
   return Effect.gen(function* () {
     const fileSystem = yield* PrFileSystem;
@@ -637,7 +638,7 @@ function repositoryFile(
     if (!repoRelative || repoRelative.startsWith("../") || repoRelative === "..") {
       return yield* Effect.fail(draftFailure(path, `source path must be a file inside the repository: ${path}`));
     }
-    if (!(yield* fileSystem.exists(absolute))) {
+    if (head === undefined && !(yield* fileSystem.exists(absolute))) {
       return yield* Effect.fail(draftFailure(path, `source file does not exist: ${repoRelative}`));
     }
     return { absolute, relative: repoRelative };
@@ -655,30 +656,28 @@ function expandTestDirective(
     const fileSystem = yield* PrFileSystem;
     const git = yield* PrGit;
     const directive = yield* decodeTestDirective(sourcePath, yaml);
-    const file = yield* repositoryFile(root, directive.path);
+    const file = yield* repositoryFile(root, directive.path, context.head);
     context.inputFiles.add(file.relative);
     const firstSelector = directive.cases[0]!.selector;
-    const sidecarPath = `${directive.path}.cases.json`;
-    const sidecarAbsolute = resolve(root, sidecarPath);
-    if (!(yield* fileSystem.exists(sidecarAbsolute))) return yield* new PrTestRelationInvalid({ selector: firstSelector, message: `case relation sidecar does not exist: ${sidecarPath}` });
-    context.inputFiles.add(sidecarPath);
-    const relations = yield* decodeTestRelations(firstSelector, context.head === undefined
-      ? yield* fileSystem.readText(sidecarAbsolute)
-      : yield* git.readBlob(context.head, sidecarPath));
-    if (relations.testFile !== file.relative) return yield* new PrTestRelationInvalid({ selector: firstSelector, message: `sidecar points to ${relations.testFile}, expected ${file.relative}` });
+    const captured = yield* readPrTestDeclarations(root, firstSelector, context.head);
+    const relationEntries = captured.declarations;
+    for (const path of captured.inputFiles) context.inputFiles.add(path);
     const narratives: string[] = [];
     for (const item of directive.cases) {
       const separator = item.selector.lastIndexOf("#");
       const selectorPath = item.selector.slice(0, separator);
       const caseId = item.selector.slice(separator + 1);
       if (selectorPath !== file.relative) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `selector path does not match ${file.relative}` });
-      const relation = relations.current[caseId];
+      const declared = relationEntries.filter((entry) => entry.caseId === caseId && entry.testFile === file.relative);
+      if (declared.length > 1) return yield* new PrTestRelationInvalid({ selector: item.selector, message: "selector has multiple current declarations" });
+      const relation = declared[0] === undefined ? undefined : { owner: declared[0].owner, regressions: declared[0].regressions, issues: declared[0].issues };
       if (relation === undefined) return yield* new PrTestRelationInvalid({ selector: item.selector, message: "selector is not a current case" });
+      context.inputFiles.add(declared[0]!.declarationPath);
       const ownerSeparator = relation.owner.lastIndexOf("#");
       if (ownerSeparator < 1) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `current owner is not a path#anchor reference: ${relation.owner}` });
       const ownerPath = relation.owner.slice(0, ownerSeparator);
       const ownerAbsolute = resolve(root, ownerPath);
-      if (!(yield* fileSystem.exists(ownerAbsolute))) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `current owner does not exist: ${relation.owner}` });
+      if (context.head === undefined && !(yield* fileSystem.exists(ownerAbsolute))) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `current owner does not exist: ${relation.owner}` });
       context.inputFiles.add(ownerPath);
       const ownerSource = context.head === undefined
         ? yield* fileSystem.readText(ownerAbsolute)
@@ -691,7 +690,7 @@ function expandTestDirective(
       if (owner === undefined) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `current owner anchor does not exist: ${relation.owner}` });
       const contract = owner.contract;
       const contractPath = contract.split("#", 1)[0]!;
-      if (!(yield* fileSystem.exists(resolve(root, contractPath)))) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `canonical contract does not exist: ${contract}` });
+      if (context.head === undefined && !(yield* fileSystem.exists(resolve(root, contractPath)))) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `canonical contract does not exist: ${contract}` });
       context.inputFiles.add(contractPath);
       if (context.head !== undefined) yield* git.readBlob(context.head, contractPath);
       if (item.regression !== undefined && !relation.regressions.includes(item.regression)) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `declared regression is not current: ${item.regression}` });
@@ -707,7 +706,7 @@ function expandTestDirective(
     let selected = source;
     if (directive.source !== undefined && directive.source !== "full" && directive.source !== "link") {
       const fragmentSource = directive.source;
-      const tracked = yield* git.run(["ls-files", "--error-unmatch", "--", file.relative], { allowFailure: true });
+      const tracked = context.head !== undefined || Boolean(yield* git.run(["ls-files", "--error-unmatch", "--", file.relative], { allowFailure: true }));
       const changed = tracked
         ? changedFinalLines(yield* git.run([
             "diff",

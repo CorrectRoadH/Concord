@@ -16,9 +16,11 @@ Concord 来源于 NiceEval revision `e1c66d31115208ceaae2f5bd4d730a7abf67048d` �
 | PR editor | 保留本地审阅中关联契约、测试与 Memory 的目标；使用 Concord 审阅格式 |
 | Issue 领域 | 提供本地 Observation 草稿与 Memory 关联，不冒充远端 GitHub 工作项状态 |
 
-通用模式拥有独立格式。Repository profile 另行迁入 NiceEval 的 104 个仓库工具模块，保留原领域与命令语义；NiceEval 的旧源码位置只转出 Concord 发布包，既有文档、sidecar、Memory 数据不改写。
+通用模式拥有独立格式。Repository profile 另行迁入 NiceEval 的 104 个仓库工具模块，保留原领域与命令语义；NiceEval 的旧源码位置只转出 Concord 发布包，既有文档与 Memory 历史保留。0.3.0 将 profile 当前测试关系迁入真实声明注释，原始 history/tombstone 保留在注释归档；旧 evidence 不改写，新正式证据使用 v2。
 
 产品专属 Nx E2E discovery、candidate/Testkit injection、native runner inventory 与 formal red/green/takeover 执行仍由消费仓库 host 拥有。Repository profile 托管原有 Mint、Preview、Examples 和下游领域，按消费仓库配置和素材工作。Host 的 TypeScript 声明快照只定义接口，不包含 runner 实现。
 通用命令结果称为 `command` evidence，不继承 NiceEval 的 formal E2E、覆盖率或可靠性矩阵承诺。
 
 本地发布包不依赖原始 checkout。所有运行时 import、模板、schema 与 Agent 指引都由 Concord 自己提供。
+
+随包 `templates/` 的文档体裁提取自 NiceEval `docs/_template/feature-design`、`design-decision`、`research` 和 `docs/engineering/_template`：保留问题、目标、约束、候选、架构、生命周期与验收的写作分工，移除 NiceEval 专属命令、Sandbox 和判分要求。通用模式使用独立的 `concord.templates/v1` manifest；它不加载 repository profile 的 `niceeval.docs-template/v1` 模板或复制其测试 sidecar。

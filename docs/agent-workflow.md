@@ -1,6 +1,12 @@
 # Agent 工作入口
 
+已安装 CLI 自带渐进式 skill。先运行 `concord --skill` 取得精简入口，需要具体流程时再运行 `concord --skill <init|document|test|memory|trace|recovery|repository>`；只有离线加载全部资料时使用 `concord --skill all`。该入口不依赖消费仓库、不加载 repository host，也不写文件。
+
 在消费仓库遵守其 AGENTS.md；先用 `concord --help` 和对应子命令的 `--help` 获取当前参数。工具安装目录与消费仓库分开，跨目录执行时显式传 `--root`。
+
+首次接入用 `concord init`，完整目录和模板由 init 一次建好，从 `docs/concord.md` 和 `docs/_template/README.md` 进入。`template list/show` 可在未初始化时读取随包模板；创建文档不传 `--body` 会生成写作提示，传 `--body -` 仍可直接提交完整正文。各类文档直接生成完整结构，`page show --json` 提供 `page set --expected-digest` 使用的最新摘要。Engineering 保存维护机制，Design 候选由 `--alternative` 声明并使用 `--plan` 操作页面。
+
+用 `concord doctor --json` 查看配置和接入缺口。`test annotate <id> --contract <ref>` 只输出经过引用检查的源码注释；把它放到真实测试声明旁再运行 `check`。模板和注释均不证明测试执行或功能覆盖。Agent 与脚本使用 `--json`，不要解析人读输出。
 
 1. 用 `feature list`、`trace show <canonical-path>`、`memory search <query>` 找当前契约和历史问题。`check` 校验当前关系，不执行测试。
 2. 已采用的用户目标进入 Feature / Use Case；尚未采用的定稿方向进入 Roadmap，多方案比较进入 Design，带日期的事实进入 Research。创建命令读取 `--body <file>` 或 `--body -`，写入前可以 `--dry-run`。

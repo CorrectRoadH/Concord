@@ -5,7 +5,8 @@ import { type CandidateTarball } from "./injection.ts";
 import { OwnedProcess } from "./owned-process.ts";
 import { type RepoRunResult } from "./run-repo.ts";
 import { type TestkitPackage } from "./testkit-snapshot.ts";
-import { type TakeoverCertificateV1 } from "./case-evidence.ts";
+import { type TakeoverCertificateV2 } from "./case-evidence.ts";
+import { type SourceProjectionV1 } from "../source-identity.ts";
 export interface TakeoverOptions {
     readonly candidatePath: string;
     readonly repoId: string;
@@ -22,16 +23,7 @@ export declare class TakeoverOperationError extends TakeoverOperationError_base<
     readonly detail: string;
 }> {
 }
-interface SourceSnapshotFile {
-    readonly path: string;
-    readonly bytes: number;
-    readonly sha256: string;
-}
-interface SourceSnapshotIdentity {
-    readonly algorithm: "sha256";
-    readonly digest: string;
-    readonly files: readonly SourceSnapshotFile[];
-}
+type SourceSnapshotIdentity = SourceProjectionV1;
 interface CheckoutIdentity {
     readonly root: string;
     readonly commit: string;
@@ -74,7 +66,7 @@ export interface TakeoverSummary {
         readonly ok: boolean;
         readonly detail: string;
     };
-    readonly certificate?: TakeoverCertificateV1;
+    readonly certificate?: TakeoverCertificateV2;
     readonly certificatePath?: string;
     readonly evidence?: string;
 }

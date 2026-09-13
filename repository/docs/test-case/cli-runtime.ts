@@ -12,6 +12,8 @@ import { mutateTraceFiles, traceDigest } from "../trace/relation-mutation.js";
 import { planCaseMove, planCaseRelation, type CaseRelationAction } from "./planner.js";
 import { parseCaseSelector, selectCurrentCase, type CaseSelector } from "./selector.js";
 import { decodeCaseRelationsSidecar, encodeCaseRelationsSidecar, type CaseIssue, type CaseRelationsSidecar } from "./sidecar.js";
+import { decodeAnnotatedCases, decodeCaseArchive, encodeCaseArchive, locateSupportedTestDeclarations, renderCaseAnnotations, type AnnotatedCase } from "./annotations.js";
+import { resolveRepositorySourceIdentity, sameRepositorySourceIdentity, type RepositorySourceIdentityV2 } from "../../source-identity.js";
 
 type Maybe<A> = Option.Option<A> | A | undefined;
 interface InventoryCase { readonly executor: "vitest" | "playwright"; readonly repo: string; readonly path: string; readonly project?: string; readonly titlePath: readonly string[]; readonly caseId: `necase_${string}` }
@@ -28,6 +30,7 @@ export interface CreateOwnerInput extends MutationFlags { readonly owner: string
 export interface SetOwnerContractInput extends MutationFlags { readonly owner: string; readonly contract: string }
 export interface RetireOwnerInput extends MutationFlags { readonly owner: string; readonly reason: string }
 export interface AddRegressionInput extends MutationFlags { readonly selector: string; readonly memory: string; readonly red: string; readonly takeover: string; readonly inventory: string }
+export interface RefreshRegressionInput extends AddRegressionInput { readonly reason: string }
 export interface RetireRegressionInput extends MutationFlags { readonly selector: string; readonly memory: string; readonly reason: string }
 export interface AddIssueInput extends MutationFlags { readonly selector: string; readonly url: string; readonly provenance: "direct"; readonly verificationReceipt: Maybe<string> }
 export interface RetireIssueInput extends MutationFlags { readonly selector: string; readonly url: string; readonly reason: string }
@@ -48,13 +51,38 @@ const fail = (code: string, message: string): never => { throw new CaseCliError(
 const detail = (cause: unknown): string => typeof cause === "object" && cause !== null && "detail" in cause && typeof cause.detail === "string" ? cause.detail : cause instanceof Error ? cause.message : String(cause);
 const sidecarPath = (testPath: string): string => `${testPath}.cases.json`;
 const evidencePath = (testPath: string): string => `${testPath}.cases.evidence.json`;
+const HISTORY_PATH = "e2e/concord-history.ts";
 const absolute = (path: string): string => resolve(REPOSITORY_ROOT, path);
 const read = (path: string): string => readFileSync(absolute(path), "utf8");
 const emptySidecar = (testFile: string): CaseRelationsSidecar => ({ format: "niceeval.e2e-case-relations/v1", testFile, current: {}, history: [], tombstones: [] });
-const decodeSidecar = (path: string, allowAbsent = false): CaseRelationsSidecar => {
-  if (!existsSync(absolute(path))) { if (allowAbsent) return emptySidecar(path.slice(0, -".cases.json".length)); return fail("CaseNotCurrent", `sidecar is missing: ${path}`); }
-  const decoded = decodeCaseRelationsSidecar(path, read(path));
+function sourceFiles(): readonly string[] {
+  let output = "";
+  try { output = execFileSync("rg", ["--files", "e2e", "-g", "*.ts", "-g", "*.tsx", "-g", "*.js", "-g", "*.jsx", "-g", "*.mts", "-g", "*.cts", "-g", "*.mjs", "-g", "*.cjs"], { cwd: REPOSITORY_ROOT, encoding: "utf8" }).trim(); }
+  catch (cause) { const status = typeof cause === "object" && cause !== null && "status" in cause ? cause.status : undefined; if (status !== 1) throw cause; }
+  return output === "" ? [] : output.split("\n").filter((path) => path !== HISTORY_PATH).sort();
+}
+function annotatedCases(): readonly AnnotatedCase[] {
+  const all: AnnotatedCase[] = [];
+  for (const path of sourceFiles()) {
+    const decoded = decodeAnnotatedCases(path, read(path));
+    const found = Result.match(decoded, { onFailure: (error) => fail(error._tag, `${error.path}: ${error.message}`), onSuccess: (value) => value });
+    all.push(...found);
+  }
+  const ids = new Map<string, string>();
+  for (const item of all) { const previous = ids.get(item.caseId); if (previous !== undefined) fail("DuplicateCaseId", `${item.caseId} is declared by ${previous} and ${item.declarationPath}`); ids.set(item.caseId, item.declarationPath); }
+  return all;
+}
+function archive() {
+  if (!existsSync(absolute(HISTORY_PATH))) return { history: [], tombstones: [] };
+  const decoded = decodeCaseArchive(HISTORY_PATH, read(HISTORY_PATH));
   return Result.isSuccess(decoded) ? decoded.success : fail(decoded.failure._tag, `${decoded.failure.path}: ${decoded.failure.message}`);
+}
+const decodeSidecar = (path: string, allowAbsent = false): CaseRelationsSidecar => {
+  const testFile = path.endsWith(".cases.json") ? path.slice(0, -".cases.json".length) : path;
+  const current = Object.fromEntries(annotatedCases().filter((item) => item.testFile === testFile).map((item) => [item.caseId, { owner: item.owner, regressions: [...item.regressions], issues: [...item.issues] }]));
+  const saved = archive();
+  if (!allowAbsent && Object.keys(current).length === 0 && !saved.tombstones.some((entry) => entry.testFile === testFile)) fail("CaseNotCurrent", `no current or archived case owner exists for ${testFile}`);
+  return { ...emptySidecar(testFile), current, history: saved.history.filter((entry) => entry.testFile === testFile).map((entry) => entry.event), tombstones: saved.tombstones.filter((entry) => entry.testFile === testFile).map((entry) => entry.event) };
 };
 const selector = (text: string): CaseSelector => { const parsed = parseCaseSelector(text); return Result.isSuccess(parsed) ? parsed.success : fail(parsed.failure._tag, `invalid case selector: ${text}`); };
 
@@ -117,27 +145,14 @@ function newCaseId(used: Set<string>): `necase_${string}` {
   }
 }
 function sidecarFiles(): readonly string[] {
-  let output: string;
-  try { output = execFileSync("rg", ["--files", "-g", "*.cases.json"], { cwd: REPOSITORY_ROOT, encoding: "utf8" }).trim(); }
-  catch (cause) { const status = typeof cause === "object" && cause !== null && "status" in cause ? cause.status : undefined; if (status === 1) return []; throw cause; }
-  return output === "" ? [] : output.split("\n").sort();
+  return [...new Set([...annotatedCases().map((item) => sidecarPath(item.testFile)), ...archive().tombstones.map((entry) => sidecarPath(entry.testFile))])].sort();
 }
 function reservedCaseIds(): Set<string> {
   const ids = new Set<string>();
-  for (const path of sidecarFiles()) {
-    const sidecar = decodeSidecar(path);
-    for (const id of Object.keys(sidecar.current)) ids.add(id);
-    for (const entry of sidecar.history) ids.add(entry.caseId);
-    for (const entry of sidecar.tombstones) ids.add(entry.caseId);
-  }
-  let sourceTokens = "";
-  try {
-    sourceTokens = execFileSync("rg", ["--only-matching", "--no-filename", "necase_[0-9A-HJKMNP-TV-Z]{16}", "e2e"], { cwd: REPOSITORY_ROOT, encoding: "utf8" });
-  } catch (cause) {
-    const status = typeof cause === "object" && cause !== null && "status" in cause ? cause.status : undefined;
-    if (status !== 1) throw cause;
-  }
-  for (const id of sourceTokens.trim().split("\n")) if (id !== "") ids.add(id);
+  for (const item of annotatedCases()) ids.add(item.caseId);
+  const saved = archive();
+  for (const entry of saved.history) ids.add(entry.event.caseId);
+  for (const entry of saved.tombstones) ids.add(entry.event.caseId);
   return ids;
 }
 export const allocateCaseId = Effect.fn("allocateCaseId")(function*() {
@@ -146,13 +161,14 @@ export const allocateCaseId = Effect.fn("allocateCaseId")(function*() {
 function inventoryForId(id: Maybe<string>): InventoryReceipt | undefined { const value = optional(id); return value === undefined ? undefined : parseInventory(value); }
 function records(history: boolean, inventory?: InventoryReceipt) {
   const collected = new Map(inventory?.cases.map((item) => [`${item.path}#${item.caseId}`, item]));
-  return sidecarFiles().flatMap((path) => { const sidecar = decodeSidecar(path); const digest = traceDigest(read(path)); return [
+  const declarations = annotatedCases();
+  return sidecarFiles().flatMap((path) => { const sidecar = decodeSidecar(path); const digest = traceDigest(declarations.filter((item) => item.testFile === sidecar.testFile).map((item) => { const source = read(item.declarationPath); return item.annotationRanges.map((range) => source.slice(range.start, range.end)).join("\n"); }).join("\n")); return [
     ...Object.entries(sidecar.current).map(([caseId, relation]) => {
       const evidenceFile = evidencePath(sidecar.testFile);
       const evidence = existsSync(absolute(evidenceFile)) ? JSON.parse(read(evidenceFile)) as { current?: Record<string, unknown> } : undefined;
-      return { selector: `${sidecar.testFile}#${caseId}`, sidecar: path, digest, relation, evidence: evidence?.current?.[caseId] ?? {}, collected: collected?.get(`${sidecar.testFile}#${caseId}`) ?? null };
+      return { selector: `${sidecar.testFile}#${caseId}`, sidecar: declarations.find((item) => item.caseId === caseId)!.declarationPath, digest, relation, evidence: evidence?.current?.[caseId] ?? {}, collected: collected?.get(`${sidecar.testFile}#${caseId}`) ?? null };
     }),
-    ...(history ? sidecar.tombstones.map((entry) => ({ selector: entry.lastSelector, sidecar: path, digest, tombstone: entry })) : []),
+    ...(history ? sidecar.tombstones.map((entry) => ({ selector: entry.lastSelector, sidecar: HISTORY_PATH, digest, tombstone: entry })) : []),
   ]; });
 }
 
@@ -172,6 +188,93 @@ function reconcileInventory(inventory: InventoryReceipt) {
 }
 
 interface PlannedChange { readonly path: string; readonly bytes: string; readonly mode?: number; readonly expectedDigest: string | null }
+function unannotatedDeclaration(path: string, caseId: string): { readonly path: string; readonly start: number } {
+  const candidates: { path: string; start: number }[] = [];
+  const preferred = existsSync(absolute(path)) ? [path] : [];
+  for (const sourcePath of [...preferred, ...sourceFiles().filter((item) => item !== path)]) {
+    const source = read(sourcePath);
+    if (!source.includes(caseId)) continue;
+    candidates.push(...locateSupportedTestDeclarations(sourcePath, source)
+      .filter((declaration) => declaration.title.endsWith(` [${caseId}]`))
+      .map((declaration) => ({ path: sourcePath, start: declaration.start })));
+  }
+  if (candidates.length !== 1) fail("CaseDeclarationAmbiguous", `expected exactly one literal declaration for ${caseId}, found ${candidates.length}`);
+  return candidates[0]!;
+}
+
+function annotationProjectionChanges(pairs: readonly { readonly before: CaseRelationsSidecar; readonly next: CaseRelationsSidecar }[]): PlannedChange[] {
+  const sources = new Map<string, string>();
+  const expected = new Map<string, string>();
+  const currentCases: AnnotatedCase[] = [];
+  for (const path of sourceFiles()) {
+    const source = read(path);
+    sources.set(path, source);
+    expected.set(path, traceDigest(source));
+    const decoded = decodeAnnotatedCases(path, source);
+    currentCases.push(...Result.match(decoded, { onFailure: (error) => fail(error._tag, `${error.path}: ${error.message}`), onSuccess: (value) => value }));
+  }
+  const edits = new Map<string, { readonly start: number; readonly end: number; readonly text: string }[]>();
+  const addEdit = (path: string, start: number, end: number, text: string): void => {
+    if (!sources.has(path)) { const source = read(path); sources.set(path, source); expected.set(path, traceDigest(source)); }
+    edits.set(path, [...(edits.get(path) ?? []), { start, end, text }]);
+  };
+  const ids = new Set(pairs.flatMap(({ before, next }) => [...Object.keys(before.current), ...Object.keys(next.current)]));
+  for (const caseId of ids) {
+    const prior = pairs.find(({ before }) => before.current[caseId] !== undefined);
+    const desired = pairs.find(({ next }) => next.current[caseId] !== undefined);
+    const oldRelation = prior?.before.current[caseId]; const relation = desired?.next.current[caseId];
+    const item = currentCases.find((entry) => entry.caseId === caseId);
+    if (oldRelation !== undefined && (item === undefined || item.testFile !== prior!.before.testFile || JSON.stringify({ owner: item.owner, regressions: item.regressions, issues: item.issues }) !== JSON.stringify(oldRelation))) fail("PreimageChanged", `current annotation relation changed while planning ${prior!.before.testFile}#${caseId}`);
+    if (relation !== undefined && item !== undefined && JSON.stringify(oldRelation) === JSON.stringify(relation) && item.testFile === desired!.next.testFile) {
+      addEdit(item.declarationPath, 0, 0, "");
+      continue;
+    }
+    if (relation === undefined) {
+      const existing = item ?? fail("CaseNotCurrent", `${prior?.before.testFile ?? "<unknown>"}#${caseId}`);
+      for (const range of existing.annotationRanges) addEdit(existing.declarationPath, range.start, range.end, "");
+    } else if (item !== undefined) {
+      const [first, ...rest] = item.annotationRanges;
+      if (first === undefined) fail("CaseDeclarationAmbiguous", `${caseId} has no bound managed annotation ranges`);
+      const originalLine = sources.get(item.declarationPath)!.slice(first!.start, first!.end);
+      const ending = /\r\n$/u.test(originalLine) ? "\r\n" : /\n$/u.test(originalLine) ? "\n" : "";
+      addEdit(item.declarationPath, first!.start, first!.end, `${renderCaseAnnotations(caseId, relation, item.declarationPath, desired!.next.testFile)}${ending}`);
+      for (const range of rest) addEdit(item.declarationPath, range.start, range.end, "");
+    } else {
+      const declaration = unannotatedDeclaration(desired!.next.testFile, caseId);
+      addEdit(declaration.path, declaration.start, declaration.start, `${renderCaseAnnotations(caseId, relation, declaration.path, desired!.next.testFile)}\n`);
+    }
+  }
+  const changes: PlannedChange[] = [];
+  for (const [path, fileEdits] of edits) {
+    let bytes = sources.get(path)!;
+    for (const edit of [...fileEdits].sort((a, b) => b.start - a.start)) bytes = bytes.slice(0, edit.start) + edit.text + bytes.slice(edit.end);
+    changes.push({ path, bytes, expectedDigest: expected.get(path)! });
+  }
+  const saved = archive();
+  const history = [...saved.history]; const tombstones = [...saved.tombstones];
+  const historyKeys = new Set(history.map((entry) => JSON.stringify(entry)));
+  const tombstoneKeys = new Set(tombstones.map((entry) => JSON.stringify(entry)));
+  for (const { before, next } of pairs) {
+    const capturedHistory = saved.history.filter((entry) => entry.testFile === before.testFile).map((entry) => entry.event);
+    const capturedTombstones = saved.tombstones.filter((entry) => entry.testFile === before.testFile).map((entry) => entry.event);
+    if (JSON.stringify(capturedHistory) !== JSON.stringify(before.history) || JSON.stringify(capturedTombstones) !== JSON.stringify(before.tombstones)) fail("PreimageChanged", `case archive changed while planning ${before.testFile}`);
+    for (const event of next.history.slice(before.history.length)) {
+      const entry = { testFile: event.action === "case-moved" && typeof event.to?.path === "string" ? event.to.path : next.testFile, event };
+      const key = JSON.stringify(entry);
+      if (!historyKeys.has(key)) { history.push(entry); historyKeys.add(key); }
+    }
+    for (const event of next.tombstones.filter((candidate) => !before.tombstones.some((entry) => entry.caseId === candidate.caseId))) {
+      const entry = { testFile: next.testFile, event };
+      const key = JSON.stringify(entry);
+      if (!tombstoneKeys.has(key)) { tombstones.push(entry); tombstoneKeys.add(key); }
+    }
+  }
+  if (history.length !== saved.history.length || tombstones.length !== saved.tombstones.length) {
+    const bytes = encodeCaseArchive({ history, tombstones });
+    changes.push({ path: HISTORY_PATH, bytes, expectedDigest: existsSync(absolute(HISTORY_PATH)) ? traceDigest(read(HISTORY_PATH)) : null });
+  }
+  return changes.sort((a, b) => a.path.localeCompare(b.path));
+}
 function transactionReceipt(operation: string, dryRun: boolean, changes: readonly PlannedChange[], value: unknown) {
   return { format: "niceeval.e2e-case-command/v1", operation, dryRun, transactionId: `netxn_plan_${randomUUID().replaceAll("-", "")}`, generationBefore: null, generationAfter: null, subject: value, preimages: changes.map((c) => ({ path: c.path, digest: c.expectedDigest })), plannedDigests: changes.map((c) => ({ path: c.path, digest: traceDigest(c.bytes) })), findings: [], committed: false };
 }
@@ -212,11 +315,12 @@ function planOne(action: CaseRelationAction, expected: Maybe<string>, operation:
 function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean, validateUnderLease: Effect.Effect<void, E, R>): Effect.Effect<unknown, E | CaseCliError | import("../trace/relation-mutation.js").TraceCoordinationError, R>;
 function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean, validateUnderLease?: Effect.Effect<void, E, R>) {
   const plan = Effect.sync(() => {
-    const path = sidecarPath(action.selector.path); const before = decodeSidecar(path, action._tag === "AttachCase"); const digest = assertExpected(path, expected);
+    const path = sidecarPath(action.selector.path); const before = decodeSidecar(path, action._tag === "AttachCase");
+    if (optional(expected) !== undefined) fail("PreimageChanged", "sidecar digests are not accepted after inline relation migration; use the transaction source preimages");
     const planned = planCaseRelation(before, action, audit());
     if (Result.isFailure(planned)) fail(planned.failure._tag, JSON.stringify(planned.failure));
     const next = Result.match(planned, { onFailure: (error) => fail(error._tag, JSON.stringify(error)), onSuccess: (value) => value });
-    return { changes: [{ path, bytes: encodeCaseRelationsSidecar(next), expectedDigest: digest }], value: `${action.selector.path}#${action.selector.caseId}` };
+    return { changes: annotationProjectionChanges([{ before, next }]), value: `${action.selector.path}#${action.selector.caseId}` };
   });
   return publish(operation, dryRun, validateUnderLease === undefined ? plan : validateUnderLease.pipe(Effect.andThen(plan)));
 }
@@ -240,18 +344,27 @@ function validateOwnerUnderLease(owner: string) {
 }
 
 interface FormalReceipt {
-  readonly format: "niceeval.e2e-case-receipt/v1";
+  readonly format: "niceeval.e2e-case-receipt/v2";
   readonly mode: "formal";
   readonly observation: "red" | "green" | "reliability";
   readonly selector: string;
   readonly caseId: string;
   readonly inventoryDigest: string;
   readonly candidate: { readonly sha256: string };
-  readonly source: { readonly testFileSha256: string; readonly sidecarSha256: string };
+  readonly source: RepositorySourceIdentityV2;
   readonly result: { readonly disposition: "regression" | "pass" };
   readonly cleanup: { readonly ok: boolean };
   readonly invocationId: string;
   readonly receiptSha256: string;
+}
+
+function projectRootForTest(testFile: string): string {
+  let directory = posix.dirname(testFile);
+  while (directory === "e2e" || directory.startsWith("e2e/")) {
+    if (existsSync(absolute(`${directory}/project.json`))) return absolute(directory);
+    const parent = posix.dirname(directory); if (parent === directory) break; directory = parent;
+  }
+  return fail("EvidenceMismatch", `cannot find the E2E project root for ${testFile}`);
 }
 
 function validateRegressionEvidence(action: AddRegressionInput, parsed: CaseSelector) {
@@ -267,10 +380,12 @@ function validateRegressionEvidence(action: AddRegressionInput, parsed: CaseSele
   } catch (cause) { return fail("EvidenceMismatch", detail(cause)); }
   const red = managedRed.receipt as unknown as FormalReceipt;
   const certificate = managedTakeover.certificate as unknown as Record<string, unknown>;
+  if (certificate.format !== "niceeval.e2e-takeover-certificate/v2") fail("EvidenceLegacy", "legacy v1 takeover evidence is read-only history and cannot register or refresh a current fixed regression");
   const greenKey = managedTakeover.certificate.greenReceipt;
   const greenValue = managedTakeover.receipts.get(greenKey);
   if (greenValue === undefined) fail("EvidenceMismatch", "managed takeover evidence is missing its green receipt");
   const green = greenValue as unknown as FormalReceipt;
+  if (red.format !== "niceeval.e2e-case-receipt/v2" || green.format !== "niceeval.e2e-case-receipt/v2") fail("EvidenceLegacy", "legacy v1 evidence is read-only history and cannot register or refresh a current fixed regression");
   if (red.selector !== action.selector || red.inventoryDigest !== inventory.digest) fail("EvidenceMismatch", "managed red evidence does not bind this selector and inventory");
   if (green.selector !== action.selector || green.inventoryDigest !== inventory.digest) fail("EvidenceMismatch", "managed takeover evidence does not bind this selector and inventory");
   if (managedTakeover.certificate.caseId !== green.caseId || managedTakeover.certificate.candidateSha256 !== green.candidate.sha256) fail("EvidenceMismatch", "takeover certificate does not bind the green receipt, selector, and candidate");
@@ -283,19 +398,48 @@ function validateRegressionEvidence(action: AddRegressionInput, parsed: CaseSele
   });
   if (reliability.some((item) => item.observation !== "reliability" || item.result.disposition !== "pass" || item.candidate.sha256 !== green.candidate.sha256)) fail("EvidenceMismatch", "takeover observations do not all pass on the green candidate");
   if (new Set([red.invocationId, green.invocationId, ...reliability.map((item) => item.invocationId)]).size !== reliability.length + 2) fail("EvidenceMismatch", "formal evidence reuses an invocation ID");
-  const currentTestFile = createHash("sha256").update(read(parsed.path)).digest("hex");
-  const sourceMatches = (receipt: FormalReceipt) => receipt.source.testFileSha256 === currentTestFile;
-  if (![red, green, ...reliability].every(sourceMatches)) fail("EvidenceMismatch", "formal evidence does not bind the current test source");
-  if ([red, ...reliability].some((receipt) => receipt.source.sidecarSha256 !== green.source.sidecarSha256)) fail("EvidenceMismatch", "formal evidence does not bind one common sidecar source");
+  if (reliability.some((receipt) => receipt.format !== "niceeval.e2e-case-receipt/v2")) fail("EvidenceLegacy", "legacy v1 reliability evidence cannot register or refresh a current fixed regression");
+  const currentSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, projectRootForTest(parsed.path), action.selector);
+  if (![red, green, ...reliability].every((receipt) => sameRepositorySourceIdentity(receipt.source, currentSource))) fail("EvidenceMismatch", "formal evidence does not bind the current code projection, declaration, owner, and contract sources");
+  if (![red, ...reliability].every((receipt) => receipt.source.projection.digest === green.source.projection.digest)) fail("EvidenceMismatch", "red, green, and reliability evidence do not bind one common source projection");
   return { inventory, red, green, certificate, reliability, certificateObservations: observations };
 }
 
-function addRegression(action: AddRegressionInput, parsed: CaseSelector) {
-  const verified = validateRegressionEvidence(action, parsed);
+function currentV2EvidenceStillValid(value: unknown, currentSource: RepositorySourceIdentityV2): boolean {
+  try {
+    if (value === null || typeof value !== "object") return false;
+    const evidence = value as Record<string, unknown>;
+    const load = (name: "red" | "green" | "certificate"): Record<string, unknown> => {
+      const reference = evidence[name];
+      if (reference === null || typeof reference !== "object") throw new Error(`missing ${name} evidence reference`);
+      const path = (reference as Record<string, unknown>).path;
+      const digest = (reference as Record<string, unknown>).digest;
+      if (typeof path !== "string" || typeof digest !== "string" || !existsSync(absolute(path))) throw new Error(`unavailable ${name} evidence`);
+      const bytes = read(path);
+      if (traceDigest(bytes) !== digest) throw new Error(`${name} evidence digest changed`);
+      const document = JSON.parse(bytes) as unknown;
+      if (document === null || typeof document !== "object") throw new Error(`${name} evidence is not an object`);
+      return document as Record<string, unknown>;
+    };
+    const red = load("red");
+    const green = load("green");
+    const certificate = load("certificate");
+    if (red.format !== "niceeval.e2e-case-receipt/v2" || green.format !== "niceeval.e2e-case-receipt/v2" || certificate.format !== "niceeval.e2e-takeover-certificate/v2") return false;
+    const redSource = red.source as RepositorySourceIdentityV2;
+    const greenSource = green.source as RepositorySourceIdentityV2;
+    return sameRepositorySourceIdentity(redSource, currentSource)
+      && sameRepositorySourceIdentity(greenSource, currentSource)
+      && certificate.sourceDigest === currentSource.projection.digest;
+  } catch {
+    return false;
+  }
+}
+
+function addRegression(action: AddRegressionInput | RefreshRegressionInput, parsed: CaseSelector, refresh = false) {
+  if (refresh && (!("reason" in action) || action.reason.trim().length === 0)) fail("InvalidReason", "regression refresh requires a non-empty reason");
   return validateOpenProblem(action.memory).pipe(Effect.andThen(Effect.suspend(() => {
     const relationPath = sidecarPath(parsed.path);
     const before = decodeSidecar(relationPath);
-    const relationDigest = assertExpected(relationPath, undefined);
     const indexPath = evidencePath(parsed.path);
     const indexDigest = assertExpected(indexPath, undefined);
     const index = existsSync(absolute(indexPath))
@@ -309,7 +453,7 @@ function addRegression(action: AddRegressionInput, parsed: CaseSelector) {
       onSuccess: (value) => value,
     });
     const relationAlreadyCurrent = relation.regressions.includes(action.memory);
-    if (relationAlreadyCurrent && currentCase[action.memory] !== undefined) {
+    if (!refresh && relationAlreadyCurrent && currentCase[action.memory] !== undefined) {
       fail("RelationAlreadyCurrent", JSON.stringify({
         selector: action.selector,
         relation: "regression",
@@ -317,6 +461,12 @@ function addRegression(action: AddRegressionInput, parsed: CaseSelector) {
         _tag: "RelationAlreadyCurrent",
       }));
     }
+    if (refresh && (!relationAlreadyCurrent || currentCase[action.memory] === undefined)) fail("RelationNotCurrent", `refresh requires an existing current regression and evidence for ${action.memory}`);
+    if (refresh) {
+      const currentSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, projectRootForTest(parsed.path), action.selector);
+      if (currentV2EvidenceStillValid(currentCase[action.memory], currentSource)) fail("EvidenceAlreadyCurrent", `current v2 evidence for ${action.memory} still binds the current source identity`);
+    }
+    const verified = validateRegressionEvidence(action, parsed);
     const next = relationAlreadyCurrent
       ? before
       : Result.match(
@@ -351,13 +501,25 @@ function addRegression(action: AddRegressionInput, parsed: CaseSelector) {
       certificate: { path: certificatePath, digest: traceDigest(`${JSON.stringify(normalizedCertificate, null, 2)}\n`) },
       inventory: { path: inventoryEvidencePath, digest: verified.inventory.digest },
     };
-    const nextIndex = { ...index, current: { ...index.current, [parsed.caseId]: { ...currentCase, [action.memory]: evidence } } };
-    return publish("test-regression-add", action.dryRun, validateOpenProblemUnderLease(action.memory).pipe(
-      Effect.andThen(Effect.sync(() => { validateRegressionEvidence(action, parsed); })),
+    const nextIndex = {
+      ...index,
+      current: { ...index.current, [parsed.caseId]: { ...currentCase, [action.memory]: evidence } },
+      ...(refresh ? { history: [...((index as { history?: readonly unknown[] }).history ?? []), { caseId: parsed.caseId, memory: action.memory, evidence: currentCase[action.memory], reason: (action as RefreshRegressionInput).reason, refreshedAtCommit: audit().atCommit }] } : {}),
+    };
+    return publish(refresh ? "test-regression-refresh" : "test-regression-add", action.dryRun, validateOpenProblemUnderLease(action.memory).pipe(
+      Effect.andThen(Effect.sync(() => {
+        if (refresh) {
+          const latestIndex = JSON.parse(read(indexPath)) as { readonly current?: Readonly<Record<string, Readonly<Record<string, unknown>>>> };
+          const latestCurrent = latestIndex.current?.[parsed.caseId]?.[action.memory];
+          const latestSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, projectRootForTest(parsed.path), action.selector);
+          if (currentV2EvidenceStillValid(latestCurrent, latestSource)) fail("EvidenceAlreadyCurrent", `current v2 evidence for ${action.memory} still binds the current source identity`);
+        }
+        validateRegressionEvidence(action, parsed);
+      })),
       Effect.as({ changes: [
       // Evidence-only repair still depends on the current relation/owner. Keep
-      // its sidecar as a no-op transaction member so the journal CAS binds it.
-      { path: relationPath, bytes: encodeCaseRelationsSidecar(next), expectedDigest: relationDigest },
+      // its declaration source as a no-op transaction member so journal CAS binds it.
+      ...annotationProjectionChanges([{ before, next }]),
       { path: indexPath, bytes: `${JSON.stringify(nextIndex, null, 2)}\n`, expectedDigest: indexDigest },
       { path: inventoryEvidencePath, bytes: `${JSON.stringify(verified.inventory, null, 2)}\n`, expectedDigest: null },
       ...copied.map((item) => ({ path: item.path, bytes: `${JSON.stringify(item.value, null, 2)}\n`, expectedDigest: null })),
@@ -371,7 +533,6 @@ function retireRegression(action: RetireRegressionInput, parsed: CaseSelector) {
   return validateRetirableProblem(action.memory).pipe(Effect.andThen(Effect.suspend(() => {
     const relationPath = sidecarPath(parsed.path);
     const before = decodeSidecar(relationPath);
-    const relationDigest = assertExpected(relationPath, undefined);
     const planned = planCaseRelation(before, { _tag: "RetireRegression", selector: parsed, memory: action.memory, reason: action.reason }, audit());
     const next = Result.match(planned, { onFailure: (error) => fail(error._tag, JSON.stringify(error)), onSuccess: (value) => value });
     const indexPath = evidencePath(parsed.path);
@@ -387,7 +548,7 @@ function retireRegression(action: RetireRegressionInput, parsed: CaseSelector) {
       history: [...(index.history ?? []), { caseId: parsed.caseId, memory: action.memory, evidence, reason: action.reason, retiredAtCommit: audit().atCommit }],
     };
     return publish("test-regression-retire", action.dryRun, validateRetirableProblemUnderLease(action.memory).pipe(Effect.as({ changes: [
-      { path: relationPath, bytes: encodeCaseRelationsSidecar(next), expectedDigest: relationDigest },
+      ...annotationProjectionChanges([{ before, next }]),
       { path: indexPath, bytes: `${JSON.stringify(nextIndex, null, 2)}\n`, expectedDigest: indexDigest },
     ], value: action.selector })));
   })));
@@ -428,14 +589,9 @@ function moveCaseMutation(action: MoveCaseInput) {
     const targetPath = sidecarPath(action.to);
     const source = decodeSidecar(sourcePath);
     const target = decodeSidecar(targetPath, true);
-    const sourceDigest = assertExpected(sourcePath, undefined);
-    const targetDigest = assertExpected(targetPath, undefined);
     const moved = planCaseMove(source, target, parsed, audit());
     const next = Result.match(moved, { onFailure: (error) => fail(error._tag, JSON.stringify(error)), onSuccess: (value) => value });
-    return { changes: [
-      { path: sourcePath, bytes: encodeCaseRelationsSidecar(next.source), expectedDigest: sourceDigest },
-      { path: targetPath, bytes: encodeCaseRelationsSidecar(next.target), expectedDigest: targetDigest },
-    ], value: `${action.to}#${parsed.caseId}` };
+    return { changes: annotationProjectionChanges([{ before: source, next: next.source }, { before: target, next: next.target }]), value: `${action.to}#${parsed.caseId}` };
   }));
 }
 
@@ -628,6 +784,7 @@ export const retireCase = Effect.fn("retireCase")(function*(input: RetireCaseInp
   return yield* planOne({ _tag: "RetireCase", selector: parsed, reason: input.reason }, undefined, "test-case-retire", input.dryRun);
 });
 export const addCaseRegression = Effect.fn("addCaseRegression")(function*(input: AddRegressionInput) { return yield* addRegression(input, selector(input.selector)); });
+export const refreshCaseRegression = Effect.fn("refreshCaseRegression")(function*(input: RefreshRegressionInput) { return yield* addRegression(input, selector(input.selector), true); });
 export const retireCaseRegression = Effect.fn("retireCaseRegression")(function*(input: RetireRegressionInput) { return yield* retireRegression(input, selector(input.selector)); });
 export const addCaseIssue = Effect.fn("addCaseIssue")(function*(input: AddIssueInput) {
   const parsed = selector(input.selector);
@@ -642,10 +799,9 @@ export const addCaseIssue = Effect.fn("addCaseIssue")(function*(input: AddIssueI
     }
     const path = sidecarPath(parsed.path);
     const before = decodeSidecar(path);
-    const digest = assertExpected(path, undefined);
     const planned = planCaseRelation(before, { _tag: "AddIssue", selector: parsed, issue: current }, audit());
     const next = Result.match(planned, { onFailure: (error) => fail(error._tag, JSON.stringify(error)), onSuccess: (value) => value });
-    return { changes: [{ path, bytes: encodeCaseRelationsSidecar(next), expectedDigest: digest }], value: input.selector };
+    return { changes: annotationProjectionChanges([{ before, next }]), value: input.selector };
   }));
 });
 export const retireCaseIssue = Effect.fn("retireCaseIssue")(function*(input: RetireIssueInput) {

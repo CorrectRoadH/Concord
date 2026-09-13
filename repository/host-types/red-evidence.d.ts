@@ -2,7 +2,7 @@ import * as FileSystem from "effect/FileSystem";
 import { Effect } from "effect";
 import { type RepoReceipt } from "./contracts.ts";
 import { OwnedProcess } from "./owned-process.ts";
-import { type FormalCaseReceiptV1 } from "./case-evidence.ts";
+import { type FormalCaseReceiptV2 } from "./case-evidence.ts";
 export interface RedEvidenceOptions {
     readonly candidatePath: string;
     readonly candidateGitSha: string;
@@ -16,7 +16,7 @@ export interface RedEvidenceSummary {
     readonly format: "niceeval.e2e-red-evidence-summary/v1";
     readonly evidence: string;
     readonly receiptPath: string;
-    readonly receipt: FormalCaseReceiptV1;
+    readonly receipt: FormalCaseReceiptV2;
 }
 declare const RedEvidenceError_base: new <A extends Record<string, any> = {}>(args: import("effect/Types").VoidIfEmpty<{ readonly [P in keyof A as P extends "_tag" ? never : P]: A[P]; }>) => import("effect/Cause").YieldableError & {
     readonly _tag: "RedEvidenceError";

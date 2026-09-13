@@ -6,7 +6,7 @@ import { parse } from "yaml";
 
 import { decodeFeedbackDocument } from "../../feedback/codec.js";
 import { decodeMemoryDocument } from "../../memory/codec.js";
-import { decodeCaseRelationsSidecar } from "../test-case/sidecar.js";
+import { decodeAnnotatedCases, decodeCaseArchive } from "../test-case/annotations.js";
 import {
   TraceFormatError,
   TraceInputChanged,
@@ -649,7 +649,8 @@ function traceInputPaths(root: string, paths: readonly string[]): readonly strin
   return sorted(paths.filter((path) => {
     const file = slash(relative(root, path));
     if (/^docs\/.*\.md$/u.test(file)) return true;
-    if (/^e2e\/.*\/(?:project\.json|[^/]+\.(?:test|spec)\.[cm]?[jt]sx?\.cases\.json)$/u.test(file)) return true;
+    if (/^e2e\/.*\.(?:[cm]?[jt]sx?)$/u.test(file)) return true;
+    if (/^e2e\/.*\/(?:project\.json|[^/]+\.cases\.evidence\.json|[^/]+\.case-evidence\/.*\.json)$/u.test(file)) return true;
     if (/^memory\/(?!INDEX\.md$).*\.md$/u.test(file)) return true;
     return /^feedback\/(?!\.)[^/]+\/README\.md$/u.test(file);
   }), (path) => slash(relative(root, path)));
@@ -749,8 +750,8 @@ function compileTraceAtGeneration(
     };
     yield* pure("docs", "relations", () => validateNodeRelations(targetSnapshot, documentIndex));
 
-    const sidecarFiles = all.filter((path) => path.startsWith(join(root, "e2e")) && path.endsWith(".cases.json"));
-    const candidateSidecars = yield* Effect.forEach(sidecarFiles, (path) => read(path).pipe(
+    const annotationFiles = all.filter((path) => path.startsWith(join(root, "e2e")) && /\.(?:[cm]?[jt]sx?)$/u.test(path) && slash(relative(root, path)) !== "e2e/concord-history.ts");
+    const candidateSources = yield* Effect.forEach(annotationFiles, (path) => read(path).pipe(
       Effect.map((source) => ({ path: slash(relative(root, path)), source })),
     ));
     const declaredOwners = yield* pure("docs", "owner", () => testingOwnerContracts(documentSources));
@@ -782,32 +783,33 @@ function compileTraceAtGeneration(
     const knownCaseIds = new Map<string, string>();
     const tests: TraceTest[] = [];
 
-    for (const candidate of candidateSidecars) {
-      const decoded = decodeCaseRelationsSidecar(candidate.path, candidate.source);
+    const annotated = [] as import("../test-case/annotations.js").AnnotatedCase[];
+    for (const candidate of candidateSources) {
+      const decoded = decodeAnnotatedCases(candidate.path, candidate.source);
       if (Result.isFailure(decoded)) return yield* Effect.fail(new TraceFormatError({
         path: candidate.path,
         subject: "case relations",
         message: decoded.failure.message,
       }));
-      const sidecar = decoded.success;
-      if (`${sidecar.testFile}.cases.json` !== candidate.path || !relativeFiles.has(sidecar.testFile)) {
-        return yield* Effect.fail(new TraceFormatError({
-          path: candidate.path,
-          subject: "testFile",
-          message: `must name the adjacent existing test file ${candidate.path.slice(0, -".cases.json".length)}`,
-        }));
-      }
-      for (const caseId of [...Object.keys(sidecar.current), ...sidecar.tombstones.map((entry) => entry.caseId)]) {
+      annotated.push(...decoded.success);
+    }
+    const historyPath = "e2e/concord-history.ts";
+    const archived = relativeFiles.has(historyPath) ? decodeCaseArchive(historyPath, yield* read(join(root, historyPath))) : Result.succeed({ history: [], tombstones: [] });
+    if (Result.isFailure(archived)) return yield* Effect.fail(new TraceFormatError({ path: historyPath, subject: "case history", message: archived.failure.message }));
+    for (const item of annotated) {
+      if (!relativeFiles.has(item.testFile)) return yield* Effect.fail(new TraceFormatError({ path: item.declarationPath, subject: "testFile", message: `${item.testFile} does not exist` }));
+      {
+        const caseId = item.caseId;
         const previous = knownCaseIds.get(caseId);
         if (previous !== undefined) return yield* Effect.fail(new TraceFormatError({
-          path: candidate.path,
+          path: item.declarationPath,
           subject: "caseId",
           message: `${caseId} is already owned by ${previous}`,
         }));
-        knownCaseIds.set(caseId, candidate.path);
+        knownCaseIds.set(caseId, item.declarationPath);
       }
 
-      let directory = posix.dirname(sidecar.testFile);
+      let directory = posix.dirname(item.testFile);
       let found: string | undefined;
       while (directory === "e2e" || directory.startsWith("e2e/")) {
         if (relativeFiles.has(`${directory}/project.json`)) {
@@ -818,7 +820,7 @@ function compileTraceAtGeneration(
       }
       if (found === undefined) {
         return yield* Effect.fail(new TraceFormatError({
-          path: candidate.path,
+          path: item.declarationPath,
           subject: "repo metadata",
           message: "no owning project.json",
         }));
@@ -833,22 +835,27 @@ function compileTraceAtGeneration(
         });
         metadataCache.set(found, repo);
       }
-      for (const [caseId, relation] of Object.entries(sidecar.current)) {
-        if (!declaredOwnerMap.has(relation.owner)) return yield* Effect.fail(new TraceFormatError({
-          path: candidate.path,
+      {
+        if (!declaredOwnerMap.has(item.owner)) return yield* Effect.fail(new TraceFormatError({
+          path: item.declarationPath,
           subject: "owner",
-          message: `${relation.owner} is not a declared owner contract anchor`,
+          message: `${item.owner} is not a declared owner contract anchor`,
         }));
         tests.push({
-          caseId: caseId as `necase_${string}`,
-          selector: `${sidecar.testFile}#${caseId}`,
-          path: sidecar.testFile,
-          owner: relation.owner,
-          regressions: relation.regressions,
-          issues: relation.issues.map((issue) => issue.url),
+          caseId: item.caseId,
+          selector: `${item.testFile}#${item.caseId}`,
+          path: item.testFile,
+          owner: item.owner,
+          regressions: [...item.regressions],
+          issues: item.issues.map((issue) => issue.url),
           ...repo,
         });
       }
+    }
+    for (const entry of archived.success.tombstones) {
+      const previous = knownCaseIds.get(entry.event.caseId);
+      if (previous !== undefined) return yield* Effect.fail(new TraceFormatError({ path: historyPath, subject: "caseId", message: `${entry.event.caseId} is already current at ${previous}` }));
+      knownCaseIds.set(entry.event.caseId, historyPath);
     }
 
     const memoryIndex = join(root, "memory", "INDEX.md");

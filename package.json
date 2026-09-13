@@ -1,6 +1,6 @@
 {
   "name": "concord-sdlc",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Contract, test evidence, and engineering memory for a repository's development lifecycle.",
   "type": "module",
   "private": true,
@@ -13,18 +13,21 @@
     "docs",
     "NOTICE.md",
     "npm-shrinkwrap.json",
-    "repository"
+    "repository",
+    "templates",
+    "skills"
   ],
   "engines": {
     "node": ">=24.15.0"
   },
   "packageManager": "pnpm@11.18.0",
   "scripts": {
-    "build": "tsc -p tsconfig.json && tsc -p tsconfig.repository.json && node -e \"const fs=require('node:fs');fs.rmSync('dist/repository/host-types',{recursive:true,force:true});fs.cpSync('repository/host-types','dist/repository/host-types',{recursive:true})\" && chmod +x dist/entry.js dist/cli.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.repository.json --noEmit",
-    "test": "pnpm build && node --test test/*.test.mjs",
-    "check": "pnpm typecheck && pnpm test",
-    "concord": "node dist/entry.js"
+    "build": "tsx scripts/build.ts",
+    "typecheck": "pnpm build && tsc -p tsconfig.test.json && tsc -p tsconfig.scripts.json",
+    "test": "pnpm build && pnpm test:built",
+    "check": "pnpm typecheck && pnpm test:built",
+    "concord": "node dist/entry.js",
+    "test:built": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.112",

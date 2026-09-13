@@ -1,0 +1,24 @@
+{
+  "format": "concord.templates/v1",
+  "templates": [
+    { "name": "feature", "description": "Current feature contract overview.", "path": "feature.md" },
+    { "name": "roadmap", "description": "Adoptable product direction overview.", "path": "roadmap.md" },
+    { "name": "design", "description": "Design decision overview and candidate comparison.", "path": "design.md" },
+    { "name": "engineering", "description": "Repository engineering mechanism.", "path": "engineering.md" },
+    { "name": "use-case", "description": "Complete path for one user goal.", "path": "use-case.md" },
+    { "name": "research", "description": "Dated external research and product mapping.", "path": "research.md" },
+    { "name": "problem", "description": "Problem memory investigation prompt.", "path": "problem.md" },
+    { "name": "decision", "description": "Decision memory rationale prompt.", "path": "decision.md" },
+    { "name": "insight", "description": "Reusable engineering insight prompt.", "path": "insight.md" },
+    { "name": "issue", "description": "Local observation draft prompt.", "path": "issue.md" },
+    { "name": "library", "description": "Public library contract page.", "path": "library.md" },
+    { "name": "cli", "description": "Command-line contract page.", "path": "cli.md" },
+    { "name": "architecture", "description": "Internal ownership and data-flow page.", "path": "architecture.md" },
+    { "name": "lifecycle", "description": "Resource lifecycle and failure ownership page.", "path": "lifecycle.md" },
+    { "name": "use-case-index", "description": "Index of user-goal paths.", "path": "use-case-index.md" },
+    { "name": "goals", "description": "Design decision goals and criteria.", "path": "goals.md" },
+    { "name": "limits", "description": "Design decision constraints and candidates.", "path": "limits.md" },
+    { "name": "decision-record", "description": "Design decision outcome and rationale.", "path": "decision-record.md" },
+    { "name": "cases", "description": "Neutral design comparison scenarios.", "path": "cases.md" }
+  ]
+}

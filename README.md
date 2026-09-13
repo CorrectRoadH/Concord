@@ -39,6 +39,7 @@ Concord 用可审阅的源文件保存这些事实，用命令维护生命周期
 | 尚未采用的已定稿方向 | Roadmap Markdown |
 | 多方案比较与裁决 | Design Markdown |
 | 带日期的外部事实与研究 | Research Markdown |
+| 仓库测试与维护机制的目标及用法 | Engineering Markdown |
 | 测试身份、功能归属和回归关系 | 测试声明旁的 `// @concord-*` 注释 |
 | 问题、决策、可复用经验及历史 | Memory Markdown |
 | 待跟进观察及关联问题 | 本地 Issue 草稿 |
@@ -51,18 +52,19 @@ Git 保存需要协作和审阅的事实。SQLite 是这些事实的投影，删
 
 标注形式如下。关系与测试一起出现在 diff 中，不需要再维护一份测试关系 JSON：
 
-```js
+```ts
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { Effect } from 'effect';
 import { login } from '../src/login.js';
 
 // @concord-case login-rejects-expired-token
 // @concord-contract docs/feature/login/use-case/expired-token.md
 // @concord-regression memory/expired-token-accepted.md
-test('rejects an expired token', async () => {
-  const result = await login({ token: 'expired' });
-  assert.equal(result.accepted, false);
-});
+test('rejects an expired token', () => Effect.runPromise(Effect.gen(function*() {
+  const result = yield* login({ token: 'expired' });
+  yield* Effect.sync(() => assert.equal(result.accepted, false));
+})));
 ```
 
 Case ID 不依赖标题或行号，当前扫描集合必须唯一；测试演进保存在 Git 中，不承诺已删除身份永远不可复用。Concord 用语法树把注释关联到测试声明，检查重复身份、无效引用和无法明确关联的标注。
@@ -111,7 +113,7 @@ SQLite 缓存文件摘要和已解析的标注。Trace 每次结合当前 Markdo
 
 ## 本地开发
 
-环境：Linux 本地文件系统、Node.js 24.15+、pnpm 11.18.0、Git。项目使用 TypeScript、固定版本的 Effect，以及 Node 的 SQLite 接口。
+环境：Linux 本地文件系统、Node.js 24.15+、pnpm 11.18.0、Git。实现、测试和构建脚本统一使用 TypeScript 与固定版本的 Effect；测试和脚本接受严格类型检查。`dist/*.js` 是供 Node 执行的编译产物，TypeScript 的 NodeNext import 也使用这些运行时扩展名。
 
 ```sh
 pnpm install --frozen-lockfile
@@ -122,6 +124,20 @@ pnpm check
 本地包名为 `concord-sdlc`，命令名为 `concord`。项目尚未发布到 npm。
 
 ## 安装与使用
+
+本机开发与 dogfooding 使用全局链接，直接运行当前 checkout 的构建产物：
+
+```sh
+cd /home/ctrdh/Code/Concord
+pnpm install --frozen-lockfile
+pnpm build
+npm install --global --prefix "$HOME/.local" --ignore-scripts --no-audit --no-fund "$PWD"
+export PATH="$HOME/.local/bin:$PATH"
+concord --version
+readlink -f "$(command -v concord)"
+```
+
+本地目录安装会创建包与 bin 的符号链接；修改源码后运行 `pnpm build` 即生效，无需重新安装。移动 checkout 后需要重新链接。若先前使用 Nix 用户 profile 安装 Concord，先用 `nix profile remove concord` 移除旧入口。全局链接供日常自举，`pnpm check` 仍构建、打包并在隔离消费者中安装验收。
 
 Linux 可以从 Homebrew tap 安装：
 
@@ -137,14 +153,52 @@ cd /home/ctrdh/Code/Concord
 pnpm install --frozen-lockfile
 pnpm build
 npm pack --ignore-scripts
-npm install --prefix ~/.local/share/concord ./concord-sdlc-0.2.1.tgz
+npm install --prefix ~/.local/share/concord ./concord-sdlc-0.3.0.tgz
 export PATH="$HOME/.local/share/concord/node_modules/.bin:$PATH"
 concord --help
 ```
 
+Agent 可直接从已安装包读取精简入口，不需要另行全局安装 skill，也不要求当前目录已初始化：
+
+```sh
+concord --skill
+concord --skill test
+concord --skill all
+```
+
+无 topic 时输出按需路由的 `SKILL.md`；已知 topic 输出对应详细命令，`all` 仅用于需要完整离线资料时。skill 读取不会加载消费仓库或 repository profile，也不会写文件。
+
 包附带 `npm-shrinkwrap.json`，锁定 Effect 预发布版本及传递依赖。源码开发用 `pnpm-lock.yaml`；升级依赖时同时更新两者并重新做安装验收。
 
 在一个已有 Git 仓库的根目录执行：
+
+```sh
+concord init
+concord feature create login --title "Login"
+concord use-case create expired-token --feature login --title "Reject expired tokens"
+concord test annotate login-rejects-expired-token \
+  --contract docs/feature/login/use-case/expired-token.md
+```
+
+`init` 一次建好配置、全部分类目录、文档总入口、`docs/concord.md` 接入指南和 `docs/_template/` 全套模板。已有文档总入口保留。打开生成的 Feature / Use Case 填写正文，把 `test annotate` 输出贴到真实测试声明正上方，再运行 `concord check` 和 `concord trace show login` 查看关联。模板是写作提示，检查通过不表示契约已写完或测试已执行。
+
+Feature、Roadmap 和 Design 候选共用文档体裁。创建时完整生成 README、`library`、`cli`、`architecture`、`lifecycle` 和 `use-case` 索引，无需选择页面。Engineering 保存仓库机制；Design 创建决策外层和独立候选：
+
+```sh
+concord engineering create ci --title "Continuous integration"
+concord roadmap create sessions --title "Session lifecycle"
+concord design create session-store --title "Session storage" \
+  --alternative sqlite --alternative files
+concord feature page show login cli --json
+concord feature page set login cli --body ./login-cli.md --expected-digest 'sha256:REPLACE_WITH_DIGEST'
+concord design page show session-store architecture --plan sqlite
+```
+
+`page set` 用 `page show` 返回的最新 digest 防止覆盖并发编辑。Design 的 `DECISION.md` 保存解释材料，正式选择仍由 `design decide` 写入主文档 metadata。已有的单页文档不需要迁移。
+
+`concord template list` / `template show <name>` 在仓库外也能查看随包模板，不需要 NiceEval checkout。`concord doctor` 检查配置、测试目录和关联，不执行 runner。初始化可以用重复的 `--test-root` 指定扫描目录，用 `--runner-config <file>` 提供符合 runner schema 的 JSON 对象；省略时仍使用 Node 原生测试。已有仓库直接维护 `concord.json`。
+
+默认输出面向人；脚本和 Agent 使用 `--json`。以下是已有正文和 Problem 红绿证据的完整路径（在新的消费仓库执行）：
 
 ```sh
 concord init
@@ -177,7 +231,7 @@ concord review render
 
 `concord repo` 承接 NiceEval 原有仓库维护命令。项目内继续使用 `pnpm run repo …`、`pnpm memory …`、`pnpm pr:body …` 等入口；这些脚本调用锁定版本的 Concord。
 
-此模式保留现有 Markdown、测试 sidecar、Memory 历史及 formal E2E 证据，不转换为通用模式的 command 收据。真实 inventory、candidate/Testkit 与 takeover 由消费仓库 host 拥有。全局 brew engine 与仓库锁定字节不同时会拒绝执行，提示使用项目入口。
+此模式沿用 Markdown 与 Memory 领域；当前测试关系写在真实声明上方，历史与退役记录保存在注释归档。旧 formal E2E 证据保持历史可读，新证据绑定执行源码与 owner/contract 内容，不转换为通用模式的 command 收据。真实 inventory、candidate/Testkit 与 takeover 由消费仓库 host 拥有。全局 engine 与仓库锁定字节不同时会拒绝执行，提示使用项目入口。
 
 具体边界见 [Repository profile](docs/repository-profile.md)。
 

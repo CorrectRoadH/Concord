@@ -23,6 +23,8 @@ export interface RunOptions {
     readonly keepWorkdir: boolean;
     readonly repoConcurrency: number;
     readonly selection?: SelectionReceipt;
+    readonly sourceDirs?: Readonly<Record<string, string>>;
+    readonly sourceSnapshotDigests?: Readonly<Record<string, string>>;
 }
 export type ScratchDisposition = {
     readonly kind: "not-created";

@@ -20,6 +20,7 @@ import {
 } from "./errors.js";
 import type { MemoryDocument, MemoryV1, ProblemResolution, PromotionKind } from "./schema.js";
 import { promoteMemory, reopenProblem, resolveProblem, retirePromotion, supersedeMemory } from "./state.js";
+import { decodeRepositorySourceIdentityV2, resolveRepositorySourceIdentity, sameRepositorySourceIdentity } from "../source-identity.js";
 
 const message = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
 export interface MemoryCheckReceipt {
@@ -51,14 +52,14 @@ const EvidenceIndexSchema = Schema.Struct({
   }))),
 });
 const FormalReceiptSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.e2e-case-receipt/v1"),
+  format: Schema.Literal("niceeval.e2e-case-receipt/v2"),
   mode: Schema.Literal("formal"),
   observation: Schema.Literals(["red", "green", "reliability"]),
   selector: Schema.String,
   caseId: Schema.String,
   inventoryDigest: Schema.String,
   candidate: Schema.Struct({ sha256: Schema.String }),
-  source: Schema.Struct({ testFileSha256: Schema.String, sidecarSha256: Schema.String }),
+  source: Schema.Unknown,
   result: Schema.Struct({ disposition: Schema.Literals(["regression", "pass"]) }),
   cleanup: Schema.Struct({ ok: Schema.Boolean }),
   invocationId: Schema.String,
@@ -72,10 +73,11 @@ const InventorySchema = Schema.Struct({
   cases: Schema.Array(Schema.Struct({ path: Schema.String, caseId: Schema.String })),
 });
 const CertificateSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.e2e-takeover-certificate/v1"),
+  format: Schema.Literal("niceeval.e2e-takeover-certificate/v2"),
   selector: Schema.String,
   caseId: Schema.String,
   candidateSha256: Schema.String,
+  sourceDigest: Schema.String,
   greenReceipt: Schema.String,
   observations: Schema.Struct({
     isolatedCopies: Schema.Array(Schema.String),
@@ -343,7 +345,11 @@ export class MemoryRepository {
       field: "receiptSha256" | "certificateSha256",
     ): A => {
       const decoded = Schema.decodeUnknownResult(schema)(verifySigned(path, field));
-      if (Result.isFailure(decoded)) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "invalid or incomplete signed evidence" });
+      if (Result.isFailure(decoded)) {
+        const input = JSON.parse(this.targetSource(path).source) as { format?: unknown };
+        const legacy = input.format === "niceeval.e2e-case-receipt/v1" || input.format === "niceeval.e2e-takeover-certificate/v1";
+        throw new MemoryReferenceConflict({ operation: "resolve", path, message: legacy ? "legacy v1 evidence is read-only history and unavailable for current fixed validation" : "invalid or incomplete signed evidence" });
+      }
       return decoded.success;
     };
     const verifySignedInventory = (path: string) => {
@@ -359,12 +365,16 @@ export class MemoryRepository {
       return decoded.success;
     };
     for (const test of related) {
-      const sidecarPath = `${test.path}.cases.json`;
       const indexPath = `${test.path}.cases.evidence.json`;
-      this.targetSource(sidecarPath);
-      const testFile = this.targetSource(test.path);
-      preimages.add(sidecarPath);
       preimages.add(test.path);
+      let projectDirectory = test.path.slice(0, test.path.lastIndexOf("/"));
+      while (projectDirectory.startsWith("e2e/") && !existsSync(join(this.#root, projectDirectory, "project.json"))) projectDirectory = projectDirectory.slice(0, projectDirectory.lastIndexOf("/"));
+      if (!projectDirectory.startsWith("e2e/") || !existsSync(join(this.#root, projectDirectory, "project.json"))) throw new MemoryReferenceConflict({ operation: "resolve", path: test.path, message: "cannot locate the E2E source projection root" });
+      const currentSource = resolveRepositorySourceIdentity(this.#root, join(this.#root, projectDirectory), test.selector);
+      preimages.add(currentSource.declarationFile);
+      preimages.add(currentSource.ownerRef.slice(0, currentSource.ownerRef.lastIndexOf("#")));
+      preimages.add(currentSource.contractRef.split("#", 1)[0]!);
+      for (const file of currentSource.projection.files) preimages.add(`${projectDirectory}/${file.path}`);
       const index = decode(indexPath, EvidenceIndexSchema);
       const entry = index.current[test.caseId]?.[memoryPath];
       if (entry === undefined) throw new MemoryReferenceConflict({
@@ -383,16 +393,19 @@ export class MemoryRepository {
           operation: "resolve", path, message: "evidence index digest does not match receipt bytes",
         });
         const value = decodeSigned(path, FormalReceiptSchema, "receiptSha256");
+        let receiptSource;
+        try { receiptSource = decodeRepositorySourceIdentityV2(value.source); }
+        catch (cause) { throw new MemoryReferenceConflict({ operation: "resolve", path, message: message(cause) }); }
         if (value.selector !== test.selector || value.caseId !== test.caseId || value.inventoryDigest !== inventoryInput.digest ||
-          value.cleanup.ok !== true || value.source.testFileSha256 !== sourceDigest(testFile.source)) {
-          throw new MemoryReferenceConflict({ operation: "resolve", path, message: "formal receipt diverges from selector, inventory, or current source digests" });
+          value.cleanup.ok !== true || !sameRepositorySourceIdentity(receiptSource, currentSource)) {
+          throw new MemoryReferenceConflict({ operation: "resolve", path, message: "formal v2 receipt diverges from selector, inventory, code projection, owner, or contract source" });
         }
-        return value;
+        return { ...value, source: receiptSource };
       };
       const red = receipt(entry.red.path, entry.red.digest);
       const green = receipt(entry.green.path, entry.green.digest);
-      if (red.source.sidecarSha256 !== green.source.sidecarSha256) throw new MemoryReferenceConflict({
-        operation: "resolve", path: indexPath, message: "formal red and green evidence diverge from the same sidecar source",
+      if (red.source.projection.digest !== green.source.projection.digest) throw new MemoryReferenceConflict({
+        operation: "resolve", path: indexPath, message: "formal red and green evidence diverge from the same source projection",
       });
       if (red.observation !== "red" || red.result.disposition !== "regression" || green.observation !== "green" || green.result.disposition !== "pass") {
         throw new MemoryReferenceConflict({ operation: "resolve", path: indexPath, message: "fixed evidence requires a formal red regression and green pass" });
@@ -404,6 +417,7 @@ export class MemoryRepository {
       const certificate = decodeSigned(entry.certificate.path, CertificateSchema, "certificateSha256");
       if (certificate.selector !== test.selector || certificate.caseId !== test.caseId ||
         certificate.candidateSha256 !== green.candidate.sha256 || certificate.greenReceipt !== entry.green.path ||
+        certificate.sourceDigest !== green.source.projection.digest ||
         certificate.observations.singleCase !== entry.green.path ||
         certificate.observations.isolatedCopies.length !== 3 || certificate.observations.sameCopy.length !== 2 ||
         certificate.observations.cleanup.length === 0) {
@@ -421,8 +435,8 @@ export class MemoryRepository {
       if (reliability.some((item) => item.observation !== "reliability" || item.result.disposition !== "pass" || item.candidate.sha256 !== green.candidate.sha256)) {
         throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "takeover receipts do not all pass on the green candidate" });
       }
-      if (reliability.some((item) => item.source.sidecarSha256 !== green.source.sidecarSha256)) throw new MemoryReferenceConflict({
-        operation: "resolve", path: entry.certificate.path, message: "takeover receipts diverge from the green sidecar source",
+      if (reliability.some((item) => item.source.projection.digest !== green.source.projection.digest)) throw new MemoryReferenceConflict({
+        operation: "resolve", path: entry.certificate.path, message: "takeover receipts diverge from the green source projection",
       });
       const invocationIds = [red.invocationId, green.invocationId, ...reliability.map((item) => item.invocationId)];
       if (new Set(invocationIds).size !== invocationIds.length) throw new MemoryReferenceConflict({

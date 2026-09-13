@@ -5,6 +5,8 @@ import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Schema } from 'effect';
 import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Change, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
+import { onboardingGuide } from './onboarding-guide.js';
+import { projectTemplateFiles } from './templates.js';
 
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
@@ -65,7 +67,7 @@ export function discoverRoot(input?: string, initialize = false): string {
 function defaultConfig(): ProjectConfig {
   return { format: 'concord.project/v1', projectId: randomUUID(), testRoots: ['test', 'tests'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 60000 } };
 }
-const allowedOwner = (path: string): boolean => path === 'concord.json' || /^(?:docs\/(?:feature|roadmap|design|research|issues)\/|memory\/).+\.md$/.test(path);
+const allowedOwner = (path: string): boolean => path === 'concord.json' || path === 'docs/README.md' || path === 'docs/concord.md' || /^(?:docs\/(?:_template|feature|roadmap|design|research|engineering|issues)\/|memory\/).+\.md$/.test(path);
 
 export class LocalRepository implements Repository {
   readonly root: string;
@@ -220,9 +222,21 @@ export class LocalRepository implements Repository {
   }
 }
 
-export function initialize(repo: Repository, dryRun = false): MutationReceipt {
-  const paths: Record<string, string> = { 'concord.json': `${JSON.stringify(repo.config, null, 2)}\n` };
-  for (const [path, title] of Object.entries({ 'docs/feature/README.md': 'Features', 'docs/roadmap/README.md': 'Roadmap', 'docs/design/README.md': 'Design decisions', 'docs/research/README.md': 'Research', 'docs/issues/README.md': 'Local issue drafts', 'memory/README.md': 'Engineering memory' })) paths[path] = `# ${title}\n\nUse concord to create and discover the source-owned documents in this directory.\n`;
+export function initialize(repo: Repository, dryRun = false, options: { testRoots?: readonly string[]; runner?: ProjectConfig['runner'] } = {}): MutationReceipt {
+  const config = decode(ProjectSchema, { ...repo.config, ...(options.testRoots ? { testRoots: options.testRoots } : {}), ...(options.runner ? { runner: options.runner } : {}) }, 'init configuration');
+  for (const path of [...config.testRoots, ...config.runner.sourceFiles]) repo.absolute(path);
+  const paths: Record<string, string> = { 'concord.json': `${JSON.stringify(config, null, 2)}\n`, 'docs/concord.md': onboardingGuide, ...projectTemplateFiles() };
+  if (repo.read('docs/README.md') === undefined) paths['docs/README.md'] = '# Project documentation\n\nStart with [the Concord workflow](concord.md) and [the complete templates](_template/README.md).\n\n' + ['feature', 'roadmap', 'design', 'engineering', 'research', 'issues'].map(kind => `- [${kind}](${kind}/README.md)`).join('\n') + '\n- [Engineering memory](../memory/README.md)\n';
+  const sections: Record<string, [string, string, string]> = {
+    'docs/feature/README.md': ['Features', 'Adopted product contracts. Write the target behavior and link complete user paths.', 'feature create'],
+    'docs/roadmap/README.md': ['Roadmap', 'Settled directions awaiting adoption as current Feature contracts.', 'roadmap create'],
+    'docs/design/README.md': ['Design decisions', 'Compare self-contained candidates against shared goals and constraints. Record selection with design decide.', 'design create'],
+    'docs/engineering/README.md': ['Engineering', 'Repository testing and maintenance mechanisms, their usage and acceptance requirements.', 'engineering create'],
+    'docs/research/README.md': ['Research', 'Dated external facts and primary sources informing decisions.', 'research create'],
+    'docs/issues/README.md': ['Local issue drafts', 'Observations and investigation links. These drafts are local, not remote issues.', 'issue draft'],
+    'memory/README.md': ['Engineering memory', 'Problems, decisions, and reusable insights. Preserve lifecycle history through Concord commands.', 'memory add'],
+  };
+  for (const [path, [title, description, command]] of Object.entries(sections)) paths[path] = `# ${title}\n\n${description}\n\nStart with \`concord ${command} --help\`.\nUse \`concord ${command.split(' ')[0]} list\` to discover documents.\n`;
   for (const path of Object.keys(paths)) if (repo.read(path) !== undefined) throw new ConcordError('InitializationConflict', `${path} already exists; no existing file will be overwritten`);
   return repo.publish('init', Object.entries(paths).map(([path, after]) => ({ path, before: null, after })), dryRun);
 }

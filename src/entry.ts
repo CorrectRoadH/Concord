@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // Keep ordinary help independent of consumer host code.
 try {
-  if (process.argv[2] === 'repo') {
+  if (process.argv.includes('--skill')) {
+    const { runSkillMain } = await import('./skill.js');
+    await runSkillMain(process.argv.slice(2));
+  } else if (process.argv[2] === 'repo') {
     process.argv.splice(2, 1);
     const entry = './repository/cli.js';
     await import(entry);
