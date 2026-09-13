@@ -12,7 +12,7 @@ Concord 来源于 NiceEval revision `e1c66d31115208ceaae2f5bd4d730a7abf67048d` �
 | `packages/repo-tools/src/docs/trace/compiler.ts` | 保留正向归属、动态反查思想；扫描范围和 schema 由 Concord 重建 |
 | `packages/repo-tools/src/docs/trace/relation-mutation.ts` | 保留 preimage、journal、原子写入与恢复模型；独立存储 owner 不依赖 NiceEval 目录或协议 |
 | Feature / Use Case / Design / Research 领域 | 由 Concord 拥有通用文档模型、模板与具名命令 |
-| Test sidecar 与 planner | 保留稳定身份、current/history 和退役原则；每个 Concord test 是显式 argv 验收单元 |
+| Test sidecar 与 planner | 保留当前唯一身份、来源归属和显式退役原则；注释拥有 current 关系，Git 保存测试演进；命令证据拥有独立的 scope |
 | PR editor | 保留本地审阅中关联契约、测试与 Memory 的目标；使用 Concord 审阅格式 |
 | Issue 领域 | 提供本地 Observation 草稿与 Memory 关联，不冒充远端 GitHub 工作项状态 |
 
