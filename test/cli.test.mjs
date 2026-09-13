@@ -8,6 +8,7 @@ const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
 let cli;
 before(()=>{
  const packed=JSON.parse(execFileSync('npm',['pack','--ignore-scripts','--json','--pack-destination',scratch],{cwd:resolve('.'),encoding:'utf8',timeout:60000}));
+ assert.ok(packed[0].files.some(file=>file.path==='npm-shrinkwrap.json'), 'package must carry its runtime dependency lock');
  const install=join(scratch,'tool');mkdirSync(install);writeFileSync(join(install,'package.json'),JSON.stringify({private:true}));
  execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund','--prefer-offline',join(scratch,packed[0].filename)],{cwd:install,encoding:'utf8',timeout:60000});
  cli=join(install,'node_modules/concord-sdlc/dist/cli.js');
@@ -62,4 +63,10 @@ test('installed CLI adoption moves current promotions atomically; local issue li
  const source=readFileSync(join(root,'memory/sharing-rule.md'),'utf8');
  call(root,['--dry-run','memory','retire','sharing-rule','--target','docs/feature/sharing/README.md','--reason','Preview']);
  assert.equal(readFileSync(join(root,'memory/sharing-rule.md'),'utf8'),source);
+});
+test('installed CLI returns a named failure for a known skipped declaration',()=>{
+ const root=consumer('skipped');
+ call(root,['feature','create','skip-feature','--title','Skip feature','--body','-']);
+ write(root,'test/skipped.test.mjs',"import test from 'node:test';\n// @concord-case skipped-case\n// @concord-contract docs/feature/skip-feature/README.md\ntest.skip('skipped',()=>{});\n");
+ assert.equal(call(root,['test','run','skipped-case'],'',1).error,'CaseNotRunnable');
 });
