@@ -1,0 +1,38 @@
+{
+  "name": "concord-sdlc",
+  "version": "0.1.0",
+  "description": "Contract, test evidence, and engineering memory for a repository's development lifecycle.",
+  "type": "module",
+  "private": true,
+  "bin": {
+    "concord": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs",
+    "skills",
+    "NOTICE.md"
+  ],
+  "engines": {
+    "node": ">=24.15.0"
+  },
+  "packageManager": "pnpm@11.18.0",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && chmod +x dist/cli.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "pnpm build && node --test test/*.test.mjs",
+    "check": "pnpm typecheck && pnpm test",
+    "concord": "node dist/cli.js",
+    "prepack": "pnpm build"
+  },
+  "dependencies": {
+    "@effect/platform-node": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112",
+    "yaml": "2.9.0",
+    "typescript": "6.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "24.13.3"
+  }
+}
