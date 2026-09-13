@@ -6,6 +6,19 @@ Concord 是面向开发者与 coding agent 的本地 SDLC 工具。它把“产�
 
 它从 NiceEval 的仓库工程体系中独立出来，使用消费项目自己的 Git 仓库，不依赖 NiceEval、云服务或模型 API。
 
+## Nix / NixOS 安装
+
+公开 Nix 发行入口与 Brew 共用同一份固定版本 Release，支持 Linux x86_64 和 aarch64：
+
+```sh
+nix run github:CorrectRoadH/homebrew-tap#concord -- --help
+nix profile install github:CorrectRoadH/homebrew-tap#concord
+```
+
+Nix 自动提供 Node.js 与 Git；仓库专用的 pnpm 等工具仍由消费环境管理。
+[NixOS 配置与发行说明](https://github.com/CorrectRoadH/homebrew-tap#nix--nixos)包含系统配置入口。
+NiceEval 的 `pnpm run repo` 等命令继续选择仓库锁定版本，Nix 安装不会重写项目数据。
+
 ## 为什么需要它
 
 功能文档、测试和问题记录通常分散在不同地方。改动一个行为时，很难可靠回答：
