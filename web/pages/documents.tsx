@@ -68,7 +68,8 @@ const descriptions: Record<string, string> = {
 }
 
 const documentStyles = stylex.create({
-  detailRoot: { display: "flex", flexDirection: "column", height: { default: "100%", "@media (max-width: 760px)": "auto" }, minHeight: 0, overflow: { default: "hidden", "@media (max-width: 760px)": "visible" } },
+  detailHost: { display: "flex", flex: 1, minHeight: 0 },
+  detailRoot: { display: "flex", flex: { default: 1, "@media (max-width: 760px)": "none" }, flexDirection: "column", minHeight: 0, overflow: { default: "hidden", "@media (max-width: 760px)": "visible" } },
   tabsHeader: {
     position: "sticky",
     zIndex: 12,
@@ -83,7 +84,7 @@ const documentStyles = stylex.create({
     padding: 4,
     backgroundColor: "var(--background)",
   },
-  tabsList: { minWidth: 0, overflowX: "auto" },
+  tabsList: { minWidth: 0, overflowX: "auto", scrollbarWidth: "none" },
   fileLayout: {
     display: "grid",
     gridTemplateColumns: { default: "minmax(210px, 260px) minmax(0, 1fr)", "@media (max-width: 760px)": "1fr" },
@@ -490,7 +491,7 @@ export function FeatureDetailPage() {
     </section>
   )
   return <>
-    <div inert={useCaseId !== undefined}>
+    <div inert={useCaseId !== undefined} {...stylex.props(documentStyles.detailHost)}>
       <DocumentLayout key={feature.path} document={feature} extra={nested} background={useCaseId !== undefined} />
     </div>
     <Outlet />

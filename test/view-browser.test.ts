@@ -250,6 +250,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     assert.equal(await documentTree.evaluate(element=>element.scrollTop),treeScrollBefore);
     const outerPage=page.locator('.document-workspace > .page');
     assert.equal(await outerPage.evaluate(element=>element.scrollHeight===element.clientHeight),true);
+    assert.equal(await outerPage.evaluate(element=>getComputedStyle(element).scrollbarWidth),'none');
+    assert.equal(await page.getByRole('tablist',{name:'文档详情'}).evaluate(element=>getComputedStyle(element).scrollbarWidth),'none');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect.poll(()=>readFileSync(join(root,'docs/feature/browser-feature/architecture.md'),'utf8')).toContain('Architecture from browser.');
     await page.getByRole('link',{name:'Git 变更',exact:true}).click();
