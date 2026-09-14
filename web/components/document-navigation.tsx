@@ -20,14 +20,11 @@ export function CloseMobileOnNavigate({ children, href, onClick, ...props }: Omi
 
 export function DocumentNavigation() {
   const { snapshot } = useWorkspace();
-  const { pathname, search } = useLocation();
-  const selectedPath = new URLSearchParams(search).get('path');
-  const selectedPage = pathname === '/pages' ? snapshot.pages.find(page => page.path === selectedPath) : undefined;
-  const pageOwner = snapshot.documents.find(document => document.path === selectedPage?.documentPath);
-  const section = sections.find(item => pathname === item.href || pathname.startsWith(`${item.href}/`) || pageOwner?.metadata.kind === item.kind);
+  const { pathname } = useLocation();
+  const section = sections.find(item => pathname === item.href || pathname.startsWith(`${item.href}/`));
   if (!section) return null;
   const documents = snapshot.documents.filter(document => document.metadata.kind === section.kind);
-  const selected = pageOwner ?? documents.find(document => pathname.split('/')[2] === encodeURIComponent(document.metadata.id));
+  const selected = documents.find(document => pathname.split('/')[2] === encodeURIComponent(document.metadata.id));
   const groups: ContentSidebarGroup[] = [{
     id: 'documents', label: `${section.label} 列表`, emptyMessage: `暂无 ${section.label}`,
     items: documents.map(document => ({
