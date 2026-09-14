@@ -2,13 +2,17 @@
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import {
   ArrowLeft,
+  ChevronRight,
   ExternalLink,
+  FileText,
   FilePlus2,
+  Folder,
   GitBranch,
   Link2,
   Plus,
   Save,
 } from "lucide-react"
+import * as stylex from "@stylexjs/stylex"
 import * as React from "react"
 import { Link, Navigate, Outlet, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
@@ -62,6 +66,69 @@ const descriptions: Record<string, string> = {
   memory: "Problem、Decision 与 Insight 的工程记忆。",
   issue: "仅本地的观察草稿，不代表远端 Issue 状态。",
 }
+
+const documentStyles = stylex.create({
+  tabsHeader: {
+    position: "sticky",
+    zIndex: 12,
+    top: 0,
+    display: "flex",
+    alignItems: { default: "center", "@media (max-width: 760px)": "stretch" },
+    flexDirection: { default: "row", "@media (max-width: 760px)": "column" },
+    justifyContent: "space-between",
+    gap: 16,
+    marginInline: -4,
+    marginBottom: 16,
+    padding: 4,
+    backgroundColor: "var(--background)",
+  },
+  tabsList: { minWidth: 0, overflowX: "auto" },
+  fileLayout: {
+    display: "grid",
+    gridTemplateColumns: { default: "minmax(210px, 260px) minmax(0, 1fr)", "@media (max-width: 760px)": "1fr" },
+    alignItems: "start",
+    gap: 16,
+  },
+  singleFileLayout: { gridTemplateColumns: "minmax(0, 1fr)" },
+  pathList: {
+    position: { default: "sticky", "@media (max-width: 760px)": "static" },
+    top: 72,
+    maxHeight: { default: "calc(100svh - 10rem)", "@media (max-width: 760px)": 230 },
+    overflowY: "auto",
+    padding: 12,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "var(--border)",
+    borderRadius: "var(--radius)",
+    backgroundColor: "var(--card)",
+  },
+  preview: { minWidth: 0 },
+  tree: { display: "grid", gap: 1 },
+  nested: { marginLeft: 10, paddingLeft: 7, borderLeftWidth: 1, borderLeftStyle: "solid", borderLeftColor: "var(--border)" },
+  treeRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    width: "100%",
+    minWidth: 0,
+    minHeight: 34,
+    paddingBlock: 6,
+    paddingInline: 8,
+    borderWidth: 0,
+    borderRadius: 7,
+    color: "inherit",
+    textAlign: "left",
+    cursor: "pointer",
+    backgroundColor: { default: "transparent", ":hover": "var(--accent)" },
+  },
+  selectedTreeRow: { backgroundColor: "var(--accent)", color: "var(--accent-foreground)" },
+  treeIcon: { width: 15, height: 15, flexShrink: 0, color: "var(--muted-foreground)" },
+  chevron: { transition: "transform 120ms ease" },
+  openChevron: { transform: "rotate(90deg)" },
+  treeSpacer: { flexShrink: 0, width: 15 },
+  treeName: { minWidth: 0, overflow: "hidden", fontWeight: 600, textOverflow: "ellipsis", whiteSpace: "nowrap" },
+  treeMetadata: { marginLeft: "auto", color: "var(--muted-foreground)", fontSize: 10 },
+})
 
 function documentHref(document: DocumentRecord): string {
   const sections: Record<string, string> = {
@@ -487,8 +554,8 @@ function DocumentLayout({
   return (
     <>
       <Tabs value={tab} onValueChange={value => { if (value !== tab) tabNavigation.request(value) }}>
-        <div className="document-tabs-header">
-          <TabsList aria-label="文档详情">
+        <div data-testid="document-header" {...stylex.props(documentStyles.tabsHeader)}>
+          <TabsList aria-label="文档详情" {...stylex.props(documentStyles.tabsList)}>
             <TabsTrigger value="body">正文</TabsTrigger>
             <TabsTrigger value="relations">关系</TabsTrigger>
             {["feature", "use-case"].includes(document.metadata.kind) && <><TabsTrigger value="implementation">实现</TabsTrigger><TabsTrigger value="testing">测试</TabsTrigger></>}
@@ -535,6 +602,7 @@ function DocumentFiles({
   const [selectedPath, setSelectedPath] = React.useState(document.path)
   const pageNavigation = useDraftNavigation(setSelectedPath)
   const [selected, setSelected] = React.useState<ViewFile | null>(null)
+  const previewRef = React.useRef<HTMLElement>(null)
   const [error, setError] = React.useState("")
   const [open, setOpen] = React.useState(false)
   const [page, setPage] = React.useState("")
@@ -544,13 +612,27 @@ function DocumentFiles({
     const controller = new AbortController()
     setSelected(null)
     setError("")
-    void api.file(selectedPath, controller.signal).then(setSelected).catch((cause: unknown) => {
+    void api.file(selectedPath, controller.signal).then((file) => {
+      setSelected(file)
+      previewRef.current?.closest<HTMLElement>(".page")?.scrollTo({ top: 0 })
+    }).catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
     })
     return () => controller.abort()
   }, [api, selectedPath])
   const files = [{ path: document.path, readOnly: false }, ...pages]
   const ownerDirectory = document.path.slice(0, document.path.lastIndexOf("/") + 1)
+  const tree = React.useMemo(() => buildFileTree(files, ownerDirectory), [files, ownerDirectory])
+  const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(() => new Set(treeDirectoryPaths(tree)))
+  React.useEffect(() => {
+    const relative = selectedPath.startsWith(ownerDirectory) ? selectedPath.slice(ownerDirectory.length) : selectedPath
+    const segments = relative.split("/")
+    setExpanded((current) => {
+      const next = new Set(current)
+      for (let index = 1; index < segments.length; index += 1) next.add(segments.slice(0, index).join("/"))
+      return next
+    })
+  }, [ownerDirectory, selectedPath])
   const allowed = ["feature", "roadmap", "design", "engineering"].includes(
     document.metadata.kind
   )
@@ -576,8 +658,8 @@ function DocumentFiles({
     setPage("")
   }
   return (
-    <div className="document-file-layout" data-single={!showPathList || undefined}>
-      {showPathList && <aside className="document-path-list">
+    <div {...stylex.props(documentStyles.fileLayout, !showPathList && documentStyles.singleFileLayout)}>
+      {showPathList && <aside data-testid="document-file-tree" {...stylex.props(documentStyles.pathList)}>
         <div className="section-heading section-heading--compact">
           <strong>文件</strong>
           {allowed && (
@@ -586,18 +668,20 @@ function DocumentFiles({
             </Button>
           )}
         </div>
-        {files.map((item) => (
-          <button
-            key={item.path}
-            data-active={selectedPath === item.path}
-            onClick={() => { if (item.path !== selectedPath) pageNavigation.request(item.path) }}
-          >
-            <span>{item.path.startsWith(ownerDirectory) ? item.path.slice(ownerDirectory.length) : item.path}</span>
-            <small>{item.path}{item.readOnly ? " · 只读" : ""}</small>
-          </button>
-        ))}
+        <FileTree
+          nodes={tree}
+          expanded={expanded}
+          selectedPath={selectedPath}
+          onToggle={(path) => setExpanded((current) => {
+            const next = new Set(current)
+            if (next.has(path)) next.delete(path)
+            else next.add(path)
+            return next
+          })}
+          onSelect={(path) => { if (path !== selectedPath) pageNavigation.request(path) }}
+        />
       </aside>}
-      <section className="document-file-preview">
+      <section ref={previewRef} {...stylex.props(documentStyles.preview)}>
         {error && <div className="form-error">{error}</div>}
         {selected ? (
           <><MarkdownEditor key={selected.path} initial={selected} onSaved={setSelected} toolbarTarget={toolbarTarget} />{selected.path === document.path && extra}</>
@@ -645,6 +729,74 @@ function DocumentFiles({
       </Dialog>
     </div>
   )
+}
+
+interface FileTreeNode {
+  readonly name: string
+  readonly relativePath: string
+  readonly path?: string
+  readonly readOnly?: boolean
+  readonly children: readonly FileTreeNode[]
+}
+
+function buildFileTree(files: readonly { path: string; readOnly: boolean }[], ownerDirectory: string): readonly FileTreeNode[] {
+  type MutableNode = { name: string; relativePath: string; path?: string; readOnly?: boolean; children: MutableNode[] }
+  const root: MutableNode = { name: "", relativePath: "", children: [] }
+  for (const file of files) {
+    const relative = file.path.startsWith(ownerDirectory) ? file.path.slice(ownerDirectory.length) : file.path
+    let parent = root
+    for (const [index, name] of relative.split("/").entries()) {
+      const relativePath = relative.split("/").slice(0, index + 1).join("/")
+      let node = parent.children.find((item) => item.name === name)
+      if (!node) {
+        node = { name, relativePath, children: [] }
+        parent.children.push(node)
+      }
+      if (index === relative.split("/").length - 1) {
+        node.path = file.path
+        node.readOnly = file.readOnly
+      }
+      parent = node
+    }
+  }
+  const sort = (nodes: MutableNode[]): MutableNode[] => nodes
+    .sort((left, right) => Number(right.children.length > 0) - Number(left.children.length > 0) || left.name.localeCompare(right.name))
+    .map((node) => ({ ...node, children: sort(node.children) }))
+  return sort(root.children)
+}
+
+function treeDirectoryPaths(nodes: readonly FileTreeNode[]): readonly string[] {
+  return nodes.flatMap((node) => node.children.length > 0 ? [node.relativePath, ...treeDirectoryPaths(node.children)] : [])
+}
+
+function FileTree({ nodes, expanded, selectedPath, onToggle, onSelect, depth = 0 }: {
+  nodes: readonly FileTreeNode[]
+  expanded: ReadonlySet<string>
+  selectedPath: string
+  onToggle: (path: string) => void
+  onSelect: (path: string) => void
+  depth?: number
+}) {
+  return <div {...stylex.props(documentStyles.tree, depth > 0 && documentStyles.nested)}>{nodes.map((node) => {
+    const directory = node.children.length > 0
+    const open = expanded.has(node.relativePath)
+    return <React.Fragment key={node.relativePath}>
+      <button
+        type="button"
+        data-active={node.path === selectedPath || undefined}
+        aria-label={node.relativePath}
+        aria-expanded={directory ? open : undefined}
+        title={node.relativePath}
+        {...stylex.props(documentStyles.treeRow, node.path === selectedPath && documentStyles.selectedTreeRow)}
+        onClick={() => directory ? onToggle(node.relativePath) : node.path && onSelect(node.path)}
+      >
+        {directory ? <><ChevronRight {...stylex.props(documentStyles.treeIcon, documentStyles.chevron, open && documentStyles.openChevron)} /><Folder {...stylex.props(documentStyles.treeIcon)} /></> : <><span {...stylex.props(documentStyles.treeSpacer)} /><FileText {...stylex.props(documentStyles.treeIcon)} /></>}
+        <span {...stylex.props(documentStyles.treeName)}>{node.name}</span>
+        {node.readOnly && <small {...stylex.props(documentStyles.treeMetadata)}>只读</small>}
+      </button>
+      {directory && open && <FileTree nodes={node.children} expanded={expanded} selectedPath={selectedPath} onToggle={onToggle} onSelect={onSelect} depth={depth + 1} />}
+    </React.Fragment>
+  })}</div>
 }
 
 function Relationships({ document }: { document: DocumentRecord }) {

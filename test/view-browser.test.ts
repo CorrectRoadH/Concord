@@ -64,7 +64,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await expect(page).toHaveURL(url);
     await expect(page.locator('html')).toHaveClass(/dark/);
     await expect(page.getByRole('button', { name: '切换至浅色主题', exact: true })).toBeVisible();
-    await expect(page.locator('.document-tabs-header').getByRole('button', { name: '重新载入', exact: true })).toBeVisible();
+    await expect(page.getByTestId('document-header').getByRole('button', { name: '重新载入', exact: true })).toBeVisible();
     await expect(page.locator('.editor-shell > .editor-shell__bar')).toHaveCount(0);
     await contentNavigation.getByRole('link', { name: 'Raw HTML fixture', exact: true }).click();
     await expect(page.getByText('已切换为原文编辑', { exact: true })).toBeVisible();
@@ -119,7 +119,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
       await expect(page).toHaveURL(new RegExp(`/${section}/`));
       await expect(list.getByRole('link',{name:title,exact:true})).toHaveAttribute('aria-current','page');
       if (category !== 'Research') {
-        const supportingPage=page.locator('.document-path-list').getByRole('button').filter({hasText:category === 'Design' ? 'plans/first/architecture.md' : 'architecture.md'});
+        const supportingPage=page.getByTestId('document-file-tree').getByRole('button',{name:category === 'Design' ? 'plans/first/architecture.md' : 'architecture.md',exact:true});
         await supportingPage.click();
         await expect(page.locator('[contenteditable="true"]').first()).toBeVisible();
       }
@@ -238,9 +238,13 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.keyboard.press('Escape');
     await expect(drawer).toHaveCount(0);
     await expect(editor).toContainText('External editor wins.');
-    await page.locator('.document-path-list').getByRole('button').filter({hasText:'architecture.md'}).click();
+    const documentTree=page.getByTestId('document-file-tree');
+    await documentTree.getByRole('button',{name:'architecture.md',exact:true}).click();
     await editor.fill('Architecture from browser.');
-    await page.locator('.document-path-list').getByRole('button').filter({hasText:'library.md'}).click();
+    const documentPane=page.locator('.document-workspace > .page');
+    await documentPane.evaluate(element=>{element.scrollTop=500;});
+    await documentTree.getByRole('button',{name:'library.md',exact:true}).click();
+    await expect.poll(()=>documentPane.evaluate(element=>element.scrollTop)).toBe(0);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect.poll(()=>readFileSync(join(root,'docs/feature/browser-feature/architecture.md'),'utf8')).toContain('Architecture from browser.');
     await page.getByRole('link',{name:'Git 变更',exact:true}).click();

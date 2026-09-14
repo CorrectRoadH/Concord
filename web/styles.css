@@ -249,17 +249,7 @@ kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28
 .editor-shell__bar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; border-bottom: 1px solid var(--border); background: #f2f1ea; }
 .editor-shell__bar strong { display: block; }
 .editor-shell__bar[data-compact="true"] { justify-content: flex-end; padding-block: .55rem; }
-.document-tabs-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
-.document-tabs-header > [data-slot="tabs-list"] { min-width: 0; overflow-x: auto; }
 .document-editor-actions, .document-editor-actions .toolbar-actions { display: contents; }
-.document-file-layout { display: grid; grid-template-columns: minmax(210px, 260px) minmax(0, 1fr); align-items: start; gap: 1rem; }
-.document-file-layout[data-single="true"] { grid-template-columns: minmax(0, 1fr); }
-.document-path-list { position: sticky; top: 0; max-height: calc(100svh - 9rem); overflow-y: auto; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); }
-.document-path-list > button { display: flex; width: 100%; flex-direction: column; gap: .12rem; padding: .58rem .65rem; border: 0; border-radius: .42rem; background: transparent; color: inherit; text-align: left; cursor: pointer; }
-.document-path-list > button:hover, .document-path-list > button[data-active="true"] { background: var(--accent); color: var(--accent-foreground); }
-.document-path-list > button span { font-weight: 650; overflow-wrap: anywhere; }
-.document-path-list > button small { color: var(--muted-foreground); font-size: .65rem; overflow-wrap: anywhere; }
-.document-file-preview { min-width: 0; }
 .path-text { max-width: 700px; overflow: hidden; color: var(--muted-foreground); font-family: monospace; font-size: .67rem; text-overflow: ellipsis; white-space: nowrap; }
 .wysiwyg { --basePageBg: var(--card); min-height: 480px; font-family: "Noto Sans SC Variable", system-ui, sans-serif; }
 .wysiwyg__content { min-height: 430px; padding: 2rem max(1.3rem, calc((100% - 850px) / 2)); color: #263a3d; font-family: "Noto Sans SC Variable", system-ui, sans-serif; font-size: .96rem; line-height: 1.75; }
@@ -375,9 +365,6 @@ kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28
   .file-list { max-height: 210px; border-right: 0; border-bottom: 1px solid var(--border); }
   .editor-shell__bar { align-items: flex-start; flex-direction: column; }
   .editor-shell__bar[data-compact="true"] { align-items: flex-end; }
-  .document-tabs-header { align-items: stretch; flex-direction: column; }
-  .document-file-layout { grid-template-columns: 1fr; }
-  .document-path-list { position: static; max-height: 230px; }
 }
 @media (max-width: 480px) {
   .page { padding: 1rem; }
