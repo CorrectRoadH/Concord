@@ -95,6 +95,7 @@ const documentStyles = stylex.create({
     top: 72,
     maxHeight: { default: "calc(100svh - 10rem)", "@media (max-width: 760px)": 230 },
     overflowY: "auto",
+    scrollbarWidth: "none",
     padding: 12,
     borderWidth: 1,
     borderStyle: "solid",
@@ -128,6 +129,12 @@ const documentStyles = stylex.create({
   treeSpacer: { flexShrink: 0, width: 15 },
   treeName: { minWidth: 0, overflow: "hidden", fontWeight: 600, textOverflow: "ellipsis", whiteSpace: "nowrap" },
   treeMetadata: { marginLeft: "auto", color: "var(--muted-foreground)", fontSize: 10 },
+  skeleton: { minHeight: 520, padding: "48px clamp(28px, 7vw, 100px)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: "var(--radius)", backgroundColor: "var(--card)" },
+  skeletonTitle: { width: "58%", height: 48, marginBottom: 28, borderRadius: 8, backgroundColor: "var(--muted)", animationName: stylex.keyframes({ "0%, 100%": { opacity: .45 }, "50%": { opacity: .9 } }), animationDuration: "1.25s", animationIterationCount: "infinite" },
+  skeletonLine: { height: 17, marginBottom: 14, borderRadius: 5, backgroundColor: "var(--muted)", animationName: stylex.keyframes({ "0%, 100%": { opacity: .4 }, "50%": { opacity: .78 } }), animationDuration: "1.25s", animationIterationCount: "infinite" },
+  skeletonLineLong: { width: "100%" },
+  skeletonLineMedium: { width: "82%" },
+  skeletonLineShort: { width: "66%" },
 })
 
 function documentHref(document: DocumentRecord): string {
@@ -686,7 +693,7 @@ function DocumentFiles({
         {selected ? (
           <><MarkdownEditor key={selected.path} initial={selected} onSaved={setSelected} toolbarTarget={toolbarTarget} />{selected.path === document.path && extra}</>
         ) : (
-          !error && <div className="loading">载入正文…</div>
+          !error && <DocumentSkeleton />
         )}
       </section>
       {pageNavigation.dialog}
@@ -729,6 +736,17 @@ function DocumentFiles({
       </Dialog>
     </div>
   )
+}
+
+function DocumentSkeleton() {
+  return <div role="status" aria-label="正在载入文件" {...stylex.props(documentStyles.skeleton)}>
+    <div {...stylex.props(documentStyles.skeletonTitle)} />
+    <div {...stylex.props(documentStyles.skeletonLine, documentStyles.skeletonLineLong)} />
+    <div {...stylex.props(documentStyles.skeletonLine, documentStyles.skeletonLineLong)} />
+    <div {...stylex.props(documentStyles.skeletonLine, documentStyles.skeletonLineMedium)} />
+    <div {...stylex.props(documentStyles.skeletonLine, documentStyles.skeletonLineLong)} />
+    <div {...stylex.props(documentStyles.skeletonLine, documentStyles.skeletonLineShort)} />
+  </div>
 }
 
 interface FileTreeNode {
