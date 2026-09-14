@@ -68,6 +68,7 @@ const descriptions: Record<string, string> = {
 }
 
 const documentStyles = stylex.create({
+  detailRoot: { display: "flex", flexDirection: "column", height: { default: "100%", "@media (max-width: 760px)": "auto" }, minHeight: 0, overflow: { default: "hidden", "@media (max-width: 760px)": "visible" } },
   tabsHeader: {
     position: "sticky",
     zIndex: 12,
@@ -86,14 +87,17 @@ const documentStyles = stylex.create({
   fileLayout: {
     display: "grid",
     gridTemplateColumns: { default: "minmax(210px, 260px) minmax(0, 1fr)", "@media (max-width: 760px)": "1fr" },
-    alignItems: "start",
+    alignItems: "stretch",
     gap: 16,
+    height: { default: "100%", "@media (max-width: 760px)": "auto" },
+    minHeight: 0,
   },
   singleFileLayout: { gridTemplateColumns: "minmax(0, 1fr)" },
+  tabPanel: { flex: 1, minHeight: 0, overflowY: "auto", scrollbarWidth: "none" },
+  bodyPanel: { overflow: "hidden" },
   pathList: {
-    position: { default: "sticky", "@media (max-width: 760px)": "static" },
-    top: 72,
-    maxHeight: { default: "calc(100svh - 10rem)", "@media (max-width: 760px)": 230 },
+    position: "static",
+    maxHeight: { default: "none", "@media (max-width: 760px)": 230 },
     overflowY: "auto",
     scrollbarWidth: "none",
     padding: 12,
@@ -103,7 +107,7 @@ const documentStyles = stylex.create({
     borderRadius: "var(--radius)",
     backgroundColor: "var(--card)",
   },
-  preview: { minWidth: 0 },
+  preview: { minWidth: 0, minHeight: 0, overflowY: { default: "auto", "@media (max-width: 760px)": "visible" }, overscrollBehavior: "contain", scrollbarWidth: "none" },
   tree: { display: "grid", gap: 1 },
   nested: { marginLeft: 10, paddingLeft: 7, borderLeftWidth: 1, borderLeftStyle: "solid", borderLeftColor: "var(--border)" },
   treeRow: {
@@ -560,7 +564,7 @@ function DocumentLayout({
 
   return (
     <>
-      <Tabs value={tab} onValueChange={value => { if (value !== tab) tabNavigation.request(value) }}>
+      <Tabs value={tab} onValueChange={value => { if (value !== tab) tabNavigation.request(value) }} {...stylex.props(documentStyles.detailRoot)}>
         <div data-testid="document-header" {...stylex.props(documentStyles.tabsHeader)}>
           <TabsList aria-label="文档详情" {...stylex.props(documentStyles.tabsList)}>
             <TabsTrigger value="body">正文</TabsTrigger>
@@ -575,17 +579,17 @@ function DocumentLayout({
             <div ref={setEditorToolbar} className="document-editor-actions" />
           </div>}
         </div>
-        {["feature", "use-case"].includes(document.metadata.kind) && <><TabsContent value="implementation"><ImplementationPanel document={document} /></TabsContent><TabsContent value="testing"><TestingPanel document={document} /></TabsContent></>}
-        <TabsContent value="body">
+        {["feature", "use-case"].includes(document.metadata.kind) && <><TabsContent value="implementation" {...stylex.props(documentStyles.tabPanel)}><ImplementationPanel document={document} /></TabsContent><TabsContent value="testing" {...stylex.props(documentStyles.tabPanel)}><TestingPanel document={document} /></TabsContent></>}
+        <TabsContent value="body" {...stylex.props(documentStyles.tabPanel, documentStyles.bodyPanel)}>
           <DocumentFiles document={document} pages={pages} extra={extra} toolbarTarget={editorToolbar} />
         </TabsContent>
-        <TabsContent value="relations">
+        <TabsContent value="relations" {...stylex.props(documentStyles.tabPanel)}>
           <Relationships document={document} />
         </TabsContent>
-        <TabsContent value="metadata">
+        <TabsContent value="metadata" {...stylex.props(documentStyles.tabPanel)}>
           <MetadataForm key={document.path} document={document} />
         </TabsContent>
-        <TabsContent value="actions">
+        <TabsContent value="actions" {...stylex.props(documentStyles.tabPanel)}>
           <Lifecycle document={document} />
         </TabsContent>
       </Tabs>
@@ -621,7 +625,7 @@ function DocumentFiles({
     setError("")
     void api.file(selectedPath, controller.signal).then((file) => {
       setSelected(file)
-      previewRef.current?.closest<HTMLElement>(".page")?.scrollTo({ top: 0 })
+      previewRef.current?.scrollTo({ top: 0 })
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
     })
@@ -688,7 +692,7 @@ function DocumentFiles({
           onSelect={(path) => { if (path !== selectedPath) pageNavigation.request(path) }}
         />
       </aside>}
-      <section ref={previewRef} {...stylex.props(documentStyles.preview)}>
+      <section ref={previewRef} data-testid="document-file-preview" {...stylex.props(documentStyles.preview)}>
         {error && <div className="form-error">{error}</div>}
         {selected ? (
           <><MarkdownEditor key={selected.path} initial={selected} onSaved={setSelected} toolbarTarget={toolbarTarget} />{selected.path === document.path && extra}</>

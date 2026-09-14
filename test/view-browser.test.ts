@@ -241,10 +241,15 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     const documentTree=page.getByTestId('document-file-tree');
     await documentTree.getByRole('button',{name:'architecture.md',exact:true}).click();
     await editor.fill('Architecture from browser.');
-    const documentPane=page.locator('.document-workspace > .page');
+    const documentPane=page.getByTestId('document-file-preview');
     await documentPane.evaluate(element=>{element.scrollTop=500;});
+    await documentTree.evaluate(element=>{element.scrollTop=80;});
+    const treeScrollBefore=await documentTree.evaluate(element=>element.scrollTop);
     await documentTree.getByRole('button',{name:'library.md',exact:true}).click();
     await expect.poll(()=>documentPane.evaluate(element=>element.scrollTop)).toBe(0);
+    assert.equal(await documentTree.evaluate(element=>element.scrollTop),treeScrollBefore);
+    const outerPage=page.locator('.document-workspace > .page');
+    assert.equal(await outerPage.evaluate(element=>element.scrollHeight===element.clientHeight),true);
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect.poll(()=>readFileSync(join(root,'docs/feature/browser-feature/architecture.md'),'utf8')).toContain('Architecture from browser.');
     await page.getByRole('link',{name:'Git 变更',exact:true}).click();
