@@ -14,8 +14,4 @@ State the final boundary of this direction, including what it deliberately exclu
 
 ## Entry Points
 
-- [Library](library.md)
-- [CLI](cli.md)
-- [Architecture](architecture.md)
-- [Lifecycle](lifecycle.md)
-- [Use Cases](use-case/README.md)
+{{entryPoints}}

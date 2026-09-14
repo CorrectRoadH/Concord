@@ -22,7 +22,8 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 验收
 
-- 已有 `docs/README.md` 不被覆盖，未知 `AGENTS.md` 不被创建或修改。
+- 缺失的 `docs/README.md`、`docs/concepts.md` 和 `docs/architecture.md` 得到阅读入口、共享术语和系统架构骨架；已有文件保留，未知 `AGENTS.md` 不被创建或修改。
+- Feature README 必需；CLI、Library、Architecture、Lifecycle、Use Case 索引用 `--pages` 按需选择，省略时只建 README。模板生成的入口只链接所选页，自定义正文保留；Use Case 索引不创建叶子 owner。Engineering 从目标、机制、使用、验收开始，按主题扩展。
 - 模板 manifest 缺失或库存损坏产生具名错误。
 - `init --dry-run` 不创建 Git-private 状态，也不运行配置命令。
 

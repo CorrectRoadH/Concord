@@ -2,6 +2,8 @@
 // @concord-implements docs/feature/local-sdlc/README.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
+import { FeedbackConnectionsSchema, FeedbackSourceSchema } from './feedback-schema.js';
+export * from './feedback-schema.js';
 
 export class ConcordError extends Error {
   readonly name = 'ConcordError';
@@ -31,7 +33,7 @@ export const RunnerSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('command'), argv: Schema.NonEmptyArray(Text), sourceFiles: Strings, timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
 ]);
 export type Runner = typeof RunnerSchema.Type;
-export const ProjectSchema = Schema.Struct({ format: Schema.Literal('concord.project/v1'), projectId: Text, testRoots: Schema.Array(Text), sourceRoots: Schema.optional(Schema.Array(Text)), runner: RunnerSchema });
+export const ProjectSchema = Schema.Struct({ format: Schema.Literal('concord.project/v1'), projectId: Text, testRoots: Schema.Array(Text), sourceRoots: Schema.optional(Schema.Array(Text)), runner: RunnerSchema, feedbackConnections: Schema.optional(FeedbackConnectionsSchema) });
 export type ProjectConfig = typeof ProjectSchema.Type;
 
 export interface Change { readonly path: string; readonly before: string | null; readonly after: string | null }
@@ -64,7 +66,7 @@ export const RoadmapSchema = Schema.Struct({ ...base, kind: Schema.Literal('road
 export const EngineeringSchema = Schema.Struct({ ...base, kind: Schema.Literal('engineering') });
 export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), memoryKind: Schema.Literals(['problem', 'decision', 'insight']), state: Schema.Literals(['open', 'resolved', 'current', 'superseded']), epoch: Nat, promotions: Strings, history: Schema.Array(HistorySchema), resolution: Schema.optional(ResolutionSchema), supersededBy: Schema.optional(Text) });
 export type MemoryMeta = typeof MemorySchema.Type;
-export const IssueSchema = Schema.Struct({ ...base, kind: Schema.Literal('issue'), state: Schema.Literals(['draft', 'closed']), memories: Strings, history: Schema.Array(HistorySchema) });
+export const IssueSchema = Schema.Struct({ ...base, kind: Schema.Literal('issue'), state: Schema.Literals(['draft', 'closed']), memories: Strings, features: Schema.optional(Strings), source: Schema.optional(FeedbackSourceSchema), history: Schema.Array(HistorySchema) });
 export const DocumentSchema = Schema.Union([FeatureSchema, UseCaseSchema, ResearchSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, IssueSchema]);
 export type DocumentMeta = typeof DocumentSchema.Type;
 export type DocumentKind = DocumentMeta['kind'];

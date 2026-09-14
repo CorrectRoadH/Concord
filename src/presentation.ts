@@ -10,8 +10,17 @@ export function humanOutput(value: unknown): string {
   if (typeof value === 'string') return value;
   if (!Predicate.isObject(value)) return scalar(value);
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
+  if (value.operation === 'view') return [
+    'Concord view', `Root: ${String(value.root)}`, `Host: ${String(value.host)}  Port: ${String(value.port)}`, '',
+    ...(Array.isArray(value.local) ? value.local.map(address => `  Local:   ${String(address)}`) : []),
+    ...(Array.isArray(value.network) ? value.network.map(address => `  Network: ${String(address)}`) : []),
+  ].join('\n');
   if ('changedPaths' in value && Array.isArray(value.changedPaths)) {
     const lines = [`${value.dryRun ? 'Would apply' : 'Applied'} ${String(value.operation)}:`, ...value.changedPaths.map(path => `  ${String(path)}`)];
+    if ((value.operation === 'feedback-sync' || value.operation === 'feedback-import') && typeof value.fetched === 'number' && typeof value.imported === 'number') {
+      lines.push('', `Fetched: ${String(value.fetched)}; imported: ${String(value.imported)}.`);
+    }
+    if (Array.isArray(value.warnings) && value.warnings.length > 0) lines.push('', 'Warnings:', ...value.warnings.map(warning => `  ${String(warning)}`));
     if (value.recoveryRequired) lines.push('', 'Recovery required: run concord recover before another operation.');
     if (value.operation === 'init') lines.push('', 'Start here: docs/concord.md', 'Next: concord feature create <id> --title "Your feature"', 'Inspect configuration: concord doctor');
     else lines.push('', 'Next: edit the author prose, then run concord check.');

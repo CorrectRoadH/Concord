@@ -1,2 +1,4 @@
+minimumReleaseAgeExclude:
+  - '@mdxeditor/editor@4.2.5'
 overrides:
   '@effect/platform-node-shared': 4.0.0-rc.112

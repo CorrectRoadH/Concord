@@ -21,7 +21,7 @@ before(() => Effect.runPromise(Effect.sync(() => {
   );
   const artifact = packed[0];
   assert.ok(artifact);
-  for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'dist/skill.js']) {
+  for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'skills/concord/references/feedback.md', 'dist/skill.js']) {
     assert.ok(artifact.files.some(file => file.path === path), `packed skill is missing ${path}`);
   }
   const install = join(scratch, 'tool');
@@ -51,6 +51,10 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   assert.equal(topic.status, 0, topic.stderr);
   assert.match(topic.stdout, /# 测试注释与命令证据/);
   assert.match(topic.stdout, /concord test annotate/);
+
+  const feedback = spawnSync(process.execPath, [cli, '--skill', 'feedback'], { cwd: outside, encoding: 'utf8' });
+  assert.equal(feedback.status, 0, feedback.stderr);
+  assert.match(feedback.stdout, /concord feedback import/);
 
   const all = spawnSync(process.execPath, [cli, '--skill', 'all'], { cwd: outside, encoding: 'utf8' });
   assert.equal(all.status, 0, all.stderr);

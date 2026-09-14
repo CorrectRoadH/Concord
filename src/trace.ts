@@ -24,7 +24,7 @@ export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 
       case 'roadmap': if (m.adoptedAs) add(m.adoptedAs, 'adopted-as'); break;
       case 'design': for (const ref of m.decision?.targets ?? []) add(ref, 'decides'); break;
       case 'memory': for (const ref of m.promotions) add(ref, 'promotion'); if (m.supersededBy) add(m.supersededBy, 'superseded-by'); break;
-      case 'issue': for (const ref of m.memories) add(ref, 'memory'); break;
+      case 'issue': for (const ref of m.memories) add(ref, 'memory'); for (const ref of m.features ?? []) add(ref, 'feature'); break;
     }
   }
   for (const item of annotations.cases) {
@@ -102,7 +102,7 @@ export function renderReview(repo: Repository, selector: string | undefined, cac
     lines.push(`- [${m.title}](${d.path}) — ${m.memoryKind}, ${m.state}, epoch ${m.epoch}`);
     if (m.resolution) lines.push(`  - Resolution: ${m.resolution.kind}; evidence level: ${m.resolution.evidenceLevel}; ${m.resolution.reason}`, `  - Historical evidence availability: ${JSON.stringify(inspectResolutionEvidence(repo, m.resolution))}`);
   }
-  lines.push('', '## Local issue drafts', '');
-  for (const d of docs) if (d.metadata.kind === 'issue') lines.push(`- [${d.metadata.title}](${d.path}) — ${d.metadata.state} (local only)`);
+  lines.push('', '## Local feedback and observations', '');
+  for (const d of docs) if (d.metadata.kind === 'issue') lines.push(`- [${d.metadata.title}](${d.path}) — ${d.metadata.state} (local document; Concord never mutates the remote provider)`);
   return `${lines.join('\n')}\n`;
 }

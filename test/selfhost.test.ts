@@ -21,7 +21,7 @@ test('current checkout configures a version-matched runner whose annotations sca
   const project = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root, 'concord.json'), 'utf8'));
   assert.equal(project.format, 'concord.project/v1');
   assert.deepEqual(project.testRoots, ['test']);
-  assert.deepEqual(project.sourceRoots, ['src']);
+  assert.deepEqual(project.sourceRoots, ['src', 'web']);
   assert.equal(project.runner.kind, 'command');
   if (project.runner.kind !== 'command') assert.fail('self-host runner must use explicit command argv');
   assert.deepEqual(project.runner.argv, ['node', '--import', 'tsx', '--test', '--test-name-pattern', '{pattern}', '{file}']);
@@ -39,6 +39,7 @@ test('current checkout configures a version-matched runner whose annotations sca
     mkdirSync(join(consumer, 'test'));
     cpSync(join(root, 'test'), join(consumer, 'test'), { recursive: true });
     cpSync(join(root, 'src'), join(consumer, 'src'), { recursive: true });
+    cpSync(join(root, 'web'), join(consumer, 'web'), { recursive: true });
     mkdirSync(join(consumer, 'docs'));
     cpSync(join(root, 'docs/feature'), join(consumer, 'docs/feature'), { recursive: true });
     for (const sourceFile of ['tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']) {
@@ -49,7 +50,7 @@ test('current checkout configures a version-matched runner whose annotations sca
       const scan = scanAnnotations(repository);
       assert.deepEqual(scan.findings, []);
       const useCases = loadDocuments(repository).filter(document => document.metadata.kind === 'use-case');
-      assert.equal(useCases.length, 8);
+      assert.equal(useCases.length, 10);
       for (const useCase of useCases) {
         assert.ok(scan.cases.some(item => item.contract === useCase.path), `missing a real test relation for ${useCase.path}`);
       }

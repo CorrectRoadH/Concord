@@ -1,6 +1,16 @@
-# Complete Concord templates
+# Concord writing templates
 
-This reference set is installed by concord init. Create commands use the bundled templates and generate the complete structure; no page selection is required. These examples are not adopted contracts or test evidence.
+This complete reference set is installed by concord init. Create commands use bundled templates, not editable configuration from this directory. These examples are not adopted contracts or test evidence.
+
+Feature, Roadmap, and Design candidates require README only. Select optional pages with --pages library,cli,architecture,lifecycle,use-case (or repeat --pages). Omit --pages for README only. Design always includes its decision wrapper. Engineering starts with goal, mechanism, usage, and acceptance in README; expand with page add when needed.
+
+| Optional page | Use when |
+| --- | --- |
+| library | A public programming interface needs exact shapes and examples |
+| cli | Public commands need inputs, outputs, and errors |
+| architecture | Internal entities, boundaries, and invariants need explanation |
+| lifecycle | Resources or state transitions need ownership and cleanup rules |
+| use-case | User goals need an index of complete paths; create actual cases separately |
 
 - [feature-design/README.md](feature-design/README.md)
 - [feature-design/library.md](feature-design/library.md)
@@ -15,11 +25,6 @@ This reference set is installed by concord init. Create commands use the bundled
 - [roadmap/lifecycle.md](roadmap/lifecycle.md)
 - [roadmap/use-case/README.md](roadmap/use-case/README.md)
 - [engineering/README.md](engineering/README.md)
-- [engineering/library.md](engineering/library.md)
-- [engineering/cli.md](engineering/cli.md)
-- [engineering/architecture.md](engineering/architecture.md)
-- [engineering/lifecycle.md](engineering/lifecycle.md)
-- [engineering/use-case/README.md](engineering/use-case/README.md)
 - [design-decision/README.md](design-decision/README.md)
 - [design-decision/GOALS.md](design-decision/GOALS.md)
 - [design-decision/LIMITS.md](design-decision/LIMITS.md)

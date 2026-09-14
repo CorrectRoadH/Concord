@@ -24,6 +24,7 @@
     "timeoutMs": 120000
   },
   "sourceRoots": [
-    "src"
+    "src",
+    "web"
   ]
 }

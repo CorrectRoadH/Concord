@@ -10,10 +10,13 @@ class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
 const build = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
-  for (const project of ['tsconfig.json', 'tsconfig.repository.json']) {
+  for (const project of ['tsconfig.json', 'tsconfig.repository.json', 'tsconfig.web.json']) {
     const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project], { stdout: 'inherit', stderr: 'inherit' }));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
   }
+  const webExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/vite/bin/vite.js', 'build'], { stdout: 'inherit', stderr: 'inherit' }));
+  if (webExit !== 0) return yield* new BuildFailed({ project: 'web', exitCode: webExit });
+  yield* fs.copyFile('node_modules/@fontsource-variable/noto-sans-sc/LICENSE', 'dist/web/FONT-LICENSE.txt');
   yield* fs.remove('dist/repository/host-types', { recursive: true, force: true });
   yield* fs.copy('repository/host-types', 'dist/repository/host-types');
   yield* fs.chmod('dist/entry.js', 0o755);

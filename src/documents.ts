@@ -1,7 +1,8 @@
 // @concord-file document-contract-operations
 // @concord-implements docs/feature/local-sdlc/README.md
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { posix } from 'node:path';
-import { Predicate } from 'effect';
+import { Predicate, Schema } from 'effect';
 import { parseDocument, stringify } from 'yaml';
 import {
   ConcordError,
@@ -32,7 +33,7 @@ import { parseReference, resolveReference } from './refs.js';
 import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { rebaseAdoptedMarkdown } from './adoption.js';
 
-const ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/research', 'docs/engineering', 'docs/issues', 'memory'] as const;
+export const DOCUMENT_ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/research', 'docs/engineering', 'docs/issues', 'memory'] as const;
 const CONTRACT_KINDS: readonly DocumentKind[] = ['feature', 'use-case', 'roadmap', 'engineering'];
 const now = (): string => new Date().toISOString();
 
@@ -48,7 +49,7 @@ function authorBody(value: string): string {
   return body.endsWith('\n') ? body : `${body}\n`;
 }
 
-function parseOwner(path: string, source: string): DocumentRecord | undefined {
+export function parseDocumentRecord(path: string, source: string): DocumentRecord | undefined {
   if (!/^---\r?\n/u.test(source)) return undefined;
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(source);
   const frontmatter = match?.[1] ?? source.slice(0, 64 * 1024);
@@ -73,7 +74,7 @@ function parseOwner(path: string, source: string): DocumentRecord | undefined {
   return { path, metadata, body: rawBody, digest: digest(source) };
 }
 
-function render(metadata: DocumentMeta, body: string): string {
+export function renderDocument(metadata: DocumentMeta, body: string): string {
   const valid = decode(DocumentSchema, metadata, `${metadata.kind}:${metadata.id}`);
   return `---\n${stringify(valid, { lineWidth: 0 }).trimEnd()}\n---\n\n${authorBody(body)}`;
 }
@@ -97,7 +98,7 @@ function expectedPath(metadata: DocumentMeta, documents: readonly DocumentRecord
 }
 
 function changed(repo: Repository, operation: string, record: DocumentRecord, metadata: DocumentMeta, body = record.body, dryRun = false): MutationReceipt {
-  return repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: render(metadata, body) }], dryRun);
+  return repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, body) }], dryRun);
 }
 
 function preimage(repo: Repository, record: DocumentRecord): string {
@@ -113,12 +114,12 @@ function memory(record: DocumentRecord): MemoryMeta {
 
 export function loadDocuments(repo: Repository): DocumentRecord[] {
   const paths = new Set<string>();
-  for (const root of ROOTS) for (const path of repo.files(root)) if (path.endsWith('.md')) paths.add(path);
+  for (const root of DOCUMENT_ROOTS) for (const path of repo.files(root)) if (path.endsWith('.md')) paths.add(path);
   const documents: DocumentRecord[] = [];
   for (const path of [...paths].sort()) {
     const source = repo.read(path);
     if (source === undefined) continue;
-    const record = parseOwner(path, source);
+    const record = parseDocumentRecord(path, source);
     if (record !== undefined) documents.push(record);
   }
   return documents;
@@ -208,10 +209,20 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
     }
     if (metadata.kind === 'issue') {
       if (new Set(metadata.memories).size !== metadata.memories.length) finding(findings, 'InvalidState', document.path, 'Issue Memory links must be unique');
+      if (new Set(metadata.features ?? []).size !== (metadata.features ?? []).length) finding(findings, 'InvalidState', document.path, 'Feedback Feature links must be unique');
       for (const target of metadata.memories) {
         checkRef(findings, repo, documents, document, target, ['memory'], 'linked Memory');
       }
+      for (const target of metadata.features ?? []) checkRef(findings, repo, documents, document, target, ['feature'], 'linked Feature');
     }
+  }
+  const feedbackSources = new Map<string, string>();
+  for (const document of documents) if (document.metadata.kind === 'issue' && document.metadata.source !== undefined) {
+    const source = document.metadata.source;
+    const identity = source.provider === 'linear' ? `${source.provider}\u0000${source.instance}\u0000${source.organizationId}\u0000${source.id}` : `${source.provider}\u0000${source.instance}\u0000${source.id}`;
+    const prior = feedbackSources.get(identity);
+    if (prior !== undefined) finding(findings, 'DuplicateFeedbackSource', document.path, `Remote feedback source is already owned by ${prior}`);
+    else feedbackSources.set(identity, document.path);
   }
   for (const [identity, matches] of identities) if (matches.length > 1) for (const match of matches) finding(findings, 'DuplicateIdentity', match.path, `${identity} is not unique`);
 
@@ -234,6 +245,7 @@ export interface CreateDocumentInput {
   readonly observedAt?: string;
   readonly sources?: readonly string[];
   readonly alternatives?: readonly string[];
+  readonly pages?: readonly string[];
   readonly memoryKind?: 'problem' | 'decision' | 'insight';
   readonly dryRun?: boolean;
 }
@@ -247,7 +259,11 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   if ((input.observedAt !== undefined || (input.sources?.length ?? 0) > 0) && kind !== 'research') throw new ConcordError('InvalidInput', 'observedAt and sources are only valid for research');
   if ((input.alternatives?.length ?? 0) > 0 && kind !== 'design') throw new ConcordError('InvalidInput', 'alternatives are only valid for design');
   if (input.memoryKind !== undefined && kind !== 'memory') throw new ConcordError('InvalidInput', 'memoryKind is only valid for memory');
-  const bodyFor = (name: string) => authorBody(input.body ?? templateBody(name, title));
+  if (input.pages !== undefined && !['feature', 'roadmap', 'design'].includes(kind)) throw new ConcordError('InvalidInput', 'pages is only valid for feature, roadmap, and design');
+  const selected = decode(Schema.Array(Schema.Literals(TEMPLATE_PAGES)), input.pages ?? [], 'pages');
+  if (new Set(selected).size !== selected.length) throw new ConcordError('InvalidInput', 'pages must be unique');
+  const requested = TEMPLATE_PAGES.filter(page => selected.includes(page));
+  const bodyFor = (name: string) => authorBody(input.body ?? templateBody(name, title, requested));
   const createdAt = now();
   const documents = loadDocuments(repo);
   if (documents.some(document => document.metadata.kind === kind && document.metadata.id === id)) {
@@ -284,10 +300,9 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     case 'issue': path = `docs/issues/${id}.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'draft', memories: [], history: [] }; break;
   }
   const body = bodyFor(template);
-  const changes = [{ path, before: null, after: render(metadata, body) }];
-  const requested = TEMPLATE_PAGES;
-  const allowed = kind === 'feature' || kind === 'roadmap' || kind === 'engineering';
-  const add = (pagePath: string, name: string) => changes.push({ path: pagePath, before: null, after: authorBody(templateBody(name, title)) });
+  const changes = [{ path, before: null, after: renderDocument(metadata, body) }];
+  const allowed = kind === 'feature' || kind === 'roadmap';
+  const add = (pagePath: string, name: string) => changes.push({ path: pagePath, before: null, after: authorBody(templateBody(name, title, requested)) });
   if (allowed) for (const page of requested) add(`${posix.dirname(path)}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
   if (kind === 'design') {
     add(`docs/design/${id}/GOALS.md`, 'goals'); add(`docs/design/${id}/LIMITS.md`, 'limits'); add(`docs/design/${id}/DECISION.md`, 'decision-record');
@@ -310,6 +325,28 @@ export function setAuthor(repo: Repository, ref: string, body: string, expectedD
   if (record.path !== parseReference(ref).path) throw new ConcordError('InvalidReferenceTarget', 'Author body belongs to an exact Concord owner, not supporting Markdown');
   if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);
   return changed(repo, 'set-author', record, record.metadata, authorBody(body), dryRun);
+}
+
+/** Updates only explicit author-owned metadata; lifecycle and identity remain domain operations. */
+export function setDocumentMetadata(
+  repo: Repository,
+  reference: string,
+  fields: { readonly title?: string; readonly observedAt?: string; readonly sources?: readonly string[] },
+  expectedDigest: string,
+  dryRun = false,
+): MutationReceipt {
+  if (fields.title === undefined && fields.observedAt === undefined && fields.sources === undefined) throw new ConcordError('InvalidInput', 'Provide at least one author metadata field');
+  const record = resolveReference(repo, loadDocuments(repo), reference);
+  if (record.path !== parseReference(reference).path) throw new ConcordError('InvalidReferenceTarget', 'Metadata belongs to an exact Concord owner, not supporting Markdown');
+  if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);
+  if ((fields.observedAt !== undefined || fields.sources !== undefined) && record.metadata.kind !== 'research') {
+    throw new ConcordError('InvalidDocumentKind', 'observedAt and sources are only author fields on Research documents');
+  }
+  const title = fields.title === undefined ? record.metadata.title : required(fields.title, 'title');
+  if (record.metadata.kind !== 'research') return changed(repo, 'set-metadata', record, { ...record.metadata, title }, record.body, dryRun);
+  const observedAt = fields.observedAt === undefined ? record.metadata.observedAt : required(fields.observedAt, 'observedAt');
+  const sources = fields.sources === undefined ? record.metadata.sources : fields.sources.map((source, index) => required(source, `sources[${index}]`));
+  return changed(repo, 'set-metadata', record, { ...record.metadata, title, observedAt, sources }, record.body, dryRun);
 }
 
 export function decideDesign(repo: Repository, selector: string, selected: string, targets: readonly string[], reason: string, dryRun = false): MutationReceipt {
@@ -356,8 +393,8 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   }
   const featureBody = rebaseAdoptedMarkdown(roadmap.body, roadmap.path, featurePath, roadmapDirectory);
   const changes = [
-    { path: featurePath, before: null, after: render(feature, featureBody) },
-    { path: roadmap.path, before: observed.get(roadmap.path)!, after: render(adopted, roadmap.body) },
+    { path: featurePath, before: null, after: renderDocument(feature, featureBody) },
+    { path: roadmap.path, before: observed.get(roadmap.path)!, after: renderDocument(adopted, roadmap.body) },
   ];
   for (const sourcePath of supporting) {
     const source = observed.get(sourcePath)!;
@@ -378,7 +415,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
       promotions: [...retained, ...replacements],
       history: [...record.metadata.history, ...matching.map((target, index) => lifecycleHistory('adopt-roadmap', `Roadmap adopted as ${featurePath}`, at, `${target} -> ${replacements[index]}`))],
     };
-    changes.push({ path: record.path, before: preimage(repo, record), after: render(metadata, record.body) });
+    changes.push({ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, record.body) });
   }
   // Recheck after the entire plan, including link transforms and promotions.
   const recaptured = repo.files(roadmapDirectory).sort();
@@ -439,6 +476,18 @@ export function linkIssue(repo: Repository, selector: string, memoryRef: string,
   const target = resolveReference(repo, documents, memoryRef, ['memory']); const canonical = target.path;
   if (record.metadata.memories.includes(canonical)) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
   return changed(repo, 'link-issue', record, { ...record.metadata, memories: [...record.metadata.memories, canonical] }, record.body, dryRun);
+}
+
+// @concord-code link-feedback-feature
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
+export function linkFeedbackFeature(repo: Repository, selector: string, featureRef: string, dryRun = false): MutationReceipt {
+  const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
+  if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
+  if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed feedback cannot gain links');
+  const target = findDocument(documents, featureRef, 'feature'); const canonical = target.path;
+  const features = record.metadata.features ?? [];
+  if (features.includes(canonical)) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
+  return changed(repo, 'link-feedback', record, { ...record.metadata, features: [...features, canonical] }, record.body, dryRun);
 }
 
 export function closeIssue(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {

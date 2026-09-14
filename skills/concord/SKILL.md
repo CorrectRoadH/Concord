@@ -18,6 +18,8 @@ Concord 把 Markdown 契约、测试声明旁的注释和工程 Memory 留在各
 - Problem、Decision、Insight 与生命周期：运行 `concord --skill memory`。
 - 关系检查、审阅材料与交接：运行 `concord --skill trace`。
 - cache 或中断写入恢复：运行 `concord --skill recovery`。
+- Web 工作台、Git 面板与人机协作编辑：运行 `concord --skill view`。
+- 本地反馈、GitHub / Linear 导入与处理：运行 `concord --skill feedback`。
 - `concord repo` 与通用模式差异：运行 `concord --skill repository`。
 - 只有确实需要完整离线资料时才运行 `concord --skill all`。
 

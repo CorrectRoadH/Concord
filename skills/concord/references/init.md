@@ -14,7 +14,7 @@ concord doctor --json
 
 `--runner-config` 指向严格 JSON 文件。默认 runner 是 Node 原生测试；自定义 command runner 的 argv 不经过 shell，`{file}`、`{name}`、`{pattern}` 必须各占一个完整参数。已有仓库也可直接维护生成的 `concord.json`。
 
-`init` 一次创建配置、分类目录、`docs/concord.md`、缺失的 `docs/README.md` 与 `docs/_template/`。它先检查完整目标集，冲突时零写入失败，不修改已有 `docs/README.md` 或 `AGENTS.md`。预览可用：
+`init` 一次创建配置、分类目录、`docs/concord.md`、缺失的 `docs/README.md`、`docs/concepts.md`、`docs/architecture.md` 与 `docs/_template/`。它先检查完整目标集，冲突时零写入失败，保留上述已有根文档，不修改 `AGENTS.md`。预览可用：
 
 ```sh
 concord --dry-run init --test-root test

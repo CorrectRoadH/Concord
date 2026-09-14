@@ -1,0 +1,17 @@
+# Web 工作台与 AI CLI
+
+在目标 Git 工作区运行 `concord view`，或显式使用 `concord --root <worktree> view`。默认监听 `0.0.0.0:4317`；`--host 127.0.0.1` 限制本机访问，`--port` 调整端口。浏览器打开终端显示的地址即可进入工作台，无需登录或访问密钥。
+
+启动输出分别列出实际 Host / Port、Local 与各网卡 Network URL。域名和 NAT 入口也可用；反向代理必须保留浏览器使用的外部 Host（含非默认端口），不依赖 forwarded headers 绕过检查。修改安装代码后需重启已有 view 进程才能生效。
+
+服务不做身份认证；任何能连接该端口的人都可以读取和修改仓库、修改配置并执行测试，拥有服务进程的代码执行权限。明文 HTTP 只用于可信网络；远程使用安全通道。首版不自动信任反向代理的转发头。
+
+Feature、Engineering、Roadmap、Design、Research 是侧栏入口；Use Case 必须归属于 Feature，在 Feature 内创建和浏览。正文用富文本编辑，元数据与生命周期由单独操作管理。未知 Markdown 可用源码视图，初始加载不会自动保存归一化内容。
+
+AI 继续优先使用已有 CLI 命令与 `--json`。新增结构化操作可由 `concord action --input <file|->` 调用，与 Web 共用校验。先读取当前摘要，再提交正文、源码或配置更新；`PreimageChanged` 表示文件被外部修改，重新读取、合并意图后重试，不能强行覆盖。
+
+Git 面板显示已暂存（HEAD 对 index）、未暂存（index 对工作区）与未跟踪文件。它与编辑器内未保存的差异不是同一比较。查看 Git 不隐含暂存、提交、回滚或 push 授权。
+
+服务空闲时不持仓库锁，CLI 可以正常协作。测试运行持锁至进程清理完成；取消后等任务终态再继续写改。`cleanup-failed` 必须保留现场，不用删锁来掩盖尚未确认退出的进程。
+
+证据、历史和身份字段通过受管操作维护，不能当普通 JSON 任意编辑。损坏的配置或 frontmatter 显示原文诊断，无法确认的身份与历史需本机修复。NiceEval repository profile 继续使用宿主 CLI，不能将通用 Web 的结果表述为 formal E2E 证据。

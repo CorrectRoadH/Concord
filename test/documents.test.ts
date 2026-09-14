@@ -110,12 +110,18 @@ test('decides a design once and validates dry-run without writing', () => Effect
 // @concord-case documents-protect-page-preimages
 // @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('creates template packages and protects supporting page preimages', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
+  const minimal = createDocument(repo, 'feature', { id: 'empty-selection', title: 'Empty selection', pages: [] });
+  assert.deepEqual(minimal.changedPaths, ['docs/feature/empty-selection/README.md']);
   createDocument(repo, 'engineering', { id: 'ci', title: 'CI' });
-  createDocument(repo, 'design', { id: 'cache', title: 'Cache', alternatives: ['sqlite', 'files'] });
+  createDocument(repo, 'design', { id: 'cache', title: 'Cache', alternatives: ['sqlite', 'files'], pages: ['architecture'] });
   assert.ok(repo.read('docs/engineering/ci/README.md')?.includes('# CI'));
   assert.ok(repo.read('docs/design/cache/GOALS.md'));
   assert.ok(repo.read('docs/design/cache/plans/sqlite/architecture.md'));
-  rmSync(repo.absolute('docs/engineering/ci/cli.md')); // Repair a missing page in an existing package.
+  assert.ok(repo.read('docs/design/cache/plans/files/architecture.md'));
+  rmSync(repo.absolute('docs/design/cache/plans/sqlite/README.md'));
+  addPage(repo, 'design', 'cache', 'readme', false, 'sqlite');
+  assert.doesNotMatch(repo.read('docs/design/cache/plans/sqlite/README.md')!, /\]\(/);
+  assert.equal(repo.read('docs/engineering/ci/cli.md'), undefined);
   addPage(repo, 'engineering', 'ci', 'cli');
   const page = showPage(repo, 'engineering', 'ci', 'cli');
   assert.equal(page.path, 'docs/engineering/ci/cli.md');

@@ -4,14 +4,13 @@ import { readFileSync, readdirSync, type Dirent } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Schema } from 'effect';
 import { ConcordError } from './shared.js';
-
-export type TemplatePage = 'library' | 'cli' | 'architecture' | 'lifecycle' | 'use-case';
-
-export const TEMPLATE_PAGES = ['library', 'cli', 'architecture', 'lifecycle', 'use-case'] as const satisfies readonly TemplatePage[];
+import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from './template-pages.js';
+export { TEMPLATE_PAGES, type TemplatePage } from './template-pages.js';
 
 const TEMPLATE_NAMES = [
   'feature', 'roadmap', 'design', 'engineering', 'use-case', 'research', 'problem', 'decision', 'insight', 'issue',
   'library', 'cli', 'architecture', 'lifecycle', 'use-case-index', 'goals', 'limits', 'decision-record', 'cases',
+  'project-index', 'concepts', 'project-architecture',
 ] as const;
 
 const TemplateNameSchema = Schema.Literals(TEMPLATE_NAMES);
@@ -96,10 +95,14 @@ function findTemplate(name: string): ManifestEntry {
   return entry;
 }
 
-export function templateBody(name: string, title: string): string {
+export function templateBody(name: string, title: string, pages: readonly TemplatePage[] = TEMPLATE_PAGES): string {
   const entry = findTemplate(name);
   try {
-    return readFileSync(new URL(`../templates/${entry.path}`, import.meta.url), 'utf8').replaceAll('{{title}}', () => title);
+    const entryPoints = pages.length === 0
+      ? 'Add supporting pages when needed and link them here. Keep the problem, mental model, and scope in this README.'
+      : pages.map(page => `- [${PAGE_DESCRIPTIONS[page].label}](${page === 'use-case' ? 'use-case/README.md' : `${page}.md`})`).join('\n');
+    return readFileSync(new URL(`../templates/${entry.path}`, import.meta.url), 'utf8')
+      .replaceAll('{{entryPoints}}', () => entryPoints).replaceAll('{{title}}', () => title);
   } catch (cause) {
     throw templateFailure('TemplateUnreadable', `Cannot read packaged template ${entry.name}`, cause);
   }
@@ -113,18 +116,19 @@ export function listTemplates(): { name: string; description: string }[] {
 export function projectTemplateFiles(): Record<string, string> {
   const files: Record<string, string> = {};
   const add = (path: string, name: string) => { files[`docs/_template/${path}`] = templateBody(name, 'Your title'); };
-  const packageTemplates = [['feature-design', 'feature'], ['roadmap', 'roadmap'], ['engineering', 'engineering']] as const;
+  const packageTemplates = [['feature-design', 'feature'], ['roadmap', 'roadmap']] as const;
   const addPackage = (directory: string, name: string) => {
     add(`${directory}/README.md`, name);
     for (const page of TEMPLATE_PAGES) add(`${directory}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
   };
   for (const [directory, name] of packageTemplates) addPackage(directory, name);
+  add('engineering/README.md', 'engineering');
   add('design-decision/README.md', 'design');
   for (const [file, name] of [['GOALS', 'goals'], ['LIMITS', 'limits'], ['DECISION', 'decision-record'], ['CASES', 'cases']]) add(`design-decision/${file}.md`, name!);
   addPackage('design-decision/plans/plan-1', 'feature');
   addPackage('design-decision/plans/plan-2', 'feature');
   for (const name of ['research', 'use-case', 'issue']) add(`${name}/README.md`, name);
   for (const name of ['problem', 'decision', 'insight']) add(`memory/${name}.md`, name);
-  files['docs/_template/README.md'] = '# Complete Concord templates\n\nThis reference set is installed by concord init. Create commands use the bundled templates and generate the complete structure; no page selection is required. These examples are not adopted contracts or test evidence.\n\n' + Object.keys(files).map(path => `- [${path.slice('docs/_template/'.length)}](${path.slice('docs/_template/'.length)})`).join('\n') + '\n';
+  files['docs/_template/README.md'] = '# Concord writing templates\n\nThis complete reference set is installed by concord init. Create commands use bundled templates, not editable configuration from this directory. These examples are not adopted contracts or test evidence.\n\nFeature, Roadmap, and Design candidates require README only. Select optional pages with --pages library,cli,architecture,lifecycle,use-case (or repeat --pages). Omit --pages for README only. Design always includes its decision wrapper. Engineering starts with goal, mechanism, usage, and acceptance in README; expand with page add when needed.\n\n| Optional page | Use when |\n| --- | --- |\n| library | A public programming interface needs exact shapes and examples |\n| cli | Public commands need inputs, outputs, and errors |\n| architecture | Internal entities, boundaries, and invariants need explanation |\n| lifecycle | Resources or state transitions need ownership and cleanup rules |\n| use-case | User goals need an index of complete paths; create actual cases separately |\n\n' + Object.keys(files).map(path => `- [${path.slice('docs/_template/'.length)}](${path.slice('docs/_template/'.length)})`).join('\n') + '\n';
   return files;
 }

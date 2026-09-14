@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
+import { once } from 'node:events';
 import { Effect, Schema } from 'effect';
 import { ProjectSchema } from '../dist/shared.js';
+import { parseDocumentRecord } from '../dist/documents.js';
 const Ack = Schema.Struct({});
 const ErrorOutput = Schema.Struct({ error: Schema.String });
 const DigestOutput = Schema.Struct({ digest: Schema.String });
@@ -34,6 +36,48 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  cli=join(install,'node_modules/concord-sdlc/dist/entry.js');
 })));
 after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
+
+// @concord-case installed-optional-document-pages
+// @concord-contract docs/feature/local-sdlc/use-case/onboard-from-template.md
+test('installed create selects optional pages, keeps README required, and rejects invalid selections before writing', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('optional-pages');
+ const only = call(root, ['feature', 'create', 'minimal', '--title', 'Minimal'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
+ assert.deepEqual(only.changedPaths, ['docs/feature/minimal/README.md']);
+ assert.doesNotMatch(readFileSync(join(root, only.changedPaths[0]!), 'utf8'), /\]\(/);
+ call(root, ['feature', 'create', 'selected', '--title', 'Selected', '--pages', 'cli,library', '--pages', 'use-case'], Ack);
+ const base = 'docs/feature/selected/';
+ const readme = readFileSync(join(root, base, 'README.md'), 'utf8');
+ for (const match of readme.matchAll(/\]\(([^)]+)\)/g)) assert.equal(existsSync(join(root, base, match[1]!)), true);
+ assert.equal(existsSync(join(root, base, 'architecture.md')), false);
+ assert.equal(existsSync(join(root, base, 'lifecycle.md')), false);
+ assert.equal(call(root, ['use-case', 'list'], Schema.Struct({ documents: Schema.Array(Schema.Unknown) })).documents.length, 0);
+ call(root, ['feature', 'page', 'add', 'selected', 'architecture'], Ack);
+ assert.equal(readFileSync(join(root, base, 'README.md'), 'utf8'), readme);
+ const author = '# Custom\n\nKeep [my link](custom.md).\n';
+ call(root, ['feature', 'create', 'custom', '--title', 'Custom', '--body', '-', '--pages', 'cli'], Ack, author);
+ assert.equal(call(root, ['feature', 'show', 'custom'], Schema.Struct({ document: Schema.Struct({ body: Schema.String }) })).document.body, author);
+ call(root, ['--dry-run', 'feature', 'create', 'preview', '--title', 'Preview', '--pages', 'cli'], Ack);
+ assert.equal(existsSync(join(root, 'docs/feature/preview')), false);
+ for (const [id, pages, error] of [['unknown', 'other', 'InvalidData'], ['duplicate', 'cli,cli', 'InvalidInput'], ['empty', 'cli,', 'InvalidData']] as const) {
+   assert.equal(call(root, ['feature', 'create', id, '--title', id, '--pages', pages], ErrorOutput, '', 1).error, error);
+   assert.equal(existsSync(join(root, 'docs/feature', id)), false);
+ }
+ assert.equal(call(root, ['engineering', 'create', 'invalid', '--title', 'Invalid', '--pages', 'cli'], ErrorOutput, '', 1).error, 'InvalidInput');
+ assert.equal(existsSync(join(root, 'docs/engineering/invalid')), false);
+ const engineering = call(root, ['engineering', 'create', 'small', '--title', 'Small'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
+ assert.deepEqual(engineering.changedPaths, ['docs/engineering/small/README.md']);
+ write(root, 'docs/feature/conflict/cli.md', '# Existing\n');
+ assert.equal(call(root, ['feature', 'create', 'conflict', '--title', 'Conflict', '--pages', 'cli'], ErrorOutput, '', 1).error, 'DocumentExists');
+ assert.equal(existsSync(join(root, 'docs/feature/conflict/README.md')), false);
+ assert.equal(readFileSync(join(root, 'docs/feature/conflict/cli.md'), 'utf8'), '# Existing\n');
+ call(root, ['design', 'create', 'minimal-design', '--title', 'Design', '--alternative', 'one'], Ack);
+ for (const file of ['README.md', 'GOALS.md', 'LIMITS.md', 'CASES.md', 'DECISION.md', 'plans/one/README.md']) assert.equal(existsSync(join(root, 'docs/design/minimal-design', file)), true);
+ assert.equal(existsSync(join(root, 'docs/design/minimal-design/plans/one/cli.md')), false);
+ call(root, ['roadmap', 'create', 'minimal-roadmap', '--title', 'Roadmap'], Ack);
+ call(root, ['roadmap', 'adopt', 'minimal-roadmap', '--feature', 'adopted-minimal'], Ack);
+ assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/README.md')), true);
+ assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/cli.md')), false);
+})));
 function call<A>(root: string,args: readonly string[],schema: Schema.ConstraintDecoder<A, never>,input='Contract body.\n',status=0): A {
  const result=spawnSync(process.execPath,[cli,'--root',root,'--json',...args],{input,encoding:'utf8',timeout:20000});
  assert.equal(result.status,status,JSON.stringify({args,stdout:result.stdout,stderr:result.stderr,error:result.error}));
@@ -44,6 +88,74 @@ function callString(root: string,args: readonly string[],input='Contract body.\n
 }
 function consumer(name: string){const root=join(scratch,name);mkdirSync(root);execFileSync('git',['init','-q',root]);call(root,['init'],Ack);return root;}
 function write(root: string,path: string,source: string){mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),source);}
+
+// @concord-case installed-feedback-local-workflow
+// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+test('packed feedback commands persist connections and local triage without remote calls', () => Effect.runPromise(Effect.sync(() => {
+ const root=consumer('packed-feedback');
+ call(root,['feedback','connection','add','--id','github-main','--provider','github','--owner','example','--repo','demo','--credential-env','CONCORD_TEST_MISSING_TOKEN'],Ack);
+ call(root,['feedback','connection','add','--id','linear-main','--provider','linear','--team','TEAM','--credential-env','CONCORD_TEST_MISSING_LINEAR_KEY'],Ack);
+ const project=Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root,'concord.json'),'utf8'));
+ assert.deepEqual(project.feedbackConnections?.map(connection=>connection.provider),['github','linear']);
+ call(root,['feature','create','feedback-target','--title','Feedback target'],Ack);
+ call(root,['feedback','create','observation','--title','Local observation'],Ack);
+ call(root,['feedback','link','observation','--feature','docs/feature/feedback-target/README.md'],Ack);
+ const relative='docs/issues/observation.md';
+ const linked=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
+ assert.equal(linked?.metadata.kind,'issue');
+ if(linked?.metadata.kind!=='issue')assert.fail('feedback must retain the local issue owner');
+ assert.deepEqual(linked.metadata.features,['docs/feature/feedback-target/README.md']);
+ assert.equal(linked.metadata.source,undefined);
+ const listed=call(root,['feedback','list'],Schema.Unknown);
+ assert.match(JSON.stringify(listed),/observation/);
+ call(root,['feedback','show','observation'],Schema.Unknown);
+ call(root,['feedback','close','observation','--reason','Investigation complete'],Ack);
+ const closed=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
+ assert.equal(closed?.metadata.kind==='issue'&&closed.metadata.state,'closed');
+ call(root,['feedback','connection','remove','github-main'],Ack);
+ assert.ok(existsSync(join(root,relative)),'removing a connection must preserve local observations');
+ assert.equal(call(root,['check'],CheckOutput).ok,true);
+})));
+
+// @concord-case installed-web-workbench-assets-and-api
+// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+test('packed view serves its frontend and API without credentials in an isolated Git consumer', async () => {
+ const root = consumer('packed-web');
+ const process = spawn(globalThis.process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+ const exited = once(process, 'exit');
+ try {
+  const ready = await new Promise<{address:string;host:string;port:number;local:readonly string[];network:readonly string[]}>((resolveReady, reject) => {
+   let buffer='';
+   const timer=setTimeout(()=>reject(new Error('Packed view did not become ready')),15000);
+   process.once('exit',()=>{clearTimeout(timer);reject(new Error('Packed view exited before readiness'));});
+   process.stdout.on('data',(chunk:Buffer)=>{
+    buffer+=chunk.toString('utf8');
+    const newline=buffer.indexOf('\n'); if(newline<0)return;
+    try {const value=Schema.decodeUnknownSync(Schema.Struct({operation:Schema.Literal('view'),root:Schema.String,address:Schema.String,host:Schema.String,port:Schema.Int,local:Schema.Array(Schema.String),network:Schema.Array(Schema.String)}),{onExcessProperty:'error'})(JSON.parse(buffer.slice(0,newline)));clearTimeout(timer);resolveReady(value);} catch (cause) { clearTimeout(timer); reject(cause); }
+   });
+  });
+  const help = execFileSync(globalThis.process.execPath, [cli, 'view', '--help'], { encoding: 'utf8' });
+  assert.doesNotMatch(help, /key|login|authenticated|密钥/iu);
+  const base=ready.address.replace('localhost','127.0.0.1');
+  assert.equal(ready.host,'127.0.0.1');
+  assert.ok(ready.port > 0);
+  assert.deepEqual(ready.local,[base]);
+  assert.deepEqual(ready.network,[]);
+  const shell=await fetch(base+'feature/accounts');
+  assert.equal(shell.status,200);
+  const html=await shell.text();
+  assert.match(html,/<div id="root"><\/div>/);
+  const script=/src="([^"]+\.js)"/.exec(html)?.[1]; assert.ok(script);
+  const asset=await fetch(new URL(script,base)); assert.equal(asset.status,200);
+  assert.match(asset.headers.get('content-type')??'',/javascript/);
+  assert.ok((await asset.arrayBuffer()).byteLength > 0);
+  const workspace=await fetch(base+'api/workspace');assert.equal(workspace.status,200);
+  const response=Schema.decodeUnknownSync(Schema.Struct({ok:Schema.Boolean,value:Schema.Struct({root:Schema.String})}),{onExcessProperty:'ignore'})(await workspace.json());
+  assert.equal(response.ok,true);assert.equal(response.value.root,root);
+  assert.equal((await fetch(base+'api/missing')).status,404);
+  assert.equal(call(root,['check'],CheckOutput).ok,true,'idle server must not lock out the CLI');
+ } finally {process.kill('SIGTERM');await exited;}
+});
 // @concord-case installed-template-inventory
 // @concord-contract docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('packed templates work outside a project and fail clearly when their inventory is damaged', () => Effect.runPromise(Effect.sync(() => {
@@ -68,9 +180,9 @@ test('packed templates work outside a project and fail clearly when their invent
 test('installed onboarding creates editable packages and connects supporting-page tests to their Feature', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('onboarding');
  assert.match(readFileSync(join(root, 'docs/concord.md'), 'utf8'), /concord test annotate/);
- for (const path of ['docs/README.md', 'docs/_template/feature-design/lifecycle.md', 'docs/_template/roadmap/use-case/README.md', 'docs/_template/design-decision/CASES.md', 'docs/_template/design-decision/plans/plan-2/library.md', 'docs/_template/engineering/architecture.md', 'docs/_template/research/README.md', 'docs/_template/memory/problem.md']) assert.equal(existsSync(join(root, path)), true, path);
+ for (const path of ['docs/README.md', 'docs/_template/feature-design/lifecycle.md', 'docs/_template/roadmap/use-case/README.md', 'docs/_template/design-decision/CASES.md', 'docs/_template/design-decision/plans/plan-2/library.md', 'docs/_template/engineering/README.md', 'docs/concepts.md', 'docs/architecture.md', 'docs/_template/research/README.md', 'docs/_template/memory/problem.md']) assert.equal(existsSync(join(root, path)), true, path);
  assert.equal(existsSync(join(root, 'AGENTS.md')), false);
- call(root, ['feature', 'create', 'accounts', '--title', 'Accounts'], Ack);
+ call(root, ['feature', 'create', 'accounts', '--title', 'Accounts', '--pages', 'library,cli,architecture,lifecycle,use-case'], Ack);
  for (const page of ['README.md', 'library.md', 'cli.md', 'architecture.md', 'lifecycle.md', 'use-case/README.md']) assert.equal(existsSync(join(root, 'docs/feature/accounts', page)), true, page);
  call(root, ['feature', 'create', 'other', '--title', 'Other'], Ack);
  call(root, ['engineering', 'create', 'ci', '--title', 'Continuous integration'], Ack);
@@ -105,6 +217,8 @@ test('installed onboarding creates editable packages and connects supporting-pag
 test('installed init previews configuration, preserves existing docs, and never runs the configured command', () => Effect.runPromise(Effect.sync(() => {
  const root = join(scratch, 'init-options'); mkdirSync(root); execFileSync('git', ['init', '-q', root]);
  write(root, 'docs/README.md', '# Existing documentation\n');
+ write(root, 'docs/concepts.md', '# Existing concepts\n');
+ write(root, 'docs/architecture.md', '# Existing architecture\n');
  const runner = { kind: 'command', argv: ['node', '-e', 'require("node:fs").writeFileSync("EXECUTED", "bad")'], sourceFiles: [], timeoutMs: 1200 };
  write(root, 'runner.json', JSON.stringify(runner));
  const args = ['init', '--test-root', 'spec', '--runner-config', join(root, 'runner.json')];
@@ -115,6 +229,8 @@ test('installed init previews configuration, preserves existing docs, and never 
  const config = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root, 'concord.json'), 'utf8'));
  assert.deepEqual(config.testRoots, ['spec']); assert.deepEqual(config.runner, runner);
  assert.equal(readFileSync(join(root, 'docs/README.md'), 'utf8'), '# Existing documentation\n');
+ assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), '# Existing concepts\n');
+ assert.equal(readFileSync(join(root, 'docs/architecture.md'), 'utf8'), '# Existing architecture\n');
  const diagnosis = call(root, ['doctor'], DoctorOutput);
  assert.deepEqual(diagnosis.missingTestRoots, ['spec']);
  call(root, ['check'], CheckOutput);
@@ -126,7 +242,7 @@ test('installed init previews configuration, preserves existing docs, and never 
 test('installed Design and Roadmap packages retain their pages and authoritative lifecycle metadata', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('document-packages');
  call(root, ['engineering', 'create', 'release', '--title', 'Release'], Ack);
- call(root, ['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'sqlite', '--alternative', 'files'], Ack);
+ call(root, ['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'sqlite', '--alternative', 'files', '--pages', 'architecture'], Ack);
  assert.match(readFileSync(join(root, 'docs/design/storage/plans/sqlite/architecture.md'), 'utf8'), /Storage/);
  assert.equal(existsSync(join(root, 'docs/design/storage/GOALS.md')), true);
  const candidate = call(root, ['design', 'page', 'show', 'storage', 'readme', '--plan', 'sqlite'], DigestOutput);
@@ -134,7 +250,7 @@ test('installed Design and Roadmap packages retain their pages and authoritative
  call(root, ['design', 'decide', 'storage', '--selected', 'sqlite', '--target', 'docs/engineering/release/README.md', '--reason', 'One deployment owner'], Ack);
  const decision = call(root, ['design', 'show', 'storage'], DecisionOutput).document.metadata.decision;
  assert.equal(decision.selected, 'sqlite');
- call(root, ['roadmap', 'create', 'session', '--title', 'Session'], Ack);
+ call(root, ['roadmap', 'create', 'session', '--title', 'Session', '--pages', 'architecture'], Ack);
  call(root, ['roadmap', 'adopt', 'session', '--feature', 'session'], Ack);
  assert.equal(existsSync(join(root, 'docs/feature/session/architecture.md')), true);
  assert.equal(call(root, ['roadmap', 'show', 'session'], StateOutput).document.metadata.state, 'adopted');

@@ -15,7 +15,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 主流程
 
-1. create 命令生成完整页面结构，作者补齐问题、目标、限制、架构、CLI、生命周期和验收。
+1. Feature、Roadmap 和 Design 候选创建必需 README；作者用 --pages 选择 library、cli、architecture、lifecycle、use-case。Design 外层目标、限制、案例、裁决页始终生成。Engineering 从目标、机制、使用、验收开始，按需加专题页。
 2. `page show` 返回正文与 digest；`page set` 只在 preimage 未变化时写入。
 3. Design 只允许一次裁决；Roadmap adoption 复制实际 Markdown 集合、重写集合内安全链接并迁移当前 promotion。
 4. 原 Roadmap 保留 adopted 历史，新 Feature 成为当前契约 owner。

@@ -14,8 +14,4 @@ State what the feature includes and excludes.
 
 ## Entry Points
 
-- [Library](library.md)
-- [CLI](cli.md)
-- [Architecture](architecture.md)
-- [Lifecycle](lifecycle.md)
-- [Use Cases](use-case/README.md)
+{{entryPoints}}

@@ -66,6 +66,41 @@ concord review render greeting
 
 打开 `docs/feature/greeting/README.md` 与 `docs/feature/greeting/use-case/greet-name.md` 补写真实产品行为。生成的模板是写作起点；检查通过不表示正文已完成，也不表示产品已被完整测试。
 
+## Web 工作台
+
+在项目根目录启动：
+
+```sh
+concord view
+# 仅本机访问或自选端口
+concord view --host 127.0.0.1 --port 4317
+```
+
+默认监听 `0.0.0.0:4317`。打开终端显示的地址即可进入工作台，无需登录或访问密钥。网页随 Concord 安装包分发，无需额外启动前端服务。任何能连接该端口的人都可以编辑仓库并运行配置的测试；明文 HTTP 用于可信网络。
+
+启动时像 Vite 一样列出 `Local` 本机地址和多个 `Network` 网卡地址，同时显示实际 `Host` / `Port`。只绑定 `127.0.0.1` 时不显示局域网入口。
+
+左侧分别进入 Feature、Roadmap、Design、Research、Engineering、代码、测试、运行证据、Memory、反馈、Git 与设置。**Use Case 在所属 Feature 内创建和浏览，没有独立顶级入口。** 文档使用所见即所得 Markdown 编辑器，可切换源码和编辑差异；保存遇到外部修改会保留草稿并报告冲突。
+
+Git 面板按已暂存、未暂存、未跟踪列出文件，支持统一和分栏差异。编辑器中的未保存差异与 Git 变化分别呈现。Web 与 CLI 共用领域校验，空闲网页不会占用仓库锁。
+
+前端使用 React、React Router、Vite、shadcn/ui 和 MDXEditor；Git 差异展示复用 react-diff-view。详细操作见 `concord --skill view`。当前工作台覆盖通用模式；NiceEval repository profile 仍从宿主 CLI 使用。
+
+## 多来源反馈
+
+从「反馈」侧栏配置 GitHub 仓库或 Linear team，显式导入 URL 或同步。连接只保存凭据环境变量名，凭据由启动 CLI / Web 服务的环境提供。
+
+```sh
+concord feedback connection add --id github-main --provider github --owner OWNER --repo REPO --credential-env GITHUB_TOKEN
+concord feedback connection add --id linear-main --provider linear --team TEAM --credential-env LINEAR_API_KEY
+concord feedback import https://github.com/OWNER/REPO/issues/123 --connection github-main
+concord feedback sync --connection linear-main
+concord feedback list --json
+concord --skill feedback
+```
+
+Linear 首版使用个人 API key。首次成功读取会绑定远端范围身份；同一对象重复导入或清空缓存后不会创建重复反馈。本地笔记、Feature / Memory 关联和关闭状态不会被远端刷新覆盖；远端 Done 不等于本地修复证据。详细命令见[反馈 usage](docs/feature/feedback/cli.md)。
+
 ## 常用 usage
 
 默认输出供人阅读；脚本和 AI 使用 `--json`，跨目录使用 `--root /path/to/project`。先用 `concord <command> --help` 查看精确参数。
@@ -82,7 +117,7 @@ concord init --docs-only
 concord init --docs-only --source-root src
 ```
 
-`init` 创建 `concord.json`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板，保留已有 `docs/README.md`。其它目标冲突时零写入失败；已有文档仓库应先在隔离分支/工作目录审阅迁移，不覆盖原文档。
+`init` 创建 `concord.json`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板，补齐缺失的 `docs/README.md`、`docs/concepts.md` 和 `docs/architecture.md`，已有根文档保留。其它目标冲突时零写入失败；已有文档仓库应先在隔离分支/工作目录审阅迁移，不覆盖原文档。
 
 已有 Concord 项目直接维护配置：`sourceRoots` 控制代码扫描，缺省 `[]`；`testRoots: []` 关闭测试发现。两组根可重叠，新增代码功能无需迁移已有测试关系。源码关系在注释里；JSON 只保存目录和 runner 等机械配置。
 
@@ -97,6 +132,10 @@ concord --skill init
 `--docs-only` 不能与 `--test-root` 同用。`doctor` 显示缺失目录与关联问题，不执行测试；以后有真实测试再配置 testRoots。
 
 ### 文档、Feature、Use Case 与设计
+
+Feature、Roadmap、Design 候选默认只生成必需 README。用 `--pages cli,library` 选择可选页，也可重复 `--pages`。全套为 `--pages library,cli,architecture,lifecycle,use-case`；依赖旧全量默认的脚本须显式选择。Architecture 用于内部边界，Lifecycle 用于资源与状态转换，Use Case 生成索引，具体用户路径单独创建。Web 创建对话框提供相同选择。
+
+Engineering 默认 README 定义目标、机制、使用和验收，用 `engineering page add <id> <topic>` 按需扩展。既有页面保留；新增页面后由作者更新 README 链接。
 
 | 想维护的事实 | owner / 入口 |
 |---|---|
@@ -114,6 +153,7 @@ concord --skill init
 ```sh
 concord feature show greeting
 concord use-case list
+concord feature page add greeting cli
 concord feature page show greeting cli --json
 concord feature page add greeting migration
 concord engineering create ci --title "Continuous integration"
@@ -231,7 +271,7 @@ Trace 从当前 owner 推导反向关系，分别展示代码声明、测试和 
 
 ## Concord 自举
 
-本项目的 `concord.json` 已配置 `sourceRoots: ["src"]` 与真实测试根 `test`。实现文件和关键函数直接关联八条 [Use Case](docs/feature/local-sdlc/use-case/README.md)：初始化、契约维护、测试索引、代码索引、命令证据、恢复、Trace、repository profile 入口。共享基础模块关联本地 SDLC Feature，具体行为关联 Use Case。
+本项目的 `concord.json` 已配置 `sourceRoots: ["src", "web"]` 与真实测试根 `test`。实现文件和关键函数直接关联八条 [本地 SDLC Use Case](docs/feature/local-sdlc/use-case/README.md) 和新增的 [Web 工作台 Use Case](docs/feature/web-workbench/use-case/use-web-workbench.md)。共享基础模块关联 Feature，具体行为关联 Use Case；工作台前端、后端、安装包和真实浏览器测试也使用这套关系。
 
 在 Concord checkout 中运行：
 

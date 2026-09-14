@@ -10,13 +10,10 @@ Define the mechanism, its owners, and the boundaries it must preserve.
 
 ## Usage
 
-Show how maintainers use it. Use the complete package for its detailed contracts:
-
-- [Library](library.md)
-- [CLI](cli.md)
-- [Architecture](architecture.md)
-- [Lifecycle](lifecycle.md)
-- [Use Cases](use-case/README.md)
+Show how maintainers use the mechanism, including inputs, commands, and observable results.
+Keep a small topic in this README. Split larger topics into pages such as usage.md,
+design.md, or validation.md and link them here. Choose the structure for this topic;
+engineering does not require the Feature page layout.
 
 ## Acceptance
 

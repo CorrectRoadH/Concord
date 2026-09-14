@@ -125,6 +125,10 @@ function annotationCommentLines(text: string, source: ts.SourceFile): number[] {
   visit(source);
   return [...lines].sort((a, b) => a - b);
 }
+export function parseTestDeclarations(path: string, text: string): { readonly cases: readonly AnnotatedCase[]; readonly findings: readonly Finding[] } {
+  return parseSource({ path, text, digest: digest(text) });
+}
+
 function parseSource(input: Source): Parsed {
   const source = ts.createSourceFile(input.path, input.text, ts.ScriptTarget.Latest, true);
   const bindings = imports(source), findings: Finding[] = [], cases: AnnotatedCase[] = [];
@@ -174,15 +178,23 @@ function sources(repo: Repository): Source[] {
   return paths.map(path => { const text = repo.read(path); if (text === undefined) throw new ConcordError('SourceChanged', `${path} disappeared while it was scanned`); return { path, text, digest: digest(text) }; });
 }
 function cachePath(repo: Repository): string { return join(repo.privateDir, 'cache.sqlite'); }
-function assertCacheSafe(path: string): void { if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`); }
+function assertCacheSafe(path: string): void {
+  let stat;
+  try { stat = lstatSync(path); }
+  catch (cause) { if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') return; throw cause; }
+  if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
+  if (!stat.isFile()) throw new ConcordError('InvalidCache', `Cache paths must be regular files: ${path}`);
+}
+function assertCacheDatabaseSafe(path: string): void { for (const suffix of ['', '-wal', '-shm', '-journal']) assertCacheSafe(`${path}${suffix}`); }
 function cacheKey(repo: Repository, current: readonly Source[]): string {
   return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: PARSER_VERSION, files: current.map(source => ({ path: source.path, digest: source.digest })) });
 }
 function readCache(repo: Repository, key: string): CachedSnapshot | undefined {
-  const path = cachePath(repo); assertCacheSafe(path);
-  const db = new DatabaseSync(path);
+  const path = cachePath(repo); assertCacheDatabaseSafe(path);
+  if (!existsSync(path)) return undefined;
+  const db = new DatabaseSync(path, { readOnly: true });
   try {
-    db.exec('CREATE TABLE IF NOT EXISTS annotation_cache (cache_key TEXT PRIMARY KEY, payload TEXT NOT NULL)');
+    if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'annotation_cache'").get() === undefined) return undefined;
     const row = db.prepare('SELECT payload FROM annotation_cache WHERE cache_key = ?').get(key) as { payload?: unknown } | undefined;
     if (row?.payload === undefined) return undefined;
     const value = decode(CachedSnapshotSchema, JSON.parse(String(row.payload)), 'annotation cache');
@@ -192,7 +204,7 @@ function readCache(repo: Repository, key: string): CachedSnapshot | undefined {
   finally { db.close(); }
 }
 function writeCache(repo: Repository, key: string, value: CachedSnapshot): void {
-  const path = cachePath(repo); assertCacheSafe(path);
+  const path = cachePath(repo); assertCacheDatabaseSafe(path);
   const db = new DatabaseSync(path);
   try { db.exec('CREATE TABLE IF NOT EXISTS annotation_cache (cache_key TEXT PRIMARY KEY, payload TEXT NOT NULL)'); db.exec('BEGIN IMMEDIATE'); try { db.prepare('INSERT OR REPLACE INTO annotation_cache (cache_key, payload) VALUES (?, ?)').run(key, canonical(value)); db.exec('COMMIT'); } catch (cause) { try { db.exec('ROLLBACK'); } catch { /* best effort */ } throw cause; } }
   finally { db.close(); }
@@ -220,7 +232,10 @@ function sourceChanged(value: CachedSnapshot, cache: AnnotationSnapshot['cache']
 export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off' } = {}): AnnotationSnapshot {
   const mode = options.cache ?? 'use', path = cachePath(repo); const current = sources(repo); const key = cacheKey(repo, current);
   if (mode === 'off') { const value = compile(current); return unchanged(repo, current) ? snapshot(value, { status: 'off', hits: 0, misses: 1, path }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
-  if (mode === 'use') try { const cached = readCache(repo, key); if (cached) return unchanged(repo, current) ? snapshot(cached, { status: 'hit', hits: 1, misses: 0, path }) : sourceChanged(compile(current), { status: 'source-changed', hits: 0, misses: 1, path }); } catch (cause) { const value = compile(current); return unchanged(repo, current) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cause instanceof Error ? cause.message : String(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
+  if (mode === 'use') try {
+    const cached = readCache(repo, key);
+    if (cached) return unchanged(repo, current) ? snapshot(cached, { status: 'hit', hits: 1, misses: 0, path }) : sourceChanged(compile(current), { status: 'source-changed', hits: 0, misses: 1, path });
+  } catch (cause) { const value = compile(current); return unchanged(repo, current) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cause instanceof Error ? cause.message : String(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
   const value = compile(current);
   if (!unchanged(repo, current)) return sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path });
   try { writeCache(repo, key, value); return snapshot(value, { status: 'miss', hits: 0, misses: 1, path }); }
@@ -232,5 +247,16 @@ export function clearCache(repo: Repository): { readonly status: string; readonl
   return { status: 'cleared', path };
 }
 export function cacheStatus(repo: Repository): { readonly status: string; readonly path: string; readonly detail?: string } {
-  const path = cachePath(repo); try { assertCacheSafe(path); if (!existsSync(path)) return { status: 'empty', path }; const db = new DatabaseSync(path, { open: false }); db.open(); try { db.prepare('SELECT 1 FROM annotation_cache LIMIT 1').all(); return { status: 'ready', path }; } finally { db.close(); } } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; }
+  const path = cachePath(repo); try {
+    assertCacheDatabaseSafe(path);
+    if (!existsSync(path)) return { status: 'empty', path };
+    const db = new DatabaseSync(path, { readOnly: true });
+    try {
+      const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('annotation_cache', 'feedback_cache') ORDER BY name").all() as unknown as readonly { readonly name: unknown }[];
+      const projections = rows.map(row => String(row.name));
+      if (projections.includes('annotation_cache')) db.prepare('SELECT 1 FROM annotation_cache LIMIT 1').all();
+      if (projections.includes('feedback_cache')) db.prepare('SELECT 1 FROM feedback_cache LIMIT 1').all();
+      return projections.length === 0 ? { status: 'empty', path } : { status: 'ready', path, detail: `projections: ${projections.join(', ')}` };
+    } finally { db.close(); }
+  } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; }
 }

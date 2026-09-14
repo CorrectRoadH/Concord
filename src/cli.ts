@@ -6,7 +6,10 @@ import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
-import { addPage, showPage, setPage, adoptRoadmap, closeIssue, createDocument, decideDesign, findDocument, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
+import { addPage, showPage, setPage, adoptRoadmap, closeIssue, createDocument, decideDesign, findDocument, linkFeedbackFeature, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
+import { listFeedback, syncFeedback } from './feedback.js';
+import { FeedbackConnectionSchema } from './feedback-schema.js';
+import { setConfig, showConfig } from './editing.js';
 import { readEvidence, runCase, verifyFixedEvidence } from './evidence.js';
 import { OwnedProcessLive } from './owned-process.js';
 import { initialize, LocalRepository } from './storage.js';
@@ -16,6 +19,10 @@ import { listTemplates, templateBody } from './templates.js';
 import { humanOutput } from './presentation.js';
 import { annotationSnippet, doctor } from './onboarding.js';
 import { codeSnippet, listCode, locateCode, showCode } from './code-commands.js';
+import { applyViewDryRun, executeViewAction, getWorkspaceSnapshot } from './application.js';
+import { getGitDiff, getGitStatus } from './git-view.js';
+import { serveViewServer } from './view-server.js';
+import { viewAddresses } from './view-addresses.js';
 
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
   root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise discover concord.json from cwd.')),
@@ -56,7 +63,7 @@ const init = Command.make('init', { testRoot: many('test-root'), sourceRoot: man
 const recover = Command.make('recover', {}, () => withRepo(repo => sync(() => repo.recover()), { recover: true })).pipe(Command.withDescription('Recover interrupted document publication; preserve conflicting external edits.'));
 
 function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
-  const create = Command.make('create', { id, title: text('title'), body: optional('body'), feature: optional('feature'), observedAt: optional('observed-at'), source: many('source'), alternative: many('alternative') }, args => withRepo((repo, s) => sync(() => createDocument(repo, kind, { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, feature: Option.getOrUndefined(args.feature), observedAt: Option.getOrUndefined(args.observedAt), sources: args.source, alternatives: args.alternative, dryRun: s.dryRun })))).pipe(Command.withDescription('Create a writing scaffold, or supply prose with --body <file|->. Every package includes its complete page structure.'));
+  const create = Command.make('create', { id, title: text('title'), body: optional('body'), feature: optional('feature'), observedAt: optional('observed-at'), source: many('source'), alternative: many('alternative'), pages: many('pages') }, args => withRepo((repo, s) => sync(() => createDocument(repo, kind, { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, feature: Option.getOrUndefined(args.feature), observedAt: Option.getOrUndefined(args.observedAt), sources: args.source, alternatives: args.alternative, pages: args.pages.length ? args.pages.flatMap(value => value.split(',').map(page => page.trim())) : undefined, dryRun: s.dryRun })))).pipe(Command.withDescription('Create a writing scaffold, or supply prose with --body <file|->. Package README is required. Feature/Roadmap/Design: select optional library,cli,architecture,lifecycle,use-case with --pages (comma-separated or repeated); omitted means README only per package. Engineering grows through page add.'));
   const list = Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation: `${kind}-list`, documents: loadDocuments(repo).filter(d => d.metadata.kind === kind).map(d => ({ path: d.path, ...d.metadata })) }))));
   const show = Command.make('show', { id }, ({ id }) => withRepo(repo => sync(() => ({ operation: `${kind}-show`, document: findDocument(loadDocuments(repo), id, kind) }))));
   const adopt = Command.make('adopt', { id, feature: text('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, args.feature, s.dryRun))));
@@ -100,6 +107,53 @@ const issue = Command.make('issue').pipe(Command.withDescription('Maintain local
   Command.make('link', { id, memory: text('memory') }, args => withRepo((repo,s) => sync(() => linkIssue(repo,args.id,args.memory,s.dryRun)))),
   Command.make('close', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => closeIssue(repo,args.id,args.reason,s.dryRun)))),
 ]));
+const feedbackConnection = Command.make('connection').pipe(Command.withDescription('Configure feedback providers by credential environment variable name; credentials are never stored.'), Command.withSubcommands([
+  Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] })))),
+  Command.make('add', {
+    id: text('id'),
+    provider: Flag.choice('provider', ['github', 'linear']),
+    credentialEnv: text('credential-env'),
+    owner: optional('owner'),
+    repo: optional('repo'),
+    team: optional('team'),
+  }, args => withRepo((local, settings) => sync(() => {
+    const owner = Option.getOrUndefined(args.owner), repo = Option.getOrUndefined(args.repo), team = Option.getOrUndefined(args.team);
+    if (args.provider === 'github' && (owner === undefined || repo === undefined || team !== undefined)) throw new ConcordError('InvalidOption', 'GitHub connections require --owner and --repo and do not accept --team');
+    if (args.provider === 'linear' && (team === undefined || owner !== undefined || repo !== undefined)) throw new ConcordError('InvalidOption', 'Linear connections require --team and do not accept --owner or --repo');
+    const connection = decode(FeedbackConnectionSchema, args.provider === 'github'
+      ? { id: args.id, provider: args.provider, credentialEnv: args.credentialEnv, owner, repo }
+      : { id: args.id, provider: args.provider, credentialEnv: args.credentialEnv, team }, 'feedback connection');
+    const current = showConfig(local);
+    if ((current.config.feedbackConnections ?? []).some(item => item.id === connection.id)) throw new ConcordError('FeedbackConnectionExists', `Feedback connection ${connection.id} already exists`);
+    return setConfig(local, { ...current.config, feedbackConnections: [...(current.config.feedbackConnections ?? []), connection] }, current.digest, settings.dryRun);
+  }))),
+  Command.make('remove', { id }, args => withRepo((local, settings) => sync(() => {
+    const current = showConfig(local);
+    const connections = current.config.feedbackConnections ?? [];
+    if (!connections.some(connection => connection.id === args.id)) throw new ConcordError('FeedbackConnectionNotFound', `No feedback connection has ID ${args.id}`);
+    return setConfig(local, { ...current.config, feedbackConnections: connections.filter(connection => connection.id !== args.id) }, current.digest, settings.dryRun);
+  }))),
+]));
+const feedbackSync = Command.make('sync', { connection: text('connection') }, args => Effect.gen(function*() {
+  const settings = yield* root;
+  const receipt = yield* syncFeedback(viewRoot(settings), args.connection, { dryRun: settings.dryRun });
+  yield* Effect.sync(() => emit(receipt, settings.json));
+}));
+const feedbackImport = Command.make('import', { url: Argument.string('url'), connection: text('connection') }, args => Effect.gen(function*() {
+  const settings = yield* root;
+  const receipt = yield* syncFeedback(viewRoot(settings), args.connection, { url: args.url, dryRun: settings.dryRun });
+  yield* Effect.sync(() => emit(receipt, settings.json));
+}));
+const feedback = Command.make('feedback').pipe(Command.withDescription('Triage local observations and explicitly import or synchronize configured remote feedback.'), Command.withSubcommands([
+  Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation: 'feedback-list', feedback: listFeedback(repo) })))),
+  Command.make('show', { id }, args => withRepo(repo => sync(() => ({ operation: 'feedback-show', feedback: listFeedback(repo).find(item => item.document.metadata.id === args.id) ?? (() => { throw new ConcordError('DocumentNotFound', `No feedback matches ${args.id}`); })() })))),
+  Command.make('create', { id, title: text('title'), body: optional('body') }, args => withRepo((repo, settings) => sync(() => createDocument(repo, 'issue', { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, dryRun: settings.dryRun })))),
+  Command.make('link', { id, feature: text('feature') }, args => withRepo((repo, settings) => sync(() => linkFeedbackFeature(repo, args.id, args.feature, settings.dryRun)))),
+  Command.make('close', { id, reason: text('reason') }, args => withRepo((repo, settings) => sync(() => closeIssue(repo, args.id, args.reason, settings.dryRun)))),
+  feedbackSync,
+  feedbackImport,
+  feedbackConnection,
+]));
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
   Command.make('annotate', { id, contract: text('contract'), regression: many('regression') }, args => withRepo(repo => sync(() => annotationSnippet(repo, args.id, args.contract, args.regression)))).pipe(Command.withDescription('Print validated annotations to place above a real test; does not edit or run tests.')),
   Command.make('list', {}, () => withRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache};}))),
@@ -138,7 +192,29 @@ const templates = Command.make('template').pipe(Command.withDescription('Inspect
   Command.make('show', { name: Argument.string('name'), title: optional('title') }, args => Effect.gen(function*() { const settings = yield* root; const result = yield* sync(() => ({ operation: 'template-show', name: args.name, body: templateBody(args.name, Option.getOrElse(args.title, () => 'Your title')) })); yield* Effect.sync(() => emit(result, settings.json)); })),
 ]));
 const diagnose = Command.make('doctor', {}, () => withRepo(repo => sync(() => { const result = doctor(repo); if (!result.ok) process.exitCode = 1; return result; }))).pipe(Command.withDescription('Inspect project configuration and onboarding gaps without running tests.'));
-root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Run this worktree repository profile with its original contracts and formal evidence.')),init,recover,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,test,code,cache,check,trace,review,templates,diagnose]),Command.run({version:'0.3.0'}),Effect.catch(cause=>Effect.sync(()=>{
+const viewRoot = (settings: { readonly root: Option.Option<string> }): string => Option.getOrUndefined(settings.root) ?? process.cwd();
+const action = Command.make('action', { input: text('input') }, args => Effect.gen(function*() {
+  const settings = yield* root;
+  const input = yield* sync(() => { try { return applyViewDryRun(JSON.parse(body(args.input)) as unknown, settings.dryRun); } catch (cause) { throw cause instanceof ConcordError ? cause : new ConcordError('InvalidJson', `Action input is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`); } });
+  const result = yield* executeViewAction(viewRoot(settings), input);
+  yield* Effect.sync(() => emit(result, settings.json));
+})).pipe(Command.withDescription('Execute one strict shared ViewAction from --input <file|->.'));
+const workspace = Command.make('workspace').pipe(Command.withDescription('Inspect the shared human/agent workspace projection.'), Command.withSubcommands([
+  Command.make('show', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* getWorkspaceSnapshot(viewRoot(settings), settings.dryRun ? 'off' : 'use'); yield* Effect.sync(() => emit(result, settings.json)); })),
+]));
+const gitView = Command.make('git').pipe(Command.withDescription('Inspect readonly working-tree status and diffs.'), Command.withSubcommands([
+  Command.make('status', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* getGitStatus(viewRoot(settings)); yield* Effect.sync(() => emit(result, settings.json)); })),
+  Command.make('diff', { path: Argument.string('path'), area: Flag.choice('area', ['staged', 'unstaged', 'untracked']) }, args => Effect.gen(function*() { const settings = yield* root; const result = yield* getGitDiff(viewRoot(settings), args.path, args.area); yield* Effect.sync(() => emit(result, settings.json)); })),
+]));
+const view = Command.make('view', {
+  host: Flag.string('host').pipe(Flag.withDefault('0.0.0.0')),
+  port: Flag.integer('port').pipe(Flag.withDefault(4317)),
+}, args => Effect.gen(function*() {
+  const settings = yield* root;
+  if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view does not accept --dry-run'));
+  return yield* serveViewServer({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) }, settings.json));
+})).pipe(Command.withDescription('Serve the local Web workbench.'));
+root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Run this worktree repository profile with its original contracts and formal evidence.')),init,recover,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:'0.3.0'}),Effect.catch(cause=>Effect.sync(()=>{
   const error=failure(cause);
   const result = {ok:false,error:error.code,message:error.message,...(error.details===undefined?{}:{details:error.details})};
   process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;

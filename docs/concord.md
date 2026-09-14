@@ -47,8 +47,8 @@ Templates provide writing prompts, not completed requirements or evidence.
 ## Complete setup
 
 Init installs every category, the documentation entry point, and the complete [template reference set](_template/README.md).
-Create commands generate the full page structure, including all Design decision pages and candidate packages.
-There is no page-selection step. Page add repairs missing template pages or adds a supporting topic using a lowercase slug, such as migration. Custom pages remain part of their package, with the same digest checks.
+Feature, Roadmap, and each Design candidate require README. Select optional pages with --pages library,cli,architecture,lifecycle,use-case, or repeat --pages; omission creates README only. Design decision wrapper pages are always created. Engineering starts with README and expands by topic.
+Page add adds optional or custom topic pages. Maintain README links after adding pages.
 
 ## First feature
 
