@@ -92,6 +92,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     try {
       initialize(repo,false,{testRoots:['test'],sourceRoots:['src']});
       createDocument(repo,'engineering',{id:'build',title:'Build workflow'});
+      const engineeringPath=join(root,'docs/engineering/build/README.md');
+      writeFileSync(engineeringPath,`${readFileSync(engineeringPath,'utf8')}\n\`\`\`mermaid\nflowchart LR\n  Source --> Result\n\`\`\`\n`);
       addPage(repo,'engineering','build','architecture');
       createDocument(repo,'roadmap',{id:'future',title:'Future direction',pages:['architecture']});
       createDocument(repo,'design',{id:'options',title:'Design options',alternatives:['first','second'],pages:['architecture']});
@@ -118,6 +120,13 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
       await list.getByRole('link',{name:title,exact:true}).click();
       await expect(page).toHaveURL(new RegExp(`/${section}/`));
       await expect(list.getByRole('link',{name:title,exact:true})).toHaveAttribute('aria-current','page');
+      if (category === 'Engineering') {
+        const diagram=page.getByLabel('Mermaid 图表预览').locator('svg');
+        await expect(diagram).toBeVisible();
+        const initialDiagram=await diagram.evaluate(element=>element.outerHTML);
+        await page.locator('.theme-toggle').click();
+        await expect.poll(()=>diagram.evaluate(element=>element.outerHTML)).not.toBe(initialDiagram);
+      }
       if (category !== 'Research') {
         const supportingPage=page.getByTestId('document-file-tree').getByRole('button',{name:category === 'Design' ? 'plans/first/architecture.md' : 'architecture.md',exact:true});
         await supportingPage.click();

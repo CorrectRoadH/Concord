@@ -2,6 +2,7 @@
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import {
   MDXEditor,
+  CodeMirrorEditor,
   codeBlockPlugin,
   codeMirrorPlugin,
   headingsPlugin,
@@ -12,8 +13,10 @@ import {
   tablePlugin,
   thematicBreakPlugin,
 } from '@mdxeditor/editor';
+import type { CodeBlockEditorProps } from '@mdxeditor/editor';
+import * as stylex from '@stylexjs/stylex';
 import { AlertTriangle, GitCompareArrows, RefreshCw } from 'lucide-react';
-import { Component, useCallback, useEffect, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { ViewFile } from '../../src/view-contract';
@@ -37,6 +40,60 @@ interface MarkdownErrorBoundaryProps {
   readonly fallback: ReactNode;
   readonly onError: (error: Error) => void;
 }
+
+const markdownStyles = stylex.create({
+  mermaidEditor: { display: 'grid', gap: 12 },
+  mermaidPreview: {
+    overflowX: 'auto',
+    padding: 16,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderColor: 'var(--border)',
+    borderRadius: 8,
+    backgroundColor: 'var(--background)',
+    color: 'var(--foreground)',
+    textAlign: 'center',
+  },
+  mermaidSvg: { display: 'block', maxWidth: '100%', marginInline: 'auto' },
+  mermaidError: { margin: 0, color: 'var(--destructive)', textAlign: 'left', whiteSpace: 'pre-wrap' },
+});
+
+function MermaidCodeBlockEditor(props: CodeBlockEditorProps) {
+  const reactId = useId().replaceAll(':', '');
+  const [svg, setSvg] = useState('');
+  const [error, setError] = useState('');
+  const [theme, setTheme] = useState<'default' | 'dark'>(() => document.documentElement.classList.contains('dark') ? 'dark' : 'default');
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'default'));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void import('mermaid').then(async ({ default: mermaid }) => {
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme });
+      const rendered = await mermaid.render(`concord-mermaid-${reactId}`, props.code);
+      if (!cancelled) { setSvg(rendered.svg); setError(''); }
+    }).catch(cause => {
+      if (!cancelled) { setSvg(''); setError(cause instanceof Error ? cause.message : String(cause)); }
+    });
+    return () => { cancelled = true; };
+  }, [props.code, reactId, theme]);
+
+  return <div data-testid="mermaid-editor" {...stylex.props(markdownStyles.mermaidEditor)}>
+    <div aria-label="Mermaid 图表预览" {...stylex.props(markdownStyles.mermaidPreview)}>
+      {svg ? <div {...stylex.props(markdownStyles.mermaidSvg)} dangerouslySetInnerHTML={{ __html: svg }} /> : error ? <pre {...stylex.props(markdownStyles.mermaidError)}>{error}</pre> : <span role="status">正在渲染图表…</span>}
+    </div>
+    <CodeMirrorEditor {...props} />
+  </div>;
+}
+
+const mermaidCodeBlockDescriptor = {
+  priority: 100,
+  match: (language: string | null | undefined) => language?.toLowerCase() === 'mermaid',
+  Editor: MermaidCodeBlockEditor,
+};
 
 class MarkdownErrorBoundary extends Component<MarkdownErrorBoundaryProps, { readonly failed: boolean }> {
   state = { failed: false };
@@ -188,7 +245,7 @@ export function MarkdownEditor({ initial, source = false, title, onSaved, toolba
         }}
         plugins={[
           headingsPlugin(), listsPlugin(), quotePlugin(), linkPlugin(), linkDialogPlugin(), tablePlugin(), thematicBreakPlugin(),
-          codeBlockPlugin({ defaultCodeBlockLanguage: '' }),
+          codeBlockPlugin({ defaultCodeBlockLanguage: '', codeBlockEditorDescriptors: [mermaidCodeBlockDescriptor] }),
           codeMirrorPlugin({ codeBlockLanguages: { '': 'Plain text', ts: 'TypeScript', tsx: 'TSX', js: 'JavaScript', json: 'JSON', bash: 'Shell', sh: 'Shell', yaml: 'YAML', python: 'Python', sql: 'SQL' } }),
         ]}
       />
