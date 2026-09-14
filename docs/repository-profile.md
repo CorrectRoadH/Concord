@@ -1,6 +1,6 @@
 # Repository profile
 
-Concord 的通用模式使用自己的 Markdown、测试注释和 command evidence。`concord repo` 则运行消费仓库明确选择的 repository profile，保持它的既有命令、文档格式和 formal evidence 契约。
+Concord 的通用模式和 repository profile 都使用 `concord.project/v1`、`concord.document/v1` Markdown、测试注释和各自的 evidence 契约。`concord repo` 运行消费仓库明确选择的 profile，但不再解析或生成 NiceEval 旧 node frontmatter 文档。
 
 NiceEval 的领域实现由 Concord 的 `repository/` 拥有，编译产物从 `concord-sdlc/repository/*` 导出。NiceEval 原路径仅保留转出声明供既有源码链接定位，实际实现不在本地重复维护。根脚本保留 `pnpm run repo`、`pnpm memory`、`pnpm pr:body` 等名字和参数。
 

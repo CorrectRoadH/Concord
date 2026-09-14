@@ -19,7 +19,7 @@ const UniqueTemplatePathsSchema = Schema.Array(CanonicalTemplatePathSchema).pipe
 );
 
 export const DocsTemplateManifestSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.docs-template/v1"),
+  format: Schema.Literal("concord.templates/v1"),
   applicableKinds: Schema.Array(Schema.Literals(["feature", "roadmap", "design", "design-plan"])).pipe(
     Schema.check(Schema.isMinLength(1), Schema.makeFilter<readonly ("feature" | "roadmap" | "design" | "design-plan")[]>((values) => new Set(values).size === values.length, { message: "applicableKinds must be unique" })),
   ),

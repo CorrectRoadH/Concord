@@ -15,6 +15,7 @@ import {
 import { dirname, join, relative, resolve, sep } from "node:path";
 
 import { Effect, Result, Schema, SchemaIssue } from "effect";
+import { stringify } from "yaml";
 
 import { traceDigest, type TraceDirectoryManifestEntry, type TraceMutationPreimage } from "../trace/relation-mutation.js";
 import { DesignIoError, DesignManifestInvalid, designErrorMessage } from "./errors.js";
@@ -26,8 +27,8 @@ import type {
 } from "./model.js";
 import { DESIGN_PAGE_ORDER, DocsTemplateManifestSchema, type DesignPage, type DocsTemplateManifest } from "./schema.js";
 
-export const DESIGN_PROJECTION_START = "<!-- niceeval.docs-index/v1:start -->";
-export const DESIGN_PROJECTION_END = "<!-- niceeval.docs-index/v1:end -->";
+export const DESIGN_PROJECTION_START = "<!-- concord.design-index/v1:start -->";
+export const DESIGN_PROJECTION_END = "<!-- concord.design-index/v1:end -->";
 export const DESIGN_DECISION_TEMPLATE = "docs/_template/design-decision";
 export const FEATURE_DESIGN_TEMPLATE = "docs/_template/feature-design";
 const MANIFEST_FILE = "manifest.json";
@@ -186,8 +187,8 @@ function source(template: LoadedTemplate, path: string): string {
   return value;
 }
 
-function nodeFrontmatter(kind: "design" | "design-plan"): string {
-  return `---\nformat: niceeval.docs-node/v1\nkind: ${kind}\nrelations: {}\n---\n\n`;
+function nodeFrontmatter(id: string, title: string, alternatives: readonly string[], createdAt: string): string {
+  return `---\n${stringify({ format: "concord.document/v1", id, title, createdAt, kind: "design", alternatives }).trimEnd()}\n---\n\n`;
 }
 
 function removeCasesNavigation(value: string): string {
@@ -224,11 +225,11 @@ export function renderDesignProjection(
     ? plans.find((plan) => plan.ref === state.selectedPlan)
     : undefined;
   const planLines = plans.map((plan) =>
-    `- [${plan.selector}${selected?.ref === plan.ref ? "（已选择）" : ""}](${plan.selector}/README.md)`
+    `- [${plan.selector}${selected?.ref === plan.ref ? "（已选择）" : ""}](plans/${plan.selector}/README.md)`
   );
   const decision = selected === undefined
-    ? "裁决：尚未写入 `relations.selectedPlan`。"
-    : `裁决：[${selected.selector}](${selected.selector}/README.md)。`;
+    ? "裁决：尚未写入 `decision.selected`。"
+    : `裁决：[${selected.selector}](plans/${selected.selector}/README.md)。`;
   return [
     DESIGN_PROJECTION_START,
     "## 候选方案索引（生成）",
@@ -288,15 +289,16 @@ export function generateDesignPackage(input: {
   const packageRoot = `docs/design/${input.slug}`;
   const pages = DESIGN_PAGE_ORDER.filter((page) => input.pages.includes(page));
   const plans: DesignPlanReceipt[] = Array.from({ length: input.planCount }, (_, index) => {
-    const selector = `PLAN-${index + 1}`;
+    const selector = `plan-${index + 1}`;
     return {
       selector,
-      ref: `${packageRoot}/${selector}/README.md`,
+      ref: `${packageRoot}/plans/${selector}/README.md`,
       title: `${input.title} · ${selector}`,
       pages,
     };
   });
   const state: DesignDecisionState = { _tag: "undecided" };
+  const createdAt = new Date().toISOString();
   const projection = renderDesignProjection(plans, state);
   const files: GeneratedDesignFile[] = [];
 
@@ -304,7 +306,7 @@ export function generateDesignPackage(input: {
     let rendered = substitute(source(input.bundle.designDecision, path), "<决策主题名>", input.title);
     if (path === "README.md") {
       rendered = decisionReadmeScaffold(rendered);
-      rendered = `${nodeFrontmatter("design")}${rendered.trimEnd()}\n\n${projection}\n`;
+      rendered = `${nodeFrontmatter(input.slug, input.title, plans.map((plan) => plan.selector), createdAt)}${rendered.trimEnd()}\n\n${projection}\n`;
     }
     if (!input.cases) rendered = removeCasesNavigation(rendered);
     files.push(receiptFile(packageRoot, path, rendered));
@@ -322,9 +324,9 @@ export function generateDesignPackage(input: {
       let rendered = substitute(source(input.bundle.featureDesign, path), "<功能或候选名>", plan.title);
       if (path === "README.md") {
         rendered = planReadmeScaffold(rendered);
-        rendered = `${nodeFrontmatter("design-plan")}${rendered.trimEnd()}\n`;
+        rendered = `${rendered.trimEnd()}\n`;
       }
-      files.push(receiptFile(packageRoot, `${plan.selector}/${path}`, rendered));
+      files.push(receiptFile(packageRoot, `plans/${plan.selector}/${path}`, rendered));
     }
   }
 

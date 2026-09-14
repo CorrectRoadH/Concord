@@ -3,6 +3,7 @@ import { dirname, relative, resolve, sep } from "node:path";
 
 import * as FileSystem from "effect/FileSystem";
 import { Effect } from "effect";
+import { stringify } from "yaml";
 
 import { compileTraceUnderLease } from "../trace/compiler.js";
 import {
@@ -24,8 +25,8 @@ import {
 import type { UseCaseCreateInput, UseCaseCreateReceipt } from "./model.js";
 import { decodeUseCaseCreateInput } from "./schema.js";
 
-const PROJECTION_START = "<!-- niceeval.docs-index/v1:start -->";
-const PROJECTION_END = "<!-- niceeval.docs-index/v1:end -->";
+const PROJECTION_START = "<!-- concord.use-case-index/v1:start -->";
+const PROJECTION_END = "<!-- concord.use-case-index/v1:end -->";
 
 interface UseCaseIndexItem {
   readonly path: string;
@@ -123,8 +124,8 @@ function validateBody(body: string, title: string): string {
   return normalized;
 }
 
-function renderLeaf(body: string): string {
-  return `---\nformat: niceeval.docs-node/v1\nkind: use-case\nrelations: {}\n---\n\n${body}\n`;
+function renderLeaf(body: string, id: string, title: string, feature: string): string {
+  return `---\n${stringify({ format: "concord.document/v1", id, title, createdAt: new Date().toISOString(), kind: "use-case", feature }).trimEnd()}\n---\n\n${body}\n`;
 }
 
 function escapeLinkTitle(title: string): string {
@@ -218,7 +219,7 @@ function makePlan(
         }
         const items = [...directUseCases(snapshot, indexPath), { path: targetPath, title: input.title }]
           .sort((left, right) => left.path.localeCompare(right.path));
-        const leaf = renderLeaf(body);
+        const leaf = renderLeaf(body, input.slug, input.title, parent.path);
         const index = replaceProjection(indexPath, indexSource, renderProjection(items));
         return {
           parent,

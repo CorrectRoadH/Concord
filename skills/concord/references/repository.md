@@ -20,6 +20,8 @@ pnpm memory --help
 
 ## 当前关系写在声明上方
 
+Repository profile 的 Feature、Use Case、Design owner 使用 `concord.document/v1` 与 canonical path；不使用 NiceEval 的 `docs-node` frontmatter 或旧模板路径。
+
 ```ts
 // @concord-case necase_7J4M2N6Q8R3T5V9X
 // @concord-owner docs/engineering/testing/e2e/inspection.md#inspection-query

@@ -13,7 +13,7 @@ import * as React from "react"
 import { Link, Navigate, Outlet, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import type { DocumentKind, DocumentRecord } from "../../src/shared"
-import type { LegacyViewDocument, ViewAction, ViewFile } from "../../src/view-contract"
+import type { ViewAction, ViewFile } from "../../src/view-contract"
 import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../src/template-pages"
 import { MarkdownEditor } from "@/components/markdown-editor"
 import { useDraftNavigation } from "@/components/draft-navigation"
@@ -273,7 +273,6 @@ export function DocumentsListPage({
   kind: Exclude<DocumentKind, "use-case">
 }) {
   const { snapshot, dirty } = useWorkspace()
-  const [legacyParams] = useSearchParams()
   const [filter, setFilter] = React.useState("")
   const documents = snapshot.documents.filter(
     (document) =>
@@ -282,14 +281,6 @@ export function DocumentsListPage({
         .toLocaleLowerCase()
         .includes(filter.toLocaleLowerCase())
   )
-  const legacyDocuments = kind === "feature"
-    ? snapshot.legacyDocuments.filter(document =>
-        `${document.title} ${document.path}`.toLocaleLowerCase().includes(filter.toLocaleLowerCase())
-      )
-    : []
-  if (kind === "feature" && legacyParams.get("legacyPath")) return <LegacyFeatureDetailPage />
-  if (kind === "feature" && legacyParams.get("legacyUseCasePath")) return <LegacyUseCaseDetailPage />
-
   if (["feature", "engineering", "roadmap", "design", "research"].includes(kind)) {
     const first = snapshot.documents.find(document => document.metadata.kind === kind)
     if (first) return dirty ? null : <Navigate to={documentHref(first)} replace />
@@ -310,9 +301,9 @@ export function DocumentsListPage({
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
         />
-        <Badge variant="secondary">{documents.length + legacyDocuments.length} 项</Badge>
+        <Badge variant="secondary">{documents.length} 项</Badge>
       </div>
-      {documents.length === 0 && legacyDocuments.length === 0 ? (
+      {documents.length === 0 ? (
         <Empty title={`还没有 ${humanKind(kind)}`}>从右上角创建第一项。</Empty>
       ) : (
         <div className="card-grid">
@@ -333,24 +324,6 @@ export function DocumentsListPage({
                 <CardContent>
                   <DocumentSummary document={document} />
                 </CardContent>
-              </Card>
-            </Link>
-          ))}
-          {legacyDocuments.map((document) => (
-            <Link
-              key={document.path}
-              to={`/features?legacyPath=${encodeURIComponent(document.path)}`}
-              className="card-link"
-            >
-              <Card>
-                <CardHeader>
-                  <div className="card-title-row">
-                    <CardTitle>{document.title}</CardTitle>
-                    <Badge variant="outline">旧版只读</Badge>
-                  </div>
-                  <CardDescription>{document.path}</CardDescription>
-                </CardHeader>
-                <CardContent><p>NiceEval Feature · 原文只读投影</p></CardContent>
               </Card>
             </Link>
           ))}
@@ -443,75 +416,6 @@ export function FeatureDetailPage() {
       <DocumentLayout key={feature.path} document={feature} extra={nested} background={useCaseId !== undefined} />
     </div>
     <Outlet />
-  </>
-}
-
-function legacyDocumentFile(document: LegacyViewDocument): ViewFile {
-  return document;
-}
-
-function LegacyDocumentFiles({ document }: { document: LegacyViewDocument }) {
-  const { api } = useWorkspace()
-  const pages = useWorkspace().snapshot.pages.filter(page => page.documentPath === document.path)
-  const files = [legacyDocumentFile(document), ...pages]
-  const [selectedPath, setSelectedPath] = React.useState(document.path)
-  const [selected, setSelected] = React.useState<ViewFile | null>(null)
-  const [error, setError] = React.useState("")
-  React.useEffect(() => { setSelectedPath(document.path) }, [document.path])
-  React.useEffect(() => {
-    const controller = new AbortController()
-    setSelected(null)
-    setError("")
-    void api.file(selectedPath, controller.signal).then(setSelected).catch((cause: unknown) => {
-      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
-    })
-    return () => controller.abort()
-  }, [api, selectedPath])
-  return <div className="document-file-layout" data-single={files.length === 1 || undefined}>
-    {files.length > 1 && <aside className="document-path-list">
-      <div className="section-heading section-heading--compact"><strong>文件</strong><Badge variant="outline">只读</Badge></div>
-      {files.map(file => <button key={file.path} data-active={selectedPath === file.path} onClick={() => setSelectedPath(file.path)}>
-        <span>{file.path.split('/').at(-1)}</span><small>{file.path} · 只读</small>
-      </button>)}
-    </aside>}
-    <section className="document-file-preview">
-      {error && <div className="form-error">{error}</div>}
-      {selected ? <MarkdownEditor key={selected.path} initial={selected} /> : !error && <div className="loading">载入正文…</div>}
-    </section>
-  </div>
-}
-
-function LegacyDocumentLayout({ document, useCases }: { document: LegacyViewDocument; useCases?: readonly LegacyViewDocument[] }) {
-  return <>
-    <PageHeader eyebrow="NiceEval 旧版文档 · 只读投影" title={document.title} description={document.path} />
-    <div className="callout callout--warning"><span>只读</span><div>保留旧 NiceEval Markdown 原文；Concord 不改写其 frontmatter、生命周期或正文。</div></div>
-    {useCases && <section className="feature-use-cases">
-      <div className="section-heading"><div><div className="eyebrow">旧版 Feature 内部</div><h2>Use Cases</h2><p>可准确归属的用例保留为只读深链接。</p></div></div>
-      {useCases.length === 0 ? <p className="muted">没有可准确归属的 Use Case。</p> : <div className="compact-list">{useCases.map(item => <Link key={item.path} to={`/features?legacyUseCasePath=${encodeURIComponent(item.path)}`}><div><strong>{item.title}</strong><span>{item.path}</span></div><ExternalLink size={16} /></Link>)}</div>}
-    </section>}
-    <LegacyDocumentFiles document={document} />
-  </>
-}
-
-export function LegacyFeatureDetailPage() {
-  const [params] = useSearchParams()
-  const { snapshot } = useWorkspace()
-  const path = params.get("path")
-  const document = snapshot.legacyDocuments.find(item => item.kind === "feature" && item.path === path)
-  if (!document) return <Empty title="找不到旧版 Feature">链接可能已失效，或原始 Markdown 已被移动。</Empty>
-  const useCases = snapshot.legacyDocuments.filter(item => item.kind === "use-case" && item.featurePath === document.path)
-  return <LegacyDocumentLayout document={document} useCases={useCases} />
-}
-
-export function LegacyUseCaseDetailPage() {
-  const [params] = useSearchParams()
-  const { snapshot } = useWorkspace()
-  const path = params.get("path")
-  const document = snapshot.legacyDocuments.find(item => item.kind === "use-case" && item.path === path)
-  if (!document) return <Empty title="找不到旧版 Use Case">链接可能已失效，或原始 Markdown 已被移动。</Empty>
-  return <>
-    {document.featurePath && <Link className="back-link" to={`/features?legacyPath=${encodeURIComponent(document.featurePath)}`}><ArrowLeft /> 返回所属 Feature</Link>}
-    <LegacyDocumentLayout document={document} />
   </>
 }
 

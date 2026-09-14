@@ -52,7 +52,7 @@ export function makeDesignCommand(
     slug: Args.string("slug"),
     title: Options.string("title").pipe(Options.withDescription("Human-readable Design title.")),
     plans: Options.integer("plans").pipe(
-      Options.withDescription("Number of direct PLAN-N packages; minimum and default are two."),
+      Options.withDescription("Number of direct plan-N alternatives; minimum and default are two."),
       Options.withDefault(2),
     ),
     cases: Options.boolean("cases").pipe(
@@ -90,7 +90,7 @@ export function makeDesignCommand(
   const decide = Command.make("decide", {
     design: Args.string("design-ref"),
     plan: Options.string("plan").pipe(
-      Options.withDescription("Exact direct PLAN-N selector or repo-relative Design Plan ref."),
+      Options.withDescription("Exact declared alternative (for example plan-1) or its canonical repo-relative path."),
     ),
     dryRun: dryRunOption,
     json: jsonOption,
@@ -119,7 +119,7 @@ const operation = (
 export const designCommandOperations: readonly DesignOperationContribution[] = Object.freeze([
   operation("create", "Create an undecided Design and direct Plans atomically.", "pnpm run repo docs design create <slug> --title <title>"),
   operation("check", "Validate either legal Design state and its generated projection.", "pnpm run repo docs design check <design-ref>"),
-  operation("decide", "Write the sole immutable selectedPlan after authoring.", "pnpm run repo docs design decide <design-ref> --plan <PLAN-N|ref>"),
+  operation("decide", "Write the sole immutable decision after authoring.", "pnpm run repo docs design decide <design-ref> --plan <alternative|ref>"),
 ]);
 
 /** Immutable Design-owned contribution mounted by the repository CLI. */

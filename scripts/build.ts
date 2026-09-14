@@ -10,6 +10,7 @@ class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
 const build = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
+  yield* fs.remove('dist', { recursive: true, force: true });
   for (const project of ['tsconfig.json', 'tsconfig.repository.json', 'tsconfig.web.json']) {
     const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project], { stdout: 'inherit', stderr: 'inherit' }));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });

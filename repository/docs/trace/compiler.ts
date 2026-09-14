@@ -34,16 +34,26 @@ import type {
 } from "./model.js";
 import { ADOPTABLE_DOCS_NODE_KINDS, DOCS_NODE_KINDS } from "./model.js";
 
-const kinds = Schema.Literals(DOCS_NODE_KINDS);
 const refSchema = RepoRefSchema;
-const refsSchema = Schema.Array(refSchema).pipe(
-  Schema.check(Schema.isMinLength(1), Schema.makeFilter<readonly string[]>((value) => new Set(value).size === value.length, { message: "must be unique" })),
-);
-const NodeSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.docs-node/v1"),
-  kind: kinds,
-  relations: Schema.Record(Schema.String, Schema.Union([refSchema, refsSchema])),
-});
+const DocumentBaseSchema = {
+  format: Schema.Literal("concord.document/v1"),
+  id: Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u))),
+  title: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
+  createdAt: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
+};
+const DocumentSchema = Schema.Union([
+  Schema.Struct({ ...DocumentBaseSchema, kind: Schema.Literal("feature"), origin: Schema.optional(refSchema) }),
+  Schema.Struct({ ...DocumentBaseSchema, kind: Schema.Literal("roadmap"), state: Schema.Literals(["planned", "adopted"]), adoptedAs: Schema.optional(refSchema) }),
+  Schema.Struct({ ...DocumentBaseSchema, kind: Schema.Literal("engineering") }),
+  Schema.Struct({
+    ...DocumentBaseSchema,
+    kind: Schema.Literal("design"),
+    alternatives: Schema.NonEmptyArray(Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)))),
+    decision: Schema.optional(Schema.Struct({ selected: Schema.String, reason: Schema.String.pipe(Schema.check(Schema.isMinLength(1))), at: Schema.String.pipe(Schema.check(Schema.isMinLength(1))), targets: Schema.Array(Schema.String) })),
+  }),
+  Schema.Struct({ ...DocumentBaseSchema, kind: Schema.Literal("use-case"), feature: refSchema }),
+]);
+type DocumentMetadata = typeof DocumentSchema.Type;
 const RepoMetadataSchema = Schema.Struct({
   name: Schema.String,
   targets: Schema.Record(Schema.String, Schema.Unknown),
@@ -101,9 +111,9 @@ function decodeNode(path: string, text: string): TraceNode | undefined {
     typeof parsed.value !== "object" ||
     parsed.value === null ||
     !("format" in parsed.value) ||
-    parsed.value.format !== "niceeval.docs-node/v1"
+    parsed.value.format !== "concord.document/v1"
   ) return undefined;
-  const decoded = Schema.decodeUnknownResult(NodeSchema, { errors: "all", onExcessProperty: "error" })(parsed.value);
+  const decoded = Schema.decodeUnknownResult(DocumentSchema, { errors: "all", onExcessProperty: "error" })(parsed.value);
   if (Result.isFailure(decoded)) {
     throw new TraceFormatError({
       path,
@@ -111,36 +121,37 @@ function decodeNode(path: string, text: string): TraceNode | undefined {
       message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue),
     });
   }
-  const permitted: Record<DocsNodeKind, readonly string[]> = {
-    feature: [],
-    roadmap: ["buildsOn"],
-    engineering: ["supports"],
-    design: ["selectedPlan", "decides"],
-    "design-plan": [],
-    "use-case": ["composes"],
-  };
+  const metadata = decoded.success as DocumentMetadata;
+  const expectedPath = (() => {
+    switch (metadata.kind) {
+      case "feature": return `docs/feature/${metadata.id}/README.md`;
+      case "roadmap": return `docs/roadmap/${metadata.id}/README.md`;
+      case "engineering": return `docs/engineering/${metadata.id}/README.md`;
+      case "design": return `docs/design/${metadata.id}/README.md`;
+      case "use-case": {
+        const feature = referenceParts(metadata.feature);
+        if (feature.anchor !== undefined || !/^docs\/feature\/[a-z0-9]+(?:-[a-z0-9]+)*\/README\.md$/u.test(feature.path)) {
+          throw new TraceFormatError({ path, subject: "feature", message: "Use Case feature must be an exact canonical Feature README path" });
+        }
+        return `${feature.path.slice(0, -"README.md".length)}use-case/${metadata.id}.md`;
+      }
+    }
+  })();
+  if (expectedPath !== path) throw new TraceFormatError({ path, subject: "placement", message: `canonical owner path is ${expectedPath}` });
+  if (metadata.kind === "design" && metadata.decision !== undefined && !metadata.alternatives.includes(metadata.decision.selected)) {
+    throw new TraceFormatError({ path, subject: "decision", message: "decision.selected must be one declared alternative" });
+  }
   const relations: Record<string, readonly string[]> = {};
-  for (const [name, value] of Object.entries(decoded.success.relations)
-    .sort(([left], [right]) => left.localeCompare(right))) {
-    if (!permitted[decoded.success.kind].includes(name)) {
-      throw new TraceFormatError({
-        path,
-        subject: "relations",
-        message: `${name} is not permitted for ${decoded.success.kind}`,
-      });
-    }
-    if (name === "selectedPlan" && Array.isArray(value)) {
-      throw new TraceFormatError({ path, subject: name, message: "must be a scalar ref" });
-    }
-    if (name !== "selectedPlan" && !Array.isArray(value)) {
-      throw new TraceFormatError({ path, subject: name, message: "must be an array of refs" });
-    }
-    relations[name] = Array.isArray(value) ? sorted(value, (item) => item) : [value];
+  if (metadata.kind === "feature" && metadata.origin !== undefined) relations.buildsOn = [metadata.origin];
+  if (metadata.kind === "use-case") relations.composes = [metadata.feature];
+  if (metadata.kind === "design" && metadata.decision !== undefined) {
+    relations.selectedPlan = [`${posix.dirname(path)}/plans/${metadata.decision.selected}/README.md`];
+    if (metadata.decision.targets.length > 0) relations.decides = [...metadata.decision.targets].sort();
   }
   return {
-    kind: decoded.success.kind,
+    kind: metadata.kind,
     path,
-    title: /^#\s+(.+)$/mu.exec(parsed.body)?.[1]?.trim() ?? path,
+    title: metadata.title,
     relations,
   };
 }
@@ -158,8 +169,8 @@ function validUseCasePlacement(path: string): boolean {
     return marker >= 3;
   }
   if (segments[0] === "docs" && segments[1] === "roadmap") return marker >= 3;
-  return segments[0] === "docs" && segments[1] === "design" &&
-    segments[2] !== undefined && /^PLAN-[1-9][0-9]*$/u.test(segments[3] ?? "") && marker === 4;
+    return segments[0] === "docs" && segments[1] === "design" &&
+    segments[2] !== undefined && segments[3] === "plans" && marker === 5;
 }
 
 function validNodePlacement(node: TraceNode): boolean {
@@ -173,10 +184,28 @@ function validNodePlacement(node: TraceNode): boolean {
     case "design":
       return /^docs\/design\/[^/]+\/README\.md$/u.test(node.path);
     case "design-plan":
-      return /^docs\/design\/[^/]+\/PLAN-[1-9][0-9]*\/README\.md$/u.test(node.path);
+      return /^docs\/design\/[^/]+\/plans\/[a-z0-9]+(?:-[a-z0-9]+)*\/README\.md$/u.test(node.path);
     case "use-case":
       return validUseCasePlacement(node.path);
   }
+}
+
+function deriveDesignPlans(nodes: readonly TraceNode[], documents: readonly (readonly [string, string])[]): readonly TraceNode[] {
+  const sources = new Map(documents);
+  return nodes.flatMap((design): TraceNode[] => {
+    if (design.kind !== "design") return [];
+    const source = sources.get(design.path);
+    if (source === undefined) return [];
+    const parsed = parseFrontmatter(design.path, source);
+    if (parsed === undefined) return [];
+    const decoded = Schema.decodeUnknownResult(DocumentSchema, { errors: "all", onExcessProperty: "error" })(parsed.value);
+    if (Result.isFailure(decoded) || decoded.success.kind !== "design") return [];
+    return decoded.success.alternatives.flatMap((alternative): TraceNode[] => {
+      const path = `${posix.dirname(design.path)}/plans/${alternative}/README.md`;
+      const plan = sources.get(path);
+      return plan === undefined ? [] : [{ kind: "design-plan", path, title: markdownTitle(path, plan), relations: {} }];
+    });
+  });
 }
 
 function markdownTitle(path: string, source: string): string {
@@ -430,13 +459,7 @@ function validateNodeRelations(
     }
     if (node.kind === "use-case") {
       const composes = node.relations.composes ?? [];
-      const crossFeature = node.path.startsWith("docs/feature/use-case/");
-      if (crossFeature && composes.length === 0) {
-        throw new TraceFormatError({ path: node.path, subject: "composes", message: "cross-Feature Use Case must compose at least one target" });
-      }
-      if (!crossFeature && composes.length > 0) {
-        throw new TraceFormatError({ path: node.path, subject: "composes", message: "only a cross-Feature Use Case may own composes relations" });
-      }
+      if (composes.length !== 1) throw new TraceFormatError({ path: node.path, subject: "feature", message: "concord.document/v1 Use Case must name exactly one Feature" });
     }
     if (node.kind === "roadmap") roadmapGraph.set(node.path, new Set());
     for (const [relation, references] of Object.entries(node.relations)) {
@@ -461,7 +484,7 @@ function validateNodeRelations(
         }
         if (
           relation === "selectedPlan" &&
-          posix.dirname(posix.dirname(target.success.path)) !== posix.dirname(node.path)
+          posix.dirname(posix.dirname(posix.dirname(target.success.path))) !== posix.dirname(node.path)
         ) {
           throw new TraceFormatError({
             path: node.path,
@@ -470,13 +493,6 @@ function validateNodeRelations(
           });
         }
         if (relation === "composes") {
-          if (target.success.kind === "feature" && referenceParts(reference).anchor === undefined) {
-            throw new TraceFormatError({
-              path: node.path,
-              subject: relation,
-              message: "Feature fallback must target an exact anchor",
-            });
-          }
           if (target.success.kind === "use-case" && (target.success.owner.relations.composes?.length ?? 0) > 0) {
             throw new TraceFormatError({ path: node.path, subject: relation, message: "must target a leaf Use Case" });
           }
@@ -733,8 +749,9 @@ function compileTraceAtGeneration(
       documentSources,
       ([path, source]) => pure(path, "frontmatter", () => decodeNode(path, source)),
     );
+    const parsedNodes = nodeValues.filter((item): item is TraceNode => item !== undefined);
     const nodes = sorted(
-      nodeValues.filter((item): item is TraceNode => item !== undefined),
+      [...parsedNodes, ...deriveDesignPlans(parsedNodes, documentSources)],
       (item) => item.path,
     );
     const pages = deriveFeaturePages(nodes, documentSources);

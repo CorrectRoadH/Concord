@@ -152,7 +152,6 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       project: null,
       configDigest: config.configDigest,
       documents: [],
-      legacyDocuments: [],
       feedback: [],
       pages: config.source === undefined ? [] : [{ path: 'concord.json', body: config.source, digest: config.configDigest!, readOnly: true, reason: 'Invalid configuration must be repaired locally before Concord can reconstruct managed state.' }],
       cases: [],
@@ -190,7 +189,6 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       project: repo.config,
       configDigest: digest(currentConfigSource),
       documents: inspected.documents,
-      legacyDocuments: inspected.legacyDocuments,
       feedback: listFeedback(repo, inspected.documents),
       pages: inspected.pages,
       cases: cases.cases,
@@ -215,8 +213,6 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
   }
   return yield* withRepository(validatedRoot, (repo) => sync('view.readFile', () => {
     const inspected = inspectDocuments(repo);
-    const legacy = inspected.legacyDocuments.find(document => document.path === path);
-    if (legacy !== undefined) return legacy;
     const listed = inspected.pages.find((page) => page.path === path);
     if (listed !== undefined) return listed;
     const document = inspected.documents.find((item) => item.path === path);

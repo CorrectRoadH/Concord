@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 
 import * as FileSystem from "effect/FileSystem";
 import { Data, Effect } from "effect";
+import { stringify } from "yaml";
 
 import { compileTraceUnderLease } from "./trace/compiler.js";
 import { mutateTraceOwner, traceDigest, type TraceDirectoryManifestEntry, type TraceMutationPreparation } from "./trace/relation-mutation.js";
@@ -14,8 +15,8 @@ const PAGE_FILES: Readonly<Record<FeaturePage, string>> = {
   library: "library.md", cli: "cli.md", architecture: "architecture.md", lifecycle: "lifecycle.md", "use-case": "use-case/README.md",
 };
 const TEMPLATE = "docs/_template/feature-design";
-const managedStart = "<!-- niceeval.docs-index/v1:start -->";
-const managedEnd = "<!-- niceeval.docs-index/v1:end -->";
+const managedStart = "<!-- concord.feature-index/v1:start -->";
+const managedEnd = "<!-- concord.feature-index/v1:end -->";
 
 export class FeatureStructureError extends Data.TaggedError("FeatureStructureError")<{
   readonly operation: "create" | "page-add" | "page-set";
@@ -56,15 +57,18 @@ function read(root: string, path: string, operation: FeatureStructureError["oper
 function template(root: string, path: string, operation: FeatureStructureError["operation"]): Effect.Effect<string, FeatureStructureError> {
   return read(root, `${TEMPLATE}/${path}`, operation);
 }
-function frontmatter(): string { return "---\nformat: niceeval.docs-node/v1\nkind: feature\nrelations: {}\n---\n\n"; }
-function render(source: string, title: string, root = false): string {
+function frontmatter(id: string, title: string, createdAt: string): string {
+  return `---\n${stringify({ format: "concord.document/v1", id, title, createdAt, kind: "feature" }).trimEnd()}\n---\n\n`;
+}
+function render(source: string, title: string, root = false, id = "", createdAt = ""): string {
   const body = source.replaceAll("<功能或候选名>", title).trimEnd();
-  return root ? `${frontmatter()}${body}\n` : `${body}\n`;
+  return root ? `${frontmatter(id, title, createdAt)}${body}\n` : `${body}\n`;
 }
 function manifest(root: string, stage: string, operation: FeatureStructureError["operation"]): readonly TraceDirectoryManifestEntry[] {
   const base = resolve(root, stage);
   const entries: TraceDirectoryManifestEntry[] = [];
   const visit = (directory: string, item: string) => {
+    if (item === "") entries.push({ kind: "directory", path: ".", mode: lstatSync(directory).mode & 0o7777 });
     if (item !== "") entries.push({ kind: "directory", path: item, mode: 0o755 });
     for (const name of readdirSync(directory).sort()) {
       const absolute = resolve(directory, name); const relativePath = item === "" ? name : `${item}/${name}`;
@@ -76,15 +80,15 @@ function manifest(root: string, stage: string, operation: FeatureStructureError[
       } else throw new Error(`${relativePath}: stage may only contain regular files and directories`);
     }
   };
-  try { visit(base, ""); return entries.filter((entry) => entry.path !== ""); }
+  try { visit(base, ""); return entries; }
   catch (cause) { throw fail(operation, stage, cause instanceof Error ? cause.message : String(cause)); }
 }
-function stage(root: string, files: readonly { readonly path: string; readonly bytes: string }[], operation: FeatureStructureError["operation"]): Effect.Effect<{ readonly stagePath: string; readonly targetPath: string }, FeatureStructureError> {
+function stage(root: string, slug: string, files: readonly { readonly path: string; readonly bytes: string }[], operation: FeatureStructureError["operation"]): Effect.Effect<{ readonly stagePath: string; readonly targetPath: string }, FeatureStructureError> {
   return Effect.try({ try: () => {
     const token = randomUUID(); const stagePath = `docs/feature/.stage-${token}`; const absolute = resolve(root, stagePath);
     mkdirSync(absolute, { recursive: true, mode: 0o700 }); chmodSync(absolute, 0o700);
     for (const file of files) { const target = resolve(absolute, file.path); mkdirSync(dirname(target), { recursive: true }); writeFileSync(target, file.bytes, { mode: 0o644 }); }
-    return { stagePath, targetPath: `docs/feature/${files[0]!.path.split("/")[0]!}` };
+    return { stagePath, targetPath: `docs/feature/${slug}` };
   }, catch: (cause) => fail(operation, "docs/feature", cause instanceof Error ? cause.message : String(cause)) });
 }
 function removeStage(root: string, stagePath: string): Effect.Effect<void, FeatureStructureError> {
@@ -106,6 +110,7 @@ function authorAndManaged(source: string, operation: FeatureStructureError["oper
 export function createFeatureAt(root: string, input: { readonly slug: string; readonly title: string; readonly pages: readonly string[]; readonly dryRun: boolean }): Effect.Effect<FeatureStructureReceipt, FeatureStructureError | import("./trace/errors.js").TraceError | import("./trace/relation-mutation.js").TraceCoordinationError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const value = yield* slug(input.slug, "create");
+    const createdAt = new Date().toISOString();
     if (input.title.trim().length === 0) return yield* fail("create", value, "title must not be empty");
     const selected = yield* Effect.all(input.pages.map((item) => page(item, "create")));
     if (new Set(selected).size !== selected.length) return yield* fail("create", value, "pages must be unique");
@@ -113,7 +118,7 @@ export function createFeatureAt(root: string, input: { readonly slug: string; re
     const optional = yield* Effect.all(selected.map((item) => template(root, PAGE_FILES[item], "create").pipe(
       Effect.map((source) => ({ path: PAGE_FILES[item], source, bytes: render(source, input.title) })),
     )));
-    const files = [{ path: "README.md", bytes: render(rootSource, input.title, true) }, ...optional];
+    const files = [{ path: "README.md", bytes: render(rootSource, input.title, true, value, createdAt) }, ...optional];
     const ownerPath = `docs/feature/${value}/README.md`;
     const execute = (publication?: { readonly stagePath: string; readonly targetPath: string }) => mutateTraceOwner({ root, operation: "feature-create", ownerPath, dryRun: input.dryRun,
       prepareUnderLease: Effect.gen(function*() {
@@ -127,7 +132,7 @@ export function createFeatureAt(root: string, input: { readonly slug: string; re
       plan: ({ source }) => source === undefined ? Effect.succeed({ bytes: files[0]!.bytes, value: files, changes: { created: true as const } }) : Effect.fail(fail("create", ownerPath, "Feature README already exists")),
       ...(publication === undefined ? {} : { publication: { kind: "new-docs-directory" as const, stagePath: publication.stagePath, targetPath: publication.targetPath, expectedManifest: manifest(root, publication.stagePath, "create") } }),
     });
-    const mutation = input.dryRun ? yield* execute() : yield* Effect.acquireUseRelease(stage(root, files.map((file) => ({ path: `${value}/${file.path}`, bytes: file.bytes })), "create"), (item) => execute(item), (item) => removeStage(root, item.stagePath));
+    const mutation = input.dryRun ? yield* execute() : yield* Effect.acquireUseRelease(stage(root, value, files, "create"), (item) => execute(item), (item) => removeStage(root, item.stagePath));
     return { format: "niceeval.docs-feature/structure-v1", operation: "feature-create", dryRun: input.dryRun, feature: { slug: value, ref: ownerPath, title: input.title }, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? files.map((file) => `docs/feature/${value}/${file.path}`) : [] };
   });
 }

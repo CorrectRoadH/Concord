@@ -2,7 +2,6 @@
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { ConcordError, ProjectSchema, decode, digest, type DocumentRecord, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { DOCUMENT_ROOTS, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
-import { applyLegacyPageOwnership, inspectLegacyView, LEGACY_REASON } from './legacy-view.js';
 import type { LocalRepository } from './storage.js';
 
 export interface ViewFile {
@@ -22,12 +21,10 @@ function markdownPaths(repo: Repository): readonly string[] {
   return [...new Set(DOCUMENT_ROOTS.flatMap(root => repo.files(root).filter(path => path.endsWith('.md'))))].sort();
 }
 
-function inspected(repo: Repository): { readonly documents: readonly DocumentRecord[]; readonly findings: readonly Finding[]; readonly pages: readonly ViewFile[]; readonly legacyDocuments: ReturnType<typeof inspectLegacyView>['documents'] } {
+function inspected(repo: Repository): { readonly documents: readonly DocumentRecord[]; readonly findings: readonly Finding[]; readonly pages: readonly ViewFile[] } {
   const documents: DocumentRecord[] = [];
   const findings: Finding[] = [];
   const pages: ViewFile[] = [];
-  const legacy = inspectLegacyView(repo);
-  const legacyOwners = new Set(legacy.documents.map(document => document.path));
   for (const path of markdownPaths(repo)) {
     const source = repo.read(path);
     if (source === undefined) continue;
@@ -37,7 +34,6 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
         documents.push(document);
         continue;
       }
-      if (legacyOwners.has(path)) continue;
       pages.push({ path, body: source, digest: digest(source), readOnly: false });
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause);
@@ -58,15 +54,14 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
   });
   return {
     documents,
-    findings: [...findings, ...legacy.findings].sort((left, right) => left.path.localeCompare(right.path) || left.code.localeCompare(right.code)),
-    pages: applyLegacyPageOwnership(ownedPages, legacy),
-    legacyDocuments: legacy.documents,
+    findings: findings.sort((left, right) => left.path.localeCompare(right.path) || left.code.localeCompare(right.code)),
+    pages: ownedPages,
   };
 }
 
-export function inspectDocuments(repo: Repository): { documents: DocumentRecord[]; findings: Finding[]; pages: ViewFile[]; legacyDocuments: ReturnType<typeof inspectLegacyView>['documents'] } {
+export function inspectDocuments(repo: Repository): { documents: DocumentRecord[]; findings: Finding[]; pages: ViewFile[] } {
   const value = inspected(repo);
-  return { documents: [...value.documents], findings: [...value.findings], pages: [...value.pages], legacyDocuments: [...value.legacyDocuments] };
+  return { documents: [...value.documents], findings: [...value.findings], pages: [...value.pages] };
 }
 
 export function listSources(repo: LocalRepository): { path: string; digest: string }[] {
@@ -115,8 +110,6 @@ function currentSource(repo: LocalRepository): string {
 }
 
 export function setMetadata(repo: LocalRepository, reference: string, fields: { title?: string; observedAt?: string; sources?: readonly string[] }, expectedDigest: string, dryRun = false): MutationReceipt {
-  const legacy = inspectLegacyView(repo);
-  if (legacy.readOnlyPaths.has(reference.split('#')[0] ?? reference)) throw new ConcordError('ReadOnlyDocument', LEGACY_REASON);
   return setDocumentMetadata(repo, reference, fields, expectedDigest, dryRun);
 }
 
@@ -128,9 +121,7 @@ function pageBody(value: string): string {
 
 export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   const inventory = inspectDocuments(repo);
-  if (inventory.legacyDocuments.some(document => document.path === path) || inventory.pages.some(page => page.path === path && page.readOnly)) {
-    throw new ConcordError('ReadOnlyDocument', LEGACY_REASON);
-  }
+  if (inventory.pages.some(page => page.path === path && page.readOnly)) throw new ConcordError('ReadOnlyDocument', inventory.pages.find(page => page.path === path)?.reason ?? `${path} is read-only`);
   const document = inventory.documents.find(item => item.path === path);
   if (document !== undefined) return setAuthor(repo, path, body, expectedDigest, dryRun);
   const page = inventory.pages.find(item => item.path === path);

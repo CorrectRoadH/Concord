@@ -1,33 +1,28 @@
 import { Result, Schema, SchemaIssue } from "effect";
 import { parse, stringify } from "yaml";
 
-import { RepoRefSchema, type RepoRef } from "../trace/ref.js";
+import type { RepoRef } from "../trace/ref.js";
 import { DesignInputInvalid } from "./errors.js";
 import type { DesignDecisionState } from "./model.js";
 
-const RefsSchema = Schema.Array(RepoRefSchema).pipe(
-  Schema.check(Schema.isMinLength(1), Schema.makeFilter<readonly RepoRef[]>((values) => new Set(values).size === values.length, {
-    message: "refs must be unique",
-  })),
-);
-
-const UndecidedRelationsSchema = Schema.Struct({
-  decides: Schema.optional(RefsSchema),
-});
-const DecidedRelationsSchema = Schema.Struct({
-  selectedPlan: RepoRefSchema,
-  decides: Schema.optional(RefsSchema),
-});
 const DesignReadmeSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.docs-node/v1"),
+  format: Schema.Literal("concord.document/v1"),
+  id: Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u))),
+  title: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
+  createdAt: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
   kind: Schema.Literal("design"),
-  relations: Schema.Union([UndecidedRelationsSchema, DecidedRelationsSchema]),
+  alternatives: Schema.NonEmptyArray(Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)))),
+  decision: Schema.optional(Schema.Struct({ selected: Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u))), reason: Schema.String.pipe(Schema.check(Schema.isMinLength(1))), at: Schema.String.pipe(Schema.check(Schema.isMinLength(1))), targets: Schema.Array(Schema.String) })),
 });
 
 export interface DecodedDesignReadme {
+  readonly id: string;
+  readonly title: string;
+  readonly createdAt: string;
+  readonly alternatives: readonly string[];
   readonly body: string;
   readonly state: DesignDecisionState;
-  readonly decides: readonly RepoRef[];
+  readonly decides: readonly string[];
 }
 
 function failure(path: string, message: string): DesignInputInvalid {
@@ -50,13 +45,18 @@ export function decodeDesignReadme(path: string, source: string): DecodedDesignR
   if (Result.isFailure(decoded)) {
     throw failure(path, SchemaIssue.makeFormatterDefault()(decoded.failure.issue));
   }
-  const relations = decoded.success.relations;
+  const metadata = decoded.success;
+  const selected = metadata.decision?.selected;
   return {
+    id: metadata.id,
+    title: metadata.title,
+    createdAt: metadata.createdAt,
+    alternatives: metadata.alternatives,
     body: match[2],
-    state: "selectedPlan" in relations
-      ? { _tag: "decided", selectedPlan: relations.selectedPlan }
-      : { _tag: "undecided" },
-    decides: relations.decides ?? [],
+    state: selected === undefined
+      ? { _tag: "undecided" }
+      : { _tag: "decided", selectedPlan: `${path.slice(0, path.lastIndexOf("/"))}/plans/${selected}/README.md` },
+    decides: metadata.decision?.targets ?? [],
   };
 }
 
@@ -65,12 +65,22 @@ export function encodeDecidedDesignReadme(
   selectedPlan: RepoRef,
   body: string,
 ): string {
+  const selected = selectedPlan.split("/").at(-2);
+  if (selected === undefined || !decoded.alternatives.includes(selected)) {
+    throw failure(decoded.id, "selected Design alternative is not declared by the owner");
+  }
   const frontmatter = stringify({
-    format: "niceeval.docs-node/v1",
+    format: "concord.document/v1",
+    id: decoded.id,
+    title: decoded.title,
+    createdAt: decoded.createdAt,
     kind: "design",
-    relations: {
-      selectedPlan,
-      ...(decoded.decides.length === 0 ? {} : { decides: decoded.decides }),
+    alternatives: decoded.alternatives,
+    decision: {
+      selected,
+      reason: "Design option selected by the repository profile.",
+      at: new Date().toISOString(),
+      targets: decoded.decides,
     },
   }, { lineWidth: 0 }).trimEnd();
   return `---\n${frontmatter}\n---\n\n${body.replace(/^\r?\n/u, "")}`;

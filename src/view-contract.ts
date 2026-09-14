@@ -25,30 +25,11 @@ export interface ViewFile {
   readonly documentPath?: string;
 }
 
-/**
- * A read-only projection of NiceEval's document nodes. It deliberately is not
- * a DocumentRecord: the legacy Markdown remains the only owner of its bytes
- * and lifecycle metadata.
- */
-export interface LegacyViewDocument {
-  readonly format: 'niceeval.docs-node/v1';
-  readonly kind: 'feature' | 'use-case';
-  readonly path: string;
-  readonly title: string;
-  readonly body: string;
-  readonly digest: string;
-  readonly readOnly: true;
-  readonly reason: string;
-  readonly featurePath?: string;
-  readonly relations: Readonly<Record<string, readonly string[]>>;
-}
-
 export interface WorkspaceSnapshot {
   readonly root: string;
   readonly project: ProjectConfig | null;
   readonly configDigest: string | null;
   readonly documents: readonly DocumentRecord[];
-  readonly legacyDocuments: readonly LegacyViewDocument[];
   readonly feedback: readonly FeedbackItem[];
   readonly pages: readonly ViewFile[];
   readonly cases: readonly AnnotatedCase[];

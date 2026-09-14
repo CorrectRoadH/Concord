@@ -109,7 +109,7 @@ function selectDesign(snapshot: TraceSnapshot, selector: string): Effect.Effect<
 function directPlans(snapshot: TraceSnapshot, design: TraceNode): readonly TraceNode[] {
   const root = dirname(design.path);
   return snapshot.nodes.filter((node) => node.kind === "design-plan" &&
-    dirname(dirname(node.path)) === root).sort((left, right) => planNumber(left.path) - planNumber(right.path));
+    dirname(dirname(dirname(node.path))) === root).sort((left, right) => planNumber(left.path) - planNumber(right.path));
 }
 
 function planSelector(path: string): string {
@@ -117,7 +117,7 @@ function planSelector(path: string): string {
 }
 
 function planNumber(path: string): number {
-  return Number.parseInt(planSelector(path).slice("PLAN-".length), 10);
+  return Number.parseInt(planSelector(path).slice("plan-".length), 10);
 }
 
 function selectPlan(
@@ -132,7 +132,7 @@ function selectPlan(
     return Effect.fail(new DesignSelectorMissing({
       selector,
       subject: "plan",
-      nextStep: `Choose an exact PLAN-N selector or direct child ref under ${dirname(design.path)}.`,
+      nextStep: `Choose an exact declared alternative or direct child ref under ${dirname(design.path)}/plans.`,
     }));
   }
   if (matches.length > 1) {
@@ -392,15 +392,15 @@ function validateManifestFiles(
 }
 
 function expectedPlanSelectors(count: number): readonly string[] {
-  return Array.from({ length: count }, (_, index) => `PLAN-${index + 1}`);
+  return Array.from({ length: count }, (_, index) => `plan-${index + 1}`);
 }
 
 function directoryPlanSelectors(root: string, packageRoot: string): Effect.Effect<readonly string[], DesignIoError> {
   return Effect.try({
-    try: () => readdirSync(resolve(root, packageRoot), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && /^PLAN-[1-9][0-9]*$/u.test(entry.name))
+    try: () => readdirSync(resolve(root, packageRoot, "plans"), { withFileTypes: true })
+      .filter((entry) => entry.isDirectory() && /^plan-[1-9][0-9]*$/u.test(entry.name))
       .map((entry) => entry.name)
-      .sort((left, right) => Number.parseInt(left.slice("PLAN-".length), 10) - Number.parseInt(right.slice("PLAN-".length), 10)),
+      .sort((left, right) => Number.parseInt(left.slice("plan-".length), 10) - Number.parseInt(right.slice("plan-".length), 10)),
     catch: (cause) => new DesignIoError({ operation: "scan Plans", path: packageRoot, message: designErrorMessage(cause) }),
   });
 }
@@ -428,10 +428,10 @@ function checkDesignPackage(
     if (plans.length < 2) findings.push(finding("plan-cardinality", design.path, "Design must contain at least two direct Plans"));
     const selectors = receipts.map((plan) => plan.selector);
     if (JSON.stringify(directoryPlans) !== JSON.stringify(selectors)) {
-      findings.push(finding("plan-node-mismatch", design.path, "every PLAN-N directory must have one direct design-plan README node"));
+      findings.push(finding("plan-node-mismatch", design.path, "every plans/plan-N directory must have one derived Design alternative"));
     }
     if (JSON.stringify(selectors) !== JSON.stringify(expectedPlanSelectors(plans.length))) {
-      findings.push(finding("plan-sequence", design.path, "direct Plans must be contiguous PLAN-1 through PLAN-N"));
+      findings.push(finding("plan-sequence", design.path, "Design alternatives must be contiguous plan-1 through plan-N"));
     }
     for (const plan of plans) {
       validateManifestFiles(
@@ -443,7 +443,7 @@ function checkDesignPackage(
       );
     }
     if (state._tag === "decided" && !plans.some((plan) => plan.path === state.selectedPlan)) {
-      findings.push(finding("selected-plan-invalid", design.path, "relations.selectedPlan must be one direct Plan"));
+      findings.push(finding("selected-plan-invalid", design.path, "decision.selected must be one declared Design alternative"));
     }
     const readme = yield* readText(root, design.path);
     const expectedProjection = renderDesignProjection(receipts, state);
