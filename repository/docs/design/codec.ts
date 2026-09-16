@@ -1,21 +1,15 @@
 import { Result, Schema, SchemaIssue } from "effect";
+import { DesignSchema } from "concord-sdlc/model";
 import { parse, stringify } from "yaml";
 
 import type { RepoRef } from "../trace/ref.js";
 import { DesignInputInvalid } from "./errors.js";
 import type { DesignDecisionState } from "./model.js";
 
-const DesignReadmeSchema = Schema.Struct({
-  format: Schema.Literal("concord.document/v1"),
-  id: Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u))),
-  title: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
-  createdAt: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
-  kind: Schema.Literal("design"),
-  alternatives: Schema.NonEmptyArray(Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)))),
-  decision: Schema.optional(Schema.Struct({ selected: Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u))), reason: Schema.String.pipe(Schema.check(Schema.isMinLength(1))), at: Schema.String.pipe(Schema.check(Schema.isMinLength(1))), targets: Schema.Array(Schema.String) })),
-});
+const DesignReadmeSchema = DesignSchema;
 
 export interface DecodedDesignReadme {
+  readonly metadata: typeof DesignSchema.Type;
   readonly id: string;
   readonly title: string;
   readonly createdAt: string;
@@ -48,13 +42,14 @@ export function decodeDesignReadme(path: string, source: string): DecodedDesignR
   const metadata = decoded.success;
   const selected = metadata.decision?.selected;
   return {
+    metadata,
     id: metadata.id,
     title: metadata.title,
     createdAt: metadata.createdAt,
     alternatives: metadata.alternatives,
     body: match[2],
     state: selected === undefined
-      ? { _tag: "undecided" }
+      ? metadata.deferral ? { _tag: "deferred", reason: metadata.deferral.reason } : { _tag: "undecided" }
       : { _tag: "decided", selectedPlan: `${path.slice(0, path.lastIndexOf("/"))}/plans/${selected}/README.md` },
     decides: metadata.decision?.targets ?? [],
   };
@@ -69,7 +64,9 @@ export function encodeDecidedDesignReadme(
   if (selected === undefined || !decoded.alternatives.includes(selected)) {
     throw failure(decoded.id, "selected Design alternative is not declared by the owner");
   }
+  const { deferral: _deferral, ...preserved } = decoded.metadata;
   const frontmatter = stringify({
+    ...preserved,
     format: "concord.document/v1",
     id: decoded.id,
     title: decoded.title,

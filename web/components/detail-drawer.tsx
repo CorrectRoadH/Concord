@@ -7,14 +7,19 @@ export interface DetailDrawerModel {
 }
 
 /** Controlled by the page so route changes and dirty-draft guards stay with their owner. */
-export function DetailDrawer({ model, open, onClose, children }: {
+export function DetailDrawer({ model, open, onClose, fullscreen = false, children }: {
   model: DetailDrawerModel;
   open: boolean;
   onClose(): void;
+  fullscreen?: boolean;
   children: ReactNode;
 }) {
   return <Sheet open={open} onOpenChange={value => { if (!value) onClose(); }}>
-    <SheetContent side="right" className="detail-drawer w-full sm:max-w-none">
+    <SheetContent
+      side="right"
+      className={`detail-drawer w-full sm:max-w-none${fullscreen ? ' source-drawer' : ''}`}
+      style={fullscreen ? { width: '100vw', maxWidth: 'none' } : undefined}
+    >
       <SheetHeader><SheetTitle>{model.title}</SheetTitle><SheetDescription>{model.description}</SheetDescription></SheetHeader>
       <div className="detail-drawer__body">{children}</div>
     </SheetContent>

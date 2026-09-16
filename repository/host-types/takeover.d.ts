@@ -6,7 +6,7 @@ import { OwnedProcess } from "./owned-process.ts";
 import { type RepoRunResult } from "./run-repo.ts";
 import { type TestkitPackage } from "./testkit-snapshot.ts";
 import { type TakeoverCertificateV2 } from "./case-evidence.ts";
-import { type SourceProjectionV1 } from "../source-identity.ts";
+import { type SourceProjectionV2 } from "../source-identity.ts";
 export interface TakeoverOptions {
     readonly candidatePath: string;
     readonly repoId: string;
@@ -23,7 +23,7 @@ export declare class TakeoverOperationError extends TakeoverOperationError_base<
     readonly detail: string;
 }> {
 }
-type SourceSnapshotIdentity = SourceProjectionV1;
+type SourceSnapshotIdentity = SourceProjectionV2;
 interface CheckoutIdentity {
     readonly root: string;
     readonly commit: string;

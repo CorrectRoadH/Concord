@@ -7,6 +7,7 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import {
   adoptRoadmap,
+  activateMemory,
   addPage,
   checkDocuments,
   closeIssue,
@@ -18,6 +19,7 @@ import {
   promoteMemory,
   reopenMemory,
   resolveMemory,
+  renderDocument,
   resolveReference,
   retirePromotion,
   setAuthor,
@@ -26,6 +28,8 @@ import {
   supersedeMemory,
 } from '../dist/documents.js';
 import { LocalRepository, initialize } from '../dist/storage.js';
+import { inspectResolutionEvidence } from '../dist/evidence.js';
+import { MemorySchema, ResolutionSchema, decode, type Resolution } from '../dist/shared.js';
 
 function createConsumer() {
   const root = mkdtempSync(join(tmpdir(), 'concord-documents-'));
@@ -51,9 +55,7 @@ function write(root: string, path: string, contents: string): void {
 function throwsCode(code: string, operation: () => unknown): void {
   assert.throws(operation, error => typeof error === 'object' && error !== null && 'code' in error && error.code === code);
 }
-
-// @concord-case documents-resolve-owner-pages
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('creates strict owners, resolves feature supporting pages, and only replaces author prose', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   createDocument(repo, 'feature', { id: 'login', title: 'Login', body: '# Login contract\n\nCurrent behavior.\n' });
   createDocument(repo, 'use-case', { id: 'expired-token', title: 'Expired token', body: '# Expired token\n', feature: 'login' });
@@ -77,9 +79,7 @@ test('creates strict owners, resolves feature supporting pages, and only replace
   throwsCode('InvalidAuthorBody', () => setAuthor(repo, revised.path, '---\ntitle: override\n---\n', revised.digest));
   assert.deepEqual(checkDocuments(repo, documents), []);
 }))));
-
-// @concord-case documents-reject-duplicate-owner-id
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('rejects a duplicate same-kind id before creating a second Use Case', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'feature', { id: 'accounts', title: 'Accounts', body: '# Accounts\n' });
   createDocument(repo, 'feature', { id: 'sessions', title: 'Sessions', body: '# Sessions\n' });
@@ -90,9 +90,7 @@ test('rejects a duplicate same-kind id before creating a second Use Case', () =>
   assert.equal(repo.read('docs/feature/sessions/use-case/sign-in.md'), undefined);
   assert.deepEqual(checkDocuments(repo, documents), []);
 }))));
-
-// @concord-case documents-decide-design-once
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('decides a design once and validates dry-run without writing', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'feature', { id: 'search', title: 'Search', body: '# Search\n' });
   createDocument(repo, 'design', { id: 'search-index', title: 'Search index', body: '# Options\n', alternatives: ['sqlite', 'memory'] });
@@ -106,9 +104,7 @@ test('decides a design once and validates dry-run without writing', () => Effect
   assert.equal(dry.dryRun, true);
   assert.equal(loadDocuments(repo).some(document => document.metadata.id === 'dry-study'), false);
 }))));
-
-// @concord-case documents-protect-page-preimages
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('creates template packages and protects supporting page preimages', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   const minimal = createDocument(repo, 'feature', { id: 'empty-selection', title: 'Empty selection', pages: [] });
   assert.deepEqual(minimal.changedPaths, ['docs/feature/empty-selection/README.md']);
@@ -136,16 +132,41 @@ test('creates template packages and protects supporting page preimages', () => E
   setPage(repo, 'design', 'cache', 'readme', '# SQLite plan\n', plan.digest, false, 'sqlite');
   throwsCode('InvalidDocumentKind', () => addPage(repo, 'memory', 'missing', 'cli'));
 }))));
-
-// @concord-case documents-select-memory-template
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('uses the memoryKind template when body is omitted', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'memory', { id: 'stale', title: 'Stale cache', memoryKind: 'problem' });
   assert.match(findDocument(loadDocuments(repo), 'stale', 'memory').body, /## Observation/u);
 }))));
 
-// @concord-case adoption-rejects-unsafe-package
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('creates captured notes from the note template and activates typed memories with history', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+  createDocument(repo, 'memory', { id: 'captured-note', title: 'Captured note', memoryKind: 'note' });
+  const note = findDocument(loadDocuments(repo), 'captured-note', 'memory');
+  assert.equal(note.metadata.kind === 'memory' && note.metadata.state, 'captured');
+  assert.match(note.body, /explicitly classified/u);
+  createDocument(repo, 'memory', { id: 'captured-problem', title: 'Captured problem', memoryKind: 'problem' });
+  const captured = findDocument(loadDocuments(repo), 'captured-problem', 'memory');
+  assert.equal(captured.metadata.kind, 'memory');
+  if (captured.metadata.kind !== 'memory') throw new Error('Expected Memory');
+  write(root, captured.path, renderDocument({ ...captured.metadata, state: 'captured' }, captured.body));
+  activateMemory(repo, 'captured-problem', 'Investigation begins');
+  const active = findDocument(loadDocuments(repo), 'captured-problem', 'memory');
+  assert.equal(active.metadata.kind === 'memory' && active.metadata.state, 'open');
+  assert.equal(active.metadata.kind === 'memory' && active.metadata.history.at(-1)?.action, 'activate');
+  assert.equal(active.metadata.kind === 'memory' && active.metadata.history.at(-1)?.reason, 'Investigation begins');
+}))));
+
+test('rejects superseded Problems from reopening while preserving their resolution history', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
+  createDocument(repo, 'memory', { id: 'old-problem', title: 'Old problem', memoryKind: 'problem' });
+  createDocument(repo, 'memory', { id: 'new-problem', title: 'New problem', memoryKind: 'problem' });
+  resolveMemory(repo, 'old-problem', 'not-a-bug', 'Historical conclusion');
+  supersedeMemory(repo, 'old-problem', 'new-problem', 'No longer applicable');
+  const old = findDocument(loadDocuments(repo), 'old-problem', 'memory');
+  assert.equal(old.metadata.kind === 'memory' && old.metadata.state, 'superseded');
+  assert.equal(old.metadata.kind === 'memory' && old.metadata.resolution, undefined);
+  assert.equal(old.metadata.kind === 'memory' && old.metadata.history.at(-1)?.resolution?.kind, 'not-a-bug');
+  throwsCode('InvalidMemoryState', () => reopenMemory(repo, 'old-problem', 'Try again'));
+}))));
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('adoption rebases supported links and rejects unsafe source packages without writing', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   createDocument(repo, 'roadmap', { id: 'move', title: 'Move', body: '# Move\n\n[Other](../other/README.md)\n' });
   write(root, 'docs/roadmap/move/guide.md', '[Inner](nested.md) [Outer](../other/README.md)\n\n[outer]: ../other/README.md\n\n`[code](../other/README.md)`\n\n~~~md\n[example](../other/README.md)\n~~~\n\n    [indented](../other/README.md)\n');
@@ -172,9 +193,7 @@ test('adoption rebases supported links and rejects unsafe source packages withou
   throwsCode('UnsafePath', () => adoptRoadmap(repo, 'linked', 'linked-feature'));
   assert.equal(repo.read('docs/feature/linked-feature/README.md'), undefined);
 }))));
-
-// @concord-case adoption-detects-source-set-drift
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('adoption detects a source-set change before publishing', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'roadmap', { id: 'drift', title: 'Drift', body: '# Drift\n' });
   let calls = 0;
@@ -189,9 +208,7 @@ test('adoption detects a source-set change before publishing', () => Effect.runP
   throwsCode('PreimageChanged', () => adoptRoadmap(unstable, 'drift', 'drift-feature'));
   assert.equal(repo.read('docs/feature/drift-feature/README.md'), undefined);
 }))));
-
-// @concord-case adoption-detects-byte-and-destination-drift
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('adoption detects source bytes and destination conflicts before publishing', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   createDocument(repo, 'roadmap', { id: 'bytes', title: 'Bytes', body: '# Bytes\n' });
   write(root, 'docs/roadmap/bytes/guide.md', '# Guide\n');
@@ -213,9 +230,7 @@ test('adoption detects source bytes and destination conflicts before publishing'
   throwsCode('DocumentExists', () => adoptRoadmap(repo, 'conflict', 'conflicted'));
   assert.equal(repo.read('docs/feature/conflicted/README.md'), undefined);
 }))));
-
-// @concord-case adoption-recovers-complete-package
-// @concord-contract docs/feature/local-sdlc/use-case/recover-local-state.md
+// @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
 test('interrupted adoption recovers the complete old package and preserves unknown edits', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   createDocument(repo, 'roadmap', { id: 'recovery', title: 'Recovery', body: '# Recovery\n' });
   write(root, 'docs/roadmap/recovery/nested/guide.md', '# Guide\n');
@@ -242,9 +257,7 @@ test('interrupted adoption recovers the complete old package and preserves unkno
     assert.equal(recovery.read('docs/roadmap/recovery/nested/guide.md'), '# Guide\n');
   } finally { recovery.close(); }
 }))));
-
-// @concord-case adoption-migrates-promotions
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('adopts Roadmap atomically and migrates current promotions to the Feature', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'roadmap', { id: 'offline', title: 'Offline mode', body: '# Offline mode\n\n## Sync policy\n' });
   createDocument(repo, 'memory', { id: 'prefer-local', title: 'Prefer local state', body: '# Decision\n', memoryKind: 'decision' });
@@ -262,9 +275,7 @@ test('adopts Roadmap atomically and migrates current promotions to the Feature',
   assert.deepEqual(checkDocuments(repo, documents), []);
   throwsCode('InvalidRoadmapState', () => adoptRoadmap(repo, 'offline', 'second-feature'));
 }))));
-
-// @concord-case memory-enforces-problem-epochs
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('enforces Problem epochs and preserves resolution history across reopen', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'memory', { id: 'token-race', title: 'Token race', body: '# Problem\n', memoryKind: 'problem' });
   throwsCode('InvalidProof', () => resolveMemory(repo, 'token-race', 'fixed', 'Fixed lock ordering', { red: 'red-1', green: 'green-1', selectedCaseId: 'token-case', epoch: 1 }));
@@ -275,15 +286,14 @@ test('enforces Problem epochs and preserves resolution history across reopen', (
   problem = findDocument(loadDocuments(repo), 'token-race', 'memory');
   assert.equal(problem.metadata.kind === 'memory' && problem.metadata.epoch, 1);
   assert.equal(problem.metadata.kind === 'memory' && problem.metadata.resolution, undefined);
-  assert.equal(problem.metadata.kind === 'memory' && problem.metadata.history.at(-1)?.resolution?.red, 'red-1');
+  const reopened = problem.metadata.kind === 'memory' ? problem.metadata.history.at(-1)?.resolution : undefined;
+  assert.equal(reopened?.evidenceLevel === 'command' ? reopened.red : undefined, 'red-1');
   resolveMemory(repo, 'token-race', 'not-a-bug', 'Expected upstream behavior');
   problem = findDocument(loadDocuments(repo), 'token-race', 'memory');
   assert.equal(problem.metadata.kind === 'memory' && problem.metadata.resolution?.evidenceLevel, 'author');
   assert.equal(problem.metadata.kind === 'memory' && problem.metadata.resolution?.epoch, 1);
 }))));
-
-// @concord-case memory-supersedes-same-kind
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('supersedes only current same-kind Memory and retires its promotions into history', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'feature', { id: 'cache', title: 'Cache', body: '# Cache\n' });
   createDocument(repo, 'memory', { id: 'old-cache', title: 'Old cache choice', body: '# Decision\n', memoryKind: 'decision' });
@@ -299,9 +309,7 @@ test('supersedes only current same-kind Memory and retires its promotions into h
   throwsCode('InvalidMemoryState', () => promoteMemory(repo, 'old-cache', 'docs/feature/cache/README.md'));
   throwsCode('InvalidMemoryState', () => supersedeMemory(repo, 'new-cache', 'cache-note', 'Wrong kind'));
 }))));
-
-// @concord-case memory-and-issue-state-guards
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('retires an exact promotion and refuses to close an Issue linked to an open Problem', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'feature', { id: 'checkout', title: 'Checkout', body: '# Checkout\n' });
   createDocument(repo, 'memory', { id: 'checkout-fails', title: 'Checkout fails', body: '# Problem\n', memoryKind: 'problem' });
@@ -325,12 +333,69 @@ test('retires an exact promotion and refuses to close an Issue linked to an open
   assert.equal(reopenedProblem.metadata.kind === 'memory' && reopenedProblem.metadata.state, 'open');
   assert.deepEqual(checkDocuments(repo, documents), []);
 }))));
-
-// @concord-case documents-distinguish-managed-frontmatter
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('ignores ordinary Markdown frontmatter but rejects a broken declared Concord owner', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   write(root, 'docs/research/ordinary.md', '---\ntitle: Ordinary page\n---\n\n# Notes\n');
   assert.deepEqual(loadDocuments(repo), []);
   write(root, 'docs/research/broken.md', '---\nformat: concord.document/v1\nid: Bad Id\nkind: research\n---\n');
   throwsCode('InvalidData', () => loadDocuments(repo));
+}))));
+
+test('historical attestations remain unverified and survive reopening without becoming new command proof', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+  createDocument(repo, 'memory', { id: 'recorded-fix', title: 'Recorded fix', memoryKind: 'problem', body: '# Original author account\n' });
+  const record = findDocument(loadDocuments(repo), 'recorded-fix', 'memory');
+  const metadata = decode(MemorySchema, record.metadata, record.path);
+  const resolution = decode(ResolutionSchema, {
+    kind: 'fixed', evidenceLevel: 'attested', epoch: 0, at: '2026-09-14T00:00:00Z', reason: 'Preserved author declaration',
+    attestation: { statement: 'The original author reported this fixed.', proof: ['original proof description'], source: { path: 'memory/INDEX.md', commit: 'a'.repeat(40), digest: `sha256:${'b'.repeat(64)}` } },
+  }, 'attestation fixture');
+  write(root, record.path, renderDocument({ ...metadata, state: 'resolved', resolution }, record.body));
+  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
+  assert.match(JSON.stringify(inspectResolutionEvidence(repo, resolution)), /unverified/);
+  reopenMemory(repo, record.path, 'The observation returned');
+  const reopened = decode(MemorySchema, findDocument(loadDocuments(repo), record.path).metadata, record.path);
+  assert.equal(reopened.epoch, 1);
+  assert.equal(reopened.resolution, undefined);
+  assert.deepEqual(reopened.history.at(-1)?.resolution, resolution);
+  throwsCode('InvalidProof', () => resolveMemory(repo, record.path, 'fixed', 'Reusing the author account'));
+  throwsCode('InvalidData', () => decode(ResolutionSchema, { ...resolution, evidenceLevel: 'command', red: 'red', green: 'green', selectedCaseId: 'case' }, 'mixed proof'));
+}))));
+
+test('repository evidence is structurally readable without pretending formal owners are generic Feature documents', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+  createDocument(repo, 'memory', { id: 'formal-fix', title: 'Formal fix', memoryKind: 'problem', body: '# Formal account\n' });
+  const record = findDocument(loadDocuments(repo), 'formal-fix', 'memory');
+  const metadata = decode(MemorySchema, record.metadata, record.path);
+  const file = (name: string) => ({ path: `case-evidence/${name}.json`, digest: `sha256:${'a'.repeat(64)}` });
+  const resolution = decode(ResolutionSchema, {
+    kind: 'fixed', evidenceLevel: 'repository', epoch: 0, at: '2026-09-14T00:00:00Z', reason: 'Profile bound formal evidence',
+    repositoryEvidence: { memory: record.path, epoch: 0, validatedAt: '2026-09-14T00:00:00Z', cases: [{
+      selector: 'e2e/sample/test.ts#case-one', caseId: 'case-one', binding: { kind: 'direct-contract', contractRef: 'docs/feature/sample/README.md', contractSha256: 'b'.repeat(64) },
+      sourceDigest: 'c'.repeat(64), candidateSha256: 'd'.repeat(64),
+      red: file('red'), green: file('green'), certificate: file('certificate'), inventory: file('inventory'),
+      reliability: Array.from({ length: 6 }, (_, index) => file(`reliability-${index}`)), invocationIds: Array.from({ length: 8 }, (_, index) => `invocation-${index}`),
+    }] },
+  }, 'repository fixture');
+  assert.equal(resolution.evidenceLevel, 'repository');
+  if (resolution.evidenceLevel !== 'repository') throw new Error('Expected repository evidence');
+  write(root, record.path, renderDocument({ ...metadata, state: 'resolved', resolution }, record.body));
+  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
+  assert.deepEqual((inspectResolutionEvidence(repo, resolution) as { availability: string }).availability, 'unavailable');
+  const invalid = { ...resolution, repositoryEvidence: { ...resolution.repositoryEvidence, epoch: 1 } };
+  write(root, record.path, renderDocument({ ...metadata, state: 'resolved', resolution: invalid }, record.body));
+  assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => /epoch/.test(finding.message)));
+}))));
+
+test('Issue closure rejects missing references and duplicate cycles', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+  for (const id of ['first-observation', 'second-observation']) createDocument(repo, 'issue', { id, title: id, body: '# Observation\n' });
+  const records = loadDocuments(repo);
+  for (const [id, target] of [['first-observation', 'second-observation'], ['second-observation', 'first-observation']] as const) {
+    const record = findDocument(records, id, 'issue');
+    if (record.metadata.kind !== 'issue') throw new Error('Expected Issue');
+    write(root, record.path, renderDocument({ ...record.metadata, state: 'closed', closure: { kind: 'duplicate', canonical: `docs/issues/${target}.md` } }, record.body));
+  }
+  assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => finding.code === 'ReferenceCycle'));
+  const first = findDocument(records, 'first-observation', 'issue');
+  if (first.metadata.kind !== 'issue') throw new Error('Expected Issue');
+  write(root, first.path, renderDocument({ ...first.metadata, state: 'closed', closure: { kind: 'fixed', memory: 'memory/missing.md', proof: ['historical declaration'] } }, first.body));
+  assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => finding.message.includes('missing')));
 }))));

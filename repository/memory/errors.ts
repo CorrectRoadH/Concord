@@ -14,10 +14,6 @@ export class MemoryReferenceConflict extends Schema.TaggedError<MemoryReferenceC
   "@niceeval/repo-tools/MemoryReferenceConflict",
 )("MemoryReferenceConflict", fields) {}
 
-export class LegacyMemoryReadOnly extends Schema.TaggedError<LegacyMemoryReadOnly>(
-  "@niceeval/repo-tools/LegacyMemoryReadOnly",
-)("LegacyMemoryReadOnly", fields) {}
-
 export class MemoryLockConflict extends Schema.TaggedError<MemoryLockConflict>(
   "@niceeval/repo-tools/MemoryLockConflict",
 )("MemoryLockConflict", fields) {}
@@ -27,4 +23,4 @@ export class MemoryIoError extends Schema.TaggedError<MemoryIoError>(
 )("MemoryIoError", fields) {}
 
 export type MemoryError = MemoryFileMissing | MemoryContentInvalid | MemoryReferenceConflict |
-  LegacyMemoryReadOnly | MemoryLockConflict | MemoryIoError;
+  MemoryLockConflict | MemoryIoError;

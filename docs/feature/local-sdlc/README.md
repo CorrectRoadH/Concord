@@ -4,6 +4,14 @@ id: local-sdlc
 title: 本地 SDLC 闭环
 createdAt: 2026-09-13T11:00:32.576Z
 kind: feature
+constitutionRefs:
+  - docs/constitution.md#c-001
+  - docs/constitution.md#c-003
+  - docs/constitution.md#c-004
+  - docs/constitution.md#c-005
+  - docs/constitution.md#c-006
+  - docs/constitution.md#c-007
+  - docs/constitution.md#c-009
 ---
 
 # 本地 SDLC 闭环
@@ -30,4 +38,4 @@ Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal
 
 ## 验收
 
-各 Use Case 均有真实 `node:test` 声明通过 `@concord-contract` 关联。`concord check` 与 `trace check` 必须验证引用完整性；定向 `trace show` 与 `review render` 必须能从当前 owner 分别反查代码声明和测试。代码声明表示实现关联，不证明契约完成。
+各 Use Case 均有真实 `node:test` 声明通过 `@use-case` 路径注释关联。`concord check` 与 `trace check` 必须验证引用完整性；定向 `trace show` 与 `review render` 必须能从当前 owner 分别反查代码声明和测试。代码声明表示实现关联，不证明契约完成。

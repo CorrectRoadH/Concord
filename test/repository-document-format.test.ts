@@ -21,7 +21,9 @@ function write(root: string, path: string, source: string): void {
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), "concord-repository-document-format-"));
   execFileSync("git", ["init", "-q", root]);
-  for (const directory of ["docs", "e2e", "feedback", "memory"]) mkdirSync(join(root, directory));
+  for (const directory of ["docs", "docs/issues", "e2e", "feedback", "memory"]) mkdirSync(join(root, directory), { recursive: true });
+  write(root, "memory/problem.md", "---\nformat: concord.document/v1\nid: problem\ntitle: Problem\ncreatedAt: 2026-09-14T00:00:00.000Z\nkind: memory\nmemoryKind: problem\nstate: open\nepoch: 0\npromotions: []\nhistory: []\n---\n\n# Problem\n");
+  write(root, "docs/issues/issue.md", "---\nformat: concord.document/v1\nid: issue\ntitle: Issue\ncreatedAt: 2026-09-14T00:00:00.000Z\nkind: issue\nstate: draft\nmemoryRelations: []\nadoptions:\n  current: []\n  history: []\nhistory: []\n---\n\n# Issue\n");
   write(root, "docs/feature/migrated/README.md", `---
 format: concord.document/v1
 id: migrated
@@ -76,8 +78,7 @@ decision:
 
 const run = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => Effect.runPromise(effect);
 
-// @concord-case repository-profile-document-format
-// @concord-contract docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
+// @use-case docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
 test("repository profile reads and writes concord.document/v1 owners", async () => {
   const root = fixture();
   try {
@@ -86,6 +87,8 @@ test("repository profile reads and writes concord.document/v1 owners", async () 
     assert.equal(snapshot.nodes.filter((node) => node.kind === "design-plan").length, 2);
     assert.equal(snapshot.nodes.find((node) => node.kind === "design")?.relations.selectedPlan?.[0], "docs/design/storage/plans/files/README.md");
     assert.equal(snapshot.nodes.find((node) => node.kind === "use-case")?.relations.composes?.[0], "docs/feature/migrated/README.md");
+    assert.deepEqual(snapshot.memory.map((item) => item.path), ["memory/problem.md"]);
+    assert.deepEqual(snapshot.feedback.map((item) => item.path), ["docs/issues/issue.md"]);
     assert.equal([...snapshot.nodes].some((node) => JSON.stringify(node).includes("niceeval.docs-node/v1")), false);
 
     const decoded = decodeDesignReadme("docs/design/storage/README.md", readFileSync(join(root, "docs/design/storage/README.md"), "utf8"));

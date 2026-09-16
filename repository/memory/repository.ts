@@ -1,535 +1,228 @@
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative, resolve, sep } from "node:path";
-
+import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createHash } from "node:crypto";
-
+import { join, relative, resolve, sep } from "node:path";
 import { Effect, Result, Schema } from "effect";
-
+import { decode, RepositoryEvidenceSchema, type MemoryMeta, type RepositoryEvidence } from "concord-sdlc/model";
 import { parseRepoRef, validateRepoRefTarget, type RepoRef, type ValidatedRepoRefTarget } from "../docs/trace/ref.js";
 import { ADOPTABLE_DOCS_NODE_KINDS, type TraceSnapshot } from "../docs/trace/model.js";
 import { traceDigest } from "../docs/trace/relation-mutation.js";
 import { decodeMemoryDocument, encodeMemoryDocument } from "./codec.js";
-import {
-  LegacyMemoryReadOnly,
-  MemoryContentInvalid,
-  MemoryFileMissing,
-  MemoryIoError,
-  MemoryLockConflict,
-  MemoryReferenceConflict,
-  type MemoryError,
-} from "./errors.js";
-import type { MemoryDocument, MemoryV1, ProblemResolution, PromotionKind } from "./schema.js";
-import { promoteMemory, reopenProblem, resolveProblem, retirePromotion, supersedeMemory } from "./state.js";
-import { decodeRepositorySourceIdentityV2, resolveRepositorySourceIdentity, sameRepositorySourceIdentity } from "../source-identity.js";
+import { MemoryContentInvalid, MemoryFileMissing, MemoryIoError, MemoryReferenceConflict, type MemoryError } from "./errors.js";
+import type { MemoryDocument, ProblemResolutionIntent, PromotionKind } from "./schema.js";
+import { activateMemory, promoteMemory, reopenProblem, resolveProblem, retirePromotion, supersedeMemory } from "./state.js";
+import { decodeRepositorySourceIdentityV3, RepositorySourceIdentityV3Schema, resolveRepositorySourceIdentity, sameRepositorySourceIdentity } from "../source-identity.js";
 
 const message = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
-export interface MemoryCheckReceipt {
-  readonly ok: boolean;
-  readonly checked: number;
-  readonly legacy: number;
-  readonly legacyFixedMigrationDebt: readonly string[];
-  readonly findings: readonly string[];
+const sha = (value: string): string => createHash("sha256").update(value).digest("hex");
+const canonical = (value: unknown): string => Array.isArray(value) ? "[" + value.map(canonical).join(",") + "]" :
+  value !== null && typeof value === "object" ? "{" + Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => JSON.stringify(k) + ":" + canonical(v)).join(",") + "}" : JSON.stringify(value);
+const canonicalDigest = (value: unknown): string => "sha256:" + sha(canonical(value));
+const canonicalSignatureDigest = (value: unknown): string => sha(canonical(value));
+
+export interface MemoryCheckReceipt { readonly ok: boolean; readonly checked: number; readonly findings: readonly string[] }
+export interface MemoryAuthorSnapshot { readonly document: MemoryDocument; readonly ownerPreimageDigest: string; readonly authorRegionDigest: string }
+export interface FixedEvidenceValidation { readonly selectors: readonly string[]; readonly preimagePaths: readonly string[]; readonly evidence: RepositoryEvidence }
+
+const FileSchema = Schema.Struct({ path: Schema.String, digest: Schema.String });
+const EvidenceEntrySchema = Schema.Struct({ red: FileSchema, green: FileSchema, certificate: FileSchema, inventory: FileSchema });
+const EvidenceHistorySchema = Schema.Union([
+  Schema.Struct({ caseId: Schema.String, memory: Schema.String, evidence: EvidenceEntrySchema, reason: Schema.String, refreshedAtCommit: Schema.String }),
+  Schema.Struct({ caseId: Schema.String, memory: Schema.String, evidence: EvidenceEntrySchema, reason: Schema.String, retiredAtCommit: Schema.String }),
+]);
+const IndexSchema = Schema.Struct({ format: Schema.Literal("niceeval.e2e-case-evidence-index/v1"), current: Schema.Record(Schema.String, Schema.Record(Schema.String, EvidenceEntrySchema)), history: Schema.optional(Schema.Array(EvidenceHistorySchema)) });
+const ReceiptSchema = Schema.Struct({ format: Schema.Literal("niceeval.e2e-case-receipt/v2"), mode: Schema.Literal("formal"), observation: Schema.Literals(["red", "green", "reliability"]), selector: Schema.String, caseId: Schema.String, inventoryDigest: Schema.String, candidate: Schema.Struct({ gitSha: Schema.String, sha256: Schema.String, sri: Schema.String }), source: RepositorySourceIdentityV3Schema, runner: Schema.Struct({ executor: Schema.Literals(["vitest", "playwright"]), version: Schema.String, argv: Schema.Array(Schema.String) }), result: Schema.Struct({ disposition: Schema.Literals(["regression", "pass"]), stage: Schema.String, exitCode: Schema.NullOr(Schema.Number), signal: Schema.NullOr(Schema.String) }), cleanup: Schema.Struct({ ok: Schema.Boolean, resources: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)) }), invocationId: Schema.String, receiptSha256: Schema.String });
+const CollectedCaseSchema = Schema.Struct({ executor: Schema.Literals(["vitest", "playwright"]), repo: Schema.String, path: Schema.String, project: Schema.optional(Schema.String), titlePath: Schema.Array(Schema.String), caseId: Schema.String });
+const RawCollectedCaseSchema = Schema.Struct({ file: Schema.String, project: Schema.optional(Schema.String), titlePath: Schema.Array(Schema.String) });
+const InventorySchema = Schema.Struct({ executor: Schema.Struct({ name: Schema.Literals(["vitest", "playwright"]), version: Schema.String }), repo: Schema.String, argv: Schema.Array(Schema.String), checkout: Schema.String, files: Schema.Array(Schema.String), cases: Schema.Array(CollectedCaseSchema), unassignedCases: Schema.Array(RawCollectedCaseSchema), bodyExecutions: Schema.Literal(0), forbiddenSetupExecutions: Schema.Literal(0), findings: Schema.Array(Schema.Unknown), digest: Schema.String, exit: Schema.NullOr(Schema.Number), signal: Schema.NullOr(Schema.String) });
+const CertificateSchema = Schema.Struct({ format: Schema.Literal("niceeval.e2e-takeover-certificate/v2"), selector: Schema.String, caseId: Schema.String, candidateSha256: Schema.String, sourceDigest: Schema.String, greenReceipt: Schema.String, observations: Schema.Struct({ isolatedCopies: Schema.Tuple([Schema.String, Schema.String, Schema.String]), sameCopy: Schema.Tuple([Schema.String, Schema.String]), defaultParallel: Schema.String, singleCase: Schema.String, cleanup: Schema.Array(Schema.String) }), certificateSha256: Schema.String });
+
+function authorRegion(body: string): string { return body; }
+function decodeJson(path: string, source: string): unknown { try { return JSON.parse(source); } catch (cause) { throw new MemoryReferenceConflict({ operation: "resolve", path, message: "invalid evidence JSON: " + message(cause) }); } }
+function objectInput(path: string, input: unknown): Record<string, unknown> {
+  if (input === null || typeof input !== "object" || Array.isArray(input)) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "evidence JSON must be an object" });
+  return Object.fromEntries(Object.entries(input));
 }
-export interface MemoryAuthorSnapshot {
-  readonly document: MemoryDocument;
-  readonly ownerPreimageDigest: string;
-  readonly authorRegionDigest: string;
-}
-
-export interface FixedEvidenceValidation {
-  readonly selectors: readonly string[];
-  readonly preimagePaths: readonly string[];
-}
-
-const EvidenceFileSchema = Schema.Struct({ path: Schema.String, digest: Schema.String });
-const EvidenceIndexSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.e2e-case-evidence-index/v1"),
-  current: Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Struct({
-    red: EvidenceFileSchema,
-    green: EvidenceFileSchema,
-    certificate: EvidenceFileSchema,
-    inventory: EvidenceFileSchema,
-  }))),
-});
-const FormalReceiptSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.e2e-case-receipt/v2"),
-  mode: Schema.Literal("formal"),
-  observation: Schema.Literals(["red", "green", "reliability"]),
-  selector: Schema.String,
-  caseId: Schema.String,
-  inventoryDigest: Schema.String,
-  candidate: Schema.Struct({ sha256: Schema.String }),
-  source: Schema.Unknown,
-  result: Schema.Struct({ disposition: Schema.Literals(["regression", "pass"]) }),
-  cleanup: Schema.Struct({ ok: Schema.Boolean }),
-  invocationId: Schema.String,
-  receiptSha256: Schema.String,
-});
-const InventorySchema = Schema.Struct({
-  digest: Schema.String,
-  findings: Schema.Array(Schema.Unknown),
-  bodyExecutions: Schema.Number,
-  forbiddenSetupExecutions: Schema.Number,
-  cases: Schema.Array(Schema.Struct({ path: Schema.String, caseId: Schema.String })),
-});
-const CertificateSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.e2e-takeover-certificate/v2"),
-  selector: Schema.String,
-  caseId: Schema.String,
-  candidateSha256: Schema.String,
-  sourceDigest: Schema.String,
-  greenReceipt: Schema.String,
-  observations: Schema.Struct({
-    isolatedCopies: Schema.Array(Schema.String),
-    sameCopy: Schema.Array(Schema.String),
-    defaultParallel: Schema.String,
-    singleCase: Schema.String,
-    cleanup: Schema.Array(Schema.String),
-  }),
-  certificateSha256: Schema.String,
-});
-
-const canonicalJson = (value: unknown): string => {
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (value !== null && typeof value === "object") {
-    const record = value as Record<string, unknown>;
-    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonicalJson(record[key])}`).join(",")}}`;
-  }
-  return JSON.stringify(value);
-};
-const canonicalDigest = (value: unknown): string => `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
-const canonicalSignatureDigest = (value: unknown): string => createHash("sha256").update(canonicalJson(value)).digest("hex");
-const sourceDigest = (value: string | Uint8Array): string => createHash("sha256").update(value).digest("hex");
-
-const RESOLUTION_HISTORY_MARKER = "<!-- niceeval.memory-resolution-history/v1 -->";
-const FIXED_EVIDENCE_CREDENTIAL = "niceeval.fixed-evidence/v1:";
-
-function authorRegion(body: string): { readonly author: string; readonly managed: string } {
-  const marker = body.indexOf(RESOLUTION_HISTORY_MARKER);
-  if (marker < 0) return { author: body, managed: "" };
-  return { author: body.slice(0, marker), managed: body.slice(marker) };
+function checked<A>(path: string, schema: Schema.Codec<A>, input: unknown): A {
+  const value = Schema.decodeUnknownResult(schema, { errors: "all", onExcessProperty: "error" })(input);
+  if (Result.isFailure(value)) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "invalid or incomplete fixed evidence" });
+  return value.success;
 }
 
 export class MemoryRepository {
   readonly #root: string;
-  readonly #directory: string;
-
-  constructor(root = process.cwd()) { this.#root = resolve(root); this.#directory = join(this.#root, "memory"); }
+  constructor(root = process.cwd()) { this.#root = resolve(root); }
   get root(): string { return this.#root; }
-  ownerPath(id: string): string { this.#guardId(id); return `memory/${id}.md`; }
+  ownerPath(id: string): string { this.#guardId(id); return "memory/" + id + ".md"; }
   absoluteOwnerPath(id: string): string { return join(this.#root, this.ownerPath(id)); }
-
-  #guardId(id: string): void {
-    if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(id) || id === "INDEX") {
-      throw new MemoryContentInvalid({ operation: "resolve id", message: `unsafe Memory id ${JSON.stringify(id)}` });
-    }
-  }
-
+  #guardId(id: string): void { if (!/^[a-z0-9][a-z0-9-]*$/u.test(id)) throw new MemoryContentInvalid({ operation: "resolve id", message: "unsafe Memory id " + JSON.stringify(id) }); }
   list(): readonly MemoryDocument[] {
-    if (!existsSync(this.#directory)) return [];
-    return readdirSync(this.#directory, { withFileTypes: true })
-      .filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md")
-      .map((entry) => this.read(entry.name.slice(0, -3)))
-      .sort((left, right) => ("legacy" in left ? left.id : left.metadata.id)
-        .localeCompare("legacy" in right ? right.id : right.metadata.id));
+    const dir = join(this.#root, "memory");
+    if (!existsSync(dir)) return [];
+    return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md" && entry.name !== "README.md").map((entry) => this.read(entry.name.slice(0, -3))).sort((a, b) => a.metadata.id.localeCompare(b.metadata.id));
   }
-
   read(id: string): MemoryDocument {
-    this.#guardId(id);
     const path = this.absoluteOwnerPath(id);
-    if (!existsSync(path)) throw new MemoryFileMissing({ operation: "read", path: relative(this.#root, path), message: "not found" });
-    try { return decodeMemoryDocument(relative(this.#root, path), id, readFileSync(path, "utf8")); }
-    catch (cause) {
-      if (cause instanceof MemoryContentInvalid) throw cause;
-      throw new MemoryIoError({ operation: "read", path: relative(this.#root, path), message: message(cause) });
-    }
-  }
-
-  readAuthorSnapshot(id: string): MemoryAuthorSnapshot {
-    this.#guardId(id);
-    const path = this.absoluteOwnerPath(id);
+    this.#assertOwnerPath(id, path);
     if (!existsSync(path)) throw new MemoryFileMissing({ operation: "read", path: this.ownerPath(id), message: "not found" });
-    try {
-      const source = readFileSync(path, "utf8");
-      const document = decodeMemoryDocument(this.ownerPath(id), id, source);
-      return {
-        document,
-        ownerPreimageDigest: traceDigest(source),
-        authorRegionDigest: traceDigest(authorRegion(document.body).author),
-      };
-    } catch (cause) {
-      if (cause instanceof MemoryContentInvalid) throw cause;
-      throw new MemoryIoError({ operation: "read", path: this.ownerPath(id), message: message(cause) });
-    }
+    try { return decodeMemoryDocument(this.ownerPath(id), id, readFileSync(path, "utf8")); } catch (cause) { if (cause instanceof MemoryContentInvalid || cause instanceof MemoryFileMissing) throw cause; throw new MemoryIoError({ operation: "read", path: this.ownerPath(id), message: message(cause) }); }
   }
-
-  planCreate(metadata: MemoryV1, body: string): { readonly bytes: string; readonly metadata: MemoryV1 } {
+  readAuthorSnapshot(id: string): MemoryAuthorSnapshot {
+    const path = this.absoluteOwnerPath(id); this.#assertOwnerPath(id, path);
+    const source = readFileSync(path, "utf8");
+    const document = decodeMemoryDocument(this.ownerPath(id), id, source);
+    return { document, ownerPreimageDigest: traceDigest(source), authorRegionDigest: traceDigest(authorRegion(document.body)) };
+  }
+  #assertOwnerPath(id: string, path: string): void {
+    if (lstatSync(this.#root).isSymbolicLink()) throw new MemoryContentInvalid({ operation: "read", path: this.ownerPath(id), message: "repository root is a symlink" });
+    const directory = join(this.#root, "memory");
+    if (existsSync(directory) && lstatSync(directory).isSymbolicLink()) throw new MemoryContentInvalid({ operation: "read", path: this.ownerPath(id), message: "memory directory is a symlink" });
+    if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new MemoryContentInvalid({ operation: "read", path: this.ownerPath(id), message: "memory owner is a symlink" });
+  }
+  planCreate(metadata: MemoryMeta, body: string) {
     this.#guardId(metadata.id);
-    if (metadata.promotions.length > 0) throw new MemoryReferenceConflict({ operation: "add", message: "memory add requires promotions=[]" });
-    const initial = metadata.kind.type === "problem"
-      ? metadata.kind.state === "open" && metadata.kind.resolution === undefined
-      : metadata.kind.type === "decision"
-      ? metadata.kind.state === "adopted" && metadata.kind.supersededBy === undefined
-      : metadata.kind.state === "current" && metadata.kind.supersededBy === undefined;
-    if (!initial) throw new MemoryReferenceConflict({
-      operation: "add",
-      message: "new Memory must start problem/open, decision/adopted, or insight/current without terminal-state metadata",
-    });
-    if (existsSync(this.absoluteOwnerPath(metadata.id))) throw new MemoryReferenceConflict({ operation: "add", path: this.ownerPath(metadata.id), message: "Memory already exists" });
+    if (metadata.promotions.length !== 0 || metadata.history.length !== 0 || metadata.resolution !== undefined || metadata.supersededBy !== undefined || metadata.supersession !== undefined) throw new MemoryReferenceConflict({ operation: "add", message: "new Memory has no history, resolution, promotion, or supersession" });
+    const valid = metadata.memoryKind === "problem" ? metadata.state === "open" : metadata.memoryKind === "note" ? metadata.state === "captured" : metadata.state === "current";
+    if (!valid || existsSync(this.absoluteOwnerPath(metadata.id))) throw new MemoryReferenceConflict({ operation: "add", path: this.ownerPath(metadata.id), message: "invalid initial Memory state or existing owner" });
     return { bytes: encodeMemoryDocument(metadata, body), metadata };
   }
-
-  planTransition(
-    id: string,
-    source: string | undefined,
-    transition: (value: MemoryV1) => Result.Result<MemoryV1, MemoryReferenceConflict>,
-  ): { readonly bytes: string; readonly metadata: MemoryV1 } {
+  planTransition(id: string, source: string | undefined, transition: (value: MemoryMeta) => Result.Result<MemoryMeta, MemoryReferenceConflict>) {
     if (source === undefined) throw new MemoryFileMissing({ operation: "mutate", path: this.ownerPath(id), message: "not found" });
     const document = decodeMemoryDocument(this.ownerPath(id), id, source);
-    if ("legacy" in document) throw new LegacyMemoryReadOnly({
-      operation: "mutate",
-      path: this.ownerPath(id),
-      message: "legacy Memory is read-only; convert it explicitly while preserving its body",
-    });
-    if (document.metadata.id !== id) throw new MemoryContentInvalid({ operation: "mutate", path: this.ownerPath(id), message: "filename and metadata IDs disagree" });
     const result = transition(document.metadata);
     if (Result.isFailure(result)) throw result.failure;
     return { bytes: encodeMemoryDocument(result.success, document.body), metadata: result.success };
   }
-
-  planAuthorSet(
-    id: string,
-    source: string | undefined,
-    body: string,
-    expectedOwnerDigest: string,
-    expectedAuthorDigest: string,
-  ): { readonly bytes: string; readonly metadata: MemoryV1 } {
-    if (source === undefined) throw new MemoryFileMissing({ operation: "author set", path: this.ownerPath(id), message: "not found" });
-    if (traceDigest(source) !== expectedOwnerDigest) throw new MemoryReferenceConflict({
-      operation: "author set", path: this.ownerPath(id), message: "owner preimage digest changed; read the Memory again before updating it",
-    });
-    if (body.includes(RESOLUTION_HISTORY_MARKER)) throw new MemoryContentInvalid({
-      operation: "author set",
-      path: this.ownerPath(id),
-      message: "author body must not contain the managed Resolution history marker",
-    });
+  planAuthorSet(id: string, source: string | undefined, body: string, expectedOwnerDigest: string, expectedAuthorDigest: string) {
+    if (source === undefined || traceDigest(source) !== expectedOwnerDigest) throw new MemoryReferenceConflict({ operation: "author set", path: this.ownerPath(id), message: "owner preimage changed or is missing" });
     const document = decodeMemoryDocument(this.ownerPath(id), id, source);
-    if ("legacy" in document) throw new LegacyMemoryReadOnly({ operation: "author set", path: this.ownerPath(id), message: "legacy Memory is read-only" });
-    if (document.metadata.id !== id) throw new MemoryContentInvalid({
-      operation: "author set",
-      path: this.ownerPath(id),
-      message: "filename and metadata IDs disagree",
-    });
-    const regions = authorRegion(document.body);
-    if (traceDigest(regions.author) !== expectedAuthorDigest) throw new MemoryReferenceConflict({
-      operation: "author set", path: this.ownerPath(id), message: "author region digest changed; read the Memory again before updating it",
-    });
-    return { bytes: encodeMemoryDocument(document.metadata, `${body}${regions.managed}`), metadata: document.metadata };
+    if (traceDigest(authorRegion(document.body)) !== expectedAuthorDigest) throw new MemoryReferenceConflict({ operation: "author set", path: this.ownerPath(id), message: "author region changed" });
+    return { bytes: encodeMemoryDocument(document.metadata, body), metadata: document.metadata };
   }
-
-  planResolve(id: string, source: string | undefined, resolution: ProblemResolution, regressionOwners: readonly string[] = []) {
-    if (resolution.kind === "fixed" && regressionOwners.length === 0) throw new MemoryReferenceConflict({
-      operation: "resolve",
-      path: this.ownerPath(id),
-      message: "fixed resolution requires a current E2E case selector with a sidecar regression relation",
-    });
-    if (resolution.proof.some((proof) => proof.startsWith(FIXED_EVIDENCE_CREDENTIAL))) throw new MemoryReferenceConflict({
-      operation: "resolve",
-      path: this.ownerPath(id),
-      message: "fixed evidence credential is repository-managed and must not be supplied as proof",
-    });
-    const credentialed = resolution.kind === "fixed"
-      ? {
-          ...resolution,
-          proof: [
-            resolution.proof[0],
-            ...resolution.proof.slice(1),
-            `${FIXED_EVIDENCE_CREDENTIAL}${JSON.stringify({ selectors: [...regressionOwners].sort() })}`,
-          ] as const,
-        }
-      : resolution;
-    return this.planTransition(id, source, (value) => resolveProblem(value, credentialed));
-  }
-  planReopen(id: string, source: string | undefined, commit: string) {
-    if (source === undefined) throw new MemoryFileMissing({ operation: "reopen", path: this.ownerPath(id), message: "not found" });
-    const document = decodeMemoryDocument(this.ownerPath(id), id, source);
-    if ("legacy" in document) throw new LegacyMemoryReadOnly({
-      operation: "reopen",
-      path: this.ownerPath(id),
-      message: "legacy Memory is read-only; convert it explicitly while preserving its body",
-    });
-    if (document.metadata.id !== id) throw new MemoryContentInvalid({ operation: "reopen", path: this.ownerPath(id), message: "filename and metadata IDs disagree" });
-    const previous = document.metadata.kind;
-    const changed = reopenProblem(document.metadata);
-    if (Result.isFailure(changed)) throw changed.failure;
-    if (previous.type !== "problem" || previous.resolution === undefined) {
-      throw new MemoryReferenceConflict({ operation: "reopen", message: "resolved Problem has no resolution to preserve" });
+  planResolve(id: string, source: string | undefined, intent: ProblemResolutionIntent, evidence: RepositoryEvidence | undefined, commit?: string) {
+    if (source === undefined) throw new MemoryFileMissing({ operation: "resolve", path: this.ownerPath(id), message: "not found" });
+    const current = decodeMemoryDocument(this.ownerPath(id), id, source).metadata;
+    if (intent.kind === "fixed") {
+      if (evidence === undefined) throw new MemoryReferenceConflict({ operation: "resolve", path: this.ownerPath(id), message: "fixed resolution requires the exclusive formal repository gate" });
+      const used = [...current.history, ...(current.resolution === undefined ? [] : [{ resolution: current.resolution }])].flatMap((entry) => entry.resolution?.kind === "fixed" && entry.resolution.evidenceLevel === "repository" ? entry.resolution.repositoryEvidence.cases.flatMap((item) => item.invocationIds) : []);
+      const next = evidence.cases.flatMap((item) => item.invocationIds);
+      if (next.some((invocationId) => used.includes(invocationId))) throw new MemoryReferenceConflict({ operation: "resolve", path: this.ownerPath(id), message: "repository evidence invocation identities were already used by this Memory" });
     }
-    const heading = "## Resolution history";
-    const entry = [
-      `### Reopened at \`${commit}\``,
-      "",
-      "```json",
-      JSON.stringify(previous.resolution, null, 2),
-      "```",
-    ].join("\n");
-    const body = document.body.includes(heading)
-      ? `${document.body.trimEnd()}\n\n${entry}\n`
-      : `${document.body.trimEnd()}\n\n${heading}\n\n<!-- niceeval.memory-resolution-history/v1 -->\n\n${entry}\n`;
-    return { bytes: encodeMemoryDocument(changed.success, body), metadata: changed.success };
+    const at = intent.at ?? new Date().toISOString();
+    const actual = intent.kind === "fixed" ? { kind: "fixed" as const, reason: intent.reason, at, epoch: current.epoch, evidenceLevel: "repository" as const, repositoryEvidence: evidence! } : { kind: intent.kind, reason: intent.reason, at, epoch: current.epoch, evidenceLevel: "author" as const };
+    return this.planTransition(id, source, (value) => resolveProblem(value, actual, commit));
   }
-  planSupersede(id: string, source: string | undefined, replacement: MemoryV1, commit: string) {
-    return this.planTransition(id, source, (value) => supersedeMemory(value, replacement, commit));
-  }
-  planPromote(id: string, source: string | undefined, kind: PromotionKind, target: RepoRef) {
-    return this.planTransition(id, source, (value) => promoteMemory(value, kind, target));
-  }
-  planRetire(id: string, source: string | undefined, kind: PromotionKind, target: RepoRef, commit: string) {
-    return this.planTransition(id, source, (value) => retirePromotion(value, kind, target, commit));
-  }
-
-  targetSource(target: unknown): { readonly path: string; readonly absolutePath: string; readonly source: string } {
-    const parsed = parseRepoRef(target);
-    if (Result.isFailure(parsed)) throw new MemoryReferenceConflict({ operation: "target", message: parsed.failure.message });
+  planActivate(id: string, source: string | undefined, reason: string, at: string, commit?: string) { return this.planTransition(id, source, (value) => activateMemory(value, reason, at, commit)); }
+  planReopen(id: string, source: string | undefined, reason: string, at: string, commit?: string) { return this.planTransition(id, source, (value) => reopenProblem(value, reason, at, commit)); }
+  planSupersede(id: string, source: string | undefined, replacement: MemoryMeta, reason: string, at: string, replacementRef: string, commit?: string) { return this.planTransition(id, source, (value) => supersedeMemory(value, replacement, replacementRef, reason, at, commit)); }
+  planPromote(id: string, source: string | undefined, target: string, at: string, commit?: string) { return this.planTransition(id, source, (value) => promoteMemory(value, target, at, commit)); }
+  planRetire(id: string, source: string | undefined, target: string, reason: string, at: string, commit?: string) { return this.planTransition(id, source, (value) => retirePromotion(value, target, reason, at, commit)); }
+  targetSource(target: unknown) {
+    const parsed = parseRepoRef(target); if (Result.isFailure(parsed)) throw new MemoryReferenceConflict({ operation: "target", message: parsed.failure.message });
     const absolutePath = resolve(this.#root, parsed.success.path);
-    if (!absolutePath.startsWith(`${this.#root}${sep}`) || !existsSync(absolutePath) || !statSync(absolutePath).isFile()) {
-      throw new MemoryReferenceConflict({ operation: "target", path: parsed.success.path, message: "target file is missing or unsafe" });
+    if (lstatSync(this.#root).isSymbolicLink()) throw new MemoryReferenceConflict({ operation: "target", path: parsed.success.path, message: "repository root is a symlink" });
+    let ancestor = this.#root;
+    for (const part of parsed.success.path.split("/").filter(Boolean)) {
+      ancestor = join(ancestor, part);
+      if (existsSync(ancestor) && lstatSync(ancestor).isSymbolicLink()) throw new MemoryReferenceConflict({ operation: "target", path: parsed.success.path, message: "target path contains a symlink component" });
     }
+    if (!absolutePath.startsWith(this.#root + sep) || !existsSync(absolutePath) || !statSync(absolutePath).isFile()) throw new MemoryReferenceConflict({ operation: "target", path: parsed.success.path, message: "target missing or unsafe" });
     return { path: parsed.success.path, absolutePath, source: readFileSync(absolutePath, "utf8") };
   }
-
   validateTarget(snapshot: TraceSnapshot, target: unknown): ValidatedRepoRefTarget & { readonly kind: PromotionKind } {
-    const source = this.targetSource(target);
-    const validated = validateRepoRefTarget(snapshot, target, ADOPTABLE_DOCS_NODE_KINDS, source.source);
-    if (Result.isFailure(validated)) throw new MemoryReferenceConflict({ operation: "target", path: source.path, message: validated.failure.message });
-    const kind = validated.success.kind;
-    if (kind !== "roadmap" && kind !== "feature" && kind !== "use-case" && kind !== "engineering") {
-      throw new MemoryReferenceConflict({ operation: "target", path: source.path, message: `unsupported promotion kind ${kind}` });
-    }
-    return { ...validated.success, kind };
+    const source = this.targetSource(target); const result = validateRepoRefTarget(snapshot, target, ADOPTABLE_DOCS_NODE_KINDS, source.source);
+    if (Result.isFailure(result)) throw new MemoryReferenceConflict({ operation: "target", path: source.path, message: result.failure.message });
+    if (!["roadmap", "feature", "use-case", "engineering"].includes(result.success.kind)) throw new MemoryReferenceConflict({ operation: "target", path: source.path, message: "unsupported promotion target" });
+    return result.success as ValidatedRepoRefTarget & { readonly kind: PromotionKind };
   }
-
-  validateFixedEvidence(snapshot: TraceSnapshot, memoryPath: string): FixedEvidenceValidation {
+  validateFixedEvidence(snapshot: TraceSnapshot, memoryPath: string, options: { readonly requireOpen?: boolean } = {}): FixedEvidenceValidation {
     const related = snapshot.tests.filter((test) => test.regressions.some((reference) => reference.split("#", 1)[0] === memoryPath));
-    if (related.length === 0) throw new MemoryReferenceConflict({
-      operation: "resolve",
-      path: memoryPath,
-      message: "fixed resolution requires a current E2E case with regression evidence",
-    });
-    const preimages = new Set<string>();
-    const decode = <A>(path: string, schema: Schema.Codec<A>): A => {
-      const source = this.targetSource(path).source;
-      preimages.add(path);
-      let input: unknown;
-      try { input = JSON.parse(source) as unknown; }
-      catch (cause) { throw new MemoryReferenceConflict({ operation: "resolve", path, message: `invalid evidence JSON: ${message(cause)}` }); }
-      const decoded = Schema.decodeUnknownResult(schema)(input);
-      if (Result.isFailure(decoded)) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "invalid or incomplete fixed evidence" });
-      return decoded.success;
-    };
-    const verifySigned = (path: string, field: "receiptSha256" | "certificateSha256"): unknown => {
-      const source = this.targetSource(path).source;
-      preimages.add(path);
-      const document = JSON.parse(source) as Record<string, unknown>;
-      const declared = document[field];
-      const unsigned = { ...document };
-      delete unsigned[field];
-      if (declared !== canonicalSignatureDigest(unsigned)) throw new MemoryReferenceConflict({
-        operation: "resolve", path, message: `${field} does not match the evidence contents`,
-      });
-      return document;
-    };
-    const decodeSigned = <A>(
-      path: string,
-      schema: Schema.Codec<A>,
-      field: "receiptSha256" | "certificateSha256",
-    ): A => {
-      const decoded = Schema.decodeUnknownResult(schema)(verifySigned(path, field));
-      if (Result.isFailure(decoded)) {
-        const input = JSON.parse(this.targetSource(path).source) as { format?: unknown };
-        const legacy = input.format === "niceeval.e2e-case-receipt/v1" || input.format === "niceeval.e2e-takeover-certificate/v1";
-        throw new MemoryReferenceConflict({ operation: "resolve", path, message: legacy ? "legacy v1 evidence is read-only history and unavailable for current fixed validation" : "invalid or incomplete signed evidence" });
-      }
-      return decoded.success;
-    };
-    const verifySignedInventory = (path: string) => {
-      const source = this.targetSource(path).source;
-      preimages.add(path);
-      const input = JSON.parse(source) as Record<string, unknown>;
-      const declared = input.digest;
-      const unsigned = { ...input };
-      delete unsigned.digest;
-      if (declared !== canonicalDigest(unsigned)) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "inventory digest does not match its contents" });
-      const decoded = Schema.decodeUnknownResult(InventorySchema)(input);
-      if (Result.isFailure(decoded)) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "invalid inventory evidence" });
-      return decoded.success;
-    };
+    const memoryId = memoryPath.slice("memory/".length, -3); const memory = this.read(memoryId).metadata;
+    if (memory.memoryKind !== "problem" || (options.requireOpen !== false && memory.state !== "open")) throw new MemoryReferenceConflict({ operation: "resolve", path: memoryPath, message: "fixed gate requires the current open Problem Memory" });
+    if (related.length === 0) throw new MemoryReferenceConflict({ operation: "resolve", path: memoryPath, message: "fixed gate requires a current regression case" });
+    const preimages = new Set<string>([memoryPath]); const cases: unknown[] = [];
     for (const test of related) {
-      const indexPath = `${test.path}.cases.evidence.json`;
-      preimages.add(test.path);
+      const indexPath = test.path + ".cases.evidence.json"; const index = checked(indexPath, IndexSchema, decodeJson(indexPath, this.targetSource(indexPath).source));
+      preimages.add(indexPath); const entry = index.current[test.caseId]?.[memoryPath];
+      if (entry === undefined) throw new MemoryReferenceConflict({ operation: "resolve", path: indexPath, message: "no current evidence for selector and Memory" });
+      const inventoryRaw = this.targetSource(entry.inventory.path).source; preimages.add(entry.inventory.path);
+      const inventoryInput = objectInput(entry.inventory.path, decodeJson(entry.inventory.path, inventoryRaw)); const inventory = checked(entry.inventory.path, InventorySchema, inventoryInput);
+      const inventoryUnsigned = { ...inventoryInput }; delete inventoryUnsigned.digest;
+      if (inventory.digest !== canonicalDigest(inventoryUnsigned) || inventory.digest !== entry.inventory.digest || inventory.findings.length !== 0 || inventory.bodyExecutions !== 0 || inventory.forbiddenSetupExecutions !== 0 || !inventory.cases.some((item) => item.path + "#" + item.caseId === test.selector)) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.inventory.path, message: "inventory is not a clean current selector inventory" });
       let projectDirectory = test.path.slice(0, test.path.lastIndexOf("/"));
       while (projectDirectory.startsWith("e2e/") && !existsSync(join(this.#root, projectDirectory, "project.json"))) projectDirectory = projectDirectory.slice(0, projectDirectory.lastIndexOf("/"));
-      if (!projectDirectory.startsWith("e2e/") || !existsSync(join(this.#root, projectDirectory, "project.json"))) throw new MemoryReferenceConflict({ operation: "resolve", path: test.path, message: "cannot locate the E2E source projection root" });
+      if (!projectDirectory.startsWith("e2e/") || !existsSync(join(this.#root, projectDirectory, "project.json"))) throw new MemoryReferenceConflict({ operation: "resolve", path: test.path, message: "cannot locate E2E project root" });
       const currentSource = resolveRepositorySourceIdentity(this.#root, join(this.#root, projectDirectory), test.selector);
-      preimages.add(currentSource.declarationFile);
-      preimages.add(currentSource.ownerRef.slice(0, currentSource.ownerRef.lastIndexOf("#")));
-      preimages.add(currentSource.contractRef.split("#", 1)[0]!);
-      for (const file of currentSource.projection.files) preimages.add(`${projectDirectory}/${file.path}`);
-      const index = decode(indexPath, EvidenceIndexSchema);
-      const entry = index.current[test.caseId]?.[memoryPath];
-      if (entry === undefined) throw new MemoryReferenceConflict({
-        operation: "resolve", path: indexPath, message: `no current evidence for ${test.selector} and ${memoryPath}`,
-      });
-      const inventoryInput = verifySignedInventory(entry.inventory.path);
-      preimages.add(entry.inventory.path);
-      if (inventoryInput.digest !== entry.inventory.digest || inventoryInput.findings.length !== 0 ||
-        inventoryInput.bodyExecutions !== 0 || inventoryInput.forbiddenSetupExecutions !== 0 ||
-        !inventoryInput.cases.some((item) => `${item.path}#${item.caseId}` === test.selector)) {
-        throw new MemoryReferenceConflict({ operation: "resolve", path: entry.inventory.path, message: "inventory does not safely collect the live case selector" });
-      }
-      const receipt = (path: string, expectedDigest?: string) => {
-        const raw = this.targetSource(path).source;
-        if (expectedDigest !== undefined && traceDigest(raw) !== expectedDigest) throw new MemoryReferenceConflict({
-          operation: "resolve", path, message: "evidence index digest does not match receipt bytes",
-        });
-        const value = decodeSigned(path, FormalReceiptSchema, "receiptSha256");
-        let receiptSource;
-        try { receiptSource = decodeRepositorySourceIdentityV2(value.source); }
-        catch (cause) { throw new MemoryReferenceConflict({ operation: "resolve", path, message: message(cause) }); }
-        if (value.selector !== test.selector || value.caseId !== test.caseId || value.inventoryDigest !== inventoryInput.digest ||
-          value.cleanup.ok !== true || !sameRepositorySourceIdentity(receiptSource, currentSource)) {
-          throw new MemoryReferenceConflict({ operation: "resolve", path, message: "formal v2 receipt diverges from selector, inventory, code projection, owner, or contract source" });
-        }
-        return { ...value, source: receiptSource };
+      preimages.add(currentSource.declarationFile); preimages.add(currentSource.binding.contractRef.split("#", 1)[0]!);
+      for (const file of currentSource.projection.files) preimages.add(projectDirectory + "/" + file.path);
+      const readReceipt = (file: { path: string; digest?: string }) => {
+        const raw = this.targetSource(file.path).source; preimages.add(file.path); if (file.digest !== undefined && traceDigest(raw) !== file.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: "evidence digest mismatch" });
+        const input = objectInput(file.path, decodeJson(file.path, raw)); const declared = input.receiptSha256; const body = { ...input }; delete body.receiptSha256;
+        if (declared !== canonicalSignatureDigest(body)) throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: "receipt signature mismatch" });
+        const receipt = checked(file.path, ReceiptSchema, input); let source;
+        try { source = decodeRepositorySourceIdentityV3(receipt.source); } catch (cause) { throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: message(cause) }); }
+        if (receipt.selector !== test.selector || receipt.caseId !== test.caseId || receipt.inventoryDigest !== inventory.digest || !receipt.cleanup.ok || !sameRepositorySourceIdentity(source, currentSource)) throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: "receipt does not match current selector/source" });
+        return { receipt, source };
       };
-      const red = receipt(entry.red.path, entry.red.digest);
-      const green = receipt(entry.green.path, entry.green.digest);
-      if (red.source.projection.digest !== green.source.projection.digest) throw new MemoryReferenceConflict({
-        operation: "resolve", path: indexPath, message: "formal red and green evidence diverge from the same source projection",
-      });
-      if (red.observation !== "red" || red.result.disposition !== "regression" || green.observation !== "green" || green.result.disposition !== "pass") {
-        throw new MemoryReferenceConflict({ operation: "resolve", path: indexPath, message: "fixed evidence requires a formal red regression and green pass" });
-      }
-      const certificateRaw = this.targetSource(entry.certificate.path).source;
-      if (traceDigest(certificateRaw) !== entry.certificate.digest) throw new MemoryReferenceConflict({
-        operation: "resolve", path: entry.certificate.path, message: "evidence index digest does not match certificate bytes",
-      });
-      const certificate = decodeSigned(entry.certificate.path, CertificateSchema, "certificateSha256");
-      if (certificate.selector !== test.selector || certificate.caseId !== test.caseId ||
-        certificate.candidateSha256 !== green.candidate.sha256 || certificate.greenReceipt !== entry.green.path ||
-        certificate.sourceDigest !== green.source.projection.digest ||
-        certificate.observations.singleCase !== entry.green.path ||
-        certificate.observations.isolatedCopies.length !== 3 || certificate.observations.sameCopy.length !== 2 ||
-        certificate.observations.cleanup.length === 0) {
-        throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "takeover certificate is incomplete or diverges from the green case evidence" });
-      }
-      const reliabilityPaths = [
-        ...certificate.observations.isolatedCopies,
-        ...certificate.observations.sameCopy,
-        certificate.observations.defaultParallel,
-      ];
-      if (new Set(reliabilityPaths).size !== 6) throw new MemoryReferenceConflict({
-        operation: "resolve", path: entry.certificate.path, message: "takeover certificate reuses reliability receipts",
-      });
-      const reliability = reliabilityPaths.map((path) => receipt(path));
-      if (reliability.some((item) => item.observation !== "reliability" || item.result.disposition !== "pass" || item.candidate.sha256 !== green.candidate.sha256)) {
-        throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "takeover receipts do not all pass on the green candidate" });
-      }
-      if (reliability.some((item) => item.source.projection.digest !== green.source.projection.digest)) throw new MemoryReferenceConflict({
-        operation: "resolve", path: entry.certificate.path, message: "takeover receipts diverge from the green source projection",
-      });
-      const invocationIds = [red.invocationId, green.invocationId, ...reliability.map((item) => item.invocationId)];
-      if (new Set(invocationIds).size !== invocationIds.length) throw new MemoryReferenceConflict({
-        operation: "resolve", path: entry.certificate.path, message: "formal evidence reuses an invocation identity",
-      });
+      const red = readReceipt(entry.red); const green = readReceipt(entry.green);
+      if (red.receipt.observation !== "red" || red.receipt.result.disposition !== "regression" || green.receipt.observation !== "green" || green.receipt.result.disposition !== "pass" || red.source.projection.digest !== green.source.projection.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: indexPath, message: "red/green gate failed" });
+      const certRaw = this.targetSource(entry.certificate.path).source; preimages.add(entry.certificate.path); if (traceDigest(certRaw) !== entry.certificate.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "evidence index digest does not match certificate bytes" }); const certInput = objectInput(entry.certificate.path, decodeJson(entry.certificate.path, certRaw)); const certUnsigned = { ...certInput }; delete certUnsigned.certificateSha256;
+      if (certInput.certificateSha256 !== canonicalSignatureDigest(certUnsigned)) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "certificate signature mismatch" });
+      const certificate = checked(entry.certificate.path, CertificateSchema, certInput);
+      if (certificate.selector !== test.selector || certificate.caseId !== test.caseId || certificate.candidateSha256 !== green.receipt.candidate.sha256 || certificate.greenReceipt !== entry.green.path || certificate.sourceDigest !== green.source.projection.digest || certificate.observations.singleCase !== entry.green.path || certificate.observations.cleanup.length === 0) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "takeover certificate is incomplete" });
+      const reliabilityPaths = [...certificate.observations.isolatedCopies, ...certificate.observations.sameCopy, certificate.observations.defaultParallel]; if (new Set(reliabilityPaths).size !== 6) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "reliability receipts are not six distinct paths" });
+      const reliability = reliabilityPaths.map((path) => readReceipt({ path }).receipt);
+      if (reliability.some((item) => item.observation !== "reliability" || item.result.disposition !== "pass" || item.candidate.sha256 !== green.receipt.candidate.sha256 || item.source.projection.digest !== green.source.projection.digest)) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "reliability gate failed" });
+      const invocationIds = [red.receipt.invocationId, green.receipt.invocationId, ...reliability.map((item) => item.invocationId)];
+      if (invocationIds.length !== 8 || new Set(invocationIds).size !== 8) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "formal gate requires eight distinct invocation identities" });
+      cases.push({ selector: test.selector, caseId: test.caseId, binding: currentSource.binding, sourceDigest: green.source.projection.digest, candidateSha256: green.receipt.candidate.sha256, red: { path: entry.red.path, digest: traceDigest(this.targetSource(entry.red.path).source) }, green: { path: entry.green.path, digest: traceDigest(this.targetSource(entry.green.path).source) }, certificate: { path: entry.certificate.path, digest: traceDigest(certRaw) }, inventory: { path: entry.inventory.path, digest: traceDigest(inventoryRaw) }, reliability: reliabilityPaths.map((path) => ({ path, digest: traceDigest(this.targetSource(path).source) })), invocationIds });
     }
-    return { selectors: related.map((test) => test.selector).sort(), preimagePaths: [...preimages].sort() };
+    const evidence = decode(RepositoryEvidenceSchema, { memory: memoryPath, epoch: memory.epoch, validatedAt: new Date().toISOString(), cases }, memoryPath);
+    return { selectors: related.map((test) => test.selector).sort(), preimagePaths: [...preimages].sort(), evidence };
   }
-
-  search(pattern: string): readonly MemoryDocument[] {
-    const needle = pattern.toLocaleLowerCase();
-    return this.list().filter((document) => {
-      const metadata = "legacy" in document ? `${document.id}\n${document.title}` : `${document.metadata.id}\n${document.metadata.title}`;
-      return `${metadata}\n${document.body}`.toLocaleLowerCase().includes(needle);
-    });
-  }
-
+  search(pattern: string): readonly MemoryDocument[] { const needle = pattern.toLocaleLowerCase(); return this.list().filter((item) => (item.metadata.id + "\n" + item.metadata.title + "\n" + item.body).toLocaleLowerCase().includes(needle)); }
   check(snapshot: TraceSnapshot): MemoryCheckReceipt {
-    const findings: string[] = [];
-    const legacyFixedMigrationDebt: string[] = [];
-    const documents: MemoryDocument[] = [];
-    try { documents.push(...this.list()); } catch (cause) { findings.push(message(cause)); }
-    const structured = documents.filter((item): item is Exclude<MemoryDocument, { readonly legacy: true }> => !("legacy" in item));
-    const byId = new Map(structured.map((item) => [item.metadata.id, item.metadata]));
-    for (const { metadata } of structured) {
-      if (metadata.kind.type === "problem" && ((metadata.kind.state === "resolved") !== (metadata.kind.resolution !== undefined))) {
-        findings.push(`${metadata.id}: Problem state and resolution disagree`);
+    const findings: string[] = []; const documents = this.list(); const byRef = new Map(documents.map((item) => ["memory/" + item.metadata.id + ".md", item.metadata]));
+    for (const item of documents) {
+      const m = item.metadata;
+      if (m.state === "captured" && (m.resolution !== undefined || m.promotions.length > 0)) findings.push(m.id + ": captured Memory cannot have resolution or promotion");
+      if (m.memoryKind === "note" && (m.state !== "captured" || m.resolution !== undefined || m.promotions.length > 0)) findings.push(m.id + ": note Memory must remain captured");
+      if (m.state === "superseded") {
+        if (m.resolution !== undefined) findings.push(m.id + ": superseded Memory cannot retain resolution");
+        if (m.supersededBy !== undefined && byRef.get(m.supersededBy)?.memoryKind !== m.memoryKind) findings.push(m.id + ": supersededBy must be same-kind or absent");
+        if (m.promotions.length > 0) findings.push(m.id + ": superseded Memory must have no current promotions");
       }
-      if (metadata.kind.type === "problem" && metadata.kind.resolution?.kind === "fixed") {
-        const credentials = metadata.kind.resolution.proof.filter((proof) => proof.startsWith(FIXED_EVIDENCE_CREDENTIAL));
-        const encoded = credentials[0];
-        if (encoded === undefined) legacyFixedMigrationDebt.push(metadata.id);
-        else if (credentials.length !== 1) findings.push(`${metadata.id}: fixed resolution must contain exactly one repository-managed evidence credential`);
-        else try {
-          const credential = JSON.parse(encoded.slice(FIXED_EVIDENCE_CREDENTIAL.length)) as { selectors?: unknown };
-          const validated = this.validateFixedEvidence(snapshot, `memory/${metadata.id}.md`);
-          if (!Array.isArray(credential.selectors) || !credential.selectors.every((item) => typeof item === "string") ||
-            JSON.stringify([...credential.selectors].sort()) !== JSON.stringify(validated.selectors)) {
-            findings.push(`${metadata.id}: fixed evidence credential selectors diverge from current validated evidence`);
-          }
-        } catch (cause) { findings.push(`${metadata.id}: ${message(cause)}`); }
+      if (m.supersededBy !== undefined && byRef.get(m.supersededBy) === undefined) findings.push(m.id + ": supersededBy target is missing");
+      for (const target of m.promotions) try { this.validateTarget(snapshot, target); } catch (cause) { findings.push(m.id + ": " + message(cause)); }
+      const seen = new Set<string>(); let cursor: MemoryMeta | undefined = m;
+      while (cursor?.supersededBy !== undefined) {
+        if (seen.has(cursor.id)) { findings.push(m.id + ": supersession cycle"); break; }
+        seen.add(cursor.id); const next = byRef.get(cursor.supersededBy);
+        if (next === undefined) break;
+        if (next.memoryKind !== m.memoryKind) break;
+        cursor = next;
       }
-      if (metadata.kind.type !== "problem" && metadata.kind.state === "superseded") {
-        const target = metadata.kind.supersededBy === undefined ? undefined : byId.get(metadata.kind.supersededBy);
-        if (target === undefined || target.kind.type !== metadata.kind.type) findings.push(`${metadata.id}: superseding Memory is missing or wrong kind`);
-        if (metadata.promotions.some((promotion) => promotion.current.length > 0)) findings.push(`${metadata.id}: superseded Memory must have no current promotions`);
-      }
-      for (const promotion of metadata.promotions) {
-        for (const target of promotion.current) {
-          try {
-            const validated = this.validateTarget(snapshot, target);
-            if (validated.kind !== promotion.kind) findings.push(`${metadata.id}: ${target} is in the wrong ${promotion.kind} bucket`);
-          } catch (cause) { findings.push(`${metadata.id}: ${message(cause)}`); }
+      if (m.resolution?.kind === "fixed" && m.resolution.evidenceLevel === "repository") {
+        try {
+          if (m.resolution.repositoryEvidence.epoch !== m.epoch || m.resolution.repositoryEvidence.memory !== "memory/" + m.id + ".md") throw new Error("repository evidence is not bound to the current Memory epoch/path");
+          const current = this.validateFixedEvidence(snapshot, "memory/" + m.id + ".md", { requireOpen: false }).evidence;
+          const { validatedAt: _storedAt, ...storedFacts } = m.resolution.repositoryEvidence;
+          const { validatedAt: _currentAt, ...currentFacts } = current;
+          if (canonical(storedFacts) !== canonical(currentFacts)) findings.push(m.id + ": repository evidence facts changed; re-resolve with current evidence");
+        } catch (cause) {
+          const detail = message(cause); findings.push(m.id + ": " + (/missing|not found|unavailable|no current/u.test(detail) ? "unavailable: " : "repository evidence invalid: ") + detail);
         }
-      }
-    }
-    for (const { metadata } of structured) {
-      if (metadata.kind.type === "problem") continue;
-      const seen = new Set<string>(); let cursor: MemoryV1 | undefined = metadata;
-      while (cursor !== undefined && cursor.kind.type !== "problem" && cursor.kind.supersededBy !== undefined) {
-        if (seen.has(cursor.id)) { findings.push(`${metadata.id}: supersession cycle`); break; }
-        seen.add(cursor.id); cursor = byId.get(cursor.kind.supersededBy);
       }
     }
     this.#checkRegressionReferences(snapshot, findings);
-    return {
-      ok: findings.length === 0,
-      checked: documents.length,
-      legacy: documents.filter((item) => "legacy" in item).length,
-      legacyFixedMigrationDebt: legacyFixedMigrationDebt.sort(),
-      findings,
-    };
+    return { ok: findings.length === 0, checked: documents.length, findings };
   }
-
   #checkRegressionReferences(snapshot: TraceSnapshot, findings: string[]): void {
     const byPath = new Map(snapshot.memory.map((memory) => [memory.path, memory]));
-    for (const test of snapshot.tests) {
-      for (const reference of test.regressions) {
-        const target = byPath.get(reference.split("#", 1)[0] ?? reference);
-        if (target === undefined) findings.push(`${test.selector}: regression Memory ${reference} is missing`);
-        else if (target.kind !== "problem" && target.kind !== "legacy/unstructured") {
-          findings.push(`${test.selector}: regression must reference Problem Memory`);
-        }
-      }
+    for (const test of snapshot.tests) for (const reference of test.regressions) {
+      const target = byPath.get(reference.split("#", 1)[0] ?? reference);
+      if (target === undefined) findings.push(test.selector + ": regression Memory " + reference + " is missing");
+      else if (target.kind !== "problem") findings.push(test.selector + ": regression must reference Problem Memory");
     }
   }
 }
-
-export const memoryEffect = <A>(operation: string, thunk: () => A): Effect.Effect<A, MemoryError> =>
-  Effect.try({
-    try: thunk,
-    catch: (cause) => cause instanceof MemoryFileMissing || cause instanceof MemoryContentInvalid ||
-      cause instanceof MemoryReferenceConflict || cause instanceof LegacyMemoryReadOnly ||
-      cause instanceof MemoryLockConflict || cause instanceof MemoryIoError
-      ? cause : new MemoryIoError({ operation, message: message(cause) }),
-  });
+export const memoryEffect = <A>(operation: string, thunk: () => A): Effect.Effect<A, MemoryError> => Effect.try({ try: thunk, catch: (cause) => cause instanceof MemoryFileMissing || cause instanceof MemoryContentInvalid || cause instanceof MemoryReferenceConflict || cause instanceof MemoryIoError ? cause : new MemoryIoError({ operation, message: message(cause) }) });

@@ -1,5 +1,7 @@
 # {{title}}
 
+Before comparing plans, read `docs/constitution.md` and record every applicable real clause anchor in this Design's `constitutionRefs` metadata.
+
 ## Problem
 
 Describe the decision to make and why comparing alternatives is necessary.

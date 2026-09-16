@@ -9,7 +9,9 @@ import { readEvidence, runCase, verifyFixedEvidence } from '../dist/evidence.js'
 import { OwnedProcessLive, runOwnedProcess } from '../dist/owned-process.js';
 import { loadDocuments } from '../dist/documents.js';
 import { LocalRepository, initialize } from '../dist/storage.js';
-import { AnnotatedCaseSchema, ProjectSchema, type AnnotatedCase } from '../dist/shared.js';
+import { AnnotatedCaseSchema, ConcordError, ProjectSchema, canonical, objectDigest, type AnnotatedCase } from '../dist/shared.js';
+import { readProjectConfig, writeProjectConfig } from './support.js';
+import { deriveTestReference } from '../dist/test-reference.js';
 
 function write(root: string, path: string, source: string) { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), source); }
 const consumer = Effect.acquireRelease(
@@ -30,13 +32,12 @@ const withRepository = <A, E>(root: string, use: (repo: LocalRepository) => Effe
   Effect.scoped(repository(root).pipe(Effect.flatMap(use)));
 const feature = `---\nformat: concord.document/v1\nid: example\ntitle: Example\ncreatedAt: 2026-01-01T00:00:00.000Z\nkind: feature\n---\n\nFeature\n`;
 const problem = `---\nformat: concord.document/v1\nid: example-problem\ntitle: Problem\ncreatedAt: 2026-01-01T00:00:00.000Z\nkind: memory\nmemoryKind: problem\nstate: open\nepoch: 0\npromotions: []\nhistory: []\n---\n\nProblem\n`;
-const selected: AnnotatedCase = Schema.decodeUnknownSync(AnnotatedCaseSchema)({ id: 'example-case', file: 'test/example.test.mjs', line: 5, name: 'case', contract: 'docs/feature/example.md', regressions: ['memory/example-problem.md'], status: 'active', framework: 'node:test', skipped: false });
-function setup(root: string, source = "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { value } from '../fixture.mjs';\n// @concord-case example-case\n// @concord-contract docs/feature/example.md\n// @concord-regression memory/example-problem.md\ntest('case', () => assert.equal(value, true));\n") { write(root, 'docs/feature/example.md', feature); write(root, 'memory/example-problem.md', problem); write(root, 'fixture.mjs', 'export const value = false;\n'); write(root, selected.file, source); }
+const selected: AnnotatedCase = Schema.decodeUnknownSync(AnnotatedCaseSchema)({ id: deriveTestReference('test/example.test.mjs', 'test/example.test.mjs', 'case'), file: 'test/example.test.mjs', line: 5, name: 'case', contract: 'docs/feature/example/README.md', contractKind: 'feature', regressions: ['memory/example-problem.md'], status: 'active', framework: 'node:test', skipped: false });
+function setup(root: string, source = "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { value } from '../fixture.mjs';\n// @feature docs/feature/example/README.md\n// @regression memory/example-problem.md\ntest('case', () => assert.equal(value, true));\n") { write(root, 'docs/feature/example/README.md', feature); write(root, 'memory/example-problem.md', problem); write(root, 'fixture.mjs', 'export const value = false;\n'); write(root, selected.file, source); }
 const issue = (repo: LocalRepository, item: AnnotatedCase = selected) =>
   runCase(repo, item, loadDocuments(repo)).pipe(Effect.provide(OwnedProcessLive));
 
-// @concord-case evidence-binds-red-green
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('binds real red-to-green receipts and current fixed proof', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   yield* Effect.sync(() => setup(root));
@@ -59,11 +60,37 @@ test('binds real red-to-green receipts and current fixed proof', () => Effect.ru
   });
 }))));
 
-// @concord-case evidence-rejects-skipped-execution
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
+test('rejects pre-binding receipts without converting them into current proof', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
+  const root = yield* consumer;
+  yield* Effect.sync(() => setup(root));
+  const repo = yield* repository(root);
+  const red = yield* issue(repo);
+  yield* Effect.sync(() => write(root, 'fixture.mjs', 'export const value = true;\n'));
+  const green = yield* issue(repo);
+  yield* Effect.sync(() => {
+    const legacy = (sourceId: string, id: string): void => {
+      const path = join(repo.privateDir, 'evidence', `${sourceId}.json`);
+      const value = JSON.parse(readFileSync(path, 'utf8')) as Record<string, unknown>;
+      delete value.configPath; delete value.configDigest; delete value.integrity;
+      const unsigned = { ...value, id };
+      writeFileSync(join(repo.privateDir, 'evidence', `${id}.json`), `${canonical({ ...unsigned, integrity: objectDigest(unsigned) })}\n`);
+    };
+    const legacyRed = 'ccev_11111111111111111111111111111111';
+    const legacyGreen = 'ccev_22222222222222222222222222222222';
+    legacy(red.id, legacyRed); legacy(green.id, legacyGreen);
+    assert.throws(() => readEvidence(repo, legacyGreen), { code: 'EvidenceMigrationRequired' });
+    const documents = loadDocuments(repo);
+    const owner = documents.find((document) => document.path === 'memory/example-problem.md');
+    assert.ok(owner);
+    assert.throws(() => verifyFixedEvidence(repo, documents, [selected], owner, legacyRed, legacyGreen), (cause) => cause instanceof ConcordError && cause.code === 'EvidenceMigrationRequired');
+  });
+}))));
+
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('rejects all-skipped Node TAP execution', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
-  yield* Effect.sync(() => setup(root, "import { test } from 'node:test';\n// @concord-case example-case\n// @concord-contract docs/feature/example.md\n// @concord-regression memory/example-problem.md\ntest.skip('case', () => {});\n"));
+  yield* Effect.sync(() => setup(root, "import { test } from 'node:test';\n// @feature docs/feature/example/README.md\n// @regression memory/example-problem.md\ntest.skip('case', () => {});\n"));
   const repo = yield* repository(root);
   const receipt = yield* issue(repo);
   yield* Effect.sync(() => {
@@ -72,37 +99,35 @@ test('rejects all-skipped Node TAP execution', () => Effect.runPromise(Effect.sc
   });
 }))));
 
-// @concord-case evidence-invalidates-definition-drift
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('preserves generic unknown and invalidates owner/candidate drift during commands', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   const config = yield* Effect.sync(() => {
     setup(root);
-    const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root, 'concord.json'), 'utf8'));
+    const decoded = readProjectConfig(root);
     const commandConfig = { ...decoded, runner: { kind: 'command' as const, argv: ['node', '-e', 'process.exit(0)'], sourceFiles: [], timeoutMs: 2000 } };
-    write(root, 'concord.json', `${JSON.stringify(commandConfig)}\n`);
+    writeProjectConfig(root, commandConfig);
     return commandConfig;
   });
   const receipt = yield* withRepository(root, (repo) => issue(repo, { ...selected, framework: 'vitest' }));
   yield* Effect.sync(() => {
     assert.equal(receipt.commandOutcome, 'pass');
     assert.equal(receipt.execution, 'unknown');
-    config.runner.argv = ['node', '-e', "require('node:fs').appendFileSync('docs/feature/example.md','changed')"];
-    write(root, 'concord.json', `${JSON.stringify(config)}\n`);
+    config.runner.argv = ['node', '-e', "require('node:fs').appendFileSync('docs/feature/example/README.md','changed')"];
+    writeProjectConfig(root, config);
   });
   const ownerDrift = yield* withRepository(root, (repo) => issue(repo, { ...selected, framework: 'vitest' }));
   yield* Effect.sync(() => {
     assert.equal(ownerDrift.commandOutcome, 'invalid');
-    write(root, 'docs/feature/example.md', feature);
+    write(root, 'docs/feature/example/README.md', feature);
     config.runner.argv = ['node', '-e', "require('node:fs').appendFileSync('fixture.mjs','changed')"];
-    write(root, 'concord.json', `${JSON.stringify(config)}\n`);
+    writeProjectConfig(root, config);
   });
   const candidateDrift = yield* withRepository(root, (repo) => issue(repo, { ...selected, framework: 'vitest' }));
   yield* Effect.sync(() => assert.equal(candidateDrift.commandOutcome, 'invalid'));
 }))));
 
-// @concord-case runner-cleans-timeout-and-output-limit
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('cleans timed-out process groups and bounds output', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   const timeout = yield* runOwnedProcess(['node', '-e', 'setInterval(() => {}, 1000)'], { cwd: root, timeoutMs: 50 }).pipe(Effect.provide(OwnedProcessLive));
@@ -117,8 +142,7 @@ test('cleans timed-out process groups and bounds output', () => Effect.runPromis
   });
 }))));
 
-// @concord-case runner-escalates-term-resistant-command
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('output limit escalates TERM-resistant commands without waiting for the command timeout', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   const started = yield* Effect.sync(() => Date.now());

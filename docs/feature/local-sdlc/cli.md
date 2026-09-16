@@ -12,7 +12,7 @@
 
 ## 实现关联
 
-`init --source-root src` 可重复配置实现源码根；已有项目维护 `concord.json` 的可选 sourceRoots。`code annotate <id> --scope file|node|region --contract <ref>` 只生成注释，重复 contract 可关联多个契约。`code list/show` 检查声明，`code locate <path> --line <n>` 查询全部包含作用域。`trace show` 返回独立 codeDeclarations 和 implements 边；代码声明不代替测试或完成证明。完整语法见 `concord --skill code`。
+`init --source-root src` 可重复配置实现源码根；已有项目维护 `concord.config.ts` 的可选 sourceRoots。`code annotate <id> --scope file|node|region --contract <ref>` 只生成注释，重复 contract 可关联多个契约。`code list/show` 检查声明，`code locate <path> --line <n>` 查询全部包含作用域。`trace show` 返回独立 codeDeclarations 和 implements 边；代码声明不代替测试或完成证明。完整语法见 `concord --skill code`。
 
 ## 测试与证据
 

@@ -10,10 +10,12 @@ import {
   GitBranch,
   Link2,
   Plus,
+  RefreshCw,
   Save,
 } from "lucide-react"
 import * as stylex from "@stylexjs/stylex"
 import * as React from "react"
+import { createPortal } from "react-dom"
 import { Link, Navigate, Outlet, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import type { DocumentKind, DocumentRecord } from "../../src/shared"
@@ -50,9 +52,11 @@ import {
 } from "@/components/ui/select"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { DetailDrawer } from "@/components/detail-drawer"
+import { TerminologyPanel } from "@/components/terminology-panel"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { humanKind } from "@/lib/utils"
+import { researchTopicDirectory } from "@/lib/research-topics"
 import { useWorkspace } from "@/workspace"
 
 import { contractIdentities, ImplementationPanel, TestingPanel } from './operations'
@@ -62,18 +66,18 @@ const descriptions: Record<string, string> = {
   engineering: "测试、构建与维护机制的工程契约。",
   roadmap: "尚未采用的方向与演进计划。",
   design: "备选方案、约束和已作出的技术裁决。",
-  research: "带来源和观察日期的决策输入。",
+  research: "按主题目录自由组织研究正文与资料。",
   memory: "Problem、Decision 与 Insight 的工程记忆。",
   issue: "仅本地的观察草稿，不代表远端 Issue 状态。",
 }
 
 const documentStyles = stylex.create({
-  detailHost: { display: "flex", flex: 1, minHeight: 0 },
-  detailRoot: { display: "flex", flex: { default: 1, "@media (max-width: 760px)": "none" }, flexDirection: "column", minHeight: 0, overflow: { default: "hidden", "@media (max-width: 760px)": "visible" } },
+  detailHost: { display: "flex", flexDirection: "column", flex: "none", minHeight: 0 },
+  detailRoot: { display: "flex", flex: "none", flexDirection: "column", minHeight: 0 },
   tabsHeader: {
     position: "sticky",
     zIndex: 12,
-    top: 0,
+    top: { default: "calc(-1 * var(--page-padding, 0px))", "@media (max-width: 767px)": 0 },
     display: "flex",
     alignItems: { default: "center", "@media (max-width: 760px)": "stretch" },
     flexDirection: { default: "row", "@media (max-width: 760px)": "column" },
@@ -88,17 +92,18 @@ const documentStyles = stylex.create({
   fileLayout: {
     display: "grid",
     gridTemplateColumns: { default: "minmax(210px, 260px) minmax(0, 1fr)", "@media (max-width: 760px)": "1fr" },
-    alignItems: "stretch",
+    alignItems: "start",
     gap: 16,
-    height: { default: "100%", "@media (max-width: 760px)": "auto" },
-    minHeight: 0,
+    // Keep the sticky tree supported even when the next file is short.
+    minHeight: { default: "calc(100svh - 76px)", "@media (max-width: 760px)": 0 },
   },
   singleFileLayout: { gridTemplateColumns: "minmax(0, 1fr)" },
-  tabPanel: { flex: 1, minHeight: 0, overflowY: "auto", scrollbarWidth: "none" },
-  bodyPanel: { overflow: "hidden" },
+  tabPanel: { flex: "none", minHeight: 0 },
+  bodyPanel: { overflow: "visible" },
   pathList: {
-    position: "static",
-    maxHeight: { default: "none", "@media (max-width: 760px)": 230 },
+    position: { default: "sticky", "@media (max-width: 760px)": "static" },
+    top: 68,
+    maxHeight: { default: "calc(100svh - 180px)", "@media (max-width: 760px)": 230 },
     overflowY: "auto",
     scrollbarWidth: "none",
     padding: 12,
@@ -108,13 +113,14 @@ const documentStyles = stylex.create({
     borderRadius: "var(--radius)",
     backgroundColor: "var(--card)",
   },
-  preview: { minWidth: 0, minHeight: 0, overflowY: { default: "auto", "@media (max-width: 760px)": "visible" }, overscrollBehavior: "contain", scrollbarWidth: "none" },
+  preview: { minWidth: 0, minHeight: 0 },
   tree: { display: "grid", gap: 1 },
   nested: { marginLeft: 10, paddingLeft: 7, borderLeftWidth: 1, borderLeftStyle: "solid", borderLeftColor: "var(--border)" },
   treeRow: {
-    display: "flex",
+    display: "grid",
+    gridTemplateColumns: "15px 15px minmax(0, 1fr) auto",
     alignItems: "center",
-    gap: 7,
+    columnGap: 7,
     width: "100%",
     minWidth: 0,
     minHeight: 34,
@@ -143,6 +149,10 @@ const documentStyles = stylex.create({
 })
 
 function documentHref(document: DocumentRecord): string {
+  if (document.metadata.kind === "use-case") {
+    const feature = document.metadata.feature.split("/").filter(Boolean).at(-2) ?? document.metadata.feature
+    return `/features/${encodeURIComponent(feature)}/use-cases/${encodeURIComponent(document.metadata.id)}`
+  }
   const sections: Record<string, string> = {
     feature: "features",
     engineering: "engineering",
@@ -153,6 +163,21 @@ function documentHref(document: DocumentRecord): string {
     issue: "issues",
   }
   return `/${sections[document.metadata.kind] ?? "features"}/${encodeURIComponent(document.metadata.id)}`
+}
+
+function relativeMarkdownTarget(currentPath: string, href: string): { path: string; hash: string } | undefined {
+  if (!href || href.startsWith("#") || href.startsWith("/") || /^[a-z][a-z\d+.-]*:/iu.test(href)) return undefined
+  try {
+    const base = new URL(`https://concord.invalid/${currentPath}`)
+    const resolved = new URL(href, base)
+    if (resolved.origin !== base.origin) return undefined
+    let path = decodeURIComponent(resolved.pathname).replace(/^\/+/, "")
+    if (resolved.pathname.endsWith("/")) path += "README.md"
+    if (!path.endsWith(".md")) return undefined
+    return { path, hash: resolved.hash }
+  } catch {
+    return undefined
+  }
 }
 
 function featureMatches(reference: string, feature: DocumentRecord): boolean {
@@ -179,9 +204,7 @@ function CreateDocument({
   const [id, setId] = React.useState("")
   const [title, setTitle] = React.useState("")
   const [body, setBody] = React.useState("")
-  const [observedAt, setObservedAt] = React.useState(
-    new Date().toISOString().slice(0, 10)
-  )
+  const [observedAt, setObservedAt] = React.useState("")
   const [sources, setSources] = React.useState("")
   const [alternatives, setAlternatives] = React.useState("")
   const [pages, setPages] = React.useState<TemplatePage[]>([])
@@ -202,7 +225,7 @@ function CreateDocument({
       ...(feature ? { feature } : {}),
       ...(kind === "research"
         ? {
-            observedAt,
+            ...(observedAt.trim() ? { observedAt: observedAt.trim() } : {}),
             sources: sources
               .split("\n")
               .map((value) => value.trim())
@@ -283,21 +306,19 @@ function CreateDocument({
             )}
             {kind === "research" && (
               <>
-                <Field label="观察日期">
+                <Field label="观察日期（可选）">
                   <Input
                     aria-label="观察日期"
                     type="date"
                     value={observedAt}
                     onChange={(event) => setObservedAt(event.target.value)}
-                    required
                   />
                 </Field>
-                <Field label="来源" hint="每行一个来源">
+                <Field label="来源（可选）" hint="每行一个来源">
                   <Textarea
                     aria-label="Research 来源"
                     value={sources}
                     onChange={(event) => setSources(event.target.value)}
-                    required
                   />
                 </Field>
               </>
@@ -422,12 +443,12 @@ function DocumentSummary({ document }: { document: DocumentRecord }) {
       <p>
         {metadata.decision
           ? `已选择 ${metadata.decision.selected}`
-          : `${metadata.alternatives.length} 个备选方案`}
+          : metadata.deferral ? "已暂缓" : `${metadata.alternatives.length} 个备选方案`}
       </p>
     )
   }
   if (metadata.kind === "research") {
-    return <p>{metadata.observedAt} · {metadata.sources.length} 个来源</p>
+    return <p>{[metadata.observedAt, metadata.sources.length ? `${metadata.sources.length} 个来源` : undefined].filter(Boolean).join(" · ")}</p>
   }
   if (metadata.kind === "memory") {
     return (
@@ -540,7 +561,8 @@ export function DocumentDetailPage({ kind }: { kind: DocumentKind }) {
       </Link>
     )
   }
-  return <>{back}<DocumentLayout key={document.path} document={document} /></>
+  const layoutKey = kind === "research" ? researchTopicDirectory(document.path) : document.path
+  return <>{back}<DocumentLayout key={layoutKey} document={document} /></>
 }
 
 function DocumentLayout({
@@ -562,6 +584,8 @@ function DocumentLayout({
   const pages = snapshot.pages.filter(
     (page) => page.documentPath === document.path && page.path !== document.path
   )
+  const showsTerminology = ["feature", "use-case", "roadmap", "design"].includes(document.metadata.kind)
+  const showsDelivery = ["feature", "use-case"].includes(document.metadata.kind)
 
   return (
     <>
@@ -569,8 +593,8 @@ function DocumentLayout({
         <div data-testid="document-header" {...stylex.props(documentStyles.tabsHeader)}>
           <TabsList aria-label="文档详情" {...stylex.props(documentStyles.tabsList)}>
             <TabsTrigger value="body">正文</TabsTrigger>
-            <TabsTrigger value="relations">关系</TabsTrigger>
-            {["feature", "use-case"].includes(document.metadata.kind) && <><TabsTrigger value="implementation">实现</TabsTrigger><TabsTrigger value="testing">测试</TabsTrigger></>}
+            {showsTerminology && <TabsTrigger value="terminology">术语</TabsTrigger>}
+            {showsDelivery && <><TabsTrigger value="implementation">实现</TabsTrigger><TabsTrigger value="testing">测试</TabsTrigger></>}
             <TabsTrigger value="metadata">元数据</TabsTrigger>
             <TabsTrigger value="actions">生命周期</TabsTrigger>
           </TabsList>
@@ -580,18 +604,16 @@ function DocumentLayout({
             <div ref={setEditorToolbar} className="document-editor-actions" />
           </div>}
         </div>
-        {["feature", "use-case"].includes(document.metadata.kind) && <><TabsContent value="implementation" {...stylex.props(documentStyles.tabPanel)}><ImplementationPanel document={document} /></TabsContent><TabsContent value="testing" {...stylex.props(documentStyles.tabPanel)}><TestingPanel document={document} /></TabsContent></>}
+        {showsTerminology && <TabsContent value="terminology" {...stylex.props(documentStyles.tabPanel)}><TerminologyPanel document={document} /></TabsContent>}
+        {showsDelivery && <><TabsContent value="implementation" {...stylex.props(documentStyles.tabPanel)}><ImplementationPanel document={document} /></TabsContent><TabsContent value="testing" {...stylex.props(documentStyles.tabPanel)}><TestingPanel document={document} /></TabsContent></>}
         <TabsContent value="body" {...stylex.props(documentStyles.tabPanel, documentStyles.bodyPanel)}>
           <DocumentFiles document={document} pages={pages} extra={extra} toolbarTarget={editorToolbar} />
-        </TabsContent>
-        <TabsContent value="relations" {...stylex.props(documentStyles.tabPanel)}>
-          <Relationships document={document} />
         </TabsContent>
         <TabsContent value="metadata" {...stylex.props(documentStyles.tabPanel)}>
           <MetadataForm key={document.path} document={document} />
         </TabsContent>
         <TabsContent value="actions" {...stylex.props(documentStyles.tabPanel)}>
-          <Lifecycle document={document} />
+          <Lifecycle key={document.path} document={document} />
         </TabsContent>
       </Tabs>
       {tabNavigation.dialog}
@@ -610,30 +632,67 @@ function DocumentFiles({
   extra?: React.ReactNode
   toolbarTarget?: HTMLElement | null
 }) {
-  const { act, api } = useWorkspace()
-  const [selectedPath, setSelectedPath] = React.useState(document.path)
-  const pageNavigation = useDraftNavigation(setSelectedPath)
+  const { act, api, snapshot } = useWorkspace()
+  const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const topicDirectory = document.metadata.kind === "research" ? researchTopicDirectory(document.path) : undefined
+  const topicDocuments = topicDirectory ? snapshot.documents.filter(item => item.metadata.kind === "research" && item.path.startsWith(topicDirectory)) : []
+  const topicPages = topicDirectory ? snapshot.pages.filter(item => item.path.startsWith(topicDirectory)) : pages
+  const files = [...new Map([{ path: document.path, readOnly: false }, ...topicDocuments.map(item => ({ path: item.path, readOnly: false })), ...topicPages].map(item => [item.path, item])).values()]
+  const requestedFile = params.get("file")
+  const initialPath = requestedFile && files.some(file => file.path === requestedFile) ? requestedFile : document.path
+  const [selection, setSelection] = React.useState({ initialPath, path: initialPath })
+  const selectedPath = selection.initialPath === initialPath ? selection.path : initialPath
+  if (selection.initialPath !== initialPath) setSelection({ initialPath, path: initialPath })
+  const layoutRef = React.useRef<HTMLDivElement>(null)
+  const treeRef = React.useRef<HTMLElement>(null)
+  const pageNavigation = useDraftNavigation((path: string) => {
+    const layout = layoutRef.current
+    const tree = treeRef.current
+    const viewport = layout?.closest('.page')
+    if (layout && tree && viewport && getComputedStyle(tree).position === 'sticky') {
+      // Show the next file from its beginning without moving the sticky tree.
+      // Reset only the distance already scrolled past the tree's visible top.
+      viewport.scrollTo({ top: Math.max(0, viewport.scrollTop + layout.getBoundingClientRect().top - tree.getBoundingClientRect().top), behavior: 'instant' })
+    }
+    const owner = topicDocuments.filter(item => path === item.path || path.startsWith(item.path.slice(0, -"README.md".length))).sort((a, b) => b.path.length - a.path.length)[0]
+    if (owner && owner.path !== document.path) navigate(`/research/${encodeURIComponent(owner.metadata.id)}?file=${encodeURIComponent(path)}`)
+    else setSelection({ initialPath, path })
+  })
+  const followMarkdownLink = (href: string) => {
+    const target = relativeMarkdownTarget(selectedPath, href)
+    if (!target) return false
+    const targetFile = snapshot.pages.find(item => item.path === target.path)
+    const targetDocument = snapshot.documents.find(item => item.path === target.path)
+    const ownerPath = targetFile?.documentPath ?? targetDocument?.path
+    const owner = snapshot.documents.find(item => item.path === ownerPath)
+    if (!owner) return false
+    if (owner.path === document.path && files.some(file => file.path === target.path)) {
+      pageNavigation.request(target.path)
+      return true
+    }
+    const query = target.path === owner.path ? "" : `?file=${encodeURIComponent(target.path)}`
+    navigate(`${documentHref(owner)}${query}${target.hash}`)
+    return true
+  }
   const [selected, setSelected] = React.useState<ViewFile | null>(null)
-  const previewRef = React.useRef<HTMLElement>(null)
   const [error, setError] = React.useState("")
+  const [fileAttempt, setFileAttempt] = React.useState(0)
   const [open, setOpen] = React.useState(false)
   const [page, setPage] = React.useState("")
   const [plan, setPlan] = React.useState("")
-  React.useEffect(() => { setSelectedPath(document.path) }, [document.path])
   React.useEffect(() => {
     const controller = new AbortController()
     setSelected(null)
     setError("")
     void api.file(selectedPath, controller.signal).then((file) => {
-      setSelected(file)
-      previewRef.current?.scrollTo({ top: 0 })
+      if (!controller.signal.aborted) setSelected(file)
     }).catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
     })
     return () => controller.abort()
-  }, [api, selectedPath])
-  const files = [{ path: document.path, readOnly: false }, ...pages]
-  const ownerDirectory = document.path.slice(0, document.path.lastIndexOf("/") + 1)
+  }, [api, selectedPath, fileAttempt])
+  const ownerDirectory = topicDirectory ?? document.path.slice(0, document.path.lastIndexOf("/") + 1)
   const tree = React.useMemo(() => buildFileTree(files, ownerDirectory), [files, ownerDirectory])
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(() => new Set(treeDirectoryPaths(tree)))
   React.useEffect(() => {
@@ -645,7 +704,7 @@ function DocumentFiles({
       return next
     })
   }, [ownerDirectory, selectedPath])
-  const allowed = ["feature", "roadmap", "design", "engineering"].includes(
+  const allowed = ["feature", "roadmap", "design", "engineering", "research"].includes(
     document.metadata.kind
   )
   const showPathList = allowed || pages.length > 0
@@ -659,7 +718,8 @@ function DocumentFiles({
           | "feature"
           | "roadmap"
           | "design"
-          | "engineering",
+          | "engineering"
+          | "research",
         id: document.metadata.id,
         page,
         ...(plan ? { plan } : {}),
@@ -670,8 +730,8 @@ function DocumentFiles({
     setPage("")
   }
   return (
-    <div {...stylex.props(documentStyles.fileLayout, !showPathList && documentStyles.singleFileLayout)}>
-      {showPathList && <aside data-testid="document-file-tree" {...stylex.props(documentStyles.pathList)}>
+    <div ref={layoutRef} {...stylex.props(documentStyles.fileLayout, !showPathList && documentStyles.singleFileLayout)}>
+      {showPathList && <aside ref={treeRef} data-testid="document-file-tree" {...stylex.props(documentStyles.pathList)}>
         <div className="section-heading section-heading--compact">
           <strong>文件</strong>
           {allowed && (
@@ -693,10 +753,14 @@ function DocumentFiles({
           onSelect={(path) => { if (path !== selectedPath) pageNavigation.request(path) }}
         />
       </aside>}
-      <section ref={previewRef} data-testid="document-file-preview" {...stylex.props(documentStyles.preview)}>
-        {error && <div className="form-error">{error}</div>}
-        {selected ? (
-          <><MarkdownEditor key={selected.path} initial={selected} onSaved={setSelected} toolbarTarget={toolbarTarget} />{selected.path === document.path && extra}</>
+      <section data-testid="document-file-preview" {...stylex.props(documentStyles.preview)}>
+        {selected?.path !== selectedPath && toolbarTarget && createPortal(<div className="toolbar-actions">
+          <Button variant="outline" size="sm" disabled><RefreshCw /> 重新载入</Button>
+          <span role="status">{error ? '载入失败' : '正在载入…'}</span>
+        </div>, toolbarTarget)}
+        {error && <div className="form-error">{error} <Button size="sm" variant="outline" onClick={() => setFileAttempt((attempt) => attempt + 1)}>重试</Button></div>}
+        {selected?.path === selectedPath ? (
+          <><MarkdownEditor key={selected.path} initial={selected} onSaved={setSelected} toolbarTarget={toolbarTarget} onFollowLink={followMarkdownLink} />{selected.path === document.path && extra}</>
         ) : (
           !error && <DocumentSkeleton />
         )}
@@ -822,53 +886,6 @@ function FileTree({ nodes, expanded, selectedPath, onToggle, onSelect, depth = 0
   })}</div>
 }
 
-function Relationships({ document }: { document: DocumentRecord }) {
-  const { snapshot } = useWorkspace()
-  const identities = contractIdentities(snapshot, document)
-  const edges = snapshot.edges.filter(edge => identities.has(edge.from) || identities.has(edge.to))
-  const cases = snapshot.cases.filter(item => identities.has(item.contract.split('#')[0]!))
-  const codes = snapshot.codes.filter((item) =>
-    item.contracts.some(
-      (contract) =>
-        identities.has(contract.split('#')[0]!)
-    )
-  )
-  return (
-    <div className="three-column">
-      <Card>
-        <CardHeader><CardTitle>领域关系</CardTitle></CardHeader>
-        <CardContent>
-          {edges.length ? edges.map((edge, index) => (
-            <div className="mini-record" key={`${edge.from}-${edge.to}-${index}`}>
-              <code>{edge.from}</code><Badge variant="outline">{edge.relation}</Badge><code>{edge.to}</code>
-            </div>
-          )) : <p className="muted">没有派生关系。</p>}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle>测试声明</CardTitle></CardHeader>
-        <CardContent>
-          {cases.length ? cases.map((item) => (
-            <div className="mini-record" key={item.id}>
-              <strong>{item.name}</strong><span>{item.file}:{item.line}</span>
-            </div>
-          )) : <p className="muted">没有关联测试。</p>}
-        </CardContent>
-      </Card>
-      <Card>
-        <CardHeader><CardTitle>实现声明</CardTitle></CardHeader>
-        <CardContent>
-          {codes.length ? codes.map((item) => (
-            <div className="mini-record" key={item.id}>
-              <strong>{item.symbol ?? item.id}</strong><span>{item.file}:{item.line}–{item.endLine}</span>
-            </div>
-          )) : <p className="muted">没有关联实现。</p>}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
 function MetadataForm({ document }: { document: DocumentRecord }) {
   const { api, refresh, setDirty, notify } = useWorkspace()
   const [baseline, setBaseline] = React.useState(document)
@@ -878,7 +895,7 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
   const [sources, setSources] = React.useState(research?.sources.join("\n") ?? "")
   const dirty = title !== baseline.metadata.title ||
     (baseline.metadata.kind === "research" &&
-      (observedAt !== baseline.metadata.observedAt ||
+      (observedAt !== (baseline.metadata.observedAt ?? "") ||
         sources !== baseline.metadata.sources.join("\n")))
   const revision = JSON.stringify([title, observedAt, sources])
   const currentRevision = React.useRef(revision)
@@ -897,7 +914,7 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
         title,
         ...(baseline.metadata.kind === "research"
           ? {
-              observedAt,
+              observedAt: observedAt.trim() || null,
               sources: sources.split("\n").map((value) => value.trim()).filter(Boolean),
             }
           : {}),
@@ -910,7 +927,7 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
       if (currentRevision.current === sent) {
       setTitle(saved.metadata.title)
       if (saved.metadata.kind === "research") {
-        setObservedAt(saved.metadata.observedAt)
+        setObservedAt(saved.metadata.observedAt ?? "")
         setSources(saved.metadata.sources.join("\n"))
       }
       setDirty(false)
@@ -933,7 +950,7 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
           </Field>
           {baseline.metadata.kind === "research" && (
             <>
-              <Field label="观察日期"><Input aria-label="观察日期" value={observedAt} onChange={(event) => setObservedAt(event.target.value)} /></Field>
+              <Field label="观察日期（可选）"><Input aria-label="观察日期" value={observedAt} onChange={(event) => setObservedAt(event.target.value)} /></Field>
               <Field label="来源"><Textarea aria-label="来源" value={sources} onChange={(event) => setSources(event.target.value)} /></Field>
             </>
           )}
@@ -958,6 +975,9 @@ function Lifecycle({ document }: { document: DocumentRecord }) {
             <Definition label="ID"><code>{metadata.id}</code></Definition>
             <Definition label="创建于">{metadata.createdAt}</Definition>
             {"state" in metadata && <Definition label="状态">{String(metadata.state)}</Definition>}
+            {metadata.kind === "roadmap" && metadata.cancellation && <><Definition label="取消理由">{metadata.cancellation.reason}</Definition><Definition label="原文来源">{metadata.cancellation.source.path}</Definition></>}
+            {metadata.kind === "design" && metadata.deferral && <><Definition label="状态">已暂缓</Definition><Definition label="暂缓理由">{metadata.deferral.reason}</Definition><Definition label="原文来源">{metadata.deferral.source.path}</Definition></>}
+            {metadata.kind === "design" && metadata.decision && <><Definition label="已选择">{metadata.decision.selected}</Definition><Definition label="裁决理由">{metadata.decision.reason}</Definition><Definition label="裁决时间">{metadata.decision.at ?? "原文未记载"}</Definition></>}
           </dl>
         </CardContent>
       </Card>
@@ -995,14 +1015,15 @@ function LifecycleActions({ document }: { document: DocumentRecord }) {
     <Card>
       <CardHeader><CardTitle>生命周期操作</CardTitle><CardDescription>使用明确动作维护状态与历史。</CardDescription></CardHeader>
       <CardContent><div className="form-grid">
-        {metadata.kind === "roadmap" && (
+        {metadata.kind === "roadmap" && metadata.state === "planned" && (
           <><Field label="采用为 Feature ID"><Input aria-label="采用为 Feature ID" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button onClick={() => invoke({ action: "roadmap.adopt", id: metadata.id, feature: target }, "Roadmap 已采用为 Feature。")}>采用 Roadmap</Button></>
         )}
-        {metadata.kind === "design" && (
+        {metadata.kind === "design" && !metadata.decision && (
           <><Field label="选定方案"><Select value={selected} onValueChange={setSelected}><SelectTrigger aria-label="选定设计方案"><SelectValue placeholder="选择方案" /></SelectTrigger><SelectContent>{metadata.alternatives.map((item) => <SelectItem value={item} key={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="关联目标" hint="每行一个引用"><Textarea aria-label="设计关联目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Field label="裁决理由"><Textarea aria-label="设计裁决理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "design.decide", id: metadata.id, selected, targets: target.split("\n").filter(Boolean), reason }, "设计裁决已记录。")}>记录裁决</Button></>
         )}
         {metadata.kind === "memory" && (
           <>
+            {metadata.state === "captured" && metadata.memoryKind !== "note" && <><Field label="激活理由"><Textarea aria-label="Memory 激活理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.activate", id: metadata.id, reason }, "Memory 已激活。")}>激活 Memory</Button></>}
             {metadata.state === "open" ? (
               <><Field label="关闭类型"><Select value={resolution} onValueChange={(value) => setResolution(value as typeof resolution)}><SelectTrigger aria-label="Memory 关闭类型"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="fixed">Fixed（命令证据）</SelectItem><SelectItem value="not-a-bug">Not a bug</SelectItem><SelectItem value="wont-fix">Won&apos;t fix</SelectItem><SelectItem value="external-fixed">External fixed</SelectItem></SelectContent></Select></Field>{resolution === "fixed" && <div className="two-column"><Field label="Red evidence"><Input aria-label="Red evidence" value={red} onChange={(event) => setRed(event.target.value)} list="evidence-ids" /></Field><Field label="Green evidence"><Input aria-label="Green evidence" value={green} onChange={(event) => setGreen(event.target.value)} list="evidence-ids" /></Field></div>}<Field label="理由"><Textarea aria-label="Memory 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.resolve", id: metadata.id, kind: resolution, reason, ...(resolution === "fixed" ? { red, green } : {}) }, "Memory 已关闭。")}>关闭 Memory</Button></>
             ) : (

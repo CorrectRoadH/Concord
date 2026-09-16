@@ -6,29 +6,22 @@ import { Effect, Option, Result } from "effect";
 import { collectRepoCaseInventory, collectWorkspaceCaseInventory, managedInventoryImplementationDigest, readManagedInventoryReceipt, readManagedRedEvidence, readManagedTakeoverEvidence, type CaseInventoryReceipt, type WorkspaceInventoryReceipt } from "../../host.js";
 import { REPOSITORY_ROOT } from "../runtime.js";
 import { compileTrace, compileTraceUnderLease } from "../trace/index.js";
-import { testingOwnerContracts } from "../trace/compiler.js";
-import { markdownAnchor, validateRepoRefTarget } from "../trace/ref.js";
 import { mutateTraceFiles, traceDigest } from "../trace/relation-mutation.js";
-import { planCaseMove, planCaseRelation, type CaseRelationAction } from "./planner.js";
+import { planCaseRelation, type CaseRelationAction } from "./planner.js";
 import { parseCaseSelector, selectCurrentCase, type CaseSelector } from "./selector.js";
 import { decodeCaseRelationsSidecar, encodeCaseRelationsSidecar, type CaseIssue, type CaseRelationsSidecar } from "./sidecar.js";
-import { decodeAnnotatedCases, decodeCaseArchive, encodeCaseArchive, locateSupportedTestDeclarations, renderCaseAnnotations, type AnnotatedCase } from "./annotations.js";
-import { resolveRepositorySourceIdentity, sameRepositorySourceIdentity, type RepositorySourceIdentityV2 } from "../../source-identity.js";
+import { decodeAnnotatedCases, decodeCaseArchive, decodeCaseDeclarations, encodeCaseArchive, renderCaseAnnotations, type AnnotatedCase, type CaseDeclaration } from "./annotations.js";
+import { resolveRepositorySourceIdentity, sameRepositorySourceIdentity, type RepositorySourceIdentityV3 } from "../../source-identity.js";
 
 type Maybe<A> = Option.Option<A> | A | undefined;
-interface InventoryCase { readonly executor: "vitest" | "playwright"; readonly repo: string; readonly path: string; readonly project?: string; readonly titlePath: readonly string[]; readonly caseId: `necase_${string}` }
+interface InventoryCase { readonly executor: "vitest" | "playwright"; readonly repo: string; readonly path: string; readonly project?: string; readonly titlePath: readonly string[]; readonly caseId: string }
 interface InventoryReceipt { readonly checkout: string; readonly repos: readonly { readonly id: string; readonly receipts: readonly unknown[] }[]; readonly digest: string; readonly findings: readonly string[]; readonly files: readonly string[]; readonly cases: readonly InventoryCase[]; readonly unassignedCases: readonly { readonly path: string; readonly project?: string; readonly titlePath: readonly string[] }[] }
 interface MutationFlags { readonly dryRun: boolean }
 export interface InventoryInput { readonly repo: string; readonly checkout: string }
 export interface ListCasesInput { readonly pattern: Maybe<string>; readonly history: boolean; readonly inventory: Maybe<string> }
 export interface ShowCaseInput { readonly selector: string; readonly history: boolean; readonly inventory: Maybe<string> }
 export interface AuditCasesInput { readonly checkout: string }
-export interface AttachCaseInput extends MutationFlags { readonly selector: string; readonly owner: string; readonly inventory: string }
-export interface MoveCaseInput extends MutationFlags { readonly selector: string; readonly to: string; readonly inventory: string }
 export interface RetireCaseInput extends MutationFlags { readonly selector: string; readonly reason: string }
-export interface CreateOwnerInput extends MutationFlags { readonly owner: string; readonly contract: string; readonly description: string }
-export interface SetOwnerContractInput extends MutationFlags { readonly owner: string; readonly contract: string }
-export interface RetireOwnerInput extends MutationFlags { readonly owner: string; readonly reason: string }
 export interface AddRegressionInput extends MutationFlags { readonly selector: string; readonly memory: string; readonly red: string; readonly takeover: string; readonly inventory: string }
 export interface RefreshRegressionInput extends AddRegressionInput { readonly reason: string }
 export interface RetireRegressionInput extends MutationFlags { readonly selector: string; readonly memory: string; readonly reason: string }
@@ -72,6 +65,16 @@ function annotatedCases(): readonly AnnotatedCase[] {
   for (const item of all) { const previous = ids.get(item.caseId); if (previous !== undefined) fail("DuplicateCaseId", `${item.caseId} is declared by ${previous} and ${item.declarationPath}`); ids.set(item.caseId, item.declarationPath); }
   return all;
 }
+function caseDeclarations(): readonly CaseDeclaration[] {
+  const all: CaseDeclaration[] = [];
+  for (const path of sourceFiles()) {
+    const decoded = decodeCaseDeclarations(path, read(path));
+    all.push(...Result.match(decoded, { onFailure: (error) => fail(error._tag, `${error.path}: ${error.message}`), onSuccess: (value) => value }));
+  }
+  const ids = new Map<string, string>();
+  for (const item of all) { const previous = ids.get(item.caseId); if (previous !== undefined) fail("DuplicateCaseId", `${item.caseId} is declared by ${previous} and ${item.declarationPath}`); ids.set(item.caseId, item.declarationPath); }
+  return all;
+}
 function archive() {
   if (!existsSync(absolute(HISTORY_PATH))) return { history: [], tombstones: [] };
   const decoded = decodeCaseArchive(HISTORY_PATH, read(HISTORY_PATH));
@@ -79,7 +82,7 @@ function archive() {
 }
 const decodeSidecar = (path: string, allowAbsent = false): CaseRelationsSidecar => {
   const testFile = path.endsWith(".cases.json") ? path.slice(0, -".cases.json".length) : path;
-  const current = Object.fromEntries(annotatedCases().filter((item) => item.testFile === testFile).map((item) => [item.caseId, { owner: item.owner, regressions: [...item.regressions], issues: [...item.issues] }]));
+  const current = Object.fromEntries(annotatedCases().filter((item) => item.testFile === testFile).map((item) => [item.caseId, { contract: item.contract, contractKind: item.contractKind, regressions: [...item.regressions], issues: [...item.issues] }]));
   const saved = archive();
   if (!allowAbsent && Object.keys(current).length === 0 && !saved.tombstones.some((entry) => entry.testFile === testFile)) fail("CaseNotCurrent", `no current or archived case owner exists for ${testFile}`);
   return { ...emptySidecar(testFile), current, history: saved.history.filter((entry) => entry.testFile === testFile).map((entry) => entry.event), tombstones: saved.tombstones.filter((entry) => entry.testFile === testFile).map((entry) => entry.event) };
@@ -117,7 +120,7 @@ function parseInventory(inventoryId: string): InventoryReceipt {
   return decodeInventory(stored.inventory as Partial<InventoryReceipt> & Record<string, unknown>, inventoryId);
 }
 function saveInventory(inventory: InventoryReceipt): string {
-  const inventoryId = newCaseId(new Set()).replace("necase_", "neinv_");
+  const inventoryId = `neinv_${Array.from(randomBytes(16), (byte) => "0123456789ABCDEFGHJKMNPQRSTVWXYZ"[byte & 31]).join("")}`;
   mkdirSync(INVENTORY_ROOT, { recursive: true, mode: 0o700 });
   writeFileSync(inventoryFile(inventoryId), `${JSON.stringify({ inventoryId, implementationDigest: inventoryImplementationDigest(), inventory })}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
   return inventoryId;
@@ -132,32 +135,9 @@ const collectInventory = Effect.fn("collectInventory")(function*(action: Invento
     Effect.map((inventory) => inventory as InventoryReceipt),
   );
 });
-const crockford = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-function newCaseId(used: Set<string>): `necase_${string}` {
-  for (;;) {
-    const bytes = randomBytes(10);
-    let value = 0n;
-    for (const byte of bytes) value = (value << 8n) | BigInt(byte);
-    let token = "";
-    for (let index = 0; index < 16; index += 1) { token = crockford[Number(value & 31n)]! + token; value >>= 5n; }
-    const caseId = `necase_${token}` as const;
-    if (!used.has(caseId)) { used.add(caseId); return caseId; }
-  }
-}
 function sidecarFiles(): readonly string[] {
   return [...new Set([...annotatedCases().map((item) => sidecarPath(item.testFile)), ...archive().tombstones.map((entry) => sidecarPath(entry.testFile))])].sort();
 }
-function reservedCaseIds(): Set<string> {
-  const ids = new Set<string>();
-  for (const item of annotatedCases()) ids.add(item.caseId);
-  const saved = archive();
-  for (const entry of saved.history) ids.add(entry.event.caseId);
-  for (const entry of saved.tombstones) ids.add(entry.event.caseId);
-  return ids;
-}
-export const allocateCaseId = Effect.fn("allocateCaseId")(function*() {
-  return { caseId: newCaseId(reservedCaseIds()) };
-});
 function inventoryForId(id: Maybe<string>): InventoryReceipt | undefined { const value = optional(id); return value === undefined ? undefined : parseInventory(value); }
 function records(history: boolean, inventory?: InventoryReceipt) {
   const collected = new Map(inventory?.cases.map((item) => [`${item.path}#${item.caseId}`, item]));
@@ -188,29 +168,15 @@ function reconcileInventory(inventory: InventoryReceipt) {
 }
 
 interface PlannedChange { readonly path: string; readonly bytes: string; readonly mode?: number; readonly expectedDigest: string | null }
-function unannotatedDeclaration(path: string, caseId: string): { readonly path: string; readonly start: number } {
-  const candidates: { path: string; start: number }[] = [];
-  const preferred = existsSync(absolute(path)) ? [path] : [];
-  for (const sourcePath of [...preferred, ...sourceFiles().filter((item) => item !== path)]) {
-    const source = read(sourcePath);
-    if (!source.includes(caseId)) continue;
-    candidates.push(...locateSupportedTestDeclarations(sourcePath, source)
-      .filter((declaration) => declaration.title.endsWith(` [${caseId}]`))
-      .map((declaration) => ({ path: sourcePath, start: declaration.start })));
-  }
-  if (candidates.length !== 1) fail("CaseDeclarationAmbiguous", `expected exactly one literal declaration for ${caseId}, found ${candidates.length}`);
-  return candidates[0]!;
-}
-
 function annotationProjectionChanges(pairs: readonly { readonly before: CaseRelationsSidecar; readonly next: CaseRelationsSidecar }[]): PlannedChange[] {
   const sources = new Map<string, string>();
   const expected = new Map<string, string>();
-  const currentCases: AnnotatedCase[] = [];
+  const currentCases: CaseDeclaration[] = [];
   for (const path of sourceFiles()) {
     const source = read(path);
     sources.set(path, source);
     expected.set(path, traceDigest(source));
-    const decoded = decodeAnnotatedCases(path, source);
+    const decoded = decodeCaseDeclarations(path, source);
     currentCases.push(...Result.match(decoded, { onFailure: (error) => fail(error._tag, `${error.path}: ${error.message}`), onSuccess: (value) => value }));
   }
   const edits = new Map<string, { readonly start: number; readonly end: number; readonly text: string }[]>();
@@ -224,7 +190,7 @@ function annotationProjectionChanges(pairs: readonly { readonly before: CaseRela
     const desired = pairs.find(({ next }) => next.current[caseId] !== undefined);
     const oldRelation = prior?.before.current[caseId]; const relation = desired?.next.current[caseId];
     const item = currentCases.find((entry) => entry.caseId === caseId);
-    if (oldRelation !== undefined && (item === undefined || item.testFile !== prior!.before.testFile || JSON.stringify({ owner: item.owner, regressions: item.regressions, issues: item.issues }) !== JSON.stringify(oldRelation))) fail("PreimageChanged", `current annotation relation changed while planning ${prior!.before.testFile}#${caseId}`);
+    if (oldRelation !== undefined && (item === undefined || item.testFile !== prior!.before.testFile || JSON.stringify({ contract: item.contract, contractKind: item.contractKind, regressions: item.regressions, issues: item.issues }) !== JSON.stringify(oldRelation))) fail("PreimageChanged", `current annotation relation changed while planning ${prior!.before.testFile}#${caseId}`);
     if (relation !== undefined && item !== undefined && JSON.stringify(oldRelation) === JSON.stringify(relation) && item.testFile === desired!.next.testFile) {
       addEdit(item.declarationPath, 0, 0, "");
       continue;
@@ -237,11 +203,10 @@ function annotationProjectionChanges(pairs: readonly { readonly before: CaseRela
       if (first === undefined) fail("CaseDeclarationAmbiguous", `${caseId} has no bound managed annotation ranges`);
       const originalLine = sources.get(item.declarationPath)!.slice(first!.start, first!.end);
       const ending = /\r\n$/u.test(originalLine) ? "\r\n" : /\n$/u.test(originalLine) ? "\n" : "";
-      addEdit(item.declarationPath, first!.start, first!.end, `${renderCaseAnnotations(caseId, relation, item.declarationPath, desired!.next.testFile)}${ending}`);
+      addEdit(item.declarationPath, first!.start, first!.end, `${renderCaseAnnotations(caseId, relation, item.declarationPath, desired!.next.testFile, item.annotationRanges.some(range => /^\s*\/\/\s*@test-file\b/u.test(sources.get(item.declarationPath)!.slice(range.start, range.end))))}${ending}`);
       for (const range of rest) addEdit(item.declarationPath, range.start, range.end, "");
     } else {
-      const declaration = unannotatedDeclaration(desired!.next.testFile, caseId);
-      addEdit(declaration.path, declaration.start, declaration.start, `${renderCaseAnnotations(caseId, relation, declaration.path, desired!.next.testFile)}\n`);
+      fail("CaseNotCurrent", `${desired!.next.testFile}#${caseId}`);
     }
   }
   const changes: PlannedChange[] = [];
@@ -259,7 +224,7 @@ function annotationProjectionChanges(pairs: readonly { readonly before: CaseRela
     const capturedTombstones = saved.tombstones.filter((entry) => entry.testFile === before.testFile).map((entry) => entry.event);
     if (JSON.stringify(capturedHistory) !== JSON.stringify(before.history) || JSON.stringify(capturedTombstones) !== JSON.stringify(before.tombstones)) fail("PreimageChanged", `case archive changed while planning ${before.testFile}`);
     for (const event of next.history.slice(before.history.length)) {
-      const entry = { testFile: event.action === "case-moved" && typeof event.to?.path === "string" ? event.to.path : next.testFile, event };
+      const entry = { testFile: next.testFile, event };
       const key = JSON.stringify(entry);
       if (!historyKeys.has(key)) { history.push(entry); historyKeys.add(key); }
     }
@@ -315,7 +280,7 @@ function planOne(action: CaseRelationAction, expected: Maybe<string>, operation:
 function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean, validateUnderLease: Effect.Effect<void, E, R>): Effect.Effect<unknown, E | CaseCliError | import("../trace/relation-mutation.js").TraceCoordinationError, R>;
 function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean, validateUnderLease?: Effect.Effect<void, E, R>) {
   const plan = Effect.sync(() => {
-    const path = sidecarPath(action.selector.path); const before = decodeSidecar(path, action._tag === "AttachCase");
+    const path = sidecarPath(action.selector.path); const before = decodeSidecar(path);
     if (optional(expected) !== undefined) fail("PreimageChanged", "sidecar digests are not accepted after inline relation migration; use the transaction source preimages");
     const planned = planCaseRelation(before, action, audit());
     if (Result.isFailure(planned)) fail(planned.failure._tag, JSON.stringify(planned.failure));
@@ -328,21 +293,6 @@ function validateOpenProblem(memory: string) { return compileTrace(REPOSITORY_RO
 function validateOpenProblemUnderLease(memory: string) { return compileTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind !== "problem" || item.state !== "open") fail("RegressionTargetInvalid", `${memory} must be an open structured Problem Memory`); })); }
 function validateRetirableProblem(memory: string) { return compileTrace(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind === "problem" && item.state === "resolved") fail("RegressionRequiresReopen", `${memory} is resolved; reopen it before retiring the regression`); })); }
 function validateRetirableProblemUnderLease(memory: string) { return compileTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind === "problem" && item.state === "resolved") fail("RegressionRequiresReopen", `${memory} is resolved; reopen it before retiring the regression`); })); }
-function validateOwner(owner: string) {
-  return compileTrace(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => {
-    const declared = snapshot.owners.find((item) => item.ref === owner);
-    if (declared === undefined) fail("OwnerCardinality", `${owner} is not an exact declared testing owner`);
-    // compileTrace validates each declared owner's exact target as a Feature or
-    // leaf Use Case before exposing it in snapshot.owners.
-  }));
-}
-function validateOwnerUnderLease(owner: string) {
-  return compileTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => {
-    const declared = snapshot.owners.find((item) => item.ref === owner);
-    if (declared === undefined) fail("OwnerCardinality", `${owner} is not an exact declared testing owner`);
-  }));
-}
-
 interface FormalReceipt {
   readonly format: "niceeval.e2e-case-receipt/v2";
   readonly mode: "formal";
@@ -351,7 +301,7 @@ interface FormalReceipt {
   readonly caseId: string;
   readonly inventoryDigest: string;
   readonly candidate: { readonly sha256: string };
-  readonly source: RepositorySourceIdentityV2;
+  readonly source: RepositorySourceIdentityV3;
   readonly result: { readonly disposition: "regression" | "pass" };
   readonly cleanup: { readonly ok: boolean };
   readonly invocationId: string;
@@ -405,7 +355,7 @@ function validateRegressionEvidence(action: AddRegressionInput, parsed: CaseSele
   return { inventory, red, green, certificate, reliability, certificateObservations: observations };
 }
 
-function currentV2EvidenceStillValid(value: unknown, currentSource: RepositorySourceIdentityV2): boolean {
+function currentV2EvidenceStillValid(value: unknown, currentSource: RepositorySourceIdentityV3): boolean {
   try {
     if (value === null || typeof value !== "object") return false;
     const evidence = value as Record<string, unknown>;
@@ -425,8 +375,8 @@ function currentV2EvidenceStillValid(value: unknown, currentSource: RepositorySo
     const green = load("green");
     const certificate = load("certificate");
     if (red.format !== "niceeval.e2e-case-receipt/v2" || green.format !== "niceeval.e2e-case-receipt/v2" || certificate.format !== "niceeval.e2e-takeover-certificate/v2") return false;
-    const redSource = red.source as RepositorySourceIdentityV2;
-    const greenSource = green.source as RepositorySourceIdentityV2;
+    const redSource = red.source as RepositorySourceIdentityV3;
+    const greenSource = green.source as RepositorySourceIdentityV3;
     return sameRepositorySourceIdentity(redSource, currentSource)
       && sameRepositorySourceIdentity(greenSource, currentSource)
       && certificate.sourceDigest === currentSource.projection.digest;
@@ -579,118 +529,6 @@ function verifyIssue(url: string, selectorText: string, injected: Maybe<string>)
   return { repository, number, url, nodeId, titleDigest: sha(title), checkedAt: new Date().toISOString(), provenance: "direct" };
 }
 
-function moveCaseMutation(action: MoveCaseInput) {
-  const parsed = selector(action.selector);
-  return publish("test-case-move", action.dryRun, Effect.sync(() => {
-    const inventory = parseInventory(action.inventory);
-    if (inventory.cases.some((item) => item.caseId === parsed.caseId && item.path === parsed.path)) fail("CaseStillCollected", `${action.selector} remains collected at the old path`);
-    if (!inventory.cases.some((item) => item.caseId === parsed.caseId && item.path === action.to)) fail("CaseNotCollected", `${action.to}#${parsed.caseId}`);
-    const sourcePath = sidecarPath(parsed.path);
-    const targetPath = sidecarPath(action.to);
-    const source = decodeSidecar(sourcePath);
-    const target = decodeSidecar(targetPath, true);
-    const moved = planCaseMove(source, target, parsed, audit());
-    const next = Result.match(moved, { onFailure: (error) => fail(error._tag, JSON.stringify(error)), onSuccess: (value) => value });
-    return { changes: annotationProjectionChanges([{ before: source, next: next.source }, { before: target, next: next.target }]), value: `${action.to}#${parsed.caseId}` };
-  }));
-}
-
-function ownerParts(owner: string): { path: string; anchor: string } {
-  const index = owner.lastIndexOf("#");
-  if (index < 1 || index === owner.length - 1) fail("OwnerCardinality", "owner must be a repository path plus Markdown anchor");
-  const path = owner.slice(0, index);
-  if (!path.startsWith("docs/engineering/testing/e2e/") || !path.endsWith(".md")) {
-    fail("OwnerCardinality", "owner must live in a testing-owner Markdown document");
-  }
-  return { path, anchor: owner.slice(index + 1) };
-}
-
-function contractLink(ownerPath: string, contract: string): string {
-  const relative = posix.relative(posix.dirname(ownerPath), contract);
-  return relative.startsWith(".") ? relative : `./${relative}`;
-}
-
-function assertPlannedOwner(path: string, bytes: string, owner: string, contract: string): void {
-  const planned = testingOwnerContracts([[path, bytes]]).find((item) => item.ref === owner);
-  if (planned === undefined || planned.contract !== contract) {
-    fail("OwnerCardinality", `planned bytes do not compile to ${owner} with contract ${contract}`);
-  }
-}
-function validateOwnerMutationUnderLease(action: CreateOwnerInput | SetOwnerContractInput | RetireOwnerInput, bytes: string, parts: { readonly path: string; readonly anchor: string }, expectedTargetPath?: string, targetDigest?: string) {
-  return compileTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => {
-    const existing = snapshot.owners.find((item) => item.ref === action.owner);
-    if ("description" in action) {
-      if (existing !== undefined) fail("OwnerCardinality", `${action.owner} already exists`);
-      const targetPath = action.contract.split("#", 1)[0]!;
-      if (expectedTargetPath !== undefined) assertExpected(expectedTargetPath, targetDigest);
-      const target = validateRepoRefTarget(snapshot, action.contract, ["feature", "use-case"], existsSync(absolute(targetPath)) ? read(targetPath) : undefined);
-      if (Result.isFailure(target)) fail("ContractTargetInvalid", target.failure.message);
-      assertPlannedOwner(parts.path, bytes, action.owner, action.contract);
-      return;
-    }
-    if (existing === undefined) fail("OwnerCardinality", `${action.owner} is not current`);
-    if (!("reason" in action)) {
-      const targetPath = action.contract.split("#", 1)[0]!;
-      if (expectedTargetPath !== undefined) assertExpected(expectedTargetPath, targetDigest);
-      const target = validateRepoRefTarget(snapshot, action.contract, ["feature", "use-case"], existsSync(absolute(targetPath)) ? read(targetPath) : undefined);
-      if (Result.isFailure(target)) fail("ContractTargetInvalid", target.failure.message);
-      assertPlannedOwner(parts.path, bytes, action.owner, action.contract);
-    }
-    if ("reason" in action && snapshot.tests.some((item) => item.owner === action.owner)) fail("OwnerInUse", `${action.owner} still owns a live case`);
-  }));
-}
-
-function ownerMutation(action: CreateOwnerInput | SetOwnerContractInput | RetireOwnerInput) {
-  const parts = ownerParts(action.owner);
-  const source = existsSync(absolute(parts.path)) ? read(parts.path) : "";
-  const digest = assertExpected(parts.path, undefined);
-  return compileTrace(REPOSITORY_ROOT).pipe(Effect.flatMap((snapshot) => {
-    const existing = snapshot.owners.find((item) => item.ref === action.owner);
-    const liveCases = snapshot.tests.filter((item) => item.owner === action.owner);
-    if ("description" in action) {
-      const value = action;
-        if (existing !== undefined || source.includes(`{#${parts.anchor}}`)) fail("OwnerCardinality", `${action.owner} already exists`);
-        const targetPath = value.contract.split("#", 1)[0]!;
-        const targetDigest = assertExpected(targetPath, undefined); if (targetDigest === null) fail("ContractTargetInvalid", `${targetPath} is absent`);
-        const target = validateRepoRefTarget(snapshot, value.contract, ["feature", "use-case"], existsSync(absolute(targetPath)) ? read(targetPath) : undefined);
-        if (Result.isFailure(target)) fail("ContractTargetInvalid", target.failure.message);
-        const block = `\n## ${value.description} {#${parts.anchor}}\n\n<!-- niceeval.e2e-owner-contract/v1 -->\nContract: [${value.contract}](${contractLink(parts.path, value.contract)})\n\n${value.description}\n`;
-        const bytes = `${source.trimEnd()}${block}`;
-        assertPlannedOwner(parts.path, bytes, action.owner, value.contract);
-        return publish("test-owner-create", value.dryRun, validateOwnerMutationUnderLease(value, bytes, parts, targetPath, targetDigest!).pipe(Effect.as({ changes: [{ path: parts.path, bytes, expectedDigest: digest }], value: action.owner })));
-    }
-    if (!("reason" in action)) {
-      const value = action;
-        if (existing === undefined) fail("OwnerCardinality", `${action.owner} is not current`);
-        const targetPath = value.contract.split("#", 1)[0]!;
-        const targetDigest = assertExpected(targetPath, undefined); if (targetDigest === null) fail("ContractTargetInvalid", `${targetPath} is absent`);
-        const target = validateRepoRefTarget(snapshot, value.contract, ["feature", "use-case"], existsSync(absolute(targetPath)) ? read(targetPath) : undefined);
-        if (Result.isFailure(target)) fail("ContractTargetInvalid", target.failure.message);
-        const oldLine = `Contract:`;
-        const lines = source.split("\n");
-        const heading = lines.findIndex((line) => markdownAnchor(line) === parts.anchor);
-        const contractLine = lines.findIndex((line, index) => index > heading && line.startsWith(oldLine));
-        if (heading < 0 || contractLine < 0) fail("OwnerCardinality", `${action.owner} managed block is missing`);
-        lines[contractLine] = `Contract: [${value.contract}](${contractLink(parts.path, value.contract)})`;
-        lines.splice(contractLine + 1, 0, `<!-- niceeval.e2e-owner-history/v1 action=set from=${existing!.contract} at=${audit().atCommit} -->`);
-        const bytes = lines.join("\n");
-        assertPlannedOwner(parts.path, bytes, action.owner, value.contract);
-        return publish("test-owner-set", value.dryRun, validateOwnerMutationUnderLease(value, bytes, parts, targetPath, targetDigest!).pipe(Effect.as({ changes: [{ path: parts.path, bytes, expectedDigest: digest }], value: action.owner })));
-    }
-    {
-      const value = action as RetireOwnerInput;
-        if (existing === undefined) fail("OwnerCardinality", `${action.owner} is not current`);
-        if (liveCases.length > 0) fail("OwnerInUse", `${action.owner} still owns ${liveCases.map((item) => item.selector).join(", ")}`);
-        const lines = source.split("\n");
-        const heading = lines.findIndex((line) => markdownAnchor(line) === parts.anchor);
-        const marker = lines.findIndex((line, index) => index > heading && line.trim() === "<!-- niceeval.e2e-owner-contract/v1 -->");
-        if (marker < 0) fail("OwnerCardinality", `${action.owner} managed block is missing`);
-        lines[marker] = `<!-- niceeval.e2e-owner-history/v1 action=retired reason=${JSON.stringify(value.reason)} at=${audit().atCommit} -->`;
-        return publish("test-owner-retire", value.dryRun, validateOwnerMutationUnderLease(value, lines.join("\n"), parts).pipe(Effect.as({ changes: [{ path: parts.path, bytes: lines.join("\n"), expectedDigest: digest }], value: action.owner })));
-    }
-  }));
-}
-
 export const inventoryCases = Effect.fn("inventoryCases")(function*(input: InventoryInput) {
   const collected = yield* collectInventory(input);
   const inventoryId = yield* Effect.try({ try: () => saveInventory(collected), catch: (cause) => cause });
@@ -739,11 +577,7 @@ export const auditCases = Effect.fn("auditCases")(function*(input: AuditCasesInp
   const current = records(false);
   const related = new Map(current.map((item) => [item.selector, item]));
   const collected = new Map(inventory.cases.map((item) => [`${item.path}#${item.caseId}`, item]));
-  const ownerContracts = new Map(snapshot.owners.map((owner) => [owner.ref, owner.contract]));
-  const coveredUseCases = new Set(snapshot.tests.flatMap((test) => {
-    const contract = ownerContracts.get(test.owner);
-    return contract === undefined ? [] : [contract];
-  }));
+  const coveredUseCases = new Set(snapshot.tests.flatMap((test) => test.contract === undefined ? [] : [test.contract]));
   return {
     format: "niceeval.e2e-case-audit/v1",
     inventory,
@@ -756,29 +590,10 @@ export const auditCases = Effect.fn("auditCases")(function*(input: AuditCasesInp
       .map((item) => ({ selector: `${item.path}#${item.caseId}`, repo: item.repo, titlePath: item.titlePath })),
     orphanedRelations: current
       .filter((item) => !collected.has(item.selector))
-      .map((item) => ({ selector: item.selector, owner: "relation" in item ? item.relation.owner : null })),
+      .map((item) => ({ selector: item.selector, contract: "relation" in item ? item.relation.contract : null })),
   };
 });
 
-export const createOwner = Effect.fn("createOwner")(function*(input: CreateOwnerInput) { return yield* ownerMutation(input); });
-export const setOwnerContract = Effect.fn("setOwnerContract")(function*(input: SetOwnerContractInput) { return yield* ownerMutation(input); });
-export const retireOwner = Effect.fn("retireOwner")(function*(input: RetireOwnerInput) { return yield* ownerMutation(input); });
-
-export const attachCase = Effect.fn("attachCase")(function*(input: AttachCaseInput) {
-  const parsed = selector(input.selector);
-  return yield* planOne(
-    { _tag: "AttachCase", selector: parsed, owner: input.owner },
-    undefined,
-    "test-case-attach",
-    input.dryRun,
-    Effect.gen(function*() {
-      const receipt = parseInventory(input.inventory);
-      if (!receipt.cases.some((item) => item.path === parsed.path && item.caseId === parsed.caseId)) fail("CaseNotCollected", input.selector);
-      yield* validateOwnerUnderLease(input.owner);
-    }),
-  );
-});
-export const moveCase = Effect.fn("moveCase")(function*(input: MoveCaseInput) { return yield* moveCaseMutation(input); });
 export const retireCase = Effect.fn("retireCase")(function*(input: RetireCaseInput) {
   const parsed = selector(input.selector);
   return yield* planOne({ _tag: "RetireCase", selector: parsed, reason: input.reason }, undefined, "test-case-retire", input.dryRun);

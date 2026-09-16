@@ -23,6 +23,16 @@ export function initializeTheme(): Theme {
   return theme;
 }
 
+export function useTheme(): Theme {
+  const [theme, setTheme] = useState<Theme>(() => document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'light'));
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  return theme;
+}
+
 export function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(() => initializeTheme());
   useEffect(() => {

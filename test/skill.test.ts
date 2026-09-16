@@ -33,8 +33,7 @@ before(() => Effect.runPromise(Effect.sync(() => {
 
 after(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));
 
-// @concord-case installed-skill-progressive-disclosure
-// @concord-contract docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('packed CLI exposes the skill entrypoint and selected topics outside a consumer', () => Effect.runPromise(Effect.sync(() => {
   const outside = join(scratch, 'outside');
   mkdirSync(outside);
@@ -50,7 +49,7 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   const topic = spawnSync(process.execPath, [cli, '--skill', 'test'], { cwd: outside, encoding: 'utf8' });
   assert.equal(topic.status, 0, topic.stderr);
   assert.match(topic.stdout, /# 测试注释与命令证据/);
-  assert.match(topic.stdout, /concord test annotate/);
+  assert.match(topic.stdout, /concord test show/);
 
   const feedback = spawnSync(process.execPath, [cli, '--skill', 'feedback'], { cwd: outside, encoding: 'utf8' });
   assert.equal(feedback.status, 0, feedback.stderr);
@@ -60,7 +59,7 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   assert.equal(all.status, 0, all.stderr);
   assert.match(all.stdout, /# 初始化与模板/);
   assert.match(all.stdout, /# Repository profile 边界/);
-  assert.equal(existsSync(join(outside, 'concord.json')), false);
+  assert.equal(existsSync(join(outside, 'concord.config.ts')), false);
 
   const installedMain = join(cli, '../../skills/concord/SKILL.md');
   const original = readFileSync(installedMain, 'utf8');
@@ -78,8 +77,7 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   }
 })));
 
-// @concord-case installed-skill-rejects-mixed-argv
-// @concord-contract docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('skill routing rejects unknown and mixed mutation argv without loading the host or writing', () => Effect.runPromise(Effect.sync(() => {
   const hostile = join(scratch, 'hostile');
   mkdirSync(hostile);
@@ -94,6 +92,6 @@ test('skill routing rejects unknown and mixed mutation argv without loading the 
   assert.equal(mixed.status, 1);
   assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(mixed.stderr).error, 'SkillArgumentsInvalid');
   assert.equal(existsSync(join(hostile, 'host-loaded')), false);
-  assert.equal(existsSync(join(hostile, 'concord.json')), false, 'fixture marker should remain the only repository-like input');
+  assert.equal(existsSync(join(hostile, 'concord.config.ts')), false, 'fixture marker should remain the only repository-like input');
   assert.equal(readFileSync(join(hostile, 'concord.repository.json'), 'utf8'), JSON.stringify({ format: 'concord.repository/v1', host: 'host.mjs' }));
 })));

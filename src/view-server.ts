@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { Effect, Schema } from 'effect';
 import { executeViewAction, getViewFile, getWorkspaceSnapshot, validateViewRoot } from './application.js';
-import { getGitDiff, getGitStatus, type GitArea } from './git-view.js';
-import { ConcordError, decode, failure } from './shared.js';
+import { getGitDiff, getGitStatus, type GitArea, type GitBaselineCache } from './git-view.js';
+import { ConcordError, decode, digest, failure } from './shared.js';
 import { ViewJobManager } from './view-jobs.js';
 import type { ViewFailure, ViewResponse } from './view-contract.js';
 
@@ -226,11 +226,24 @@ function serveStatic(response: ServerResponse, pathname: string, webRoot: string
   response.end(readFileSync(target));
 }
 
-async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager): Promise<void> {
+async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache): Promise<void> {
   const method = request.method ?? 'GET';
   if (method === 'GET' && url.pathname === '/api/workspace') {
     exactQuery(url, []);
-    return success(response, await Effect.runPromise(getWorkspaceSnapshot(root)));
+    const value = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
+    const body = `${JSON.stringify({ ok: true, value })}\n`;
+    const etag = `"${digest(body)}"`;
+    securityHeaders(response);
+    response.setHeader('ETag', etag);
+    if (request.headers['if-none-match'] === etag) {
+      response.statusCode = 304;
+      response.end();
+    } else {
+      response.statusCode = 200;
+      response.setHeader('Content-Type', 'application/json; charset=utf-8');
+      response.end(body);
+    }
+    return;
   }
   if (method === 'GET' && url.pathname === '/api/file') {
     exactQuery(url, ['path']);
@@ -258,7 +271,8 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   }
   if (method === 'GET' && url.pathname === '/api/git') {
     exactQuery(url, []);
-    return success(response, await Effect.runPromise(getGitStatus(root, true)));
+    const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
+    return success(response, await Effect.runPromise(getGitStatus(root, true, baselineCache, snapshot.project?.testRoots ?? [])));
   }
   if (method === 'GET' && url.pathname === '/api/git/diff') {
     exactQuery(url, ['path', 'area']);
@@ -276,13 +290,14 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? join(dirname(fileURLToPath(import.meta.url)), 'web');
   const jobs = new ViewJobManager(root);
+  const baselineCache: GitBaselineCache = {};
   const server = createServer((request, response) => {
     void (async () => {
       try {
         const hostAuthority = validateAuthority(request);
         const url = parseRequestTarget(request, hostAuthority);
         if (url.pathname.startsWith('/api/')) {
-          await api(request, response, url, root, jobs);
+          await api(request, response, url, root, jobs, baselineCache);
         } else if (request.method === 'GET') {
           serveStatic(response, url.pathname, webRoot);
         } else {

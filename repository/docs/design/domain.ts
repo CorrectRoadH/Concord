@@ -148,9 +148,11 @@ function selectPlan(
     : Effect.succeed(match);
 }
 
-function stateOf(design: TraceNode): DesignDecisionState {
-  const selected = design.relations.selectedPlan?.[0];
-  return selected === undefined ? { _tag: "undecided" } : { _tag: "decided", selectedPlan: selected };
+function stateOf(root: string, design: TraceNode): Effect.Effect<DesignDecisionState, DesignIoError> {
+  return Effect.try({
+    try: () => decodeDesignReadme(design.path, readFileSync(resolve(root, design.path), "utf8")).state,
+    catch: cause => new DesignIoError({ operation: "read Design state", path: design.path, message: designErrorMessage(cause) }),
+  });
 }
 
 function pagesForPlan(root: string, plan: TraceNode, bundle: DesignTemplateBundle): readonly DesignPage[] {
@@ -398,7 +400,7 @@ function expectedPlanSelectors(count: number): readonly string[] {
 function directoryPlanSelectors(root: string, packageRoot: string): Effect.Effect<readonly string[], DesignIoError> {
   return Effect.try({
     try: () => readdirSync(resolve(root, packageRoot, "plans"), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && /^plan-[1-9][0-9]*$/u.test(entry.name))
+      .filter((entry) => entry.isDirectory() && /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(entry.name))
       .map((entry) => entry.name)
       .sort((left, right) => Number.parseInt(left.slice("plan-".length), 10) - Number.parseInt(right.slice("plan-".length), 10)),
     catch: (cause) => new DesignIoError({ operation: "scan Plans", path: packageRoot, message: designErrorMessage(cause) }),
@@ -416,7 +418,7 @@ function checkDesignPackage(
     const plans = directPlans(snapshot, design);
     const receipts = planReceipts(root, plans, bundle);
     const directoryPlans = yield* directoryPlanSelectors(root, packageRoot);
-    const state = stateOf(design);
+    const state = yield* stateOf(root, design);
     const findings: DesignCheckFinding[] = [];
     const rootOptional = validateManifestFiles(
       root,
@@ -425,13 +427,10 @@ function checkDesignPackage(
       bundle.designDecision.manifest.optionalFiles,
       findings,
     );
-    if (plans.length < 2) findings.push(finding("plan-cardinality", design.path, "Design must contain at least two direct Plans"));
+    if (plans.length === 0) findings.push(finding("plan-cardinality", design.path, "Design must contain at least one declared alternative"));
     const selectors = receipts.map((plan) => plan.selector);
-    if (JSON.stringify(directoryPlans) !== JSON.stringify(selectors)) {
+    if (JSON.stringify([...directoryPlans].sort()) !== JSON.stringify([...selectors].sort())) {
       findings.push(finding("plan-node-mismatch", design.path, "every plans/plan-N directory must have one derived Design alternative"));
-    }
-    if (JSON.stringify(selectors) !== JSON.stringify(expectedPlanSelectors(plans.length))) {
-      findings.push(finding("plan-sequence", design.path, "Design alternatives must be contiguous plan-1 through plan-N"));
     }
     for (const plan of plans) {
       validateManifestFiles(
@@ -587,7 +586,7 @@ function prepareDecision(
   return Effect.gen(function*() {
     const snapshot = yield* compileTraceUnderLease(root);
     const design = yield* selectDesign(snapshot, designSelector);
-    const state = stateOf(design);
+    const state = yield* stateOf(root, design);
     if (state._tag === "decided") {
       return yield* new DesignAlreadyDecided({
         design: design.path,

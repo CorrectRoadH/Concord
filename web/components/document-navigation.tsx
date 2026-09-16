@@ -1,4 +1,5 @@
-import { FileText } from 'lucide-react';
+import { FileText, Folder } from 'lucide-react';
+import { researchTopicDirectory, researchTopics } from '../lib/research-topics';
 import { Link, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../workspace';
 import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar';
@@ -27,7 +28,11 @@ export function DocumentNavigation() {
   const selected = documents.find(document => pathname.split('/')[2] === encodeURIComponent(document.metadata.id));
   const groups: ContentSidebarGroup[] = [{
     id: 'documents', label: `${section.label} 列表`, emptyMessage: `暂无 ${section.label}`,
-    items: documents.map(document => ({
+    items: section.kind === 'research' ? researchTopics(documents).map(topic => ({
+      id: topic.directory, href: `${section.href}/${encodeURIComponent(topic.document.metadata.id)}`,
+      title: topic.title, active: selected !== undefined && researchTopicDirectory(selected.path) === topic.directory,
+      icon: <Folder size={16} />,
+    })) : documents.map(document => ({
       id: document.path, href: `${section.href}/${encodeURIComponent(document.metadata.id)}`,
       title: document.metadata.title, active: selected?.path === document.path, icon: <FileText size={16} />,
     })),

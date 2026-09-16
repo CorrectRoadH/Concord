@@ -16,6 +16,7 @@ import { loadDocuments, renderDocument } from './documents.js';
 import { fetchFeedback, type FeedbackTransport } from './feedback-providers.js';
 import { ConcordError, ProjectSchema, canonical, decode, digest, failure, type DocumentMeta, type DocumentRecord, type MutationReceipt } from './shared.js';
 import { LocalRepository } from './storage.js';
+import { renderTypeScriptConfig } from './config.js';
 
 export interface FeedbackSyncOptions {
   readonly url?: string;
@@ -49,11 +50,11 @@ function withRepository<A>(
 }
 
 function configSnapshot(repo: LocalRepository, connectionId: string): { readonly source: string; readonly digest: string; readonly connection: FeedbackConnection } {
-  const source = repo.read('concord.json');
-  if (source === undefined) throw new ConcordError('ProjectNotFound', 'concord.json disappeared before feedback synchronization');
+  const source = repo.read(repo.configSnapshot.path);
+  if (source === undefined) throw new ConcordError('ProjectNotFound', `${repo.configSnapshot.path} disappeared before feedback synchronization`);
   const matches = (repo.config.feedbackConnections ?? []).filter((connection) => connection.id === connectionId);
   if (matches.length !== 1) throw new ConcordError(matches.length === 0 ? 'FeedbackConnectionNotFound' : 'InvalidData', `Expected one feedback connection with ID ${connectionId}, found ${matches.length}`);
-  return { source, digest: digest(source), connection: matches[0]! };
+  return { source, digest: repo.configSnapshot.digest, connection: matches[0]! };
 }
 
 function assertReturnedConnection(expected: FeedbackConnection, input: unknown): FeedbackConnection {
@@ -124,10 +125,10 @@ export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonl
       availability = remote === null ? 'unavailable' : 'cached';
       if (cacheWarning !== undefined) warnings.push(cacheWarning);
     }
-    const features = document.metadata.features ?? [];
+    const features = document.metadata.adoptions.current;
     const triage: FeedbackItem['triage'] = document.metadata.state === 'closed'
       ? 'closed'
-      : features.length > 0 || document.metadata.memories.length > 0 ? 'linked' : 'pending';
+      : features.length > 0 || document.metadata.memoryRelations.length > 0 ? 'linked' : 'pending';
     return { document: issueRecord(document), triage, remote, availability, warnings };
   });
 }
@@ -155,7 +156,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
 
   return yield* withRepository(root, (repo) => attempt('feedback.publish', () => {
     const current = configSnapshot(repo, connectionId);
-    if (current.digest !== observed.digest) throw new ConcordError('PreimageChanged', 'concord.json changed while remote feedback was fetched; retry with the current configuration');
+    if (current.digest !== observed.digest) throw new ConcordError('PreimageChanged', `${repo.configSnapshot.path} changed while remote feedback was fetched; retry with the current configuration`);
     assertReturnedConnection(current.connection, bound);
     const documents = loadDocuments(repo);
     const existingSources = new Map<string, string>();
@@ -171,7 +172,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
     const nextConnections = (repo.config.feedbackConnections ?? []).map((connection) => connection.id === connectionId ? bound : connection);
     if (canonical(nextConnections) !== canonical(repo.config.feedbackConnections ?? [])) {
       const nextConfig = decode(ProjectSchema, { ...repo.config, feedbackConnections: nextConnections }, 'bound feedback configuration');
-      changes.push({ path: 'concord.json', before: current.source, after: `${JSON.stringify(nextConfig, null, 2)}\n` });
+      changes.push({ path: repo.configSnapshot.path, before: current.source, after: repo.configSnapshot.path === 'concord.config.ts' ? renderTypeScriptConfig(nextConfig) : `${JSON.stringify(nextConfig, null, 2)}\n` });
     }
     for (const item of remote.items) {
       const identity = feedbackIdentity(item);
@@ -182,7 +183,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
       const path = `docs/issues/${id}.md`;
       const source: FeedbackSource = decode(FeedbackSourceSchema, { ...item, connectionId, importedAt }, `feedback source ${identity}`);
       const metadata: DocumentMeta = {
-        format: 'concord.document/v1', id, title: item.title, createdAt: importedAt, kind: 'issue', state: 'draft', memories: [], features: [], source, history: [],
+        format: 'concord.document/v1', id, title: item.title, createdAt: importedAt, kind: 'issue', state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, source, history: [],
       };
       const body = item.body.trim().length > 0 ? item.body : `Imported feedback: ${item.url}`;
       changes.push({ path, before: null, after: renderDocument(metadata, body) });

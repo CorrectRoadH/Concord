@@ -1,6 +1,7 @@
 import type * as Inventory from './host-types/inventory-api.js';
 export interface RepositoryHost {
   readonly format: 'concord.repository-host/v1';
+  readonly caseIdentity: 'concord.case-contracts/v1';
   readonly repositoryRoot: string;
   readonly QUERY_PROTOCOL: string;
   readonly OwnedProcessLive: typeof Inventory.OwnedProcessLive;

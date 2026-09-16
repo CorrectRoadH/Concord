@@ -1,3 +1,4 @@
+import { deriveTestReference } from '../dist/test-reference.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -66,8 +67,7 @@ async function waitFor(manager: ViewJobManager, id: string, state: readonly stri
   }
 }
 
-// @concord-case view-server-allows-open-access-and-enforces-strict-actions
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view server keeps the application shell data-free and allows unauthenticated access and enforces authority, strict JSON, and API fallback', async () => {
   const { root, webRoot } = fixture();
   let server: ViewServerHandle | undefined;
@@ -110,8 +110,8 @@ test('view server keeps the application shell data-free and allows unauthenticat
     ]) {
       const rejectedWrite = await send(server, '/api/action', { method: 'POST', headers, body: JSON.stringify({ action: 'init', docsOnly: true }) });
       assert.equal(rejectedWrite.status, 403);
-      assert.equal(existsSync(join(root, 'concord.json')), false);
-      const rejectedJob = await send(server, '/api/jobs', { method: 'POST', headers, body: JSON.stringify({ caseId: 'view-job-case' }) });
+      assert.equal(existsSync(join(root, 'concord.config.ts')), false);
+      const rejectedJob = await send(server, '/api/jobs', { method: 'POST', headers, body: JSON.stringify({ caseId: viewJobCase }) });
       assert.equal(rejectedJob.status, 403);
       assert.deepEqual(parsed(await send(server, '/api/jobs')).value, []);
     }
@@ -154,8 +154,7 @@ test('view server keeps the application shell data-free and allows unauthenticat
   }
 });
 
-// @concord-case view-server-rejects-ambiguous-authority-and-request-targets
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view server rejects malformed or ambiguous authorities and non-origin-form request targets over HTTP', async () => {
   const { root, webRoot } = fixture();
   let server: ViewServerHandle | undefined;
@@ -199,8 +198,7 @@ test('view server rejects malformed or ambiguous authorities and non-origin-form
   }
 });
 
-// @concord-case view-cli-propagates-shared-dry-run
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view CLI propagates or rejects shared dry-run without cache or repository writes', () => {
   const { root } = fixture();
   const cli = join(process.cwd(), 'dist/entry.js');
@@ -210,7 +208,7 @@ test('view CLI propagates or rejects shared dry-run without cache or repository 
     const preview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(preview.status, 0, preview.stderr);
     assert.equal((JSON.parse(preview.stdout) as { dryRun: boolean }).dryRun, true);
-    assert.equal(existsSync(join(root, 'concord.json')), false);
+    assert.equal(existsSync(join(root, 'concord.config.ts')), false);
     assert.equal(existsSync(join(root, '.git/concord')), false);
 
     const rejected = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'view', '--port', '0'], { encoding: 'utf8', timeout: 10_000 });
@@ -239,8 +237,7 @@ test('view CLI propagates or rejects shared dry-run without cache or repository 
   }
 });
 
-// @concord-case view-server-refuses-symlinked-or-oversize-private-input
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('workspace diagnostics never dereference unsafe config or evidence paths', async () => {
   const { root, webRoot } = fixture();
   const outside = mkdtempSync(join(tmpdir(), 'concord-view-outside-'));
@@ -248,7 +245,7 @@ test('workspace diagnostics never dereference unsafe config or evidence paths', 
   try {
     const secret = 'must-not-cross-the-worktree-boundary';
     writeFileSync(join(outside, 'secret.json'), secret);
-    symlinkSync(join(outside, 'secret.json'), join(root, 'concord.json'));
+    symlinkSync(join(outside, 'secret.json'), join(root, 'concord.config.ts'));
     server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot });
     const linked = await send(server, '/api/workspace');
     assert.equal(linked.status, 200);
@@ -258,8 +255,8 @@ test('workspace diagnostics never dereference unsafe config or evidence paths', 
     assert.equal(linkedValue.diagnostics.error, 'UnsafePath');
     assert.equal(linked.body.includes(secret), false);
 
-    rmSync(join(root, 'concord.json'));
-    writeFileSync(join(root, 'concord.json'), 'x'.repeat(4 * 1024 * 1024 + 1));
+    rmSync(join(root, 'concord.config.ts'));
+    writeFileSync(join(root, 'concord.config.ts'), 'x'.repeat(4 * 1024 * 1024 + 1));
     const oversize = await send(server, '/api/workspace');
     assert.equal(oversize.status, 200);
     const oversizeValue = parsed(oversize).value as { pages: unknown[]; configDigest: string | null; diagnostics: { error: string } };
@@ -289,9 +286,11 @@ test('workspace diagnostics never dereference unsafe config or evidence paths', 
   }
 });
 
+const viewJobCase = deriveTestReference('test/view-case.test.js', 'test/view-case.test.js', 'view job case');
+
 function writeCase(root: string, slow: boolean): void {
   mkdirSync(join(root, 'test'), { recursive: true });
-  writeFileSync(join(root, 'test/view-case.test.js'), `import test from 'node:test';\nimport assert from 'node:assert/strict';\n// @concord-case view-job-case\n// @concord-contract docs/feature/web/README.md\ntest('view job case', async () => { ${slow ? "await new Promise(resolve => setTimeout(resolve, 10000));" : 'assert.equal(1, 1);'} });\n`);
+  writeFileSync(join(root, 'test/view-case.test.js'), `import test from 'node:test';\nimport assert from 'node:assert/strict';\n// @feature docs/feature/web/README.md\ntest('view job case', async () => { ${slow ? "await new Promise(resolve => setTimeout(resolve, 10000));" : 'assert.equal(1, 1);'} });\n`);
 }
 
 function initializedJobFixture(): string {
@@ -306,8 +305,7 @@ function initializedJobFixture(): string {
   return root;
 }
 
-// @concord-case view-http-jobs-without-credentials
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('HTTP jobs run, cancel, and run again without credentials', async () => {
   const root = initializedJobFixture();
   let server: ViewServerHandle | undefined;
@@ -316,7 +314,7 @@ test('HTTP jobs run, cancel, and run again without credentials', async () => {
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const current = server;
     const start = async () => {
-      const response = await send(current, '/api/jobs', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ caseId: 'view-job-case' }) });
+      const response = await send(current, '/api/jobs', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ caseId: viewJobCase }) });
       assert.equal(response.status, 202, response.body);
       return (parsed(response).value as { id: string }).id;
     };
@@ -347,41 +345,40 @@ test('HTTP jobs run, cancel, and run again without credentials', async () => {
   }
 });
 
-// @concord-case view-jobs-cancel-and-release-owned-resources
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view jobs preserve pre-spawn cancellation, serialize repository ownership, and clean shutdown', async () => {
   const root = initializedJobFixture();
   let held: LocalRepository | undefined;
   try {
     const manager = new ViewJobManager(root);
-    const beforeSpawn = manager.start('view-job-case');
+    const beforeSpawn = manager.start(viewJobCase);
     assert.equal(manager.cancel(beforeSpawn.id).state, 'cancelling');
     assert.equal((await waitFor(manager, beforeSpawn.id, ['cancelled'])).state, 'cancelled');
 
-    const completed = manager.start('view-job-case');
+    const completed = manager.start(viewJobCase);
     const completedResult = await waitFor(manager, completed.id, ['completed', 'failed']);
     assert.equal(completedResult.state, 'completed', JSON.stringify(completedResult.error));
     assert.equal(completedResult.evidence?.commandOutcome, 'pass');
 
     held = new LocalRepository(root);
-    const blocked = manager.start('view-job-case');
+    const blocked = manager.start(viewJobCase);
     const blockedResult = await waitFor(manager, blocked.id, ['failed']);
     assert.equal(blockedResult.error?.code, 'RepositoryBusy');
     held.close();
     held = undefined;
 
     writeCase(root, true);
-    const running = manager.start('view-job-case');
+    const running = manager.start(viewJobCase);
     await waitFor(manager, running.id, ['running']);
     manager.cancel(running.id);
     assert.equal((await waitFor(manager, running.id, ['cancelled', 'cleanup-failed'])).state, 'cancelled');
 
     writeCase(root, false);
-    const afterCancel = manager.start('view-job-case');
+    const afterCancel = manager.start(viewJobCase);
     assert.equal((await waitFor(manager, afterCancel.id, ['completed', 'failed'])).state, 'completed');
 
     writeCase(root, true);
-    const shutdown = manager.start('view-job-case');
+    const shutdown = manager.start(viewJobCase);
     await waitFor(manager, shutdown.id, ['running']);
     await manager.close();
     assert.equal((await waitFor(manager, shutdown.id, ['cancelled'])).state, 'cancelled');

@@ -8,9 +8,9 @@ import { chromium, expect, type Browser } from '@playwright/test';
 import { addPage, createDocument } from '../dist/documents.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { projectConfigPath, readProjectConfig, writeProjectConfig } from './support.js';
 
-// @concord-case browser-direct-access-retry-and-refresh
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser opens and refreshes a deep link without credentials and retries initial load failures', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-browser-open-'));
   let server: ViewServerHandle | undefined;
@@ -21,6 +21,8 @@ test('browser opens and refreshes a deep link without credentials and retries in
     try {
       initialize(repo, false, { testRoots: [] });
       createDocument(repo, 'feature', { id: 'web', title: 'Direct access fixture' });
+      createDocument(repo, 'use-case', { id: 'floating-path', title: 'Floating user path', feature: 'web' });
+      createDocument(repo, 'engineering', { id: 'floating-tooling', title: 'Floating tooling' });
       createDocument(repo, 'feature', {
         id: 'html',
         title: 'Raw HTML fixture',
@@ -28,6 +30,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
       });
       for (let index = 0; index < 24; index += 1) createDocument(repo, 'feature', { id: `fixture-${index}`, title: `Navigation fixture ${index}` });
     } finally { repo.close(); }
+    writeFileSync(join(root, 'docs/concepts.md'), '# Concepts\n\n| 中文 | English | 含义 | 契约 |\n|---|---|---|---|\n| 直接访问 | Direct access | 浏览器直接打开工作台 | [Web](feature/web/README.md) |\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
@@ -47,8 +50,35 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await page.getByRole('button', { name: '重试', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Direct access fixture', exact: true })).toBeVisible();
     await expect(page).toHaveURL(url);
+    await page.getByRole('link', { name: '总览', exact: true }).click();
+    const floating = page.getByText('悬空功能', { exact: true }).locator('xpath=ancestor::*[@data-slot="card"]');
+    await expect(floating.getByRole('link', { name: /Direct access fixture/ })).toBeVisible();
+    await expect(floating.getByRole('link', { name: /Floating user path/ })).toBeVisible();
+    await expect(floating.getByRole('link', { name: /Floating tooling/ })).toBeVisible();
+    await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: `http://127.0.0.1:${server.port}` });
+    await floating.getByRole('button', { name: '复制全部', exact: true }).click();
+    await expect(page.getByText(/已复制 \d+ 项悬空功能。/)).toBeVisible();
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    assert.match(copied, /- \[Feature\] Direct access fixture — docs\/feature\/web\/README\.md/);
+    assert.match(copied, /- \[Use Case\] Floating user path — docs\/feature\/web\/use-case\/floating-path\.md/);
+    assert.match(copied, /- \[Engineering\] Floating tooling — docs\/engineering\/floating-tooling\/README\.md/);
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+      (window as typeof window & { copiedFallback?: string }).copiedFallback = '';
+      document.execCommand = command => {
+        if (command !== 'copy') return false;
+        (window as typeof window & { copiedFallback?: string }).copiedFallback = (document.activeElement as HTMLTextAreaElement | null)?.value ?? '';
+        return true;
+      };
+    });
+    await floating.getByRole('button', { name: '复制全部', exact: true }).click();
+    assert.match(await page.evaluate(() => (window as typeof window & { copiedFallback?: string }).copiedFallback ?? ''), /Floating tooling/);
+    await floating.getByRole('link', { name: /Floating user path/ }).click();
+    await expect(page.getByRole('heading', { name: 'Floating user path', exact: true }).first()).toBeVisible();
+    await page.goto(url);
     const contentNavigation = page.getByRole('navigation', { name: '内容导航', exact: true });
     assert.equal(await contentNavigation.evaluate(element => element.parentElement!.scrollHeight > element.parentElement!.clientHeight), true);
+    assert.equal(await contentNavigation.evaluate(element => getComputedStyle(element.parentElement!).scrollbarWidth), 'none');
     const pagePane = page.locator('.document-workspace > .page');
     await contentNavigation.evaluate(element => { element.parentElement!.scrollTop = 160; });
     assert.equal(await contentNavigation.evaluate(element => element.parentElement!.scrollTop), 160);
@@ -65,6 +95,11 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await expect(page.locator('html')).toHaveClass(/dark/);
     await expect(page.getByRole('button', { name: '切换至浅色主题', exact: true })).toBeVisible();
     await expect(page.getByTestId('document-header').getByRole('button', { name: '重新载入', exact: true })).toBeVisible();
+    await page.getByRole('tab', { name: '术语', exact: true }).click();
+    await expect(page.getByText('直接访问', { exact: true })).toBeVisible();
+    await expect(page.getByText('Direct access', { exact: true })).toBeVisible();
+    await expect(page.getByRole('tab', { name: '关系', exact: true })).toHaveCount(0);
+    await page.getByRole('tab', { name: '正文', exact: true }).click();
     await expect(page.locator('.editor-shell > .editor-shell__bar')).toHaveCount(0);
     await contentNavigation.getByRole('link', { name: 'Raw HTML fixture', exact: true }).click();
     await expect(page.getByText('已切换为原文编辑', { exact: true })).toBeVisible();
@@ -80,8 +115,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
   }
 });
 
-// @concord-case browser-authoring-and-git-workflow
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('real browser creates a Feature, edits Markdown, preserves conflicts and opens Git changes', async () => {
   const root=mkdtempSync(join(tmpdir(),'concord-browser-'));
   let server: ViewServerHandle|undefined;
@@ -120,6 +154,11 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
       await list.getByRole('link',{name:title,exact:true}).click();
       await expect(page).toHaveURL(new RegExp(`/${section}/`));
       await expect(list.getByRole('link',{name:title,exact:true})).toHaveAttribute('aria-current','page');
+      if (category === 'Roadmap') {
+        await expect(page.getByRole('tab', { name: '术语', exact: true })).toBeVisible();
+        await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('tab', { name: '测试', exact: true })).toHaveCount(0);
+      }
       if (category === 'Engineering') {
         const diagram=page.getByLabel('Mermaid 图表预览').locator('svg');
         await expect(diagram).toBeVisible();
@@ -167,7 +206,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByRole('button',{name:'保存',exact:true})).toHaveCount(0);
     assert.equal(readFileSync(path,'utf8'),original,'loading must not normalize the file');
     await editor.fill('Browser edited paragraph.');
-    await page.getByRole('tab',{name:'关系',exact:true}).click();
+    await page.getByRole('tab',{name:'术语',exact:true}).click();
+    await expect(page.getByRole('tab',{name:'术语',exact:true})).toHaveAttribute('data-state', 'active');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByRole('tab',{name:'正文',exact:true}).click();
     await expect(editor).toContainText('Browser edited paragraph.');
@@ -244,13 +284,13 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.reload();
     await expect(drawer).toBeVisible();
     await expect(drawer.locator('[contenteditable="true"]').first()).toBeVisible();
-    await page.keyboard.press('Escape');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
     await expect(drawer).toHaveCount(0);
     await expect(editor).toContainText('External editor wins.');
     const documentTree=page.getByTestId('document-file-tree');
     await documentTree.getByRole('button',{name:'architecture.md',exact:true}).click();
     await editor.fill('Architecture from browser.');
-    const documentPane=page.getByTestId('document-file-preview');
+    const documentPane=page.locator('.document-workspace > .page');
     await documentPane.evaluate(element=>{element.scrollTop=500;});
     await documentTree.evaluate(element=>{element.scrollTop=80;});
     const treeScrollBefore=await documentTree.evaluate(element=>element.scrollTop);
@@ -258,7 +298,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect.poll(()=>documentPane.evaluate(element=>element.scrollTop)).toBe(0);
     assert.equal(await documentTree.evaluate(element=>element.scrollTop),treeScrollBefore);
     const outerPage=page.locator('.document-workspace > .page');
-    assert.equal(await outerPage.evaluate(element=>element.scrollHeight===element.clientHeight),true);
+    assert.equal(await page.getByTestId('document-file-preview').evaluate(element=>getComputedStyle(element).overflowY),'visible');
     assert.equal(await outerPage.evaluate(element=>getComputedStyle(element).scrollbarWidth),'none');
     assert.equal(await page.getByRole('tablist',{name:'文档详情'}).evaluate(element=>getComputedStyle(element).scrollbarWidth),'none');
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -284,19 +324,17 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.getByRole('link',{name:'项目设置',exact:true}).click();
     await expect(page.getByLabel('Project ID',{exact:true})).not.toBeEditable();
     await page.getByLabel('运行超时',{exact:true}).fill('11111');
-    await expect.poll(()=>JSON.parse(readFileSync(join(root,'concord.json'),'utf8')).runner.timeoutMs).toBe(11111);
+    await expect.poll(()=>readProjectConfig(root).runner.timeoutMs).toBe(11111);
     await page.getByLabel('源码目录',{exact:true}).fill('src\n');
     await expect(page.getByLabel('源码目录',{exact:true})).toHaveValue('src\n');
     // Wait for the preceding save/readback to finish before introducing an external edit.
     await expect(page.getByLabel('源码目录',{exact:true})).toHaveValue('src');
     await expect(page.getByRole('status')).toContainText('已自动保存');
     await page.getByLabel('运行超时',{exact:true}).fill('12345');
-    const configPath=join(root,'concord.json');
-    const config=JSON.parse(readFileSync(configPath,'utf8'));
-    config.runner.timeoutMs=54321;
-    const externalConfig=`${JSON.stringify(config,null,2)}\n`;
-    writeFileSync(configPath,externalConfig);
-    await page.waitForResponse(response=>response.url().endsWith('/api/workspace')&&response.ok());
+    const configPath=join(root,projectConfigPath(root));
+    const config=readProjectConfig(root);
+    writeProjectConfig(root,{...config,runner:{...config.runner,timeoutMs:54321}});
+    const externalConfig=readFileSync(configPath,'utf8');
     await expect(page.locator('.form-error').first()).toBeVisible();
     await expect(page.getByLabel('运行超时',{exact:true})).toHaveValue('12345');
     assert.equal(readFileSync(configPath,'utf8'),externalConfig,'polled digests must not let stale config overwrite disk');
@@ -312,18 +350,20 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await navigation.getByRole('link',{name:'Browser authoring',exact:true}).click();
     writeFileSync(join(root,'src/demo.ts'),'// @concord-file browser-demo\n// @concord-implements docs/feature/browser-feature/README.md\nexport const demo = 1;\n');
     mkdirSync(join(root,'test'),{recursive:true});
-    writeFileSync(join(root,'test/demo.test.ts'),"import test from 'node:test';\n// @concord-case browser-added-test\n// @concord-contract docs/feature/browser-feature/use-case/browser-flow.md\ntest('Added browser test', () => {});\n" + Array.from({length:100},(_,index)=>`// Reading fixture ${index}\n`).join(''));
-    await page.waitForResponse(response=>response.url().endsWith('/api/workspace')&&response.ok());
+    writeFileSync(join(root,'test/demo.test.ts'),"import test from 'node:test';\n// @use-case docs/feature/browser-feature/use-case/browser-flow.md\ntest('Added browser test', () => {});\n" + Array.from({length:100},(_,index)=>`// Reading fixture ${index}\n`).join(''));
+    await page.reload();
+    await expect(page.getByRole('tab',{name:'测试',exact:true})).toBeVisible();
     await page.getByRole('tab',{name:'测试',exact:true}).click();
     await expect(page.getByText('Added browser test',{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'查看测试源码',exact:true}).click();
-    await expect(page.getByRole('dialog')).toContainText('browser-added-test');
+    await expect(page.getByRole('dialog')).toContainText('Added browser test');
     await page.keyboard.press('Escape');
     await page.getByRole('tab',{name:'实现',exact:true}).click();
-    await page.getByRole('button',{name:'src/demo.ts',exact:true}).click();
+    await page.getByRole('button',{name:/^src\/demo\.ts · 第 /}).click();
     const source=page.getByLabel('源码原文',{exact:true});
     await source.fill('export const demo = 2;\n');
     await expect.poll(()=>readFileSync(join(root,'src/demo.ts'),'utf8')).toBe('export const demo = 2;\n');
+    await page.getByRole('button',{name:'Close',exact:true}).click();
     await sidebar.getByRole('link',{name:'Git 变更',exact:true}).click();
     await expect(page.getByRole('tab',{name:/Docs 变更/})).toHaveAttribute('aria-selected','true');
     await expect(page.getByRole('region',{name:'新增测试用例',exact:true})).toHaveCount(0);
@@ -331,10 +371,10 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(gitTree).toContainText('Added browser test');
     await expect(gitTree).not.toContainText('src/demo.ts');
     await gitTree.getByRole('button').filter({hasText:'Added browser test'}).click();
-    await expect(page.locator('[data-git-diff]')).toContainText('browser-added-test');
+    await expect(page.locator('[data-git-diff]')).toContainText('Added browser test');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page).toHaveURL(/line=4/);
-    await expect(page.locator('[data-git-diff] #git-line-4')).toBeVisible();
+    await expect(page).toHaveURL(/line=3/);
+    await expect(page.locator('[data-git-diff] #git-line-3')).toBeVisible();
     const diffScroll = page.getByTestId('git-diff-scroll');
     await diffScroll.evaluate(element => { element.scrollTop = 250; });
     await expect.poll(() => diffScroll.evaluate(element => element.scrollTop)).toBe(250);
@@ -347,7 +387,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(gitTree.getByRole('button',{name:'docs/feature/browser-feature/README.md',exact:true})).toHaveAttribute('aria-current','page');
     await page.getByRole('tab',{name:/测试用例变更/}).click();
     await page.reload();
-    await expect(page.locator('[data-git-diff]')).toContainText('browser-added-test');
+    await expect(page.locator('[data-git-diff]')).toContainText('Added browser test');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect(page.getByRole('tab',{name:/测试用例变更/})).toHaveAttribute('aria-selected','true');
     await expect(sidebar.getByRole('link',{name:'测试',exact:true})).toHaveCount(0);
@@ -357,7 +397,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByRole('dialog')).toContainText('test');
     await gitTree.getByRole('button',{name:'test/demo.test.ts',exact:true}).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page.locator('[data-git-diff]')).toContainText('browser-added-test');
+    await expect(page.locator('[data-git-diff]')).toContainText('Added browser test');
     await page.getByRole('button',{name:'Toggle Sidebar',exact:true}).click();
     await expect(page.getByRole('link',{name:'Feature',exact:true})).toBeVisible();
     await page.getByRole('link',{name:'Feature',exact:true}).click();

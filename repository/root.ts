@@ -16,8 +16,7 @@ export function repositoryRoot(): string {
   return root;
 }
 const Configuration = Schema.Struct({ format: Schema.Literal('concord.repository/v1'), host: Schema.String });
-export function repositoryConfiguration() {
-  const root = repositoryRoot();
+export function repositoryConfiguration(root = repositoryRoot()) {
   const path = join(root, 'concord.repository.json');
   let source: string;
   try { if (!lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) throw new Error(); source = readFileSync(path, 'utf8'); }

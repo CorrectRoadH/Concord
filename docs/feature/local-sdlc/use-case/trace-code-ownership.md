@@ -15,7 +15,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 主流程
 
-1. 在 concord.json 配置 sourceRoots，或新项目用 init --source-root src；缺省不扫描实现源码。
+1. 在 concord.config.ts 配置 sourceRoots，或新项目用 init --source-root src；缺省不扫描实现源码。
 2. code annotate <id> --scope file|node|region --contract <canonical-ref> 生成注释，多目标重复 --contract；维护者把片段放到实际源码。
 3. code list/show 检查声明，code locate <path> --line <n> 返回该行所有包含作用域。
 4. trace show <feature-or-use-case> 汇总代码 implements 边；review render 分别列出代码和测试。

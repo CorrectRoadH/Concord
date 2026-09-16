@@ -45,7 +45,6 @@ import {
   decodeTestDirective,
 } from "./schema.js";
 import { PrFileSystem, PrGit, PrGitHub, type PrBodyRequirements } from "./services.js";
-import { testingOwnerContracts } from "../docs/trace/compiler.js";
 
 export const PR_REPOSITORY_ROOT = repositoryRoot();
 
@@ -670,25 +669,11 @@ function expandTestDirective(
       if (selectorPath !== file.relative) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `selector path does not match ${file.relative}` });
       const declared = relationEntries.filter((entry) => entry.caseId === caseId && entry.testFile === file.relative);
       if (declared.length > 1) return yield* new PrTestRelationInvalid({ selector: item.selector, message: "selector has multiple current declarations" });
-      const relation = declared[0] === undefined ? undefined : { owner: declared[0].owner, regressions: declared[0].regressions, issues: declared[0].issues };
+      const relation = declared[0];
       if (relation === undefined) return yield* new PrTestRelationInvalid({ selector: item.selector, message: "selector is not a current case" });
       context.inputFiles.add(declared[0]!.declarationPath);
-      const ownerSeparator = relation.owner.lastIndexOf("#");
-      if (ownerSeparator < 1) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `current owner is not a path#anchor reference: ${relation.owner}` });
-      const ownerPath = relation.owner.slice(0, ownerSeparator);
-      const ownerAbsolute = resolve(root, ownerPath);
-      if (context.head === undefined && !(yield* fileSystem.exists(ownerAbsolute))) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `current owner does not exist: ${relation.owner}` });
-      context.inputFiles.add(ownerPath);
-      const ownerSource = context.head === undefined
-        ? yield* fileSystem.readText(ownerAbsolute)
-        : yield* git.readBlob(context.head, ownerPath);
-      const owners = yield* Effect.try({
-        try: () => testingOwnerContracts([[ownerPath, ownerSource]]),
-        catch: (cause) => new PrTestRelationInvalid({ selector: item.selector, message: cause instanceof Error ? cause.message : String(cause) }),
-      });
-      const owner = owners.find((entry) => entry.ref === relation.owner);
-      if (owner === undefined) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `current owner anchor does not exist: ${relation.owner}` });
-      const contract = owner.contract;
+      const contract = relation.contract;
+
       const contractPath = contract.split("#", 1)[0]!;
       if (context.head === undefined && !(yield* fileSystem.exists(resolve(root, contractPath)))) return yield* new PrTestRelationInvalid({ selector: item.selector, message: `canonical contract does not exist: ${contract}` });
       context.inputFiles.add(contractPath);

@@ -28,7 +28,7 @@ import {
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = "16rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
+const SIDEBAR_WIDTH_MOBILE = "min(18rem, 85vw)"
 const SIDEBAR_WIDTH_ICON = "3rem"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
@@ -163,6 +163,19 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const [contentWidth, setContentWidth] = React.useState<number>()
+  const innerRef = React.useRef<HTMLDivElement>(null)
+
+  React.useLayoutEffect(() => {
+    if (isMobile || collapsible !== "icon") return
+    const inner = innerRef.current
+    if (!inner) return
+    const updateWidth = () => setContentWidth(Math.ceil(inner.getBoundingClientRect().width))
+    updateWidth()
+    const observer = new ResizeObserver(updateWidth)
+    observer.observe(inner)
+    return () => observer.disconnect()
+  }, [collapsible, isMobile])
 
   if (collapsible === "none") {
     return (
@@ -216,6 +229,7 @@ function Sidebar({
       {/* This is what handles the sidebar gap on desktop */}
       <div
         data-slot="sidebar-gap"
+        style={state === "expanded" && contentWidth ? { width: contentWidth } : undefined}
         className={cn(
           "relative w-(--sidebar-width) bg-transparent transition-[width] duration-200 ease-linear",
           "group-data-[collapsible=offcanvas]:w-0",
@@ -228,7 +242,8 @@ function Sidebar({
       <div
         data-slot="sidebar-container"
         className={cn(
-          "fixed inset-y-0 z-10 hidden h-svh w-(--sidebar-width) transition-[left,right,width] duration-200 ease-linear md:flex",
+          "fixed inset-y-0 z-10 hidden h-svh transition-[left,right,width] duration-200 ease-linear md:flex",
+          collapsible === "icon" ? "w-max" : "w-(--sidebar-width)",
           side === "left"
             ? "left-0 group-data-[collapsible=offcanvas]:left-[calc(var(--sidebar-width)*-1)]"
             : "right-0 group-data-[collapsible=offcanvas]:right-[calc(var(--sidebar-width)*-1)]",
@@ -241,6 +256,7 @@ function Sidebar({
         {...props}
       >
         <div
+          ref={innerRef}
           data-sidebar="sidebar"
           data-slot="sidebar-inner"
           className="flex h-full w-full flex-col bg-sidebar group-data-[variant=floating]:rounded-lg group-data-[variant=floating]:border group-data-[variant=floating]:border-sidebar-border group-data-[variant=floating]:shadow-sm"

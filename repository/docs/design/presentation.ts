@@ -65,7 +65,7 @@ export function renderDesignError(error: DesignPresentationError, json = false):
 }
 
 function state(value: DesignReceipt["design"]["state"]): string {
-  return value._tag === "undecided" ? "undecided" : `decided → ${value.selectedPlan}`;
+  return value._tag === "undecided" ? "undecided" : value._tag === "deferred" ? `deferred: ${value.reason}` : `decided → ${value.selectedPlan}`;
 }
 
 function humanReceipt(receipt: DesignReceipt): string {

@@ -1,5 +1,5 @@
 import { type CaseInventoryReceipt, type CollectedCase } from "./inventory.ts";
-import type { RepositorySourceIdentityV2 } from "../source-identity.ts";
+import type { RepositorySourceIdentityV3 } from "../source-identity.ts";
 export interface FormalCaseReceiptV1 {
     readonly format: "niceeval.e2e-case-receipt/v1";
     readonly mode: "formal";
@@ -43,7 +43,7 @@ export interface FormalCaseReceiptV2 {
     readonly caseId: string;
     readonly inventoryDigest: string;
     readonly candidate: { readonly gitSha: string; readonly sha256: string; readonly sri: string };
-    readonly source: RepositorySourceIdentityV2;
+    readonly source: RepositorySourceIdentityV3;
     readonly runner: { readonly executor: "vitest" | "playwright"; readonly version: string; readonly argv: readonly string[] };
     readonly result: { readonly disposition: "regression" | "pass"; readonly stage: string; readonly exitCode: number | null; readonly signal: string | null };
     readonly cleanup: { readonly ok: boolean; readonly resources: readonly object[] };
@@ -84,7 +84,7 @@ export declare const parseExactSelector: (selector: string) => {
     readonly path: string;
     readonly caseId: string;
 };
-export declare const exactCaseNativeArgs: (executor: "vitest" | "playwright", path: string, caseId: string) => readonly string[];
+export declare const exactCaseNativeArgs: (executor: "vitest" | "playwright", path: string, titlePath: readonly string[]) => readonly string[];
 export declare const validateInventoryReceipt: (input: unknown) => CaseInventoryReceipt;
 export declare const readManagedInventoryReceipt: (root: string, inventoryId: string, selector: string) => CaseInventoryReceipt;
 export declare const selectInventoryCase: (receipt: CaseInventoryReceipt, selector: string, repo: string) => CollectedCase;

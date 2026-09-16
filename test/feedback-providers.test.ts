@@ -93,8 +93,7 @@ async function expectConcordError(effect: Effect.Effect<unknown, ConcordError>, 
   }
 }
 
-// @concord-case feedback-provider-github-list
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('GitHub sync binds repository identity, requests all states, filters PRs, and accepts null body', async () => {
   const requests: Request[] = [];
   const transport = scripted([
@@ -124,8 +123,7 @@ test('GitHub sync binds repository identity, requests all states, filters PRs, a
   assert.match(result.fetchedAt, /Z$/u);
 });
 
-// @concord-case feedback-provider-github-import-scope
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('GitHub single import rejects PR URLs, malformed encoding, and a different returned issue', async () => {
   for (const url of [
     'https://github.com/acme/widgets/pull/7',
@@ -147,8 +145,7 @@ test('GitHub single import rejects PR URLs, malformed encoding, and a different 
   }), 'FeedbackScopeMismatch');
 });
 
-// @concord-case feedback-provider-bound-identity
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('bound immutable provider identity mismatches abort the fetch', async () => {
   await expectConcordError(fetchFeedback({ ...githubConnection, repositoryId: '42' }, {
     credential: 'token', transport: scripted([response({ id: 43 })]),
@@ -159,8 +156,7 @@ test('bound immutable provider identity mismatches abort the fetch', async () =>
   }), 'ConnectionIdentityMismatch');
 });
 
-// @concord-case feedback-provider-rate-limit-classification
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('HTTP and GraphQL rate limits are classified without treating every 400/403 as rate limited', async () => {
   await expectConcordError(fetchFeedback(githubConnection, {
     credential: 'token', transport: scripted([response({}, 403)]),
@@ -179,8 +175,7 @@ test('HTTP and GraphQL rate limits are classified without treating every 400/403
   }), 'ProviderRequestFailed');
 });
 
-// @concord-case feedback-provider-linear-list
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('Linear sync uses the official GraphQL endpoint, raw personal key, archived traversal, and actual scope IDs', async () => {
   const requests: Request[] = [];
   const transport = scripted([
@@ -210,8 +205,7 @@ test('Linear sync uses the official GraphQL endpoint, raw personal key, archived
   }]);
 });
 
-// @concord-case feedback-provider-linear-import-scope
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('Linear import verifies returned team, workspace, and identifier', async () => {
   const transport = scripted([
     response(teamsEnvelope()),
@@ -228,8 +222,7 @@ test('Linear import verifies returned team, workspace, and identifier', async ()
   assert.equal(requests.length, 0);
 });
 
-// @concord-case feedback-provider-repeat-identity
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('repeated identities retain the latest update and reject equal-version conflicts', async () => {
   const latest = await Effect.runPromise(fetchFeedback(githubConnection, {
     credential: 'token',
@@ -252,8 +245,7 @@ test('repeated identities retain the latest update and reject equal-version conf
   }), 'RemoteIdentityConflict');
 });
 
-// @concord-case feedback-provider-credential-and-response-bounds
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('missing credentials and oversized transport responses fail with named safe errors', async () => {
   const prior = process.env.TEST_GITHUB_TOKEN;
   delete process.env.TEST_GITHUB_TOKEN;
@@ -270,8 +262,7 @@ test('missing credentials and oversized transport responses fail with named safe
   assert.doesNotMatch(error.message, /never-print-this-token/u);
 });
 
-// @concord-case feedback-provider-github-pagination
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('GitHub follows a full first page and aborts the whole fetch when a later page fails', async () => {
   const firstPage = Array.from({ length: 100 }, (_, index) => githubIssue({
     id: index + 1,
@@ -301,8 +292,7 @@ test('GitHub follows a full first page and aborts the whole fetch when a later p
   assert.equal(call, 3);
 });
 
-// @concord-case feedback-provider-linear-pagination
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('Linear follows cursors and rejects HTTP 200 partial data accompanied by GraphQL errors', async () => {
   const requests: Request[] = [];
   const paged = await Effect.runPromise(fetchFeedback(linearConnection, {
@@ -332,8 +322,7 @@ test('Linear follows cursors and rejects HTTP 200 partial data accompanied by Gr
   }), 'ProviderGraphQlFailed');
 });
 
-// @concord-case feedback-provider-pagination-bounds
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('repeated cursors and indefinitely full GitHub pages terminate with explicit bounds', async () => {
   let linearCalls = 0;
   const repeatedCursor: FeedbackTransport = () => {

@@ -3,10 +3,11 @@ import { createHash } from "node:crypto";
 import { join, posix, relative, sep } from "node:path";
 import { Effect, Result, Schema, SchemaIssue } from "effect";
 import { parse } from "yaml";
+import { DocumentSchema } from 'concord-sdlc/model';
 
 import { decodeFeedbackDocument } from "../../feedback/codec.js";
 import { decodeMemoryDocument } from "../../memory/codec.js";
-import { decodeAnnotatedCases, decodeCaseArchive } from "../test-case/annotations.js";
+import { decodeCaseDeclarations, decodeCaseArchive } from "../test-case/annotations.js";
 import {
   TraceFormatError,
   TraceInputChanged,
@@ -34,26 +35,6 @@ import type {
 } from "./model.js";
 import { ADOPTABLE_DOCS_NODE_KINDS, DOCS_NODE_KINDS } from "./model.js";
 
-const refSchema = RepoRefSchema;
-const DocumentBaseSchema = {
-  format: Schema.Literal("concord.document/v1"),
-  id: Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u))),
-  title: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
-  createdAt: Schema.String.pipe(Schema.check(Schema.isMinLength(1))),
-};
-const DocumentSchema = Schema.Union([
-  Schema.Struct({ ...DocumentBaseSchema, kind: Schema.Literal("feature"), origin: Schema.optional(refSchema) }),
-  Schema.Struct({ ...DocumentBaseSchema, kind: Schema.Literal("roadmap"), state: Schema.Literals(["planned", "adopted"]), adoptedAs: Schema.optional(refSchema) }),
-  Schema.Struct({ ...DocumentBaseSchema, kind: Schema.Literal("engineering") }),
-  Schema.Struct({
-    ...DocumentBaseSchema,
-    kind: Schema.Literal("design"),
-    alternatives: Schema.NonEmptyArray(Schema.String.pipe(Schema.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u)))),
-    decision: Schema.optional(Schema.Struct({ selected: Schema.String, reason: Schema.String.pipe(Schema.check(Schema.isMinLength(1))), at: Schema.String.pipe(Schema.check(Schema.isMinLength(1))), targets: Schema.Array(Schema.String) })),
-  }),
-  Schema.Struct({ ...DocumentBaseSchema, kind: Schema.Literal("use-case"), feature: refSchema }),
-]);
-type DocumentMetadata = typeof DocumentSchema.Type;
 const RepoMetadataSchema = Schema.Struct({
   name: Schema.String,
   targets: Schema.Record(Schema.String, Schema.Unknown),
@@ -121,7 +102,8 @@ function decodeNode(path: string, text: string): TraceNode | undefined {
       message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue),
     });
   }
-  const metadata = decoded.success as DocumentMetadata;
+  const metadata = decoded.success;
+  if (metadata.kind === 'research' || metadata.kind === 'issue' || metadata.kind === 'memory') return undefined;
   const expectedPath = (() => {
     switch (metadata.kind) {
       case "feature": return `docs/feature/${metadata.id}/README.md`;
@@ -556,7 +538,7 @@ function validateRegressions(
           message: `target ${reference} is not a Memory document`,
         });
       }
-      if (target.kind !== "legacy/unstructured" && target.kind !== "problem") {
+      if (target.kind !== "problem") {
         throw new TraceFormatError({
           path: test.path,
           subject: "regression",
@@ -596,7 +578,7 @@ function validateFeedbackRelations(
   documents: ReadonlyMap<string, string>,
   memory: readonly TraceMemory[],
 ): void {
-  const memoryIds = new Set(memory.map((entry) => entry.id));
+  const memoryIds = new Set(memory.map((entry) => entry.path));
   for (const entry of feedback) {
     for (const target of entry.adoptions.current) {
       validateScopedRepoRef(
@@ -628,7 +610,7 @@ function validateMemoryPromotions(
   for (const entry of memory) {
     for (const promotion of entry.promotions) {
       for (const target of promotion.current) {
-        validateScopedRepoRef(entry.path, "promotion", target, snapshot, documents, [promotion.kind]);
+        validateScopedRepoRef(entry.path, "promotion", target, snapshot, documents, ADOPTABLE_DOCS_NODE_KINDS);
       }
     }
   }
@@ -668,7 +650,7 @@ function traceInputPaths(root: string, paths: readonly string[]): readonly strin
     if (/^e2e\/.*\.(?:[cm]?[jt]sx?)$/u.test(file)) return true;
     if (/^e2e\/.*\/(?:project\.json|[^/]+\.cases\.evidence\.json|[^/]+\.case-evidence\/.*\.json)$/u.test(file)) return true;
     if (/^memory\/(?!INDEX\.md$).*\.md$/u.test(file)) return true;
-    return /^feedback\/(?!\.)[^/]+\/README\.md$/u.test(file);
+    return /^docs\/issues\/(?!\.)[^/]+\.md$/u.test(file);
   }), (path) => slash(relative(root, path)));
 }
 
@@ -698,7 +680,7 @@ function compileTraceAtGeneration(
   return Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const scan = () => Effect.forEach(
-      ["docs", "e2e", "feedback", "memory"],
+      ["docs", "e2e", "memory"],
       (directory) => walk(join(root, directory)),
     ).pipe(Effect.map((groups) => groups.flat()));
     const firstAll = yield* scan();
@@ -771,38 +753,13 @@ function compileTraceAtGeneration(
     const candidateSources = yield* Effect.forEach(annotationFiles, (path) => read(path).pipe(
       Effect.map((source) => ({ path: slash(relative(root, path)), source })),
     ));
-    const declaredOwners = yield* pure("docs", "owner", () => testingOwnerContracts(documentSources));
-    const declaredOwnerMap = new Map(declaredOwners.map((owner) => [owner.ref, owner]));
-    for (const owner of declaredOwners) {
-      const contractPath = yield* pure(owner.path, "contract", () => {
-        const targetPath = referenceParts(owner.contract).path;
-        const target = validateRepoRefTarget(
-          targetSnapshot,
-          owner.contract,
-          ["feature", "use-case"],
-          documentIndex.get(targetPath),
-        );
-        if (Result.isFailure(target)) {
-          throw new TraceFormatError({ path: owner.path, subject: "contract", message: target.failure.message });
-        }
-        return target.success.path;
-      });
-      if (featuresForContract(nodes, contractPath).length === 0) {
-        return yield* Effect.fail(new TraceFormatError({
-          path: owner.path,
-          subject: "contract",
-          message: `target ${owner.contract} is not a Feature contract or composed Use Case`,
-        }));
-      }
-    }
-
     const metadataCache = new Map<string, ReturnType<typeof metadata>>();
     const knownCaseIds = new Map<string, string>();
     const tests: TraceTest[] = [];
 
-    const annotated = [] as import("../test-case/annotations.js").AnnotatedCase[];
+    const annotated = [] as import("../test-case/annotations.js").CaseDeclaration[];
     for (const candidate of candidateSources) {
-      const decoded = decodeAnnotatedCases(candidate.path, candidate.source);
+      const decoded = decodeCaseDeclarations(candidate.path, candidate.source);
       if (Result.isFailure(decoded)) return yield* Effect.fail(new TraceFormatError({
         path: candidate.path,
         subject: "case relations",
@@ -824,6 +781,21 @@ function compileTraceAtGeneration(
           message: `${caseId} is already owned by ${previous}`,
         }));
         knownCaseIds.set(caseId, item.declarationPath);
+      }
+
+      const contract = item.contract;
+      if (item.contract !== undefined) {
+        const contractPath = referenceParts(contract).path;
+        const target = validateRepoRefTarget(targetSnapshot, contract, ["feature", "use-case"], documentIndex.get(contractPath));
+        if (Result.isFailure(target)) return yield* Effect.fail(new TraceFormatError({
+          path: item.declarationPath, subject: "contract", message: target.failure.message,
+        }));
+        if (target.success.kind !== item.contractKind) return yield* Effect.fail(new TraceFormatError({
+          path: item.declarationPath, subject: "contract", message: `@${item.contractKind} must point to a ${item.contractKind} contract`,
+        }));
+        if (featuresForContract(nodes, target.success.path).length === 0) return yield* Effect.fail(new TraceFormatError({
+          path: item.declarationPath, subject: "contract", message: `${contract} is not a Feature contract or composed Use Case`,
+        }));
       }
 
       let directory = posix.dirname(item.testFile);
@@ -853,16 +825,12 @@ function compileTraceAtGeneration(
         metadataCache.set(found, repo);
       }
       {
-        if (!declaredOwnerMap.has(item.owner)) return yield* Effect.fail(new TraceFormatError({
-          path: item.declarationPath,
-          subject: "owner",
-          message: `${item.owner} is not a declared owner contract anchor`,
-        }));
         tests.push({
           caseId: item.caseId,
+          title: item.title,
           selector: `${item.testFile}#${item.caseId}`,
           path: item.testFile,
-          owner: item.owner,
+          contract,
           regressions: [...item.regressions],
           issues: item.issues.map((issue) => issue.url),
           ...repo,
@@ -877,7 +845,7 @@ function compileTraceAtGeneration(
 
     const memoryIndex = join(root, "memory", "INDEX.md");
     const memoryFiles = all.filter((path) =>
-      path.startsWith(join(root, "memory")) && path.endsWith(".md") && path !== memoryIndex
+      path.startsWith(join(root, "memory") + sep) && path.endsWith(".md") && path !== memoryIndex && path !== join(root, 'memory', 'README.md')
     );
     const memorySources = yield* Effect.forEach(memoryFiles, (path) => read(path).pipe(
       Effect.map((source) => [slash(relative(root, path)), source] as const),
@@ -892,34 +860,24 @@ function compileTraceAtGeneration(
           relativePath.slice("memory/".length, -".md".length),
           source,
         );
-        return "legacy" in decoded
-          ? {
-              path: relativePath,
-              id: decoded.id,
-              title: decoded.title,
-              kind: "legacy/unstructured",
-              promotions: [],
-            }
-          : {
-              path: relativePath,
-              id: decoded.metadata.id,
-              title: decoded.metadata.title,
-              kind: decoded.metadata.kind.type,
-              state: decoded.metadata.kind.state,
-              promotions: sorted(decoded.metadata.promotions.map((promotion) => ({
-                kind: promotion.kind,
-                current: sorted(promotion.current, (target) => target),
-                history: sorted(promotion.history, (item) => `${item.target}\0${item.commit}`),
-              })), (promotion) => promotion.kind),
-              metadataDigest: digest({
-                ...decoded.metadata,
-                promotions: sorted(decoded.metadata.promotions.map((promotion) => ({
-                  ...promotion,
-                  current: sorted(promotion.current, (target) => target),
-                  history: sorted(promotion.history, (item) => `${item.target}\0${item.commit}`),
-                })), (promotion) => promotion.kind),
-              }),
-            };
+        return {
+          path: relativePath,
+          id: decoded.metadata.id,
+          title: decoded.metadata.title,
+          kind: decoded.metadata.memoryKind,
+          state: decoded.metadata.state,
+          promotions: [{
+            kind: "promotion",
+            current: sorted(decoded.metadata.promotions, (target) => target),
+            history: decoded.metadata.history
+              .flatMap((entry) => entry.action !== "promote" && entry.action !== "retire-promotion"
+                ? []
+                : entry.ref === undefined
+                  ? []
+                  : [{ at: entry.at, action: entry.action, reason: entry.reason, ref: entry.ref, ...(entry.commit === undefined ? {} : { commit: entry.commit }) }]),
+          }],
+          metadataDigest: digest(decoded.metadata),
+        };
       },
     ));
     yield* pure(
@@ -929,7 +887,7 @@ function compileTraceAtGeneration(
     );
 
     const feedbackFiles = all.filter((path) =>
-      /^feedback\/(?!\.)[^/]+\/README\.md$/u.test(slash(relative(root, path)))
+      /^docs\/issues\/(?!\.|README\.md$)[^/]+\.md$/u.test(slash(relative(root, path)))
     );
     const feedback = yield* Effect.forEach(feedbackFiles, (path) => read(path).pipe(
       Effect.flatMap((source) => {
@@ -944,9 +902,8 @@ function compileTraceAtGeneration(
             id: metadata.id,
             title: metadata.title,
             state: metadata.state,
-            source: metadata.source,
-            subject: metadata.subject,
-            claim: metadata.claim,
+            ...(metadata.subject === undefined ? {} : { subject: metadata.subject }),
+            ...(metadata.claim === undefined ? {} : { claim: metadata.claim }),
             adoptions: { current, history },
             memoryRelations,
             metadataDigest: digest({
@@ -962,7 +919,7 @@ function compileTraceAtGeneration(
       generation,
       nodes,
       pages,
-      owners: declaredOwners,
+      owners: [],
       tests: sorted(tests, (item) => item.selector),
       feedback: sorted(feedback, (item) => item.path),
       memory: sorted(memory, (item) => item.path),

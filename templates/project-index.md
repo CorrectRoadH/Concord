@@ -11,7 +11,7 @@ Start with [Concepts](concepts.md) for shared language and
 | Repository testing, maintenance, and build mechanisms | [Engineering](engineering/README.md) |
 | Settled directions awaiting adoption | [Roadmap](roadmap/README.md) |
 | Alternative comparison and a decision | [Design](design/README.md) |
-| Dated external observations and sources | [Research](research/README.md) |
+| Freeform research, observations, and sources | [Research](research/README.md) |
 | Feedback awaiting investigation | [Feedback](issues/README.md) |
 | Problems, decisions, and reusable lessons | [Memory](../memory/README.md) |
 

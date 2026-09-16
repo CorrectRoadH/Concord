@@ -1,5 +1,6 @@
 import ts from "typescript";
 import { Result, Schema, SchemaIssue } from "effect";
+import { deriveTestReference } from "concord-sdlc/model";
 
 import { CaseRelationsFormatError } from "./errors.js";
 import {
@@ -14,14 +15,15 @@ import {
   type CaseTombstone,
 } from "./sidecar.js";
 
-const MANAGED = /^\s*\/\/\s*@concord-(case|owner|regression|issue|test-file)\s+(.+?)\s*$/u;
+const MANAGED = /^\s*\/\/\s*@(feature|use-case|regression|issue|test-file)\s+(.+?)\s*$/u;
 const HISTORY = /^\s*\/\/\s*@concord-(history|tombstone)\s+(.+?)\s*$/u;
 
 export interface AnnotatedCase {
-  readonly caseId: `necase_${string}`;
+  readonly caseId: string;
   readonly declarationPath: string;
   readonly testFile: string;
-  readonly owner: string;
+  readonly contract: string;
+  readonly contractKind: "feature" | "use-case";
   readonly regressions: readonly string[];
   readonly issues: readonly CaseIssue[];
   readonly title: string;
@@ -30,6 +32,8 @@ export interface AnnotatedCase {
   readonly annotationEnd: number;
   readonly annotationRanges: readonly { readonly start: number; readonly end: number }[];
 }
+
+export type CaseDeclaration = AnnotatedCase;
 
 export interface SupportedTestDeclaration { readonly title: string; readonly start: number }
 
@@ -128,11 +132,11 @@ function managedLineRange(source: string, start: number, end: number, path: stri
   return { start: lineStart, end: lineEnd };
 }
 
-export function decodeAnnotatedCases(path: string, source: string): Result.Result<readonly AnnotatedCase[], CaseRelationsFormatError> {
+export function decodeCaseDeclarations(path: string, source: string): Result.Result<readonly CaseDeclaration[], CaseRelationsFormatError> {
   try {
     const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
     const bindings = runnerBindings(file);
-    const cases: AnnotatedCase[] = [];
+    const cases: CaseDeclaration[] = [];
     const visit = (node: ts.Node): void => {
       if (ts.isCallExpression(node)) {
         const call = testCall(node, bindings);
@@ -144,11 +148,18 @@ export function decodeAnnotatedCases(path: string, source: string): Result.Resul
           });
           if (managed.length > 0) {
             const byName = (name: string) => managed.filter((entry) => entry.name === name);
-            const ids = byName("case"); const owners = byName("owner"); const testFiles = byName("test-file");
-            if (ids.length !== 1 || owners.length !== 1 || testFiles.length > 1) throw new CaseRelationsFormatError({ path, message: `managed annotations above test declaration at ${file.getLineAndCharacterOfPosition(node.getStart(file)).line + 1} require exactly one case and owner, and at most one test-file` });
-            const caseId = decode(CaseIdSchema, ids[0]!.value, path, "case ID") as `necase_${string}`;
-            const owner = canonicalPath(owners[0]!.value, path, "owner");
-            if (!owner.includes("#")) throw new CaseRelationsFormatError({ path, message: `owner for ${caseId} must include an exact anchor` });
+            const features = byName("feature"); const useCases = byName("use-case"); const testFiles = byName("test-file");
+            if (features.length + useCases.length !== 1 || testFiles.length > 1) throw new CaseRelationsFormatError({ path, message: "test declaration requires exactly one @feature or @use-case" });
+            const topLevel = node.parent !== undefined && ts.isExpressionStatement(node.parent) && node.parent.parent === file;
+            if (!topLevel) throw new CaseRelationsFormatError({ path, message: "annotated test declarations must be top-level static test/it calls" });
+            const titleCount = locateSupportedTestDeclarations(path, source).filter((entry) => entry.title === call.title).length;
+            const testFile = testFiles.length === 0 ? path : canonicalPath(testFiles[0]!.value, path, "test-file");
+            if (titleCount !== 1) throw new CaseRelationsFormatError({ path, message: `test title is ambiguous: ${call.title}` });
+            const caseId = deriveTestReference(testFile, path, call.title);
+            const contract = canonicalPath((features[0] ?? useCases[0])!.value, path, "contract");
+            const contractKind = features.length === 1 ? "feature" as const : "use-case" as const;
+            if (contractKind === "feature" && !/^docs\/feature\/(?!.*\/use-case\/).+\/README\.md$/u.test(contract)) throw new CaseRelationsFormatError({ path, message: "feature annotation must target docs/feature" });
+            if (contractKind === "use-case" && !/^docs\/feature\/.+\/use-case\/.+\.md$/u.test(contract)) throw new CaseRelationsFormatError({ path, message: "use-case annotation must target a feature use-case path" });
             const regressions = byName("regression").map((entry) => canonicalPath(entry.value, path, "regression"));
             if (new Set(regressions).size !== regressions.length) throw new CaseRelationsFormatError({ path, message: `regressions for ${caseId} contain duplicates` });
             const issues = byName("issue").map((entry) => {
@@ -157,18 +168,22 @@ export function decodeAnnotatedCases(path: string, source: string): Result.Resul
               return decode(CaseIssueSchema, input, path, `issue for ${caseId}`);
             });
             if (new Set(issues.map((issue) => issue.url)).size !== issues.length) throw new CaseRelationsFormatError({ path, message: `issues for ${caseId} contain duplicate URLs` });
-            const testFile = testFiles.length === 0 ? path : canonicalPath(testFiles[0]!.value, path, "test-file");
-            if (!call.title.endsWith(` [${caseId}]`)) throw new CaseRelationsFormatError({ path, message: `annotated declaration for ${caseId} does not end its literal runner title with the same ID` });
             const start = Math.min(...managed.map((entry) => entry.start));
             const end = Math.max(...managed.map((entry) => entry.end));
             const annotationRanges = managed.map(({ start, end }) => managedLineRange(source, start, end, path));
-            cases.push({ caseId, declarationPath: path, testFile, owner, regressions, issues, title: call.title, declarationStart: node.getStart(file), annotationStart: start, annotationEnd: end, annotationRanges });
+            cases.push({ caseId, declarationPath: path, testFile, contract, contractKind, regressions, issues, title: call.title, declarationStart: node.getStart(file), annotationStart: start, annotationEnd: end, annotationRanges });
           }
         }
       }
       ts.forEachChild(node, visit);
     };
     visit(file);
+    const seen = new Set<string>();
+    for (const item of cases) {
+
+      if (seen.has(item.caseId)) throw new CaseRelationsFormatError({ path, message: `${item.caseId} is declared more than once in ${path}` });
+      seen.add(item.caseId);
+    }
     const managedCommentStarts = new Set<number>();
     const collectComments = (node: ts.Node): void => {
       const ranges = [
@@ -192,13 +207,18 @@ export function decodeAnnotatedCases(path: string, source: string): Result.Resul
   }
 }
 
-export function renderCaseAnnotations(caseId: string, relation: CaseRelation, declarationPath: string, testFile: string): string {
+export function decodeAnnotatedCases(path: string, source: string): Result.Result<readonly AnnotatedCase[], CaseRelationsFormatError> {
+  const decoded = decodeCaseDeclarations(path, source);
+  if (Result.isFailure(decoded)) return Result.fail(decoded.failure);
+  return Result.succeed(decoded.success);
+}
+
+export function renderCaseAnnotations(caseId: string, relation: CaseRelation, declarationPath: string, testFile: string, preserveTestFile = false): string {
   const lines = [
-    `// @concord-case ${caseId}`,
-    `// @concord-owner ${relation.owner}`,
-    ...relation.regressions.map((memory) => `// @concord-regression ${memory}`),
-    ...relation.issues.map((issue) => `// @concord-issue ${JSON.stringify(issue)}`),
-    `// @concord-test-file ${testFile}`,
+    `// @${relation.contractKind} ${relation.contract}`,
+    ...relation.regressions.map((memory) => `// @regression ${memory}`),
+    ...relation.issues.map((issue) => `// @issue ${JSON.stringify(issue)}`),
+    ...(preserveTestFile || declarationPath !== testFile ? [`// @test-file ${testFile}`] : []),
   ];
   return lines.join("\n");
 }
@@ -209,14 +229,14 @@ export function replaceCaseAnnotations(source: string, item: AnnotatedCase, rela
   if (first === undefined) return source;
   for (const range of [...rest].sort((a, b) => b.start - a.start)) output = output.slice(0, range.start) + output.slice(range.end);
   const ending = /\r\n$/u.test(source.slice(first.start, first.end)) ? "\r\n" : /\n$/u.test(source.slice(first.start, first.end)) ? "\n" : "";
-  return output.slice(0, first.start) + renderCaseAnnotations(item.caseId, relation, item.declarationPath, testFile) + ending + output.slice(first.end);
+  return output.slice(0, first.start) + renderCaseAnnotations(item.caseId, relation, item.declarationPath, testFile, item.annotationRanges.some(range => /^\s*\/\/\s*@test-file\b/u.test(source.slice(range.start, range.end)))) + ending + output.slice(first.end);
 }
 
 export function stripManagedCaseAnnotations(path: string, source: string): Result.Result<string, CaseRelationsFormatError> {
-  const decoded = decodeAnnotatedCases(path, source);
+  const decoded = decodeCaseDeclarations(path, source);
   if (Result.isFailure(decoded)) return Result.fail(decoded.failure);
   let projected = source;
-  const ranges = decoded.success.flatMap((item) => item.annotationRanges).sort((a, b) => b.start - a.start);
+  const ranges = decoded.success.flatMap((item) => item.annotationRanges.filter((range) => /^\s*\/\/\s*@(feature|use-case|regression|issue)\b/u.test(source.slice(range.start, range.end)))).sort((a, b) => b.start - a.start);
   for (const range of ranges) projected = projected.slice(0, range.start) + projected.slice(range.end);
   return Result.succeed(projected);
 }

@@ -107,18 +107,19 @@ function breadcrumb(pathname: string): string {
 }
 
 export function App() {
+  const [api] = useState(() => new ConcordApi());
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
   const [error, setError] = useState('');
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
     setError('');
-    void new ConcordApi().workspace(controller.signal).then(
+    void api.workspace(controller.signal).then(
       value => { if (!controller.signal.aborted) setSnapshot(value); },
       cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)); },
     );
     return () => controller.abort();
-  }, [attempt]);
+  }, [api, attempt]);
   if (!snapshot) return <main className="startup-page"><section className="startup-card"><div className="brand-mark">C</div><h1>{error ? '无法加载工作台' : '正在加载工作台…'}</h1>{error ? <><p role="alert">{error}</p><Button onClick={() => setAttempt(value => value + 1)}>重试</Button></> : <p role="status">正在读取项目工作区。</p>}</section></main>;
-  return <WorkspaceProvider initial={snapshot}><ThemeToggle /><Shell /></WorkspaceProvider>;
+  return <WorkspaceProvider initial={snapshot} api={api}><ThemeToggle /><Shell /></WorkspaceProvider>;
 }

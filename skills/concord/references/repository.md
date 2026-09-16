@@ -1,62 +1,42 @@
 # Repository profile 边界
 
-`concord repo ...` 保留消费仓库的文档、Memory 与原生 E2E 工作流。通用 `concord test run` 记录 command evidence；它不能替代此 profile 的正式 red/green/takeover 证据。先读消费仓库规则和测试契约。
+`concord repo ...` 使用消费仓库的原生 E2E 工作流。通用 `concord test run` 记录 command evidence，不能替代正式 red/green/takeover 证据。先阅读消费仓库的测试契约。
 
-## 入口与安装
+## 入口
 
-消费仓库的 `concord.repository.json` 指向自己的 host。host 拥有真实 candidate、Testkit、native inventory 和 takeover。Concord 校验 Git 顶层、host root、协议与锁定 engine 的实际字节；`RepositoryEngineMismatch` 时使用项目入口，不绕过校验。
-
-NiceEval 使用签入仓库的已构建 tarball 和锁定依赖：
+消费仓库的 `concord.repository.json` 指向自己的可信 host。host 拥有 candidate、Testkit、native inventory 和 takeover；Concord 校验 Git 顶层、host root 与锁定 engine 的实际字节。`RepositoryEngineMismatch` 时使用项目锁定入口。
 
 ```sh
-pnpm install --frozen-lockfile
 pnpm exec concord --skill repository
 pnpm run repo --help
 pnpm run repo docs test --help
-pnpm memory --help
 ```
 
-离线安装还需要其它依赖的本地缓存。Concord 自身开发可以全局 link checkout 后 `pnpm build`；这个 link 不替代另一个仓库锁定的包。
+## 用路径关联测试
 
-## 当前关系写在声明上方
-
-Repository profile 的 Feature、Use Case、Design owner 使用 `concord.document/v1` 与 canonical path；不使用 NiceEval 的 `docs-node` frontmatter 或旧模板路径。
+在真实顶层测试声明正上方放置一个契约注释：
 
 ```ts
-// @concord-case necase_7J4M2N6Q8R3T5V9X
-// @concord-owner docs/engineering/testing/e2e/inspection.md#inspection-query
-// @concord-regression memory/query-run-pipe-truncated-at-128k.md
-test("query run 经 pipe 交付完整文档 [necase_7J4M2N6Q8R3T5V9X]", async () => {})
+// @use-case docs/feature/inspection/use-case/query-run.md
+test("query run 经 pipe 交付完整文档", async () => {})
 ```
 
-ID 是永久不复用的 opaque 身份，title 末尾仍须有同一 token。每 case 一个 testing owner，owner authority 再唯一指向 Feature 或 Use Case。不要在此 profile 改用通用模式的 `@concord-contract`。
+指向整个 Feature 时改用 `// @feature docs/feature/inspection/README.md`。目标必须存在且类型匹配；多个测试可以指向同一契约。无需人工 ID、标题后缀、testing owner 或 attach 步骤。
 
-helper 声明用 `// @concord-test-file e2e/<repo>/test/<entry>.test.ts` 明示 native owner path；selector 是 `<native-path>#<caseId>`，旧路径不会自动跟随。可重复的 `@concord-issue` 保存经验证的严格 JSON Issue 数据；不用手写外部 provenance。
-
-AST 只定位注释和声明；只有原生 runner collection 产生 inventory。歧义、重复、动态展开和无效注释必须先修正。当前关系不另写 `.cases.json`；`e2e/concord-history.ts` 只保存 history/tombstone 注释，不保存 current 副本。证据索引和旧 receipts 仍然是独立证据文件。
-
-## 新增与维护 case
-
-从现有产品契约和 testing owner 开始，优先加强同一长期结果的既有 case。按实际子命令帮助核对参数：
+Concord 从 native 文件路径、声明文件路径和测试名称自动派生执行引用。helper 声明通过 `// @test-file e2e/<repo>/test/<entry>.test.ts` 指定 native 文件。名称或路径变化会改变执行引用；静态声明必须能与原生收集结果唯一对应。用 list 的结果选择测试，不手写引用。
 
 ```sh
 pnpm run repo docs test list --json
-pnpm run repo docs test case allocate-id --json
 pnpm run repo docs test inventory --repo <repo-id> --json
-pnpm run repo docs test owner create --help
-pnpm run repo docs test case attach <path#caseId> --owner <owner-ref> --inventory <neinv-id> --json
-pnpm run repo docs test show <path#caseId> --json
-pnpm run repo docs test case move --help
-pnpm run repo docs test case retire --help
-pnpm run repo docs test issue add --help
+pnpm run repo docs test show <selector> --json
 pnpm run repo docs test audit --json
 ```
 
-把新分配的 ID 放到真实可见标题后，再 collection 并 attach。用具名命令维护关系、移动和退役，保留事务历史及 ID。多 case 文件逐 case 操作，不把一个文件的关系复制给全部测试。`audit` 的 uncoveredUseCases、unassignedCases、missingRelations、orphanedRelations 是不同发现。
+`@regression` 指向 Problem Memory，`@issue` 保存经验证的 Issue 数据。维护这些关系使用 `regression`、`issue` 子命令；不手写证据或外部 provenance。current 关系只在源码注释中，反向关系由工具派生。`e2e/concord-history.ts` 仅保存历史和退役记录。
 
-## 正式回归与证据更新
+## 原生证据
 
-先取得旧 candidate 的公开入口 red，再验证修复 candidate 的 green 与可靠性矩阵；不能用私有函数调用、手写 receipt 或 diagnose 代替。
+host 声明 `caseIdentity: "concord.case-contracts/v1"`，并在实际执行副本中用相同算法唯一绑定 native case。字段声明本身不证明绑定正确；实现摘要必须覆盖绑定算法。AST 扫描不证明测试执行。
 
 ```sh
 pnpm e2e evidence red --help
@@ -66,10 +46,10 @@ pnpm run repo docs test regression refresh --help
 pnpm memory resolve --help
 ```
 
-root runner 返回 `nered_...` / `netake_...`，inventory 返回 `neinv_...`。`regression add` 使用这些受管 ID；不传任意 JSON 或 artifact 路径。新 fixed 只接受 v2 formal evidence：绑定同一固定执行副本的源码投影、case/native path、owner/contract 引用和完整 Markdown 内容。源码投影剥除经过严格解析的真实受管注释；字符串里的假注释、普通代码、helper 与路径集合变化仍会使 proof 失效。它不证明完整依赖闭包。
+正式证据绑定 `concord.repository-source-identity/v3`，其中 `direct-contract` 保存契约路径及内容摘要。源码投影使用 `concord.repository-source-projection/v2`：剥除真实关系注释，保留名称、测试逻辑与 native 文件映射。契约、helper 断言或源码路径变化会使证据陈旧。
 
-旧 v1 receipts、证据索引与 fixed Memory 保留为历史并显示 legacy/stale/unavailable，不自动 reopen。已有 current regression 的 proof 需要更新时，对 open Problem 使用 `regression refresh --reason <text>`，附带新的 red/takeover/inventory。刷新原子归档旧索引指针，不重写旧 receipts，也不追加重复 regression。有效 current v2 proof 的重复刷新会拒绝。
+新 fixed 需要完整正式 gate；旧 receipts 保留原件，不能补写摘要来冒充当前证据。更新已有 regression 的陈旧 proof 时，对 open Problem 使用 `regression refresh --reason` 并提供新受管 red、takeover 和 inventory。
 
 ## 冲突与恢复
 
-`InventoryStale` 或 bundle identity 变化：用当前工具重新 collection/运行；不修补 digest。`CasePathStale`：读取当前 selector 并核对迁移。遇到 journal 时保留现场，查看 `pnpm run repo docs trace recover --help` 后执行显式恢复。不要覆盖外部编辑。
+`InventoryStale` 时重新收集，不修补 digest。遇到 journal 时保留现场，查看 `pnpm run repo docs trace recover --help` 并使用显式恢复。不要覆盖外部编辑。

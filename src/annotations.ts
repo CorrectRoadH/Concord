@@ -6,8 +6,9 @@ import { DatabaseSync } from 'node:sqlite';
 import { Schema } from 'effect';
 import * as ts from 'typescript';
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from './shared.js';
+import { deriveTestReference } from './test-reference.js';
 
-const PARSER_VERSION = `typescript-ast/${ts.version}/concord-annotations-v2`;
+const PARSER_VERSION = `typescript-ast/${ts.version}/concord-annotations-v3-test-reference`;
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 const FindingSchema = Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int) });
 const CachedSnapshotSchema = Schema.Struct({
@@ -89,29 +90,28 @@ function annotationLines(text: string, source: ts.SourceFile, statement: ts.Stat
   }
   return { values, lines: resultLines };
 }
-function parseAnnotations(values: readonly string[], lines: readonly number[], path: string, findings: Finding[]): { readonly id?: string; readonly contract?: string; readonly regressions: string[]; readonly status: 'active' | 'retired'; readonly used: Set<number> } {
-  let id: string | undefined, contract: string | undefined, status: 'active' | 'retired' = 'active';
+function parseAnnotations(values: readonly string[], lines: readonly number[], path: string, findings: Finding[]): { readonly contract?: string; readonly contractKind?: 'feature' | 'use-case'; readonly regressions: string[]; readonly status: 'active' | 'retired'; readonly used: Set<number> } {
+  let contract: string | undefined, contractKind: 'feature' | 'use-case' | undefined, status: 'active' | 'retired' = 'active';
   const regressions: string[] = [], used = new Set<number>();
   for (let index = 0; index < values.length; index++) {
     const value = values[index] ?? '';
-    const match = /^@concord-(case|contract|regression|status)(?:\s+(.+?))?\s*$/.exec(value);
+    const match = /^@(feature|use-case|regression|status)(?:\s+(.+?))?\s*$/.exec(value);
     if (!match) continue;
     used.add(lines[index] ?? 0);
     const kind = match[1], argument = match[2]?.trim();
-    if (!argument) { finding(findings, 'InvalidAnnotation', path, `@concord-${kind} requires a value`, lines[index]); continue; }
-    if (kind === 'case') { if (id !== undefined) finding(findings, 'DuplicateCaseAnnotation', path, 'A test declaration has more than one @concord-case', lines[index]); else id = argument; }
-    else if (kind === 'contract') { if (contract !== undefined) finding(findings, 'DuplicateContractAnnotation', path, 'A test declaration has more than one @concord-contract', lines[index]); else contract = argument; }
+    if (!argument) { finding(findings, 'InvalidAnnotation', path, `@${kind} requires a value`, lines[index]); continue; }
+    if (kind === 'feature' || kind === 'use-case') { if (contract !== undefined) finding(findings, 'DuplicateContractAnnotation', path, 'A test declaration has more than one @feature/@use-case target', lines[index]); else { contract = argument; contractKind = kind; } }
     else if (kind === 'regression') regressions.push(argument);
     else if (argument === 'retired') status = 'retired';
-    else finding(findings, 'InvalidAnnotation', path, '@concord-status must be retired', lines[index]);
+    else finding(findings, 'InvalidAnnotation', path, '@status must be retired', lines[index]);
   }
-  return { id, contract, regressions, status, used };
+  return { contract, contractKind, regressions, status, used };
 }
 function annotationCommentLines(text: string, source: ts.SourceFile): number[] {
   const lines = new Set<number>();
   const collect = (ranges: readonly ts.CommentRange[] | undefined): void => {
     for (const range of ranges ?? []) {
-      if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia && /^\/\/\s*@concord-(?:case|contract|regression|status)\b/.test(text.slice(range.pos, range.end))) lines.add(lineAt(source, range.pos));
+      if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia && /^\/\/\s*@(?:feature|use-case|regression|status)\b/.test(text.slice(range.pos, range.end))) lines.add(lineAt(source, range.pos));
     }
   };
   // The parser owns template/regex/JSX token boundaries. A context-free scanner
@@ -141,8 +141,16 @@ function parseSource(input: Source): Parsed {
     const annotations = annotationLines(input.text, source, statement);
     const parsed = parseAnnotations(annotations.values, annotations.lines, input.path, findings);
     for (const item of parsed.used) attached.add(item);
-    if (parsed.id === undefined && parsed.contract === undefined && parsed.regressions.length === 0 && parsed.status === 'active') return;
+    if (parsed.contract === undefined && parsed.regressions.length === 0 && parsed.status === 'active') return;
     const [name, second, third] = call.arguments;
+    if (supported && name && (ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name))) {
+      const prior = source.statements.find((candidate) => {
+        if (!ts.isExpressionStatement(candidate) || !ts.isCallExpression(candidate.expression) || candidate.expression === call) return false;
+        const other = candidate.expression.arguments[0];
+        return !!other && (ts.isStringLiteral(other) || ts.isNoSubstitutionTemplateLiteral(other)) && other.text === name.text && !!calleeInfo(candidate.expression.expression, bindings);
+      });
+      if (prior) finding(findings, 'AmbiguousTestDeclaration', input.path, `Test name ${name.text} is declared more than once at the top level`, line);
+    }
     if (!name || !(ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name))) { finding(findings, 'DynamicTestName', input.path, 'Annotated test declarations need a literal test name', line); return; }
     let callback: ts.Expression | undefined, skipped = info.modifier === 'skip' || info.modifier === 'todo';
     if (call.arguments.length === 2) callback = second;
@@ -152,9 +160,12 @@ function parseSource(input: Source): Parsed {
       skipped ||= options.skipped; callback = third;
     } else { finding(findings, 'AmbiguousTestDeclaration', input.path, 'Annotated test declarations need a literal name and explicit callback', line); return; }
     if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) { finding(findings, 'AmbiguousTestDeclaration', input.path, 'Annotated test declarations need an explicit callback', line); return; }
-    if (!parsed.id) { finding(findings, 'MissingCaseId', input.path, 'Annotated test declaration is missing @concord-case', line); return; }
-    if (!parsed.contract) { finding(findings, 'MissingContract', input.path, 'Annotated test declaration is missing @concord-contract', line); return; }
-    try { cases.push(decode(AnnotatedCaseSchema, { id: parsed.id, file: input.path, line, name: name.text, contract: parsed.contract, regressions: parsed.regressions, status: parsed.status, framework: info.binding.framework, skipped }, `${input.path}:${line}`)); }
+    if (!parsed.contract) { finding(findings, 'MissingContract', input.path, 'Annotated test declaration is missing @feature or @use-case', line); return; }
+    const id = deriveTestReference(input.path, input.path, name.text);
+    try {
+      const value = { id, file: input.path, line, name: name.text, contract: parsed.contract, contractKind: parsed.contractKind, regressions: parsed.regressions, status: parsed.status, framework: info.binding.framework, skipped };
+      cases.push(decode(AnnotatedCaseSchema, value, `${input.path}:${line}`));
+    }
     catch (cause) { finding(findings, 'InvalidAnnotation', input.path, cause instanceof Error ? cause.message : String(cause), line); }
   };
   for (const statement of source.statements) {

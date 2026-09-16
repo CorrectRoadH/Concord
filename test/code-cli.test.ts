@@ -7,9 +7,10 @@ import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { CodeDeclarationSchema } from '../dist/code.js';
 import { ProjectSchema } from '../dist/shared.js';
+import { readProjectConfig, writeProjectConfig } from './support.js';
+import { deriveTestReference } from '../dist/test-reference.js';
 
-// @concord-case installed-code-ownership
-// @concord-contract docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('packed CLI traces code scopes and preserves the original fixed evidence gate', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-code-cli-'));
   try {
@@ -34,7 +35,7 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     const feature = 'docs/feature/orders/README.md';
     const useCase = 'docs/feature/orders/use-case/create-order.md';
     call(['init', '--docs-only', '--source-root', 'src', '--source-root', 'test'], ack);
-    const config = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root, 'concord.json'), 'utf8'));
+    const config = readProjectConfig(root);
     assert.deepEqual(config.sourceRoots, ['src', 'test']);
     assert.deepEqual(config.testRoots, []);
     assert.deepEqual(call(['doctor'], Schema.Struct({ missingSourceRoots: Schema.Array(Schema.String) })).missingSourceRoots, ['src', 'test']);
@@ -97,22 +98,23 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     // A code finding must not become an extra precondition for real red/green evidence.
     call(['memory', 'add', 'wrong-result', '--kind', 'problem', '--title', 'Wrong result'], ack);
     const problem = 'memory/wrong-result.md';
-    writeFileSync(join(root, 'concord.json'), JSON.stringify({ ...config, testRoots: ['test'] }));
+    writeProjectConfig(root, { ...config, testRoots: ['test'] });
     writeFileSync(join(root, 'test/result.test.mjs'), [
       "import test from 'node:test';", "import assert from 'node:assert/strict';", "import { result } from '../src/result.mjs';",
-      '// @concord-case result-check', `// @concord-contract ${useCase}`, `// @concord-regression ${problem}`,
+      `// @use-case ${useCase}`, `// @regression ${problem}`,
       "test('result', () => { assert.equal(result(), 2); });", '',
     ].join('\n'));
+    const resultCase = deriveTestReference('test/result.test.mjs', 'test/result.test.mjs', 'result');
     const product = (value: number) => `// @concord-unknown-label invalid\nexport function result() { return ${value}; }\n`;
     writeFileSync(join(root, 'src/result.mjs'), product(1));
     assert.equal(call(['check'], Schema.Struct({ ok: Schema.Boolean }), 1).ok, false);
     assert.equal(call(['code', 'list'], error, 1).error, 'TraceInvalid');
     assert.equal(call(['test', 'list'], Schema.Struct({ cases: Schema.Array(Schema.Unknown) })).cases.length, 1);
-    call(['test', 'show', 'result-check'], ack);
+    call(['test', 'show', resultCase], ack);
     const receipt = Schema.Struct({ id: Schema.String, commandOutcome: Schema.String });
-    const red = call(['test', 'run', 'result-check'], receipt, 1); assert.equal(red.commandOutcome, 'fail');
+    const red = call(['test', 'run', resultCase], receipt, 1); assert.equal(red.commandOutcome, 'fail');
     writeFileSync(join(root, 'src/result.mjs'), product(2));
-    const green = call(['test', 'run', 'result-check'], receipt); assert.equal(green.commandOutcome, 'pass');
+    const green = call(['test', 'run', resultCase], receipt); assert.equal(green.commandOutcome, 'pass');
     assert.equal(call(['memory', 'resolve', 'wrong-result', '--kind', 'fixed', '--reason', 'fixed'], error, 1).error, 'EvidenceRequired');
     const resolveArgs = ['memory', 'resolve', 'wrong-result', '--kind', 'fixed', '--reason', 'fixed result', '--red', red.id, '--green', green.id];
     writeFileSync(join(root, 'src/result.mjs'), product(3));
@@ -123,9 +125,9 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     const testFile = join(root, 'test/result.test.mjs');
     writeFileSync(testFile, readFileSync(testFile, 'utf8').replace(useCase, 'docs/feature/missing/README.md'));
     assert.equal(call(['test', 'list'], error, 1).error, 'TraceInvalid', 'original test reference validation remains enforced');
-    writeFileSync(join(root, 'concord.json'), JSON.stringify({ ...config, sourceRoots: ['../escape'] }));
+    writeProjectConfig(root, { ...config, sourceRoots: ['../escape'] });
     assert.equal(call(['doctor'], error, 1).error, 'UnsafePath');
-    writeFileSync(join(root, 'concord.json'), JSON.stringify({ ...config, sourceRoots: 'src' }));
+    writeFileSync(join(root, 'concord.config.ts'), readFileSync(join(root, 'concord.config.ts'), 'utf8').replace(/"sourceRoots": \[[\s\S]*?\]/u, '"sourceRoots": "src"'));
     assert.equal(call(['doctor'], error, 1).error, 'InvalidData');
 
     const skill = spawnSync(process.execPath, [cli, '--skill', 'code'], { cwd: scratch, encoding: 'utf8', timeout: 10000 });

@@ -8,17 +8,16 @@ import { Effect, Schema } from 'effect';
 import { scanAnnotations } from '../dist/annotations.js';
 import { scanCode } from '../dist/code.js';
 import { loadDocuments } from '../dist/documents.js';
-import { ProjectSchema } from '../dist/shared.js';
 import { LocalRepository } from '../dist/storage.js';
+import { projectConfigPath, readProjectConfig } from './support.js';
 
 const PackageVersion = Schema.Struct({ version: Schema.String });
 const CheckOutput = Schema.Struct({ ok: Schema.Boolean });
 
-// @concord-case selfhost-config-and-annotation-smoke
-// @concord-contract docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('current checkout configures a version-matched runner whose annotations scan cleanly', () => Effect.runPromise(Effect.sync(() => {
   const root = resolve('.');
-  const project = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root, 'concord.json'), 'utf8'));
+  const project = readProjectConfig(root);
   assert.equal(project.format, 'concord.project/v1');
   assert.deepEqual(project.testRoots, ['test']);
   assert.deepEqual(project.sourceRoots, ['src', 'web']);
@@ -35,12 +34,15 @@ test('current checkout configures a version-matched runner whose annotations sca
   const consumer = mkdtempSync(join(tmpdir(), 'concord-selfhost-smoke-'));
   try {
     execFileSync('git', ['init', '-q', consumer]);
-    cpSync(join(root, 'concord.json'), join(consumer, 'concord.json'));
+    const configPath = projectConfigPath(root);
+    cpSync(join(root, configPath), join(consumer, configPath));
+    for (const source of project.memorySources ?? []) cpSync(join(root, source.path), join(consumer, source.path), { recursive: true });
     mkdirSync(join(consumer, 'test'));
     cpSync(join(root, 'test'), join(consumer, 'test'), { recursive: true });
     cpSync(join(root, 'src'), join(consumer, 'src'), { recursive: true });
     cpSync(join(root, 'web'), join(consumer, 'web'), { recursive: true });
     mkdirSync(join(consumer, 'docs'));
+    if (project.constitution !== undefined) cpSync(join(root, project.constitution.path), join(consumer, project.constitution.path));
     cpSync(join(root, 'docs/feature'), join(consumer, 'docs/feature'), { recursive: true });
     for (const sourceFile of ['tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']) {
       cpSync(join(root, sourceFile), join(consumer, sourceFile));
@@ -50,7 +52,7 @@ test('current checkout configures a version-matched runner whose annotations sca
       const scan = scanAnnotations(repository);
       assert.deepEqual(scan.findings, []);
       const useCases = loadDocuments(repository).filter(document => document.metadata.kind === 'use-case');
-      assert.equal(useCases.length, 10);
+      assert.equal(useCases.length, 17);
       for (const useCase of useCases) {
         assert.ok(scan.cases.some(item => item.contract === useCase.path), `missing a real test relation for ${useCase.path}`);
       }

@@ -3,15 +3,17 @@ import { Effect, FileSystem, Schema } from "effect";
 import { RepoRefSchema } from "../docs/trace/ref.js";
 import { MemoryContentInvalid } from "./errors.js";
 import type { MemoryCheckReceipt } from "./repository.js";
-import { MemoryV1Schema, ProblemResolutionSchema, type MemoryDocument } from "./schema.js";
+import { MemorySchema } from "concord-sdlc/model";
+import type { MemoryDocument } from "./schema.js";
 import { MemoryStore, type MemoryMutationReceipt, type MemoryStoreError } from "./services.js";
 
 const NonEmpty = Schema.String.check(Schema.isTrimmed(), Schema.isMinLength(1));
 const Body = Schema.NonEmptyString;
 const MutationFields = { dryRun: Schema.Boolean };
+const ResolutionIntentSchema = Schema.Struct({ kind: Schema.Literals(["fixed", "not-a-bug", "wont-fix", "external-fixed"]), reason: NonEmpty, at: Schema.optional(NonEmpty) });
 
 export const MemoryCommandInputSchema = Schema.Union([
-  Schema.Struct({ operation: Schema.Literal("add"), ...MutationFields, metadata: MemoryV1Schema, body: Body }),
+  Schema.Struct({ operation: Schema.Literal("add"), ...MutationFields, metadata: MemorySchema, body: Body }),
   Schema.Struct({ operation: Schema.Literal("list") }),
   Schema.Struct({ operation: Schema.Literal("show"), id: NonEmpty }),
   Schema.Struct({
@@ -23,7 +25,8 @@ export const MemoryCommandInputSchema = Schema.Union([
     expectedAuthorDigest: NonEmpty,
   }),
   Schema.Struct({ operation: Schema.Literal("search"), pattern: NonEmpty }),
-  Schema.Struct({ operation: Schema.Literal("resolve"), ...MutationFields, id: NonEmpty, resolution: ProblemResolutionSchema }),
+  Schema.Struct({ operation: Schema.Literal("resolve"), ...MutationFields, id: NonEmpty, resolution: ResolutionIntentSchema }),
+  Schema.Struct({ operation: Schema.Literal("activate"), ...MutationFields, id: NonEmpty, reason: NonEmpty }),
   Schema.Struct({ operation: Schema.Literal("reopen"), ...MutationFields, id: NonEmpty }),
   Schema.Struct({ operation: Schema.Literal("supersede"), ...MutationFields, id: NonEmpty, by: NonEmpty }),
   Schema.Struct({ operation: Schema.Literal("promote"), ...MutationFields, id: NonEmpty, to: RepoRefSchema }),
@@ -32,9 +35,9 @@ export const MemoryCommandInputSchema = Schema.Union([
 ]);
 export type MemoryCommandInput = typeof MemoryCommandInputSchema.Type;
 
-type MutationOperation = "add" | "author-set" | "resolve" | "reopen" | "supersede" | "promote" | "retire";
+type MutationOperation = "add" | "author-set" | "resolve" | "activate" | "reopen" | "supersede" | "promote" | "retire";
 export type MemoryCommandOutcome =
-  | { readonly domain: "memory"; readonly operation: MutationOperation; readonly dryRun: boolean; readonly memory: typeof MemoryV1Schema.Type; readonly receipt: MemoryMutationReceipt }
+  | { readonly domain: "memory"; readonly operation: MutationOperation; readonly dryRun: boolean; readonly memory: import("concord-sdlc/model").MemoryMeta; readonly receipt: MemoryMutationReceipt }
   | { readonly domain: "memory"; readonly operation: "list" | "search"; readonly memories: readonly MemoryDocument[] }
   | { readonly domain: "memory"; readonly operation: "show"; readonly memory: MemoryDocument; readonly ownerPreimageDigest: string; readonly authorRegionDigest: string }
   | { readonly domain: "memory"; readonly operation: "check"; readonly receipt: MemoryCheckReceipt };
@@ -80,6 +83,10 @@ export function runMemoryCommand(
       }
       case "resolve": {
         const receipt = yield* store.resolve(decoded.id, decoded.resolution, decoded.dryRun);
+        return mutationOutcome(decoded.operation, decoded.dryRun, receipt);
+      }
+      case "activate": {
+        const receipt = yield* store.activate(decoded.id, decoded.reason, decoded.dryRun);
         return mutationOutcome(decoded.operation, decoded.dryRun, receipt);
       }
       case "reopen": {

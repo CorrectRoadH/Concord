@@ -39,7 +39,7 @@ interface UseCasePlan {
   readonly snapshot: TraceSnapshot;
   readonly indexPath: string;
   readonly targetPath: string;
-  readonly changes: readonly TraceMultiFileChange[];
+  readonly changes: readonly (TraceMultiFileChange & { readonly bytes: string | Uint8Array })[];
 }
 
 function pathMessage(cause: unknown): string {

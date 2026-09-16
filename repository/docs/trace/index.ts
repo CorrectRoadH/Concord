@@ -138,12 +138,11 @@ export function listFeatures(snapshot: TraceSnapshot, input: FeatureListInput = 
 
 export function listTests(snapshot: TraceSnapshot, input: TestListInput = {}): TestListReceipt {
   const pattern = input.pattern?.toLocaleLowerCase();
-  const owners = new Map(snapshot.owners.map((owner) => [owner.ref, owner]));
   const memory = new Map(snapshot.memory.map((entry) => [entry.path, entry]));
   const tests = snapshot.tests
     .filter((test) => {
       if (pattern === undefined) return true;
-      const contract = owners.get(test.owner)?.contract;
+      const contract = test.contract;
       const features = contract === undefined ? [] : featuresForTarget(snapshot, contract);
       const regressionValues = test.regressions.flatMap((reference) => {
         const entry = memory.get(pathOf(reference));
@@ -155,14 +154,13 @@ export function listTests(snapshot: TraceSnapshot, input: TestListInput = {}): T
         test.title ?? "",
         test.path,
         test.repo,
-        test.owner,
         contract ?? "",
         ...features.flatMap((feature) => [featureId(feature.path), feature.path, feature.title]),
         ...regressionValues,
         ...test.issues,
       ].some((value) => value.toLocaleLowerCase().includes(pattern));
     })
-    .map((test) => ({ selector: test.selector, caseId: test.caseId, path: test.path, ...(test.title === undefined ? {} : { title: test.title }), repo: test.repo, owner: test.owner }))
+    .map((test) => ({ selector: test.selector, caseId: test.caseId, path: test.path, ...(test.title === undefined ? {} : { title: test.title }), repo: test.repo, contract: test.contract }))
     .sort((left, right) => left.selector.localeCompare(right.selector));
   return {
     format: "niceeval.docs-trace/list-v2",
@@ -218,23 +216,19 @@ export function showFeature(
       : undefined;
   };
 
-  const ownersByRef = new Map(snapshot.owners.map((owner) => [owner.ref, owner]));
   const scopedTests: TraceScopedTest[] = [];
   for (const test of snapshot.tests) {
-    const owner = ownersByRef.get(test.owner);
-    if (owner === undefined) continue;
-    const target = includedTarget(owner.contract);
+    const target = includedTarget(test.contract);
     if (target === undefined) continue;
     scopedTests.push({
       ...target,
-      via: "owner",
+      via: "contract",
       path: test.path,
       caseId: test.caseId,
       selector: test.selector,
       ...(test.title === undefined ? {} : { title: test.title }),
       repo: test.repo,
-      owner: test.owner,
-      description: owner.description,
+      description: test.title ?? "",
       lane: test.lane,
       areas: test.areas,
       executor: test.executor,
@@ -246,7 +240,7 @@ export function showFeature(
   const feedbackMemoryRelations: TraceFeedbackMemoryRelation[] = [];
   const adoptionHistory: TraceAdoptionHistory[] = [];
   const issueProvenance: TraceIssueProvenance[] = [];
-  const memoryById = new Map(snapshot.memory.map((memory) => [memory.id, memory]));
+  const memoryById = new Map(snapshot.memory.map((memory) => [memory.path, memory]));
 
   for (const feedback of snapshot.feedback) {
     const summary = feedbackSummary(feedback);
@@ -265,7 +259,7 @@ export function showFeature(
           memory: memorySummary(memory),
         });
       }
-      if (feedback.source.kind === "issue") {
+      if (feedback.source?.kind === "issue") {
         issueProvenance.push({
           ...target,
           via: "feedback",
@@ -421,15 +415,13 @@ export function showTest(
   }
   const test = matches[0];
   if (test === undefined) return Effect.fail(new TraceSelectorMissing({ selector, subject: "test" }));
-  const owner = snapshot.owners.find((item) => item.ref === test.owner);
-  if (owner === undefined) return Effect.fail(new TraceSelectorMissing({ selector: test.owner, subject: "test" }));
-  const target = relationTarget(snapshot, owner.contract);
+  const target = relationTarget(snapshot, test.contract);
   if (target === undefined) {
-    return Effect.fail(new TraceSelectorMissing({ selector: owner.contract, subject: "feature" }));
+    return Effect.fail(new TraceSelectorMissing({ selector: test.contract, subject: "feature" }));
   }
-  const features = featuresForTarget(snapshot, owner.contract);
+  const features = featuresForTarget(snapshot, test.contract);
   if (features.length === 0) {
-    return Effect.fail(new TraceSelectorMissing({ selector: owner.contract, subject: "feature" }));
+    return Effect.fail(new TraceSelectorMissing({ selector: test.contract, subject: "feature" }));
   }
 
   const regressions = byKey(test.regressions.flatMap((reference): TraceRegression[] => {
@@ -464,8 +456,7 @@ export function showTest(
       areas: test.areas,
       executor: test.executor,
     },
-    owner,
-    contract: { ref: owner.contract, kind: target.scope },
+    contract: { ref: test.contract, kind: target.scope },
     features: features.map((feature) => ({
       id: featureId(feature.path),
       path: feature.path,

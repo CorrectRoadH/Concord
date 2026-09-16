@@ -101,7 +101,7 @@ function testListTree(receipt: TestListReceipt, details: readonly TestShowReceip
     cursor.leaves.push({
       label: `${test.selector}${test.title === undefined ? "" : ` — ${test.title}`} [repo: ${test.repo}]`,
       children: detail === undefined ? relationChildren : [
-        { label: `Description: ${detail.owner.description}` },
+        { label: `Description: ${detail.test.title ?? ""}` },
         ...relationChildren,
       ],
     });
@@ -232,13 +232,7 @@ function testShowTree(receipt: TestShowReceipt): string {
     children: [
       { label: `Repository: ${receipt.test.repo}` },
       section("Metadata", metadata),
-      {
-        label: `Owner: ${receipt.owner.ref}`,
-        children: [
-          { label: `Description: ${receipt.owner.description}` },
-          { label: `Contract (${receipt.contract.kind}): ${receipt.contract.ref}` },
-        ],
-      },
+      { label: `Contract (${receipt.contract.kind}): ${receipt.contract.ref}` },
       section("Features", receipt.features.map((feature) => ({
         label: `${feature.id} — ${feature.title} [${feature.path}]`,
       }))),

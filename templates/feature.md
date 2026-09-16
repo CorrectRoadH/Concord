@@ -1,5 +1,7 @@
 # {{title}}
 
+Before writing, read `docs/constitution.md` and record every applicable real clause anchor in this Feature's `constitutionRefs` metadata.
+
 ## Problem
 
 Describe the user problem and why the product needs a current contract for it.

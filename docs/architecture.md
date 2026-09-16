@@ -1,24 +1,33 @@
 # Concord 架构与行为契约
 
+## 初始化与项目治理的采用设计
+
+2026-09-14 采用 [TS-only 运行时方案](design/ts-only-runtime/plans/ts-only/README.md)，替代初始化设计中的旧格式兼容规则。独立 Astra 挑战最终 PASS，实际交付由完整 pnpm check 与打包消费者验证。渐进初始化、多来源 Memory 和宪法治理继续有效；未涉及的证据等级、路径安全和 owner 分工保持原契约。
+
+新项目生成静态 concord.config.ts，旧 concord.json 返回 ProjectMigrationRequired，双配置同样拒绝，不执行 TS 模块。配置快照统一拥有原文前像、路径与摘要，写入/恢复/证据使用一致协议。Memory 首版仅 worktree 内本地文件来源，canonical path 拥有身份，只读权限在 publication 统一执行。
+
+docs/constitution.md 必需，默认可明确为 draft；作者显式采用 active。Feature/Design 通过 constitutionRefs 声明条款，反向影响派生，宪法不得冒充测试契约或自动合规证据。根 DESIGN.md 可选；页面默认值可按次覆盖。详细状态格式、引用解析、恢复及组合验收均以上述方案页面为准。
+
 源码注释与 Markdown 拥有协作事实，SQLite 只保存可重建缓存。
 
 ## 领域与 CLI
 
-`concord --root <repo>` 指定消费者，默认从 cwd 向上发现 `concord.json`；`init` 只初始化显式目录或 cwd。安装目录绝不充当消费者根。
+`concord --root <repo>` 指定消费者，默认从 cwd 向上发现 `concord.config.ts`；发现旧 `concord.json` 时仅返回具名迁移错误；`init` 只初始化显式目录或 cwd。安装目录绝不充当消费者根。
 
 - `--skill [topic]`：在任意 cwd 读取随包 Agent 指引，不加载 host、不写文件。默认短路由，按 init/document/test/memory/trace/recovery/repository 读取，all 展开全部。未知 topic 或混用写命令具名拒绝。
-- `init`：一次建立本地 Git 仓库中的 concord.json、完整分类目录、docs/concord.md 指南、缺失的 docs/README.md 和 docs/_template 全套模板。已有文件保留或具名报冲突；根入口、concepts 与 architecture 骨架仅在缺失时创建。`--test-root` 可重复，`--runner-config` 接受严格 runner JSON；默认配置仍是 Node 原生测试。纯文档仓库使用 `--docs-only` 保存空 testRoots，不要求测试目录；以后添加真实测试根即可启用发现。该选项与 `--test-root` 互斥。
+- `init`：一次建立本地 Git 仓库中的静态 concord.config.ts、必需的 docs/constitution.md、完整分类目录、docs/concord.md 指南、缺失的 docs/README.md 和 docs/_template 全套模板；根 DESIGN.md 可选。已有文件保留或具名报冲突；根入口、concepts 与 architecture 骨架仅在缺失时创建。`--test-root` 可重复，`--runner-config` 接受严格 runner JSON；默认配置仍是 Node 原生测试。纯文档仓库使用 `--docs-only` 保存空 testRoots，不要求测试目录；以后添加真实测试根即可启用发现。该选项与 `--test-root` 互斥。
 - `feature create/list/show`、`use-case create/list/show`：当前目标及其叶子用户路径。
-- `research create/list/show`：带日期决策输入。
+- owner `show` 面向 agent 返回路径、metadata、digest 与当前派生关系，不重复输出可直接读取的 Markdown 正文；Feature 汇总直属 Use Case 及其测试/实现声明。`page show` 与模板查看仍返回其明确请求的正文。声明关系不代表执行或覆盖率。
+- `research create/list/show`：研究输入，保留安全嵌套路径；观察日期仅在原文明确时记录。
 - `engineering create/list/show`：仓库测试与维护机制的目标、使用与验收。
 - `template list/show`：在任意 cwd 查看随包写作模板，无需初始化项目。
 - `doctor`：检查项目配置、缺失测试目录和当前关联，给出接入步骤，不执行 runner。
 - `design create/decide/list/show`：候选比较、唯一裁决及关联目标。
 - `roadmap create/adopt/list/show`：已定稿方向与显式采用。采用创建 Feature，Roadmap 标记 adopted 并保留历史；当前契约只在 Feature。
-- `test list/show/run`：从测试声明旁的源码注释发现稳定 case ID、目标契约与 regression Memory；项目级配置拥有 argv、附加 sourceFiles 和 timeout。源码正常编辑与 Git 保存测试演进，Concord 不再建立测试关系 sidecar。
-- `test annotate`：验证新 case ID、Feature / Use Case 目标与 Problem 引用后输出注释片段。它不改测试源文件，也不自动运行测试。
+- `test list/show/run`：从测试声明旁的源码注释派生测试执行引用并发现目标契约与 regression Memory；项目级配置拥有 argv、附加 sourceFiles 和 timeout。源码正常编辑与 Git 保存测试演进，Concord 不再建立测试关系 sidecar。
+- `test annotate`：验证 Feature / Use Case 目标与 Problem 引用后输出注释片段。它不改测试源文件，也不自动运行测试。
 - `cache status/rebuild/clear`：维护可删除重建的 SQLite 解析缓存。
-- `memory add/list/show/search/resolve/reopen/supersede/promote/retire`：Problem、Decision、Insight 及历史。
+- `memory add/list/show/search/activate/resolve/reopen/supersede/promote/retire`：Problem、Decision、Insight、Note 及历史；captured 表示尚未确认当前生命周期。
 - `author set`：用完整 owner preimage digest 更换契约或 Memory 正文，保留工具拥有的 metadata 与历史。
 - `issue draft/list/show/link/close`：本地 Observation 与 Memory 链接；`feedback` 统一提供本地反馈和 GitHub / Linear 读取接入，来源快照与本地状态分离，不执行远端发布。详见 [Feedback 契约](feature/feedback/architecture.md)。
 - `trace show/check`：从各 owner 编译图，检查目标存在、类型、重复及循环，动态反查测试和 Memory。不输出虚构覆盖率。
@@ -29,13 +38,13 @@
 
 消费仓库中使用 Markdown 加严格 YAML frontmatter。Feature、Use Case、Design、Roadmap、Engineering、Research、Memory 分别有 schema 与具名操作，不公开通用 CRUD。
 
-文档创建省略 `--body` 时使用随包模板；显式文件/stdin 正文仍可用。模板是作者提示，不是完成状态或验收证据。Feature、Roadmap 和 Design 候选使用相同体裁，README 必需。可选的 library、cli、architecture、lifecycle 和 use-case 索引通过可重复或逗号分隔的 --pages 选择，缺省只生成 README；结构化 pages 数组遵循同一规则。未知、重复选择和不支持的种类明确拒绝。Engineering 默认 README 定义目标、机制、使用与验收，按主题使用 page add 扩展。Design 外层包含 GOALS、LIMITS、DECISION 和 CASES，候选放在 `plans/<alternative>/`；候选身份仍由主 owner 的 alternatives 声明，普通页面不新增 metadata 真源。旧 Design 缺少模板页仍然有效，DECISION 正文不会改变 metadata.decision 中的裁决。
+文档创建省略 `--body` 时使用随包模板；显式文件/stdin 正文仍可用。模板是作者提示，不是完成状态或验收证据。Feature、Roadmap 和 Design 候选使用相同体裁，README 必需。可选的 library、cli、architecture、lifecycle 和 use-case 索引通过可重复或逗号分隔的 --pages 选择，省略时采用项目默认页面，显式 --no-pages 或结构化 pages: [] 仅生成 README。未知、重复选择和不支持的种类明确拒绝。Engineering 默认 README 定义目标、机制、使用与验收，按主题使用 page add 扩展。Design 外层包含 GOALS、LIMITS、DECISION 和 CASES，候选放在 `plans/<alternative>/`；候选身份仍由主 owner 的 alternatives 声明，普通页面不新增 metadata 真源。旧 Design 缺少模板页仍然有效，DECISION 正文不会改变 metadata.decision 中的裁决。
 
 `feature/roadmap/design/engineering page add/show/set` 维护已存在 package 的页面；也支持安全小写 slug 的自定义专题页，路径固定为 package 内的 `<slug>.md`，继续使用整文件 CAS。Design 外层保留 goals/limits/decision/cases 的既有路径，候选模板页须指定 plan。Design 候选通过 `--plan` 选择。set 必须提供最新整文件 digest，主 README 正文写入保留 metadata。普通 supporting Markdown 继续进入 candidate 摘要，不因为由模板生成而变成独立 owner 或测试证据。测试 contract 仍限于 Feature / Use Case；Engineering owner 可作为 Design 裁决和 Memory promotion 的目标。
 
 模板安装在工具包内，由严格 manifest 校验名称、路径、库存和普通文件类型，不依赖消费仓库或 NiceEval checkout。init 一次生成完整分类目录、docs/concord.md、docs/_template/ 全套可读参考模板，以及缺失的 docs/README.md、docs/concepts.md 和 docs/architecture.md。已有上述根文档保留，不修改 AGENTS.md。参考模板不成为契约 owner，create 使用随包模板，不把参考文件解释为自定义配置。
 
-路径是文档 canonical identity；slug 只允许 ASCII 小写字母、数字、单连字符。测试身份由紧邻测试声明的 `// @concord-case <id>` 拥有，`// @concord-contract <ref>` 和可重复的 `// @concord-regression <ref>` 保存唯一正向关系，可选 `// @concord-status retired` 表示关系退役。反向列表不写回契约，也不保存 JSON 测试关系副本。Git 保存源码演进；工具检查当前 ID 唯一性，不声称在删除所有历史后仍能判定 ID 复用。
+路径是文档 canonical identity；测试声明使用紧邻的 `// @feature <path>` 或 `// @use-case <path>`，并可使用 `// @regression`、`// @issue`、`// @test-file`、`// @status` 元数据。测试身份由 `deriveTestReference` 自动生成 `neref_...`；无需人工 ID、分配或 attach 步骤。反向列表由当前源码派生，不写回契约，也不保存 JSON 测试关系副本。
 
 注释解析使用 TypeScript AST，初期支持 JS/TS 中可明确绑定的静态 test/it 声明。悬空标注、重复 ID、动态/歧义声明产生明确 finding；静态索引不是 native runner inventory。项目配置保存 testRoots、runner argv、附加 sourceFiles、timeout。argv 的 {file}/{name}/{pattern} 占位符仅按参数替换，不经过 shell。运行收据明确 scope: command 和 selectedCaseId；不渲染为 native case passed，零测试或 skip 不能因此被称作 case 已通过。
 
@@ -45,7 +54,7 @@ Memory 保存 current promotion 和追加的生命周期 history，Problem 使�
 
 init 必须作用于 Git worktree 顶层；子目录项目与 bare repo 明确拒绝。
 
-`concord.json` 是格式为 concord.project/v1 的项目标记；采用固定的 docs/feature、docs/roadmap、docs/design、docs/engineering、docs/research、memory 约定。已有这些目录可以共存，但 init 遇到要创建的文件冲突时零写入失败，不导入或修改未知文件。
+`concord.config.ts` 是新项目的 concord.project/v1 项目标记，旧 `concord.json` 须先显式离线迁移且双配置拒绝；采用固定的 docs/feature、docs/roadmap、docs/design、docs/engineering、docs/research 约定及配置声明的 Memory 来源。已有这些目录可以共存，但 init 遇到要创建的文件冲突时零写入失败，不导入或修改未知文件。
 
 Roadmap adoption 递归包含实际 Markdown 页面并保留目录结构；旧 Roadmap 保存 adopted 历史，新 Feature 拥有当前契约。内部链接指向新副本，集合外相对链接保持原 canonical 目标；不能安全处理的链接、非 Markdown 附件、嵌套 owner、symlink 与目标冲突具名拒绝，不静默丢弃。规划再次检查源集合与摘要，并将 supporting source 的同内容 guard 纳入 publication；guard 会按现有协议原子重写并列入 changedPaths，不是只读断言。观察到的来源变化阻止发布；不额外宣称对不合作编辑器的线性化保证。
 
@@ -104,7 +113,11 @@ Code Declaration 是维护者对实现与契约关系的显式声明，源文件
 
 ## Repository profile
 
-`concord repo` 通过消费仓库声明的 host 使用原生 inventory 与正式证据，独立于上述通用 command evidence。源码注释、历史归档、固定执行副本的 v2 证据及既有 v1 历史读取规则见 [Repository profile](repository-profile.md)。包内 `concord --skill repository` 提供具体命令，不初始化通用项目或加载产品 host。
+测试身份采用[注释身份裁决](design/annotation-case-identity/README.md)：声明旁的 `@feature`/`@use-case` 直接绑定 canonical 契约，ID 由内部协议派生。host 声明 `caseIdentity: "concord.case-contracts/v1"`，source identity 使用 `concord.repository-source-identity/v3` 的 direct-contract binding，源码投影使用 `concord.repository-source-projection/v2`。原生唯一绑定及正式执行继续由消费仓库验证。
+
+`concord repo` 通过消费仓库声明的 host 使用原生 inventory 与正式证据，独立于上述通用 command evidence。源码注释、历史归档及固定执行副本的当前正式证据见 [Repository profile](repository-profile.md)。包内 `concord --skill repository` 提供具体命令，不初始化通用项目或加载产品 host。
+
+Research、Memory、Issue 的通用入口与 repository profile 共用唯一 `concord.document/v1` 模型。旧文档一次性迁移，不保留旧 owner 解码分支。历史处理声明以 attested 证据保留；正式执行证据通过 profile gate 绑定当前 Memory epoch。通用操作、profile 与迁移从首次读取起共用 Git-private flock，并互相检查未完成 journal；dry-run 可建立协调锁文件。详见[文档模型与迁移](document-migration.md)。
 
 ## 人用 Web 与 AI CLI
 
@@ -113,3 +126,5 @@ Code Declaration 是维护者对实现与契约关系的显式声明，源文件
 Web API 和 CLI 结构化 action 共用完整应用校验，fixed 的 red/green 验证不会因入口不同而省略。正文、作者字段、配置和源码分别有明确写入口；历史、身份和证据不能通过任意 JSON 覆盖。详见 [Web 工作台契约](feature/web-workbench/README.md)及其[架构](feature/web-workbench/architecture.md)。
 
 日志只实现当前格式，scope 区分文档和源码授权范围，不维护历史 journal 兼容分支。未知格式严格拒绝并保留现场。源码日志保存同一次读取的配置原文及摘要，发布和恢复均检查当前配置一致；文档初始化仍支持批量文件创建及回滚。
+
+Research 以目录 README 为 owner，支持安全相对路径的自由附页；界面从物理目录派生主题分组，嵌套 owner 保留独立 ID 与关系。Research 无默认章节、必填日期或必填来源。历史 Design 暂缓与 Roadmap 取消由原文来源支持的 metadata 保留，详见[目录迁移](document-migration.md#目录迁移)。

@@ -32,8 +32,7 @@ function message(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
 
-export function WorkspaceProvider({ initial, children }: { initial: WorkspaceSnapshot; children: ReactNode }) {
-  const api = useMemo(() => new ConcordApi(), []);
+export function WorkspaceProvider({ initial, api, children }: { initial: WorkspaceSnapshot; api: ConcordApi; children: ReactNode }) {
   const [snapshot, setSnapshot] = useState(initial);
   const [git, setGit] = useState<GitStatus | null>(null);
   const [jobs, setJobs] = useState<readonly ViewJob[]>([]);
@@ -58,18 +57,39 @@ export function WorkspaceProvider({ initial, children }: { initial: WorkspaceSna
   }, []);
   const clearNotice = useCallback((id: number) => setNotices(items => items.filter(item => item.id !== id)), []);
 
-  const refresh = useCallback(async () => {
-    const [next, nextGit, nextJobs] = await Promise.allSettled([api.workspace(), api.git(), api.jobs()]);
-    if (next.status === 'fulfilled') setSnapshot(next.value);
-    if (nextGit.status === 'fulfilled') setGit(nextGit.value);
-    if (nextJobs.status === 'fulfilled') setJobs(nextJobs.value);
+  const refreshInFlight = useRef<Promise<void> | null>(null);
+  const refresh = useCallback(async (includeWorkspace = true) => {
+    // A refresh requested after a write must read after any older refresh finishes.
+    while (refreshInFlight.current) await refreshInFlight.current;
+    // Git status also loads workspace metadata on the server. Keep it behind the
+    // workspace request so one browser refresh cannot contend with itself.
+    const pending = (async () => {
+      if (includeWorkspace) await api.workspace().then(setSnapshot).catch(() => undefined);
+      await Promise.allSettled([api.git().then(setGit), api.jobs().then(setJobs)]);
+    })();
+    refreshInFlight.current = pending;
+    try { await pending; }
+    finally { if (refreshInFlight.current === pending) refreshInFlight.current = null; }
   }, [api]);
 
   useEffect(() => {
-    void refresh();
-    const id = window.setInterval(() => void refresh(), 4000);
-    return () => window.clearInterval(id);
-  }, [refresh]);
+    let stopped = false;
+    let timer: number | undefined;
+    let cycle = 0;
+    const poll = async (initial = false) => {
+      cycle += initial ? 0 : 1;
+      // Jobs are cheap and need responsive state. Workspace/Git scans are much
+      // heavier, especially in large dirty worktrees, so refresh them every
+      // eighth cycle instead of keeping the repository lock almost continuous.
+      if (!initial && cycle % 8 === 0) await refresh(true);
+      else if (initial) await refresh(false);
+      else await api.jobs().then(setJobs).catch(() => undefined);
+      if (!stopped) timer = window.setTimeout(() => void poll(), 4000);
+    };
+    // App has just loaded the workspace; only fetch the remaining panels now.
+    void poll(true);
+    return () => { stopped = true; window.clearTimeout(timer); };
+  }, [api, refresh]);
 
   const act = useCallback(async (action: ViewAction, success = '操作已完成。') => {
     setBusy(true);

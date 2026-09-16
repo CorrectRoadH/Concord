@@ -2,16 +2,16 @@ import { Match, Result } from "effect";
 import { CaseNotCurrent, CasePathStale, InvalidCaseToken } from "./errors.js";
 import type { CaseRelationsSidecar } from "./sidecar.js";
 
-export interface CaseSelector { readonly path: string; readonly caseId: `necase_${string}` }
+export interface CaseSelector { readonly path: string; readonly caseId: string }
 
 export function parseCaseSelector(selector: string): Result.Result<CaseSelector, InvalidCaseToken> {
   const index = selector.lastIndexOf("#");
   const path = selector.slice(0, index);
   const caseId = selector.slice(index + 1);
-  if (index < 1 || path.startsWith("/") || path.includes("\\") || path.split("/").some((part) => part === "" || part === "." || part === "..") || !/^necase_[0-9A-HJKMNP-TV-Z]{16}$/u.test(caseId)) {
+  if (index < 1 || path.startsWith("/") || path.includes("\\") || path.split("/").some((part) => part === "" || part === "." || part === "..") || !/^neref_[0-9a-f]{32}$/u.test(caseId)) {
     return Result.fail(new InvalidCaseToken({ selector }));
   }
-  return Result.succeed({ path, caseId: caseId as `necase_${string}` });
+  return Result.succeed({ path, caseId });
 }
 
 export function selectCurrentCase(sidecar: CaseRelationsSidecar, selector: CaseSelector) {

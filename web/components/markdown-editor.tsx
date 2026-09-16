@@ -6,6 +6,7 @@ import {
   codeBlockPlugin,
   codeMirrorPlugin,
   headingsPlugin,
+  imagePlugin,
   linkDialogPlugin,
   linkPlugin,
   listsPlugin,
@@ -14,6 +15,10 @@ import {
   thematicBreakPlugin,
 } from '@mdxeditor/editor';
 import type { CodeBlockEditorProps } from '@mdxeditor/editor';
+import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { EditorView } from '@codemirror/view';
+import { tags } from '@lezer/highlight';
+import { fromMarkdown } from 'mdast-util-from-markdown';
 import * as stylex from '@stylexjs/stylex';
 import { AlertTriangle, GitCompareArrows, RefreshCw } from 'lucide-react';
 import { Component, useCallback, useEffect, useId, useRef, useState } from 'react';
@@ -23,17 +28,54 @@ import type { ViewFile } from '../../src/view-contract';
 import { ApiError } from '../lib/api';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { useWorkspace } from '../workspace';
+import { useTheme } from '../theme';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
+import { SourceEditor } from './source-editor';
 
 interface Props {
   readonly initial: ViewFile;
   readonly source?: boolean;
   readonly title?: string;
+  readonly sourceLocation?: { readonly line: number; readonly endLine: number };
+  readonly hideSourceHeading?: boolean;
   readonly onSaved?: (file: ViewFile) => void;
   readonly toolbarTarget?: HTMLElement | null;
+  readonly onFollowLink?: (href: string) => boolean;
 }
+
+// Stable extensions use CSS variables so theme changes preserve selection and undo history.
+const codeMirrorExtensions = [
+  EditorView.theme({
+    '&': { backgroundColor: 'var(--card)', color: 'var(--foreground)' },
+    '.cm-scroller': {
+      fontFamily: 'ui-monospace, SFMono-Regular, Consolas, "Noto Sans SC Variable", monospace',
+      overflowX: 'auto',
+    },
+    '.cm-content, .cm-line': {
+      whiteSpace: 'pre',
+      overflowWrap: 'normal',
+      wordBreak: 'normal',
+    },
+    '.cm-gutters': { backgroundColor: 'var(--card)', color: 'var(--muted-foreground)', borderColor: 'var(--border)' },
+    '.cm-content': { caretColor: 'var(--foreground)' },
+    '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--foreground)' },
+    '.cm-activeLine, .cm-activeLineGutter': { backgroundColor: 'var(--muted)' },
+    '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground': { backgroundColor: 'var(--accent)' },
+    '.cm-matchingBracket': { backgroundColor: 'var(--accent)', outline: '1px solid var(--border)' },
+    '.cm-tooltip': { backgroundColor: 'var(--popover)', color: 'var(--popover-foreground)', borderColor: 'var(--border)' },
+  }),
+  syntaxHighlighting(HighlightStyle.define([
+    { tag: tags.keyword, color: 'var(--code-keyword)' },
+    { tag: [tags.string, tags.regexp], color: 'var(--code-string)' },
+    { tag: [tags.number, tags.bool, tags.null], color: 'var(--code-number)' },
+    { tag: [tags.function(tags.variableName), tags.typeName, tags.tagName], color: 'var(--code-function)' },
+    { tag: tags.comment, color: 'var(--code-comment)', fontStyle: 'italic' },
+    { tag: [tags.variableName, tags.propertyName, tags.operator, tags.punctuation], color: 'var(--foreground)' },
+    { tag: tags.invalid, color: 'var(--destructive)' },
+  ])),
+];
 
 interface MarkdownErrorBoundaryProps {
   readonly children: ReactNode;
@@ -62,17 +104,11 @@ function MermaidCodeBlockEditor(props: CodeBlockEditorProps) {
   const reactId = useId().replaceAll(':', '');
   const [svg, setSvg] = useState('');
   const [error, setError] = useState('');
-  const [theme, setTheme] = useState<'default' | 'dark'>(() => document.documentElement.classList.contains('dark') ? 'dark' : 'default');
-
-  useEffect(() => {
-    const observer = new MutationObserver(() => setTheme(document.documentElement.classList.contains('dark') ? 'dark' : 'default'));
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class', 'data-theme'] });
-    return () => observer.disconnect();
-  }, []);
+  const theme = useTheme();
   useEffect(() => {
     let cancelled = false;
     void import('mermaid').then(async ({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme });
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: theme === 'dark' ? 'dark' : 'default' });
       const rendered = await mermaid.render(`concord-mermaid-${reactId}`, props.code);
       if (!cancelled) { setSvg(rendered.svg); setError(''); }
     }).catch(cause => {
@@ -111,7 +147,20 @@ class MarkdownErrorBoundary extends Component<MarkdownErrorBoundaryProps, { read
   }
 }
 
-export function MarkdownEditor({ initial, source = false, title, onSaved, toolbarTarget }: Props) {
+function markdownLinkUrls(markdown: string): readonly string[] {
+  const urls: string[] = [];
+  const visit = (node: unknown) => {
+    if (!node || typeof node !== 'object') return;
+    const value = node as { readonly type?: unknown; readonly url?: unknown; readonly children?: unknown };
+    if (value.type === 'link' && typeof value.url === 'string') urls.push(value.url);
+    if (Array.isArray(value.children)) for (const child of value.children) visit(child);
+  };
+  visit(fromMarkdown(markdown));
+  return urls;
+}
+
+export function MarkdownEditor({ initial, source = false, title, sourceLocation, hideSourceHeading = false, onSaved, toolbarTarget, onFollowLink }: Props) {
+  const theme = useTheme();
   const { api, refresh, setDirty, notify, snapshot, busy } = useWorkspace();
   const [file, setFile] = useState(initial);
   const [draft, setDraft] = useState(initial.body);
@@ -211,13 +260,25 @@ export function MarkdownEditor({ initial, source = false, title, onSaved, toolba
     {autoSave.error && <Button variant="outline" size="sm" onClick={() => { void autoSave.flush().catch(() => undefined); }}>重试保存</Button>}
   </div>;
 
-  return <div className="editor-shell" data-dirty={dirty}>
+  const followLink = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    const target = event.target;
+    const anchor = target instanceof Element ? target.closest('a[href]') : null;
+    const anchors = [...event.currentTarget.querySelectorAll('.wysiwyg__content a[href]')];
+    const sourceHref = anchor ? markdownLinkUrls(currentDraft.current)[anchors.indexOf(anchor)] : undefined;
+    const href = sourceHref ?? anchor?.getAttribute('href');
+    if (!href || !onFollowLink?.(href)) return;
+    event.preventDefault();
+    event.stopPropagation();
+  };
+
+  return <div className="editor-shell" data-dirty={dirty} onClickCapture={followLink}>
     {toolbarTarget && !source && createPortal(toolbarActions, toolbarTarget)}
     {(!toolbarTarget || source) && <div className="editor-shell__bar" data-compact={!source || undefined}>
-      {source && <div>
+      {source && !hideSourceHeading && <div>
         <div className="eyebrow">源码文件</div>
         <strong>{title ?? file.path}</strong>
-        <div className="path-text">{file.path}</div>
+        {title && title !== file.path && <div className="path-text">{file.path}</div>}
       </div>}
       {toolbarActions}
     </div>}
@@ -225,13 +286,13 @@ export function MarkdownEditor({ initial, source = false, title, onSaved, toolba
     {file.readOnly && <div className="callout callout--warning"><AlertTriangle /> <div><strong>只读</strong><p>{file.reason ?? '当前内容不能由工作台安全修改。'}</p></div></div>}
     {external && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘内容已变化</strong><p>当前草稿没有被覆盖。请比较后保留草稿或重新载入。</p></div></div>}
     {unsupported && <div className="callout callout--warning"><AlertTriangle /><div><strong>已切换为原文编辑</strong><p>WYSIWYG 无法无损解析该语法：{unsupported}。原始字节内容保持不变，只有你的明确编辑才会标记为未保存。</p></div></div>}
-    {source || unsupported ? rawEditor : <MarkdownErrorBoundary
+    {source ? <SourceEditor value={draft} path={file.path} readOnly={file.readOnly || busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : unsupported ? rawEditor : <MarkdownErrorBoundary
       fallback={rawEditor}
       onError={error => setUnsupported(error.message)}
     >
       <MDXEditor
         key={editorKey}
-        className="wysiwyg"
+        className={`wysiwyg ${theme === 'dark' ? 'dark-theme' : 'light-theme'}`}
         contentEditableClassName="wysiwyg__content"
         markdown={file.body}
         trim={false}
@@ -244,9 +305,9 @@ export function MarkdownEditor({ initial, source = false, title, onSaved, toolba
           changeDraft(markdown);
         }}
         plugins={[
-          headingsPlugin(), listsPlugin(), quotePlugin(), linkPlugin(), linkDialogPlugin(), tablePlugin(), thematicBreakPlugin(),
+          headingsPlugin(), listsPlugin(), quotePlugin(), linkPlugin(), linkDialogPlugin(), imagePlugin(), tablePlugin(), thematicBreakPlugin(),
           codeBlockPlugin({ defaultCodeBlockLanguage: '', codeBlockEditorDescriptors: [mermaidCodeBlockDescriptor] }),
-          codeMirrorPlugin({ codeBlockLanguages: { '': 'Plain text', ts: 'TypeScript', tsx: 'TSX', js: 'JavaScript', json: 'JSON', bash: 'Shell', sh: 'Shell', yaml: 'YAML', python: 'Python', sql: 'SQL' } }),
+          codeMirrorPlugin({ codeMirrorExtensions, autoLoadLanguageSupport: true, codeBlockLanguages: { '': 'Plain text', ts: 'TypeScript', typescript: 'TypeScript', tsx: 'TSX', js: 'JavaScript', javascript: 'JavaScript', jsx: 'JSX', json: 'JSON', bash: 'Shell', sh: 'Shell', yaml: 'YAML', yml: 'YAML', python: 'Python', py: 'Python', sql: 'SQL', css: 'CSS', html: 'HTML', markdown: 'Markdown', mermaid: 'Mermaid' } }),
         ]}
       />
     </MarkdownErrorBoundary>}

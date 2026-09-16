@@ -1,5 +1,4 @@
-import type { FeedbackMemoryRelation } from "../../feedback/schema.js";
-import type { MemoryV1, PromotionKind } from "../../memory/schema.js";
+import type { IssueMemoryRelation, MemoryMeta } from "concord-sdlc/model";
 
 export const DOCS_NODE_KINDS = ["feature", "roadmap", "engineering", "design", "design-plan", "use-case"] as const;
 export type DocsNodeKind = typeof DOCS_NODE_KINDS[number];
@@ -30,12 +29,12 @@ export interface TraceOwner {
 }
 
 export interface TraceTest {
-  readonly caseId: `necase_${string}`;
+  readonly caseId: string;
   readonly selector: string;
   readonly path: string;
   readonly title?: string;
   readonly repo: string;
-  readonly owner: string;
+  readonly contract: string;
   readonly regressions: readonly string[];
   readonly issues: readonly string[];
   readonly lane: readonly string[];
@@ -65,31 +64,31 @@ export interface TraceFeedback {
   readonly path: string;
   readonly id: string;
   readonly title: string;
-  readonly state: "open" | "closed";
-  readonly source: TraceFeedbackSource;
-  readonly subject: "product" | "repository" | "dependency";
-  readonly claim: "defect" | "friction" | "request";
+  readonly state: "draft" | "closed";
+  readonly source?: TraceFeedbackSource;
+  readonly subject?: "product" | "repository" | "dependency";
+  readonly claim?: "defect" | "friction" | "request";
   readonly adoptions: {
     readonly current: readonly string[];
     readonly history: readonly { readonly target: string; readonly commit: string }[];
   };
-  readonly memoryRelations: readonly FeedbackMemoryRelation[];
+  readonly memoryRelations: readonly IssueMemoryRelation[];
   /** Digest of the complete decoded metadata, including closure credentials. */
   readonly metadataDigest: string;
 }
 
 export interface TraceMemoryPromotion {
-  readonly kind: PromotionKind;
+  readonly kind: "promotion";
   readonly current: readonly string[];
-  readonly history: readonly { readonly target: string; readonly commit: string }[];
+  readonly history: readonly { readonly at: string; readonly action: string; readonly reason: string; readonly ref?: string; readonly commit?: string }[];
 }
 
 export interface TraceMemory {
   readonly path: string;
   readonly id: string;
   readonly title: string;
-  readonly kind: MemoryV1["kind"]["type"] | "legacy/unstructured";
-  readonly state?: MemoryV1["kind"]["state"];
+  readonly kind: MemoryMeta["memoryKind"];
+  readonly state: MemoryMeta["state"];
   readonly promotions: readonly TraceMemoryPromotion[];
   /** Digest of decoded structured metadata. Legacy body bytes intentionally do not participate. */
   readonly metadataDigest?: string;
@@ -116,7 +115,7 @@ export interface TraceFeedbackSummary {
   readonly id: string;
   readonly path: string;
   readonly title: string;
-  readonly state: "open" | "closed";
+  readonly state: "draft" | "closed";
 }
 
 export interface TraceMemorySummary {
@@ -128,13 +127,12 @@ export interface TraceMemorySummary {
 }
 
 export interface TraceScopedTest extends TraceTargetRelation {
-  readonly via: "owner";
+  readonly via: "contract";
   readonly path: string;
-  readonly caseId: `necase_${string}`;
+  readonly caseId: string;
   readonly selector: string;
   readonly title?: string;
   readonly repo: string;
-  readonly owner: string;
   readonly description: string;
   readonly lane: readonly string[];
   readonly areas: readonly string[];
@@ -148,7 +146,7 @@ export interface TraceFeedbackAdoption extends TraceTargetRelation {
 
 export interface TraceFeedbackMemoryRelation extends TraceTargetRelation {
   readonly via: "feedback-memory-relation";
-  readonly kind: FeedbackMemoryRelation["kind"];
+  readonly kind: IssueMemoryRelation["kind"];
   readonly feedback: TraceFeedbackSummary;
   readonly memory: TraceMemorySummary;
 }
@@ -223,7 +221,7 @@ export interface TestListReceipt {
   readonly operation: "test-list";
   readonly snapshotDigest: string;
   readonly generation: number;
-  readonly tests: readonly { readonly selector: string; readonly caseId: `necase_${string}`; readonly path: string; readonly title?: string; readonly repo: string; readonly owner: string }[];
+  readonly tests: readonly { readonly selector: string; readonly caseId: string; readonly path: string; readonly title?: string; readonly repo: string; readonly contract: string }[];
 }
 
 export interface FeatureShowReceipt {
@@ -263,10 +261,10 @@ export interface TestShowReceipt {
   readonly operation: "test-show";
   readonly snapshotDigest: string;
   readonly generation: number;
-  readonly subject: { readonly kind: "test"; readonly selector: string; readonly caseId: `necase_${string}`; readonly path: string };
+  readonly subject: { readonly kind: "test"; readonly selector: string; readonly caseId: string; readonly path: string };
   readonly test: {
     readonly selector: string;
-    readonly caseId: `necase_${string}`;
+    readonly caseId: string;
     readonly path: string;
     readonly title?: string;
     readonly repo: string;
@@ -274,7 +272,6 @@ export interface TestShowReceipt {
     readonly areas: readonly string[];
     readonly executor: { readonly kind: string };
   };
-  readonly owner: TraceOwner;
   readonly contract: { readonly ref: string; readonly kind: TraceScope };
   readonly features: readonly { readonly id: string; readonly path: string; readonly title: string }[];
   readonly regressions: readonly TraceRegression[];

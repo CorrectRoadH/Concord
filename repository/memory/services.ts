@@ -12,9 +12,9 @@ import {
   withTraceReadLease,
 } from "../docs/trace/relation-mutation.js";
 import { decodeMemoryDocument } from "./codec.js";
-import { LegacyMemoryReadOnly, MemoryReferenceConflict, type MemoryError } from "./errors.js";
+import { MemoryReferenceConflict, type MemoryError } from "./errors.js";
 import { memoryEffect, MemoryRepository, type MemoryAuthorSnapshot, type MemoryCheckReceipt } from "./repository.js";
-import type { MemoryDocument, MemoryV1, ProblemResolution, PromotionKind } from "./schema.js";
+import type { MemoryDocument, MemoryMeta, ProblemResolutionIntent, PromotionKind } from "./schema.js";
 
 export interface MemoryMutationChanges {
   readonly created?: boolean;
@@ -26,7 +26,7 @@ export interface MemoryMutationChanges {
   readonly retiredBySupersede?: readonly { readonly kind: PromotionKind; readonly target: RepoRef; readonly commit: string }[];
 }
 
-export type MemoryMutationReceipt = TraceMutationReceipt<MemoryV1, MemoryMutationChanges>;
+export type MemoryMutationReceipt = TraceMutationReceipt<MemoryMeta, MemoryMutationChanges>;
 export type MemoryStoreError = MemoryError | TraceError | TraceCoordinationError;
 
 export interface MemoryStoreService {
@@ -34,9 +34,10 @@ export interface MemoryStoreService {
   readonly read: (id: string) => Effect.Effect<MemoryDocument, MemoryStoreError>;
   readonly readAuthor: (id: string) => Effect.Effect<MemoryAuthorSnapshot, MemoryStoreError>;
   readonly search: (pattern: string) => Effect.Effect<readonly MemoryDocument[], MemoryStoreError>;
-  readonly create: (metadata: MemoryV1, body: string, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
+  readonly create: (metadata: MemoryMeta, body: string, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
   readonly setAuthor: (id: string, body: string, expectedOwnerDigest: string, expectedAuthorDigest: string, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
-  readonly resolve: (id: string, resolution: ProblemResolution, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
+  readonly resolve: (id: string, resolution: ProblemResolutionIntent, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
+  readonly activate: (id: string, reason: string, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
   readonly reopen: (id: string, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
   readonly supersede: (id: string, replacementId: string, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
   readonly promote: (id: string, target: RepoRef, dryRun: boolean) => Effect.Effect<MemoryMutationReceipt, MemoryStoreError, FileSystem.FileSystem>;
@@ -59,14 +60,14 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       Effect.flatMap((snapshot) => memoryEffect("trace preparation", () => {
         const regressionTarget = regressionMemory === undefined ? undefined : `memory/${regressionMemory}.md`;
         const fixedEvidence = regressionTarget === undefined
-          ? { selectors: [] as readonly string[], preimagePaths: [] as readonly string[] }
+          ? { selectors: [] as readonly string[], preimagePaths: [] as readonly string[], evidence: undefined }
           : repository.validateFixedEvidence(snapshot, regressionTarget);
         const guardedPaths = [...new Set([...extraPaths, ...fixedEvidence.preimagePaths])].sort();
         const extra = guardedPaths.map((path) => {
           const source = repository.targetSource(path);
           return { path: source.absolutePath, digest: traceDigest(source.source) };
         });
-        const evidence = regressionMemory === undefined ? {} : { regressionOwners: fixedEvidence.selectors };
+        const evidence = regressionMemory === undefined ? {} : { regressionOwners: fixedEvidence.selectors, regressionMemoryEvidence: fixedEvidence.evidence };
         if (target === undefined) return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: extra, ...evidence };
         const source = repository.targetSource(target);
         const validated = repository.validateTarget(snapshot, target);
@@ -91,8 +92,8 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       source: string | undefined,
       commit: string,
       preparation: TraceMutationPreparation,
-    ) => { readonly bytes: string; readonly metadata: MemoryV1; readonly changes: Changes };
-  }): Effect.Effect<TraceMutationReceipt<MemoryV1, Changes>, MemoryStoreError, FileSystem.FileSystem> =>
+    ) => { readonly bytes: string; readonly metadata: MemoryMeta; readonly changes: Changes };
+  }): Effect.Effect<TraceMutationReceipt<MemoryMeta, Changes>, MemoryStoreError, FileSystem.FileSystem> =>
     mutateTraceOwner({
       root,
       operation: options.operation,
@@ -130,16 +131,25 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       operation: "memory-resolve",
       dryRun,
       ...(resolution.kind === "fixed" ? { regressionMemory: id } : {}),
-      plan: (source, _commit, preparation) => ({
-        ...repository.planResolve(id, source, resolution, preparation.regressionOwners ?? []),
+      plan: (source, commit, preparation) => ({
+        ...repository.planResolve(id, source, resolution, (preparation as TraceMutationPreparation & { readonly regressionMemoryEvidence?: import("concord-sdlc/model").RepositoryEvidence }).regressionMemoryEvidence, commit),
         changes: { state: { from: "open", to: "resolved" } },
       }),
+    }),
+    activate: (id, reason, dryRun) => mutate({
+      id,
+      operation: "memory-activate",
+      dryRun,
+      plan: (source, commit) => {
+        const planned = repository.planActivate(id, source, reason, new Date().toISOString(), commit);
+        return { ...planned, changes: { state: { from: "captured", to: planned.metadata.state } } };
+      },
     }),
     reopen: (id, dryRun) => mutate({
       id,
       operation: "memory-reopen",
       dryRun,
-      plan: (source, commit) => ({ ...repository.planReopen(id, source, commit), changes: { state: { from: "resolved", to: "open" } } }),
+      plan: (source, commit) => ({ ...repository.planReopen(id, source, "reopen", new Date().toISOString(), commit), changes: { state: { from: "resolved", to: "open" } } }),
     }),
     supersede: (id, replacementId, dryRun) => mutate({
       id,
@@ -154,28 +164,10 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
             message: "Memory disappeared during supersede planning",
           });
         }
-        const current = decodeMemoryDocument(repository.ownerPath(id), id, source);
-        if ("legacy" in current) {
-          throw new LegacyMemoryReadOnly({
-            operation: "supersede",
-            path: repository.ownerPath(id),
-            message: "legacy Memory is read-only; convert it explicitly while preserving its body",
-          });
-        }
         const replacement = repository.read(replacementId);
-        if ("legacy" in replacement) {
-          throw new LegacyMemoryReadOnly({
-            operation: "supersede",
-            path: repository.ownerPath(replacementId),
-            message: "replacement must be structured Memory",
-          });
-        }
-        const retiredBySupersede = current.metadata.promotions.flatMap((promotion) =>
-          promotion.current.map((target) => ({ kind: promotion.kind, target, commit })),
-        );
         return {
-          ...repository.planSupersede(id, source, replacement.metadata, commit),
-          changes: { supersededBy: replacementId, retiredBySupersede },
+          ...repository.planSupersede(id, source, replacement.metadata, "supersede", new Date().toISOString(), repository.ownerPath(replacementId), commit),
+          changes: { supersededBy: repository.ownerPath(replacementId) },
         };
       },
     }),
@@ -184,12 +176,12 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       operation: "memory-promote",
       dryRun,
       target,
-      plan: (source, _commit, preparation) => {
+      plan: (source, commit, preparation) => {
         const kind = preparation.target?.kind;
         if (kind !== "roadmap" && kind !== "feature" && kind !== "use-case" && kind !== "engineering") {
           throw new MemoryReferenceConflict({ operation: "promote", message: "promotion target kind was not prepared" });
         }
-        return { ...repository.planPromote(id, source, kind, target), changes: { promotionAdded: { kind, target } } };
+        return { ...repository.planPromote(id, source, target, new Date().toISOString(), commit), changes: { promotionAdded: { kind, target } } };
       },
     }),
     retire: (id, target, dryRun) => mutate({
@@ -203,13 +195,13 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
           throw new MemoryReferenceConflict({ operation: "retire", message: "promotion target kind was not prepared" });
         }
         return {
-          ...repository.planRetire(id, source, kind, target, commit),
+          ...repository.planRetire(id, source, target, "retire promotion", new Date().toISOString(), commit),
           changes: { promotionRetired: { kind, target, commit } },
         };
       },
     }),
-    check: () => compileTrace(root).pipe(
+    check: () => withTraceReadLease(root, () => compileTraceUnderLease(root).pipe(
       Effect.flatMap((snapshot) => memoryEffect("check", () => repository.check(snapshot))),
-    ),
+    )),
   } satisfies MemoryStoreService;
 })());

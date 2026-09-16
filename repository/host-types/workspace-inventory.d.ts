@@ -12,7 +12,7 @@ interface CollectedSubject {
     readonly project?: string;
     readonly titlePath: readonly string[];
     readonly subjectDigest: `sha256:${string}`;
-    readonly caseId: `necase_${string}`;
+    readonly caseId: string;
 }
 export interface WorkspaceInventoryReceipt {
     readonly checkout: string;
@@ -53,7 +53,7 @@ declare const DuplicateCollectedCaseId_base: new <A extends Record<string, any> 
     readonly _tag: "DuplicateCollectedCaseId";
 } & Readonly<A>;
 export declare class DuplicateCollectedCaseId extends DuplicateCollectedCaseId_base<{
-    readonly caseId: `necase_${string}`;
+    readonly caseId: string;
     readonly subjects: readonly CollectedSubject[];
 }> {
 }
@@ -71,7 +71,7 @@ export declare const collectWorkspaceCaseInventory: (checkout: string) => Effect
                 repo: string;
                 project?: string;
                 titlePath: readonly string[];
-                caseId: `necase_${string}`;
+                caseId: string;
             }[];
             unassignedCases: {
                 file: string;
@@ -117,7 +117,7 @@ export declare const collectRepoCaseInventory: (repoId: string, checkout: string
                 repo: string;
                 project?: string;
                 titlePath: readonly string[];
-                caseId: `necase_${string}`;
+                caseId: string;
             }[];
             unassignedCases: {
                 file: string;

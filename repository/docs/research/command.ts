@@ -22,43 +22,23 @@ const dryRunOption = Options.boolean("dry-run").pipe(
 function contentOptions() {
   return {
     title: Options.string("title").pipe(Options.withDescription("Research page title.")),
-    observedOn: Options.string("observed-on").pipe(
-      Options.withDescription("Observation date as YYYY-MM-DD."),
-    ),
-    version: Options.string("observed-version").pipe(
-      Options.optional,
-      Options.withDescription("Optional fixed version associated with the observation."),
-    ),
-    sources: Options.string("source").pipe(
-      Options.atLeast(0),
-      Options.withDescription("One HTTP(S) link to first-party material; repeat for more."),
-    ),
-    boundary: Options.string("boundary").pipe(Options.withDescription("The external product's real boundary.")),
-    mapping: Options.string("mapping").pipe(Options.withDescription("NiceEval concept mapping and non-equivalences.")),
-    absorb: Options.string("absorb").pipe(Options.withDescription("What to absorb and what not to copy.")),
-    nextEvidence: Options.string("next-evidence").pipe(Options.withDescription("Evidence still needed before product adoption.")),
+    body: Options.string("body").pipe(Options.optional, Options.withDescription("Optional free-form Markdown body.")),
+    observedAt: Options.string("observed-at").pipe(Options.optional, Options.withDescription("Optional observation timestamp.")),
+    sources: Options.string("source").pipe(Options.atLeast(0), Options.withDescription("Optional source text or local path; repeat for more.")),
   };
 }
 
 function contentFrom(options: {
   readonly title: string;
-  readonly observedOn: string;
-  readonly version: Option.Option<string>;
+  readonly body: Option.Option<string>;
+  readonly observedAt: Option.Option<string>;
   readonly sources: readonly string[];
-  readonly boundary: string;
-  readonly mapping: string;
-  readonly absorb: string;
-  readonly nextEvidence: string;
 }): ResearchContent {
   return {
     title: options.title,
-    observedOn: options.observedOn,
-    ...(Option.isSome(options.version) ? { version: options.version.value } : {}),
+    ...(Option.isSome(options.body) ? { body: options.body.value } : {}),
+    ...(Option.isSome(options.observedAt) ? { observedAt: options.observedAt.value } : {}),
     sources: options.sources,
-    boundary: options.boundary,
-    mapping: options.mapping,
-    absorb: options.absorb,
-    nextEvidence: options.nextEvidence,
   };
 }
 
@@ -80,21 +60,12 @@ function deliverResearchOutcome(
 /** Builds the independent Research command contribution for the Docs command tree. */
 export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSITORY_ROOT) {
 
-  const pageOptions = contentOptions();
   const createPage = Command.make("page", {
-    path: Args.string("path").pipe(
-      Args.withDescription("Relative slug path under docs/research, without the .md suffix."),
-    ),
-    ...pageOptions,
-    dryRun: dryRunOption,
     json: jsonOption,
-  }, ({ dryRun, json, path, ...content }) => deliverResearchOutcome(runResearchAt(root, {
+  }, ({ json }) => deliverResearchOutcome(runResearchAt(root, {
     command: "create-page",
-    path,
-    content: contentFrom(content),
-    dryRun,
   }), json, deliver)).pipe(
-    Command.withDescription("Create one standalone Research v1 page."),
+    Command.withDescription("Standalone Research pages require offline migration."),
   );
 
   const packageOptions = contentOptions();
@@ -111,7 +82,7 @@ export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSI
     content: contentFrom(content),
     dryRun,
   }), json, deliver)).pipe(
-    Command.withDescription("Create a Research v1 package root."),
+    Command.withDescription("Create a Concord Research package root."),
   );
 
   const addPageOptions = contentOptions();
@@ -120,7 +91,7 @@ export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSI
       Args.withDescription("Exact research: ref of the package README."),
     ),
     page: Args.string("page").pipe(
-      Args.withDescription("Single page slug without the .md suffix."),
+      Args.withDescription("Safe relative Markdown page path, including the .md suffix."),
     ),
     ...addPageOptions,
     dryRun: dryRunOption,
@@ -132,7 +103,7 @@ export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSI
     content: contentFrom(content),
     dryRun,
   }), json, deliver)).pipe(
-    Command.withDescription("Add one explicitly package-owned Research v1 page."),
+    Command.withDescription("Add one explicitly package-owned Research page."),
   );
 
   const check = Command.make("check", {
@@ -143,7 +114,7 @@ export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSI
     json,
     deliver,
   )).pipe(
-    Command.withDescription("Check exactly one Research v1 page or package root and its explicitly owned pages; --all is intentionally unsupported."),
+    Command.withDescription("Check exactly one Research page or package root and its explicitly owned pages; --all is intentionally unsupported."),
   );
 
   return Command.make("research").pipe(

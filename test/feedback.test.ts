@@ -17,6 +17,7 @@ import { setConfig, showConfig } from '../dist/editing.js';
 import { ConcordError } from '../dist/shared.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { humanOutput } from '../dist/presentation.js';
+import { projectConfigPath } from './support.js';
 
 const issue = (overrides: Record<string, unknown> = {}) => ({
   id: 9001,
@@ -63,8 +64,7 @@ function errorCode(error: unknown, code: string): boolean {
   return error instanceof ConcordError && error.code === code;
 }
 
-// @concord-case feedback-workspace-readonly-cache
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('feedback workspace stays tolerant and readonly when its cache table or unrelated owners are unavailable', async () => {
   const root = fixture();
   const uninitialized = mkdtempSync(join(tmpdir(), 'concord-feedback-uninitialized-'));
@@ -94,14 +94,13 @@ test('feedback workspace stays tolerant and readonly when its cache table or unr
   }
 });
 
-// @concord-case feedback-sync-preserves-local-owner
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('sync binds and imports atomically while repeat sync preserves editable local state and first source snapshot', async () => {
   const root = fixture();
   try {
     const first = await Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
     assert.equal(first.imported, 1);
-    assert.deepEqual([...first.changedPaths].sort(), ['concord.json', 'docs/issues/feedback-github-9001.md']);
+    assert.deepEqual([...first.changedPaths].sort(), ['concord.config.ts', 'docs/issues/feedback-github-9001.md']);
     open(root, repo => {
       const config = showConfig(repo).config.feedbackConnections?.[0];
       assert.equal(config?.provider === 'github' ? config.repositoryId : undefined, '42');
@@ -147,20 +146,20 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-// @concord-case feedback-dry-run-and-config-cas
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('dry-run and failed or stale fetches write neither documents nor cache', async () => {
   const root = fixture();
   try {
-    const before = readFileSync(join(root, 'concord.json'), 'utf8');
+    const configPath = projectConfigPath(root);
+    const before = readFileSync(join(root, configPath), 'utf8');
     const dry = await Effect.runPromise(syncFeedback(root, 'github-main', { dryRun: true, transport: githubTransport([issue()]), credential: 'test-token' }));
     assert.equal(dry.imported, 1);
-    assert.equal(readFileSync(join(root, 'concord.json'), 'utf8'), before);
+    assert.equal(readFileSync(join(root, configPath), 'utf8'), before);
     assert.equal(existsSync(join(root, 'docs/issues/feedback-github-9001.md')), false);
     assert.equal(existsSync(join(root, '.git/concord/cache.sqlite')), false);
 
     await assert.rejects(Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([], { failList: true }), credential: 'test-token' })), error => errorCode(error, 'InjectedFailure'));
-    assert.equal(readFileSync(join(root, 'concord.json'), 'utf8'), before);
+    assert.equal(readFileSync(join(root, configPath), 'utf8'), before);
 
     let reached!: () => void, release!: () => void;
     const atList = new Promise<void>(resolve => { reached = resolve; });
@@ -189,8 +188,7 @@ test('dry-run and failed or stale fetches write neither documents nor cache', as
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
-// @concord-case feedback-cache-version-and-identity
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('cache compares real instants, rejects unsafe paths, and duplicate source identities are findings plus sync failures', async () => {
   const root = fixture();
   try {

@@ -1,89 +1,32 @@
 import { Result } from "effect";
-
-import type { RepoRef } from "../docs/trace/ref.js";
+import type { IssueClosure, IssueMemoryRelation, IssueMeta } from "concord-sdlc/model";
 import { FeedbackReferenceConflict } from "./errors.js";
-import type { FeedbackClosure, FeedbackMemoryRelation, FeedbackV2 } from "./schema.js";
 
-function conflict(operation: string, message: string): Result.Result<never, FeedbackReferenceConflict> {
-  return Result.fail(new FeedbackReferenceConflict({ operation, message }));
+const conflict = (operation: string, message: string): Result.Result<never, FeedbackReferenceConflict> =>
+  Result.fail(new FeedbackReferenceConflict({ operation, message }));
+
+export function linkMemory(issue: IssueMeta, relation: IssueMemoryRelation): Result.Result<IssueMeta, FeedbackReferenceConflict> {
+  if (issue.memoryRelations.some((item) => item.kind === relation.kind && item.memory === relation.memory)) return conflict("link", "memory relation already exists");
+  return Result.succeed({ ...issue, memoryRelations: [...issue.memoryRelations, relation] });
 }
-
-export function linkMemory(
-  feedback: FeedbackV2,
-  relation: FeedbackMemoryRelation,
-): Result.Result<FeedbackV2, FeedbackReferenceConflict> {
-  if (feedback.id === relation.memory) return conflict("link", "feedback cannot relate to itself");
-  if (feedback.memoryRelations.some((item) => item.kind === relation.kind && item.memory === relation.memory)) {
-    return conflict("link", "memory relation already exists");
-  }
-  return Result.succeed({ ...feedback, memoryRelations: [...feedback.memoryRelations, relation] });
+export function adoptFeedback(issue: IssueMeta, target: string): Result.Result<IssueMeta, FeedbackReferenceConflict> {
+  if (issue.state === "closed") return conflict("adopt", "closed Issue must be reopened before adoption");
+  if (issue.adoptions.current.includes(target)) return conflict("adopt", "target is already adopted");
+  return Result.succeed({ ...issue, adoptions: { ...issue.adoptions, current: [...issue.adoptions.current, target] } });
 }
-
-export function adoptFeedback(
-  feedback: FeedbackV2,
-  target: RepoRef,
-): Result.Result<FeedbackV2, FeedbackReferenceConflict> {
-  if (feedback.state === "closed") {
-    return conflict("adopt", "closed Feedback must be reopened before adding a current adoption");
-  }
-  if (feedback.adoptions.current.includes(target)) return conflict("adopt", `exact target ${target} is already current`);
-  return Result.succeed({
-    ...feedback,
-    adoptions: { ...feedback.adoptions, current: [...feedback.adoptions.current, target] },
-  });
+export function retireFeedback(issue: IssueMeta, target: string, commit: string): Result.Result<IssueMeta, FeedbackReferenceConflict> {
+  if (!issue.adoptions.current.includes(target)) return conflict("retire", "target is not currently adopted");
+  return Result.succeed({ ...issue, adoptions: { current: issue.adoptions.current.filter((item) => item !== target), history: [...issue.adoptions.history, { target, commit }] } });
 }
-
-export function retireFeedback(
-  feedback: FeedbackV2,
-  target: RepoRef,
-  commit: string,
-): Result.Result<FeedbackV2, FeedbackReferenceConflict> {
-  if (!feedback.adoptions.current.includes(target)) return conflict("retire", `exact target ${target} is not current`);
-  return Result.succeed({
-    ...feedback,
-    adoptions: {
-      current: feedback.adoptions.current.filter((item) => item !== target),
-      history: [...feedback.adoptions.history, { target, commit }],
-    },
-  });
+export function closeFeedback(issue: IssueMeta, closure: IssueClosure, at: string, reason: string): Result.Result<IssueMeta, FeedbackReferenceConflict> {
+  if (issue.state === "closed") return conflict("close", "Issue is already closed");
+  if (closure.kind === "duplicate" && closure.canonical === `docs/issues/${issue.id}.md`) return conflict("close", "Issue cannot duplicate itself");
+  if ((closure.kind === "declined" || closure.kind === "invalid" || closure.kind === "duplicate") && issue.adoptions.current.length > 0) return conflict("close", "retire current adoptions before this closure");
+  if (closure.kind === "delivered" && !issue.adoptions.current.includes(closure.target) && !issue.adoptions.history.some((item) => item.target === closure.target)) return conflict("close", "delivered target is absent from adoption history");
+  return Result.succeed({ ...issue, state: "closed", closure, history: [...issue.history, { action: "close", at, reason }] });
 }
-
-export function closeFeedback(
-  feedback: FeedbackV2,
-  closure: FeedbackClosure,
-): Result.Result<FeedbackV2, FeedbackReferenceConflict> {
-  if (feedback.state === "closed") return conflict("close", "feedback is already closed");
-  if (closure.kind === "fixed" && (
-    feedback.subject === "dependency" || (feedback.claim !== "defect" && feedback.claim !== "friction")
-  )) return conflict("close", "fixed closure requires a product/repository defect or friction");
-  if (closure.kind === "delivered" && feedback.claim !== "request") {
-    return conflict("close", "delivered closure is only valid for a request");
-  }
-  if (closure.kind === "external-fixed" && feedback.subject !== "dependency") {
-    return conflict("close", "external-fixed closure requires dependency Feedback");
-  }
-  if (closure.kind === "declined" && feedback.claim !== "request" && feedback.claim !== "friction") {
-    return conflict("close", "declined closure requires a request or friction");
-  }
-  if (closure.kind === "duplicate" && closure.canonical === feedback.id) {
-    return conflict("close", "duplicate feedback cannot name itself as canonical");
-  }
-  if ((closure.kind === "fixed" || closure.kind === "delivered" || closure.kind === "declined") &&
-    closure.memory === feedback.id) return conflict("close", "closure memory cannot be the feedback itself");
-  if ((closure.kind === "declined" || closure.kind === "invalid" || closure.kind === "duplicate") &&
-    feedback.adoptions.current.length > 0) {
-    return conflict("close", "closure requires empty current adoptions; retire each exact target first");
-  }
-  if (closure.kind === "delivered" &&
-    !feedback.adoptions.current.includes(closure.target) &&
-    !feedback.adoptions.history.some((item) => item.target === closure.target)) {
-    return conflict("close", `delivered target ${closure.target} is absent from current and history adoptions`);
-  }
-  return Result.succeed({ ...feedback, state: "closed", closure });
-}
-
-export function reopenFeedback(feedback: FeedbackV2): Result.Result<FeedbackV2, FeedbackReferenceConflict> {
-  if (feedback.state === "open") return conflict("reopen", "feedback is already open");
-  const { closure: _closure, ...open } = feedback;
-  return Result.succeed({ ...open, state: "open" });
+export function reopenFeedback(issue: IssueMeta, at: string, reason: string): Result.Result<IssueMeta, FeedbackReferenceConflict> {
+  if (issue.state !== "closed") return conflict("reopen", "Issue is not closed");
+  const { closure: _closure, ...open } = issue;
+  return Result.succeed({ ...open, state: "draft", history: [...issue.history, { action: "reopen", at, reason }] });
 }

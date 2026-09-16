@@ -13,6 +13,7 @@ import type {
   ProjectConfig,
   Runner,
 } from './shared.js';
+import { MemorySourceSchema, ProjectSchema } from './shared.js';
 import type { TraceEdge } from './trace.js';
 import { FeedbackConnectionsSchema, type FeedbackItem } from './feedback-schema.js';
 
@@ -26,6 +27,7 @@ export interface ViewFile {
 }
 
 export interface WorkspaceSnapshot {
+  readonly repositoryTests?: import('./view-profile.js').RepositoryTestView;
   readonly root: string;
   readonly project: ProjectConfig | null;
   readonly configDigest: string | null;
@@ -74,19 +76,12 @@ const RunnerInputSchema = Schema.Union([
     timeoutMs: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3_600_000 })),
   }),
 ]);
-export const ProjectInputSchema = Schema.Struct({
-  format: Schema.Literal('concord.project/v1'),
-  projectId: Text,
-  testRoots: Strings,
-  sourceRoots: Schema.optional(Strings),
-  runner: RunnerInputSchema,
-  feedbackConnections: Schema.optional(FeedbackConnectionsSchema),
-});
+export const ProjectInputSchema = ProjectSchema;
 const DryRun = { dryRun: Schema.optional(Schema.Boolean) } as const;
 
 /** Strictly decoded at every CLI and HTTP action boundary. */
 export const ViewActionSchema = Schema.Union([
-  Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), runner: Schema.optional(RunnerInputSchema), docsOnly: Schema.optional(Schema.Boolean), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), runner: Schema.optional(RunnerInputSchema), docsOnly: Schema.optional(Schema.Boolean), projectTypes: Schema.optional(Schema.Array(Schema.Literals(['library', 'cli']))), pages: Schema.optional(Schema.Array(Schema.Literals(TEMPLATE_PAGES))), design: Schema.optional(Schema.Boolean), constitutionBody: Schema.optional(Schema.String), adoptConstitution: Schema.optional(Schema.Boolean), constitutionReason: Schema.optional(Text), constitutionImpact: Schema.optional(Text), constitutionSources: Schema.optional(Strings), memorySources: Schema.optional(Schema.NonEmptyArray(MemorySourceSchema)), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('recover') }),
   Schema.Struct({
     action: Schema.Literal('document.create'),
@@ -99,15 +94,18 @@ export const ViewActionSchema = Schema.Union([
     sources: Schema.optional(Strings),
     alternatives: Schema.optional(Strings),
     pages: Schema.optional(Schema.Array(Schema.Literals(TEMPLATE_PAGES))),
-    memoryKind: Schema.optional(Schema.Literals(['problem', 'decision', 'insight'])),
+    constitutionRefs: Schema.optional(Strings),
+    memorySource: Schema.optional(Text),
+    memoryKind: Schema.optional(Schema.Literals(['problem', 'decision', 'insight', 'note'])),
     ...DryRun,
   }),
   Schema.Struct({ action: Schema.Literal('document.set'), path: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('document.metadata'), reference: Text, expectedDigest: Text, title: Schema.optional(Text), observedAt: Schema.optional(Text), sources: Schema.optional(Strings), ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('page.add'), kind: Schema.Literals(['feature', 'roadmap', 'design', 'engineering']), id: Text, page: Text, plan: Schema.optional(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('document.metadata'), reference: Text, expectedDigest: Text, title: Schema.optional(Text), observedAt: Schema.optional(Schema.NullOr(Text)), sources: Schema.optional(Strings), constitutionRefs: Schema.optional(Strings), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('page.add'), kind: Schema.Literals(['feature', 'roadmap', 'design', 'engineering', 'research']), id: Text, page: Text, plan: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('roadmap.adopt'), id: Text, feature: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('design.decide'), id: Text, selected: Text, targets: Strings, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.resolve'), id: Text, kind: Schema.Literals(['fixed', 'not-a-bug', 'wont-fix', 'external-fixed']), reason: Text, red: Schema.optional(Text), green: Schema.optional(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('memory.activate'), id: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.reopen'), id: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.supersede'), id: Text, replacement: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.promote'), id: Text, target: Text, ...DryRun }),
@@ -118,9 +116,12 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('feedback.link'), id: Text, feature: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('source.set'), path: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('config.set'), config: ProjectInputSchema, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('constitution.initialize'), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('constitution.adopt'), body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('constitution.amend'), version: Text, body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('code.annotate'), id: Text, scope: Schema.Literals(['file', 'node', 'region']), contracts: Strings }),
   Schema.Struct({ action: Schema.Literal('code.locate'), path: Text, line: Schema.Int }),
-  Schema.Struct({ action: Schema.Literal('test.annotate'), id: Text, contract: Text, regressions: Strings }),
+  Schema.Struct({ action: Schema.Literal('test.annotate'), contract: Text, regressions: Strings }),
   Schema.Struct({ action: Schema.Literal('evidence.show'), id: Text }),
   Schema.Struct({ action: Schema.Literal('cache.status') }),
   Schema.Struct({ action: Schema.Literal('cache.clear'), ...DryRun }),

@@ -8,9 +8,9 @@ import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from './template
 export { TEMPLATE_PAGES, type TemplatePage } from './template-pages.js';
 
 const TEMPLATE_NAMES = [
-  'feature', 'roadmap', 'design', 'engineering', 'use-case', 'research', 'problem', 'decision', 'insight', 'issue',
+  'feature', 'roadmap', 'design', 'engineering', 'use-case', 'research', 'problem', 'decision', 'insight', 'note', 'issue',
   'library', 'cli', 'architecture', 'lifecycle', 'use-case-index', 'goals', 'limits', 'decision-record', 'cases',
-  'project-index', 'concepts', 'project-architecture',
+  'project-index', 'concepts', 'project-architecture', 'constitution', 'project-design',
 ] as const;
 
 const TemplateNameSchema = Schema.Literals(TEMPLATE_NAMES);
@@ -128,7 +128,9 @@ export function projectTemplateFiles(): Record<string, string> {
   addPackage('design-decision/plans/plan-1', 'feature');
   addPackage('design-decision/plans/plan-2', 'feature');
   for (const name of ['research', 'use-case', 'issue']) add(`${name}/README.md`, name);
-  for (const name of ['problem', 'decision', 'insight']) add(`memory/${name}.md`, name);
-  files['docs/_template/README.md'] = '# Concord writing templates\n\nThis complete reference set is installed by concord init. Create commands use bundled templates, not editable configuration from this directory. These examples are not adopted contracts or test evidence.\n\nFeature, Roadmap, and Design candidates require README only. Select optional pages with --pages library,cli,architecture,lifecycle,use-case (or repeat --pages). Omit --pages for README only. Design always includes its decision wrapper. Engineering starts with goal, mechanism, usage, and acceptance in README; expand with page add when needed.\n\n| Optional page | Use when |\n| --- | --- |\n| library | A public programming interface needs exact shapes and examples |\n| cli | Public commands need inputs, outputs, and errors |\n| architecture | Internal entities, boundaries, and invariants need explanation |\n| lifecycle | Resources or state transitions need ownership and cleanup rules |\n| use-case | User goals need an index of complete paths; create actual cases separately |\n\n' + Object.keys(files).map(path => `- [${path.slice('docs/_template/'.length)}](${path.slice('docs/_template/'.length)})`).join('\n') + '\n';
+  for (const name of ['problem', 'decision', 'insight', 'note']) add(`memory/${name}.md`, name);
+  add('constitution.md', 'constitution');
+  add('project-DESIGN.md', 'project-design');
+  files['docs/_template/README.md'] = '# Concord writing templates\n\nThis complete reference set is installed by concord init. Create commands use bundled templates, not editable configuration from this directory. These examples are not adopted contracts or test evidence.\n\nFeature, Roadmap, and Design candidates require README only. Select optional pages with --pages library,cli,architecture,lifecycle,use-case (or repeat --pages). Omitted pages use project defaults; --no-pages explicitly creates README only. Design always includes its decision wrapper. Engineering starts with goal, mechanism, usage, and acceptance in README; expand with page add when needed.\n\n| Optional page | Use when |\n| --- | --- |\n| library | A public programming interface needs exact shapes and examples |\n| cli | Public commands need inputs, outputs, and errors |\n| architecture | Internal entities, boundaries, and invariants need explanation |\n| lifecycle | Resources or state transitions need ownership and cleanup rules |\n| use-case | User goals need an index of complete paths; create actual cases separately |\n\n' + Object.keys(files).map(path => `- [${path.slice('docs/_template/'.length)}](${path.slice('docs/_template/'.length)})`).join('\n') + '\n';
   return files;
 }

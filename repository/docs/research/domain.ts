@@ -1,258 +1,271 @@
 import { readdirSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
-
 import { Effect, Schema, SchemaIssue } from "effect";
-import { parseDocument } from "yaml";
+import { parseDocument as parseYaml } from "yaml";
 
 import {
+  ResearchConflictError,
   ResearchFileError,
   ResearchFormatError,
   ResearchInputError,
+  ResearchMigrationRequired,
   ResearchPathError,
   researchErrorMessage,
   type ResearchError,
 } from "./errors.js";
 import {
   RESEARCH_FORMAT,
-  RESEARCH_MARKER,
   ResearchCommandInputSchema,
   ResearchFrontmatterSchema,
   type ResearchCheckFinding,
   type ResearchCheckReceipt,
   type ResearchCommandInput,
   type ResearchContent,
-  type ResearchFrontmatter,
   type ResearchMutationReceipt,
   type ResearchOutcome,
 } from "./model.js";
-import { publishNewDirectory, publishNewFile, readResearchFile, sha256 } from "./publication.js";
+import {
+  publishNewDirectory,
+  publishNewFile,
+  readResearchFile,
+  readResearchFileIfPresent,
+  sha256,
+} from "./publication.js";
+import { withTraceReadLease } from "../trace/relation-mutation.js";
 
-const RESEARCH_ROOT = "docs/research";
-const TEMPLATE_ROOT = "docs/_template/research";
-const REQUIRED_BLOCKS = [
-  "Observed version or date",
-  "Primary sources",
-  "External boundary",
-  "NiceEval mapping",
-  "Absorb, do not copy",
-  "Next evidence",
-] as const;
-
+const ROOT = "docs/research";
+type Frontmatter = typeof ResearchFrontmatterSchema.Type;
 type Inspection =
-  | { readonly kind: "legacy" }
+  | { readonly kind: "unmanaged" }
   | { readonly kind: "invalid"; readonly message: string }
-  | { readonly kind: "v1"; readonly frontmatter: ResearchFrontmatter };
+  | { readonly kind: "document"; readonly frontmatter: Frontmatter };
 
 function decodeUnknown<A>(
   path: string,
   schema: Schema.ConstraintDecoder<A, never>,
   input: unknown,
 ): Effect.Effect<A, ResearchInputError> {
-  return Schema.decodeUnknownEffect(schema, { errors: "all" })(input).pipe(
-    Effect.mapError((error) => new ResearchInputError({
+  return Schema.decodeUnknownEffect(schema, {
+    errors: "all",
+    onExcessProperty: "error",
+  })(input).pipe(
+    Effect.mapError(error => new ResearchInputError({
       message: `${path}: ${SchemaIssue.makeFormatterDefault()(error.issue)}`,
     })),
   );
 }
 
-function relativeFromReference(ref: string): string {
-  return ref.slice("research:".length);
+function refPath(reference: string): string {
+  return reference.slice("research:".length);
 }
 
-function referenceFor(relativePath: string): string {
-  return `research:${relativePath}`;
+function referenceFor(path: string): string {
+  return `research:${path}`;
 }
 
-function pageTarget(path: string): string {
-  return `${RESEARCH_ROOT}/${path}.md`;
-}
-
-function packageTarget(path: string): string {
-  return `${RESEARCH_ROOT}/${path}`;
-}
-
-function packageRootTarget(path: string): string {
-  return `${packageTarget(path)}/README.md`;
-}
-
-function pageContent(content: ResearchContent, parent?: string): string {
-  const frontmatter = [
-    "---",
-    `research: ${JSON.stringify(RESEARCH_FORMAT)}`,
-    `title: ${JSON.stringify(content.title)}`,
-    `observed-on: ${JSON.stringify(content.observedOn)}`,
-    ...(content.version === undefined ? [] : [`version: ${JSON.stringify(content.version)}`]),
-    "primary-sources:",
-    ...content.sources.map((source) => `  - ${JSON.stringify(source)}`),
-    ...(parent === undefined ? [] : [`parent: ${JSON.stringify(parent)}`]),
-    "---",
-  ].join("\n");
-  const observation = content.version === undefined
-    ? `Observed on ${content.observedOn}.`
-    : `Observed on ${content.observedOn}; fixed version: ${content.version}.`;
-  return JSON.stringify({
-    "{{frontmatter}}": frontmatter,
-    "{{marker}}": RESEARCH_MARKER,
-    "{{title}}": content.title,
-    "{{observation}}": observation,
-    "{{primary-sources}}": content.sources.map((source) => `- <${source}>`).join("\n"),
-    "{{boundary}}": content.boundary,
-    "{{mapping}}": content.mapping,
-    "{{absorb}}": content.absorb,
-    "{{next-evidence}}": content.nextEvidence,
-  });
-}
-
-function renderTemplate(template: string, encodedVariables: string): Effect.Effect<string, ResearchFormatError> {
-  return Effect.try({
-    try: () => {
-      const variables = JSON.parse(encodedVariables) as Record<string, string>;
-      const expected = Object.keys(variables);
-      for (const key of expected) {
-        if (!template.includes(key)) throw new Error(`template is missing ${key}`);
-      }
-      return expected.reduce((result, key) => result.replaceAll(key, variables[key]!), template);
-    },
-    catch: (error) => new ResearchFormatError({
-      path: TEMPLATE_ROOT,
-      message: `Cannot render the Research template: ${researchErrorMessage(error)}`,
-    }),
-  });
-}
-
-function loadTemplate(
-  root: string,
-  name: "PAGE.md" | "PACKAGE.md",
-): Effect.Effect<string, ResearchFileError | ResearchPathError> {
-  return readResearchFile(root, `${TEMPLATE_ROOT}/${name}`);
-}
-
-function parseV1Document(
-  path: string,
-  source: string,
-): Effect.Effect<ResearchFrontmatter, ResearchFormatError | ResearchInputError> {
-  const frontmatter = source.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/u);
-  if (frontmatter === null) {
-    return Effect.fail(new ResearchFormatError({ path, message: "Missing Research v1 YAML frontmatter." }));
-  }
-  if (!source.includes(RESEARCH_MARKER)) {
-    return Effect.fail(new ResearchFormatError({ path, message: `Missing required marker ${RESEARCH_MARKER}.` }));
-  }
-  return Effect.try({
-    try: () => {
-      const document = parseDocument(frontmatter[1]!);
-      if (document.errors.length > 0) throw document.errors[0]!;
-      return document.toJSON() as unknown;
-    },
-    catch: (error) => new ResearchFormatError({
-      path,
-      message: `Invalid Research v1 YAML frontmatter: ${researchErrorMessage(error)}`,
-    }),
-  }).pipe(Effect.flatMap((value) => decodeUnknown(path, ResearchFrontmatterSchema, value)));
-}
-
-function inspectDocument(path: string, source: string): Effect.Effect<Inspection> {
-  if (!source.includes(RESEARCH_MARKER)) {
-    return Effect.succeed({ kind: "legacy" });
-  }
-  return parseV1Document(path, source).pipe(
-    Effect.map((frontmatter): Inspection => ({ kind: "v1", frontmatter })),
-    Effect.catch((error): Effect.Effect<Inspection> => Effect.succeed({ kind: "invalid", message: error.message })),
+function isSafeRelativePath(path: string): boolean {
+  if (
+    path.length === 0 ||
+    path.trim() !== path ||
+    path.startsWith("/") ||
+    path.endsWith("/") ||
+    path.includes("\\") ||
+    path.includes("#")
+  ) return false;
+  return path.split("/").every(segment =>
+    segment.length > 0 &&
+    segment.trim() === segment &&
+    segment !== "." &&
+    segment !== ".." &&
+    !/[\0\r\n]/u.test(segment)
   );
 }
 
-function blockContent(source: string, heading: string): string | undefined {
-  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
-  const match = source.match(new RegExp(`^## ${escaped}\\s*\\r?\\n([\\s\\S]*?)(?=^##\\s|$)`, "mu"));
-  return match?.[1]?.replace(/<!--[^]*?-->/gu, "").trim();
+function markdown(title: string, body?: string): string {
+  const suffix = body === undefined || body.length === 0
+    ? ""
+    : `\n\n${body.replace(/\s+$/u, "")}`;
+  return `# ${title}${suffix}\n`;
 }
 
-function structureFindings(path: string, source: string): ResearchCheckFinding[] {
-  const findings: ResearchCheckFinding[] = [];
-  for (const heading of REQUIRED_BLOCKS) {
-    const body = blockContent(source, heading);
-    if (body === undefined || body.length === 0) {
-      findings.push({
-        path,
-        code: "missing-required-block",
-        message: `Research v1 requires a non-empty “${heading}” block.`,
-      });
-    }
-  }
-  const sources = blockContent(source, "Primary sources");
-  if (sources !== undefined && !/(?:<https?:\/\/[^>]+>|\[[^\]]+\]\(https?:\/\/[^)]+\))/u.test(sources)) {
-    findings.push({
+function rootText(content: ResearchContent, path: string): string {
+  const metadata = [
+    `format: ${JSON.stringify(RESEARCH_FORMAT)}`,
+    `id: ${JSON.stringify(`research-${sha256(path).slice(-12)}`)}`,
+    `title: ${JSON.stringify(content.title)}`,
+    `createdAt: ${JSON.stringify(new Date().toISOString())}`,
+    "kind: research",
+    ...(content.observedAt === undefined
+      ? []
+      : [`observedAt: ${JSON.stringify(content.observedAt)}`]),
+    `sources: ${JSON.stringify(content.sources ?? [])}`,
+  ];
+  return `---\n${metadata.join("\n")}\n---\n\n${markdown(content.title, content.body)}`;
+}
+
+function parseDocument(
+  path: string,
+  source: string,
+): Effect.Effect<Frontmatter, ResearchFormatError | ResearchInputError> {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
+  if (match === null) {
+    return Effect.fail(new ResearchFormatError({
       path,
-      code: "missing-primary-source-link",
-      message: "The Primary sources block must contain at least one HTTP(S) source link; the author remains responsible for choosing first-party material.",
-    });
+      message: "Missing Concord Research document frontmatter.",
+    }));
   }
-  return findings;
+  return Effect.try({
+    try: () => {
+      const yaml = parseYaml(match[1]!, { uniqueKeys: true, merge: false });
+      if (yaml.errors.length > 0) throw yaml.errors[0]!;
+      return yaml.toJS({ maxAliasCount: 0 }) as unknown;
+    },
+    catch: cause => new ResearchFormatError({
+      path,
+      message: `Invalid Concord Research frontmatter: ${researchErrorMessage(cause)}`,
+    }),
+  }).pipe(Effect.flatMap(value => decodeUnknown(path, ResearchFrontmatterSchema, value)));
 }
 
-function checkV1Page(path: string, source: string): Effect.Effect<ResearchCheckFinding[]> {
-  return inspectDocument(path, source).pipe(Effect.map((inspection) => {
-    if (inspection.kind === "legacy") {
-      return [{
-        path,
-        code: "legacy-unmanaged" as const,
-        message: "This target is legacy/unmanaged: migrate it to Research v1 before checking it.",
-      }];
-    }
-    if (inspection.kind === "invalid") {
-      return [{ path, code: "invalid-v1" as const, message: inspection.message }];
-    }
-    return structureFindings(path, source);
+function inspect(path: string, source: string): Effect.Effect<Inspection> {
+  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
+  if (match === null) return Effect.succeed({ kind: "unmanaged" });
+  try {
+    const yaml = parseYaml(match[1]!, { uniqueKeys: true, merge: false });
+    if (yaml.errors.length > 0) throw yaml.errors[0]!;
+    const value: unknown = yaml.toJS({ maxAliasCount: 0 });
+    if (
+      value === null ||
+      typeof value !== "object" ||
+      !("format" in value) ||
+      value.format !== RESEARCH_FORMAT
+    ) return Effect.succeed({ kind: "unmanaged" });
+  } catch (cause) {
+    return Effect.succeed({ kind: "invalid" as const, message: researchErrorMessage(cause) });
+  }
+  return parseDocument(path, source).pipe(
+    Effect.map(frontmatter => ({ kind: "document", frontmatter }) as Inspection),
+    Effect.catch(error => Effect.succeed({ kind: "invalid" as const, message: error.message })),
+  );
+}
+
+function checkFile(path: string, source: string): Effect.Effect<ResearchCheckFinding[]> {
+  return inspect(path, source).pipe(Effect.map(result => {
+    if (result.kind === "unmanaged") return [{
+      path,
+      code: "unmanaged" as const,
+      message: "This target is not a managed Concord Research document.",
+    }];
+    if (result.kind === "invalid") return [{
+      path,
+      code: "invalid-document" as const,
+      message: result.message,
+    }];
+    if (!path.endsWith("/README.md")) return [{
+      path,
+      code: "research-migration-required" as const,
+      message: `${path}: Research owners must use a topic directory with README.md; run the offline document package migration`,
+    }];
+    return [];
   }));
 }
 
-function readAndCheckPage(root: string, path: string): Effect.Effect<ResearchCheckFinding[], ResearchFileError | ResearchPathError> {
-  return readResearchFile(root, path).pipe(Effect.flatMap((source) => checkV1Page(path, source)));
-}
-
-function createReceipt(
+function receipt(
   command: ResearchMutationReceipt["command"],
   dryRun: boolean,
   target: string,
-  contentDigest: string,
+  digest: string,
 ): ResearchMutationReceipt {
-  const ref = referenceFor(target);
-  const action = command === "create-page"
-    ? "create a standalone page"
-    : command === "create-package"
+  const action = command === "create-package"
     ? "create a package root"
     : "add a package-owned page";
   return {
     format: "niceeval.docs-research/receipt/v1",
     command,
     dryRun,
-    ref,
+    ref: referenceFor(target),
     target,
     changedPaths: [target],
     preimage: { kind: "absent" },
-    contentDigest,
-    summary: dryRun
-      ? `Would ${action}: ${ref}.`
-      : `${action[0]!.toUpperCase()}${action.slice(1)}: ${ref}.`,
+    contentDigest: digest,
+    summary: `${dryRun ? "Would " : ""}${action}: ${referenceFor(target)}.`,
   };
 }
 
-function createPage(
-  root: string,
-  path: string,
-  content: ResearchContent,
-  dryRun: boolean,
-  parent?: string,
-): Effect.Effect<ResearchMutationReceipt, ResearchError> {
-  const target = pageTarget(path);
-  return Effect.all({
-    template: loadTemplate(root, "PAGE.md"),
-    variables: Effect.succeed(pageContent(content, parent)),
-  }).pipe(
-    Effect.flatMap(({ template, variables }) => renderTemplate(template, variables)),
-    Effect.flatMap((rendered) => publishNewFile(root, target, rendered, dryRun)),
-    Effect.map(({ digest }) => createReceipt(parent === undefined ? "create-page" : "add-page", dryRun, target, digest)),
+function isConcordFrontmatter(source: string): boolean {
+  return /^---\r?\n(?:format:\s*["']?concord\.document\/|[\s\S]*?\r?\nformat:\s*["']?concord\.document\/)/u.test(source);
+}
+
+function ancestorDirectories(path: string): readonly string[] {
+  const parts = path.split("/");
+  const ancestors: string[] = [];
+  for (let length = 1; length < parts.length; length += 1) {
+    ancestors.push(parts.slice(0, length).join("/"));
+  }
+  return ancestors;
+}
+
+function validatePackageAncestors(root: string, packagePath: string): Effect.Effect<void, ResearchError> {
+  return Effect.forEach(ancestorDirectories(`${ROOT}/${packagePath}`), directory => {
+    const ownerPath = `${directory}/README.md`;
+    return readResearchFileIfPresent(root, ownerPath).pipe(
+      Effect.flatMap(source => {
+        if (source === undefined || !isConcordFrontmatter(source)) return Effect.void;
+        return parseDocument(ownerPath, source).pipe(
+          Effect.catch(() => Effect.fail(new ResearchFormatError({
+            path: ownerPath,
+            message: "Ancestor Research owner metadata is invalid.",
+          }))),
+          Effect.flatMap(() => Effect.fail(new ResearchConflictError({
+            path: ownerPath,
+            message: "A package cannot be created below an existing Research owner.",
+          }))),
+        );
+      }),
+    );
+  }, { discard: true });
+}
+
+function requirePackage(root: string, parent: string): Effect.Effect<string, ResearchError> {
+  const target = refPath(parent);
+  if (
+    !target.endsWith("/README.md") ||
+    !target.startsWith(`${ROOT}/`) ||
+    !isSafeRelativePath(target)
+  ) return Effect.fail(new ResearchInputError({
+    message: "add-page requires an exact safe Research package-root ref ending in /README.md.",
+  }));
+  return readResearchFile(root, target).pipe(
+    Effect.flatMap(source => parseDocument(target, source)),
+    Effect.map(() => target),
   );
+}
+
+function nestedOwnerGuard(
+  root: string,
+  packageRoot: string,
+  target: string,
+): Effect.Effect<void, ResearchError> {
+  const base = dirname(packageRoot);
+  const parts = relative(base, dirname(target)).split(sep).filter(Boolean);
+  return Effect.forEach(parts, (_part, index) => {
+    const candidate = `${base}/${parts.slice(0, index + 1).join("/")}/README.md`;
+    return readResearchFileIfPresent(root, candidate).pipe(
+      Effect.flatMap(source => {
+        if (source === undefined || !isConcordFrontmatter(source)) return Effect.void;
+        return parseDocument(candidate, source).pipe(
+          Effect.catch(() => Effect.fail(new ResearchFormatError({
+            path: candidate,
+            message: "Nested Research owner metadata is invalid.",
+          }))),
+          Effect.flatMap(() => Effect.fail(new ResearchConflictError({
+            path: candidate,
+            message: "Nested Research owner cannot be written by its parent package.",
+          }))),
+        );
+      }),
+    );
+  }, { discard: true });
 }
 
 function createPackage(
@@ -261,181 +274,192 @@ function createPackage(
   content: ResearchContent,
   dryRun: boolean,
 ): Effect.Effect<ResearchMutationReceipt, ResearchError> {
-  const target = packageTarget(path);
-  const rootPage = packageRootTarget(path);
-  return Effect.all({
-    template: loadTemplate(root, "PACKAGE.md"),
-    variables: Effect.succeed(pageContent(content)),
-  }).pipe(
-    Effect.flatMap(({ template, variables }) => renderTemplate(template, variables)),
-    Effect.flatMap((rendered) => publishNewDirectory(root, target, [{ path: "README.md", content: rendered }], dryRun)),
-    Effect.map(({ digest }) => createReceipt("create-package", dryRun, rootPage, digest)),
+  if (!isSafeRelativePath(path)) return Effect.fail(new ResearchPathError({
+    path,
+    message: "Research package path must be a safe relative path.",
+  }));
+  const target = `${ROOT}/${path}`;
+  const contentEffect = validatePackageAncestors(root, path).pipe(
+    Effect.map(() => rootText(content, path)),
+  );
+  return publishNewDirectory(root, target, contentEffect, dryRun).pipe(
+    Effect.map(({ digest }) => receipt("create-package", dryRun, `${target}/README.md`, digest)),
   );
 }
 
-function requireV1Package(
+function addPage(
   root: string,
   parent: string,
-): Effect.Effect<void, ResearchFileError | ResearchPathError | ResearchFormatError | ResearchInputError> {
-  const target = relativeFromReference(parent);
-  if (!target.endsWith("/README.md")) {
-    return Effect.fail(new ResearchInputError({ message: "add-page requires an exact Research package-root ref ending in /README.md." }));
-  }
-  return readResearchFile(root, target).pipe(
-    Effect.flatMap((source) => parseV1Document(target, source)),
-    Effect.flatMap((frontmatter) => frontmatter.parent === undefined
-      ? Effect.void
-      : Effect.fail(new ResearchFormatError({ path: target, message: "A package root cannot declare a parent Research ref." }))),
+  page: string,
+  content: ResearchContent,
+  dryRun: boolean,
+): Effect.Effect<ResearchMutationReceipt, ResearchError> {
+  if (!isSafeRelativePath(page) || !page.endsWith(".md")) return Effect.fail(new ResearchPathError({
+    path: page,
+    message: "Supporting page must be a safe relative Markdown path ending in .md.",
+  }));
+  const parentPath = refPath(parent);
+  const target = `${dirname(parentPath)}/${page}`;
+  const contentEffect = requirePackage(root, parent).pipe(
+    Effect.flatMap(packageRoot => nestedOwnerGuard(root, packageRoot, target)),
+    Effect.map(() => markdown(content.title, content.body)),
+  );
+  return publishNewFile(root, target, contentEffect, dryRun).pipe(
+    Effect.map(({ digest }) => receipt("add-page", dryRun, target, digest)),
   );
 }
 
-function walkMarkdownPages(root: string, start: string): Effect.Effect<readonly string[], ResearchFileError | ResearchPathError> {
-  return Effect.try({
-    try: () => {
-      const directory = resolve(root, start);
-      const pages: string[] = [];
-      const walk = (current: string): void => {
-        for (const entry of readdirSync(current, { withFileTypes: true })) {
-          const candidate = resolve(current, entry.name);
-          const path = relative(root, candidate).split(sep).join("/");
-          if (entry.isDirectory()) walk(candidate);
-          else if (entry.isFile() && entry.name.endsWith(".md")) pages.push(path);
-        }
-      };
-      walk(directory);
-      return pages.sort();
-    },
-    catch: (error) => new ResearchFileError({ operation: "enumerate package pages", path: start, message: researchErrorMessage(error) }),
-  });
+function walkMarkdown(directory: string, root: string): readonly string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const absolute = resolve(directory, entry.name);
+    if (entry.isSymbolicLink()) throw new ResearchPathError({
+      path: relative(root, absolute).split(sep).join("/"),
+      message: "Research package discovery cannot traverse symbolic links.",
+    });
+    if (entry.isDirectory()) files.push(...walkMarkdown(absolute, root));
+    else if (entry.isFile() && entry.name.endsWith(".md")) {
+      files.push(relative(root, absolute).split(sep).join("/"));
+    }
+  }
+  return files.sort();
 }
 
-function checkPackage(root: string, ref: string, target: string): Effect.Effect<ResearchCheckReceipt, ResearchFileError | ResearchPathError> {
+function under(path: string, directory: string): boolean {
+  return path === directory || path.startsWith(`${directory}/`);
+}
+
+function checkPackage(
+  root: string,
+  reference: string,
+  target: string,
+): Effect.Effect<ResearchCheckReceipt, ResearchError> {
   return Effect.gen(function*() {
     const rootSource = yield* readResearchFile(root, target);
-    const findings = yield* checkV1Page(target, rootSource);
-    const rootInspection = yield* inspectDocument(target, rootSource);
-    if (rootInspection.kind === "v1" && rootInspection.frontmatter.parent !== undefined) {
-      findings.push({
-        path: target,
-        code: "invalid-package-root",
-        message: "A checked package root must not declare a parent Research ref.",
-      });
+    const findings = yield* checkFile(target, rootSource);
+    const packageDirectory = dirname(target);
+    const files = yield* Effect.try({
+      try: () => walkMarkdown(dirname(resolve(root, target)), root),
+      catch: cause => cause instanceof ResearchPathError
+        ? cause
+        : new ResearchFileError({
+          operation: "enumerate package pages",
+          path: target,
+          message: researchErrorMessage(cause),
+        }),
+    });
+    const ownerDirectories = new Map<string, "valid" | "invalid">();
+    ownerDirectories.set(packageDirectory, "valid");
+    const checkedPaths = [target];
+    for (const path of files.filter(file => file.endsWith("/README.md") && file !== target)) {
+      const source = yield* readResearchFile(root, path);
+      if (!isConcordFrontmatter(source)) {
+        checkedPaths.push(path);
+        continue;
+      }
+      const inspection = yield* inspect(path, source);
+      const directory = dirname(path);
+      if (inspection.kind === "document") ownerDirectories.set(directory, "valid");
+      else {
+        ownerDirectories.set(directory, "invalid");
+        findings.push({
+          path,
+          code: "invalid-document",
+          message: inspection.kind === "invalid" ? inspection.message : "Invalid Research owner metadata.",
+        });
+      }
     }
-    const pages = yield* walkMarkdownPages(root, dirname(target));
-    const owned: string[] = [target];
-    for (const page of pages) {
-      if (page === target) continue;
-      const source = yield* readResearchFile(root, page);
-      const inspection = yield* inspectDocument(page, source);
-      if (inspection.kind === "legacy") {
-        findings.push({
-          path: page,
-          code: "legacy-unmanaged",
-          message: "This package member is legacy/unmanaged; migrate it to Research v1 or move it outside this package.",
-        });
-        continue;
-      }
-      if (inspection.kind === "invalid") {
-        findings.push({ path: page, code: "invalid-v1", message: inspection.message });
-        continue;
-      }
-      if (inspection.frontmatter.parent !== ref || dirname(page) !== dirname(target)) {
-        findings.push({
-          path: page,
-          code: "unmanaged-v1",
-          message: `This v1 page is not explicitly owned by ${ref}.`,
-        });
-        continue;
-      }
-      owned.push(page);
-      findings.push(...structureFindings(page, source));
+    for (const path of files.filter(file => file !== target && !file.endsWith("/README.md"))) {
+      const owners = [...ownerDirectories.entries()]
+        .filter(([directory]) => under(path, directory))
+        .sort(([left], [right]) => right.length - left.length);
+      const owner = owners[0];
+      if (owner === undefined || owner[0] !== packageDirectory) continue;
+      const source = yield* readResearchFile(root, path);
+      const inspection = yield* inspect(path, source);
+      if (inspection.kind === "document") findings.push({
+        path,
+        code: "research-migration-required",
+        message: `${path}: Research owners must use a topic directory with README.md; run the offline document package migration`,
+      });
+      else if (inspection.kind === "invalid") findings.push({ path, code: "invalid-document", message: inspection.message });
+      checkedPaths.push(path);
     }
     return {
-      format: "niceeval.docs-research/check/v1",
-      command: "check",
+      format: "niceeval.docs-research/check/v1" as const,
+      command: "check" as const,
       ok: findings.length === 0,
-      ref,
+      ref: reference,
       target,
-      checkedPaths: owned,
+      checkedPaths,
       findings,
       summary: findings.length === 0
-        ? `Research v1 check passed for ${ref}.`
-        : `Research v1 check failed for ${ref} with ${findings.length} finding(s).`,
+        ? `Concord Research check passed for ${reference}.`
+        : `Concord Research check failed for ${reference} with ${findings.length} finding(s).`,
     };
   });
 }
 
-function checkResearch(root: string, ref: string): Effect.Effect<ResearchCheckReceipt, ResearchFileError | ResearchPathError> {
-  const target = relativeFromReference(ref);
-  if (target.endsWith("/README.md")) return checkPackage(root, ref, target);
-  return readAndCheckPage(root, target).pipe(Effect.map((findings) => ({
-    format: "niceeval.docs-research/check/v1" as const,
-    command: "check" as const,
-    ok: findings.length === 0,
-    ref,
-    target,
-    checkedPaths: [target],
-    findings,
-    summary: findings.length === 0
-      ? `Research v1 check passed for ${ref}.`
-      : `Research v1 check failed for ${ref} with ${findings.length} finding(s).`,
-  })));
+function checkResearch(root: string, reference: string): Effect.Effect<ResearchCheckReceipt, ResearchError> {
+  const target = refPath(reference);
+  if (!isSafeRelativePath(target) || !target.startsWith(`${ROOT}/`)) return Effect.fail(new ResearchPathError({
+    path: target,
+    message: "Research reference must be a safe repository-relative path.",
+  }));
+  if (target.endsWith("/README.md")) return checkPackage(root, reference, target);
+  return readResearchFile(root, target).pipe(
+    Effect.flatMap(source => checkFile(target, source)),
+    Effect.map(findings => ({
+      format: "niceeval.docs-research/check/v1" as const,
+      command: "check" as const,
+      ok: findings.length === 0,
+      ref: reference,
+      target,
+      checkedPaths: [target],
+      findings,
+      summary: findings.length === 0
+        ? `Concord Research check passed for ${reference}.`
+        : `Concord Research check failed for ${reference} with ${findings.length} finding(s).`,
+    })),
+  );
 }
 
-function runDecodedResearchAt(root: string, input: ResearchCommandInput): Effect.Effect<ResearchOutcome, ResearchError> {
+function runDecoded(root: string, input: ResearchCommandInput): Effect.Effect<ResearchOutcome, ResearchError> {
   switch (input.command) {
     case "create-page":
-      return createPage(root, input.path, input.content, input.dryRun);
+      return Effect.fail(new ResearchMigrationRequired({
+        message: "Standalone Research page creation is retired; run the offline document package migration.",
+      }));
     case "create-package":
       return createPackage(root, input.path, input.content, input.dryRun);
     case "add-page":
-      return requireV1Package(root, input.parent).pipe(
-        Effect.flatMap(() => createPage(
-          root,
-          `${relativeFromReference(input.parent).slice(0, -"/README.md".length).replace(`${RESEARCH_ROOT}/`, "")}/${input.page}`,
-          input.content,
-          input.dryRun,
-          input.parent,
-        )),
-      );
+      return addPage(root, input.parent, input.page, input.content, input.dryRun);
     case "check":
-      return checkResearch(root, input.ref);
+      return withTraceReadLease(root, () => checkResearch(root, input.ref));
   }
 }
 
-/**
- * Research-owned command program. It deliberately creates no Trace RepoRef,
- * Trace generation, journal, or transaction: Research is independent input to
- * product decisions, not a Docs Trace node.
- */
-export function runResearchAt(
-  root: string,
-  input: unknown,
-): Effect.Effect<ResearchOutcome, ResearchError> {
+export function runResearchAt(root: string, input: unknown): Effect.Effect<ResearchOutcome, ResearchError> {
   return decodeUnknown("Research command input", ResearchCommandInputSchema, input).pipe(
-    Effect.flatMap((decoded) => runDecodedResearchAt(root, decoded)),
+    Effect.flatMap(decoded => runDecoded(root, decoded)),
   );
 }
 
 export function renderResearchOutcome(outcome: ResearchOutcome): string {
-  if (outcome.command !== "check") return outcome.summary;
-  if (outcome.ok) return outcome.summary;
-  return [outcome.summary, ...outcome.findings.map((finding) => `- ${finding.path}: ${finding.message}`)].join("\n");
+  if (outcome.command !== "check" || outcome.ok) return outcome.summary;
+  return [outcome.summary, ...outcome.findings.map(finding => `- ${finding.path}: ${finding.message}`)].join("\n");
 }
 
 export function renderResearchError(error: ResearchError): string {
   switch (error._tag) {
-    case "ResearchInputError":
-      return `Research input is invalid: ${error.message}`;
-    case "ResearchPathError":
-      return `Research path ${error.path} is invalid: ${error.message}`;
-    case "ResearchConflictError":
-      return `Research target ${error.path} conflicts: ${error.message}`;
-    case "ResearchFileError":
-      return `Research ${error.operation} failed for ${error.path}: ${error.message}`;
-    case "ResearchFormatError":
-      return `Research v1 format is invalid in ${error.path}: ${error.message}`;
+    case "TraceRecoveryRequired": return `Unfinished journal at ${error.path}; run ${error.nextStep}.`;
+    case "TraceRecoveryConflict": return `Recovery conflict at ${error.path}: ${error.message}`;
+    case "TraceMutationError": return `Research publication ${error.phase}: ${error.message}`;
+    case "ResearchInputError": return `Research input is invalid: ${error.message}`;
+    case "ResearchMigrationRequired": return `ResearchMigrationRequired: ${error.message}`;
+    case "ResearchPathError": return `Research path ${error.path} is invalid: ${error.message}`;
+    case "ResearchConflictError": return `Research target ${error.path} conflicts: ${error.message}`;
+    case "ResearchFileError": return `Research ${error.operation} failed for ${error.path}: ${error.message}`;
+    case "ResearchFormatError": return `Concord Research format is invalid in ${error.path}: ${error.message}`;
   }
 }
-
-export { RESEARCH_FORMAT, RESEARCH_MARKER, sha256 };

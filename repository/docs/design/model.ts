@@ -2,6 +2,7 @@ import type { DesignPage } from "./schema.js";
 
 export type DesignDecisionState =
   | { readonly _tag: "undecided" }
+  | { readonly _tag: "deferred"; readonly reason: string }
   | { readonly _tag: "decided"; readonly selectedPlan: string };
 
 export interface DesignFileReceipt {

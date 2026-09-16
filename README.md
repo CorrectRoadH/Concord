@@ -45,8 +45,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { greet } from '../src/greeting.mjs';
 
-// @concord-case greeting-happy-path
-// @concord-contract docs/feature/greeting/use-case/greet-name.md
+// @use-case docs/feature/greeting/use-case/greet-name.md
 test('greets a name', () => {
   assert.equal(greet(' Ada '), 'Hello, Ada!');
 });
@@ -57,7 +56,8 @@ concord check
 concord code list
 concord code locate src/greeting.mjs --line 9
 concord test list
-concord test run greeting-happy-path --json
+test_ref="$(concord test list --json | node --input-type=commonjs -pe 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).cases[0].id')"
+concord test run "$test_ref" --json
 concord trace show greeting
 concord review render greeting
 ```
@@ -91,7 +91,7 @@ Git 面板按已暂存、未暂存、未跟踪列出文件，支持统一和分�
 从「反馈」侧栏配置 GitHub 仓库或 Linear team，显式导入 URL 或同步。连接只保存凭据环境变量名，凭据由启动 CLI / Web 服务的环境提供。
 
 ```sh
-concord feedback connection add --id github-main --provider github --owner OWNER --repo REPO --credential-env GITHUB_TOKEN
+concord feedback connection add --id github-main --provider github --contract source OWNER --repo REPO --credential-env GITHUB_TOKEN
 concord feedback connection add --id linear-main --provider linear --team TEAM --credential-env LINEAR_API_KEY
 concord feedback import https://github.com/OWNER/REPO/issues/123 --connection github-main
 concord feedback sync --connection linear-main
@@ -117,9 +117,9 @@ concord init --docs-only
 concord init --docs-only --source-root src
 ```
 
-`init` 创建 `concord.json`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板，补齐缺失的 `docs/README.md`、`docs/concepts.md` 和 `docs/architecture.md`，已有根文档保留。其它目标冲突时零写入失败；已有文档仓库应先在隔离分支/工作目录审阅迁移，不覆盖原文档。
+`init` 创建静态、不会被执行的 `concord.config.ts`、必需的 `docs/constitution.md`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板；根 `DESIGN.md` 可选。它补齐缺失的 `docs/README.md`、`docs/concepts.md` 和 `docs/architecture.md`，已有根文档保留。其它目标冲突时零写入失败；已有文档仓库应先在隔离分支/工作目录审阅迁移，不覆盖原文档。旧 `concord.json`（包括双配置）返回 `ProjectMigrationRequired`，须先显式离线迁移。
 
-已有 Concord 项目直接维护配置：`sourceRoots` 控制代码扫描，缺省 `[]`；`testRoots: []` 关闭测试发现。两组根可重叠，新增代码功能无需迁移已有测试关系。源码关系在注释里；JSON 只保存目录和 runner 等机械配置。
+已有 Concord 项目直接维护配置：`sourceRoots` 控制代码扫描，缺省 `[]`；`testRoots: []` 关闭测试发现。两组根可重叠，新增代码功能无需迁移已有测试关系。源码关系在注释里；静态 TypeScript 配置保存目录、runner、模板默认值和本地 Memory 来源，旧 JSON 配置仍可读取。
 
 ```sh
 concord --dry-run init --docs-only
@@ -137,7 +137,7 @@ Feature、Roadmap、Design 候选默认只生成必需 README。用 `--pages cli
 
 Engineering 默认 README 定义目标、机制、使用和验收，用 `engineering page add <id> <topic>` 按需扩展。既有页面保留；新增页面后由作者更新 README 链接。
 
-| 想维护的事实 | owner / 入口 |
+| 想维护的事实 | contract source / 入口 |
 |---|---|
 | 已采用的产品目标 | `feature create/list/show` |
 | 一个功能下的具体用户路径 | `use-case create/list/show` |
@@ -202,18 +202,17 @@ concord --skill code
 ### 测试关联与执行
 
 ```sh
-concord test annotate greeting-fallback \
-  --contract docs/feature/greeting/use-case/greet-name.md
+concord test annotate --contract docs/feature/greeting/use-case/greet-name.md
 concord test list
-concord test show greeting-happy-path
-concord test run greeting-happy-path --json
+concord test show <derived-reference>
+concord test run <derived-reference> --json
 concord test evidence ccev_REPLACE_WITH_RECEIPT_ID
 concord --skill test
 ```
 
-把生成的 `@concord-case` 与 `@concord-contract` 注释放在真实测试声明正上方，关联历史问题时加 `@concord-regression memory/<problem-id>.md`。无需测试关系 JSON。代码 ID 与测试 case ID 分属独立命名空间。
+把 `@feature` 或 `@use-case` 注释放在真实测试声明正上方，关联历史问题时加 `@regression docs/memory/<problem-id>.md`。通用测试用 `@status retired` 退役关联；Repository profile 还支持 `@issue` 和 helper 的 `@test-file`。测试 ID 由 Concord 自动派生 `neref_...`，无需人工分配或测试关系 JSON。
 
-默认 runner 使用 Node 原生测试。索引支持 `node:test`、Vitest、Playwright 的直接 import 绑定、顶层字面量测试名和静态 callback；已知 skip/todo 不能作为 fixed 证据。其它 runner 在 `concord.json` 设置 `runner`，初始化时也可用 `--runner-config <file>`。例如已有 Vitest 消费项目可以配置：
+默认 runner 使用 Node 原生测试。索引支持 `node:test`、Vitest、Playwright 的直接 import 绑定、顶层字面量测试名和静态 callback；已知 skip/todo 不能作为 fixed 证据。其它 runner 在项目配置（仅 `concord.config.ts`，旧 JSON 须先离线迁移）设置 `runner`，初始化时也可用 `--runner-config <file>`。例如已有 Vitest 消费项目可以配置：
 
 ```json
 {
@@ -224,7 +223,7 @@ concord --skill test
 }
 ```
 
-这是 runner 对象，不是完整 concord.json；对应工具和 sourceFiles 必须存在于消费项目中。`{file}`、`{name}`、`{pattern}` 各占一个完整参数，执行不经过 shell。command 收据记录显式命令及摘要，不证明每个原生 case 实际执行或完整覆盖。
+这是 runner 对象，不是完整项目配置；对应工具和 sourceFiles 必须存在于消费项目中。`{file}`、`{name}`、`{pattern}` 各占一个完整参数，执行不经过 shell。command 收据记录显式命令及摘要，不证明每个原生 case 实际执行或完整覆盖。
 
 ### Memory、问题关闭与本地 Issue
 
@@ -236,7 +235,7 @@ concord issue draft greeting-observation --title "Investigate greeting behavior"
 concord issue link greeting-observation --memory memory/blank-name.md
 ```
 
-用真实测试复现问题，并在测试旁添加 `@concord-regression memory/blank-name.md`。修复前运行 `test run` 取得 red，修复实现后再运行取得 green；用输出里的真实 ID 关闭问题：
+用真实测试复现问题，并在测试旁添加 `@regression memory/blank-name.md`。修复前运行 `test run` 取得 red，修复实现后再运行取得 green；用输出里的真实 ID 关闭问题：
 
 ```sh
 concord memory resolve blank-name --kind fixed \
@@ -263,7 +262,7 @@ concord --skill trace
 concord --skill recovery
 ```
 
-Trace 从当前 owner 推导反向关系，分别展示代码声明、测试和 Memory；`check`、`doctor`、`trace` 和 `review` 不执行 runner。代码标注错误会阻断代码与全图命令，但测试执行及 Problem 关闭保留原有文档、测试与证据校验。
+Trace 从当前 contract source 推导反向关系，分别展示代码声明、测试和 Memory；`check`、`doctor`、`trace` 和 `review` 不执行 runner。代码标注错误会阻断代码与全图命令，但测试执行及 Problem 关闭保留原有文档、测试与证据校验。
 
 代码关系每次回源扫描；SQLite 只缓存可重建的测试投影，损坏或失效时回源。实际路径用 `cache status` 查询，普通 checkout 通常为 `.git/concord/cache.sqlite`，不是项目根下的 `.concord`。收据与 journal 位于独立 Git-private 文件中，不能作为缓存删除。克隆后历史裁决保留，缺失的私有证据显示不可用。
 
@@ -271,7 +270,7 @@ Trace 从当前 owner 推导反向关系，分别展示代码声明、测试和 
 
 ## Concord 自举
 
-本项目的 `concord.json` 已配置 `sourceRoots: ["src", "web"]` 与真实测试根 `test`。实现文件和关键函数直接关联八条 [本地 SDLC Use Case](docs/feature/local-sdlc/use-case/README.md) 和新增的 [Web 工作台 Use Case](docs/feature/web-workbench/use-case/use-web-workbench.md)。共享基础模块关联 Feature，具体行为关联 Use Case；工作台前端、后端、安装包和真实浏览器测试也使用这套关系。
+本项目的 `concord.config.ts` 已配置 `sourceRoots: ["src", "web"]` 与真实测试根 `test`。实现文件和关键函数直接关联八条 [本地 SDLC Use Case](docs/feature/local-sdlc/use-case/README.md) 和新增的 [Web 工作台 Use Case](docs/feature/web-workbench/use-case/use-web-workbench.md)。共享基础模块关联 Feature，具体行为关联 Use Case；工作台前端、后端、安装包和真实浏览器测试也使用这套关系。
 
 在 Concord checkout 中运行：
 
@@ -328,7 +327,7 @@ cd /path/to/Concord
 pnpm install --frozen-lockfile
 pnpm build
 npm pack --ignore-scripts
-npm install --prefix ~/.local/share/concord ./concord-sdlc-0.3.0.tgz
+npm install --prefix ~/.local/share/concord ./concord-sdlc-0.4.0.tgz
 export PATH="$HOME/.local/share/concord/node_modules/.bin:$PATH"
 concord --help
 ```

@@ -6,7 +6,7 @@ Feature 与 Use Case 拥有当前产品契约；Engineering 拥有仓库维护�
 
 ## 派生关系
 
-`@concord-case` 提供当前扫描集合中的稳定身份，`@concord-contract` 指向 Feature、Feature supporting page 或 Use Case，`@concord-regression` 可重复指向 Problem。契约不反写测试列表，trace 每次从 owner 和源码重新编译反向关系。
+`@feature` 或 `@use-case` 用 canonical 路径指向对应契约，`@regression` 可重复指向 Problem。执行引用由文件路径与测试名称自动派生。契约不反写测试列表，trace 每次从 owner 和源码重新编译反向关系。
 
 ## 私有状态
 

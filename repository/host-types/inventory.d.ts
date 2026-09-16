@@ -8,7 +8,7 @@ export interface CollectedCase {
     readonly path: string;
     readonly project?: string;
     readonly titlePath: readonly string[];
-    readonly caseId: `necase_${string}`;
+    readonly caseId: string;
 }
 export interface CaseInventoryReceipt {
     readonly executor: {

@@ -16,6 +16,7 @@ export interface GitEntry {
   readonly conflicted: boolean;
 }
 export interface GitStatus { readonly branch: string; readonly entries: readonly GitEntry[]; readonly baselineCaseIds?: readonly string[]; readonly baselineError?: string; }
+export interface GitBaselineCache { value?: { readonly revision: string; readonly roots: string; readonly caseIds: readonly string[] }; }
 export type GitArea = 'staged' | 'unstaged' | 'untracked';
 export interface GitDiff {
   readonly path: string;
@@ -43,7 +44,7 @@ const runGit = Effect.fn('view.runGit')(function*(root: string, args: readonly s
   });
 });
 
-export const getGitStatus = Effect.fn('view.getGitStatus')(function*(root: string, includeTestBaseline = false): Effect.fn.Return<GitStatus, ConcordError> {
+export const getGitStatus = Effect.fn('view.getGitStatus')(function*(root: string, includeTestBaseline = false, baselineCache?: GitBaselineCache, testRoots?: readonly string[]): Effect.fn.Return<GitStatus, ConcordError> {
   const result = yield* runGit(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
   if (result.truncated) return yield* Effect.fail(new ConcordError('GitOutputLimit', 'Git status exceeds 2 MiB; narrow the working tree changes before inspecting them.'));
   const records = result.stdout.split('\0');
@@ -59,28 +60,35 @@ export const getGitStatus = Effect.fn('view.getGitStatus')(function*(root: strin
   }
   const branch = yield* runGit(root, ['symbolic-ref', '--quiet', '--short', 'HEAD'], true);
   const head = branch.stdout.trim() || (yield* runGit(root, ['rev-parse', '--short', 'HEAD'], true)).stdout.trim();
-  const baseline = includeTestBaseline ? yield* readTestBaseline(root).pipe(
+  const baseline = includeTestBaseline ? yield* readTestBaseline(root, baselineCache, testRoots).pipe(
     Effect.map(baselineCaseIds => ({ baselineCaseIds })),
     Effect.catch(cause => Effect.succeed({ baselineError: `${cause.code}: ${cause.message}` })),
   ) : {};
   return { ...baseline, branch: branch.stdout.trim() || (head ? `Detached at ${head}` : 'Unborn HEAD'), entries };
 });
 
-const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(root: string) {
+const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(root: string, cache?: GitBaselineCache, testRoots?: readonly string[]) {
   const baselineCaseIds: string[] = [];
+    const roots = testRoots === undefined ? '*' : [...testRoots].sort().join('\0');
     const revision = yield* runGit(root, ['rev-parse', '--verify', 'HEAD'], true);
+    const revisionId = revision.stdout.trim();
+    if (revisionId && cache?.value?.revision === revisionId && cache.value.roots === roots) return [...cache.value.caseIds];
     if (revision.stdout.trim()) {
-      const candidates = yield* runGit(root, ['grep', '-l', '-z', '-F', '@concord-case', revision.stdout.trim()], [1]);
+      const candidates = yield* runGit(root, ['grep', '-l', '-z', '-F', '-e', '@feature', '-e', '@use-case', revision.stdout.trim()], [1]);
       if (candidates.truncated) return yield* Effect.fail(new ConcordError('GitOutputLimit', 'Test baseline inventory exceeds the preview limit.'));
       for (const object of candidates.stdout.split('\0').filter(object => /\.(?:[cm]?[jt]sx?)$/u.test(object))) {
+        const path = object.slice(object.indexOf(':') + 1);
+        if (testRoots !== undefined && !testRoots.some(root => root === '.' || path === root || path.startsWith(root.replace(/\/$/u, '') + '/'))) continue;
         const source = yield* runGit(root, ['show', object]);
         if (source.truncated) return yield* Effect.fail(new ConcordError('GitOutputLimit', 'A test baseline source exceeds the preview limit.'));
-        const parsed = parseTestDeclarations(object.slice(object.indexOf(':') + 1), source.stdout);
+        const parsed = parseTestDeclarations(path, source.stdout);
         if (parsed.findings.length) return yield* Effect.fail(new ConcordError('GitTestBaselineInvalid', 'The HEAD test declarations have findings; repair the baseline before comparing added cases.'));
         baselineCaseIds.push(...parsed.cases.map(item => item.id));
       }
     }
-  return [...new Set(baselineCaseIds)];
+  const caseIds = [...new Set(baselineCaseIds)];
+  if (cache) cache.value = { revision: revisionId, roots, caseIds };
+  return [...caseIds];
 });
 
 function untrackedDiff(root: string, path: string): GitDiff {

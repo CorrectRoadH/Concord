@@ -18,6 +18,7 @@ const candidate: unknown = module.default;
 if (typeof candidate !== 'object' || candidate === null) throw new RepositoryProfileError('RepositoryHostInvalid', 'Expected a repository host object.');
 const host = candidate as RepositoryHost;
 if (host.format !== 'concord.repository-host/v1' || typeof host.repositoryRoot !== 'string' || realpathSync(host.repositoryRoot) !== configuration.root) throw new RepositoryProfileError('RepositoryHostMismatch', 'The runner host belongs to a different consumer root.');
+if (host.caseIdentity !== 'concord.case-contracts/v1') throw new RepositoryProfileError('RepositoryHostCaseIdentityUnsupported', 'The runner host must declare case identity concord.case-contracts/v1.');
 for (const key of ['collectRepoCaseInventory', 'collectWorkspaceCaseInventory', 'managedInventoryImplementationDigest', 'readManagedInventoryReceipt', 'readManagedRedEvidence', 'readManagedTakeoverEvidence'] as const) if (typeof host[key] !== 'function') throw new RepositoryProfileError('RepositoryHostInvalid', `The runner host is missing ${key}.`);
 if (!Layer.isLayer(host.OwnedProcessLive)) throw new RepositoryProfileError('RepositoryHostInvalid', 'The runner host must supply its owned-process Layer.');
 if (typeof host.QUERY_PROTOCOL !== 'string' || !host.QUERY_PROTOCOL) throw new RepositoryProfileError('RepositoryHostInvalid', 'The host must supply its query protocol identity.');

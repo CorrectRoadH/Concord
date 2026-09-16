@@ -4,6 +4,11 @@ id: web-workbench
 title: 面向人的项目工作台
 createdAt: 2026-09-14T00:00:00.000Z
 kind: feature
+constitutionRefs:
+  - docs/constitution.md#c-001
+  - docs/constitution.md#c-004
+  - docs/constitution.md#c-005
+  - docs/constitution.md#c-006
 ---
 
 # 面向人的项目工作台

@@ -4,6 +4,7 @@ import { Schema } from 'effect';
 import * as ts from 'typescript';
 import { decode, digest, objectDigest, Slug, Text, type Finding, type Repository } from './shared.js';
 import { parseReference } from './refs.js';
+import { ContentCache } from './content-cache.js';
 
 export const CodeDeclarationSchema = Schema.Struct({
   id: Slug,
@@ -361,8 +362,10 @@ function sameSources(left: readonly Source[], right: readonly Source[]): boolean
   return left.length === right.length && left.every((source, index) => source.path === right[index]?.path && source.digest === right[index]?.digest);
 }
 
+const codeContentCache = new ContentCache<ReturnType<typeof parseSource>>();
+
 function compile(current: readonly Source[]): { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] } {
-  const parsed = current.map(parseSource);
+  const parsed = current.map(source => codeContentCache.get(source.path, source.text, () => parseSource(source)));
   const codes = parsed.flatMap(item => item.codes).sort((left, right) => left.id.localeCompare(right.id) || left.file.localeCompare(right.file) || left.line - right.line);
   const findings = parsed.flatMap(item => item.findings);
   const ids = new Map<string, CodeDeclaration>();

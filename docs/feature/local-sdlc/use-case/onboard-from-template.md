@@ -15,7 +15,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 主流程
 
-1. 在尚未存在 `concord.json` 的 worktree 运行 `concord init`，明确测试根与 runner 配置。
+1. 在尚未存在 `concord.config.ts` 的 worktree 运行 `concord init`，明确测试根与 runner 配置。
 2. Concord 先检查全部目标；任何待创建文件冲突都零写入失败。
 3. 成功后 `doctor` 报告配置、缺失测试根和当前 case 数量，但不执行 runner。
 4. 维护者也可在项目外使用 `template list/show` 查看随包模板。
@@ -38,7 +38,7 @@ feature: docs/feature/local-sdlc/README.md
 
 没有测试的仓库通过 `concord init --docs-only` 接入，配置保存 `testRoots: []`。Feature、Design、Roadmap 与 Engineering 仍可由 AI 使用具名命令维护，doctor 不要求空测试目录，也不建议伪造测试。`--docs-only` 与 `--test-root` 同用必须零写入失败。
 
-文档完整性检查通过只表示当前文档关联有效，不代表测试覆盖。以后有真实测试时在 concord.json 添加测试根，即可恢复发现与关联。
+文档完整性检查通过只表示当前文档关联有效，不代表测试覆盖。以后有真实测试时在 concord.config.ts 添加测试根，即可恢复发现与关联。
 
 ## 可执行 quick start
 

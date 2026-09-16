@@ -10,6 +10,19 @@ export function humanOutput(value: unknown): string {
   if (typeof value === 'string') return value;
   if (!Predicate.isObject(value)) return scalar(value);
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
+  if (value.operation === 'init-cancelled') return 'Initialization cancelled. No files or private state were written.';
+  if (value.operation === 'init-preview' && Predicate.isObject(value.configuration)) {
+    const configuration = value.configuration;
+    const memorySources = Array.isArray(configuration.memorySources) ? configuration.memorySources : [];
+    const lines = ['Initialization preview', '', 'Final configuration:', `  ${JSON.stringify(configuration, null, 2).replaceAll('\n', '\n  ')}`, '', 'Memory sources:'];
+    for (const source of memorySources) if (Predicate.isObject(source)) lines.push(`  ${String(source.name)} — ${String(source.path)}; ${String(source.provider)}; ${String(source.access)}${source.defaultWrite === true ? '; default write target' : ''}`);
+    lines.push('', 'Create:');
+    for (const path of Array.isArray(value.create) ? value.create : []) lines.push(`  ${String(path)}`);
+    lines.push('', 'Preserve:');
+    if (!Array.isArray(value.preserve) || value.preserve.length === 0) lines.push('  none');
+    else for (const path of value.preserve) lines.push(`  ${String(path)}`);
+    return lines.join('\n');
+  }
   if (value.operation === 'view') return [
     'Concord view', `Root: ${String(value.root)}`, `Host: ${String(value.host)}  Port: ${String(value.port)}`, '',
     ...(Array.isArray(value.local) ? value.local.map(address => `  Local:   ${String(address)}`) : []),
@@ -48,7 +61,8 @@ export function humanOutput(value: unknown): string {
       lines.push(`${label(key)}: ${item.length === 0 ? 'none' : ''}`);
       for (const entry of item) {
         if (Predicate.isObject(entry) && typeof entry.path === 'string') {
-          lines.push(`  ${entry.path}${entry.line ? `:${String(entry.line)}` : ''}${entry.title ? ` — ${String(entry.title)}` : ''}${entry.kind ? ` (${String(entry.kind)})` : ''}`);
+          const metadata = Predicate.isObject(entry.metadata) ? entry.metadata : entry;
+          lines.push(`  ${entry.path}${entry.line ? `:${String(entry.line)}` : ''}${metadata.title ? ` — ${String(metadata.title)}` : ''}${metadata.kind ? ` (${String(metadata.kind)})` : ''}`);
           if (entry.state) lines.push(`    ${String(entry.memoryKind ?? entry.kind)}: ${String(entry.state)}`);
           if (entry.message) lines.push(`    ${String(entry.code ?? 'Finding')}: ${String(entry.message)}`);
           if (entry.evidence) lines.push(indent(humanOutput(entry.evidence), 4));
@@ -63,8 +77,8 @@ export function humanOutput(value: unknown): string {
       lines.push(`${label(key)}:`, indent(humanOutput(item), 2));
     } else lines.push(`${label(key)}: ${scalar(item)}`);
   }
-  if (value.operation === 'test-list' && Array.isArray(value.cases) && value.cases.length === 0) lines.push('Next: concord test annotate <id> --contract <Feature or Use Case path>', 'Place the output directly above a supported test declaration, then run concord check.');
-  if (value.operation === 'code-list' && Array.isArray(value.codes) && value.codes.length === 0) lines.push('Next: configure sourceRoots in concord.json, then use concord --skill code.');
+  if (value.operation === 'test-list' && Array.isArray(value.cases) && value.cases.length === 0) lines.push('Next: concord test annotate --contract <Feature or Use Case path>', 'Place the output directly above a supported test declaration, then run concord check.');
+  if (value.operation === 'code-list' && Array.isArray(value.codes) && value.codes.length === 0) lines.push('Next: configure sourceRoots in concord.config.ts, then use concord --skill code.');
   if (value.operation === 'check' && value.cases === 0) lines.push('No test annotations found. This checks document integrity; it does not establish test coverage.');
   return lines.join('\n');
 }

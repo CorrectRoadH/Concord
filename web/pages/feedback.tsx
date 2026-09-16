@@ -160,7 +160,7 @@ function SourcePanel({ item }: { item: FeedbackItem }) {
 function FeatureLinker({ item }: { item: FeedbackItem }) {
   const { snapshot, act, busy } = useWorkspace()
   const features = snapshot.documents.filter((document) => document.metadata.kind === "feature")
-  const linked = item.document.metadata.kind === "issue" ? item.document.metadata.features ?? [] : []
+  const linked = item.document.metadata.kind === "issue" ? item.document.metadata.adoptions.current : []
   const available = features.filter((candidate) => !linked.some((reference) => reference === candidate.path || reference === candidate.metadata.id))
   const [feature, setFeature] = React.useState(available[0]?.path ?? "")
   const [error, setError] = React.useState("")

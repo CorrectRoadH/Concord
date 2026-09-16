@@ -29,6 +29,8 @@ export function reopenedMemory(memory: MemoryMeta, reason: string, at: string): 
 }
 
 export function promotedMemory(memory: MemoryMeta, target: string): MemoryMeta {
+  if (memory.state === 'captured') throw new ConcordError('InvalidMemoryState', 'Captured Memory cannot be promoted');
+  if (memory.memoryKind === 'note') throw new ConcordError('InvalidMemoryState', 'A note cannot be promoted');
   if (memory.state === 'superseded') throw new ConcordError('InvalidMemoryState', 'Superseded Memory cannot gain a promotion');
   if (memory.promotions.includes(target)) throw new ConcordError('DuplicatePromotion', `Promotion is already current: ${target}`);
   return { ...memory, promotions: [...memory.promotions, target] };
@@ -45,18 +47,21 @@ export function retiredPromotion(memory: MemoryMeta, target: string, reason: str
 
 export function supersededMemory(memory: MemoryMeta, replacement: MemoryMeta, replacementRef: string, reason: string, at: string): MemoryMeta {
   if (memory.id === replacement.id) throw new ConcordError('InvalidMemoryState', 'Memory cannot supersede itself');
-  if (memory.memoryKind === 'problem' || replacement.memoryKind !== memory.memoryKind) {
-    throw new ConcordError('InvalidMemoryState', 'Only Decision or Insight Memory of the same kind may supersede an entry');
+  if (replacement.memoryKind !== memory.memoryKind) {
+    throw new ConcordError('InvalidMemoryState', 'Only Memory of the same kind may supersede an entry');
   }
-  if (memory.state !== 'current') throw new ConcordError('InvalidMemoryState', 'Only current Memory can be superseded');
-  if (replacement.state !== 'current') throw new ConcordError('InvalidMemoryState', 'Replacement Memory must still be current');
+  const sourceEligible = memory.memoryKind === 'problem' ? memory.state === 'open' || memory.state === 'resolved' : memory.state === 'current';
+  const replacementEligible = replacement.memoryKind === 'problem' ? replacement.state === 'open' || replacement.state === 'resolved' : replacement.state === 'current';
+  if (!sourceEligible) throw new ConcordError('InvalidMemoryState', 'Only an active Memory can be superseded');
+  if (!replacementEligible) throw new ConcordError('InvalidMemoryState', 'Replacement Memory must still be active');
   const retired = memory.promotions.map(target => history('retire-promotion', reason, at, target));
+  const { resolution: previousResolution, ...withoutResolution } = memory;
   return {
-    ...memory,
+    ...withoutResolution,
     state: 'superseded',
     supersededBy: replacementRef,
     promotions: [],
-    history: [...memory.history, ...retired, history('supersede', reason, at, replacementRef)],
+    history: [...memory.history, ...retired, history('supersede', reason, at, replacementRef, previousResolution)],
   };
 }
 

@@ -1,34 +1,29 @@
 import { Schema } from "effect";
+import { ResearchSchema, type DocumentMeta } from "concord-sdlc/model";
 
 const NonEmptyTrimmedString = Schema.String.check(Schema.isTrimmed(), Schema.isMinLength(1));
 
-export const RESEARCH_FORMAT = "niceeval.research/v1" as const;
-export const RESEARCH_MARKER = "<!-- niceeval-research: v1 -->" as const;
+export const RESEARCH_FORMAT = "concord.document/v1" as const;
+export const RESEARCH_MARKER = "<!-- concord-research: v1 -->" as const;
 
-const SegmentSchema = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*$/u));
-export const ResearchPathSchema = Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*$/u));
-export const ResearchRefSchema = Schema.String.check(Schema.isPattern(/^research:docs\/research(?:\/[a-z0-9][a-z0-9-]*)*\/(?:README|[a-z0-9][a-z0-9-]*)\.md$/u));
+// Path safety is enforced again by publication against the real filesystem;
+// this schema intentionally permits Unicode topic and page names.
+const SafeRelativePath = Schema.String.check(Schema.isPattern(/^[^/\\\0\r\n]+(?:\/[^/\\\0\r\n]+)*$/u));
+export const ResearchPathSchema = SafeRelativePath;
+export const ResearchPageSchema = SafeRelativePath;
+export const ResearchRefSchema = Schema.String.check(Schema.isPattern(/^research:docs\/research\/.+\.md$/u));
 export const ResearchUrlSchema = Schema.String.check(Schema.isPattern(/^https?:\/\/\S+$/u));
-export const ObservationDateSchema = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u));
-const MarkdownAnswerSchema = NonEmptyTrimmedString;
 
 export const ResearchContentSchema = Schema.Struct({
   title: NonEmptyTrimmedString,
-  observedOn: ObservationDateSchema,
-  version: Schema.optional(NonEmptyTrimmedString),
-  sources: Schema.Array(ResearchUrlSchema).pipe(Schema.check(Schema.isMinLength(1))),
-  boundary: MarkdownAnswerSchema,
-  mapping: MarkdownAnswerSchema,
-  absorb: MarkdownAnswerSchema,
-  nextEvidence: MarkdownAnswerSchema,
+  body: Schema.optional(Schema.String),
+  observedAt: Schema.optional(NonEmptyTrimmedString),
+  sources: Schema.optional(Schema.Array(NonEmptyTrimmedString)),
 });
 export type ResearchContent = typeof ResearchContentSchema.Type;
 
 export const ResearchCreatePageInputSchema = Schema.Struct({
   command: Schema.Literal("create-page"),
-  path: ResearchPathSchema,
-  content: ResearchContentSchema,
-  dryRun: Schema.Boolean,
 });
 export type ResearchCreatePageInput = typeof ResearchCreatePageInputSchema.Type;
 
@@ -43,7 +38,7 @@ export type ResearchCreatePackageInput = typeof ResearchCreatePackageInputSchema
 export const ResearchAddPageInputSchema = Schema.Struct({
   command: Schema.Literal("add-page"),
   parent: ResearchRefSchema,
-  page: SegmentSchema,
+  page: ResearchPageSchema,
   content: ResearchContentSchema,
   dryRun: Schema.Boolean,
 });
@@ -63,15 +58,8 @@ export const ResearchCommandInputSchema = Schema.Union([
 ]);
 export type ResearchCommandInput = typeof ResearchCommandInputSchema.Type;
 
-export const ResearchFrontmatterSchema = Schema.Struct({
-  research: Schema.Literal(RESEARCH_FORMAT),
-  title: NonEmptyTrimmedString,
-  "observed-on": ObservationDateSchema,
-  version: Schema.optional(NonEmptyTrimmedString),
-  "primary-sources": Schema.Array(ResearchUrlSchema).pipe(Schema.check(Schema.isMinLength(1))),
-  parent: Schema.optional(ResearchRefSchema),
-});
-export type ResearchFrontmatter = typeof ResearchFrontmatterSchema.Type;
+export const ResearchFrontmatterSchema = ResearchSchema;
+export type ResearchFrontmatter = Extract<DocumentMeta, { readonly kind: "research" }>;
 
 export interface ResearchMutationReceipt {
   readonly format: "niceeval.docs-research/receipt/v1";
@@ -88,11 +76,10 @@ export interface ResearchMutationReceipt {
 export interface ResearchCheckFinding {
   readonly path: string;
   readonly code:
-    | "legacy-unmanaged"
-    | "unmanaged-v1"
-    | "invalid-v1"
-    | "missing-required-block"
-    | "missing-primary-source-link"
+    | "unmanaged"
+    | "invalid-document"
+    | "research-migration-required"
+    | "nested-owner"
     | "invalid-package-root";
   readonly message: string;
 }

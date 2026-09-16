@@ -6,8 +6,10 @@ import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
 import { once } from 'node:events';
 import { Effect, Schema } from 'effect';
+import { readProjectConfig } from './support.js';
 import { ProjectSchema } from '../dist/shared.js';
-import { parseDocumentRecord } from '../dist/documents.js';
+import { deriveTestReference } from '../dist/test-reference.js';
+import { parseDocumentRecord, renderDocument } from '../dist/documents.js';
 const Ack = Schema.Struct({});
 const ErrorOutput = Schema.Struct({ error: Schema.String });
 const DigestOutput = Schema.Struct({ digest: Schema.String });
@@ -24,6 +26,7 @@ const DecisionOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schem
 const ResolutionOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ state: Schema.String, resolution: Schema.Struct({ evidenceLevel: Schema.String }) }) }) });
 const EpochOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ epoch: Schema.Int }) }) });
 const PromotionsOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ promotions: Schema.Array(Schema.String) }) }) });
+const MemoryLifecycleOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ state: Schema.String, history: Schema.Array(Schema.Struct({ action: Schema.String, reason: Schema.String })) }) }) });
 const TemplatesOutput = Schema.Struct({ templates: Schema.Array(Schema.Struct({ name: Schema.String })) });
 const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
 let cli: string;
@@ -37,8 +40,22 @@ before(() => Effect.runPromise(Effect.sync(()=>{
 })));
 after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
 
-// @concord-case installed-optional-document-pages
-// @concord-contract docs/feature/local-sdlc/use-case/onboard-from-template.md
+test('memory note uses the captured template and activation records its reason', () => {
+ const root = consumer('memory-note-activation');
+ call(root, ['memory', 'add', 'triage-note', '--title', 'Triage note', '--kind', 'note'], Ack);
+ const captured = call(root, ['memory', 'show', 'triage-note'], MemoryLifecycleOutput).document;
+ assert.equal(captured.metadata.state, 'captured');
+ call(root, ['memory', 'add', 'triage-problem', '--title', 'Triage problem', '--kind', 'problem'], Ack);
+ const path = 'memory/triage-problem.md';
+ const pending = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8'));
+ assert.ok(pending?.metadata.kind === 'memory');
+ write(root, path, renderDocument({ ...pending.metadata, state: 'captured' }, pending.body));
+ call(root, ['memory', 'activate', 'triage-problem', '--reason', 'Begin investigation'], Ack);
+ const active = call(root, ['memory', 'show', 'triage-problem'], MemoryLifecycleOutput).document;
+ assert.equal(active.metadata.state, 'open');
+ assert.deepEqual(active.metadata.history.at(-1), { action: 'activate', reason: 'Begin investigation' });
+});
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('installed create selects optional pages, keeps README required, and rejects invalid selections before writing', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('optional-pages');
  const only = call(root, ['feature', 'create', 'minimal', '--title', 'Minimal'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
@@ -55,7 +72,21 @@ test('installed create selects optional pages, keeps README required, and reject
  assert.equal(readFileSync(join(root, base, 'README.md'), 'utf8'), readme);
  const author = '# Custom\n\nKeep [my link](custom.md).\n';
  call(root, ['feature', 'create', 'custom', '--title', 'Custom', '--body', '-', '--pages', 'cli'], Ack, author);
- assert.equal(call(root, ['feature', 'show', 'custom'], Schema.Struct({ document: Schema.Struct({ body: Schema.String }) })).document.body, author);
+ const shown = call(root, ['feature', 'show', 'custom'], Schema.Struct({
+   document: Schema.Struct({ path: Schema.String, metadata: Schema.Unknown, digest: Schema.String }),
+   useCases: Schema.Array(Schema.Unknown), tests: Schema.Array(Schema.Unknown), codeDeclarations: Schema.Array(Schema.Unknown), findings: Schema.Array(Schema.Unknown),
+ }));
+ assert.equal(shown.document.path, 'docs/feature/custom/README.md');
+ assert.deepEqual(shown.useCases, []);
+ assert.equal('body' in shown.document, false, 'feature show leaves author prose to direct file reads');
+ call(root, ['use-case', 'create', 'custom-flow', '--title', 'Custom flow', '--feature', 'custom'], Ack);
+ const featureRelations = call(root, ['feature', 'show', 'custom'], Schema.Struct({ useCases: Schema.Array(Schema.Struct({ path: Schema.String })) }));
+ assert.deepEqual(featureRelations.useCases.map(item => item.path), ['docs/feature/custom/use-case/custom-flow.md']);
+ const useCaseRelations = call(root, ['use-case', 'show', 'custom-flow'], Schema.Struct({
+   document: Schema.Struct({ path: Schema.String }), outgoing: Schema.Array(Schema.Struct({ to: Schema.String })),
+ }));
+ assert.equal(useCaseRelations.document.path, 'docs/feature/custom/use-case/custom-flow.md');
+ assert.ok(useCaseRelations.outgoing.some(edge => edge.to === 'docs/feature/custom/README.md'));
  call(root, ['--dry-run', 'feature', 'create', 'preview', '--title', 'Preview', '--pages', 'cli'], Ack);
  assert.equal(existsSync(join(root, 'docs/feature/preview')), false);
  for (const [id, pages, error] of [['unknown', 'other', 'InvalidData'], ['duplicate', 'cli,cli', 'InvalidInput'], ['empty', 'cli,', 'InvalidData']] as const) {
@@ -66,6 +97,9 @@ test('installed create selects optional pages, keeps README required, and reject
  assert.equal(existsSync(join(root, 'docs/engineering/invalid')), false);
  const engineering = call(root, ['engineering', 'create', 'small', '--title', 'Small'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
  assert.deepEqual(engineering.changedPaths, ['docs/engineering/small/README.md']);
+ const engineeringShow = call(root, ['engineering', 'show', 'small'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
+ assert.equal(engineeringShow.document.path, 'docs/engineering/small/README.md');
+ assert.equal('body' in engineeringShow.document, false);
  write(root, 'docs/feature/conflict/cli.md', '# Existing\n');
  assert.equal(call(root, ['feature', 'create', 'conflict', '--title', 'Conflict', '--pages', 'cli'], ErrorOutput, '', 1).error, 'DocumentExists');
  assert.equal(existsSync(join(root, 'docs/feature/conflict/README.md')), false);
@@ -88,14 +122,12 @@ function callString(root: string,args: readonly string[],input='Contract body.\n
 }
 function consumer(name: string){const root=join(scratch,name);mkdirSync(root);execFileSync('git',['init','-q',root]);call(root,['init'],Ack);return root;}
 function write(root: string,path: string,source: string){mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),source);}
-
-// @concord-case installed-feedback-local-workflow
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('packed feedback commands persist connections and local triage without remote calls', () => Effect.runPromise(Effect.sync(() => {
  const root=consumer('packed-feedback');
  call(root,['feedback','connection','add','--id','github-main','--provider','github','--owner','example','--repo','demo','--credential-env','CONCORD_TEST_MISSING_TOKEN'],Ack);
  call(root,['feedback','connection','add','--id','linear-main','--provider','linear','--team','TEAM','--credential-env','CONCORD_TEST_MISSING_LINEAR_KEY'],Ack);
- const project=Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root,'concord.json'),'utf8'));
+ const project=readProjectConfig(root);
  assert.deepEqual(project.feedbackConnections?.map(connection=>connection.provider),['github','linear']);
  call(root,['feature','create','feedback-target','--title','Feedback target'],Ack);
  call(root,['feedback','create','observation','--title','Local observation'],Ack);
@@ -104,7 +136,7 @@ test('packed feedback commands persist connections and local triage without remo
  const linked=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
  assert.equal(linked?.metadata.kind,'issue');
  if(linked?.metadata.kind!=='issue')assert.fail('feedback must retain the local issue owner');
- assert.deepEqual(linked.metadata.features,['docs/feature/feedback-target/README.md']);
+ assert.deepEqual(linked.metadata.adoptions.current,['docs/feature/feedback-target/README.md']);
  assert.equal(linked.metadata.source,undefined);
  const listed=call(root,['feedback','list'],Schema.Unknown);
  assert.match(JSON.stringify(listed),/observation/);
@@ -116,9 +148,7 @@ test('packed feedback commands persist connections and local triage without remo
  assert.ok(existsSync(join(root,relative)),'removing a connection must preserve local observations');
  assert.equal(call(root,['check'],CheckOutput).ok,true);
 })));
-
-// @concord-case installed-web-workbench-assets-and-api
-// @concord-contract docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('packed view serves its frontend and API without credentials in an isolated Git consumer', async () => {
  const root = consumer('packed-web');
  const process = spawn(globalThis.process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -156,8 +186,7 @@ test('packed view serves its frontend and API without credentials in an isolated
   assert.equal(call(root,['check'],CheckOutput).ok,true,'idle server must not lock out the CLI');
  } finally {process.kill('SIGTERM');await exited;}
 });
-// @concord-case installed-template-inventory
-// @concord-contract docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('packed templates work outside a project and fail clearly when their inventory is damaged', () => Effect.runPromise(Effect.sync(() => {
  const result = spawnSync(process.execPath, [cli, 'template', 'list', '--json'], { cwd: scratch, encoding: 'utf8' });
  assert.equal(result.status, 0, result.stderr);
@@ -175,11 +204,10 @@ test('packed templates work outside a project and fail clearly when their invent
   assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(broken.stderr).error, 'TemplateInventoryInvalid');
  } finally { writeFileSync(template, original); }
 })));
-// @concord-case installed-trace-and-review
-// @concord-contract docs/feature/local-sdlc/use-case/review-traceability.md
+// @use-case docs/feature/local-sdlc/use-case/review-traceability.md
 test('installed onboarding creates editable packages and connects supporting-page tests to their Feature', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('onboarding');
- assert.match(readFileSync(join(root, 'docs/concord.md'), 'utf8'), /concord test annotate/);
+ assert.match(readFileSync(join(root, 'docs/concord.md'), 'utf8'), /concord test list/);
  for (const path of ['docs/README.md', 'docs/_template/feature-design/lifecycle.md', 'docs/_template/roadmap/use-case/README.md', 'docs/_template/design-decision/CASES.md', 'docs/_template/design-decision/plans/plan-2/library.md', 'docs/_template/engineering/README.md', 'docs/concepts.md', 'docs/architecture.md', 'docs/_template/research/README.md', 'docs/_template/memory/problem.md']) assert.equal(existsSync(join(root, path)), true, path);
  assert.equal(existsSync(join(root, 'AGENTS.md')), false);
  call(root, ['feature', 'create', 'accounts', '--title', 'Accounts', '--pages', 'library,cli,architecture,lifecycle,use-case'], Ack);
@@ -195,38 +223,40 @@ test('installed onboarding creates editable packages and connects supporting-pag
  call(root, ['feature', 'page', 'set', 'accounts', 'readme', '--body', '-', '--expected-digest', readme.digest], Ack, '# Accounts\n\nUsers sign in with valid credentials.\n');
  assert.deepEqual(call(root, ['feature', 'show', 'accounts'], OwnerOutput).document.metadata, ownerBefore.metadata);
  call(root, ['memory', 'add', 'expired', '--kind', 'problem', '--title', 'Expired token'], Ack);
- const annotation = call(root, ['test', 'annotate', 'reject-expired', '--contract', 'docs/feature/accounts/cli.md#sign-in', '--regression', 'memory/expired.md'], AnnotationOutput);
+ const annotation = call(root, ['test', 'annotate', '--contract', 'docs/feature/accounts/cli.md#sign-in', '--regression', 'memory/expired.md'], AnnotationOutput);
  assert.equal(existsSync(join(root, 'test')), false, 'annotate must not edit test sources');
  write(root, 'test/accounts.test.mjs', `import test from 'node:test';\n${annotation.snippet}test('rejects expired tokens', () => {});\n`);
+ const accountCase = deriveTestReference('test/accounts.test.mjs', 'test/accounts.test.mjs', 'rejects expired tokens');
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
  const tracedTest = call(root, ['trace', 'show', 'accounts'], TraceOutput).tests[0];
  assert.ok(tracedTest);
- assert.equal(tracedTest.id, 'reject-expired');
+ assert.equal(tracedTest.id, accountCase);
  assert.equal(call(root, ['trace', 'show', 'other'], TraceOutput).tests.length, 0);
- assert.match(callString(root, ['review', 'render', 'accounts']), /reject-expired/);
- assert.equal(call(root, ['test', 'annotate', 'reject-expired', '--contract', 'docs/feature/accounts/README.md'], ErrorOutput, '', 1).error, 'CaseExists');
+ assert.match(callString(root, ['review', 'render', 'accounts']), new RegExp(accountCase));
  assert.equal(call(root, ['doctor'], DoctorOutput).cases, 1);
  const human = spawnSync(process.execPath, [cli, '--root', root, 'test', 'list'], { encoding: 'utf8' });
  assert.equal(human.status, 0, human.stderr);
- assert.match(human.stdout, /reject-expired/);
+ assert.match(human.stdout, new RegExp(accountCase));
  assert.match(human.stdout, /Contract:/);
  assert.ok(!human.stdout.trimStart().startsWith('{'));
 })));
-// @concord-case installed-init-is-safe
-// @concord-contract docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('installed init previews configuration, preserves existing docs, and never runs the configured command', () => Effect.runPromise(Effect.sync(() => {
  const root = join(scratch, 'init-options'); mkdirSync(root); execFileSync('git', ['init', '-q', root]);
  write(root, 'docs/README.md', '# Existing documentation\n');
  write(root, 'docs/concepts.md', '# Existing concepts\n');
  write(root, 'docs/architecture.md', '# Existing architecture\n');
+ write(root, 'bad-memory-sources.json', '{not json');
+ assert.equal(call(root, ['init', '--memory-sources', join(root, 'bad-memory-sources.json')], ErrorOutput, '', 1).error, 'InvalidJson');
+ assert.equal(existsSync(join(root, 'concord.config.ts')), false);
  const runner = { kind: 'command', argv: ['node', '-e', 'require("node:fs").writeFileSync("EXECUTED", "bad")'], sourceFiles: [], timeoutMs: 1200 };
  write(root, 'runner.json', JSON.stringify(runner));
  const args = ['init', '--test-root', 'spec', '--runner-config', join(root, 'runner.json')];
  assert.equal(call(root, ['--dry-run', ...args], DryRunOutput).dryRun, true);
- assert.equal(existsSync(join(root, 'concord.json')), false);
+ assert.equal(existsSync(join(root, 'concord.config.ts')), false);
  assert.equal(existsSync(join(root, '.git/concord')), false);
  call(root, args, Ack);
- const config = Schema.decodeUnknownSync(Schema.fromJsonString(ProjectSchema))(readFileSync(join(root, 'concord.json'), 'utf8'));
+ const config = readProjectConfig(root);
  assert.deepEqual(config.testRoots, ['spec']); assert.deepEqual(config.runner, runner);
  assert.equal(readFileSync(join(root, 'docs/README.md'), 'utf8'), '# Existing documentation\n');
  assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), '# Existing concepts\n');
@@ -237,8 +267,7 @@ test('installed init previews configuration, preserves existing docs, and never 
  assert.equal(existsSync(join(root, 'EXECUTED')), false);
  assert.equal(call(root, ['init'], ErrorOutput, '', 1).error, 'ProjectExists');
 })));
-// @concord-case installed-document-lifecycles
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('installed Design and Roadmap packages retain their pages and authoritative lifecycle metadata', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('document-packages');
  call(root, ['engineering', 'create', 'release', '--title', 'Release'], Ack);
@@ -256,22 +285,22 @@ test('installed Design and Roadmap packages retain their pages and authoritative
  assert.equal(call(root, ['roadmap', 'show', 'session'], StateOutput).document.metadata.state, 'adopted');
  call(root, ['memory', 'add', 'release-owner', '--kind', 'decision', '--title', 'Release owner'], Ack);
  call(root, ['memory', 'promote', 'release-owner', '--target', 'docs/engineering/release/README.md'], Ack);
- assert.equal(call(root, ['test', 'annotate', 'release-case', '--contract', 'docs/engineering/release/README.md'], ErrorOutput, '', 1).error, 'InvalidReferenceTarget');
+ assert.equal(call(root, ['test', 'annotate', '--contract', 'docs/engineering/release/README.md'], ErrorOutput, '', 1).error, 'InvalidReferenceTarget');
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
 })));
-// @concord-case installed-command-evidence-memory
-// @concord-contract docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('installed CLI connects contracts, real red/green execution, Memory history and cache',()=>Effect.runPromise(Effect.sync(()=>{
  const root=consumer('flow');
  call(root,['feature','create','arithmetic','--title','Arithmetic','--body','-'],Ack);
  call(root,['use-case','create','addition','--feature','arithmetic','--title','Addition','--body','-'],Ack);
  call(root,['memory','add','sum-bug','--kind','problem','--title','Incorrect sum','--body','-'],Ack);
  write(root,'src/math.mjs','export const sum=(a,b)=>a-b;\n');
- write(root,'test/math.test.mjs',`import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {sum} from '../src/math.mjs';\n// @concord-case sum-adds\n// @concord-contract docs/feature/arithmetic/use-case/addition.md\n// @concord-regression memory/sum-bug.md\ntest('adds numbers',()=>assert.equal(sum(2,3),5));\n`);
+ write(root,'test/math.test.mjs',`import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {sum} from '../src/math.mjs';\n// @use-case docs/feature/arithmetic/use-case/addition.md\n// @regression memory/sum-bug.md\ntest('adds numbers',()=>assert.equal(sum(2,3),5));\n`);
+ const sumCase = deriveTestReference('test/math.test.mjs', 'test/math.test.mjs', 'adds numbers');
  assert.equal(call(root,['check'],CheckOutput).ok,true);
- const red=call(root,['test','run','sum-adds'],EvidenceOutput,'',1);assert.equal(red.commandOutcome,'fail');assert.equal(red.execution,'nonzero');
+ const red=call(root,['test','run',sumCase],EvidenceOutput,'',1);assert.equal(red.commandOutcome,'fail');assert.equal(red.execution,'nonzero');
  write(root,'src/math.mjs','export const sum=(a,b)=>a+b;\n');
- const green=call(root,['test','run','sum-adds'],EvidenceOutput);assert.equal(green.commandOutcome,'pass');assert.equal(green.execution,'nonzero');
+ const green=call(root,['test','run',sumCase],EvidenceOutput);assert.equal(green.commandOutcome,'pass');assert.equal(green.execution,'nonzero');
  const resolveArgs=['memory','resolve','sum-bug','--kind','fixed','--red',red.id,'--green',green.id,'--reason','Correct addition verified'];
  write(root,'src/math.mjs','export const sum=(a,b)=>a+b+1;\n');
  assert.equal(call(root,resolveArgs,ErrorOutput,'',1).error,'EvidenceStale');
@@ -289,8 +318,7 @@ test('installed CLI connects contracts, real red/green execution, Memory history
  assert.equal(call(root,['memory','resolve','sum-bug','--kind','fixed','--red',red.id,'--green',green.id,'--reason','Old proof'],ErrorOutput,'',1).error,'EvidenceStale');
  const nested=spawnSync(process.execPath,[cli,'--json','feature','list'],{cwd:join(root,'src'),encoding:'utf8',timeout:10000});assert.equal(nested.status,0,nested.stderr);
 })));
-// @concord-case installed-adoption-and-issue-lifecycle
-// @concord-contract docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('installed CLI adoption moves current promotions atomically; local issue lifecycle stays explicit',()=>Effect.runPromise(Effect.sync(()=>{
  const root=consumer('lifecycle');
  call(root,['roadmap','create','sharing','--title','Sharing','--body','-'],Ack);
@@ -306,30 +334,29 @@ test('installed CLI adoption moves current promotions atomically; local issue li
  call(root,['--dry-run','memory','retire','sharing-rule','--target','docs/feature/sharing/README.md','--reason','Preview'],Ack);
  assert.equal(readFileSync(join(root,'memory/sharing-rule.md'),'utf8'),source);
 })));
-// @concord-case installed-rejects-skipped-case
-// @concord-contract docs/feature/local-sdlc/use-case/discover-annotated-tests.md
+// @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 test('installed CLI returns a named failure for a known skipped declaration',()=>Effect.runPromise(Effect.sync(()=>{
  const root=consumer('skipped');
  call(root,['feature','create','skip-feature','--title','Skip feature','--body','-'],Ack);
- write(root,'test/skipped.test.mjs',"import test from 'node:test';\n// @concord-case skipped-case\n// @concord-contract docs/feature/skip-feature/README.md\ntest.skip('skipped',()=>{});\n");
- assert.equal(call(root,['test','run','skipped-case'],ErrorOutput,'',1).error,'CaseNotRunnable');
+ write(root,'test/skipped.test.mjs',"import test from 'node:test';\n// @feature docs/feature/skip-feature/README.md\ntest.skip('skipped',()=>{});\n");
+ const skippedCase = deriveTestReference('test/skipped.test.mjs', 'test/skipped.test.mjs', 'skipped');
+ assert.equal(call(root,['test','run',skippedCase],ErrorOutput,'',1).error,'CaseNotRunnable');
 })));
-// @concord-case repository-profile-compatibility
-// @concord-contract docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
+// @use-case docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
 test('installed repository profile keeps lifecycle behavior and refuses mismatched hosts or engines',()=>Effect.runPromise(Effect.sync(()=>{
  const root=join(scratch,'repository-profile');mkdirSync(root);execFileSync('git',['init','-q',root]);
  write(root,'package.json',JSON.stringify({private:true,type:'module'}));
  write(root,'concord.repository.json',JSON.stringify({format:'concord.repository/v1',host:'host.mjs'}));
  const dependencyRoot=join(scratch,'tool/node_modules');
  symlinkSync(dependencyRoot,join(root,'node_modules'),'dir');
- const hostSource=`import {Layer} from 'effect';\nconst forbidden=()=>{throw new Error('Native collection was not requested');};\nexport default {format:'concord.repository-host/v1',repositoryRoot:process.cwd(),QUERY_PROTOCOL:'niceeval.query/v1',OwnedProcessLive:Layer.empty,collectRepoCaseInventory:forbidden,collectWorkspaceCaseInventory:forbidden,managedInventoryImplementationDigest:forbidden,readManagedInventoryReceipt:forbidden,readManagedRedEvidence:forbidden,readManagedTakeoverEvidence:forbidden};\n`;
+ const hostSource=`import {Layer} from 'effect';\nconst forbidden=()=>{throw new Error('Native collection was not requested');};\nexport default {format:'concord.repository-host/v1',caseIdentity:'concord.case-contracts/v1',repositoryRoot:process.cwd(),QUERY_PROTOCOL:'niceeval.query/v1',OwnedProcessLive:Layer.empty,collectRepoCaseInventory:forbidden,collectWorkspaceCaseInventory:forbidden,managedInventoryImplementationDigest:forbidden,readManagedInventoryReceipt:forbidden,readManagedRedEvidence:forbidden,readManagedTakeoverEvidence:forbidden};\n`;
  write(root,'host.mjs',hostSource);
  for(const directory of ['docs','e2e','feedback','memory'])mkdirSync(join(root,directory));
  execFileSync('git',['-C',root,'-c','user.name=Test','-c','user.email=test@example.invalid','commit','--allow-empty','-qm','Initialize fixture']);
  const profile=(args: readonly string[],input='A durable engineering observation.\n')=>spawnSync(process.execPath,[cli,'repo',...args],{cwd:root,input,encoding:'utf8',timeout:15000});
  let result=profile(['memory','add','profile-problem','--kind','problem','--title','Profile problem','--body','-','--json']);assert.equal(result.status,0,result.stderr+result.stdout);
  result=profile(['memory','resolve','profile-problem','--kind','fixed','--proof','ccev_0123456789abcdef0123456789abcdef','--json']);assert.notEqual(result.status,0,'command evidence must not close a formal Problem');
- result=profile(['memory','resolve','profile-problem','--kind','not-a-bug','--proof','Observed behavior matches the contract','--json']);assert.equal(result.status,0,result.stderr+result.stdout);
+ result=profile(['memory','resolve','profile-problem','--kind','not-a-bug','--reason','Observed behavior matches the contract','--json']);assert.equal(result.status,0,result.stderr+result.stdout);
  result=profile(['memory','check','--json']);assert.equal(result.status,0,result.stderr+result.stdout);
  result=profile(['memory','add','profile-problem','--kind','problem','--title','Duplicate','--body','-','--json']);assert.notEqual(result.status,0);
  result=profile(['memory','list','--json']);assert.equal(result.status,0,'failed mutation must release its lock');
@@ -343,3 +370,17 @@ test('installed repository profile keeps lifecycle behavior and refuses mismatch
  rmSync(join(root,'concord.repository.json'));
  result=profile(['--help']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryProfileMissing/);
 })));
+// @use-case docs/feature/document-packages/use-case/organize-freeform-research.md
+test('packed Research creates only its title and edits arbitrary nested supporting Markdown', () => {
+ const root = consumer('research-package');
+ const created = call(root, ['research', 'create', 'notes', '--title', 'My notes'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
+ assert.deepEqual(created.changedPaths, ['docs/research/notes/README.md']);
+ const owner = parseDocumentRecord('docs/research/notes/README.md', readFileSync(join(root, 'docs/research/notes/README.md'), 'utf8'))!;
+ assert.equal(owner.body.trim(), '# My notes');
+ call(root, ['research', 'page', 'add', 'notes', '材料/比较'], Ack);
+ const page = call(root, ['research', 'page', 'show', 'notes', '材料/比较'], PageOutput);
+ assert.equal(page.body.trim(), '# 比较');
+ call(root, ['research', 'page', 'set', 'notes', '材料/比较', '--body', '-', '--expected-digest', page.digest], Ack, '# 任意结构\n\n自由正文。\n');
+ assert.equal(readFileSync(join(root, 'docs/research/notes/材料/比较.md'), 'utf8'), '# 任意结构\n\n自由正文。\n');
+ assert.equal(call(root, ['check'], CheckOutput).ok, true);
+});

@@ -10,9 +10,9 @@ import { createDocument, loadDocuments, renderDocument } from '../dist/documents
 import { mergeFeedbackCache } from '../dist/feedback-cache.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
 import type { FeedbackSource } from '../dist/feedback-schema.js';
+import { projectConfigPath, readProjectConfig, writeProjectConfig } from './support.js';
 
-// @concord-case browser-feedback-authoring-and-connection-conflict
-// @concord-contract docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('feedback browser separates remote observations from local editing and protects connection drafts', async () => {
   const root=mkdtempSync(join(tmpdir(),'concord-feedback-browser-'));
   let server:ViewServerHandle|undefined;
@@ -46,17 +46,17 @@ test('feedback browser separates remote observations from local editing and prot
     await page.getByLabel('凭据环境变量',{exact:true}).fill('CONCORD_BROWSER_MISSING_TOKEN');
     await page.getByLabel('GitHub owner',{exact:true}).fill('example');
     await page.getByLabel('GitHub repository',{exact:true}).fill('demo');
-    const configPath=join(root,'concord.json');
-    const config=JSON.parse(readFileSync(configPath,'utf8'));
-    config.runner.timeoutMs=54321;
-    const external=`${JSON.stringify(config,null,2)}\n`;
-    writeFileSync(configPath,external);
-    await page.waitForResponse(response=>response.url().endsWith('/api/workspace')&&response.ok());
+    const configPath=join(root,projectConfigPath(root));
+    const config=readProjectConfig(root);
+    writeProjectConfig(root,{...config,runner:{...config.runner,timeoutMs:54321}});
+    const external=readFileSync(configPath,'utf8');
     await page.getByRole('button',{name:'添加',exact:true}).click();
     await expect(page.getByRole('dialog').locator('.form-error')).toBeVisible();
     assert.equal(readFileSync(configPath,'utf8'),external);
     await expect(page.getByLabel('连接 ID',{exact:true})).toHaveValue('browser-github');
     await page.getByRole('button',{name:'取消',exact:true}).click();
+    await page.reload();
+    await expect(page.getByRole('heading',{name:'反馈',exact:true})).toBeVisible();
     await page.getByRole('button',{name:'添加连接',exact:true}).click();
     await page.getByLabel('连接 ID',{exact:true}).fill('browser-github');
     await page.getByLabel('凭据环境变量',{exact:true}).fill('CONCORD_BROWSER_MISSING_TOKEN');
@@ -64,7 +64,7 @@ test('feedback browser separates remote observations from local editing and prot
     await page.getByLabel('GitHub repository',{exact:true}).fill('demo');
     await page.getByRole('button',{name:'添加',exact:true}).click();
     await expect(page.getByRole('dialog')).not.toBeVisible();
-    await expect.poll(()=>JSON.parse(readFileSync(configPath,'utf8')).feedbackConnections?.[0]?.id).toBe('browser-github');
+    await expect.poll(()=>readProjectConfig(root).feedbackConnections?.[0]?.id).toBe('browser-github');
     await page.getByRole('button',{name:'同步',exact:true}).click();
     await expect(page.locator('.connection-record .form-error')).toBeVisible();
     await page.getByRole('button',{name:'新建本地反馈',exact:true}).click();

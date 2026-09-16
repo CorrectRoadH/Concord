@@ -34,8 +34,7 @@ function scan(root: string) {
   finally { repo.close(); }
 }
 
-// @concord-case code-parser-scopes-and-nodes
-// @concord-contract docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('discovers file, nested node, and complete statement region ownership with multiple targets', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
@@ -112,8 +111,7 @@ declare const sealed: ClassDecorator;
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
-// @concord-case code-parser-real-comment-boundary
-// @concord-contract docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('uses TypeScript comment ranges and ignores pseudo markers plus known annotation families', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
@@ -122,8 +120,7 @@ const stringValue = '// @concord-code string-fake';
 const templateValue = \`before \${id} // @concord-code template-fake\`;
 const regularExpression = /\\/\\/ @concord-code regex-fake/;
 const jsx = <div>// @concord-code jsx-fake</div>;
-// @concord-case ignored-test-family
-// @concord-contract ${contract}
+// @use-case ${contract}
 // @concord-mystery actual-unknown
 // @concord-code actual-node
 // @concord-implements ${contract}
@@ -132,12 +129,11 @@ const actual = () => ({ stringValue, templateValue, regularExpression, jsx });
     const result = scan(root);
     assert.deepEqual(result.codes.map(item => item.id), ['actual-node']);
     assert.deepEqual(result.findings.map(item => item.code), ['UnknownConcordAnnotation']);
-    assert.equal(result.findings[0]?.line, 8);
+    assert.equal(result.findings[0]?.line, 7);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
-// @concord-case code-parser-rejects-ambiguous-nodes
-// @concord-contract docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('rejects unsupported declarations, repeated owners, invalid IDs, and orphan relation markers', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
@@ -206,8 +202,7 @@ export function second() {}
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
-// @concord-case code-parser-region-boundaries
-// @concord-contract docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('rejects empty, nested, mismatched, cross-function, and partial-expression regions', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
@@ -249,8 +244,7 @@ void outer; void inner; void mismatch; void boundary; void partial;
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
-// @concord-case code-parser-node-marker-barrier
-// @concord-contract docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('does not bind a node marker across a region marker while retaining the wrapped function region', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
@@ -268,8 +262,7 @@ const after = 1;
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
-// @concord-case code-parser-switch-boundaries
-// @concord-contract docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('accepts terminal switch clause regions and rejects crossing into another clause', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
@@ -308,8 +301,7 @@ console.log(2);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
-// @concord-case code-parser-source-freshness
-// @concord-contract docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('refuses marked parse failures and keeps moved, deleted, and concurrently changed scans fresh', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
@@ -346,6 +338,7 @@ export function moving() {}
       root: local.root,
       privateDir: local.privateDir,
       config: local.config,
+      configSnapshot: local.configSnapshot,
       absolute: path => local.absolute(path),
       files: prefix => local.files(prefix),
       read: path => {
@@ -369,6 +362,7 @@ export function moving() {}
       root: disappearingLocal.root,
       privateDir: disappearingLocal.privateDir,
       config: disappearingLocal.config,
+      configSnapshot: disappearingLocal.configSnapshot,
       absolute: path => disappearingLocal.absolute(path),
       files: prefix => ++inventories === 1 ? ['src/vanished.ts'] : disappearingLocal.files(prefix),
       read: path => disappearingLocal.read(path),

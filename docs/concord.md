@@ -12,7 +12,7 @@ Concord 用当前 checkout 构建并 link 的公开 CLI 维护自身契约。当
 node --import tsx --test --test-name-pattern {pattern} {file}
 ```
 
-维护文档时先阅读 [本地 SDLC 闭环](feature/local-sdlc/README.md) 与 [Concord 自举维护](engineering/concord-self-hosting/README.md)。新增或调整测试必须在真实、由 `node:test` 直接导入的顶层声明正上方放置 `@concord-case` 和 `@concord-contract`；测试回调通过 `Effect.runPromise` 执行 `Effect.sync` 或现有 Effect program。不要通过包装函数假注册测试。
+维护文档时先阅读 [本地 SDLC 闭环](feature/local-sdlc/README.md) 与 [Concord 自举维护](engineering/concord-self-hosting/README.md)。新增或调整测试必须在真实、由 `node:test` 直接导入的顶层声明正上方放置 `@feature <canonical path>` 或 `@use-case <canonical path>`；可附加 `@regression`、`@issue`、`@test-file` 和 `@status`。测试 ID 由 Concord 自动派生，不人工分配。测试回调通过 `Effect.runPromise` 执行 `Effect.sync` 或现有 Effect program。不要通过包装函数假注册测试。
 
 日常自举检查使用：
 
@@ -29,7 +29,7 @@ concord review render local-sdlc
 
 ## Connect implementation to contracts
 
-Configure sourceRoots in concord.json, or initialize with --source-root src (repeatable). Run concord --skill code for file, function and statement-region declarations. Use code annotate to generate comments, code locate <path> --line <n> to inspect all containing scopes, and trace show to reverse-query the contract. Code declarations describe implementation associations, not completion or test coverage.
+Configure sourceRoots in concord.config.ts, or initialize with --source-root src (repeatable). Run concord --skill code for file, function and statement-region declarations. Use code annotate to generate comments, code locate <path> --line <n> to inspect all containing scopes, and trace show to reverse-query the contract. Code declarations describe implementation associations, not completion or test coverage.
 
 ## Choose the document that owns your intent
 
@@ -47,8 +47,12 @@ Templates provide writing prompts, not completed requirements or evidence.
 ## Complete setup
 
 Init installs every category, the documentation entry point, and the complete [template reference set](_template/README.md).
-Feature, Roadmap, and each Design candidate require README. Select optional pages with --pages library,cli,architecture,lifecycle,use-case, or repeat --pages; omission creates README only. Design decision wrapper pages are always created. Engineering starts with README and expands by topic.
+Feature, Roadmap, and each Design candidate require README. Select optional pages with --pages library,cli,architecture,lifecycle,use-case, or repeat --pages; omission uses project defaults; --no-pages explicitly creates README only. Design decision wrapper pages are always created. Engineering starts with README and expands by topic.
 Page add adds optional or custom topic pages. Maintain README links after adding pages.
+
+## Project constitution
+
+Read [the current constitution](constitution.md) before planning, implementing, or reviewing a feature. Feature and Design owners cite applicable clause anchors through constitutionRefs. Use `concord constitution show` to inspect the current body, version, digest, and affected owners; explicit adopt/amend operations record the reason, sources, and impact. Draft templates do not assert compliance.
 
 ## First feature
 
@@ -64,15 +68,14 @@ Lifecycle metadata remains owned by the corresponding Concord commands.
 
 ## Connect a real test
 
-Run `concord test annotate login-rejects-expired-token --contract docs/feature/login/use-case/expired-token.md`.
-Place the output immediately above an existing supported test declaration. Keep its stable case ID with the test.
+Place `// @use-case docs/feature/login/use-case/expired-token.md` immediately above an existing supported test declaration. Concord derives the execution reference from its file and name; no manual ID or attach step is needed.
 Then run `concord check`, `concord test list`, and `concord trace show docs/feature/login/README.md`.
 Use `--regression memory/<problem>.md` when a test protects a recorded Problem.
-Source annotations are the only owner of these test relations; reverse lists are derived.
+Source annotations are the only contract source of these test relations; reverse lists are derived.
 
 ## Configure and run verification
 
-`concord.json` owns testRoots and runner configuration. Defaults scan test/ and tests/ using Node native tests.
+`concord.config.ts` owns testRoots and runner configuration for this repository and new projects; old `concord.json` requires explicit offline migration. Defaults scan test/ and tests/ using Node native tests.
 For documentation-only repositories, use `concord init --docs-only` with empty testRoots. Add real test roots later; document integrity is not test coverage.
 Use `concord doctor` to inspect the configuration and missing test roots without running repository commands.
 For another runner, set runner to an object such as:

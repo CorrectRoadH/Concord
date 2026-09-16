@@ -1,0 +1,44 @@
+import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import test from 'node:test';
+import { Schema } from 'effect';
+import { RepoRefSchema } from '../dist/repository/docs/trace/ref.js';
+import { adoptRoadmap, checkDocuments, createDocument, decideDesign, findDocument, loadDocuments, renderDocument } from '../dist/documents.js';
+import { initialize, LocalRepository } from '../dist/storage.js';
+import { decodeDesignReadme, encodeDecidedDesignReadme } from '../dist/repository/docs/design/codec.js';
+
+// @use-case docs/feature/document-packages/use-case/migrate-document-discovery.md
+test('cancelled Roadmap cannot be adopted and a new decision replaces historical deferral', t => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-dispositions-'));
+  execFileSync('git', ['init', '-q', root]);
+  const repo = new LocalRepository(root, { initialize: true });
+  t.after(() => { repo.close(); rmSync(root, { recursive: true, force: true }); });
+  initialize(repo);
+  createDocument(repo, 'roadmap', { id: 'cancelled', title: 'Cancelled' });
+  createDocument(repo, 'design', { id: 'deferred', title: 'Deferred', alternatives: ['one', 'two'] });
+  const disposition = { reason: 'Original statement', source: { path: 'historic/DECISION.md', commit: 'a'.repeat(40), digest: `sha256:${'b'.repeat(64)}` } };
+  const roadmap = findDocument(loadDocuments(repo), 'cancelled', 'roadmap');
+  assert.equal(roadmap.metadata.kind, 'roadmap');
+  if (roadmap.metadata.kind !== 'roadmap') throw new Error('fixture');
+  writeFileSync(join(root, roadmap.path), renderDocument({ ...roadmap.metadata, state: 'cancelled', cancellation: disposition }, roadmap.body));
+  assert.throws(() => adoptRoadmap(repo, 'cancelled', 'new-feature'), { code: 'InvalidRoadmapState' });
+  const design = findDocument(loadDocuments(repo), 'deferred', 'design');
+  if (design.metadata.kind !== 'design') throw new Error('fixture');
+  writeFileSync(join(root, design.path), renderDocument({ ...design.metadata, deferral: disposition }, design.body));
+  const profile = decodeDesignReadme(design.path, renderDocument({ ...design.metadata, deferral: disposition, constitutionRefs: [] }, design.body));
+  assert.equal(profile.state._tag, 'deferred');
+  const encoded = encodeDecidedDesignReadme(profile, Schema.decodeUnknownSync(RepoRefSchema)('docs/design/deferred/plans/one/README.md'), design.body);
+  assert.doesNotMatch(encoded, /deferral:/);
+  assert.match(encoded, /constitutionRefs: \[\]/);
+  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
+  decideDesign(repo, 'deferred', 'one', [], 'Evidence is now available');
+  const selected = findDocument(loadDocuments(repo), 'deferred', 'design');
+  assert(selected.metadata.kind === 'design');
+  assert.equal(selected.metadata.deferral, undefined);
+  assert.equal(selected.metadata.decision?.selected, 'one');
+  assert.ok(selected.metadata.decision?.at);
+  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
+});

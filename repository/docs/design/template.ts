@@ -228,7 +228,7 @@ export function renderDesignProjection(
     `- [${plan.selector}${selected?.ref === plan.ref ? "（已选择）" : ""}](plans/${plan.selector}/README.md)`
   );
   const decision = selected === undefined
-    ? "裁决：尚未写入 `decision.selected`。"
+    ? state._tag === "deferred" ? `裁决：已暂缓。${state.reason}` : "裁决：尚未写入 `decision.selected`。"
     : `裁决：[${selected.selector}](plans/${selected.selector}/README.md)。`;
   return [
     DESIGN_PROJECTION_START,

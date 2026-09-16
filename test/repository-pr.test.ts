@@ -9,13 +9,13 @@ import { Effect, Result } from "effect";
 
 import { runPrBodyAt } from "../dist/repository/pr/domain.js";
 import { makeNodePrLive } from "../dist/repository/pr/node.js";
+import { deriveTestReference } from "../dist/test-reference.js";
 import { readPrTestDeclarations } from "../dist/repository/pr/test-relations.js";
 
-const caseId = "necase_0123456789ABCDEF";
 const nativePath = "e2e/fixture/test/native.test.ts";
 const helperPath = "e2e/fixture/test/helper.scenarios.ts";
+const caseId = deriveTestReference(nativePath, helperPath, "fixture contract");
 const selector = `${nativePath}#${caseId}`;
-const owner = "docs/engineering/testing/e2e/fixture.md#owner";
 const contract = "docs/feature/fixture/use-case/run.md";
 const write = (root: string, path: string, text: string): void => {
   mkdirSync(dirname(join(root, path)), { recursive: true });
@@ -23,10 +23,9 @@ const write = (root: string, path: string, text: string): void => {
 };
 const git = (root: string, ...args: string[]): string => execFileSync("git", args, { cwd: root, encoding: "utf8" }).trim();
 const helperSource = `import { test } from "vitest";
-// @concord-case ${caseId}
-// @concord-owner ${owner}
-// @concord-test-file ${nativePath}
-test("fixture contract [${caseId}]", () => {});
+// @use-case ${contract}
+// @test-file ${nativePath}
+test("fixture contract", () => {});
 `;
 const fixture = () => Effect.acquireRelease(
   Effect.sync(() => {
@@ -35,7 +34,6 @@ const fixture = () => Effect.acquireRelease(
     git(root, "config", "user.name", "Concord fixture");
     git(root, "config", "user.email", "fixture@example.invalid");
     write(root, ".github/PULL_REQUEST_TEMPLATE.md", "## Problem\n\n## Tests\n");
-    write(root, "docs/engineering/testing/e2e/fixture.md", `## Fixture {#owner}\n\n<!-- niceeval.e2e-owner-contract/v1 -->\nContract: [Run](../../../feature/fixture/use-case/run.md)\n\nPreserve the public result.\n`);
     write(root, contract, "# Run\n\nPreserve the public result.\n");
     git(root, "add", ".");
     git(root, "commit", "-qm", "Fixture contracts");
@@ -44,8 +42,7 @@ const fixture = () => Effect.acquireRelease(
   root => Effect.sync(() => rmSync(root, { recursive: true, force: true })),
 );
 
-// @concord-case repository-pr-pinned-source-inventory
-// @concord-contract docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
+// @use-case docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
 test("PR source inventory reads the specified Git tree despite index and worktree changes", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const root = yield* fixture();
   const head = yield* Effect.sync(() => {
@@ -56,7 +53,7 @@ test("PR source inventory reads the specified Git tree despite index and worktre
     const revision = git(root, "rev-parse", "HEAD");
     git(root, "rm", "--cached", helperPath);
     rmSync(join(root, helperPath));
-    write(root, "e2e/fixture/test/new.test.ts", "// @concord-case invalid\nconst unrelated = true;\n");
+    write(root, "e2e/fixture/test/new.test.ts", "// @use-case invalid\nconst unrelated = true;\n");
     git(root, "add", "e2e/fixture/test/new.test.ts");
     return revision;
   });
@@ -67,19 +64,18 @@ test("PR source inventory reads the specified Git tree despite index and worktre
     assert.deepEqual(captured.inputFiles, [helperPath, nativePath]);
     assert.equal(captured.declarations.length, 1);
     assert.equal(captured.declarations[0]!.declarationPath, helperPath);
-    assert.equal(captured.declarations[0]!.owner, owner);
+    assert.equal(captured.declarations[0]!.contract, contract);
   });
 }))));
 
-// @concord-case repository-pr-local-untracked-relations
-// @concord-contract docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
-test("local PR rendering includes untracked helper annotations and rejects conflicting current IDs", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+// @use-case docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
+test("local PR rendering includes untracked helper annotations and rejects ambiguous test declarations", () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const root = yield* fixture();
   yield* Effect.sync(() => {
     write(root, nativePath, 'import "./helper.scenarios.js";\n');
     write(root, helperPath, helperSource);
     write(root, ".gitignore", "e2e/ignored/\n");
-    write(root, "e2e/ignored/invalid.test.ts", "// @concord-case invalid\nconst ignored = true;\n");
+    write(root, "e2e/ignored/invalid.test.ts", "// @use-case invalid\nconst ignored = true;\n");
   });
   const source = ".git/concord-pr-draft.md";
   const rendered = yield* Effect.gen(function*() {
@@ -98,7 +94,7 @@ test("local PR rendering includes untracked helper annotations and rejects confl
       assert.ok(rendered.body.includes(contract));
       assert.ok(rendered.body.includes(selector));
     }
-    write(root, "e2e/fixture/test/duplicate.test.ts", helperSource.replace(nativePath, "e2e/fixture/test/duplicate.test.ts"));
+    write(root, helperPath, helperSource + 'test("fixture contract", () => {});\n');
   });
   const duplicate = yield* Effect.result(readPrTestDeclarations(root, selector)).pipe(
     Effect.provide(makeNodePrLive(root)), Effect.provide(NodeServices.layer),

@@ -42,7 +42,7 @@ export class TraceInputChanged extends Data.TaggedError("TraceInputChanged")<{
 
 export class TraceRecoveryRequired extends Data.TaggedError("TraceRecoveryRequired")<{
   readonly path: string;
-  readonly nextStep: "pnpm trace recover";
+  readonly nextStep: "pnpm trace recover" | "concord recover";
 }> {}
 
 export class TraceRecoveryConflict extends Data.TaggedError("TraceRecoveryConflict")<{

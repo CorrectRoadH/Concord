@@ -2,7 +2,7 @@ import { Result, Schema, SchemaIssue } from "effect";
 
 import { CaseRelationsFormatError } from "./errors.js";
 
-export const CaseIdSchema = Schema.String.check(Schema.isPattern(/^necase_[0-9A-HJKMNP-TV-Z]{16}$/u));
+export const CaseIdSchema = Schema.String.check(Schema.isPattern(/^neref_[0-9a-f]{32}$/u));
 const CanonicalPath = Schema.String.check(
   Schema.isTrimmed(), Schema.isMinLength(1),
   Schema.makeFilter((value) => !value.startsWith("/") && !value.includes("\\") && !value.split("/").some((part) => part === "" || part === "." || part === "..")),
@@ -22,16 +22,12 @@ export const CaseIssueSchema = Schema.Struct({
 });
 export type CaseIssue = typeof CaseIssueSchema.Type;
 
-export const CaseRelationSchema = Schema.Struct({
-  owner: CanonicalPath,
-  regressions: Schema.Array(CanonicalPath),
-  issues: Schema.Array(CaseIssueSchema),
-});
+const RelationExtras = { contractKind: Schema.Literals(["feature", "use-case"]), regressions: Schema.Array(CanonicalPath), issues: Schema.Array(CaseIssueSchema) };
+export const CaseRelationSchema = Schema.Struct({ contract: CanonicalPath, ...RelationExtras });
 export type CaseRelation = typeof CaseRelationSchema.Type;
 
 const HistoryAction = Schema.Literals([
-  "owner-set", "case-attached", "case-moved", "case-retired",
-  "legacy-migrated",
+  "case-retired",
   "regression-added", "regression-retired", "issue-added", "issue-retired",
 ]);
 export const CaseHistorySchema = Schema.Struct({
