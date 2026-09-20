@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
+import { authorDesignFixture } from './design-fixture.js';
 import {
   adoptRoadmap,
   activateMemory,
@@ -94,6 +95,7 @@ test('rejects a duplicate same-kind id before creating a second Use Case', () =>
 test('decides a design once and validates dry-run without writing', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'feature', { id: 'search', title: 'Search', body: '# Search\n' });
   createDocument(repo, 'design', { id: 'search-index', title: 'Search index', body: '# Options\n', alternatives: ['sqlite', 'memory'] });
+  authorDesignFixture(repo.root, 'search-index', ['sqlite', 'memory'], 'sqlite');
   const receipt = decideDesign(repo, 'search-index', 'sqlite', ['docs/feature/search/README.md'], 'Keeps local state rebuildable');
   assert.equal(receipt.operation, 'decide-design');
   let design = findDocument(loadDocuments(repo), 'search-index', 'design');
@@ -116,7 +118,7 @@ test('creates template packages and protects supporting page preimages', () => E
   assert.ok(repo.read('docs/design/cache/plans/files/architecture.md'));
   rmSync(repo.absolute('docs/design/cache/plans/sqlite/README.md'));
   addPage(repo, 'design', 'cache', 'readme', false, 'sqlite');
-  assert.doesNotMatch(repo.read('docs/design/cache/plans/sqlite/README.md')!, /\]\(/);
+  assert.match(repo.read('docs/design/cache/plans/sqlite/README.md')!, /## Limits/u);
   assert.equal(repo.read('docs/engineering/ci/cli.md'), undefined);
   addPage(repo, 'engineering', 'ci', 'cli');
   const page = showPage(repo, 'engineering', 'ci', 'cli');

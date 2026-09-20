@@ -34,9 +34,16 @@ concord design page show session-store architecture --plan sqlite
 `page set` 必须使用 `page show --json` 返回的最新整文件 digest；Design candidate 用 `--plan <alternative>`。正式裁决与采用分别由具名命令完成：
 
 ```sh
+concord design check session-store
+concord --dry-run design format session-store
+concord design format session-store
 concord design decide session-store --selected sqlite --target docs/feature/login/README.md --reason "满足本地事务约束"
 concord roadmap adopt sessions --feature sessions
 ```
+
+定案前，GOALS/LIMITS 用 `## G1: 标题`、`## L1: 标题` 定义稳定条目；每个候选 README 的 `## Goals`、`## Limits` 各用四列表格逐项写出要求链接、状态、机制/缺口和依据。状态支持 satisfied/not-satisfied/pending（满足/不满足/待验证），Goal 另支持 partial（部分满足）。链接例如 `[L1](../../LIMITS.md#l1-offline)`，必须指向实际标题。代码块、HTML 和引用式链接不作为要求回应。
+
+DECISION 的 `## Decision` 只放 `Selected: [sqlite](plans/sqlite/README.md)` 或 `选择 [sqlite](plans/sqlite/README.md)。`；`## Rationale`、`## Rejected Options`、`## Residual Risks` 写真实论证。每个非 satisfied 的已选 Goal 需在 Rationale 单独写 `G1: 接受缺口的理由`。全部候选必须完整回应，所选候选的所有 Limit 必须 satisfied。`design check` 检查当前正文，结构通过不代表真实验证；`design format` 只整理已识别的 H2 和四列表格空白，不能生成选择或证据。定案收据中的 changedPaths 包括保护已校验输入的同内容 guards。
 
 普通 supporting page 不成为第二个 metadata 真源。Roadmap adopt 会创建新 Feature、保留 Roadmap 历史，并迁移当前 promotion。修改 owner 正文时读取最新 digest，再执行：
 

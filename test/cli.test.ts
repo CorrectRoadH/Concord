@@ -6,6 +6,7 @@ import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
 import { once } from 'node:events';
 import { Effect, Schema } from 'effect';
+import { authorDesignFixture } from './design-fixture.js';
 import { readProjectConfig } from './support.js';
 import { ProjectSchema } from '../dist/shared.js';
 import { deriveTestReference } from '../dist/test-reference.js';
@@ -39,6 +40,35 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  cli=join(install,'node_modules/concord-sdlc/dist/entry.js');
 })));
 after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
+
+// @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
+test('packed Design commands require complete responses and preserve formatting and decision semantics', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('design-comparison');
+ call(root, ['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'local', '--alternative', 'remote'], Ack);
+ const base = join(root, 'docs/design/storage');
+ assert.match(readFileSync(join(base, 'plans/local/README.md'), 'utf8'), /## Limits/u);
+ const incomplete = call(root, ['design', 'check', 'storage'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ code: Schema.String })) }), '', 1);
+ assert.equal(incomplete.ok, false);
+ assert(incomplete.findings.some(item => item.code === 'DesignSelectionInvalid'));
+ assert.equal(call(root, ['design', 'decide', 'storage', '--selected', 'local', '--reason', 'Local'], ErrorOutput, '', 1).error, 'DesignDecisionIncomplete');
+ authorDesignFixture(root, 'storage', ['local', 'remote'], 'local');
+ call(root, ['design', 'check', 'storage'], CheckOutput);
+ const plan = join(base, 'plans/local/README.md');
+ const source = readFileSync(plan, 'utf8').replace('## Limits', '##   Limits  ');
+ writeFileSync(plan, source);
+ call(root, ['--dry-run', 'design', 'format', 'storage'], DryRunOutput);
+ assert.equal(readFileSync(plan, 'utf8'), source);
+ call(root, ['design', 'format', 'storage'], Ack);
+ assert.match(readFileSync(plan, 'utf8'), /\n## Limits\n/u);
+ assert.deepEqual(call(root, ['design', 'format', 'storage'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) })).changedPaths, []);
+ const owner = readFileSync(join(base, 'README.md'), 'utf8');
+ call(root, ['--dry-run', 'design', 'decide', 'storage', '--selected', 'local', '--reason', 'Offline'], DryRunOutput);
+ assert.equal(readFileSync(join(base, 'README.md'), 'utf8'), owner);
+ assert.equal(call(root, ['design', 'decide', 'storage', '--selected', 'remote', '--reason', 'Remote'], ErrorOutput, '', 1).error, 'DesignDecisionIncomplete');
+ call(root, ['design', 'decide', 'storage', '--selected', 'local', '--reason', 'Offline'], Ack);
+ assert.equal(call(root, ['design', 'show', 'storage'], DecisionOutput).document.metadata.decision.selected, 'local');
+ call(root, ['design', 'check', 'storage'], CheckOutput);
+})));
 
 test('memory note uses the captured template and activation records its reason', () => {
  const root = consumer('memory-note-activation');
@@ -277,6 +307,7 @@ test('installed Design and Roadmap packages retain their pages and authoritative
  assert.equal(existsSync(join(root, 'docs/design/storage/GOALS.md')), true);
  const candidate = call(root, ['design', 'page', 'show', 'storage', 'readme', '--plan', 'sqlite'], DigestOutput);
  call(root, ['design', 'page', 'set', 'storage', 'readme', '--plan', 'sqlite', '--body', '-', '--expected-digest', candidate.digest], Ack, '# SQLite\n\nA single local store.\n');
+ authorDesignFixture(root, 'storage', ['sqlite', 'files'], 'sqlite');
  call(root, ['design', 'decide', 'storage', '--selected', 'sqlite', '--target', 'docs/engineering/release/README.md', '--reason', 'One deployment owner'], Ack);
  const decision = call(root, ['design', 'show', 'storage'], DecisionOutput).document.metadata.decision;
  assert.equal(decision.selected, 'sqlite');

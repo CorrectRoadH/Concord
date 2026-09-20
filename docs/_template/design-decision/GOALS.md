@@ -1,17 +1,7 @@
 # Your title
 
-## Purpose and Scope
+Each goal is an H2 with a stable G-number. Keep IDs when editing; do not renumber or reuse removed IDs. Link to the actual heading anchor from every candidate's Goals table.
 
-State which decision boundary this document evaluates and which adjacent concerns it excludes.
+## G1: Measurable outcome
 
-## Goals
-
-- G1: Define a measurable outcome without embedding a preferred solution.
-
-## Design Principles
-
-List the tradeoff criteria that apply equally to every candidate.
-
-## Verifiable Requirements
-
-Map each requirement to a neutral case or another explicit source of evidence.
+TODO: Describe the observable outcome without choosing a solution. Record its source and the criteria or neutral case used to judge it.

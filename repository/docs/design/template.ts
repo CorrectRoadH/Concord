@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { templateBody } from "concord-sdlc/templates";
 import {
   chmodSync,
   closeSync,
@@ -285,6 +286,7 @@ export function generateDesignPackage(input: {
   readonly planCount: number;
   readonly cases: boolean;
   readonly pages: readonly DesignPage[];
+  readonly createdAt?: string;
 }): GeneratedDesignPackage {
   const packageRoot = `docs/design/${input.slug}`;
   const pages = DESIGN_PAGE_ORDER.filter((page) => input.pages.includes(page));
@@ -298,7 +300,7 @@ export function generateDesignPackage(input: {
     };
   });
   const state: DesignDecisionState = { _tag: "undecided" };
-  const createdAt = new Date().toISOString();
+  const createdAt = input.createdAt ?? new Date().toISOString();
   const projection = renderDesignProjection(plans, state);
   const files: GeneratedDesignFile[] = [];
 
@@ -323,6 +325,7 @@ export function generateDesignPackage(input: {
     for (const path of selectedPaths) {
       let rendered = substitute(source(input.bundle.featureDesign, path), "<功能或候选名>", plan.title);
       if (path === "README.md") {
+        rendered = templateBody('design-plan', plan.title, pages);
         rendered = planReadmeScaffold(rendered);
         rendered = `${rendered.trimEnd()}\n`;
       }

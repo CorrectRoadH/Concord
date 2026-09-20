@@ -24,6 +24,27 @@
 
 页面省略采用项目默认值，显式空数组表示仅 README，CLI 与结构化入口保持一致。DESIGN.md 独立可选。交互完成前只读取和规划，确认后重新核验前像再发布。
 
-## 状态
+## Status
 
 已采用。共享 lease 与模型迁移的主仓库集成已通过 `pnpm check` 132 项测试；Concord 自身已通过公开 CLI 采用宪法并关联 Feature/Design 条款。
+
+## Limits
+
+| Limit | Status | Mechanism or gap | Evidence |
+| --- | --- | --- | --- |
+| [L1](../../LIMITS.md#l1-本地独立且无外部副作用) | satisfied | 使用本地 worktree、local-files 和隔离消费者，不依赖远端 provider。 | 原候选正文定义 local-files 与隔离验收。 |
+| [L2](../../LIMITS.md#l2-保留消费者现场与身份) | satisfied | 配置快照、canonical path、preimage 与恢复授权保护现场和身份。 | 原候选正文明确 snapshot、canonical identity 与恢复规则。 |
+| [L3](../../LIMITS.md#l3-配置与恢复协议一致且查询不执行脚本) | satisfied | TS 为严格静态数据，不执行模块；source/digest 绑定 publication 与恢复。 | 原候选正文明确静态解析和快照边界。 |
+| [L4](../../LIMITS.md#l4-宪法必需且不冒充证据) | satisfied | 生成 constitution draft，review/check 展示待完善，不把模板当证据。 | 原候选正文明确宪法和证据边界。 |
+| [L5](../../LIMITS.md#l5-不实现远端-provider-或跨后端同步) | satisfied | provider 首版限定 local-files，不实现远端同步。 | 原候选正文明确首版 provider。 |
+| [L6](../../LIMITS.md#l6-严格工程栈与隔离验收) | satisfied | 原文记录严格 TS/Effect、固定依赖和打包消费者验收。 | 原设计约束及 Status 段明确记录。 |
+
+## Goals
+
+| Goal | Status | Mechanism or gap | Evidence |
+| --- | --- | --- | --- |
+| [G1](../../GOALS.md#g1-渐进初始化可表达) | satisfied | init、非交互配置和页面默认值共同表达选择。 | 原候选正文定义 init 与 CLI/结构化入口。 |
+| [G2](../../GOALS.md#g2-新项目拥有宪法与可覆盖默认值) | satisfied | 新项目声明 constitution，页面支持默认值和显式空数组。 | 原候选正文明确宪法与模板规则。 |
+| [G3](../../GOALS.md#g3-配置格式与既有项目边界明确) | not-satisfied | 原方案保留旧 JSON runtime 读取，已被 ts-only 裁决替代。 | 历史说明明确当前不支持该兼容部分。 |
+| [G4](../../GOALS.md#g4-memory-多来源参与查询与写入) | satisfied | local-files 多来源按 canonical path 聚合，默认写入来源唯一并检查只读权限。 | 原候选正文完整描述 Memory 规则。 |
+| [G5](../../GOALS.md#g5-功能开发受宪法治理) | satisfied | constitutionRefs、修订 CAS 和 review 当前正文共同提供治理。 | 原候选正文明确条款和 review 语义。 |

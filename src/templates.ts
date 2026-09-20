@@ -8,7 +8,7 @@ import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from './template
 export { TEMPLATE_PAGES, type TemplatePage } from './template-pages.js';
 
 const TEMPLATE_NAMES = [
-  'feature', 'roadmap', 'design', 'engineering', 'use-case', 'research', 'problem', 'decision', 'insight', 'note', 'issue',
+  'feature', 'roadmap', 'design', 'design-plan', 'engineering', 'use-case', 'research', 'problem', 'decision', 'insight', 'note', 'issue',
   'library', 'cli', 'architecture', 'lifecycle', 'use-case-index', 'goals', 'limits', 'decision-record', 'cases',
   'project-index', 'concepts', 'project-architecture', 'constitution', 'project-design',
 ] as const;
@@ -125,8 +125,8 @@ export function projectTemplateFiles(): Record<string, string> {
   add('engineering/README.md', 'engineering');
   add('design-decision/README.md', 'design');
   for (const [file, name] of [['GOALS', 'goals'], ['LIMITS', 'limits'], ['DECISION', 'decision-record'], ['CASES', 'cases']]) add(`design-decision/${file}.md`, name!);
-  addPackage('design-decision/plans/plan-1', 'feature');
-  addPackage('design-decision/plans/plan-2', 'feature');
+  addPackage('design-decision/plans/plan-1', 'design-plan');
+  addPackage('design-decision/plans/plan-2', 'design-plan');
   for (const name of ['research', 'use-case', 'issue']) add(`${name}/README.md`, name);
   for (const name of ['problem', 'decision', 'insight', 'note']) add(`memory/${name}.md`, name);
   add('constitution.md', 'constitution');

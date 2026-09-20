@@ -59,6 +59,7 @@ export function encodeDecidedDesignReadme(
   decoded: DecodedDesignReadme,
   selectedPlan: RepoRef,
   body: string,
+  reason = "Design option selected by the repository profile.",
 ): string {
   const selected = selectedPlan.split("/").at(-2);
   if (selected === undefined || !decoded.alternatives.includes(selected)) {
@@ -75,7 +76,7 @@ export function encodeDecidedDesignReadme(
     alternatives: decoded.alternatives,
     decision: {
       selected,
-      reason: "Design option selected by the repository profile.",
+      reason,
       at: new Date().toISOString(),
       targets: decoded.decides,
     },

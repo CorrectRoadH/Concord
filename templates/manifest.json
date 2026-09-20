@@ -9,6 +9,7 @@
     { "name": "feature", "description": "Current feature contract overview.", "path": "feature.md" },
     { "name": "roadmap", "description": "Adoptable product direction overview.", "path": "roadmap.md" },
     { "name": "design", "description": "Design decision overview and candidate comparison.", "path": "design.md" },
+    { "name": "design-plan", "description": "Design candidate with complete Goals and Limits responses.", "path": "design-plan.md" },
     { "name": "engineering", "description": "Repository engineering mechanism.", "path": "engineering.md" },
     { "name": "use-case", "description": "Complete path for one user goal.", "path": "use-case.md" },
     { "name": "research", "description": "Freeform research topic; no preset sections or pages.", "path": "research.md" },

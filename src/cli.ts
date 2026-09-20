@@ -9,6 +9,7 @@ import { Effect, Option, Schema } from 'effect';
 import { Argument, Command, Flag, Prompt } from 'effect/unstable/cli';
 import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
 import { activateMemory, addPage, showPage, setPage, adoptRoadmap, closeIssue, createDocument, decideDesign, findDocument, linkFeedbackFeature, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
+import { checkDesign, formatDesign } from './documents.js';
 import { listFeedback, syncFeedback } from './feedback.js';
 import { FeedbackConnectionSchema } from './feedback-schema.js';
 import { setConfig, showConfig } from './editing.js';
@@ -132,13 +133,15 @@ function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
   const show = Command.make('show', { id }, ({ id }) => withRepo((repo, settings) => sync(() => documentShow(repo, id, kind, cached(settings.dryRun)))));
   const adopt = Command.make('adopt', { id, feature: text('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, args.feature, s.dryRun))));
   const decide = Command.make('decide', { id, selected: text('selected'), target: many('target'), reason: text('reason') }, args => withRepo((repo, s) => sync(() => decideDesign(repo, args.id, args.selected, args.target, args.reason, s.dryRun))));
+  const designCheck = Command.make('check', { id }, args => withRepo(repo => sync(() => { const result = checkDesign(repo, args.id); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true }));
+  const designFormat = Command.make('format', { id }, args => withRepo((repo, s) => sync(() => formatDesign(repo, args.id, s.dryRun))));
   const pageName = Argument.string('page');
   const page = Command.make('page').pipe(Command.withDescription('Add, inspect, or replace a package page. Use --plan <alternative> for a Design candidate.'), Command.withSubcommands([
     Command.make('add', { id, page: pageName, plan: optional('plan') }, args => withRepo((repo,s) => sync(() => addPage(repo,kind,args.id,args.page,s.dryRun,Option.getOrUndefined(args.plan))))),
     Command.make('show', { id, page: pageName, plan: optional('plan') }, args => withRepo(repo => sync(() => showPage(repo,kind,args.id,args.page,Option.getOrUndefined(args.plan))))),
     Command.make('set', { id, page: pageName, body: text('body'), expectedDigest: text('expected-digest'), plan: optional('plan') }, args => withRepo((repo,s) => sync(() => setPage(repo,kind,args.id,args.page,body(args.body),args.expectedDigest,s.dryRun,Option.getOrUndefined(args.plan))))),
   ]));
-  const commands = kind === 'roadmap' ? [create, list, show, page, adopt] : kind === 'design' ? [create, list, show, page, decide] : kind === 'feature' || kind === 'engineering' || kind === 'research' ? [create, list, show, page] : [create, list, show];
+  const commands = kind === 'roadmap' ? [create, list, show, page, adopt] : kind === 'design' ? [create, list, show, page, decide, designCheck, designFormat] : kind === 'feature' || kind === 'engineering' || kind === 'research' ? [create, list, show, page] : [create, list, show];
   return Command.make(kind).pipe(Command.withDescription(`Maintain ${kind} contracts.`), Command.withSubcommands(commands));
 }
 const author = Command.make('author').pipe(Command.withDescription('Edit author prose while retaining managed metadata and history.'), Command.withSubcommands([

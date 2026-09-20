@@ -15,6 +15,8 @@ import {
   closeIssue,
   createDocument,
   decideDesign,
+  checkDesign,
+  formatDesign,
   findDocument,
   linkIssue,
   linkFeedbackFeature,
@@ -77,6 +79,7 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'page.add':
     case 'roadmap.adopt':
     case 'design.decide':
+    case 'design.format':
     case 'memory.resolve':
     case 'memory.activate':
     case 'memory.reopen':
@@ -300,6 +303,8 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'page.add': return addPage(repo, action.kind, action.id, action.page, dryRun, action.plan);
     case 'roadmap.adopt': return adoptRoadmap(repo, action.id, action.feature, dryRun);
     case 'design.decide': return decideDesign(repo, action.id, action.selected, action.targets, action.reason, dryRun);
+    case 'design.check': return checkDesign(repo, action.id);
+    case 'design.format': return formatDesign(repo, action.id, dryRun);
     case 'memory.resolve': {
       const trace = buildTrace(repo, 'off', { includeCode: false });
       requireValidTrace(trace);
@@ -368,5 +373,5 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   if (action.action === 'recover') return yield* withRepository(root, (repo) => sync('view.recover', () => repo.recover()), { recover: true });
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun });
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => executeWithRepo(repo, action)), { dryRun });
+  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => executeWithRepo(repo, action)), { dryRun: action.action === 'design.check' || dryRun });
 });

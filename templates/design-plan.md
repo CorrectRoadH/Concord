@@ -1,4 +1,4 @@
-# Your title
+# {{title}}
 
 ## Problem
 
@@ -30,8 +30,4 @@ Use one row per Goal. Status: satisfied, partial, not-satisfied, pending (满足
 
 ## Entry Points
 
-- [Library](library.md)
-- [CLI](cli.md)
-- [Architecture](architecture.md)
-- [Lifecycle](lifecycle.md)
-- [Use Cases](use-case/README.md)
+{{entryPoints}}

@@ -2,17 +2,18 @@
 
 ## Decision
 
-Explain the decision recorded by `concord design decide` in the owner metadata.
-This page is supporting prose: editing it does not select a candidate or change decision targets.
+Undecided.
+
+Replace this section with one explicit declaration: `Selected: [plan-slug](plans/plan-slug/README.md)` (or `选择 [plan-slug](plans/plan-slug/README.md)。`). Use the actual declared slug, not its position in a list. It must match the choice passed to `concord design decide` and the resulting owner metadata. Editing prose alone does not select a candidate.
 
 ## Rationale
 
-Compare the decisive evidence against the stated goals, limits, and neutral cases.
+TODO: Compare the decisive evidence against the goals, limits, and neutral cases. For each selected-plan Goal that is partial, not-satisfied, or pending, add a separate `G1: explanation` paragraph explaining the accepted gap.
 
 ## Rejected Options
 
-Explain why each alternative was not selected.
+TODO: Explain why each alternative was not selected.
 
 ## Residual Risks
 
-List remaining risks, the conditions that expose them, and the evidence or action required next.
+TODO: List remaining risks, the conditions that expose them, and the evidence or action required next. Say explicitly if none remain. Design reasoning and actual execution evidence must be distinguished.

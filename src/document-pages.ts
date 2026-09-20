@@ -76,7 +76,7 @@ export function addPage(repo: Repository, kind: DocumentKind, selector: string, 
   const target = pagePath(repo, kind, selector, page, plan);
   if (repo.read(target.path) !== undefined) throw new ConcordError('PageExists', `${target.path} already exists`);
   if (kind === 'research') return repo.publish('add-page', [{ path: target.path, before: null, after: `# ${posix.basename(target.path, '.md')}\n` }], dryRun);
-  const name = plan !== undefined && (page === 'README' || page === 'readme') ? 'feature' : template(checkedPage(page));
+  const name = plan !== undefined && (page === 'README' || page === 'readme') ? 'design-plan' : template(checkedPage(page));
   const content = name === undefined ? `# ${target.title}: ${page}\n\nDescribe this topic and link to the package contract.\n` : templateBody(name, target.title, []);
   return repo.publish('add-page', [{ path: target.path, before: null, after: body(content) }], dryRun);
 }

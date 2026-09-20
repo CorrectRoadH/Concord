@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Schema } from 'effect';
+import { authorDesignFixture } from './design-fixture.js';
 import { RepoRefSchema } from '../dist/repository/docs/trace/ref.js';
 import { adoptRoadmap, checkDocuments, createDocument, decideDesign, findDocument, loadDocuments, renderDocument } from '../dist/documents.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
@@ -34,6 +35,7 @@ test('cancelled Roadmap cannot be adopted and a new decision replaces historical
   assert.doesNotMatch(encoded, /deferral:/);
   assert.match(encoded, /constitutionRefs: \[\]/);
   assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
+  authorDesignFixture(root, 'deferred', ['one', 'two'], 'one');
   decideDesign(repo, 'deferred', 'one', [], 'Evidence is now available');
   const selected = findDocument(loadDocuments(repo), 'deferred', 'design');
   assert(selected.metadata.kind === 'design');

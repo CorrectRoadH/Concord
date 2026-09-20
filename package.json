@@ -33,6 +33,7 @@
     "@effect/platform-node": "4.0.0-rc.112",
     "@effect/platform-node-shared": "4.0.0-rc.112",
     "effect": "4.0.0-rc.112",
+    "mdast-util-from-markdown": "2.0.3",
     "mermaid": "11.12.2",
     "shiki": "4.3.0",
     "tsx": "4.23.12",
@@ -60,7 +61,6 @@
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "lucide-react": "1.45.0",
-    "mdast-util-from-markdown": "2.0.3",
     "radix-ui": "1.6.7",
     "react": "19.3.0",
     "react-diff-view": "3.3.3",
@@ -80,6 +80,14 @@
     "@effect/platform-node-shared": "4.0.0-rc.112"
   },
   "exports": {
+    "./design-content": {
+      "types": "./dist/design-content.d.ts",
+      "default": "./dist/design-content.js"
+    },
+    "./templates": {
+      "types": "./dist/templates.d.ts",
+      "default": "./dist/templates.js"
+    },
     "./governance-config": {
       "types": "./dist/governance-config.d.ts",
       "default": "./dist/governance-config.js"

@@ -22,7 +22,7 @@ docs/constitution.md 必需，默认可明确为 draft；作者显式采用 acti
 - `engineering create/list/show`：仓库测试与维护机制的目标、使用与验收。
 - `template list/show`：在任意 cwd 查看随包写作模板，无需初始化项目。
 - `doctor`：检查项目配置、缺失测试目录和当前关联，给出接入步骤，不执行 runner。
-- `design create/decide/list/show`：候选比较、唯一裁决及关联目标。
+- `design create/check/format/decide/list/show`：候选比较、逐项检查、有限格式化、唯一裁决及关联目标。
 - `roadmap create/adopt/list/show`：已定稿方向与显式采用。采用创建 Feature，Roadmap 标记 adopted 并保留历史；当前契约只在 Feature。
 - `test list/show/run`：从测试声明旁的源码注释派生测试执行引用并发现目标契约与 regression Memory；项目级配置拥有 argv、附加 sourceFiles 和 timeout。源码正常编辑与 Git 保存测试演进，Concord 不再建立测试关系 sidecar。
 - `test annotate`：验证 Feature / Use Case 目标与 Problem 引用后输出注释片段。它不改测试源文件，也不自动运行测试。
@@ -63,6 +63,12 @@ Trace 与定向 Review 按解析得到的 owner 汇总 Feature supporting page �
 读写路径拒绝绝对路径、traversal、symlink 组件和超出 repo 的 realpath。扫描只读取 Concord 所属目录和格式；错误的受管格式明确报错。
 
 Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。初版只支持 Linux 本地文件系统，不支持网络文件系统、macOS 或 Windows。写入使用独占锁和 preimage journal，写前校验完整变更集，逐文件原子 rename；读遇到未完成 journal 要求 recover。恢复仅在内容符合 preimage 或 planned digest 时进行，否则拒绝覆盖未知编辑。dry-run 执行同一规划校验，不写文件。锁不因超时擅自抢占；明确 recovery 检查同主机 PID 已消失后才能清理遗留锁。
+
+## Design 逐项比较与裁决
+
+详细行为见[逐项比较方案并明确裁决](feature/local-sdlc/use-case/compare-design-plans.md)：GOALS/LIMITS 每条为稳定 G/L 编号的 H2；所有候选以四列表格逐项回应。DECISION 显式选择的 slug/link 须与请求及 metadata 一致，所选候选全部 Limit 满足，Goal 缺口逐项解释。显式 `design check` 检查当前正文，普通读取及全局 check 不追溯新的写作门槛；正文后续变化不重写历史裁决。`design format` 仅整理识别出的 H2 与四列表格空白，保留编号、锚点、链接和代码块，不能补充选择或证据。
+
+2026-09-20 独立 Herdr design_grill（GPT-6 Astra，concord-design-astra-0920b）完成问题与回答后给出 PASS。新定案绑定 owner、GOALS、LIMITS、DECISION 和所有候选 README 的同一次读取；主 publication 的同内容 guards 实际重写并计入 changedPaths，沿用 journal 恢复。repository 入口保留自己的 lease/preimages，并在 dry-run 返回前也复核完整输入；候选投影按 metadata.alternatives 顺序派生，不再扫描旧 PLAN-N。此设计结论不替代实现验收，也不证明自然语言声称的满足度。
 
 ## 测试执行和证据边界
 

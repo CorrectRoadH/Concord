@@ -23,3 +23,18 @@ JSON-only、dual、子目录发现、workspace、JS绕过类型调用、旧owner
 ## 设计挑战条件落实
 
 2026-09-14 独立 Herdr concord-ts-only-grill-0914（GPT-6 Astra）先给出 CONDITIONAL，条件落实后最终给出 PASS（设计与验收定义）。错误优先级、拒绝识别边界与无配置恢复例外已写入上述契约及验收定义；锁外只读拒绝进一步保护协调文件。离线迁移父已提供迁移阻断诊断，普通运行时不宣称可恢复旧journal。实际实现另由完整gate验收。
+
+## Limits
+
+| Limit | Status | Mechanism or gap | Evidence |
+| --- | --- | --- | --- |
+| [L1](../../LIMITS.md#l1-不提供旧版本运行时兼容) | satisfied | 旧 journal、marker、JSON scope 和旧收据分别具名拒绝或重新取证，不进入当前授权。 | 原候选正文完整定义拒绝分类和旧证据边界。 |
+| [L2](../../LIMITS.md#l2-保留协调文件与领域语义) | satisfied | 锁外只读拒绝，拒绝路径不改写锁/journal/目标/temp；当前 config 与领域语义继续支持。 | 原候选正文明确现场保护与当前恢复。 |
+| [L3](../../LIMITS.md#l3-离线脚本独立拥有历史数据迁移) | satisfied | 一次性迁移由 scripts 拥有，runtime 不提供 registry、fallback 或旧 journal 恢复。 | 原候选正文明确迁移归属。 |
+
+## Goals
+
+| Goal | Status | Mechanism or gap | Evidence |
+| --- | --- | --- | --- |
+| [G1](../../GOALS.md#g1-普通入口只接受静态-ts-配置) | satisfied | ConfigSnapshot 只允许 concord.config.ts，旧格式返回具名迁移错误且不解析。 | 原候选正文明确当前格式和拒绝行为。 |
+| [G2](../../GOALS.md#g2-旧现场拒绝不破坏恢复现场) | pending | 设计明确拒绝不改现场并支持当前精确恢复；本次格式迁移不复验完整 gate/packed consumers，原记录证明范围不扩大。 | [验收](#验收)保留原验收范围；这是设计论证，不是本次执行证明。 |

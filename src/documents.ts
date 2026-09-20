@@ -41,6 +41,7 @@ import { showConstitution } from './constitution.js';
 import { ContentCache } from './content-cache.js';
 import { readGovernanceConfiguration } from './governance-config.js';
 import { adoptMemoryEvidenceRequirement, memoryEvidenceRequirement } from './evidence-policy.js';
+import { designContentPaths, formatDesignMarkdown, validateDesignContent } from './design-content.js';
 
 export const DOCUMENT_ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/research', 'docs/engineering', 'docs/issues'] as const;
 export function documentRoots(repo: Repository): readonly string[] { return [...DOCUMENT_ROOTS, ...(repo.config.memorySources ?? [{ path: 'memory' }]).map((source) => source.path)]; }
@@ -435,7 +436,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     const alternatives = metadata.kind === 'design' ? metadata.alternatives : [];
     for (const alternative of alternatives) {
       const base = `docs/design/${id}/plans/${alternative}`;
-      add(`${base}/README.md`, 'feature');
+      add(`${base}/README.md`, 'design-plan');
       for (const page of requested) add(`${base}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
     }
   }
@@ -488,8 +489,41 @@ export function decideDesign(repo: Repository, selector: string, selected: strin
   const uniqueTargets = [...new Set(targets)];
   if (uniqueTargets.length !== targets.length) throw new ConcordError('InvalidDecision', 'Decision targets must be unique');
   for (const target of targets) resolveReference(repo, documents, target, CONTRACT_KINDS);
+  const snapshot = designSnapshot(repo, record);
+  const assessment = validateDesignContent(posix.dirname(record.path), record.metadata.alternatives, snapshot, choice);
+  if (assessment.findings.length) throw new ConcordError('DesignDecisionIncomplete', assessment.findings.map(item => `${item.code}: ${item.path}: ${item.message}`).join('\n'));
   const { deferral: _deferral, ...metadata } = record.metadata;
-  return changed(repo, 'decide-design', record, { ...metadata, decision: { selected: choice, reason: required(reason, 'reason'), at: now(), targets } }, record.body, dryRun);
+  const next = renderDocument({ ...metadata, decision: { selected: choice, reason: required(reason, 'reason'), at: now(), targets } }, record.body);
+  return repo.publish('decide-design', [...snapshot].map(([path, source]) => ({ path, before: source!, after: path === record.path ? next : source! })), dryRun);
+}
+
+function designSnapshot(repo: Repository, record: DocumentRecord): Map<string, string | undefined> {
+  if (record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', record.path);
+  const paths = designContentPaths(posix.dirname(record.path), record.metadata.alternatives);
+  const snapshot = new Map(paths.map(path => [path, path === record.path ? preimage(repo, record) : repo.read(path)]));
+  return snapshot;
+}
+
+export function checkDesign(repo: Repository, selector: string) {
+  const record = findDocument(loadDocuments(repo), selector, 'design');
+  if (record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', record.path);
+  const snapshot = designSnapshot(repo, record);
+  const result = validateDesignContent(posix.dirname(record.path), record.metadata.alternatives, snapshot, record.metadata.decision?.selected);
+  for (const [path, source] of snapshot) if (repo.read(path) !== source) throw new ConcordError('PreimageChanged', `${path} changed while checking Design`);
+  return { operation: 'design-check', path: record.path, ok: result.findings.length === 0, ...result };
+}
+
+export function formatDesign(repo: Repository, selector: string, dryRun = false): MutationReceipt {
+  const record = findDocument(loadDocuments(repo), selector, 'design');
+  const snapshot = designSnapshot(repo, record);
+  const changes = [...snapshot].flatMap(([path, source]) => {
+    if (source === undefined) return [];
+    const next = path === record.path ? source : formatDesignMarkdown(source);
+    return next === source ? [] : [{ path, before: source, after: next }];
+  });
+  if (changes.length === 0) return { operation: 'format-design', dryRun, changedPaths: [] };
+  changes.unshift({ path: record.path, before: snapshot.get(record.path)!, after: snapshot.get(record.path)! });
+  return repo.publish('format-design', changes, dryRun);
 }
 
 // @concord-code

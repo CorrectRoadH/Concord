@@ -1,9 +1,7 @@
 # Your title
 
-## Limits
+Each hard constraint is an H2 with a stable L-number. Keep IDs when editing; do not renumber or reuse removed IDs. Every candidate must respond to every limit; only a candidate satisfying all limits may be selected.
 
-- L1: Record an objective constraint, existing contract, or external boundary without deriving a preferred solution.
+## L1: Required boundary
 
-## Candidates
-
-List each candidate and its one-sentence distinction. Add links only after the candidate pages exist; keep detailed API, architecture, and tradeoffs in each candidate.
+TODO: Describe the objective constraint, its source, and its pass condition without deriving a preferred solution.

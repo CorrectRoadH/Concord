@@ -1,4 +1,5 @@
 import { repositoryRoot } from "../../root.js";
+import { designContentPaths, validateDesignContent, type DesignContentResult } from "concord-sdlc/design-content";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -253,8 +254,10 @@ export function createDesignAt(
 ): Effect.Effect<DesignCreateReceipt, DesignCommandError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const initialBundle = yield* loadDesignTemplates(root);
+    const createdAt = new Date().toISOString();
     const initial = generateDesignPackage({
       bundle: initialBundle,
+      createdAt,
       slug: input.slug,
       title: input.title,
       planCount: input.plans,
@@ -275,6 +278,7 @@ export function createDesignAt(
         const bundle = yield* loadDesignTemplates(root);
         const planned = generateDesignPackage({
           bundle,
+          createdAt,
           slug: input.slug,
           title: input.title,
           planCount: input.plans,
@@ -415,7 +419,9 @@ function checkDesignPackage(
 ): Effect.Effect<DesignCheckReceipt, DesignIoError> {
   return Effect.gen(function*() {
     const packageRoot = dirname(design.path);
-    const plans = directPlans(snapshot, design);
+    const readme = yield* readText(root, design.path);
+    const declared = decodeDesignReadme(design.path, readme).alternatives;
+    const plans = [...directPlans(snapshot, design)].sort((left, right) => declared.indexOf(planSelector(left.path)) - declared.indexOf(planSelector(right.path)));
     const receipts = planReceipts(root, plans, bundle);
     const directoryPlans = yield* directoryPlanSelectors(root, packageRoot);
     const state = yield* stateOf(root, design);
@@ -444,7 +450,6 @@ function checkDesignPackage(
     if (state._tag === "decided" && !plans.some((plan) => plan.path === state.selectedPlan)) {
       findings.push(finding("selected-plan-invalid", design.path, "decision.selected must be one declared Design alternative"));
     }
-    const readme = yield* readText(root, design.path);
     const expectedProjection = renderDesignProjection(receipts, state);
     const actualProjection = extractDesignProjection(readme);
     if (actualProjection === undefined) {
@@ -453,6 +458,8 @@ function checkDesignPackage(
       findings.push(finding("projection-stale", design.path, "generated docs index bytes do not match direct Plans and selectedPlan"));
     }
     const files = yield* collectFiles(root, packageRoot);
+    const content = yield* captureDesignContent(root, design.path);
+    findings.push(...content.assessment.findings);
     return {
       format: "concord.docs-design/check-v1",
       operation: "design-check",
@@ -487,88 +494,51 @@ export function checkDesignAt(
   }));
 }
 
-function markdownBody(source: string): string {
-  const match = /^---\r?\n[\s\S]*?\r?\n---\r?\n?([\s\S]*)$/u.exec(source);
-  return match?.[1] ?? source;
+interface DesignContentSnapshot {
+  readonly sources: readonly (readonly [string, string])[];
+  readonly assessment: DesignContentResult;
+}
+interface DesignPreparation extends TraceMutationPreparation {
+  readonly content: DesignContentSnapshot;
+  readonly plans: readonly DesignPlanReceipt[];
 }
 
-function section(source: string, heading: string): readonly string[] | undefined {
-  const lines = markdownBody(source).split(/\r?\n/u);
-  const start = lines.findIndex((line) => line.trim() === `## ${heading}`);
-  if (start < 0) return undefined;
-  const endOffset = lines.slice(start + 1).findIndex((line) => /^##\s+/u.test(line));
-  const end = endOffset < 0 ? lines.length : start + 1 + endOffset;
-  return lines.slice(start + 1, end).map((line) => line.trim()).filter((line) => line.length > 0);
-}
-
-function authoredSections(
-  source: string,
-  templateSource: string,
-  headings: readonly string[],
-): readonly string[] {
-  const findings: string[] = [];
-  for (const heading of headings) {
-    const lines = section(source, heading);
-    const templateLines = new Set(section(templateSource, heading) ?? []);
-    const authored = lines?.filter((line) => !templateLines.has(line) && !/<[^>]+>/u.test(line)) ?? [];
-    if (lines === undefined) findings.push(`missing section ## ${heading}`);
-    else if (authored.length === 0) findings.push(`section ## ${heading} is still an empty template`);
+function readDesignSource(root: string, path: string): string | undefined {
+  let current = root;
+  for (const part of path.split("/")) {
+    current = resolve(current, part);
+    if (!existsSync(current)) return undefined;
+    if (lstatSync(current).isSymbolicLink()) throw new Error(`symlink is not allowed: ${path}`);
   }
-  return findings;
+  return readFileSync(current, "utf8");
 }
 
-function validateDecisionAuthored(
-  design: { readonly path: string },
-  plan: { readonly path: string },
-  planSource: string,
-  decisionSource: string,
-  bundle: DesignTemplateBundle,
-): Effect.Effect<void, DesignDecisionIncomplete> {
-  const planTemplate = bundle.featureDesign.sources.get("README.md") ?? "";
-  const decisionTemplate = bundle.designDecision.sources.get("DECISION.md") ?? "";
-  const findings = [
-    ...authoredSections(planSource, planTemplate, ["解决的问题", "核心心智", "范围", "入口"])
-      .map((item) => `${plan.path}: ${item}`),
-    ...authoredSections(decisionSource, decisionTemplate, ["定案", "依据", "否决项", "遗留风险"])
-      .map((item) => `${dirname(design.path)}/DECISION.md: ${item}`),
-  ];
-  const relativePlan = `${planSelector(plan.path)}/README.md`;
-  if (!decisionSource.includes(`](${relativePlan})`) && !decisionSource.includes(plan.path)) {
-    findings.push(`${dirname(design.path)}/DECISION.md: must link the selected direct Plan ${relativePlan}`);
-  }
-  return findings.length === 0
-    ? Effect.void
-    : Effect.fail(new DesignDecisionIncomplete({
-        design: design.path,
-        plan: plan.path,
-        findings,
-        nextStep: `Complete the Plan and DECISION.md, then run pnpm run repo docs design decide ${designSlug(design.path)} --plan ${planSelector(plan.path)}.`,
-      }));
-}
-
-function filesystemPlanReceipts(
-  root: string,
-  designPath: string,
-  bundle: DesignTemplateBundle,
-): Effect.Effect<readonly DesignPlanReceipt[], DesignIoError> {
-  const packageRoot = dirname(designPath);
+function captureDesignContent(root: string, path: string, selected?: string): Effect.Effect<DesignContentSnapshot, DesignIoError> {
   return Effect.try({
-    try: () => readdirSync(resolve(root, packageRoot), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && /^PLAN-[1-9][0-9]*$/u.test(entry.name))
-      .map((entry) => {
-        const ref = `${packageRoot}/${entry.name}/README.md`;
-        const source = readFileSync(resolve(root, ref), "utf8");
-        const title = /^#\s+(.+)$/mu.exec(markdownBody(source))?.[1]?.trim() ?? entry.name;
-        return {
-          selector: entry.name,
-          ref,
-          title: displayPlanTitle(title),
-          pages: DESIGN_PAGE_ORDER.filter((page) => (bundle.featureDesign.manifest.optionalFiles[page] ?? [])
-            .every((path) => existsSync(resolve(root, packageRoot, entry.name, path)))),
-        } satisfies DesignPlanReceipt;
-      })
-      .sort((left, right) => planNumber(left.ref) - planNumber(right.ref)),
-    catch: (cause) => new DesignIoError({ operation: "scan Plans", path: packageRoot, message: designErrorMessage(cause) }),
+    try: () => {
+      const owner = readDesignSource(root, path);
+      if (owner === undefined) throw new Error("Design owner is missing");
+      const decoded = decodeDesignReadme(path, owner);
+      const base = dirname(path);
+      const sources = new Map(designContentPaths(base, decoded.alternatives).map(candidate => [candidate, candidate === path ? owner : readDesignSource(root, candidate)]));
+      const assessment = validateDesignContent(base, decoded.alternatives, sources, selected ?? decoded.metadata.decision?.selected);
+      return { sources: [...sources].flatMap(([file, content]) => content === undefined ? [] : [[file, content] as const]), assessment };
+    },
+    catch: cause => new DesignIoError({ operation: "read Design content", path, message: designErrorMessage(cause) }),
+  });
+}
+
+function verifyDesignPreparation(root: string, prepared: DesignPreparation): Effect.Effect<void, DesignConflict> {
+  return Effect.try({
+    try: () => {
+      for (const [path, source] of prepared.content.sources) {
+        if (readDesignSource(root, path) !== source) throw new Error(`${path} changed after validation`);
+      }
+      for (const preimage of prepared.preimages ?? []) {
+        if (traceDigest(readFileSync(preimage.path)) !== preimage.digest) throw new Error(`${preimage.path} changed after validation`);
+      }
+    },
+    catch: cause => new DesignConflict({ operation: "decide", path: root, message: designErrorMessage(cause) }),
   });
 }
 
@@ -582,7 +552,7 @@ function prepareDecision(
   root: string,
   designSelector: string,
   requestedPlan: string,
-): Effect.Effect<TraceMutationPreparation, DesignCommandError, FileSystem.FileSystem> {
+): Effect.Effect<DesignPreparation, DesignCommandError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const snapshot = yield* compileTraceUnderLease(root);
     const design = yield* selectDesign(snapshot, designSelector);
@@ -606,20 +576,26 @@ function prepareDecision(
         nextStep: `Fix the Design findings from pnpm run repo docs design check ${designSlug(design.path)} before deciding.`,
       });
     }
-    const decisionPath = `${dirname(design.path)}/DECISION.md`;
-    const [planSource, decisionSource] = yield* Effect.all([
-      readText(root, plan.path),
-      readText(root, decisionPath),
-    ]);
-    yield* validateDecisionAuthored(design, plan, planSource, decisionSource, bundle);
+    const content = yield* captureDesignContent(root, design.path, planSelector(plan.path));
+    if (content.assessment.findings.length) return yield* new DesignDecisionIncomplete({ design: design.path, plan: plan.path, findings: content.assessment.findings.map(item => `${item.code}: ${item.path}: ${item.message}`), nextStep: "Complete all candidate responses and the explicit DECISION selection." });
+    const decoded = decodeDesignReadme(design.path, new Map(content.sources).get(design.path)!);
+    if (decoded.alternatives.length !== packageCheck.plans.length || decoded.alternatives.some(selector => !packageCheck.plans.some(plan => plan.selector === selector))) {
+      return yield* new DesignConflict({ operation: "decide", path: design.path, message: "Design alternatives changed while validating the package" });
+    }
+    const plans = decoded.alternatives.map(selector => {
+      const receipt = packageCheck.plans.find(candidate => candidate.selector === selector)!;
+      const planSource = new Map(content.sources).get(`${dirname(design.path)}/plans/${selector}/README.md`)!;
+      return { ...receipt, title: displayPlanTitle(/^#\s+(.+)$/mu.exec(planSource)?.[1]?.trim() ?? selector) };
+    });
     return {
+      content,
+      plans,
       generation: snapshot.generation,
       snapshotDigest: snapshot.digest,
       target: validatedPlanTarget(snapshot, plan),
       preimages: [
         ...bundle.preimages,
-        { path: resolve(root, plan.path), digest: traceDigest(planSource) },
-        { path: resolve(root, decisionPath), digest: traceDigest(decisionSource) },
+        ...content.sources.map(([path, source]) => ({ path: resolve(root, path), digest: traceDigest(source) })),
       ].sort((left, right) => left.path.localeCompare(right.path)),
     };
   });
@@ -668,19 +644,19 @@ export function decideDesignAt(
           message: "Design already has an immutable selectedPlan",
         });
       }
+      const prepared = preparation as DesignPreparation;
+      if (new Map(prepared.content.sources).get(designPath) !== source) return yield* new DesignConflict({ operation: "decide", path: designPath, message: "Design owner changed after validation" });
       const bundle = yield* loadDesignTemplates(root);
-      const plans = yield* filesystemPlanReceipts(root, designPath, bundle);
+      const plans = prepared.plans;
       const state = { _tag: "decided" as const, selectedPlan: target.path };
       const projection = renderDesignProjection(plans, state);
       const body = replaceDesignProjection(decoded.body, projection);
       if (body === undefined) {
         return yield* new DesignConflict({ operation: "decide", path: designPath, message: "Design README generated projection is missing or duplicated" });
       }
-      const decisionPath = `${dirname(designPath)}/DECISION.md`;
-      const [planSource, decisionSource] = yield* Effect.all([readText(root, target.path), readText(root, decisionPath)]);
-      yield* validateDecisionAuthored({ path: designPath }, { path: target.path }, planSource, decisionSource, bundle);
-      const bytes = encodeDecidedDesignReadme(decoded, target.ref, body);
+      const bytes = encodeDecidedDesignReadme(decoded, target.ref, body, prepared.content.assessment.rationale);
       const title = /^#\s+(.+)$/mu.exec(decoded.body)?.[1]?.trim() ?? designSlug(designPath);
+      yield* verifyDesignPreparation(root, prepared);
       return {
         bytes,
         value: {
