@@ -277,10 +277,12 @@ function readManifest(manifestPath: string): Effect.Effect<Manifest, Error> {
   });
 }
 
-export function prepareMemoryMigration(root: string, manifestPath: string, at: string): Effect.Effect<MemoryMigrationPart, Error> {
+export function prepareMemoryMigration(root: string, manifestPath: string, at: string, incremental = false): Effect.Effect<MemoryMigrationPart, Error> {
   return Effect.gen(function* () {
     const manifest = yield* readManifest(manifestPath);
-    if (manifest.source.recordCount !== 551 || manifest.records.length !== 551) return yield* Effect.fail(new MigrationError(`expected exactly 551 records, got ${manifest.records.length}`));
+    const expected = incremental ? manifest.source.recordCount : 551;
+    if (expected < 1 || manifest.source.recordCount !== expected || manifest.records.length !== expected) return yield* Effect.fail(new MigrationError(`expected exactly ${expected} records, got ${manifest.records.length}`));
+    if (path.resolve(manifest.source.root) !== path.resolve(root)) return yield* Effect.fail(new MigrationError('manifest root differs from the requested repository'));
     const head = yield* currentHead(root);
     const index = yield* Effect.tryPromise({ try: () => readFile(`${root}/memory/INDEX.md`, 'utf8'), catch: cause => cause instanceof Error ? cause : new Error(String(cause)) });
     const ids = new Set(manifest.records.map(record => record.path.replace(/^memory\//, '').replace(/\.md$/, '')));
@@ -296,6 +298,21 @@ export function prepareMemoryMigration(root: string, manifestPath: string, at: s
       const bodyDigest = digest(parts.body);
       if (sourceDigest !== record.sourceDigest || bodyDigest !== record.bodyDigest) return yield* Effect.fail(new MigrationError(`manifest CAS mismatch for ${record.path}`));
       const metadata = objectValue(parts.metadata);
+      if (incremental) {
+        const kind = objectValue(metadata.kind);
+        const promotions = decode(Schema.Array(Schema.Struct({
+          kind: Schema.String, current: Schema.Array(Schema.String), history: Schema.Array(PromotionHistory),
+        })), metadata.promotions, `${record.path}: legacy promotions`);
+        const proof = decode(Schema.Array(Schema.String), objectValue(kind.resolution).proof ?? [], `${record.path}: legacy proof`);
+        if (metadata.format !== 'niceeval.memory/v1' || metadata.id !== path.basename(record.path, '.md') ||
+          metadata.title !== record.title || metadata.createdAt !== record.createdAt.value ||
+          kind.type !== record.migratedKind || kind.state !== record.migratedStateFact ||
+          JSON.stringify(promotions.flatMap(p => p.current)) !== JSON.stringify(record.promotionCurrent) ||
+          JSON.stringify(promotions.flatMap(p => p.history)) !== JSON.stringify(record.promotionHistory) ||
+          JSON.stringify(proof) !== JSON.stringify(record.resolutionProofOriginal)) {
+          return yield* Effect.fail(new MigrationError(`${record.path}: incremental migration must preserve declared legacy facts`));
+        }
+      }
       const source: SourceRef = { path: record.path, commit: head, digest: sourceDigest };
       const indexRef: SourceRef = { path: 'memory/INDEX.md', commit: head, digest: digest(index) };
       const target = targetMetadata(record, metadata, parts.raw, parts.body.toString('utf8'), index, at, source, indexRef, knownKinds);

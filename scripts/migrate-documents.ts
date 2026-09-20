@@ -97,27 +97,33 @@ function verifyPlannedDocuments(root: string, changes: readonly Change[]): void 
 export const prepareDocumentMigration = Effect.fn('prepareDocumentMigration')(function*(options: {
   root: string; memoryManifest: string; researchManifest: string; feedbackManifest: string;
   at: string; extraChanges?: readonly Change[];
+  memoryOnly?: boolean; receipt?: string;
 }): Effect.fn.Return<MigrationPlan, Error> {
   return yield* withMigrationJournalGuard(options.root, withTraceReadLease(options.root, () => Effect.gen(function*() {
     const head = git(options.root, ['rev-parse', 'HEAD']);
     const inputs = inventory(options.root);
-    const memory = yield* prepareMemoryMigration(options.root, options.memoryManifest, options.at);
-    const researchFeedback = yield* prepareResearchFeedbackMigration(options.root, options.researchManifest, options.feedbackManifest, head, options.at);
+    const targetReceipt = options.receipt ?? receiptPath;
+    if (options.memoryOnly && (!options.receipt || !/^docs\/migrations\/[a-z0-9-]+\.json$/.test(targetReceipt) || source(options.root, targetReceipt) !== null)) {
+      throw new ConcordError('MigrationReceiptConflict', 'Incremental Memory migration requires a new docs/migrations/<name>.json receipt.');
+    }
+    const memory = yield* prepareMemoryMigration(options.root, options.memoryManifest, options.at, options.memoryOnly);
+    const researchFeedback = options.memoryOnly ? { audit: [], changes: [] } : yield* prepareResearchFeedbackMigration(options.root, options.researchManifest, options.feedbackManifest, head, options.at);
     const audit: readonly MigrationAudit[] = [...memory.audit, ...researchFeedback.audit];
-    const changes: Change[] = [...memory.changes, ...researchFeedback.changes, ...prepareEntrypointMigration(options.root), ...(options.extraChanges ?? [])];
+    const changes: Change[] = [...memory.changes, ...researchFeedback.changes, ...(options.memoryOnly ? [] : prepareEntrypointMigration(options.root)), ...(options.extraChanges ?? [])];
     if (new Set(changes.map(change => change.path)).size !== changes.length) throw new ConcordError('MigrationDuplicatePath', 'Overlapping transformations must be composed before publication');
-    if (memory.audit.length !== 551 || researchFeedback.audit.length !== 188) throw new ConcordError('MigrationCoverageMismatch', 'Expected 551 Memory, 132 Research files and 56 Issues');
+    if (!options.memoryOnly && (memory.audit.length !== 551 || researchFeedback.audit.length !== 188)) throw new ConcordError('MigrationCoverageMismatch', 'Expected 551 Memory, 132 Research files and 56 Issues');
+    const counts = { memory: memory.audit.length, researchFiles: options.memoryOnly ? 0 : 132, issues: options.memoryOnly ? 0 : 56 };
     for (const change of changes) {
       if (source(options.root, change.path) !== change.before) throw new ConcordError('MigrationSourceChanged', change.path);
     }
     verifyPlannedDocuments(options.root, changes);
     const receipt = {
       format: 'concord.document-migration-receipt/v1', recordedAt: options.at, sourceCommit: head,
-      counts: { memory: 551, researchFiles: 132, issues: 56 },
+      counts,
       entries: audit.map(entry => ({ ...entry, targetDigest: digest(changes.find(change => change.path === entry.targetPath)?.after ?? source(options.root, entry.targetPath)!) })),
       evidence: 'Historical resolution attestations preserve source declarations and do not verify command or repository execution.',
     };
-    changes.push({ path: receiptPath, before: source(options.root, receiptPath), after: `${JSON.stringify(receipt, null, 2)}\n` });
+    changes.push({ path: targetReceipt, before: source(options.root, targetReceipt), after: `${JSON.stringify(receipt, null, 2)}\n` });
     const outputMap = new Map(inputs.map(input => [input.path, input.digest]));
     for (const change of changes) {
       if (!roots.some(prefix => change.path.startsWith(`${prefix}/`))) continue;
@@ -130,7 +136,7 @@ export const prepareDocumentMigration = Effect.fn('prepareDocumentMigration')(fu
       format: 'concord.document-migration/v1', root: options.root, head, at: options.at, inputs,
       outputs: [...outputMap].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([path, digest]) => ({ path, digest })),
       changes: changes.map(change => ({ path: change.path, beforeDigest: change.before === null ? null : digest(change.before), after: change.after })),
-      counts: { memory: 551, researchFiles: 132, issues: 56 },
+      counts,
     }, 'migration plan');
     validatePlan(plan);
     return plan;
@@ -181,6 +187,7 @@ const main = Effect.gen(function*() {
   const { values } = parseArgs({ options: {
     root: { type: 'string' }, plan: { type: 'string' }, apply: { type: 'boolean' },
     'memory-manifest': { type: 'string' }, 'research-manifest': { type: 'string' }, 'feedback-manifest': { type: 'string' },
+    'memory-only': { type: 'boolean' }, receipt: { type: 'string' },
   } });
   if (values.plan === undefined) throw new ConcordError('MigrationOptionMissing', '--plan is required');
   if (values.apply) {
@@ -189,11 +196,11 @@ const main = Effect.gen(function*() {
     yield* Effect.log(JSON.stringify(result));
     return;
   }
-  if (values.root === undefined || values['memory-manifest'] === undefined || values['research-manifest'] === undefined || values['feedback-manifest'] === undefined) throw new ConcordError('MigrationOptionMissing', 'Preparation requires --root and all three --*-manifest paths');
+  if (values.root === undefined || values['memory-manifest'] === undefined || !values['memory-only'] && (values['research-manifest'] === undefined || values['feedback-manifest'] === undefined)) throw new ConcordError('MigrationOptionMissing', 'Preparation requires --root and all three --*-manifest paths, or --memory-only with --memory-manifest and --receipt');
   const root = resolve(values.root);
   const planFile = resolve(values.plan);
   if (planFile.startsWith(`${root}/`) || dirname(planFile) === root) throw new ConcordError('MigrationUnsafePlanPath', 'Save the review plan outside the consumer repository');
-  const plan = yield* prepareDocumentMigration({ root, memoryManifest: values['memory-manifest'], researchManifest: values['research-manifest'], feedbackManifest: values['feedback-manifest'], at: new Date().toISOString() });
+  const plan = yield* prepareDocumentMigration({ root, memoryManifest: values['memory-manifest'], researchManifest: values['research-manifest'] ?? '', feedbackManifest: values['feedback-manifest'] ?? '', at: new Date().toISOString(), memoryOnly: values['memory-only'], receipt: values.receipt });
   yield* Effect.try({ try: () => writeFileSync(planFile, `${JSON.stringify(plan, null, 2)}\n`, { flag: 'wx', mode: 0o600 }), catch: asError });
   yield* Effect.log(JSON.stringify({ status: 'prepared', plan: planFile, counts: plan.counts, changes: plan.changes.length }));
 });
