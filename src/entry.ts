@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @concord-file public-entry-routing
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 // Keep ordinary help independent of consumer host code.
@@ -8,12 +8,12 @@ try {
     const { runSkillMain } = await import('./skill.js');
     await runSkillMain(process.argv.slice(2));
   } else if (process.argv[2] === 'repo') {
-    // @concord-begin route-repository-profile
+    // @concord-begin
     // @concord-implements docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
     process.argv.splice(2, 1);
     const entry = './repository/cli.js';
     await import(entry);
-    // @concord-end route-repository-profile
+    // @concord-end
   } else {
     await import('./cli.js');
   }

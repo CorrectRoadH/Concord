@@ -13,7 +13,7 @@ import { readProjectConfig, writeProjectConfig } from './support.js';
 import { startViewServer } from '../dist/view-server.js';
 import { deriveTestReference } from '../dist/test-reference.js';
 
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
 test('Web derives repository tests from Feature and Use Case paths without importing hosts or changing runner authorization', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-profile-'));
   const write = (path: string, body: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), body); };
@@ -25,14 +25,13 @@ test('Web derives repository tests from Feature and Use Case paths without impor
     createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'adapters' });
     createDocument(repo, 'feature', { id: 'unrelated', title: 'Unrelated' });
   } finally { repo.close(); }
-  write('concord.repository.json', JSON.stringify({ format: 'concord.repository/v1', host: 'host.ts' }));
+  write('concord.repository.json', JSON.stringify({ format: 'concord.repository/v2', host: 'host.ts', suites: [{ id: 'adapter', root: 'acceptance/adapter' }], historyPath: 'acceptance/history.ts', policy: 'concord.native-reliability/v1' }));
   write('host.ts', 'throw new Error("HOST MUST NEVER BE IMPORTED");');
-  write('e2e/adapter/project.json', JSON.stringify({ name: 'e2e-adapter', targets: { e2e: { metadata: { niceeval: { lanes: ['main'], areas: ['adapter'], executor: { kind: 'provider' } } } } } }));
-  write('e2e/adapter/test/adapter.test.ts', `import { it } from 'vitest';
+  write('acceptance/adapter/test/adapter.test.ts', `import { it } from 'vitest';
 // @use-case docs/feature/adapters/use-case/flow.md
 it('SDK adapter flow', () => { throw new Error('DO NOT EXECUTE'); });
 `);
-  const nativePath = 'e2e/adapter/test/adapter.test.ts';
+  const nativePath = 'acceptance/adapter/test/adapter.test.ts';
   const directId = deriveTestReference(nativePath, nativePath, 'SDK adapter flow');
   const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
   const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
@@ -50,28 +49,54 @@ it('SDK adapter flow', () => { throw new Error('DO NOT EXECUTE'); });
     const page = await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.port}/features/adapters?tab=testing`);
     await expect(page.getByText('SDK adapter flow', { exact: true })).toBeVisible();
-    await expect(page.getByText('provider', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '运行声明命令', exact: true })).toHaveCount(0);
     await expect(page.getByText('Repository 测试', { exact: false })).toHaveCount(0);
-    await expect(page.getByText('此测试由项目显式关联；此处展示关联，不代表测试已运行。', { exact: true })).toBeVisible();
+    await expect(page.getByText('关联声明不代表测试已运行；命令收据不代表原生 case 覆盖。', { exact: true })).toBeVisible();
+    const testRecord = page.locator('.content-record').first();
+    await expect(testRecord.locator('details')).not.toHaveAttribute('open', '');
+    await testRecord.locator('summary').click();
+    await expect(testRecord.getByText('契约', { exact: true })).toBeVisible();
+    await expect(testRecord.getByText('执行器', { exact: true })).toHaveCount(0);
+    await expect(testRecord.getByText('运行通道', { exact: true })).toHaveCount(0);
+    assert.equal('executor' in snapshot.repositoryTests!.tests[0]!, false);
+    assert.equal('lanes' in snapshot.repositoryTests!.tests[0]!, false);
+    assert.equal(await testRecord.evaluate(element => getComputedStyle(element).borderBottomWidth), '1px');
     await expect(page.getByText('尚未配置通用测试扫描目录。', { exact: false })).toHaveCount(0);
     const testingPanel = page.getByRole('tabpanel', { name: '测试', exact: true });
     await testingPanel.evaluate(element => element.setAttribute('data-browser-instance', 'preserved'));
     await page.getByRole('button', { name: nativePath, exact: true }).click();
     await expect(page.getByRole('dialog')).toContainText('SDK adapter flow');
+    assert.equal(new URL(page.url()).searchParams.get('source'), nativePath);
+    await page.goBack();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.goForward();
+    await expect(page.getByRole('dialog')).toContainText('SDK adapter flow');
     await page.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(testingPanel).toHaveAttribute('data-browser-instance', 'preserved');
+    await page.getByRole('button', { name: nativePath, exact: true }).click();
+    await page.reload();
+    await expect(page.getByRole('dialog')).toContainText('SDK adapter flow');
+    await expect(page.getByRole('dialog').locator('.cm-content')).toHaveAttribute('contenteditable', 'false');
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await expect(page).toHaveURL(`http://127.0.0.1:${server.port}/features/adapters?tab=testing`);
     await page.getByRole('tab', { name: '实现', exact: true }).click();
     await expect(page.getByText('尚未配置源码声明扫描目录。', { exact: false })).toBeVisible();
     await expect(page.getByText('尚未建立实现关联', { exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'e2e/adapter/test/adapter.test.ts（Repository 测试）' })).toHaveCount(0);
+    assert.equal(await page.locator('.panel-empty').first().evaluate(element => getComputedStyle(element).borderTopColor === getComputedStyle(element).color), false, 'empty panel separator must not inherit text color');
+    const implementationHeading = await page.locator('.panel-header h2').boundingBox();
+    await page.getByRole('tab', { name: 'Use Cases', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Use Cases', exact: true })).toBeVisible();
+    const useCasesHeading = await page.locator('.panel-header h2').boundingBox();
+    assert.ok(implementationHeading && useCasesHeading && Math.abs(implementationHeading.y - useCasesHeading.y) < 1, 'Use Cases and implementation headings align vertically');
+    await page.getByRole('tab', { name: '实现', exact: true }).click();
+    await expect(page.getByRole('link', { name: 'acceptance/adapter/test/adapter.test.ts（Repository 测试）' })).toHaveCount(0);
     for (const width of [1280, 1920, 390]) {
       await page.setViewportSize({ width, height: 900 });
       assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true, 'source paths must stay inside the viewport');
       await expect(page.getByRole('button', { name: '添加关联', exact: true }).first()).toBeVisible();
     }
 
-    const sourceBody = '// Padding before declaration\n'.repeat(500) + `// @concord-code send-adapter
+    const sourceBody = '// Padding before declaration\n'.repeat(500) + `// @concord-code
 // @concord-implements docs/feature/adapters/README.md
 // @concord-implements docs/feature/adapters/use-case/flow.md
 export function sendAdapter() { return 'ok'; }
@@ -83,11 +108,14 @@ export function sendAdapter() { return 'ok'; }
     const featureGroup = page.getByRole('region', { name: 'Adapters的实现', exact: true });
     const useCaseGroup = page.getByRole('region', { name: 'Flow的实现', exact: true });
     await expect(featureGroup.getByText('sendAdapter', { exact: true })).toBeVisible();
-    await expect(featureGroup.getByText(/声明 ID：send-adapter/)).not.toBeVisible();
-    await featureGroup.getByText('声明详情', { exact: true }).click();
-    await expect(featureGroup.getByText(/声明 ID：send-adapter/)).toBeVisible();
+    await expect(featureGroup.getByText(/声明 ID/)).toHaveCount(0);
+    await expect(featureGroup.locator('details')).toHaveCount(0);
+    await expect(featureGroup.getByRole('button', { name: '复制 ID', exact: true })).toHaveCount(0);
     await expect(useCaseGroup.getByText('sendAdapter', { exact: true })).toBeVisible();
-    await useCaseGroup.getByRole('button', { name: '添加关联', exact: true }).click();
+    await expect(useCaseGroup.getByRole('link', { name: 'Flow', exact: true })).toHaveAttribute('href', '/features/adapters/use-cases/flow');
+    await page.getByRole('button', { name: '添加关联', exact: true }).click();
+    await page.getByRole('combobox', { name: '实现关联目标', exact: true }).click();
+    await page.getByRole('option', { name: 'Flow', exact: true }).click();
     await expect(page.getByRole('textbox', { name: '实现契约引用', exact: true })).toHaveValue('docs/feature/adapters/use-case/flow.md');
     await page.getByRole('button', { name: '取消', exact: true }).click();
     await useCaseGroup.evaluate(element => element.setAttribute('data-browser-instance', 'preserved'));
@@ -95,7 +123,7 @@ export function sendAdapter() { return 'ok'; }
     await expect(page.getByRole('dialog')).toBeVisible();
     const drawer = page.getByRole('dialog');
     const drawerBox = await drawer.boundingBox();
-    assert.deepEqual(drawerBox && { width: drawerBox.width, height: drawerBox.height }, { width: 1280, height: 900 });
+    assert.ok(drawerBox && Math.abs(drawerBox.width - 1100) < 1 && Math.abs(drawerBox.height - 900) < 1, 'drawer fits the desktop viewport within subpixel rounding');
     await expect(drawer.getByText('src/adapters.ts', { exact: true })).toHaveCount(1);
     const activeLine = drawer.locator('.cm-activeLine');
     await expect(activeLine).toHaveText("export function sendAdapter() { return 'ok'; }");
@@ -130,7 +158,7 @@ export function sendAdapter() { return 'ok'; }
       assert.equal(installed.repositoryTests.status, 'ready');
       assert.equal(installed.repositoryTests.tests[0]?.id, directId);
     } finally { rmSync(installation, { recursive: true, force: true }); }
-    const pendingPath = 'e2e/adapter/test/pending.test.ts';
+    const pendingPath = 'acceptance/adapter/test/pending.test.ts';
     write(pendingPath, `import { it } from 'vitest';
 // @use-case docs/feature/adapters/use-case/flow.md
 it('duplicate description', () => {});

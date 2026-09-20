@@ -1,9 +1,9 @@
 ---
 format: concord.constitution/v1
 status: active
-version: 1.1.0
+version: 1.2.0
 ratifiedAt: 2026-09-14
-amendedAt: 2026-09-14
+amendedAt: 2026-09-20
 amendments:
   - version: 1.0.0
     date: 2026-09-14
@@ -20,6 +20,13 @@ amendments:
       - docs/design/ts-only-runtime/README.md
       - docs/feature/project-onboarding/README.md
     impact: 旧格式须离线迁移；保留现场，旧证据重新取证
+  - version: 1.2.0
+    date: 2026-09-20
+    reason: 将项目实践提升为中立治理标准，明确消费者执行职责和不可降级的证据要求
+    sources:
+      - docs/feature/neutral-project-governance/README.md
+      - docs/design/neutral-project-governance/README.md
+    impact: 适用于 Concord 新接入设计及当前 repository 治理中立化；消费者适配中立协议，历史证明不自动升级，源码语言和包管理器仍由项目选择
 ---
 
 # Concord 项目宪法
@@ -88,3 +95,14 @@ Concord 必须可作为独立安装包在隔离 Git 消费者中使用，不依�
 普通运行时仅接受当前格式，不保留旧配置、owner 或 journal 的兼容授权。检测旧项目或历史事务时返回具名迁移诊断，保留锁和事务现场，由显式离线迁移或恢复处理。缺少当前配置绑定的旧证据必须重新取证，不补字段或重算摘要伪装为当前证明。本条约束运行时格式边界，不改变现有领域数据的含义。
 
 来源：用户无 legacy 要求、docs/design/ts-only-runtime/README.md。
+
+<a id="c-010"></a>
+## 强制中立治理，产品执行由消费者拥有
+
+Concord 面向软件项目规定唯一事实来源、统一契约布局、显式实现和测试关联、工程记忆生命周期、证据解释与安全变更。接入项目适配这些规范；规范的价值由其治理目的决定，不因最初来自某个项目而弃用。
+
+产品构建与部署、原生 runner、运行环境及调度通道由消费者拥有。通用治理模型不能要求产品包名、私有 HTTP 接口、Nx metadata 或 host/provider 分类。可选执行能力的缺失只阻断需要该能力的操作，不使静态契约与关联失效。
+
+项目与 Problem 已采用的证据要求是关闭结论的下限，不能通过换入口、删除配置或降级 command 证据绕过。原生与可靠性结论由 Concord 统一核验事实；adapter 负责真实观察与资源终结。政策变更及跨仓库切换必须保留历史、互斥和恢复边界。Concord 自身的 TypeScript、Effect 与 pnpm 工程约束不自动成为消费者的技术栈要求。
+
+来源：用户 2026-09-20 授权、docs/feature/neutral-project-governance/README.md、docs/design/neutral-project-governance/README.md。

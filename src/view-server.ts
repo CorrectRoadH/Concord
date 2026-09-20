@@ -1,4 +1,4 @@
-// @concord-file web-workbench-server
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { isIP } from 'node:net';
@@ -6,8 +6,8 @@ import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { Effect, Schema } from 'effect';
-import { executeViewAction, getViewFile, getWorkspaceSnapshot, validateViewRoot } from './application.js';
-import { getGitDiff, getGitStatus, type GitArea, type GitBaselineCache } from './git-view.js';
+import { executeViewAction, getViewGitStatus, getViewFile, getWorkspaceSnapshot, validateViewRoot } from './application.js';
+import { getGitDiff, type GitArea, type GitBaselineCache } from './git-view.js';
 import { ConcordError, decode, digest, failure } from './shared.js';
 import { ViewJobManager } from './view-jobs.js';
 import type { ViewFailure, ViewResponse } from './view-contract.js';
@@ -271,8 +271,7 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   }
   if (method === 'GET' && url.pathname === '/api/git') {
     exactQuery(url, []);
-    const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
-    return success(response, await Effect.runPromise(getGitStatus(root, true, baselineCache, snapshot.project?.testRoots ?? [])));
+    return success(response, await Effect.runPromise(getViewGitStatus(root, baselineCache)));
   }
   if (method === 'GET' && url.pathname === '/api/git/diff') {
     exactQuery(url, ['path', 'area']);

@@ -13,7 +13,7 @@ export const FEEDBACK_MEMORY_RELATION_KINDS = ["investigation", "root-cause", "d
 export const FEEDBACK_CLOSURE_KINDS = ["fixed", "delivered", "duplicate", "declined", "invalid", "external-fixed", "closed"] as const;
 
 export const FeedbackEnvelopeV1Schema = Schema.Struct({
-  format: Schema.Literal("niceeval.feedback-envelope/v1"),
+  format: Schema.Literal("concord.feedback-envelope/v1"),
   origin: Schema.Struct({ repository: Schema.NonEmptyString, originId: Schema.NonEmptyString, commit: Schema.NonEmptyString }),
   candidate: Schema.optional(Schema.Struct({ version: Schema.optional(Schema.NonEmptyString), commit: Schema.optional(Schema.NonEmptyString), sha256: Schema.optional(Schema.NonEmptyString) })),
   source: Schema.Literal("dogfood"), observation: Schema.NonEmptyString, impact: Schema.NonEmptyString,

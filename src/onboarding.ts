@@ -1,4 +1,4 @@
-// @concord-file project-onboarding
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 import { existsSync } from 'node:fs';

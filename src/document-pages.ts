@@ -1,4 +1,4 @@
-// @concord-file document-page-operations
+// @concord-file
 // @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { posix } from 'node:path';

@@ -7,6 +7,7 @@ import { DocumentSchema } from 'concord-sdlc/model';
 
 import { decodeFeedbackDocument } from "../../feedback/codec.js";
 import { decodeMemoryDocument } from "../../memory/codec.js";
+import { repositoryConfiguration } from "../../root.js";
 import { decodeCaseDeclarations, decodeCaseArchive } from "../test-case/annotations.js";
 import {
   TraceFormatError,
@@ -27,26 +28,12 @@ import type {
   TraceFeedback,
   TraceMemory,
   TraceNode,
-  TraceOwner,
   TracePage,
   TracePageRole,
   TraceSnapshot,
   TraceTest,
 } from "./model.js";
 import { ADOPTABLE_DOCS_NODE_KINDS, DOCS_NODE_KINDS } from "./model.js";
-
-const RepoMetadataSchema = Schema.Struct({
-  name: Schema.String,
-  targets: Schema.Record(Schema.String, Schema.Unknown),
-});
-const E2eTargetSchema = Schema.Struct({
-  metadata: Schema.Record(Schema.String, Schema.Unknown),
-});
-const NiceEvalMetadataSchema = Schema.Struct({
-  lanes: Schema.Array(Schema.String),
-  areas: Schema.Array(Schema.String),
-  executor: Schema.Struct({ kind: Schema.String }),
-});
 
 const sorted = <A>(items: readonly A[], key: (item: A) => string): readonly A[] =>
   [...items].sort((a, b) => key(a).localeCompare(key(b)));
@@ -247,155 +234,6 @@ function deriveFeaturePages(
 
 function hasHeading(source: string, anchor: string): boolean {
   return source.split(/\r?\n/u).some((line) => markdownAnchor(line) === anchor);
-}
-
-function plainOwnerDescription(value: string): string {
-  return value
-    .replace(/\[([^\]]+)\]\([^)]+\)/gu, "$1")
-    .replace(/`([^`]+)`/gu, "$1")
-    .replace(/[*_~]/gu, "")
-    .replace(/^[-+*]\s+/u, "")
-    .replace(/\s+/gu, " ")
-    .trim();
-}
-
-function conciseOwnerDescription(value: string): string {
-  const normalized = plainOwnerDescription(value);
-  const sentences = normalized.match(/.*?(?:[。！？!?]|[.](?=\s|$))|.+$/gu)?.map((sentence) => sentence.trim()).filter(Boolean) ?? [];
-  const useful = sentences.filter((sentence) => !/^(?:Provenance\b|Repo ID\b|Manifest\b|仓库 ID\b)/iu.test(sentence));
-  const selected = useful.find((sentence) => /被测|证明|验证|必须|不得|确保|\b(?:must|should|prove|verify|ensure|reject|return|keep)s?\b/iu.test(sentence)) ??
-    useful[0] ?? sentences[0] ?? normalized;
-  const points = [...selected.replace(/[。！？!?]+$/u, "")];
-  if (points.length <= 120) return points.join("");
-  const prefix = points.slice(0, 119).join("");
-  const boundary = Math.max(prefix.lastIndexOf(" "), prefix.lastIndexOf("，"), prefix.lastIndexOf("、"), prefix.lastIndexOf("；"));
-  const concise = boundary >= 80 ? prefix.slice(0, boundary).replace(/[，、；\s]+$/u, "") : prefix;
-  return `${concise}…`;
-}
-
-function ownerDescription(lines: readonly string[], anchor: string, contractLine: number): string {
-  for (const line of lines) {
-    if (!line.trimStart().startsWith("|") || !line.includes(`(#${anchor})`)) continue;
-    const cells = line.split("|").slice(1, -1).map((cell) => cell.trim());
-    const description = conciseOwnerDescription(cells[1] ?? "");
-    if (description.length > 0) return description;
-  }
-  let cursor = contractLine + 1;
-  const paragraph: string[] = [];
-  while (cursor < lines.length) {
-    const line = lines[cursor]?.trim() ?? "";
-    if (markdownAnchor(line) !== undefined || line === "<!-- niceeval.e2e-owner-contract/v1 -->") break;
-    if (line.length > 0 && !line.startsWith("|")) paragraph.push(line);
-    cursor += 1;
-  }
-  const description = conciseOwnerDescription(paragraph.join(" "));
-  return description.length > 0 ? description : anchor.replace(/-+/gu, " ");
-}
-
-function parseOwner(ownerRef: string, ownerPath: string, text: string): TraceOwner {
-  const hash = ownerRef.lastIndexOf("#");
-  if (hash <= 0 || hash === ownerRef.length - 1) {
-    throw new TraceFormatError({ path: ownerPath, subject: "owner", message: "must name an anchor" });
-  }
-  const anchor = ownerRef.slice(hash + 1);
-  const lines = text.split(/\r?\n/u);
-  const headingLines = lines.flatMap((item, index) => markdownAnchor(item) === anchor ? [index] : []);
-  if (headingLines.length === 0) {
-    throw new TraceFormatError({ path: ownerPath, subject: "owner", message: `anchor ${anchor} is missing` });
-  }
-  if (headingLines.length !== 1) {
-    throw new TraceFormatError({ path: ownerPath, subject: "owner", message: `anchor ${anchor} is ambiguous` });
-  }
-  const line = headingLines[0];
-  if (line === undefined) throw new TraceFormatError({ path: ownerPath, subject: "owner", message: `anchor ${anchor} is missing` });
-  let cursor = line + 1;
-  while (lines[cursor]?.trim() === "") cursor += 1;
-  if (lines[cursor]?.trim() !== "<!-- niceeval.e2e-owner-contract/v1 -->") {
-    throw new TraceFormatError({
-      path: ownerPath,
-      subject: "contract",
-      message: "missing immediate versioned contract block",
-    });
-  }
-  cursor += 1;
-  while (lines[cursor]?.trim() === "") cursor += 1;
-  const target = /^Contract:\s+\[[^\]]+\]\(([^)]+)\)\s*$/u.exec(lines[cursor] ?? "")?.[1];
-  if (target === undefined || target.startsWith("#")) {
-    throw new TraceFormatError({ path: ownerPath, subject: "contract", message: "must be one repo Markdown link" });
-  }
-  const contract = posix.normalize(posix.join(posix.dirname(ownerPath), target));
-  if (contract.startsWith("../") || contract === "..") {
-    throw new TraceFormatError({ path: ownerPath, subject: "contract", message: "escapes repository" });
-  }
-  return { ref: ownerRef, path: ownerPath, anchor, contract, description: ownerDescription(lines, anchor, cursor) };
-}
-
-export function testingOwnerContracts(documents: readonly (readonly [string, string])[]): readonly TraceOwner[] {
-  const owners: TraceOwner[] = [];
-  const seen = new Set<string>();
-  for (const [path, source] of documents) {
-    const lines = source.split(/\r?\n/u);
-    let fence: { readonly character: "`" | "~"; readonly length: number } | undefined;
-    for (let index = 0; index < lines.length; index += 1) {
-      const line = lines[index] ?? "";
-      const fenceMatch = /^\s{0,3}(`{3,}|~{3,})/u.exec(line)?.[1];
-      if (fenceMatch !== undefined) {
-        const character = fenceMatch[0] as "`" | "~";
-        if (fence === undefined) fence = { character, length: fenceMatch.length };
-        else if (character === fence.character && fenceMatch.length >= fence.length) fence = undefined;
-        continue;
-      }
-      if (fence !== undefined || line.trim() !== "<!-- niceeval.e2e-owner-contract/v1 -->") continue;
-      let heading = index - 1;
-      while (heading >= 0 && lines[heading]?.trim() === "") heading -= 1;
-      const anchor = markdownAnchor(lines[heading] ?? "");
-      if (anchor === undefined) {
-        throw new TraceFormatError({
-          path,
-          subject: "owner",
-          message: "owner contract marker must be the first non-empty content after one Markdown heading",
-        });
-      }
-      const ref = `${path}#${anchor}`;
-      if (seen.has(ref)) throw new TraceFormatError({ path, subject: "owner", message: `duplicate owner anchor ${ref}` });
-      seen.add(ref);
-      owners.push(parseOwner(ref, path, source));
-    }
-  }
-  return sorted(owners, (owner) => owner.ref);
-}
-
-function metadata(value: unknown, path: string): { readonly repo: string; readonly lane: readonly string[]; readonly areas: readonly string[]; readonly executor: { readonly kind: string } } {
-  const decoded = Schema.decodeUnknownResult(RepoMetadataSchema, { errors: "all" })(value);
-  if (Result.isFailure(decoded)) {
-    throw new TraceFormatError({
-      path,
-      subject: "repo metadata",
-      message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue),
-    });
-  }
-  const target = Schema.decodeUnknownResult(E2eTargetSchema, { errors: "all" })(decoded.success.targets.e2e);
-  if (Result.isFailure(target)) {
-    throw new TraceFormatError({
-      path,
-      subject: "repo metadata",
-      message: SchemaIssue.makeFormatterDefault()(target.failure.issue),
-    });
-  }
-  const niceeval = Schema.decodeUnknownResult(NiceEvalMetadataSchema, { errors: "all" })(target.success.metadata.niceeval);
-  if (Result.isFailure(niceeval)) {
-    throw new TraceFormatError({
-      path,
-      subject: "repo metadata",
-      message: SchemaIssue.makeFormatterDefault()(niceeval.failure.issue),
-    });
-  }
-  return {
-    repo: decoded.success.name.replace(/^e2e-/u, ""),
-    lane: sorted(niceeval.success.lanes, (item) => item),
-    areas: sorted(niceeval.success.areas, (item) => item),
-    executor: niceeval.success.executor,
-  };
 }
 
 function validateReferenceTarget(
@@ -630,27 +468,32 @@ function walk(directory: string): Effect.Effect<readonly string[], TraceIoError,
       if (
         entry.startsWith(".stage-") ||
         entry === "node_modules" ||
-        entry === ".niceeval" ||
-        entry === ".e2e-artifacts"
+        entry === ".git"
       ) return Effect.succeed([] as readonly string[]);
       const path = join(directory, entry);
       return fs.stat(path).pipe(
         Effect.mapError((cause) => new TraceIoError({ operation: "scan", path, message: message(cause) })),
-        Effect.flatMap((status) => status.type === "Directory" ? walk(path) : Effect.succeed([path])),
+        Effect.flatMap((status) => status.type === "Directory"
+          ? walk(path)
+          : status.type === "File"
+            ? Effect.succeed([path])
+            : Effect.fail(new TraceIoError({ operation: "scan", path, message: `unsupported ${status.type} entry` }))),
       );
     });
     return nested.flat();
   });
 }
 
-function traceInputPaths(root: string, paths: readonly string[]): readonly string[] {
+type RepositoryConfiguration = ReturnType<typeof repositoryConfiguration>["config"];
+const inDirectory = (file: string, directory: string): boolean => file === directory || file.startsWith(`${directory}/`);
+
+function traceInputPaths(root: string, paths: readonly string[], config: RepositoryConfiguration): readonly string[] {
   return sorted(paths.filter((path) => {
     const file = slash(relative(root, path));
     if (/^docs\/.*\.md$/u.test(file)) return true;
-    if (/^e2e\/.*\.(?:[cm]?[jt]sx?)$/u.test(file)) return true;
-    if (/^e2e\/.*\/(?:project\.json|[^/]+\.cases\.evidence\.json|[^/]+\.case-evidence\/.*\.json)$/u.test(file)) return true;
     if (/^memory\/(?!INDEX\.md$).*\.md$/u.test(file)) return true;
-    return /^docs\/issues\/(?!\.)[^/]+\.md$/u.test(file);
+    if (file === config.historyPath) return true;
+    return /\.(?:[cm]?[jt]sx?)$/u.test(file) && config.suites.some(suite => inDirectory(file, suite.root));
   }), (path) => slash(relative(root, path)));
 }
 
@@ -679,12 +522,22 @@ function compileTraceAtGeneration(
 ): Effect.Effect<TraceSnapshot, TraceError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
-    const scan = () => Effect.forEach(
-      ["docs", "e2e", "memory"],
-      (directory) => walk(join(root, directory)),
-    ).pipe(Effect.map((groups) => groups.flat()));
+    const profile = yield* pure("concord.repository.json", "configuration", () => repositoryConfiguration(root));
+    const scan = Effect.fn("repository.trace.scanGovernedInputs")(function*() {
+      const directories = [...new Set(["docs", "memory", ...profile.config.suites.map(suite => suite.root)])];
+      const groups = yield* Effect.forEach(directories, directory => walk(join(root, directory)));
+      const files = new Set(groups.flat());
+      const history = join(root, profile.config.historyPath);
+      const historyExists = yield* fs.exists(history).pipe(Effect.mapError(cause => new TraceIoError({
+        operation: "scan",
+        path: profile.config.historyPath,
+        message: message(cause),
+      })));
+      if (historyExists) files.add(history);
+      return [...files];
+    });
     const firstAll = yield* scan();
-    const firstInputs = traceInputPaths(root, firstAll);
+    const firstInputs = traceInputPaths(root, firstAll, profile.config);
     const firstPairs = yield* Effect.forEach(firstInputs, (path) => fs.readFileString(path).pipe(
       Effect.map((source) => [path, source] as const),
       Effect.mapError((cause) => new TraceIoError({
@@ -694,7 +547,7 @@ function compileTraceAtGeneration(
       })),
     ));
     const secondAll = yield* scan();
-    const secondInputs = traceInputPaths(root, secondAll);
+    const secondInputs = traceInputPaths(root, secondAll, profile.config);
     const secondPairs = yield* Effect.forEach(secondInputs, (path) => fs.readFileString(path).pipe(
       Effect.map((source) => [path, source] as const),
       Effect.mapError((cause) => new TraceIoError({
@@ -705,7 +558,9 @@ function compileTraceAtGeneration(
     ));
     const firstSources = new Map(firstPairs);
     const capturedSources = new Map(secondPairs);
-    const changed = changedInputs(root, firstInputs, secondInputs, firstSources, capturedSources);
+    const changed = [...changedInputs(root, firstInputs, secondInputs, firstSources, capturedSources)];
+    const currentProfile = yield* pure("concord.repository.json", "configuration", () => repositoryConfiguration(root));
+    if (currentProfile.digest !== profile.digest) changed.push("concord.repository.json");
     if (changed.length > 0) {
       return yield* new TraceInputChanged({ path: root, attempts: attempt, changed });
     }
@@ -722,7 +577,7 @@ function compileTraceAtGeneration(
         : Effect.succeed(source);
     };
 
-    const docFiles = all.filter((path) => path.startsWith(join(root, "docs")) && path.endsWith(".md"));
+    const docFiles = all.filter((path) => path.startsWith(join(root, "docs") + sep) && path.endsWith(".md"));
     const documentSources = yield* Effect.forEach(docFiles, (path) => read(path).pipe(
       Effect.map((source) => [slash(relative(root, path)), source] as const),
     ));
@@ -742,18 +597,20 @@ function compileTraceAtGeneration(
       generation,
       nodes,
       pages,
-      owners: [],
       tests: [],
       feedback: [],
       memory: [],
     };
     yield* pure("docs", "relations", () => validateNodeRelations(targetSnapshot, documentIndex));
 
-    const annotationFiles = all.filter((path) => path.startsWith(join(root, "e2e")) && /\.(?:[cm]?[jt]sx?)$/u.test(path) && slash(relative(root, path)) !== "e2e/concord-history.ts");
+    const annotationFiles = all.filter((path) => {
+      const file = slash(relative(root, path));
+      return file !== profile.config.historyPath && /\.(?:[cm]?[jt]sx?)$/u.test(file)
+        && profile.config.suites.some(suite => inDirectory(file, suite.root));
+    });
     const candidateSources = yield* Effect.forEach(annotationFiles, (path) => read(path).pipe(
       Effect.map((source) => ({ path: slash(relative(root, path)), source })),
     ));
-    const metadataCache = new Map<string, ReturnType<typeof metadata>>();
     const knownCaseIds = new Map<string, string>();
     const tests: TraceTest[] = [];
 
@@ -767,7 +624,7 @@ function compileTraceAtGeneration(
       }));
       annotated.push(...decoded.success);
     }
-    const historyPath = "e2e/concord-history.ts";
+    const historyPath = profile.config.historyPath;
     const archived = relativeFiles.has(historyPath) ? decodeCaseArchive(historyPath, yield* read(join(root, historyPath))) : Result.succeed({ history: [], tombstones: [] });
     if (Result.isFailure(archived)) return yield* Effect.fail(new TraceFormatError({ path: historyPath, subject: "case history", message: archived.failure.message }));
     for (const item of annotated) {
@@ -798,31 +655,21 @@ function compileTraceAtGeneration(
         }));
       }
 
-      let directory = posix.dirname(item.testFile);
-      let found: string | undefined;
-      while (directory === "e2e" || directory.startsWith("e2e/")) {
-        if (relativeFiles.has(`${directory}/project.json`)) {
-          found = directory;
-          break;
-        }
-        directory = posix.dirname(directory);
-      }
-      if (found === undefined) {
+      const suites = profile.config.suites.filter(suite => inDirectory(item.testFile, suite.root));
+      if (suites.length !== 1) {
         return yield* Effect.fail(new TraceFormatError({
           path: item.declarationPath,
-          subject: "repo metadata",
-          message: "no owning project.json",
+          subject: "suite",
+          message: `${item.testFile} must belong to exactly one configured suite`,
         }));
       }
-      let repo = metadataCache.get(found);
-      if (repo === undefined) {
-        const projectPath = `${found}/project.json`;
-        const projectSource = yield* read(join(root, projectPath));
-        repo = yield* pure(projectPath, "repo metadata", () => {
-          const project: unknown = JSON.parse(projectSource);
-          return metadata(project, projectPath);
-        });
-        metadataCache.set(found, repo);
+      const suite = suites[0]!;
+      if (!inDirectory(item.declarationPath, suite.root)) {
+        return yield* Effect.fail(new TraceFormatError({
+          path: item.declarationPath,
+          subject: "suite",
+          message: `declaration helper and native test must belong to suite ${suite.id}`,
+        }));
       }
       {
         tests.push({
@@ -833,7 +680,7 @@ function compileTraceAtGeneration(
           contract,
           regressions: [...item.regressions],
           issues: item.issues.map((issue) => issue.url),
-          ...repo,
+          suite: suite.id,
         });
       }
     }
@@ -919,7 +766,6 @@ function compileTraceAtGeneration(
       generation,
       nodes,
       pages,
-      owners: [],
       tests: sorted(tests, (item) => item.selector),
       feedback: sorted(feedback, (item) => item.path),
       memory: sorted(memory, (item) => item.path),

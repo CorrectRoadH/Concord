@@ -1,4 +1,4 @@
-// @concord-file feedback-provider-tests
+// @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
 import test from 'node:test';

@@ -22,6 +22,7 @@ function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), "concord-repository-document-format-"));
   execFileSync("git", ["init", "-q", root]);
   for (const directory of ["docs", "docs/issues", "e2e", "feedback", "memory"]) mkdirSync(join(root, directory), { recursive: true });
+  write(root, "concord.repository.json", JSON.stringify({ format: 'concord.repository/v2', suites: [{ id: 'suite', root: 'e2e' }], historyPath: 'test-history.ts', policy: 'concord.native-reliability/v1' }));
   write(root, "memory/problem.md", "---\nformat: concord.document/v1\nid: problem\ntitle: Problem\ncreatedAt: 2026-09-14T00:00:00.000Z\nkind: memory\nmemoryKind: problem\nstate: open\nepoch: 0\npromotions: []\nhistory: []\n---\n\n# Problem\n");
   write(root, "docs/issues/issue.md", "---\nformat: concord.document/v1\nid: issue\ntitle: Issue\ncreatedAt: 2026-09-14T00:00:00.000Z\nkind: issue\nstate: draft\nmemoryRelations: []\nadoptions:\n  current: []\n  history: []\nhistory: []\n---\n\n# Issue\n");
   write(root, "docs/feature/migrated/README.md", `---

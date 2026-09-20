@@ -1,10 +1,11 @@
-// @concord-file workbench-human-readable-results
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
+import { urlChoice, useUrlNavigation } from '../hooks/use-url-navigation';
 import { json } from '../lib/utils';
 
 const labels: Readonly<Record<string, string>> = {
@@ -27,7 +28,7 @@ function Fields({ value, depth = 0 }: { value: unknown; depth?: number }) {
   if (typeof value !== 'object') return <span className="whitespace-pre-wrap break-words">{String(value)}</span>;
   if (depth > 3) return <details><summary>展开详情</summary><pre>{json(value)}</pre></details>;
   if (Array.isArray(value)) return value.length === 0 ? <span className="muted">无</span> : (
-    <ul className="grid gap-3">{value.map((item, index) => <li className="rounded-md border p-3" key={index}><Fields value={item} depth={depth + 1} /></li>)}</ul>
+    <ul className="grid gap-3">{value.map((item, index) => <li className="border-b border-border py-3" key={index}><Fields value={item} depth={depth + 1} /></li>)}</ul>
   );
   return <dl className="grid gap-3">{Object.entries(value).map(([key, item]) => (
     <div className="grid min-w-0 gap-1" key={key}>
@@ -38,10 +39,12 @@ function Fields({ value, depth = 0 }: { value: unknown; depth?: number }) {
 }
 
 export function ActionResult({ title, value }: { title: string; value: unknown }) {
+  const { params, update } = useUrlNavigation();
+  const tab = urlChoice(params.get('resultView'), ['preview', 'source'], 'preview');
   const markdown = record(value) ? (typeof value.markdown === 'string' ? value.markdown : value.operation === 'template-show' && typeof value.body === 'string' ? value.body : null) : null;
   const snippet = record(value) && typeof value.snippet === 'string' ? value.snippet : null;
   return <Card className="result-card"><CardHeader><CardTitle>{title}</CardTitle></CardHeader><CardContent>
-    {markdown !== null ? <Tabs defaultValue="preview">
+    {markdown !== null ? <Tabs value={tab} onValueChange={value => update({ resultView: value })}>
       <TabsList><TabsTrigger value="preview">阅读预览</TabsTrigger><TabsTrigger value="source">Markdown 原文</TabsTrigger></TabsList>
       <TabsContent value="preview"><article className="wysiwyg__content min-h-0"><Markdown remarkPlugins={[remarkGfm]}>{markdown}</Markdown></article></TabsContent>
       <TabsContent value="source"><pre>{markdown}</pre></TabsContent>

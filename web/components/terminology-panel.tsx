@@ -1,12 +1,11 @@
-// @concord-file workbench-terminology-panel
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { useEffect, useMemo, useState } from 'react';
 import type { DocumentRecord } from '../../src/shared';
 import type { ViewFile } from '../../src/view-contract';
 import { contractIdentities } from '../pages/operations';
 import { useWorkspace } from '../workspace';
-import { Empty } from './page';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { PanelEmpty, PanelHeader, RecordList, RecordItem } from './content-layout';
 
 interface Term {
   readonly key: string;
@@ -47,11 +46,13 @@ export function TerminologyPanel({ document }: { readonly document: DocumentReco
   }, [api]);
   const targets = contractIdentities(snapshot, document);
   const terms = useMemo(() => linkedTerms(concepts?.body ?? '', targets), [concepts?.body, targets]);
-  if (error) return <div role="alert" className="form-error">术语表读取失败：{error}</div>;
-  if (!concepts) return <p role="status">正在读取术语表…</p>;
-  if (terms.length === 0) return <Empty title="尚未关联术语">请在 docs/concepts.md 的词条契约列中链接当前契约。</Empty>;
-  return <div className="record-list">{terms.map(term => <Card key={term.key}>
-    <CardHeader><CardTitle>{term.preferred}</CardTitle><CardDescription>{term.english}</CardDescription></CardHeader>
-    <CardContent><p>{term.meaning}</p></CardContent>
-  </Card>)}</div>;
+  return <><PanelHeader title="术语" />
+    {error ? <div role="alert" className="form-error">术语表读取失败：{error}</div>
+      : !concepts ? <p role="status">正在读取术语表…</p>
+      : terms.length === 0 ? <PanelEmpty title="尚未关联术语">请在 docs/concepts.md 的词条契约列中链接当前契约。</PanelEmpty>
+      : <RecordList>{terms.map(term => <RecordItem key={term.key}>
+        <div className="flex flex-wrap items-baseline gap-2"><strong>{term.preferred}</strong><span className="text-sm text-muted-foreground">{term.english}</span></div>
+        <p className="mb-0 mt-2">{term.meaning}</p>
+      </RecordItem>)}</RecordList>}
+  </>;
 }

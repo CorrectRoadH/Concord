@@ -1,4 +1,4 @@
-// @concord-file workbench-editing
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { ConcordError, ProjectSchema, decode, digest, type DocumentRecord, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
@@ -142,13 +142,10 @@ function pageBody(value: string): string {
 }
 
 export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
-  const inventory = inspectDocuments(repo);
-  if (inventory.pages.some(page => page.path === path && page.readOnly)) throw new ConcordError('ReadOnlyDocument', inventory.pages.find(page => page.path === path)?.reason ?? `${path} is read-only`);
-  const document = inventory.documents.find(item => item.path === path);
-  if (document !== undefined) return setAuthor(repo, path, body, expectedDigest, dryRun);
-  const page = inventory.pages.find(item => item.path === path);
+  const page = inspectDocumentFile(repo, path);
   if (page === undefined) throw new ConcordError('FileNotFound', 'Markdown editing is limited to the Concord document and supporting-page inventory');
   if (page.readOnly) throw new ConcordError('ReadOnlyDocument', page.reason ?? `${path} is read-only`);
+  if (page.documentPath === path) return setAuthor(repo, path, body, expectedDigest, dryRun);
   if (page.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; use its current digest`);
   const before = repo.read(path);
   if (before === undefined) throw new ConcordError('FileNotFound', `${path} disappeared before publication`);

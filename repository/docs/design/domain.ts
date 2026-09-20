@@ -305,7 +305,7 @@ export function createDesignAt(
       ? yield* execute()
       : yield* withGeneratedStage(root, initial, execute);
     return {
-      format: "niceeval.docs-design/create-v1",
+      format: "concord.docs-design/create-v1",
       operation: "design-create",
       dryRun: input.dryRun,
       design: {
@@ -454,7 +454,7 @@ function checkDesignPackage(
     }
     const files = yield* collectFiles(root, packageRoot);
     return {
-      format: "niceeval.docs-design/check-v1",
+      format: "concord.docs-design/check-v1",
       operation: "design-check",
       ok: findings.length === 0,
       design: {
@@ -697,7 +697,7 @@ export function decideDesignAt(
       };
     }),
   }).pipe(Effect.map((mutation): DesignDecideReceipt => ({
-    format: "niceeval.docs-design/decide-v1",
+    format: "concord.docs-design/decide-v1",
     operation: "design-decide",
     dryRun,
     design: {

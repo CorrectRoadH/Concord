@@ -1,4 +1,4 @@
-// @concord-file packaged-agent-guidance
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';

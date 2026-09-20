@@ -7,7 +7,7 @@ export interface UseCaseCreateInput {
 }
 
 export interface UseCaseCreateReceipt {
-  readonly format: "niceeval.docs-use-case/create-v1";
+  readonly format: "concord.docs-use-case/create-v1";
   readonly operation: "use-case-create";
   readonly dryRun: boolean;
   readonly parent: {

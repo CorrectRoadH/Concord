@@ -1,4 +1,4 @@
-// @concord-file workbench-markdown-editor
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import {
   MDXEditor,
@@ -27,6 +27,7 @@ import { createPortal } from 'react-dom';
 import type { ViewFile } from '../../src/view-contract';
 import { ApiError } from '../lib/api';
 import { useAutoSave } from '../hooks/use-auto-save';
+import { flushSync } from 'react-dom';
 import { useWorkspace } from '../workspace';
 import { useTheme } from '../theme';
 import { Button } from './ui/button';
@@ -161,7 +162,7 @@ function markdownLinkUrls(markdown: string): readonly string[] {
 
 export function MarkdownEditor({ initial, source = false, title, sourceLocation, hideSourceHeading = false, onSaved, toolbarTarget, onFollowLink }: Props) {
   const theme = useTheme();
-  const { api, refresh, setDirty, notify, snapshot, busy } = useWorkspace();
+  const { api, refresh, notify, snapshot, busy } = useWorkspace();
   const [file, setFile] = useState(initial);
   const [draft, setDraft] = useState(initial.body);
   const [dirty, setLocalDirty] = useState(false);
@@ -177,7 +178,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     ?? (currentDocument ? { path: currentDocument.path, body: currentDocument.body, digest: currentDocument.digest, readOnly: false, documentPath: currentDocument.path } : undefined);
   const observedDigest = useRef(observed?.digest);
 
-  useEffect(() => { setDirty(dirty); return () => setDirty(false); }, [dirty, setDirty]);
+
 
   useEffect(() => {
     const controller = new AbortController();
@@ -229,10 +230,12 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
         ? { action: 'source.set', path: before.path, body: sent, expectedDigest: before.digest }
         : { action: 'document.set', path: before.path, body: sent, expectedDigest: before.digest });
       const next = await api.file(before.path);
-      baseline.current = next; setFile(next); observedDigest.current = next.digest;
-      if (currentDraft.current === sent) { currentDraft.current = next.body; setDraft(next.body); setLocalDirty(false); }
-      else setLocalDirty(currentDraft.current !== next.body);
-      setExternal(null); onSaved?.(next);
+      flushSync(() => {
+        baseline.current = next; setFile(next); observedDigest.current = next.digest;
+        if (currentDraft.current === sent) { currentDraft.current = next.body; setDraft(next.body); setLocalDirty(false); }
+        else setLocalDirty(currentDraft.current !== next.body);
+        setExternal(null); onSaved?.(next);
+      });
       await refresh();
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 409) {
@@ -243,7 +246,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
       throw cause;
     } finally { savingNow.current = false; }
   }, [api, external, onSaved, refresh, source]);
-  const autoSave = useAutoSave({ dirty, revision: draft, save, enabled: !file.readOnly });
+  const autoSave = useAutoSave({ dirty, revision: draft, save, discard: () => { replaceWith(baseline.current); setCompareOpen(false); }, enabled: !file.readOnly });
   const saving = autoSave.saving;
   const changeDraft = (value: string) => { currentDraft.current = value; setDraft(value); setLocalDirty(value !== baseline.current.body); };
   const rawEditor = <Textarea
@@ -276,7 +279,6 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     {toolbarTarget && !source && createPortal(toolbarActions, toolbarTarget)}
     {(!toolbarTarget || source) && <div className="editor-shell__bar" data-compact={!source || undefined}>
       {source && !hideSourceHeading && <div>
-        <div className="eyebrow">源码文件</div>
         <strong>{title ?? file.path}</strong>
         {title && title !== file.path && <div className="path-text">{file.path}</div>}
       </div>}

@@ -17,14 +17,14 @@ export interface IssueRemoteService {
   readonly mutate: (repository: IssueRepository, identity: IssueIdentity | CreateIdentity, payload: IssuePayload) => Effect.Effect<IssueMutationResult, IssueError>;
 }
 
-export class IssueRemote extends Context.Service<IssueRemote, IssueRemoteService>()("@niceeval/repo-tools/issue/Remote") {}
+export class IssueRemote extends Context.Service<IssueRemote, IssueRemoteService>()("concord/issue/Remote") {}
 
 export interface IssuePlanStoreService {
   readonly plan: (receipt: IssuePlanReceipt) => Effect.Effect<void, IssuePlanCorrupt | IssuePlanIoError>;
   readonly consume: (receipt: IssuePlanReceipt, now: number) => Effect.Effect<void, IssuePlanConsumed | IssuePlanExpired | IssuePlanNotPlanned | IssuePlanCorrupt | IssuePlanIoError>;
 }
 
-export class IssuePlanStore extends Context.Service<IssuePlanStore, IssuePlanStoreService>()("@niceeval/repo-tools/issue/PlanStore") {}
+export class IssuePlanStore extends Context.Service<IssuePlanStore, IssuePlanStoreService>()("concord/issue/PlanStore") {}
 
 export const planIssueMutation = (
   identity: IssueIdentity | CreateIdentity,
@@ -33,7 +33,7 @@ export const planIssueMutation = (
   remotePreimageDigest: string,
   now: number,
 ): IssuePlanReceipt => ({
-  format: "niceeval.issue-plan/v1",
+  format: "concord.issue-plan/v1",
   id: randomUUID(),
   schema: 1,
   plannedAt: now,
@@ -81,7 +81,7 @@ export const prepareIssue = Effect.fn("Issue.prepare")((identity: IssueIdentity 
 /** execute assumes the caller has already obtained current explicit authorization. */
 export const executeIssuePlan = Effect.fn("Issue.executePlan")((receipt: IssuePlanReceipt, now: number) =>
   Effect.gen(function*() {
-    if (receipt.format !== "niceeval.issue-plan/v1" || receipt.schema !== 1 || receipt.payloadDigest !== digest(receipt.payload)) {
+    if (receipt.format !== "concord.issue-plan/v1" || receipt.schema !== 1 || receipt.payloadDigest !== digest(receipt.payload)) {
       return yield* Effect.fail(new IssueInputError({ message: "invalid issue plan receipt" }));
     }
     if (!sameRepository(receipt.repository, receipt.identity)) return yield* Effect.fail(new IssueInputError({ message: "receipt repository and identity disagree" }));

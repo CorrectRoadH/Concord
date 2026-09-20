@@ -99,25 +99,31 @@ AST 识别必须核对受支持 runner import 的绑定，不因任意函数叫 
 
 ## 代码归属声明
 
-Code Declaration 是维护者对实现与契约关系的显式声明，源文件是唯一 owner。独立 `code:<id> → exactRef` 的 `implements` 边不会成为测试声明、覆盖率、完成状态或 Problem fixed 证据。2026-09-13 的独立 Astra 设计挑战经过四项问答获得 PASS；裁决如下。
+Code Declaration 是维护者对实现与契约关系的显式声明，源文件是唯一 owner。独立 `code:<id> → exactRef` 的 `implements` 边不会成为测试声明、覆盖率、完成状态或 Problem fixed 证据。2026-09-13 的独立 Astra 挑战确定范围与绑定规则；2026-09-20 的独立 Herdr Astra 挑战 PASS 后采用[自动查询引用](design/derived-code-reference/README.md)，替代手写声明 ID。
 
 `sourceRoots` 为严格配置中的可选路径数组，缺省 `[]`，构造和 init 沿用既有安全路径验证。仅扫描显式根内 JS/TS；允许与 testRoots 重叠，各 family 保留自己的标签语义。代码投影首版无持久缓存，每次核对扫描前后文件集合及摘要；SQLite 测试缓存和 evidence 协议保持原职责。
 
-三种 scope：文件头 `@concord-file`，紧邻支持的完整 AST 节点的 `@concord-code`，同一 statement-list 内非空连续语句的 `@concord-begin/end`。一个文件级 scope 或节点最多一份声明，多目标通过相邻 implements 表达。node 白名单为有 body 的函数声明/方法、类声明，以及单 identifier 且直接 arrow/function initializer 的变量语句。region 不嵌套、不截断表达式、不跨语句列表，但可以包含完整函数。所有 scope 可在允许的范围内完整包含，查询返回全部包含关系，不推断覆盖或继承。
+三种 scope：文件头 `@concord-file`，紧邻支持的完整 AST 节点的 `@concord-code`，同一 statement-list 内非空连续语句的 `@concord-begin/end`。范围标记均无参数，一个文件级 scope 或节点最多一份声明，多目标通过相邻 implements 表达。node 白名单为有 body 的函数声明/方法、类声明，以及单 identifier 且直接 arrow/function initializer 的变量语句。region 不嵌套、不截断表达式、不跨语句列表，但可以包含完整函数。所有 scope 可在允许的范围内完整包含，查询返回全部包含关系，不推断覆盖或继承。
 
 绑定和孤立标记诊断都消费真实 TS comment ranges，不能从裸文本行认领字符串、模板、正则或 JSX 伪标记。有真实代码标记且存在语法错误的文件不产生有效代码声明。起始块内 implements 必须连续相邻；具体语法与位置规则由 [使用指引](../skills/concord/references/code.md) 说明。
 
-目标沿用 owner/supporting-page/anchor 解析，仅拒绝重复 exactRef，不合并不同 anchor。Feature 反查汇总自身与 Use Case，按声明 ID 去重，保留匹配 exactRefs。ID 只在当前 code 集合唯一，不以行号充当持久身份。
+目标支持 Feature、Use Case 与 Engineering，沿用 owner/supporting-page/anchor 解析，仅拒绝重复 exactRef，不合并不同 anchor。Feature 反查汇总自身与 Use Case；Engineering 汇总自身与支持页面，不拥有 Use Case 子树。反查按自动引用去重，保留匹配 exactRefs。
+
+`id` 由版本、canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用；文件移动、改名、作用域和顺序变化可能使旧引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list/locate 并核对位置。固定元组、名称和序号规则见[采用架构](design/derived-code-reference/plans/derived/architecture.md)。
+
+`code annotate` 与对应 action 不接收或返回 ID；`code list` 和 `code locate` 提供声明查询。按 ID 查询的命令已删除，不提供兼容入口或迁移协议。Web 以符号、位置和显式关联呈现实现。范围标记不接受参数，无效 begin 仍参与边界检查；普通扫描不写源码。
 
 代码错误阻断 code/check/trace/review/doctor；test list/show/run 与 memory resolve 显式不包含代码投影，仍保留全部原有文档、测试关系和证据校验。evidence 不接收 code ID，完整源码及候选摘要不会因为新注释被剥离。公开打包入口验证三种 scope、反查与位置查询、源码变更、非法边界和此隔离行为。
 
-## Repository profile
+## 中立高级治理
 
-测试身份采用[注释身份裁决](design/annotation-case-identity/README.md)：声明旁的 `@feature`/`@use-case` 直接绑定 canonical 契约，ID 由内部协议派生。host 声明 `caseIdentity: "concord.case-contracts/v1"`，source identity 使用 `concord.repository-source-identity/v3` 的 direct-contract binding，源码投影使用 `concord.repository-source-projection/v2`。原生唯一绑定及正式执行继续由消费仓库验证。
+2026-09-20 采用 [中立治理方案](design/neutral-project-governance/plans/generalize-profile/architecture.md)，独立 Herdr Astra 设计挑战 PASS。该裁决替代先前 repository profile 的产品专属配置、host、锁位置和执行协议假设；实现验收不由设计 PASS 代替。
 
-`concord repo` 通过消费仓库声明的 host 使用原生 inventory 与正式证据，独立于上述通用 command evidence。源码注释、历史归档及固定执行副本的当前正式证据见 [Repository profile](repository-profile.md)。包内 `concord --skill repository` 提供具体命令，不初始化通用项目或加载产品 host。
+`concord repo` 保留为中立高级治理入口。Concord 拥有声明身份、契约关系、Memory 生命周期、证据要求和权威 validator；消费者拥有 runner、原生副本与清理，以及产品构建/Preview/Examples/部署/PR 组合。显式 suite roots 不依赖 Nx 或 e2e 布局；静态 trace 与 Web 不加载 host，不要求 lanes/executor。
 
-Research、Memory、Issue 的通用入口与 repository profile 共用唯一 `concord.document/v1` 模型。旧文档一次性迁移，不保留旧 owner 解码分支。历史处理声明以 attested 证据保留；正式执行证据通过 profile gate 绑定当前 Memory epoch。通用操作、profile 与迁移从首次读取起共用 Git-private flock，并互相检查未完成 journal；dry-run 可建立协调锁文件。详见[文档模型与迁移](document-migration.md)。
+版本化的可靠原生要求与 command 证据严格分离。Problem 已采用的下限持久化并在所有 fixed 入口执行；新证据绑定配置、policy、adapter 实现、当前测试/契约和 epoch。red 允许绑定实际缺陷候选，green 与可靠性观察必须绑定同一修复候选。旧证明保留历史，不补字段或重新签发。
+
+Research、Memory、Issue 继续共用唯一 `concord.document/v1` 模型。新协调路径为 Git-private `concord/trace`，旧现场通过停写、旧新持锁和完整前像计划显式离线迁移。细节见[高级测试治理](repository-profile.md)和[设计中的迁移及验收要求](design/neutral-project-governance/plans/generalize-profile/architecture.md)。
 
 ## 人用 Web 与 AI CLI
 

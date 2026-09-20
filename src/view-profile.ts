@@ -1,10 +1,11 @@
+// @concord-file
+// @concord-implements docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
 import { Effect, Schema } from 'effect';
 import { ConcordError, decode } from './shared.js';
 
 export const RepositoryViewTestSchema = Schema.Struct({
   id: Schema.String, name: Schema.String, file: Schema.String, selector: Schema.String,
   contract: Schema.String, features: Schema.Array(Schema.String),
-  lanes: Schema.Array(Schema.String), executor: Schema.String,
 });
 export type RepositoryViewTest = typeof RepositoryViewTestSchema.Type;
 export interface RepositoryTestView {

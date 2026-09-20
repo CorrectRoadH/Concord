@@ -1,12 +1,13 @@
 import * as React from "react"
 import { cn } from "@/lib/utils"
+import { Surface } from '../content-layout'
 
 function Card({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <div
+    <Surface
       data-slot="card"
       className={cn(
-        "flex flex-col gap-6 rounded-xl border bg-card py-6 text-card-foreground shadow-sm",
+        "flex flex-col gap-6 py-6",
         className
       )}
       {...props}

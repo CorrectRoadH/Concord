@@ -1,9 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { posix, resolve } from "node:path";
+import { resolve } from "node:path";
 import { Effect, Option, Result } from "effect";
-import { collectRepoCaseInventory, collectWorkspaceCaseInventory, managedInventoryImplementationDigest, readManagedInventoryReceipt, readManagedRedEvidence, readManagedTakeoverEvidence, type CaseInventoryReceipt, type WorkspaceInventoryReceipt } from "../../host.js";
+import { collectRepoCaseInventory, collectWorkspaceCaseInventory, managedInventoryImplementationDigest, readManagedInventoryReceipt, readManagedRedEvidence, readManagedTakeoverEvidence } from "../../host.js";
 import { REPOSITORY_ROOT } from "../runtime.js";
 import { compileTrace, compileTraceUnderLease } from "../trace/index.js";
 import { mutateTraceFiles, traceDigest } from "../trace/relation-mutation.js";
@@ -11,10 +11,15 @@ import { planCaseRelation, type CaseRelationAction } from "./planner.js";
 import { parseCaseSelector, selectCurrentCase, type CaseSelector } from "./selector.js";
 import { decodeCaseRelationsSidecar, encodeCaseRelationsSidecar, type CaseIssue, type CaseRelationsSidecar } from "./sidecar.js";
 import { decodeAnnotatedCases, decodeCaseArchive, decodeCaseDeclarations, encodeCaseArchive, renderCaseAnnotations, type AnnotatedCase, type CaseDeclaration } from "./annotations.js";
-import { resolveRepositorySourceIdentity, sameRepositorySourceIdentity, type RepositorySourceIdentityV3 } from "../../source-identity.js";
+import { resolveRepositorySourceIdentity, sameRepositorySourceIdentity, decodeRepositorySourceIdentityV4, type RepositorySourceIdentityV4 } from "../../source-identity.js";
+
+import { readGovernanceConfiguration } from "concord-sdlc/governance-config";
+import { ConcordError, decode } from "concord-sdlc/model";
+import { decodeNativeEvidenceIndex, NativeReliabilityCertificateSchema, validateNativeEvidence, usedMemoryInvocations } from "concord-sdlc/evidence-policy";
+import { MemoryRepository } from "../../memory/repository.js";
 
 type Maybe<A> = Option.Option<A> | A | undefined;
-interface InventoryCase { readonly executor: "vitest" | "playwright"; readonly repo: string; readonly path: string; readonly project?: string; readonly titlePath: readonly string[]; readonly caseId: string }
+interface InventoryCase { readonly executor: string; readonly repo: string; readonly path: string; readonly project?: string; readonly titlePath: readonly string[]; readonly caseId: string }
 interface InventoryReceipt { readonly checkout: string; readonly repos: readonly { readonly id: string; readonly receipts: readonly unknown[] }[]; readonly digest: string; readonly findings: readonly string[]; readonly files: readonly string[]; readonly cases: readonly InventoryCase[]; readonly unassignedCases: readonly { readonly path: string; readonly project?: string; readonly titlePath: readonly string[] }[] }
 interface MutationFlags { readonly dryRun: boolean }
 export interface InventoryInput { readonly repo: string; readonly checkout: string }
@@ -41,18 +46,24 @@ const canonicalJson = (value: unknown): string => {
   return JSON.stringify(value);
 };
 const fail = (code: string, message: string): never => { throw new CaseCliError(code, message); };
-const detail = (cause: unknown): string => typeof cause === "object" && cause !== null && "detail" in cause && typeof cause.detail === "string" ? cause.detail : cause instanceof Error ? cause.message : String(cause);
+const errorCode = (cause: unknown): string | undefined => typeof cause === "object" && cause !== null && "code" in cause && typeof cause.code === "string" ? cause.code : undefined;
+const detail = (cause: unknown): string => {
+  const message = typeof cause === "object" && cause !== null && "detail" in cause && typeof cause.detail === "string" ? cause.detail : cause instanceof Error ? cause.message : String(cause);
+  const code = errorCode(cause);
+  return code === undefined ? message : `[${code}] ${message}`;
+};
+const caseFailure = (fallback: string, cause: unknown): CaseCliError => new CaseCliError(errorCode(cause) ?? fallback, detail(cause));
 const sidecarPath = (testPath: string): string => `${testPath}.cases.json`;
 const evidencePath = (testPath: string): string => `${testPath}.cases.evidence.json`;
-const HISTORY_PATH = "e2e/concord-history.ts";
+const historyPath = (): string => readGovernanceConfiguration(REPOSITORY_ROOT)?.config.historyPath ?? fail("GovernanceConfigurationMissing", "Repository governance configuration is required");
 const absolute = (path: string): string => resolve(REPOSITORY_ROOT, path);
 const read = (path: string): string => readFileSync(absolute(path), "utf8");
-const emptySidecar = (testFile: string): CaseRelationsSidecar => ({ format: "niceeval.e2e-case-relations/v1", testFile, current: {}, history: [], tombstones: [] });
+const emptySidecar = (testFile: string): CaseRelationsSidecar => ({ format: "concord.case-relations/v1", testFile, current: {}, history: [], tombstones: [] });
 function sourceFiles(): readonly string[] {
   let output = "";
-  try { output = execFileSync("rg", ["--files", "e2e", "-g", "*.ts", "-g", "*.tsx", "-g", "*.js", "-g", "*.jsx", "-g", "*.mts", "-g", "*.cts", "-g", "*.mjs", "-g", "*.cjs"], { cwd: REPOSITORY_ROOT, encoding: "utf8" }).trim(); }
+  try { output = execFileSync("rg", ["--files", ...(readGovernanceConfiguration(REPOSITORY_ROOT)?.config.suites.map(suite => suite.root) ?? []), "-g", "*.ts", "-g", "*.tsx", "-g", "*.js", "-g", "*.jsx", "-g", "*.mts", "-g", "*.cts", "-g", "*.mjs", "-g", "*.cjs"], { cwd: REPOSITORY_ROOT, encoding: "utf8" }).trim(); }
   catch (cause) { const status = typeof cause === "object" && cause !== null && "status" in cause ? cause.status : undefined; if (status !== 1) throw cause; }
-  return output === "" ? [] : output.split("\n").filter((path) => path !== HISTORY_PATH).sort();
+  return output === "" ? [] : output.split("\n").filter((path) => path !== historyPath()).sort();
 }
 function annotatedCases(): readonly AnnotatedCase[] {
   const all: AnnotatedCase[] = [];
@@ -76,8 +87,8 @@ function caseDeclarations(): readonly CaseDeclaration[] {
   return all;
 }
 function archive() {
-  if (!existsSync(absolute(HISTORY_PATH))) return { history: [], tombstones: [] };
-  const decoded = decodeCaseArchive(HISTORY_PATH, read(HISTORY_PATH));
+  if (!existsSync(absolute(historyPath()))) return { history: [], tombstones: [] };
+  const decoded = decodeCaseArchive(historyPath(), read(historyPath()));
   return Result.isSuccess(decoded) ? decoded.success : fail(decoded.failure._tag, `${decoded.failure.path}: ${decoded.failure.message}`);
 }
 const decodeSidecar = (path: string, allowAbsent = false): CaseRelationsSidecar => {
@@ -93,9 +104,6 @@ const INVENTORY_ROOT = resolve(REPOSITORY_ROOT, ".repo-tools/test-inventories");
 const INVENTORY_ID = /^neinv_[0-9A-HJKMNP-TV-Z]{16}$/;
 interface StoredInventory { readonly inventoryId: string; readonly implementationDigest: string; readonly inventory: InventoryReceipt }
 
-function inventoryImplementationDigest(): string {
-  return managedInventoryImplementationDigest(REPOSITORY_ROOT);
-}
 function decodeInventory(value: Partial<InventoryReceipt> & Record<string, unknown>, source: string): InventoryReceipt {
   if (typeof value.checkout !== "string" || !Array.isArray(value.repos) || !Array.isArray(value.files) || !Array.isArray(value.cases) || !Array.isArray(value.unassignedCases) || !Array.isArray(value.findings) || typeof value.digest !== "string") fail("InventoryInvalid", `${source} is not a current managed inventory`);
   if (value.findings!.length > 0) fail("InventoryInvalid", `inventory has findings: ${value.findings!.join("; ")}`);
@@ -108,47 +116,47 @@ function inventoryFile(inventoryId: string): string {
   if (!INVENTORY_ID.test(inventoryId)) fail("InventoryInvalid", `${inventoryId} is not a managed inventory ID`);
   return resolve(INVENTORY_ROOT, `${inventoryId}.json`);
 }
-function parseInventory(inventoryId: string): InventoryReceipt {
+function parseInventory(inventoryId: string, implementationDigest: string): InventoryReceipt {
   const path = inventoryFile(inventoryId);
   if (!existsSync(path)) fail("InventoryNotFound", `${inventoryId} is unavailable; collect a fresh inventory`);
   let stored: StoredInventory;
   try { stored = JSON.parse(readFileSync(path, "utf8")) as StoredInventory; }
   catch { return fail("InventoryInvalid", `${inventoryId} is unreadable; collect a fresh inventory`); }
-  if (stored.inventoryId !== inventoryId || stored.implementationDigest !== inventoryImplementationDigest()) {
+  if (stored.inventoryId !== inventoryId || stored.implementationDigest !== implementationDigest) {
     fail("InventoryStale", `${inventoryId} was produced by a different implementation; collect a fresh inventory`);
   }
   return decodeInventory(stored.inventory as Partial<InventoryReceipt> & Record<string, unknown>, inventoryId);
 }
-function saveInventory(inventory: InventoryReceipt): string {
+function saveInventory(inventory: InventoryReceipt, implementationDigest: string): string {
   const inventoryId = `neinv_${Array.from(randomBytes(16), (byte) => "0123456789ABCDEFGHJKMNPQRSTVWXYZ"[byte & 31]).join("")}`;
   mkdirSync(INVENTORY_ROOT, { recursive: true, mode: 0o700 });
-  writeFileSync(inventoryFile(inventoryId), `${JSON.stringify({ inventoryId, implementationDigest: inventoryImplementationDigest(), inventory })}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
+  writeFileSync(inventoryFile(inventoryId), `${JSON.stringify({ inventoryId, implementationDigest, inventory })}\n`, { encoding: "utf8", mode: 0o600, flag: "wx" });
   return inventoryId;
 }
 const collectInventory = Effect.fn("collectInventory")(function*(action: InventoryInput) {
   const checkout = yield* Effect.try({
     try: () => execFileSync("git", ["rev-parse", action.checkout], { cwd: REPOSITORY_ROOT, encoding: "utf8" }).trim(),
-    catch: (cause) => new CaseCliError("InventoryCheckoutInvalid", detail(cause)),
+    catch: (cause) => caseFailure("InventoryCheckoutInvalid", cause),
   });
   return yield* Effect.scoped(collectRepoCaseInventory(action.repo, checkout)).pipe(
-    Effect.mapError((cause) => new CaseCliError("InventoryCollectionFailed", detail(cause))),
+    Effect.mapError((cause) => caseFailure("InventoryCollectionFailed", cause)),
     Effect.map((inventory) => inventory as InventoryReceipt),
   );
 });
 function sidecarFiles(): readonly string[] {
   return [...new Set([...annotatedCases().map((item) => sidecarPath(item.testFile)), ...archive().tombstones.map((entry) => sidecarPath(entry.testFile))])].sort();
 }
-function inventoryForId(id: Maybe<string>): InventoryReceipt | undefined { const value = optional(id); return value === undefined ? undefined : parseInventory(value); }
+const inventoryForId = Effect.fn("inventoryForId")(function*(id: Maybe<string>) { const value = optional(id); if (value === undefined) return undefined; const implementation = yield* managedInventoryImplementationDigest(REPOSITORY_ROOT); return parseInventory(value, implementation); });
 function records(history: boolean, inventory?: InventoryReceipt) {
   const collected = new Map(inventory?.cases.map((item) => [`${item.path}#${item.caseId}`, item]));
   const declarations = annotatedCases();
   return sidecarFiles().flatMap((path) => { const sidecar = decodeSidecar(path); const digest = traceDigest(declarations.filter((item) => item.testFile === sidecar.testFile).map((item) => { const source = read(item.declarationPath); return item.annotationRanges.map((range) => source.slice(range.start, range.end)).join("\n"); }).join("\n")); return [
     ...Object.entries(sidecar.current).map(([caseId, relation]) => {
       const evidenceFile = evidencePath(sidecar.testFile);
-      const evidence = existsSync(absolute(evidenceFile)) ? JSON.parse(read(evidenceFile)) as { current?: Record<string, unknown> } : undefined;
+      const evidence = existsSync(absolute(evidenceFile)) ? decodeNativeEvidenceIndex(JSON.parse(read(evidenceFile)) as unknown, evidenceFile) : undefined;
       return { selector: `${sidecar.testFile}#${caseId}`, sidecar: declarations.find((item) => item.caseId === caseId)!.declarationPath, digest, relation, evidence: evidence?.current?.[caseId] ?? {}, collected: collected?.get(`${sidecar.testFile}#${caseId}`) ?? null };
     }),
-    ...(history ? sidecar.tombstones.map((entry) => ({ selector: entry.lastSelector, sidecar: HISTORY_PATH, digest, tombstone: entry })) : []),
+    ...(history ? sidecar.tombstones.map((entry) => ({ selector: entry.lastSelector, sidecar: historyPath(), digest, tombstone: entry })) : []),
   ]; });
 }
 
@@ -164,7 +172,7 @@ function reconcileInventory(inventory: InventoryReceipt) {
   const ids = new Map<string, string[]>();
   for (const item of inventory.cases) ids.set(item.caseId, [...(ids.get(item.caseId) ?? []), item.path]);
   findings.push(...[...ids].filter(([, paths]) => paths.length > 1).map(([caseId, paths]) => ({ code: "DuplicateCaseId", selector: `${caseId}: ${paths.join(", ")}` })));
-  return { format: "niceeval.e2e-case-inventory-reconciliation/v1", inventory, cases: current, findings };
+  return { format: "concord.case-inventory-reconciliation/v1", inventory, cases: current, findings };
 }
 
 interface PlannedChange { readonly path: string; readonly bytes: string; readonly mode?: number; readonly expectedDigest: string | null }
@@ -236,12 +244,12 @@ function annotationProjectionChanges(pairs: readonly { readonly before: CaseRela
   }
   if (history.length !== saved.history.length || tombstones.length !== saved.tombstones.length) {
     const bytes = encodeCaseArchive({ history, tombstones });
-    changes.push({ path: HISTORY_PATH, bytes, expectedDigest: existsSync(absolute(HISTORY_PATH)) ? traceDigest(read(HISTORY_PATH)) : null });
+    changes.push({ path: historyPath(), bytes, expectedDigest: existsSync(absolute(historyPath())) ? traceDigest(read(historyPath())) : null });
   }
   return changes.sort((a, b) => a.path.localeCompare(b.path));
 }
 function transactionReceipt(operation: string, dryRun: boolean, changes: readonly PlannedChange[], value: unknown) {
-  return { format: "niceeval.e2e-case-command/v1", operation, dryRun, transactionId: `netxn_plan_${randomUUID().replaceAll("-", "")}`, generationBefore: null, generationAfter: null, subject: value, preimages: changes.map((c) => ({ path: c.path, digest: c.expectedDigest })), plannedDigests: changes.map((c) => ({ path: c.path, digest: traceDigest(c.bytes) })), findings: [], committed: false };
+  return { format: "concord.case-command/v1", operation, dryRun, transactionId: `netxn_plan_${randomUUID().replaceAll("-", "")}`, generationBefore: null, generationAfter: null, subject: value, preimages: changes.map((c) => ({ path: c.path, digest: c.expectedDigest })), plannedDigests: changes.map((c) => ({ path: c.path, digest: traceDigest(c.bytes) })), findings: [], committed: false };
 }
 interface PublicationPlan {
   readonly changes: readonly PlannedChange[];
@@ -293,109 +301,48 @@ function validateOpenProblem(memory: string) { return compileTrace(REPOSITORY_RO
 function validateOpenProblemUnderLease(memory: string) { return compileTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind !== "problem" || item.state !== "open") fail("RegressionTargetInvalid", `${memory} must be an open structured Problem Memory`); })); }
 function validateRetirableProblem(memory: string) { return compileTrace(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind === "problem" && item.state === "resolved") fail("RegressionRequiresReopen", `${memory} is resolved; reopen it before retiring the regression`); })); }
 function validateRetirableProblemUnderLease(memory: string) { return compileTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind === "problem" && item.state === "resolved") fail("RegressionRequiresReopen", `${memory} is resolved; reopen it before retiring the regression`); })); }
-interface FormalReceipt {
-  readonly format: "niceeval.e2e-case-receipt/v2";
-  readonly mode: "formal";
-  readonly observation: "red" | "green" | "reliability";
-  readonly selector: string;
-  readonly caseId: string;
-  readonly inventoryDigest: string;
-  readonly candidate: { readonly sha256: string };
-  readonly source: RepositorySourceIdentityV3;
-  readonly result: { readonly disposition: "regression" | "pass" };
-  readonly cleanup: { readonly ok: boolean };
-  readonly invocationId: string;
-  readonly receiptSha256: string;
-}
+const validateRegressionEvidence = Effect.fn("validateRegressionEvidence")(function*(action: AddRegressionInput) {
+  const inventory = yield* readManagedInventoryReceipt(REPOSITORY_ROOT, action.inventory, action.selector);
+  const managedRed = yield* readManagedRedEvidence(REPOSITORY_ROOT, action.red);
+  const managedTakeover = yield* readManagedTakeoverEvidence(REPOSITORY_ROOT, action.takeover);
+  const implementationDigest = yield* managedInventoryImplementationDigest(REPOSITORY_ROOT);
+  return yield* Effect.try({ try: () => {
+    const currentSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, action.selector);
+    const memory = new MemoryRepository(REPOSITORY_ROOT).read(action.memory.slice("memory/".length, -3)).metadata;
+    return validateNativeEvidence({ inventory, red: managedRed.receipt, certificate: managedTakeover.certificate, receipts: managedTakeover.receipts }, {
+      selector: action.selector, problem: { path: action.memory, epoch: memory.epoch }, currentSource, implementationDigest,
+      decodeSource: decodeRepositorySourceIdentityV4, sameSource: sameRepositorySourceIdentity, usedInvocations: usedMemoryInvocations(memory),
+    });
+  }, catch: cause => caseFailure("EvidenceMismatch", cause) });
+});
 
-function projectRootForTest(testFile: string): string {
-  let directory = posix.dirname(testFile);
-  while (directory === "e2e" || directory.startsWith("e2e/")) {
-    if (existsSync(absolute(`${directory}/project.json`))) return absolute(directory);
-    const parent = posix.dirname(directory); if (parent === directory) break; directory = parent;
-  }
-  return fail("EvidenceMismatch", `cannot find the E2E project root for ${testFile}`);
-}
-
-function validateRegressionEvidence(action: AddRegressionInput, parsed: CaseSelector) {
-  let inventory: CaseInventoryReceipt;
-  try { inventory = readManagedInventoryReceipt(REPOSITORY_ROOT, action.inventory, action.selector); }
-  catch (cause) { return fail("EvidenceMismatch", detail(cause)); }
-  if (!inventory.cases.some((item) => `${item.path}#${item.caseId}` === action.selector)) fail("CaseNotCollected", action.selector);
-  let managedRed: ReturnType<typeof readManagedRedEvidence>;
-  let managedTakeover: ReturnType<typeof readManagedTakeoverEvidence>;
+function currentEvidenceStillValid(value: unknown, currentSource: RepositorySourceIdentityV4, memoryPath: string, implementationDigest: string): boolean {
   try {
-    managedRed = readManagedRedEvidence(REPOSITORY_ROOT, action.red);
-    managedTakeover = readManagedTakeoverEvidence(REPOSITORY_ROOT, action.takeover);
-  } catch (cause) { return fail("EvidenceMismatch", detail(cause)); }
-  const red = managedRed.receipt as unknown as FormalReceipt;
-  const certificate = managedTakeover.certificate as unknown as Record<string, unknown>;
-  if (certificate.format !== "niceeval.e2e-takeover-certificate/v2") fail("EvidenceLegacy", "legacy v1 takeover evidence is read-only history and cannot register or refresh a current fixed regression");
-  const greenKey = managedTakeover.certificate.greenReceipt;
-  const greenValue = managedTakeover.receipts.get(greenKey);
-  if (greenValue === undefined) fail("EvidenceMismatch", "managed takeover evidence is missing its green receipt");
-  const green = greenValue as unknown as FormalReceipt;
-  if (red.format !== "niceeval.e2e-case-receipt/v2" || green.format !== "niceeval.e2e-case-receipt/v2") fail("EvidenceLegacy", "legacy v1 evidence is read-only history and cannot register or refresh a current fixed regression");
-  if (red.selector !== action.selector || red.inventoryDigest !== inventory.digest) fail("EvidenceMismatch", "managed red evidence does not bind this selector and inventory");
-  if (green.selector !== action.selector || green.inventoryDigest !== inventory.digest) fail("EvidenceMismatch", "managed takeover evidence does not bind this selector and inventory");
-  if (managedTakeover.certificate.caseId !== green.caseId || managedTakeover.certificate.candidateSha256 !== green.candidate.sha256) fail("EvidenceMismatch", "takeover certificate does not bind the green receipt, selector, and candidate");
-  const observations = managedTakeover.certificate.observations;
-  const reliabilityPaths = [...(Array.isArray(observations?.isolatedCopies) ? observations.isolatedCopies : []), ...(Array.isArray(observations?.sameCopy) ? observations.sameCopy : []), observations?.defaultParallel].filter((item): item is string => typeof item === "string");
-  if (reliabilityPaths.length !== 6 || observations.singleCase !== greenKey || !Array.isArray(observations?.cleanup) || observations.cleanup.length === 0) fail("EvidenceMismatch", "takeover certificate is missing the complete observation matrix");
-  const reliability = reliabilityPaths.map((path) => {
-    const receipt = managedTakeover.receipts.get(path);
-    return receipt === undefined ? fail("EvidenceMismatch", `managed takeover evidence is missing ${path}`) : receipt as unknown as FormalReceipt;
-  });
-  if (reliability.some((item) => item.observation !== "reliability" || item.result.disposition !== "pass" || item.candidate.sha256 !== green.candidate.sha256)) fail("EvidenceMismatch", "takeover observations do not all pass on the green candidate");
-  if (new Set([red.invocationId, green.invocationId, ...reliability.map((item) => item.invocationId)]).size !== reliability.length + 2) fail("EvidenceMismatch", "formal evidence reuses an invocation ID");
-  if (reliability.some((receipt) => receipt.format !== "niceeval.e2e-case-receipt/v2")) fail("EvidenceLegacy", "legacy v1 reliability evidence cannot register or refresh a current fixed regression");
-  const currentSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, projectRootForTest(parsed.path), action.selector);
-  if (![red, green, ...reliability].every((receipt) => sameRepositorySourceIdentity(receipt.source, currentSource))) fail("EvidenceMismatch", "formal evidence does not bind the current code projection, declaration, owner, and contract sources");
-  if (![red, ...reliability].every((receipt) => receipt.source.projection.digest === green.source.projection.digest)) fail("EvidenceMismatch", "red, green, and reliability evidence do not bind one common source projection");
-  return { inventory, red, green, certificate, reliability, certificateObservations: observations };
-}
-
-function currentV2EvidenceStillValid(value: unknown, currentSource: RepositorySourceIdentityV3): boolean {
-  try {
-    if (value === null || typeof value !== "object") return false;
-    const evidence = value as Record<string, unknown>;
-    const load = (name: "red" | "green" | "certificate"): Record<string, unknown> => {
-      const reference = evidence[name];
-      if (reference === null || typeof reference !== "object") throw new Error(`missing ${name} evidence reference`);
-      const path = (reference as Record<string, unknown>).path;
-      const digest = (reference as Record<string, unknown>).digest;
-      if (typeof path !== "string" || typeof digest !== "string" || !existsSync(absolute(path))) throw new Error(`unavailable ${name} evidence`);
-      const bytes = read(path);
-      if (traceDigest(bytes) !== digest) throw new Error(`${name} evidence digest changed`);
-      const document = JSON.parse(bytes) as unknown;
-      if (document === null || typeof document !== "object") throw new Error(`${name} evidence is not an object`);
-      return document as Record<string, unknown>;
+    const index = decodeNativeEvidenceIndex({ format: "concord.case-evidence-index/v1", current: { selected: { [memoryPath]: value } } }, "current evidence");
+    const entry = index.current.selected![memoryPath]!;
+    const load = (file: { readonly path: string; readonly digest: string }, inventory = false): unknown => {
+      const bytes = new MemoryRepository(REPOSITORY_ROOT).targetSource(file.path).source;
+      if (!inventory && traceDigest(bytes) !== file.digest) throw new Error("evidence bytes changed");
+      return JSON.parse(bytes) as unknown;
     };
-    const red = load("red");
-    const green = load("green");
-    const certificate = load("certificate");
-    if (red.format !== "niceeval.e2e-case-receipt/v2" || green.format !== "niceeval.e2e-case-receipt/v2" || certificate.format !== "niceeval.e2e-takeover-certificate/v2") return false;
-    const redSource = red.source as RepositorySourceIdentityV3;
-    const greenSource = green.source as RepositorySourceIdentityV3;
-    return sameRepositorySourceIdentity(redSource, currentSource)
-      && sameRepositorySourceIdentity(greenSource, currentSource)
-      && certificate.sourceDigest === currentSource.projection.digest;
-  } catch {
-    return false;
-  }
+    const certificate = decode(NativeReliabilityCertificateSchema, load(entry.certificate), "certificate");
+    if (certificate.greenReceipt !== entry.green.path) return false;
+    const paths = [...certificate.observations.isolatedCopies, ...certificate.observations.sameCopy, certificate.observations.defaultParallel];
+    const memory = new MemoryRepository(REPOSITORY_ROOT).read(memoryPath.slice("memory/".length, -3)).metadata;
+    const receipts = new Map<string, unknown>([[entry.green.path, load(entry.green)], ...paths.map(path => [path, JSON.parse(new MemoryRepository(REPOSITORY_ROOT).targetSource(path).source) as unknown] as const)]);
+    const validated = validateNativeEvidence({ inventory: load(entry.inventory, true), red: load(entry.red), certificate, receipts }, { selector: `${currentSource.nativeTestFile}#${currentSource.caseId}`, problem: { path: memoryPath, epoch: memory.epoch }, currentSource, implementationDigest, decodeSource: decodeRepositorySourceIdentityV4, sameSource: sameRepositorySourceIdentity, usedInvocations: usedMemoryInvocations(memory) });
+    return validated.inventory.digest === entry.inventory.digest;
+  } catch { return false; }
 }
 
 function addRegression(action: AddRegressionInput | RefreshRegressionInput, parsed: CaseSelector, refresh = false) {
   if (refresh && (!("reason" in action) || action.reason.trim().length === 0)) fail("InvalidReason", "regression refresh requires a non-empty reason");
-  return validateOpenProblem(action.memory).pipe(Effect.andThen(Effect.suspend(() => {
+  return validateOpenProblem(action.memory).pipe(Effect.andThen(Effect.gen(function*() {
     const relationPath = sidecarPath(parsed.path);
     const before = decodeSidecar(relationPath);
     const indexPath = evidencePath(parsed.path);
     const indexDigest = assertExpected(indexPath, undefined);
-    const index = existsSync(absolute(indexPath))
-      ? JSON.parse(read(indexPath)) as { format: string; current: Record<string, Record<string, unknown>> }
-      : { format: "niceeval.e2e-case-evidence-index/v1", current: {} };
-    if (index.format !== "niceeval.e2e-case-evidence-index/v1") fail("EvidenceMismatch", `${indexPath} has an unknown format`);
+    const index = decodeNativeEvidenceIndex(existsSync(absolute(indexPath)) ? JSON.parse(read(indexPath)) as unknown : { format: "concord.case-evidence-index/v1", current: {} }, indexPath);
     const currentCase = index.current[parsed.caseId] ?? {};
     const selected = selectCurrentCase(before, parsed);
     const relation = Result.match(selected, {
@@ -412,11 +359,13 @@ function addRegression(action: AddRegressionInput | RefreshRegressionInput, pars
       }));
     }
     if (refresh && (!relationAlreadyCurrent || currentCase[action.memory] === undefined)) fail("RelationNotCurrent", `refresh requires an existing current regression and evidence for ${action.memory}`);
+    const implementationDigest = yield* managedInventoryImplementationDigest(REPOSITORY_ROOT);
     if (refresh) {
-      const currentSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, projectRootForTest(parsed.path), action.selector);
-      if (currentV2EvidenceStillValid(currentCase[action.memory], currentSource)) fail("EvidenceAlreadyCurrent", `current v2 evidence for ${action.memory} still binds the current source identity`);
+      const currentSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, action.selector);
+      if (currentEvidenceStillValid(currentCase[action.memory], currentSource, action.memory, implementationDigest)) fail("EvidenceAlreadyCurrent", `current native evidence for ${action.memory} still binds the current source identity`);
     }
-    const verified = validateRegressionEvidence(action, parsed);
+    const governance = readGovernanceConfiguration(REPOSITORY_ROOT)!;
+    const verified = yield* validateRegressionEvidence(action);
     const next = relationAlreadyCurrent
       ? before
       : Result.match(
@@ -432,14 +381,14 @@ function addRegression(action: AddRegressionInput | RefreshRegressionInput, pars
     ];
     const greenPath = copied[1]!.path;
     const normalizedCertificateUnsigned: Record<string, unknown> = {
-      ...(verified.certificate as Record<string, unknown>),
+      ...verified.certificate,
       greenReceipt: greenPath,
       observations: {
         isolatedCopies: copied.slice(2, 5).map((item) => item.path),
         sameCopy: copied.slice(5, 7).map((item) => item.path),
         defaultParallel: copied[7]!.path,
         singleCase: greenPath,
-        cleanup: verified.certificateObservations.cleanup,
+        cleanup: copied.slice(1).map(item => item.path),
       },
     };
     delete normalizedCertificateUnsigned.certificateSha256;
@@ -451,25 +400,40 @@ function addRegression(action: AddRegressionInput | RefreshRegressionInput, pars
       certificate: { path: certificatePath, digest: traceDigest(`${JSON.stringify(normalizedCertificate, null, 2)}\n`) },
       inventory: { path: inventoryEvidencePath, digest: verified.inventory.digest },
     };
+    const currentSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, action.selector);
+    if (!sameRepositorySourceIdentity(verified.green.source, currentSource) || currentSource.binding.configurationDigest !== governance.digest) fail("PreimageChanged", "Evidence source changed during publication planning");
+    const dependencyDigests = new Map<string, string>(currentSource.projection.files.map(file => [file.path, `sha256:${file.rawSha256}`]));
+    dependencyDigests.set(currentSource.binding.contractRef.split("#", 1)[0]!, `sha256:${currentSource.binding.contractSha256}`);
+    if (governance.config.host !== undefined && currentSource.binding.adapterSourceDigest !== null) dependencyDigests.set(governance.config.host, currentSource.binding.adapterSourceDigest);
+    const relationChanges = annotationProjectionChanges([{ before, next }]);
+    const dependencyGuards = [...dependencyDigests].map(([path, expectedDigest]) => {
+      const bytes = new MemoryRepository(REPOSITORY_ROOT).targetSource(path).source;
+      if (traceDigest(bytes) !== expectedDigest) fail("PreimageChanged", `${path} changed during evidence validation`);
+      return { path, bytes, expectedDigest };
+    }).filter(guard => !relationChanges.some(change => change.path === guard.path));
     const nextIndex = {
-      ...index,
+      ...index, format: "concord.case-evidence-index/v1",
       current: { ...index.current, [parsed.caseId]: { ...currentCase, [action.memory]: evidence } },
       ...(refresh ? { history: [...((index as { history?: readonly unknown[] }).history ?? []), { caseId: parsed.caseId, memory: action.memory, evidence: currentCase[action.memory], reason: (action as RefreshRegressionInput).reason, refreshedAtCommit: audit().atCommit }] } : {}),
     };
-    return publish(refresh ? "test-regression-refresh" : "test-regression-add", action.dryRun, validateOpenProblemUnderLease(action.memory).pipe(
-      Effect.andThen(Effect.sync(() => {
+    return yield* publish(refresh ? "test-regression-refresh" : "test-regression-add", action.dryRun, validateOpenProblemUnderLease(action.memory).pipe(
+      Effect.andThen(Effect.gen(function*() {
+        if ((yield* managedInventoryImplementationDigest(REPOSITORY_ROOT)) !== implementationDigest) fail("PreimageChanged", "Native implementation changed before publication");
         if (refresh) {
           const latestIndex = JSON.parse(read(indexPath)) as { readonly current?: Readonly<Record<string, Readonly<Record<string, unknown>>>> };
           const latestCurrent = latestIndex.current?.[parsed.caseId]?.[action.memory];
-          const latestSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, projectRootForTest(parsed.path), action.selector);
-          if (currentV2EvidenceStillValid(latestCurrent, latestSource)) fail("EvidenceAlreadyCurrent", `current v2 evidence for ${action.memory} still binds the current source identity`);
+          const latestSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, action.selector);
+          if (currentEvidenceStillValid(latestCurrent, latestSource, action.memory, implementationDigest)) fail("EvidenceAlreadyCurrent", `current native evidence for ${action.memory} still binds the current source identity`);
         }
-        validateRegressionEvidence(action, parsed);
+        if (readGovernanceConfiguration(REPOSITORY_ROOT)?.digest !== governance.digest) fail("PreimageChanged", "Repository policy configuration changed before publication");
+        yield* validateRegressionEvidence(action);
       })),
       Effect.as({ changes: [
       // Evidence-only repair still depends on the current relation/owner. Keep
       // its declaration source as a no-op transaction member so journal CAS binds it.
-      ...annotationProjectionChanges([{ before, next }]),
+      ...relationChanges,
+      ...dependencyGuards,
+      { path: governance.path, bytes: governance.source, expectedDigest: governance.digest },
       { path: indexPath, bytes: `${JSON.stringify(nextIndex, null, 2)}\n`, expectedDigest: indexDigest },
       { path: inventoryEvidencePath, bytes: `${JSON.stringify(verified.inventory, null, 2)}\n`, expectedDigest: null },
       ...copied.map((item) => ({ path: item.path, bytes: `${JSON.stringify(item.value, null, 2)}\n`, expectedDigest: null })),
@@ -487,13 +451,13 @@ function retireRegression(action: RetireRegressionInput, parsed: CaseSelector) {
     const next = Result.match(planned, { onFailure: (error) => fail(error._tag, JSON.stringify(error)), onSuccess: (value) => value });
     const indexPath = evidencePath(parsed.path);
     const indexDigest = assertExpected(indexPath, undefined);
-    const index = JSON.parse(read(indexPath)) as { format: string; current: Record<string, Record<string, unknown>>; history?: readonly unknown[] };
+    const index = decodeNativeEvidenceIndex(JSON.parse(read(indexPath)) as unknown, indexPath);
     const evidence = index.current[parsed.caseId]?.[action.memory];
     if (evidence === undefined) fail("EvidenceMismatch", `current evidence for ${action.memory} is missing`);
     const currentCase = { ...(index.current[parsed.caseId] ?? {}) };
     delete currentCase[action.memory];
     const nextIndex = {
-      ...index,
+      ...index, format: "concord.case-evidence-index/v1",
       current: { ...index.current, [parsed.caseId]: currentCase },
       history: [...(index.history ?? []), { caseId: parsed.caseId, memory: action.memory, evidence, reason: action.reason, retiredAtCommit: audit().atCommit }],
     };
@@ -511,7 +475,7 @@ function verifyIssue(url: string, selectorText: string, injected: Maybe<string>)
   const receiptPath = optional(injected);
   let document: Record<string, unknown>;
   if (receiptPath !== undefined) {
-    if (process.env.NICEEVAL_TEST_CASE_ALLOW_VERIFIED_RECEIPT !== "1") return fail("IssueVerificationFailed", "injected verification receipts are disabled outside an explicit isolated fixture");
+    if (process.env.CONCORD_TEST_CASE_ALLOW_VERIFIED_RECEIPT !== "1") return fail("IssueVerificationFailed", "injected verification receipts are disabled outside an explicit isolated fixture");
     document = JSON.parse(readFileSync(resolve(receiptPath), "utf8")) as Record<string, unknown>;
   }
   else {
@@ -521,7 +485,7 @@ function verifyIssue(url: string, selectorText: string, injected: Maybe<string>)
     try { document = JSON.parse(execFileSync("gh", ["api", `repos/${match[1]}/${match[2]}/issues/${number}`], { cwd: REPOSITORY_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] })) as Record<string, unknown>; }
     catch { return fail("IssueVerificationFailed", "GitHub read-only verification is unavailable; refusing local publication"); }
   }
-  if (document.format === "niceeval.test-case-issue-verification/v1" && (document.selector !== selectorText || document.url !== url)) return fail("IssueVerificationFailed", "injected verification receipt does not bind this selector and URL");
+  if (document.format === "concord.case-issue-verification/v1" && (document.selector !== selectorText || document.url !== url)) return fail("IssueVerificationFailed", "injected verification receipt does not bind this selector and URL");
   if (document.pull_request !== undefined || document.isPullRequest === true) return fail("IssueVerificationFailed", "target is a Pull Request, not an Issue");
   const body = typeof document.body === "string" ? document.body : ""; if (!body.includes(selectorText)) return fail("IssueVerificationFailed", "Issue body does not contain direct provenance for the exact selector");
   const nodeId = typeof document.node_id === "string" ? document.node_id : typeof document.nodeId === "string" ? document.nodeId : "";
@@ -531,7 +495,8 @@ function verifyIssue(url: string, selectorText: string, injected: Maybe<string>)
 
 export const inventoryCases = Effect.fn("inventoryCases")(function*(input: InventoryInput) {
   const collected = yield* collectInventory(input);
-  const inventoryId = yield* Effect.try({ try: () => saveInventory(collected), catch: (cause) => cause });
+  const implementationDigest = yield* managedInventoryImplementationDigest(REPOSITORY_ROOT);
+  const inventoryId = yield* Effect.try({ try: () => saveInventory(collected, implementationDigest), catch: (cause) => cause });
   const reconciliation = reconcileInventory(collected);
   return {
     inventory: inventoryId,
@@ -544,12 +509,13 @@ export const inventoryCases = Effect.fn("inventoryCases")(function*(input: Inven
 });
 
 export const listCases = Effect.fn("listCases")(function*(input: ListCasesInput) {
+  const inventory = yield* inventoryForId(input.inventory);
   return yield* Effect.try({
     try: () => {
-      const all = records(input.history, inventoryForId(input.inventory));
+      const all = records(input.history, inventory);
       const pattern = optional(input.pattern);
       return {
-        format: "niceeval.e2e-case-list/v1",
+        format: "concord.case-list/v1",
         cases: pattern === undefined ? all : all.filter((item) => JSON.stringify(item).includes(pattern)),
       };
     },
@@ -558,11 +524,12 @@ export const listCases = Effect.fn("listCases")(function*(input: ListCasesInput)
 });
 
 export const showCase = Effect.fn("showCase")(function*(input: ShowCaseInput) {
+  const inventory = yield* inventoryForId(input.inventory);
   return yield* Effect.try({
     try: () => {
       const parsed = selector(input.selector);
       const canonical = `${parsed.path}#${parsed.caseId}`;
-      return records(input.history, inventoryForId(input.inventory)).find((entry) => entry.selector === canonical)
+      return records(input.history, inventory).find((entry) => entry.selector === canonical)
         ?? fail("CaseNotCurrent", input.selector);
     },
     catch: (cause) => cause,
@@ -571,7 +538,7 @@ export const showCase = Effect.fn("showCase")(function*(input: ShowCaseInput) {
 
 export const auditCases = Effect.fn("auditCases")(function*(input: AuditCasesInput) {
   const inventory = yield* Effect.scoped(collectWorkspaceCaseInventory(input.checkout)).pipe(
-    Effect.mapError((cause) => new CaseCliError("WorkspaceInventoryIncomplete", detail(cause))),
+    Effect.mapError((cause) => caseFailure("WorkspaceInventoryIncomplete", cause)),
   );
   const snapshot = yield* compileTrace(REPOSITORY_ROOT);
   const current = records(false);
@@ -579,7 +546,7 @@ export const auditCases = Effect.fn("auditCases")(function*(input: AuditCasesInp
   const collected = new Map(inventory.cases.map((item) => [`${item.path}#${item.caseId}`, item]));
   const coveredUseCases = new Set(snapshot.tests.flatMap((test) => test.contract === undefined ? [] : [test.contract]));
   return {
-    format: "niceeval.e2e-case-audit/v1",
+    format: "concord.case-audit/v1",
     inventory,
     uncoveredUseCases: snapshot.nodes
       .filter((node) => node.kind === "use-case" && !coveredUseCases.has(node.path))
@@ -623,5 +590,5 @@ export const retireCaseIssue = Effect.fn("retireCaseIssue")(function*(input: Ret
   const parsed = selector(input.selector);
   return yield* planOne({ _tag: "RetireIssue", selector: parsed, url: input.url, reason: input.reason }, undefined, "test-issue-retire", input.dryRun);
 });
-export function renderCaseCommandError(error: unknown): string { return `${error instanceof CaseCliError ? `${error.code}: ${error.message}` : error instanceof Error ? error.message : String(error)}\n`; }
+export function renderCaseCommandError(error: unknown): string { return `${(error instanceof CaseCliError || error instanceof ConcordError) ? `${error.code}: ${error.message}` : detail(error)}\n`; }
 export function renderCaseReceipt(value: unknown): string { if (typeof value === "object" && value !== null && "cases" in value && Array.isArray(value.cases)) return `${value.cases.map((item) => typeof item === "object" && item !== null && "selector" in item ? String(item.selector) : JSON.stringify(item)).join("\n")}\n`; return `${JSON.stringify(value, null, 2)}\n`; }

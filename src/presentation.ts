@@ -1,4 +1,4 @@
-// @concord-file human-command-output
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/README.md
 import { Predicate } from 'effect';
 

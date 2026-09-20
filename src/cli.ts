@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// @concord-file public-command-interface
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/README.md
 // @concord-implements docs/feature/project-onboarding/README.md
 import { readFileSync } from 'node:fs';
@@ -20,7 +20,7 @@ import { ConcordError, MemorySourceSchema, ProjectSchema, RunnerSchema, decode, 
 import { listTemplates, templateBody } from './templates.js';
 import { humanOutput } from './presentation.js';
 import { annotationSnippet, doctor } from './onboarding.js';
-import { codeSnippet, listCode, locateCode, showCode } from './code-commands.js';
+import { codeSnippet, listCode, locateCode } from './code-commands.js';
 import { applyViewDryRun, executeViewAction, getWorkspaceSnapshot } from './application.js';
 import { getGitDiff, getGitStatus } from './git-view.js';
 import { serveViewServer } from './view-server.js';
@@ -238,11 +238,10 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
   }))),
   Command.make('evidence', { id }, args => withRepo(repo => sync(()=>readEvidence(repo,args.id)))),
 ]));
-const code = Command.make('code').pipe(Command.withDescription('Associate files, functions and statement regions with Feature or Use Case contracts. No coverage or completion claim.'), Command.withSubcommands([
+const code = Command.make('code').pipe(Command.withDescription('Associate files, functions and statement regions with Feature, Use Case or Engineering contracts. No coverage or completion claim.'), Command.withSubcommands([
   Command.make('list', {}, () => withRepo(repo => sync(() => listCode(repo)))).pipe(Command.withDescription('List current declarations from configured sourceRoots.')),
-  Command.make('show', { id }, args => withRepo(repo => sync(() => showCode(repo, args.id)))).pipe(Command.withDescription('Inspect one stable code ID, its current range and contract targets.')),
   Command.make('locate', { file: Argument.string('path'), line: Flag.integer('line').pipe(Flag.withDescription('1-based source line; returns every containing scope.')) }, args => withRepo(repo => sync(() => locateCode(repo, args.file, args.line)))).pipe(Command.withDescription('Find all explicit declarations containing a repository-relative source line.')),
-  Command.make('annotate', { id, scope: Flag.choice('scope', ['file', 'node', 'region']), contract: many('contract') }, args => withRepo(repo => sync(() => codeSnippet(repo, args.id, args.scope, args.contract)))).pipe(Command.withDescription('Print validated source comments; repeat --contract for multiple targets. Does not edit source.')),
+  Command.make('annotate', { scope: Flag.choice('scope', ['file', 'node', 'region']), contract: many('contract') }, args => withRepo(repo => sync(() => codeSnippet(repo, args.scope, args.contract)))).pipe(Command.withDescription('Print validated source comments; repeat --contract for multiple targets. Does not edit source.')),
 ]));
 const cache = Command.make('cache').pipe(Command.withDescription('Inspect or rebuild disposable SQLite projections.'),Command.withSubcommands([
   Command.make('status',{},()=>withRepo(repo=>sync(()=>cacheStatus(repo)))),
@@ -294,7 +293,7 @@ const view = Command.make('view', {
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view does not accept --dry-run'));
   return yield* serveViewServer({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) }, settings.json));
 })).pipe(Command.withDescription('Serve the local Web workbench.'));
-root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Run this worktree repository profile with its original contracts and formal evidence.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:'0.4.0'}),Effect.catch(cause=>Effect.sync(()=>{
+root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:'0.5.0'}),Effect.catch(cause=>Effect.sync(()=>{
   const error=failure(cause);
   const result = {ok:false,error:error.code,message:error.message,...(error.details===undefined?{}:{details:error.details})};
   process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;

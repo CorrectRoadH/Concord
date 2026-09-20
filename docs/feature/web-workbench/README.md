@@ -6,9 +6,11 @@ createdAt: 2026-09-14T00:00:00.000Z
 kind: feature
 constitutionRefs:
   - docs/constitution.md#c-001
+  - docs/constitution.md#c-003
   - docs/constitution.md#c-004
   - docs/constitution.md#c-005
   - docs/constitution.md#c-006
+  - docs/constitution.md#c-007
 ---
 
 # 面向人的项目工作台
@@ -16,6 +18,8 @@ constitutionRefs:
 `concord view` 在当前 Git 工作区提供 Web 工作台。Web 为维护者提供导航、表单、富文本编辑与结果检查；CLI 为 AI 提供严格输入、明确命令和 JSON 输出。两者使用同一套领域校验。
 
 主侧栏只显示 Feature、Roadmap、Design、Research、Engineering 等分类入口。独立的第二侧栏始终显示当前分类的完整条目列表及筛选输入；点击条目只切换右侧预览，列表不会消失。分类入口默认预览第一项，空集合提供创建入口，不重复展示卡片网格。支持页面与 Use Case 在右侧预览内访问，移动端通过单独的内容导航抽屉访问条目列表。点击 Use Case 时保留 Feature 背景，并从右侧打开详情抽屉；深链接和刷新仍打开该抽屉，关闭或返回时先完成待保存内容，只有自动保存失败时才要求处理草稿。Use Case 是 Feature 内的契约，必须在所属 Feature 内创建和浏览，没有独立顶级入口。实现和测试在 Feature / Use Case 详情中展示对应源码位置、声明和运行任务，Feature 汇总自身、支持页面与所属 Use Case 的关联。运行证据、Memory、反馈、Git 与设置保留对应工作入口。
+
+Engineering 详情同样提供实现列表、添加关联与源码跳转，汇总主文档和支持页面的实现关联；不因此开放测试契约或测试 tab。实现条目直接展示关联契约，不再折叠详情或显示内部查询引用；添加关联无需输入声明 ID。可用宽度充足时将符号、范围及源码位置与关联信息分列，窄内容区使用单列。
 
 Git 页默认显示 Docs 变更 tab，第二个 tab 显示测试用例相关文件变更。测试文件由配置的 testRoots 和当前测试声明所在文件识别，同时考虑重命名前路径。桌面采用常驻双栏：左侧按目录组织可折叠文件树，每个文件只出现一次并显示变更状态；右侧直接呈现选中文件的 Git diff，默认选择树中第一个文件。暂存、未暂存与未跟踪区域及统一/分栏布局在右侧顶部切换。
 
@@ -33,7 +37,7 @@ Git 页默认显示 Docs 变更 tab，第二个 tab 显示测试用例相关文�
 
 ## 范围
 
-覆盖 Concord 通用模式的正常数据操作。Memory 历史、证据与身份字段通过受管操作维护；损坏且无法认证的配置或 frontmatter 只读诊断，需本机修复。NiceEval repository profile 仍由宿主 CLI 执行。
+覆盖 Concord 通用模式的正常数据操作。Memory 历史、证据与身份字段通过受管操作维护；损坏且无法认证的配置或 frontmatter 只读诊断，需本机修复。高级原生执行由项目明确接入，静态测试投影不要求执行器或通道字段。
 
 
 ## Web 组件组合

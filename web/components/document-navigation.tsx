@@ -4,6 +4,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../workspace';
 import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar';
 import { useSidebar } from './ui/sidebar';
+import { CreateDocument } from '../pages/documents';
 
 type NavigationKind = 'feature' | 'engineering' | 'roadmap' | 'design' | 'research';
 const sections: readonly { href: string; kind: NavigationKind; label: string }[] = [
@@ -37,6 +38,6 @@ export function DocumentNavigation() {
       title: document.metadata.title, active: selected?.path === document.path, icon: <FileText size={16} />,
     })),
   }];
-  return <ContentSidebar key={section.kind} model={{ label: section.label, title: section.label,
+  return <ContentSidebar key={section.kind} actions={<CreateDocument kind={section.kind} />} model={{ label: section.label, title: section.label,
     filter: { label: `筛选 ${section.label}`, placeholder: '按标题或 ID 筛选…' }, groups }} />;
 }

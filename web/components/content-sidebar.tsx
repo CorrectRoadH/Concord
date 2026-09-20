@@ -29,7 +29,7 @@ export interface ContentSidebarModel {
 }
 
 /** Pages own the navigation model; this component owns layout and mobile presentation. */
-export function ContentSidebar({ model }: { model: ContentSidebarModel }) {
+export function ContentSidebar({ model, actions }: { model: ContentSidebarModel; actions?: ReactNode }) {
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -37,6 +37,7 @@ export function ContentSidebar({ model }: { model: ContentSidebarModel }) {
     <div className="document-navigation__header">
       {model.back && <Link className="document-navigation__back" to={model.back.href} onClick={() => setOpen(false)}><ArrowLeft size={16} />{model.back.title}</Link>}
       <strong>{model.title}</strong>
+      {!isMobile && actions}
     </div>
     {model.filter && <Input className="mb-3" aria-label={model.filter.label} placeholder={model.filter.placeholder} value={query} onChange={event => setQuery(event.target.value)} />}
     {model.groups.map((group, index) => {
@@ -52,5 +53,5 @@ export function ContentSidebar({ model }: { model: ContentSidebarModel }) {
   return isMobile ? <div className="document-navigation-mobile"><Sheet open={open} onOpenChange={setOpen}>
     <SheetTrigger asChild><Button variant="outline"><List />内容导航</Button></SheetTrigger>
     <SheetContent side="left" className="document-navigation-sheet" aria-describedby={undefined}><SheetHeader><SheetTitle>{model.label} 导航</SheetTitle></SheetHeader>{content}</SheetContent>
-  </Sheet></div> : <aside className="document-navigation" aria-label={`${model.label} 侧栏`}>{content}</aside>;
+  </Sheet>{actions}</div> : <aside className="document-navigation" aria-label={`${model.label} 侧栏`}>{content}</aside>;
 }

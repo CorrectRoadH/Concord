@@ -244,7 +244,7 @@ function makePlan(
 
 function receipt(plan: UseCasePlan, committed: boolean): UseCaseCreateReceipt {
   return {
-    format: "niceeval.docs-use-case/create-v1",
+    format: "concord.docs-use-case/create-v1",
     operation: "use-case-create",
     dryRun: plan.input.dryRun,
     parent: { ref: plan.parent.path, title: plan.parent.title },

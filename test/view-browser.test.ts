@@ -23,6 +23,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
       createDocument(repo, 'feature', { id: 'web', title: 'Direct access fixture' });
       createDocument(repo, 'use-case', { id: 'floating-path', title: 'Floating user path', feature: 'web' });
       createDocument(repo, 'engineering', { id: 'floating-tooling', title: 'Floating tooling' });
+      createDocument(repo, 'roadmap', { id: 'planned', title: 'Planned direction' });
       createDocument(repo, 'feature', {
         id: 'html',
         title: 'Raw HTML fixture',
@@ -98,13 +99,50 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await page.getByRole('tab', { name: '术语', exact: true }).click();
     await expect(page.getByText('直接访问', { exact: true })).toBeVisible();
     await expect(page.getByText('Direct access', { exact: true })).toBeVisible();
+    assert.equal(new URL(page.url()).searchParams.get('tab'), 'terminology');
+    await page.getByRole('tab', { name: '实现', exact: true }).click();
+    await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active');
+    await page.goBack();
+    await expect(page.getByRole('tab', { name: '术语', exact: true })).toHaveAttribute('data-state', 'active');
+    await page.goForward();
+    await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active');
+    await page.reload();
+    await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active');
     await expect(page.getByRole('tab', { name: '关系', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: '生命周期', exact: true })).toHaveCount(0);
+    await expect(page.getByTestId('document-header').getByRole('button', { name: '新建 Feature', exact: true })).toHaveCount(0);
+    await expect(contentNavigation.getByRole('button', { name: '新建 Feature', exact: true })).toBeVisible();
+    await page.goto(`${url}?tab=actions`);
+    await expect(page.getByRole('tab', { name: '元数据', exact: true })).toHaveAttribute('data-state', 'active');
+    await expect(page.getByText('创建于', { exact: true })).toBeVisible();
+    await page.getByLabel('文档标题', { exact: true }).fill('Direct access renamed');
+    await page.getByRole('tab', { name: 'Use Cases', exact: true }).click();
+    await expect(contentNavigation.getByRole('link', { name: 'Direct access renamed', exact: true })).toBeVisible();
     await page.getByRole('tab', { name: '正文', exact: true }).click();
     await expect(page.locator('.editor-shell > .editor-shell__bar')).toHaveCount(0);
     await contentNavigation.getByRole('link', { name: 'Raw HTML fixture', exact: true }).click();
     await expect(page.getByText('已切换为原文编辑', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Markdown 原文', { exact: true })).toContainText('<details>');
+    await page.goto(`http://127.0.0.1:${server.port}/roadmap/planned?tab=actions`);
+    await expect(page.getByRole('tab', { name: '生命周期', exact: true })).toHaveAttribute('data-state', 'active');
+    await page.getByLabel('采用为 Feature ID', { exact: true }).fill('adopted-direction');
+    await page.getByRole('button', { name: '采用 Roadmap', exact: true }).click();
+    await expect(page.getByText('adopted', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '可用操作', exact: true })).toHaveCount(0);
     await expect(page.getByText('Unexpected Application Error!', { exact: true })).toHaveCount(0);
+    const configurationPath = join(root, 'concord.config.ts');
+    const originalConfiguration = readFileSync(configurationPath, 'utf8');
+    const invalidConfiguration = 'export default { broken: ; }';
+    writeFileSync(configurationPath, invalidConfiguration);
+    await page.goto(`http://127.0.0.1:${server.port}/settings`);
+    await expect(page.getByRole('heading', { name: '项目配置无法读取', exact: true })).toBeVisible();
+    await expect(page.getByLabel('无效配置原文', { exact: true })).toHaveValue(invalidConfiguration);
+    await expect(page.getByLabel('无效配置原文', { exact: true })).not.toBeEditable();
+    await expect(page.getByRole('button', { name: '初始化', exact: true })).toHaveCount(0);
+    assert.equal(readFileSync(configurationPath, 'utf8'), invalidConfiguration);
+    writeFileSync(configurationPath, originalConfiguration);
+    await page.getByRole('button', { name: '重新载入', exact: true }).click();
+    await expect(page.getByLabel('Project ID', { exact: true })).toBeVisible();
     assert.ok(authorizations.length > 0);
     assert.ok(authorizations.every(value => value === undefined));
     assert.deepEqual(errors, []);
@@ -129,12 +167,13 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
       const engineeringPath=join(root,'docs/engineering/build/README.md');
       writeFileSync(engineeringPath,`${readFileSync(engineeringPath,'utf8')}\n\`\`\`mermaid\nflowchart LR\n  Source --> Result\n\`\`\`\n`);
       addPage(repo,'engineering','build','architecture');
+      writeFileSync(join(root,'docs/engineering/build/architecture.md'),'# Architecture\n\n## Source\n');
       createDocument(repo,'roadmap',{id:'future',title:'Future direction',pages:['architecture']});
       createDocument(repo,'design',{id:'options',title:'Design options',alternatives:['first','second'],pages:['architecture']});
       createDocument(repo,'research',{id:'study',title:'Research study',observedAt:'2026-09-14',sources:['Local observations']});
     } finally {repo.close();}
     mkdirSync(join(root,'src'));
-    writeFileSync(join(root,'src/demo.ts'),'export const demo = 1;\n');
+    writeFileSync(join(root,'src/demo.ts'),'// @concord-code\n// @concord-implements docs/engineering/build/architecture.md#source\nexport function demo() { return 1; }\n');
     server=await startViewServer({root,host:'127.0.0.1',port:0});
     const executablePath=process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium')?'/run/current-system/sw/bin/chromium':undefined);
     browser=await chromium.launch({headless:true,...(executablePath?{executablePath}:{}),args:['--no-sandbox']});
@@ -165,6 +204,30 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
         const initialDiagram=await diagram.evaluate(element=>element.outerHTML);
         await page.locator('.theme-toggle').click();
         await expect.poll(()=>diagram.evaluate(element=>element.outerHTML)).not.toBe(initialDiagram);
+        await page.getByRole('tab',{name:'实现',exact:true}).click();
+        await expect(page.getByRole('tab',{name:'实现',exact:true})).toHaveAttribute('data-state','active');
+        await expect(page.getByRole('tab',{name:'测试',exact:true})).toHaveCount(0);
+        await expect(page.getByText('docs/engineering/build/architecture.md#source',{exact:true})).toBeVisible();
+        const implementationRecord=page.locator('.implementation-record').first();
+        const columns=await implementationRecord.evaluate(element=>Array.from(element.children).map(child=>child.getBoundingClientRect()));
+        assert.ok(columns[1]!.left > columns[0]!.right,'desktop implementation details should occupy the right column');
+        assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth <= window.innerWidth),'desktop implementation must not overflow');
+        await page.getByRole('button',{name:/src\/demo\.ts/}).click();
+        await expect(page.getByRole('dialog')).toContainText('export function demo()');
+        await page.getByRole('button',{name:'Close',exact:true}).click();
+        await page.setViewportSize({width:900,height:1000});
+        const narrowBounds=await implementationRecord.evaluate(element=>Array.from(element.children).map(child=>({top:child.getBoundingClientRect().top,bottom:child.getBoundingClientRect().bottom})));
+        assert.ok(narrowBounds[1]!.top > narrowBounds[0]!.bottom,'narrow content should stack implementation details');
+        assert.ok(await implementationRecord.evaluate(element=>element.scrollWidth <= element.clientWidth),'narrow content implementation must not overflow horizontally');
+        await page.setViewportSize({width:480,height:1000});
+        assert.ok(await implementationRecord.evaluate(element=>element.scrollWidth <= element.clientWidth),'mobile implementation must not overflow horizontally');
+        await page.setViewportSize({width:1440,height:1000});
+        await page.getByRole('button',{name:'添加关联',exact:true}).click();
+        await expect(page.getByLabel('代码声明 ID',{exact:true})).toHaveCount(0);
+        await page.getByLabel('实现契约引用',{exact:true}).fill('docs/engineering/build/architecture.md#source');
+        await page.getByRole('button',{name:'生成',exact:true}).click();
+        await expect(page.getByText(/@concord-implements docs\/engineering\/build\/architecture\.md#source/).first()).toBeVisible();
+        await page.getByRole('tab',{name:'正文',exact:true}).click();
       }
       if (category !== 'Research') {
         const supportingPage=page.getByTestId('document-file-tree').getByRole('button',{name:category === 'Design' ? 'plans/first/architecture.md' : 'architecture.md',exact:true});
@@ -205,6 +268,13 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     const original=readFileSync(path,'utf8');
     await expect(page.getByRole('button',{name:'保存',exact:true})).toHaveCount(0);
     assert.equal(readFileSync(path,'utf8'),original,'loading must not normalize the file');
+    let busySaveResponses = 0;
+    await page.route('**/api/action', async route => {
+      const action = route.request().postDataJSON() as { action?: string };
+      if (action.action === 'document.set' && busySaveResponses++ === 0) {
+        await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'RepositoryBusy', message: 'shared Trace lease is busy' }) });
+      } else await route.continue();
+    });
     await editor.fill('Browser edited paragraph.');
     await page.getByRole('tab',{name:'术语',exact:true}).click();
     await expect(page.getByRole('tab',{name:'术语',exact:true})).toHaveAttribute('data-state', 'active');
@@ -212,6 +282,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.getByRole('tab',{name:'正文',exact:true}).click();
     await expect(editor).toContainText('Browser edited paragraph.');
     await expect.poll(()=>readFileSync(path,'utf8')).toContain('Browser edited paragraph.');
+    assert.ok(busySaveResponses >= 2, 'a transient lease conflict retries the save');
+    await page.unroute('**/api/action');
     await page.getByRole('tab',{name:'元数据',exact:true}).click();
     await page.getByLabel('文档标题',{exact:true}).fill('Browser authoring renamed');
     await expect(featureList.getByRole('link',{name:'Browser authoring renamed',exact:true})).toBeVisible();
@@ -245,6 +317,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByRole('dialog')).toContainText('Unsaved browser draft.');
     assert.equal(readFileSync(path,'utf8'),disk,'conflict must preserve the external edit');
     await page.getByRole('button',{name:'丢弃草稿并载入',exact:true}).click();
+    await expect(page.getByRole('button',{name:'新建 Use Case',exact:true})).toHaveCount(0);
+    await page.getByRole('tab',{name:'Use Cases',exact:true}).click();
     await page.getByRole('button',{name:'新建 Use Case',exact:true}).click();
     await page.getByLabel('Use Case ID',{exact:true}).fill('browser-flow');
     await page.getByLabel('Use Case 标题',{exact:true}).fill('Nested browser flow');
@@ -256,12 +330,15 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     const contentBounds=await navigation.boundingBox();
     assert.ok(primaryBounds && contentBounds && contentBounds.x >= primaryBounds.x + primaryBounds.width, 'content navigation occupies its own column');
     assert.match(readFileSync(join(root,'docs/feature/browser-feature/use-case/browser-flow.md'),'utf8'),/feature: docs\/feature\/browser-feature\/README\.md/);
+    await page.getByRole('tab',{name:'正文',exact:true}).click();
     await editor.fill('External editor wins. Flushed from Feature.');
-    await editor.evaluate(element => element.setAttribute('data-feature-editor-instance', 'preserved'));
+    await page.getByRole('tab',{name:'Use Cases',exact:true}).click();
+    await expect(page.getByRole('tab',{name:'Use Cases',exact:true})).toHaveAttribute('data-state','active');
+    assert.ok(readFileSync(path,'utf8').includes('Flushed from Feature.'));
     await nestedCase.click();
     const drawer=page.getByRole('dialog',{name:'Nested browser flow',exact:true});
     await expect(drawer).toBeVisible();
-    await expect(page.locator('.page [inert]')).toContainText('External editor wins. Flushed from Feature.');
+    await expect(page.locator('.page [inert]')).toContainText('Use Cases');
     await expect(drawer.getByRole('heading',{name:'Nested browser flow',exact:true}).first()).toBeVisible();
     await expect.poll(async () => {
       const bounds=await drawer.boundingBox();
@@ -269,8 +346,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     }).toBe(1440);
     await page.goBack();
     await expect(drawer).toHaveCount(0);
-    await expect(editor).toContainText('External editor wins.');
-    await expect(editor).toHaveAttribute('data-feature-editor-instance', 'preserved');
+    await expect(page.getByRole('tab',{name:'Use Cases',exact:true})).toHaveAttribute('data-state','active');
+    assert.equal(new URL(page.url()).searchParams.get('tab'),'use-cases');
     await page.locator('.feature-use-cases').getByRole('link').filter({hasText:'Nested browser flow'}).click();
     const drawerEditor=drawer.locator('[contenteditable="true"]').first();
     await expect(drawerEditor).toBeVisible();
@@ -286,9 +363,12 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(drawer.locator('[contenteditable="true"]').first()).toBeVisible();
     await page.getByRole('button',{name:'Close',exact:true}).click();
     await expect(drawer).toHaveCount(0);
+    await expect(page.getByRole('tab',{name:'Use Cases',exact:true})).toHaveAttribute('data-state','active');
+    await page.getByRole('tab',{name:'正文',exact:true}).click();
     await expect(editor).toContainText('External editor wins.');
     const documentTree=page.getByTestId('document-file-tree');
     await documentTree.getByRole('button',{name:'architecture.md',exact:true}).click();
+    await expect(editor).toContainText('Entity Ownership');
     await editor.fill('Architecture from browser.');
     const documentPane=page.locator('.document-workspace > .page');
     await documentPane.evaluate(element=>{element.scrollTop=500;});
@@ -303,6 +383,12 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     assert.equal(await page.getByRole('tablist',{name:'文档详情'}).evaluate(element=>getComputedStyle(element).scrollbarWidth),'none');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await expect.poll(()=>readFileSync(join(root,'docs/feature/browser-feature/architecture.md'),'utf8')).toContain('Architecture from browser.');
+    await expect(page).toHaveURL(/file=docs%2Ffeature%2Fbrowser-feature%2Flibrary.md/);
+    await page.goBack();
+    await expect(editor).toContainText('Architecture from browser.');
+    assert.equal(new URL(page.url()).searchParams.get('file'), 'docs/feature/browser-feature/architecture.md');
+    await page.goForward();
+    await expect(page).toHaveURL(/file=docs%2Ffeature%2Fbrowser-feature%2Flibrary.md/);
     await page.getByRole('link',{name:'Git 变更',exact:true}).click();
     await expect(page.getByRole('heading',{name:'工作树变更',exact:true})).toBeVisible();
     const gitTree = page.getByRole('navigation',{name:'Git 文件树',exact:true});
@@ -339,16 +425,19 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByLabel('运行超时',{exact:true})).toHaveValue('12345');
     assert.equal(readFileSync(configPath,'utf8'),externalConfig,'polled digests must not let stale config overwrite disk');
     await page.getByRole('tab',{name:'高级 JSON',exact:true}).click();
+    await expect(page.getByRole('dialog',{name:'离开并丢弃未保存内容？'})).toBeVisible();
+    await page.getByRole('button',{name:'丢弃并离开',exact:true}).click();
     await page.getByLabel('高级项目配置 JSON',{exact:true}).fill('{}');
     await page.getByRole('tab',{name:'常用设置',exact:true}).click();
     await expect(page.getByLabel('高级项目配置 JSON',{exact:true})).toHaveValue('{}');
     await expect(page.locator('.form-error').first()).toBeVisible();
+    await page.getByRole('button',{name:'留在此页',exact:true}).click();
     await sidebar.getByRole('link',{name:'Feature',exact:true}).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.getByRole('button',{name:'丢弃并离开',exact:true}).click();
     await expect(navigation).toBeVisible();
     await navigation.getByRole('link',{name:'Browser authoring',exact:true}).click();
-    writeFileSync(join(root,'src/demo.ts'),'// @concord-file browser-demo\n// @concord-implements docs/feature/browser-feature/README.md\nexport const demo = 1;\n');
+    writeFileSync(join(root,'src/demo.ts'),'// @concord-file\n// @concord-implements docs/feature/browser-feature/README.md\nexport const demo = 1;\n');
     mkdirSync(join(root,'test'),{recursive:true});
     writeFileSync(join(root,'test/demo.test.ts'),"import test from 'node:test';\n// @use-case docs/feature/browser-feature/use-case/browser-flow.md\ntest('Added browser test', () => {});\n" + Array.from({length:100},(_,index)=>`// Reading fixture ${index}\n`).join(''));
     await page.reload();
@@ -385,6 +474,14 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect.poll(() => diffScroll.evaluate(element => element.scrollTop)).toBe(250);
     await page.getByRole('tab',{name:/Docs 变更/}).click();
     await expect(gitTree.getByRole('button',{name:'docs/feature/browser-feature/README.md',exact:true})).toHaveAttribute('aria-current','page');
+    await page.getByRole('tab',{name:'分栏',exact:true}).click();
+    await expect(page).toHaveURL(/view=split/);
+    await page.getByRole('tab',{name:'统一',exact:true}).click();
+    await expect(page).toHaveURL(/view=unified/);
+    await page.goBack();
+    await expect(page.getByRole('tab',{name:'分栏',exact:true})).toHaveAttribute('data-state','active');
+    await page.reload();
+    await expect(page.getByRole('tab',{name:'分栏',exact:true})).toHaveAttribute('data-state','active');
     await page.getByRole('tab',{name:/测试用例变更/}).click();
     await page.reload();
     await expect(page.locator('[data-git-diff]')).toContainText('Added browser test');
@@ -404,9 +501,14 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.locator('[data-mobile="true"]')).toHaveCount(0);
     await page.getByRole('button',{name:'内容导航',exact:true}).click();
     await navigation.getByRole('link',{name:'Browser authoring',exact:true}).click();
+    await page.getByRole('tab',{name:'Use Cases',exact:true}).click();
     await nestedCase.click();
     await expect(page.getByRole('heading',{name:'Nested browser flow',exact:true}).first()).toBeVisible();
     await expect(page.locator('[data-mobile="true"]')).toHaveCount(0);
+    await page.getByRole('button',{name:'Close',exact:true}).click();
+    await page.getByRole('button',{name:'新建 Feature',exact:true}).click();
+    await expect(page.getByLabel('Feature ID',{exact:true})).toBeVisible();
+    await page.getByRole('button',{name:'取消',exact:true}).click();
     assert.deepEqual(errors,[]);
   } finally {await browser?.close();await server?.close();rmSync(root,{recursive:true,force:true});}
 });

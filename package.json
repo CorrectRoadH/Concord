@@ -1,6 +1,6 @@
 {
   "name": "concord-sdlc",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Contract, test evidence, and engineering memory for a repository's development lifecycle.",
   "type": "module",
   "private": true,
@@ -73,12 +73,25 @@
     "tailwindcss": "4.3.3",
     "tw-animate-css": "1.4.0",
     "unplugin": "2.3.11",
-    "vite": "8.3.0"
+    "vite": "8.3.0",
+    "vitest": "4.1.11"
   },
   "overrides": {
     "@effect/platform-node-shared": "4.0.0-rc.112"
   },
   "exports": {
+    "./governance-config": {
+      "types": "./dist/governance-config.d.ts",
+      "default": "./dist/governance-config.js"
+    },
+    "./evidence-policy": {
+      "types": "./dist/evidence-policy.d.ts",
+      "default": "./dist/evidence-policy.js"
+    },
+    "./memory-state": {
+      "types": "./dist/memory-state.d.ts",
+      "default": "./dist/memory-state.js"
+    },
     "./coordination": {
       "types": "./dist/coordination.d.ts",
       "default": "./dist/coordination.js"

@@ -1,4 +1,4 @@
-// @concord-file web-workbench-test-jobs
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { randomUUID } from 'node:crypto';
 import { Cause, Effect, Exit, Option } from 'effect';

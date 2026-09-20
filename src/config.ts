@@ -1,4 +1,4 @@
-// @concord-file static-project-configuration
+// @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 import ts from 'typescript';
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type ProjectConfig } from './shared.js';

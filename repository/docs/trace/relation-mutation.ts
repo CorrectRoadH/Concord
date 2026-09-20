@@ -30,7 +30,7 @@ import {
   type TraceLease,
 } from "concord-sdlc/coordination";
 
-import { TraceRecoveryConflict, TraceRecoveryRequired } from "./errors.js";
+import { TraceJournalMigrationRequired, TraceRecoveryConflict, TraceRecoveryRequired } from "./errors.js";
 import type { RepoRef, ValidatedRepoRefTarget } from "./ref.js";
 
 const GENERATION_FILE = "generation";
@@ -42,6 +42,7 @@ export class TraceMutationError extends Data.TaggedError("TraceMutationError")<{
   readonly operation: string;
   readonly phase:
     | "git-private"
+    | "migration"
     | "read"
     | "lock"
     | "preimage"
@@ -55,7 +56,7 @@ export class TraceMutationError extends Data.TaggedError("TraceMutationError")<{
   readonly message: string;
 }> {}
 
-export type TraceCoordinationError = TraceMutationError | TraceRecoveryRequired | TraceRecoveryConflict;
+export type TraceCoordinationError = TraceMutationError | TraceRecoveryRequired | TraceRecoveryConflict | TraceJournalMigrationRequired;
 
 export interface TraceMutationPreimage {
   readonly path: string;
@@ -77,7 +78,7 @@ export interface TraceMutationPlanned<A, Changes> {
 }
 
 export interface TraceMutationReceipt<A, Changes> {
-  readonly format: "niceeval.docs-trace/relation-mutation/v1";
+  readonly format: "concord.docs-trace/relation-mutation/v1";
   readonly operation: string;
   readonly dryRun: boolean;
   readonly owner: string;
@@ -127,7 +128,7 @@ export interface TraceMutationOptions<A, Changes, E, R> {
 }
 
 export interface TraceRecoveryReceipt {
-  readonly format: "niceeval.docs-trace/recovery/v1";
+  readonly format: "concord.docs-trace/recovery/v1";
   readonly operation: "trace-recover";
   readonly recovered: boolean;
   readonly action: "none" | "discarded-unpublished" | "rolled-back" | "completed" | "finished-discard";
@@ -167,7 +168,7 @@ const ManifestEntrySchema = Schema.Union([
   }),
 ]);
 const JournalCommon = {
-  format: Schema.Literal("niceeval.docs-trace/publication-journal/v1"),
+  format: Schema.Literal("concord.trace/publication-journal/v1"),
   token: Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/u)),
   operation: NonEmptyTrimmedString,
   owner: NonEmptyTrimmedString,
@@ -287,7 +288,7 @@ function durableReplace(path: string, bytes: string | Uint8Array, mode: number):
 }
 
 function acquireLease(root: string, mode: TraceLease["mode"], operation: string, create: boolean): Effect.Effect<TraceLease | undefined, TraceMutationError> {
-  return acquireTraceLease(root, mode, operation, create).pipe(Effect.mapError((cause) => mutationFailure(operation, cause.phase === "git-private" ? "git-private" : cause.phase === "cleanup" ? "cleanup" : "lock", cause, cause.path)));
+  return acquireTraceLease(root, mode, operation, create).pipe(Effect.mapError((cause) => mutationFailure(operation, cause.phase === "git-private" ? "git-private" : (cause.phase as string) === "migration" ? "migration" : cause.phase === "cleanup" ? "cleanup" : "lock", cause, cause.path)));
 }
 
 function releaseLease(lease: TraceLease, operation: string): Effect.Effect<void, TraceMutationError> {
@@ -459,6 +460,9 @@ function manifestIsSubset(current: readonly ManifestEntry[] | undefined, planned
 }
 
 function validateJournal(root: string, directory: string, input: unknown): PublicationJournal {
+  if (typeof input === "object" && input !== null && "format" in input && typeof input.format === "string" && input.format.startsWith("niceeval.docs-trace/")) {
+    throw new TraceJournalMigrationRequired({ path: journalPath(directory), format: input.format, message: "Legacy Trace journal requires explicit offline migration; ordinary recovery preserves it unchanged" });
+  }
   const decoded = Schema.decodeUnknownResult(JournalSchema, { errors: "all", onExcessProperty: "error" })(input);
   if (Result.isFailure(decoded)) throw new TraceRecoveryConflict({ path: journalPath(directory), message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue) });
   const journal = decoded.success;
@@ -502,7 +506,7 @@ function readJournal(root: string, directory: string): PublicationJournal | unde
   if (!existsSync(path)) return undefined;
   try { return validateJournal(root, directory, JSON.parse(readFileSync(path, "utf8")) as unknown); }
   catch (cause) {
-    if (cause instanceof TraceRecoveryConflict) throw cause;
+    if (cause instanceof TraceRecoveryConflict || cause instanceof TraceJournalMigrationRequired) throw cause;
     throw new TraceRecoveryConflict({ path, message: message(cause) });
   }
 }
@@ -599,19 +603,19 @@ function recoverFileJournal(root: string, directory: string, journal: FileJourna
   if (generation === journal.newGeneration) {
     if (!fileSnapshotMatches(ownerState, journal.planned) || temporaryState.kind !== "absent") throw new TraceRecoveryConflict({ path: journal.owner, message: "committed file publication no longer matches its journal" });
     removeJournal(directory);
-    return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner, generation };
   }
   if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither the journal old nor new value" });
   verifyRecoveryGit(root, journal);
   if (fileSnapshotMatches(ownerState, journal.preimage)) {
     if (temporaryState.kind !== "absent") removeExactFile(temporary, journal.planned, "recover");
     removeJournal(directory);
-    return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner, generation };
   }
   if (fileSnapshotMatches(ownerState, journal.planned) && temporaryState.kind === "absent") {
     restoreFile(root, journal);
     removeJournal(directory);
-    return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner, generation };
   }
   throw new TraceRecoveryConflict({ path: journal.owner, message: "file publication state does not match a safe recovery transition" });
 }
@@ -625,14 +629,14 @@ function recoverDirectoryJournal(root: string, directory: string, journal: Direc
     if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "discard phase requires the old generation" });
     verifyRecoveryGit(root, journal);
     discardStage(root, directory, journal);
-    return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "finished-discard", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "finished-discard", owner: journal.owner, generation };
   }
   const stageManifest = manifest(stage, "recover");
   const targetManifest = manifest(target, "recover");
   if (generation === journal.newGeneration) {
     if (stageManifest !== undefined || !sameManifest(targetManifest, journal.manifest)) throw new TraceRecoveryConflict({ path: journal.target, message: "committed directory publication no longer matches its journal" });
     removeJournal(directory);
-    return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner, generation };
   }
   if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither the journal old nor new value" });
   verifyRecoveryGit(root, journal);
@@ -640,7 +644,7 @@ function recoverDirectoryJournal(root: string, directory: string, journal: Direc
     const discarding = { ...journal, phase: "discarding-stage" as const };
     writeJournal(directory, discarding);
     discardStage(root, directory, discarding);
-    return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner, generation };
   }
   if (stageManifest === undefined && sameManifest(targetManifest, journal.manifest)) {
     if (existsSync(stage)) throw new TraceRecoveryConflict({ path: journal.stage, message: "stage appeared immediately before rollback" });
@@ -649,7 +653,7 @@ function recoverDirectoryJournal(root: string, directory: string, journal: Direc
     const discarding = { ...journal, phase: "discarding-stage" as const };
     writeJournal(directory, discarding);
     discardStage(root, directory, discarding);
-    return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner, generation };
   }
   throw new TraceRecoveryConflict({ path: journal.target, message: "directory publication state does not match a safe recovery transition" });
 }
@@ -657,7 +661,7 @@ function recoverDirectoryJournal(root: string, directory: string, journal: Direc
 function recoverUnderLease(root: string, directory: string): TraceRecoveryReceipt {
   const journal = readJournal(root, directory);
   const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
-  if (journal === undefined) return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none", generation };
+  if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none", generation };
   return journal.publication === "file-replace" ? recoverFileJournal(root, directory, journal) : recoverDirectoryJournal(root, directory, journal);
 }
 
@@ -671,7 +675,7 @@ export function recoverTrace(root: string): Effect.Effect<TraceRecoveryReceipt, 
       const single = recoverUnderLease(root, lease.directory);
       return single.recovered ? single : recoverMultiUnderLease(root, lease.directory);
     },
-    catch: (cause) => cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
+    catch: (cause) => cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired || cause instanceof TraceJournalMigrationRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
   }));
 }
 
@@ -696,7 +700,7 @@ function receiptFor<A, Changes>(input: {
   readonly changed: boolean;
 }): TraceMutationReceipt<A, Changes> {
   return {
-    format: "niceeval.docs-trace/relation-mutation/v1", operation: input.options.operation, dryRun: input.options.dryRun, owner: input.options.ownerPath,
+    format: "concord.docs-trace/relation-mutation/v1", operation: input.options.operation, dryRun: input.options.dryRun, owner: input.options.ownerPath,
     ...(input.preparation.target === undefined ? {} : { target: input.preparation.target.ref, targetKind: input.preparation.target.kind, targetOwner: input.preparation.target.owner.path }),
     snapshotDigest: input.preparation.snapshotDigest,
     generation: input.preparation.generation,
@@ -715,9 +719,9 @@ function buildFileJournal(
   source: FileSnapshot, plannedBytes: Buffer, plannedMode: number, head: string, index: string | null,
 ): FileJournal {
   const token = randomUUID();
-  const temporary = slash(relative(resolve(root), resolve(dirname(repositoryPath(root, ownerPath, operation)), `.${basename(ownerPath)}.niceeval-${token}.tmp`)));
+  const temporary = slash(relative(resolve(root), resolve(dirname(repositoryPath(root, ownerPath, operation)), `.${basename(ownerPath)}.concord-${token}.tmp`)));
   return {
-    format: "niceeval.docs-trace/publication-journal/v1", publication: "file-replace", token, operation, owner: ownerPath, temporary,
+    format: "concord.trace/publication-journal/v1", publication: "file-replace", token, operation, owner: ownerPath, temporary,
     oldGeneration: preparation.generation, newGeneration: preparation.generation + 1, snapshotDigest: preparation.snapshotDigest,
     headCommit: head, indexEntry: index, identity: worktreeIdentity(root, directory, true, operation), createdAt: new Date().toISOString(),
     process: { pid: process.pid, host: hostname() }, preimage: preimageForJournal(source),
@@ -730,7 +734,7 @@ function buildDirectoryJournal(
   preparation: TraceMutationPreparation, plannedManifest: readonly ManifestEntry[], head: string, index: string | null,
 ): DirectoryJournal {
   return {
-    format: "niceeval.docs-trace/publication-journal/v1", publication: publication.kind, phase: "prepared",
+    format: "concord.trace/publication-journal/v1", publication: publication.kind, phase: "prepared",
     token: basename(publication.stagePath).slice(".stage-".length), operation, owner: ownerPath, stage: publication.stagePath, target: publication.targetPath,
     oldGeneration: preparation.generation, newGeneration: preparation.generation + 1, snapshotDigest: preparation.snapshotDigest,
     headCommit: head, indexEntry: index, identity: worktreeIdentity(root, directory, true, operation), createdAt: new Date().toISOString(),
@@ -885,7 +889,7 @@ export interface TraceMultiFileChange {
   readonly expectedDigest?: string | null;
 }
 export interface TraceMultiFileReceipt {
-  readonly format: "niceeval.docs-trace/multi-file-mutation/v1";
+  readonly format: "concord.docs-trace/multi-file-mutation/v1";
   readonly transactionId: string;
   readonly generationBefore: number;
   readonly generationAfter: number;
@@ -914,7 +918,7 @@ interface MultiFileJournalEntry {
   readonly planned: { readonly kind: "absent" } | { readonly kind: "file"; readonly digest: string; readonly byteLength: number; readonly mode: number };
 }
 interface MultiFileJournalV2 {
-  readonly format: "niceeval.docs-trace/multi-file-publication-journal/v2";
+  readonly format: "concord.trace/multi-file-publication-journal/v1";
   readonly phase: "prepared" | "publishing" | "generation-committed" | "cleanup";
   readonly transactionId: string;
   readonly operation: string;
@@ -936,7 +940,7 @@ const MultiPlannedSchema = Schema.Union([
 ]);
 const MultiFileEntrySchema = Schema.Struct({ path: NonEmptyTrimmedString, temporary: NonEmptyTrimmedString, preimage: MultiPreimageSchema, planned: MultiPlannedSchema });
 const MultiJournalSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.docs-trace/multi-file-publication-journal/v2"),
+  format: Schema.Literal("concord.trace/multi-file-publication-journal/v1"),
   phase: Schema.Literals(["prepared", "publishing", "generation-committed", "cleanup"]),
   transactionId: Schema.String.check(Schema.isPattern(/^netxn_[0-9a-f]+$/u)), operation: NonEmptyTrimmedString,
   oldGeneration: GenerationSchema, newGeneration: GenerationSchema, headCommit: NonEmptyTrimmedString,
@@ -947,6 +951,9 @@ const MultiJournalSchema = Schema.Struct({
 function multiJournalPath(directory: string): string { return resolve(directory, MULTI_FILE_JOURNAL); }
 function validateMultiJournal(root: string, directory: string, input: unknown): MultiFileJournalV2 {
   const path = multiJournalPath(directory);
+  if (typeof input === "object" && input !== null && "format" in input && typeof input.format === "string" && input.format.startsWith("niceeval.docs-trace/")) {
+    throw new TraceJournalMigrationRequired({ path, format: input.format, message: "Legacy Trace journal requires explicit offline migration; ordinary recovery preserves it unchanged" });
+  }
   const decoded = Schema.decodeUnknownResult(MultiJournalSchema, { errors: "all", onExcessProperty: "error" })(input);
   if (Result.isFailure(decoded)) throw new TraceRecoveryConflict({ path, message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue) });
   const journal = decoded.success;
@@ -959,7 +966,7 @@ function validateMultiJournal(root: string, directory: string, input: unknown): 
   for (const file of journal.files) {
     repositoryPath(root, file.path, "multi-file-recover");
     repositoryPath(root, file.temporary, "multi-file-recover");
-    const expectedTemporary = slash(join(dirname(file.path), `.${basename(file.path)}.niceeval-${journal.transactionId}.tmp`));
+    const expectedTemporary = slash(join(dirname(file.path), `.${basename(file.path)}.concord-${journal.transactionId}.tmp`));
     if (file.temporary !== expectedTemporary || temporaries.has(file.temporary) || owners.has(file.temporary)) throw new TraceRecoveryConflict({ path, message: `temporary path is not exactly owned by ${journal.transactionId}` });
     temporaries.add(file.temporary);
     const checkMode = (mode: number): void => { if (!Number.isInteger(mode) || mode < 0 || mode > 0o7777) throw new TraceRecoveryConflict({ path, message: `invalid mode for ${file.path}` }); };
@@ -1019,7 +1026,7 @@ function restoreMultiPreimages(root: string, journal: MultiFileJournalV2): void 
 function recoverMultiUnderLease(root: string, directory: string): TraceRecoveryReceipt {
   const journal = readMultiJournal(root, directory);
   const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
-  if (journal === undefined) return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none", generation };
+  if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none", generation };
   if (!sameIdentity(worktreeIdentity(root, directory, false, "multi-file-recover"), journal.identity)) throw new TraceRecoveryConflict({ path: multiJournalPath(directory), message: "worktree identity changed" });
   if (generation === journal.newGeneration) {
     for (const file of journal.files) {
@@ -1027,19 +1034,19 @@ function recoverMultiUnderLease(root: string, directory: string): TraceRecoveryR
       if (existsSync(repositoryPath(root, file.temporary, journal.operation))) throw new TraceRecoveryConflict({ path: file.temporary, message: "committed temporary file remains" });
     }
     removeMultiJournal(directory);
-    return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", generation };
   }
   if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither old nor new" });
   assertMultiGit(root, journal);
   restoreMultiPreimages(root, journal);
   removeMultiJournal(directory);
-  return { format: "niceeval.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", generation };
+  return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", generation };
 }
 
 export function recoverTraceMultiFile(root: string): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError> {
   return withLease(root, "exclusive", "trace-recover", true, (lease) => Effect.try({
     try: () => lease === undefined ? (() => { throw new Error("exclusive Trace lease was not created"); })() : recoverMultiUnderLease(root, lease.directory),
-    catch: (cause) => cause instanceof TraceRecoveryConflict || cause instanceof TraceMutationError || cause instanceof TraceRecoveryRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
+    catch: (cause) => cause instanceof TraceRecoveryConflict || cause instanceof TraceMutationError || cause instanceof TraceRecoveryRequired || cause instanceof TraceJournalMigrationRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
   }));
 }
 
@@ -1060,10 +1067,10 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
         const expected = change.expectedDigest;
         if (expected !== undefined && (source.kind === "absent" ? null : source.digest) !== expected) throw mutationFailure(options.operation, "preimage", "expected preimage digest changed", change.path);
         const bytes = change.bytes === null ? null : Buffer.from(change.bytes);
-        const temporary = slash(relative(resolve(options.root), resolve(dirname(target), `.${basename(target)}.niceeval-${token}.tmp`)));
+        const temporary = slash(relative(resolve(options.root), resolve(dirname(target), `.${basename(target)}.concord-${token}.tmp`)));
         return { path: change.path, temporary, preimage: preimageForJournal(source), planned: bytes === null ? { kind: "absent" as const } : { kind: "file" as const, digest: traceDigest(bytes), byteLength: bytes.byteLength, mode: change.mode ?? (source.kind === "file" ? source.mode : 0o644) } };
       });
-      const journal: MultiFileJournalV2 = { format: "niceeval.docs-trace/multi-file-publication-journal/v2", phase: "prepared", transactionId: token, operation: options.operation, oldGeneration: generation, newGeneration: generation + 1, headCommit: head, indexEntries: Object.fromEntries(files.map((file) => [file.path, indexEntry(options.root, file.path, options.operation)])), identity: worktreeIdentity(options.root, lease.directory, true, options.operation), files };
+      const journal: MultiFileJournalV2 = { format: "concord.trace/multi-file-publication-journal/v1", phase: "prepared", transactionId: token, operation: options.operation, oldGeneration: generation, newGeneration: generation + 1, headCommit: head, indexEntries: Object.fromEntries(files.map((file) => [file.path, indexEntry(options.root, file.path, options.operation)])), identity: worktreeIdentity(options.root, lease.directory, true, options.operation), files };
       writeMultiJournal(options.root, lease.directory, journal);
       files.forEach((file, index) => {
         if (file.planned.kind === "file") {
@@ -1091,9 +1098,9 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
       if (options.injectFailureAfterGeneration === true) throw mutationFailure(options.operation, "cleanup", "injected interruption");
       writeMultiJournal(options.root, lease.directory, { ...journal, phase: "cleanup" });
       removeMultiJournal(lease.directory);
-      return { format: "niceeval.docs-trace/multi-file-mutation/v1", transactionId: token, generationBefore: generation, generationAfter: generation + 1, preimages: files.map((file) => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map((file) => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
+      return { format: "concord.docs-trace/multi-file-mutation/v1", transactionId: token, generationBefore: generation, generationAfter: generation + 1, preimages: files.map((file) => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map((file) => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
     } catch (cause) {
-      return yield* Effect.fail(cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(options.operation, "publish", cause));
+      return yield* Effect.fail(cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired || cause instanceof TraceJournalMigrationRequired ? cause : mutationFailure(options.operation, "publish", cause));
     }
   }));
 }

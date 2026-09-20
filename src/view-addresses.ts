@@ -1,4 +1,4 @@
-// @concord-file workbench-access-addresses
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { isIP } from 'node:net';
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os';

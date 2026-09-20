@@ -1,4 +1,4 @@
-// @concord-file web-workbench-documents
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import {
   ArrowLeft,
@@ -16,13 +16,12 @@ import {
 import * as stylex from "@stylexjs/stylex"
 import * as React from "react"
 import { createPortal } from "react-dom"
-import { Link, Navigate, Outlet, useNavigate, useParams, useSearchParams } from "react-router-dom"
+import { Link, Navigate, Outlet, useNavigate, useParams } from "react-router-dom"
 
 import type { DocumentKind, DocumentRecord } from "../../src/shared"
 import type { ViewAction, ViewFile } from "../../src/view-contract"
 import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../src/template-pages"
 import { MarkdownEditor } from "@/components/markdown-editor"
-import { useDraftNavigation } from "@/components/draft-navigation"
 import { Definition, Empty, Field, PageHeader } from "@/components/page"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -51,8 +50,11 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { useAutoSave } from "@/hooks/use-auto-save"
+import { urlChoice, useUrlNavigation } from "@/hooks/use-url-navigation"
+import { flushSync } from "react-dom"
 import { DetailDrawer } from "@/components/detail-drawer"
 import { TerminologyPanel } from "@/components/terminology-panel"
+import { ContentSection, PanelHeader, PanelEmpty, RecordList, RecordItem } from "@/components/content-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { humanKind } from "@/lib/utils"
@@ -192,7 +194,7 @@ function fire(task: Promise<unknown>): void {
   void task.catch(() => undefined)
 }
 
-function CreateDocument({
+export function CreateDocument({
   kind,
   feature,
 }: {
@@ -253,7 +255,7 @@ function CreateDocument({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
+        <Button variant={kind === "use-case" ? "outline" : "default"}>
           <Plus /> 新建 {humanKind(kind)}
         </Button>
       </DialogTrigger>
@@ -389,10 +391,9 @@ export function DocumentsListPage({
   return (
     <>
       <PageHeader
-        eyebrow="契约空间"
         title={humanKind(kind)}
         description={descriptions[kind]}
-        actions={<CreateDocument kind={kind} />}
+        actions={!["feature", "engineering", "roadmap", "design", "research"].includes(kind) ? <CreateDocument kind={kind} /> : undefined}
       />
       <div className="list-toolbar">
         <Input
@@ -404,30 +405,25 @@ export function DocumentsListPage({
         <Badge variant="secondary">{documents.length} 项</Badge>
       </div>
       {documents.length === 0 ? (
-        <Empty title={`还没有 ${humanKind(kind)}`}>从右上角创建第一项。</Empty>
+        <Empty kind={filter ? "filtered" : "empty"} title={filter ? "没有匹配的文档" : `还没有 ${humanKind(kind)}`}>{filter ? "调整筛选条件后重试。" : "使用新建入口创建第一项。"}</Empty>
       ) : (
-        <div className="card-grid">
+        <RecordList>
           {documents.map((document) => (
+            <RecordItem key={document.path}>
             <Link
-              key={document.path}
               to={documentHref(document)}
-              className="card-link"
+              className="block"
             >
-              <Card>
-                <CardHeader>
                   <div className="card-title-row">
-                    <CardTitle>{document.metadata.title}</CardTitle>
+                    <strong>{document.metadata.title}</strong>
                     <Badge variant="outline">{document.metadata.id}</Badge>
                   </div>
-                  <CardDescription>{document.path}</CardDescription>
-                </CardHeader>
-                <CardContent>
+                  <p className="muted break-all">{document.path}</p>
                   <DocumentSummary document={document} />
-                </CardContent>
-              </Card>
             </Link>
+            </RecordItem>
           ))}
-        </div>
+        </RecordList>
       )}
     </>
   )
@@ -465,6 +461,7 @@ function DocumentSummary({ document }: { document: DocumentRecord }) {
 }
 
 export function FeatureDetailPage() {
+  const navigation = useUrlNavigation()
   const { id = "", useCaseId } = useParams()
   const { snapshot } = useWorkspace()
   const feature = snapshot.documents.find(
@@ -472,7 +469,7 @@ export function FeatureDetailPage() {
       document.metadata.kind === "feature" && document.metadata.id === id
   )
   if (!feature) {
-    return <Empty title="找不到 Feature">它可能已被移动或删除。</Empty>
+    return <Empty kind="missing" title="找不到 Feature">它可能已被移动或删除。</Empty>
   }
   const useCases = snapshot.documents.filter(
     (document) =>
@@ -481,33 +478,29 @@ export function FeatureDetailPage() {
   )
   const nested = (
     <section className="feature-use-cases">
-      <div className="section-heading">
-        <div>
-          <div className="eyebrow">Feature 内部</div>
-          <h2>Use Cases</h2>
-          <p>用户路径属于此 Feature，不作为独立顶级入口。</p>
-        </div>
-        <CreateDocument kind="use-case" feature={feature.path} />
-      </div>
+      <PanelHeader title="Use Cases" actions={<CreateDocument kind="use-case" feature={feature.path} />} />
       {useCases.length === 0 ? (
-        <Empty title="还没有 Use Case">
+        <PanelEmpty title="还没有 Use Case">
           从这里创建时会自动绑定 {feature.metadata.title}。
-        </Empty>
+        </PanelEmpty>
       ) : (
-        <div className="compact-list">
+        <RecordList>
           {useCases.map((item) => (
+            <RecordItem key={item.path}>
             <Link
-              key={item.path}
+              className="flex items-center justify-between gap-3"
               to={`/features/${encodeURIComponent(feature.metadata.id)}/use-cases/${encodeURIComponent(item.metadata.id)}`}
+              state={navigation.opening(`/features/${encodeURIComponent(feature.metadata.id)}/use-cases/${encodeURIComponent(item.metadata.id)}`)}
             >
               <div>
                 <strong>{item.metadata.title}</strong>
-                <span>{item.metadata.id}</span>
+                <span className="block text-sm text-muted-foreground">{item.metadata.id}</span>
               </div>
               <ExternalLink size={16} />
             </Link>
+            </RecordItem>
           ))}
-        </div>
+        </RecordList>
       )}
     </section>
   )
@@ -520,21 +513,22 @@ export function FeatureDetailPage() {
 }
 
 export function UseCaseDrawer() {
+  const navigation = useUrlNavigation()
   const { id, useCaseId } = useParams()
   const { snapshot } = useWorkspace()
   const navigate = useNavigate()
   const feature = snapshot.documents.find(item => item.metadata.kind === "feature" && item.metadata.id === id)
   const document = snapshot.documents.find(item => item.metadata.kind === "use-case" && item.metadata.id === useCaseId && feature !== undefined && featureMatches(item.metadata.feature, feature))
-  const close = () => navigate(`/features/${encodeURIComponent(id ?? "")}`, { replace: true })
+  const close = () => navigation.close(`/features/${encodeURIComponent(id ?? "")}?tab=use-cases`)
   return <DetailDrawer open onClose={close} model={{
     title: document?.metadata.title ?? "找不到 Use Case",
     description: `所属 Feature：${feature?.metadata.title ?? id}`,
   }}>
-    {document ? <DocumentLayout key={document.path} document={document} /> : <Empty title="找不到 Use Case">此 Feature 下没有该 Use Case。</Empty>}
+    {document ? <DocumentLayout key={document.path} document={document} /> : <Empty kind="missing" title="找不到 Use Case">此 Feature 下没有该 Use Case。</Empty>}
   </DetailDrawer>
 }
 
-export function DocumentDetailPage({ kind }: { kind: DocumentKind }) {
+export function DocumentDetailPage({ kind, relatedContent }: { kind: DocumentKind; relatedContent?: React.ReactNode }) {
   const params = useParams()
   const id = kind === "use-case" ? params.useCaseId : params.id
   const { snapshot } = useWorkspace()
@@ -542,7 +536,7 @@ export function DocumentDetailPage({ kind }: { kind: DocumentKind }) {
     (item) => item.metadata.kind === kind && item.metadata.id === id
   )
   if (!document) {
-    return <Empty title={`找不到 ${humanKind(kind)}`}>它可能已被移动或删除。</Empty>
+    return <Empty kind="missing" title={`找不到 ${humanKind(kind)}`}>它可能已被移动或删除。</Empty>
   }
   let back: React.ReactNode = null
   if (document.metadata.kind === "use-case") {
@@ -562,61 +556,69 @@ export function DocumentDetailPage({ kind }: { kind: DocumentKind }) {
     )
   }
   const layoutKey = kind === "research" ? researchTopicDirectory(document.path) : document.path
-  return <>{back}<DocumentLayout key={layoutKey} document={document} /></>
+  return <>{back}<DocumentLayout key={layoutKey} document={document} relatedContent={relatedContent} /></>
 }
 
 function DocumentLayout({
   document,
   extra,
+  relatedContent,
   background = false,
 }: {
   document: DocumentRecord
   extra?: React.ReactNode
+  relatedContent?: React.ReactNode
   background?: boolean
 }) {
   const { snapshot } = useWorkspace()
-  const [params] = useSearchParams()
-  const requestedTab = params.get("tab") === "pages" ? "body" : params.get("tab") ?? "body"
-  const [tab, setTab] = React.useState(requestedTab)
+  const { params, update } = useUrlNavigation()
+  const showsLifecycle = ["roadmap", "design", "memory", "issue"].includes(document.metadata.kind)
+  const requested = background && extra ? "use-cases" : params.get("tab") === "pages" ? "body" : params.get("tab") ?? "body"
+  const requestedTab = requested === "actions" && !showsLifecycle ? "metadata" : requested
   const [editorToolbar, setEditorToolbar] = React.useState<HTMLDivElement | null>(null)
-  React.useEffect(() => { setTab(requestedTab) }, [requestedTab])
-  const tabNavigation = useDraftNavigation(setTab)
   const pages = snapshot.pages.filter(
     (page) => page.documentPath === document.path && page.path !== document.path
   )
   const showsTerminology = ["feature", "use-case", "roadmap", "design"].includes(document.metadata.kind)
-  const showsDelivery = ["feature", "use-case"].includes(document.metadata.kind)
+  const showsImplementation = ["feature", "use-case", "engineering"].includes(document.metadata.kind)
+  const showsTesting = ["feature", "use-case"].includes(document.metadata.kind)
+  const availableTabs = ["body", "metadata", ...(extra ? ["use-cases"] : []), ...(showsTerminology ? ["terminology"] : []), ...(showsImplementation ? ["implementation"] : []), ...(showsTesting ? ["testing"] : []), ...(showsLifecycle ? ["actions"] : []), ...(relatedContent ? ["related"] : [])]
+  const tab = urlChoice(requestedTab, availableTabs, "body")
 
   return (
     <>
-      <Tabs value={tab} onValueChange={value => { if (value !== tab) tabNavigation.request(value) }} {...stylex.props(documentStyles.detailRoot)}>
+      <Tabs value={tab} onValueChange={value => { if (value !== tab) update({ tab: value, source: null, sourceLine: null, sourceEndLine: null }) }} {...stylex.props(documentStyles.detailRoot)}>
         <div data-testid="document-header" {...stylex.props(documentStyles.tabsHeader)}>
           <TabsList aria-label="文档详情" {...stylex.props(documentStyles.tabsList)}>
             <TabsTrigger value="body">正文</TabsTrigger>
+            {extra && <TabsTrigger value="use-cases">Use Cases</TabsTrigger>}
             {showsTerminology && <TabsTrigger value="terminology">术语</TabsTrigger>}
-            {showsDelivery && <><TabsTrigger value="implementation">实现</TabsTrigger><TabsTrigger value="testing">测试</TabsTrigger></>}
+            {showsImplementation && <TabsTrigger value="implementation">实现</TabsTrigger>}
+            {showsTesting && <TabsTrigger value="testing">测试</TabsTrigger>}
             <TabsTrigger value="metadata">元数据</TabsTrigger>
-            <TabsTrigger value="actions">生命周期</TabsTrigger>
+            {showsLifecycle && <TabsTrigger value="actions">生命周期</TabsTrigger>}
+            {relatedContent && <TabsTrigger value="related">来源与关联</TabsTrigger>}
           </TabsList>
           {!background && <div className="button-row">
-            {["feature", "engineering", "roadmap", "design", "research"].includes(document.metadata.kind) && <CreateDocument kind={document.metadata.kind} />}
             <Button asChild variant="outline" size="sm"><Link to={`/git?path=${encodeURIComponent(document.path)}`}><GitBranch /> 查看 Git 变更</Link></Button>
             <div ref={setEditorToolbar} className="document-editor-actions" />
           </div>}
         </div>
         {showsTerminology && <TabsContent value="terminology" {...stylex.props(documentStyles.tabPanel)}><TerminologyPanel document={document} /></TabsContent>}
-        {showsDelivery && <><TabsContent value="implementation" {...stylex.props(documentStyles.tabPanel)}><ImplementationPanel document={document} /></TabsContent><TabsContent value="testing" {...stylex.props(documentStyles.tabPanel)}><TestingPanel document={document} /></TabsContent></>}
+        {showsImplementation && <TabsContent value="implementation" {...stylex.props(documentStyles.tabPanel)}><ImplementationPanel document={document} /></TabsContent>}
+        {showsTesting && <TabsContent value="testing" {...stylex.props(documentStyles.tabPanel)}><TestingPanel document={document} /></TabsContent>}
         <TabsContent value="body" {...stylex.props(documentStyles.tabPanel, documentStyles.bodyPanel)}>
-          <DocumentFiles document={document} pages={pages} extra={extra} toolbarTarget={editorToolbar} />
+          <DocumentFiles document={document} pages={pages} toolbarTarget={editorToolbar} />
         </TabsContent>
+        {extra && <TabsContent value="use-cases" {...stylex.props(documentStyles.tabPanel)}>{extra}</TabsContent>}
         <TabsContent value="metadata" {...stylex.props(documentStyles.tabPanel)}>
           <MetadataForm key={document.path} document={document} />
         </TabsContent>
-        <TabsContent value="actions" {...stylex.props(documentStyles.tabPanel)}>
+        {showsLifecycle && <TabsContent value="actions" {...stylex.props(documentStyles.tabPanel)}>
           <Lifecycle key={document.path} document={document} />
-        </TabsContent>
+        </TabsContent>}
+        {relatedContent && <TabsContent value="related" {...stylex.props(documentStyles.tabPanel)}>{relatedContent}</TabsContent>}
       </Tabs>
-      {tabNavigation.dialog}
     </>
   )
 }
@@ -634,19 +636,16 @@ function DocumentFiles({
 }) {
   const { act, api, snapshot } = useWorkspace()
   const navigate = useNavigate()
-  const [params] = useSearchParams()
+  const { params, update } = useUrlNavigation()
   const topicDirectory = document.metadata.kind === "research" ? researchTopicDirectory(document.path) : undefined
   const topicDocuments = topicDirectory ? snapshot.documents.filter(item => item.metadata.kind === "research" && item.path.startsWith(topicDirectory)) : []
   const topicPages = topicDirectory ? snapshot.pages.filter(item => item.path.startsWith(topicDirectory)) : pages
   const files = [...new Map([{ path: document.path, readOnly: false }, ...topicDocuments.map(item => ({ path: item.path, readOnly: false })), ...topicPages].map(item => [item.path, item])).values()]
   const requestedFile = params.get("file")
-  const initialPath = requestedFile && files.some(file => file.path === requestedFile) ? requestedFile : document.path
-  const [selection, setSelection] = React.useState({ initialPath, path: initialPath })
-  const selectedPath = selection.initialPath === initialPath ? selection.path : initialPath
-  if (selection.initialPath !== initialPath) setSelection({ initialPath, path: initialPath })
+  const selectedPath = requestedFile && files.some(file => file.path === requestedFile) ? requestedFile : document.path
   const layoutRef = React.useRef<HTMLDivElement>(null)
   const treeRef = React.useRef<HTMLElement>(null)
-  const pageNavigation = useDraftNavigation((path: string) => {
+  const selectFile = (path: string) => {
     const layout = layoutRef.current
     const tree = treeRef.current
     const viewport = layout?.closest('.page')
@@ -657,8 +656,8 @@ function DocumentFiles({
     }
     const owner = topicDocuments.filter(item => path === item.path || path.startsWith(item.path.slice(0, -"README.md".length))).sort((a, b) => b.path.length - a.path.length)[0]
     if (owner && owner.path !== document.path) navigate(`/research/${encodeURIComponent(owner.metadata.id)}?file=${encodeURIComponent(path)}`)
-    else setSelection({ initialPath, path })
-  })
+    else update({ file: path })
+  }
   const followMarkdownLink = (href: string) => {
     const target = relativeMarkdownTarget(selectedPath, href)
     if (!target) return false
@@ -668,7 +667,7 @@ function DocumentFiles({
     const owner = snapshot.documents.find(item => item.path === ownerPath)
     if (!owner) return false
     if (owner.path === document.path && files.some(file => file.path === target.path)) {
-      pageNavigation.request(target.path)
+      selectFile(target.path)
       return true
     }
     const query = target.path === owner.path ? "" : `?file=${encodeURIComponent(target.path)}`
@@ -750,7 +749,7 @@ function DocumentFiles({
             else next.add(path)
             return next
           })}
-          onSelect={(path) => { if (path !== selectedPath) pageNavigation.request(path) }}
+          onSelect={(path) => { if (path !== selectedPath) selectFile(path) }}
         />
       </aside>}
       <section data-testid="document-file-preview" {...stylex.props(documentStyles.preview)}>
@@ -765,7 +764,6 @@ function DocumentFiles({
           !error && <DocumentSkeleton />
         )}
       </section>
-      {pageNavigation.dialog}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent>
           <form onSubmit={(event) => fire(submit(event))}>
@@ -887,7 +885,7 @@ function FileTree({ nodes, expanded, selectedPath, onToggle, onSelect, depth = 0
 }
 
 function MetadataForm({ document }: { document: DocumentRecord }) {
-  const { api, refresh, setDirty, notify } = useWorkspace()
+  const { api, refresh, notify } = useWorkspace()
   const [baseline, setBaseline] = React.useState(document)
   const [title, setTitle] = React.useState(document.metadata.title)
   const research = document.metadata.kind === "research" ? document.metadata : null
@@ -900,10 +898,7 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
   const revision = JSON.stringify([title, observedAt, sources])
   const currentRevision = React.useRef(revision)
   currentRevision.current = revision
-  React.useEffect(() => {
-    setDirty(dirty)
-    return () => setDirty(false)
-  }, [dirty, setDirty])
+
   async function submit(): Promise<void> {
     const sent = revision
     try {
@@ -923,27 +918,34 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
       const latest = await api.workspace()
       const saved = latest.documents.find((item) => item.path === baseline.path)
       if (!saved) throw new Error("保存后无法重新读取文档。")
-      setBaseline(saved)
-      if (currentRevision.current === sent) {
-      setTitle(saved.metadata.title)
-      if (saved.metadata.kind === "research") {
-        setObservedAt(saved.metadata.observedAt ?? "")
-        setSources(saved.metadata.sources.join("\n"))
-      }
-      setDirty(false)
-      }
+      flushSync(() => {
+        setBaseline(saved)
+        if (currentRevision.current === sent) {
+          setTitle(saved.metadata.title)
+          if (saved.metadata.kind === "research") {
+            setObservedAt(saved.metadata.observedAt ?? "")
+            setSources(saved.metadata.sources.join("\n"))
+          }
+        }
+      })
     } catch (cause) {
       throw cause
     }
   }
-  const autoSave = useAutoSave({ dirty, revision, save: submit })
+  const autoSave = useAutoSave({ dirty, revision, save: submit, discard: () => {
+    setTitle(baseline.metadata.title)
+    if (baseline.metadata.kind === "research") {
+      setObservedAt(baseline.metadata.observedAt ?? "")
+      setSources(baseline.metadata.sources.join("\n"))
+    }
+  } })
   return (
-    <Card className="narrow-card">
-      <CardHeader>
-        <CardTitle>作者可编辑字段</CardTitle>
-        <CardDescription>身份、状态与历史由对应操作维护。</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <>
+      <PanelHeader title="元数据" actions={<span className="form-status" role="status">{autoSave.status}</span>} />
+      <ContentSection title="身份信息" className="form-section">
+        <dl><Definition label="类型">{humanKind(document.metadata.kind)}</Definition><Definition label="ID"><code>{document.metadata.id}</code></Definition><Definition label="创建于">{document.metadata.createdAt}</Definition></dl>
+      </ContentSection>
+      <ContentSection title="可编辑字段" className="form-section">
         <form className="form-grid" onSubmit={event => { event.preventDefault(); void autoSave.flush().catch(() => undefined) }}>
           <Field label="标题">
             <Input aria-label="文档标题" value={title} onChange={(event) => setTitle(event.target.value)} />
@@ -954,11 +956,10 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
               <Field label="来源"><Textarea aria-label="来源" value={sources} onChange={(event) => setSources(event.target.value)} /></Field>
             </>
           )}
-          <span role="status">{autoSave.status}</span>
           {autoSave.error && <div className="form-error" role="alert">{autoSave.error}<Button type="submit" variant="outline">重试保存</Button></div>}
         </form>
-      </CardContent>
-    </Card>
+      </ContentSection>
+    </>
   )
 }
 
@@ -966,31 +967,25 @@ function Lifecycle({ document }: { document: DocumentRecord }) {
   const metadata = document.metadata
   const history = metadata.kind === "memory" || metadata.kind === "issue" ? metadata.history : []
   return (
-    <div className="lifecycle-grid">
-      <Card>
-        <CardHeader><CardTitle>当前状态</CardTitle></CardHeader>
-        <CardContent>
+    <><PanelHeader title="生命周期" /><div className="lifecycle-grid">
+      <ContentSection title="当前状态">
           <dl>
-            <Definition label="类型">{humanKind(metadata.kind)}</Definition>
-            <Definition label="ID"><code>{metadata.id}</code></Definition>
-            <Definition label="创建于">{metadata.createdAt}</Definition>
+            {metadata.kind === "design" && !metadata.decision && !metadata.deferral && <Definition label="状态">待裁决</Definition>}
             {"state" in metadata && <Definition label="状态">{String(metadata.state)}</Definition>}
             {metadata.kind === "roadmap" && metadata.cancellation && <><Definition label="取消理由">{metadata.cancellation.reason}</Definition><Definition label="原文来源">{metadata.cancellation.source.path}</Definition></>}
             {metadata.kind === "design" && metadata.deferral && <><Definition label="状态">已暂缓</Definition><Definition label="暂缓理由">{metadata.deferral.reason}</Definition><Definition label="原文来源">{metadata.deferral.source.path}</Definition></>}
             {metadata.kind === "design" && metadata.decision && <><Definition label="已选择">{metadata.decision.selected}</Definition><Definition label="裁决理由">{metadata.decision.reason}</Definition><Definition label="裁决时间">{metadata.decision.at ?? "原文未记载"}</Definition></>}
           </dl>
-        </CardContent>
-      </Card>
+      </ContentSection>
       <LifecycleActions document={document} />
       {history.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>历史</CardTitle></CardHeader>
-          <CardContent><div className="timeline">{history.map((entry, index) => (
+        <ContentSection title="历史">
+          <div className="timeline">{history.map((entry, index) => (
             <div key={`${entry.at}-${index}`}><i /><strong>{entry.action}</strong><time>{entry.at}</time><p>{entry.reason}</p></div>
-          ))}</div></CardContent>
-        </Card>
+          ))}</div>
+        </ContentSection>
       )}
-    </div>
+    </div></>
   )
 }
 
@@ -1009,12 +1004,12 @@ function LifecycleActions({ document }: { document: DocumentRecord }) {
     fire(act(action, text).then(() => setReason("")))
   }
   if (!["roadmap", "design", "memory", "issue"].includes(metadata.kind)) {
-    return <Card><CardHeader><CardTitle>生命周期操作</CardTitle><CardDescription>此类型没有额外状态转换。</CardDescription></CardHeader></Card>
+    return null
   }
+  if (metadata.kind === "roadmap" && metadata.state !== "planned" || metadata.kind === "design" && metadata.decision || metadata.kind === "issue" && metadata.state !== "draft") return null
   return (
-    <Card>
-      <CardHeader><CardTitle>生命周期操作</CardTitle><CardDescription>使用明确动作维护状态与历史。</CardDescription></CardHeader>
-      <CardContent><div className="form-grid">
+    <ContentSection title="可用操作" className="form-section">
+      <div className="form-grid">
         {metadata.kind === "roadmap" && metadata.state === "planned" && (
           <><Field label="采用为 Feature ID"><Input aria-label="采用为 Feature ID" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button onClick={() => invoke({ action: "roadmap.adopt", id: metadata.id, feature: target }, "Roadmap 已采用为 Feature。")}>采用 Roadmap</Button></>
         )}
@@ -1037,7 +1032,7 @@ function LifecycleActions({ document }: { document: DocumentRecord }) {
         {metadata.kind === "issue" && metadata.state === "draft" && (
           <><Field label="关联 Memory"><Input aria-label="关联 Memory" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "issue.link", id: metadata.id, memory: target }, "Issue 已关联 Memory。") }><Link2 /> 关联 Memory</Button><Field label="关闭理由"><Textarea aria-label="Issue 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "issue.close", id: metadata.id, reason }, "Issue 已关闭。")}>关闭草稿</Button></>
         )}
-      </div></CardContent>
-    </Card>
+      </div>
+    </ContentSection>
   )
 }

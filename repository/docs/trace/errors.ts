@@ -50,8 +50,14 @@ export class TraceRecoveryConflict extends Data.TaggedError("TraceRecoveryConfli
   readonly message: string;
 }> {}
 
+export class TraceJournalMigrationRequired extends Data.TaggedError("TraceJournalMigrationRequired")<{
+  readonly path: string;
+  readonly format: string;
+  readonly message: string;
+}> {}
+
 export type TraceError = TraceIoError | TraceFormatError | TraceSelectorMissing | TraceSelectorAmbiguous |
-  TraceSnapshotChanged | TraceMutationActive | TraceInputChanged | TraceRecoveryRequired | TraceRecoveryConflict;
+  TraceSnapshotChanged | TraceMutationActive | TraceInputChanged | TraceRecoveryRequired | TraceRecoveryConflict | TraceJournalMigrationRequired;
 
 export function isTraceError(value: unknown): value is TraceError {
   return value instanceof TraceIoError ||
@@ -62,5 +68,6 @@ export function isTraceError(value: unknown): value is TraceError {
     value instanceof TraceMutationActive ||
     value instanceof TraceInputChanged ||
     value instanceof TraceRecoveryRequired ||
-    value instanceof TraceRecoveryConflict;
+    value instanceof TraceRecoveryConflict ||
+    value instanceof TraceJournalMigrationRequired;
 }

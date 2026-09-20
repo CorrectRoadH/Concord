@@ -1,4 +1,4 @@
-// @concord-file feedback-core-integration
+// @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { Effect } from 'effect';
 import { readFeedbackCache, mergeFeedbackCache } from './feedback-cache.js';

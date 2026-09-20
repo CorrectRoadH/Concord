@@ -4,7 +4,7 @@ import { posix } from "node:path";
 
 import type { DocsNodeKind, TraceNode, TraceSnapshot } from "./model.js";
 
-const REPO_REF_BRAND = "@niceeval/repo-tools/RepoRef";
+const REPO_REF_BRAND = "concord/RepoRef";
 
 function isCanonicalRepoRef(value: string): boolean {
   if (value.trim() !== value || value.length === 0 || value.includes("\\") || value.startsWith("/")) return false;

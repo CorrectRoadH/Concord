@@ -128,7 +128,7 @@ export function listFeatures(snapshot: TraceSnapshot, input: FeatureListInput = 
       [feature.id, feature.path, feature.title].some((value) => value.toLocaleLowerCase().includes(pattern)))
     .sort((left, right) => left.id.localeCompare(right.id));
   return {
-    format: "niceeval.docs-trace/list-v1",
+    format: "concord.docs-trace/list-v1",
     operation: "feature-list",
     snapshotDigest: snapshot.digest,
     generation: snapshot.generation,
@@ -153,17 +153,17 @@ export function listTests(snapshot: TraceSnapshot, input: TestListInput = {}): T
         test.caseId,
         test.title ?? "",
         test.path,
-        test.repo,
+        test.suite,
         contract ?? "",
         ...features.flatMap((feature) => [featureId(feature.path), feature.path, feature.title]),
         ...regressionValues,
         ...test.issues,
       ].some((value) => value.toLocaleLowerCase().includes(pattern));
     })
-    .map((test) => ({ selector: test.selector, caseId: test.caseId, path: test.path, ...(test.title === undefined ? {} : { title: test.title }), repo: test.repo, contract: test.contract }))
+    .map((test) => ({ selector: test.selector, caseId: test.caseId, path: test.path, ...(test.title === undefined ? {} : { title: test.title }), suite: test.suite, contract: test.contract }))
     .sort((left, right) => left.selector.localeCompare(right.selector));
   return {
-    format: "niceeval.docs-trace/list-v2",
+    format: "concord.docs-trace/list-v2",
     operation: "test-list",
     snapshotDigest: snapshot.digest,
     generation: snapshot.generation,
@@ -227,11 +227,8 @@ export function showFeature(
       caseId: test.caseId,
       selector: test.selector,
       ...(test.title === undefined ? {} : { title: test.title }),
-      repo: test.repo,
+      suite: test.suite,
       description: test.title ?? "",
-      lane: test.lane,
-      areas: test.areas,
-      executor: test.executor,
     });
   }
   const tests = byKey(scopedTests, relationKey);
@@ -372,7 +369,7 @@ export function showFeature(
   );
 
   return Effect.succeed({
-    format: "niceeval.docs-trace/show-v2",
+    format: "concord.docs-trace/show-v2",
     operation: "feature-show",
     snapshotDigest: snapshot.digest,
     generation: snapshot.generation,
@@ -441,7 +438,7 @@ export function showTest(
   })), relationKey);
 
   return Effect.succeed({
-    format: "niceeval.docs-trace/show-v3",
+    format: "concord.docs-trace/show-v3",
     operation: "test-show",
     snapshotDigest: snapshot.digest,
     generation: snapshot.generation,
@@ -451,10 +448,7 @@ export function showTest(
       caseId: test.caseId,
       path: test.path,
       ...(test.title === undefined ? {} : { title: test.title }),
-      repo: test.repo,
-      lane: test.lane,
-      areas: test.areas,
-      executor: test.executor,
+      suite: test.suite,
     },
     contract: { ref: test.contract, kind: target.scope },
     features: features.map((feature) => ({

@@ -99,7 +99,7 @@ function testListTree(receipt: TestListReceipt, details: readonly TestShowReceip
         : { label: `${issue.repository}#${issue.number} ${issue.url}` })),
     ];
     cursor.leaves.push({
-      label: `${test.selector}${test.title === undefined ? "" : ` — ${test.title}`} [repo: ${test.repo}]`,
+      label: `${test.selector}${test.title === undefined ? "" : ` — ${test.title}`} [suite: ${test.suite}]`,
       children: detail === undefined ? relationChildren : [
         { label: `Description: ${detail.test.title ?? ""}` },
         ...relationChildren,
@@ -120,7 +120,7 @@ function testListTree(receipt: TestListReceipt, details: readonly TestShowReceip
 
 function targetRelations(group: TraceRelationsByTarget): readonly TreeNode[] {
   const tests = group.tests.map((test) => ({
-    label: `${test.selector}${test.title === undefined ? "" : ` — ${test.title}`} [repo: ${test.repo}]`,
+    label: `${test.selector}${test.title === undefined ? "" : ` — ${test.title}`} [suite: ${test.suite}]`,
     children: [{ label: `Description: ${test.description}` }],
   }));
   const feedback = group.feedbackAdoptions.map((relation) => ({
@@ -223,14 +223,11 @@ function featureShowTree(receipt: FeatureShowReceipt): string {
 
 function testShowTree(receipt: TestShowReceipt): string {
   const metadata: TreeNode[] = [
-    { label: `Lanes: ${receipt.test.lane.join(", ") || "None"}` },
-    { label: `Areas: ${receipt.test.areas.join(", ") || "None"}` },
-    { label: `Executor: ${receipt.test.executor.kind}` },
   ];
   return renderTree({
     label: `Test ${receipt.subject.selector}${receipt.test.title === undefined ? "" : ` — ${receipt.test.title}`}`,
     children: [
-      { label: `Repository: ${receipt.test.repo}` },
+      { label: `Suite: ${receipt.test.suite}` },
       section("Metadata", metadata),
       { label: `Contract (${receipt.contract.kind}): ${receipt.contract.ref}` },
       section("Features", receipt.features.map((feature) => ({
@@ -267,6 +264,8 @@ export function renderTraceError(error: TraceError): string {
       return `${error._tag}: trace inputs changed while compiling ${error.path} after ${error.attempts} attempts (${error.changed.join(", ")}); retry after the files stop changing`;
     case "TraceRecoveryRequired":
       return `${error._tag}: unfinished Trace publication at ${error.path}; run ${error.nextStep}`;
+    case "TraceJournalMigrationRequired":
+      return `${error._tag}: ${error.path} (${error.format}): ${error.message}`;
     case "TraceRecoveryConflict":
       return `${error._tag}: ${error.path}: ${error.message}`;
   }

@@ -1,4 +1,4 @@
-// @concord-file derived-trace-and-review
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { scanAnnotations } from './annotations.js';
@@ -9,7 +9,7 @@ import { ConcordError, type AnnotatedCase, type DocumentRecord, type Finding, ty
 import { checkConstitution, showConstitution } from './constitution.js';
 
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
-// @concord-code compile-current-trace
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean } = {}) {
   const documents = loadDocuments(repo);
@@ -57,7 +57,7 @@ export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 
   findings.push(...(code?.findings ?? []));
   for (const item of codeDeclarations) for (const target of item.contracts) {
     try {
-      resolveReference(repo, documents, target, ['feature', 'use-case']);
+      resolveReference(repo, documents, target, ['feature', 'use-case', 'engineering']);
       edges.push({ from: `code:${item.id}`, to: target, relation: 'implements' });
     } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
@@ -74,7 +74,7 @@ function belongsTo(repo: Repository, trace: ReturnType<typeof buildTrace>, selec
   const owner = resolveReference(repo, trace.documents, ref);
   return selectedPaths.has(owner.path) || (owner.metadata.kind === 'use-case' && selectedPaths.has(owner.metadata.feature));
 }
-// @concord-code query-contract-relations
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 export function traceShow(repo: Repository, selector: string, cache: 'use' | 'off' = 'use') {
   const trace = buildTrace(repo, cache); requireValidTrace(trace);
@@ -114,7 +114,7 @@ export function selectCase(cases: readonly AnnotatedCase[], id: string): Annotat
   if (matches.length !== 1) throw new ConcordError(matches.length ? 'CaseAmbiguous' : 'CaseNotFound', `Expected one case for ${id}, found ${matches.length}`);
   return matches[0]!;
 }
-// @concord-code render-contract-review
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 export function renderReview(repo: Repository, selector: string | undefined, cache: 'use' | 'off' = 'use'): string {
   const trace = buildTrace(repo, cache); requireValidTrace(trace);
@@ -134,7 +134,7 @@ export function renderReview(repo: Repository, selector: string | undefined, cac
   lines.push('', '## Contracts and decisions', '');
   for (const d of docs.filter(d => d.metadata.kind !== 'memory' && d.metadata.kind !== 'issue')) lines.push(`- [${d.metadata.title}](${d.path}) — ${d.metadata.kind}`);
   lines.push('', '## Code declarations', '');
-  for (const c of codes) lines.push(`- **${c.id}** — [${c.file}:${c.line}–${c.endLine}](${c.file}#L${c.line}); ${c.scope}`, ...c.contracts.map(ref => `  - Implements: [${ref}](${ref})`));
+  for (const c of codes) lines.push(`- **${c.symbol ?? `${c.file}:${c.line}–${c.endLine}`}** — [${c.file}:${c.line}–${c.endLine}](${c.file}#L${c.line}); ${c.scope}`, ...c.contracts.map(ref => `  - Implements: [${ref}](${ref})`));
   lines.push('', '## Test declarations', '');
   for (const c of cases) lines.push(`- **${c.id}** — [${c.file}:${c.line}](${c.file}#L${c.line}); ${c.status}${c.skipped ? ', skipped/todo' : ''}; contract: [${c.contract}](${c.contract})`, ...c.regressions.map(r => `  - Regression: [${r}](${r})`));
   lines.push('', '## Engineering memory', '');

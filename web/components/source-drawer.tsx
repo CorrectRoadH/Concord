@@ -1,4 +1,4 @@
-// @concord-file workbench-source-drawer
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { useEffect, useState } from 'react';
 import type { ViewFile } from '../../src/view-contract';

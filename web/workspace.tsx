@@ -1,4 +1,4 @@
-// @concord-file workbench-live-workspace
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import '@fontsource-variable/noto-sans-sc/wght.css';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -6,6 +6,11 @@ import type { GitStatus, ViewAction, ViewJob, WorkspaceSnapshot } from '../src/v
 import { ApiError, ConcordApi } from './lib/api';
 
 interface Notice { readonly id: number; readonly tone: 'success' | 'error' | 'info'; readonly text: string }
+export interface DraftOwner {
+  flush(): Promise<void>;
+  discard(): Promise<void>;
+  isDirty(): boolean;
+}
 interface WorkspaceValue {
   readonly api: ConcordApi;
   readonly snapshot: WorkspaceSnapshot;
@@ -14,9 +19,10 @@ interface WorkspaceValue {
   readonly busy: boolean;
   readonly dirty: boolean;
   readonly notices: readonly Notice[];
-  setDirty(value: boolean): void;
-  registerAutoSave(flush: () => Promise<void>): () => void;
+  reportDirty(owner: DraftOwner): void;
+  registerAutoSave(owner: DraftOwner): () => void;
   flushAutoSave(): Promise<boolean>;
+  discardAutoSave(): Promise<void>;
   refresh(): Promise<void>;
   act(action: ViewAction, success?: string): Promise<unknown>;
   runCase(caseId: string): Promise<void>;
@@ -40,14 +46,24 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
   const [dirty, setDirty] = useState(false);
   const [notices, setNotices] = useState<readonly Notice[]>([]);
   const noticeId = useRef(0);
-  const autoSave = useRef<(() => Promise<void>) | null>(null);
-  const registerAutoSave = useCallback((flush: () => Promise<void>) => {
-    autoSave.current = flush;
-    return () => { if (autoSave.current === flush) autoSave.current = null; };
+  const autoSave = useRef<DraftOwner | null>(null);
+  const registerAutoSave = useCallback((owner: DraftOwner) => {
+    if (autoSave.current && autoSave.current !== owner) throw new Error('Multiple active draft owners');
+    autoSave.current = owner;
+    setDirty(owner.isDirty());
+    return () => { if (autoSave.current === owner) { autoSave.current = null; setDirty(false); } };
+  }, []);
+  const reportDirty = useCallback((owner: DraftOwner) => {
+    if (autoSave.current === owner) setDirty(owner.isDirty());
   }, []);
   const flushAutoSave = useCallback(async () => {
-    if (!autoSave.current) return false;
-    try { await autoSave.current(); return true; } catch { return false; }
+    const owner = autoSave.current;
+    if (!owner) return false;
+    try { await owner.flush(); return autoSave.current === owner && !owner.isDirty(); } catch { return false; }
+  }, []);
+  const discardAutoSave = useCallback(async () => {
+    const owner = autoSave.current;
+    if (owner) await owner.discard();
   }, []);
 
   const notify = useCallback((text: string, tone: Notice['tone'] = 'info') => {
@@ -115,7 +131,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     catch (cause) { notify(message(cause), 'error'); }
   }, [api, notify]);
 
-  const value = useMemo<WorkspaceValue>(() => ({ api, snapshot, git, jobs, busy, dirty, notices, setDirty, registerAutoSave, flushAutoSave, refresh, act, runCase, cancelJob, notify, clearNotice }), [api, snapshot, git, jobs, busy, dirty, notices, registerAutoSave, flushAutoSave, refresh, act, runCase, cancelJob, notify, clearNotice]);
+  const value = useMemo<WorkspaceValue>(() => ({ api, snapshot, git, jobs, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, act, runCase, cancelJob, notify, clearNotice }), [api, snapshot, git, jobs, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, act, runCase, cancelJob, notify, clearNotice]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 

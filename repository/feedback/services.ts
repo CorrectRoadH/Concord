@@ -33,7 +33,7 @@ export interface FeedbackStoreService {
   readonly reopen: (id: string, dryRun: boolean) => Effect.Effect<FeedbackMutationReceipt, FeedbackStoreError, FileSystem.FileSystem>;
   readonly check: () => Effect.Effect<FeedbackCheckReceipt, FeedbackStoreError, FileSystem.FileSystem>;
 }
-export class FeedbackStore extends Context.Service<FeedbackStore, FeedbackStoreService>()("@niceeval/repo-tools/feedback/Store") {}
+export class FeedbackStore extends Context.Service<FeedbackStore, FeedbackStoreService>()("concord/feedback/Store") {}
 
 export const NodeFeedbackStoreLive = (root: string) => Layer.succeed(FeedbackStore, (() => {
   const repository = new FeedbackRepository({ root });
@@ -41,7 +41,7 @@ export const NodeFeedbackStoreLive = (root: string) => Layer.succeed(FeedbackSto
     const env = { ...process.env }; for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
     return execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { env, encoding: 'utf8' }).trim();
   };
-  const dryReceipt = (path: string, bytes: string, value: IssueMeta, changes: FeedbackMutationChanges, generation: number): FeedbackMutationReceipt => ({ format: "niceeval.docs-trace/multi-file-mutation/v1", transactionId: "dry-run", generationBefore: generation, generationAfter: generation, preimages: [{ path, digest: existsSync(repository.safePath(path)) ? traceDigest(readFileSync(repository.safePath(path), "utf8")) : null }], plannedDigests: [{ path, digest: traceDigest(bytes) }], committed: false, value, changes });
+  const dryReceipt = (path: string, bytes: string, value: IssueMeta, changes: FeedbackMutationChanges, generation: number): FeedbackMutationReceipt => ({ format: "concord.docs-trace/multi-file-mutation/v1", transactionId: "dry-run", generationBefore: generation, generationAfter: generation, preimages: [{ path, digest: existsSync(repository.safePath(path)) ? traceDigest(readFileSync(repository.safePath(path), "utf8")) : null }], plannedDigests: [{ path, digest: traceDigest(bytes) }], committed: false, value, changes });
   const mutate = (id: string, operation: string, dryRun: boolean, plan: (source: string | undefined, at: string, commit: string) => { readonly bytes: string; readonly value: IssueMeta; readonly changes: FeedbackMutationChanges }): Effect.Effect<FeedbackMutationReceipt, FeedbackStoreError, FileSystem.FileSystem> => {
     const owner = repository.ownerPath(id);
     let plannedValue: IssueMeta | undefined;

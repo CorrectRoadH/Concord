@@ -1,5 +1,5 @@
 import { execFileSync, spawn } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -9,7 +9,7 @@ import { renderTypeScriptConfig } from '../src/config.js';
 import { LocalRepository } from "../src/storage.js";
 import { acquireTraceLeaseSync, genericJournalPath, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../src/coordination.js";
 import { mutateTraceFiles, recoverTrace, traceDigest, withTraceReadLease } from "../repository/docs/trace/relation-mutation.js";
-import { TraceRecoveryRequired } from "../repository/docs/trace/errors.js";
+import { TraceJournalMigrationRequired, TraceRecoveryRequired } from "../repository/docs/trace/errors.js";
 
 function isolatedRepository(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), "concord-coordination-"));
@@ -89,7 +89,7 @@ test("old multi-file journal format is rejected by strict recovery", async (t) =
   const directory = tracePrivateDirectorySync(root);
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, "multi-file-publication-journal.json"), JSON.stringify({ format: "niceeval.docs-trace/multi-file-publication-journal/v1", files: [] }));
-  await assert.rejects(Effect.runPromise(recoverTrace(root)), /invalid multi-file journal|format/);
+  await assert.rejects(Effect.runPromise(recoverTrace(root)), (cause) => cause instanceof TraceJournalMigrationRequired);
 });
 
 test("a mixed write/delete transaction validates every temp before rolling back any target", async (t) => {
@@ -152,8 +152,8 @@ test("generic and both Trace journals block ordinary reads/writes and cross-reco
 
 test("private coordination paths reject symlinked Trace and generic directories", (t) => {
   const traceRoot = isolatedRepository(t);
-  mkdirSync(join(traceRoot, ".git", "niceeval"), { recursive: true });
-  symlinkSync(traceRoot, join(traceRoot, ".git", "niceeval", "docs-trace"));
+  mkdirSync(join(traceRoot, ".git", "concord"), { recursive: true });
+  symlinkSync(traceRoot, join(traceRoot, ".git", "concord", "trace"));
   assert.throws(() => acquireTraceLeaseSync(traceRoot, "shared", "symlink-trace", true), /symbolic links/);
   const genericRoot = isolatedRepository(t);
   mkdirSync(join(genericRoot, ".git"), { recursive: true });
@@ -163,6 +163,44 @@ test("private coordination paths reject symlinked Trace and generic directories"
   mkdirSync(join(journalRoot, ".git", "concord"), { recursive: true });
   symlinkSync(journalRoot, join(journalRoot, ".git", "concord", "journal.json"));
   assert.throws(() => new LocalRepository(journalRoot, { dryRun: true }), /[Ss]ymbolic links/);
+});
+
+test("fresh repositories create only Concord private coordination state", (t) => {
+  const root = isolatedRepository(t);
+  const repository = new LocalRepository(root, { dryRun: true });
+  repository.close();
+  assert.equal(existsSync(join(root, ".git", "niceeval")), false);
+  assert.equal(tracePrivateDirectorySync(root), join(root, ".git", "concord", "trace"));
+});
+
+test("ordinary runtime names and preserves unmigrated legacy coordination state", (t) => {
+  const root = isolatedRepository(t);
+  const legacy = join(root, ".git", "niceeval", "docs-trace");
+  mkdirSync(legacy, { recursive: true });
+  writeFileSync(join(legacy, "generation"), "4\n");
+  assert.throws(() => new LocalRepository(root, { dryRun: true }), { code: "CoordinationMigrationRequired" });
+  assert.equal(readFileSync(join(legacy, "generation"), "utf8"), "4\n");
+  assert.equal(existsSync(join(root, ".git", "concord", "trace")), false);
+});
+
+test("governance configuration participates as a same-preimage guard without becoming a writable owner", (t) => {
+  const root = isolatedRepository(t);
+  mkdirSync(join(root, "docs", "feature", "guard"), { recursive: true });
+  writeFileSync(join(root, "docs", "feature", "guard", "README.md"), "before\n");
+  writeFileSync(join(root, "docs", "feature", "guard", "architecture.md"), "supporting guard\n");
+  const repository = new LocalRepository(root);
+  try {
+    const receipt = repository.publish("guarded-write", [
+      { path: "docs/feature/guard/README.md", before: "before\n", after: "after\n" },
+      { path: "docs/feature/guard/architecture.md", before: "supporting guard\n", after: "supporting guard\n" },
+      { path: "concord.repository.json", before: null, after: null },
+    ]);
+    assert.deepEqual(receipt.changedPaths, ["docs/feature/guard/README.md", "docs/feature/guard/architecture.md"]);
+    assert.equal(readFileSync(join(root, "docs", "feature", "guard", "README.md"), "utf8"), "after\n");
+    assert.equal(readFileSync(join(root, "docs", "feature", "guard", "architecture.md"), "utf8"), "supporting guard\n");
+    assert.equal(existsSync(join(root, "concord.repository.json")), false);
+    assert.throws(() => repository.publish("forbidden-governance-write", [{ path: "concord.repository.json", before: null, after: "{}\n" }]), /Governance configuration|Not a Concord document owner/);
+  } finally { repository.close(); }
 });
 
 test("invalid generated mode or oversized bytes are rejected before a journal is durable", async (t) => {

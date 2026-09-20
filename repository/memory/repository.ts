@@ -1,47 +1,28 @@
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { join, relative, resolve, sep } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { Effect, Result, Schema } from "effect";
-import { decode, RepositoryEvidenceSchema, type MemoryMeta, type RepositoryEvidence } from "concord-sdlc/model";
-import { parseRepoRef, validateRepoRefTarget, type RepoRef, type ValidatedRepoRefTarget } from "../docs/trace/ref.js";
+import { ConcordError, decode, RepositoryEvidenceSchema, type MemoryMeta, type RepositoryEvidence } from "concord-sdlc/model";
+import { parseRepoRef, validateRepoRefTarget, type ValidatedRepoRefTarget } from "../docs/trace/ref.js";
 import { ADOPTABLE_DOCS_NODE_KINDS, type TraceSnapshot } from "../docs/trace/model.js";
 import { traceDigest } from "../docs/trace/relation-mutation.js";
+import { readGovernanceConfiguration, governanceSuiteForFile } from "concord-sdlc/governance-config";
+import { adoptMemoryEvidenceRequirement, validateNativeEvidence, decodeNativeEvidenceIndex, NativeReliabilityCertificateSchema, evidenceSignature, usedMemoryInvocations } from "concord-sdlc/evidence-policy";
 import { decodeMemoryDocument, encodeMemoryDocument } from "./codec.js";
-import { MemoryContentInvalid, MemoryFileMissing, MemoryIoError, MemoryReferenceConflict, type MemoryError } from "./errors.js";
+import { MemoryContentInvalid, MemoryFileMissing, MemoryIoError, MemoryReferenceConflict, EvidenceMigrationRequired, type MemoryError } from "./errors.js";
 import type { MemoryDocument, ProblemResolutionIntent, PromotionKind } from "./schema.js";
 import { activateMemory, promoteMemory, reopenProblem, resolveProblem, retirePromotion, supersedeMemory } from "./state.js";
-import { decodeRepositorySourceIdentityV3, RepositorySourceIdentityV3Schema, resolveRepositorySourceIdentity, sameRepositorySourceIdentity } from "../source-identity.js";
+import { decodeRepositorySourceIdentityV4, resolveRepositorySourceIdentity, sameRepositorySourceIdentity } from "../source-identity.js";
 
 const message = (cause: unknown): string => cause instanceof Error ? cause.message : String(cause);
-const sha = (value: string): string => createHash("sha256").update(value).digest("hex");
 const canonical = (value: unknown): string => Array.isArray(value) ? "[" + value.map(canonical).join(",") + "]" :
   value !== null && typeof value === "object" ? "{" + Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([k, v]) => JSON.stringify(k) + ":" + canonical(v)).join(",") + "}" : JSON.stringify(value);
-const canonicalDigest = (value: unknown): string => "sha256:" + sha(canonical(value));
-const canonicalSignatureDigest = (value: unknown): string => sha(canonical(value));
 
 export interface MemoryCheckReceipt { readonly ok: boolean; readonly checked: number; readonly findings: readonly string[] }
 export interface MemoryAuthorSnapshot { readonly document: MemoryDocument; readonly ownerPreimageDigest: string; readonly authorRegionDigest: string }
-export interface FixedEvidenceValidation { readonly selectors: readonly string[]; readonly preimagePaths: readonly string[]; readonly evidence: RepositoryEvidence }
-
-const FileSchema = Schema.Struct({ path: Schema.String, digest: Schema.String });
-const EvidenceEntrySchema = Schema.Struct({ red: FileSchema, green: FileSchema, certificate: FileSchema, inventory: FileSchema });
-const EvidenceHistorySchema = Schema.Union([
-  Schema.Struct({ caseId: Schema.String, memory: Schema.String, evidence: EvidenceEntrySchema, reason: Schema.String, refreshedAtCommit: Schema.String }),
-  Schema.Struct({ caseId: Schema.String, memory: Schema.String, evidence: EvidenceEntrySchema, reason: Schema.String, retiredAtCommit: Schema.String }),
-]);
-const IndexSchema = Schema.Struct({ format: Schema.Literal("niceeval.e2e-case-evidence-index/v1"), current: Schema.Record(Schema.String, Schema.Record(Schema.String, EvidenceEntrySchema)), history: Schema.optional(Schema.Array(EvidenceHistorySchema)) });
-const ReceiptSchema = Schema.Struct({ format: Schema.Literal("niceeval.e2e-case-receipt/v2"), mode: Schema.Literal("formal"), observation: Schema.Literals(["red", "green", "reliability"]), selector: Schema.String, caseId: Schema.String, inventoryDigest: Schema.String, candidate: Schema.Struct({ gitSha: Schema.String, sha256: Schema.String, sri: Schema.String }), source: RepositorySourceIdentityV3Schema, runner: Schema.Struct({ executor: Schema.Literals(["vitest", "playwright"]), version: Schema.String, argv: Schema.Array(Schema.String) }), result: Schema.Struct({ disposition: Schema.Literals(["regression", "pass"]), stage: Schema.String, exitCode: Schema.NullOr(Schema.Number), signal: Schema.NullOr(Schema.String) }), cleanup: Schema.Struct({ ok: Schema.Boolean, resources: Schema.Array(Schema.Record(Schema.String, Schema.Unknown)) }), invocationId: Schema.String, receiptSha256: Schema.String });
-const CollectedCaseSchema = Schema.Struct({ executor: Schema.Literals(["vitest", "playwright"]), repo: Schema.String, path: Schema.String, project: Schema.optional(Schema.String), titlePath: Schema.Array(Schema.String), caseId: Schema.String });
-const RawCollectedCaseSchema = Schema.Struct({ file: Schema.String, project: Schema.optional(Schema.String), titlePath: Schema.Array(Schema.String) });
-const InventorySchema = Schema.Struct({ executor: Schema.Struct({ name: Schema.Literals(["vitest", "playwright"]), version: Schema.String }), repo: Schema.String, argv: Schema.Array(Schema.String), checkout: Schema.String, files: Schema.Array(Schema.String), cases: Schema.Array(CollectedCaseSchema), unassignedCases: Schema.Array(RawCollectedCaseSchema), bodyExecutions: Schema.Literal(0), forbiddenSetupExecutions: Schema.Literal(0), findings: Schema.Array(Schema.Unknown), digest: Schema.String, exit: Schema.NullOr(Schema.Number), signal: Schema.NullOr(Schema.String) });
-const CertificateSchema = Schema.Struct({ format: Schema.Literal("niceeval.e2e-takeover-certificate/v2"), selector: Schema.String, caseId: Schema.String, candidateSha256: Schema.String, sourceDigest: Schema.String, greenReceipt: Schema.String, observations: Schema.Struct({ isolatedCopies: Schema.Tuple([Schema.String, Schema.String, Schema.String]), sameCopy: Schema.Tuple([Schema.String, Schema.String]), defaultParallel: Schema.String, singleCase: Schema.String, cleanup: Schema.Array(Schema.String) }), certificateSha256: Schema.String });
+export interface FixedEvidenceValidation { readonly selectors: readonly string[]; readonly preimagePaths: readonly string[]; readonly preimageDigests: Readonly<Record<string, string>>; readonly evidence: RepositoryEvidence }
 
 function authorRegion(body: string): string { return body; }
 function decodeJson(path: string, source: string): unknown { try { return JSON.parse(source); } catch (cause) { throw new MemoryReferenceConflict({ operation: "resolve", path, message: "invalid evidence JSON: " + message(cause) }); } }
-function objectInput(path: string, input: unknown): Record<string, unknown> {
-  if (input === null || typeof input !== "object" || Array.isArray(input)) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "evidence JSON must be an object" });
-  return Object.fromEntries(Object.entries(input));
-}
 function checked<A>(path: string, schema: Schema.Codec<A>, input: unknown): A {
   const value = Schema.decodeUnknownResult(schema, { errors: "all", onExcessProperty: "error" })(input);
   if (Result.isFailure(value)) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "invalid or incomplete fixed evidence" });
@@ -79,6 +60,7 @@ export class MemoryRepository {
     if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new MemoryContentInvalid({ operation: "read", path: this.ownerPath(id), message: "memory owner is a symlink" });
   }
   planCreate(metadata: MemoryMeta, body: string) {
+    metadata = adoptMemoryEvidenceRequirement(metadata, readGovernanceConfiguration(this.#root)?.config.policy);
     this.#guardId(metadata.id);
     if (metadata.promotions.length !== 0 || metadata.history.length !== 0 || metadata.resolution !== undefined || metadata.supersededBy !== undefined || metadata.supersession !== undefined) throw new MemoryReferenceConflict({ operation: "add", message: "new Memory has no history, resolution, promotion, or supersession" });
     const valid = metadata.memoryKind === "problem" ? metadata.state === "open" : metadata.memoryKind === "note" ? metadata.state === "captured" : metadata.state === "current";
@@ -88,7 +70,7 @@ export class MemoryRepository {
   planTransition(id: string, source: string | undefined, transition: (value: MemoryMeta) => Result.Result<MemoryMeta, MemoryReferenceConflict>) {
     if (source === undefined) throw new MemoryFileMissing({ operation: "mutate", path: this.ownerPath(id), message: "not found" });
     const document = decodeMemoryDocument(this.ownerPath(id), id, source);
-    const result = transition(document.metadata);
+    const result = transition(adoptMemoryEvidenceRequirement(document.metadata, readGovernanceConfiguration(this.#root)?.config.policy));
     if (Result.isFailure(result)) throw result.failure;
     return { bytes: encodeMemoryDocument(result.success, document.body), metadata: result.success };
   }
@@ -134,53 +116,62 @@ export class MemoryRepository {
     if (!["roadmap", "feature", "use-case", "engineering"].includes(result.success.kind)) throw new MemoryReferenceConflict({ operation: "target", path: source.path, message: "unsupported promotion target" });
     return result.success as ValidatedRepoRefTarget & { readonly kind: PromotionKind };
   }
-  validateFixedEvidence(snapshot: TraceSnapshot, memoryPath: string, options: { readonly requireOpen?: boolean } = {}): FixedEvidenceValidation {
+  validateFixedEvidence(snapshot: TraceSnapshot, memoryPath: string, options: { readonly requireOpen?: boolean; readonly implementationDigest?: string; readonly validatedAt?: string } = {}): FixedEvidenceValidation {
+    if (options.implementationDigest === undefined) throw new MemoryReferenceConflict({ operation: "resolve", path: memoryPath, message: "current native implementation digest is unavailable; request the host capability" });
     const related = snapshot.tests.filter((test) => test.regressions.some((reference) => reference.split("#", 1)[0] === memoryPath));
-    const memoryId = memoryPath.slice("memory/".length, -3); const memory = this.read(memoryId).metadata;
+    const memoryId = memoryPath.slice("memory/".length, -3); const owner = this.readAuthorSnapshot(memoryId); const memory = owner.document.metadata;
     if (memory.memoryKind !== "problem" || (options.requireOpen !== false && memory.state !== "open")) throw new MemoryReferenceConflict({ operation: "resolve", path: memoryPath, message: "fixed gate requires the current open Problem Memory" });
     if (related.length === 0) throw new MemoryReferenceConflict({ operation: "resolve", path: memoryPath, message: "fixed gate requires a current regression case" });
     const preimages = new Set<string>([memoryPath]); const cases: unknown[] = [];
+    const preimageDigests: Record<string, string> = { [memoryPath]: owner.ownerPreimageDigest };
+    const capture = (path: string, digest: string): void => {
+      if (preimageDigests[path] !== undefined && preimageDigests[path] !== digest) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "evidence dependency changed during validation" });
+      preimages.add(path); preimageDigests[path] = digest;
+    };
     for (const test of related) {
-      const indexPath = test.path + ".cases.evidence.json"; const index = checked(indexPath, IndexSchema, decodeJson(indexPath, this.targetSource(indexPath).source));
+      const indexPath = test.path + ".cases.evidence.json";
+      const indexSource = this.targetSource(indexPath).source; capture(indexPath, traceDigest(indexSource));
+      const index = decodeNativeEvidenceIndex(decodeJson(indexPath, indexSource), indexPath);
       preimages.add(indexPath); const entry = index.current[test.caseId]?.[memoryPath];
       if (entry === undefined) throw new MemoryReferenceConflict({ operation: "resolve", path: indexPath, message: "no current evidence for selector and Memory" });
-      const inventoryRaw = this.targetSource(entry.inventory.path).source; preimages.add(entry.inventory.path);
-      const inventoryInput = objectInput(entry.inventory.path, decodeJson(entry.inventory.path, inventoryRaw)); const inventory = checked(entry.inventory.path, InventorySchema, inventoryInput);
-      const inventoryUnsigned = { ...inventoryInput }; delete inventoryUnsigned.digest;
-      if (inventory.digest !== canonicalDigest(inventoryUnsigned) || inventory.digest !== entry.inventory.digest || inventory.findings.length !== 0 || inventory.bodyExecutions !== 0 || inventory.forbiddenSetupExecutions !== 0 || !inventory.cases.some((item) => item.path + "#" + item.caseId === test.selector)) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.inventory.path, message: "inventory is not a clean current selector inventory" });
-      let projectDirectory = test.path.slice(0, test.path.lastIndexOf("/"));
-      while (projectDirectory.startsWith("e2e/") && !existsSync(join(this.#root, projectDirectory, "project.json"))) projectDirectory = projectDirectory.slice(0, projectDirectory.lastIndexOf("/"));
-      if (!projectDirectory.startsWith("e2e/") || !existsSync(join(this.#root, projectDirectory, "project.json"))) throw new MemoryReferenceConflict({ operation: "resolve", path: test.path, message: "cannot locate E2E project root" });
-      const currentSource = resolveRepositorySourceIdentity(this.#root, join(this.#root, projectDirectory), test.selector);
-      preimages.add(currentSource.declarationFile); preimages.add(currentSource.binding.contractRef.split("#", 1)[0]!);
-      for (const file of currentSource.projection.files) preimages.add(projectDirectory + "/" + file.path);
-      const readReceipt = (file: { path: string; digest?: string }) => {
-        const raw = this.targetSource(file.path).source; preimages.add(file.path); if (file.digest !== undefined && traceDigest(raw) !== file.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: "evidence digest mismatch" });
-        const input = objectInput(file.path, decodeJson(file.path, raw)); const declared = input.receiptSha256; const body = { ...input }; delete body.receiptSha256;
-        if (declared !== canonicalSignatureDigest(body)) throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: "receipt signature mismatch" });
-        const receipt = checked(file.path, ReceiptSchema, input); let source;
-        try { source = decodeRepositorySourceIdentityV3(receipt.source); } catch (cause) { throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: message(cause) }); }
-        if (receipt.selector !== test.selector || receipt.caseId !== test.caseId || receipt.inventoryDigest !== inventory.digest || !receipt.cleanup.ok || !sameRepositorySourceIdentity(source, currentSource)) throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: "receipt does not match current selector/source" });
-        return { receipt, source };
+      const config = readGovernanceConfiguration(this.#root);
+      const suite = governanceSuiteForFile(this.#root, test.path);
+      if (config === undefined || suite === undefined) throw new MemoryReferenceConflict({ operation: "resolve", path: test.path, message: "native evidence requires current governance suite configuration" });
+      capture(config.path, config.digest);
+      const currentSource = resolveRepositorySourceIdentity(this.#root, test.selector);
+      if (currentSource.binding.configurationDigest !== config.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: config.path, message: "policy configuration changed during validation" });
+      capture(currentSource.binding.contractRef.split("#", 1)[0]!, "sha256:" + currentSource.binding.contractSha256);
+      for (const file of currentSource.projection.files) capture(file.path, "sha256:" + file.rawSha256);
+      if (config.config.host !== undefined && currentSource.binding.adapterSourceDigest !== null) capture(config.config.host, currentSource.binding.adapterSourceDigest);
+      const sources = new Map<string, string>();
+      const readEvidence = (file: { readonly path: string; readonly digest?: string }, inventory = false): unknown => {
+        const raw = this.targetSource(file.path).source;
+        capture(file.path, traceDigest(raw)); sources.set(file.path, raw);
+        if (!inventory && file.digest !== undefined && traceDigest(raw) !== file.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: file.path, message: "evidence digest mismatch" });
+        return decodeJson(file.path, raw);
       };
-      const red = readReceipt(entry.red); const green = readReceipt(entry.green);
-      if (red.receipt.observation !== "red" || red.receipt.result.disposition !== "regression" || green.receipt.observation !== "green" || green.receipt.result.disposition !== "pass" || red.source.projection.digest !== green.source.projection.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: indexPath, message: "red/green gate failed" });
-      const certRaw = this.targetSource(entry.certificate.path).source; preimages.add(entry.certificate.path); if (traceDigest(certRaw) !== entry.certificate.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "evidence index digest does not match certificate bytes" }); const certInput = objectInput(entry.certificate.path, decodeJson(entry.certificate.path, certRaw)); const certUnsigned = { ...certInput }; delete certUnsigned.certificateSha256;
-      if (certInput.certificateSha256 !== canonicalSignatureDigest(certUnsigned)) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "certificate signature mismatch" });
-      const certificate = checked(entry.certificate.path, CertificateSchema, certInput);
-      if (certificate.selector !== test.selector || certificate.caseId !== test.caseId || certificate.candidateSha256 !== green.receipt.candidate.sha256 || certificate.greenReceipt !== entry.green.path || certificate.sourceDigest !== green.source.projection.digest || certificate.observations.singleCase !== entry.green.path || certificate.observations.cleanup.length === 0) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "takeover certificate is incomplete" });
-      const reliabilityPaths = [...certificate.observations.isolatedCopies, ...certificate.observations.sameCopy, certificate.observations.defaultParallel]; if (new Set(reliabilityPaths).size !== 6) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "reliability receipts are not six distinct paths" });
-      const reliability = reliabilityPaths.map((path) => readReceipt({ path }).receipt);
-      if (reliability.some((item) => item.observation !== "reliability" || item.result.disposition !== "pass" || item.candidate.sha256 !== green.receipt.candidate.sha256 || item.source.projection.digest !== green.source.projection.digest)) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "reliability gate failed" });
-      const invocationIds = [red.receipt.invocationId, green.receipt.invocationId, ...reliability.map((item) => item.invocationId)];
-      if (invocationIds.length !== 8 || new Set(invocationIds).size !== 8) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.certificate.path, message: "formal gate requires eight distinct invocation identities" });
-      cases.push({ selector: test.selector, caseId: test.caseId, binding: currentSource.binding, sourceDigest: green.source.projection.digest, candidateSha256: green.receipt.candidate.sha256, red: { path: entry.red.path, digest: traceDigest(this.targetSource(entry.red.path).source) }, green: { path: entry.green.path, digest: traceDigest(this.targetSource(entry.green.path).source) }, certificate: { path: entry.certificate.path, digest: traceDigest(certRaw) }, inventory: { path: entry.inventory.path, digest: traceDigest(inventoryRaw) }, reliability: reliabilityPaths.map((path) => ({ path, digest: traceDigest(this.targetSource(path).source) })), invocationIds });
+      const certificate = checked(entry.certificate.path, NativeReliabilityCertificateSchema, readEvidence(entry.certificate));
+      const paths = [...certificate.observations.isolatedCopies, ...certificate.observations.sameCopy, certificate.observations.defaultParallel];
+      if (certificate.greenReceipt !== entry.green.path) throw new MemoryReferenceConflict({ operation: "resolve", path: indexPath, message: "certificate green receipt differs from index" });
+      const receipts = new Map<string, unknown>([[entry.green.path, readEvidence(entry.green)], ...paths.map(path => [path, readEvidence({ path })] as const)]);
+      const verified = validateNativeEvidence({ inventory: readEvidence(entry.inventory, true), red: readEvidence(entry.red), certificate, receipts }, {
+        selector: test.selector, problem: { path: memoryPath, epoch: memory.epoch }, currentSource, implementationDigest: options.implementationDigest,
+        decodeSource: decodeRepositorySourceIdentityV4, sameSource: sameRepositorySourceIdentity,
+        usedInvocations: options.requireOpen === false ? [] : usedMemoryInvocations(memory),
+      });
+      if (verified.inventory.digest !== entry.inventory.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: entry.inventory.path, message: "inventory index digest mismatch" });
+      const file = (path: string) => ({ path, digest: traceDigest(sources.get(path)!) });
+      cases.push({ selector: test.selector, caseId: test.caseId,
+        binding: { kind: currentSource.binding.kind, contractRef: currentSource.binding.contractRef, contractSha256: currentSource.binding.contractSha256 },
+        sourceIdentityDigest: evidenceSignature(currentSource), sourceDigest: currentSource.projection.digest, candidateSha256: verified.green.candidate.sha256,
+        red: file(entry.red.path), green: file(entry.green.path), certificate: file(entry.certificate.path), inventory: file(entry.inventory.path), reliability: paths.map(file), invocationIds: verified.invocationIds });
     }
-    const evidence = decode(RepositoryEvidenceSchema, { memory: memoryPath, epoch: memory.epoch, validatedAt: new Date().toISOString(), cases }, memoryPath);
-    return { selectors: related.map((test) => test.selector).sort(), preimagePaths: [...preimages].sort(), evidence };
+    const evidence = decode(RepositoryEvidenceSchema, { policy: "concord.native-reliability/v1", memory: memoryPath, epoch: memory.epoch, validatedAt: options.validatedAt ?? new Date().toISOString(), cases }, memoryPath);
+    for (const [path, expected] of Object.entries(preimageDigests)) if (traceDigest(this.targetSource(path).source) !== expected) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "evidence dependency changed during validation" });
+    return { selectors: related.map((test) => test.selector).sort(), preimagePaths: [...preimages].sort(), preimageDigests, evidence };
   }
   search(pattern: string): readonly MemoryDocument[] { const needle = pattern.toLocaleLowerCase(); return this.list().filter((item) => (item.metadata.id + "\n" + item.metadata.title + "\n" + item.body).toLocaleLowerCase().includes(needle)); }
-  check(snapshot: TraceSnapshot): MemoryCheckReceipt {
+  check(snapshot: TraceSnapshot, implementationDigest?: string): MemoryCheckReceipt {
     const findings: string[] = []; const documents = this.list(); const byRef = new Map(documents.map((item) => ["memory/" + item.metadata.id + ".md", item.metadata]));
     for (const item of documents) {
       const m = item.metadata;
@@ -201,10 +192,11 @@ export class MemoryRepository {
         if (next.memoryKind !== m.memoryKind) break;
         cursor = next;
       }
+      if (m.resolution?.kind === "fixed" && m.resolution.evidenceLevel === "command" && adoptMemoryEvidenceRequirement(m).evidenceRequirement === "concord.native-reliability/v1") findings.push(m.id + ": command evidence does not satisfy the persisted native requirement");
       if (m.resolution?.kind === "fixed" && m.resolution.evidenceLevel === "repository") {
         try {
           if (m.resolution.repositoryEvidence.epoch !== m.epoch || m.resolution.repositoryEvidence.memory !== "memory/" + m.id + ".md") throw new Error("repository evidence is not bound to the current Memory epoch/path");
-          const current = this.validateFixedEvidence(snapshot, "memory/" + m.id + ".md", { requireOpen: false }).evidence;
+          const current = this.validateFixedEvidence(snapshot, "memory/" + m.id + ".md", { requireOpen: false, ...(implementationDigest === undefined ? {} : { implementationDigest }) }).evidence;
           const { validatedAt: _storedAt, ...storedFacts } = m.resolution.repositoryEvidence;
           const { validatedAt: _currentAt, ...currentFacts } = current;
           if (canonical(storedFacts) !== canonical(currentFacts)) findings.push(m.id + ": repository evidence facts changed; re-resolve with current evidence");
@@ -225,4 +217,4 @@ export class MemoryRepository {
     }
   }
 }
-export const memoryEffect = <A>(operation: string, thunk: () => A): Effect.Effect<A, MemoryError> => Effect.try({ try: thunk, catch: (cause) => cause instanceof MemoryFileMissing || cause instanceof MemoryContentInvalid || cause instanceof MemoryReferenceConflict || cause instanceof MemoryIoError ? cause : new MemoryIoError({ operation, message: message(cause) }) });
+export const memoryEffect = <A>(operation: string, thunk: () => A): Effect.Effect<A, MemoryError> => Effect.try({ try: thunk, catch: (cause) => cause instanceof ConcordError && cause.code === "EvidenceMigrationRequired" ? new EvidenceMigrationRequired({ operation, message: cause.message }) : cause instanceof EvidenceMigrationRequired || cause instanceof MemoryFileMissing || cause instanceof MemoryContentInvalid || cause instanceof MemoryReferenceConflict || cause instanceof MemoryIoError ? cause : new MemoryIoError({ operation, message: message(cause) }) });

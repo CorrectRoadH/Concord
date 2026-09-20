@@ -1,4 +1,4 @@
-// @concord-file local-repository-storage
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -26,6 +26,7 @@ function storageCoordinationFailure(cause: unknown): ConcordError {
   const coordination = cause instanceof CoordinationError || (typeof cause === 'object' && cause !== null && '_tag' in cause && cause._tag === 'CoordinationError');
   if (!coordination) return cause instanceof ConcordError ? cause : new ConcordError('CoordinationFailed', cause instanceof Error ? cause.message : String(cause));
   const error = cause as CoordinationError;
+  if (error.phase === 'migration') return new ConcordError('CoordinationMigrationRequired', error.message, { operation: error.operation, path: error.path });
   if (error.phase === 'lock' && error.message.includes('busy')) return new ConcordError('RepositoryBusy', error.message, { operation: error.operation, path: error.path });
   return new ConcordError('CoordinationFailed', error.message, { operation: error.operation, phase: error.phase, path: error.path });
 }
@@ -92,6 +93,8 @@ function currentJournal(path: string): Journal {
 /** Refusal only: callers must still acquire a lease and repeat this check before ordinary work. */
 export function assertCurrentRuntimeFormat(root: string): void {
   const journal = join(genericPrivateDirectorySync(root), 'journal.json');
+  const governanceMigration = join(genericPrivateDirectorySync(root), 'neutral-governance-migration-journal.json');
+  if (present(governanceMigration)) throw new ConcordError('CoordinationMigrationRequired', 'An interrupted neutral-governance migration is present; preserve it and run scripts/migrate-neutral-governance.ts --recover before ordinary runtime work.');
   if (present(journal)) currentJournal(journal);
   if (present(join(root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'concord.json is not a runtime configuration; explicitly migrate it to concord.config.ts offline. Preserve any interrupted journals and locks for offline recovery first.');
 }
@@ -296,8 +299,8 @@ export class LocalRepository implements Repository {
       }
     }
   }
-  // @concord-code publish-guarded-documents
-  // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
+  // @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
   publish(operation: string, changes: readonly Change[], dryRun = false): MutationReceipt {
     if (changes.length === 0) return { operation, dryRun, changedPaths: [] };
     if (new Set(changes.map(c => c.path)).size !== changes.length) throw new ConcordError('InvalidChange', 'A path occurs more than once in the publication');
@@ -309,13 +312,16 @@ export class LocalRepository implements Repository {
     if (operation === 'init' && plannedConfigChange === undefined) throw new ConcordError('InvalidChange', 'Init must publish exactly one project configuration');
     const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after).config;
     if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) this.validateProjectConfig(authorizationConfig);
+    const governanceGuard = (change: Change): boolean => change.path === 'concord.repository.json' && change.before === change.after;
+    if (!changes.some(change => !governanceGuard(change))) throw new ConcordError('InvalidChange', 'A governance preimage guard cannot be published without an actual owner change');
     const entries = changes.map(c => {
       this.absolute(c.path);
-      if (!this.allowedOwner(c.path, authorizationConfig)) throw new ConcordError('InvalidChange', `Not a Concord document owner: ${c.path}`);
-      this.assertWritable(c.path, authorizationConfig);
+      const guard = governanceGuard(c);
+      if (!guard && !this.allowedOwner(c.path, authorizationConfig)) throw new ConcordError('InvalidChange', `Not a Concord document owner: ${c.path}`);
+      if (!guard) this.assertWritable(c.path, authorizationConfig);
       const current = this.read(c.path) ?? null;
       if (current !== c.before) throw new ConcordError('PreimageChanged', `${c.path} changed; read its current digest and retry`);
-      if (c.before === null && c.after === null) throw new ConcordError('InvalidChange', 'An empty change is not permitted');
+      if (!guard && c.before === null && c.after === null) throw new ConcordError('InvalidChange', 'An absent same-preimage guard is only valid for concord.repository.json');
       return { ...c, beforeDigest: c.before === null ? null : digest(c.before), afterDigest: c.after === null ? null : digest(c.after), mode: current === null ? 0o644 : lstatSync(this.absolute(c.path)).mode & 0o777 };
     });
     const directories = new Set<string>();
@@ -353,7 +359,7 @@ export class LocalRepository implements Repository {
   }
   private publishJournal(journal: Journal, dryRun: boolean): MutationReceipt {
     if (Buffer.byteLength(canonical(journal)) > MAX_TRANSACTION_BYTES) throw new ConcordError('InvalidChange', 'Publication exceeds the transaction size limit');
-    const changedPaths = journal.changes.map(change => change.path);
+    const changedPaths = journal.changes.filter(change => change.path !== 'concord.repository.json' || change.before !== change.after).map(change => change.path);
     // Validate the complete set before persisting a prepared journal; dry-run follows this same guard.
     this.preflight(journal);
     if (dryRun || this.noWrite) return { operation: journal.operation, dryRun: true, changedPaths };
@@ -370,6 +376,7 @@ export class LocalRepository implements Repository {
           if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('PreimageChanged', 'Project configuration changed before source replacement');
         }
         if ((this.read(change.path) ?? null) !== change.before) throw new ConcordError('PreimageChanged', `${change.path} changed before replacement`);
+        if (change.path === 'concord.repository.json' && change.before === change.after) continue;
         this.apply(change.path, change.after, change.mode);
       }
       atomic(journalPath, `${canonical({ ...journal, phase: 'committed' })}\n`);
@@ -431,7 +438,10 @@ export class LocalRepository implements Repository {
       }
       if (plannedConfigChange?.after === null) fail('A journal cannot delete the runtime configuration');
       if (authorizationConfig === undefined) fail('Missing current TS authorization');
-      for (const change of journal.changes) if (!this.allowedOwner(change.path, authorizationConfig)) fail(`Not a Concord document owner: ${change.path}`);
+      for (const change of journal.changes) {
+        const governanceGuard = change.path === 'concord.repository.json' && change.before === change.after;
+        if (!governanceGuard && !this.allowedOwner(change.path, authorizationConfig)) fail(`Not a Concord document owner: ${change.path}`);
+      }
       for (const dir of journal.directories) {
         this.absolute(dir);
         if (!journal.changes.some(change => change.path.startsWith(`${dir}/`))) fail('Journal contains an unrelated directory');
@@ -439,6 +449,9 @@ export class LocalRepository implements Repository {
     }
     for (const change of journal.changes) {
       this.absolute(change.path);
+      const governanceGuard = change.path === 'concord.repository.json' && change.before === change.after;
+      if (change.path === 'concord.repository.json' && !governanceGuard) fail('Governance configuration may only appear as a same-preimage read guard');
+      if (!governanceGuard && change.before === null && change.after === null) fail('An absent same-preimage guard is only valid for concord.repository.json');
       if (change.mode < 0 || change.mode > 0o777 || (change.before === null ? null : digest(change.before)) !== change.beforeDigest || (change.after === null ? null : digest(change.after)) !== change.afterDigest) fail('Invalid journal contents');
       const current = this.read(change.path) ?? null;
       if (!recovering) {
@@ -453,8 +466,8 @@ export class LocalRepository implements Repository {
     if (contents === null) { if (present(target)) { rmSync(target); syncDirectory(dirname(target)); } }
     else atomic(target, contents, mode);
   }
-  // @concord-code recover-document-publication
-  // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
+  // @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
   recover(): { operation: string; status: string; changedPaths: readonly string[] } {
     const path = join(this.privateDir, 'journal.json');
     if (!present(path)) return { operation: 'recover', status: 'clean', changedPaths: [] };
@@ -468,6 +481,7 @@ export class LocalRepository implements Repository {
         }
         const current = this.read(change.path) ?? null;
         if (current !== change.before && current !== change.after) throw new ConcordError('RecoveryConflict', `${change.path} changed during recovery`);
+        if (change.path === 'concord.repository.json' && change.before === change.after) continue;
         if (current !== change.before) this.apply(change.path, change.before, change.mode);
       }
       for (const dir of [...journal.directories].sort((a,b) => b.length - a.length)) {
@@ -476,13 +490,13 @@ export class LocalRepository implements Repository {
       }
     }
     rmSync(path); syncDirectory(this.privateDir);
-    return { operation: 'recover', status: journal.phase === 'prepared' ? 'rolled-back' : 'committed', changedPaths: journal.changes.map(c => c.path) };
+    return { operation: 'recover', status: journal.phase === 'prepared' ? 'rolled-back' : 'committed', changedPaths: journal.changes.filter(change => change.path !== 'concord.repository.json' || change.before !== change.after).map(c => c.path) };
   }
 }
 
 export interface InitializeOptions { readonly projectId?: string; readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner']; readonly projectTypes?: readonly ('library' | 'cli')[]; readonly pages?: readonly ('library' | 'cli' | 'architecture' | 'lifecycle' | 'use-case')[]; readonly design?: boolean; readonly constitutionBody?: string; readonly adoptConstitution?: boolean; readonly constitutionReason?: string; readonly constitutionImpact?: string; readonly constitutionSources?: readonly string[]; readonly memorySources?: ProjectConfig['memorySources'] }
 export interface InitializationReceipt extends MutationReceipt { readonly config: ProjectConfig; readonly createdPaths: readonly string[]; readonly preservedPaths: readonly string[] }
-// @concord-code initialize-project-documents
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 export function initialize(repo: Repository, dryRun = false, options: InitializeOptions = {}): InitializationReceipt {
   const projectTypes = [...(options.projectTypes ?? [])];

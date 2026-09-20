@@ -43,7 +43,7 @@ interface DesignMutationReceiptBase {
 }
 
 export interface DesignCreateReceipt extends DesignMutationReceiptBase {
-  readonly format: "niceeval.docs-design/create-v1";
+  readonly format: "concord.docs-design/create-v1";
   readonly operation: "design-create";
   readonly cases: boolean;
 }
@@ -55,7 +55,7 @@ export interface DesignCheckFinding {
 }
 
 export interface DesignCheckReceipt {
-  readonly format: "niceeval.docs-design/check-v1";
+  readonly format: "concord.docs-design/check-v1";
   readonly operation: "design-check";
   readonly ok: boolean;
   readonly design: DesignMutationReceiptBase["design"];
@@ -70,7 +70,7 @@ export interface DesignCheckReceipt {
 }
 
 export interface DesignDecideReceipt extends DesignMutationReceiptBase {
-  readonly format: "niceeval.docs-design/decide-v1";
+  readonly format: "concord.docs-design/decide-v1";
   readonly operation: "design-decide";
   readonly selectedPlan: string;
 }

@@ -36,6 +36,17 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 export class ConcordApi {
   private readonly workspaceCache: { current?: { etag: string; value: WorkspaceSnapshot } } = {};
 
+  private async retryBusy<T>(request: () => Promise<T>, signal?: AbortSignal): Promise<T> {
+    const waits = [100, 250, 500, 1000];
+    for (let attempt = 0; ; attempt += 1) {
+      try { return await request(); }
+      catch (cause) {
+        if (!(cause instanceof ApiError) || cause.code !== 'RepositoryBusy' || attempt >= waits.length) throw cause;
+        await delay(waits[attempt]!, signal);
+      }
+    }
+  }
+
   private async request<T>(path: string, init?: RequestInit, cache?: { current?: { etag: string; value: T } }): Promise<T> {
     const headers = new Headers(init?.headers);
     const cached = cache?.current;
@@ -56,22 +67,15 @@ export class ConcordApi {
   }
 
   workspace(signal?: AbortSignal): Promise<WorkspaceSnapshot> {
-    return this.request('/api/workspace', { signal }, this.workspaceCache);
+    return this.retryBusy(() => this.request('/api/workspace', { signal }, this.workspaceCache), signal);
   }
   async file(path: string, signal?: AbortSignal) {
     const endpoint = `/api/file?path=${encodeURIComponent(path)}`;
-    const waits = [100, 250, 500, 1000];
-    for (let attempt = 0; ; attempt += 1) {
-      try {
-        return await this.request<import('../../src/view-contract').ViewFile>(endpoint, { signal });
-      } catch (cause) {
-        if (!(cause instanceof ApiError) || cause.code !== 'RepositoryBusy' || attempt >= waits.length) throw cause;
-        await delay(waits[attempt]!, signal);
-      }
-    }
+    return this.retryBusy(() => this.request<import('../../src/view-contract').ViewFile>(endpoint, { signal }), signal);
   }
   action(action: ViewAction): Promise<unknown> {
-    return this.request('/api/action', { method: 'POST', body: JSON.stringify(action) });
+    const request = () => this.request('/api/action', { method: 'POST', body: JSON.stringify(action) });
+    return ['document.set', 'document.metadata', 'source.set'].includes(action.action) ? this.retryBusy(request) : request();
   }
   jobs(signal?: AbortSignal): Promise<readonly ViewJob[]> { return this.request('/api/jobs', { signal }); }
   run(caseId: string): Promise<ViewJob> { return this.request('/api/jobs', { method: 'POST', body: JSON.stringify({ caseId }) }); }

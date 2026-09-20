@@ -18,7 +18,6 @@ export function DetailDrawer({ model, open, onClose, fullscreen = false, childre
     <SheetContent
       side="right"
       className={`detail-drawer w-full sm:max-w-none${fullscreen ? ' source-drawer' : ''}`}
-      style={fullscreen ? { width: '100vw', maxWidth: 'none' } : undefined}
     >
       <SheetHeader><SheetTitle>{model.title}</SheetTitle><SheetDescription>{model.description}</SheetDescription></SheetHeader>
       <div className="detail-drawer__body">{children}</div>

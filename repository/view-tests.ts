@@ -20,6 +20,6 @@ export const readViewTests = Effect.fn('repository.readViewTests')(function*(roo
   return snapshot.tests.map(test => ({
     id: test.caseId, name: test.title ?? test.selector, file: test.path,
     selector: test.selector, contract: test.contract,
-    features: features.get(test.selector) ?? [], lanes: test.lane, executor: test.executor.kind,
+    features: features.get(test.selector) ?? [],
   }));
 }, Effect.provide(NodeServices.layer));

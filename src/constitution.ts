@@ -1,4 +1,4 @@
-// @concord-file project-constitution-governance
+// @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 import { Predicate, Schema } from 'effect';
 import { parseDocument, stringify } from 'yaml';

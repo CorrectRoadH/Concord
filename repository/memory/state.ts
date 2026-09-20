@@ -1,3 +1,5 @@
+import { resolvedMemory, reopenedMemory } from "concord-sdlc/memory-state";
+import { adoptMemoryEvidenceRequirement } from "concord-sdlc/evidence-policy";
 import { Result } from "effect";
 import type { MemoryMeta, Resolution } from "concord-sdlc/model";
 import { MemoryReferenceConflict } from "./errors.js";
@@ -5,22 +7,25 @@ import { MemoryReferenceConflict } from "./errors.js";
 function conflict(operation: string, message: string): Result.Result<never, MemoryReferenceConflict> { return Result.fail(new MemoryReferenceConflict({ operation, message })); }
 
 export function activateMemory(memory: MemoryMeta, reason: string, at: string, commit?: string): Result.Result<MemoryMeta, MemoryReferenceConflict> {
+  memory = adoptMemoryEvidenceRequirement(memory);
   if (memory.state !== "captured") return conflict("activate", "only captured Memory can be activated");
   if (memory.memoryKind === "note") return conflict("activate", "note Memory cannot be activated");
   const state = memory.memoryKind === "problem" ? "open" : "current";
   return Result.succeed({ ...memory, state, history: [...memory.history, { action: "activate", at, reason, ...(commit === undefined ? {} : { commit }) }] });
 }
 
+function withCommit(memory: MemoryMeta, commit: string | undefined): MemoryMeta {
+  return commit === undefined ? memory : { ...memory, history: memory.history.map((entry, index) => index === memory.history.length - 1 ? { ...entry, commit } : entry) };
+}
+
 export function resolveProblem(memory: MemoryMeta, resolution: Resolution, commit?: string): Result.Result<MemoryMeta, MemoryReferenceConflict> {
-  if (memory.memoryKind !== "problem" || memory.state !== "open") return conflict("resolve", "only an open Problem Memory can be resolved");
-  if (resolution.epoch !== memory.epoch) return conflict("resolve", "resolution epoch does not match the current Problem epoch");
-  return Result.succeed({ ...memory, state: "resolved", resolution, history: [...memory.history, { action: "resolve", at: resolution.at, reason: resolution.reason, ...(commit === undefined ? {} : { commit }), resolution }] });
+  try { return Result.succeed(withCommit(resolvedMemory(memory, resolution), commit)); }
+  catch (cause) { return conflict("resolve", cause instanceof Error ? cause.message : String(cause)); }
 }
 
 export function reopenProblem(memory: MemoryMeta, reason: string, at: string, commit?: string): Result.Result<MemoryMeta, MemoryReferenceConflict> {
-  if (memory.memoryKind !== "problem" || memory.state !== "resolved" || memory.resolution === undefined) return conflict("reopen", "only a resolved Problem Memory can be reopened");
-  const { resolution: _resolution, ...open } = memory;
-  return Result.succeed({ ...open, state: "open", epoch: memory.epoch + 1, history: [...memory.history, { action: "reopen", at, reason, ...(commit === undefined ? {} : { commit }), resolution: memory.resolution }] });
+  try { return Result.succeed(withCommit(reopenedMemory(memory, reason, at), commit)); }
+  catch (cause) { return conflict("reopen", cause instanceof Error ? cause.message : String(cause)); }
 }
 
 export function supersedeMemory(memory: MemoryMeta, replacement: MemoryMeta, replacementRef: string, reason: string, at: string, commit?: string): Result.Result<MemoryMeta, MemoryReferenceConflict> {

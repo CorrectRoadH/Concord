@@ -1,4 +1,4 @@
-// @concord-file web-workbench-contract
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { Schema } from 'effect';
 import { TEMPLATE_PAGES } from './template-pages.js';
@@ -119,7 +119,7 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('constitution.initialize'), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('constitution.adopt'), body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('constitution.amend'), version: Text, body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('code.annotate'), id: Text, scope: Schema.Literals(['file', 'node', 'region']), contracts: Strings }),
+  Schema.Struct({ action: Schema.Literal('code.annotate'), scope: Schema.Literals(['file', 'node', 'region']), contracts: Strings }),
   Schema.Struct({ action: Schema.Literal('code.locate'), path: Text, line: Schema.Int }),
   Schema.Struct({ action: Schema.Literal('test.annotate'), contract: Text, regressions: Strings }),
   Schema.Struct({ action: Schema.Literal('evidence.show'), id: Text }),

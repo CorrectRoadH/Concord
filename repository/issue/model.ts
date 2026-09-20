@@ -37,7 +37,7 @@ export interface CreateIdentity extends IssueRepository {
 }
 
 export interface IssuePlanReceipt {
-  readonly format: "niceeval.issue-plan/v1";
+  readonly format: "concord.issue-plan/v1";
   readonly id: string;
   readonly schema: 1;
   readonly plannedAt: number;

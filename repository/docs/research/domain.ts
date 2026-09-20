@@ -180,7 +180,7 @@ function receipt(
     ? "create a package root"
     : "add a package-owned page";
   return {
-    format: "niceeval.docs-research/receipt/v1",
+    format: "concord.docs-research/receipt/v1",
     command,
     dryRun,
     ref: referenceFor(target),
@@ -386,7 +386,7 @@ function checkPackage(
       checkedPaths.push(path);
     }
     return {
-      format: "niceeval.docs-research/check/v1" as const,
+      format: "concord.docs-research/check/v1" as const,
       command: "check" as const,
       ok: findings.length === 0,
       ref: reference,
@@ -410,7 +410,7 @@ function checkResearch(root: string, reference: string): Effect.Effect<ResearchC
   return readResearchFile(root, target).pipe(
     Effect.flatMap(source => checkFile(target, source)),
     Effect.map(findings => ({
-      format: "niceeval.docs-research/check/v1" as const,
+      format: "concord.docs-research/check/v1" as const,
       command: "check" as const,
       ok: findings.length === 0,
       ref: reference,
@@ -453,6 +453,8 @@ export function renderResearchOutcome(outcome: ResearchOutcome): string {
 export function renderResearchError(error: ResearchError): string {
   switch (error._tag) {
     case "TraceRecoveryRequired": return `Unfinished journal at ${error.path}; run ${error.nextStep}.`;
+    case "TraceJournalMigrationRequired":
+      return `${error._tag}: ${error.path} (${error.format}): ${error.message}`;
     case "TraceRecoveryConflict": return `Recovery conflict at ${error.path}: ${error.message}`;
     case "TraceMutationError": return `Research publication ${error.phase}: ${error.message}`;
     case "ResearchInputError": return `Research input is invalid: ${error.message}`;

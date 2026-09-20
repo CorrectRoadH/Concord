@@ -20,26 +20,15 @@ export interface TracePage {
   readonly feature: string;
 }
 
-export interface TraceOwner {
-  readonly ref: string;
-  readonly path: string;
-  readonly anchor: string;
-  readonly contract: string;
-  readonly description: string;
-}
-
 export interface TraceTest {
   readonly caseId: string;
   readonly selector: string;
   readonly path: string;
   readonly title?: string;
-  readonly repo: string;
+  readonly suite: string;
   readonly contract: string;
   readonly regressions: readonly string[];
   readonly issues: readonly string[];
-  readonly lane: readonly string[];
-  readonly areas: readonly string[];
-  readonly executor: { readonly kind: string };
 }
 
 export interface TraceFeedbackSourceIssue {
@@ -99,7 +88,6 @@ export interface TraceSnapshot {
   readonly generation: number;
   readonly nodes: readonly TraceNode[];
   readonly pages: readonly TracePage[];
-  readonly owners: readonly TraceOwner[];
   readonly tests: readonly TraceTest[];
   readonly feedback: readonly TraceFeedback[];
   readonly memory: readonly TraceMemory[];
@@ -132,11 +120,8 @@ export interface TraceScopedTest extends TraceTargetRelation {
   readonly caseId: string;
   readonly selector: string;
   readonly title?: string;
-  readonly repo: string;
+  readonly suite: string;
   readonly description: string;
-  readonly lane: readonly string[];
-  readonly areas: readonly string[];
-  readonly executor: { readonly kind: string };
 }
 
 export interface TraceFeedbackAdoption extends TraceTargetRelation {
@@ -210,22 +195,22 @@ export interface TraceRelationsByTarget {
 export interface FeatureListInput { readonly pattern?: string; }
 export interface TestListInput { readonly pattern?: string; }
 export interface FeatureListReceipt {
-  readonly format: "niceeval.docs-trace/list-v1";
+  readonly format: "concord.docs-trace/list-v1";
   readonly operation: "feature-list";
   readonly snapshotDigest: string;
   readonly generation: number;
   readonly features: readonly { readonly id: string; readonly path: string; readonly title: string }[];
 }
 export interface TestListReceipt {
-  readonly format: "niceeval.docs-trace/list-v2";
+  readonly format: "concord.docs-trace/list-v2";
   readonly operation: "test-list";
   readonly snapshotDigest: string;
   readonly generation: number;
-  readonly tests: readonly { readonly selector: string; readonly caseId: string; readonly path: string; readonly title?: string; readonly repo: string; readonly contract: string }[];
+  readonly tests: readonly { readonly selector: string; readonly caseId: string; readonly path: string; readonly title?: string; readonly suite: string; readonly contract: string }[];
 }
 
 export interface FeatureShowReceipt {
-  readonly format: "niceeval.docs-trace/show-v2";
+  readonly format: "concord.docs-trace/show-v2";
   readonly operation: "feature-show";
   readonly snapshotDigest: string;
   readonly generation: number;
@@ -257,7 +242,7 @@ export interface FeatureShowReceipt {
 }
 
 export interface TestShowReceipt {
-  readonly format: "niceeval.docs-trace/show-v3";
+  readonly format: "concord.docs-trace/show-v3";
   readonly operation: "test-show";
   readonly snapshotDigest: string;
   readonly generation: number;
@@ -267,10 +252,7 @@ export interface TestShowReceipt {
     readonly caseId: string;
     readonly path: string;
     readonly title?: string;
-    readonly repo: string;
-    readonly lane: readonly string[];
-    readonly areas: readonly string[];
-    readonly executor: { readonly kind: string };
+    readonly suite: string;
   };
   readonly contract: { readonly ref: string; readonly kind: TraceScope };
   readonly features: readonly { readonly id: string; readonly path: string; readonly title: string }[];

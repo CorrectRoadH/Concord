@@ -52,7 +52,7 @@ export const CaseTombstoneSchema = Schema.Struct({
 export type CaseTombstone = typeof CaseTombstoneSchema.Type;
 
 export const CaseRelationsSidecarSchema = Schema.Struct({
-  format: Schema.Literal("niceeval.e2e-case-relations/v1"),
+  format: Schema.Literal("concord.case-relations/v1"),
   testFile: CanonicalPath,
   current: Schema.Record(CaseIdSchema, CaseRelationSchema),
   history: Schema.Array(CaseHistorySchema),

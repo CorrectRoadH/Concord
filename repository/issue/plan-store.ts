@@ -31,7 +31,7 @@ async function gitDirectory(root: string): Promise<string> {
 /** Git-private, cross-process receipt coordination. No authorization is stored here. */
 export const makeNodeIssuePlanStore = (root: string): IssuePlanStoreService => {
   const base = async () => {
-    const directory = join(await gitDirectory(root), "niceeval", "issue-plan", "v1");
+    const directory = join(await gitDirectory(root), "concord", "issue-plan", "v1");
     await Promise.all([mkdir(join(directory, "planned"), { recursive: true, mode: 0o700 }), mkdir(join(directory, "consumed"), { recursive: true, mode: 0o700 })]);
     return directory;
   };

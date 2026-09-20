@@ -1,38 +1,35 @@
 ---
 format: concord.document/v1
 id: load-compatible-repository-profile
-title: 加载兼容的 Repository Profile
+title: 加载中立项目治理接入
 createdAt: 2026-09-13T11:00:38.089Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
-# 加载兼容的 Repository Profile
+# 加载中立项目治理接入
 
 ## 场景
 
-作为需要保留原仓库专属工作流的维护者，我希望 `concord repo` 只在 host 与当前 worktree 匹配、安装 engine identity 一致时加载 profile，从而避免用错误实现解释原有 Memory 与 formal evidence。
+维护者将软件项目按 Concord 的套件、源码身份、证据要求和安全写入规范接入，在使用原生执行能力时验证实际 host 与锁定 engine，而静态查询不执行项目代码。
 
 ## 主流程
 
-1. profile 配置声明 host module，host 明确提供 repository root、协议身份、`caseIdentity: "concord.case-contracts/v1"` 和产品专属 inventory/evidence 边界。
-2. CLI 在执行 profile 命令前核对 host root 与当前 worktree，并核对已安装 engine identity。
-3. 匹配时沿用 repository profile 的 Memory 生命周期与 formal proof 规则；不匹配时在任何业务操作前具名失败。
+1. 显式声明 `concord.repository/v2`：suite ID/root、historyPath、版本化 policy 及可选 host。
+2. 静态 list/trace/Web 从 suite 源码注释派生关系；不读取 Nx 或产品分类，不加载 host。
+3. 只有请求 inventory 或原生证据能力时加载当前 v2 host，验证 root、caseIdentity、实际 engine 和所需能力。
+4. 原生结果必须唯一绑定真实声明、契约、候选与配置；Concord 统一核验可靠性事实和当前 Problem epoch。
+5. 已采用原生证明要求的 Problem 不接受 command 降级。旧格式通过显式离线迁移保留原件与历史，不能补摘要变成当前证明。
 
 ## 验收
 
-- host 指向其它根目录时报 `RepositoryHostMismatch`。
-- host 未声明当前注释身份协议时报 `RepositoryHostCaseIdentityUnsupported`，在业务操作前要求升级 host；不得回退标题 token。
-- engine 内容与声明身份不一致时报 `RepositoryEngineMismatch`；缺少配置时报 `RepositoryProfileMissing`。
-- 通用 Concord 的 command evidence 不能关闭要求 formal proof 的 profile Problem。
-- 这些测试证明兼容与边界检查，不声称覆盖 NiceEval 的完整原生 inventory、E2E 或生产可靠性。
+- root 或 engine 身份错误时，原生能力在业务执行前具名失败。
+- host 缺少当前协议、所需能力或配置损坏时返回具体诊断。
+- 加载即失败的 host 不妨碍 help、静态关系与 Web。
+- 非 Nx、非 e2e 目录且没有 executor/lanes 字段的软件项目能够接入。
+- helper、声明名称、源码集合、契约、配置或 adapter 身份变化使旧 proof 失效。
+- command 收据不能绕过原生可靠性下限；真实原生验收须单独执行，不能以 help/fake-host 测试代替。
 
-## 源码关系与正式证据
+## 权威契约
 
-- 真实声明旁使用一个 `@feature` 或 `@use-case` canonical 路径注释；目标存在且类型匹配。多个测试可指向同一契约。
-- 由 native 文件、声明文件与测试名称自动派生执行引用，无需人工 ID 或前置 attach。helper 用 `@test-file` 指定 native 文件；改名或移动后重新派生引用。
-- host 必须在执行副本中将原生收集结果与源码声明唯一绑定。能力字段只是 host 的承诺，绑定算法须由消费仓库验证并纳入实现摘要。
-- current 关系只存于源码；历史、退役与证据指针共用事务和完整 preimage 检查。
-- 正式证据使用 `concord.repository-source-identity/v3`，绑定测试引用、文件路径和 direct-contract 路径及内容摘要。`concord.repository-source-projection/v2` 剥除关系注释，保留测试名称、逻辑及文件映射。
-- 契约、源码、helper 或路径集合变化会使证据陈旧。旧 receipts 保留原件，新的 fixed 仍须通过完整正式 gate。
-- 消费仓库使用锁定的已构建包，不依赖 Concord checkout；静态发现与 command evidence 不代表原生测试执行。
+[高级测试治理](../../../repository-profile.md)拥有当前配置、source v4/projection v3、证据和迁移边界；[中立治理设计](../../../design/neutral-project-governance/README.md)记录裁决。

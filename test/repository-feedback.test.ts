@@ -17,6 +17,7 @@ function fixture(t: TestContext): string {
   t.after(() => rmSync(root, { recursive: true, force: true }));
   execFileSync('git', ['init', '-q', root]);
   mkdirSync(join(root, 'e2e'));
+  write(root, 'concord.repository.json', JSON.stringify({ format: 'concord.repository/v2', suites: [{ id: 'suite', root: 'e2e' }], historyPath: 'test-history.ts', policy: 'concord.native-reliability/v1' }));
   for (const path of ['docs/issues/README.md', 'memory/README.md']) write(root, path, '# Navigation\n');
   write(root, 'docs/feature/flow/README.md', owner({ kind: 'feature', id: 'flow', title: 'Flow' }));
   write(root, 'memory/problem.md', owner({ kind: 'memory', id: 'problem', title: 'Problem', memoryKind: 'problem', state: 'open', epoch: 0, promotions: [], history: [] }));
@@ -63,7 +64,7 @@ test('dogfood import preserves binary artifacts and candidate facts, validates d
   t.after(() => rmSync(artifacts, { recursive: true, force: true }));
   const bytes = Buffer.from([0, 255, 13, 10, 128]);
   write(artifacts, 'capture.bin', bytes);
-  const unsigned = { format: 'niceeval.feedback-envelope/v1', origin: { repository: 'acme/project', originId: 'run-1', commit: 'a'.repeat(40) }, candidate: { version: 'candidate-one' }, source: 'dogfood', observation: 'Original observation', impact: 'Original impact', artifacts: [{ path: 'capture.bin', byteLength: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }] };
+  const unsigned = { format: 'concord.feedback-envelope/v1', origin: { repository: 'acme/project', originId: 'run-1', commit: 'a'.repeat(40) }, candidate: { version: 'candidate-one' }, source: 'dogfood', observation: 'Original observation', impact: 'Original impact', artifacts: [{ path: 'capture.bin', byteLength: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') }] };
   const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(canonical) : value !== null && typeof value === 'object' ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, value]) => [key, canonical(value)])) : value;
   const envelope = { ...unsigned, digest: createHash('sha256').update(JSON.stringify(canonical(unsigned))).digest('hex') };
   await assert.rejects(run(root, { operation: 'import', envelope: { ...envelope, digest: 'bad' }, artifacts, dryRun: false }), /digest mismatch/);

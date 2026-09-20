@@ -26,7 +26,7 @@ Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码
 
 - 初始化项目配置、写作指南和完整参考模板，不覆盖已有文件。
 - 创建并维护 Feature、Use Case、Roadmap、Design、Engineering、Research 与 Memory owner。
-- 从整文件、函数和完整代码段旁的注释反查 Feature / Use Case 实现关联，支持按源码行定位。
+- 从整文件、函数和完整代码段旁的注释反查 Feature / Use Case / Engineering 实现关联，支持按源码行定位；查询引用自动派生，无需手写声明 ID。
 - 从真实测试声明旁的注释发现 case，并用 SQLite 加速可重建投影。
 - 运行项目声明的 argv，签发 command 级 red/green 收据，并约束 Problem 的 fixed 关闭。
 - 以路径安全、preimage、journal 和恢复协议保护本地写入。

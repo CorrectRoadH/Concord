@@ -4,7 +4,7 @@
 
 Concord 是面向开发者与 coding agent 的本地 SDLC CLI。产品契约保存在 Markdown，代码与测试关系写在实际源码旁，Memory 保存问题和裁决历史；Trace 动态反查这些关系，不需要第二份关系 JSON。
 
-通用模式使用项目自己的 Git worktree，不依赖 NiceEval、云服务或模型 API。当前支持 Linux 本地文件系统与 Node.js 24.15+；源码开发使用 pnpm 11.18.0。
+Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux 本地文件系统与 Node.js 24.15+；源码开发使用 pnpm 11.18.0。
 
 - [Quick start](#quick-start)：从空仓库跑通契约、代码、测试和反查。
 - [常用 usage](#常用-usage)：接入已有项目、维护文档、关联代码、测试与 Memory。
@@ -26,16 +26,16 @@ concord use-case create greet-name --feature greeting --title "Greet a name"
 mkdir -p src test
 
 cat > src/greeting.mjs <<'SOURCE'
-// @concord-file greeting-module
+// @concord-file
 // @concord-implements docs/feature/greeting/README.md
 
-// @concord-code greet-name
+// @concord-code
 // @concord-implements docs/feature/greeting/use-case/greet-name.md
 export function greet(name) {
-  // @concord-begin normalize-name
+  // @concord-begin
   // @concord-implements docs/feature/greeting/use-case/greet-name.md
   const label = name.trim() || 'world';
-  // @concord-end normalize-name
+  // @concord-end
   return `Hello, ${label}!`;
 }
 SOURCE
@@ -84,7 +84,7 @@ concord view --host 127.0.0.1 --port 4317
 
 Git 面板按已暂存、未暂存、未跟踪列出文件，支持统一和分栏差异。编辑器中的未保存差异与 Git 变化分别呈现。Web 与 CLI 共用领域校验，空闲网页不会占用仓库锁。
 
-前端使用 React、React Router、Vite、shadcn/ui 和 MDXEditor；Git 差异展示复用 react-diff-view。详细操作见 `concord --skill view`。当前工作台覆盖通用模式；NiceEval repository profile 仍从宿主 CLI 使用。
+前端使用 React、React Router、Vite、shadcn/ui 和 MDXEditor；Git 差异展示复用 react-diff-view。详细操作见 `concord --skill view`。工作台显示契约、实现和测试关联；高级原生执行通过项目明确接入的能力使用。
 
 ## 多来源反馈
 
@@ -181,23 +181,23 @@ concord --skill document
 ### 文件、函数和代码段属于哪个功能
 
 ```sh
-concord code annotate validate-name --scope node \
+concord code annotate --scope node \
   --contract docs/feature/greeting/use-case/greet-name.md
-concord code annotate name-module --scope file \
+concord code annotate --scope file \
   --contract docs/feature/greeting/README.md
-concord code annotate format-name --scope region \
+concord code annotate --scope region \
   --contract docs/feature/greeting/README.md \
   --contract docs/feature/greeting/use-case/greet-name.md
-concord code show greet-name
+concord code list --json
 concord code locate src/greeting.mjs --line 9 --json
 concord --skill code
 ```
 
-`annotate` 只生成片段，需放入实际源码；重复 `--contract` 表示多目标。文件头用 `@concord-file`，函数/声明前用 `@concord-code`，连续完整语句用同 ID 的 `@concord-begin/end`；起始标记后紧跟一条或多条 `@concord-implements`。
+`annotate` 只生成片段，需放入实际源码；重复 `--contract` 表示多目标。文件头用 `@concord-file`，函数/声明前用 `@concord-code`，连续完整语句用成对的 `@concord-begin/end`；范围标记均不带 ID，起始标记后紧跟一条或多条 `@concord-implements`。
 
 首版支持 JS/TS 的有函数体的函数、方法、类，以及单标识符直接绑定的 arrow/function 变量。Region 必须在同一语句列表内，不能截断表达式、跨函数或嵌套 region。文件、函数、代码段可以完整包含，位置查询返回所有包含作用域，不推断继承或优先级。
 
-代码 ID 在当前 code 集合唯一，行号随源码重新计算；目标使用 canonical Feature / Use Case 路径，也支持 Feature supporting page 与有效 `#anchor`。引用检查会发现重复 ID、缺失目标、错误边界及真实标注文件的语法错误。源码中的字符串、模板、正则或 JSX 伪标记不注册声明。详见[代码声明指引](skills/concord/references/code.md)。
+内部引用由源路径、范围和 AST 位置自动派生，行号随源码重新计算，无需手工命名。目标使用 canonical Feature / Use Case / Engineering 路径，也支持 Feature 或 Engineering supporting page 与有效 `#anchor`。检查会发现重复引用、缺失目标、错误边界及真实标注文件的语法错误；字符串、模板、正则或 JSX 伪标记不注册声明。详见[代码声明](skills/concord/references/code.md)。
 
 ### 测试关联与执行
 
@@ -278,7 +278,6 @@ Trace 从当前 contract source 推导反向关系，分别展示代码声明、
 pnpm build
 pnpm concord check
 pnpm concord code list
-pnpm concord code show verify-fixed-command-proof
 pnpm concord trace show resolve-with-command-evidence
 pnpm concord trace show recover-local-state
 pnpm concord review render local-sdlc
@@ -355,18 +354,18 @@ nix profile install 'git+https://github.com/CorrectRoadH/homebrew-tap?ref=main#c
 
 Nix 自动提供 Node.js 与 Git；仓库专用的 pnpm 等工具仍由消费环境管理。
 [NixOS 配置与发行说明](https://github.com/CorrectRoadH/homebrew-tap#nix--nixos)包含系统配置入口。
-NiceEval 的 `pnpm run repo` 等命令继续选择仓库锁定版本，Nix 安装不会重写项目数据。
+项目的执行入口继续选择仓库锁定版本，Nix 安装不会重写项目数据。
 
-## Repository profile
+## 高级测试治理
 
-`concord repo` 承接 NiceEval 仓库维护命令，通过消费仓库的 host 提供原生 inventory 与 formal evidence。项目内继续使用锁定版本的 `pnpm run repo …` 等入口；global engine 与仓库锁定字节不一致时会拒绝执行。它与通用模式的 command 收据保持独立，不要求其它项目接入 NiceEval。
+`concord repo` 管理声明式套件、原生 inventory、回归关系和可靠性证据。项目按 Concord 的中立治理规范接入，拥有自己的 runner、运行环境和调度策略；不要求 Nx、产品包名或固定测试目录。
 
 ```sh
 concord --skill repository
 concord repo --help
 ```
 
-[Repository profile](docs/repository-profile.md) 说明源码注释、历史归档、v2 证据及既有历史读取边界。
+原生能力按需加载，静态关系与 Web 不执行 host。Problem 已采用的可靠性要求不能用 command 收据绕过。配置、证据与离线迁移契约见[高级测试治理](docs/repository-profile.md)。产品 Preview、示例同步、部署和专属 PR 工具由消费项目维护。
 
 ## 更多资料
 

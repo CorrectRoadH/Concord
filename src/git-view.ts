@@ -1,4 +1,4 @@
-// @concord-file inspect-working-tree-changes
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/README.md
 import { execFile } from 'node:child_process';
 import { lstatSync, readFileSync } from 'node:fs';

@@ -1,7 +1,8 @@
-// @concord-file memory-lifecycle
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { ConcordError, type HistoryEntry, type MemoryMeta, type Resolution } from './shared.js';
+import { adoptMemoryEvidenceRequirement, assertMemoryResolutionPolicy } from './evidence-policy.js';
 
 const required = (value: string, field: string): string => {
   if (!value || value.trim() !== value) throw new ConcordError('InvalidInput', `${field} must be non-empty and have no surrounding whitespace`);
@@ -14,13 +15,16 @@ const history = (action: string, reason: string, at: string, ref?: string, resol
 
 /** Pure lifecycle transitions derived from NiceEval's memory/state.ts. */
 export function resolvedMemory(memory: MemoryMeta, resolution: Resolution): MemoryMeta {
+  memory = adoptMemoryEvidenceRequirement(memory);
+  assertMemoryResolutionPolicy(memory, resolution);
   if (memory.memoryKind !== 'problem') throw new ConcordError('InvalidMemoryState', 'Only Problem Memory can be resolved');
   if (memory.state !== 'open') throw new ConcordError('InvalidMemoryState', 'Problem Memory is already resolved');
   if (resolution.epoch !== memory.epoch) throw new ConcordError('InvalidProof', 'Resolution evidence belongs to a different Problem epoch');
-  return { ...memory, state: 'resolved', resolution, history: [...memory.history, history('resolve', resolution.reason, resolution.at, undefined, resolution)] };
+  return adoptMemoryEvidenceRequirement({ ...memory, state: 'resolved', resolution, history: [...memory.history, history('resolve', resolution.reason, resolution.at, undefined, resolution)] });
 }
 
 export function reopenedMemory(memory: MemoryMeta, reason: string, at: string): MemoryMeta {
+  memory = adoptMemoryEvidenceRequirement(memory);
   if (memory.memoryKind !== 'problem') throw new ConcordError('InvalidMemoryState', 'Only Problem Memory can be reopened');
   if (memory.state !== 'resolved' || memory.resolution === undefined) throw new ConcordError('InvalidMemoryState', 'Only a resolved Problem Memory can be reopened');
   const previous = memory.resolution;

@@ -34,7 +34,7 @@ test('init preview is write-free only before owners or coordination locks exist'
       assert.throws(() => new LocalRepository(root, { initialize: true, dryRun: true }), { code: 'RecoveryRequired' });
       rmSync(join(traceDir, name));
     }
-    mkdirSync(join(root, '.git/concord'));
+    mkdirSync(join(root, '.git/concord'), { recursive: true });
     writeFileSync(join(root, '.git/concord/journal.json'), JSON.stringify({ format: 'concord.journal', root, privateDir: join(root, '.git/concord'), projectId: 'pending', operation: 'init', phase: 'prepared', directories: [], changes: [], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: 'sha256:pending' } }));
     assert.throws(() => new LocalRepository(root, { initialize: true, dryRun: true }), { code: 'RecoveryRequired' });
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);

@@ -62,7 +62,7 @@ export const ResearchFrontmatterSchema = ResearchSchema;
 export type ResearchFrontmatter = Extract<DocumentMeta, { readonly kind: "research" }>;
 
 export interface ResearchMutationReceipt {
-  readonly format: "niceeval.docs-research/receipt/v1";
+  readonly format: "concord.docs-research/receipt/v1";
   readonly command: "create-page" | "create-package" | "add-page";
   readonly dryRun: boolean;
   readonly ref: string;
@@ -85,7 +85,7 @@ export interface ResearchCheckFinding {
 }
 
 export interface ResearchCheckReceipt {
-  readonly format: "niceeval.docs-research/check/v1";
+  readonly format: "concord.docs-research/check/v1";
   readonly command: "check";
   readonly ok: boolean;
   readonly ref: string;

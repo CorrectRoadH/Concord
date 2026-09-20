@@ -58,7 +58,7 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   const all = spawnSync(process.execPath, [cli, '--skill', 'all'], { cwd: outside, encoding: 'utf8' });
   assert.equal(all.status, 0, all.stderr);
   assert.match(all.stdout, /# 初始化与模板/);
-  assert.match(all.stdout, /# Repository profile 边界/);
+  assert.match(all.stdout, /# 高级测试治理/);
   assert.equal(existsSync(join(outside, 'concord.config.ts')), false);
 
   const installedMain = join(cli, '../../skills/concord/SKILL.md');

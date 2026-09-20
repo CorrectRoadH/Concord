@@ -16,13 +16,16 @@ Concord 来源于 NiceEval revision `e1c66d31115208ceaae2f5bd4d730a7abf67048d` �
 | PR editor | 保留本地审阅中关联契约、测试与 Memory 的目标；使用 Concord 审阅格式 |
 | Issue 领域 | 提供本地 Observation 草稿与 Memory 关联，不冒充远端 GitHub 工作项状态 |
 
-Repository profile 迁入 NiceEval 的仓库工具模块；NiceEval 的旧源码位置只转出 Concord 发布包。Research、Memory、Issue 统一采用 Concord 当前文档格式，旧文件通过一次性迁移保留正文、来源及历史，不提供旧 owner 兼容运行时。Profile 当前测试关系位于真实声明注释，原始 history/tombstone 保留在注释归档；旧 evidence 不改写，历史处理声明保存为未验证 attestation，新正式证据使用当前 v2 gate。
+早期 Repository profile 曾整体迁入 NiceEval 的仓库工具，消费仓库通过转出 Concord 包使用它；其中也包含 Mint、Preview、Examples 和下游领域及 runner 类型快照。这是抽取阶段的历史边界，已由下述中立治理裁决替代。
 
-产品专属 Nx E2E discovery、candidate/Testkit injection、native runner inventory 与 formal red/green/takeover 执行仍由消费仓库 host 拥有。Repository profile 托管原有 Mint、Preview、Examples 和下游领域，按消费仓库配置和素材工作。Host 的 TypeScript 声明快照只定义接口，不包含 runner 实现。
-通用命令结果称为 `command` evidence，不继承 NiceEval 的 formal E2E、覆盖率或可靠性矩阵承诺。
+Research、Memory、Issue 采用 Concord 当前文档格式。显式迁移保留正文、来源及历史；旧 evidence 不改写，历史处理声明保持未验证状态。通用命令结果仍称为 `command` evidence，原生可靠性由显式采用的 Concord 政策和当前证据核验，二者不能互相冒充。
 
 本地发布包不依赖原始 checkout。所有运行时 import、模板、schema 与 Agent 指引都由 Concord 自己提供。
 
 随包 `templates/` 的文档体裁提取自 NiceEval `docs/_template/feature-design`、`design-decision`、`research` 和 `docs/engineering/_template`：保留问题、目标、约束、候选、架构、生命周期与验收的写作分工，移除 NiceEval 专属命令、Sandbox 和判分要求。通用模式使用独立的 `concord.templates/v1` manifest；它不加载 repository profile 的 `niceeval.docs-template/v1` 模板或复制其测试 sidecar。
 
 Research 模板后来按自由研究契约收敛为标题，来源、观察日期、章节和附页均不强制。历史 NiceEval 主题仍属于 NiceEval 消费仓库；离线目录迁移只补齐其当前格式与路径，不复制进 Concord 自身文档。
+
+## 2026-09-20 中立治理裁决
+
+前述 Repository profile 是历史抽取阶段的归属记录。当前采用 [中立治理方案](design/neutral-project-governance/README.md)：将产品 Preview、Examples、下游、站点与 PR 组合归还消费者，保留并提升身份、证据、生命周期和恢复规则为 Concord 标准。原始来源说明继续保留；NiceEval 作为消费者适配中立配置与协议，不再决定 Concord 的产品字段。

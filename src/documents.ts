@@ -1,4 +1,4 @@
-// @concord-file document-contract-operations
+// @concord-file
 // @concord-implements docs/feature/document-packages/use-case/migrate-document-discovery.md
 // @concord-implements docs/feature/local-sdlc/README.md
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -39,6 +39,8 @@ import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { rebaseAdoptedMarkdown } from './adoption.js';
 import { showConstitution } from './constitution.js';
 import { ContentCache } from './content-cache.js';
+import { readGovernanceConfiguration } from './governance-config.js';
+import { adoptMemoryEvidenceRequirement, memoryEvidenceRequirement } from './evidence-policy.js';
 
 export const DOCUMENT_ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/research', 'docs/engineering', 'docs/issues'] as const;
 export function documentRoots(repo: Repository): readonly string[] { return [...DOCUMENT_ROOTS, ...(repo.config.memorySources ?? [{ path: 'memory' }]).map((source) => source.path)]; }
@@ -118,6 +120,15 @@ function expectedPath(metadata: DocumentMeta, documents: readonly DocumentRecord
 
 function changed(repo: Repository, operation: string, record: DocumentRecord, metadata: DocumentMeta, body = record.body, dryRun = false): MutationReceipt {
   return repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, body) }], dryRun);
+}
+
+function problemPolicy(repo: Repository) {
+  const config = readGovernanceConfiguration(repo.root);
+  return { policy: config?.config.policy ?? 'command' as const, guard: { path: config?.path ?? 'concord.repository.json', before: config?.source ?? null, after: config?.source ?? null } };
+}
+
+function changedProblem(repo: Repository, operation: string, record: DocumentRecord, metadata: MemoryMeta, policy: ReturnType<typeof problemPolicy>, dryRun: boolean): MutationReceipt {
+  return repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, record.body) }, policy.guard], dryRun);
 }
 
 function preimage(repo: Repository, record: DocumentRecord): string {
@@ -246,6 +257,7 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       if (problem && (metadata.state !== 'captured' && metadata.state !== 'open' && metadata.state !== 'resolved' && metadata.state !== 'superseded')) finding(findings, 'InvalidState', document.path, 'Problem state must be captured, open, resolved, or superseded');
       if (problem && metadata.state === 'resolved' && metadata.resolution === undefined) finding(findings, 'InvalidState', document.path, 'Resolved Problem must have a resolution');
       if (metadata.resolution !== undefined && metadata.resolution.epoch !== metadata.epoch) finding(findings, 'InvalidState', document.path, 'Resolution epoch does not match current Problem epoch');
+      if (metadata.resolution?.kind === 'fixed' && metadata.resolution.evidenceLevel === 'command' && memoryEvidenceRequirement(metadata) === 'concord.native-reliability/v1') finding(findings, 'EvidenceRequirementUnsatisfied', document.path, 'Command resolution does not satisfy the persisted native evidence requirement');
       if (metadata.resolution?.kind === 'fixed' && metadata.resolution.evidenceLevel === 'command' && (!metadata.resolution.red || !metadata.resolution.green || !metadata.resolution.selectedCaseId)) finding(findings, 'InvalidState', document.path, 'Fixed resolution lacks complete command evidence');
       if (metadata.resolution?.kind === 'fixed' && metadata.resolution.evidenceLevel === 'repository') {
         const evidence = metadata.resolution.repositoryEvidence;
@@ -351,9 +363,10 @@ export interface CreateDocumentInput {
   readonly dryRun?: boolean;
 }
 
-// @concord-code create-contract-owner
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
+  const governance = kind === 'memory' ? problemPolicy(repo) : undefined;
   const id = decode(Slug, input.id, 'id');
   const title = required(input.title, 'title');
   if (input.feature !== undefined && kind !== 'use-case') throw new ConcordError('InvalidInput', 'feature is only valid for use-case');
@@ -410,6 +423,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     case 'issue': path = `docs/issues/${id}.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }; break;
   }
   const body = bodyFor(template);
+  if (metadata.kind === 'memory') metadata = adoptMemoryEvidenceRequirement(metadata, governance!.policy);
   if (kind === 'research' && repo.files(posix.dirname(path)).length > 0) throw new ConcordError('DocumentExists', `${posix.dirname(path)} already contains files; creating an owner would change their ownership`);
   const changes = [{ path, before: null, after: renderDocument(metadata, body) }];
   const allowed = kind === 'feature' || kind === 'roadmap';
@@ -426,7 +440,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     }
   }
   for (const change of changes) if (repo.read(change.path) !== undefined) throw new ConcordError('DocumentExists', `${change.path} already exists`);
-  return repo.publish(`create-${kind}`, changes, input.dryRun ?? false);
+  return repo.publish(`create-${kind}`, [...changes, ...(metadata.kind === 'memory' && metadata.memoryKind === 'problem' ? [governance!.guard] : [])], input.dryRun ?? false);
 }
 
 export { addPage, setPage, showPage } from './document-pages.js';
@@ -478,7 +492,7 @@ export function decideDesign(repo: Repository, selector: string, selected: strin
   return changed(repo, 'decide-design', record, { ...metadata, decision: { selected: choice, reason: required(reason, 'reason'), at: now(), targets } }, record.body, dryRun);
 }
 
-// @concord-code adopt-roadmap-contract
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 export function adoptRoadmap(repo: Repository, selector: string, featureId: string, dryRun = false): MutationReceipt {
   const documents = loadDocuments(repo); const roadmap = findDocument(documents, selector, 'roadmap');
@@ -541,10 +555,11 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   return repo.publish('adopt-roadmap', changes, dryRun);
 }
 
-// @concord-code record-memory-resolution
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 export function resolveMemory(repo: Repository, selector: string, kind: Resolution['kind'], reason: string, proof?: FixedProof, dryRun = false): MutationReceipt {
-  const record = findDocument(loadDocuments(repo), selector, 'memory'); const metadata = memory(record); const at = now();
+  const governance = problemPolicy(repo);
+  const record = findDocument(loadDocuments(repo), selector, 'memory'); const metadata = adoptMemoryEvidenceRequirement(memory(record), governance.policy); const at = now();
   const why = required(reason, 'reason');
   let resolution: Resolution;
   if (kind === 'fixed') {
@@ -555,22 +570,24 @@ export function resolveMemory(repo: Repository, selector: string, kind: Resoluti
     if (!(['not-a-bug', 'wont-fix', 'external-fixed'] as const).includes(kind as never)) throw new ConcordError('InvalidInput', `Unknown resolution kind: ${kind}`);
     resolution = { kind, reason: why, at, epoch: metadata.epoch, evidenceLevel: 'author' };
   }
-  return changed(repo, 'resolve-memory', record, resolvedMemory(metadata, resolution), record.body, dryRun);
+  return changedProblem(repo, 'resolve-memory', record, resolvedMemory(metadata, resolution), governance, dryRun);
 }
 
 export function activateMemory(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
+  const governance = problemPolicy(repo);
   const record = findDocument(loadDocuments(repo), selector, 'memory');
-  const metadata = memory(record);
+  const metadata = adoptMemoryEvidenceRequirement(memory(record), governance.policy);
   if (metadata.state !== 'captured') throw new ConcordError('InvalidMemoryState', 'Only captured Memory can be activated');
   if (metadata.memoryKind === 'note') throw new ConcordError('InvalidMemoryState', 'A note cannot be activated without explicit classification');
   const at = now();
   const state = metadata.memoryKind === 'problem' ? 'open' : 'current';
-  return changed(repo, 'activate-memory', record, { ...metadata, state, history: [...metadata.history, lifecycleHistory('activate', required(reason, 'reason'), at)] }, record.body, dryRun);
+  return changedProblem(repo, 'activate-memory', record, { ...metadata, state, history: [...metadata.history, lifecycleHistory('activate', required(reason, 'reason'), at)] }, governance, dryRun);
 }
 
 export function reopenMemory(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
+  const governance = problemPolicy(repo);
   const record = findDocument(loadDocuments(repo), selector, 'memory');
-  return changed(repo, 'reopen-memory', record, reopenedMemory(memory(record), reason, now()), record.body, dryRun);
+  return changedProblem(repo, 'reopen-memory', record, reopenedMemory(adoptMemoryEvidenceRequirement(memory(record), governance.policy), reason, now()), governance, dryRun);
 }
 
 export function supersedeMemory(repo: Repository, selector: string, replacement: string, reason: string, dryRun = false): MutationReceipt {
@@ -606,7 +623,7 @@ export function linkIssue(repo: Repository, selector: string, memoryRef: string,
   return changed(repo, 'link-issue', record, { ...record.metadata, memoryRelations: [...record.metadata.memoryRelations, { kind: 'investigation', memory: canonical }] }, record.body, dryRun);
 }
 
-// @concord-code link-feedback-feature
+// @concord-code
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 export function linkFeedbackFeature(repo: Repository, selector: string, featureRef: string, dryRun = false): MutationReceipt {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');

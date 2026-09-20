@@ -1,4 +1,4 @@
-// @concord-file feedback-cache-projection
+// @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';

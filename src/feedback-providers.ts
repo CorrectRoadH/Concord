@@ -1,4 +1,4 @@
-// @concord-file feedback-provider-adapters
+// @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { DateTime, Effect, Predicate, Schema } from 'effect';
 import { RemoteFeedbackSchema, type FeedbackConnection, type RemoteFeedback } from './feedback-schema.js';

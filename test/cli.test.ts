@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
@@ -254,7 +254,8 @@ test('installed init previews configuration, preserves existing docs, and never 
  const args = ['init', '--test-root', 'spec', '--runner-config', join(root, 'runner.json')];
  assert.equal(call(root, ['--dry-run', ...args], DryRunOutput).dryRun, true);
  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
- assert.equal(existsSync(join(root, '.git/concord')), false);
+ assert.deepEqual(readdirSync(join(root, '.git/concord')), ['trace']);
+ assert.deepEqual(readdirSync(join(root, '.git/concord/trace')), ['publication.lock']);
  call(root, args, Ack);
  const config = readProjectConfig(root);
  assert.deepEqual(config.testRoots, ['spec']); assert.deepEqual(config.runner, runner);
@@ -343,15 +344,15 @@ test('installed CLI returns a named failure for a known skipped declaration',()=
  assert.equal(call(root,['test','run',skippedCase],ErrorOutput,'',1).error,'CaseNotRunnable');
 })));
 // @use-case docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
-test('installed repository profile keeps lifecycle behavior and refuses mismatched hosts or engines',()=>Effect.runPromise(Effect.sync(()=>{
+test('installed neutral governance keeps lifecycle rules and loads native hosts only for capability commands',()=>Effect.runPromise(Effect.sync(()=>{
  const root=join(scratch,'repository-profile');mkdirSync(root);execFileSync('git',['init','-q',root]);
  write(root,'package.json',JSON.stringify({private:true,type:'module'}));
- write(root,'concord.repository.json',JSON.stringify({format:'concord.repository/v1',host:'host.mjs'}));
+ write(root,'concord.repository.json',JSON.stringify({format:'concord.repository/v2',host:'host.mjs',suites:[{id:'suite',root:'acceptance'}],historyPath:'acceptance-history.ts',policy:'concord.native-reliability/v1'}));
  const dependencyRoot=join(scratch,'tool/node_modules');
  symlinkSync(dependencyRoot,join(root,'node_modules'),'dir');
- const hostSource=`import {Layer} from 'effect';\nconst forbidden=()=>{throw new Error('Native collection was not requested');};\nexport default {format:'concord.repository-host/v1',caseIdentity:'concord.case-contracts/v1',repositoryRoot:process.cwd(),QUERY_PROTOCOL:'niceeval.query/v1',OwnedProcessLive:Layer.empty,collectRepoCaseInventory:forbidden,collectWorkspaceCaseInventory:forbidden,managedInventoryImplementationDigest:forbidden,readManagedInventoryReceipt:forbidden,readManagedRedEvidence:forbidden,readManagedTakeoverEvidence:forbidden};\n`;
+ const hostSource=`const forbidden=()=>{throw new Error('Native collection was not requested');};\nexport default {format:'concord.repository-host/v2',caseIdentity:'concord.case-contracts/v1',repositoryRoot:process.cwd(),collectRepoCaseInventory:forbidden,collectWorkspaceCaseInventory:forbidden,managedInventoryImplementationDigest:forbidden,readManagedInventoryReceipt:forbidden,readManagedRedEvidence:forbidden,readManagedTakeoverEvidence:forbidden};\n`;
  write(root,'host.mjs',hostSource);
- for(const directory of ['docs','e2e','feedback','memory'])mkdirSync(join(root,directory));
+ for(const directory of ['docs','acceptance','feedback','memory'])mkdirSync(join(root,directory));
  execFileSync('git',['-C',root,'-c','user.name=Test','-c','user.email=test@example.invalid','commit','--allow-empty','-qm','Initialize fixture']);
  const profile=(args: readonly string[],input='A durable engineering observation.\n')=>spawnSync(process.execPath,[cli,'repo',...args],{cwd:root,input,encoding:'utf8',timeout:15000});
  let result=profile(['memory','add','profile-problem','--kind','problem','--title','Profile problem','--body','-','--json']);assert.equal(result.status,0,result.stderr+result.stdout);
@@ -361,14 +362,17 @@ test('installed repository profile keeps lifecycle behavior and refuses mismatch
  result=profile(['memory','add','profile-problem','--kind','problem','--title','Duplicate','--body','-','--json']);assert.notEqual(result.status,0);
  result=profile(['memory','list','--json']);assert.equal(result.status,0,'failed mutation must release its lock');
  write(root,'host.mjs',hostSource.replace('repositoryRoot:process.cwd()','repositoryRoot:'+JSON.stringify(scratch)));
- result=profile(['--help']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryHostMismatch/);
+ result=profile(['--help']);assert.equal(result.status,0,result.stderr);
+ result=profile(['docs','test','inventory','--repo','suite','--json']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryHostMismatch/);
  write(root,'host.mjs',hostSource);
  rmSync(join(root,'node_modules'));mkdirSync(join(root,'node_modules'));
  const locked=join(root,'node_modules/concord-sdlc');cpSync(join(dependencyRoot,'concord-sdlc'),locked,{recursive:true});
- const identity=join(locked,'dist/repository/identity.js');writeFileSync(identity,readFileSync(identity,'utf8')+'\n// different installed engine\n');
- result=profile(['--help']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryEngineMismatch/);
+ const identity=join(locked,'dist/evidence-policy.js');writeFileSync(identity,readFileSync(identity,'utf8')+'\n// different installed engine\n');
+ result=profile(['--help']);assert.equal(result.status,0,result.stderr);
+ result=profile(['docs','test','inventory','--repo','suite','--json']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryEngineMismatch/);
  rmSync(join(root,'concord.repository.json'));
- result=profile(['--help']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryProfileMissing/);
+ result=profile(['--help']);assert.equal(result.status,0,result.stderr);
+ result=profile(['docs','test','inventory','--repo','suite','--json']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryProfileMissing|GovernanceConfigurationMissing/);
 })));
 // @use-case docs/feature/document-packages/use-case/organize-freeform-research.md
 test('packed Research creates only its title and edits arbitrary nested supporting Markdown', () => {

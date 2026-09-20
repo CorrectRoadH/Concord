@@ -40,7 +40,9 @@ function humanError(error: DesignPresentationError): string {
     case "TraceMutationError":
       return `${error._tag}: ${error.operation} ${error.phase}${error.path === undefined ? "" : ` ${error.path}`}: ${error.message}`;
     case "TraceRecoveryRequired":
-      return `${error._tag}: unfinished Trace publication at ${error.path}; run pnpm run repo trace recover`;
+      return `${error._tag}: unfinished Trace publication at ${error.path}; run concord repo docs trace recover`;
+    case "TraceJournalMigrationRequired":
+      return `${error._tag}: ${error.path} (${error.format}): ${error.message}`;
     case "TraceRecoveryConflict":
       return `${error._tag}: ${error.path}: ${error.message}`;
     case "TraceIoError":
@@ -77,7 +79,7 @@ function humanReceipt(receipt: DesignReceipt): string {
         `Plans: ${receipt.plans.map((plan) => plan.selector).join(", ")}`,
         `Files: ${receipt.files.length}; generation ${receipt.generation} → ${receipt.nextGeneration}`,
         `Template manifests: design-decision ${receipt.manifestDigests.designDecision}; feature-design ${receipt.manifestDigests.featureDesign}`,
-        `Next: pnpm run repo docs design check ${receipt.design.slug}`,
+        `Next: concord repo docs design check ${receipt.design.slug}`,
       ].join("\n");
     case "design-check":
       return [
@@ -93,7 +95,7 @@ function humanReceipt(receipt: DesignReceipt): string {
         `${receipt.dryRun ? "Would decide" : "Decided"} Design ${receipt.design.slug} → ${receipt.selectedPlan}`,
         `Path: ${receipt.design.ref}`,
         `Generation: ${receipt.generation} → ${receipt.nextGeneration}`,
-        `Next: pnpm run repo docs design check ${receipt.design.slug}`,
+        `Next: concord repo docs design check ${receipt.design.slug}`,
       ].join("\n");
   }
 }

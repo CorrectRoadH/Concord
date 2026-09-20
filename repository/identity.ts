@@ -15,6 +15,16 @@ export function repositoryImplementationDigest(directory = dirname(fileURLToPath
     }
   };
   walk(directory);
+  // Shared policy and document lifecycle code live alongside repository/.
+  // Both entry points must use the same complete governance engine.
+  const sharedDirectory = dirname(directory);
+  for (const name of readdirSync(sharedDirectory).sort()) {
+    const path = join(sharedDirectory, name);
+    const stat = lstatSync(path);
+    if (!name.endsWith('.js')) continue;
+    if (stat.isSymbolicLink()) throw new Error('Repository engine cannot contain symbolic links');
+    if (stat.isFile()) entries.push([relative(directory, path), hash(path)]);
+  }
   for (const name of ['package.json', 'npm-shrinkwrap.json']) entries.push([name, hash(resolve(directory, '../..', name))]);
   return 'sha256:' + createHash('sha256').update(JSON.stringify(entries)).digest('hex');
 }

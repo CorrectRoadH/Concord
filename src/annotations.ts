@@ -1,4 +1,4 @@
-// @concord-file test-annotation-index
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 import { existsSync, lstatSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
@@ -238,7 +238,7 @@ function sourceChanged(value: CachedSnapshot, cache: AnnotationSnapshot['cache']
   return snapshot({ ...value, findings: [...value.findings, { code: 'SourceChanged', path: '.', message: 'Source files changed while annotations were scanned' }] }, cache);
 }
 
-// @concord-code scan-real-test-annotations
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off' } = {}): AnnotationSnapshot {
   const mode = options.cache ?? 'use', path = cachePath(repo); const current = sources(repo); const key = cacheKey(repo, current);

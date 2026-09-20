@@ -1,4 +1,4 @@
-// @concord-file canonical-contract-references
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { posix } from 'node:path';
@@ -46,7 +46,7 @@ function hasAnchor(source: string, expected: string): boolean {
 
 /**
  * Resolves exact Concord owners and supporting Markdown inside the deepest
- * Feature or Research package. Derived from NiceEval's docs/trace/ref.ts; its formats and
+ * Feature, Engineering, or Research package. Derived from NiceEval's docs/trace/ref.ts; its formats and
  * runtime-specific Result errors intentionally do not cross this boundary.
  */
 export function resolveReference(
@@ -65,14 +65,14 @@ export function resolveReference(
     source = repo.read(parsed.path);
     if (source === undefined) throw new ConcordError('ReferenceNotFound', `Reference target does not exist: ${input}`);
     owner = documents
-      .filter(document => document.metadata.kind === 'feature' || document.metadata.kind === 'research')
+      .filter(document => document.metadata.kind === 'feature' || document.metadata.kind === 'engineering' || document.metadata.kind === 'research')
       .filter(document => parsed.path.startsWith(`${posix.dirname(document.path)}/`))
       .sort((left, right) => right.path.length - left.path.length)[0];
-    if (owner === undefined) throw new ConcordError('ReferenceNotFound', `Supporting Markdown is outside a Feature or Research package: ${input}`);
+    if (owner === undefined) throw new ConcordError('ReferenceNotFound', `Supporting Markdown is outside a Feature, Engineering, or Research package: ${input}`);
     const nestedOwner = documents.find(document =>
       document.path !== owner?.path &&
       parsed.path.startsWith(`${posix.dirname(document.path)}/`) &&
-      document.metadata.kind !== 'feature' && document.metadata.kind !== 'research');
+      document.metadata.kind !== 'feature' && document.metadata.kind !== 'engineering' && document.metadata.kind !== 'research');
     if (nestedOwner !== undefined) throw new ConcordError('InvalidReferenceTarget', `Supporting Markdown is inside ${nestedOwner.metadata.kind} ${nestedOwner.path}; reference its owner directly`);
   }
   if (allowedKinds !== undefined && !allowedKinds.includes(owner.metadata.kind)) {

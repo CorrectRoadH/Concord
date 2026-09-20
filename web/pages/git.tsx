@@ -1,4 +1,4 @@
-// @concord-file web-workbench-git
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import * as stylex from '@stylexjs/stylex';
 import { AlertTriangle, FileDiff, ListTree, RefreshCw } from 'lucide-react';
@@ -43,7 +43,7 @@ export function GitPage() {
     {tab === 'tests' && <p {...stylex.props(styles.note)}>{git?.baselineError ? `无法比较新增测试：${git.baselineError}` : '新增声明列在所属文件下；diff 按文件展示。'}</p>}
   </nav>;
   return <>
-    <PageHeader eyebrow={git?.branch ?? 'Git'} title="工作树变更" description="从文件树选择变更，在右侧审阅 Git diff。" actions={<Button variant="outline" onClick={state.refreshGit}><RefreshCw />刷新</Button>} />
+    <PageHeader title="工作树变更" description="从文件树选择变更，在右侧审阅 Git diff。" actions={<><span className="text-sm text-muted-foreground">{git?.branch ?? 'Git'}</span><Button variant="outline" onClick={state.refreshGit}><RefreshCw />刷新</Button></>} />
     <Tabs value={tab} onValueChange={state.changeCategory}><TabsList aria-label="变更分类">
       <TabsTrigger value="docs">Docs 变更 <Badge variant="secondary">{state.docs.length}</Badge></TabsTrigger>
       <TabsTrigger value="tests">测试用例变更 <Badge variant="secondary">{state.tests.length}</Badge></TabsTrigger>

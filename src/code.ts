@@ -1,5 +1,6 @@
-// @concord-file code-ownership-parser
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
+import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
 import * as ts from 'typescript';
 import { decode, digest, objectDigest, Slug, Text, type Finding, type Repository } from './shared.js';
@@ -54,13 +55,16 @@ interface LineComment {
 }
 interface StartMarker extends LineComment {
   readonly family: 'file' | 'code' | 'begin';
-  readonly id: string;
+  readonly valid: boolean;
   readonly contracts: readonly string[];
   readonly blockEnd: number;
 }
 interface StatementContext { readonly node: ts.Node; readonly statements: readonly ts.Statement[]; readonly pos: number; readonly end: number }
 interface Gap { readonly context: StatementContext; readonly index: number }
 interface RegionPair { readonly begin: StartMarker; readonly end: LineComment }
+interface RegionCandidate { readonly pair: RegionPair; readonly context: StatementContext; readonly first: ts.Statement; readonly last: ts.Statement }
+type LocatorPart = readonly [kind: string, staticName: string | null, siblingOrdinal: number];
+type Locator = readonly LocatorPart[];
 
 class CodeSourceReadChanged extends Error {}
 
@@ -79,6 +83,7 @@ function lineBounds(text: string, pos: number, end: number): { readonly ownLine:
   return { ownLine: /^\s*$/u.test(text.slice(start, pos)) && /^\s*$/u.test(text.slice(end, lineEnd).replace(/\r$/u, '')), end: newline < 0 ? text.length : newline + 1 };
 }
 
+/** Only comments reported by TypeScript's comment ranges can own a declaration. */
 function actualLineComments(source: ts.SourceFile): readonly LineComment[] {
   const ranges = new Map<number, ts.CommentRange>();
   const tokenSpans: { readonly start: number; readonly end: number }[] = [];
@@ -107,25 +112,13 @@ function actualLineComments(source: ts.SourceFile): readonly LineComment[] {
   return comments;
 }
 
-function decodeId(comment: LineComment, path: string, findings: Finding[]): string | undefined {
-  if (!comment.ownLine || comment.argument === undefined) {
-    addFinding(findings, 'InvalidCodeAnnotation', path, `@concord-${comment.family} must occupy its own line and have one stable ID`, comment.line);
-    return undefined;
-  }
-  try { return decode(Slug, comment.argument, `${path}:${comment.line} code ID`); }
-  catch (cause) {
-    addFinding(findings, 'InvalidCodeId', path, cause instanceof Error ? cause.message : String(cause), comment.line);
-    return undefined;
-  }
-}
-
 function startMarkers(comments: readonly LineComment[], path: string, findings: Finding[]): { readonly starts: readonly StartMarker[]; readonly consumedImplements: ReadonlySet<number> } {
   const byLine = new Map(comments.map(comment => [comment.line, comment]));
   const consumed = new Set<number>();
   const starts: StartMarker[] = [];
   for (const comment of comments) {
     if (comment.family !== 'file' && comment.family !== 'code' && comment.family !== 'begin') continue;
-    const id = decodeId(comment, path, findings);
+    let valid = comment.ownLine && comment.argument === undefined;
     const implementations: LineComment[] = [];
     for (let line = comment.line + 1;; line++) {
       const next = byLine.get(line);
@@ -133,9 +126,11 @@ function startMarkers(comments: readonly LineComment[], path: string, findings: 
       implementations.push(next);
       consumed.add(next.pos);
     }
-    if (implementations.length === 0) addFinding(findings, 'MissingCodeContract', path, `@concord-${comment.family} ${comment.argument ?? ''} must be followed immediately by at least one @concord-implements`, comment.line);
+    if (implementations.length === 0) {
+      addFinding(findings, 'MissingCodeContract', path, `@concord-${comment.family} must be followed immediately by at least one @concord-implements`, comment.line);
+      valid = false;
+    }
     const contracts: string[] = [];
-    let valid = id !== undefined && implementations.length > 0;
     for (const implementation of implementations) {
       if (implementation.argument === undefined) {
         addFinding(findings, 'InvalidCodeContract', path, '@concord-implements requires one canonical reference', implementation.line);
@@ -153,7 +148,7 @@ function startMarkers(comments: readonly LineComment[], path: string, findings: 
         valid = false;
       }
     }
-    if (valid && id !== undefined) starts.push({ ...comment, family: comment.family, id, contracts, blockEnd: implementations.at(-1)?.end ?? comment.end });
+    starts.push({ ...comment, family: comment.family, valid, contracts, blockEnd: implementations.at(-1)?.end ?? comment.end });
   }
   return { starts, consumedImplements: consumed };
 }
@@ -189,38 +184,34 @@ function gapFor(marker: LineComment, source: ts.SourceFile, contexts: readonly S
   return matches.sort((left, right) => (left.context.end - left.context.pos) - (right.context.end - right.context.pos))[0];
 }
 
+/** Invalid begins are still pushed, so their end cannot consume an outer region. */
 function regionPairs(starts: readonly StartMarker[], comments: readonly LineComment[], path: string, findings: Finding[]): readonly RegionPair[] {
-  const valid = new Map(starts.filter(start => start.family === 'begin').map(start => [start.pos, start]));
+  const byPosition = new Map(starts.filter(start => start.family === 'begin').map(start => [start.pos, start]));
   const boundaries = comments.filter(comment => comment.family === 'begin' || comment.family === 'end').sort((left, right) => left.pos - right.pos);
-  const stack: StartMarker[] = [];
-  const invalid = new Set<number>();
+  const stack: { marker: StartMarker; invalid: boolean }[] = [];
   const pairs: RegionPair[] = [];
   for (const boundary of boundaries) {
     if (boundary.family === 'begin') {
-      const begin = valid.get(boundary.pos);
-      if (begin === undefined) continue;
+      const marker = byPosition.get(boundary.pos);
+      const invalid = marker === undefined || !marker.valid || !boundary.ownLine;
+      const entry = { marker: marker ?? { ...boundary, family: 'begin' as const, valid: false, contracts: [], blockEnd: boundary.end }, invalid };
       if (stack.length > 0) {
-        addFinding(findings, 'NestedCodeRegion', path, 'Code regions may not be nested or crossed', begin.line);
-        for (const open of stack) invalid.add(open.pos);
-        invalid.add(begin.pos);
+        addFinding(findings, 'NestedCodeRegion', path, 'Code regions may not be nested or crossed', boundary.line);
+        entry.invalid = true;
+        stack[stack.length - 1]!.invalid = true;
       }
-      stack.push(begin);
+      stack.push(entry);
       continue;
     }
-    const endId = decodeId(boundary, path, findings);
     if (stack.length === 0) {
       addFinding(findings, 'OrphanCodeEnd', path, '@concord-end has no open region', boundary.line);
       continue;
     }
-    const begin = stack.pop()!;
-    if (endId === undefined || endId !== begin.id) {
-      addFinding(findings, 'MismatchedCodeRegion', path, `Expected @concord-end ${begin.id}`, boundary.line);
-      invalid.add(begin.pos);
-      continue;
-    }
-    if (!invalid.has(begin.pos)) pairs.push({ begin, end: boundary });
+    const open = stack.pop()!;
+    if (open.invalid || !boundary.ownLine || boundary.argument !== undefined || !open.marker.valid) continue;
+    pairs.push({ begin: open.marker, end: boundary });
   }
-  for (const begin of stack) addFinding(findings, 'UnclosedCodeRegion', path, `@concord-begin ${begin.id} has no matching end`, begin.line);
+  for (const open of stack) addFinding(findings, 'UnclosedCodeRegion', path, '@concord-begin has no matching end', open.marker.line);
   return pairs;
 }
 
@@ -242,17 +233,64 @@ function attachedBoundary(marker: StartMarker, source: ts.SourceFile, nodes: rea
   return candidates[0];
 }
 
+function staticName(node: ts.Node): string | null {
+  const name = ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isMethodDeclaration(node)
+    ? node.name
+    : ts.isVariableDeclaration(node)
+      ? node.name
+      : ts.isVariableStatement(node) && node.declarationList.declarations.length === 1
+        ? node.declarationList.declarations[0]!.name
+        : undefined;
+  if (name === undefined) return null;
+  if (ts.isIdentifier(name) || ts.isPrivateIdentifier(name) || ts.isStringLiteral(name) || ts.isNumericLiteral(name)) return name.text;
+  return null;
+}
+
 function supportedNode(node: ts.Node): { readonly symbol?: string } | undefined {
-  if (ts.isFunctionDeclaration(node)) return node.body === undefined ? undefined : node.name === undefined ? {} : { symbol: node.name.text };
-  if (ts.isClassDeclaration(node)) return node.name === undefined ? {} : { symbol: node.name.text };
-  if (ts.isMethodDeclaration(node)) {
-    if (node.body === undefined) return undefined;
-    return { symbol: node.name.getText() };
-  }
+  if (ts.isFunctionDeclaration(node)) return node.body === undefined ? undefined : (staticName(node) === null ? {} : { symbol: staticName(node)! });
+  if (ts.isClassDeclaration(node)) return staticName(node) === null ? {} : { symbol: staticName(node)! };
+  if (ts.isMethodDeclaration(node)) return node.body === undefined ? undefined : (staticName(node) === null ? {} : { symbol: staticName(node)! });
   if (!ts.isVariableStatement(node) || node.declarationList.declarations.length !== 1) return undefined;
   const declaration = node.declarationList.declarations[0]!;
   if (!ts.isIdentifier(declaration.name) || declaration.initializer === undefined || (!ts.isArrowFunction(declaration.initializer) && !ts.isFunctionExpression(declaration.initializer))) return undefined;
   return { symbol: declaration.name.text };
+}
+
+function directChildren(node: ts.Node): readonly ts.Node[] {
+  const children: ts.Node[] = [];
+  // Do not return the recursive result from this callback: TypeScript treats a truthy return as early termination.
+  ts.forEachChild(node, child => { children.push(child); });
+  return children;
+}
+
+function locatorPart(node: ts.Node, siblings: readonly ts.Node[], index: number): LocatorPart {
+  const kind = ts.SyntaxKind[node.kind] ?? String(node.kind);
+  const name = staticName(node);
+  const siblingOrdinal = siblings.slice(0, index).filter(candidate => {
+    const candidateKind = ts.SyntaxKind[candidate.kind] ?? String(candidate.kind);
+    return candidateKind === kind && staticName(candidate) === name;
+  }).length;
+  return [kind, name, siblingOrdinal];
+}
+
+function locatorFor(source: ts.SourceFile, target: ts.Node): Locator {
+  const find = (parent: ts.Node): Locator | undefined => {
+    const children = directChildren(parent);
+    for (let index = 0; index < children.length; index++) {
+      const child = children[index]!;
+      const part = locatorPart(child, children, index);
+      if (child === target) return [part];
+      const nested = find(child);
+      if (nested !== undefined) return [part, ...nested];
+    }
+    return undefined;
+  };
+  return find(source) ?? [];
+}
+
+function codeId(relativePath: string, scope: CodeDeclaration['scope'], locator: unknown): string {
+  const input = JSON.stringify(['concord.code-reference/v1', relativePath, scope, locator]);
+  return `code-${createHash('sha256').update(input).digest('hex').slice(0, 32)}`;
 }
 
 function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] } {
@@ -262,12 +300,11 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
   const comments = actualLineComments(source);
   for (const comment of comments) {
     if (!CODE_FAMILIES.has(comment.family) && !OTHER_FAMILIES.has(comment.family)) addFinding(findings, 'UnknownConcordAnnotation', input.path, `Unknown annotation family @concord-${comment.family}`, comment.line);
+    if (['file', 'code', 'begin', 'end'].includes(comment.family) && (comment.argument !== undefined || !comment.ownLine)) addFinding(findings, 'InvalidCodeAnnotation', input.path, `@concord-${comment.family} must be a standalone marker without a parameter`, comment.line);
   }
   const hasCodeMarker = comments.some(comment => CODE_FAMILIES.has(comment.family));
   if (hasCodeMarker && parseDiagnostics.length > 0) {
-    for (const diagnostic of parseDiagnostics) {
-      addFinding(findings, 'CodeParseError', input.path, ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), diagnostic.start === undefined ? undefined : lineAt(source, diagnostic.start));
-    }
+    for (const diagnostic of parseDiagnostics) addFinding(findings, 'CodeParseError', input.path, ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), diagnostic.start === undefined ? undefined : lineAt(source, diagnostic.start));
     return { codes: [], findings };
   }
   const prepared = startMarkers(comments, input.path, findings);
@@ -275,18 +312,18 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
     if (comment.family === 'implements' && !prepared.consumedImplements.has(comment.pos)) addFinding(findings, 'OrphanCodeImplements', input.path, '@concord-implements is not immediately owned by a starting code marker', comment.line);
   }
   const declarations: CodeDeclaration[] = [];
-  const fileMarkers = prepared.starts.filter(start => start.family === 'file');
+  const allFileMarkers = prepared.starts.filter(start => start.family === 'file');
+  const fileMarkers = allFileMarkers.filter(start => start.valid);
   if (fileMarkers.length > 1) for (const marker of fileMarkers.slice(1)) addFinding(findings, 'DuplicateFileCode', input.path, 'A source file may have at most one @concord-file declaration', marker.line);
-  if (fileMarkers.length === 1) {
+  if (fileMarkers.length === 1 && allFileMarkers.length === 1) {
     const marker = fileMarkers[0]!;
     const firstStatement = source.statements[0];
     if (firstStatement !== undefined && marker.pos >= firstStatement.getStart(source)) addFinding(findings, 'OrphanCodeAnnotation', input.path, '@concord-file must appear before the first statement', marker.line);
-    else {
-      const value = { id: marker.id, file: input.path, line: 1, endLine: lineAt(source, input.text.length), scope: 'file' as const, contracts: marker.contracts };
-      declarations.push(decode(CodeDeclarationSchema, value, `${input.path}:${marker.line}`));
-    }
+    else declarations.push(decode(CodeDeclarationSchema, { id: codeId(input.path, 'file', []), file: input.path, line: 1, endLine: lineAt(source, input.text.length), scope: 'file', contracts: marker.contracts }, `${input.path}:${marker.line}`));
   }
+
   const contexts = statementContexts(source);
+  const regionCandidates: RegionCandidate[] = [];
   for (const pair of regionPairs(prepared.starts, comments, input.path, findings)) {
     const beginGap = gapFor(pair.begin, source, contexts);
     const endGap = gapFor(pair.end, source, contexts);
@@ -304,12 +341,26 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
       addFinding(findings, 'EmptyCodeRegion', input.path, 'A code region must contain one or more complete consecutive statements', pair.begin.line);
       continue;
     }
-    declarations.push(decode(CodeDeclarationSchema, { id: pair.begin.id, file: input.path, line: lineAt(source, first.getStart(source)), endLine: lineAt(source, Math.max(first.getStart(source), last.getEnd() - 1)), scope: 'region', contracts: pair.begin.contracts }, `${input.path}:${pair.begin.line}`));
+    regionCandidates.push({ pair, context: beginGap.context, first, last });
   }
+  const validRegionOrdinals = new Map<RegionCandidate, number>();
+  for (const context of contexts) {
+    const candidates = regionCandidates.filter(candidate => candidate.context === context).sort((left, right) => left.pair.begin.pos - right.pair.begin.pos);
+    candidates.forEach((candidate, ordinal) => validRegionOrdinals.set(candidate, ordinal));
+  }
+  for (const candidate of regionCandidates) {
+    const locator = [locatorFor(source, candidate.context.node), validRegionOrdinals.get(candidate)!];
+    declarations.push(decode(CodeDeclarationSchema, {
+      id: codeId(input.path, 'region', locator), file: input.path,
+      line: lineAt(source, candidate.first.getStart(source)), endLine: lineAt(source, Math.max(candidate.first.getStart(source), candidate.last.getEnd() - 1)),
+      scope: 'region', contracts: candidate.pair.begin.contracts,
+    }, `${input.path}:${candidate.pair.begin.line}`));
+  }
+
   const nodes = boundaryNodes(source);
   const nodeGroups = new Map<ts.Node, StartMarker[]>();
-  const validCodeStarts = new Set(prepared.starts.filter(start => start.family === 'code').map(start => start.pos));
-  for (const marker of prepared.starts.filter(start => start.family === 'code')) {
+  const validCodeStarts = new Set(prepared.starts.filter(start => start.family === 'code' && start.valid).map(start => start.pos));
+  for (const marker of prepared.starts.filter(start => start.family === 'code' && start.valid)) {
     const node = attachedBoundary(marker, source, nodes);
     if (node === undefined) {
       addFinding(findings, 'OrphanCodeAnnotation', input.path, '@concord-code is not attached to the immediately following AST node', marker.line);
@@ -335,7 +386,11 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
       addFinding(findings, 'UnsupportedCodeNode', input.path, '@concord-code supports body-bearing function, class and method declarations, or a single identifier variable initialized directly with a function', marker.line);
       continue;
     }
-    declarations.push(decode(CodeDeclarationSchema, { id: marker.id, file: input.path, line: lineAt(source, node.getStart(source)), endLine: lineAt(source, Math.max(node.getStart(source), node.getEnd() - 1)), scope: 'node', ...(supported.symbol === undefined ? {} : { symbol: supported.symbol }), contracts: marker.contracts }, `${input.path}:${marker.line}`));
+    declarations.push(decode(CodeDeclarationSchema, {
+      id: codeId(input.path, 'node', locatorFor(source, node)), file: input.path,
+      line: lineAt(source, node.getStart(source)), endLine: lineAt(source, Math.max(node.getStart(source), node.getEnd() - 1)),
+      scope: 'node', ...(supported.symbol === undefined ? {} : { symbol: supported.symbol }), contracts: marker.contracts,
+    }, `${input.path}:${marker.line}`));
   }
   return { codes: declarations, findings };
 }
@@ -372,7 +427,7 @@ function compile(current: readonly Source[]): { readonly codes: readonly CodeDec
   for (const item of codes) {
     const prior = ids.get(item.id);
     if (prior === undefined) ids.set(item.id, item);
-    else addFinding(findings, 'DuplicateCodeId', item.file, `Code ID ${item.id} is also declared at ${prior.file}:${prior.line}`, item.line);
+    else addFinding(findings, 'DuplicateCodeId', item.file, `Code reference ${item.id} is also declared at ${prior.file}:${prior.line}`, item.line);
   }
   return { codes, findings };
 }
@@ -386,7 +441,7 @@ function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly
   return decode(CodeSnapshotSchema, value, 'code scan');
 }
 
-// @concord-code scan-code-ownership
+// @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 export function scanCode(repo: Repository): CodeSnapshot {
   let before: readonly Source[];
@@ -396,7 +451,7 @@ export function scanCode(repo: Repository): CodeSnapshot {
   const initial = compile(before);
   let after: readonly Source[];
   try { after = readSources(repo); }
-  catch (cause) { if (cause instanceof CodeSourceReadChanged) return result({ codes: [], findings: [] }, [], true); throw cause; }
+  catch (cause) { if (cause instanceof CodeSourceReadChanged) return result({ codes: [], findings: [] }, [], true); else throw cause; }
   if (sameSources(before, after)) return result(initial, before, changed);
   const fresh = compile(after);
   try {

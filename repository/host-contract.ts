@@ -1,14 +1,19 @@
-import type * as Inventory from './host-types/inventory-api.js';
+import type {
+  CaseInventoryReceipt,
+  HostEffect,
+  ManagedRedEvidence,
+  ManagedTakeoverEvidence,
+  WorkspaceInventoryReceipt,
+} from './host-types/index.js';
+
 export interface RepositoryHost {
-  readonly format: 'concord.repository-host/v1';
+  readonly format: 'concord.repository-host/v2';
   readonly caseIdentity: 'concord.case-contracts/v1';
   readonly repositoryRoot: string;
-  readonly QUERY_PROTOCOL: string;
-  readonly OwnedProcessLive: typeof Inventory.OwnedProcessLive;
-  readonly collectRepoCaseInventory: typeof Inventory.collectRepoCaseInventory;
-  readonly collectWorkspaceCaseInventory: typeof Inventory.collectWorkspaceCaseInventory;
-  readonly managedInventoryImplementationDigest: typeof Inventory.managedInventoryImplementationDigest;
-  readonly readManagedInventoryReceipt: typeof Inventory.readManagedInventoryReceipt;
-  readonly readManagedRedEvidence: typeof Inventory.readManagedRedEvidence;
-  readonly readManagedTakeoverEvidence: typeof Inventory.readManagedTakeoverEvidence;
+  readonly collectRepoCaseInventory?: (suiteId: string, checkout: string) => HostEffect<WorkspaceInventoryReceipt>;
+  readonly collectWorkspaceCaseInventory?: (checkout: string) => HostEffect<WorkspaceInventoryReceipt>;
+  readonly managedInventoryImplementationDigest?: (root: string) => HostEffect<string>;
+  readonly readManagedInventoryReceipt?: (root: string, inventoryId: string, selector: string) => HostEffect<CaseInventoryReceipt>;
+  readonly readManagedRedEvidence?: (root: string, id: string) => HostEffect<ManagedRedEvidence>;
+  readonly readManagedTakeoverEvidence?: (root: string, id: string) => HostEffect<ManagedTakeoverEvidence>;
 }

@@ -73,18 +73,29 @@ test('feedback browser separates remote observations from local editing and prot
     await page.getByLabel('本地反馈正文',{exact:true}).fill('Authored local feedback.');
     await page.getByRole('button',{name:'创建',exact:true}).click();
     await page.getByRole('link').filter({hasText:'Browser local feedback'}).click();
+    await expect(page.getByRole('button',{name:'关联 Feature',exact:true})).toHaveCount(0);
+    await page.getByRole('tab',{name:'来源与关联',exact:true}).click();
     await page.getByRole('button',{name:'关联 Feature',exact:true}).click();
     await expect.poll(()=>readFileSync(join(root,'docs/issues/browser-local.md'),'utf8')).toContain('docs/feature/target/README.md');
+    await page.getByRole('tab',{name:'正文',exact:true}).click();
     const editor=page.locator('[contenteditable="true"]').first();
     await editor.fill('Edited through feedback workbench.');
     await expect.poll(()=>readFileSync(join(root,'docs/issues/browser-local.md'),'utf8')).toContain('Edited through feedback workbench.');
     await page.getByRole('link',{name:'返回反馈列表',exact:true}).click();
     await page.getByRole('link').filter({hasText:'Local title retained'}).click();
+    const localEditor=page.locator('[contenteditable="true"]').first();
+    await expect(localEditor).toContainText('Local notes retained.');
+    await localEditor.fill('Local notes retained. Saved before opening sources.');
+    await page.getByRole('tab',{name:'来源与关联',exact:true}).click();
+    await expect.poll(()=>readFileSync(join(root,'docs/issues/remote-observation.md'),'utf8')).toContain('Saved before opening sources.');
     await expect(page.getByText('Original remote body',{exact:true})).toBeVisible();
     // Both snapshots remain independently accessible; the current observation must not replace author prose.
     const cachedTab=page.getByRole('tab').filter({hasText:/缓存|最近|远端观察/});
     if(await cachedTab.count()) await cachedTab.first().click();
     await expect(page.getByText('Updated remote body',{exact:true})).toBeVisible();
+    await expect(page.getByRole('tab',{name:'来源与关联',exact:true})).toHaveAttribute('data-state','active');
+    await page.getByRole('tab',{name:'正文',exact:true}).click();
+    await expect(page.getByText('Original remote body',{exact:true})).toHaveCount(0);
     await expect(page.locator('[contenteditable="true"]').first()).toContainText('Local notes retained.');
     assert.deepEqual(errors,[]);
   } finally {await browser?.close();await server?.close();rmSync(root,{recursive:true,force:true});if(previousCredential===undefined)delete process.env.CONCORD_BROWSER_MISSING_TOKEN;else process.env.CONCORD_BROWSER_MISSING_TOKEN=previousCredential;}

@@ -1,3 +1,5 @@
+import { managedInventoryImplementationDigest } from "../host.js";
+import { readGovernanceConfiguration } from "concord-sdlc/governance-config";
 import { Context, Effect, FileSystem, Layer } from "effect";
 
 import { compileTrace, compileTraceUnderLease } from "../docs/trace/compiler.js";
@@ -45,7 +47,7 @@ export interface MemoryStoreService {
   readonly check: () => Effect.Effect<MemoryCheckReceipt, MemoryStoreError, FileSystem.FileSystem>;
 }
 
-export class MemoryStore extends Context.Service<MemoryStore, MemoryStoreService>()("@niceeval/repo-tools/memory/Store") {}
+export class MemoryStore extends Context.Service<MemoryStore, MemoryStoreService>()("@concord/repository/memory/Store") {}
 
 /** Node filesystem adapter; applications provide it once at their composition edge. */
 export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, (() => {
@@ -55,17 +57,26 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
     target?: RepoRef,
     extraPaths: readonly string[] = [],
     regressionMemory?: string,
+    validatedAt?: string,
   ): Effect.Effect<TraceMutationPreparation, MemoryStoreError, FileSystem.FileSystem> =>
-    compileTraceUnderLease(root).pipe(
-      Effect.flatMap((snapshot) => memoryEffect("trace preparation", () => {
+    Effect.gen(function*() {
+      const snapshot = yield* compileTraceUnderLease(root);
+      const implementationDigest = regressionMemory === undefined ? undefined : yield* managedInventoryImplementationDigest(root).pipe(Effect.mapError(cause => new MemoryReferenceConflict({ operation: "resolve", message: cause.message })));
+      const prepared = yield* memoryEffect("trace preparation", () => {
         const regressionTarget = regressionMemory === undefined ? undefined : `memory/${regressionMemory}.md`;
         const fixedEvidence = regressionTarget === undefined
-          ? { selectors: [] as readonly string[], preimagePaths: [] as readonly string[], evidence: undefined }
-          : repository.validateFixedEvidence(snapshot, regressionTarget);
-        const guardedPaths = [...new Set([...extraPaths, ...fixedEvidence.preimagePaths])].sort();
+          ? { selectors: [] as readonly string[], preimagePaths: [] as readonly string[], preimageDigests: {} as Readonly<Record<string, string>>, evidence: undefined }
+          : repository.validateFixedEvidence(snapshot, regressionTarget, { ...(implementationDigest === undefined ? {} : { implementationDigest }), ...(validatedAt === undefined ? {} : { validatedAt }) });
+        const governance = readGovernanceConfiguration(root);
+        const policyPaths = governance === undefined ? [] : [governance.path, ...(governance.config.host === undefined ? [] : [governance.config.host])];
+        const guardedPaths = [...new Set([...extraPaths, ...fixedEvidence.preimagePaths, ...policyPaths])].sort();
         const extra = guardedPaths.map((path) => {
           const source = repository.targetSource(path);
-          return { path: source.absolutePath, digest: traceDigest(source.source) };
+          const actual = traceDigest(source.source);
+          const expected = fixedEvidence.preimageDigests[path];
+          if (expected !== undefined && actual !== expected) throw new MemoryReferenceConflict({ operation: "resolve", path, message: "evidence dependency changed after validation" });
+          if (governance !== undefined && path === governance.path && actual !== governance.digest) throw new MemoryReferenceConflict({ operation: "mutate", path, message: "policy configuration changed during preparation" });
+          return { path: source.absolutePath, digest: actual };
         });
         const evidence = regressionMemory === undefined ? {} : { regressionOwners: fixedEvidence.selectors, regressionMemoryEvidence: fixedEvidence.evidence };
         if (target === undefined) return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: extra, ...evidence };
@@ -78,8 +89,13 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
           preimages: [...extra, { path: source.absolutePath, digest: traceDigest(source.source) }],
           ...evidence,
         };
-      })),
-    );
+      });
+      if (implementationDigest !== undefined) {
+        const current = yield* managedInventoryImplementationDigest(root).pipe(Effect.mapError(cause => new MemoryReferenceConflict({ operation: "resolve", message: cause.message })));
+        if (current !== implementationDigest) return yield* Effect.fail(new MemoryReferenceConflict({ operation: "resolve", message: "native implementation changed during evidence validation" }));
+      }
+      return prepared;
+    });
 
   const mutate = <Changes>(options: {
     readonly id: string;
@@ -94,16 +110,20 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       preparation: TraceMutationPreparation,
     ) => { readonly bytes: string; readonly metadata: MemoryMeta; readonly changes: Changes };
   }): Effect.Effect<TraceMutationReceipt<MemoryMeta, Changes>, MemoryStoreError, FileSystem.FileSystem> =>
-    mutateTraceOwner({
-      root,
-      operation: options.operation,
-      ownerPath: repository.ownerPath(options.id),
-      dryRun: options.dryRun,
-      prepareUnderLease: prepareUnderLease(options.target, options.extraPaths, options.regressionMemory),
-      plan: ({ source, headCommit, preparation }) => memoryEffect(options.operation, () => {
-        const planned = options.plan(source, headCommit, preparation);
-        return { bytes: planned.bytes, value: planned.metadata, changes: planned.changes };
-      }),
+    Effect.suspend(() => {
+      // Both publication preflight passes observe one validation operation.
+      const validatedAt = new Date().toISOString();
+      return mutateTraceOwner({
+        root,
+        operation: options.operation,
+        ownerPath: repository.ownerPath(options.id),
+        dryRun: options.dryRun,
+        prepareUnderLease: prepareUnderLease(options.target, options.extraPaths, options.regressionMemory, validatedAt),
+        plan: ({ source, headCommit, preparation }) => memoryEffect(options.operation, () => {
+          const planned = options.plan(source, headCommit, preparation);
+          return { bytes: planned.bytes, value: planned.metadata, changes: planned.changes };
+        }),
+      });
     });
 
   return {
@@ -201,7 +221,12 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       },
     }),
     check: () => withTraceReadLease(root, () => compileTraceUnderLease(root).pipe(
-      Effect.flatMap((snapshot) => memoryEffect("check", () => repository.check(snapshot))),
+      Effect.flatMap(snapshot => Effect.gen(function*() {
+        const memories = yield* memoryEffect("check", () => repository.list());
+        const hasNative = memories.some(memory => memory.metadata.resolution?.evidenceLevel === "repository");
+        const implementation = hasNative ? yield* managedInventoryImplementationDigest(root).pipe(Effect.catch(() => Effect.succeed(undefined))) : undefined;
+        return yield* memoryEffect("check", () => repository.check(snapshot, implementation));
+      })),
     )),
   } satisfies MemoryStoreService;
 })());

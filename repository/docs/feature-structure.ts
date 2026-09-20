@@ -25,7 +25,7 @@ export class FeatureStructureError extends Data.TaggedError("FeatureStructureErr
 }> {}
 
 export interface FeatureStructureReceipt {
-  readonly format: "niceeval.docs-feature/structure-v1";
+  readonly format: "concord.docs-feature/structure-v1";
   readonly operation: "feature-create" | "feature-page-add" | "feature-page-set";
   readonly dryRun: boolean;
   readonly feature: { readonly slug: string; readonly ref: string; readonly title: string };
@@ -133,7 +133,7 @@ export function createFeatureAt(root: string, input: { readonly slug: string; re
       ...(publication === undefined ? {} : { publication: { kind: "new-docs-directory" as const, stagePath: publication.stagePath, targetPath: publication.targetPath, expectedManifest: manifest(root, publication.stagePath, "create") } }),
     });
     const mutation = input.dryRun ? yield* execute() : yield* Effect.acquireUseRelease(stage(root, value, files, "create"), (item) => execute(item), (item) => removeStage(root, item.stagePath));
-    return { format: "niceeval.docs-feature/structure-v1", operation: "feature-create", dryRun: input.dryRun, feature: { slug: value, ref: ownerPath, title: input.title }, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? files.map((file) => `docs/feature/${value}/${file.path}`) : [] };
+    return { format: "concord.docs-feature/structure-v1", operation: "feature-create", dryRun: input.dryRun, feature: { slug: value, ref: ownerPath, title: input.title }, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? files.map((file) => `docs/feature/${value}/${file.path}`) : [] };
   });
 }
 
@@ -152,7 +152,7 @@ export function addFeaturePageAt(root: string, input: { readonly feature: string
         ? Effect.succeed({ bytes: render(templateSource, selected?.title ?? initial.title), value: undefined, changes: { added: requested } })
         : Effect.fail(fail("page-add", ownerPath, "page already exists")),
     });
-    return { format: "niceeval.docs-feature/structure-v1", operation: "feature-page-add", dryRun: input.dryRun, feature: { slug: dirname(initial.path).split("/").at(-1)!, ref: initial.path, title: initial.title }, page: requested, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? [ownerPath] : [] };
+    return { format: "concord.docs-feature/structure-v1", operation: "feature-page-add", dryRun: input.dryRun, feature: { slug: dirname(initial.path).split("/").at(-1)!, ref: initial.path, title: initial.title }, page: requested, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? [ownerPath] : [] };
   });
 }
 
@@ -172,6 +172,6 @@ export function setFeaturePageAt(root: string, input: { readonly feature: string
         return { bytes: `${protectedPrefix}${input.body.trimEnd()}\n${regions.managed}`, value: undefined, changes: { updated: requested } };
       }),
     });
-    return { format: "niceeval.docs-feature/structure-v1", operation: "feature-page-set", dryRun: input.dryRun, feature: { slug: dirname(initial.path).split("/").at(-1)!, ref: initial.path, title: initial.title }, page: requested, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? [ownerPath] : [] };
+    return { format: "concord.docs-feature/structure-v1", operation: "feature-page-set", dryRun: input.dryRun, feature: { slug: dirname(initial.path).split("/").at(-1)!, ref: initial.path, title: initial.title }, page: requested, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? [ownerPath] : [] };
   });
 }

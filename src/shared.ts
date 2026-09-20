@@ -1,4 +1,4 @@
-// @concord-file shared-domain-contracts
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/README.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
@@ -85,6 +85,7 @@ export const RepositoryCaseEvidenceSchema = Schema.Struct({
   selector: Text, caseId: Text,
   binding: Schema.Struct({ kind: Schema.Literal('direct-contract'), contractRef: Text, contractSha256: ContentHash }),
   sourceDigest: ContentHash, candidateSha256: ContentHash,
+  sourceIdentityDigest: Schema.optional(ContentHash),
   red: EvidenceFileSchema, green: EvidenceFileSchema, certificate: EvidenceFileSchema, inventory: EvidenceFileSchema,
   reliability: Schema.Array(EvidenceFileSchema).check(Schema.makeFilter(
     values => values.length === 6 && new Set(values.map(value => value.path)).size === 6,
@@ -96,6 +97,7 @@ export const RepositoryCaseEvidenceSchema = Schema.Struct({
   )),
 });
 export const RepositoryEvidenceSchema = Schema.Struct({
+  policy: Schema.optional(Schema.Literal('concord.native-reliability/v1')),
   memory: Text, epoch: Nat, validatedAt: Text, cases: Schema.NonEmptyArray(RepositoryCaseEvidenceSchema),
 });
 export type RepositoryEvidence = typeof RepositoryEvidenceSchema.Type;
@@ -121,7 +123,7 @@ export const HistoricalDispositionSchema = Schema.Struct({ reason: Text, source:
 export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.NonEmptyArray(Slug), constitutionRefs: Schema.optional(Strings), decision: Schema.optional(Schema.Struct({ selected: Slug, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
 export const RoadmapSchema = Schema.Struct({ ...base, kind: Schema.Literal('roadmap'), state: Schema.Literals(['planned', 'adopted', 'cancelled']), adoptedAs: Schema.optional(Text), cancellation: Schema.optional(HistoricalDispositionSchema) });
 export const EngineeringSchema = Schema.Struct({ ...base, kind: Schema.Literal('engineering') });
-export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), memoryKind: Schema.Literals(['problem', 'decision', 'insight', 'note']), state: Schema.Literals(['captured', 'open', 'resolved', 'current', 'superseded']), epoch: Nat, promotions: Strings, history: Schema.Array(HistorySchema), resolution: Schema.optional(ResolutionSchema), supersededBy: Schema.optional(Text), supersession: Schema.optional(Schema.Struct({ statement: Text, source: SourceRecordSchema })) });
+export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), memoryKind: Schema.Literals(['problem', 'decision', 'insight', 'note']), state: Schema.Literals(['captured', 'open', 'resolved', 'current', 'superseded']), epoch: Nat, evidenceRequirement: Schema.optional(Schema.Literals(['command', 'concord.native-reliability/v1'])), promotions: Strings, history: Schema.Array(HistorySchema), resolution: Schema.optional(ResolutionSchema), supersededBy: Schema.optional(Text), supersession: Schema.optional(Schema.Struct({ statement: Text, source: SourceRecordSchema })) });
 export type MemoryMeta = typeof MemorySchema.Type;
 export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'decision', 'delivery'] as const;
 export const IssueMemoryRelationSchema = Schema.Struct({ kind: Schema.Literals(MEMORY_RELATION_KINDS), memory: Text });

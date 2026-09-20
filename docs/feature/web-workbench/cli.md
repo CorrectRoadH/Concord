@@ -18,4 +18,4 @@
 | 检查与恢复 | `check`、`doctor`、`cache`、`recover` | 检查与设置 |
 | 审阅、模板 | `review render`、`template list/show` | 审阅与模板操作 |
 
-结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新仍执行原有领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。NiceEval repository profile 的专属入口继续由宿主 CLI 提供。
+结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新仍执行原有领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。高级原生证据入口执行同一最低证明要求，不能由通用 command 操作绕过。

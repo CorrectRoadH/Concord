@@ -1,0 +1,12 @@
+{
+  "format": "concord.repository/v2",
+  "suites": [
+    {
+      "id": "calculator",
+      "root": "acceptance"
+    }
+  ],
+  "historyPath": "case-history.ts",
+  "policy": "concord.native-reliability/v1",
+  "host": "acceptance/host.ts"
+}

@@ -14,4 +14,4 @@ concord review render
 
 `review render` 只生成本地 Markdown 审阅材料，不写 GitHub、不发送消息。交接时报告实际修改、运行过的验证、具名 finding、私有 evidence 是否可用，以及仍需授权的提交、push、发布或部署。
 
-不要把“无 finding”、命令成功收据或审阅材料表述成完整覆盖、native case passed 或 NiceEval formal E2E 可靠性证明。
+不要把“无 finding”、命令成功收据或审阅材料表述成完整覆盖、native case passed 或 原生 E2E 可靠性证明。

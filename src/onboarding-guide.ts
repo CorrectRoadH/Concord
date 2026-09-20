@@ -1,4 +1,4 @@
-// @concord-file generated-project-guide
+// @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 export const onboardingGuide = `# Developing with Concord
 

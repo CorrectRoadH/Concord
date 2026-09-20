@@ -1,9 +1,10 @@
-// @concord-file shared-workbench-operations
+// @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Result } from 'effect';
 import { readRepositoryTestView, type RepositoryTestView } from './view-profile.js';
+import { getGitStatus, type GitBaselineCache } from './git-view.js';
 import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
 import { codeSnippet, locateCode } from './code-commands.js';
 import { scanCode } from './code.js';
@@ -242,6 +243,15 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
   }), { dryRun: cache === 'off' });
 });
 
+/** Git needs current configuration, not the document, code, or evidence projections. */
+export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(rootInput: string, baselineCache?: GitBaselineCache) {
+  const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
+  const config = directConfig(root);
+  const testRoots = config.project === null ? [] : yield* withRepository(root,
+    repo => Effect.succeed(repo.config.testRoots), { dryRun: true });
+  return yield* getGitStatus(root, true, baselineCache, testRoots);
+});
+
 export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string): Effect.fn.Return<ViewFile, ConcordError> {
   const validatedRoot = yield* sync('view.validateRoot', () => validateViewRoot(root));
   const config = directConfig(validatedRoot);
@@ -312,7 +322,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'constitution.initialize': return initializeConstitution(repo, dryRun);
     case 'constitution.adopt': return adoptConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
     case 'constitution.amend': return amendConstitution(repo, action.version, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
-    case 'code.annotate': return codeSnippet(repo, action.id, action.scope, action.contracts);
+    case 'code.annotate': return codeSnippet(repo, action.scope, action.contracts);
     case 'code.locate': return locateCode(repo, action.path, action.line);
     case 'test.annotate': return annotationSnippet(repo, action.contract, action.regressions);
     case 'evidence.show': return readEvidence(repo, action.id);
