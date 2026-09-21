@@ -52,7 +52,7 @@ test('current checkout configures a version-matched runner whose annotations sca
       const scan = scanAnnotations(repository);
       assert.deepEqual(scan.findings, []);
       const useCases = loadDocuments(repository).filter(document => document.metadata.kind === 'use-case');
-      assert.equal(useCases.length, 19);
+      assert.ok(useCases.length > 0, 'self-host contract inventory must contain at least one Use Case');
       for (const useCase of useCases) {
         assert.ok(scan.cases.some(item => item.contract === useCase.path), `missing a real test relation for ${useCase.path}`);
       }

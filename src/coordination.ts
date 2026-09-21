@@ -12,6 +12,48 @@ const SUPPORTED_LOCAL_FILESYSTEMS = new Set([
   0x794c7630, 0xf2f52010, 0x858458f6,
 ]);
 
+export interface DarwinFilesystemCommands {
+  readonly run: (command: string, args: readonly string[], input?: Buffer) => Buffer;
+}
+
+const systemDarwinFilesystemCommands: DarwinFilesystemCommands = {
+  run: (command, args, input) => execFileSync(command, args, {
+    ...(input === undefined ? {} : { input }),
+    shell: false,
+    stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
+    timeout: 10_000,
+    maxBuffer: 1024 * 1024,
+  }),
+};
+
+/** Returns diskutil's strictly decoded filesystem type for the actual path mount. */
+export function darwinFilesystemTypeSync(path: string, commands: DarwinFilesystemCommands = systemDarwinFilesystemCommands): string {
+  const plist = commands.run("diskutil", ["info", "-plist", resolve(path)]);
+  const raw = commands.run("plutil", ["-extract", "FilesystemType", "raw", "-o", "-", "-"], plist).toString("utf8");
+  if (!/^[a-z0-9]+\n?$/u.test(raw)) throw new Error("plutil returned an invalid FilesystemType value");
+  return raw.endsWith("\n") ? raw.slice(0, -1) : raw;
+}
+
+// @concord-code
+// @concord-implements docs/feature/cross-platform-release/use-case/release-from-tag.md
+export function assertSupportedLocalFilesystemSync(
+  path: string,
+  platform: NodeJS.Platform = process.platform,
+  commands: DarwinFilesystemCommands = systemDarwinFilesystemCommands,
+): void {
+  if (platform === "linux") {
+    const type = statfsSync(path).type >>> 0;
+    if (!SUPPORTED_LOCAL_FILESYSTEMS.has(type)) throw new Error(`unsupported filesystem type 0x${type.toString(16)}`);
+    return;
+  }
+  if (platform === "darwin") {
+    const type = darwinFilesystemTypeSync(path, commands);
+    if (type !== "apfs") throw new Error(`unsupported Darwin filesystem ${type}`);
+    return;
+  }
+  throw new Error(`unsupported host ${platform}`);
+}
+
 export class CoordinationError extends Data.TaggedError("CoordinationError")<{
   readonly operation: string;
   readonly phase: "git-private" | "migration" | "lock" | "cleanup";
@@ -75,10 +117,8 @@ function assertSupported(root: string, directory: string, operation: string): vo
     throw new CoordinationError({ operation, phase: "lock", path: directory, message: "repository and Trace coordination are on different filesystems" });
   }
   for (const path of [resolve(root), directory]) {
-    const type = statfsSync(path).type >>> 0;
-    if (!SUPPORTED_LOCAL_FILESYSTEMS.has(type)) {
-      throw new CoordinationError({ operation, phase: "lock", path, message: `unsupported filesystem type 0x${type.toString(16)}` });
-    }
+    try { assertSupportedLocalFilesystemSync(path); }
+    catch (cause) { throw new CoordinationError({ operation, phase: "lock", path, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
 }
 
@@ -95,7 +135,10 @@ function acquireAtDirectory(root: string, directory: string, mode: TraceLease["m
     const result = spawnSync("flock", [mode === "shared" ? "--shared" : "--exclusive", "--nonblock", "--conflict-exit-code", String(LOCK_CONFLICT_EXIT), "3"], {
       stdio: ["ignore", "ignore", "pipe", descriptor],
     });
-    if (result.error !== undefined) throw result.error;
+    if (result.error !== undefined) {
+      if ((result.error as NodeJS.ErrnoException).code === "ENOENT") throw new Error("required flock helper is unavailable");
+      throw result.error;
+    }
     if (result.status === LOCK_CONFLICT_EXIT) throw new CoordinationError({ operation, phase: "lock", path: lockPath, message: `${mode} Trace lease is busy` });
     if (result.status !== 0) throw new Error(`flock helper exited ${String(result.status)}`);
     return { descriptor, directory, mode };

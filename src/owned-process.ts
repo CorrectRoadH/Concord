@@ -27,15 +27,32 @@ export const runOwnedProcess = (command: readonly string[], options: OwnedProces
 export const hasConfirmedOwnedGroupCleanup = (result: Pick<OwnedProcessResult, 'processGroupOwned' | 'groupCleanup'>): boolean => !result.processGroupOwned || result.groupCleanup.gone === true;
 export const hasSuccessfulOwnedProcessResult = (result: Pick<OwnedProcessResult, 'exitCode' | 'signal' | 'timedOut' | 'cancelled' | 'outputLimitExceeded' | 'error' | 'processGroupOwned' | 'groupCleanup'>): boolean => result.exitCode === 0 && result.signal === null && !result.timedOut && !result.cancelled && !result.outputLimitExceeded && result.error === undefined && hasConfirmedOwnedGroupCleanup(result);
 
-type GroupPresence = 'alive' | 'zombie-only' | 'gone' | 'unknown';
-function groupPresence(groupId: number): GroupPresence {
+export type GroupPresence = 'alive' | 'zombie-only' | 'gone' | 'unknown';
+export interface GroupPresenceDependencies {
+  readonly platform?: NodeJS.Platform;
+  readonly kill?: (pid: number, signal: 0) => void;
+  readonly procEntries?: () => readonly string[];
+  readonly procStat?: (pid: string) => string;
+}
+export function observeOwnedProcessGroup(groupId: number, dependencies: GroupPresenceDependencies = {}): GroupPresence {
+  const platform = dependencies.platform ?? process.platform;
+  const kill = dependencies.kill ?? ((pid: number, signal: 0) => process.kill(pid, signal));
   try {
-    process.kill(-groupId, 0);
-    if (process.platform === 'linux') {
-      const states = readdirSync('/proc', { withFileTypes: true }).flatMap((entry) => {
-        if (!entry.isDirectory() || !/^\d+$/u.test(entry.name)) return [];
-        try { const stat = readFileSync(`/proc/${entry.name}/stat`, 'utf8'); const fields = stat.slice(stat.lastIndexOf(')') + 1).trimStart().split(/\s+/u); return Number(fields[2]) === groupId ? [fields[0] === 'Z' || fields[0] === 'X'] : []; } catch { return []; }
-      });
+    kill(-groupId, 0);
+    if (platform === 'linux') {
+      const entries = dependencies.procEntries?.() ?? readdirSync('/proc', { withFileTypes: true }).filter((entry) => entry.isDirectory() && /^\d+$/u.test(entry.name)).map((entry) => entry.name);
+      const states: boolean[] = [];
+      let incomplete = false;
+      for (const pid of entries) {
+        try {
+          const stat = dependencies.procStat?.(pid) ?? readFileSync(`/proc/${pid}/stat`, 'utf8');
+          const fields = stat.slice(stat.lastIndexOf(')') + 1).trimStart().split(/\s+/u);
+          if (Number(fields[2]) === groupId) states.push(fields[0] === 'Z' || fields[0] === 'X');
+        } catch (cause) {
+          if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') incomplete = true;
+        }
+      }
+      if (incomplete) return 'unknown';
       if (states.length > 0 && states.every(Boolean)) return 'zombie-only';
     }
     return 'alive';
@@ -44,19 +61,39 @@ function groupPresence(groupId: number): GroupPresence {
 interface Active { readonly child: ChildProcess; readonly command: readonly string[]; readonly groupOwned: boolean; readonly groupId?: number; readonly signals: NodeJS.Signals[]; readonly closed: Deferred.Deferred<readonly [number | null, NodeJS.Signals | null]>; readonly shutdown: Deferred.Deferred<OwnedProcessResult>; stdout: string; stderr: string; bytes: number; error?: string; termination?: OwnedTermination; }
 const none = (detail: string): OwnedProcessGroupCleanup => ({ owned: false, checked: false, aliveAfterLeaderClose: null, signalsSent: [], gone: null, detail });
 function signal(active: Active, name: NodeJS.Signals, reason?: OwnedTermination): void { if (reason !== undefined && active.termination === undefined) active.termination = reason; try { if (active.groupOwned && active.groupId !== undefined) { process.kill(-active.groupId, name); active.signals.push(name); } else active.child.kill(name); } catch { /* already closed */ } }
-function waitGroup(groupId: number, remaining: number): Effect.Effect<GroupPresence> { return Effect.suspend(() => { const state = groupPresence(groupId); return state === 'alive' && remaining > 0 ? Effect.sleep(Math.min(100, remaining)).pipe(Effect.andThen(waitGroup(groupId, remaining - 100))) : Effect.succeed(state); }); }
+function waitGroup(groupId: number, remaining: number): Effect.Effect<GroupPresence> { return Effect.suspend(() => { const state = observeOwnedProcessGroup(groupId); return state === 'alive' && remaining > 0 ? Effect.sleep(Math.min(100, remaining)).pipe(Effect.andThen(waitGroup(groupId, remaining - 100))) : Effect.succeed(state); }); }
 function cleanup(active: Active, graceMs: number): Effect.Effect<OwnedProcessGroupCleanup> {
   if (!active.groupOwned || active.groupId === undefined) return Effect.succeed(none('no detached POSIX process group was created'));
-  const initial = groupPresence(active.groupId); const result = (state: GroupPresence, detail: string): OwnedProcessGroupCleanup => ({ owned: true, checked: true, aliveAfterLeaderClose: initial === 'alive', groupId: active.groupId, signalsSent: active.signals, gone: state === 'gone' || state === 'zombie-only', detail });
+  const initial = observeOwnedProcessGroup(active.groupId); const result = (state: GroupPresence, detail: string): OwnedProcessGroupCleanup => ({ owned: true, checked: true, aliveAfterLeaderClose: initial === 'alive', groupId: active.groupId, signalsSent: active.signals, gone: state === 'gone' || state === 'zombie-only', detail });
   if (initial !== 'alive') return Effect.succeed(result(initial, initial === 'unknown' ? 'could not verify owned process group' : 'owned process group has no running members'));
   return Effect.sync(() => signal(active, 'SIGTERM')).pipe(Effect.andThen(waitGroup(active.groupId, graceMs)), Effect.flatMap((afterTerm) => afterTerm === 'alive' ? Effect.sync(() => signal(active, 'SIGKILL')).pipe(Effect.andThen(waitGroup(active.groupId!, graceMs)), Effect.map((afterKill) => result(afterKill, 'owned process group required TERM/grace/KILL cleanup'))) : Effect.succeed(result(afterTerm, 'owned process group drained after TERM grace'))));
 }
 function makeResult(active: Active, close: readonly [number | null, NodeJS.Signals | null], graceMs: number): Effect.Effect<OwnedProcessResult> { return cleanup(active, graceMs).pipe(Effect.map((groupCleanup) => ({ command: active.command, exitCode: close[0], signal: close[1], timedOut: active.termination === 'timeout', cancelled: active.termination === 'cancelled', outputLimitExceeded: active.termination === 'output-limit', stdout: active.stdout, stderr: active.stderr, ...(active.error === undefined ? {} : { error: active.error }), processGroupOwned: active.groupOwned, groupCleanup }))); }
-function stop(active: Active, graceMs: number, reason: OwnedTermination, first: NodeJS.Signals = 'SIGTERM'): Effect.Effect<OwnedProcessResult> { return Effect.uninterruptible(Effect.gen(function* () { const known = yield* Deferred.poll(active.shutdown); if (Option.isSome(known)) return yield* known.value; signal(active, first, reason); const closed = yield* Deferred.await(active.closed).pipe(Effect.timeoutOption(graceMs)); if (Option.isNone(closed)) { signal(active, 'SIGKILL'); const killed = yield* Deferred.await(active.closed); const result = yield* makeResult(active, killed, graceMs); yield* Deferred.succeed(active.shutdown, result); return result; } const result = yield* makeResult(active, closed.value, graceMs); yield* Deferred.succeed(active.shutdown, result); return result; })); }
+function stop(active: Active, graceMs: number, reason: OwnedTermination, first: NodeJS.Signals = 'SIGTERM'): Effect.Effect<OwnedProcessResult> { return Effect.uninterruptible(Effect.gen(function* () {
+  const known = yield* Deferred.poll(active.shutdown);
+  if (Option.isSome(known)) return yield* known.value;
+  signal(active, first, reason);
+  const closed = yield* Deferred.await(active.closed).pipe(Effect.timeoutOption(graceMs));
+  if (Option.isNone(closed)) {
+    signal(active, 'SIGKILL');
+    const killed = yield* Deferred.await(active.closed).pipe(Effect.timeoutOption(graceMs));
+    if (Option.isNone(killed)) {
+      const observed = yield* makeResult(active, [null, 'SIGKILL'], graceMs);
+      const result: OwnedProcessResult = { ...observed, error: observed.error ?? `process did not close within ${graceMs}ms after SIGKILL` };
+      yield* Deferred.succeed(active.shutdown, result);
+      return result;
+    }
+    const result = yield* makeResult(active, killed.value, graceMs);
+    yield* Deferred.succeed(active.shutdown, result);
+    return result;
+  }
+  const result = yield* makeResult(active, closed.value, graceMs);
+  yield* Deferred.succeed(active.shutdown, result);
+  return result;
+})); }
 function acquire(command: readonly string[], options: OwnedProcessOptions, active: Set<Active>, graceMs: number): Effect.Effect<Active, OwnedProcessError> { return Effect.gen(function* () { const closed = yield* Deferred.make<readonly [number | null, NodeJS.Signals | null]>(); const shutdown = yield* Deferred.make<OwnedProcessResult>(); return yield* Effect.try({ try: () => { if (command[0] === undefined) throw new Error('owned process command must contain an executable'); const groupOwned = process.platform !== 'win32'; const env = { ...(options.env ?? process.env) }; delete env.NODE_TEST_CONTEXT; const child = spawn(command[0], command.slice(1), { cwd: options.cwd, env, detached: groupOwned, stdio: ['ignore', 'pipe', 'pipe'] }); const entry: Active = { child, command, groupOwned, ...(groupOwned && child.pid !== undefined && child.pid !== process.pid ? { groupId: child.pid } : {}), signals: [], closed, shutdown, stdout: '', stderr: '', bytes: 0 };
-      let outputKillTimer: ReturnType<typeof setTimeout> | undefined;
-      const capture = (channel: 'stdout' | 'stderr', chunk: Buffer) => { if (entry.termination === 'output-limit') return; const remaining = OUTPUT_LIMIT - entry.bytes; if (remaining <= 0 || chunk.byteLength > remaining) { const prefix = remaining > 0 ? chunk.subarray(0, remaining).toString('utf8') : ''; entry[channel] += prefix; entry.bytes += Math.max(0, remaining); signal(entry, 'SIGTERM', 'output-limit'); outputKillTimer = setTimeout(() => signal(entry, 'SIGKILL'), graceMs); outputKillTimer.unref(); return; } entry[channel] += chunk.toString('utf8'); entry.bytes += chunk.byteLength; };
-      child.stdout?.on('data', (chunk: Buffer) => capture('stdout', chunk)); child.stderr?.on('data', (chunk: Buffer) => capture('stderr', chunk)); child.once('error', (error) => { entry.error = error.message; }); child.once('close', (code, exitSignal) => { if (outputKillTimer !== undefined) clearTimeout(outputKillTimer); void Effect.runPromise(Deferred.succeed(closed, [code, exitSignal])); }); active.add(entry); return entry; }, catch: (cause) => new OwnedProcessError({ operation: 'spawn', detail: cause instanceof Error ? cause.message : 'could not spawn command' }) }); }); }
+      const capture = (channel: 'stdout' | 'stderr', chunk: Buffer) => { if (entry.termination === 'output-limit') return; const remaining = OUTPUT_LIMIT - entry.bytes; if (remaining <= 0 || chunk.byteLength > remaining) { const prefix = remaining > 0 ? chunk.subarray(0, remaining).toString('utf8') : ''; entry[channel] += prefix; entry.bytes += Math.max(0, remaining); void Effect.runPromise(stop(entry, graceMs, 'output-limit')); return; } entry[channel] += chunk.toString('utf8'); entry.bytes += chunk.byteLength; };
+      child.stdout?.on('data', (chunk: Buffer) => capture('stdout', chunk)); child.stderr?.on('data', (chunk: Buffer) => capture('stderr', chunk)); child.once('error', (error) => { entry.error = error.message; }); child.once('close', (code, exitSignal) => { void Effect.runPromise(Deferred.succeed(closed, [code, exitSignal])); }); active.add(entry); return entry; }, catch: (cause) => new OwnedProcessError({ operation: 'spawn', detail: cause instanceof Error ? cause.message : 'could not spawn command' }) }); }); }
 export function makeOwnedProcessService(options: { readonly graceMs?: number } = {}): OwnedProcessService {
   const graceMs = options.graceMs ?? 500;
   const active = new Set<Active>();
@@ -75,10 +112,11 @@ export function makeOwnedProcessService(options: { readonly graceMs?: number } =
         acquire(command, processOptions, active, graceMs),
         (entry) => stop(entry, graceMs, 'cancelled').pipe(Effect.asVoid, Effect.ensuring(Effect.sync(() => active.delete(entry)))),
       ).pipe(Effect.flatMap((entry) => {
-        const observed = Deferred.await(entry.closed).pipe(
+        const observedClose = Deferred.await(entry.closed).pipe(
           Effect.flatMap((close) => makeResult(entry, close, graceMs)),
           Effect.tap((result) => Deferred.succeed(entry.shutdown, result)),
         );
+        const observed = Effect.raceFirst(observedClose, Deferred.await(entry.shutdown));
         const timed = processOptions.timeoutMs === undefined
           ? observed
           : Effect.raceFirst(observed, Effect.sleep(processOptions.timeoutMs).pipe(Effect.andThen(stop(entry, graceMs, 'timeout'))));

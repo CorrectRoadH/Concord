@@ -90,6 +90,45 @@ export function traceShow(repo: Repository, selector: string, cache: 'use' | 'of
   return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, cache: trace.annotations.cache };
 }
 
+type RelationshipKind = 'code' | 'test';
+
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md
+export function traceGaps(repo: Repository, cache: 'use' | 'off' = 'use') {
+  const trace = buildTrace(repo, cache); requireValidTrace(trace);
+  const relationshipCounts = (matches: (edge: TraceEdge) => boolean) => ({
+    code: trace.edges.filter(edge => edge.relation === 'implements' && matches(edge)).length,
+    test: trace.edges.filter(edge => edge.relation === 'contract' && matches(edge)).length,
+  });
+  const gap = (counts: { readonly code: number; readonly test: number }): readonly RelationshipKind[] => [
+    ...(counts.code === 0 ? ['code' as const] : []),
+    ...(counts.test === 0 ? ['test' as const] : []),
+  ];
+  const contracts = trace.documents.flatMap(document => {
+    if (document.metadata.kind !== 'feature' && document.metadata.kind !== 'use-case') return [];
+    const selected = new Set([document.path]);
+    const counts = relationshipCounts(edge => belongsTo(repo, trace, selected, edge.to));
+    const missing = gap(counts);
+    return missing.length === 0 ? [] : [{ path: document.path, kind: document.metadata.kind, title: document.metadata.title, missing, relationships: counts }];
+  });
+  const cliPages = trace.documents.flatMap(document => {
+    if (document.metadata.kind !== 'feature') return [];
+    const path = document.path.replace(/\/README\.md$/u, '/cli.md');
+    if (path === document.path || repo.read(path) === undefined) return [];
+    const counts = relationshipCounts(edge => pathOf(edge.to) === path);
+    const missing = gap(counts);
+    return missing.length === 0 ? [] : [{ path, feature: document.path, title: document.metadata.title, missing, relationships: counts }];
+  });
+  return {
+    operation: 'trace-gaps',
+    semantics: 'missing-explicit-relationships-not-coverage',
+    limitations: ['Only documented CLI pages are discoverable; undocumented commands require a product-owned inventory.'],
+    contracts,
+    cliPages,
+    cache: trace.annotations.cache,
+  };
+}
+
 export function documentShow(repo: Repository, selector: string, kind: DocumentRecord['metadata']['kind'], cache: 'use' | 'off' = 'use') {
   const trace = buildTrace(repo, cache);
   const document = findDocument(trace.documents, selector, kind);

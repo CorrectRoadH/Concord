@@ -7,11 +7,11 @@
 // @concord-implements docs/feature/project-onboarding/use-case/inherit-template-defaults.md
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statfsSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Predicate, Schema } from 'effect';
-import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync, type TraceLease } from './coordination.js';
+import { acquireTraceLeaseSync, assertSupportedLocalFilesystemSync, CoordinationError, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync, type TraceLease } from './coordination.js';
 import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Change, type ConfigSnapshot, type MemorySource, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig, snapshot } from './config.js';
 import { initialConstitutionSource } from './constitution.js';
@@ -20,7 +20,6 @@ import { projectTemplateFiles, templateBody } from './templates.js';
 
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
-const LOCAL_LINUX_FS = new Set([0xef53, 0x58465342, 0x9123683e, 0x1021994, 0x2fc12fc1, 0x794c7630, 0xf2f52010, 0x858458f6]);
 const errno = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code;
 function storageCoordinationFailure(cause: unknown): ConcordError {
   const coordination = cause instanceof CoordinationError || (typeof cause === 'object' && cause !== null && '_tag' in cause && cause._tag === 'CoordinationError');
@@ -37,12 +36,51 @@ export function git(root: string, args: readonly string[]): string {
   catch { throw new ConcordError('GitFailed', `Git could not ${args[0] ?? 'inspect'} the selected repository`); }
 }
 function present(path: string): boolean { try { lstatSync(path); return true; } catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; } }
+
+/** Conservative APFS collision key: over-rejection is safer than a partial publication. */
+export function darwinPathCollisionKey(path: string): string {
+  return path.split('/').map((part) => part.normalize('NFKD').toUpperCase().toLowerCase().normalize('NFD')).join('/');
+}
+
+export function hasExactDarwinEntry(entries: readonly Buffer[], requested: string): boolean {
+  return entries.some((entry) => entry.equals(Buffer.from(requested)));
+}
+
 function assertNoSymlink(path: string): void {
   const absolute = resolve(path);
   let part: string = sep;
   for (const segment of absolute.slice(sep.length).split(sep)) {
-    part = join(part, segment);
+    const target = join(part, segment);
+    if (process.platform === 'darwin' && present(part)) {
+      const entries = readdirSync(part, { encoding: 'buffer' });
+      if (!hasExactDarwinEntry(entries, segment)) {
+        const alias = entries.find((entry) => darwinPathCollisionKey(entry.toString('utf8')) === darwinPathCollisionKey(segment));
+        if (alias !== undefined || present(target)) throw new ConcordError('UnsafePath', `Path component spelling does not match the directory entry: ${target}`);
+        break;
+      }
+    }
+    part = target;
     if (present(part) && lstatSync(part).isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${part}`);
+  }
+}
+
+function assertStorageFilesystem(path: string): void {
+  try { assertSupportedLocalFilesystemSync(path); }
+  catch (cause) { throw new ConcordError('UnsupportedFilesystem', `Concord requires a supported local filesystem: ${cause instanceof Error ? cause.message : String(cause)}`); }
+}
+
+export function assertDarwinPublicationPaths(paths: readonly string[], platform: NodeJS.Platform = process.platform): void {
+  if (platform !== 'darwin') return;
+  const seen = new Map<string, string>();
+  for (const path of paths) {
+    const parts = path.split('/');
+    for (let index = 1; index <= parts.length; index += 1) {
+      const prefix = parts.slice(0, index).join('/');
+      const key = darwinPathCollisionKey(prefix);
+      const previous = seen.get(key);
+      if (previous !== undefined && previous !== prefix) throw new ConcordError('InvalidChange', `Darwin publication paths collide by case or Unicode normalization: ${previous} and ${prefix}`);
+      seen.set(key, prefix);
+    }
   }
 }
 export function canonicalPath(path: string): string {
@@ -122,7 +160,34 @@ function defaultConfig(): ProjectConfig {
     memorySources: [{ name: 'project', provider: 'local-files', path: 'memory', access: 'read-write', defaultWrite: true }],
   };
 }
-const fixedOwner = (path: string): boolean => path === 'concord.config.ts' || path === 'DESIGN.md' || path === 'docs/README.md' || path === 'docs/concord.md' || path === 'docs/concepts.md' || path === 'docs/architecture.md' || path === 'docs/constitution.md' || /^(?:docs\/(?:_template|feature|roadmap|design|research|engineering|issues)\/).+\.md$/.test(path);
+const fixedOwner = (path: string): boolean => path === 'AGENTS.md' || path === 'concord.config.ts' || path === 'DESIGN.md' || path === 'docs/README.md' || path === 'docs/concord.md' || path === 'docs/concepts.md' || path === 'docs/architecture.md' || path === 'docs/constitution.md' || /^(?:docs\/(?:_template|feature|roadmap|design|research|engineering|issues)\/).+\.md$/.test(path);
+
+const AGENT_RULE_BEGIN = '<!-- BEGIN CONCORD AGENT INSTRUCTIONS -->';
+const AGENT_RULE_END = '<!-- END CONCORD AGENT INSTRUCTIONS -->';
+const AGENT_RULE_CONTENT = `## Concord
+
+This repository uses Concord-driven development. Product contracts, executable test relationships, and engineering memory stay in repository-owned sources.
+
+Before planning, implementing, or reviewing governed work:
+
+- Run \`concord --skill\` to read the task router from the installed Concord version.
+- Run \`concord --skill <topic>\` for the relevant workflow, where topics include \`init\`, \`document\`, \`code\`, \`test\`, \`memory\`, \`trace\`, \`recovery\`, \`view\`, \`feedback\`, and \`repository\`.
+- Use \`concord --skill all\` only when the complete offline guide is needed.
+- Before changing behavior, read or update the owning Feature, leaf Use Case, documented CLI page, and any required Design. Then run \`concord trace gaps --json\` to inspect missing explicit code/test relationships before implementation.
+
+Follow the returned instructions and the repository's current \`docs/constitution.md\`. A gap result means an explicit Concord relationship is absent; it is not code coverage, and undocumented CLI commands require the product's own inventory. Do not infer completion or test coverage from document structure or command receipts alone.`;
+
+function withAgentInstructions(source: string): string {
+  const begin = source.indexOf(AGENT_RULE_BEGIN);
+  const end = source.indexOf(AGENT_RULE_END);
+  if ((begin === -1) !== (end === -1) || (begin !== -1 && end < begin)) {
+    throw new ConcordError('InitializationConflict', 'AGENTS.md contains an incomplete Concord-managed instruction block');
+  }
+  const block = `${AGENT_RULE_BEGIN}\n${AGENT_RULE_CONTENT}\n${AGENT_RULE_END}`;
+  if (begin !== -1) return `${source.slice(0, begin)}${block}${source.slice(end + AGENT_RULE_END.length)}`;
+  if (source.trim() === '') return `${block}\n`;
+  return `${source.replace(/\n*$/u, '')}\n\n${block}\n`;
+}
 
 export class LocalRepository implements Repository {
   readonly root: string;
@@ -136,14 +201,14 @@ export class LocalRepository implements Repository {
     this.root = discoverRoot(input, options.initialize);
     this.noWrite = options.dryRun ?? false;
     if (options.recover && this.noWrite) throw new ConcordError('InvalidOption', 'recover does not accept --dry-run');
-    if (process.platform !== 'linux') throw new ConcordError('UnsupportedHost', 'Concord currently supports local Linux filesystems');
+    if (process.platform !== 'linux' && process.platform !== 'darwin') throw new ConcordError('UnsupportedHost', 'Concord supports Linux and Darwin/macOS hosts');
     if (git(this.root, ['rev-parse', '--show-toplevel']) !== this.root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
-    if (!LOCAL_LINUX_FS.has(statfsSync(this.root).type)) throw new ConcordError('UnsupportedFilesystem', 'Concord requires a supported local filesystem');
+    assertStorageFilesystem(this.root);
     assertCurrentRuntimeFormat(this.root);
     try { this.privateDir = genericPrivateDirectorySync(this.root); }
     catch (cause) { throw storageCoordinationFailure(cause); }
     assertNoSymlink(this.privateDir);
-    if (!LOCAL_LINUX_FS.has(statfsSync(dirname(this.privateDir)).type)) throw new ConcordError('UnsupportedFilesystem', 'Concord private state requires a local filesystem');
+    assertStorageFilesystem(dirname(this.privateDir));
     try {
       const coordinationDir = tracePrivateDirectorySync(this.root);
       // Only a new owner-free, lock-free repository may preview without creating private state.
@@ -392,6 +457,7 @@ export class LocalRepository implements Repository {
     if (journal.root !== this.root || journal.privateDir !== this.privateDir) fail('Publication belongs to a different worktree');
     if (new Set(journal.changes.map(change => change.path)).size !== journal.changes.length || journal.changes.length === 0) fail('Journal must contain unique changes');
     if (new Set(journal.directories).size !== journal.directories.length) fail('Journal contains duplicate directories');
+    assertDarwinPublicationPaths([...journal.changes.map((change) => change.path), ...journal.directories]);
     if (journal.scope.kind === 'source') {
       if (journal.operation !== 'set-source' || journal.changes.length !== 1 || journal.directories.length !== 0) fail('Source publication must replace exactly one existing file without directories');
       if (digest(journal.scope.configSource) !== journal.scope.configDigest) fail('Frozen project configuration digest is invalid');
@@ -529,6 +595,10 @@ export function initialize(repo: Repository, dryRun = false, options: Initialize
   for (const source of config.memorySources ?? []) if (source.access === 'read-write') sections[`${source.path}/README.md`] = ['Engineering memory', `Memory source ${source.name} (${source.access}).`, 'memory add'];
   for (const [path, [title, description, command]] of Object.entries(sections)) paths[path] = `# ${title}\n\n${description}\n\nStart with \`concord ${command} --help\`.\nUse \`concord ${command.split(' ')[0]} list\` to discover documents.\n`;
   for (const path of Object.keys(paths)) if (repo.read(path) !== undefined) throw new ConcordError('InitializationConflict', `${path} already exists; no existing file will be overwritten`);
-  const receipt = repo.publish('init', Object.entries(paths).map(([path, after]) => ({ path, before: null, after })), dryRun);
+  const agentBefore = repo.read('AGENTS.md') ?? null;
+  const agentAfter = withAgentInstructions(agentBefore ?? '');
+  const changes: Change[] = Object.entries(paths).map(([path, after]) => ({ path, before: null, after }));
+  if (agentBefore !== agentAfter) changes.push({ path: 'AGENTS.md', before: agentBefore, after: agentAfter });
+  const receipt = repo.publish('init', changes, dryRun);
   return { ...receipt, config, createdPaths: receipt.changedPaths, preservedPaths };
 }

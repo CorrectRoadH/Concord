@@ -4,7 +4,7 @@
 
 Concord 是面向开发者与 coding agent 的本地 SDLC CLI。产品契约保存在 Markdown，代码与测试关系写在实际源码旁，Memory 保存问题和裁决历史；Trace 动态反查这些关系，不需要第二份关系 JSON。
 
-Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux 本地文件系统与 Node.js 24.15+；源码开发使用 pnpm 11.18.0。
+Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux 本地文件系统，以及 Apple Silicon macOS 14/15 的本地 APFS；需要 Node.js 24.15+、Git 和 `flock`。源码开发使用 pnpm 11.18.0。Windows、Intel macOS、HFS 与网络文件系统尚未纳入兼容声明。
 
 - [Quick start](#quick-start)：从空仓库跑通契约、代码、测试和反查。
 - [常用 usage](#常用-usage)：接入已有项目、维护文档、关联代码、测试与 Memory。
@@ -58,6 +58,7 @@ concord code locate src/greeting.mjs --line 9
 concord test list
 test_ref="$(concord test list --json | node --input-type=commonjs -pe 'JSON.parse(require("node:fs").readFileSync(0, "utf8")).cases[0].id')"
 concord test run "$test_ref" --json
+concord trace gaps --json
 concord trace show greeting
 concord review render greeting
 ```
@@ -117,7 +118,9 @@ concord init --docs-only
 concord init --docs-only --source-root src
 ```
 
-`init` 创建静态、不会被执行的 `concord.config.ts`、必需的 `docs/constitution.md`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板；根 `DESIGN.md` 可选。它补齐缺失的 `docs/README.md`、`docs/concepts.md` 和 `docs/architecture.md`，已有根文档保留。其它目标冲突时零写入失败；已有文档仓库应先在隔离分支/工作目录审阅迁移，不覆盖原文档。旧 `concord.json`（包括双配置）返回 `ProjectMigrationRequired`，须先显式离线迁移。
+`init` 创建静态、不会被执行的 `concord.config.ts`、必需的 `docs/constitution.md`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板；根 `DESIGN.md` 可选。它补齐缺失的 `docs/README.md`、`docs/concepts.md` 和 `docs/architecture.md`，已有根文档保留。它还在根 `AGENTS.md` 新建或刷新一个带边界标记的 Concord-driven development 区块，保留区块外内容，并指向当前安装版本的 `concord --skill`。标记残缺或其它目标冲突时零写入失败。旧 `concord.json`（包括双配置）返回 `ProjectMigrationRequired`，须先显式离线迁移。
+
+改功能前先读取或更新 Feature、叶子 Use Case、CLI supporting page 和必要 Design，再进入实现与测试。运行 `concord trace gaps --json` 可列出没有显式 code/test 关系的 Feature、Use Case 与已建档 CLI 页面；它是关系缺口，不是覆盖率，也不能发现从未建档的命令。
 
 已有 Concord 项目直接维护配置：`sourceRoots` 控制代码扫描，缺省 `[]`；`testRoots: []` 关闭测试发现。两组根可重叠，新增代码功能无需迁移已有测试关系。源码关系在注释里；静态 TypeScript 配置保存目录、runner、模板默认值和本地 Memory 来源，旧 JSON 配置仍可读取。
 
@@ -312,7 +315,7 @@ readlink -f "$(command -v concord)"
 
 本地目录安装会创建包与 bin 的符号链接；修改源码后运行 `pnpm build` 即生效，无需重新安装。移动 checkout 后需要重新链接。若先前使用 Nix 用户 profile 安装 Concord，先用 `nix profile remove concord` 移除旧入口。全局链接供日常自举，`pnpm check` 仍构建、打包并在隔离消费者中安装验收。
 
-Linux 可以从 Homebrew tap 安装：
+Linux 与 Apple Silicon macOS 14/15 可以从 Homebrew tap 安装。Formula 会提供 Node、Git，以及 macOS 所需的 `util-linux` flock：
 
 ```sh
 brew install CorrectRoadH/tap/concord
@@ -326,7 +329,7 @@ cd /path/to/Concord
 pnpm install --frozen-lockfile
 pnpm build
 npm pack --ignore-scripts
-npm install --prefix ~/.local/share/concord ./concord-sdlc-0.4.0.tgz
+npm install --prefix ~/.local/share/concord ./concord-sdlc-0.5.0.tgz
 export PATH="$HOME/.local/share/concord/node_modules/.bin:$PATH"
 concord --help
 ```
@@ -342,6 +345,10 @@ concord --skill all
 无 topic 时输出按需路由的 `SKILL.md`；已知 topic 输出对应详细命令，`all` 仅用于需要完整离线资料时。skill 读取不会加载消费仓库或 repository profile，也不会写文件。
 
 包附带 `npm-shrinkwrap.json`，锁定 Effect 预发布版本及传递依赖。源码开发用 `pnpm-lock.yaml`；升级依赖时同时更新两者并重新做安装验收。
+
+### 发版
+
+源仓库使用 `concord-v<package.version>` annotated tag。tag workflow 校验版本，构建一次 tgz，并用同一资产在 macOS 14/15 Apple Silicon 与 Ubuntu 24.04 x86_64/arm64 运行完整检查及隔离安装；全部通过后才创建 GitHub Release。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
 
 ### Nix / NixOS
 

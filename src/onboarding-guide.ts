@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 export const onboardingGuide = `# Developing with Concord
 
-Concord connects current product contracts, real test declarations, and engineering memory.
+Concord drives development by connecting current product contracts, implementation declarations, real test declarations, and engineering memory. Before changing behavior, update or confirm the owning Feature, leaf Use Case, documented CLI page, and any required Design.
 
 ## Connect implementation to contracts
 
@@ -45,6 +45,7 @@ Lifecycle metadata remains owned by the corresponding Concord commands.
 
 Place \`// @use-case docs/feature/login/use-case/expired-token.md\` immediately above an existing supported test declaration. Concord derives the execution reference from the test file and test name; no manual ID or attach step is needed.
 Then run \`concord check\`, \`concord test list\`, and \`concord trace show docs/feature/login/README.md\`.
+Run \`concord trace gaps --json\` to find contracts and documented CLI pages without explicit code or active test relationships. These are relationship gaps, not coverage results; product-owned inventory is still required to discover undocumented commands.
 Use \`--regression memory/<problem>.md\` when a test protects a recorded Problem.
 Source annotations are the only source of these test relations; reverse lists are derived. Put \`// @feature <canonical path>\` or \`// @use-case <canonical path>\` above a top-level test. Concord derives the \`neref_...\` test reference; use \`@regression\` for a Problem and \`@status retired\` to retire a generic relation. Repository profile additionally supports \`@issue\` and helper \`@test-file\`.
 

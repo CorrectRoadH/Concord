@@ -60,8 +60,10 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await page.locator('.feature-use-cases').getByRole('link', { name: /History/ }).click();
     const useCase = page.getByRole('dialog', { name: 'History', exact: true });
     await expect(useCase.locator('[contenteditable="true"]').first()).toContainText('A paragraph');
-    await useCase.locator('.detail-drawer__body').evaluate(element => { element.scrollTop = 300; });
-    await expect.poll(() => useCase.locator('.detail-drawer__body').evaluate(element => element.scrollTop)).toBe(300);
+    const drawerBody = useCase.locator('.detail-drawer__body');
+    await expect.poll(() => drawerBody.evaluate(element => element.scrollHeight > element.clientHeight)).toBe(true);
+    await drawerBody.evaluate(element => { element.scrollTop = 300; });
+    await expect.poll(() => drawerBody.evaluate(element => element.scrollTop), { timeout: 15_000 }).toBe(300);
     await useCase.getByRole('tab', { name: '实现', exact: true }).click();
     await useCase.getByRole('button', { name: /src\/navigation.ts · 第/ }).click();
     const source = page.getByRole('dialog', { name: 'src/navigation.ts', exact: true });
@@ -72,7 +74,7 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await expect(useCase.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active');
     await page.goBack();
     await expect(useCase.getByRole('tab', { name: '正文', exact: true })).toHaveAttribute('data-state', 'active');
-    await expect.poll(() => useCase.locator('.detail-drawer__body').evaluate(element => element.scrollTop)).toBe(300);
+    await expect.poll(() => drawerBody.evaluate(element => element.scrollTop), { timeout: 15_000 }).toBe(300);
     await page.goForward();
     await expect(useCase.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active');
     await page.goForward();

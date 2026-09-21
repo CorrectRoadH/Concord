@@ -42,7 +42,7 @@ docs/constitution.md 必需，默认可明确为 draft；作者显式采用 acti
 
 `feature/roadmap/design/engineering page add/show/set` 维护已存在 package 的页面；也支持安全小写 slug 的自定义专题页，路径固定为 package 内的 `<slug>.md`，继续使用整文件 CAS。Design 外层保留 goals/limits/decision/cases 的既有路径，候选模板页须指定 plan。Design 候选通过 `--plan` 选择。set 必须提供最新整文件 digest，主 README 正文写入保留 metadata。普通 supporting Markdown 继续进入 candidate 摘要，不因为由模板生成而变成独立 owner 或测试证据。测试 contract 仍限于 Feature / Use Case；Engineering owner 可作为 Design 裁决和 Memory promotion 的目标。
 
-模板安装在工具包内，由严格 manifest 校验名称、路径、库存和普通文件类型，不依赖消费仓库或 NiceEval checkout。init 一次生成完整分类目录、docs/concord.md、docs/_template/ 全套可读参考模板，以及缺失的 docs/README.md、docs/concepts.md 和 docs/architecture.md。已有上述根文档保留，不修改 AGENTS.md。参考模板不成为契约 owner，create 使用随包模板，不把参考文件解释为自定义配置。
+模板安装在工具包内，由严格 manifest 校验名称、路径、库存和普通文件类型，不依赖消费仓库或 NiceEval checkout。init 一次生成完整分类目录、docs/concord.md、docs/_template/ 全套可读参考模板，以及缺失的 docs/README.md、docs/concepts.md 和 docs/architecture.md。已有上述根文档保留。根 AGENTS.md 由 init 保留既有正文并追加或刷新一个带明确边界的 Concord 托管区块，指向当前安装版本的 `concord --skill` 路由；缺失时创建。标记残缺时拒绝写入，不猜测或覆盖用户内容。参考模板不成为契约 owner，create 使用随包模板，不把参考文件解释为自定义配置。
 
 路径是文档 canonical identity；测试声明使用紧邻的 `// @feature <path>` 或 `// @use-case <path>`，并可使用 `// @regression`、`// @issue`、`// @test-file`、`// @status` 元数据。测试身份由 `deriveTestReference` 自动生成 `neref_...`；无需人工 ID、分配或 attach 步骤。反向列表由当前源码派生，不写回契约，也不保存 JSON 测试关系副本。
 
@@ -62,7 +62,7 @@ Trace 与定向 Review 按解析得到的 owner 汇总 Feature supporting page �
 
 读写路径拒绝绝对路径、traversal、symlink 组件和超出 repo 的 realpath。扫描只读取 Concord 所属目录和格式；错误的受管格式明确报错。
 
-Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。初版只支持 Linux 本地文件系统，不支持网络文件系统、macOS 或 Windows。写入使用独占锁和 preimage journal，写前校验完整变更集，逐文件原子 rename；读遇到未完成 journal 要求 recover。恢复仅在内容符合 preimage 或 planned digest 时进行，否则拒绝覆盖未知编辑。dry-run 执行同一规划校验，不写文件。锁不因超时擅自抢占；明确 recovery 检查同主机 PID 已消失后才能清理遗留锁。
+Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。支持已批准的 Linux 本地文件系统和 macOS APFS，不支持网络文件系统或 Windows；macOS 还拒绝大小写或 Unicode 规范化别名可能导致的发布路径碰撞。两端沿用由 `flock` 提供的 descriptor-backed 协调协议，Homebrew 在 macOS 上提供该 helper。写入使用独占锁和 preimage journal，写前校验完整变更集，逐文件原子 rename；读遇到未完成 journal 要求 recover。恢复仅在内容符合 preimage 或 planned digest 时进行，否则拒绝覆盖未知编辑。dry-run 执行同一规划校验，不写文件。锁不因超时擅自抢占；明确 recovery 检查同主机 PID 已消失后才能清理遗留锁。
 
 ## Design 逐项比较与裁决
 

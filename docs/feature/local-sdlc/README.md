@@ -18,6 +18,8 @@ constitutionRefs:
 
 Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品契约、可执行验收和工程记忆。它面向离线、可移植的开发流程：文档与源码是事实来源；Git-private SQLite 只保存可删除重建的缓存，命令证据与未完成事务 journal 则必须保留并按各自完整性规则处理。
 
+开发由 Concord 契约驱动：修改功能前先读取或更新 Feature、叶子 Use Case、CLI supporting page 与必要 Design，再进入实现和测试。`concord trace gaps --json` 派生当前显式实现/测试关系缺口，帮助发现尚未建立关系的契约和已建档 CLI 页面；它不等于代码覆盖率，也不能发现从未建档的命令。
+
 ## 用户价值
 
 维护者可以从同一个 CLI 完成接入、规划、测试关联、命令证据、Memory 生命周期、追踪和审阅，不需要 NiceEval checkout、全局凭据、部署服务或第二份关系注册表。

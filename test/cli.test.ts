@@ -239,7 +239,7 @@ test('installed onboarding creates editable packages and connects supporting-pag
  const root = consumer('onboarding');
  assert.match(readFileSync(join(root, 'docs/concord.md'), 'utf8'), /concord test list/);
  for (const path of ['docs/README.md', 'docs/_template/feature-design/lifecycle.md', 'docs/_template/roadmap/use-case/README.md', 'docs/_template/design-decision/CASES.md', 'docs/_template/design-decision/plans/plan-2/library.md', 'docs/_template/engineering/README.md', 'docs/concepts.md', 'docs/architecture.md', 'docs/_template/research/README.md', 'docs/_template/memory/problem.md']) assert.equal(existsSync(join(root, path)), true, path);
- assert.equal(existsSync(join(root, 'AGENTS.md')), false);
+ assert.match(readFileSync(join(root, 'AGENTS.md'), 'utf8'), /BEGIN CONCORD AGENT INSTRUCTIONS[\s\S]*concord trace gaps --json/u);
  call(root, ['feature', 'create', 'accounts', '--title', 'Accounts', '--pages', 'library,cli,architecture,lifecycle,use-case'], Ack);
  for (const page of ['README.md', 'library.md', 'cli.md', 'architecture.md', 'lifecycle.md', 'use-case/README.md']) assert.equal(existsSync(join(root, 'docs/feature/accounts', page)), true, page);
  call(root, ['feature', 'create', 'other', '--title', 'Other'], Ack);

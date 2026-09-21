@@ -135,7 +135,7 @@ test('cleans timed-out process groups and bounds output', () => Effect.runPromis
     assert.equal(timeout.timedOut, true);
     assert.equal(timeout.groupCleanup.gone, true);
   });
-  const capped = yield* runOwnedProcess(['node', '-e', "process.stdout.write('x'.repeat(5 * 1024 * 1024))"], { cwd: root, timeoutMs: 5000 }).pipe(Effect.provide(OwnedProcessLive));
+  const capped = yield* runOwnedProcess(['node', '-e', "process.stdout.write('x'.repeat(5 * 1024 * 1024))"], { cwd: root }).pipe(Effect.provide(OwnedProcessLive));
   yield* Effect.sync(() => {
     assert.equal(capped.outputLimitExceeded, true);
     assert.ok(Buffer.byteLength(capped.stdout) <= 4 * 1024 * 1024);
@@ -146,7 +146,7 @@ test('cleans timed-out process groups and bounds output', () => Effect.runPromis
 test('output limit escalates TERM-resistant commands without waiting for the command timeout', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   const started = yield* Effect.sync(() => Date.now());
-  const result = yield* runOwnedProcess(['node', '-e', "process.on('SIGTERM',()=>{});process.stdout.write('x'.repeat(5*1024*1024));setInterval(()=>{},1000)"], { cwd: root, timeoutMs: 5000 }).pipe(Effect.provide(OwnedProcessLive));
+  const result = yield* runOwnedProcess(['node', '-e', "process.on('SIGTERM',()=>{});process.stdout.write('x'.repeat(5*1024*1024));setInterval(()=>{},1000)"], { cwd: root }).pipe(Effect.provide(OwnedProcessLive));
   yield* Effect.sync(() => {
     assert.equal(result.outputLimitExceeded, true);
     assert.equal(result.groupCleanup.gone, true);

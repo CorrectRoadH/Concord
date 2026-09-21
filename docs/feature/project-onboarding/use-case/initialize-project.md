@@ -20,11 +20,13 @@ feature: docs/feature/project-onboarding/README.md
 3. 确认测试根、源码根和 runner；无测试项目允许空测试根。
 4. 配置 Memory 来源，首版仅选择本地文件 provider。
 5. 预览配置与完整文件变更后完成；非交互输入能表达相同选择。
-6. 运行 doctor，查看真实配置与待完善项。
+6. 在根 AGENTS.md 读取 Concord 托管指引，通过 `concord --skill` 获取当前安装版本的任务路由和主题说明。
+7. 运行 doctor，查看真实配置与待完善项。
 
 ## 可观察验收
 
 - 新项目必有 docs/constitution.md；不将未填写原则或模板示例当成已采用规则。
+- 没有 AGENTS.md 时创建；已有文件只追加或刷新边界明确的托管区块，保留区块外的原字节。标记残缺时原子拒绝，不覆盖未知内容。
 - DESIGN.md 仅在选中时创建，已有文档保留。
 - 取消、非法选项或文件冲突不得留下部分初始化；dry-run 不写项目文件。已有 owner 或锁文件的仓库预览必须遵守共享 lease 及两套 journal 障碍；无 owner、无锁的新仓库不创建私有状态。
 - 非 TTY 不等待交互，结果确定；重跑不覆盖既有项目配置。

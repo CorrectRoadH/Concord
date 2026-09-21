@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'concord-v*'
+  workflow_dispatch:
+
+concurrency:
+  group: concord-release
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: pnpm
+      - name: Verify immutable release identity
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          if test -z "$RELEASE_TAG"; then RELEASE_TAG="concord-v$version"; fi
+          test "$RELEASE_TAG" = "concord-v$version"
+          test "$(node -p "require('./npm-shrinkwrap.json').version")" = "$version"
+          test "$(node -p "require('./npm-shrinkwrap.json').packages[''].version")" = "$version"
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm check
+      - name: Pack once
+        run: |
+          mkdir release
+          npm pack --ignore-scripts --pack-destination release
+          test "$(find release -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
+          sha256sum release/concord-sdlc-*.tgz > release/SHA256SUMS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concord-release-package
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
+
+  verify:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-14, macos-15, ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: pnpm
+      - name: Provide flock on macOS
+        if: runner.os == 'macOS'
+        run: |
+          brew install util-linux
+          echo "$(brew --prefix util-linux)/bin" >> "$GITHUB_PATH"
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install browser used by the public check suite (Linux)
+        if: runner.os == 'Linux'
+        run: pnpm exec playwright install --with-deps chromium
+      - name: Install browser used by the public check suite (macOS)
+        if: runner.os == 'macOS'
+        run: pnpm exec playwright install chromium
+      - run: pnpm check
+      - uses: actions/download-artifact@v4
+        with:
+          name: concord-release-package
+          path: release
+      - name: Install and exercise the exact candidate package
+        env:
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
+        run: |
+          if test "${{ runner.os }}" = macOS; then shasum -a 256 --check release/SHA256SUMS; else sha256sum --check release/SHA256SUMS; fi
+          if test -z "$RELEASE_TAG"; then RELEASE_TAG="concord-v$(node -p "require('./package.json').version")"; fi
+          version="${RELEASE_TAG#concord-v}"
+          consumer="$(mktemp -d)"
+          git -C "$consumer" init --quiet
+          npm install --prefix "$consumer/tool" --ignore-scripts --no-audit --no-fund "$PWD/release/concord-sdlc-$version.tgz"
+          cli="$consumer/tool/node_modules/.bin/concord"
+          test "$($cli --version)" = "concord v$version"
+          "$cli" --root "$consumer" init --docs-only
+          "$cli" --root "$consumer" check
+
+  publish:
+    needs: verify
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: concord-release-package
+          path: release
+      - name: Publish the verified immutable asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          test -z "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName 2>/dev/null || true)"
+          version="${RELEASE_TAG#concord-v}"
+          digest="$(cut -d' ' -f1 release/SHA256SUMS)"
+          gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
+            --notes "Tested on Apple Silicon macOS 14/15 and Ubuntu 24.04 x86_64/arm64. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."

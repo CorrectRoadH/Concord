@@ -16,7 +16,7 @@ import { setConfig, showConfig } from './editing.js';
 import { readEvidence, runCase, verifyFixedEvidence } from './evidence.js';
 import { OwnedProcessLive } from './owned-process.js';
 import { initialize, LocalRepository } from './storage.js';
-import { buildTrace, documentShow, renderReview, requireValidTrace, selectCase, traceShow } from './trace.js';
+import { buildTrace, documentShow, renderReview, requireValidTrace, selectCase, traceGaps, traceShow } from './trace.js';
 import { ConcordError, MemorySourceSchema, ProjectSchema, RunnerSchema, decode, failure, type DocumentKind } from './shared.js';
 import { listTemplates, templateBody } from './templates.js';
 import { humanOutput } from './presentation.js';
@@ -254,6 +254,7 @@ const cache = Command.make('cache').pipe(Command.withDescription('Inspect or reb
 const check = Command.make('check',{},()=>withRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'check',ok:t.findings.length===0,findings:t.findings,advisories:t.advisories,documents:t.documents.length,cases:t.annotations.cases.length,codeDeclarations:t.codeDeclarations.length,memoryEvidence:t.memories,cache:t.annotations.cache};}))).pipe(Command.withDescription('Validate current source ownership and references; do not execute tests.'));
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
   Command.make('show',{ref:Argument.string('reference')},args=>withRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))))),
+  Command.make('gaps',{},()=>withRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))))).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),
   Command.make('check',{},()=>withRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'trace-check',ok:!t.findings.length,findings:t.findings,edges:t.edges};}))),
 ]));
 const review = Command.make('review').pipe(Command.withDescription('Generate local review material from current contracts and history.'),Command.withSubcommands([

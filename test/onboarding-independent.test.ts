@@ -70,6 +70,10 @@ test('public init previews without writes and creates draft constitution with ov
   assert.equal(existsSync(join(root, 'concord.config.ts')), false);
   action(root, { action: 'init', docsOnly: true, projectTypes: ['library', 'cli'], design: false });
   assert.equal(existsSync(join(root, 'concord.config.ts')), true);
+  const agentInstructions = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+  assert.match(agentInstructions, /BEGIN CONCORD AGENT INSTRUCTIONS/);
+  assert.match(agentInstructions, /concord --skill <topic>/);
+  assert.match(agentInstructions, /docs\/constitution\.md/);
   assert.equal(existsSync(join(root, 'concord.json')), false);
   assert.equal(existsSync(join(root, 'DESIGN.md')), false);
   assert.match(readFileSync(join(root, 'docs/constitution.md'), 'utf8'), /status: draft/);
@@ -80,6 +84,27 @@ test('public init previews without writes and creates draft constitution with ov
   assert.equal(existsSync(join(root, 'docs/feature/minimal/library.md')), false);
   assert.equal(existsSync(join(root, 'docs/feature/minimal/cli.md')), false);
 }))));
+
+// @use-case docs/feature/project-onboarding/use-case/initialize-project.md
+test('public init preserves existing AGENTS.md content and refuses incomplete managed markers atomically', () => Effect.runPromise(Effect.sync(() => {
+  withConsumer('agent-rules-existing', root => {
+    const existing = '# Repository rules\n\nKeep this exact text.\n';
+    writeFileSync(join(root, 'AGENTS.md'), existing);
+    run(root, ['init', '--docs-only']);
+    const initialized = readFileSync(join(root, 'AGENTS.md'), 'utf8');
+    assert.ok(initialized.startsWith(existing));
+    assert.equal(initialized.match(/BEGIN CONCORD AGENT INSTRUCTIONS/g)?.length, 1);
+    assert.match(initialized, /concord --skill/);
+  });
+  withConsumer('agent-rules-conflict', root => {
+    const incomplete = '# Rules\n\n<!-- BEGIN CONCORD AGENT INSTRUCTIONS -->\nunknown edit\n';
+    writeFileSync(join(root, 'AGENTS.md'), incomplete);
+    run(root, ['init', '--docs-only'], '', 1);
+    assert.equal(readFileSync(join(root, 'AGENTS.md'), 'utf8'), incomplete);
+    assert.equal(existsSync(join(root, 'concord.config.ts')), false);
+    assert.equal(existsSync(join(root, 'docs')), false);
+  });
+})));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('public configuration rejects executable TypeScript and stale edits without executing or overwriting them', () => Effect.runPromise(Effect.sync(() => withConsumer('config', root => {
