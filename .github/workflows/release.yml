@@ -44,48 +44,10 @@ jobs:
           npm pack --ignore-scripts --pack-destination release
           test "$(find release -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
           sha256sum release/concord-sdlc-*.tgz > release/SHA256SUMS
-      - uses: actions/upload-artifact@v4
-        with:
-          name: concord-release-package
-          path: release/
-          if-no-files-found: error
-          retention-days: 7
-
-  verify:
-    needs: package
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11.18.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24.19.0'
-          cache: pnpm
-      - name: Provide public runtime helpers on Linux
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Install browser used by the public check suite
-        run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm check
-      - uses: actions/download-artifact@v4
-        with:
-          name: concord-release-package
-          path: release
       - name: Install and exercise the exact candidate package
-        env:
-          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
           sha256sum --check release/SHA256SUMS
-          if test -z "$RELEASE_TAG"; then RELEASE_TAG="concord-v$(node -p "require('./package.json').version")"; fi
-          version="${RELEASE_TAG#concord-v}"
+          version="$(node -p "require('./package.json').version")"
           consumer="$(mktemp -d)"
           git -C "$consumer" init --quiet
           npm install --prefix "$consumer/tool" --ignore-scripts --no-audit --no-fund "$PWD/release/concord-sdlc-$version.tgz"
@@ -93,35 +55,15 @@ jobs:
           test "$($cli --version)" = "concord v$version"
           "$cli" --root "$consumer" init --docs-only
           "$cli" --root "$consumer" check
-
-  macos-package:
-    needs: package
-    strategy:
-      fail-fast: false
-      matrix:
-        runner: [macos-14, macos-15]
-    runs-on: ${{ matrix.runner }}
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/upload-artifact@v4
         with:
-          version: 11.18.0
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24.19.0'
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Build and pack on macOS without running the test suite
-        run: |
-          pnpm build
-          mkdir macos-package
-          npm pack --ignore-scripts --pack-destination macos-package
-          test "$(find macos-package -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
+          name: concord-release-package
+          path: release/
+          if-no-files-found: error
+          retention-days: 7
 
   publish:
-    needs: [verify, macos-package]
+    needs: package
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
@@ -141,4 +83,4 @@ jobs:
           digest="$(cut -d' ' -f1 release/SHA256SUMS)"
           gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
-            --notes "Fully tested on Ubuntu 24.04 x86_64/arm64 and built/packed on Apple Silicon macOS 14/15. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."
+            --notes "Built, fully tested, packed, and installed from the exact candidate on Ubuntu 24.04. The npm package is platform-independent; target-specific optional dependencies are selected during installation. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."

@@ -10,7 +10,7 @@ Validate the source tag and package version, acquire ordinary repository coordin
 
 ## Run
 
-Linux platform jobs install the same tgz in isolated Git consumers and execute the full check plus `init` and `check`. macOS 14/15 jobs only install source dependencies, build and create a package; they do not run the test suite. Homebrew later supplies `ripgrep` and the keg-only `util-linux` flock. After source publication, tap sync prepares and tests Formula/Nix before updating its branch and recipe tag.
+One Ubuntu 24.04 job runs the full check, creates the platform-independent npm tgz, verifies its digest, and installs that exact asset in an isolated Git consumer for `init` and `check`. npm owns target-specific optional dependency selection at installation. Homebrew later supplies `ripgrep` and the keg-only `util-linux` flock. After source publication, tap sync prepares and validates Formula/Nix before updating its branch and recipe tag.
 
 ## Reuse
 

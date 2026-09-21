@@ -17,7 +17,7 @@ A maintainer pushes one version tag and receives a tested Concord package plus a
 
 1. Finish Concord-driven contract, implementation and test work on a pushed commit; `package.json`, shrinkwrap and CLI version agree.
 2. Create and push `concord-v<version>`.
-3. Source CI runs `pnpm check`, packs once, and installs that artifact on Ubuntu 24.04 x86_64/arm64 with an isolated `init`/`check` smoke. macOS 14/15 Apple Silicon builds and packs the source without running the test suite.
+3. One Ubuntu 24.04 runner runs `pnpm check`, packs once, verifies the digest, and installs that exact platform-independent npm artifact with an isolated `init`/`check` smoke.
 4. Only after every required job passes, publish the source GitHub Release and its tgz.
 5. The public tap discovers the release, verifies version/tag/asset/hash, prepares Formula and Linux Nix metadata, validates candidate installs, then commits and tags the recipe.
 6. Users install with `brew install CorrectRoadH/tap/concord` or the documented Nix flake and observe the tagged version.
