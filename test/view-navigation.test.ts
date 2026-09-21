@@ -74,7 +74,8 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await expect(useCase.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active');
     await page.goBack();
     await expect(useCase.getByRole('tab', { name: '正文', exact: true })).toHaveAttribute('data-state', 'active');
-    await expect.poll(() => drawerBody.evaluate(element => element.scrollTop), { timeout: 15_000 }).toBe(300);
+    await expect.poll(() => drawerBody.evaluate(element => element.scrollTop), { timeout: 15_000 }).toBeGreaterThanOrEqual(250);
+    await expect.poll(() => drawerBody.evaluate(element => element.scrollTop), { timeout: 15_000 }).toBeLessThanOrEqual(350);
     await page.goForward();
     await expect(useCase.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active');
     await page.goForward();

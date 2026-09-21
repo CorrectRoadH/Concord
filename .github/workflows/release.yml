@@ -34,6 +34,8 @@ jobs:
           test "$(node -p "require('./npm-shrinkwrap.json').version")" = "$version"
           test "$(node -p "require('./npm-shrinkwrap.json').packages[''].version")" = "$version"
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Install public runtime helpers
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm check
       - name: Pack once
@@ -67,11 +69,14 @@ jobs:
         with:
           node-version: '24.19.0'
           cache: pnpm
-      - name: Provide flock on macOS
+      - name: Provide public runtime helpers on macOS
         if: runner.os == 'macOS'
         run: |
-          brew install util-linux
+          brew install util-linux ripgrep
           echo "$(brew --prefix util-linux)/bin" >> "$GITHUB_PATH"
+      - name: Provide public runtime helpers on Linux
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Install browser used by the public check suite (Linux)
         if: runner.os == 'Linux'
