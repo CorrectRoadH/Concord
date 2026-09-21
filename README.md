@@ -348,7 +348,7 @@ concord --skill all
 
 ### 发版
 
-源仓库使用 `concord-v<package.version>` annotated tag。tag workflow 校验版本，构建一次 tgz，并用同一资产在 macOS 14/15 Apple Silicon 与 Ubuntu 24.04 x86_64/arm64 运行完整检查及隔离安装；全部通过后才创建 GitHub Release。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
+源仓库使用 `concord-v<package.version>` annotated tag。tag workflow 校验版本并构建一次发布 tgz；Ubuntu 24.04 x86_64/arm64 对同一资产运行完整检查及隔离安装，macOS 14/15 Apple Silicon 只验证源码可以构建和打包。全部通过后才创建 GitHub Release。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
 
 ### Nix / NixOS
 

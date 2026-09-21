@@ -56,7 +56,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [macos-14, macos-15, ubuntu-24.04, ubuntu-24.04-arm]
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
@@ -69,21 +69,11 @@ jobs:
         with:
           node-version: '24.19.0'
           cache: pnpm
-      - name: Provide public runtime helpers on macOS
-        if: runner.os == 'macOS'
-        run: |
-          brew install util-linux ripgrep
-          echo "$(brew --prefix util-linux)/bin" >> "$GITHUB_PATH"
       - name: Provide public runtime helpers on Linux
-        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - name: Install browser used by the public check suite (Linux)
-        if: runner.os == 'Linux'
+      - name: Install browser used by the public check suite
         run: pnpm exec playwright install --with-deps chromium
-      - name: Install browser used by the public check suite (macOS)
-        if: runner.os == 'macOS'
-        run: pnpm exec playwright install chromium
       - run: pnpm check
       - uses: actions/download-artifact@v4
         with:
@@ -93,7 +83,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || '' }}
         run: |
-          if test "${{ runner.os }}" = macOS; then shasum -a 256 --check release/SHA256SUMS; else sha256sum --check release/SHA256SUMS; fi
+          sha256sum --check release/SHA256SUMS
           if test -z "$RELEASE_TAG"; then RELEASE_TAG="concord-v$(node -p "require('./package.json').version")"; fi
           version="${RELEASE_TAG#concord-v}"
           consumer="$(mktemp -d)"
@@ -104,8 +94,34 @@ jobs:
           "$cli" --root "$consumer" init --docs-only
           "$cli" --root "$consumer" check
 
+  macos-package:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-14, macos-15]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Build and pack on macOS without running the test suite
+        run: |
+          pnpm build
+          mkdir macos-package
+          npm pack --ignore-scripts --pack-destination macos-package
+          test "$(find macos-package -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
+
   publish:
-    needs: verify
+    needs: [verify, macos-package]
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
@@ -125,4 +141,4 @@ jobs:
           digest="$(cut -d' ' -f1 release/SHA256SUMS)"
           gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
-            --notes "Tested on Apple Silicon macOS 14/15 and Ubuntu 24.04 x86_64/arm64. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."
+            --notes "Fully tested on Ubuntu 24.04 x86_64/arm64 and built/packed on Apple Silicon macOS 14/15. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."

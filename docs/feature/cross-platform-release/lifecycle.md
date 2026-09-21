@@ -10,7 +10,7 @@ Validate the source tag and package version, acquire ordinary repository coordin
 
 ## Run
 
-Platform jobs install the same tgz in isolated Git consumers and execute `init` and `check`. Each job supplies `ripgrep`; macOS also supplies `flock` through Homebrew `util-linux`. After source publication, tap sync prepares and tests Formula/Nix before updating its branch and recipe tag.
+Linux platform jobs install the same tgz in isolated Git consumers and execute the full check plus `init` and `check`. macOS 14/15 jobs only install source dependencies, build and create a package; they do not run the test suite. Homebrew later supplies `ripgrep` and the keg-only `util-linux` flock. After source publication, tap sync prepares and tests Formula/Nix before updating its branch and recipe tag.
 
 ## Reuse
 

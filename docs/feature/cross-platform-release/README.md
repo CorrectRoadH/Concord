@@ -28,7 +28,7 @@ Concord-driven development applies to this workflow itself: the contract and des
 
 ## Scope
 
-The supported release is Linux x86_64/aarch64 and Apple Silicon macOS 14/15 on local APFS, with Node.js 24.15+, Git, `ripgrep` and `flock`. Homebrew supplies the runtime helpers, including the keg-only `util-linux` flock on macOS. Nix remains Linux-only. Windows, Intel macOS, HFS and network filesystems are outside the current compatibility claim.
+The release is fully tested on Linux x86_64/aarch64 and built and packed on Apple Silicon macOS 14/15. Runtime support on macOS remains limited to local APFS and requires Node.js 24.15+, Git, `ripgrep` and `flock`; Homebrew supplies those helpers, including the keg-only `util-linux` flock. Nix remains Linux-only. Windows, Intel macOS, HFS and network filesystems are outside the current compatibility claim.
 
 ## Entry Points
 
