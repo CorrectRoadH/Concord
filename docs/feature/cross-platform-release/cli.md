@@ -15,6 +15,6 @@ Any source check, package identity, exact-candidate installation/check, digest, 
 ## Minimal Example
 
 ```sh
-git tag -a concord-v0.5.0 -m 'Concord 0.5.0'
-git push origin concord-v0.5.0
+git tag -a concord-v0.6.0 -m 'Concord 0.6.0'
+git push origin concord-v0.6.0
 ```

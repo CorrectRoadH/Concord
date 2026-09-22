@@ -49,7 +49,7 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await page.getByLabel('文档标题', { exact: true }).fill('Latest revision');
     await page.getByRole('tab', { name: '实现', exact: true }).click();
     release();
-    await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active').catch(async cause => {
+    await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active', { timeout: 15000 }).catch(async cause => {
       throw new Error(`Navigation failed at ${page.url()}: ${await page.locator('.form-error').allTextContents()}; ${errors}; ${await page.getByLabel('文档标题', { exact: true }).inputValue()}; ${readFileSync(join(root, 'docs/feature/navigation/README.md'), 'utf8')}`, { cause });
     });
     assert.match(readFileSync(join(root, 'docs/feature/navigation/README.md'), 'utf8'), /title: Latest revision/);

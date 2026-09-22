@@ -310,7 +310,7 @@ function scanLegacyState(directory: string): NeutralGovernanceMigrationPlan["leg
     if (status.isDirectory()) {
       if (path !== ".") directories.push({ path: canonicalRelative(path, "legacy state directory"), mode: status.mode & 0o7777 });
       for (const name of readdirSync(absolute).sort()) {
-        if (path === "." && name === "publication.lock") continue;
+        if (path === "." && (name === "publication.lock" || name === "publication.lease" || name.startsWith(".publication.lease-"))) continue;
         visit(join(absolute, name), path === "." ? name : `${path}/${name}`);
       }
       return;
@@ -340,7 +340,7 @@ function validatePlan(plan: NeutralGovernanceMigrationPlan): NeutralGovernanceMi
   }
   const statePaths = [...decoded.legacyState.directories.map(entry => entry.path), ...decoded.legacyState.files.map(entry => entry.path)];
   if (new Set(statePaths).size !== statePaths.length) throw new ConcordError("MigrationPlanInvalid", "Legacy state paths must be unique");
-  const reservedState = new Set<string>(["publication.lock", ...TRACE_JOURNALS]);
+  const reservedState = new Set<string>(["publication.lock", "publication.lease", ...TRACE_JOURNALS]);
   if (statePaths.some(path => reservedState.has(path))) throw new ConcordError("MigrationPlanInvalid", "Locks and pending publication journals cannot be migration payloads");
   const filePaths = new Set(decoded.legacyState.files.map(entry => entry.path));
   if (statePaths.some(path => path.split("/").slice(0, -1).some((_, index, parts) => filePaths.has(parts.slice(0, index + 1).join("/"))))) throw new ConcordError("MigrationPlanInvalid", "A state file cannot contain another planned path");

@@ -285,7 +285,7 @@ test('installed init previews configuration, preserves existing docs, and never 
  assert.equal(call(root, ['--dry-run', ...args], DryRunOutput).dryRun, true);
  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
  assert.deepEqual(readdirSync(join(root, '.git/concord')), ['trace']);
- assert.deepEqual(readdirSync(join(root, '.git/concord/trace')), ['publication.lock']);
+ assert.deepEqual(readdirSync(join(root, '.git/concord/trace')), []);
  call(root, args, Ack);
  const config = readProjectConfig(root);
  assert.deepEqual(config.testRoots, ['spec']); assert.deepEqual(config.runner, runner);

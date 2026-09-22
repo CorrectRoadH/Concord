@@ -241,6 +241,9 @@ function sourceChanged(value: CachedSnapshot, cache: AnnotationSnapshot['cache']
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off' } = {}): AnnotationSnapshot {
+  return repo.snapshot === undefined ? scanUnderSnapshot(repo, options) : repo.snapshot(() => scanUnderSnapshot(repo, options));
+}
+function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off' }): AnnotationSnapshot {
   const mode = options.cache ?? 'use', path = cachePath(repo); const current = sources(repo); const key = cacheKey(repo, current);
   if (mode === 'off') { const value = compile(current); return unchanged(repo, current) ? snapshot(value, { status: 'off', hits: 0, misses: 1, path }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
   if (mode === 'use') try {
@@ -254,10 +257,16 @@ export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 're
 }
 
 export function clearCache(repo: Repository): { readonly status: string; readonly path: string } {
+  return repo.snapshot === undefined ? clearUnderSnapshot(repo) : repo.snapshot(() => clearUnderSnapshot(repo));
+}
+function clearUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string } {
   const path = cachePath(repo); for (const suffix of ['', '-wal', '-shm', '-journal']) { const target = `${path}${suffix}`; assertCacheSafe(target); if (existsSync(target)) rmSync(target); }
   return { status: 'cleared', path };
 }
 export function cacheStatus(repo: Repository): { readonly status: string; readonly path: string; readonly detail?: string } {
+  return repo.snapshot === undefined ? statusUnderSnapshot(repo) : repo.snapshot(() => statusUnderSnapshot(repo));
+}
+function statusUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string; readonly detail?: string } {
   const path = cachePath(repo); try {
     assertCacheDatabaseSafe(path);
     if (!existsSync(path)) return { status: 'empty', path };

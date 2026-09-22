@@ -3,6 +3,7 @@
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Result } from 'effect';
+import { recoverLocalState } from './recovery.js';
 import { readRepositoryTestView, type RepositoryTestView } from './view-profile.js';
 import { getGitStatus, type GitBaselineCache } from './git-view.js';
 import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
@@ -188,7 +189,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     };
   }
   return yield* withRepository(root, (repo) => Effect.gen(function*() {
-    const snapshot = yield* sync('view.compileWorkspace', () => {
+    const snapshot = yield* sync('view.compileWorkspace', () => repo.snapshot(() => {
     const currentConfigSource = repo.configSnapshot.source;
     const inspected = inspectDocuments(repo);
     let cases: ReturnType<typeof scanAnnotations>;
@@ -231,7 +232,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       cache: cases.cache,
       diagnostics,
     };
-    });
+    }));
     let repositoryTests: RepositoryTestView = { status: 'not-configured', tests: [] };
     const hasProfile = yield* sync('view.detectRepositoryProfile', () => lstatSync(join(root, 'concord.repository.json'), { throwIfNoEntry: false }) !== undefined);
     if (hasProfile) {
@@ -263,7 +264,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
     return { path, body: config.source, digest: config.configDigest!, readOnly: true, reason: 'Invalid configuration must be repaired locally before Concord can reconstruct managed state.' };
   }
   return yield* withRepository(validatedRoot, (repo) => Effect.gen(function*() {
-    const ordinary = yield* sync('view.readFile', () => {
+    const ordinary = yield* sync('view.readFile', () => repo.snapshot(() => {
       const listed = inspectDocumentFile(repo, path);
       if (listed !== undefined) return listed;
       if (isSourcePath(repo, path)) {
@@ -279,16 +280,16 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
         return { path, body: repo.configSnapshot.source, digest: repo.configSnapshot.digest, readOnly: true, reason: 'Edit configuration through config.set so project identity and validation are preserved.' };
       }
       return undefined;
-    });
+    }));
     if (ordinary !== undefined) return ordinary;
 
     const projected = yield* Effect.result(readRepositoryTestView(validatedRoot));
     if (Result.isSuccess(projected) && projected.success.some(test => test.file === path)) {
-      return yield* sync('view.readRepositoryTestFile', () => {
+      return yield* sync('view.readRepositoryTestFile', () => repo.snapshot(() => {
         const body = repo.read(path);
         if (body === undefined) throw new ConcordError('FileNotFound', 'The explicitly associated project test file no longer exists');
         return { path, body, digest: digest(body), readOnly: true, reason: 'Project test source is available here for inspection only.' };
-      });
+      }));
     }
     return yield* Effect.fail(new ConcordError('FileNotFound', 'The requested path is not in the Concord document, configured source, or explicitly associated project test inventory'));
   }), { dryRun: true });
@@ -355,7 +356,7 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   if (action.action === 'init') {
     if (action.docsOnly && (action.testRoots?.length ?? 0) > 0) return yield* Effect.fail(new ConcordError('ConflictingOptions', 'docsOnly cannot be combined with testRoots'));
     const dryRun = action.dryRun ?? false;
-    return yield* withRepository(root, (repo) => sync('view.initialize', () => initialize(repo, dryRun, {
+    return yield* withRepository(root, (repo) => sync('view.initialize', () => repo.snapshot(() => initialize(repo, dryRun, {
       testRoots: action.docsOnly ? [] : action.testRoots,
       sourceRoots: action.sourceRoots,
       runner: action.runner,
@@ -368,10 +369,10 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
       constitutionImpact: action.constitutionImpact,
       constitutionSources: action.constitutionSources,
       memorySources: action.memorySources,
-    })), { initialize: true, dryRun });
+    }))), { initialize: true, dryRun });
   }
-  if (action.action === 'recover') return yield* withRepository(root, (repo) => sync('view.recover', () => repo.recover()), { recover: true });
+  if (action.action === 'recover') return yield* recoverLocalState(root);
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun });
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => executeWithRepo(repo, action)), { dryRun: action.action === 'design.check' || dryRun });
+  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { dryRun: action.action === 'design.check' || dryRun });
 });

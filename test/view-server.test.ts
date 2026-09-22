@@ -361,6 +361,7 @@ test('view jobs preserve pre-spawn cancellation, serialize repository ownership,
     assert.equal(completedResult.evidence?.commandOutcome, 'pass');
 
     held = new LocalRepository(root);
+    held.beginSnapshot();
     const blocked = manager.start(viewJobCase);
     const blockedResult = await waitFor(manager, blocked.id, ['failed']);
     assert.equal(blockedResult.error?.code, 'RepositoryBusy');

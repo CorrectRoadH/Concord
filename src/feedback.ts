@@ -46,7 +46,10 @@ function withRepository<A>(
   return Effect.acquireRelease(
     attempt('feedback.openRepository', () => new LocalRepository(root, { dryRun })),
     (repo) => Effect.sync(() => repo.close()),
-  ).pipe(Effect.flatMap(use), Effect.scoped);
+  ).pipe(Effect.flatMap(repo => Effect.acquireRelease(
+    attempt('feedback.snapshot', () => repo.beginSnapshot()),
+    () => Effect.sync(() => repo.endSnapshot()),
+  ).pipe(Effect.flatMap(() => use(repo)))), Effect.scoped);
 }
 
 function configSnapshot(repo: LocalRepository, connectionId: string): { readonly source: string; readonly digest: string; readonly connection: FeedbackConnection } {

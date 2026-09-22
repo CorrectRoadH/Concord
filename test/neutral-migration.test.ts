@@ -149,7 +149,7 @@ test("planning acquires the legacy lock first and rejects active old writers", a
   const root = fixture(t);
   const legacyLock = join(legacyTracePrivateDirectorySync(root), "publication.lock");
   writeFileSync(legacyLock, "");
-  const child = spawn("flock", ["--exclusive", legacyLock, "sh", "-c", "printf ready; read line"], { stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireFileLease, releaseFileLease } from './dist/file-lease.js'; import { dirname } from 'node:path'; const lease=acquireFileLease(process.argv[1],dirname(process.argv[2]),'publication.lease','exclusive','test'); console.log('ready'); process.stdin.once('data',()=>releaseFileLease(lease,'test'));", root, legacyLock], { stdio: ['pipe', 'pipe', 'pipe'] });
   t.after(() => { if (child.exitCode === null) child.kill("SIGTERM"); });
   await new Promise<void>((resolveReady, reject) => {
     child.stdout.once("data", data => data.toString().includes("ready") ? resolveReady() : reject(new Error(`unexpected child output: ${data}`)));

@@ -12,6 +12,9 @@ export interface TraceEdge { readonly from: string; readonly to: string; readonl
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean } = {}) {
+  return repo.snapshot === undefined ? buildUnderSnapshot(repo, cache, options) : repo.snapshot(() => buildUnderSnapshot(repo, cache, options));
+}
+function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean }) {
   const documents = loadDocuments(repo);
   const annotations = scanAnnotations(repo, { cache });
   const constitutionFindings = checkConstitution(repo);

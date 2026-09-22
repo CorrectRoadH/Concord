@@ -8,12 +8,13 @@
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
-import { hostname } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Predicate, Schema } from 'effect';
-import { acquireTraceLeaseSync, assertSupportedLocalFilesystemSync, CoordinationError, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync, type TraceLease } from './coordination.js';
+import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from './coordination.js';
 import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Change, type ConfigSnapshot, type MemorySource, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig, snapshot } from './config.js';
+import { invalidateActiveRun } from './run-coordination.js';
+import { acquireFileLease } from './file-lease.js';
 import { initialConstitutionSource } from './constitution.js';
 import { onboardingGuide } from './onboarding-guide.js';
 import { projectTemplateFiles, templateBody } from './templates.js';
@@ -26,7 +27,7 @@ function storageCoordinationFailure(cause: unknown): ConcordError {
   if (!coordination) return cause instanceof ConcordError ? cause : new ConcordError('CoordinationFailed', cause instanceof Error ? cause.message : String(cause));
   const error = cause as CoordinationError;
   if (error.phase === 'migration') return new ConcordError('CoordinationMigrationRequired', error.message, { operation: error.operation, path: error.path });
-  if (error.phase === 'lock' && error.message.includes('busy')) return new ConcordError('RepositoryBusy', error.message, { operation: error.operation, path: error.path });
+  if (error.message.includes('busy')) return new ConcordError('RepositoryBusy', error.message, { operation: error.operation, path: error.path });
   return new ConcordError('CoordinationFailed', error.message, { operation: error.operation, phase: error.phase, path: error.path });
 }
 export function git(root: string, args: readonly string[]): string {
@@ -64,11 +65,6 @@ function assertNoSymlink(path: string): void {
   }
 }
 
-function assertStorageFilesystem(path: string): void {
-  try { assertSupportedLocalFilesystemSync(path); }
-  catch (cause) { throw new ConcordError('UnsupportedFilesystem', `Concord requires a supported local filesystem: ${cause instanceof Error ? cause.message : String(cause)}`); }
-}
-
 export function assertDarwinPublicationPaths(paths: readonly string[], platform: NodeJS.Platform = process.platform): void {
   if (platform !== 'darwin') return;
   const seen = new Map<string, string>();
@@ -104,7 +100,6 @@ function atomic(path: string, contents: string, mode = 0o600): void {
     assertNoSymlink(path); renameSync(temp, path); syncDirectory(dirname(path));
   } finally { if (fd !== undefined) closeSync(fd); if (present(temp)) rmSync(temp); }
 }
-const LockSchema = Schema.Struct({ format: Schema.Literal('concord.lock/v1'), root: Text, host: Text, pid: Schema.Int, token: Text });
 const JournalChangeSchema = Schema.Struct({ path: Text, before: Schema.NullOr(Schema.String), after: Schema.NullOr(Schema.String), beforeDigest: Schema.NullOr(Text), afterDigest: Schema.NullOr(Text), mode: Schema.Int });
 const JournalScopeSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('documents'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text }),
@@ -129,9 +124,9 @@ function currentJournal(path: string): Journal {
 }
 
 /** Refusal only: callers must still acquire a lease and repeat this check before ordinary work. */
-export function assertCurrentRuntimeFormat(root: string): void {
-  const journal = join(genericPrivateDirectorySync(root), 'journal.json');
-  const governanceMigration = join(genericPrivateDirectorySync(root), 'neutral-governance-migration-journal.json');
+export function assertCurrentRuntimeFormat(root: string, privateDir = genericPrivateDirectorySync(root)): void {
+  const journal = join(privateDir, 'journal.json');
+  const governanceMigration = join(privateDir, 'neutral-governance-migration-journal.json');
   if (present(governanceMigration)) throw new ConcordError('CoordinationMigrationRequired', 'An interrupted neutral-governance migration is present; preserve it and run scripts/migrate-neutral-governance.ts --recover before ordinary runtime work.');
   if (present(journal)) currentJournal(journal);
   if (present(join(root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'concord.json is not a runtime configuration; explicitly migrate it to concord.config.ts offline. Preserve any interrupted journals and locks for offline recovery first.');
@@ -194,27 +189,36 @@ export class LocalRepository implements Repository {
   readonly privateDir: string;
   config: ProjectConfig;
   configSnapshot: ConfigSnapshot;
-  private lockToken: string | undefined;
   private traceLease: TraceLease | undefined;
+  private readonly coordinationDirectory: string;
   private readonly noWrite: boolean;
+  private snapshotDepth = 0;
+  private previewWithoutState = false;
+  private readonly recovering: boolean;
+  private observing = true;
+  private readonly observedFiles = new Map<string, string | undefined>();
+  private readonly observedDirectories = new Map<string, string>();
   constructor(input?: string, options: { initialize?: boolean; recover?: boolean; dryRun?: boolean } = {}) {
     this.root = discoverRoot(input, options.initialize);
+    this.recovering = options.recover ?? false;
     this.noWrite = options.dryRun ?? false;
     if (options.recover && this.noWrite) throw new ConcordError('InvalidOption', 'recover does not accept --dry-run');
     if (process.platform !== 'linux' && process.platform !== 'darwin') throw new ConcordError('UnsupportedHost', 'Concord supports Linux and Darwin/macOS hosts');
     if (git(this.root, ['rev-parse', '--show-toplevel']) !== this.root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
-    assertStorageFilesystem(this.root);
     assertCurrentRuntimeFormat(this.root);
     try { this.privateDir = genericPrivateDirectorySync(this.root); }
     catch (cause) { throw storageCoordinationFailure(cause); }
     assertNoSymlink(this.privateDir);
-    assertStorageFilesystem(dirname(this.privateDir));
+    this.coordinationDirectory = tracePrivateDirectorySync(this.root);
     try {
+      this.snapshotDepth = 1;
       const coordinationDir = tracePrivateDirectorySync(this.root);
       // Only a new owner-free, lock-free repository may preview without creating private state.
       const emptyPreview = options.initialize === true && this.noWrite
         && !['concord.config.ts', 'concord.json', 'docs', 'memory', 'DESIGN.md'].some(path => present(this.absolute(path)))
-        && ![join(this.privateDir, 'lock.json'), join(this.privateDir, 'journal.json'), join(coordinationDir, 'publication.lock'), join(coordinationDir, 'publication-journal.json'), join(coordinationDir, 'multi-file-publication-journal.json')].some(present);
+        && ![join(this.privateDir, 'lock.json'), join(this.privateDir, 'journal.json'), join(coordinationDir, PUBLICATION_LEASE), join(coordinationDir, 'publication-journal.json'), join(coordinationDir, 'multi-file-publication-journal.json')].some(present);
+      this.previewWithoutState = emptyPreview;
+      if (options.recover) recoverPublicationLeaseSync(this.root);
       try { this.traceLease = acquireTraceLeaseSync(this.root, this.noWrite ? 'shared' : 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview); }
       catch (cause) { throw storageCoordinationFailure(cause); }
       assertCurrentRuntimeFormat(this.root);
@@ -240,10 +244,9 @@ export class LocalRepository implements Repository {
       for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...this.config.runner.sourceFiles]) this.absolute(path);
       this.validateMemorySources(this.config);
       if (recoveryJournal !== undefined) this.preflight(recoveryJournal, true);
-      if (options.recover) this.removeDeadLock();
-      if (!this.noWrite) this.acquire();
-      else if (present(join(this.privateDir, 'lock.json'))) throw new ConcordError('RepositoryBusy', 'A Concord operation is active; retry when it completes');
+
     } catch (cause) { this.close(); throw cause; }
+    finally { this.close(); }
   }
   absolute(path: string): string {
     canonicalPath(path);
@@ -253,6 +256,14 @@ export class LocalRepository implements Repository {
     return target;
   }
   read(path: string): string | undefined {
+    return this.snapshotDepth === 0 ? this.underLease(() => this.readObserved(path)) : this.readObserved(path);
+  }
+  private readObserved(path: string): string | undefined {
+    const source = this.readCurrent(path);
+    if (this.observing && !this.observedFiles.has(path)) this.observedFiles.set(path, source);
+    return source;
+  }
+  private readCurrent(path: string): string | undefined {
     const target = this.absolute(path);
     if (!present(target)) return undefined;
     const stat = lstatSync(target);
@@ -260,6 +271,10 @@ export class LocalRepository implements Repository {
     return readFileSync(target, 'utf8');
   }
   files(prefix: string): string[] {
+    return this.snapshotDepth === 0 ? this.underLease(() => this.filesObserved(prefix)) : this.filesObserved(prefix);
+  }
+  private filesObserved(prefix: string): string[] {
+    if (this.observing && !this.observedDirectories.has(prefix)) this.observedDirectories.set(prefix, this.directoryObservation(prefix));
     const base = this.absolute(prefix);
     if (!present(base)) return [];
     const paths: string[] = [];
@@ -328,41 +343,60 @@ export class LocalRepository implements Repository {
       if (forbiddenSourcePart(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot: ${root}`);
       this.absolute(root);
   }
-  private acquire(): void {
-    assertNoSymlink(this.privateDir); mkdirSync(this.privateDir, { recursive: true, mode: 0o700 });
-    const path = join(this.privateDir, 'lock.json');
-    const token = randomUUID(); let fd: number;
-    try { fd = openSync(path, 'wx', 0o600); }
-    catch (cause) { if (errno(cause, 'EEXIST')) throw new ConcordError('RepositoryBusy', 'Another operation or abandoned lock exists; use recover only after the owner exits'); throw cause; }
-    try { writeFileSync(fd, canonical({ format: 'concord.lock/v1', root: this.root, host: hostname(), pid: process.pid, token })); fsyncSync(fd); this.lockToken = token; }
-    finally { closeSync(fd); }
+  /** An explicit coherent source-read section; never include network or runner waits. */
+  snapshot<A>(read: () => A): A {
+    if (this.snapshotDepth === 0) { this.observedFiles.clear(); this.observedDirectories.clear(); }
+    return this.underLease(read);
   }
-  private removeDeadLock(): void {
-    const path = join(this.privateDir, 'lock.json');
-    if (!present(path)) return;
-    assertNoSymlink(path);
-    const source = readFileSync(path, 'utf8');
-    const lock = jsonFile(path, LockSchema);
-    if (lock.root !== this.root || lock.host !== hostname() || lock.pid <= 0) throw new ConcordError('RecoveryConflict', 'The lock owner cannot be safely identified');
-    try { process.kill(lock.pid, 0); throw new ConcordError('RepositoryBusy', 'The lock owner is still alive'); }
-    catch (cause) { if (!errno(cause, 'ESRCH')) throw cause; }
-    if (readFileSync(path, 'utf8') !== source) throw new ConcordError('RecoveryConflict', 'The lock changed during recovery');
-    rmSync(path);
+  private underLease<A>(read: () => A): A {
+    this.beginSnapshot();
+    try { return read(); } finally { this.endSnapshot(); }
+  }
+  beginSnapshot(): void {
+    if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
+    try {
+      this.traceLease = acquireFileLease(this.root, this.coordinationDirectory, PUBLICATION_LEASE, 'exclusive', 'snapshot', !this.previewWithoutState);
+      this.snapshotDepth = 1;
+      this.assertReady();
+    } catch (cause) { this.close(); throw storageCoordinationFailure(cause); }
+  }
+  endSnapshot(): void {
+    if (this.snapshotDepth === 0) return;
+    this.snapshotDepth--;
+    if (this.snapshotDepth === 0 && this.traceLease !== undefined) {
+      const lease = this.traceLease;
+      this.traceLease = undefined;
+      releaseTraceLeaseSync(lease, 'snapshot-close');
+    }
   }
   close(): void {
-    try {
-      if (this.lockToken !== undefined) {
-        const path = join(this.privateDir, 'lock.json');
-        try { const lock = jsonFile(path, LockSchema); if (lock.token === this.lockToken) rmSync(path); }
-        finally { this.lockToken = undefined; }
-      }
-    } finally {
-      if (this.traceLease !== undefined) {
-        const lease = this.traceLease;
-        this.traceLease = undefined;
-        releaseTraceLeaseSync(lease, 'repository-close');
-      }
-    }
+    this.snapshotDepth = this.traceLease === undefined ? 0 : 1;
+    this.endSnapshot();
+  }
+  private assertReady(): void {
+    assertCurrentRuntimeFormat(this.root, this.privateDir);
+    const directory = this.coordinationDirectory;
+    const pending = ['publication-journal.json', 'multi-file-publication-journal.json'].filter(name => present(join(directory, name)));
+    if (pending.length > 0) throw new ConcordError('RecoveryRequired', 'An interrupted Trace publication exists; run concord recover');
+    if (!this.recovering && present(join(this.privateDir, 'journal.json'))) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
+    if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('PreimageChanged', 'Project configuration changed; open a fresh repository snapshot');
+  }
+  private directoryObservation(prefix: string): string {
+    const target = this.absolute(prefix);
+    if (!present(target)) return 'absent';
+    const entries: string[] = [];
+    const visit = (path: string, name: string): void => {
+      assertNoSymlink(path);
+      const stat = lstatSync(path);
+      entries.push(`${name}:${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}:${stat.mode & 0o777}`);
+      if (stat.isDirectory()) for (const child of readdirSync(path).sort()) visit(join(path, child), `${name}/${child}`);
+    };
+    visit(target, prefix);
+    return canonical(entries);
+  }
+  private validateObservations(): void {
+    for (const [path, source] of this.observedFiles) if (this.readCurrent(path) !== source) throw new ConcordError('PreimageChanged', `${path} changed after planning; take a fresh snapshot`);
+    for (const [path, source] of this.observedDirectories) if (this.directoryObservation(path) !== source) throw new ConcordError('PreimageChanged', `${path} membership or type changed after planning; take a fresh snapshot`);
   }
   // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
@@ -394,7 +428,7 @@ export class LocalRepository implements Repository {
     const isInit = operation === 'init' && this.configSnapshot.source === '';
     const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, projectId: authorizationConfig.projectId, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest } };
     const receipt = this.publishJournal(journal, dryRun);
-    if (operation === 'init' && !receipt.dryRun && plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
+    if (!receipt.dryRun && plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
       this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after);
       this.config = this.configSnapshot.config;
     }
@@ -423,12 +457,24 @@ export class LocalRepository implements Repository {
     return this.publishJournal(journal, dryRun);
   }
   private publishJournal(journal: Journal, dryRun: boolean): MutationReceipt {
+    return this.underLease(() => {
+      this.validateObservations();
+      this.observing = false;
+      try {
+        const receipt = this.publishUnderLease(journal, dryRun);
+        if (!receipt.dryRun) { this.observedFiles.clear(); this.observedDirectories.clear(); }
+        return receipt;
+      } finally { this.observing = true; }
+    });
+  }
+  private publishUnderLease(journal: Journal, dryRun: boolean): MutationReceipt {
     if (Buffer.byteLength(canonical(journal)) > MAX_TRANSACTION_BYTES) throw new ConcordError('InvalidChange', 'Publication exceeds the transaction size limit');
     const changedPaths = journal.changes.filter(change => change.path !== 'concord.repository.json' || change.before !== change.after).map(change => change.path);
     // Validate the complete set before persisting a prepared journal; dry-run follows this same guard.
     this.preflight(journal);
     if (dryRun || this.noWrite) return { operation: journal.operation, dryRun: true, changedPaths };
-    if (this.lockToken === undefined) throw new ConcordError('RepositoryBusy', 'Publication requires an owned lock');
+    if (this.traceLease === undefined) throw new ConcordError('RepositoryBusy', 'Publication requires an owned lease');
+    invalidateActiveRun(this.root);
     const journalPath = join(this.privateDir, 'journal.json');
     if (present(journalPath)) throw new ConcordError('RecoveryRequired', 'Run concord recover before another publication');
     atomic(journalPath, `${canonical(journal)}\n`);
@@ -535,11 +581,15 @@ export class LocalRepository implements Repository {
   // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
   recover(): { operation: string; status: string; changedPaths: readonly string[] } {
+    return this.snapshot(() => this.recoverUnderLease());
+  }
+  private recoverUnderLease(): { operation: string; status: string; changedPaths: readonly string[] } {
     const path = join(this.privateDir, 'journal.json');
     if (!present(path)) return { operation: 'recover', status: 'clean', changedPaths: [] };
     const journal = currentJournal(path);
     this.preflight(journal, true);
     if (journal.phase === 'prepared') {
+      invalidateActiveRun(this.root);
       for (const change of [...journal.changes].reverse()) {
         if (journal.scope.kind === 'source') {
           const current = this.currentSnapshot();

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Schema } from 'effect';
 import { RemoteFeedbackSchema, feedbackIdentity, type RemoteFeedback } from './feedback-schema.js';
-import { ConcordError, canonical, decode, type Repository } from './shared.js';
+import { ConcordError, canonical, decode, inRepositorySnapshot, type Repository } from './shared.js';
 
 const MAX_CACHE_BYTES = 256 * 1024 * 1024;
 const CachedFeedbackSchema = Schema.Struct({
@@ -59,6 +59,9 @@ function openWritable(repo: Repository): DatabaseSync {
 }
 
 export function readFeedbackCache(repo: Repository): FeedbackCacheSnapshot {
+  return inRepositorySnapshot(repo, () => readFeedbackCacheUnderSnapshot(repo));
+}
+function readFeedbackCacheUnderSnapshot(repo: Repository): FeedbackCacheSnapshot {
   const path = pathFor(repo);
   assertDatabasePaths(repo);
   if (inspect(path) === undefined) return { items: new Map(), warnings: [] };
@@ -92,6 +95,9 @@ export function mergeFeedbackCache(
   connectionId: string,
   remoteItems: readonly RemoteFeedback[],
 ): readonly string[] {
+  return inRepositorySnapshot(repo, () => mergeFeedbackCacheUnderSnapshot(repo, connectionId, remoteItems));
+}
+function mergeFeedbackCacheUnderSnapshot(repo: Repository, connectionId: string, remoteItems: readonly RemoteFeedback[]): readonly string[] {
   const database = openWritable(repo);
   const warnings: string[] = [];
   try {

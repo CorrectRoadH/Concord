@@ -7,10 +7,13 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Predicate, Schema } from 'effect';
 import { AnnotatedCaseSchema, ConcordError, MemorySchema, Sha256, Text, canonical, decode, digest, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type FixedProof, type ProjectConfig, type Repository, type Resolution } from './shared.js';
-import { hasSuccessfulOwnedProcessResult, runOwnedProcess, type OwnedProcessResult } from './owned-process.js';
+import { hasConfirmedOwnedGroupCleanup, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from './owned-process.js';
 import { loadDocuments, resolveReference } from './documents.js';
 import { parseReference } from './refs.js';
 import { snapshot as parseConfigSnapshot } from './config.js';
+import type { LocalRepository } from './storage.js';
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './coordination.js';
+import { beginRun, finalizeRun, finishRun, quarantineRun } from './run-coordination.js';
 
 const MAX_EVIDENCE_BYTES = 1024 * 1024;
 const OPAQUE_ID = /^ccev_[0-9a-f]{32}$/u;
@@ -89,17 +92,43 @@ function observed(result: OwnedProcessResult, node: boolean): { execution: Evide
 }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
-export const runCase = (repo: Repository, selected: AnnotatedCase, documents: readonly DocumentRecord[]): Effect.Effect<Evidence, ConcordError, import('./owned-process.js').OwnedProcess> => Effect.suspend(() => {
+export const runCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[]): Effect.Effect<Evidence, ConcordError, OwnedProcess> => Effect.gen(function*() {
+  const process = yield* OwnedProcess;
+  const prepared = yield* Effect.acquireRelease(
+    Effect.try({ try: () => repo.snapshot(() => {
   const annotation = decode(AnnotatedCaseSchema, selected, 'selected test case'); const beforeDocuments = loadDocuments(repo); const beforeConfig = currentConfig(repo); const definition = buildDefinition(repo, annotation, beforeConfig, beforeDocuments); const contract = documentFor(repo, beforeDocuments, annotation.contract, ['feature', 'use-case']); const problems = annotation.regressions.map((ref) => documentFor(repo, beforeDocuments, ref, ['memory'])).filter((doc) => doc.metadata.kind === 'memory' && doc.metadata.memoryKind === 'problem');
   const epochs: Record<string, number> = {}; for (const problem of problems) { const metadata = decode(MemorySchema, problem.metadata, problem.path); epochs[problem.path] = metadata.epoch; }
   const contractDigest = documentDigest(repo, contract, annotation.contract); const candidate = currentCandidate(repo, beforeDocuments); const implementation = implementationDigest(); const startedAt = iso();
-  return runOwnedProcess(definition.argv, { cwd: repo.root, env: safeEnvironment(), timeoutMs: beforeConfig.runner.timeoutMs }).pipe(Effect.map((result) => {
+      return { run: beginRun(repo.root), annotation, beforeConfig, definition, epochs, contractDigest, candidate, implementation, startedAt };
+    }), catch: failure }),
+    prepared => Effect.gen(function*() {
+      const results = yield* process.cleanupResults;
+      const idle = (yield* process.activeCount) === 0;
+      yield* Effect.sync(() => {
+        try {
+          // Releasing a confirmed process group must not depend on unchanged
+          // configuration or a healthy journal. Only coordination is required.
+          const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'test-finalize')!;
+          try {
+            const cleanupOk = idle && results.every(hasConfirmedOwnedGroupCleanup);
+            finalizeRun(repo.root, prepared.run, cleanupOk);
+            if (cleanupOk) finishRun(repo.root, prepared.run);
+          } finally { releaseTraceLeaseSync(lease, 'test-finalize'); }
+        } catch (cause) { quarantineRun(repo.root, prepared.run); throw cause; }
+      });
+    }),
+  );
+  const { run, annotation, beforeConfig, definition, epochs, contractDigest, candidate, implementation, startedAt } = prepared;
+  const result = yield* runOwnedProcess(definition.argv, { cwd: repo.root, env: safeEnvironment(), timeoutMs: beforeConfig.runner.timeoutMs }).pipe(Effect.scoped);
+  return yield* Effect.try({ try: () => repo.snapshot(() => {
+    const cleanupOk = hasConfirmedOwnedGroupCleanup(result);
+    const invalidated = finalizeRun(repo.root, run, cleanupOk);
     const afterDocuments = loadDocuments(repo); const afterConfigSource = repo.read(repo.configSnapshot.path); const afterConfigSnapshot = afterConfigSource === undefined ? undefined : parseConfigSnapshot(repo.configSnapshot.path, afterConfigSource); const afterConfig = afterConfigSnapshot?.config ?? beforeConfig; const afterProblems = annotation.regressions.map((ref) => documentFor(repo, afterDocuments, ref, ['memory'])).filter((doc) => doc.metadata.kind === 'memory' && doc.metadata.memoryKind === 'problem');
     const afterEpochs = Object.fromEntries(afterProblems.map((problem) => [problem.path, decode(MemorySchema, problem.metadata, problem.path).epoch])); const afterContract = documentFor(repo, afterDocuments, annotation.contract, ['feature', 'use-case']);
     const stable = afterConfigSnapshot !== undefined && afterConfigSnapshot.digest === repo.configSnapshot.digest && candidate === currentCandidate(repo, afterDocuments) && implementation === implementationDigest() && canonical(beforeConfig) === canonical(afterConfig) && definition.digest === buildDefinition(repo, annotation, afterConfig, afterDocuments).digest && contractDigest === documentDigest(repo, afterContract, annotation.contract) && canonical(epochs) === canonical(afterEpochs);
-    const state = observed(result, beforeConfig.runner.kind === 'node-test'); const outcome = stable ? state.outcome : 'invalid'; const unsigned = { id: `ccev_${randomBytes(16).toString('hex')}`, format: 'concord.command-evidence/v1' as const, scope: 'command' as const, selectedCaseId: annotation.id, projectId: beforeConfig.projectId, root: repo.root, implementationDigest: implementation, definitionDigest: definition.digest, contractDigest, candidateDigest: candidate, configPath: repo.configSnapshot.path, configDigest: repo.configSnapshot.digest, problemEpochs: epochs, argv: [...definition.argv], startedAt, finishedAt: iso(), commandOutcome: outcome, execution: state.execution, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk: hasSuccessfulOwnedProcessResult(result) || (!result.processGroupOwned || result.groupCleanup.gone === true), stdoutDigest: digest(result.stdout), stderrDigest: digest(result.stderr) }; const evidence = decodeEvidence({ ...unsigned, integrity: objectDigest(unsigned) }, 'issued evidence'); store(repo, evidence); return evidence;
-  }), Effect.catch((cause) => Effect.fail(cause instanceof ConcordError ? cause : new ConcordError('CommandFailed', cause instanceof Error ? cause.message : String(cause)))));
-}).pipe(Effect.scoped, Effect.catchDefect(cause => Effect.fail(failure(cause))));
+    const state = observed(result, beforeConfig.runner.kind === 'node-test'); const outcome = stable && !invalidated && cleanupOk ? state.outcome : 'invalid'; const unsigned = { id: `ccev_${randomBytes(16).toString('hex')}`, format: 'concord.command-evidence/v1' as const, scope: 'command' as const, selectedCaseId: annotation.id, projectId: beforeConfig.projectId, root: repo.root, implementationDigest: implementation, definitionDigest: definition.digest, contractDigest, candidateDigest: candidate, configPath: repo.configSnapshot.path, configDigest: repo.configSnapshot.digest, problemEpochs: epochs, argv: [...definition.argv], startedAt, finishedAt: iso(), commandOutcome: outcome, execution: state.execution, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk, stdoutDigest: digest(result.stdout), stderrDigest: digest(result.stderr) }; const evidence = decodeEvidence({ ...unsigned, integrity: objectDigest(unsigned) }, 'issued evidence'); store(repo, evidence); return evidence;
+  }), catch: failure });
+}).pipe(Effect.scoped, Effect.mapError(failure), Effect.catchDefect(cause => Effect.fail(failure(cause))));
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 export function verifyFixedEvidence(repo: Repository, documents: readonly DocumentRecord[], cases: readonly AnnotatedCase[], problem: DocumentRecord, redId: string, greenId: string): FixedProof {

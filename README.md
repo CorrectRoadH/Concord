@@ -4,7 +4,7 @@
 
 Concord 是面向开发者与 coding agent 的本地 SDLC CLI。产品契约保存在 Markdown，代码与测试关系写在实际源码旁，Memory 保存问题和裁决历史；Trace 动态反查这些关系，不需要第二份关系 JSON。
 
-Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux 本地文件系统，以及 Apple Silicon macOS 14/15 的本地 APFS；需要 Node.js 24.15+、Git、`ripgrep` 和 `flock`。源码开发使用 pnpm 11.18.0。Windows、Intel macOS、HFS 与网络文件系统尚未纳入兼容声明。
+Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux/macOS 本地工作树，发行验收覆盖 Ubuntu 24.04 与 Apple Silicon macOS 14/15；需要 Node.js 24.15+、Git，Repository 工具使用 `ripgrep`。发布协调只用 Node 文件 API，不需要 `flock`、`stat`、`diskutil` 或 `plutil`。SQLite 仅作可删除缓存。源码开发使用 pnpm 11.18.0；Windows 执行与网络多机协调尚未纳入兼容声明。
 
 - [Quick start](#quick-start)：从空仓库跑通契约、代码、测试和反查。
 - [常用 usage](#常用-usage)：接入已有项目、维护文档、关联代码、测试与 Memory。
@@ -315,7 +315,7 @@ readlink -f "$(command -v concord)"
 
 本地目录安装会创建包与 bin 的符号链接；修改源码后运行 `pnpm build` 即生效，无需重新安装。移动 checkout 后需要重新链接。若先前使用 Nix 用户 profile 安装 Concord，先用 `nix profile remove concord` 移除旧入口。全局链接供日常自举，`pnpm check` 仍构建、打包并在隔离消费者中安装验收。
 
-Linux 与 Apple Silicon macOS 14/15 可以从 Homebrew tap 安装。Formula 会提供 Node、Git、`ripgrep`，以及 macOS 所需的 `util-linux` flock：
+Linux 与 Apple Silicon macOS 14/15 可以从 Homebrew tap 安装。Formula 提供 Node、Git 和 `ripgrep`；0.6.0 的发布协调不再需要 `util-linux` flock：
 
 ```sh
 brew install CorrectRoadH/tap/concord
@@ -329,7 +329,7 @@ cd /path/to/Concord
 pnpm install --frozen-lockfile
 pnpm build
 npm pack --ignore-scripts
-npm install --prefix ~/.local/share/concord ./concord-sdlc-0.5.0.tgz
+npm install --prefix ~/.local/share/concord ./concord-sdlc-0.6.0.tgz
 export PATH="$HOME/.local/share/concord/node_modules/.bin:$PATH"
 concord --help
 ```

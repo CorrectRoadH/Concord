@@ -70,10 +70,16 @@ export interface Repository {
   readonly privateDir: string;
   readonly config: ProjectConfig;
   readonly configSnapshot: ConfigSnapshot;
+  snapshot?<A>(read: () => A): A;
   read(path: string): string | undefined;
   files(prefix: string): string[];
   absolute(path: string): string;
   publish(operation: string, changes: readonly Change[], dryRun?: boolean): MutationReceipt;
+}
+
+/** Named operations own a coherent short snapshot; nested calls reuse it. */
+export function inRepositorySnapshot<A>(repo: Repository, operation: () => A): A {
+  return repo.snapshot === undefined ? operation() : repo.snapshot(operation);
 }
 
 export const Sha256 = Schema.String.check(Schema.isPattern(/^sha256:[0-9a-f]{64}$/));

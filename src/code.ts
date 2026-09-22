@@ -444,6 +444,9 @@ function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 export function scanCode(repo: Repository): CodeSnapshot {
+  return repo.snapshot === undefined ? scanCodeUnderSnapshot(repo) : repo.snapshot(() => scanCodeUnderSnapshot(repo));
+}
+function scanCodeUnderSnapshot(repo: Repository): CodeSnapshot {
   let before: readonly Source[];
   let changed = false;
   try { before = readSources(repo); }

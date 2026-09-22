@@ -62,7 +62,13 @@ Trace 与定向 Review 按解析得到的 owner 汇总 Feature supporting page �
 
 读写路径拒绝绝对路径、traversal、symlink 组件和超出 repo 的 realpath。扫描只读取 Concord 所属目录和格式；错误的受管格式明确报错。
 
-Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。支持已批准的 Linux 本地文件系统和 macOS APFS，不支持网络文件系统或 Windows；macOS 还拒绝大小写或 Unicode 规范化别名可能导致的发布路径碰撞。两端沿用由 `flock` 提供的 descriptor-backed 协调协议，Homebrew 在 macOS 上提供该 helper。写入使用独占锁和 preimage journal，写前校验完整变更集，逐文件原子 rename；读遇到未完成 journal 要求 recover。恢复仅在内容符合 preimage 或 planned digest 时进行，否则拒绝覆盖未知编辑。dry-run 执行同一规划校验，不写文件。锁不因超时擅自抢占；明确 recovery 检查同主机 PID 已消失后才能清理遗留锁。
+Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。0.6.0 采用[可移植发布协调](design/portable-publication/README.md)：普通运行仅用 Node 文件 API，移除 flock、stat、diskutil、plutil 和卷名称准入探测。支持同主机、同 PID 命名空间内的 Linux/macOS 本地工作树；网络多机协调与 Windows 执行不在保证内。macOS 保留大小写、Unicode 路径碰撞和 symlink 防护。
+
+一个非空 publication.lease 目录拥有短快照与提交互斥；完整 token owner 经临时目录 fsync/rename 原子公布。构造 LocalRepository 不持有命令全程锁；显式 snapshot 读取完整规划输入，提交在同一短 lease 下复核首次读取、缺失文件、目录集合与类型、配置和完整前像，再写 preimage journal、逐文件原子 rename。正常释放与显式死 PID 恢复只删除准确 token；不按年龄抢占，不递归删除活动锁目录。SQLite 只保存可删除重建的缓存，其连接和清理也在快照内。旧锁协议不迁移、不支持混合版本同时运行。
+
+`concord recover` 路由当前唯一的普通或 Trace journal；多 journal 现场冲突时保留并拒绝。各恢复入口获锁后重查类型和现场，只在内容符合 preimage 或 planned digest 时恢复。dry-run 执行同一规划校验，不发布 owner、journal 或缓存；已有项目的短协调可能创建 Git-private 目录。
+
+CLI/Web 测试共用独立 runner.lease，长执行不占文档 lease。持久 run 状态区分 running、finalizing、quarantined，只有同主机活进程的 running 状态允许发布，并且发布前必须持久标记该次 run 已失效；A→B→A 和回滚不撤销失效标记。结束在新快照中核对起止 candidate、配置、定义、契约、epoch、失效与清理结果，再写证据。父进程死亡不能授权回收 runner，清理未知时保留阻断；若最终快照无法取得，则留下只会收紧权限的 token-bound quarantine 标记。此协议不宣称能够观察不合作编辑器的每次瞬时修改。
 
 ## Design 逐项比较与裁决
 

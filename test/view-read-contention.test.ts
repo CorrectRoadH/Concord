@@ -11,9 +11,9 @@ import { tracePrivateDirectorySync } from '../dist/coordination.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
 
-async function hold(lockPath: string): Promise<ChildProcess> {
-  // External process boundary: flock owns the lock until the child stdin closes.
-  const child = spawn('flock', ['--exclusive', lockPath, process.execPath, '-e', "process.stdout.write('held'); process.stdin.resume();"], { stdio: ['pipe', 'pipe', 'inherit'] });
+async function hold(root: string): Promise<ChildProcess> {
+  // A real independent process owns the portable lease until stdin closes.
+  const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './dist/coordination.js'; const lease=acquireTraceLeaseSync(process.argv[1], 'exclusive', 'contention'); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'contention'));", root], { stdio: ['pipe', 'pipe', 'inherit'] });
   await once(child.stdout!, 'data');
   return child;
 }
@@ -55,7 +55,7 @@ test('file reads recover from real lease contention, cancel on navigation, and a
     assert.ok(Math.abs(folderIcon.x - fileIcon.x) < 1, 'same-depth icons align');
     assert.ok(Math.abs(folderLabel.x - fileLabel.x) < 1, 'same-depth labels align');
 
-    const lockPath = join(tracePrivateDirectorySync(root), 'publication.lock');
+    const lockPath = root;
     const busyResponse = () => page.waitForResponse(response => response.url().includes('/api/file?') && response.status() === 409);
     holder = await hold(lockPath);
     const busy = busyResponse();

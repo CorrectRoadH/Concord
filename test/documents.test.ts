@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -242,7 +242,8 @@ test('interrupted adoption recovers the complete old package and preserves unkno
   mkdirSync(blocked, { recursive: true }); chmodSync(blocked, 0o555);
   try { throwsCode('RecoveryRequired', () => adoptRoadmap(repo, 'recovery', 'recovered')); }
   finally { chmodSync(blocked, 0o755); }
-  const planned = repo.read('docs/feature/recovered/README.md');
+  throwsCode('RecoveryRequired', () => repo.read('docs/feature/recovered/README.md'));
+  const planned = readFileSync(join(root, 'docs/feature/recovered/README.md'), 'utf8');
   assert.ok(planned); repo.close();
   const recovery = new LocalRepository(root, { recover: true });
   try {

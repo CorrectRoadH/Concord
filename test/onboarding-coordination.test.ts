@@ -22,8 +22,8 @@ test('init preview is write-free only before owners or coordination locks exist'
     mkdirSync(join(root, 'docs'));
     writeFileSync(join(root, 'docs/README.md'), '# Existing owner\n');
     repo = new LocalRepository(root, { initialize: true, dryRun: true });
-    assert.equal(existsSync(join(traceDir, 'publication.lock')), true);
-    assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'competing-writer', true), /busy/);
+    assert.equal(existsSync(join(traceDir, 'publication.lease')), false);
+    repo.snapshot(() => assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'competing-writer', true), /busy/));
     repo.close(); repo = undefined;
     const lease = acquireTraceLeaseSync(root, 'exclusive', 'writer', true);
     try {

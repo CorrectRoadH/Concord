@@ -21,7 +21,7 @@ function isolatedRepository(t: TestContext): string {
   return root;
 }
 
-test("generic and Trace operations share one flock lease", (t) => {
+test("generic and Trace operations share one portable publication lease", (t) => {
   const root = isolatedRepository(t);
   const lease = acquireTraceLeaseSync(root, "exclusive", "test-hold", true);
   assert.throws(() => new LocalRepository(root, { dryRun: true }), { code: "RepositoryBusy" });
@@ -56,7 +56,9 @@ test("multi-file deletion journals and recovers an interrupted transaction", asy
     /injected interruption/,
   );
   assert.equal(readFileSync(join(tracePrivateDirectorySync(root), "multi-file-publication-journal.json"), "utf8").includes('"kind":"absent"'), true);
-  const receipt = await Effect.runPromise(recoverTrace(root));
+  const recovered = JSON.parse(execFileSync(process.execPath, ['dist/entry.js', '--root', root, '--json', 'recover'], { encoding: 'utf8' })) as { status: string; receipt: { recovered: boolean } };
+  assert.equal(recovered.status, 'trace-recovered');
+  const receipt = recovered.receipt;
   assert.equal(receipt.recovered, true);
   assert.equal(readFileSync(join(root, "docs.md"), "utf8"), "before\n");
   assert.equal((await Effect.runPromise(recoverTrace(root))).recovered, false);
@@ -212,17 +214,17 @@ test("invalid generated mode or oversized bytes are rejected before a journal is
 
 test("full LocalRepository and Trace entry points exclude each other across processes", async (t) => {
   const root = isolatedRepository(t);
-  const genericChild = spawn(process.execPath, ["--import", "tsx", "--eval", `import { LocalRepository } from './src/storage.ts'; const repository = new LocalRepository(process.argv[1]); console.log('ready'); process.stdin.once('data', () => repository.close());`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
+  const genericChild = spawn(process.execPath, ["--import", "tsx", "--eval", `import { LocalRepository } from './src/storage.ts'; const repository = new LocalRepository(process.argv[1]); repository.beginSnapshot(); console.log('ready'); process.stdin.once('data', () => repository.close());`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
   t.after(() => { if (genericChild.exitCode === null) genericChild.kill("SIGTERM"); });
   try {
     await new Promise<void>((resolve, reject) => { genericChild.stdout.once("data", (data) => data.toString().includes("ready") ? resolve() : reject(new Error("generic child did not become ready"))); genericChild.once("error", reject); });
     await assert.rejects(Effect.runPromise(withTraceReadLease(root, () => Effect.succeed(true))), /busy|lease/i);
-  } finally { genericChild.stdin.end(); await new Promise<void>((resolve) => genericChild.once("exit", () => resolve())); }
+  } finally { genericChild.stdin.end("done"); await new Promise<void>((resolve) => genericChild.once("exit", () => resolve())); }
 
   const profileChild = spawn(process.execPath, ["--import", "tsx", "--eval", `import { Effect } from 'effect'; import { mutateTraceFiles } from './repository/docs/trace/relation-mutation.ts'; await Effect.runPromise(mutateTraceFiles({ root: process.argv[1], operation: 'hold-profile', prepareUnderLease: Effect.promise(() => { console.log('ready'); return new Promise((resolve) => process.stdin.once('data', () => resolve([{ path: 'held.md', bytes: 'held\\n' }]))); }) }));`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
   t.after(() => { if (profileChild.exitCode === null) profileChild.kill("SIGTERM"); });
   try {
     await new Promise<void>((resolve, reject) => { profileChild.stdout.once("data", (data) => data.toString().includes("ready") ? resolve() : reject(new Error("profile child did not become ready"))); profileChild.once("error", reject); });
     assert.throws(() => new LocalRepository(root, { dryRun: true }), /busy|lease/i);
-  } finally { profileChild.stdin.end(); await new Promise<void>((resolve) => profileChild.once("exit", () => resolve())); }
+  } finally { profileChild.stdin.end("done"); await new Promise<void>((resolve) => profileChild.once("exit", () => resolve())); }
 });

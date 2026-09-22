@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
-import { ConcordError, ProjectSchema, decode, digest, type DocumentRecord, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
+import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
 import { documentRoots, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
 import type { LocalRepository } from './storage.js';
@@ -43,6 +43,7 @@ function inspectMarkdown(repo: Repository, path: string): { document?: DocumentR
 
 /** Read only the requested Markdown and its owner chain, using the same classification as the full inventory. */
 export function inspectDocumentFile(repo: Repository, path: string): ViewFile | undefined {
+  return inRepositorySnapshot(repo, () => {
   const inDocumentInventory = documentRoots(repo).some(root => path === root || path.startsWith(`${root}/`));
   if (!path.endsWith('.md') || sourceForbidden(path) || (!inDocumentInventory && !ROOT_MARKDOWN_PAGES.includes(path as typeof ROOT_MARKDOWN_PAGES[number]))) return undefined;
   const target = inspectMarkdown(repo, path);
@@ -58,6 +59,7 @@ export function inspectDocumentFile(repo: Repository, path: string): ViewFile | 
     if (ancestor.document) owner = ancestorPath;
   }
   return owner ? { ...target.page, documentPath: owner } : target.page;
+  });
 }
 
 function inspected(repo: Repository): { readonly documents: readonly DocumentRecord[]; readonly findings: readonly Finding[]; readonly pages: readonly ViewFile[] } {
@@ -86,41 +88,55 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
 }
 
 export function inspectDocuments(repo: Repository): { documents: DocumentRecord[]; findings: Finding[]; pages: ViewFile[] } {
+  return repo.snapshot === undefined ? inspectDocumentsUnderSnapshot(repo) : repo.snapshot(() => inspectDocumentsUnderSnapshot(repo));
+}
+function inspectDocumentsUnderSnapshot(repo: Repository): { documents: DocumentRecord[]; findings: Finding[]; pages: ViewFile[] } {
   const value = inspected(repo);
   return { documents: [...value.documents], findings: [...value.findings], pages: [...value.pages] };
 }
 
 export function listSources(repo: LocalRepository): { path: string; digest: string }[] {
+  return inRepositorySnapshot(repo, () => {
   const roots = [...new Set([...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])])].sort();
   const paths = [...new Set(roots.flatMap(root => repo.files(root)))].filter(path => SOURCE_EXTENSION.test(path) && !sourceForbidden(path)).sort();
   return paths.flatMap(path => {
     const body = repo.read(path);
     return body === undefined ? [] : [{ path, digest: digest(body) }];
   });
+  });
 }
 
 export function readSource(repo: LocalRepository, path: string): { operation: string; path: string; body: string; digest: string } {
+  return inRepositorySnapshot(repo, () => {
   if (!isSourcePath(repo, path)) throw new ConcordError('SourceNotFound', 'The requested source is not an existing JS/TS file in configured sourceRoots or testRoots');
   const body = repo.read(path);
   if (body === undefined) throw new ConcordError('SourceNotFound', `${path} disappeared while reading`);
   return { operation: 'show-source', path, body, digest: digest(body) };
+  });
 }
 
 export function isSourcePath(repo: Repository, path: string): boolean {
+  return inRepositorySnapshot(repo, () => {
   return SOURCE_EXTENSION.test(path) && !sourceForbidden(path) && [...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])].some(root => path === root || path.startsWith(`${root}/`));
+  });
 }
 
 export function setSource(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
   const source = readSource(repo, path);
   if (source.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; use its current digest`);
   return repo.publishSource(path, source.body, body, dryRun);
+  });
 }
 
 export function showConfig(repo: LocalRepository): { operation: string; config: ProjectConfig; digest: string } {
+  return inRepositorySnapshot(repo, () => {
   return { operation: 'show-config', config: repo.configSnapshot.config, digest: repo.configSnapshot.digest };
+  });
 }
 
 export function setConfig(repo: LocalRepository, config: ProjectConfig, expectedDigest: string, dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
   const current = showConfig(repo);
   if (current.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${repo.configSnapshot.path} changed; use its current digest`);
   const next = decode(ProjectSchema, config, 'configuration');
@@ -129,10 +145,13 @@ export function setConfig(repo: LocalRepository, config: ProjectConfig, expected
   for (const root of [...next.testRoots, ...(next.sourceRoots ?? [])]) if (sourceForbidden(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot or testRoot: ${root}`);
   const after = renderTypeScriptConfig(next);
   return repo.publish('set-config', [{ path: repo.configSnapshot.path, before: repo.configSnapshot.source, after }], dryRun);
+  });
 }
 
 export function setMetadata(repo: LocalRepository, reference: string, fields: { title?: string; observedAt?: string | null; sources?: readonly string[]; constitutionRefs?: readonly string[] }, expectedDigest: string, dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
   return setDocumentMetadata(repo, reference, fields, expectedDigest, dryRun);
+  });
 }
 
 function pageBody(value: string): string {
@@ -142,6 +161,7 @@ function pageBody(value: string): string {
 }
 
 export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
   const page = inspectDocumentFile(repo, path);
   if (page === undefined) throw new ConcordError('FileNotFound', 'Markdown editing is limited to the Concord document and supporting-page inventory');
   if (page.readOnly) throw new ConcordError('ReadOnlyDocument', page.reason ?? `${path} is read-only`);
@@ -150,4 +170,5 @@ export function setMarkdown(repo: LocalRepository, path: string, body: string, e
   const before = repo.read(path);
   if (before === undefined) throw new ConcordError('FileNotFound', `${path} disappeared before publication`);
   return repo.publish('set-markdown', [{ path, before, after: pageBody(body) }], dryRun);
+  });
 }

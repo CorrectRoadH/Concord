@@ -50,6 +50,7 @@ test('old journals are refused before stale locks or interrupted files can be ch
   const path = 'memory/interrupted.md';
   writeFileSync(join(root, path), '# Interrupted\n');
   const publicationLock = join(root, '.git/concord/trace/publication.lock');
+  writeFileSync(publicationLock, '');
   chmodSync(publicationLock, 0o644);
   for (const [scope, code] of [
     [{ kind: 'documents' }, 'JournalMigrationRequired'],

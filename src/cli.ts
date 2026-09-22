@@ -16,6 +16,7 @@ import { setConfig, showConfig } from './editing.js';
 import { readEvidence, runCase, verifyFixedEvidence } from './evidence.js';
 import { OwnedProcessLive } from './owned-process.js';
 import { initialize, LocalRepository } from './storage.js';
+import { recoverLocalState } from './recovery.js';
 import { buildTrace, documentShow, renderReview, requireValidTrace, selectCase, traceGaps, traceShow } from './trace.js';
 import { ConcordError, MemorySourceSchema, ProjectSchema, RunnerSchema, decode, failure, type DocumentKind } from './shared.js';
 import { listTemplates, templateBody } from './templates.js';
@@ -54,13 +55,14 @@ function emit(value: unknown, json: boolean): void {
   const output = json ? JSON.stringify(value) : humanOutput(value);
   process.stdout.write(output.endsWith('\n') ? output : `${output}\n`);
 }
-function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, options: { initialize?: boolean; recover?: boolean; readonly?: boolean } = {}) {
+function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, options: { initialize?: boolean; recover?: boolean; readonly?: boolean; unlocked?: boolean } = {}) {
   return Effect.gen(function*() {
     const settings = yield* root;
     const repo = yield* Effect.acquireRelease(
       Effect.try({ try: () => new LocalRepository(Option.getOrUndefined(settings.root), { initialize: options.initialize, recover: options.recover, dryRun: options.readonly === true || settings.dryRun }), catch: failure }),
       repo => Effect.sync(() => repo.close()),
     );
+    if (!options.unlocked) yield* Effect.acquireRelease(sync(() => repo.beginSnapshot()), () => Effect.sync(() => repo.endSnapshot()));
     return yield* operation(repo, settings).pipe(Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
   }).pipe(Effect.scoped);
 }
@@ -109,20 +111,28 @@ const init = Command.make('init', {
     projectTypes, pages, design, constitutionBody,
     adoptConstitution: args.adoptConstitution, constitutionReason: Option.getOrUndefined(args.constitutionReason), constitutionImpact: Option.getOrUndefined(args.constitutionImpact), constitutionSources: args.constitutionSource, memorySources: memorySourceConfig,
   } as const;
-  const preview = yield* sync(() => initialize(repo, true, options));
+  const { preview, preimages } = yield* sync(() => repo.snapshot(() => {
+    const preview = initialize(repo, true, options);
+    const preimages = [...preview.createdPaths, ...preview.preservedPaths].map(path => ({ path, source: repo.read(path) }));
+    return { preview, preimages };
+  }));
   if (s.dryRun) return preview;
-  const preimages = yield* sync(() => [...preview.createdPaths, ...preview.preservedPaths].map(path => ({ path, source: repo.read(path) })));
   if (interactive) yield* Effect.sync(() => emit({ operation: 'init-preview', configuration: preview.config, create: preview.createdPaths, preserve: preview.preservedPaths }, s.json));
   const confirmed = args.yes || !interactive || (yield* Prompt.run(Prompt.confirm({ message: `Create ${preview.changedPaths.length} files?`, initial: true })));
   if (!confirmed) return { operation: 'init-cancelled', cancelled: true, dryRun: true, changedPaths: [], plannedPaths: preview.changedPaths };
   yield* sync(() => repo.close());
   const writer = yield* Effect.acquireRelease(sync(() => new LocalRepository(repo.root, { initialize: true })), (opened) => Effect.sync(() => opened.close()));
-  yield* sync(() => {
+  return yield* sync(() => writer.snapshot(() => {
     for (const preimage of preimages) if (writer.read(preimage.path) !== preimage.source) throw new ConcordError('PreimageChanged', `${preimage.path} changed since init preview; review a fresh preview`);
-  });
-  return yield* sync(() => initialize(writer, false, options));
-}), { initialize: true, readonly: true })).pipe(Command.withDescription('Progressively initialize static TypeScript configuration, constitution, templates and optional DESIGN.md. Non-TTY uses deterministic defaults; --dry-run previews and an interactive rejection writes nothing.'));
-const recover = Command.make('recover', {}, () => withRepo(repo => sync(() => repo.recover()), { recover: true })).pipe(Command.withDescription('Recover interrupted document publication; preserve conflicting external edits.'));
+    return initialize(writer, false, options);
+  }));
+}), { initialize: true, readonly: true, unlocked: true })).pipe(Command.withDescription('Progressively initialize static TypeScript configuration, constitution, templates and optional DESIGN.md. Non-TTY uses deterministic defaults; --dry-run previews and an interactive rejection writes nothing.'));
+const recover = Command.make('recover', {}, () => Effect.gen(function*() {
+  const settings = yield* root;
+  if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'recover does not accept --dry-run'));
+  const receipt = yield* recoverLocalState(Option.getOrUndefined(settings.root));
+  yield* Effect.sync(() => emit(receipt, settings.json));
+})).pipe(Command.withDescription('Recover the current document or Trace publication; preserve conflicting external edits.'));
 
 function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
   const create = Command.make('create', { id, title: text('title'), body: optional('body'), feature: optional('feature'), observedAt: optional('observed-at'), source: many('source'), alternative: many('alternative'), pages: many('pages'), noPages: Flag.boolean('no-pages').pipe(Flag.withDefault(false)), constitutionRef: many('constitution-ref') }, args => withRepo((repo, s) => sync(() => {
@@ -233,12 +243,12 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
   Command.make('show', { id }, args => withRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-show',case:selectCase(t.annotations.cases,args.id),evidenceScope:'command'};}))),
   Command.make('run', { id }, args => withRepo((repo,s) => Effect.gen(function*(){
     if(s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','test run does not accept --dry-run; use test show to inspect the declaration'));
-    const t=yield* sync(()=>buildTrace(repo,'off',{includeCode:false}));yield* sync(()=>requireValidTrace(t));
+    const t=yield* sync(()=>repo.snapshot(()=>buildTrace(repo,'off',{includeCode:false})));yield* sync(()=>requireValidTrace(t));
     const selected=yield* sync(()=>selectCase(t.annotations.cases,args.id));
     const evidence=yield* runCase(repo,selected,t.documents);
     if(evidence.commandOutcome!=='pass') yield* Effect.sync(()=>{process.exitCode=1;});
     return evidence;
-  }))),
+  }), { unlocked: true })),
   Command.make('evidence', { id }, args => withRepo(repo => sync(()=>readEvidence(repo,args.id)))),
 ]));
 const code = Command.make('code').pipe(Command.withDescription('Associate files, functions and statement regions with Feature, Use Case or Engineering contracts. No coverage or completion claim.'), Command.withSubcommands([
@@ -297,7 +307,7 @@ const view = Command.make('view', {
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view does not accept --dry-run'));
   return yield* serveViewServer({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) }, settings.json));
 })).pipe(Command.withDescription('Serve the local Web workbench.'));
-root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:'0.5.0'}),Effect.catch(cause=>Effect.sync(()=>{
+root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:'0.6.0'}),Effect.catch(cause=>Effect.sync(()=>{
   const error=failure(cause);
   const result = {ok:false,error:error.code,message:error.message,...(error.details===undefined?{}:{details:error.details})};
   process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;

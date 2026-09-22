@@ -62,8 +62,51 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
-  publish:
+  portable:
     needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    env:
+      TMPDIR: /private/tmp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: concord-release-package
+          path: release
+      - name: Verify portable locks and recovery from the packed build
+        run: |
+          shasum -a 256 --check release/SHA256SUMS
+          version="$(node -p "require('./package.json').version")"
+          tar -xzf "release/concord-sdlc-$version.tgz" --strip-components=1 package/dist
+          node --import tsx --test test/portable-coordination.test.ts test/storage.test.ts test/runtime-portability.test.ts test/coordination-migration.test.ts
+      - name: Install and exercise the same candidate CLI
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          consumer="$(mktemp -d)"
+          git -C "$consumer" init --quiet
+          npm install --prefix "$consumer/tool" --ignore-scripts --no-audit --no-fund "$PWD/release/concord-sdlc-$version.tgz"
+          cli="$consumer/tool/node_modules/.bin/concord"
+          test "$($cli --version)" = "concord v$version"
+          "$cli" --root "$consumer" init --docs-only
+          "$cli" --root "$consumer" check
+
+  publish:
+    needs: [package, portable]
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
     permissions:
@@ -83,4 +126,4 @@ jobs:
           digest="$(cut -d' ' -f1 release/SHA256SUMS)"
           gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
-            --notes "Built, fully tested, packed, and installed from the exact candidate on Ubuntu 24.04. The npm package is platform-independent; target-specific optional dependencies are selected during installation. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."
+            --notes "Built and fully tested on Ubuntu 24.04. The same packed candidate passed portable coordination, recovery, and isolated CLI installation checks on Apple Silicon macOS 14 and 15. Runtime publication no longer requires flock or disk-inspection helpers; SQLite remains disposable cache. No old lock migration or mixed-version coordination is provided. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."

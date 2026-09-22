@@ -20,4 +20,7 @@ concord recover --json
 
 `JournalMigrationRequired` 表示历史事务，只能显式离线恢复；保留 journal、锁和目标文件，不反复调用普通 recover。`ProjectMigrationRequired` 表示旧配置须先离线迁移。缺当前配置绑定的旧收据返回 `EvidenceMigrationRequired`，保留原收据并重新取证。
 
-`--dry-run` 走同一规划校验，不发布项目文件；已有 owner 的仓库仍须共享 lease 和两套 journal 障碍，可能首次创建协调锁。只有全新且无 owner/锁的 init 预览可以完全不创建私有状态。它不等于真实发布完成。`recover` 不接受 `--dry-run`。
+`--dry-run` 走同一规划校验，不发布项目文件；已有 owner 的仓库仍须短快照 lease 和当前 journal 障碍，可能首次创建私有协调目录。只有全新且无 owner/锁的 init 预览可以完全不创建私有状态。它不等于真实发布完成。`recover` 不接受 `--dry-run`。
+
+
+0.6.0 使用 Node 文件 API 的短 publication lease，不需要外部 flock 或磁盘探测。`concord recover` 自动选择唯一的当前普通或 Trace journal，多 journal 时保留并拒绝。SQLite 仅为可删除缓存；不要把 journal、evidence、runner.lease 或 run 状态当作缓存删除。测试运行期间允许文档发布，但会使该次运行失效，即使稍后撤销修改也不会重新有效。runner 的 finalizing/quarantined、死父 PID 或未知状态阻断后续冲突操作；父进程死亡不证明子进程清理完成，必须先确认进程现场。不提供旧锁迁移或混合版本协调。

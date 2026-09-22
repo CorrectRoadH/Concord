@@ -20,7 +20,6 @@ interface JobRecord {
   cancelRequested: boolean;
   readonly process: OwnedProcessService;
   promise?: Promise<void>;
-  retainedRepository?: LocalRepository;
 }
 
 const terminal = new Set<ViewJobState>(['cancelled', 'completed', 'failed', 'cleanup-failed']);
@@ -41,7 +40,7 @@ function exitError(exit: Exit.Exit<unknown, unknown>): ConcordError {
   return Option.isSome(selected) ? failure(selected.value) : new ConcordError('JobInterrupted', Cause.pretty(exit.cause));
 }
 
-/** Server-owned single-slot job runner. Repository and child-process ownership end together. */
+/** Server-owned single-slot job runner. Runner coordination owns child-process cleanup independently of document snapshots. */
 export class ViewJobManager {
   private readonly jobs = new Map<string, JobRecord>();
   private active: JobRecord | undefined;
@@ -57,7 +56,7 @@ export class ViewJobManager {
     if (!caseId || caseId.trim() !== caseId) throw new ConcordError('InvalidInput', 'caseId must be non-empty and have no surrounding whitespace');
     if (this.stopped) throw new ConcordError('ServerStopping', 'The view server is stopping');
     if (this.active !== undefined) {
-      if (this.active.state === 'cleanup-failed') throw new ConcordError('CleanupFailed', 'A previous job could not confirm process-group cleanup; restart after inspecting the repository lock');
+      if (this.active.state === 'cleanup-failed') throw new ConcordError('CleanupFailed', 'A previous job could not confirm process-group cleanup; inspect its persistent runner state before restarting');
       throw new ConcordError('JobBusy', 'Only one test job may run at a time');
     }
     const job: JobRecord = {
@@ -91,7 +90,7 @@ export class ViewJobManager {
     if (job === undefined) return;
     this.cancel(job.id);
     await job.promise;
-    if (job.state === 'cleanup-failed') throw new ConcordError('CleanupFailed', 'Server shutdown could not confirm test process-group cleanup; the repository lock was retained');
+    if (job.state === 'cleanup-failed') throw new ConcordError('CleanupFailed', 'Server shutdown could not confirm test process-group cleanup; persistent runner quarantine was retained');
   }
 
   private async execute(job: JobRecord): Promise<void> {
@@ -105,7 +104,7 @@ export class ViewJobManager {
       repo = new LocalRepository(this.root);
       if (job.cancelRequested) await Effect.runPromise(job.process.requestStop('SIGTERM'));
       job.state = job.cancelRequested ? 'cancelling' : 'running';
-      const trace = buildTrace(repo, 'off', { includeCode: false });
+      const trace = repo.snapshot(() => buildTrace(repo!, 'off', { includeCode: false }));
       requireValidTrace(trace);
       const selected = selectCase(trace.annotations.cases, job.caseId);
       const exit = await Effect.runPromiseExit(runCase(repo, selected, trace.documents).pipe(Effect.provideService(OwnedProcess, job.process)));
@@ -115,8 +114,6 @@ export class ViewJobManager {
       if (!cleanupOk) {
         job.state = 'cleanup-failed';
         job.error = { code: 'CleanupFailed', message: 'The test command ended without confirmed owned process-group cleanup' };
-        job.retainedRepository = repo;
-        repo = undefined;
       } else if (Exit.isSuccess(exit)) {
         job.evidence = exit.value;
         job.state = exit.value.cancelled || job.cancelRequested ? 'cancelled' : 'completed';
@@ -131,17 +128,13 @@ export class ViewJobManager {
       if (!idle || !results.every(hasConfirmedOwnedGroupCleanup)) {
         job.state = 'cleanup-failed';
         job.error = { code: 'CleanupFailed', message: 'The job failed and process-group cleanup could not be confirmed' };
-        if (repo !== undefined) {
-          job.retainedRepository = repo;
-          repo = undefined;
-        }
       } else {
         const error = failure(cause);
         job.error = { code: error.code, message: error.message };
         job.state = job.cancelRequested ? 'cancelled' : 'failed';
       }
     } finally {
-      if (job.state !== 'cleanup-failed') repo?.close();
+      repo?.close();
       job.finishedAt ??= now();
       if (job.state !== 'cleanup-failed' && this.active === job) this.active = undefined;
       this.trim();

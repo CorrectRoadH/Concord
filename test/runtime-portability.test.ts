@@ -1,41 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertSupportedLocalFilesystemSync, darwinFilesystemTypeSync, type DarwinFilesystemCommands } from '../dist/coordination.js';
 import { observeOwnedProcessGroup } from '../dist/owned-process.js';
 import { assertDarwinPublicationPaths, darwinPathCollisionKey, hasExactDarwinEntry } from '../dist/storage.js';
-
-function darwinCommands(filesystemType: string): { readonly commands: DarwinFilesystemCommands; readonly calls: string[] } {
-  const calls: string[] = [];
-  const commands: DarwinFilesystemCommands = {
-    run(command, args, input) {
-      calls.push(`${command} ${args.join(' ')}`);
-      if (command === 'diskutil') {
-        assert.equal(input, undefined);
-        return Buffer.from('plist bytes');
-      }
-      assert.equal(command, 'plutil');
-      assert.deepEqual(input, Buffer.from('plist bytes'));
-      return Buffer.from(`${filesystemType}\n`);
-    },
-  };
-  return { commands, calls };
-}
-
-// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('Darwin filesystem detection uses diskutil plist and strict plutil extraction', () => {
-  const apfs = darwinCommands('apfs');
-  assert.equal(darwinFilesystemTypeSync('/repository', apfs.commands), 'apfs');
-  assert.deepEqual(apfs.calls, [
-    'diskutil info -plist /repository',
-    'plutil -extract FilesystemType raw -o - -',
-  ]);
-  assert.doesNotThrow(() => assertSupportedLocalFilesystemSync('/repository', 'darwin', apfs.commands));
-
-  const hfs = darwinCommands('hfs');
-  assert.throws(() => assertSupportedLocalFilesystemSync('/repository', 'darwin', hfs.commands), /unsupported Darwin filesystem hfs/u);
-  const malformed = darwinCommands('apfs ');
-  assert.throws(() => darwinFilesystemTypeSync('/repository', malformed.commands), /invalid FilesystemType/u);
-});
 
 test('Darwin path guards preserve exact bytes and reject case or Unicode publication aliases', () => {
   assert.equal(hasExactDarwinEntry([Buffer.from('.git')], '.git'), true);
