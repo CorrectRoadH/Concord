@@ -327,7 +327,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'config.set': return setConfig(repo, action.config, action.expectedDigest, dryRun);
     case 'constitution.initialize': return initializeConstitution(repo, dryRun);
     case 'constitution.adopt': return adoptConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
-    case 'constitution.amend': return amendConstitution(repo, action.version, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
+    case 'constitution.amend': return amendConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
     case 'code.annotate': return codeSnippet(repo, action.scope, action.contracts);
     case 'code.locate': return locateCode(repo, action.path, action.line);
     case 'test.annotate': return annotationSnippet(repo, action.contract, action.regressions);

@@ -389,7 +389,10 @@ export class LocalRepository implements Repository {
       assertNoSymlink(path);
       const stat = lstatSync(path);
       entries.push(`${name}:${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}:${stat.mode & 0o777}`);
-      if (stat.isDirectory()) for (const child of readdirSync(path).sort()) visit(join(path, child), `${name}/${child}`);
+      if (stat.isDirectory()) for (const child of readdirSync(path).sort()) {
+        if (child === '.git' || child === 'node_modules') continue;
+        visit(join(path, child), `${name}/${child}`);
+      }
     };
     visit(target, prefix);
     return canonical(entries);

@@ -1,32 +1,34 @@
 ---
 format: concord.constitution/v1
 status: active
-version: 1.2.0
 ratifiedAt: 2026-09-14
-amendedAt: 2026-09-20
+amendedAt: 2026-09-22
 amendments:
-  - version: 1.0.0
-    date: 2026-09-14
+  - date: 2026-09-14
     reason: 汇总已采用的工程约束，并落实本轮 dogfood 要求
     sources:
       - AGENTS.md
       - docs/architecture.md
       - docs/feature/project-onboarding/README.md
     impact: 适用于 Concord 后续 Feature、Design、实现与验收；不声明历史功能已自动符合全部规则
-  - version: 1.1.0
-    date: 2026-09-14
+  - date: 2026-09-14
     reason: 落实用户无 legacy 运行时约束
     sources:
       - docs/design/ts-only-runtime/README.md
       - docs/feature/project-onboarding/README.md
     impact: 旧格式须离线迁移；保留现场，旧证据重新取证
-  - version: 1.2.0
-    date: 2026-09-20
+  - date: 2026-09-20
     reason: 将项目实践提升为中立治理标准，明确消费者执行职责和不可降级的证据要求
     sources:
       - docs/feature/neutral-project-governance/README.md
       - docs/design/neutral-project-governance/README.md
     impact: 适用于 Concord 新接入设计及当前 repository 治理中立化；消费者适配中立协议，历史证明不自动升级，源码语言和包管理器仍由项目选择
+  - date: 2026-09-22
+    reason: 移除宪法语义版本并保留修订历史
+    sources:
+      - docs/feature/project-onboarding/use-case/evolve-constitution.md
+      - docs/design/onboarding-contracts/plans/compatible/governance.md
+    impact: 现有项目的宪法修订无需版本号；旧文件只读兼容，首次授权修订投影为无版本历史
 ---
 
 # Concord 项目宪法
@@ -85,14 +87,14 @@ Concord 必须可作为独立安装包在隔离 Git 消费者中使用，不依�
 <a id="c-008"></a>
 ## 宪法随功能经验明确修订
 
-功能规划、实施和审阅读取当前宪法。新发现的跨功能约束可以提出条款修订，必须说明适用范围、理由、来源和影响；功能专属细节保留在对应契约。按项目授权采用具体修订，保留版本与历史，不能默默追加相反规则或声称旧功能自动满足新规则。
+功能规划、实施和审阅读取当前宪法。新发现的跨功能约束可以提出条款修订，必须说明适用范围、理由、来源和影响；功能专属细节保留在对应契约。按项目授权采用具体修订，保留日期、理由、来源、影响与追加历史，不能默默追加相反规则或声称旧功能自动满足新规则。条款身份由路径和 anchor 拥有，修订不要求版本号。
 
 来源：docs/feature/project-onboarding/README.md。
 
 <a id="c-009"></a>
 ## 旧格式通过显式离线迁移升级
 
-普通运行时仅接受当前格式，不保留旧配置、owner 或 journal 的兼容授权。检测旧项目或历史事务时返回具名迁移诊断，保留锁和事务现场，由显式离线迁移或恢复处理。缺少当前配置绑定的旧证据必须重新取证，不补字段或重算摘要伪装为当前证明。本条约束运行时格式边界，不改变现有领域数据的含义。
+普通运行时仅接受当前格式，不保留旧配置、owner 或 journal 的兼容授权。检测旧项目或历史事务时返回具名迁移诊断，保留锁和事务现场，由显式离线迁移或恢复处理。缺少当前配置绑定的旧证据必须重新取证，不补字段或重算摘要伪装为当前证明。本条约束运行时格式边界，不改变现有领域数据的含义。宪法旧版本字段仅作为受限读取兼容输入；读取不改写历史，授权修订后移除版本字段。旧程序无法读取新宪法文件，回退程序前须恢复对应历史文件。
 
 来源：用户无 legacy 要求、docs/design/ts-only-runtime/README.md。
 

@@ -8,6 +8,8 @@ docs/constitution.md 是 Markdown 文件，使用严格 YAML frontmatter：forma
 
 默认初始化为 draft、0.1.0、ratifiedAt:null、amendments:[]，正文明确尚未采用项目原则。提供正文不会自动 active；显式采用必须提供真实条款、理由与影响，首次采用设置 ratifiedAt，后续保持。修订由具名操作整文件 CAS，保持历史前缀并更新 amendedAt；普通正文编辑不能悄悄改状态或历史。结构合法不等于治理通过。
 
+后续裁决（2026-09-22）：宪法条款身份由路径和 anchor 拥有，整文件 digest 提供并发前像，因此不再要求语义版本号。此段保留原设计记录；现行契约见 Feature 的 evolve-constitution Use Case。旧版本字段只作为读取兼容输入；授权修订会投影为无版本历史，保留每条记录的日期、顺序、理由、来源和影响。旧程序无法读取新格式，回退程序前须恢复相应宪法文件。
+
 条款声明是独占一行的 `<a id="c-001"></a>`，ID 是小写安全 slug，文档内唯一。解析忽略围栏代码、行内代码和 HTML 注释中的示例。constitutionRefs 仅接受 docs/constitution.md#<id>，只在 Feature/Design 声明；创建和作者字段编辑必须可用，反向关系派生。宪法不是测试 contract/code implements 的目标。
 
 ## 初始化与恢复条件

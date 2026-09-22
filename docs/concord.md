@@ -52,7 +52,7 @@ Page add adds optional or custom topic pages. Maintain README links after adding
 
 ## Project constitution
 
-Read [the current constitution](constitution.md) before planning, implementing, or reviewing a feature. Feature and Design owners cite applicable clause anchors through constitutionRefs. Use `concord constitution show` to inspect the current body, version, digest, and affected owners; explicit adopt/amend operations record the reason, sources, and impact. Draft templates do not assert compliance.
+Read [the current constitution](constitution.md) before planning, implementing, or reviewing a feature. Feature and Design owners cite applicable clause anchors through constitutionRefs. Use `concord constitution show` to inspect the current body, digest, and affected owners; explicit adopt/amend operations record the reason, sources, and impact. Draft templates do not assert compliance.
 
 ## First feature
 

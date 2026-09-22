@@ -7,10 +7,15 @@ import { renderTypeScriptConfig } from './config.js';
 
 const DateText = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u));
 const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u));
-const Amendment = Schema.Struct({ version: Version, date: DateText, reason: Text, sources: Schema.Array(Text), impact: Text });
+const Amendment = Schema.Struct({ date: DateText, reason: Text, sources: Schema.Array(Text), impact: Text });
 export const ConstitutionSchema = Schema.Struct({
-  format: Schema.Literal('concord.constitution/v1'), status: Schema.Literals(['draft', 'active']), version: Version,
+  format: Schema.Literal('concord.constitution/v1'), status: Schema.Literals(['draft', 'active']),
   ratifiedAt: Schema.NullOr(DateText), amendedAt: DateText, amendments: Schema.Array(Amendment),
+});
+const LegacyConstitutionSchema = Schema.Struct({
+  format: Schema.Literal('concord.constitution/v1'), status: Schema.Literals(['draft', 'active']), version: Version,
+  ratifiedAt: Schema.NullOr(DateText), amendedAt: DateText,
+  amendments: Schema.Array(Schema.Struct({ version: Version, date: DateText, reason: Text, sources: Schema.Array(Text), impact: Text })),
 });
 export type ConstitutionMeta = typeof ConstitutionSchema.Type;
 export interface ConstitutionRecord { readonly path: 'docs/constitution.md'; readonly source: string; readonly metadata: ConstitutionMeta; readonly body: string; readonly digest: string; readonly anchors: readonly string[] }
@@ -70,7 +75,13 @@ export function parseConstitution(source: string): ConstitutionRecord {
   if (yaml.errors.length > 0) throw new ConcordError('InvalidConstitution', yaml.errors.map((error) => error.message).join('; '));
   const value: unknown = yaml.toJS({ maxAliasCount: 0 });
   if (!Predicate.isObject(value)) throw new ConcordError('InvalidConstitution', 'Constitution frontmatter must be an object');
-  const metadata = decode(ConstitutionSchema, value, 'docs/constitution.md');
+  const metadata = 'version' in value ? (() => {
+    const legacy = decode(LegacyConstitutionSchema, value, 'docs/constitution.md');
+    return decode(ConstitutionSchema, {
+      format: legacy.format, status: legacy.status, ratifiedAt: legacy.ratifiedAt, amendedAt: legacy.amendedAt,
+      amendments: legacy.amendments.map(({ date, reason, sources, impact }) => ({ date, reason, sources, impact })),
+    }, 'docs/constitution.md');
+  })() : decode(ConstitutionSchema, value, 'docs/constitution.md');
   if ((metadata.status === 'draft') !== (metadata.ratifiedAt === null)) throw new ConcordError('InvalidConstitution', 'draft requires ratifiedAt:null and active requires a ratified date');
   const body = match[2]!.replace(/^\r?\n/u, '');
   const anchors = constitutionAnchors(body);
@@ -100,9 +111,9 @@ export function initialConstitutionSource(options: InitialConstitutionOptions): 
   const active = options.active === true;
   if (active && (!options.reason || !options.impact)) throw new ConcordError('InvalidConstitution', 'Adopting the constitution requires a non-empty reason and impact');
   if (active && constitutionAnchors(options.body).length === 0) throw new ConcordError('InvalidConstitution', 'Adopting the constitution requires a body with at least one real clause anchor');
-  const amendments = active ? [{ version: '1.0.0', date, reason: required(options.reason!, 'reason'), sources: (options.sources ?? []).map((source) => required(source, 'source')), impact: required(options.impact!, 'impact') }] : [];
+  const amendments = active ? [{ date, reason: required(options.reason!, 'reason'), sources: (options.sources ?? []).map((source) => required(source, 'source')), impact: required(options.impact!, 'impact') }] : [];
   const metadata = decode(ConstitutionSchema, {
-    format: 'concord.constitution/v1', status: active ? 'active' : 'draft', version: active ? '1.0.0' : '0.1.0',
+    format: 'concord.constitution/v1', status: active ? 'active' : 'draft',
     ratifiedAt: active ? date : null, amendedAt: date, amendments,
   }, 'constitution initialization');
   const source = render(metadata, options.body);
@@ -137,23 +148,19 @@ export function adoptConstitution(repo: Repository, body: string, reason: string
   if (current.metadata.status !== 'draft') throw new ConcordError('ConstitutionAlreadyActive', 'Use constitution amend for an active constitution');
   if (constitutionAnchors(body).length === 0) throw new ConcordError('InvalidConstitution', 'Adoption requires at least one real clause anchor');
   const date = new Date().toISOString().slice(0, 10);
-  const entry = { version: '1.0.0', date, reason: required(reason, 'reason'), sources: sources.map((source) => required(source, 'source')), impact: required(impact, 'impact') };
-  const metadata = decode(ConstitutionSchema, { ...current.metadata, status: 'active', version: entry.version, ratifiedAt: date, amendedAt: date, amendments: [...current.metadata.amendments, entry] }, 'constitution adoption');
+  const entry = { date, reason: required(reason, 'reason'), sources: sources.map((source) => required(source, 'source')), impact: required(impact, 'impact') };
+  const metadata = decode(ConstitutionSchema, { ...current.metadata, status: 'active', ratifiedAt: date, amendedAt: date, amendments: [...current.metadata.amendments, entry] }, 'constitution adoption');
   return repo.publish('constitution-adopt', [{ path: current.path, before: current.source, after: render(metadata, body) }], dryRun);
 }
 
-function versionTuple(value: string): readonly number[] { decode(Version, value, 'version'); return value.split('.').map(Number); }
-export function amendConstitution(repo: Repository, version: string, body: string, reason: string, impact: string, sources: readonly string[], expectedDigest: string, dryRun = false): MutationReceipt {
+export function amendConstitution(repo: Repository, body: string, reason: string, impact: string, sources: readonly string[], expectedDigest: string, dryRun = false): MutationReceipt {
   const current = showConstitution(repo);
   if (current.digest !== expectedDigest) throw new ConcordError('PreimageChanged', 'docs/constitution.md changed; reload it and retry');
   if (current.metadata.status !== 'active') throw new ConcordError('ConstitutionNotActive', 'Adopt the draft constitution before amending it');
-  const before = versionTuple(current.metadata.version), after = versionTuple(version);
-  const greater = after[0]! > before[0]! || after[0] === before[0] && (after[1]! > before[1]! || after[1] === before[1] && after[2]! > before[2]!);
-  if (!greater) throw new ConcordError('InvalidVersion', 'Amendment version must be a greater semantic version');
   if (constitutionAnchors(body).length === 0) throw new ConcordError('InvalidConstitution', 'An active constitution requires at least one clause anchor');
   const date = new Date().toISOString().slice(0, 10);
-  const entry = { version, date, reason: required(reason, 'reason'), sources: sources.map((source) => required(source, 'source')), impact: required(impact, 'impact') };
-  const metadata = decode(ConstitutionSchema, { ...current.metadata, version, amendedAt: date, amendments: [...current.metadata.amendments, entry] }, 'constitution amendment');
+  const entry = { date, reason: required(reason, 'reason'), sources: sources.map((source) => required(source, 'source')), impact: required(impact, 'impact') };
+  const metadata = decode(ConstitutionSchema, { ...current.metadata, amendedAt: date, amendments: [...current.metadata.amendments, entry] }, 'constitution amendment');
   return repo.publish('constitution-amend', [{ path: current.path, before: current.source, after: render(metadata, body) }], dryRun);
 }
 

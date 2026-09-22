@@ -168,7 +168,7 @@ export function renderReview(repo: Repository, selector: string | undefined, cac
   if (repo.config.constitution === undefined) lines.push('- Not configured. Existing projects must opt in with `concord constitution initialize`.');
   else {
     const constitution = showConstitution(repo);
-    lines.push(`- ${constitution.metadata.status}, version ${constitution.metadata.version}, digest ${constitution.digest}. Structural validity is not semantic compliance.`, '', constitution.body.trimEnd());
+    lines.push(`- ${constitution.metadata.status}, digest ${constitution.digest}. Structural validity is not semantic compliance.`, '', constitution.body.trimEnd());
     for (const document of docs) if (document.metadata.kind === 'feature' || document.metadata.kind === 'design') {
       for (const reference of document.metadata.constitutionRefs ?? []) lines.push(`- Applicable to [${document.metadata.title}](${document.path}): [${reference}](${reference})`);
     }

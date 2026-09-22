@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -23,6 +23,8 @@ test('trace gaps distinguishes aggregate contract relations from direct document
     mkdirSync(join(root, 'src')); mkdirSync(join(root, 'test'));
     writeFileSync(join(root, 'src/orders.ts'), '// @concord-file\n// @concord-implements docs/feature/orders/README.md\nexport const orders = true;\n');
     writeFileSync(join(root, 'test/orders.test.ts'), "import test from 'node:test';\n// @feature docs/feature/orders/README.md\ntest('orders', () => {});\n");
+    mkdirSync(join(root, 'src/node_modules'));
+    symlinkSync(root, join(root, 'src/node_modules/dependency'), 'dir');
 
     const result = traceGaps(repo, 'off');
     assert.deepEqual(result.contracts, [{

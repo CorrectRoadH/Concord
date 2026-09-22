@@ -22,6 +22,8 @@
 
 条款用显式稳定 HTML anchor；Feature/Design 的可选 constitutionRefs 声明适用规则，反向影响派生。宪法不成为测试契约或代码实现目标。修订 CAS 更新版本、日期、正文、来源和影响；review 读取当前正文与摘要，不推断语义合规。
 
+后续裁决（2026-09-22）：宪法修订不再使用语义版本；CAS 仍核对整文件摘要，追加日期、理由、来源和影响。原设计中的版本要求仅记录当时裁决，现行契约见 Feature 的 evolve-constitution Use Case。
+
 页面省略采用项目默认值，显式空数组表示仅 README，CLI 与结构化入口保持一致。DESIGN.md 独立可选。交互完成前只读取和规划，确认后重新核验前像再发布。
 
 ## Status

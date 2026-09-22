@@ -120,7 +120,7 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('config.set'), config: ProjectInputSchema, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('constitution.initialize'), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('constitution.adopt'), body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('constitution.amend'), version: Text, body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('constitution.amend'), body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('code.annotate'), scope: Schema.Literals(['file', 'node', 'region']), contracts: Strings }),
   Schema.Struct({ action: Schema.Literal('code.locate'), path: Text, line: Schema.Int }),
   Schema.Struct({ action: Schema.Literal('test.annotate'), contract: Text, regressions: Strings }),
