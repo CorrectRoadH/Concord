@@ -1,4 +1,5 @@
 import { FileText, Folder } from 'lucide-react';
+import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs';
 import { researchTopicDirectory, researchTopics } from '../lib/research-topics';
 import { Link, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../workspace';
@@ -22,7 +23,8 @@ export function CloseMobileOnNavigate({ children, href, onClick, ...props }: Omi
 
 export function DocumentNavigation() {
   const { snapshot } = useWorkspace();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
+  if (pathname === '/docs') return <ProjectDocNavigation search={search} />;
   const section = sections.find(item => pathname === item.href || pathname.startsWith(`${item.href}/`));
   if (!section) return null;
   const documents = snapshot.documents.filter(document => document.metadata.kind === section.kind);
@@ -40,4 +42,29 @@ export function DocumentNavigation() {
   }];
   return <ContentSidebar key={section.kind} actions={<CreateDocument kind={section.kind} />} model={{ label: section.label, title: section.label,
     filter: { label: `筛选 ${section.label}`, placeholder: '按标题或 ID 筛选…' }, groups }} />;
+}
+
+function ProjectDocNavigation({ search }: { readonly search: string }) {
+  const { snapshot } = useWorkspace();
+  const selected = new URLSearchParams(search).get('file');
+  const pages = projectDocPages(snapshot);
+  const root = pages.filter(page => !page.path.startsWith('docs/_template/'));
+  const templates = pages.filter(page => page.path.startsWith('docs/_template/'));
+  const item = (page: typeof pages[number]) => ({
+    id: page.path,
+    href: projectDocHref(page.path),
+    title: projectDocTitle(page),
+    active: selected === page.path,
+    icon: <FileText size={16} />,
+  });
+  const groups: ContentSidebarGroup[] = [
+    { id: 'project', label: '项目文档', heading: '项目文档', items: root.map(item), emptyMessage: '暂无项目文档' },
+    ...(templates.length === 0 ? [] : [{ id: 'templates', label: '参考模板', heading: '参考模板', items: templates.map(item) }]),
+  ];
+  return <ContentSidebar key="docs" model={{
+    label: '文档',
+    title: '文档',
+    filter: { label: '筛选文档', placeholder: '按标题或路径筛选…' },
+    groups,
+  }} />;
 }

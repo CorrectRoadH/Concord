@@ -19,7 +19,7 @@ feature: docs/feature/local-sdlc/README.md
 2. code annotate --scope file|node|region --contract <canonical-ref> 生成无 ID 注释，多目标重复 --contract；维护者把片段放到实际源码。file/code/begin/end 标记均无参数，implements 保留显式引用。
 3. code list 返回当前声明；code locate <path> --line <n> 返回该行所有包含作用域。生成片段无需身份，使用者按符号与源码位置查看实现。
 4. trace show <feature-or-use-case-or-engineering> 汇总代码 implements 边；review render 分别列出代码和测试。Web 以符号、文件位置和关联契约展示，不再要求输入或显示声明 ID。
-5. 修改、移动、删除源码后查询重新扫描，不维护第二份关系 JSON。
+5. 修改、移动、删除源码后按当前字节重新核对。未改文件的声明解析可以来自可丢弃投影；查询不维护第二份关系 JSON，关系仍从当前 Markdown 派生。
 
 ## 验收
 

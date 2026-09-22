@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { createDocument } from '../dist/documents.js';
-import { inspectDocuments, listSources, readSource, setConfig, setMarkdown, setMetadata, setSource } from '../dist/editing.js';
+import { inspectDocumentFile, inspectDocuments, listSources, readSource, setConfig, setMarkdown, setMetadata, setSource } from '../dist/editing.js';
 import { digest } from '../dist/shared.js';
 import { LocalRepository, initialize } from '../dist/storage.js';
 import { projectConfigPath, readProjectConfig, writeProjectConfig } from './support.js';
@@ -69,6 +69,40 @@ test('editing exposes configured source and known Markdown only, preserving mana
   assert.equal(malformed?.readOnly, true);
   assert.match(malformed?.body ?? '', /format: concord\.document/u);
   throwsCode('ReadOnlyDocument', () => setMarkdown(repo, malformed!.path, '# Repair\n', malformed!.digest));
+}))));
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('project documents under docs are readable without becoming category owners', () => Effect.runPromise(Effect.sync(() => withRepository((root, repo) => {
+  const inventory = inspectDocuments(repo);
+  const architecture = inventory.pages.find(page => page.path === 'docs/architecture.md');
+  const constitution = inventory.pages.find(page => page.path === 'docs/constitution.md');
+  const template = inventory.pages.find(page => page.path === 'docs/_template/feature-design/library.md');
+  assert.equal(architecture?.readOnly, false);
+  assert.equal(architecture?.documentPath, undefined);
+  assert.equal(constitution?.readOnly, true);
+  assert.match(constitution?.reason ?? '', /not compliance evidence/);
+  assert.equal(template?.readOnly, false);
+  assert.equal(inventory.documents.some(document => document.path === 'docs/architecture.md' || document.path === 'docs/constitution.md'), false);
+
+  let walks = 0;
+  const files = repo.files.bind(repo);
+  repo.files = path => { walks += 1; return files(path); };
+  assert.deepEqual(inspectDocumentFile(repo, 'docs/architecture.md'), architecture);
+  assert.deepEqual(inspectDocumentFile(repo, 'docs/constitution.md'), constitution);
+  assert.equal(walks, 0, 'opening one project document must not enumerate the repository');
+
+  const saved = setMarkdown(repo, architecture!.path, '# Project architecture\n\nSaved from the workbench.\n', architecture!.digest);
+  assert.deepEqual(saved.changedPaths, ['docs/architecture.md']);
+  assert.match(readFileSync(join(root, 'docs/architecture.md'), 'utf8'), /Saved from the workbench/);
+  throwsCode('ReadOnlyDocument', () => setMarkdown(repo, constitution!.path, '# Rewritten constitution\n', constitution!.digest));
+  assert.match(readFileSync(join(root, 'docs/constitution.md'), 'utf8'), /concord\.constitution\/v1/);
+
+  mkdirSync(join(root, 'docs/notes'), { recursive: true });
+  writeFileSync(join(root, 'docs/notes/extra.md'), '# Extra\n');
+  const extra = inspectDocuments(repo).pages.find(page => page.path === 'docs/notes/extra.md');
+  assert.equal(extra?.readOnly, true);
+  throwsCode('ReadOnlyDocument', () => setMarkdown(repo, extra!.path, '# Changed\n', extra!.digest));
+  assert.equal(readFileSync(join(root, 'docs/notes/extra.md'), 'utf8'), '# Extra\n');
 }))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

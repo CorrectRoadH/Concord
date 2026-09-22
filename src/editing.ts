@@ -15,23 +15,43 @@ export interface ViewFile {
 }
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
-const ROOT_MARKDOWN_PAGES = ['docs/concepts.md'] as const;
+const CONSTITUTION_PATH = 'docs/constitution.md';
+const WRITABLE_PROJECT_PAGES = new Set(['docs/README.md', 'docs/concord.md', 'docs/concepts.md', 'docs/architecture.md']);
 const sourceForbidden = (path: string): boolean => path.split('/').some(part => part === '.git' || part === 'node_modules');
 const claimsConcordOwner = (source: string): boolean => /(?:^|\n)\s*format\s*:[^\n]*concord\.document\//u.test(source.slice(0, 64 * 1024));
+const hasFrontmatter = (source: string): boolean => /^(?:\uFEFF)?---(?:\r?\n|$)/u.test(source);
+const underRoot = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 
-function markdownPaths(repo: Repository): readonly string[] {
-  return [...new Set([
-    ...documentRoots(repo).flatMap(root => repo.files(root).filter(path => path.endsWith('.md'))),
-    ...ROOT_MARKDOWN_PAGES.filter(path => repo.read(path) !== undefined),
-  ])].sort();
+function isLooseProjectDoc(path: string, roots: readonly string[]): boolean {
+  return path.startsWith('docs/') && path.endsWith('.md') && !sourceForbidden(path) && !roots.some(root => underRoot(path, root));
 }
 
-function inspectMarkdown(repo: Repository, path: string): { document?: DocumentRecord; page?: ViewFile; finding?: Finding } {
+function writableProjectPage(path: string): boolean {
+  return WRITABLE_PROJECT_PAGES.has(path) || /^docs\/_template\/.+\.md$/u.test(path);
+}
+
+function projectPage(path: string, source: string): ViewFile {
+  const base = { path, body: source, digest: digest(source) };
+  if (path === CONSTITUTION_PATH) return { ...base, readOnly: true, reason: 'The constitution is maintained through constitution adopt and amend. This view is read-only and is not compliance evidence.' };
+  if (!writableProjectPage(path)) return { ...base, readOnly: true, reason: 'This project document is outside the writable owner set and is shown read-only.' };
+  if (hasFrontmatter(source)) return { ...base, readOnly: true, reason: 'Project documents that begin with frontmatter cannot be rewritten through the supporting-page editor.' };
+  return { ...base, readOnly: false };
+}
+
+function markdownPaths(repo: Repository, roots: readonly string[]): readonly string[] {
+  const markdown = (prefix: string) => repo.files(prefix).filter(path => path.endsWith('.md') && !sourceForbidden(path));
+  const outsideDocs = roots.filter(root => root !== 'docs' && !root.startsWith('docs/')).flatMap(markdown);
+  return [...new Set([...markdown('docs'), ...outsideDocs])].sort();
+}
+
+function inspectMarkdown(repo: Repository, path: string, roots: readonly string[]): { document?: DocumentRecord; page?: ViewFile; finding?: Finding } {
   const source = repo.read(path);
   if (source === undefined) return {};
   try {
     const document = parseDocumentRecord(path, source);
-    return document ? { document } : { page: { path, body: source, digest: digest(source), readOnly: false } };
+    if (document) return { document };
+    if (path === CONSTITUTION_PATH || isLooseProjectDoc(path, roots)) return { page: projectPage(path, source) };
+    return { page: { path, body: source, digest: digest(source), readOnly: false } };
   } catch (cause) {
     if (!claimsConcordOwner(source)) return { page: { path, body: source, digest: digest(source), readOnly: false } };
     return {
@@ -44,17 +64,20 @@ function inspectMarkdown(repo: Repository, path: string): { document?: DocumentR
 /** Read only the requested Markdown and its owner chain, using the same classification as the full inventory. */
 export function inspectDocumentFile(repo: Repository, path: string): ViewFile | undefined {
   return inRepositorySnapshot(repo, () => {
-  const inDocumentInventory = documentRoots(repo).some(root => path === root || path.startsWith(`${root}/`));
-  if (!path.endsWith('.md') || sourceForbidden(path) || (!inDocumentInventory && !ROOT_MARKDOWN_PAGES.includes(path as typeof ROOT_MARKDOWN_PAGES[number]))) return undefined;
-  const target = inspectMarkdown(repo, path);
+  const roots = documentRoots(repo);
+  const loose = path === CONSTITUTION_PATH || isLooseProjectDoc(path, roots);
+  const inDocumentInventory = roots.some(root => underRoot(path, root));
+  if (!path.endsWith('.md') || sourceForbidden(path) || (!inDocumentInventory && !loose)) return undefined;
+  const target = inspectMarkdown(repo, path, roots);
   if (target.document) return { path, body: target.document.body, digest: target.document.digest, readOnly: false, documentPath: path };
   if (!target.page) return undefined;
+  if (loose) return target.page;
   let owner: string | undefined;
   const segments = path.split('/');
   for (let depth = 1; depth < segments.length; depth += 1) {
     const ancestorPath = `${segments.slice(0, depth).join('/')}/README.md`;
-    if (!documentRoots(repo).some(root => ancestorPath === root || ancestorPath.startsWith(`${root}/`))) continue;
-    const ancestor = ancestorPath === path ? target : inspectMarkdown(repo, ancestorPath);
+    if (!roots.some(root => underRoot(ancestorPath, root))) continue;
+    const ancestor = ancestorPath === path ? target : inspectMarkdown(repo, ancestorPath, roots);
     if (ancestor.page?.readOnly) return { ...target.page, readOnly: true, reason: `Repair malformed owner ${ancestorPath} before editing this directory.` };
     if (ancestor.document) owner = ancestorPath;
   }
@@ -63,11 +86,12 @@ export function inspectDocumentFile(repo: Repository, path: string): ViewFile | 
 }
 
 function inspected(repo: Repository): { readonly documents: readonly DocumentRecord[]; readonly findings: readonly Finding[]; readonly pages: readonly ViewFile[] } {
+  const roots = documentRoots(repo);
   const documents: DocumentRecord[] = [];
   const findings: Finding[] = [];
   const pages: ViewFile[] = [];
-  for (const path of markdownPaths(repo)) {
-    const value = inspectMarkdown(repo, path);
+  for (const path of markdownPaths(repo, roots)) {
+    const value = inspectMarkdown(repo, path, roots);
     if (value.document) documents.push(value.document);
     if (value.page) pages.push(value.page);
     if (value.finding) findings.push(value.finding);
@@ -75,6 +99,7 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
   const packageOwners = documents.filter(document => document.path.endsWith('/README.md'))
     .sort((left, right) => right.path.length - left.path.length);
   const ownedPages = pages.map(page => {
+    if (page.path === CONSTITUTION_PATH || isLooseProjectDoc(page.path, roots)) return page;
     const malformedBoundary = pages.find(candidate => candidate.readOnly && candidate.path.endsWith('/README.md') && page.path.startsWith(candidate.path.slice(0, -'README.md'.length)));
     if (malformedBoundary) return { ...page, readOnly: true, reason: `Repair malformed owner ${malformedBoundary.path} before editing this directory.` };
     const owner = packageOwners.find(document => page.path.startsWith(document.path.slice(0, -'README.md'.length)));

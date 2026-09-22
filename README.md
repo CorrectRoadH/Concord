@@ -267,7 +267,7 @@ concord --skill recovery
 
 Trace 从当前 contract source 推导反向关系，分别展示代码声明、测试和 Memory；`check`、`doctor`、`trace` 和 `review` 不执行 runner。代码标注错误会阻断代码与全图命令，但测试执行及 Problem 关闭保留原有文档、测试与证据校验。
 
-代码关系每次回源扫描；SQLite 只缓存可重建的测试投影，损坏或失效时回源。实际路径用 `cache status` 查询，普通 checkout 通常为 `.git/concord/cache.sqlite`，不是项目根下的 `.concord`。收据与 journal 位于独立 Git-private 文件中，不能作为缓存删除。克隆后历史裁决保留，缺失的私有证据显示不可用。
+代码声明解析可按文件重建缓存；关系边每次用当前 Markdown 重算。SQLite 只缓存可重建投影，损坏或失效时回源。实际路径用 `cache status` 查询，普通 checkout 通常为 `.git/concord/cache.sqlite`，不是项目根下的 `.concord`。收据与 journal 位于独立 Git-private 文件中，不能作为缓存删除。克隆后历史裁决保留，缺失的私有证据显示不可用。
 
 写入使用锁、preimage 与 journal；中断后根据提示运行 `recover`。外部编辑冲突不会被覆盖，清缓存不能修复错误注释或替代事务恢复。
 

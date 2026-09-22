@@ -208,7 +208,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       diagnostics = doctor(repo, trace);
     } catch (cause) {
       cases = scanAnnotations(repo, { cache });
-      const code = scanCode(repo);
+      const code = scanCode(repo, { cache });
       codes = code.codes;
       codeFiles = code.files;
       findings = [...inspected.findings, ...cases.findings, ...code.findings];
@@ -334,10 +334,14 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'evidence.show': return readEvidence(repo, action.id);
     case 'cache.status': return cacheStatus(repo);
     case 'cache.clear': return dryRun ? { operation: 'cache-clear', dryRun: true } : clearCache(repo);
-    case 'cache.rebuild': return scanAnnotations(repo, { cache: 'rebuild' });
+    case 'cache.rebuild': {
+      const annotations = scanAnnotations(repo, { cache: 'rebuild' });
+      const code = scanCode(repo, { cache: 'rebuild' });
+      return { ...annotations, codeCache: code.cache };
+    }
     case 'check': {
       const trace = buildTrace(repo);
-      return { operation: 'check', ok: trace.findings.length === 0, findings: trace.findings, advisories: trace.advisories, documents: trace.documents.length, cases: trace.annotations.cases.length, codeDeclarations: trace.codeDeclarations.length, memoryEvidence: trace.memories, cache: trace.annotations.cache };
+      return { operation: 'check', ok: trace.findings.length === 0, findings: trace.findings, advisories: trace.advisories, documents: trace.documents.length, cases: trace.annotations.cases.length, codeDeclarations: trace.codeDeclarations.length, memoryEvidence: trace.memories, cache: trace.annotations.cache, codeCache: trace.codeCache };
     }
     case 'trace.check': {
       const trace = buildTrace(repo);

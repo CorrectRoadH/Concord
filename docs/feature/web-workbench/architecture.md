@@ -4,6 +4,8 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node �
 
 `docs/concepts.md` 是初始化建立且由存储层授权的固定 Markdown owner；Web 文件 inventory 通过与契约支持页面相同的摘要保护入口读取和编辑它。术语页只从其中作者明确填写的契约链接派生当前词条，不建立术语注册表。
 
+`docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering、Issue 或 Memory 来源的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 只读，修订仍走 constitution adopt 与 amend；阅读不是合规证据。`docs/README.md`、`docs/architecture.md`、`docs/concepts.md`、`docs/concord.md` 和 `docs/_template/` 下无 frontmatter 的参考模板沿用支持页面的摘要保护写入。其余未授权路径只读。单文件读取仍不枚举全仓库。
+
 每次领域操作独立取得、释放 LocalRepository。长期打开网页不占锁。测试由服务拥有的单槽 job 管理，每个 job 使用独立 runner；浏览器断开不取消任务。取消须确认子进程组退出，才能释放锁和运行槽，失败时保留锁并提供诊断。
 
 读取工作区启用 SQLite 测试索引缓存，同一次请求复用 trace 生成诊断。文档与代码的纯解析结果使用有容量上限的进程内缓存，以当前原文匹配；目录集合、文件读取、路径安全、配置、租约及恢复检查仍每次执行，不以时间戳代替内容校验。单文件预览只读取目标和其 README 归属链，全局 inventory 异常由 workspace/check 诊断。Git 测试基线按不可变 HEAD revision 缓存，工作树状态仍实时读取。

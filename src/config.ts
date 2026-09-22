@@ -1,14 +1,18 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-import ts from 'typescript';
+import { noteConfigProjection, readCachedProjectConfig } from './config-cache.js';
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type ProjectConfig } from './shared.js';
+import type * as TypeScript from 'typescript';
+import { lazyTypeScript } from './typescript-host.js';
 
-function unwrap(expression: ts.Expression): ts.Expression {
+const ts = lazyTypeScript();
+
+function unwrap(expression: TypeScript.Expression): TypeScript.Expression {
   if (ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isParenthesizedExpression(expression)) return unwrap(expression.expression);
   return expression;
 }
 
-function literal(expression: ts.Expression, source: string): unknown {
+function literal(expression: TypeScript.Expression, source: string): unknown {
   const node = unwrap(expression);
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
   if (ts.isNumericLiteral(node)) return Number(node.text);
@@ -38,9 +42,9 @@ function literal(expression: ts.Expression, source: string): unknown {
 
 export function parseTypeScriptConfig(source: string, path = 'concord.config.ts'): ProjectConfig {
   const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const diagnostics = (file as ts.SourceFile & { readonly parseDiagnostics?: readonly ts.Diagnostic[] }).parseDiagnostics ?? [];
+  const diagnostics = (file as TypeScript.SourceFile & { readonly parseDiagnostics?: readonly TypeScript.Diagnostic[] }).parseDiagnostics ?? [];
   if (diagnostics.length > 0) throw new ConcordError('InvalidConfigSyntax', `${path}: ${diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; ')}`);
-  let exported: ts.ExportAssignment | undefined;
+  let exported: TypeScript.ExportAssignment | undefined;
   for (const statement of file.statements) {
     if (ts.isImportDeclaration(statement) && (statement.importClause?.isTypeOnly === true || statement.importClause?.name === undefined && statement.importClause?.namedBindings !== undefined && ts.isNamedImports(statement.importClause.namedBindings) && statement.importClause.namedBindings.elements.length > 0 && statement.importClause.namedBindings.elements.every((element) => element.isTypeOnly))) continue;
     if (ts.isExportAssignment(statement) && !statement.isExportEquals && exported === undefined) { exported = statement; continue; }
@@ -56,8 +60,14 @@ export function renderTypeScriptConfig(config: ProjectConfig): string {
   return `import type { ProjectConfig } from 'concord-sdlc/config';\n\nexport default ${JSON.stringify(valid, null, 2)} as const satisfies ProjectConfig;\n`;
 }
 
-export function snapshot(path: ConfigSnapshot['path'], source: string): ConfigSnapshot {
+export function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string): ConfigSnapshot {
   if (path !== 'concord.config.ts') throw new ConcordError('ProjectMigrationRequired', 'Runtime configuration must be concord.config.ts; migrate old configuration explicitly offline');
+  const sourceDigest = digest(source);
+  if (privateDir !== undefined) {
+    const cached = readCachedProjectConfig(privateDir, sourceDigest);
+    if (cached !== undefined) return { path, source, digest: sourceDigest, config: cached };
+  }
   const config = parseTypeScriptConfig(source, path);
-  return { path, source, digest: digest(source), config };
+  if (privateDir !== undefined) noteConfigProjection(privateDir, sourceDigest, config);
+  return { path, source, digest: sourceDigest, config };
 }

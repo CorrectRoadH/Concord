@@ -2,10 +2,16 @@
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
-import * as ts from 'typescript';
-import { decode, digest, objectDigest, Slug, Text, type Finding, type Repository } from './shared.js';
+import { cacheDatabasePath } from './cache-file.js';
+import { readCodePayloads, writeCodePayloads } from './code-cache.js';
+import { persistNotedConfig } from './config-cache.js';
+import { decode, canonical, digest, objectDigest, Slug, Text, type Finding, type Repository } from './shared.js';
 import { parseReference } from './refs.js';
 import { ContentCache } from './content-cache.js';
+import type * as TypeScript from 'typescript';
+import { lazyTypeScript, typescriptPackageVersion } from './typescript-host.js';
+
+const ts = lazyTypeScript();
 
 export const CodeDeclarationSchema = Schema.Struct({
   id: Slug,
@@ -26,11 +32,19 @@ export type CodeDeclaration = {
   readonly contracts: readonly string[];
 };
 
+export interface CodeCacheStatus {
+  readonly status: string;
+  readonly hits: number;
+  readonly misses: number;
+  readonly path: string;
+  readonly detail?: string;
+}
 export interface CodeSnapshot {
   readonly codes: readonly CodeDeclaration[];
   readonly findings: readonly Finding[];
   readonly files: readonly { readonly path: string; readonly digest: string }[];
   readonly digest: string;
+  readonly cache: CodeCacheStatus;
 }
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
@@ -43,6 +57,21 @@ const CodeSnapshotSchema = Schema.Struct({
   files: Schema.Array(Schema.Struct({ path: Text, digest: Text })),
   digest: Text,
 });
+const CodeParseSchema = Schema.Struct({
+  codes: Schema.Array(CodeDeclarationSchema),
+  findings: Schema.Array(FindingSchema),
+  digest: Text,
+});
+type CodeMode = 'use' | 'rebuild' | 'off';
+type ParsedFile = { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] };
+interface CompiledFiles {
+  readonly codes: readonly CodeDeclaration[];
+  readonly findings: readonly Finding[];
+  readonly hits: number;
+  readonly misses: number;
+  readonly rows: readonly { readonly key: string; readonly payload: string }[];
+  readonly readFailure?: string;
+}
 
 interface Source { readonly path: string; readonly text: string; readonly digest: string }
 interface LineComment {
@@ -59,10 +88,10 @@ interface StartMarker extends LineComment {
   readonly contracts: readonly string[];
   readonly blockEnd: number;
 }
-interface StatementContext { readonly node: ts.Node; readonly statements: readonly ts.Statement[]; readonly pos: number; readonly end: number }
+interface StatementContext { readonly node: TypeScript.Node; readonly statements: readonly TypeScript.Statement[]; readonly pos: number; readonly end: number }
 interface Gap { readonly context: StatementContext; readonly index: number }
 interface RegionPair { readonly begin: StartMarker; readonly end: LineComment }
-interface RegionCandidate { readonly pair: RegionPair; readonly context: StatementContext; readonly first: ts.Statement; readonly last: ts.Statement }
+interface RegionCandidate { readonly pair: RegionPair; readonly context: StatementContext; readonly first: TypeScript.Statement; readonly last: TypeScript.Statement }
 type LocatorPart = readonly [kind: string, staticName: string | null, siblingOrdinal: number];
 type Locator = readonly LocatorPart[];
 
@@ -72,7 +101,7 @@ function addFinding(findings: Finding[], code: string, path: string, message: st
   findings.push(line === undefined ? { code, path, message } : { code, path, message, line });
 }
 
-function lineAt(source: ts.SourceFile, position: number): number {
+function lineAt(source: TypeScript.SourceFile, position: number): number {
   return source.getLineAndCharacterOfPosition(Math.max(0, Math.min(position, source.text.length))).line + 1;
 }
 
@@ -84,13 +113,13 @@ function lineBounds(text: string, pos: number, end: number): { readonly ownLine:
 }
 
 /** Only comments reported by TypeScript's comment ranges can own a declaration. */
-function actualLineComments(source: ts.SourceFile): readonly LineComment[] {
-  const ranges = new Map<number, ts.CommentRange>();
+function actualLineComments(source: TypeScript.SourceFile): readonly LineComment[] {
+  const ranges = new Map<number, TypeScript.CommentRange>();
   const tokenSpans: { readonly start: number; readonly end: number }[] = [];
-  const collect = (items: readonly ts.CommentRange[] | undefined): void => {
+  const collect = (items: readonly TypeScript.CommentRange[] | undefined): void => {
     for (const range of items ?? []) if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia) ranges.set(range.pos, range);
   };
-  const visit = (node: ts.Node): void => {
+  const visit = (node: TypeScript.Node): void => {
     const children = node.getChildren(source);
     if (children.length > 0) {
       for (const child of children) visit(child);
@@ -153,12 +182,12 @@ function startMarkers(comments: readonly LineComment[], path: string, findings: 
   return { starts, consumedImplements: consumed };
 }
 
-function statementContexts(source: ts.SourceFile): readonly StatementContext[] {
+function statementContexts(source: TypeScript.SourceFile): readonly StatementContext[] {
   const contexts: StatementContext[] = [];
-  const add = (node: ts.Node, statements: ts.NodeArray<ts.Statement>, end: number): void => {
+  const add = (node: TypeScript.Node, statements: TypeScript.NodeArray<TypeScript.Statement>, end: number): void => {
     contexts.push({ node, statements: [...statements], pos: statements.pos, end });
   };
-  const visit = (node: ts.Node): void => {
+  const visit = (node: TypeScript.Node): void => {
     if (ts.isSourceFile(node)) add(node, node.statements, node.end);
     else if (ts.isBlock(node) || ts.isModuleBlock(node)) add(node, node.statements, Math.max(node.statements.pos, node.getEnd() - 1));
     else if (ts.isCaseClause(node) || ts.isDefaultClause(node)) {
@@ -172,7 +201,7 @@ function statementContexts(source: ts.SourceFile): readonly StatementContext[] {
   return contexts;
 }
 
-function gapFor(marker: LineComment, source: ts.SourceFile, contexts: readonly StatementContext[]): Gap | undefined {
+function gapFor(marker: LineComment, source: TypeScript.SourceFile, contexts: readonly StatementContext[]): Gap | undefined {
   const matches: Gap[] = [];
   for (const context of contexts) {
     for (let index = 0; index <= context.statements.length; index++) {
@@ -215,9 +244,9 @@ function regionPairs(starts: readonly StartMarker[], comments: readonly LineComm
   return pairs;
 }
 
-function boundaryNodes(source: ts.SourceFile): readonly ts.Node[] {
-  const nodes: ts.Node[] = [];
-  const visit = (node: ts.Node): void => {
+function boundaryNodes(source: TypeScript.SourceFile): readonly TypeScript.Node[] {
+  const nodes: TypeScript.Node[] = [];
+  const visit = (node: TypeScript.Node): void => {
     if (ts.isStatement(node) || ts.isClassElement(node) || ts.isObjectLiteralElementLike(node) || ts.isTypeElement(node)) nodes.push(node);
     ts.forEachChild(node, visit);
   };
@@ -225,7 +254,7 @@ function boundaryNodes(source: ts.SourceFile): readonly ts.Node[] {
   return nodes;
 }
 
-function attachedBoundary(marker: StartMarker, source: ts.SourceFile, nodes: readonly ts.Node[]): ts.Node | undefined {
+function attachedBoundary(marker: StartMarker, source: TypeScript.SourceFile, nodes: readonly TypeScript.Node[]): TypeScript.Node | undefined {
   const candidates = nodes.filter(node => {
     const start = node.getStart(source);
     return marker.pos >= node.getFullStart() && marker.blockEnd <= start;
@@ -233,7 +262,7 @@ function attachedBoundary(marker: StartMarker, source: ts.SourceFile, nodes: rea
   return candidates[0];
 }
 
-function staticName(node: ts.Node): string | null {
+function staticName(node: TypeScript.Node): string | null {
   const name = ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isMethodDeclaration(node)
     ? node.name
     : ts.isVariableDeclaration(node)
@@ -246,7 +275,7 @@ function staticName(node: ts.Node): string | null {
   return null;
 }
 
-function supportedNode(node: ts.Node): { readonly symbol?: string } | undefined {
+function supportedNode(node: TypeScript.Node): { readonly symbol?: string } | undefined {
   if (ts.isFunctionDeclaration(node)) return node.body === undefined ? undefined : (staticName(node) === null ? {} : { symbol: staticName(node)! });
   if (ts.isClassDeclaration(node)) return staticName(node) === null ? {} : { symbol: staticName(node)! };
   if (ts.isMethodDeclaration(node)) return node.body === undefined ? undefined : (staticName(node) === null ? {} : { symbol: staticName(node)! });
@@ -256,14 +285,14 @@ function supportedNode(node: ts.Node): { readonly symbol?: string } | undefined 
   return { symbol: declaration.name.text };
 }
 
-function directChildren(node: ts.Node): readonly ts.Node[] {
-  const children: ts.Node[] = [];
+function directChildren(node: TypeScript.Node): readonly TypeScript.Node[] {
+  const children: TypeScript.Node[] = [];
   // Do not return the recursive result from this callback: TypeScript treats a truthy return as early termination.
   ts.forEachChild(node, child => { children.push(child); });
   return children;
 }
 
-function locatorPart(node: ts.Node, siblings: readonly ts.Node[], index: number): LocatorPart {
+function locatorPart(node: TypeScript.Node, siblings: readonly TypeScript.Node[], index: number): LocatorPart {
   const kind = ts.SyntaxKind[node.kind] ?? String(node.kind);
   const name = staticName(node);
   const siblingOrdinal = siblings.slice(0, index).filter(candidate => {
@@ -273,8 +302,8 @@ function locatorPart(node: ts.Node, siblings: readonly ts.Node[], index: number)
   return [kind, name, siblingOrdinal];
 }
 
-function locatorFor(source: ts.SourceFile, target: ts.Node): Locator {
-  const find = (parent: ts.Node): Locator | undefined => {
+function locatorFor(source: TypeScript.SourceFile, target: TypeScript.Node): Locator {
+  const find = (parent: TypeScript.Node): Locator | undefined => {
     const children = directChildren(parent);
     for (let index = 0; index < children.length; index++) {
       const child = children[index]!;
@@ -295,7 +324,7 @@ function codeId(relativePath: string, scope: CodeDeclaration['scope'], locator: 
 
 function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] } {
   const source = ts.createSourceFile(input.path, input.text, ts.ScriptTarget.Latest, true);
-  const parseDiagnostics = (source as ts.SourceFile & { readonly parseDiagnostics: readonly ts.Diagnostic[] }).parseDiagnostics;
+  const parseDiagnostics = (source as TypeScript.SourceFile & { readonly parseDiagnostics: readonly TypeScript.Diagnostic[] }).parseDiagnostics;
   const findings: Finding[] = [];
   const comments = actualLineComments(source);
   for (const comment of comments) {
@@ -358,7 +387,7 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
   }
 
   const nodes = boundaryNodes(source);
-  const nodeGroups = new Map<ts.Node, StartMarker[]>();
+  const nodeGroups = new Map<TypeScript.Node, StartMarker[]>();
   const validCodeStarts = new Set(prepared.starts.filter(start => start.family === 'code' && start.valid).map(start => start.pos));
   for (const marker of prepared.starts.filter(start => start.family === 'code' && start.valid)) {
     const node = attachedBoundary(marker, source, nodes);
@@ -418,9 +447,25 @@ function sameSources(left: readonly Source[], right: readonly Source[]): boolean
 }
 
 const codeContentCache = new ContentCache<ReturnType<typeof parseSource>>();
-
-function compile(current: readonly Source[]): { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] } {
-  const parsed = current.map(source => codeContentCache.get(source.path, source.text, () => parseSource(source)));
+function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-code-parse/v1`; }
+function fileKey(repo: Repository, source: Source): string {
+  return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, parser: parserVersion(), path: source.path, sourceDigest: source.digest });
+}
+function parseProjected(source: Source): ParsedFile {
+  if (!source.text.includes('@concord-')) return { codes: [], findings: [] };
+  return codeContentCache.get(source.path, source.text, () => parseSource(source));
+}
+function encodeParse(parsed: ParsedFile): string {
+  return canonical({ codes: parsed.codes, findings: parsed.findings, digest: objectDigest({ codes: parsed.codes, findings: parsed.findings }) });
+}
+function decodeParse(payload: string): ParsedFile | undefined {
+  try {
+    const value = decode(CodeParseSchema, JSON.parse(payload), 'code cache');
+    if (value.digest !== objectDigest({ codes: value.codes, findings: value.findings })) return undefined;
+    return { codes: value.codes, findings: value.findings };
+  } catch { return undefined; }
+}
+function mergeParsed(parsed: readonly ParsedFile[]): { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] } {
   const codes = parsed.flatMap(item => item.codes).sort((left, right) => left.id.localeCompare(right.id) || left.file.localeCompare(right.file) || left.line - right.line);
   const findings = parsed.flatMap(item => item.findings);
   const ids = new Map<string, CodeDeclaration>();
@@ -431,8 +476,33 @@ function compile(current: readonly Source[]): { readonly codes: readonly CodeDec
   }
   return { codes, findings };
 }
+function compileCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean): CompiledFiles {
+  if (mode === 'off' || skipCache) return { ...mergeParsed(current.map(parseProjected)), hits: 0, misses: current.length, rows: [] };
+  let stored = new Map<string, string>();
+  let readFailure: string | undefined;
+  if (mode === 'use') {
+    try { stored = new Map(readCodePayloads(repo, current.map(source => fileKey(repo, source)))); }
+    catch (cause) { readFailure = cause instanceof Error ? cause.message : String(cause); }
+  }
+  const parsed: ParsedFile[] = [];
+  const rows: { key: string; payload: string }[] = [];
+  let hits = 0;
+  let misses = 0;
+  for (const source of current) {
+    const key = fileKey(repo, source);
+    if (mode === 'use' && readFailure === undefined && stored.has(key)) {
+      const decoded = decodeParse(stored.get(key)!);
+      if (decoded !== undefined) { hits += 1; parsed.push(decoded); continue; }
+    }
+    misses += 1;
+    const fresh = parseProjected(source);
+    parsed.push(fresh);
+    if (readFailure === undefined) rows.push({ key, payload: encodeParse(fresh) });
+  }
+  return { ...mergeParsed(parsed), hits, misses, rows, ...(readFailure === undefined ? {} : { readFailure }) };
+}
 
-function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] }, current: readonly Source[], changed: boolean): CodeSnapshot {
+function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] }, current: readonly Source[], changed: boolean): Omit<CodeSnapshot, 'cache'> {
   const findings = [...compiled.findings];
   if (changed) addFinding(findings, 'CodeSourceChanged', '.', 'Code source paths or contents changed while they were scanned');
   findings.sort((left, right) => left.path.localeCompare(right.path) || (left.line ?? 0) - (right.line ?? 0) || left.code.localeCompare(right.code));
@@ -440,28 +510,45 @@ function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly
   const value = { codes: compiled.codes, findings, files, digest: objectDigest({ codes: compiled.codes, findings, files }) };
   return decode(CodeSnapshotSchema, value, 'code scan');
 }
+function withCache(body: Omit<CodeSnapshot, 'cache'>, cache: CodeCacheStatus): CodeSnapshot { return { ...body, cache }; }
+function finish(repo: Repository, compiled: CompiledFiles, current: readonly Source[], changed: boolean, mode: CodeMode, cachePath: string): CodeSnapshot {
+  const body = result(compiled, current, changed);
+  if (changed) return withCache(body, { status: 'source-changed', hits: 0, misses: compiled.misses, path: cachePath });
+  if (mode === 'off') return withCache(body, { status: 'off', hits: 0, misses: compiled.misses, path: cachePath });
+  if (compiled.readFailure !== undefined) return withCache(body, { status: 'unavailable', hits: 0, misses: compiled.misses, path: cachePath, detail: compiled.readFailure });
+  try {
+    persistNotedConfig(repo.privateDir);
+    if (compiled.rows.length > 0) writeCodePayloads(repo, compiled.rows);
+  } catch (cause) {
+    return withCache(body, { status: 'unavailable', hits: compiled.hits, misses: compiled.misses, path: cachePath, detail: cause instanceof Error ? cause.message : String(cause) });
+  }
+  const status = compiled.misses === 0 ? 'hit' : compiled.hits === 0 ? 'miss' : 'partial';
+  return withCache(body, { status, hits: compiled.hits, misses: compiled.misses, path: cachePath });
+}
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
-export function scanCode(repo: Repository): CodeSnapshot {
-  return repo.snapshot === undefined ? scanCodeUnderSnapshot(repo) : repo.snapshot(() => scanCodeUnderSnapshot(repo));
+export function scanCode(repo: Repository, options: { cache?: CodeMode } = {}): CodeSnapshot {
+  return repo.snapshot === undefined ? scanCodeUnderSnapshot(repo, options) : repo.snapshot(() => scanCodeUnderSnapshot(repo, options));
 }
-function scanCodeUnderSnapshot(repo: Repository): CodeSnapshot {
+function scanCodeUnderSnapshot(repo: Repository, options: { cache?: CodeMode }): CodeSnapshot {
+  const mode = options.cache ?? 'use';
+  const cachePath = cacheDatabasePath(repo.privateDir);
   let before: readonly Source[];
   let changed = false;
   try { before = readSources(repo); }
   catch (cause) { if (cause instanceof CodeSourceReadChanged) { before = []; changed = true; } else throw cause; }
-  const initial = compile(before);
+  const initial = compileCached(repo, before, mode, changed);
   let after: readonly Source[];
   try { after = readSources(repo); }
-  catch (cause) { if (cause instanceof CodeSourceReadChanged) return result({ codes: [], findings: [] }, [], true); else throw cause; }
-  if (sameSources(before, after)) return result(initial, before, changed);
-  const fresh = compile(after);
+  catch (cause) { if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath); else throw cause; }
+  if (sameSources(before, after)) return finish(repo, initial, before, changed, mode, cachePath);
+  const fresh = compileCached(repo, after, mode, true);
   try {
     const stable = readSources(repo);
-    return sameSources(after, stable) ? result(fresh, after, true) : result({ codes: [], findings: [] }, stable, true);
+    return sameSources(after, stable) ? finish(repo, fresh, after, true, mode, cachePath) : finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, stable, true, mode, cachePath);
   } catch (cause) {
-    if (cause instanceof CodeSourceReadChanged) return result({ codes: [], findings: [] }, [], true);
+    if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath);
     throw cause;
   }
 }

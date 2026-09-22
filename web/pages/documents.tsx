@@ -150,7 +150,7 @@ const documentStyles = stylex.create({
   skeletonLineShort: { width: "66%" },
 })
 
-function documentHref(document: DocumentRecord): string {
+export function documentHref(document: DocumentRecord): string {
   if (document.metadata.kind === "use-case") {
     const feature = document.metadata.feature.split("/").filter(Boolean).at(-2) ?? document.metadata.feature
     return `/features/${encodeURIComponent(feature)}/use-cases/${encodeURIComponent(document.metadata.id)}`
@@ -167,7 +167,7 @@ function documentHref(document: DocumentRecord): string {
   return `/${sections[document.metadata.kind] ?? "features"}/${encodeURIComponent(document.metadata.id)}`
 }
 
-function relativeMarkdownTarget(currentPath: string, href: string): { path: string; hash: string } | undefined {
+export function relativeMarkdownTarget(currentPath: string, href: string): { path: string; hash: string } | undefined {
   if (!href || href.startsWith("#") || href.startsWith("/") || /^[a-z][a-z\d+.-]*:/iu.test(href)) return undefined
   try {
     const base = new URL(`https://concord.invalid/${currentPath}`)

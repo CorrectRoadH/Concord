@@ -8,7 +8,7 @@ concord cache clear
 concord cache rebuild
 ```
 
-缓存损坏、schema 不符或写失败时，查询应回退权威源码而非返回陈旧关系。`cache clear` 不删除 evidence、journal 或 Memory。`cache rebuild` 不接受 `--dry-run`。
+缓存损坏、schema 不符或写失败时，查询应回退权威源码而非返回陈旧声明或关系。`cache clear` 不删除 evidence、journal 或 Memory。`cache rebuild` 不接受 `--dry-run`。
 
 文档、配置、Memory 与源码写入共享配置快照、锁、preimage journal 和逐文件原子 rename。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现当前格式的未完成 journal 时停止并报告 RecoveryRequired；确认写入进程已经退出后执行：
 

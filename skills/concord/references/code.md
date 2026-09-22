@@ -48,7 +48,7 @@ export function parseOrder(input: string) {
 
 `code`、`check`、`trace`、`review` 和 `doctor` 校验代码声明及引用；标注文件存在语法错误时不会信任恢复后的 AST。未知 `@concord-*` 在 sourceRoots 中报错，已知测试及 repository profile 标签交给原有 owner。
 
-代码关系每次重新扫描并核对文件集合与摘要，首版不持久缓存。现有测试缓存位于 Git-private 的 `concord/cache.sqlite`（普通 checkout 通常为 `.git/concord/cache.sqlite`，用 `concord cache status` 查询实际位置），仍是可重建投影；清缓存不能修复源码错误。
+代码关系每次从当前 Markdown 重算，并核对文件集合与摘要。声明解析可命中 Git-private 的可重建投影（普通 checkout 通常为 `.git/concord/cache.sqlite`，用 `concord cache status` 查询实际位置）；字节摘要变化、损坏或 `cache clear` 后回源。清缓存不能修复源码错误。
 
 ## 自动查询引用
 

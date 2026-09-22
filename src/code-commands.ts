@@ -8,14 +8,14 @@ import { ConcordError, digest, type Repository } from './shared.js';
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 export function listCode(repo: Repository) {
-  const trace = buildTrace(repo, 'off'); requireValidTrace(trace);
+  const trace = buildTrace(repo, 'use'); requireValidTrace(trace);
   return { operation: 'code-list', codes: trace.codeDeclarations, sourceRoots: repo.config.sourceRoots ?? [] };
 }
 
 export function locateCode(repo: Repository, file: string, line: number) {
   repo.absolute(file);
   if (!Number.isSafeInteger(line) || line < 1) throw new ConcordError('InvalidCodeLine', '--line must be a positive integer');
-  const trace = buildTrace(repo, 'off'); requireValidTrace(trace);
+  const trace = buildTrace(repo, 'use'); requireValidTrace(trace);
   const scanned = trace.codeFiles.find(item => item.path === file);
   if (!scanned) throw new ConcordError('CodeSourceNotScanned', `${file} is not a JS/TS file inside configured sourceRoots`);
   const text = repo.read(file);

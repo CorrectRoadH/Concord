@@ -113,7 +113,7 @@ AST 识别必须核对受支持 runner import 的绑定，不因任意函数叫 
 
 Code Declaration 是维护者对实现与契约关系的显式声明，源文件是唯一 owner。独立 `code:<id> → exactRef` 的 `implements` 边不会成为测试声明、覆盖率、完成状态或 Problem fixed 证据。2026-09-13 的独立 Astra 挑战确定范围与绑定规则；2026-09-20 的独立 Herdr Astra 挑战 PASS 后采用[自动查询引用](design/derived-code-reference/README.md)，替代手写声明 ID。
 
-`sourceRoots` 为严格配置中的可选路径数组，缺省 `[]`，构造和 init 沿用既有安全路径验证。仅扫描显式根内 JS/TS；允许与 testRoots 重叠，各 family 保留自己的标签语义。代码投影首版无持久缓存，每次核对扫描前后文件集合及摘要；SQLite 测试缓存和 evidence 协议保持原职责。
+`sourceRoots` 为严格配置中的可选路径数组，缺省 `[]`，构造和 init 沿用既有安全路径验证。仅扫描显式根内 JS/TS；允许与 testRoots 重叠，各 family 保留自己的标签语义。代码声明解析按文件缓存在同一份可删除 SQLite 中，键包含 worktree、解析器版本、路径和当前字节摘要；命中仍严格解码，摘要不符、损坏或写失败就回源，不返回旧声明。归属结论、关系边、缺口和 fixed 判断不缓存，关系始终用当前 Markdown 重算。扫描仍核对前后文件集合及摘要。未改动的配置解析也可命中同一库，使后续命令不必加载 TypeScript 编译器；配置源码仍是唯一 owner。SQLite 测试缓存和 evidence 协议保持原职责。
 
 三种 scope：文件头 `@concord-file`，紧邻支持的完整 AST 节点的 `@concord-code`，同一 statement-list 内非空连续语句的 `@concord-begin/end`。范围标记均无参数，一个文件级 scope 或节点最多一份声明，多目标通过相邻 implements 表达。node 白名单为有 body 的函数声明/方法、类声明，以及单 identifier 且直接 arrow/function initializer 的变量语句。region 不嵌套、不截断表达式、不跨语句列表，但可以包含完整函数。所有 scope 可在允许的范围内完整包含，查询返回全部包含关系，不推断覆盖或继承。
 

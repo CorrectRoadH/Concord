@@ -22,6 +22,7 @@ import { ConcordError, MemorySourceSchema, ProjectSchema, RunnerSchema, decode, 
 import { listTemplates, templateBody } from './templates.js';
 import { humanOutput } from './presentation.js';
 import { annotationSnippet, doctor } from './onboarding.js';
+import { scanCode } from './code.js';
 import { codeSnippet, listCode, locateCode } from './code-commands.js';
 import { applyViewDryRun, executeViewAction, getWorkspaceSnapshot } from './application.js';
 import { getGitDiff, getGitStatus } from './git-view.js';
@@ -259,9 +260,9 @@ const code = Command.make('code').pipe(Command.withDescription('Associate files,
 const cache = Command.make('cache').pipe(Command.withDescription('Inspect or rebuild disposable SQLite projections.'),Command.withSubcommands([
   Command.make('status',{},()=>withRepo(repo=>sync(()=>cacheStatus(repo)))),
   Command.make('clear',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) return {operation:'cache-clear',dryRun:true};return clearCache(repo);}))),
-  Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');return scanAnnotations(repo,{cache:'rebuild'});}))),
+  Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');const annotations=scanAnnotations(repo,{cache:'rebuild'});const code=scanCode(repo,{cache:'rebuild'});return {...annotations,codeCache:code.cache};}))),
 ]));
-const check = Command.make('check',{},()=>withRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'check',ok:t.findings.length===0,findings:t.findings,advisories:t.advisories,documents:t.documents.length,cases:t.annotations.cases.length,codeDeclarations:t.codeDeclarations.length,memoryEvidence:t.memories,cache:t.annotations.cache};}))).pipe(Command.withDescription('Validate current source ownership and references; do not execute tests.'));
+const check = Command.make('check',{},()=>withRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'check',ok:t.findings.length===0,findings:t.findings,advisories:t.advisories,documents:t.documents.length,cases:t.annotations.cases.length,codeDeclarations:t.codeDeclarations.length,memoryEvidence:t.memories,cache:t.annotations.cache,codeCache:t.codeCache};}))).pipe(Command.withDescription('Validate current source ownership and references; do not execute tests.'));
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
   Command.make('show',{ref:Argument.string('reference')},args=>withRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))))),
   Command.make('gaps',{},()=>withRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))))).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),

@@ -55,7 +55,7 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
     }
   }
   // Implementation associations are independent of test declarations and fixed evidence.
-  const code = options.includeCode === false ? undefined : scanCode(repo);
+  const code = options.includeCode === false ? undefined : scanCode(repo, { cache });
   const codeDeclarations: readonly CodeDeclaration[] = code?.codes ?? [];
   findings.push(...(code?.findings ?? []));
   for (const item of codeDeclarations) for (const target of item.contracts) {
@@ -67,7 +67,7 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
   const memories = documents.flatMap(doc => doc.metadata.kind === 'memory' && doc.metadata.resolution !== undefined
     ? [{ path: doc.path, evidenceLevel: doc.metadata.resolution.evidenceLevel, evidence: inspectResolutionEvidence(repo, doc.metadata.resolution) }]
     : []);
-  return { documents, annotations, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, advisories, memories };
+  return { documents, annotations, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, advisories, memories, codeCache: code?.cache };
 }
 export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
   if (trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);
@@ -129,6 +129,7 @@ export function traceGaps(repo: Repository, cache: 'use' | 'off' = 'use') {
     contracts,
     cliPages,
     cache: trace.annotations.cache,
+    codeCache: trace.codeCache,
   };
 }
 

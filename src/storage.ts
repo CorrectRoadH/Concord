@@ -238,7 +238,7 @@ export class LocalRepository implements Repository {
       if (options.recover && marker === undefined && (recoveryJournal?.operation !== 'init' || recoveryJournal.phase !== 'prepared')) throw new ConcordError('RecoveryConflict', 'Missing TS configuration may only be recovered from a current prepared init journal');
       if (options.initialize && marker !== undefined) throw new ConcordError('ProjectExists', `${markerPath} already exists`);
       if (!options.initialize && marker === undefined && !options.recover) throw new ConcordError('ProjectNotFound', 'The selected worktree has no Concord project configuration; run concord init');
-      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: defaultConfig() } : snapshot(markerPath, marker);
+      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: defaultConfig() } : snapshot(markerPath, marker, this.privateDir);
       this.config = this.configSnapshot.config;
       this.validateConfiguredRoots(this.config);
       for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...this.config.runner.sourceFiles]) this.absolute(path);
@@ -336,7 +336,7 @@ export class LocalRepository implements Repository {
     if (present(join(this.root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'Old project configuration appeared; explicit offline migration is required');
     const source = this.read('concord.config.ts');
     if (source === undefined) throw new ConcordError('ProjectNotFound', 'Project configuration disappeared');
-    return snapshot('concord.config.ts', source);
+    return snapshot('concord.config.ts', source, this.privateDir);
   }
   private validateConfiguredRoot(root: string): void {
       canonicalPath(root);
@@ -412,7 +412,7 @@ export class LocalRepository implements Repository {
     if (plannedConfigChange?.after === null) throw new ConcordError('InvalidChange', 'The runtime configuration cannot be deleted or renamed');
     if (operation === 'set-config' && changes.length !== 1) throw new ConcordError('InvalidChange', 'config.set must publish exactly one configuration');
     if (operation === 'init' && plannedConfigChange === undefined) throw new ConcordError('InvalidChange', 'Init must publish exactly one project configuration');
-    const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after).config;
+    const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir).config;
     if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) this.validateProjectConfig(authorizationConfig);
     const governanceGuard = (change: Change): boolean => change.path === 'concord.repository.json' && change.before === change.after;
     if (!changes.some(change => !governanceGuard(change))) throw new ConcordError('InvalidChange', 'A governance preimage guard cannot be published without an actual owner change');
@@ -432,7 +432,7 @@ export class LocalRepository implements Repository {
     const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, projectId: authorizationConfig.projectId, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest } };
     const receipt = this.publishJournal(journal, dryRun);
     if (!receipt.dryRun && plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
-      this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after);
+      this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir);
       this.config = this.configSnapshot.config;
     }
     return receipt;
@@ -513,7 +513,7 @@ export class LocalRepository implements Repository {
       const frozenPath = journal.scope.configPath;
       const current = this.currentSnapshot();
       if (current.path !== frozenPath || current.digest !== journal.scope.configDigest) fail('Project configuration changed since source publication');
-      const config = snapshot(frozenPath, journal.scope.configSource).config;
+      const config = snapshot(frozenPath, journal.scope.configSource, this.privateDir).config;
       if (config.projectId !== journal.projectId || config.projectId !== this.config.projectId) fail('Project identity changed');
       const change = journal.changes[0]!;
       const roots = this.sourceScopeRoots(config);
@@ -534,11 +534,11 @@ export class LocalRepository implements Repository {
           if (typeof plannedSource !== 'string') fail('Init journal configuration is missing');
           const typed = this.read('concord.config.ts');
           if (!recovering && typed !== undefined) fail('Project configuration appeared since init planning');
-          authorizationConfig = snapshot('concord.config.ts', plannedSource as string).config;
+          authorizationConfig = snapshot('concord.config.ts', plannedSource as string, this.privateDir).config;
           this.validateProjectConfig(authorizationConfig);
           if (authorizationConfig.projectId !== journal.projectId) fail('Project identity changed');
         } else {
-          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource).config;
+          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.privateDir).config;
           this.validateProjectConfig(authorizationConfig);
           if (authorizationConfig.projectId !== journal.projectId) fail('Project identity changed');
           const current = this.currentSnapshot();
@@ -547,7 +547,7 @@ export class LocalRepository implements Repository {
         }
       }
       if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
-        const next = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after).config;
+        const next = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir).config;
         this.validateProjectConfig(next);
         if (next.projectId !== journal.projectId) fail('Planned configuration changes project identity');
       }

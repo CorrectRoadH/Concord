@@ -4,11 +4,13 @@ import { existsSync, lstatSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Schema } from 'effect';
-import * as ts from 'typescript';
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from './shared.js';
 import { deriveTestReference } from './test-reference.js';
+import type * as TypeScript from 'typescript';
+import { lazyTypeScript, typescriptPackageVersion } from './typescript-host.js';
 
-const PARSER_VERSION = `typescript-ast/${ts.version}/concord-annotations-v3-test-reference`;
+const ts = lazyTypeScript();
+function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-annotations-v3-test-reference`; }
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 const FindingSchema = Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int) });
 const CachedSnapshotSchema = Schema.Struct({
@@ -24,12 +26,12 @@ interface Binding { readonly framework: Framework; readonly namespace: boolean }
 interface Source { readonly path: string; readonly text: string; readonly digest: string }
 interface Parsed { readonly cases: AnnotatedCase[]; readonly findings: Finding[] }
 
-function lineAt(source: ts.SourceFile, position: number): number { return source.getLineAndCharacterOfPosition(position).line + 1; }
+function lineAt(source: TypeScript.SourceFile, position: number): number { return source.getLineAndCharacterOfPosition(position).line + 1; }
 function finding(findings: Finding[], code: string, path: string, message: string, line?: number): void { findings.push(line === undefined ? { code, path, message } : { code, path, message, line }); }
 function runner(module: string): Framework | undefined {
   return module === 'node:test' || module === 'vitest' || module === '@playwright/test' ? module : undefined;
 }
-function imports(source: ts.SourceFile): Map<string, Binding> {
+function imports(source: TypeScript.SourceFile): Map<string, Binding> {
   const bindings = new Map<string, Binding>();
   for (const statement of source.statements) {
     if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
@@ -45,7 +47,7 @@ function imports(source: ts.SourceFile): Map<string, Binding> {
   }
   return bindings;
 }
-function calleeInfo(expression: ts.Expression, bindings: Map<string, Binding>): { readonly binding: Binding; readonly modifier?: 'skip' | 'todo' | 'each' } | undefined {
+function calleeInfo(expression: TypeScript.Expression, bindings: Map<string, Binding>): { readonly binding: Binding; readonly modifier?: 'skip' | 'todo' | 'each' } | undefined {
   if (ts.isIdentifier(expression)) {
     const binding = bindings.get(expression.text);
     return binding && !binding.namespace ? { binding } : undefined;
@@ -67,7 +69,7 @@ function calleeInfo(expression: ts.Expression, bindings: Map<string, Binding>): 
   }
   return undefined;
 }
-function staticBooleanOptions(node: ts.Expression): { readonly skipped: boolean } | undefined {
+function staticBooleanOptions(node: TypeScript.Expression): { readonly skipped: boolean } | undefined {
   if (!ts.isObjectLiteralExpression(node)) return undefined;
   let skipped = false;
   for (const property of node.properties) {
@@ -79,7 +81,7 @@ function staticBooleanOptions(node: ts.Expression): { readonly skipped: boolean 
   }
   return { skipped };
 }
-function annotationLines(text: string, source: ts.SourceFile, statement: ts.Statement): { readonly values: string[]; readonly lines: number[] } {
+function annotationLines(text: string, source: TypeScript.SourceFile, statement: TypeScript.Statement): { readonly values: string[]; readonly lines: number[] } {
   const lines = text.split(/\r?\n/);
   let index = source.getLineAndCharacterOfPosition(statement.getStart(source)).line - 1;
   const values: string[] = [], resultLines: number[] = [];
@@ -107,16 +109,16 @@ function parseAnnotations(values: readonly string[], lines: readonly number[], p
   }
   return { contract, contractKind, regressions, status, used };
 }
-function annotationCommentLines(text: string, source: ts.SourceFile): number[] {
+function annotationCommentLines(text: string, source: TypeScript.SourceFile): number[] {
   const lines = new Set<number>();
-  const collect = (ranges: readonly ts.CommentRange[] | undefined): void => {
+  const collect = (ranges: readonly TypeScript.CommentRange[] | undefined): void => {
     for (const range of ranges ?? []) {
       if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia && /^\/\/\s*@(?:feature|use-case|regression|status)\b/.test(text.slice(range.pos, range.end))) lines.add(lineAt(source, range.pos));
     }
   };
   // The parser owns template/regex/JSX token boundaries. A context-free scanner
   // can mistake template text following an interpolation for source comments.
-  const visit = (node: ts.Node): void => {
+  const visit = (node: TypeScript.Node): void => {
     const children = node.getChildren(source);
     if (children.length > 0) { for (const child of children) visit(child); return; }
     collect(ts.getLeadingCommentRanges(text, node.getFullStart()));
@@ -133,7 +135,7 @@ function parseSource(input: Source): Parsed {
   const source = ts.createSourceFile(input.path, input.text, ts.ScriptTarget.Latest, true);
   const bindings = imports(source), findings: Finding[] = [], cases: AnnotatedCase[] = [];
   const attached = new Set<number>();
-  const inspect = (call: ts.CallExpression, statement: ts.Statement, supported: boolean): void => {
+  const inspect = (call: TypeScript.CallExpression, statement: TypeScript.Statement, supported: boolean): void => {
     const info = calleeInfo(call.expression, bindings);
     if (!info) return;
     const line = lineAt(source, call.getStart(source));
@@ -152,7 +154,7 @@ function parseSource(input: Source): Parsed {
       if (prior) finding(findings, 'AmbiguousTestDeclaration', input.path, `Test name ${name.text} is declared more than once at the top level`, line);
     }
     if (!name || !(ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name))) { finding(findings, 'DynamicTestName', input.path, 'Annotated test declarations need a literal test name', line); return; }
-    let callback: ts.Expression | undefined, skipped = info.modifier === 'skip' || info.modifier === 'todo';
+    let callback: TypeScript.Expression | undefined, skipped = info.modifier === 'skip' || info.modifier === 'todo';
     if (call.arguments.length === 2) callback = second;
     else if (call.arguments.length === 3 && second && third) {
       const options = staticBooleanOptions(second);
@@ -169,7 +171,7 @@ function parseSource(input: Source): Parsed {
     catch (cause) { finding(findings, 'InvalidAnnotation', input.path, cause instanceof Error ? cause.message : String(cause), line); }
   };
   for (const statement of source.statements) {
-    const visit = (node: ts.Node): void => {
+    const visit = (node: TypeScript.Node): void => {
       if (ts.isCallExpression(node)) inspect(node, statement, false);
       ts.forEachChild(node, visit);
     };
@@ -198,7 +200,7 @@ function assertCacheSafe(path: string): void {
 }
 function assertCacheDatabaseSafe(path: string): void { for (const suffix of ['', '-wal', '-shm', '-journal']) assertCacheSafe(`${path}${suffix}`); }
 function cacheKey(repo: Repository, current: readonly Source[]): string {
-  return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: PARSER_VERSION, files: current.map(source => ({ path: source.path, digest: source.digest })) });
+  return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: parserVersion(), files: current.map(source => ({ path: source.path, digest: source.digest })) });
 }
 function readCache(repo: Repository, key: string): CachedSnapshot | undefined {
   const path = cachePath(repo); assertCacheDatabaseSafe(path);
@@ -272,9 +274,11 @@ function statusUnderSnapshot(repo: Repository): { readonly status: string; reado
     if (!existsSync(path)) return { status: 'empty', path };
     const db = new DatabaseSync(path, { readOnly: true });
     try {
-      const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('annotation_cache', 'feedback_cache') ORDER BY name").all() as unknown as readonly { readonly name: unknown }[];
+      const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('annotation_cache', 'code_cache', 'config_cache', 'feedback_cache') ORDER BY name").all() as unknown as readonly { readonly name: unknown }[];
       const projections = rows.map(row => String(row.name));
       if (projections.includes('annotation_cache')) db.prepare('SELECT 1 FROM annotation_cache LIMIT 1').all();
+      if (projections.includes('code_cache')) db.prepare('SELECT 1 FROM code_cache LIMIT 1').all();
+      if (projections.includes('config_cache')) db.prepare('SELECT 1 FROM config_cache LIMIT 1').all();
       if (projections.includes('feedback_cache')) db.prepare('SELECT 1 FROM feedback_cache LIMIT 1').all();
       return projections.length === 0 ? { status: 'empty', path } : { status: 'ready', path, detail: `projections: ${projections.join(', ')}` };
     } finally { db.close(); }
