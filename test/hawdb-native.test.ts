@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, linkSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { mkdtempSync, realpathSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, linkSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -25,7 +25,8 @@ if (childRole) {
   const artifact = JSON.parse(readFileSync(join(process.cwd(), 'dist/native', hawdbTarget(), 'artifact.json'), 'utf8')) as { testHooks?: boolean };
   const hooks = artifact.testHooks === true;
   function fixture(): { dir: string; db: string; cleanup(): void } {
-    const dir = mkdtempSync(join(tmpdir(), 'concord-native-'));
+    // macOS exposes its temporary directory through /var -> /private/var.
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'concord-native-')));
     return { dir, db: join(dir, 'cache'), cleanup: () => rmSync(dir, { recursive: true, force: true }) };
   }
   function code(operation: () => unknown, expected: HawdbFailureCode): void {
