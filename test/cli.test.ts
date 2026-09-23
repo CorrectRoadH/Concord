@@ -38,6 +38,11 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  assert.ok(packed[0].files.some(file=>file.path==='npm-shrinkwrap.json'), 'package must carry its runtime dependency lock');
  const install=join(scratch,'tool');mkdirSync(install);writeFileSync(join(install,'package.json'),JSON.stringify({private:true}));
  execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund','--prefer-offline',join(scratch,packed[0].filename)],{cwd:install,encoding:'utf8',timeout:60000});
+ const packageRoot=join(install,'node_modules/concord-sdlc');
+ const manifest=Schema.Struct({version:Schema.String,dependencies:Schema.Record(Schema.String,Schema.String),devDependencies:Schema.Record(Schema.String,Schema.String)});
+ const published=Schema.decodeUnknownSync(Schema.fromJsonString(manifest))(readFileSync(join(packageRoot,'package.json'),'utf8'));
+ const locked=Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({packages:Schema.Record(Schema.String,Schema.Unknown)})))(readFileSync(join(packageRoot,'npm-shrinkwrap.json'),'utf8'));
+ assert.deepEqual(Schema.decodeUnknownSync(manifest)(locked.packages['']),published,'packed dependency lock must match the manifest for offline npm ci');
  cli=join(install,'node_modules/concord-sdlc/dist/entry.js');
 })));
 after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
