@@ -2,8 +2,13 @@
 
 ## Shared language
 
-Define the terms readers need across features. Give each concept one name and one
-meaning, with a concrete example. Keep feature-specific details in their owner.
+Structured definitions live in `concepts.json`: global terms under `docs`, local
+terms beside their Feature or Engineering documents. Maintain them with Concord
+concepts tools or the Web workbench; the complete glossary is derived from these
+sources. Keep stable IDs, preferred names, permitted aliases, and deprecated
+names in JSON rather than repeating them in a Markdown table.
+
+Use this page for explanations and concrete examples that link to those concepts.
 
 ## Relationships and ownership
 

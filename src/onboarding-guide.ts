@@ -18,14 +18,28 @@ Configure sourceRoots in concord.config.ts, or initialize with --source-root src
 - [Memory](../memory/README.md): problems, decisions, and reusable lessons with their history.
 - [Issues](issues/README.md): local observations awaiting investigation.
 
-Write the intended behavior in contracts. Keep implementation progress in your work tracking and Git history.
+Write contracts as declarations of intended behavior, constraints, and acceptance. Product workflows and lifecycle rules belong in contracts. Development logs, investigation history, and implementation progress belong in Memory; observations awaiting investigation belong in Issues.
 Templates provide writing prompts, not completed requirements or evidence.
 Read docs/constitution.md before creating or revising Feature and Design owners, and record applicable real clause anchors through constitutionRefs.
+
+## Recall and maintain local knowledge
+
+Use \`concord memory index --json\` and \`concord memory recall "query" --json\` to discover current memories and read their content. Use \`concord issue index --json\` and \`concord issue recall "query" --json\` for observations. These indexes are derived; do not maintain a manual INDEX.md or directly read or edit Memory/Issue owner files.
+
+Create through \`memory add\` or \`issue create\`; update author prose with \`memory edit\` or \`issue edit\`, supplying the latest digest from recall. Change lifecycle state and relationships only with the corresponding Concord commands. If an operation is missing, report or implement the tool gap instead of editing files around its guards.
+
+Local issues require no external account or connection. GitHub and Linear are optional read adapters; local notes and state remain local. Only an unlinked local draft with no history can be removed with \`issue remove\` and its current digest. Local removal never deletes a remote issue.
+
+## Scoped concepts and writing
+
+Use \`concord concepts index --json\` for a derived project glossary. The global catalog is docs/concepts.json; each Feature, Engineering, or other docs subdirectory may own its own concepts.json and concord-writing.json. The containing directory defines local scope. Keep definitions, stable IDs, preferred names, permitted aliases, and deprecated names in JSON; use Markdown for explanation and examples. Only deprecated names generate terminology bans.
+
+Use concepts and writing show/set commands or the Web workbench to maintain each owner with its current digest. Do not duplicate definitions into a global aggregate or edit managed JSON around these guards. Writing v2 composes ancestor policy within scope. Check saved inputs with \`concord docs check --json\`; old writing/v1 needs explicit author-reviewed migration, never an automatic conversion of all aliases into banned names.
 
 ## Complete setup
 
 Init installs every category, the documentation entry point, and the complete [template reference set](_template/README.md).
-Init also supplies missing concepts.md and architecture.md writing outlines while preserving existing root documents.
+Init also supplies missing concepts.md and architecture.md writing outlines and an empty global concepts.json, while preserving existing root documents and catalog bytes.
 Feature, Roadmap, and each Design candidate require README. Select optional pages with --pages library,cli,architecture,lifecycle,use-case, or repeat --pages; omission uses project defaults, and --no-pages explicitly creates README only. Design decision wrapper pages are always created. Engineering starts with README and expands by topic.
 Page add adds optional pages or supporting topics using a lowercase slug, such as migration. Update the author-owned README links after adding pages. Custom pages remain part of their package, with the same digest checks.
 

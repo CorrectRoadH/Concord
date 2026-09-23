@@ -13,11 +13,12 @@ constitutionRefs:
   - docs/constitution.md#c-007
   - docs/constitution.md#c-009
   - docs/constitution.md#c-011
+  - docs/constitution.md#c-012
 ---
 
 # 本地 SDLC 闭环
 
-Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品契约、可执行验收和工程记忆。它面向离线、可移植的开发流程：文档与源码是事实来源；Git-private SQLite 只保存可删除重建的缓存，命令证据与未完成事务 journal 则必须保留并按各自完整性规则处理。
+Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品契约、可执行验收和工程记忆。它面向离线、可移植的开发流程：文档与源码是事实来源；Git-private HawDB 只保存可删除重建的缓存，命令证据与未完成事务 journal 则必须保留并按各自完整性规则处理。
 
 开发由 Concord 契约驱动：修改功能前先读取或更新 Feature、叶子 Use Case、CLI supporting page 与必要 Design，再进入实现和测试。`concord trace gaps --json` 派生当前显式实现/测试关系缺口，帮助发现尚未建立关系的契约和已建档 CLI 页面；它不等于代码覆盖率，也不能发现从未建档的命令。
 
@@ -30,15 +31,17 @@ Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码
 - 初始化项目配置、写作指南和完整参考模板，不覆盖已有文件。
 - 创建并维护 Feature、Use Case、Roadmap、Design、Engineering、Research 与 Memory owner。
 - 从整文件、函数和完整代码段旁的注释反查 Feature / Use Case / Engineering 实现关联，支持按源码行定位；查询引用自动派生，无需手写声明 ID。
-- 从测试根里的 Concord 标记发现 case，不解析宿主测试语法，并用 SQLite 加速可重建投影。
+- 从测试根里的 Concord 标记发现 case，不解析宿主测试语法，并用 HawDB 加速可重建投影。
 - 运行项目声明的 argv，签发 command 级 red/green 收据，并约束 Problem 的 fixed 关闭。
 - 以路径安全、preimage、journal 和恢复协议保护本地写入。
 - 从 owner 动态编译 trace，并渲染本地 review 材料。
 
 ## 非目标
 
-Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal E2E；不自动发布、push、调用付费模型或操作远端 Issue；不让 SQLite 成为不可重建的事实来源。
+Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal E2E；不自动发布、push、调用付费模型或操作远端 Issue；不让 HawDB 成为不可重建的事实来源。
 
 ## 验收
 
 各 Use Case 均有带 `@use-case` 标记的测试。`concord check` 与 `trace check` 必须验证引用完整性；定向 `trace show` 与 `review render` 必须能从当前 owner 分别反查代码声明和测试。代码声明表示实现关联，不证明契约完成。
+
+- [通过工具检索与维护工程知识](use-case/recall-and-maintain-memory.md)

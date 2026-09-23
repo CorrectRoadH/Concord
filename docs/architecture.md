@@ -8,7 +8,7 @@
 
 docs/constitution.md 必需，默认可明确为 draft；作者显式采用 active。Feature/Design 通过 constitutionRefs 声明条款，反向影响派生，宪法不得冒充测试契约或自动合规证据。根 DESIGN.md 可选；页面默认值可按次覆盖。详细状态格式、引用解析、恢复及组合验收均以上述方案页面为准。
 
-源码注释与 Markdown 拥有协作事实，SQLite 只保存可重建缓存。
+源码注释与 Markdown 拥有协作事实，HawDB 只保存可重建缓存。
 
 ## 领域与 CLI
 
@@ -26,7 +26,7 @@ docs/constitution.md 必需，默认可明确为 draft；作者显式采用 acti
 - `roadmap create/adopt/list/show`：已定稿方向与显式采用。采用创建 Feature，Roadmap 标记 adopted 并保留历史；当前契约只在 Feature。
 - `test list/show/run`：从测试声明旁的源码注释派生测试执行引用并发现目标契约与 regression Memory；项目级配置拥有 argv、附加 sourceFiles 和 timeout。源码正常编辑与 Git 保存测试演进，Concord 不再建立测试关系 sidecar。
 - `test annotate`：验证 Feature / Use Case 目标与 Problem 引用后输出注释片段。它不改测试源文件，也不自动运行测试。
-- `cache status/rebuild/clear`：维护可删除重建的 SQLite 解析缓存。
+- `cache status/rebuild/clear`：维护可删除重建的 HawDB 解析缓存。
 - `memory add/list/show/search/activate/resolve/reopen/supersede/promote/retire`：Problem、Decision、Insight、Note 及历史；captured 表示尚未确认当前生命周期。
 - `author set`：用完整 owner preimage digest 更换契约或 Memory 正文，保留工具拥有的 metadata 与历史。
 - `issue draft/list/show/link/close`：本地 Observation 与 Memory 链接；`feedback` 统一提供本地反馈和 GitHub / Linear 读取接入，来源快照与本地状态分离，不执行远端发布。详见 [Feedback 契约](feature/feedback/architecture.md)。
@@ -42,13 +42,17 @@ docs/constitution.md 必需，默认可明确为 draft；作者显式采用 acti
 
 `feature/roadmap/design/engineering page add/show/set` 维护已存在 package 的页面；也支持安全小写 slug 的自定义专题页，路径固定为 package 内的 `<slug>.md`，继续使用整文件 CAS。Design 外层保留 goals/limits/decision/cases 的既有路径，候选模板页须指定 plan。Design 候选通过 `--plan` 选择。set 必须提供最新整文件 digest，主 README 正文写入保留 metadata。普通 supporting Markdown 继续进入 candidate 摘要，不因为由模板生成而变成独立 owner 或测试证据。测试 contract 仍限于 Feature / Use Case；Engineering owner 可作为 Design 裁决和 Memory promotion 的目标。
 
-模板安装在工具包内，由严格 manifest 校验名称、路径、库存和普通文件类型，不依赖消费仓库或 NiceEval checkout。init 一次生成完整分类目录、docs/concord.md、docs/_template/ 全套可读参考模板，以及缺失的 docs/README.md、docs/concepts.md 和 docs/architecture.md。已有上述根文档保留。根 AGENTS.md 由 init 保留既有正文并追加或刷新一个带明确边界的 Concord 托管区块，指向当前安装版本的 `concord --skill` 路由；缺失时创建。标记残缺时拒绝写入，不猜测或覆盖用户内容。参考模板不成为契约 owner，create 使用随包模板，不把参考文件解释为自定义配置。
+模板安装在工具包内，由严格 manifest 校验名称、路径、库存和普通文件类型，不依赖消费仓库或 NiceEval checkout。init 一次生成完整分类目录、docs/concord.md、docs/_template/ 全套可读参考模板，以及缺失的 docs/README.md、docs/concepts.md、空 docs/concepts.json 和 docs/architecture.md。已有上述根文档保留。根 AGENTS.md 由 init 保留既有正文并追加或刷新一个带明确边界的 Concord 托管区块，指向当前安装版本的 `concord --skill` 路由；缺失时创建。标记残缺时拒绝写入，不猜测或覆盖用户内容。参考模板不成为契约 owner，create 使用随包模板，不把参考文件解释为自定义配置。
 
 路径是文档 canonical identity。测试关联是测试根里的 Concord 标记：`//`、`#` 或 `--` 开头的 `@feature <path>` 或 `@use-case <path>`，并可使用 `@regression`、`@status retired` 和可选 `@name`。标记存在即表示测试存在。身份由文件和标记派生 `neref_...`：有 `@name` 时用该名称，否则用契约路径加同文件序号。无需人工 ID、分配或 attach 步骤。反向列表由当前源码派生，不写回契约，也不保存 JSON 测试关系副本。
 
 扫描不解析宿主测试声明。JS/TS 只用 TypeScript 注释范围排除字符串、模板和正则中的伪标记；其它文本文件按注释前缀认标记。缺值、一块标记上的重复契约、以及只有 `@regression`/`@status`/`@name` 的块产生 finding。不认识的测试写法不是 finding。静态索引不是 native runner inventory。项目配置保存 testRoots、runner argv、附加 sourceFiles、timeout。argv 的 {file}/{name}/{pattern} 占位符仅按参数替换，不经过 shell。没有 `@name` 时 `{pattern}` 为 `.*`，默认 Node runner 运行整个标记文件。运行收据明确 scope: command 和 selectedCaseId；不渲染为 native case passed，零测试或 skip 不能因此被称作 case 已通过。
 
-SQLite 位于 Git-private `cache.sqlite`，只拥有可重建缓存。每次查询核对路径集合、内容摘要与解析器/schema版本，cache 命中仍需严格解码；缓存损坏、schema不符或写入失败回退到源文件编译，不返回陈旧结果。只缓存解析结果和投影，不缓存可绕过核验的授权或 Problem fixed 判定。clear 不删除 evidence、journal 或 Memory。一次 SQL transaction 更新同一代投影，源文件不是 SQL transaction 的一部分，必须通过前后摘要检测读取漂移。
+HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。每次查询核对路径集合、内容摘要与解析器/schema版本，cache 命中仍需严格解码；缓存损坏、schema不符或写入失败回退到源文件编译，不返回陈旧结果。只缓存解析结果和投影，不缓存可绕过核验的授权或 Problem fixed 判定。clear 不删除 evidence、journal 或 Memory。一次 SQL transaction 更新同一代投影，源文件不是 SQL transaction 的一部分，必须通过前后摘要检测读取漂移。
+
+HawDB 的[引擎边界与预算](design/hawdb-data-engine/plans/native-embedded/README.md)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 只读打开现有完整库，缺少 ownership 文件或命名空间不补建；所有持久句柄与事务先于 repository lease 释放。文档解析、代码解析及不可变 Git 测试基线同样使用有界 HawDB 内存命名空间，不另存解析结果 Map。当前源文件集合和字节仍每次读取。
+
+cache clear 在独占 repository lease 下取得与固定 HawDB revision 相同的原生文件锁，持有锁清理数据，保留目录与锁 inode，owner-only 目录显示 empty。锁错误不授权删除；损坏库通过独立锁 guard 清理，不靠打开数据库成功。旧 cache.sqlite 与列明的 sidecar 只在显式 clear 时处理，不读取或自动迁移。clear 不删除源 owner、证据和发布日志。路径类型、安全、预算、冷/热查询及跨进程恢复均须独立验收。
 
 Memory 保存 current promotion 和追加的生命周期 history，Problem 使用递增 epoch；reopen 增加 epoch，red/green 都必须绑定当前 epoch。
 
@@ -62,9 +66,9 @@ Trace 与定向 Review 按解析得到的 owner 汇总 Feature supporting page �
 
 读写路径拒绝绝对路径、traversal、symlink 组件和超出 repo 的 realpath。扫描只读取 Concord 所属目录和格式；错误的受管格式明确报错。
 
-Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。0.6.0 采用[可移植发布协调](design/portable-publication/README.md)：普通运行仅用 Node 文件 API，移除 flock、stat、diskutil、plutil 和卷名称准入探测。支持同主机、同 PID 命名空间内的 Linux/macOS 本地工作树；网络多机协调与 Windows 执行不在保证内。macOS 保留大小写、Unicode 路径碰撞和 symlink 防护。
+Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。0.6.0 采用[可移植发布协调](design/portable-publication/README.md)：文档发布协调仅用 Node 文件 API，移除外部 flock、stat、diskutil、plutil 和卷名称准入探测。支持同主机、同 PID 命名空间内的 Linux/macOS 本地工作树；网络多机协调与 Windows 执行不在保证内。macOS 保留大小写、Unicode 路径碰撞和 symlink 防护。
 
-一个非空 publication.lease 目录拥有短快照与提交互斥；完整 token owner 经临时目录 fsync/rename 原子公布。构造 LocalRepository 不持有命令全程锁；显式 snapshot 读取完整规划输入，提交在同一短 lease 下复核首次读取、缺失文件、目录集合与类型、配置和完整前像，再写 preimage journal、逐文件原子 rename。正常释放与显式死 PID 恢复只删除准确 token；不按年龄抢占，不递归删除活动锁目录。SQLite 只保存可删除重建的缓存，其连接和清理也在快照内。旧锁协议不迁移、不支持混合版本同时运行。
+一个非空 publication.lease 目录拥有短快照与提交互斥；完整 token owner 经临时目录 fsync/rename 原子公布。构造 LocalRepository 不持有命令全程锁；显式 snapshot 读取完整规划输入，提交在同一短 lease 下复核首次读取、缺失文件、目录集合与类型、配置和完整前像，再写 preimage journal、逐文件原子 rename。正常释放与显式死 PID 恢复只删除准确 token；不按年龄抢占，不递归删除活动锁目录。HawDB 只保存可删除重建的缓存，其持久连接和清理也在快照内。旧锁协议不迁移、不支持混合版本同时运行。
 
 `concord recover` 路由当前唯一的普通或 Trace journal；多 journal 现场冲突时保留并拒绝。各恢复入口获锁后重查类型和现场，只在内容符合 preimage 或 planned digest 时恢复。dry-run 执行同一规划校验，不发布 owner、journal 或缓存；已有项目的短协调可能创建 Git-private 目录。
 
@@ -96,6 +100,8 @@ Memory 其他关闭理由需要非空说明；reopen 追加历史并移除 curre
 
 实现、测试和构建脚本维护为严格 TypeScript，执行与副作用通过 Effect 组织。构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。dist 中的 JavaScript 是编译产物，JS 消费者的兼容 fixture 只存在于明确的测试边界。
 
+仅 native/hawdb 的 Rust 引擎桥接、必要链接胶水、字节转换、预算和固定 revision 所有权 guard 适用 c-005 的原生例外。发行 tgz 同时携带 Linux x64/glibc 与 macOS arm64 产物，绑定源码、ABI、revision 和摘要；消费者不需要 Rust 或数据库服务。平台构建完成后统一打包，目标平台安装同一份包验收；本机 Nix 构建不视作通用发行物。
+
 `pnpm check` 构建后检查测试与脚本类型，再执行领域、恢复和 package smoke；公开 CLI 验收使用独立安装后的命令。保留来源说明、README、Agent 工作流指引与 CI 检查配置，不发布或 push。
 
 
@@ -113,7 +119,7 @@ Memory 其他关闭理由需要非空说明；reopen 追加历史并移除 curre
 
 Code Declaration 是维护者对实现与契约关系的显式声明，源文件是唯一 owner。独立 `code:<id> → exactRef` 的 `implements` 边不会成为测试声明、覆盖率、完成状态或 Problem fixed 证据。2026-09-13 的独立 Astra 挑战确定范围与绑定规则；2026-09-20 的独立 Herdr Astra 挑战 PASS 后采用[自动查询引用](design/derived-code-reference/README.md)，替代手写声明 ID。
 
-`sourceRoots` 为严格配置中的可选路径数组，缺省 `[]`，构造和 init 沿用既有安全路径验证。仅扫描显式根内 JS/TS；允许与 testRoots 重叠，各 family 保留自己的标签语义。代码声明解析按文件缓存在同一份可删除 SQLite 中，键包含 worktree、解析器版本、路径和当前字节摘要；命中仍严格解码，摘要不符、损坏或写失败就回源，不返回旧声明。归属结论、关系边、缺口和 fixed 判断不缓存，关系始终用当前 Markdown 重算。扫描仍核对前后文件集合及摘要。未改动的配置解析也可命中同一库，使后续命令不必加载 TypeScript 编译器；配置源码仍是唯一 owner。SQLite 测试缓存和 evidence 协议保持原职责。
+`sourceRoots` 为严格配置中的可选路径数组，缺省 `[]`，构造和 init 沿用既有安全路径验证。仅扫描显式根内 JS/TS；允许与 testRoots 重叠，各 family 保留自己的标签语义。代码声明解析按文件缓存在同一份可清空的 HawDB 中，键包含 worktree、解析器版本、路径和当前字节摘要；命中仍严格解码，摘要不符、损坏或写失败就回源，不返回旧声明。归属结论、关系边、缺口和 fixed 判断不缓存，关系始终用当前 Markdown 重算。扫描仍核对前后文件集合及摘要。未改动的配置解析也可命中同一库，使后续命令不必加载 TypeScript 编译器；配置源码仍是唯一 owner。HawDB 测试缓存与独立 evidence 协议保持各自职责。
 
 三种 scope：文件头 `@concord-file`，紧邻支持的完整 AST 节点的 `@concord-code`，同一 statement-list 内非空连续语句的 `@concord-begin/end`。范围标记均无参数，一个文件级 scope 或节点最多一份声明，多目标通过相邻 implements 表达。node 白名单为有 body 的函数声明/方法、类声明，以及单 identifier 且直接 arrow/function initializer 的变量语句。region 不嵌套、不截断表达式、不跨语句列表，但可以包含完整函数。所有 scope 可在允许的范围内完整包含，查询返回全部包含关系，不推断覆盖或继承。
 
@@ -146,3 +152,14 @@ Web API 和 CLI 结构化 action 共用完整应用校验，fixed 的 red/green 
 日志只实现当前格式，scope 区分文档和源码授权范围，不维护历史 journal 兼容分支。未知格式严格拒绝并保留现场。源码日志保存同一次读取的配置原文及摘要，发布和恢复均检查当前配置一致；文档初始化仍支持批量文件创建及回滚。
 
 Research 以目录 README 为 owner，支持安全相对路径的自由附页；界面从物理目录派生主题分组，嵌套 owner 保留独立 ID 与关系。Research 无默认章节、必填日期或必填来源。历史 Design 暂缓与 Roadmap 取消由原文来源支持的 metadata 保留，详见[目录迁移](document-migration.md#目录迁移)。
+
+## 文档写作检查
+
+`concord docs check` 根据消费者显式采用的写作规则检查正文、术语和 SVG，一次只读检查快照覆盖政策与输入文件。政策解码、纯文本解析和扫描编排各自独立，CLI 不拥有词库或文件遍历。没有规则不推断默认政策；静态命中不作为执行证据。详见[文档写作契约](feature/documentation-quality/README.md)及[规则格式](feature/documentation-quality/policy.md)。
+
+
+`writing.index/show/set/check` 与 `concepts.index/show/set` 通过 CLI 和 Web 共用领域操作。docs 下精确命名的 JSON 按目录拥有 scope；全局汇总只读派生，Markdown 保留概念解释。publication/recovery 双向检查路径、操作、Schema 和 CAS，concepts journal 还绑定其它 catalog 的集合与摘要。旧 v1 政策须显式迁移。完整合成、语料和恢复约束见[目录作用域采用方案](design/scoped-terminology/plans/directory-owned/README.md)。
+
+## 工具式工程知识与本地观察
+
+Memory/Issue 的索引与 recall 从当前 owner 派生，通过 Concord 工具读取和更新，不新增人工索引。Local 与 GitHub、Linear 是派生的来源视图；本地观察沿用现有 Issue owner，不创建虚假的连接或迁移持久化 source。正文、关系、生命周期与来源继续各自拥有事实。没有历史或关系的本地草稿可通过最新摘要删除，进入调查的记录保留既有生命周期。详见[记忆工具契约](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察契约](feature/feedback/use-case/manage-local-observations.md)。

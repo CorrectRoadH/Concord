@@ -16,6 +16,6 @@
 6. 晋升 Memory 到有效契约用 `memory promote`；采用 Roadmap 用 `roadmap adopt`，由工具一起迁移当前 promotion。修改正文用 `author set` 和最新 owner digest，保留受管历史。
 7. 用 `check`、`trace show`、`review render` 交接。私有证据缺失要保留“不可用”的事实，不能把历史结论当当前运行结果。
 
-SQLite 损坏时查询会回退源码。`cache clear` / `cache rebuild` 只处理缓存；写事务中断使用 `recover`。恢复遇到未知修改时先保留现场，查明冲突，不删除 journal 强行绕过。
+HawDB 缓存损坏时源码查询会回源。`cache clear` / `cache rebuild` 只处理缓存；写事务中断使用 `recover`。恢复遇到未知修改时先保留现场，查明冲突，不删除 journal 强行绕过。
 
 本地 Issue 草稿与 Memory 工程状态独立。Concord 不发送远端消息；提交、push、部署和发布仍遵守用户授权及消费仓库规则。

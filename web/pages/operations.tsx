@@ -104,7 +104,7 @@ const tools: readonly { title: string; description: string; action: ViewAction; 
   { title: 'Trace 检查', description: '检查派生关系图。', action: { action: 'trace.check' }, icon: <Activity /> },
   { title: 'Doctor', description: '给出配置和接入诊断，不运行测试。', action: { action: 'doctor' }, icon: <Stethoscope /> },
   { title: '恢复中断写入', description: '按 journal 规则恢复，不覆盖未知编辑。', action: { action: 'recover' }, icon: <Wrench /> },
-  { title: 'Cache 状态', description: '查看可重建 SQLite 缓存。', action: { action: 'cache.status' }, icon: <Database /> },
+  { title: 'Cache 状态', description: '查看可重建 HawDB 缓存。', action: { action: 'cache.status' }, icon: <Database /> },
   { title: '重建 Cache', description: '从源事实重新构建缓存。', action: { action: 'cache.rebuild' }, icon: <RefreshCw /> },
   { title: '清理 Cache', description: '清除可重建缓存，不删除证据或文档。', action: { action: 'cache.clear' }, icon: <Database /> },
 ];

@@ -1,9 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-import { existsSync, lstatSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import { lstatSync } from 'node:fs';
 import { Schema } from 'effect';
+import { cacheDatabasePath, assertCacheDatabaseSafe, inspectCacheClear, deleteInspectedCache, prepareCacheClearRoot } from './cache-file.js';
+import { withPersistentCache, closeRepositoryCache } from './cache-store.js';
+import { acquireHawdbClearGuard } from './hawdb-native.js';
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from './shared.js';
 import { caseDiscriminator, deriveTestReference } from './test-reference.js';
 import type * as TypeScript from 'typescript';
@@ -128,37 +129,21 @@ function sources(repo: Repository): Source[] {
   }
   return selected;
 }
-function cachePath(repo: Repository): string { return join(repo.privateDir, 'cache.sqlite'); }
-function assertCacheSafe(path: string): void {
-  let stat;
-  try { stat = lstatSync(path); }
-  catch (cause) { if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') return; throw cause; }
-  if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
-  if (!stat.isFile()) throw new ConcordError('InvalidCache', `Cache paths must be regular files: ${path}`);
-}
-function assertCacheDatabaseSafe(path: string): void { for (const suffix of ['', '-wal', '-shm', '-journal']) assertCacheSafe(`${path}${suffix}`); }
+function cachePath(repo: Repository): string { return cacheDatabasePath(repo.privateDir); }
 function cacheKey(repo: Repository, current: readonly Source[]): string {
   return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: parserVersion(), files: current.map(source => ({ path: source.path, digest: source.digest })) });
 }
 function readCache(repo: Repository, key: string): CachedSnapshot | undefined {
-  const path = cachePath(repo); assertCacheDatabaseSafe(path);
-  if (!existsSync(path)) return undefined;
-  const db = new DatabaseSync(path, { readOnly: true });
-  try {
-    if (db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'annotation_cache'").get() === undefined) return undefined;
-    const row = db.prepare('SELECT payload FROM annotation_cache WHERE cache_key = ?').get(key) as { payload?: unknown } | undefined;
-    if (row?.payload === undefined) return undefined;
-    const value = decode(CachedSnapshotSchema, JSON.parse(String(row.payload)), 'annotation cache');
+  return withPersistentCache(repo, false, db => {
+    const row = db?.get('annotation_cache', [key])[0];
+    if (row === undefined) return undefined;
+    const value = decode(CachedSnapshotSchema, JSON.parse(row.payload), 'annotation cache');
     if (value.digest !== objectDigest({ cases: value.cases, findings: value.findings, files: value.files })) throw new ConcordError('InvalidData', 'annotation cache digest does not match its payload');
     return value;
-  }
-  finally { db.close(); }
+  });
 }
 function writeCache(repo: Repository, key: string, value: CachedSnapshot): void {
-  const path = cachePath(repo); assertCacheDatabaseSafe(path);
-  const db = new DatabaseSync(path);
-  try { db.exec('CREATE TABLE IF NOT EXISTS annotation_cache (cache_key TEXT PRIMARY KEY, payload TEXT NOT NULL)'); db.exec('BEGIN IMMEDIATE'); try { db.prepare('INSERT OR REPLACE INTO annotation_cache (cache_key, payload) VALUES (?, ?)').run(key, canonical(value)); db.exec('COMMIT'); } catch (cause) { try { db.exec('ROLLBACK'); } catch { /* best effort */ } throw cause; } }
-  finally { db.close(); }
+  withPersistentCache(repo, true, db => db!.put('annotation_cache', [{ key, payload: canonical(value) }]));
 }
 function unchanged(repo: Repository, before: readonly Source[]): boolean {
   try { const after = sources(repo); return after.length === before.length && after.every((source, index) => source.path === before[index]?.path && source.digest === before[index]?.digest); } catch { return false; }
@@ -200,25 +185,27 @@ export function clearCache(repo: Repository): { readonly status: string; readonl
   return repo.snapshot === undefined ? clearUnderSnapshot(repo) : repo.snapshot(() => clearUnderSnapshot(repo));
 }
 function clearUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string } {
-  const path = cachePath(repo); for (const suffix of ['', '-wal', '-shm', '-journal']) { const target = `${path}${suffix}`; assertCacheSafe(target); if (existsSync(target)) rmSync(target); }
-  return { status: 'cleared', path };
+  const inventory = inspectCacheClear(repo.privateDir);
+  if (!inventory.existing && inventory.legacy.length === 0) return { status: 'empty', path: inventory.path };
+  closeRepositoryCache(repo);
+  prepareCacheClearRoot(inventory);
+  const guard = acquireHawdbClearGuard(inventory.path);
+  try { deleteInspectedCache(inspectCacheClear(repo.privateDir)); }
+  finally { guard.close(); }
+  return { status: inventory.empty ? 'empty' : 'cleared', path: inventory.path };
 }
 export function cacheStatus(repo: Repository): { readonly status: string; readonly path: string; readonly detail?: string } {
   return repo.snapshot === undefined ? statusUnderSnapshot(repo) : repo.snapshot(() => statusUnderSnapshot(repo));
 }
 function statusUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string; readonly detail?: string } {
   const path = cachePath(repo); try {
-    assertCacheDatabaseSafe(path);
-    if (!existsSync(path)) return { status: 'empty', path };
-    const db = new DatabaseSync(path, { readOnly: true });
-    try {
-      const rows = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('annotation_cache', 'code_cache', 'config_cache', 'feedback_cache') ORDER BY name").all() as unknown as readonly { readonly name: unknown }[];
-      const projections = rows.map(row => String(row.name));
-      if (projections.includes('annotation_cache')) db.prepare('SELECT 1 FROM annotation_cache LIMIT 1').all();
-      if (projections.includes('code_cache')) db.prepare('SELECT 1 FROM code_cache LIMIT 1').all();
-      if (projections.includes('config_cache')) db.prepare('SELECT 1 FROM config_cache LIMIT 1').all();
-      if (projections.includes('feedback_cache')) db.prepare('SELECT 1 FROM feedback_cache LIMIT 1').all();
-      return projections.length === 0 ? { status: 'empty', path } : { status: 'ready', path, detail: `projections: ${projections.join(', ')}` };
-    } finally { db.close(); }
+    const inventory = inspectCacheClear(repo.privateDir);
+    if (inventory.legacy.length > 0) return { status: 'unavailable', path, detail: 'Legacy SQLite cache remnants require explicit clear' };
+    if (!assertCacheDatabaseSafe(path) || inventory.empty) return { status: 'empty', path };
+    return withPersistentCache(repo, false, db => {
+      const projections = db!.namespaces().filter(name => name.endsWith('_cache'));
+      for (const namespace of projections) db!.scan(namespace);
+      return { status: projections.length === 0 ? 'empty' : 'ready', path, detail: `projections: ${projections.join(', ')}` };
+    });
   } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; }
 }

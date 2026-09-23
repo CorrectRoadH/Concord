@@ -59,7 +59,7 @@ function ProjectDocNavigation({ search }: { readonly search: string }) {
   });
   const groups: ContentSidebarGroup[] = [
     { id: 'project', label: '项目文档', heading: '项目文档', items: root.map(item), emptyMessage: '暂无项目文档' },
-    ...(templates.length === 0 ? [] : [{ id: 'templates', label: '参考模板', heading: '参考模板', items: templates.map(item) }]),
+    ...(templates.length === 0 ? [] : [{ id: 'templates', label: '参考模板', heading: '参考模板', treeRoot: 'docs/_template/', items: templates.map(item) }]),
   ];
   return <ContentSidebar key="docs" model={{
     label: '文档',

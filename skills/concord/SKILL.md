@@ -26,3 +26,9 @@ Concord 把 Markdown 契约、测试源码里的 Concord 标记和工程 Memory 
 ## 工作原则
 
 先读取现有 owner 与关系，再决定应修改契约、测试源码还是 Memory。路径是 canonical identity；不要另建反向登记表或测试关系 JSON。文档变更先用 `--dry-run` 检查时，仍须以实际非 dry-run 结果作为完成依据。任何冲突、恢复要求或证据陈旧都应保留现场并处理具名错误，不得绕过 guard。
+
+契约正文声明目标、行为、约束和验收条件；产品流程属于契约。开发日志、排障经过、实施进度与临时计划归工程 Memory，不写入契约正文。观察归 Issue，调查与经验归 Memory，采用后的目标归 Feature。
+
+Memory 与 Issue 必须通过 Concord 工具索引、检索、读取和修改。使用 `memory index/recall`、`issue index/recall` 发现当前内容，使用具名作者与生命周期命令更新；不要直接读写 owner 文件代替工具，不手工维护 INDEX.md、metadata、history 或反向关系。工具缺口先报告或补齐，不能手写文件绕过。
+
+领域术语通过 `concepts index/show/set` 管理，写作政策通过 `writing index/show/set/check` 管理。docs 下 `concepts.json` 与 `concord-writing.json` 的所在目录决定 scope；全项目视图只汇总来源，不复制局部定义到全局。Markdown 写解释和案例，JSON 拥有结构化定义。编辑使用工具与摘要，先读 `concord --skill document` 了解格式和迁移。

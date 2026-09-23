@@ -1,0 +1,17 @@
+{
+  "format": "concord.concepts/v1",
+  "concepts": [
+    {
+      "id": "command-evidence",
+      "definition": "记录一次已配置消费者命令执行及其绑定输入的收据；它本身不证明底层逐用例覆盖或原生端到端可靠性。",
+      "names": {
+        "zh": {
+          "preferred": "命令证据"
+        },
+        "en": {
+          "preferred": "Command evidence"
+        }
+      }
+    }
+  ]
+}

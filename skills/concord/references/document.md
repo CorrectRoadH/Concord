@@ -2,6 +2,8 @@
 
 已采用的当前目标写入 Feature，叶子用户路径写入 Use Case；尚未采用的定稿方向写入 Roadmap，多方案比较写入 Design，自由研究与决策输入写入 Research，仓库测试与维护机制写入 Engineering。
 
+契约正文采用声明式表达：写产品必须具备的行为、边界与验收，不写“这轮做了什么”、开发流水账、实施进度或临时计划。用户操作流程、状态迁移和验收步骤可以保留。排障经过与交付经验使用 `concord memory add` 保存；待调查观察使用 `concord issue create`。Research 的来源事实和工具维护的历史不因这条规则被删除或伪装成目标契约。
+
 ```sh
 concord feature create login --title "登录" --pages cli,use-case
 concord use-case create expired-token --feature login --title "拒绝过期令牌"
@@ -52,3 +54,15 @@ concord author set docs/feature/login/README.md --body ./login.md --expected-dig
 ```
 
 不要手改工具拥有的 metadata 或历史；路径和 anchor 是关系身份，链接目标必须是 canonical repository-relative reference。
+
+## 术语与写作政策
+
+用 `concepts index/show/set` 和 `writing index/show/set/check` 发现、读取和管理 JSON owner，编辑先取得最新 digest。全局定义在 docs/concepts.json；Feature、Engineering 或其它 docs 子目录可分别放 concepts.json 和 concord-writing.json。精确文件名与目录决定 scope，docs/_template 排除，局部 roots 不得越界。
+
+concepts 使用 concord.concepts/v1：稳定局部 id、definition、多语言 preferred/aliases/deprecated 和可选直接 imports。允许别名不成为禁词，只有明确 deprecated 才派生规则。Markdown 保留解释和案例；全项目术语表只读汇总，不写第二份词库。删除或改名被引用的概念会被拒绝。
+
+政策使用 concord.writing/v2。根集合用于选文件，祖先规则仍按有效范围应用；省略阈值表示继承，null 表示清除，布尔 false 表示关闭。同名概念和规则冲突保留全部来源，不默默覆盖。作用域、语料与恢复的精确定义见随包 docs/feature/documentation-quality/policy.md。
+
+`concord docs check --json` 自动发现政策与概念；`--rules <path>` 选择受管政策的扫描根，或使用外部只读 profile。报告说明实际范围与输入快照。发现问题退出 1，逐处核对上下文，不机械全仓替换；这不是测试覆盖率或实现证明。
+
+旧 writing/v1 的普通检查返回 WritingMigrationRequired。先 show 取得原文与摘要，作者审核并用 concepts.set 保存 JSON，再用 writing.set 和旧摘要显式替换为 v2。概念编辑不因仍存在旧政策而被阻断，中间阶段不宣称检查通过。不要从旧表的名字编造定义；有旧 journal 时先用匹配的旧 CLI 恢复，不能绕过新授权边界。

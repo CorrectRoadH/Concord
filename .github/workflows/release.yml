@@ -16,7 +16,48 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: linux-x64-glibc
+          - os: macos-14
+            target: darwin-arm64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Verify native transaction failure and crash recovery
+        run: |
+          node --import tsx scripts/build-native.ts --output dist/native --test-hooks
+          node --import tsx --test test/hawdb-native.test.ts
+      - name: Build the pinned host engine
+        run: node --import tsx scripts/build-native.ts --output native-artifacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: concord-hawdb-${{ matrix.target }}
+          path: native-artifacts/
+          if-no-files-found: error
+          retention-days: 7
+
   package:
+    needs: native
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -44,7 +85,15 @@ jobs:
       - name: Install public runtime helpers
         run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: concord-hawdb-*
+          path: native-artifacts
+          merge-multiple: true
       - run: pnpm check
+        env:
+          CONCORD_NATIVE_ARTIFACTS: native-artifacts
+          CONCORD_REQUIRE_PORTABLE_NATIVE: '1'
       - name: Pack once
         run: |
           mkdir release
@@ -62,6 +111,7 @@ jobs:
           test "$($cli --version)" = "concord v$version"
           "$cli" --root "$consumer" init --docs-only
           "$cli" --root "$consumer" check
+          node --import tsx scripts/verify-installed-native.ts "$consumer/tool/node_modules/concord-sdlc"
       - uses: actions/upload-artifact@v4
         with:
           name: concord-release-package
@@ -102,7 +152,7 @@ jobs:
           shasum -a 256 --check release/SHA256SUMS
           version="$(node -p "require('./package.json').version")"
           tar -xzf "release/concord-sdlc-$version.tgz" --strip-components=1 package/dist
-          node --import tsx --test test/portable-coordination.test.ts test/storage.test.ts test/runtime-portability.test.ts test/coordination-migration.test.ts
+          node --import tsx --test test/portable-coordination.test.ts test/storage.test.ts test/runtime-portability.test.ts test/coordination-migration.test.ts test/hawdb-native.test.ts test/hawdb-cache.test.ts test/content-cache.test.ts test/annotations.test.ts test/code-cache.test.ts test/feedback.test.ts
       - name: Install and exercise the same candidate CLI
         run: |
           version="$(node -p "require('./package.json').version")"
@@ -113,6 +163,7 @@ jobs:
           test "$($cli --version)" = "concord v$version"
           "$cli" --root "$consumer" init --docs-only
           "$cli" --root "$consumer" check
+          node --import tsx scripts/verify-installed-native.ts "$consumer/tool/node_modules/concord-sdlc"
 
   publish:
     needs: [package, portable]
@@ -135,4 +186,4 @@ jobs:
           digest="$(cut -d' ' -f1 release/SHA256SUMS)"
           gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
-            --notes "Built and fully tested on Ubuntu 24.04. The same packed candidate passed portable coordination, recovery, and isolated CLI installation checks on Apple Silicon macOS 14 and 15. Runtime publication no longer requires flock or disk-inspection helpers; SQLite remains disposable cache. No old lock migration or mixed-version coordination is provided. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."
+            --notes "Built and fully tested on Ubuntu 24.04. The same packed candidate, including pinned Linux x64 and macOS arm64 HawDB engines, passed cache, coordination, recovery, and isolated installation checks on Apple Silicon macOS 14 and 15. Consumer installation requires neither Rust nor a HawDB service. No old lock migration or mixed-version coordination is provided. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."

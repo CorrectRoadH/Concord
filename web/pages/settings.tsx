@@ -1,12 +1,14 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
-import { AlertTriangle, RefreshCw, Save } from "lucide-react"
+import { AlertTriangle, RefreshCw } from "lucide-react"
 import * as React from "react"
 import { flushSync } from "react-dom"
 import { Schema } from "effect"
 import { ProjectInputSchema } from "../../src/view-contract"
 
 import type { ProjectConfig } from "../../src/shared"
+import type { FeedbackConnection } from "../../src/feedback-schema"
+import { FeedbackConnectionsEditor } from "@/components/feedback-connections"
 import { urlChoice, useUrlNavigation } from "@/hooks/use-url-navigation"
 import { useAutoSave } from "@/hooks/use-auto-save"
 import { Empty, Field, PageHeader } from "@/components/page"
@@ -45,10 +47,11 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   const [argvText, setArgvText] = React.useState(initial.runner.kind === "command" ? lines(initial.runner.argv) : "")
   const [timeoutText, setTimeoutText] = React.useState(String(initial.runner.timeoutMs))
   const { params, update } = useUrlNavigation()
-  const tab = urlChoice(params.get("tab"), ["form", "advanced", "diagnostics"], "form")
+  const tab = urlChoice(params.get("tab"), ["form", "feedback", "advanced", "diagnostics"], "form")
   const [error, setError] = React.useState("")
   const [saving, setSaving] = React.useState(false)
   const [reloadOpen, setReloadOpen] = React.useState(false)
+  const connectionEditRevision = React.useRef(0)
   const latestDigest = useWorkspace().snapshot.configDigest
   const formDirty = testRootsText !== lines(baseline.config.testRoots) || sourceRootsText !== lines(baseline.config.sourceRoots ?? []) || sourceFilesText !== lines(baseline.config.runner.sourceFiles) || timeoutText !== String(baseline.config.runner.timeoutMs) || draft.runner.kind !== baseline.config.runner.kind || (draft.runner.kind === "command" && argvText !== (baseline.config.runner.kind === "command" ? lines(baseline.config.runner.argv) : ""))
   const dirty = formDirty || source !== json(baseline.config)
@@ -57,6 +60,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
 
 
   function change(next: ProjectConfig): void {
+    connectionEditRevision.current += 1
     setDraft(next)
     setSource(json(next))
   }
@@ -130,10 +134,19 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
     revision,
     discard: () => { sync(baseline.config); setError("") },
     save: async () => {
-      const config = tab === "advanced" ? Schema.decodeUnknownSync(ProjectInputSchema, { onExcessProperty: "error" })(JSON.parse(source)) : formConfig()
+      const config = source !== json(draft) ? Schema.decodeUnknownSync(ProjectInputSchema, { onExcessProperty: "error" })(JSON.parse(source)) : formConfig()
       await persist(config)
     },
   })
+
+  async function prepareFeedbackCheck(connection: Extract<FeedbackConnection, { readonly provider: "github" }>): Promise<void> {
+    const before = connectionEditRevision.current
+    await autoSave.flush()
+    if (connectionEditRevision.current !== before) throw new Error("设置在保存期间已改变，请重试检测。")
+    const saved = await api.workspace()
+    const configured = saved.project?.feedbackConnections?.find((item) => item.id === connection.id)
+    if (!configured || configured.provider !== "github" || configured.transport !== "gh" || connection.transport !== "gh" || configured.owner !== connection.owner || configured.repo !== connection.repo || configured.repositoryId !== connection.repositoryId) throw new Error("连接尚未保存为当前配置，请先解决保存冲突。")
+  }
 
   const runner = draft.runner
   return (
@@ -145,7 +158,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
       />
       {externallyChanged && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘设置已变化</strong><p>当前草稿没有被覆盖。保存会要求你先比较或重新载入。</p></div></div>}
       <Tabs value={tab} onValueChange={next => update({ tab: next })}>
-        <TabsList><TabsTrigger value="form">常用设置</TabsTrigger><TabsTrigger value="advanced">高级 JSON</TabsTrigger><TabsTrigger value="diagnostics">诊断</TabsTrigger></TabsList>
+        <TabsList><TabsTrigger value="form">常用设置</TabsTrigger><TabsTrigger value="feedback">反馈来源</TabsTrigger><TabsTrigger value="advanced">高级 JSON</TabsTrigger><TabsTrigger value="diagnostics">诊断</TabsTrigger></TabsList>
         <TabsContent value="form">
           <div className="form-section">
             <form className="form-grid" onSubmit={(event) => { event.preventDefault(); void autoSave.flush().catch(() => undefined) }}>
@@ -163,6 +176,13 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
               {autoSave.error && <div className="form-error" role="alert">{autoSave.error}<Button type="submit" variant="outline">重试保存</Button></div>}
             </form>
           </div>
+        </TabsContent>
+        <TabsContent value="feedback">
+          <PanelHeader title="反馈来源" actions={<span className="form-status" role="status">{autoSave.status}</span>} />
+          <p className="muted">连接保存后，前往反馈页手动同步或导入。移除连接不会删除已导入的反馈。</p>
+          <FeedbackConnectionsEditor connections={draft.feedbackConnections ?? []} onChange={(connections) => change({ ...draft, feedbackConnections: [...connections] })} prepareCheck={prepareFeedbackCheck} />
+          {error && <div className="form-error" role="alert">{error}</div>}
+          {autoSave.error && <div className="form-error" role="alert">{autoSave.error}<Button variant="outline" onClick={() => { void autoSave.flush().catch(() => undefined) }}>重试保存</Button></div>}
         </TabsContent>
         <TabsContent value="advanced">
           <PanelHeader title="高级配置" actions={<span className="form-status" role="status">{autoSave.status}</span>} /><div><Textarea className="json-editor" aria-label="高级项目配置 JSON" value={source} onChange={(event) => setSource(event.target.value)} />{error && <div className="form-error" role="alert">{error}</div>}{autoSave.error && <div className="form-error" role="alert">{autoSave.error}<Button variant="outline" onClick={() => { void autoSave.flush().catch(() => undefined) }}>重试保存</Button></div>}</div>

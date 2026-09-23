@@ -4,6 +4,7 @@ import { GitBranch } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { MarkdownEditor } from '../components/markdown-editor';
+import { ConstitutionEditor } from '../components/constitution-editor';
 import { Button } from '../components/ui/button';
 import { useUrlNavigation } from '../hooks/use-url-navigation';
 import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs';
@@ -71,7 +72,9 @@ export function ProjectDocsPage() {
     <section data-testid="project-doc-preview" aria-label={selectedPath}>
       {error && <div className="form-error" role="alert">{error} <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>重试</Button></div>}
       {selected?.path === selectedPath
-        ? <MarkdownEditor key={selected.path} initial={selected} title={title} onSaved={setSelected} toolbarTarget={toolbar} onFollowLink={follow} />
+        ? selected.path === 'docs/constitution.md'
+          ? <ConstitutionEditor key={selected.path} initial={selected} onSaved={setSelected} toolbarTarget={toolbar} onFollowLink={follow} />
+          : <MarkdownEditor key={selected.path} initial={selected} title={title} onSaved={setSelected} toolbarTarget={toolbar} onFollowLink={follow} />
         : !error && <p role="status">正在载入…</p>}
     </section>
   </>;

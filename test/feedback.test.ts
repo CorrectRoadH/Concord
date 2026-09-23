@@ -1,15 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { getWorkspaceSnapshot } from '../dist/application.js';
 import { cacheStatus, scanAnnotations, clearCache } from '../dist/annotations.js';
 import { checkDocuments, closeIssue, createDocument, linkFeedbackFeature, loadDocuments, renderDocument, setAuthor, setDocumentMetadata } from '../dist/documents.js';
 import { mergeFeedbackCache, readFeedbackCache } from '../dist/feedback-cache.js';
+import { openHawdb } from '../dist/hawdb-native.js';
 import { listFeedback, syncFeedback } from '../dist/feedback.js';
 import type { RemoteFeedback } from '../dist/feedback-schema.js';
 import type { FeedbackTransport } from '../dist/feedback-providers.js';
@@ -74,7 +74,7 @@ test('feedback workspace stays tolerant and readonly when its cache table or unr
     open(root, repo => createDocument(repo, 'issue', { id: 'local-note', title: 'Local note' }));
     mkdirSync(join(root, 'memory'), { recursive: true });
     writeFileSync(join(root, 'memory', 'broken.md'), '---\nformat: concord.document/v1\nid: broken\n---\n');
-    const cache = join(root, '.git', 'concord', 'cache.sqlite');
+    const cache = join(root, '.git', 'concord', 'cache.hawdb');
     assert.equal(existsSync(cache), false);
     const workspace = await Effect.runPromise(getWorkspaceSnapshot(root));
     assert.deepEqual(workspace.feedback.map(item => item.document.metadata.id), ['local-note']);
@@ -82,11 +82,11 @@ test('feedback workspace stays tolerant and readonly when its cache table or unr
     rmSync(join(root, 'memory', 'broken.md'));
 
     open(root, repo => scanAnnotations(repo, { cache: 'rebuild' }));
-    const before = statSync(cache).mtimeMs;
+    const before = readdirSync(cache).sort();
     open(root, repo => assert.deepEqual(listFeedback(repo).map(item => item.document.metadata.id), ['local-note']));
-    assert.equal(statSync(cache).mtimeMs, before, 'reading a database without feedback_cache must stay readonly');
-    const database = new DatabaseSync(cache, { readOnly: true });
-    try { assert.equal(database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='feedback_cache'").get(), undefined); }
+    assert.deepEqual(readdirSync(cache).sort(), before, 'reading a database without feedback_cache must stay readonly');
+    const database = openHawdb(cache, { readOnly: true, create: false });
+    try { assert.deepEqual(database.scan('feedback_cache'), []); }
     finally { database.close(); }
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -156,7 +156,7 @@ test('dry-run and failed or stale fetches write neither documents nor cache', as
     assert.equal(dry.imported, 1);
     assert.equal(readFileSync(join(root, configPath), 'utf8'), before);
     assert.equal(existsSync(join(root, 'docs/issues/feedback-github-9001.md')), false);
-    assert.equal(existsSync(join(root, '.git/concord/cache.sqlite')), false);
+    assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
 
     await assert.rejects(Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([], { failList: true }), credential: 'test-token' })), error => errorCode(error, 'InjectedFailure'));
     assert.equal(readFileSync(join(root, configPath), 'utf8'), before);
@@ -173,9 +173,9 @@ test('dry-run and failed or stale fetches write neither documents nor cache', as
     release();
     await assert.rejects(running, error => errorCode(error, 'PreimageChanged'));
     assert.equal(existsSync(join(root, 'docs/issues/feedback-github-9001.md')), false);
-    assert.equal(existsSync(join(root, '.git/concord/cache.sqlite')), false);
+    assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
 
-    writeFileSync(join(root, '.git/concord/cache.sqlite'), 'not a sqlite database');
+    writeFileSync(join(root, '.git/concord/cache.hawdb'), 'not a HawDB directory');
     const cacheFailed = await Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
     assert.equal(cacheFailed.imported, 1);
     assert.ok(cacheFailed.warnings.some(warning => warning.includes('cache could not be updated')));
@@ -205,8 +205,53 @@ test('cache compares real instants, rejects unsafe paths, and duplicate source i
     await assert.rejects(Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' })), error => errorCode(error, 'FeedbackIdentityConflict'));
     rmSync(join(root, 'docs/issues/duplicate-feedback.md'));
     open(root, repo => clearCache(repo));
-    const dangling = join(root, '.git/concord/cache.sqlite');
+    const dangling = join(root, '.git/concord/cache.hawdb');
+    rmSync(dangling, { recursive: true });
     symlinkSync(join(root, 'missing-cache-target'), dangling);
     open(root, repo => assert.throws(() => readFeedbackCache(repo), error => errorCode(error, 'UnsafePath')));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('one feedback fetch merges repeated identities against earlier entries in the same batch', () => {
+  const root = fixture();
+  try {
+    const remote: RemoteFeedback = { provider: 'github', instance: 'https://api.github.com', id: '9001', url: 'https://github.com/acme/project/issues/7', title: 'Initial', body: '', state: 'open', updatedAt: '2026-09-14T00:00:00Z' };
+    open(root, repo => {
+      const warnings = mergeFeedbackCache(repo, 'github-main', [
+        remote,
+        { ...remote, title: 'Newer', updatedAt: '2026-09-14T01:00:00Z' },
+        { ...remote, title: 'Stale', updatedAt: '2026-09-14T00:30:00Z' },
+        { ...remote, title: 'Conflict', updatedAt: '2026-09-14T01:00:00Z' },
+      ]);
+      assert.equal(warnings.length, 1);
+      assert.equal([...readFeedbackCache(repo).items.values()][0]?.remote.title, 'Newer');
+      const database = openHawdb(join(repo.privateDir, 'cache.hawdb'), { readOnly: true, create: false });
+      try { assert.equal(database.scan('feedback_cache').length, 1, 'the merged entry was published to HawDB'); }
+      finally { database.close(); }
+    });
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('feedback cache rejects a damaged HawDB payload and never partially publishes an oversized identity batch', () => {
+  const root = fixture();
+  try {
+    const remote: RemoteFeedback = { provider: 'github', instance: 'https://api.github.com', id: '9001', url: 'https://github.com/acme/project/issues/7', title: 'Original', body: '', state: 'open', updatedAt: '2026-09-14T00:00:00Z' };
+    open(root, repo => {
+      assert.throws(() => mergeFeedbackCache(repo, 'github-main', Array.from({ length: 1001 }, (_, index) => ({ ...remote, id: String(index + 1) }))), error => errorCode(error, 'HawdbLimit'));
+      const path = join(repo.privateDir, 'cache.hawdb');
+      const database = openHawdb(path, { readOnly: true, create: false });
+      try { assert.deepEqual(database.scan('feedback_cache'), []); }
+      finally { database.close(); }
+      mergeFeedbackCache(repo, 'github-main', [remote]);
+      const writer = openHawdb(path, { readOnly: false, create: false });
+      try {
+        const row = writer.scan('feedback_cache')[0]!;
+        writer.put('feedback_cache', [{ key: row.key, payload: '{' }]);
+      } finally { writer.close(); }
+      assert.throws(() => readFeedbackCache(repo), error => errorCode(error, 'InvalidCache'));
+      assert.throws(() => mergeFeedbackCache(repo, 'github-main', [{ ...remote, updatedAt: '2026-09-14T01:00:00Z' }]), error => errorCode(error, 'InvalidCache'));
+    });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

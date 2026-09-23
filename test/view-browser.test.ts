@@ -31,7 +31,9 @@ test('browser opens and refreshes a deep link without credentials and retries in
       });
       for (let index = 0; index < 24; index += 1) createDocument(repo, 'feature', { id: `fixture-${index}`, title: `Navigation fixture ${index}` });
     } finally { repo.close(); }
-    writeFileSync(join(root, 'docs/concepts.md'), '# Concepts\n\n| 中文 | English | 含义 | 契约 |\n|---|---|---|---|\n| 直接访问 | Direct access | 浏览器直接打开工作台 | [Web](feature/web/README.md) |\n');
+    writeFileSync(join(root, 'docs/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'direct-access', definition: '浏览器直接打开工作台', names: { zh: { preferred: '直接访问', aliases: ['直接打开'], deprecated: ['旧访问'] }, en: { preferred: 'Direct access', aliases: ['Open directly'] } } }] }));
+    writeFileSync(join(root, 'docs/feature/web/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'workbench', definition: 'Web Feature 所属定义', names: { en: { preferred: 'Workbench' } } }] }));
+    writeFileSync(join(root, 'docs/feature/html/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'html-only', definition: '相邻 Feature 定义', names: { en: { preferred: 'HTML Only' } } }] }));
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
@@ -76,6 +78,11 @@ test('browser opens and refreshes a deep link without credentials and retries in
     assert.match(await page.evaluate(() => (window as typeof window & { copiedFallback?: string }).copiedFallback ?? ''), /Floating tooling/);
     await floating.getByRole('link', { name: /Floating user path/ }).click();
     await expect(page.getByRole('heading', { name: 'Floating user path', exact: true }).first()).toBeVisible();
+    await page.getByRole('tab', { name: '术语', exact: true }).click();
+    await expect(page.getByText('docs/feature/web/use-case/concepts.json', { exact: true })).toBeVisible();
+    await expect(page.getByText('docs/concepts.json#direct-access', { exact: true })).toBeVisible();
+    await expect(page.getByText('docs/feature/web/concepts.json#workbench', { exact: true })).toBeVisible();
+    await expect(page.getByText('docs/feature/html/concepts.json#html-only', { exact: true })).toHaveCount(0);
     await page.goto(url);
     const contentNavigation = page.getByRole('navigation', { name: '内容导航', exact: true });
     assert.equal(await contentNavigation.evaluate(element => element.parentElement!.scrollHeight > element.parentElement!.clientHeight), true);
@@ -97,8 +104,14 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await expect(page.getByRole('button', { name: '切换至浅色主题', exact: true })).toBeVisible();
     await expect(page.getByTestId('document-header').getByRole('button', { name: '重新载入', exact: true })).toBeVisible();
     await page.getByRole('tab', { name: '术语', exact: true }).click();
-    await expect(page.getByText('直接访问', { exact: true })).toBeVisible();
-    await expect(page.getByText('Direct access', { exact: true })).toBeVisible();
+    await expect(page.getByText('docs/concepts.json#direct-access', { exact: true })).toBeVisible();
+    await expect(page.getByText('docs/feature/web/concepts.json#workbench', { exact: true })).toBeVisible();
+    await expect(page.getByText(/zh · 首选：直接访问/u)).toBeVisible();
+    await expect(page.getByText(/en · 首选：Direct access/u)).toBeVisible();
+    await expect(page.getByText(/允许名称：直接打开；弃用名称：旧访问/u)).toBeVisible();
+    await expect(page.getByText('浏览器直接打开工作台', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: '管理术语' })).toHaveAttribute('href', '/writing');
+    await expect(page.getByText('docs/feature/html/concepts.json#html-only', { exact: true })).toHaveCount(0);
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'terminology');
     await page.getByRole('tab', { name: '实现', exact: true }).click();
     await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active');
@@ -151,6 +164,57 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await server?.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+test('terminology tab discards a previous document response and shows scoped JSON diagnostics', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-terminology-browser-'));
+  let server: ViewServerHandle | undefined;
+  let browser: Browser | undefined;
+  try {
+    execFileSync('git', ['init', '-q', root]);
+    const repo = new LocalRepository(root, { initialize: true });
+    try {
+      initialize(repo, false, { testRoots: [] });
+      createDocument(repo, 'feature', { id: 'alpha', title: 'Alpha Feature' });
+      createDocument(repo, 'feature', { id: 'beta', title: 'Beta Feature' });
+    } finally { repo.close(); }
+    writeFileSync(join(root, 'docs/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'shared', definition: 'Shared definition', names: { en: { preferred: 'Shared' } } }] }));
+    writeFileSync(join(root, 'docs/feature/alpha/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'alpha', definition: 'Alpha definition', names: { en: { preferred: 'Alpha' } } }] }));
+    writeFileSync(join(root, 'docs/feature/beta/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'beta', definition: 'Beta definition', names: { en: { preferred: 'Beta' } } }], imports: ['docs/concepts.json#missing'] }));
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
+    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
+    const page = await browser.newPage();
+    let legacyReads = 0;
+    page.on('request', request => { if (request.url().includes('/api/file') && request.url().includes('concepts.md')) legacyReads++; });
+    let releaseAlpha!: () => void;
+    let interceptedAlpha!: () => void;
+    const heldAlpha = new Promise<void>(resolve => { interceptedAlpha = resolve; });
+    const release = new Promise<void>(resolve => { releaseAlpha = resolve; });
+    await page.route('**/api/action', async route => {
+      const input = route.request().postDataJSON() as { action?: string; path?: string };
+      if (input.action === 'concepts.show' && input.path === 'docs/feature/alpha/concepts.json') {
+        interceptedAlpha();
+        await release;
+      }
+      await route.continue();
+    });
+    await page.goto(`http://127.0.0.1:${server.port}/features/alpha?tab=terminology`);
+    await heldAlpha;
+    const navigation = page.getByRole('navigation', { name: '内容导航', exact: true });
+    await navigation.getByRole('link', { name: 'Beta Feature', exact: true }).click();
+    await page.getByRole('tab', { name: '术语', exact: true }).click();
+    await expect(page.getByText('docs/concepts.json#shared', { exact: true })).toBeVisible();
+    await expect(page.getByText('docs/feature/beta/concepts.json#beta', { exact: true })).toBeVisible();
+    await expect(page.getByText(/DanglingConceptImport/u)).toBeVisible();
+    const oldResponse = page.waitForResponse(response => response.url().endsWith('/api/action') && (response.request().postDataJSON() as { action?: string; path?: string }).path === 'docs/feature/alpha/concepts.json');
+    releaseAlpha();
+    await oldResponse;
+    await expect(page.getByText('docs/feature/alpha/concepts.json#alpha', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('docs/feature/beta/concepts.json#beta', { exact: true })).toBeVisible();
+    assert.equal(legacyReads, 0);
+  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

@@ -11,6 +11,12 @@ const build = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   yield* fs.remove('dist', { recursive: true, force: true });
+  const nativeArgs = ['--import', 'tsx', 'scripts/build-native.ts', '--output', 'dist/native'];
+  const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
+  if (prebuilt !== undefined) nativeArgs.push('--prebuilt', prebuilt);
+  if (process.env.CONCORD_REQUIRE_PORTABLE_NATIVE === '1') nativeArgs.push('--require-portable');
+  const nativeExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, nativeArgs, { stdout: 'inherit', stderr: 'inherit' }));
+  if (nativeExit !== 0) return yield* new BuildFailed({ project: 'hawdb-native', exitCode: nativeExit });
   for (const project of ['tsconfig.json', 'tsconfig.repository.json', 'tsconfig.web.json']) {
     const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project], { stdout: 'inherit', stderr: 'inherit' }));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });

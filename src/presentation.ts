@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/README.md
+// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { Predicate } from 'effect';
 
 const label = (key: string): string => key.replace(/([a-z])([A-Z])/gu, '$1 $2').replaceAll('-', ' ');
@@ -10,6 +11,14 @@ export function humanOutput(value: unknown): string {
   if (typeof value === 'string') return value;
   if (!Predicate.isObject(value)) return scalar(value);
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
+  if (value.operation === 'docs-check' && Array.isArray(value.findings)) {
+    return [
+      `Documentation writing: ${value.ok ? 'passed' : 'failed'} (${String(value.files)} files)`,
+      `Mode: ${String(value.mode)}; selection: ${Array.isArray(value.selectedRoots) ? value.selectedRoots.join(', ') : ''}`,
+      `Policy: ${String(value.policy)}`,
+      ...value.findings.filter(Predicate.isObject).map(hit => `${String(hit.file)}:${String(hit.line)} [${String(hit.rule)}] ${String(hit.message)}`),
+    ].join('\n');
+  }
   if (value.operation === 'init-cancelled') return 'Initialization cancelled. No files or private state were written.';
   if (value.operation === 'init-preview' && Predicate.isObject(value.configuration)) {
     const configuration = value.configuration;

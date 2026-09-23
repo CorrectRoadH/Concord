@@ -21,14 +21,15 @@ const IsoInstant = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2
 );
 const Url = TrimmedText.check(Schema.isMaxLength(8 * 1024), Schema.isPattern(/^https:\/\/[^\s]+$/u));
 
-export const GitHubFeedbackConnectionSchema = Schema.Struct({
+const GitHubFeedbackConnectionBase = {
   id: Slug,
   provider: Schema.Literal('github'),
-  credentialEnv: CredentialEnvironment,
   owner: ShortText,
   repo: ShortText,
   repositoryId: Schema.optional(CanonicalIntegerId),
-});
+} as const;
+export const GitHubFeedbackApiConnectionSchema = Schema.Struct({ ...GitHubFeedbackConnectionBase, transport: Schema.optional(Schema.Literal('api')), credentialEnv: CredentialEnvironment });
+export const GitHubFeedbackGhConnectionSchema = Schema.Struct({ ...GitHubFeedbackConnectionBase, transport: Schema.Literal('gh'), credentialEnv: Schema.optional(Schema.Never) });
 export const LinearFeedbackConnectionSchema = Schema.Struct({
   id: Slug,
   provider: Schema.Literal('linear'),
@@ -38,7 +39,8 @@ export const LinearFeedbackConnectionSchema = Schema.Struct({
   teamId: Schema.optional(Uuid),
 });
 export const FeedbackConnectionSchema = Schema.Union([
-  GitHubFeedbackConnectionSchema,
+  GitHubFeedbackApiConnectionSchema,
+  GitHubFeedbackGhConnectionSchema,
   LinearFeedbackConnectionSchema,
 ]);
 export type FeedbackConnection = typeof FeedbackConnectionSchema.Type;
@@ -95,6 +97,7 @@ export type FeedbackIssueRecord = Omit<DocumentRecord, 'metadata'> & {
 };
 export interface FeedbackItem {
   readonly document: FeedbackIssueRecord;
+  readonly provider: 'local' | 'github' | 'linear';
   readonly triage: FeedbackTriage;
   readonly remote: RemoteFeedback | null;
   readonly availability: FeedbackAvailability;

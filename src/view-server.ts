@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { Effect, Schema } from 'effect';
 import { executeViewAction, getViewGitStatus, getViewFile, getWorkspaceSnapshot, validateViewRoot } from './application.js';
-import { getGitDiff, type GitArea, type GitBaselineCache } from './git-view.js';
+import { closeGitBaselineCache, getGitDiff, type GitArea, type GitBaselineCache } from './git-view.js';
 import { ConcordError, decode, digest, failure } from './shared.js';
 import { ViewJobManager } from './view-jobs.js';
 import type { ViewFailure, ViewResponse } from './view-contract.js';
@@ -226,7 +226,7 @@ function serveStatic(response: ServerResponse, pathname: string, webRoot: string
   response.end(readFileSync(target));
 }
 
-async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache): Promise<void> {
+async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, runAction: (input: unknown, response: ServerResponse) => Promise<unknown>): Promise<void> {
   const method = request.method ?? 'GET';
   if (method === 'GET' && url.pathname === '/api/workspace') {
     exactQuery(url, []);
@@ -252,7 +252,7 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   if (method === 'POST' && url.pathname === '/api/action') {
     exactQuery(url, []);
     mutationJson(request);
-    return success(response, await Effect.runPromise(executeViewAction(root, await readJson(request))));
+    return success(response, await runAction(await readJson(request), response));
   }
   if (method === 'GET' && url.pathname === '/api/jobs') {
     exactQuery(url, []);
@@ -290,19 +290,37 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   const webRoot = options.webRoot ?? join(dirname(fileURLToPath(import.meta.url)), 'web');
   const jobs = new ViewJobManager(root);
   const baselineCache: GitBaselineCache = {};
+  let stopping = false;
+  const feedbackControllers = new Set<AbortController>();
+  const feedbackTasks = new Set<Promise<unknown>>();
+  const runAction = (input: unknown, response: ServerResponse): Promise<unknown> => {
+    if (stopping) throw new ConcordError('ServerStopping', 'The workbench is shutting down');
+    const action = input !== null && typeof input === 'object' && 'action' in input ? input.action : undefined;
+    if (action !== 'feedback.sync' && action !== 'feedback.check') return Effect.runPromise(executeViewAction(root, input));
+    const controller = new AbortController();
+    feedbackControllers.add(controller);
+    const onClose = () => { if (!response.writableFinished) controller.abort(); };
+    response.once('close', onClose);
+    if (response.destroyed) controller.abort();
+    const task = Effect.runPromise(executeViewAction(root, input, controller.signal), { signal: controller.signal });
+    feedbackTasks.add(task);
+    void task.finally(() => { feedbackTasks.delete(task); feedbackControllers.delete(controller); response.off('close', onClose); }).catch(() => {});
+    return task;
+  };
   const server = createServer((request, response) => {
     void (async () => {
       try {
+        if (stopping) throw new ConcordError('ServerStopping', 'The workbench is shutting down');
         const hostAuthority = validateAuthority(request);
         const url = parseRequestTarget(request, hostAuthority);
         if (url.pathname.startsWith('/api/')) {
-          await api(request, response, url, root, jobs, baselineCache);
+          await api(request, response, url, root, jobs, baselineCache, runAction);
         } else if (request.method === 'GET') {
           serveStatic(response, url.pathname, webRoot);
         } else {
           throw new ConcordError('MethodNotAllowed', 'Only GET is available for the static application');
         }
-      } catch (cause) { failed(response, cause); }
+      } catch (cause) { if (!response.destroyed) failed(response, cause); }
     })();
   });
   server.requestTimeout = 15_000;
@@ -329,10 +347,12 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     server,
     jobs,
     close: () => closing ??= (async () => {
+      stopping = true;
+      for (const controller of feedbackControllers) controller.abort();
       const closed = new Promise<void>((resolveClosed, reject) => server.close((cause) => cause ? reject(failure(cause)) : resolveClosed()));
       server.closeIdleConnections();
-      await jobs.close();
-      await closed;
+      try { await Promise.allSettled([...feedbackTasks]); await jobs.close(); await closed; }
+      finally { closeGitBaselineCache(baselineCache); }
     })(),
   };
   return handle;

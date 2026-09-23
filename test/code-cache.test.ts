@@ -4,12 +4,12 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Effect } from 'effect';
 import { cacheStatus, clearCache } from '../dist/annotations.js';
 import { scanCode } from '../dist/code.js';
+import { openHawdb } from '../dist/hawdb-native.js';
 import { createDocument } from '../dist/documents.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { traceGaps } from '../dist/trace.js';
@@ -66,16 +66,15 @@ test('caches code declaration parses per file and repairs a corrupt row', () => 
     assert.equal(partial.cache.misses, 1);
     assert.equal(partial.codes.find(item => item.file === 'src/alpha.ts')?.symbol, 'alphaEdited');
     assert.equal(partial.codes.find(item => item.file === 'src/beta.ts')?.symbol, 'beta');
-    const cache = join(root, '.git/concord/cache.sqlite');
-    const db = new DatabaseSync(cache);
+    const cache = join(root, '.git/concord/cache.hawdb');
+    const db = openHawdb(cache, { readOnly: false, create: false });
     try {
-      const rows = db.prepare('SELECT cache_key, payload FROM code_cache').all() as { cache_key: string; payload: string }[];
+      const rows = db.scan('code_cache');
       assert.ok(rows.length > 0);
-      const update = db.prepare('UPDATE code_cache SET payload = ? WHERE cache_key = ?');
       for (const row of rows) {
         const payload = JSON.parse(row.payload) as { codes: { symbol?: string }[]; digest: string };
         payload.codes[0] = { ...(payload.codes[0] ?? {}), symbol: 'stale-cache-symbol' };
-        update.run(JSON.stringify(payload), row.cache_key);
+        db.put('code_cache', [{ key: row.key, payload: JSON.stringify(payload) }]);
       }
     } finally { db.close(); }
     const repaired = scan(root);
@@ -86,7 +85,7 @@ test('caches code declaration parses per file and repairs a corrupt row', () => 
     assert.equal(afterRepair.codes.find(item => item.file === 'src/alpha.ts')?.symbol, 'alphaEdited');
     open(root, repo => assert.match(cacheStatus(repo).detail ?? '', /code_cache/u));
     open(root, repo => clearCache(repo));
-    assert.equal(existsSync(cache), false);
+    assert.equal(existsSync(cache), true);
     open(root, repo => assert.equal(cacheStatus(repo).status, 'empty'));
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
@@ -98,12 +97,12 @@ test('cache off does not create the code projection, and rebuild rewrites it', (
     write(root, 'src/alpha.ts', marked('alpha'));
     const disabled = scan(root, { cache: 'off' });
     assert.equal(disabled.cache.status, 'off');
-    assert.equal(existsSync(join(root, '.git/concord/cache.sqlite')), false);
+    assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
     const rebuilt = scan(root, { cache: 'rebuild' });
     assert.equal(rebuilt.cache.status, 'miss');
     assert.equal(rebuilt.codes[0]?.symbol, 'alpha');
-    const db = new DatabaseSync(join(root, '.git/concord/cache.sqlite'));
-    try { db.prepare('UPDATE code_cache SET payload = ?').run('{'); }
+    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });
+    try { db.put('code_cache', db.scan('code_cache').map(row => ({ key: row.key, payload: '{' }))); }
     finally { db.close(); }
     const again = scan(root, { cache: 'rebuild' });
     assert.equal(again.codes[0]?.symbol, 'alpha');
@@ -138,11 +137,11 @@ test('a warm code and config cache hit does not load the TypeScript compiler', (
   try {
     write(root, 'src/alpha.ts', marked('alpha'));
     assert.equal(scan(root).cache.status, 'miss');
-    const cache = join(root, '.git/concord/cache.sqlite');
-    const db = new DatabaseSync(cache, { readOnly: true });
+    const cache = join(root, '.git/concord/cache.hawdb');
+    const db = openHawdb(cache, { readOnly: true, create: false });
     try {
-      assert.notEqual(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'code_cache'").get(), undefined);
-      assert.notEqual(db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'config_cache'").get(), undefined);
+      assert.ok(db.scan('code_cache').length > 0);
+      assert.ok(db.scan('config_cache').length > 0);
     } finally { db.close(); }
     const script = `
       import { createRequire } from 'node:module';

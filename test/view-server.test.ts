@@ -222,7 +222,7 @@ test('view CLI propagates or rejects shared dry-run without cache or repository 
     const unsafePreview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(unsafePreview.status, 1);
     assert.equal((JSON.parse(unsafePreview.stderr) as { error: string }).error, 'InvalidOption');
-    const cache = join(root, '.git/concord/cache.sqlite');
+    const cache = join(root, '.git/concord/cache.hawdb');
     assert.equal(existsSync(cache), false);
     const workspace = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'workspace', 'show'], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(workspace.status, 0, workspace.stderr);

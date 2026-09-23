@@ -3,9 +3,11 @@
 import { execFile } from 'node:child_process';
 import { lstatSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { parseTestDeclarations } from './annotations.js';
-import { ConcordError } from './shared.js';
+import { createMemoryHawdb, type HawdbDatabase } from './hawdb-native.js';
+import { ConcordError, decode, objectDigest } from './shared.js';
+import { typescriptPackageVersion } from './typescript-host.js';
 
 export interface GitEntry {
   readonly path: string;
@@ -16,7 +18,10 @@ export interface GitEntry {
   readonly conflicted: boolean;
 }
 export interface GitStatus { readonly branch: string; readonly entries: readonly GitEntry[]; readonly baselineCaseIds?: readonly string[]; readonly baselineError?: string; }
-export interface GitBaselineCache { value?: { readonly revision: string; readonly roots: string; readonly caseIds: readonly string[] }; }
+export interface GitBaselineCache { database?: HawdbDatabase; }
+const BaselineSchema = Schema.Struct({ root: Schema.String, revision: Schema.String, roots: Schema.String, parser: Schema.String, caseIds: Schema.Array(Schema.String) });
+const BASELINE_PARSER = `typescript-ast/${typescriptPackageVersion()}/concord-marker-baseline/v4`;
+export function closeGitBaselineCache(cache: GitBaselineCache): void { cache.database?.close(); cache.database = undefined; }
 export type GitArea = 'staged' | 'unstaged' | 'untracked';
 export interface GitDiff {
   readonly path: string;
@@ -72,7 +77,15 @@ const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(root: stri
     const roots = testRoots === undefined ? '*' : [...testRoots].sort().join('\0');
     const revision = yield* runGit(root, ['rev-parse', '--verify', 'HEAD'], true);
     const revisionId = revision.stdout.trim();
-    if (revisionId && cache?.value?.revision === revisionId && cache.value.roots === roots) return [...cache.value.caseIds];
+    const key = objectDigest({ root, revision: revisionId, roots, parser: BASELINE_PARSER });
+    if (cache && revisionId) try {
+      cache.database ??= createMemoryHawdb();
+      const row = cache.database.get('git_baseline', [key])[0];
+      if (row) {
+        const value = decode(BaselineSchema, JSON.parse(row.payload), 'Git baseline cache');
+        if (value.root === root && value.revision === revisionId && value.roots === roots && value.parser === BASELINE_PARSER) return [...value.caseIds];
+      }
+    } catch { /* invalid cache is rebuilt from HEAD */ }
     if (revision.stdout.trim()) {
       const candidates = yield* runGit(root, ['grep', '-l', '-z', '-F', '-e', '@feature', '-e', '@use-case', revision.stdout.trim()], [1]);
       if (candidates.truncated) return yield* Effect.fail(new ConcordError('GitOutputLimit', 'Test baseline inventory exceeds the preview limit.'));
@@ -87,7 +100,10 @@ const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(root: stri
       }
     }
   const caseIds = [...new Set(baselineCaseIds)];
-  if (cache) cache.value = { revision: revisionId, roots, caseIds };
+  if (cache) try {
+    cache.database ??= createMemoryHawdb();
+    cache.database.put('git_baseline', [{ key, payload: JSON.stringify({ root, revision: revisionId, roots, parser: BASELINE_PARSER, caseIds }) }]);
+  } catch { /* baseline remains derived from HEAD */ }
   return [...caseIds];
 });
 

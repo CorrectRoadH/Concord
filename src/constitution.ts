@@ -1,23 +1,13 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
-import { Predicate, Schema } from 'effect';
+import { Predicate } from 'effect';
 import { parseDocument, stringify } from 'yaml';
 import { ConcordError, ProjectSchema, Slug, Text, decode, digest, type Finding, type MutationReceipt, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
+import { ConstitutionSchema, LegacyConstitutionSchema, type ConstitutionMeta } from './constitution-schema.js';
 
-const DateText = Schema.String.check(Schema.isPattern(/^\d{4}-\d{2}-\d{2}$/u));
-const Version = Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/u));
-const Amendment = Schema.Struct({ date: DateText, reason: Text, sources: Schema.Array(Text), impact: Text });
-export const ConstitutionSchema = Schema.Struct({
-  format: Schema.Literal('concord.constitution/v1'), status: Schema.Literals(['draft', 'active']),
-  ratifiedAt: Schema.NullOr(DateText), amendedAt: DateText, amendments: Schema.Array(Amendment),
-});
-const LegacyConstitutionSchema = Schema.Struct({
-  format: Schema.Literal('concord.constitution/v1'), status: Schema.Literals(['draft', 'active']), version: Version,
-  ratifiedAt: Schema.NullOr(DateText), amendedAt: DateText,
-  amendments: Schema.Array(Schema.Struct({ version: Version, date: DateText, reason: Text, sources: Schema.Array(Text), impact: Text })),
-});
-export type ConstitutionMeta = typeof ConstitutionSchema.Type;
+export { ConstitutionSchema } from './constitution-schema.js';
+export type { ConstitutionMeta } from './constitution-schema.js';
 export interface ConstitutionRecord { readonly path: 'docs/constitution.md'; readonly source: string; readonly metadata: ConstitutionMeta; readonly body: string; readonly digest: string; readonly anchors: readonly string[] }
 
 export function constitutionAnchors(body: string): string[] {

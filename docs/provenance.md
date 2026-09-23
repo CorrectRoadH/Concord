@@ -29,3 +29,7 @@ Research 模板后来按自由研究契约收敛为标题，来源、观察日�
 ## 2026-09-20 中立治理裁决
 
 前述 Repository profile 是历史抽取阶段的归属记录。当前采用 [中立治理方案](design/neutral-project-governance/README.md)：将产品 Preview、Examples、下游、站点与 PR 组合归还消费者，保留并提升身份、证据、生命周期和恢复规则为 Concord 标准。原始来源说明继续保留；NiceEval 作为消费者适配中立配置与协议，不再决定 Concord 的产品字段。
+
+## 文档写作检查
+
+`lint/docs/writing.ts` 的 SVG 文本解析及写作检查语义被独立移植。当前领域术语改由按目录归属的 `concord.concepts/v1` JSON 定义，`concord.writing/v2` 政策声明禁词、长度和 SVG 检查；早期 Markdown 概念表解释不再是运行时定义来源，迁移需作者审核。Markdown 正文语法复用 Concord 已有解析器，文件读取复用 Repository 安全快照。NiceEval 的 calledTool 等产品 API 规则与站点特定政策不进入通用实现。

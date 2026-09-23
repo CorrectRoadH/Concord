@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { Schema } from 'effect';
 import { TEMPLATE_PAGES } from './template-pages.js';
 import type { CodeDeclaration } from './code.js';
@@ -16,6 +17,8 @@ import type {
 import { MemorySourceSchema, ProjectSchema } from './shared.js';
 import type { TraceEdge } from './trace.js';
 import { FeedbackConnectionsSchema, type FeedbackItem } from './feedback-schema.js';
+import { WritingPolicySchema } from './writing-schema.js';
+import { ConceptCatalogSchema } from './concepts-schema.js';
 
 export interface ViewFile {
   readonly path: string;
@@ -107,16 +110,31 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('design.check'), id: Text }),
   Schema.Struct({ action: Schema.Literal('design.format'), id: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.resolve'), id: Text, kind: Schema.Literals(['fixed', 'not-a-bug', 'wont-fix', 'external-fixed']), reason: Text, red: Schema.optional(Text), green: Schema.optional(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('memory.index') }),
+  Schema.Struct({ action: Schema.Literal('memory.recall'), query: Text }),
+  Schema.Struct({ action: Schema.Literal('memory.edit'), id: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.activate'), id: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.reopen'), id: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.supersede'), id: Text, replacement: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.promote'), id: Text, target: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.retire'), id: Text, target: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.link'), id: Text, memory: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.index') }),
+  Schema.Struct({ action: Schema.Literal('issue.recall'), query: Text }),
+  Schema.Struct({ action: Schema.Literal('issue.edit'), id: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.remove'), id: Text, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.close'), id: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('feedback.sync'), connection: Text, url: Schema.optional(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('feedback.check'), connection: Text }),
   Schema.Struct({ action: Schema.Literal('feedback.link'), id: Text, feature: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('source.set'), path: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('writing.index') }),
+  Schema.Struct({ action: Schema.Literal('writing.show'), path: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('writing.set'), path: Schema.optional(Text), policy: WritingPolicySchema, expectedDigest: Schema.NullOr(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('writing.check'), path: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('concepts.index') }),
+  Schema.Struct({ action: Schema.Literal('concepts.show'), path: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('concepts.set'), path: Schema.optional(Text), catalog: ConceptCatalogSchema, expectedDigest: Schema.NullOr(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('config.set'), config: ProjectInputSchema, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('constitution.initialize'), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('constitution.adopt'), body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),

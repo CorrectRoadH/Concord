@@ -28,10 +28,12 @@ Concord-driven development applies to this workflow itself: the contract and des
 
 ## Scope
 
-The platform-independent npm release is built, fully tested, packed and installed from its exact tgz on one Ubuntu 24.04 runner. npm selects target-specific optional dependencies during installation. The same packed build passes lock/recovery tests and isolated CLI installation on Apple Silicon macOS 14/15 before publication. Runtime coordination uses Node file APIs on local Linux/macOS worktrees, with no flock or disk-inspection helper. Node.js 24.15+, Git and Repository-tool ripgrep remain dependencies. Nix remains Linux-only. Windows execution and network/multi-host coordination are outside the current guarantee. SQLite remains disposable cache; old lock migration and mixed-version coordination are not provided.
+The single npm release artifact with bundled target-native engines is built, fully tested, packed and installed from its exact tgz on one Ubuntu 24.04 runner. npm selects target-specific optional dependencies during installation. The same packed build passes lock/recovery tests and isolated CLI installation on Apple Silicon macOS 14/15 before publication. Runtime coordination uses Node file APIs on local Linux/macOS worktrees, with no flock or disk-inspection helper. Node.js 24.15+, Git and Repository-tool ripgrep remain dependencies. Nix remains Linux-only. Windows execution and network/multi-host coordination are outside the current guarantee. HawDB remains disposable cache; old lock migration and mixed-version coordination are not provided.
 
 ## Entry Points
 
 - [CLI](cli.md)
 - [Architecture](architecture.md)
 - [Lifecycle](lifecycle.md)
+
+The package contains linux-x64-glibc and darwin-arm64 HawDB N-API engines from the same pinned source and Cargo lock. macOS deployment target is 14.0. Native target jobs precede the one package build; missing or inconsistent ABI, source identity, upstream revision, or digest blocks release. Consumer installation uses --ignore-scripts and requires neither Rust nor a HawDB service. Host-only Nix builds are local validation artifacts.

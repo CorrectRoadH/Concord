@@ -3,6 +3,10 @@
 Start with [Concepts](concepts.md) for shared language and
 [Architecture](architecture.md) for the system's boundaries and main flow.
 
+Structured global terminology lives in `docs/concepts.json`; local definitions
+and writing policies live in their own documentation directories. Use Concord's
+concepts index or Web glossary for an automatically aggregated view with sources.
+
 ## Where facts belong
 
 | Content | Owner |
@@ -17,9 +21,12 @@ Start with [Concepts](concepts.md) for shared language and
 
 ## Writing rules
 
-Write adopted target behavior in Feature and Engineering. Implementation gaps
-do not change the contract; keep progress in work tracking and change history in
-Git. Define each fact in one owner and link to it elsewhere. Research informs
+Write adopted target behavior, constraints, and acceptance in Feature and
+Engineering. Product workflows belong in contracts; development logs,
+investigation history, and implementation progress belong in Concord Memory.
+Maintain Memory and Issues through Concord tools, including index, recall, and
+digest-protected edits; do not maintain a second index or edit their owner files
+directly. Define each fact in one owner and link to it elsewhere. Research informs
 decisions; Roadmap does not impose a current implementation obligation.
 
 Feature README defines the problem, mental model, scope, and entry points.

@@ -4,7 +4,7 @@
 
 Concord 是面向开发者与 coding agent 的本地 SDLC CLI。产品契约保存在 Markdown，代码与测试关系写在实际源码旁，Memory 保存问题和裁决历史；Trace 动态反查这些关系，不需要第二份关系 JSON。
 
-Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux/macOS 本地工作树，发行验收覆盖 Ubuntu 24.04 与 Apple Silicon macOS 14/15；需要 Node.js 24.15+、Git，Repository 工具使用 `ripgrep`。发布协调只用 Node 文件 API，不需要 `flock`、`stat`、`diskutil` 或 `plutil`。SQLite 仅作可删除缓存。源码开发使用 pnpm 11.18.0；Windows 执行与网络多机协调尚未纳入兼容声明。
+Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux/macOS 本地工作树，发行验收覆盖 Ubuntu 24.04 与 Apple Silicon macOS 14/15；需要 Node.js 24.15+、Git，Repository 工具使用 `ripgrep`。发布协调只用 Node 文件 API，不需要 `flock`、`stat`、`diskutil` 或 `plutil`。HawDB 统一承接可重建缓存，安装包自带原生引擎，运行不需要 Rust。源码开发使用 pnpm 11.18.0；Windows 执行与网络多机协调尚未纳入兼容声明。
 
 - [Quick start](#quick-start)：从空仓库跑通契约、代码、测试和反查。
 - [常用 usage](#常用-usage)：接入已有项目、维护文档、关联代码、测试与 Memory。
@@ -81,7 +81,7 @@ concord view --host 127.0.0.1 --port 4317
 
 启动时像 Vite 一样列出 `Local` 本机地址和多个 `Network` 网卡地址，同时显示实际 `Host` / `Port`。只绑定 `127.0.0.1` 时不显示局域网入口。
 
-左侧分别进入 Feature、Roadmap、Design、Research、Engineering、代码、测试、运行证据、Memory、反馈、Git 与设置。**Use Case 在所属 Feature 内创建和浏览，没有独立顶级入口。** 文档使用所见即所得 Markdown 编辑器，可切换源码和编辑差异；保存遇到外部修改会保留草稿并报告冲突。
+左侧分别进入 Feature、Roadmap、Design、Research、Engineering、代码、测试、运行证据、Memory、反馈、写作与术语、Git 与设置。**Use Case 在所属 Feature 内创建和浏览，没有独立顶级入口。** 文档使用所见即所得 Markdown 编辑器，可切换源码和编辑差异；保存遇到外部修改会保留草稿并报告冲突。
 
 Git 面板按已暂存、未暂存、未跟踪列出文件，支持统一和分栏差异。编辑器中的未保存差异与 Git 变化分别呈现。Web 与 CLI 共用领域校验，空闲网页不会占用仓库锁。
 
@@ -89,10 +89,18 @@ Git 面板按已暂存、未暂存、未跟踪列出文件，支持统一和分�
 
 ## 多来源反馈
 
+Local、GitHub、Linear 在同一列表中呈现。没有外部账号时直接新建本地观察，不需要配置连接：
+
+```sh
+concord issue create confusing-output --title "输出含义不清楚"
+concord issue index --json
+concord issue recall "输出" --json
+```
+
 从「反馈」侧栏配置 GitHub 仓库或 Linear team，显式导入 URL 或同步。连接只保存凭据环境变量名，凭据由启动 CLI / Web 服务的环境提供。
 
 ```sh
-concord feedback connection add --id github-main --provider github --contract source OWNER --repo REPO --credential-env GITHUB_TOKEN
+concord feedback connection add --id github-main --provider github --owner OWNER --repo REPO --credential-env GITHUB_TOKEN
 concord feedback connection add --id linear-main --provider linear --team TEAM --credential-env LINEAR_API_KEY
 concord feedback import https://github.com/OWNER/REPO/issues/123 --connection github-main
 concord feedback sync --connection linear-main
@@ -118,7 +126,7 @@ concord init --docs-only
 concord init --docs-only --source-root src
 ```
 
-`init` 创建静态、不会被执行的 `concord.config.ts`、必需的 `docs/constitution.md`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板；根 `DESIGN.md` 可选。它补齐缺失的 `docs/README.md`、`docs/concepts.md` 和 `docs/architecture.md`，已有根文档保留。它还在根 `AGENTS.md` 新建或刷新一个带边界标记的 Concord-driven development 区块，保留区块外内容，并指向当前安装版本的 `concord --skill`。标记残缺或其它目标冲突时零写入失败。旧 `concord.json`（包括双配置）返回 `ProjectMigrationRequired`，须先显式离线迁移。
+`init` 创建静态、不会被执行的 `concord.config.ts`、必需的 `docs/constitution.md`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板；根 `DESIGN.md` 可选。它补齐缺失的 `docs/README.md`、`docs/concepts.md`、空 `docs/concepts.json` 和 `docs/architecture.md`，已有根文档保留。它还在根 `AGENTS.md` 新建或刷新一个带边界标记的 Concord-driven development 区块，保留区块外内容，并指向当前安装版本的 `concord --skill`。标记残缺或其它目标冲突时零写入失败。旧 `concord.json`（包括双配置）返回 `ProjectMigrationRequired`，须先显式离线迁移。
 
 改功能前先读取或更新 Feature、叶子 Use Case、CLI supporting page 和必要 Design，再进入实现与测试。运行 `concord trace gaps --json` 可列出没有显式 code/test 关系的 Feature、Use Case 与已建档 CLI 页面；它是关系缺口，不是覆盖率，也不能发现从未建档的命令。
 
@@ -232,11 +240,14 @@ concord --skill test
 
 ```sh
 concord memory add blank-name --kind problem --title "Blank name handling is wrong"
-concord memory search "Blank name"
+concord memory index --json
+concord memory recall "Blank name" --json
 concord memory show blank-name
-concord issue draft greeting-observation --title "Investigate greeting behavior"
+concord issue create greeting-observation --title "Investigate greeting behavior"
 concord issue link greeting-observation --memory memory/blank-name.md
 ```
+
+Agent 通过工具读取和维护 Memory/Issue，不直接编辑 owner 或人工 INDEX。正文更新用 `memory edit` / `issue edit --body <file> --expected-digest <digest>`；动态索引与 recall 返回当前内容和摘要。仅无来源、无关系、无历史的本地草稿可用 `issue remove --expected-digest <digest>` 删除，已进入调查的记录保留生命周期。
 
 用真实测试复现问题，并在测试旁添加 `@regression memory/blank-name.md`。修复前运行 `test run` 取得 red，修复实现后再运行取得 green；用输出里的真实 ID 关闭问题：
 
@@ -267,7 +278,11 @@ concord --skill recovery
 
 Trace 从当前 contract source 推导反向关系，分别展示代码声明、测试和 Memory；`check`、`doctor`、`trace` 和 `review` 不执行 runner。代码标注错误会阻断代码与全图命令，但测试执行及 Problem 关闭保留原有文档、测试与证据校验。
 
-代码声明解析可按文件重建缓存；关系边每次用当前 Markdown 重算。SQLite 只缓存可重建投影，损坏或失效时回源。实际路径用 `cache status` 查询，普通 checkout 通常为 `.git/concord/cache.sqlite`，不是项目根下的 `.concord`。收据与 journal 位于独立 Git-private 文件中，不能作为缓存删除。克隆后历史裁决保留，缺失的私有证据显示不可用。
+文档写作检查使用 `concord docs check --json`。消费者在 docs 下按目录声明 `concepts.json` 和 `concord-writing.json`：根目录拥有全局定义，Feature、Engineering 及子目录拥有局部范围。Web 提供概念与政策编辑和自动汇总；允许别名与弃用名称分开，只有后者派生禁词。写作 v2 支持句段长度、概念使用与 SVG 检查，旧 v1 须显式迁移。规则与用法见[文档写作契约](docs/feature/documentation-quality/README.md)。命中时返回非零退出码，不改写正文。
+
+代码声明解析可按文件重建缓存；关系边每次用当前 Markdown 重算。HawDB 只缓存可重建投影，损坏或失效时回源。实际路径用 `cache status` 查询，普通 checkout 通常为 `.git/concord/cache.hawdb`，不是项目根下的 `.concord`。收据与 journal 位于独立 Git-private 文件中，不能作为缓存删除。克隆后历史裁决保留，缺失的私有证据显示不可用。
+
+文档、代码解析和 Git 测试基线的短期缓存同样使用有界 HawDB 内存实例。`cache clear` 取得数据库所有权后清数据，保留目录和锁 inode；旧 `cache.sqlite` 及其 sidecar 只在显式 clear 时移除。缓存不可用不授权删除锁，也不触发远端刷新。
 
 写入使用锁、preimage 与 journal；中断后根据提示运行 `recover`。外部编辑冲突不会被覆盖，清缓存不能修复错误注释或替代事务恢复。
 
@@ -291,15 +306,18 @@ pnpm check
 
 ## 安装与本地开发
 
-新代码声明功能使用本 checkout 的构建产物；发行渠道的固定版本可能不同，用 `concord code --help` 核对入口。源码构建需要 Node.js 24.15+、pnpm 11.18.0 和 Git。首次取得源码：
+新代码声明功能使用本 checkout 的构建产物；发行渠道的固定版本可能不同，用 `concord code --help` 核对入口。源码构建需要 Node.js 24.15+、pnpm 11.18.0、Git、Rust 1.97.1 与本机 C 链接工具链。原生构建使用固定 HawDB revision 和 Cargo lock；安装后的消费者不需要这些构建工具。首次取得源码：
 
 ```sh
 git clone https://github.com/CorrectRoadH/Concord.git
 cd Concord
 pnpm install --frozen-lockfile
+rustup toolchain install 1.97.1 --profile minimal
 pnpm build
 pnpm check
 ```
+
+Nix 开发环境可用 `nix shell nixpkgs#gcc nixpkgs#pkg-config -c pnpm check` 提供构建工具。该本机构建带 Nix 链接依赖，只用于本地验收；发行流水线分别构建 Linux x64/glibc 和 macOS arm64，再汇入同一个 tgz 验证，不能把本机产物直接当通用发行包。
 
 本机开发与 dogfooding 使用全局链接，直接运行当前 checkout 的构建产物：
 

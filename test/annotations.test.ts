@@ -3,11 +3,11 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { LocalRepository, initialize } from '../dist/storage.js';
 import { cacheStatus, clearCache, scanAnnotations } from '../dist/annotations.js';
+import { openHawdb } from '../dist/hawdb-native.js';
 
 function consumer() {
   const root = mkdtempSync(join(tmpdir(), 'concord-annotations-'));
@@ -21,7 +21,7 @@ function write(root: string, relative: string, contents: string) { const path = 
 function scan(root: string, options?: Parameters<typeof scanAnnotations>[1]) { const repo = new LocalRepository(root); try { return options === undefined ? scanAnnotations(repo) : scanAnnotations(repo, options); } finally { repo.close(); } }
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-test('indexes real runner imports and safely rebuilds SQLite projections', () => Effect.runPromise(Effect.sync(() => {
+test('indexes real runner imports and safely rebuilds HawDB projections', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
     write(root, 'test/example.test.mjs', `import spec from 'node:test';
@@ -104,25 +104,23 @@ const fake = ` + '`ordinary text: @feature template-fake`' + `;
     assert.equal(first.findings.some(item => item.code === 'UnsupportedTestDeclaration'), false);
     assert.equal(first.cases.length, 3);
     const repo = new LocalRepository(root); let path: string;
-    try { path = repo.privateDir + '/cache.sqlite'; } finally { repo.close(); }
-    writeFileSync(path, 'not a sqlite database');
+    try { path = repo.privateDir + '/cache.hawdb'; } finally { repo.close(); }
+    rmSync(path, { recursive: true });
+    writeFileSync(path, 'not a HawDB directory');
+    const damaged = new LocalRepository(root);
+    try { assert.equal(cacheStatus(damaged).status, 'unavailable'); }
+    finally { damaged.close(); }
     const recovered = scan(root);
     assert.equal(recovered.cache.status, 'unavailable');
     assert.equal(recovered.cases.length, 3);
     rmSync(path);
-    const db = new DatabaseSync(path); try {
-      db.exec('CREATE TABLE annotation_cache (cache_key TEXT PRIMARY KEY, payload TEXT NOT NULL)');
-      db.prepare('INSERT INTO annotation_cache (cache_key, payload) VALUES (?, ?)').run('corrupt-but-json', JSON.stringify({ cases: [], findings: [], files: [], digest: 'sha256:not-a-real-digest' }));
-    } finally { db.close(); }
     const source = `import { test } from 'node:test';\n// @feature docs/feature/a/README.md\ntest('valid', () => {});\n`;
     write(root, 'test/findings.test.ts', source);
     const seeded = scan(root); assert.equal(seeded.cases.length, 1);
-    const cache = new DatabaseSync(path); try {
-      const row = cache.prepare('SELECT cache_key FROM annotation_cache WHERE cache_key != ? LIMIT 1').get('corrupt-but-json');
+    const cache = openHawdb(path, { readOnly: false, create: false }); try {
+      const row = cache.scan('annotation_cache')[0];
       assert.ok(row);
-      const cacheKey = row.cache_key;
-      if (typeof cacheKey !== 'string') assert.fail('cache_key must be a string');
-      cache.prepare('UPDATE annotation_cache SET payload = ? WHERE cache_key = ?').run(JSON.stringify({ cases: [], findings: [], files: [], digest: 'sha256:not-a-real-digest' }), cacheKey);
+      cache.put('annotation_cache', [{ key: row.key, payload: JSON.stringify({ cases: [], findings: [], files: [], digest: 'sha256:not-a-real-digest' }) }]);
     } finally { cache.close(); }
     const digestRecovered = scan(root);
     assert.equal(digestRecovered.cache.status, 'unavailable');

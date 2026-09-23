@@ -1,0 +1,41 @@
+{
+  "format": "concord.concepts/v1",
+  "concepts": [
+    {
+      "id": "contract",
+      "definition": "产品或工程的目标、行为、约束与验收要求。",
+      "names": {
+        "zh": {
+          "preferred": "契约"
+        },
+        "en": {
+          "preferred": "Contract"
+        }
+      }
+    },
+    {
+      "id": "memory",
+      "definition": "保存调查经过、根因、裁决及可复用经验，并维护其生命周期与证明关系的工程知识。",
+      "names": {
+        "zh": {
+          "preferred": "工程记忆"
+        },
+        "en": {
+          "preferred": "Memory"
+        }
+      }
+    },
+    {
+      "id": "issue",
+      "definition": "等待调查的问题、摩擦或请求，拥有观察描述、调查关联与本地处理状态。",
+      "names": {
+        "zh": {
+          "preferred": "观察"
+        },
+        "en": {
+          "preferred": "Issue"
+        }
+      }
+    }
+  ]
+}

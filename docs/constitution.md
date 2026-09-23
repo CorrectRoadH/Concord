@@ -2,7 +2,7 @@
 format: concord.constitution/v1
 status: active
 ratifiedAt: 2026-09-14
-amendedAt: 2026-09-22
+amendedAt: 2026-09-23
 amendments:
   - date: 2026-09-14
     reason: 汇总已采用的工程约束，并落实本轮 dogfood 要求
@@ -35,6 +35,24 @@ amendments:
       - docs/constitution.md#c-010
       - docs/architecture.md
     impact: 标记存在即构成测试关联；旧的按测试标题派生的 neref_ 不再视为同一身份，已有命令证据须重新取证。不改变代码声明的 AST 规则，也不把命令收据升级为原生用例通过
+  - date: 2026-09-23
+    reason: 明确声明式契约与工程过程分工，并要求Memory/Issue通过Concord工具操作
+    sources:
+      - docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
+      - docs/feature/feedback/use-case/manage-local-observations.md
+    impact: 适用于后续Agent治理和init随包指引；保留既有来源历史、持久化格式和远端授权，不批量改写历史资料
+  - date: 2026-09-23
+    reason: 采用按目录拥有的结构化领域术语与写作政策
+    sources:
+      - docs/design/scoped-terminology/README.md
+      - docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+    impact: 为领域术语与写作政策声明 JSON owner 例外；局部范围按目录，全局汇总派生，旧写作格式显式迁移，其他契约和证据来源不变
+  - date: 2026-09-23
+    reason: 按用户要求统一到HawDB，并落实独立挑战要求的窄原生边界
+    sources:
+      - docs/design/hawdb-data-engine/README.md
+      - docs/feature/local-data-engine/README.md
+    impact: 所有可重建缓存采用HawDB；只允许引擎桥接与所有权适配使用Rust，事实owner、证据、授权和TS/Effect领域职责不变；实现须满足已记录的生命周期、预算及同包平台验收
 ---
 
 # Concord 项目宪法
@@ -44,7 +62,7 @@ amendments:
 <a id="c-001"></a>
 ## 事实只由自己的来源维护
 
-契约由 Markdown owner 拥有，测试定义和正向关系由实际测试源码拥有，工程 Memory 拥有自己的正文与生命周期历史。反向关系必须派生，不得维护第二份登记表。SQLite 只保存可重建缓存。
+契约正文由 Markdown owner 拥有；领域术语的结构化定义由 docs 下按目录归属的 concepts.json 拥有，写作政策由同目录的 concord-writing.json 拥有。目录确定局部作用域，docs 根拥有全局定义；Markdown 解释关系与案例，不重复维护结构化定义。术语与政策的目录扫描、聚合索引及引用反查均从来源派生，不维护第二份登记表。测试定义和正向关系由实际测试源码拥有，工程 Memory 拥有自己的正文与生命周期历史。HawDB 只保存可重建投影与可丢弃缓存；短期解析也使用同一引擎的内存实例。文件 owner、证据与发布日志不迁入缓存。
 
 来源：AGENTS.md、docs/architecture.md。
 
@@ -73,6 +91,8 @@ Concord 必须可作为独立安装包在隔离 Git 消费者中使用，不依�
 ## 维护代码采用严格 TypeScript 与 Effect
 
 实现、测试和构建脚本采用严格 TypeScript，执行与副作用通过 Effect 组织。不添加手工维护的 JavaScript 脚本，不绕过类型检查；编译输出和明确的 JavaScript 消费者兼容 fixture 除外。Effect 依赖保持精确固定版本，使用 API 前读取安装包指引；不可信边界严格 Schema 解码并返回具名失败。
+
+唯一原生例外是 native/hawdb 下嵌入 HawDB 所需的 Rust N-API 桥接、必要链接胶水、字节转换、预算执行与固定 revision 的目录所有权锁适配。领域决策、来源核验、测试和构建编排继续采用 TypeScript/Effect；不以例外扩展为另一套业务实现。桥接、引擎、Rust toolchain 与依赖精确固定，持久句柄受短快照生命周期管理，无磁盘缓存句柄按进程管理。发行包携带目标平台产物，消费者无需 Rust、全局 HawDB 或数据库服务。锁协议与上游 revision 绑定，升级须重新验证互斥与清理。
 
 来源：AGENTS.md。
 
@@ -123,3 +143,15 @@ Concord 面向软件项目规定唯一事实来源、统一契约布局、显式
 执行仍由消费者的 runner 命令负责。没有显式 `@name` 时，运行覆盖标记所在文件，不声称选中了某个原生用例。缺少逐 case 选择能力只限制选择性执行，不使标记关联失效。
 
 来源：用户 2026-09-22 授权、docs/constitution.md#c-010、docs/architecture.md。
+
+
+<a id="c-012"></a>
+## 契约声明目标，工程知识通过工具维护
+
+产品与工程契约正文声明目标、行为、约束和验收条件，不承载开发日志、排障流水账、实施进度或临时执行计划。产品操作流程、生命周期与验收步骤是行为契约，可以保留。Research 的研究事实、Issue 的观察来源及工具维护的决策和生命周期历史由各自 owner 保留，不因目录名称被改写为实现进度。
+
+排障经过、根因和可复用经验归工程 Memory，待调查的观察归 Issue，正式采用的目标归契约。Agent 对 Memory/Issue 的索引、检索、读取、创建、作者更新、关联和生命周期操作必须通过 Concord CLI 或共用受管 API；不直接编辑 owner 文件、metadata、history，也不维护人工 INDEX 或另一份关系登记表。工具缺口须补齐或明确报告，不能用手写文件绕过。
+
+本地 Issue 不依赖外部服务。Local、GitHub、Linear 可以统一展示来源，但远端写入仍需单独授权；本地操作不得自动投射为远端变更。此规则约束工具工作流，不宣称操作系统阻止用户编辑文件，也不把已有历史材料批量重写。
+
+来源：用户 2026-09-23 要求、docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md、docs/feature/feedback/use-case/manage-local-observations.md。

@@ -2,6 +2,13 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/README.md
 // @concord-implements docs/feature/project-onboarding/README.md
+// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+// @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
+import { checkWriting } from './writing.js';
+import { showWriting, setWriting, writingIndex } from './writing-management.js';
+import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
+import { WritingPolicySchema } from './writing-schema.js';
+import { ConceptCatalogSchema } from './concepts-schema.js';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
@@ -11,6 +18,7 @@ import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
 import { activateMemory, addPage, showPage, setPage, adoptRoadmap, closeIssue, createDocument, decideDesign, findDocument, linkFeedbackFeature, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
 import { checkDesign, formatDesign } from './documents.js';
 import { listFeedback, syncFeedback } from './feedback.js';
+import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from './knowledge.js';
 import { FeedbackConnectionSchema } from './feedback-schema.js';
 import { setConfig, showConfig } from './editing.js';
 import { readEvidence, runCase, verifyFixedEvidence } from './evidence.js';
@@ -173,6 +181,9 @@ const memoryResolve = Command.make('resolve', { id, kind: Flag.choice('kind', ['
 })));
 const memory = Command.make('memory').pipe(Command.withDescription('Maintain Problem, Decision, and Insight lifecycles.'), Command.withSubcommands([
   memoryAdd, memoryList, memoryShow, memorySearch, memoryResolve,
+  Command.make('index', {}, () => withRepo(repo => sync(() => knowledgeIndex(repo, 'memory')), { readonly: true })),
+  Command.make('recall', { query: Argument.string('query') }, args => withRepo(repo => sync(() => knowledgeRecall(repo, 'memory', args.query)), { readonly: true })),
+  Command.make('edit', { id, body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => editKnowledge(repo, 'memory', args.id, body(args.body), args.expectedDigest, s.dryRun)))),
   Command.make('activate', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => activateMemory(repo, args.id, args.reason, s.dryRun)))),
   Command.make('reopen', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => reopenMemory(repo,args.id,args.reason,s.dryRun)))),
   Command.make('supersede', { id, replacement: text('replacement'), reason: text('reason') }, args => withRepo((repo,s) => sync(() => supersedeMemory(repo,args.id,args.replacement,args.reason,s.dryRun)))),
@@ -181,31 +192,48 @@ const memory = Command.make('memory').pipe(Command.withDescription('Maintain Pro
 ]));
 const issue = Command.make('issue').pipe(Command.withDescription('Maintain local observation drafts; no remote GitHub mutations.'), Command.withSubcommands([
   Command.make('draft', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))),
+  Command.make('create', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))),
   Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation:'issue-list', drafts:loadDocuments(repo).filter(d=>d.metadata.kind==='issue') })))),
+  Command.make('index', {}, () => withRepo(repo => sync(() => knowledgeIndex(repo, 'issue')), { readonly: true })),
+  Command.make('recall', { query: Argument.string('query') }, args => withRepo(repo => sync(() => knowledgeRecall(repo, 'issue', args.query)), { readonly: true })),
   Command.make('show', { id }, args => withRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'issue', cached(settings.dryRun))))),
+  Command.make('edit', { id, body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => editKnowledge(repo, 'issue', args.id, body(args.body), args.expectedDigest, s.dryRun)))),
+  Command.make('remove', { id, expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => removeIssue(repo, args.id, args.expectedDigest, s.dryRun)))),
   Command.make('link', { id, memory: text('memory') }, args => withRepo((repo,s) => sync(() => linkIssue(repo,args.id,args.memory,s.dryRun)))),
   Command.make('close', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => closeIssue(repo,args.id,args.reason,s.dryRun)))),
 ]));
-const feedbackConnection = Command.make('connection').pipe(Command.withDescription('Configure feedback providers by credential environment variable name; credentials are never stored.'), Command.withSubcommands([
+const feedbackConnection = Command.make('connection').pipe(Command.withDescription('Configure feedback providers; GitHub CLI mode reuses the server machine login.'), Command.withSubcommands([
   Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] })))),
   Command.make('add', {
     id: text('id'),
     provider: Flag.choice('provider', ['github', 'linear']),
-    credentialEnv: text('credential-env'),
+    transport: Flag.choice('transport', ['api', 'gh']).pipe(Flag.optional),
+    credentialEnv: optional('credential-env'),
     owner: optional('owner'),
     repo: optional('repo'),
     team: optional('team'),
   }, args => withRepo((local, settings) => sync(() => {
     const owner = Option.getOrUndefined(args.owner), repo = Option.getOrUndefined(args.repo), team = Option.getOrUndefined(args.team);
+    const transport = Option.getOrUndefined(args.transport) ?? 'api';
+    const credentialEnv = Option.getOrUndefined(args.credentialEnv);
     if (args.provider === 'github' && (owner === undefined || repo === undefined || team !== undefined)) throw new ConcordError('InvalidOption', 'GitHub connections require --owner and --repo and do not accept --team');
     if (args.provider === 'linear' && (team === undefined || owner !== undefined || repo !== undefined)) throw new ConcordError('InvalidOption', 'Linear connections require --team and do not accept --owner or --repo');
+    if (args.provider === 'linear' && transport !== 'api') throw new ConcordError('InvalidOption', 'Linear does not support CLI transport');
+    if (transport === 'gh' && credentialEnv !== undefined) throw new ConcordError('InvalidOption', 'GitHub CLI connections reject --credential-env');
+    if (transport === 'api' && credentialEnv === undefined) throw new ConcordError('InvalidOption', 'API connections require --credential-env');
     const connection = decode(FeedbackConnectionSchema, args.provider === 'github'
-      ? { id: args.id, provider: args.provider, credentialEnv: args.credentialEnv, owner, repo }
-      : { id: args.id, provider: args.provider, credentialEnv: args.credentialEnv, team }, 'feedback connection');
+      ? transport === 'gh' ? { id: args.id, provider: args.provider, transport: 'gh', owner, repo } : { id: args.id, provider: args.provider, credentialEnv, owner, repo }
+      : { id: args.id, provider: args.provider, credentialEnv, team }, 'feedback connection');
     const current = showConfig(local);
     if ((current.config.feedbackConnections ?? []).some(item => item.id === connection.id)) throw new ConcordError('FeedbackConnectionExists', `Feedback connection ${connection.id} already exists`);
     return setConfig(local, { ...current.config, feedbackConnections: [...(current.config.feedbackConnections ?? []), connection] }, current.digest, settings.dryRun);
   }))),
+  Command.make('check', { id }, args => Effect.gen(function* () {
+    const settings = yield* root;
+    if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'feedback connection check does not accept --dry-run'));
+    const result = yield* executeViewAction(viewRoot(settings), { action: 'feedback.check', connection: args.id });
+    yield* Effect.sync(() => emit(result, settings.json));
+  })),
   Command.make('remove', { id }, args => withRepo((local, settings) => sync(() => {
     const current = showConfig(local);
     const connections = current.config.feedbackConnections ?? [];
@@ -257,10 +285,29 @@ const code = Command.make('code').pipe(Command.withDescription('Associate files,
   Command.make('locate', { file: Argument.string('path'), line: Flag.integer('line').pipe(Flag.withDescription('1-based source line; returns every containing scope.')) }, args => withRepo(repo => sync(() => locateCode(repo, args.file, args.line)))).pipe(Command.withDescription('Find all explicit declarations containing a repository-relative source line.')),
   Command.make('annotate', { scope: Flag.choice('scope', ['file', 'node', 'region']), contract: many('contract') }, args => withRepo(repo => sync(() => codeSnippet(repo, args.scope, args.contract)))).pipe(Command.withDescription('Print validated source comments; repeat --contract for multiple targets. Does not edit source.')),
 ]));
-const cache = Command.make('cache').pipe(Command.withDescription('Inspect or rebuild disposable SQLite projections.'),Command.withSubcommands([
+const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear, or rebuild disposable HawDB projections.'),Command.withSubcommands([
   Command.make('status',{},()=>withRepo(repo=>sync(()=>cacheStatus(repo)))),
   Command.make('clear',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) return {operation:'cache-clear',dryRun:true};return clearCache(repo);}))),
   Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');const annotations=scanAnnotations(repo,{cache:'rebuild'});const code=scanCode(repo,{cache:'rebuild'});return {...annotations,codeCache:code.cache};}))),
+]));
+const docs = Command.make('docs').pipe(Command.withDescription('Check authored prose and terminology using consumer-owned writing policy.'), Command.withSubcommands([
+  Command.make('check', { rules: optional('rules') }, args => withRepo(repo => sync(() => {
+    const report = checkWriting(repo, Option.getOrUndefined(args.rules));
+    if (!report.ok) process.exitCode = 1;
+    return report;
+  }), { readonly: true })),
+]));
+const expected = (value: string): string | null => value === 'null' ? null : value;
+const writing = Command.make('writing').pipe(Command.withDescription('Discover and manage directory-owned writing policies.'), Command.withSubcommands([
+  Command.make('index', {}, () => withRepo(repo => sync(() => writingIndex(repo)), { readonly: true })),
+  Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showWriting(repo, Option.getOrUndefined(args.path))), { readonly: true })),
+  Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setWriting(repo, jsonBody(args.body, WritingPolicySchema, 'writing policy'), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a policy with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
+  Command.make('check', { path: optional('path') }, args => withRepo(repo => sync(() => { const result = checkWriting(repo, Option.getOrUndefined(args.path)); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true })),
+]));
+const concepts = Command.make('concepts').pipe(Command.withDescription('Discover and manage directory-owned concept catalogs.'), Command.withSubcommands([
+  Command.make('index', {}, () => withRepo(repo => sync(() => indexConcepts(repo)), { readonly: true })),
+  Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showConcepts(repo, Option.getOrUndefined(args.path))), { readonly: true })),
+  Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setConcepts(repo, jsonBody(args.body, ConceptCatalogSchema, 'concept catalog'), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a catalog with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
 ]));
 const check = Command.make('check',{},()=>withRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'check',ok:t.findings.length===0,findings:t.findings,advisories:t.advisories,documents:t.documents.length,cases:t.annotations.cases.length,codeDeclarations:t.codeDeclarations.length,memoryEvidence:t.memories,cache:t.annotations.cache,codeCache:t.codeCache};}))).pipe(Command.withDescription('Validate current source ownership and references; do not execute tests.'));
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
@@ -308,7 +355,7 @@ const view = Command.make('view', {
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view does not accept --dry-run'));
   return yield* serveViewServer({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) }, settings.json));
 })).pipe(Command.withDescription('Serve the local Web workbench.'));
-root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:'0.6.0'}),Effect.catch(cause=>Effect.sync(()=>{
+root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,docs,writing,concepts,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:'0.6.0'}),Effect.catch(cause=>Effect.sync(()=>{
   const error=failure(cause);
   const result = {ok:false,error:error.code,message:error.message,...(error.details===undefined?{}:{details:error.details})};
   process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;

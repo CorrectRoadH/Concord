@@ -2,7 +2,7 @@
 
 ## Entity Ownership
 
-The source tag and package metadata are owned by CorrectRoadH/Concord. Its GitHub Release owns the tgz. CorrectRoadH/homebrew-tap owns Formula, Nix expressions and the recipe tag. Runtime coordination follows [portable publication](../../design/portable-publication/README.md): one Node file lease for short snapshots and commits. SQLite remains disposable cache. Version 0.6.0 provides no old lock migration or mixed-version coordination.
+The source tag and package metadata are owned by CorrectRoadH/Concord. Its GitHub Release owns the tgz. CorrectRoadH/homebrew-tap owns Formula, Nix expressions and the recipe tag. Runtime coordination follows [portable publication](../../design/portable-publication/README.md): one Node file lease for short snapshots and commits. HawDB remains disposable cache. Version 0.6.0 provides no old lock migration or mixed-version coordination.
 
 ## Data Flow
 
@@ -23,3 +23,5 @@ Unsupported hosts, unavailable filesystem primitives, unsafe aliases and cleanup
 ## Identity and Reuse
 
 Version, source tag commit, package metadata, tgz SHA-256 and recipe commit form the release mapping. A rerun may continue an interrupted stage only when those identities match exactly.
+
+Native engines are built on their target systems before packaging. The packaging job cleans dist before collecting the complete verified native set, then packs once. Later validation extracts that exact artifact without rebuilding or deleting another target. Portable checks must assert an actual HawDB cache miss followed by hit; source fallback alone is insufficient.

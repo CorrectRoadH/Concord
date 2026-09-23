@@ -11,6 +11,7 @@ import { readProjectConfig } from './support.js';
 import { ProjectSchema } from '../dist/shared.js';
 import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
 import { parseDocumentRecord, renderDocument } from '../dist/documents.js';
+import { verifyInstalledNative } from '../scripts/verify-installed-native.js';
 const Ack = Schema.Struct({});
 const ErrorOutput = Schema.Struct({ error: Schema.String });
 const DigestOutput = Schema.Struct({ digest: Schema.String });
@@ -40,6 +41,10 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  cli=join(install,'node_modules/concord-sdlc/dist/entry.js');
 })));
 after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
+
+// @use-case docs/feature/local-data-engine/use-case/query-current-projections.md
+test('installed HawDB caches and current recall work without Rust or a database helper', () =>
+  Effect.runPromise(verifyInstalledNative(join(scratch, 'tool/node_modules/concord-sdlc')).pipe(Effect.asVoid)));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
 test('packed Design commands require complete responses and preserve formatting and decision semantics', () => Effect.runPromise(Effect.sync(() => {
@@ -421,3 +426,80 @@ test('packed Research creates only its title and edits arbitrary nested supporti
  assert.equal(readFileSync(join(root, 'docs/research/notes/材料/比较.md'), 'utf8'), '# 任意结构\n\n自由正文。\n');
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
 });
+
+// @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
+test('packed writing checks consumer policy, readable prose, SVG, and safe input boundaries', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('writing');
+ const reportSchema = Schema.Struct({ ok: Schema.Boolean, files: Schema.Int, findings: Schema.Array(Schema.Struct({ file: Schema.String, line: Schema.Int, rule: Schema.String, message: Schema.String })) });
+ const policy = {
+  format: 'concord.writing/v2', roots: ['guide', 'guide/page.md'],
+  bannedTerms: [{ term: 'bad', use: 'clear', why: 'Be precise', exempt: ['guide/exempt'] }, { term: '旧词', use: '新词', why: 'One vocabulary', allowIn: ['旧词典'] }],
+  sentenceLength: 20, paragraphLength: 30, unusedConcepts: true, svgTerms: true, svgStyle: 'guide/style.css',
+ };
+ mkdirSync(join(root, 'guide'));
+ writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify(policy));
+ writeFileSync(join(root, 'guide/style.css'), '.label { fill: black; }\n');
+ writeFileSync(join(root, 'docs/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'new-word', definition: 'Preferred wording', names: { zh: { preferred: '新词', deprecated: ['旧称'] }, en: { preferred: 'Good' } } }] }));
+ writeFileSync(join(root, 'guide/page.md'), [
+  '---', 'title: bad', '---', '# Guide', '', '新词 good 旧词典.', '',
+  '```ts', 'bad', '```', '', '~~~', 'bad', '~~~', '',
+  '``bad ` bad`` [clear](bad) ![bad](image.png)', '', '<!-- bad -->', '',
+  'bad BAD badly 旧词 旧称', '', '甲'.repeat(15), '乙'.repeat(20) + '。',
+ ].join('\n'));
+ writeFileSync(join(root, 'guide/view.mdx'), ['<Panel', ' title="bad"', '>', 'clear', '</Panel>', '{/* GENERATED:BEGIN fields */}', 'bad', '{/* GENERATED:END fields */}'].join('\n'));
+ writeFileSync(join(root, 'guide/figure.svg'), '<svg><style>.label { fill: black; }</style><text class="label">新<tspan>词</tspan></text><desc>bad</desc></svg>');
+ const first = call(root, ['docs', 'check'], reportSchema, '', 1);
+ assert.equal(first.files, 3);
+ assert(first.findings.filter(hit => hit.rule === 'bannedTerm').length >= 5);
+ assert.equal(first.findings.filter(hit => hit.rule === 'sentenceLength').length, 1);
+ assert.equal(first.findings.filter(hit => hit.rule === 'paragraphLength').length, 1);
+ assert(first.findings.some(hit => hit.file === 'guide/page.md' && hit.line === 22));
+ assert(!first.findings.some(hit => hit.rule === 'unusedConcept' || hit.rule === 'svgTerm' || hit.rule === 'svgStyle'));
+ writeFileSync(join(root, 'guide/page.md'), '新词 good 旧词典.\n');
+ writeFileSync(join(root, 'guide/figure.svg'), '<svg><style>.label { fill: black; }</style><text class="label">新<tspan>词</tspan></text></svg>');
+ assert.equal(call(root, ['docs', 'check'], reportSchema).ok, true);
+ mkdirSync(join(root, 'guide/exempt-more'));
+ writeFileSync(join(root, 'guide/exempt-more/page.md'), 'bad');
+ assert(call(root, ['docs', 'check'], reportSchema, '', 1).findings.some(hit => hit.file === 'guide/exempt-more/page.md'));
+ rmSync(join(root, 'guide/exempt-more'), { recursive: true });
+ writeFileSync(join(root, 'guide/page.md'), 'clear');
+ writeFileSync(join(root, 'guide/figure.svg'), '<svg><text class="label">幽灵</text></svg>');
+ const missing = call(root, ['docs', 'check'], reportSchema, '', 1);
+ for (const rule of ['unusedConcept', 'svgTerm', 'svgStyle']) assert(missing.findings.some(hit => hit.rule === rule), rule);
+ for (const invalid of [{ ...policy, unknown: true }, { ...policy, roots: ['../outside'] }, { ...policy, bannedTerms: [{ term: 'bad', use: '', why: 'reason' }] }]) {
+  writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify(invalid));
+  assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'InvalidWritingPolicy');
+ }
+ writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ ...policy, roots: ['missing'] }));
+ assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'WritingInputNotFound');
+ writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify(policy));
+ symlinkSync(join(root, 'guide/page.md'), join(root, 'guide/escape.md'));
+ assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'UnsafePath');
+ assert.equal(call(root, ['docs', 'check', '--rules', 'absent.json'], ErrorOutput, '', 1).error, 'WritingPolicyNotFound');
+})));
+
+// @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+test('packed scoped owner commands use path, JSON body, null creation CAS, and standalone rules', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('scoped-owner-cli');
+ write(root, 'docs/feature/sample/page.md', 'Feedback.\n');
+ write(root, 'policy.json', JSON.stringify({ format: 'concord.writing/v2', bannedTerms: [] }));
+ write(root, 'catalog.json', JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'feedback', definition: 'A response', names: { en: { preferred: 'Feedback' }, api: { preferred: 'Feedback' } } }] }));
+ const ownerPath = 'docs/feature/sample/concord-writing.json';
+ const catalogPath = 'docs/feature/sample/concepts.json';
+ assert.equal(call(root, ['writing', 'show', '--path', ownerPath], Schema.Struct({ state: Schema.String })).state, 'missing');
+ assert.equal(call(root, ['--dry-run', 'writing', 'set', '--path', ownerPath, '--body', join(root, 'policy.json'), '--expected-digest', 'null'], DryRunOutput).dryRun, true);
+ assert.equal(existsSync(join(root, ownerPath)), false);
+ call(root, ['writing', 'set', '--path', ownerPath, '--body', join(root, 'policy.json'), '--expected-digest', 'null'], DigestOutput);
+ call(root, ['concepts', 'set', '--path', catalogPath, '--body', join(root, 'catalog.json'), '--expected-digest', 'null'], DigestOutput);
+ assert.equal(call(root, ['concepts', 'show', '--path', catalogPath], Schema.Struct({ state: Schema.String })).state, 'valid');
+ assert(call(root, ['writing', 'index'], Schema.Struct({ scopes: Schema.Array(Schema.Struct({ scope: Schema.String })) })).scopes.some(item => item.scope === 'docs/feature/sample'));
+ assert(call(root, ['concepts', 'index'], Schema.Struct({ concepts: Schema.Array(Schema.Struct({ reference: Schema.String })) })).concepts.some(item => item.reference === catalogPath + '#feedback'));
+ assert.equal(call(root, ['writing', 'check', '--path', ownerPath], CheckOutput).ok, true);
+ const external = consumer('standalone-owner-cli');
+ rmSync(join(external, 'docs/concepts.json'));
+ write(external, 'guide/page.md', 'Standalone prose.\n');
+ write(external, 'rules.json', JSON.stringify({ format: 'concord.writing/v2', roots: ['guide'], bannedTerms: [] }));
+ assert.equal(call(external, ['docs', 'check', '--rules', 'rules.json'], CheckOutput).ok, true);
+ write(external, 'docs/concord-writing.json', JSON.stringify({ format: 'concord.writing/v1', roots: ['docs'], bannedTerms: [] }));
+ assert.equal(call(external, ['docs', 'check', '--rules', 'rules.json'], CheckOutput).ok, true);
+})));

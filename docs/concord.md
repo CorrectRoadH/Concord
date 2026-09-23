@@ -41,7 +41,7 @@ Configure sourceRoots in concord.config.ts, or initialize with --source-root src
 - [Memory](../memory/README.md): problems, decisions, and reusable lessons with their history.
 - [Issues](issues/README.md): local observations awaiting investigation.
 
-Write the intended behavior in contracts. Keep implementation progress in your work tracking and Git history.
+契约正文声明目标、行为、约束与验收条件；产品流程属于契约。开发日志、排障经过与实施进度归工程 Memory，待调查观察归 Issue。
 Templates provide writing prompts, not completed requirements or evidence.
 
 ## Complete setup
@@ -100,3 +100,13 @@ See `concord memory resolve --help`. Use `concord review render` for local revie
 `--json` emits machine-readable results. An empty repository can pass integrity checks without having tests.
 Private evidence is per Git worktree and is not copied by a normal clone; missing historical evidence remains unavailable.
 Use `concord recover` for an interrupted publication and `concord cache rebuild` for disposable cache repair.
+
+## 工具维护工程知识
+
+Memory 使用 `concord memory index/recall` 获取索引和正文，Issue 使用 `concord issue index/recall`。创建和修改使用 add/create、edit 或 author set；状态与关系使用具名生命周期命令。Agent 不直接读写受管 Memory/Issue 文件，不手工维护 INDEX.md 或关系登记表。参见 [工具式记忆维护](feature/local-sdlc/use-case/recall-and-maintain-memory.md)。
+
+Local、GitHub、Linear 统一作为反馈来源。Local 无需连接即可用 `concord issue create` 创建观察；远端接入只负责读取，其本地笔记和状态由本地工具维护。参见 [本地观察](feature/feedback/use-case/manage-local-observations.md)。
+
+## Scoped terminology and writing
+
+Use Concord concepts and writing tools for scoped JSON owners under docs. The directory owns the scope; docs/concepts.json contains global definitions, while Feature/Engineering subdirectories own local concepts.json and concord-writing.json. The Web workbench aggregates sources without copying them. Markdown explains relationships and examples; only explicit deprecated names produce terminology bans. See [policy and migration](feature/documentation-quality/policy.md).

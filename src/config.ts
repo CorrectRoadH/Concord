@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-import { noteConfigProjection, readCachedProjectConfig } from './config-cache.js';
+import { readCachedProjectConfig } from './config-cache.js';
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type ProjectConfig } from './shared.js';
 import type * as TypeScript from 'typescript';
 import { lazyTypeScript } from './typescript-host.js';
@@ -68,6 +68,5 @@ export function snapshot(path: ConfigSnapshot['path'], source: string, privateDi
     if (cached !== undefined) return { path, source, digest: sourceDigest, config: cached };
   }
   const config = parseTypeScriptConfig(source, path);
-  if (privateDir !== undefined) noteConfigProjection(privateDir, sourceDigest, config);
   return { path, source, digest: sourceDigest, config };
 }

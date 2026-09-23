@@ -1,17 +1,18 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 import { ExternalLink, GitPullRequestArrow, Link2, Plus, RefreshCw, Trash2 } from "lucide-react"
 import * as React from "react"
 import ReactMarkdown from "react-markdown"
-import { Link, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams } from "react-router-dom"
 import remarkGfm from "remark-gfm"
 
 import type { FeedbackConnection, FeedbackItem, FeedbackSource } from "../../src/feedback-schema"
-import type { ProjectConfig } from "../../src/shared"
 import type { ViewAction } from "../../src/view-contract"
+import { connectionSummary } from "@/components/feedback-connections"
 import { DocumentDetailPage } from "@/pages/documents"
 import { Definition, Empty, Field, PageHeader } from "@/components/page"
-import { PanelHeader, RecordList, RecordItem, RecordDetails } from "@/components/content-layout"
+import { PanelEmpty, PanelHeader, RecordList, RecordItem, RecordDetails } from "@/components/content-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,8 +35,8 @@ function receiptWarnings(value: unknown): readonly string[] {
 function sourceOf(item: FeedbackItem): FeedbackSource | undefined {
   return item.document.metadata.kind === "issue" ? item.document.metadata.source : undefined
 }
-function providerOf(item: FeedbackItem): FeedbackConnection["provider"] | null {
-  return item.remote?.provider ?? sourceOf(item)?.provider ?? null
+function providerOf(item: FeedbackItem): FeedbackItem["provider"] {
+  return item.provider
 }
 function remoteStateOf(item: FeedbackItem): string | null {
   return item.remote?.state ?? sourceOf(item)?.state ?? null
@@ -44,14 +45,6 @@ function searchText(item: FeedbackItem): string {
   const source = sourceOf(item)
   return [item.document.metadata.id, item.document.metadata.title, item.document.body, item.remote?.title, item.remote?.body, item.remote?.url, source?.title, source?.body, source?.url, providerOf(item)].filter(Boolean).join(" ").toLocaleLowerCase()
 }
-function connectionSummary(connection: FeedbackConnection): string {
-  return connection.provider === "github" ? `${connection.owner}/${connection.repo}` : connection.team
-}
-function connectionBinding(connection: FeedbackConnection): string {
-  if (connection.provider === "github") return connection.repositoryId ? `repository ${connection.repositoryId}` : "首次成功同步时绑定 repository ID"
-  return connection.organizationId && connection.teamId ? `organization ${connection.organizationId} · team ${connection.teamId}` : "首次成功同步时绑定 organization/team ID"
-}
-
 function CreateLocalFeedback() {
   const { act, busy } = useWorkspace()
   const [open, setOpen] = React.useState(false)
@@ -84,62 +77,27 @@ function ImportFeedback({ connections, onReceipt }: { connections: readonly Feed
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button disabled={connections.length === 0}><GitPullRequestArrow /> 从 URL 导入</Button></DialogTrigger><DialogContent><form onSubmit={(event) => fire(submit(event))}><DialogHeader><DialogTitle>从远端 URL 导入</DialogTitle><DialogDescription>URL 必须属于所选连接支持的 GitHub 或 Linear 主机。导入只在提交后发起网络请求。</DialogDescription></DialogHeader><div className="form-grid"><Field label="连接"><Select value={connection} onValueChange={setConnection}><SelectTrigger aria-label="导入连接"><SelectValue placeholder="选择连接" /></SelectTrigger><SelectContent>{connections.map((item) => <SelectItem key={item.id} value={item.id}>{item.id} · {connectionSummary(item)}</SelectItem>)}</SelectContent></Select></Field><Field label="远端 Issue URL"><Input aria-label="远端 Issue URL" type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/owner/repo/issues/123" required /></Field>{error && <div className="form-error" role="alert">{error}</div>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="submit" disabled={busy || !connection}>{busy ? "导入中…" : "导入"}</Button></DialogFooter></form></DialogContent></Dialog>
 }
 
-function AddConnection() {
-  const { snapshot, act, busy } = useWorkspace()
-  const [open, setOpen] = React.useState(false)
-  const [baseline, setBaseline] = React.useState<{ readonly config: ProjectConfig; readonly digest: string; readonly connections: readonly FeedbackConnection[] } | null>(null)
-  const [id, setId] = React.useState("")
-  const [provider, setProvider] = React.useState<FeedbackConnection["provider"]>("github")
-  const [credentialEnv, setCredentialEnv] = React.useState("")
-  const [owner, setOwner] = React.useState("")
-  const [repo, setRepo] = React.useState("")
-  const [team, setTeam] = React.useState("")
-  const [error, setError] = React.useState("")
-  function loadCurrent(): void {
-    if (!snapshot.project || !snapshot.configDigest) return
-    setBaseline({ config: snapshot.project, digest: snapshot.configDigest, connections: snapshot.project.feedbackConnections ?? [] })
-    setError("")
-  }
-  function changeOpen(next: boolean): void {
-    if (next) loadCurrent()
-    setOpen(next)
-  }
-  async function submit(event: React.FormEvent): Promise<void> {
-    event.preventDefault()
-    if (!baseline) return
-    const connection: FeedbackConnection = provider === "github" ? { id, provider, credentialEnv, owner, repo } : { id, provider, credentialEnv, team }
-    setError("")
-    try {
-      await act({ action: "config.set", config: { ...baseline.config, feedbackConnections: [...baseline.connections, connection] }, expectedDigest: baseline.digest }, "反馈连接已添加。")
-      setOpen(false); setId(""); setCredentialEnv(""); setOwner(""); setRepo(""); setTeam("")
-    } catch (cause) { setError(errorMessage(cause)) }
-  }
-  return <Dialog open={open} onOpenChange={changeOpen}><DialogTrigger asChild><Button size="sm" variant="outline"><Plus /> 添加连接</Button></DialogTrigger><DialogContent><form onSubmit={(event) => fire(submit(event))}><DialogHeader><DialogTitle>添加反馈连接</DialogTitle><DialogDescription>这里只保存凭据的环境变量名，不接收或保存 token。打开表单时已冻结完整配置版本；冲突时不会丢失当前草稿。</DialogDescription></DialogHeader><div className="form-grid"><Field label="连接 ID" hint="小写字母、数字和单连字符"><Input aria-label="连接 ID" value={id} onChange={(event) => setId(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></Field><Field label="来源"><Select value={provider} onValueChange={(value) => setProvider(value as FeedbackConnection["provider"])}><SelectTrigger aria-label="连接来源"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select></Field><Field label="凭据环境变量" hint={provider === "linear" ? "Linear personal API key 的环境变量名，例如 LINEAR_API_KEY；不要填写 token。" : "GitHub token 的环境变量名，例如 GITHUB_TOKEN；不要填写 token。"}><Input aria-label="凭据环境变量" value={credentialEnv} onChange={(event) => setCredentialEnv(event.target.value)} pattern="[A-Za-z_][A-Za-z0-9_]*" placeholder={provider === "linear" ? "LINEAR_API_KEY" : "GITHUB_TOKEN"} required /></Field>{provider === "github" ? <div className="two-column"><Field label="Owner"><Input aria-label="GitHub owner" value={owner} onChange={(event) => setOwner(event.target.value)} required /></Field><Field label="Repository"><Input aria-label="GitHub repository" value={repo} onChange={(event) => setRepo(event.target.value)} required /></Field></div> : <Field label="Team" hint="由首次同步解析并绑定 team ID。"><Input aria-label="Linear team" value={team} onChange={(event) => setTeam(event.target.value)} required /></Field>}{error && <div className="form-error" role="alert">{error}</div>}</div><DialogFooter><Button type="button" variant="ghost" onClick={loadCurrent}>载入当前配置</Button><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="submit" disabled={busy || !baseline}>{busy ? "保存中…" : "添加"}</Button></DialogFooter></form></DialogContent></Dialog>
-}
-
-function Connections({ connections, onReceipt }: { connections: readonly FeedbackConnection[]; onReceipt(warnings: readonly string[]): void }) {
-  const { snapshot, act, busy } = useWorkspace()
+function FeedbackSources({ connections, onReceipt }: { connections: readonly FeedbackConnection[]; onReceipt(warnings: readonly string[]): void }) {
+  const { act, busy } = useWorkspace()
+  const [active, setActive] = React.useState<string | null>(null)
   const [errors, setErrors] = React.useState<Readonly<Record<string, string>>>({})
   async function sync(connection: FeedbackConnection): Promise<void> {
+    setActive(connection.id)
     setErrors((current) => ({ ...current, [connection.id]: "" }))
     try { const receipt = await act({ action: "feedback.sync", connection: connection.id }, `${connection.id} 已同步。`); onReceipt(receiptWarnings(receipt)) }
     catch (cause) { setErrors((current) => ({ ...current, [connection.id]: errorMessage(cause) })) }
+    finally { setActive(null) }
   }
-  async function remove(connection: FeedbackConnection): Promise<void> {
-    if (!snapshot.project || !snapshot.configDigest) return
-    setErrors((current) => ({ ...current, [connection.id]: "" }))
-    try { await act({ action: "config.set", config: { ...snapshot.project, feedbackConnections: connections.filter((item) => item.id !== connection.id) }, expectedDigest: snapshot.configDigest }, `${connection.id} 已移除。`) }
-    catch (cause) { setErrors((current) => ({ ...current, [connection.id]: errorMessage(cause) })) }
-  }
-  return <Card className="feedback-connections"><CardHeader><div className="card-title-row"><div><CardTitle>远端来源连接</CardTitle><CardDescription>页面展示已保存的信息；点击同步或从 URL 导入时才会获取远端变化。</CardDescription></div><AddConnection /></div></CardHeader><CardContent>{connections.length === 0 ? <p className="muted">尚未配置连接。添加连接时只填写凭据环境变量名。</p> : <div className="connection-list">{connections.map((connection) => <div key={connection.id} className="connection-record"><div><div className="inline-badges"><strong>{connection.id}</strong><Badge variant="outline">{feedbackProviderLabel(connection.provider)}</Badge></div><span>{connectionSummary(connection)} · <code>{connection.credentialEnv}</code></span><small>{connectionBinding(connection)}</small>{errors[connection.id] && <div className="form-error" role="alert">{errors[connection.id]}</div>}</div><div className="button-row"><Button size="sm" variant="outline" disabled={busy} onClick={() => fire(sync(connection))}><RefreshCw /> 同步</Button><Button size="icon-sm" variant="ghost" aria-label={`移除连接 ${connection.id}`} title="移除连接" disabled={busy} onClick={() => fire(remove(connection))}><Trash2 /></Button></div></div>)}</div>}</CardContent></Card>
+  return <div className="feedback-source-status"><span>{connections.length === 0 ? "尚未配置远端来源" : `${connections.length} 个远端来源`}</span>{connections.map((connection) => <span className="feedback-source-status__connection" key={connection.id}><Badge variant="outline">{feedbackProviderLabel(connection.provider)}</Badge><span>{connectionSummary(connection)}</span><Button size="sm" variant="outline" disabled={busy} onClick={() => fire(sync(connection))}><RefreshCw /> {active === connection.id ? "同步中…" : "同步"}</Button>{errors[connection.id] && <span className="feedback-source-status__error" role="alert">{errors[connection.id]}</span>}</span>)}<Link to="/settings?tab=feedback">管理反馈来源</Link></div>
 }
 
 function FeedbackCard({ item }: { item: FeedbackItem }) {
-  const provider = providerOf(item); const source = sourceOf(item)
+  const source = sourceOf(item)
   return <RecordItem>
-    <div className="card-title-row"><Link className="font-semibold hover:underline" to={`/feedback/${encodeURIComponent(item.document.metadata.id)}`}>{item.document.metadata.title}</Link><Badge variant={item.triage === "pending" ? "default" : "outline"}>{feedbackTriageLabel(item.triage)}</Badge></div>
-    <p className="muted mt-2 mb-2">{item.document.body.slice(0, 160) || source?.body.slice(0, 160) || "等待补充本地上下文"}</p>
-    <RecordDetails title="来源与状态"><dl><Definition label="ID"><code>{item.document.metadata.id}</code></Definition>{provider && <Definition label="来源">{feedbackProviderLabel(provider)}</Definition>}<Definition label="本地状态">{item.document.metadata.kind === "issue" ? item.document.metadata.state : "—"}</Definition>{remoteStateOf(item) && <Definition label="远端状态">{remoteStateOf(item)}</Definition>}<Definition label="可用性">{availabilityLabel(item.availability)}</Definition></dl></RecordDetails>
+    <div className="card-title-row"><Link className="font-semibold hover:underline" to={`/feedback/${encodeURIComponent(item.document.metadata.id)}`}>{item.document.metadata.title}</Link><div className="inline-badges"><Badge variant={item.triage === "pending" ? "default" : "outline"}>{feedbackTriageLabel(item.triage)}</Badge><Badge variant="secondary">{feedbackProviderLabel(item.provider)}</Badge></div></div>
+    <p className="feedback-item-summary">{item.document.body.slice(0, 160) || source?.body.slice(0, 160) || "等待补充本地上下文"}</p>
+    <small className="feedback-item-date">{source ? `来源更新于 ${dateTime(item.remote?.updatedAt ?? source.updatedAt)}` : `创建于 ${dateTime(item.document.metadata.createdAt)}`}</small>
+    <RecordDetails title="来源与状态"><dl><Definition label="ID"><code>{item.document.metadata.id}</code></Definition><Definition label="来源">{feedbackProviderLabel(item.provider)}</Definition><Definition label="本地状态">{item.document.metadata.kind === "issue" ? item.document.metadata.state : "—"}</Definition>{remoteStateOf(item) && <Definition label="远端状态">{remoteStateOf(item)}</Definition>}<Definition label="可用性">{availabilityLabel(item.availability)}</Definition></dl></RecordDetails>
     {item.warnings.length > 0 && <small className="feedback-warning">{item.warnings.join("；")}</small>}
   </RecordItem>
 }
@@ -153,14 +111,40 @@ export function FeedbackPage() {
   const [triage, setTriage] = React.useState<TriageFilter>("all")
   const [receiptNotices, setReceiptNotices] = React.useState<readonly string[]>([])
   const normalized = query.trim().toLocaleLowerCase()
-  const visible = feedback.filter((item) => (provider === "all" || (provider === "local" ? providerOf(item) === null : providerOf(item) === provider)) && (triage === "all" || item.triage === triage) && (!normalized || searchText(item).includes(normalized)))
-  return <><PageHeader title="反馈" description="汇总本地草稿与 GitHub、Linear 来源；本地正文和状态独立维护，不会被远端刷新覆盖。" actions={<><CreateLocalFeedback /><ImportFeedback connections={connections} onReceipt={setReceiptNotices} /></>} /><Connections connections={connections} onReceipt={setReceiptNotices} />{receiptNotices.length > 0 && <div className="callout callout--warning feedback-receipt-warnings"><div><strong>同步已完成，但有提醒</strong>{receiptNotices.map((warning) => <p key={warning}>{warning}</p>)}</div><Button size="sm" variant="ghost" onClick={() => setReceiptNotices([])}>关闭</Button></div>}<div className="feedback-toolbar"><Input aria-label="搜索反馈" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、ID、正文或来源 URL…" /><Select value={provider} onValueChange={(value) => setProvider(value as ProviderFilter)}><SelectTrigger aria-label="按来源筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部来源</SelectItem><SelectItem value="local">仅本地</SelectItem><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select><Select value={triage} onValueChange={(value) => setTriage(value as TriageFilter)}><SelectTrigger aria-label="按处理状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="pending">待处理</SelectItem><SelectItem value="linked">已关联</SelectItem><SelectItem value="closed">已关闭</SelectItem></SelectContent></Select><Badge variant="secondary">{visible.length} / {feedback.length} 项</Badge></div>{visible.length === 0 ? <Empty kind={feedback.length === 0 ? "empty" : "filtered"} title={feedback.length === 0 ? "还没有反馈" : "没有匹配的反馈"}>{feedback.length === 0 ? "新建本地反馈，或配置连接后显式同步。" : "调整搜索词或筛选条件。"}</Empty> : <RecordList>{visible.map((item) => <FeedbackCard key={item.document.path} item={item} />)}</RecordList>}</>
+  const visible = feedback.filter((item) => (provider === "all" || providerOf(item) === provider) && (triage === "all" || item.triage === triage) && (!normalized || searchText(item).includes(normalized)))
+  return <><PageHeader title="反馈" description="浏览并处理本地与远端反馈。远端来源只在手动同步或导入时更新。" actions={<><CreateLocalFeedback />{connections.length > 0 && <ImportFeedback connections={connections} onReceipt={setReceiptNotices} />}</>} />
+    <FeedbackSources connections={connections} onReceipt={setReceiptNotices} />
+    {receiptNotices.length > 0 && <div className="callout callout--warning feedback-receipt-warnings"><div><strong>同步已完成，但有提醒</strong>{receiptNotices.map((warning) => <p key={warning}>{warning}</p>)}</div><Button size="sm" variant="ghost" onClick={() => setReceiptNotices([])}>关闭</Button></div>}
+    <PanelHeader title="反馈列表" actions={feedback.length > 0 ? <span className="muted">{visible.length} / {feedback.length} 项</span> : undefined} />
+    {feedback.length > 0 && <div className="feedback-toolbar"><Input aria-label="搜索反馈" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、ID、正文或来源 URL…" /><Select value={provider} onValueChange={(value) => setProvider(value as ProviderFilter)}><SelectTrigger aria-label="按来源筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部来源</SelectItem><SelectItem value="local">仅本地</SelectItem><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select><Select value={triage} onValueChange={(value) => setTriage(value as TriageFilter)}><SelectTrigger aria-label="按处理状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="pending">待处理</SelectItem><SelectItem value="linked">已关联</SelectItem><SelectItem value="closed">已关闭</SelectItem></SelectContent></Select></div>}
+    {feedback.length === 0 ? <PanelEmpty title="还没有反馈">新建本地反馈，或前往<Link to="/settings?tab=feedback">反馈来源设置</Link>添加连接。</PanelEmpty> : visible.length === 0 ? <PanelEmpty title="没有匹配的反馈">调整搜索词或筛选条件。</PanelEmpty> : <RecordList>{visible.map((item) => <FeedbackCard key={item.document.path} item={item} />)}</RecordList>}
+  </>
 }
 
 function SourcePanel({ item }: { item: FeedbackItem }) {
   const source = sourceOf(item); const remote = item.remote
   if (!source) return <Card className="feedback-source-card"><CardHeader><CardTitle>来源</CardTitle><CardDescription>这是本地创建的反馈，没有远端来源快照。</CardDescription></CardHeader></Card>
   return <Card className="feedback-source-card"><CardHeader><div className="card-title-row"><div><CardTitle>远端来源（只读）</CardTitle><CardDescription>“上次观察缓存”来自最近一次成功同步，不代表远端实时最新；页面只展示已保存的信息。</CardDescription></div><Button asChild size="sm" variant="outline"><a href={source.url} target="_blank" rel="noreferrer"><ExternalLink /> 打开远端</a></Button></div></CardHeader><CardContent><div className="feedback-source-facts"><Definition label="来源">{feedbackProviderLabel(source.provider)}</Definition><Definition label="连接"><code>{source.connectionId}</code></Definition><Definition label="远端 ID"><code>{source.id}</code></Definition><Definition label="本地状态"><Badge variant="outline">{item.document.metadata.state}</Badge></Definition><Definition label="可用性">{availabilityLabel(item.availability)}</Definition></div><div className="feedback-source-snapshots"><section><div className="feedback-snapshot-heading"><div><strong>首次导入快照</strong><small>永久保留，不被刷新替换</small></div><span>{dateTime(source.updatedAt)}</span></div><Badge variant="outline">远端状态：{source.state}</Badge><article className="feedback-source-markdown"><h3>{source.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{source.body}</ReactMarkdown></article><small>导入于 {dateTime(source.importedAt)}</small></section><section><div className="feedback-snapshot-heading"><div><strong>上次观察缓存</strong><small>非实时；只表示最近成功观察</small></div><span>{remote ? dateTime(remote.updatedAt) : "不可用"}</span></div>{remote ? <><Badge variant="secondary">远端状态：{remote.state}</Badge><article className="feedback-source-markdown"><h3>{remote.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{remote.body}</ReactMarkdown></article></> : <p className="muted">当前没有可读的远端缓存；首次导入快照仍可用。</p>}</section></div>{item.warnings.length > 0 && <div className="callout callout--warning"><div><strong>来源提醒</strong>{item.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div></div>}</CardContent></Card>
+}
+
+function RemoveLocalDraft({ item }: { item: FeedbackItem }) {
+  const { snapshot, act, busy } = useWorkspace()
+  const navigate = useNavigate()
+  const [open, setOpen] = React.useState(false)
+  const [error, setError] = React.useState("")
+  const metadata = item.document.metadata
+  const candidate = item.provider === "local" && metadata.state === "draft" && metadata.source === undefined && metadata.origin === undefined && metadata.closure === undefined && metadata.history.length === 0 && metadata.memoryRelations.length === 0 && metadata.adoptions.current.length === 0 && metadata.adoptions.history.length === 0
+  const incoming = snapshot.edges.some((edge) => edge.from !== item.document.path && [item.document.path, metadata.id].includes(edge.to.split("#")[0] ?? ""))
+  if (!candidate || incoming || snapshot.findings.length > 0) return null
+  async function remove(): Promise<void> {
+    setError("")
+    try {
+      await act({ action: "issue.remove", id: item.document.path, expectedDigest: item.document.digest }, "本地草稿已删除。")
+      setOpen(false)
+      navigate("/feedback")
+    } catch (cause) { setError(errorMessage(cause)) }
+  }
+  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline"><Trash2 /> 删除本地草稿</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>删除本地草稿</DialogTitle><DialogDescription>将删除 {metadata.title} 的本地 Issue 文件。已有来源、关系或历史的记录不能删除。</DialogDescription></DialogHeader>{error && <div className="form-error" role="alert">{error}</div>}<DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="button" variant="destructive" disabled={busy} onClick={() => fire(remove())}>删除</Button></DialogFooter></DialogContent></Dialog>
 }
 
 function FeatureLinker({ item }: { item: FeedbackItem }) {
@@ -183,5 +167,5 @@ export function FeedbackDetailPage() {
   const { id = "" } = useParams(); const { snapshot } = useWorkspace()
   const item = snapshot.feedback.find((candidate) => candidate.document.metadata.id === id)
   if (!item) return <Empty kind="missing" title="找不到反馈">它可能已被移动、删除或尚未导入。</Empty>
-  return <><Link className="back-link" to="/feedback">返回反馈列表</Link><DocumentDetailPage kind="issue" relatedContent={<><PanelHeader title="来源与关联" /><div className="feedback-detail-context"><SourcePanel item={item} /><FeatureLinker item={item} /></div></>} /></>
+  return <><Link className="back-link" to="/feedback">返回反馈列表</Link><DocumentDetailPage kind="issue" relatedContent={<><PanelHeader title="来源与关联" /><RemoveLocalDraft item={item} /><div className="feedback-detail-context"><SourcePanel item={item} /><FeatureLinker item={item} /></div></>} /></>
 }

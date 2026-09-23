@@ -12,6 +12,7 @@ constitutionRefs:
   - docs/constitution.md#c-006
   - docs/constitution.md#c-008
   - docs/constitution.md#c-009
+  - docs/constitution.md#c-012
 ---
 
 # 渐进式项目初始化与宪法治理
@@ -25,14 +26,13 @@ constitutionRefs:
 - 项目特点允许组合，例如 Library 与 CLI；这些选择给出可覆盖的模板页面默认值。
 - `docs/constitution.md` 必需；根目录 `DESIGN.md` 是独立可选项。
 - 初始化提供渐进交互与等价的非交互输入，预览完整变更，取消不写入，保留已有文件。
+- 初始化指引要求契约声明目标，开发过程归 Memory；Memory/Issue 的索引、检索和修改全部通过 Concord 工具。
 - 初始化在根 `AGENTS.md` 中维护有边界标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
 - 新 init 采用静态 `concord.config.ts`；旧 `concord.json` 返回具名迁移错误，双配置拒绝，不执行配置模块。
 - Memory 支持多个来源；首版 provider 仅本地文件，后续 provider 可扩展。canonical 路径拥有身份，默认写入目标唯一，只读来源的间接修改也必须拒绝。
 - Feature 可以推动宪法新增、修订条款；记录适用范围、理由、来源与影响，不把功能细节无限追加为全局规则。
 
-## 交付状态与边界
-
-已在主仓库实现渐进初始化，并按 [TS-only 裁决](../../design/ts-only-runtime/README.md) 收敛运行时格式；交付运行完整 `pnpm check`，覆盖构建、严格类型检查、打包 Git 消费者、浏览器和迁移模型。独立验收覆盖 TS 原字节恢复、多来源只读保护、宪法引用修订及协调锁。真实终端验证确认前文件变化时保留外部内容并拒绝发布。Concord 自身已采用静态 TS 配置、正式宪法及条款引用；结构检查不代表语义合规。
+## 边界
 
 不生成其它框架的应用代码，不引入远端写入或自动多后端同步，不将文档存在、代码声明或命令收据称为完整合规证明。
 

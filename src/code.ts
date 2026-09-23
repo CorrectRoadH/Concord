@@ -446,14 +446,10 @@ function sameSources(left: readonly Source[], right: readonly Source[]): boolean
   return left.length === right.length && left.every((source, index) => source.path === right[index]?.path && source.digest === right[index]?.digest);
 }
 
-const codeContentCache = new ContentCache<ReturnType<typeof parseSource>>();
 function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-code-parse/v1`; }
+const codeContentCache = new ContentCache<ParsedFile>('code_parse', parserVersion(), Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), findings: Schema.Array(FindingSchema) }));
 function fileKey(repo: Repository, source: Source): string {
   return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, parser: parserVersion(), path: source.path, sourceDigest: source.digest });
-}
-function parseProjected(source: Source): ParsedFile {
-  if (!source.text.includes('@concord-')) return { codes: [], findings: [] };
-  return codeContentCache.get(source.path, source.text, () => parseSource(source));
 }
 function encodeParse(parsed: ParsedFile): string {
   return canonical({ codes: parsed.codes, findings: parsed.findings, digest: objectDigest({ codes: parsed.codes, findings: parsed.findings }) });
@@ -477,7 +473,10 @@ function mergeParsed(parsed: readonly ParsedFile[]): { readonly codes: readonly 
   return { codes, findings };
 }
 function compileCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean): CompiledFiles {
-  if (mode === 'off' || skipCache) return { ...mergeParsed(current.map(parseProjected)), hits: 0, misses: current.length, rows: [] };
+  if (mode === 'off' || skipCache) {
+    const inputs = current.map(source => ({ path: source.path, source: source.text }));
+    return { ...mergeParsed(codeContentCache.getMany(inputs, input => input.source.includes('@concord-') ? parseSource({ path: input.path, text: input.source, digest: digest(input.source) }) : { codes: [], findings: [] })), hits: 0, misses: current.length, rows: [] };
+  }
   let stored = new Map<string, string>();
   let readFailure: string | undefined;
   if (mode === 'use') {
@@ -488,6 +487,8 @@ function compileCached(repo: Repository, current: readonly Source[], mode: CodeM
   const rows: { key: string; payload: string }[] = [];
   let hits = 0;
   let misses = 0;
+  const missesToParse: Source[] = [];
+  const pending: { index: number; key: string }[] = [];
   for (const source of current) {
     const key = fileKey(repo, source);
     if (mode === 'use' && readFailure === undefined && stored.has(key)) {
@@ -495,9 +496,16 @@ function compileCached(repo: Repository, current: readonly Source[], mode: CodeM
       if (decoded !== undefined) { hits += 1; parsed.push(decoded); continue; }
     }
     misses += 1;
-    const fresh = parseProjected(source);
-    parsed.push(fresh);
-    if (readFailure === undefined) rows.push({ key, payload: encodeParse(fresh) });
+    pending.push({ index: parsed.length, key });
+    missesToParse.push(source);
+    parsed.push({ codes: [], findings: [] });
+  }
+  const freshValues = codeContentCache.getMany(missesToParse.map(source => ({ path: source.path, source: source.text })), input => input.source.includes('@concord-') ? parseSource({ path: input.path, text: input.source, digest: digest(input.source) }) : { codes: [], findings: [] });
+  for (let index = 0; index < pending.length; index++) {
+    const item = pending[index]!;
+    const fresh = freshValues[index]!;
+    parsed[item.index] = fresh;
+    if (readFailure === undefined) rows.push({ key: item.key, payload: encodeParse(fresh) });
   }
   return { ...mergeParsed(parsed), hits, misses, rows, ...(readFailure === undefined ? {} : { readFailure }) };
 }
@@ -517,7 +525,7 @@ function finish(repo: Repository, compiled: CompiledFiles, current: readonly Sou
   if (mode === 'off') return withCache(body, { status: 'off', hits: 0, misses: compiled.misses, path: cachePath });
   if (compiled.readFailure !== undefined) return withCache(body, { status: 'unavailable', hits: 0, misses: compiled.misses, path: cachePath, detail: compiled.readFailure });
   try {
-    persistNotedConfig(repo.privateDir);
+    persistNotedConfig(repo);
     if (compiled.rows.length > 0) writeCodePayloads(repo, compiled.rows);
   } catch (cause) {
     return withCache(body, { status: 'unavailable', hits: compiled.hits, misses: compiled.misses, path: cachePath, detail: cause instanceof Error ? cause.message : String(cause) });

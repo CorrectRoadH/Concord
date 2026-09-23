@@ -100,7 +100,7 @@ test('GitHub sync binds repository identity, requests all states, filters PRs, a
     response({ id: 9001, ignored: 'allowed' }),
     response([
       githubIssue(),
-      githubIssue({ id: 202, number: 8, html_url: 'https://github.com/acme/widgets/issues/8', pull_request: { url: 'https://api.github.com/pulls/8' } }),
+      githubIssue({ id: 202, number: 8, html_url: 'https://github.com/acme/widgets/pull/8', pull_request: { url: 'https://api.github.com/pulls/8' } }),
     ]),
   ], requests);
   const result = await Effect.runPromise(fetchFeedback(githubConnection, { credential: 'secret-token', transport }));

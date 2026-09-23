@@ -2,6 +2,10 @@
 
 Memory 保存 Problem、Decision、Insight 与未分类 Note，不复制契约正文或测试关系。唯一当前格式是 `concord.document/v1`，旧文件需要一次性迁移。
 
+索引、检索和正文读取使用 `concord memory index --json`、`concord memory recall "查询词" --json`。recall 返回匹配的实际正文与摘要，是本地文本检索，不调用模型。不要直接读取或编辑 Memory 文件，不维护人工 INDEX。需要查看状态与关系仍可使用 show；index/list 与 recall/search 都从当前 owner 派生。
+
+修改正文用 `concord memory edit <id-or-path> --body <file> --expected-digest <digest>`，或已有 `author set`。先从工具取得最新摘要，冲突后重新读取并核对，不盲目重试。正文更新不改状态、证据和历史；这些事实必须通过下述生命周期命令修改。受管文件以外的临时正文文件或 stdin 可以作为命令输入。
+
 `captured` 表示已保存但尚未确认当前生命周期；它不允许 fixed 或 promotion。已分类记录通过 `concord memory activate <id> --reason <text>` 激活：Problem 变为 open，Decision／Insight 变为 current。Note 使用 `memory add --kind note` 创建，保持 captured。
 
 ```sh

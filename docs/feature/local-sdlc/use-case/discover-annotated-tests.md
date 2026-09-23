@@ -17,7 +17,7 @@ feature: docs/feature/local-sdlc/README.md
 
 1. 用 `test annotate` 验证契约目标和 Problem 引用，把输出片段放进测试文件。`//`、`#` 和 `--` 都是标记。
 2. `test list/show` 或 `check` 扫描配置的 testRoots。标记存在即是 case，不解析宿主测试语法。
-3. SQLite 以项目、路径集合、文件摘要、runner 配置和解析器版本作为身份；有效缓存命中才复用投影。
+3. HawDB 以项目、路径集合、文件摘要、runner 配置和解析器版本作为身份；有效缓存命中才复用投影。
 4. 文件修改、重命名、删除、配置变化或缓存损坏时从权威源码重建。
 
 ## 验收

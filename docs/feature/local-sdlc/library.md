@@ -10,7 +10,7 @@ Feature 与 Use Case 拥有当前产品契约；Engineering 拥有仓库维护�
 
 ## 私有状态
 
-通过 `git rev-parse --git-path concord` 定位的 SQLite、evidence 和 journal 属于当前 worktree；普通单 worktree 仓库通常落在 `.git/concord`，linked worktree 则使用自己的 Git-private 路径。缓存可清除重建；证据绑定定义、契约、候选内容和 runner 配置；journal 只用于安全恢复，不取代 Markdown 或测试源码。
+通过 `git rev-parse --git-path concord` 定位的 HawDB、evidence 和 journal 属于当前 worktree；普通单 worktree 仓库通常落在 `.git/concord`，linked worktree 则使用自己的 Git-private 路径。缓存可清除重建；证据绑定定义、契约、候选内容和 runner 配置；journal 只用于安全恢复，不取代 Markdown 或测试源码。
 
 ## 边界
 

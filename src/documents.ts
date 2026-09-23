@@ -63,7 +63,8 @@ function authorBody(value: string): string {
   return body.endsWith('\n') ? body : `${body}\n`;
 }
 
-const documentContentCache = new ContentCache<DocumentRecord | undefined>();
+const DocumentRecordCacheSchema = Schema.Struct({ path: Schema.String, metadata: DocumentSchema, body: Schema.String, digest: Schema.String });
+const documentContentCache = new ContentCache<DocumentRecord | undefined>('document_parse', 'concord-document-parse/v1', Schema.Union([DocumentRecordCacheSchema, Schema.Undefined]));
 
 export function parseDocumentRecord(path: string, source: string): DocumentRecord | undefined {
   return documentContentCache.get(path, source, () => parseDocumentSource(path, source));
@@ -156,14 +157,13 @@ function loadDocumentsUnderSnapshot(repo: Repository): DocumentRecord[] {
     if (memoryRoots.has(root) && !existsSync(repo.absolute(root))) throw new ConcordError('MemorySourceUnavailable', `Configured Memory source does not exist: ${root}`);
     for (const path of repo.files(root)) if (path.endsWith('.md')) paths.add(path);
   }
-  const documents: DocumentRecord[] = [];
+  const inputs: { path: string; source: string }[] = [];
   for (const path of [...paths].sort()) {
     const source = repo.read(path);
     if (source === undefined) continue;
-    const record = parseDocumentRecord(path, source);
-    if (record !== undefined) documents.push(record);
+    inputs.push({ path, source });
   }
-  return documents;
+  return documentContentCache.getMany(inputs, input => parseDocumentSource(input.path, input.source)).filter((record): record is DocumentRecord => record !== undefined);
 }
 
 export function findDocument(documents: readonly DocumentRecord[], selector: string, kind?: DocumentKind): DocumentRecord {

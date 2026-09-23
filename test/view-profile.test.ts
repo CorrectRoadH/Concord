@@ -104,7 +104,11 @@ export function sendAdapter() { return 'ok'; }
     write('src/adapters.ts', sourceBody);
     writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'] });
     await page.setViewportSize({ width: 1280, height: 900 });
+    const refreshedWorkspace = page.waitForResponse(response => response.url().endsWith('/api/workspace') && response.request().method() === 'GET');
     await page.goto(`http://127.0.0.1:${server.port}/features/adapters?tab=implementation`);
+    const refreshedResponse = await refreshedWorkspace;
+    assert.equal(refreshedResponse.status(), 200);
+    assert.equal(await refreshedResponse.finished(), null);
     const featureGroup = page.getByRole('region', { name: 'Adapters的实现', exact: true });
     const useCaseGroup = page.getByRole('region', { name: 'Flow的实现', exact: true });
     await expect(featureGroup.getByText('sendAdapter', { exact: true })).toBeVisible();

@@ -1,0 +1,57 @@
+{
+  "format": "concord.concepts/v1",
+  "concepts": [
+    {
+      "id": "cache",
+      "definition": "可丢弃的派生数据；其缺失或失效不改变事实 owner，复用前核对当前来源身份。",
+      "names": {
+        "zh": {
+          "preferred": "缓存"
+        },
+        "en": {
+          "preferred": "Cache"
+        }
+      }
+    },
+    {
+      "id": "projection",
+      "definition": "从权威输入生成的结构化表示，保留来源身份和代次，不拥有独立的领域事实或授权结论。",
+      "names": {
+        "zh": {
+          "preferred": "投影"
+        },
+        "en": {
+          "preferred": "Projection"
+        }
+      }
+    },
+    {
+      "id": "cache-namespace",
+      "definition": "统一数据引擎内区分缓存种类与预算的存储分区，不等同于文档目录的术语作用域。",
+      "names": {
+        "zh": {
+          "preferred": "缓存命名空间"
+        },
+        "en": {
+          "preferred": "Cache namespace"
+        }
+      }
+    },
+    {
+      "id": "ownership-guard",
+      "definition": "覆盖整个缓存清理过程的目录所有权锁；取得该锁才允许删缓存数据，锁文件及其 inode 保留。",
+      "names": {
+        "zh": {
+          "preferred": "所有权守卫"
+        },
+        "en": {
+          "preferred": "Ownership guard"
+        }
+      }
+    }
+  ],
+  "imports": [
+    "docs/feature/feedback/concepts.json#index",
+    "docs/feature/feedback/concepts.json#recall"
+  ]
+}

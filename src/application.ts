@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Result } from 'effect';
@@ -27,7 +28,8 @@ import {
   retirePromotion,
   supersedeMemory,
 } from './documents.js';
-import { listFeedback, syncFeedback } from './feedback.js';
+import { checkFeedbackConnection, listFeedback, syncFeedback } from './feedback.js';
+import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from './knowledge.js';
 import {
   inspectDocuments,
   inspectDocumentFile,
@@ -48,6 +50,9 @@ import { adoptConstitution, amendConstitution, initializeConstitution } from './
 import { listTemplates, templateBody } from './templates.js';
 import { buildTrace, renderReview, requireValidTrace, traceShow } from './trace.js';
 import { ViewActionSchema, type ViewAction, type ViewFile, type WorkspaceSnapshot } from './view-contract.js';
+import { showWriting, setWriting, writingIndex } from './writing-management.js';
+import { checkWriting } from './writing.js';
+import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
 
 const sync = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> => Effect.try({
   try: evaluate,
@@ -82,16 +87,21 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'design.decide':
     case 'design.format':
     case 'memory.resolve':
+    case 'memory.edit':
     case 'memory.activate':
     case 'memory.reopen':
     case 'memory.supersede':
     case 'memory.promote':
     case 'memory.retire':
     case 'issue.link':
+    case 'issue.edit':
+    case 'issue.remove':
     case 'issue.close':
     case 'feedback.sync':
     case 'feedback.link':
     case 'source.set':
+    case 'writing.set':
+    case 'concepts.set':
     case 'config.set':
     case 'constitution.initialize':
     case 'constitution.adopt':
@@ -295,7 +305,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
   }), { dryRun: true });
 });
 
-function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' }>): unknown {
+function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>): unknown {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
     case 'document.create': return createDocument(repo, action.kind, { ...action, dryRun });
@@ -315,15 +325,29 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
       const proof = action.kind === 'fixed' ? verifyFixedEvidence(repo, trace.documents, trace.annotations.cases, problem, action.red!, action.green!) : undefined;
       return resolveMemory(repo, action.id, action.kind, action.reason, proof, dryRun);
     }
+    case 'memory.index': return knowledgeIndex(repo, 'memory');
+    case 'memory.recall': return knowledgeRecall(repo, 'memory', action.query);
+    case 'memory.edit': return editKnowledge(repo, 'memory', action.id, action.body, action.expectedDigest, dryRun);
     case 'memory.activate': return activateMemory(repo, action.id, action.reason, dryRun);
     case 'memory.reopen': return reopenMemory(repo, action.id, action.reason, dryRun);
     case 'memory.supersede': return supersedeMemory(repo, action.id, action.replacement, action.reason, dryRun);
     case 'memory.promote': return promoteMemory(repo, action.id, action.target, dryRun);
     case 'memory.retire': return retirePromotion(repo, action.id, action.target, action.reason, dryRun);
     case 'issue.link': return linkIssue(repo, action.id, action.memory, dryRun);
+    case 'issue.index': return knowledgeIndex(repo, 'issue');
+    case 'issue.recall': return knowledgeRecall(repo, 'issue', action.query);
+    case 'issue.edit': return editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun);
+    case 'issue.remove': return removeIssue(repo, action.id, action.expectedDigest, dryRun);
     case 'issue.close': return closeIssue(repo, action.id, action.reason, dryRun);
     case 'feedback.link': return linkFeedbackFeature(repo, action.id, action.feature, dryRun);
     case 'source.set': return setSource(repo, action.path, action.body, action.expectedDigest, dryRun);
+    case 'writing.index': return writingIndex(repo);
+    case 'writing.show': return showWriting(repo, action.path);
+    case 'writing.set': return setWriting(repo, action.policy, action.expectedDigest, dryRun, action.path);
+    case 'writing.check': return checkWriting(repo, action.path);
+    case 'concepts.index': return indexConcepts(repo);
+    case 'concepts.show': return showConcepts(repo, action.path);
+    case 'concepts.set': return setConcepts(repo, action.catalog, action.expectedDigest, dryRun, action.path);
     case 'config.set': return setConfig(repo, action.config, action.expectedDigest, dryRun);
     case 'constitution.initialize': return initializeConstitution(repo, dryRun);
     case 'constitution.adopt': return adoptConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
@@ -353,7 +377,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
   }
 }
 
-export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown): Effect.fn.Return<unknown, ConcordError> {
+export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal): Effect.fn.Return<unknown, ConcordError> {
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const action = yield* sync('view.decodeAction', () => decodeViewAction(input));
   if (action.action === 'template.show') return yield* sync('view.template', () => ({ operation: 'template-show', name: action.name, body: templateBody(action.name, action.title ?? 'Your title') }));
@@ -376,7 +400,8 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
     }))), { initialize: true, dryRun });
   }
   if (action.action === 'recover') return yield* recoverLocalState(root);
-  if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun });
+  if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
+  if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { dryRun: action.action === 'design.check' || dryRun });
+  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { dryRun: action.action === 'design.check' || action.action === 'memory.index' || action.action === 'memory.recall' || action.action === 'issue.index' || action.action === 'issue.recall' || action.action === 'writing.index' || action.action === 'writing.show' || action.action === 'writing.check' || action.action === 'concepts.index' || action.action === 'concepts.show' || dryRun });
 });

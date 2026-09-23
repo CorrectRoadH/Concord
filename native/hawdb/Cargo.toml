@@ -1,0 +1,21 @@
+[package]
+name = "concord-hawdb-native"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.97.1"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+hawdb = { git = "https://github.com/nowledge-co/hawdb.git", rev = "1e9f76428be6649a18a6f99d75b0ccfef16bf545", version = "=0.3.0", default-features = false }
+napi = { version = "=3.13.0", default-features = false, features = ["napi4"] }
+napi-derive = "=3.6.9"
+libc = "=0.2.175"
+
+[features]
+test-hooks = []
+
+[profile.release]
+strip = "symbols"

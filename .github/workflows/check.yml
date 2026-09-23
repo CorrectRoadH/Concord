@@ -15,6 +15,11 @@ jobs:
           node-version: '24.19.0'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: rustup toolchain install 1.97.1 --profile minimal
+      - name: Verify native transaction failure and crash recovery
+        run: |
+          node --import tsx scripts/build-native.ts --output dist/native --test-hooks
+          node --import tsx --test test/hawdb-native.test.ts
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm check

@@ -31,8 +31,8 @@ export function dateTime(value: string | undefined): string {
   }).format(date);
 }
 
-export function feedbackProviderLabel(provider: 'github' | 'linear'): string {
-  return provider === 'github' ? 'GitHub' : 'Linear';
+export function feedbackProviderLabel(provider: 'local' | 'github' | 'linear'): string {
+  return provider === 'local' ? 'Local' : provider === 'github' ? 'GitHub' : 'Linear';
 }
 
 export function feedbackTriageLabel(triage: 'pending' | 'linked' | 'closed'): string {

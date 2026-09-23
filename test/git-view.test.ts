@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getGitDiff, getGitStatus, type GitBaselineCache } from '../dist/git-view.js';
+import { closeGitBaselineCache, getGitDiff, getGitStatus, type GitBaselineCache } from '../dist/git-view.js';
 import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -58,12 +58,13 @@ test('Git test baseline derives IDs from the committed declaration path', async 
     const status = await Effect.runPromise(getGitStatus(root, true, cache));
     const existing = deriveTestReference('old.test.ts', 'old.test.ts', caseDiscriminator('docs/feature/example/README.md', 0));
     assert.deepEqual(status.baselineCaseIds, [existing]);
-    const cached = cache.value;
+    const cached = cache.database?.scan('git_baseline');
+    assert.equal(cached?.length, 2, 'different testRoots occupy distinct HawDB entries');
     assert.deepEqual((await Effect.runPromise(getGitStatus(root, true, cache))).baselineCaseIds, [existing]);
-    assert.equal(cache.value, cached, 'unchanged HEAD reuses its baseline');
+    assert.deepEqual(cache.database?.scan('git_baseline'), cached, 'unchanged HEAD reuses its baseline');
     git('commit', '-qm', 'new baseline');
     const contract = 'docs/feature/example/README.md';
     assert.deepEqual((await Effect.runPromise(getGitStatus(root, true, cache))).baselineCaseIds, [deriveTestReference('renamed.test.ts', 'renamed.test.ts', caseDiscriminator(contract, 0)), deriveTestReference('renamed.test.ts', 'renamed.test.ts', caseDiscriminator(contract, 1))]);
-    assert.notEqual(cache.value?.revision, cached?.revision);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.equal(cache.database?.scan('git_baseline').length, 3);
+  } finally { closeGitBaselineCache(cache); rmSync(root, { recursive: true, force: true }); }
 });

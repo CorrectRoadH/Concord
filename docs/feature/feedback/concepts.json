@@ -1,0 +1,58 @@
+{
+  "format": "concord.concepts/v1",
+  "concepts": [
+    {
+      "id": "provider",
+      "definition": "观察产生的来源类别，包括 Local、GitHub 和 Linear。",
+      "names": {
+        "zh": {
+          "preferred": "来源"
+        },
+        "en": {
+          "preferred": "Provider"
+        }
+      }
+    },
+    {
+      "id": "connection",
+      "definition": "外部来源的读取配置，声明远端范围和凭据环境变量名。",
+      "names": {
+        "zh": {
+          "preferred": "连接"
+        },
+        "en": {
+          "preferred": "Connection"
+        }
+      }
+    },
+    {
+      "id": "index",
+      "definition": "从当前 owner 派生的摘要列表，不拥有第二份事实或人工登记表。",
+      "names": {
+        "zh": {
+          "preferred": "索引"
+        },
+        "en": {
+          "preferred": "Index"
+        }
+      }
+    },
+    {
+      "id": "recall",
+      "definition": "检索当前保存的知识与上下文，返回原文、身份和摘要，不产生新的执行证据。",
+      "names": {
+        "zh": {
+          "preferred": "检索"
+        },
+        "en": {
+          "preferred": "Recall"
+        }
+      }
+    }
+  ],
+  "imports": [
+    "docs/concepts.json#issue",
+    "docs/concepts.json#memory",
+    "docs/concepts.json#contract"
+  ]
+}

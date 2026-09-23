@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 import { Effect } from 'effect';
 import { readFeedbackCache, mergeFeedbackCache } from './feedback-cache.js';
 import {
@@ -14,6 +15,7 @@ import {
 } from './feedback-schema.js';
 import { loadDocuments, renderDocument } from './documents.js';
 import { fetchFeedback, type FeedbackTransport } from './feedback-providers.js';
+import { checkGhConnection, fetchGhFeedback } from './feedback-gh.js';
 import { ConcordError, ProjectSchema, canonical, decode, digest, failure, type DocumentMeta, type DocumentRecord, type MutationReceipt } from './shared.js';
 import { LocalRepository } from './storage.js';
 import { renderTypeScriptConfig } from './config.js';
@@ -24,6 +26,7 @@ export interface FeedbackSyncOptions {
   readonly transport?: FeedbackTransport;
   /** Test-only credential injection; production callers leave this unset. */
   readonly credential?: string;
+  readonly signal?: AbortSignal;
 }
 
 export interface FeedbackSyncReceipt extends MutationReceipt {
@@ -63,7 +66,7 @@ function configSnapshot(repo: LocalRepository, connectionId: string): { readonly
 function assertReturnedConnection(expected: FeedbackConnection, input: unknown): FeedbackConnection {
   const actual = decode(FeedbackConnectionSchema, input, 'fetched feedback connection');
   const fixed = expected.provider === 'github'
-    ? actual.provider === 'github' && actual.id === expected.id && actual.credentialEnv === expected.credentialEnv && actual.owner === expected.owner && actual.repo === expected.repo
+    ? actual.provider === 'github' && actual.id === expected.id && actual.transport === expected.transport && actual.credentialEnv === expected.credentialEnv && actual.owner === expected.owner && actual.repo === expected.repo
     : actual.provider === 'linear' && actual.id === expected.id && actual.credentialEnv === expected.credentialEnv && actual.team === expected.team;
   if (!fixed) throw new ConcordError('FeedbackConnectionMismatch', 'Provider changed immutable connection fields');
   if (expected.provider === 'github' && actual.provider === 'github') {
@@ -132,7 +135,7 @@ export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonl
     const triage: FeedbackItem['triage'] = document.metadata.state === 'closed'
       ? 'closed'
       : features.length > 0 || document.metadata.memoryRelations.length > 0 ? 'linked' : 'pending';
-    return { document: issueRecord(document), triage, remote, availability, warnings };
+    return { document: issueRecord(document), provider: source?.provider ?? 'local', triage, remote, availability, warnings };
   });
 }
 
@@ -142,11 +145,13 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
   options: FeedbackSyncOptions = {},
 ): Effect.fn.Return<FeedbackSyncReceipt, ConcordError> {
   const observed = yield* withRepository(root, (repo) => attempt('feedback.snapshot', () => configSnapshot(repo, connectionId)), true);
-  const fetched = yield* fetchFeedback(observed.connection, {
+  const fetched = observed.connection.provider === 'github' && observed.connection.transport === 'gh'
+    ? yield* fetchGhFeedback(root, observed.connection, options.url)
+    : yield* fetchFeedback(observed.connection, {
     ...(options.url === undefined ? {} : { url: options.url }),
     ...(options.transport === undefined ? {} : { transport: options.transport }),
     ...(options.credential === undefined ? {} : { credential: options.credential }),
-  });
+    });
   const bound = yield* attempt('feedback.validateFetch', () => assertReturnedConnection(observed.connection, fetched.connection));
   const remote = yield* attempt('feedback.validateItems', () => distinctRemote(fetched.items));
   yield* attempt('feedback.validateScope', () => {
@@ -156,6 +161,8 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
     }
   });
   const dryRun = options.dryRun ?? false;
+
+  if (options.signal?.aborted) return yield* Effect.fail(new ConcordError('GhCancelled', 'Feedback read was cancelled before publication'));
 
   return yield* withRepository(root, (repo) => attempt('feedback.publish', () => {
     const current = configSnapshot(repo, connectionId);
@@ -203,4 +210,10 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
     }
     return { ...receipt, connection: bound, fetched: fetched.items.length, imported: changes.filter((change) => change.path.startsWith('docs/issues/')).length, warnings };
   }), dryRun);
+});
+
+export const checkFeedbackConnection = Effect.fn('feedback.check')(function*(root: string, connectionId: string): Effect.fn.Return<{ readonly connectionId: string; readonly provider: 'github'; readonly transport: 'gh'; readonly target: string; readonly checkedAt: string }, ConcordError> {
+  const observed = yield* withRepository(root, (repo) => attempt('feedback.checkSnapshot', () => configSnapshot(repo, connectionId)), true);
+  if (observed.connection.provider !== 'github' || observed.connection.transport !== 'gh') return yield* Effect.fail(new ConcordError('FeedbackCheckUnsupported', 'Connection checks are available only for GitHub CLI connections'));
+  return yield* checkGhConnection(root, observed.connection);
 });

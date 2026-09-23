@@ -1,14 +1,18 @@
 # Web 工作台架构
 
-React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node 服务固定一个 Git 工作区，HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 SQLite、journal、证据或关系注册表。
+React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node 服务固定一个 Git 工作区，HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
 
-`docs/concepts.md` 是初始化建立且由存储层授权的固定 Markdown owner；Web 文件 inventory 通过与契约支持页面相同的摘要保护入口读取和编辑它。术语页只从其中作者明确填写的契约链接派生当前词条，不建立术语注册表。
+结构化术语由 `docs/**/concepts.json` 拥有，目录决定作用域；文档术语页通过 concepts 工具读取当前文档目录的有效定义、直接导入与来源诊断，不解析 Markdown 表格或自行实现第二套合成规则。`docs/concepts.md` 保留为可编辑的解释页面。全项目汇总与写作页共享同一后端 JSON 来源，不建立术语注册表。
 
-`docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering、Issue 或 Memory 来源的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 只读，修订仍走 constitution adopt 与 amend；阅读不是合规证据。`docs/README.md`、`docs/architecture.md`、`docs/concepts.md`、`docs/concord.md` 和 `docs/_template/` 下无 frontmatter 的参考模板沿用支持页面的摘要保护写入。其余未授权路径只读。单文件读取仍不枚举全仓库。
+`docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering、Issue 或 Memory 来源的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 提供专用正文编辑入口，草稿采用与正式修订分别调用 constitution adopt 与 amend；普通 document.set 仍不能覆写宪法元数据与历史。阅读不是合规证据。`docs/README.md`、`docs/architecture.md`、`docs/concepts.md`、`docs/concord.md` 和 `docs/_template/` 下无 frontmatter 的参考模板沿用支持页面的摘要保护写入。其余未授权路径只读。单文件读取仍不枚举全仓库。
+
+只读 Markdown 按 [MDXEditor 官方建议](https://mdxeditor.dev/editor/docs/overview) 使用独立阅读渲染器。复用 react-markdown，通过 remark-frontmatter 识别元数据；rehype-raw 后接 rehype-sanitize，不使用未经净化的 HTML。保留净化器的 DOM clobbering 前缀，由阅读导航映射源锚点，不能为保留锚点关闭净化。正文和原文／元数据详情来自同一读取结果；预览不产生写入或自动归一化。可编辑正文继续使用 MDXEditor 及原文回退，错误不得清空草稿。
+
+参考模板树从现有 inventory 的路径派生，由共享 ContentSidebar 渲染；不新增存储索引。树形导航采用 [WAI 折叠导航模式](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/examples/disclosure-navigation/) 的嵌套列表、aria-expanded 按钮和 aria-current 链接。目录展开是展示状态，文件选择由 URL 拥有；筛选和当前文件定位不建立另一份导航来源。
 
 每次领域操作独立取得、释放 LocalRepository。长期打开网页不占锁。测试由服务拥有的单槽 job 管理，每个 job 使用独立 runner；浏览器断开不取消任务。取消须确认子进程组退出，才能释放锁和运行槽，失败时保留锁并提供诊断。
 
-读取工作区启用 SQLite 测试索引缓存，同一次请求复用 trace 生成诊断。文档与代码的纯解析结果使用有容量上限的进程内缓存，以当前原文匹配；目录集合、文件读取、路径安全、配置、租约及恢复检查仍每次执行，不以时间戳代替内容校验。单文件预览只读取目标和其 README 归属链，全局 inventory 异常由 workspace/check 诊断。Git 测试基线按不可变 HEAD revision 缓存，工作树状态仍实时读取。
+读取工作区启用 HawDB 测试索引缓存，同一次请求复用 trace 生成诊断。文档与代码的纯解析结果使用有容量上限的 HawDB 内存缓存，以当前原文匹配；目录集合、文件读取、路径安全、配置、租约及恢复检查仍每次执行，不以时间戳代替内容校验。单文件预览只读取目标和其 README 归属链，全局 inventory 异常由 workspace/check 诊断。Git 测试基线在 HawDB 内存 namespace 中按 worktree、不可变 HEAD revision、测试根与解析器版本缓存，工作树状态仍实时读取。
 
 浏览器在上一轮刷新完成后等待四秒再轮询，写入后的刷新排在已有读取之后。首次取得工作区后不立即重复读取。同一 Research 主题内切换文件保留文件树节点、折叠和滚动状态，加载占位保持工具栏布局。
 

@@ -34,6 +34,7 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
 import { SourceEditor } from './source-editor';
+import { MarkdownPreview } from './markdown-preview';
 
 interface Props {
   readonly initial: ViewFile;
@@ -264,6 +265,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
   </div>;
 
   const followLink = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (file.readOnly && !source) return;
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const target = event.target;
     const anchor = target instanceof Element ? target.closest('a[href]') : null;
@@ -287,8 +289,8 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     {autoSave.error && <div className="form-error" role="alert">{autoSave.error}</div>}
     {file.readOnly && <div className="callout callout--warning"><AlertTriangle /> <div><strong>只读</strong><p>{file.reason ?? '当前内容不能由工作台安全修改。'}</p></div></div>}
     {external && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘内容已变化</strong><p>当前草稿没有被覆盖。请比较后保留草稿或重新载入。</p></div></div>}
-    {unsupported && <div className="callout callout--warning"><AlertTriangle /><div><strong>已切换为原文编辑</strong><p>WYSIWYG 无法无损解析该语法：{unsupported}。原始字节内容保持不变，只有你的明确编辑才会标记为未保存。</p></div></div>}
-    {source ? <SourceEditor value={draft} path={file.path} readOnly={file.readOnly || busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : unsupported ? rawEditor : <MarkdownErrorBoundary
+    {unsupported && !file.readOnly && <div className="callout callout--warning"><AlertTriangle /><div><strong>已切换为原文编辑</strong><p>WYSIWYG 无法无损解析该语法：{unsupported}。原始字节内容保持不变，只有你的明确编辑才会标记为未保存。</p></div></div>}
+    {source ? <SourceEditor value={draft} path={file.path} readOnly={file.readOnly || busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : file.readOnly ? <MarkdownPreview markdown={file.body} onFollowLink={onFollowLink} /> : unsupported ? rawEditor : <MarkdownErrorBoundary
       fallback={rawEditor}
       onError={error => setUnsupported(error.message)}
     >

@@ -245,6 +245,7 @@ const send = Effect.fn('feedback.send')(function*(transport: FeedbackTransport, 
 });
 
 function credentialFor(connection: FeedbackConnection, override?: string): string {
+  if (connection.provider === 'github' && connection.transport === 'gh') return '';
   const credential = override ?? process.env[connection.credentialEnv];
   if (credential === undefined || credential.length === 0) {
     throw providerError('CredentialMissing', `Credential environment variable ${connection.credentialEnv} is not set`);
@@ -379,7 +380,13 @@ const fetchGitHub = Effect.fn('feedback.fetchGitHub')(function*(
       const response = yield* send(transport, { url: `${repoUrl}/issues?state=all&per_page=${PAGE_SIZE}&page=${page}`, method: 'GET', headers }, budget);
       const pageItems = decodeVendor(Schema.Array(GitHubIssueSchema), response.body, 'GitHub issues');
       accountItems(budget, pageItems.length);
-      for (const issue of pageItems) if (issue.pull_request === undefined) keepLatest(items, githubRemote(issue));
+      for (const issue of pageItems) {
+        if (issue.pull_request !== undefined) continue;
+        const returned = parseGitHubImport(issue.html_url);
+        assertGitHubImportScope(connection, returned);
+        if (returned.number !== issue.number) return yield* Effect.fail(providerError('FeedbackScopeMismatch', 'GitHub issue URL and number disagree'));
+        keepLatest(items, githubRemote(issue));
+      }
       if (pageItems.length < PAGE_SIZE) break;
     }
   }
@@ -569,6 +576,9 @@ const fetchFeedbackInternal = Effect.fn('feedback.fetchFeedback')(function*(
 });
 
 export function fetchFeedback(connection: FeedbackConnection, options?: FeedbackFetchOptions): Effect.Effect<FeedbackFetch, ConcordError> {
+  if (connection.provider === 'github' && connection.transport === 'gh' && options?.transport === undefined) {
+    return Effect.fail(providerError('FeedbackTransportUnavailable', 'GitHub CLI connections require the managed gh transport'));
+  }
   return fetchFeedbackInternal(connection, options).pipe(
     Effect.catchDefect(cause => Effect.fail(cause instanceof ConcordError
       ? cause
