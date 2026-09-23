@@ -1,6 +1,6 @@
 {
   "name": "concord-sdlc",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Contract, test evidence, and engineering memory for a repository's development lifecycle.",
   "type": "module",
   "private": true,

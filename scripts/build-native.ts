@@ -9,7 +9,7 @@ import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, decodeNativeArtifact, hawdbTa
 
 const root = resolve(import.meta.dirname, '..');
 const crate = join(root, 'native/hawdb');
-const sources = ['native/hawdb/Cargo.toml', 'native/hawdb/rust-toolchain.toml', 'native/hawdb/src/lib.rs', 'native/hawdb/UPSTREAM.txt', 'native/hawdb/HAWDB-LICENSE.txt', 'src/hawdb-native.ts', 'src/hawdb-native-contract.ts', 'scripts/build-native.ts'];
+const sources = ['native/hawdb/Cargo.toml', 'native/hawdb/build.rs', 'native/hawdb/rust-toolchain.toml', 'native/hawdb/src/lib.rs', 'native/hawdb/UPSTREAM.txt', 'native/hawdb/HAWDB-LICENSE.txt', 'src/hawdb-native.ts', 'src/hawdb-native-contract.ts', 'scripts/build-native.ts'];
 const hash = (data: Buffer | string): string => createHash('sha256').update(data).digest('hex');
 const digestSources = (): string => hash(sources.map(name => `${name}\0${hash(readFileSync(join(root, name)))}\n`).join(''));
 const shaFile = (path: string): string => hash(readFileSync(path));
