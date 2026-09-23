@@ -9,9 +9,14 @@ import { scopeOf, under } from './writing-scopes.js';
 export { WritingPolicySchema, type WritingPolicy, type BannedTerm } from './writing-schema.js';
 export function readWritingPolicy(source: string, path = 'docs/concord-writing.json', managed = true): WritingPolicy {
   try {
-    const policy = decode(WritingPolicySchema, JSON.parse(source), 'writing policy');
+    const input: unknown = JSON.parse(source);
+    if (typeof input === 'object' && input !== null) {
+      const removed = ['svgTerms', 'svgStyle'].filter(key => Object.hasOwn(input, key));
+      if (removed.length) throw new Error(`${path}: SVG writing checks were removed (${removed.join(', ')}). Use writing show to retain source and digest; remove only these fields, then writing set --body <file> --expected-digest <digest>.`);
+    }
+    const policy = decode(WritingPolicySchema, input, 'writing policy');
     const scope = managed ? scopeOf(path, 'policy') : 'docs';
-    const paths = [...(policy.roots ?? []), ...(policy.svgStyle ? [policy.svgStyle] : [])];
+    const paths = [...(policy.roots ?? [])];
     const seen = new Set<string>();
     for (const ban of policy.bannedTerms) {
       if (ban.term !== ban.term.trim()) throw new Error('Banned terms cannot have leading or trailing whitespace');

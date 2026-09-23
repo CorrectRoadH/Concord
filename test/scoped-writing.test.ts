@@ -21,6 +21,7 @@ const fixture = () => {
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
   try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+  rmSync(join(root, 'docs/concord-writing.json'));
   return root;
 };
 const withRepo = <T>(root: string, run: (repo: LocalRepository) => T, options = {}) => {
@@ -57,7 +58,7 @@ test('project selection composes ancestor rules while explicit managed selection
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('SVG corpus uses selected external global roots and keeps sibling local prose isolated', () => Effect.runPromise(Effect.sync(() => {
+test('writing snapshots exclude SVG and CSS content and membership', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   try {
     write(root, 'apps/docs-site/zh/page.md', '外部词说明。\n');
@@ -65,12 +66,19 @@ test('SVG corpus uses selected external global roots and keeps sibling local pro
     write(root, 'docs/feature/a/page.md', '甲词说明。\n');
     write(root, 'docs/feature/a/figure.svg', '<svg><text class="label">乙词</text></svg>');
     write(root, 'docs/feature/b/page.md', '乙词说明。\n');
-    withRepo(root, repo => setWriting(repo, { ...policy(), roots: ['apps/docs-site/zh', 'docs/feature/a', 'docs/feature/b'], svgTerms: true }, null));
+    withRepo(root, repo => setWriting(repo, { ...policy(), roots: ['apps/docs-site/zh', 'docs/feature/a', 'docs/feature/b'] }, null));
     withRepo(root, repo => setConcepts(repo, catalog([]), null, false, 'docs/feature/a/concepts.json'));
     withRepo(root, repo => setConcepts(repo, catalog([]), null, false, 'docs/feature/b/concepts.json'));
     const report = withRepo(root, checkWriting);
-    assert(report.findings.some(item => item.file === 'docs/feature/a/figure.svg' && item.rule === 'svgTerm'));
-    assert(!report.findings.some(item => item.file === 'apps/docs-site/zh/figure.svg' && item.rule === 'svgTerm'));
+    assert.equal(report.files, 3);
+    assert.equal(report.findings.length, 0);
+    write(root, 'docs/feature/a/figure.svg', '<svg>changed</svg>');
+    write(root, 'docs/feature/a/another.svg', '<svg/>');
+    write(root, 'docs/feature/a/style.css', 'changed');
+    assert.equal(withRepo(root, checkWriting).inputDigest, report.inputDigest);
+    write(root, 'only-svg/figure.svg', '<svg/>');
+    write(root, 'standalone.json', json(policy({ roots: ['only-svg'] })));
+    assert.throws(() => withRepo(root, repo => checkWriting(repo, 'standalone.json')), /No Markdown or MDX files/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 

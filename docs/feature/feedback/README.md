@@ -20,7 +20,7 @@ constitutionRefs:
 
 维护者和 AI 将本地观察、GitHub issue、Linear issue 汇入同一反馈入口，关联 Feature 或工程 Memory，并在项目中保留调查笔记和处理结论。来源由可扩展的读取适配器提供；产品契约和修复证据仍由各自 owner 管理。
 
-Web 提供反馈列表、筛选、导入、连接表单和 Markdown 编辑。CLI 提供同样的领域操作及结构化结果，适合 AI 按需读取和处理。Use Case 继续隶属于 Feature；反馈不是另一套产品需求注册表。
+Web 以常驻反馈导航和右侧详情组织处理流程，导航提供搜索、来源和处理状态筛选；选择反馈后直接阅读或编辑本地正文。手机通过共享内容导航抽屉选取反馈。导入与同步在反馈入口显式操作，连接表单归项目设置。CLI 提供同样的领域操作及结构化结果，适合 AI 按需读取和处理。Use Case 继续隶属于 Feature；反馈不是另一套产品需求注册表。
 
 - [处理来自不同来源的反馈](use-case/triage-feedback.md)
 - [CLI 与 Web 用法](cli.md)

@@ -155,7 +155,7 @@ Research 以目录 README 为 owner，支持安全相对路径的自由附页；
 
 ## 文档写作检查
 
-`concord docs check` 根据消费者显式采用的写作规则检查正文、术语和 SVG，一次只读检查快照覆盖政策与输入文件。政策解码、纯文本解析和扫描编排各自独立，CLI 不拥有词库或文件遍历。没有规则不推断默认政策；静态命中不作为执行证据。详见[文档写作契约](feature/documentation-quality/README.md)及[规则格式](feature/documentation-quality/policy.md)。
+`concord docs check` 根据消费者显式采用的写作规则检查正文和术语，一次只读检查快照覆盖政策与输入文件。政策解码、纯文本解析和扫描编排各自独立，CLI 不拥有词库或文件遍历。init 将随包通用预设写入缺失的全局政策；检查只读取已保存政策，没有规则时不推断隐式预设；静态命中不作为执行证据。详见[文档写作契约](feature/documentation-quality/README.md)及[规则格式](feature/documentation-quality/policy.md)。
 
 
 `writing.index/show/set/check` 与 `concepts.index/show/set` 通过 CLI 和 Web 共用领域操作。docs 下精确命名的 JSON 按目录拥有 scope；全局汇总只读派生，Markdown 保留概念解释。publication/recovery 双向检查路径、操作、Schema 和 CAS，concepts journal 还绑定其它 catalog 的集合与摘要。旧 v1 政策须显式迁移。完整合成、语料和恢复约束见[目录作用域采用方案](design/scoped-terminology/plans/directory-owned/README.md)。

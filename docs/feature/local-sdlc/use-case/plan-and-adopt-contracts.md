@@ -25,3 +25,5 @@ feature: docs/feature/local-sdlc/README.md
 - 相同 kind 的重复 id、嵌套 owner、附件、symlink、目标冲突和不支持的链接均拒绝且不留下部分写入。
 - supporting page 可被精确 path/anchor 解析到所属 Feature，但相邻 package 不混入。
 - adoption 期间源集合或字节变化会阻止 publication。
+
+文档 ID、Design 候选名称及自定义专题名支持 Unicode 字母、组合标记和数字，可用单连字符分隔。Use Case 文件名随 ID 原样生成，例如 `use-case/扩展NPC动作.md`；专题名 `认知与执行` 生成 `认知与执行.md`。现有英文名称和固定模板入口继续有效。CLI 与 Web 使用同一校验，创建、发现、按 ID 查询、按路径引用及摘要保护编辑都须支持这些名称。名称不自动翻译、变换大小写或规范化；不允许空白、控制字符、路径分隔符、点段或引用分隔符，既有路径、symlink、冲突和事务保护继续生效。

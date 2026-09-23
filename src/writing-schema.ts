@@ -17,7 +17,5 @@ export const WritingPolicySchema = Schema.Struct({
   sentenceLength: Schema.optional(Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0)))),
   paragraphLength: Schema.optional(Schema.NullOr(Schema.Int.check(Schema.isGreaterThan(0)))),
   unusedConcepts: Schema.optional(Schema.Boolean),
-  svgTerms: Schema.optional(Schema.Boolean),
-  svgStyle: Schema.optional(Schema.NullOr(Text)),
 });
 export type WritingPolicy = typeof WritingPolicySchema.Type;

@@ -18,6 +18,7 @@ const fixture = () => {
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
   try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+  rmSync(join(root, 'docs/concord-writing.json'));
   return root;
 };
 const withRepo = <T>(root: string, run: (repo: LocalRepository) => T, options = {}) => {
@@ -51,7 +52,7 @@ test('writing show preserves invalid and v1 bytes for explicit CAS repair', () =
 test('policy journal uses two-way authorization and preserves conflicting recovery scenes', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture(), journalPath = join(root, '.git/concord/journal.json');
   try {
-    const before = '{ broken', after = source(policy);
+    const before = source({ ...policy, svgTerms: false, svgStyle: null }), after = source(policy);
     write(root, policyPath, before);
     const config = readFileSync(join(root, 'concord.config.ts'), 'utf8');
     const projectId = withRepo(root, repo => repo.config.projectId);
@@ -64,6 +65,14 @@ test('policy journal uses two-way authorization and preserves conflicting recove
     ]) {
       writeFileSync(journalPath, source(forged));
       assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
+      assert.equal(readFileSync(join(root, policyPath), 'utf8'), before);
+      rmSync(journalPath);
+    }
+    for (const phase of ['prepared', 'committed']) {
+      const obsolete = { ...base, phase, changes: [{ ...base.changes[0], before: null, beforeDigest: null, after: before, afterDigest: digest(before) }] };
+      writeFileSync(journalPath, source(obsolete));
+      assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
+      assert.equal(readFileSync(journalPath, 'utf8'), source(obsolete));
       assert.equal(readFileSync(join(root, policyPath), 'utf8'), before);
       rmSync(journalPath);
     }
@@ -90,5 +99,30 @@ test('public CLI writing action validates strict v2 and creation CAS', () => Eff
     assert.notEqual(conflict.status, 0);
     assert.match(`${conflict.stdout}${conflict.stderr}`, /PreimageChanged/);
     assert.equal(existsSync(join(root, 'docs/concepts.json')), true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
+test('removed SVG fields reject every value and explicit CAS cleanup preserves the rest', () => Effect.runPromise(Effect.sync(() => {
+  const root = fixture();
+  try {
+    for (const path of [policyPath, 'docs/feature/sample/concord-writing.json', 'standalone.json']) {
+      const clean = { ...policy, roots: [path.startsWith('docs/feature/') ? 'docs/feature/sample' : 'docs'] as [string, ...string[]] };
+      for (const fields of [{ svgTerms: true }, { svgTerms: false }, { svgStyle: null }, { svgStyle: 'docs/style.css' }]) {
+        const before = source({ ...clean, ...fields });
+        write(root, path, before);
+        assert.throws(() => withRepo(root, repo => checkWriting(repo, path)), /SVG writing checks were removed/);
+        if (path === 'standalone.json') continue;
+        const shown = withRepo(root, repo => showWriting(repo, path));
+        assert.equal(shown.state, 'invalid');
+        assert.equal(shown.source, before);
+        assert.equal(shown.digest, digest(before));
+        assert.throws(() => withRepo(root, repo => setWriting(repo, clean, null, false, path)), { code: 'PreimageChanged' });
+        withRepo(root, repo => setWriting(repo, clean, shown.digest, true, path));
+        assert.equal(readFileSync(join(root, path), 'utf8'), before);
+        withRepo(root, repo => setWriting(repo, clean, shown.digest, false, path));
+        assert.deepEqual(JSON.parse(readFileSync(join(root, path), 'utf8')), clean);
+      }
+    }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

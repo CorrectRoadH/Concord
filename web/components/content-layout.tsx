@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '../lib/utils';
 
 export function PanelHeader({ title, actions }: { title: string; actions?: ReactNode }) {
@@ -13,12 +14,17 @@ export function RecordList(props: ComponentProps<'ul'>) {
   return <ul {...props} className={cn('content-records', props.className)} />;
 }
 
-export function PanelEmpty({ title, children }: { title: string; children?: ReactNode }) {
-  return <div className="panel-empty"><strong>{title}</strong>{children && <p>{children}</p>}</div>;
+export function PanelEmpty({ title, children, className, ...props }: Omit<ComponentProps<'div'>, 'title'> & { title: string }) {
+  return <div {...props} className={cn('panel-empty', className)}><strong>{title}</strong>{children && <p>{children}</p>}</div>;
 }
 
 export function RecordItem(props: ComponentProps<'li'>) {
   return <li {...props} className={cn('content-record', props.className)} />;
+}
+
+/** A whole-row destination; rows with independent controls use RecordItem instead. */
+export function RecordLink({ className, ...props }: ComponentProps<typeof Link>) {
+  return <RecordItem className="content-record--link"><Link {...props} className={cn('content-record__link', className)} /></RecordItem>;
 }
 
 export function RecordDetails({ children, title = '声明详情' }: { children: ReactNode; title?: string }) {

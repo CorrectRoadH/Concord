@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { posix } from 'node:path';
-import { ConcordError, digest, slug, type DocumentKind, type MutationReceipt, type Repository } from './shared.js';
+import { ConcordError, digest, decode, DocumentName, type DocumentKind, type MutationReceipt, type Repository } from './shared.js';
 import { findDocument, loadDocuments, setAuthor } from './documents.js';
 import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { canonicalPath } from './storage.js';
@@ -11,8 +11,8 @@ export type DocumentPage = string;
 
 function checkedPage(value: string): DocumentPage {
   if (value === 'README') return value;
-  try { return slug(value); }
-  catch { throw new ConcordError('InvalidPage', `Page must be a lowercase slug: ${value}`); }
+  try { return decode(DocumentName, value, 'page'); }
+  catch { throw new ConcordError('InvalidPage', `Page must be a single name using Unicode letters, marks, numbers, or single hyphens: ${value}`); }
 }
 
 function body(value: string): string {

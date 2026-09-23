@@ -278,7 +278,7 @@ concord --skill recovery
 
 Trace 从当前 contract source 推导反向关系，分别展示代码声明、测试和 Memory；`check`、`doctor`、`trace` 和 `review` 不执行 runner。代码标注错误会阻断代码与全图命令，但测试执行及 Problem 关闭保留原有文档、测试与证据校验。
 
-文档写作检查使用 `concord docs check --json`。消费者在 docs 下按目录声明 `concepts.json` 和 `concord-writing.json`：根目录拥有全局定义，Feature、Engineering 及子目录拥有局部范围。Web 提供概念与政策编辑和自动汇总；允许别名与弃用名称分开，只有后者派生禁词。写作 v2 支持句段长度、概念使用与 SVG 检查，旧 v1 须显式迁移。规则与用法见[文档写作契约](docs/feature/documentation-quality/README.md)。命中时返回非零退出码，不改写正文。
+文档写作检查使用 `concord docs check --json`。消费者在 docs 下按目录声明 `concepts.json` 和 `concord-writing.json`：根目录拥有全局定义，Feature、Engineering 及子目录拥有局部范围。Web 提供概念与政策编辑和自动汇总；允许别名与弃用名称分开，只有后者派生禁词。写作 v2 支持句段长度、概念使用检查，旧 v1 须显式迁移。规则与用法见[文档写作契约](docs/feature/documentation-quality/README.md)。命中时返回非零退出码，不改写正文。
 
 代码声明解析可按文件重建缓存；关系边每次用当前 Markdown 重算。HawDB 只缓存可重建投影，损坏或失效时回源。实际路径用 `cache status` 查询，普通 checkout 通常为 `.git/concord/cache.hawdb`，不是项目根下的 `.concord`。收据与 journal 位于独立 Git-private 文件中，不能作为缓存删除。克隆后历史裁决保留，缺失的私有证据显示不可用。
 

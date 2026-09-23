@@ -1,19 +1,13 @@
 import * as stylex from '@stylexjs/stylex';
 import { ChevronRight, FileDiff, Folder } from 'lucide-react';
 import { useState } from 'react';
+import { SidebarItem } from '../../components/content-sidebar';
 import type { GitEntry } from '../../../src/git-view';
 import type { CaseLink, TreeNode } from './model';
 
 const styles = stylex.create({
   list: { margin: 0, padding: 0, listStyleType: 'none' },
   nested: { marginLeft: 10, paddingLeft: 7, borderLeftWidth: 1, borderLeftStyle: 'solid', borderLeftColor: 'var(--border)' },
-  row: {
-    display: 'flex', alignItems: 'center', gap: 6, width: '100%', minWidth: 0, paddingBlock: 7, paddingInline: 6,
-    borderRadius: 5, fontSize: 12, textAlign: 'left', cursor: 'pointer', color: 'inherit',
-    backgroundColor: { default: 'transparent', ':hover': 'var(--accent)' },
-    outline: { default: 'none', ':focus-visible': '2px solid var(--ring)' }, outlineOffset: -2,
-  },
-  selected: { backgroundColor: 'var(--accent)', color: 'var(--primary)' },
   icon: { width: 14, height: 14, flexShrink: 0 },
   expanded: { transform: 'rotate(90deg)' },
   name: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
@@ -29,7 +23,7 @@ interface TreeProps {
 function Directory({ node, selected, cases, select }: TreeProps) {
   const [open, setOpen] = useState(true);
   return <>
-    <button type="button" {...stylex.props(styles.row)} aria-expanded={open} aria-label={node.path + ' 目录'} onClick={() => setOpen(value => !value)}>
+    <button type="button" className="document-navigation__folder" aria-expanded={open} aria-label={node.path + ' 目录'} onClick={() => setOpen(value => !value)}>
       <ChevronRight {...stylex.props(styles.icon, open && styles.expanded)} /><Folder {...stylex.props(styles.icon)} /><span {...stylex.props(styles.name)}>{node.name}</span>
     </button>
     {open && <div {...stylex.props(styles.nested)}><FileTree node={node} selected={selected} cases={cases} select={select} /></div>}
@@ -40,17 +34,14 @@ export function FileTree({ node, selected, cases, select }: TreeProps) {
   const nodes = [...node.children.values()].sort((a, b) => Number(!a.children.size) - Number(!b.children.size) || a.name.localeCompare(b.name));
   return <ul {...stylex.props(styles.list)}>{nodes.map(child => <li key={child.path}>
     {child.entry && <>
-      <button type="button" {...stylex.props(styles.row, selected === child.path && styles.selected)} aria-label={child.path}
-        title={child.entry.previousPath ? child.path + '（从 ' + child.entry.previousPath + '）' : child.path}
-        aria-current={selected === child.path ? 'page' : undefined} onClick={() => select(child.entry!)}>
-        <FileDiff {...stylex.props(styles.icon)} /><span {...stylex.props(styles.name)}>{child.name}</span>
-        <code {...stylex.props(styles.metadata)}>{child.entry.conflicted ? '冲突' : child.entry.untracked ? 'A' : (child.entry.index + child.entry.worktree).trim()}</code>
-      </button>
+      <SidebarItem item={{ id: child.path, title: child.name, ariaLabel: child.path, active: selected === child.path,
+        icon: <FileDiff {...stylex.props(styles.icon)} />,
+        suffix: <code {...stylex.props(styles.metadata)}>{child.entry.conflicted ? '冲突' : child.entry.untracked ? 'A' : (child.entry.index + child.entry.worktree).trim()}</code>,
+        onSelect: () => select(child.entry!),
+      }} tooltip={child.entry.previousPath ? child.path + '（从 ' + child.entry.previousPath + '）' : child.path} onNavigate={() => undefined} />
       {cases.some(item => item.file === child.path) && <ul {...stylex.props(styles.list, styles.nested, styles.cases)} aria-label={child.path + ' 新增测试'}>
         {cases.filter(item => item.file === child.path).map(item => <li key={item.id}>
-          <button type="button" {...stylex.props(styles.row)} title={item.name} onClick={() => select(child.entry!, item.line)}>
-            <span {...stylex.props(styles.name)}>{item.name}</span><small {...stylex.props(styles.metadata)}>+ L{item.line}</small>
-          </button>
+          <SidebarItem item={{ id: item.id, title: item.name, suffix: <small {...stylex.props(styles.metadata)}>+ L{item.line}</small>, onSelect: () => select(child.entry!, item.line) }} onNavigate={() => undefined} />
         </li>)}
       </ul>}
     </>}

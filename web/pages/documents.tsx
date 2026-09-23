@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
 import {
   ArrowLeft,
   ChevronRight,
@@ -54,7 +55,7 @@ import { urlChoice, useUrlNavigation } from "@/hooks/use-url-navigation"
 import { flushSync } from "react-dom"
 import { DetailDrawer } from "@/components/detail-drawer"
 import { TerminologyPanel } from "@/components/terminology-panel"
-import { ContentSection, PanelHeader, PanelEmpty, RecordList, RecordItem } from "@/components/content-layout"
+import { ContentSection, PanelHeader, PanelEmpty, RecordList, RecordItem, RecordLink } from "@/components/content-layout"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { humanKind } from "@/lib/utils"
@@ -270,12 +271,12 @@ export function CreateDocument({
             </DialogDescription>
           </DialogHeader>
           <div className="form-grid">
-            <Field label="ID" hint="小写字母、数字和单连字符">
+            <Field label="ID" hint="中文等 Unicode 字母、数字，可用单连字符分隔">
               <Input
                 aria-label={`${humanKind(kind)} ID`}
                 value={id}
                 onChange={(event) => setId(event.target.value)}
-                pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+                pattern={DOCUMENT_NAME_PATTERN.source}
                 required
               />
             </Field>
@@ -383,7 +384,7 @@ export function DocumentsListPage({
         .toLocaleLowerCase()
         .includes(filter.toLocaleLowerCase())
   )
-  if (["feature", "engineering", "roadmap", "design", "research"].includes(kind)) {
+  if (["feature", "engineering", "roadmap", "design", "research", "memory"].includes(kind)) {
     const first = snapshot.documents.find(document => document.metadata.kind === kind)
     if (first) return dirty ? null : <Navigate to={documentHref(first)} replace />
   }
@@ -393,7 +394,7 @@ export function DocumentsListPage({
       <PageHeader
         title={humanKind(kind)}
         description={descriptions[kind]}
-        actions={!["feature", "engineering", "roadmap", "design", "research"].includes(kind) ? <CreateDocument kind={kind} /> : undefined}
+        actions={!["feature", "engineering", "roadmap", "design", "research", "memory"].includes(kind) ? <CreateDocument kind={kind} /> : undefined}
       />
       <div className="list-toolbar">
         <Input
@@ -486,9 +487,7 @@ export function FeatureDetailPage() {
       ) : (
         <RecordList>
           {useCases.map((item) => (
-            <RecordItem key={item.path}>
-            <Link
-              className="flex items-center justify-between gap-3"
+            <RecordLink key={item.path}
               to={`/features/${encodeURIComponent(feature.metadata.id)}/use-cases/${encodeURIComponent(item.metadata.id)}`}
               state={navigation.opening(`/features/${encodeURIComponent(feature.metadata.id)}/use-cases/${encodeURIComponent(item.metadata.id)}`)}
             >
@@ -497,8 +496,7 @@ export function FeatureDetailPage() {
                 <span className="block text-sm text-muted-foreground">{item.metadata.id}</span>
               </div>
               <ExternalLink size={16} />
-            </Link>
-            </RecordItem>
+            </RecordLink>
           ))}
         </RecordList>
       )}

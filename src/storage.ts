@@ -20,6 +20,7 @@ import { acquireFileLease } from './file-lease.js';
 import { initialConstitutionSource } from './constitution.js';
 import { onboardingGuide } from './onboarding-guide.js';
 import { projectTemplateFiles, templateBody } from './templates.js';
+import { defaultWritingSource } from './writing-defaults.js';
 import { readWritingPolicy } from './writing-policy.js';
 import { analyzeCatalogs, catalogDependencies, catalogSources, readConceptCatalog, splitReference } from './concepts.js';
 import { catalogName, policyName, scopeOf } from './writing-scopes.js';
@@ -422,9 +423,14 @@ export class LocalRepository implements Repository {
   publish(operation: string, changes: readonly Change[], dryRun = false, catalogGuard?: readonly { path: string; digest: string }[]): MutationReceipt {
     const managedJson = (path: string) => path.startsWith('docs/') && (path.endsWith(`/${policyName}`) || path.endsWith(`/${catalogName}`));
     if (operation === 'set-writing-policy' || changes.some(change => managedJson(change.path) && change.path.endsWith(`/${policyName}`))) {
-      if (operation !== 'set-writing-policy' || changes.length !== 1 || changes[0]?.after === null) throw new ConcordError('InvalidChange', 'Writing policy publication requires one non-null managed owner');
-      scopeOf(changes[0]!.path, 'policy');
-      readWritingPolicy(changes[0]!.after!, changes[0]!.path);
+      if (operation === 'init') {
+        const policies = changes.filter(change => change.path.endsWith(`/${policyName}`));
+        if (policies.length !== 1 || policies[0]?.path !== 'docs/concord-writing.json' || policies[0].before !== null || policies[0].after !== defaultWritingSource) throw new ConcordError('InvalidChange', 'Init may only create the exact global writing preset');
+      } else {
+        if (operation !== 'set-writing-policy' || changes.length !== 1 || changes[0]?.after === null) throw new ConcordError('InvalidChange', 'Writing policy publication requires one non-null managed owner');
+        scopeOf(changes[0]!.path, 'policy');
+        readWritingPolicy(changes[0]!.after!, changes[0]!.path);
+      }
     }
     if (operation === 'set-concepts' || changes.some(change => managedJson(change.path) && change.path.endsWith(`/${catalogName}`))) {
       const change = changes[0];
@@ -542,9 +548,13 @@ export class LocalRepository implements Repository {
     const policyChanges = journal.changes.filter(change => change.path.endsWith(`/${policyName}`));
     const catalogChanges = journal.changes.filter(change => change.path.endsWith(`/${catalogName}`));
     if (journal.operation === 'set-writing-policy' || policyChanges.length) {
-      const policyChange = journal.changes[0];
-      if (journal.scope.kind !== 'documents' || journal.operation !== 'set-writing-policy' || journal.changes.length !== 1 || policyChange?.after == null) fail('Writing policy journal has an unauthorized operation, path, or deletion');
-      try { scopeOf(policyChange!.path, 'policy'); readWritingPolicy(policyChange!.after!, policyChange!.path); } catch { fail('Writing policy journal contains an invalid after image'); }
+      if (journal.operation === 'init') {
+        if (policyChanges.length !== 1 || policyChanges[0]?.path !== 'docs/concord-writing.json' || policyChanges[0].before !== null || policyChanges[0].after !== defaultWritingSource) fail('Init may only create the exact global writing preset. Preserve the journal; recover an older init with the version that created it before upgrading.');
+      } else {
+        const policyChange = journal.changes[0];
+        if (journal.scope.kind !== 'documents' || journal.operation !== 'set-writing-policy' || journal.changes.length !== 1 || policyChange?.after == null) fail('Writing policy journal has an unauthorized operation, path, or deletion');
+        try { scopeOf(policyChange!.path, 'policy'); readWritingPolicy(policyChange!.after!, policyChange!.path); } catch { fail('Writing policy journal contains an invalid after image. Preserve the journal; recover older policies with the version that created them before removing retired fields.'); }
+      }
     }
     if (journal.operation === 'set-concepts' || catalogChanges.length) {
       if (journal.operation === 'init') {
@@ -705,6 +715,8 @@ export function initialize(repo: Repository, dryRun = false, options: Initialize
   }
   if (repo.read('docs/concepts.json') === undefined) paths['docs/concepts.json'] = '{\n  "format": "concord.concepts/v1",\n  "concepts": []\n}\n';
   else preservedPaths.push('docs/concepts.json');
+  if (repo.read('docs/concord-writing.json') === undefined) paths['docs/concord-writing.json'] = defaultWritingSource;
+  else preservedPaths.push('docs/concord-writing.json');
   const sections: Record<string, [string, string, string]> = {
     'docs/feature/README.md': ['Features', 'Adopted product contracts. Write the target behavior and link complete user paths.', 'feature create'],
     'docs/roadmap/README.md': ['Roadmap', 'Settled directions awaiting adoption as current Feature contracts.', 'roadmap create'],

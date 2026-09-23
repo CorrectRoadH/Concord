@@ -7,13 +7,14 @@ import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar';
 import { useSidebar } from './ui/sidebar';
 import { CreateDocument } from '../pages/documents';
 
-type NavigationKind = 'feature' | 'engineering' | 'roadmap' | 'design' | 'research';
+type NavigationKind = 'feature' | 'engineering' | 'roadmap' | 'design' | 'research' | 'memory';
 const sections: readonly { href: string; kind: NavigationKind; label: string }[] = [
   { href: '/features', kind: 'feature', label: 'Feature' },
   { href: '/engineering', kind: 'engineering', label: 'Engineering' },
   { href: '/roadmap', kind: 'roadmap', label: 'Roadmap' },
   { href: '/design', kind: 'design', label: 'Design' },
   { href: '/research', kind: 'research', label: 'Research' },
+  { href: '/memory', kind: 'memory', label: 'Memory' },
 ];
 
 export function CloseMobileOnNavigate({ children, href, onClick, ...props }: Omit<React.ComponentProps<typeof Link>, 'to'> & { href: string }) {

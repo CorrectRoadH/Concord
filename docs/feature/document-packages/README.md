@@ -18,6 +18,7 @@ constitutionRefs:
 
 ## 用户结果
 
+- 文档 ID、Use Case 文件名及自定义专题支持中文等 Unicode 名称；沿用固定入口与原有归属关系，不需要另建英文副本。
 - Research 以主题文件夹及 README.md 入口组织。新建时只生成标题，不要求来源、日期、章节或附页；作者可添加自己命名的 Markdown 页面。
 - Research 的来源和观察日期可选，已有值、历史 provenance 与正文在迁移时保留。来源不限定为外部产品。
 - Engineering、Roadmap、Design 与 Feature 的旧主题经过完整分类后可由 CLI 与 Web 发现。索引、模板、候选和材料页保持自己的角色，不伪造独立主题或采用状态。

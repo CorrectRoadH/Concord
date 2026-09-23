@@ -28,7 +28,7 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
       setWriting(repo, { format: 'concord.writing/v2', bannedTerms: [{ term: 'Old', use: 'Beta', why: 'scope B' }] }, null, false, `${b}/concord-writing.json`);
       setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'beta', definition: 'Beta definition', names: { en: { preferred: 'Beta' } } }] }, null, false, `${b}/concepts.json`);
       const global = showConcepts(repo);
-      setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'global', definition: 'Global definition', names: { en: { preferred: 'Global' } } }] }, global.digest, false, 'docs/concepts.json');
+      setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'global', definition: 'Global definition', names: { en: { preferred: 'Global' } } }, { id: 'second', definition: 'Second definition', names: { en: { preferred: 'Second' } } }] }, global.digest, false, 'docs/concepts.json');
     } finally { repo.close(); }
     writeFileSync(join(root, a, 'sample.md'), '# Alpha writing\n\nOld expression in Alpha.\n');
     writeFileSync(join(root, b, 'sample.md'), '# Old in Beta\n\nOld. Global.\n');
@@ -36,8 +36,37 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
     const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
-    await page.goto(`http://127.0.0.1:${server.port}/writing`);
-    await expect(page.getByRole('heading', { name: '写作与术语' })).toBeVisible();
+    await page.goto(`http://127.0.0.1:${server.port}/terms`);
+    await expect(page.getByRole('complementary', { name: '术语 侧栏' })).toBeVisible();
+    const terms = page.getByRole('list', { name: '术语列表' });
+    const detail = page.getByRole('region', { name: '术语详情' });
+    await expect(page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true })).toBeVisible();
+    await expect(page.getByLabel('新适用范围')).toBeVisible();
+    await expect(page.getByRole('button', { name: '管理术语', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '编辑术语', exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('术语定义 1')).toBeVisible();
+    await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
+    await expect(detail.getByLabel('术语定义 1')).toHaveValue('Beta definition');
+    await page.getByLabel('筛选术语').fill('Global');
+    await expect(terms.getByRole('button')).toHaveCount(1);
+    await terms.getByRole('button', { name: /Global/ }).click();
+    await expect(detail.getByLabel('术语定义 1')).toHaveValue('Global definition');
+    await page.getByLabel('筛选术语').fill('');
+
+    await detail.getByLabel('术语定义 1').fill('Unsaved global');
+    await terms.getByRole('button', { name: /Second/ }).click();
+    await expect(detail.getByLabel('术语定义 2')).toHaveValue('Second definition');
+    await terms.getByRole('button', { name: /Global/ }).click();
+    await expect(detail.getByLabel('术语定义 1')).toHaveValue('Unsaved global');
+    assert.equal(JSON.parse(readFileSync(join(root, 'docs/concepts.json'), 'utf8')).concepts[0].definition, 'Global definition');
+    await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
+    await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
+    await page.getByRole('button', { name: '丢弃并切换' }).click();
+    await expect(detail.getByLabel('术语定义 1')).toHaveValue('Beta definition');
+    await page.getByLabel('筛选术语').fill('Second');
+    await terms.getByRole('button', { name: /Second/ }).click();
+    await expect(detail.getByLabel('术语定义 2')).toHaveValue('Second definition');
+    await page.getByLabel('筛选术语').fill('');
 
     let releaseA!: () => void;
     let interceptedA!: () => void;
@@ -51,29 +80,35 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
       }
       await route.continue();
     });
-    await page.getByLabel('新目录范围').fill(a);
+    await page.getByRole('link', { name: '写作', exact: true }).click();
+    await page.getByLabel('新适用范围').fill(a);
     await page.getByRole('button', { name: '打开范围' }).click();
     await heldA;
-    await page.getByLabel('新目录范围').fill(b);
+    await page.getByLabel('新适用范围').fill(b);
     await page.getByRole('button', { name: '打开范围' }).click();
     await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta');
     releaseA();
     await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta');
     await page.unroute('**/api/action');
 
-    await expect(page.getByText('docs/concepts.json#global').first()).toBeVisible();
+    await page.getByRole('link', { name: '术语', exact: true }).click();
+    await expect(terms.getByRole('button', { name: /Beta/ })).toBeVisible();
+    await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByLabel('替换建议 1').fill('Beta saved');
-    await page.getByLabel('概念定义 1').fill('Beta draft');
-    await page.getByLabel('已发现范围').selectOption(a);
+    await page.getByRole('link', { name: '术语', exact: true }).click();
+    await page.getByLabel('术语定义 1').fill('Beta draft');
+    await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/alpha', exact: true }).click();
     await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
     await page.getByRole('button', { name: '留在当前范围' }).click();
     await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta saved');
-    await expect(page.getByLabel('概念定义 1')).toHaveValue('Beta draft');
-    await page.getByRole('button', { name: '显式保存政策' }).click();
+    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
+    await page.getByRole('link', { name: '写作', exact: true }).click();
+    await page.getByRole('button', { name: '保存规则' }).click();
     await expect.poll(() => JSON.parse(readFileSync(join(root, b, 'concord-writing.json'), 'utf8')).bannedTerms[0]?.use).toBe('Beta saved');
     assert.equal(JSON.parse(readFileSync(join(root, b, 'concord-writing.json'), 'utf8')).roots, undefined);
-    await expect(page.getByText('政策已保存。')).toBeVisible();
-    await expect(page.getByLabel('概念定义 1')).toHaveValue('Beta draft');
+    await page.getByRole('link', { name: '写作', exact: true }).click();
+    await expect(page.getByText('写作规则已保存。')).toBeVisible();
+    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
 
     const external = new LocalRepository(root);
     try {
@@ -81,11 +116,14 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
       if (current.state !== 'valid') throw new Error('Expected scoped catalog');
       setConcepts(external, { ...current.catalog, concepts: [{ ...current.catalog.concepts[0]!, definition: 'External definition' }] }, current.digest, false, `${b}/concepts.json`);
     } finally { external.close(); }
-    await page.getByRole('button', { name: '显式保存概念' }).click();
-    await expect(page.getByRole('region', { name: '概念目录编辑' }).getByRole('alert')).toContainText(/changed|变化|前像|Preimage/u);
-    await expect(page.getByLabel('概念定义 1')).toHaveValue('Beta draft');
-    await expect(page.getByText('政策已保存。')).toBeVisible();
+    await page.getByRole('link', { name: '术语', exact: true }).click();
+    await page.getByRole('button', { name: '保存术语' }).click();
+    await expect(page.getByRole('region', { name: '术语表编辑' }).getByRole('alert')).toContainText(/changed|变化|前像|Preimage/u);
+    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
+    await page.getByRole('link', { name: '写作', exact: true }).click();
+    await expect(page.getByText('写作规则已保存。')).toBeVisible();
 
+    await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByRole('button', { name: '检查已保存文档' }).click();
     await expect(page.getByText(/某次快照的检查结果/)).toBeVisible();
     const changedGlobal = new LocalRepository(root);
@@ -94,10 +132,20 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
       if (current.state !== 'valid') throw new Error('Expected global catalog');
       setConcepts(changedGlobal, { ...current.catalog, concepts: [{ ...current.catalog.concepts[0]!, definition: 'Changed inherited definition' }] }, current.digest, false, 'docs/concepts.json');
     } finally { changedGlobal.close(); }
-    await page.getByRole('button', { name: '刷新汇总' }).click();
-    await expect(page.getByText(/概念来源已变化/)).toBeVisible();
+    await page.getByRole('link', { name: '术语', exact: true }).click();
+    await page.getByRole('button', { name: '刷新列表' }).click();
+    await expect(page.getByText(/术语来源已变化/)).toBeVisible();
     await expect(page.getByText(/某次快照的检查结果/)).toHaveCount(0);
-    await expect(page.getByLabel('概念定义 1')).toHaveValue('Beta draft');
+    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.getByRole('button', { name: '内容导航', exact: true }).click();
+    const mobileNavigation = page.getByRole('dialog', { name: '术语 导航' });
+    await expect(mobileNavigation.getByRole('list', { name: '术语列表' })).toBeVisible();
+    await mobileNavigation.getByRole('button', { name: 'feature/alpha', exact: true }).click();
+    await expect(mobileNavigation).not.toBeVisible();
+    await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
+    await page.getByRole('button', { name: '留在当前范围' }).click();
+    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
     const unchanged = new LocalRepository(root);
     try { assert.equal(showWriting(unchanged, `${b}/concord-writing.json`).policy?.bannedTerms[0]?.use, 'Beta saved'); }
     finally { unchanged.close(); }
@@ -114,7 +162,7 @@ test('real browser can check again after editing invalidates a delayed check res
     const repo = new LocalRepository(root, { initialize: true });
     try {
       initialize(repo, false, { testRoots: [] });
-      setWriting(repo, { format: 'concord.writing/v2', bannedTerms: [{ term: 'Old', use: 'New', why: '统一写法' }] }, null);
+      setWriting(repo, { format: 'concord.writing/v2', bannedTerms: [{ term: 'Old', use: 'New', why: '统一写法' }] }, showWriting(repo).digest);
     } finally { repo.close(); }
     writeFileSync(join(root, 'docs/sample.md'), '# Sample\n\nOld.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
@@ -138,17 +186,22 @@ test('real browser can check again after editing invalidates a delayed check res
       }
       await route.continue();
     });
+    await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByRole('button', { name: '检查已保存文档' }).click();
     await intercepted;
     await expect(page.getByRole('button', { name: '正在检查…' })).toBeDisabled();
+    await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByLabel('替换建议 1').fill('Draft');
+    await page.getByRole('link', { name: '写作', exact: true }).click();
     await expect(page.getByRole('button', { name: '检查已保存文档' })).toBeEnabled();
 
     const oldResponse = page.waitForResponse(response => response.url().endsWith('/api/action') && (response.request().postDataJSON() as { action?: string }).action === 'writing.check');
     releaseOld();
     await oldResponse;
     await expect(page.getByText(/某次快照的检查结果/)).toHaveCount(0);
+    await page.getByRole('link', { name: '写作', exact: true }).click();
     await expect(page.getByRole('button', { name: '检查已保存文档' })).toBeEnabled();
+    await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByRole('button', { name: '检查已保存文档' }).click();
     await expect(page.getByText(/某次快照的检查结果/)).toBeVisible();
     await expect(page.getByText('Old.', { exact: true }).first()).toBeVisible();
@@ -174,36 +227,43 @@ test('real browser creates local policy and structured multilingual concept cata
     const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
     const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
-    await page.goto(`http://127.0.0.1:${server.port}/writing`);
-    await page.getByLabel('新目录范围').fill(scope);
+    await page.goto(`http://127.0.0.1:${server.port}/terms`);
+    await page.getByLabel('新适用范围').fill(scope);
     await page.getByRole('button', { name: '打开范围' }).click();
-    await expect(page.getByText(`${scope}/concepts.json`)).toBeVisible();
-    await page.getByRole('button', { name: '显式初始化概念' }).click();
+    await page.getByRole('button', { name: '新增术语' }).click();
     await page.getByLabel('显式导入引用').fill('docs/concepts.json#global');
-    await page.getByRole('button', { name: '新增概念' }).click();
-    await page.getByLabel('概念 ID 1').fill('local');
-    await page.getByLabel('概念定义 1').fill('Local definition');
-    await page.getByLabel('概念 1 en 首选名称').fill('Local');
-    await page.getByLabel('概念 1 en 允许别名').fill('Nearby');
-    await page.getByLabel('概念 1 en 弃用名称').fill('Legacy');
-    await page.getByLabel('概念 1 新语言代码').fill('zh');
+    await page.getByLabel('术语 ID 1').fill('local');
+    await page.getByRole('link', { name: '术语', exact: true }).click();
+    await page.getByLabel('术语定义 1').fill('Local definition');
+    await page.getByLabel('术语 1 en 首选名称').fill('Local');
+    await page.getByLabel('术语 1 en 允许别名').fill('Nearby');
+    await page.getByLabel('术语 1 en 弃用名称').fill('Legacy');
+    await page.getByLabel('术语 1 新语言代码').fill('zh');
     await page.getByRole('button', { name: '添加语言' }).click();
-    await page.getByLabel('概念 1 zh 首选名称').fill('本地');
-    await page.getByRole('button', { name: '显式保存概念' }).click();
+    await page.getByLabel('术语 1 zh 首选名称').fill('本地');
+    await page.getByRole('link', { name: '术语', exact: true }).click();
+    await page.getByRole('button', { name: '保存术语' }).click();
+    await expect(page.getByRole('region', { name: '术语表编辑' }).getByRole('status')).toHaveText('术语已保存。');
     await expect.poll(() => JSON.parse(readFileSync(join(root, scope, 'concepts.json'), 'utf8')).concepts[0]?.names.zh?.preferred).toBe('本地');
     const catalog = JSON.parse(readFileSync(join(root, scope, 'concepts.json'), 'utf8')) as { imports: string[]; concepts: { names: { en: { aliases: string[]; deprecated: string[] } } }[] };
     assert.deepEqual(catalog.imports, ['docs/concepts.json#global']);
     assert.deepEqual(catalog.concepts[0]?.names.en.aliases, ['Nearby']);
     assert.deepEqual(catalog.concepts[0]?.names.en.deprecated, ['Legacy']);
-    await expect(page.getByText(`${scope}/concepts.json#local`)).toBeVisible();
+    await expect(page.getByRole('list', { name: '术语列表' }).getByRole('button', { name: /本地/ })).toBeVisible();
 
-    await page.getByRole('button', { name: '显式初始化政策' }).click();
-    await page.getByLabel('句子长度继承方式').selectOption('clear');
-    await page.getByLabel('SVG 样式继承方式').selectOption('clear');
-    await page.getByRole('button', { name: '显式保存政策' }).click();
+    await page.getByRole('link', { name: '写作', exact: true }).click();
+    await expect(page.getByLabel('上级写作规则')).toContainText('140');
+    await expect(page.getByLabel('上级写作规则')).toContainText('320');
+    await expect(page.getByText('沿用上级规则，尚无本范围的调整')).toBeVisible();
+    await page.getByRole('button', { name: '添加规则' }).click();
+    await page.getByLabel('句子长度设置').selectOption('clear');
+    await expect(page.getByLabel('SVG 样式继承方式')).toHaveCount(0);
+    await page.getByRole('link', { name: '写作', exact: true }).click();
+    await page.getByRole('button', { name: '保存规则' }).click();
+    await expect(page.getByRole('region', { name: '写作规则编辑' }).getByRole('status')).toHaveText('写作规则已保存。');
     await expect.poll(() => JSON.parse(readFileSync(join(root, scope, 'concord-writing.json'), 'utf8')).sentenceLength).toBe(null);
-    const policy = JSON.parse(readFileSync(join(root, scope, 'concord-writing.json'), 'utf8')) as { roots?: string[]; svgStyle: null };
+    const policy = JSON.parse(readFileSync(join(root, scope, 'concord-writing.json'), 'utf8')) as { roots?: string[]; svgStyle?: null };
     assert.equal(policy.roots, undefined);
-    assert.equal(policy.svgStyle, null);
+    assert.equal(policy.svgStyle, undefined);
   } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });

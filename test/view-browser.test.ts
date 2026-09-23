@@ -110,7 +110,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await expect(page.getByText(/en · 首选：Direct access/u)).toBeVisible();
     await expect(page.getByText(/允许名称：直接打开；弃用名称：旧访问/u)).toBeVisible();
     await expect(page.getByText('浏览器直接打开工作台', { exact: true })).toBeVisible();
-    await expect(page.getByRole('link', { name: '管理术语' })).toHaveAttribute('href', '/writing');
+    await expect(page.getByRole('link', { name: '打开术语' })).toHaveAttribute('href', '/terms');
     await expect(page.getByText('docs/feature/html/concepts.json#html-only', { exact: true })).toHaveCount(0);
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'terminology');
     await page.getByRole('tab', { name: '实现', exact: true }).click();
@@ -454,8 +454,9 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.goForward();
     await expect(page).toHaveURL(/file=docs%2Ffeature%2Fbrowser-feature%2Flibrary.md/);
     await page.getByRole('link',{name:'Git 变更',exact:true}).click();
-    await expect(page.getByRole('heading',{name:'工作树变更',exact:true})).toBeVisible();
+    await expect(page.getByRole('complementary',{name:'Git 变更 侧栏'})).toBeVisible();
     const gitTree = page.getByRole('navigation',{name:'Git 文件树',exact:true});
+    await expect(page.getByRole('complementary', {name:'Git 变更 侧栏'}).getByRole('tablist', {name:'变更分类'})).toBeVisible();
     await expect(gitTree.getByRole('button',{name:'docs/feature/browser-feature/README.md',exact:true})).toBeVisible();
     await gitTree.getByRole('button',{name:'docs/feature/browser-feature/README.md',exact:true}).click();
     await expect(page.locator('[data-git-diff]')).toContainText('External editor wins.');
@@ -519,9 +520,9 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect.poll(()=>readFileSync(join(root,'src/demo.ts'),'utf8')).toBe('export const demo = 2;\n');
     await page.getByRole('button',{name:'Close',exact:true}).click();
     await sidebar.getByRole('link',{name:'Git 变更',exact:true}).click();
-    await expect(page.getByRole('tab',{name:/Docs 变更/})).toHaveAttribute('aria-selected','true');
+    await expect(page.getByRole('tab',{name:/文档/})).toHaveAttribute('aria-selected','true');
     await expect(page.getByRole('region',{name:'新增测试用例',exact:true})).toHaveCount(0);
-    await page.getByRole('tab',{name:/测试用例变更/}).click();
+    await page.getByRole('tab',{name:/测试用例/}).click();
     await expect(gitTree).toContainText(markerName);
     await expect(gitTree).not.toContainText('src/demo.ts');
     await gitTree.getByRole('button').filter({hasText:markerName}).click();
@@ -532,12 +533,12 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     const diffScroll = page.getByTestId('git-diff-scroll');
     await diffScroll.evaluate(element => { element.scrollTop = 250; });
     await expect.poll(() => diffScroll.evaluate(element => element.scrollTop)).toBe(250);
-    await page.getByRole('tab',{name:/Docs 变更/}).click();
+    await page.getByRole('tab',{name:/文档/}).click();
     await gitTree.getByRole('button',{name:'docs/feature/browser-feature/README.md',exact:true}).click();
-    await page.getByRole('tab',{name:/测试用例变更/}).click();
+    await page.getByRole('tab',{name:/测试用例/}).click();
     await expect(gitTree.getByRole('button',{name:'test/demo.test.ts',exact:true})).toHaveAttribute('aria-current','page');
     await expect.poll(() => diffScroll.evaluate(element => element.scrollTop)).toBe(250);
-    await page.getByRole('tab',{name:/Docs 变更/}).click();
+    await page.getByRole('tab',{name:/文档/}).click();
     await expect(gitTree.getByRole('button',{name:'docs/feature/browser-feature/README.md',exact:true})).toHaveAttribute('aria-current','page');
     await page.getByRole('tab',{name:'分栏',exact:true}).click();
     await expect(page).toHaveURL(/view=split/);
@@ -547,15 +548,15 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByRole('tab',{name:'分栏',exact:true})).toHaveAttribute('data-state','active');
     await page.reload();
     await expect(page.getByRole('tab',{name:'分栏',exact:true})).toHaveAttribute('data-state','active');
-    await page.getByRole('tab',{name:/测试用例变更/}).click();
+    await page.getByRole('tab',{name:/测试用例/}).click();
     await page.reload();
     await expect(page.locator('[data-git-diff]')).toContainText('Added browser test');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page.getByRole('tab',{name:/测试用例变更/})).toHaveAttribute('aria-selected','true');
+    await expect(page.getByRole('tab',{name:/测试用例/})).toHaveAttribute('aria-selected','true');
     await expect(sidebar.getByRole('link',{name:'测试',exact:true})).toHaveCount(0);
     await expect(sidebar.getByRole('link',{name:'实现',exact:true})).toHaveCount(0);
     await page.setViewportSize({width:390,height:844});
-    await page.getByRole('button',{name:'变更文件',exact:true}).click();
+    await page.getByRole('button',{name:'内容导航',exact:true}).click();
     await expect(page.getByRole('dialog')).toContainText('test');
     await gitTree.getByRole('button',{name:'test/demo.test.ts',exact:true}).click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -576,4 +577,36 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.getByRole('button',{name:'取消',exact:true}).click();
     assert.deepEqual(errors,[]);
   } finally {await browser?.close();await server?.close();rmSync(root,{recursive:true,force:true});}
+});
+
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('browser creates Unicode Feature and Use Case names and restores their encoded routes', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-unicode-browser-'));
+  let server: ViewServerHandle | undefined;
+  let browser: Browser | undefined;
+  try {
+    execFileSync('git', ['init', '-q', root]);
+    const repo = new LocalRepository(root, { initialize: true });
+    try { initialize(repo); } finally { repo.close(); }
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
+    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
+    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+    await page.goto(`http://127.0.0.1:${server.port}/features`);
+    await page.getByRole('button', { name: '新建 Feature', exact: true }).click();
+    await page.getByLabel('Feature ID', { exact: true }).fill('角色NPC');
+    await page.getByLabel('Feature 标题', { exact: true }).fill('角色');
+    await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+    await page.getByRole('tab', { name: 'Use Cases', exact: true }).click();
+    await page.getByRole('button', { name: '新建 Use Case', exact: true }).click();
+    await page.getByLabel('Use Case ID', { exact: true }).fill('扩展NPC动作');
+    await page.getByLabel('Use Case 标题', { exact: true }).fill('扩展 NPC 动作');
+    await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+    await page.getByRole('link', { name: /扩展 NPC 动作/u }).click();
+    await expect(page.getByRole('dialog')).toContainText('扩展 NPC 动作');
+    assert.match(decodeURIComponent(new URL(page.url()).pathname), /角色NPC\/use-cases\/扩展NPC动作$/u);
+    await page.reload();
+    await expect(page.getByRole('dialog')).toContainText('扩展 NPC 动作');
+    assert.match(readFileSync(join(root, 'docs/feature/角色NPC/use-case/扩展NPC动作.md'), 'utf8'), /id: 扩展NPC动作/u);
+  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });

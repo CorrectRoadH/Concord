@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { GitDiff, GitEntry } from '../../../src/git-view';
-import { useIsMobile } from '../../hooks/use-mobile';
 import { urlChoice } from '../../hooks/use-url-navigation';
 import { useWorkspace } from '../../workspace';
 import { entriesFor, fileTree, firstArea, sortedFiles, validArea, type Category } from './model';
@@ -13,8 +12,6 @@ export function useGitReview() {
   const [error, setError] = useState('');
   const view = urlChoice(params.get('view'), ['split', 'unified'], 'unified');
   const setView = (value: string) => { const next = new URLSearchParams(params); next.set('view', value === 'split' ? 'split' : 'unified'); setParams(next); };
-  const [navigationOpen, setNavigationOpen] = useState(false);
-  const isMobile = useIsMobile();
   const positions = useRef(new Map<string, number>());
   const docs = useMemo(() => git?.entries.filter(entry => entry.path.startsWith('docs/') || entry.previousPath?.startsWith('docs/')) ?? [], [git]);
   const tests = useMemo(() => {
@@ -50,7 +47,6 @@ export function useGitReview() {
     next.set(`${tab}Path`, entry.path); next.set(`${tab}Area`, selectedArea);
     next.delete('line'); if (selectedLine) next.set('line', String(selectedLine));
     setParams(next);
-    setNavigationOpen(false);
   };
   const baseline = new Set(git?.baselineCaseIds ?? []);
   const addedCases = tab === 'tests' && git?.baselineCaseIds ? snapshot.cases.filter(item => !baseline.has(item.id)) : [];
@@ -69,5 +65,5 @@ export function useGitReview() {
   function refreshGit(): void {
     void refresh().catch(cause => notify(cause instanceof Error ? cause.message : String(cause), 'error'));
   }
-  return { git, view, setView, navigationOpen, setNavigationOpen, isMobile, docs, tests, tab, tree, entry, area, path, line, readingKey, visibleDiff, error, select, addedCases, changeCategory, refreshGit, positions };
+  return { git, view, setView, docs, tests, tab, tree, entry, area, path, line, readingKey, visibleDiff, error, select, addedCases, changeCategory, refreshGit, positions };
 }

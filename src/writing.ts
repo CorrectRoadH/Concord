@@ -8,7 +8,6 @@ import { ConcordError, inRepositorySnapshot, type Repository } from './shared.js
 import { canonicalPath } from './storage.js';
 import { readWritingPolicy, type BannedTerm, type WritingPolicy } from './writing-policy.js';
 import { analyzeCatalogs, catalogSources, effectiveConcepts, spellingKey, spellingPositions } from './concepts.js';
-import { svgTexts } from './writing-text.js';
 import { applies, discovered, scopeOf, snapshotDigest, under } from './writing-scopes.js';
 
 export interface WritingFinding { file: string; line: number; rule: string; message: string; context: string; source?: { path: string; line?: number; entry?: number; column?: string; ref?: string }; sources?: readonly { path: string; line?: number; entry?: number; column?: string; ref?: string }[] }
@@ -60,7 +59,7 @@ const rootsOf = (owner: PolicyOwner): readonly string[] => owner.policy.roots ??
 function applicablePolicy(file: string, policies: readonly PolicyOwner[]): PolicyOwner[] {
   return policies.filter(owner => applies(file, owner.scope)).sort((a, b) => a.scope.length - b.scope.length || a.path.localeCompare(b.path));
 }
-function inherited<T extends 'sentenceLength' | 'paragraphLength' | 'unusedConcepts' | 'svgTerms' | 'svgStyle'>(owners: readonly PolicyOwner[], key: T): WritingPolicy[T] {
+function inherited<T extends 'sentenceLength' | 'paragraphLength' | 'unusedConcepts'>(owners: readonly PolicyOwner[], key: T): WritingPolicy[T] {
   let value: WritingPolicy[T] = undefined;
   for (const owner of owners) if (owner.policy[key] !== undefined) value = owner.policy[key];
   return value;
@@ -155,22 +154,18 @@ export function checkWriting(repo: Repository, selectedPath?: string) {
     const selectedRoots = [...new Set(selection)].sort();
     const files = new Set<string>();
     for (const root of selectedRoots) {
-      const members = repo.files(root).filter(path => /\.(?:md|mdx|svg)$/iu.test(path)).sort();
+      const members = repo.files(root).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
       memberships.set(root, members);
-      if (!members.length) throw new ConcordError('WritingInputNotFound', `No Markdown or SVG files in writing root: ${root}`);
+      if (!members.length) throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
       members.forEach(file => files.add(file));
     }
     const documents = new Map<string, Prose[]>();
-    const contents = new Map<string, string>();
     for (const file of [...files].sort()) {
       const source = read(file);
-      contents.set(file, source);
       if (/\.mdx?$/iu.test(file)) documents.set(file, prose(file, source));
     }
-    for (const owner of activePolicies) if (owner.policy.svgStyle && [...files].some(file => applies(file, owner.scope))) read(owner.policy.svgStyle);
     const findings: WritingFinding[] = [];
     const used = new Set<string>(), eligible = new Set<string>();
-    const localScopes = [...new Set([...activePolicies.filter(owner => owner.path.startsWith('docs/')).map(owner => owner.scope), ...catalogPaths.map(path => path.slice(0, path.lastIndexOf('/')))].filter(scope => scope !== 'docs'))];
     for (const [file, blocks] of documents) {
       const owners = applicablePolicy(file, activePolicies);
       const concepts = effectiveConcepts(file, catalogs.catalogs);
@@ -189,27 +184,9 @@ export function checkWriting(repo: Repository, selectedPath?: string) {
     for (const item of catalogs.catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, record, concept })))) {
       if (eligible.has(item.reference) && !used.has(item.reference)) findings.push({ file: item.record.path, line: 1, rule: 'unusedConcept', message: `No selected prose uses ${item.reference}`, context: item.concept.definition.slice(0, 240), source: { path: item.record.path, ref: item.reference } });
     }
-    for (const [file, content] of contents) if (/\.svg$/iu.test(file)) {
-      const owners = applicablePolicy(file, activePolicies);
-      const concepts = effectiveConcepts(file, catalogs.catalogs);
-      const bans = bansFor(file, owners, concepts);
-      const localScope = localScopes.filter(scope => under(file, scope)).sort((a, b) => b.length - a.length)[0];
-      const corpus = [...documents].filter(([path]) => localScope ? under(path, localScope) : selectedRoots.some(root => under(path, root))).flatMap(([, blocks]) => blocks.map(block => block.readable)).join('\n');
-      const vocabulary = `${corpus}\n${concepts.flatMap(item => Object.values(item.concept.names).flatMap(names => [names.preferred, ...(names.aliases ?? [])])).join('\n')}`;
-      for (const node of svgTexts(content)) {
-        checkTerms(file, node.line, node.text, bans, concepts, findings);
-        if (inherited(owners, 'svgTerms') === true && node.classes.includes('label')) for (const term of node.text.match(/[㐀-䶿一-鿿]+/gu) ?? []) if (!vocabulary.includes(term)) findings.push({ file, line: node.line, rule: 'svgTerm', message: `SVG label has no prose source: ${term}`, context: node.text.slice(0, 240) });
-      }
-      const stylePath = inherited(owners, 'svgStyle');
-      if (stylePath) {
-        const style = inputs.get(stylePath) ?? read(stylePath);
-        const present = /<style\b[^>]*>([\s\S]*?)<\/style>/iu.exec(content)?.[1]?.trim();
-        if (present !== style.trim()) findings.push({ file, line: 1, rule: 'svgStyle', message: `SVG style must match ${stylePath}`, context: present?.slice(0, 240) ?? '(no style)', source: { path: stylePath } });
-      }
-    }
     for (const [path, before] of inputs) if (repo.read(path) !== before) throw new ConcordError('WritingInputsChanged', `${path} changed during writing checks`);
     for (const [root, before] of memberships) {
-      const after = repo.files(root).filter(path => /\.(?:md|mdx|svg)$/iu.test(path)).sort();
+      const after = repo.files(root).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
       if (JSON.stringify(after) !== JSON.stringify(before)) throw new ConcordError('WritingInputsChanged', `${root} membership changed during writing checks`);
     }
     if (JSON.stringify(discovered(repo, 'policy')) !== JSON.stringify(policyPaths) || JSON.stringify(discovered(repo, 'catalog')) !== JSON.stringify(catalogPaths)) throw new ConcordError('WritingInputsChanged', 'Writing owner membership changed during checks');

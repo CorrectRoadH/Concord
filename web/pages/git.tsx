@@ -1,11 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import * as stylex from '@stylexjs/stylex';
-import { AlertTriangle, FileDiff, ListTree, RefreshCw } from 'lucide-react';
-import { Empty, PageHeader } from '../components/page';
+import { AlertTriangle, FileDiff, RefreshCw } from 'lucide-react';
+import { Empty } from '../components/page';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '../components/ui/sheet';
+import { createPortal } from 'react-dom';
+import { ContentSidebar } from '../components/content-sidebar';
 import { Tabs, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { DiffReading } from './git/diff-reading';
 import { FileTree } from './git/file-tree';
@@ -14,16 +15,11 @@ import { useGitReview } from './git/use-git-review';
 
 const styles = stylex.create({
   review: {
-    display: 'grid', gridTemplateColumns: { default: 'minmax(230px, 285px) minmax(0, 1fr)', '@media (max-width: 767px)': 'minmax(0, 1fr)' },
-    height: { default: 'max(420px, calc(100dvh - 280px))', '@media (max-width: 767px)': 'max(400px, calc(100dvh - 320px))' },
+    display: 'flex', flexDirection: 'column',
+    height: { default: 'max(420px, calc(100dvh - 180px))', '@media (max-width: 767px)': 'max(400px, calc(100dvh - 200px))' },
     marginTop: 16, overflow: 'hidden', borderWidth: 1, borderStyle: 'solid', borderColor: 'var(--border)', borderRadius: 'var(--radius)', backgroundColor: 'var(--card)',
   },
-  sidebar: { minHeight: 0, overflow: 'auto', borderRightWidth: 1, borderRightStyle: 'solid', borderRightColor: 'var(--border)' },
-  navigation: { paddingBlock: 12, paddingInline: 8 },
-  heading: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 5, paddingInline: 8, paddingBottom: 13, fontSize: 13, fontWeight: 600 },
   note: { marginBlock: 12, marginInline: 8, fontSize: 11, color: 'var(--muted-foreground)' },
-  toggle: { marginTop: 12 },
-  sheet: { overflowY: 'auto' },
   panel: { display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0, overflow: 'hidden' },
   header: { flexShrink: 0, padding: 13, borderBottomWidth: 1, borderBottomStyle: 'solid', borderBottomColor: 'var(--border)' },
   path: { display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, overflowWrap: 'anywhere' },
@@ -35,25 +31,21 @@ const styles = stylex.create({
 export function GitPage() {
   const state = useGitReview();
   const { git, tab, tree, path, entry, area, view, line, readingKey, visibleDiff } = state;
+  const navigationHost = document.getElementById('content-navigation');
   const count = tab === 'docs' ? state.docs.length : state.tests.length;
-  const navigation = <nav {...stylex.props(styles.navigation)} aria-label="Git 文件树">
-    <div {...stylex.props(styles.heading)}>变更文件 <Badge variant="secondary">{count}</Badge></div>
-    <FileTree node={tree} selected={path} cases={state.addedCases} select={(file, line) => state.select(file, firstArea(file), line)} />
+  const navigation = (close: () => void) => <nav aria-label="Git 文件树">
+    <p>变更文件 · {count}</p>
+    <FileTree node={tree} selected={path} cases={state.addedCases} select={(file, line) => { state.select(file, firstArea(file), line); close(); }} />
     {!git ? <p role="status">正在读取 Git 变更…</p> : !count && <p {...stylex.props(styles.note)}>{tab === 'docs' ? '没有 docs 文档变更' : '没有测试文件变更'}</p>}
     {tab === 'tests' && <p {...stylex.props(styles.note)}>{git?.baselineError ? `无法比较新增测试：${git.baselineError}` : '新增声明列在所属文件下；diff 按文件展示。'}</p>}
   </nav>;
   return <>
-    <PageHeader title="工作树变更" description="从文件树选择变更，在右侧审阅 Git diff。" actions={<><span className="text-sm text-muted-foreground">{git?.branch ?? 'Git'}</span><Button variant="outline" onClick={state.refreshGit}><RefreshCw />刷新</Button></>} />
-    <Tabs value={tab} onValueChange={state.changeCategory}><TabsList aria-label="变更分类">
-      <TabsTrigger value="docs">Docs 变更 <Badge variant="secondary">{state.docs.length}</Badge></TabsTrigger>
-      <TabsTrigger value="tests">测试用例变更 <Badge variant="secondary">{state.tests.length}</Badge></TabsTrigger>
-    </TabsList></Tabs>
-    {state.isMobile && <Sheet open={state.navigationOpen} onOpenChange={state.setNavigationOpen}>
-      <SheetTrigger asChild><Button variant="outline" {...stylex.props(styles.toggle)}><ListTree />变更文件</Button></SheetTrigger>
-      <SheetContent side="left" {...stylex.props(styles.sheet)} aria-describedby={undefined}><SheetHeader><SheetTitle>变更文件</SheetTitle></SheetHeader>{navigation}</SheetContent>
-    </Sheet>}
+    <div role="toolbar" aria-label="Git 操作" className="button-row justify-end mb-3"><span className="text-sm text-muted-foreground">{git?.branch ?? 'Git'}</span><Button variant="outline" onClick={state.refreshGit}><RefreshCw />刷新</Button></div>
+    {navigationHost && createPortal(<ContentSidebar model={{ label: 'Git 变更', title: 'Git 变更', groups: [{ id: 'files', label: '变更文件', items: [], actions: <Tabs value={tab} onValueChange={state.changeCategory}><TabsList aria-label="变更分类" className="w-full">
+      <TabsTrigger value="docs">文档 <Badge variant="secondary">{state.docs.length}</Badge></TabsTrigger>
+      <TabsTrigger value="tests">测试用例 <Badge variant="secondary">{state.tests.length}</Badge></TabsTrigger>
+    </TabsList></Tabs>, content: navigation }] }} />, navigationHost)}
     <div {...stylex.props(styles.review)} data-testid="git-review">
-      {!state.isMobile && <aside {...stylex.props(styles.sidebar)}>{navigation}</aside>}
       <section {...stylex.props(styles.panel)} data-git-diff aria-label="Git diff">
         {entry && <header {...stylex.props(styles.header)}><div {...stylex.props(styles.path)}><FileDiff {...stylex.props(styles.icon)} /><strong>{path}</strong>{entry.conflicted && <Badge variant="destructive">冲突</Badge>}</div>
           {entry.previousPath && <p {...stylex.props(styles.note)}>从 {entry.previousPath}</p>}

@@ -12,7 +12,7 @@ import { parseDocument, stringify } from 'yaml';
 import {
   ConcordError,
   DocumentSchema,
-  Slug,
+  DocumentName,
   Text,
   decode,
   digest,
@@ -171,7 +171,7 @@ export function findDocument(documents: readonly DocumentRecord[], selector: str
   if (selector.includes('/')) {
     const parsed = parseReference(selector);
     if (parsed.anchor !== undefined) throw new ConcordError('InvalidReference', 'Document selectors cannot contain anchors');
-  } else decode(Slug, selector, 'selector');
+  } else decode(DocumentName, selector, 'selector');
   const pool = kind === undefined ? documents : documents.filter(document => document.metadata.kind === kind);
   const exact = pool.filter(document => document.path === selector);
   if (exact.length === 1) return exact[0]!;
@@ -377,7 +377,7 @@ export interface CreateDocumentInput {
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const governance = kind === 'memory' ? problemPolicy(repo) : undefined;
-  const id = decode(Slug, input.id, 'id');
+  const id = decode(DocumentName, input.id, 'id');
   const title = required(input.title, 'title');
   if (input.feature !== undefined && kind !== 'use-case') throw new ConcordError('InvalidInput', 'feature is only valid for use-case');
   if ((input.observedAt !== undefined || (input.sources?.length ?? 0) > 0) && kind !== 'research') throw new ConcordError('InvalidInput', 'observedAt and sources are only valid for research');
@@ -411,7 +411,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     }
     case 'roadmap': path = `docs/roadmap/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'planned' }; break;
     case 'design': {
-      const alternatives = input.alternatives?.map(value => decode(Slug, value, 'alternative')) ?? [];
+      const alternatives = input.alternatives?.map(value => decode(DocumentName, value, 'alternative')) ?? [];
       if (alternatives.length === 0 || new Set(alternatives).size !== alternatives.length) throw new ConcordError('InvalidInput', 'Design requires unique non-empty alternatives');
       path = `docs/design/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]], ...(input.constitutionRefs === undefined ? {} : { constitutionRefs: [...input.constitutionRefs] }) };
       break;
@@ -499,7 +499,7 @@ export function decideDesign(repo: Repository, selector: string, selected: strin
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'design');
   if (record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', selector);
   if (record.metadata.decision !== undefined) throw new ConcordError('DecisionExists', 'A Design decision cannot be overwritten');
-  const choice = decode(Slug, selected, 'selected');
+  const choice = decode(DocumentName, selected, 'selected');
   if (!record.metadata.alternatives.includes(choice)) throw new ConcordError('InvalidDecision', `${choice} is not a declared alternative`);
   const uniqueTargets = [...new Set(targets)];
   if (uniqueTargets.length !== targets.length) throw new ConcordError('InvalidDecision', 'Decision targets must be unique');
@@ -553,7 +553,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   const documents = loadDocuments(repo); const roadmap = findDocument(documents, selector, 'roadmap');
   if (roadmap.metadata.kind !== 'roadmap') throw new ConcordError('InvalidDocumentKind', selector);
   if (roadmap.metadata.state !== 'planned') throw new ConcordError('InvalidRoadmapState', 'Only a planned Roadmap can be adopted');
-  const id = decode(Slug, featureId, 'featureId'); const featurePath = `docs/feature/${id}/README.md`;
+  const id = decode(DocumentName, featureId, 'featureId'); const featurePath = `docs/feature/${id}/README.md`;
   if (repo.read(featurePath) !== undefined) throw new ConcordError('DocumentExists', `${featurePath} already exists`);
   const at = now();
   const feature: DocumentMeta = { format: 'concord.document/v1', id, title: roadmap.metadata.title, createdAt: at, kind: 'feature', origin: roadmap.path };

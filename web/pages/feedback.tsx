@@ -1,18 +1,20 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
+import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
 import { ExternalLink, GitPullRequestArrow, Link2, Plus, RefreshCw, Trash2 } from "lucide-react"
 import * as React from "react"
+import { ContentSidebar } from "@/components/content-sidebar"
 import ReactMarkdown from "react-markdown"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useMatch, useNavigate, useParams } from "react-router-dom"
 import remarkGfm from "remark-gfm"
 
 import type { FeedbackConnection, FeedbackItem, FeedbackSource } from "../../src/feedback-schema"
 import type { ViewAction } from "../../src/view-contract"
 import { connectionSummary } from "@/components/feedback-connections"
 import { DocumentDetailPage } from "@/pages/documents"
-import { Definition, Empty, Field, PageHeader } from "@/components/page"
-import { PanelEmpty, PanelHeader, RecordList, RecordItem, RecordDetails } from "@/components/content-layout"
+import { Definition, Empty, Field } from "@/components/page"
+import { PanelEmpty, PanelHeader } from "@/components/content-layout"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -38,9 +40,6 @@ function sourceOf(item: FeedbackItem): FeedbackSource | undefined {
 function providerOf(item: FeedbackItem): FeedbackItem["provider"] {
   return item.provider
 }
-function remoteStateOf(item: FeedbackItem): string | null {
-  return item.remote?.state ?? sourceOf(item)?.state ?? null
-}
 function searchText(item: FeedbackItem): string {
   const source = sourceOf(item)
   return [item.document.metadata.id, item.document.metadata.title, item.document.body, item.remote?.title, item.remote?.body, item.remote?.url, source?.title, source?.body, source?.url, providerOf(item)].filter(Boolean).join(" ").toLocaleLowerCase()
@@ -59,7 +58,7 @@ function CreateLocalFeedback() {
       setOpen(false); setId(""); setTitle(""); setBody("")
     } catch (cause) { setError(errorMessage(cause)) }
   }
-  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button variant="outline"><Plus /> 新建本地反馈</Button></DialogTrigger><DialogContent><form onSubmit={(event) => fire(submit(event))}><DialogHeader><DialogTitle>新建本地反馈</DialogTitle><DialogDescription>创建不依赖远端来源的 Issue 草稿；之后可关联 Feature、Memory 并正常关闭。</DialogDescription></DialogHeader><div className="form-grid"><Field label="ID" hint="小写字母、数字和单连字符"><Input aria-label="本地反馈 ID" value={id} onChange={(event) => setId(event.target.value)} pattern="[a-z0-9]+(?:-[a-z0-9]+)*" required /></Field><Field label="标题"><Input aria-label="本地反馈标题" value={title} onChange={(event) => setTitle(event.target.value)} required /></Field><Field label="初始正文" hint="本地正文可继续自由编辑"><Textarea aria-label="本地反馈正文" value={body} onChange={(event) => setBody(event.target.value)} /></Field>{error && <div className="form-error" role="alert">{error}</div>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="submit" disabled={busy}>{busy ? "创建中…" : "创建"}</Button></DialogFooter></form></DialogContent></Dialog>
+  return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button variant="outline"><Plus /> 新建本地反馈</Button></DialogTrigger><DialogContent><form onSubmit={(event) => fire(submit(event))}><DialogHeader><DialogTitle>新建本地反馈</DialogTitle><DialogDescription>创建不依赖远端来源的 Issue 草稿；之后可关联 Feature、Memory 并正常关闭。</DialogDescription></DialogHeader><div className="form-grid"><Field label="ID" hint="中文等 Unicode 字母、数字，可用单连字符分隔"><Input aria-label="本地反馈 ID" value={id} onChange={(event) => setId(event.target.value)} pattern={DOCUMENT_NAME_PATTERN.source} required /></Field><Field label="标题"><Input aria-label="本地反馈标题" value={title} onChange={(event) => setTitle(event.target.value)} required /></Field><Field label="初始正文" hint="本地正文可继续自由编辑"><Textarea aria-label="本地反馈正文" value={body} onChange={(event) => setBody(event.target.value)} /></Field>{error && <div className="form-error" role="alert">{error}</div>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="submit" disabled={busy}>{busy ? "创建中…" : "创建"}</Button></DialogFooter></form></DialogContent></Dialog>
 }
 
 function ImportFeedback({ connections, onReceipt }: { connections: readonly FeedbackConnection[]; onReceipt(warnings: readonly string[]): void }) {
@@ -91,33 +90,38 @@ function FeedbackSources({ connections, onReceipt }: { connections: readonly Fee
   return <div className="feedback-source-status"><span>{connections.length === 0 ? "尚未配置远端来源" : `${connections.length} 个远端来源`}</span>{connections.map((connection) => <span className="feedback-source-status__connection" key={connection.id}><Badge variant="outline">{feedbackProviderLabel(connection.provider)}</Badge><span>{connectionSummary(connection)}</span><Button size="sm" variant="outline" disabled={busy} onClick={() => fire(sync(connection))}><RefreshCw /> {active === connection.id ? "同步中…" : "同步"}</Button>{errors[connection.id] && <span className="feedback-source-status__error" role="alert">{errors[connection.id]}</span>}</span>)}<Link to="/settings?tab=feedback">管理反馈来源</Link></div>
 }
 
-function FeedbackCard({ item }: { item: FeedbackItem }) {
-  const source = sourceOf(item)
-  return <RecordItem>
-    <div className="card-title-row"><Link className="font-semibold hover:underline" to={`/feedback/${encodeURIComponent(item.document.metadata.id)}`}>{item.document.metadata.title}</Link><div className="inline-badges"><Badge variant={item.triage === "pending" ? "default" : "outline"}>{feedbackTriageLabel(item.triage)}</Badge><Badge variant="secondary">{feedbackProviderLabel(item.provider)}</Badge></div></div>
-    <p className="feedback-item-summary">{item.document.body.slice(0, 160) || source?.body.slice(0, 160) || "等待补充本地上下文"}</p>
-    <small className="feedback-item-date">{source ? `来源更新于 ${dateTime(item.remote?.updatedAt ?? source.updatedAt)}` : `创建于 ${dateTime(item.document.metadata.createdAt)}`}</small>
-    <RecordDetails title="来源与状态"><dl><Definition label="ID"><code>{item.document.metadata.id}</code></Definition><Definition label="来源">{feedbackProviderLabel(item.provider)}</Definition><Definition label="本地状态">{item.document.metadata.kind === "issue" ? item.document.metadata.state : "—"}</Definition>{remoteStateOf(item) && <Definition label="远端状态">{remoteStateOf(item)}</Definition>}<Definition label="可用性">{availabilityLabel(item.availability)}</Definition></dl></RecordDetails>
-    {item.warnings.length > 0 && <small className="feedback-warning">{item.warnings.join("；")}</small>}
-  </RecordItem>
+export function FeedbackNavigation() {
+  const { snapshot } = useWorkspace()
+  const id = useMatch("/feedback/:id")?.params.id
+  const feedback = snapshot.feedback
+  const [query, setQuery] = React.useState("")
+  const [provider, setProvider] = React.useState<ProviderFilter>("all")
+  const [triage, setTriage] = React.useState<TriageFilter>("all")
+  const normalized = query.trim().toLocaleLowerCase()
+  const visible = feedback.filter((item) => (provider === "all" || providerOf(item) === provider) && (triage === "all" || item.triage === triage) && (!normalized || searchText(item).includes(normalized)))
+  return <ContentSidebar model={{ label: '反馈', title: '反馈',
+    back: id ? { title: '返回反馈列表', href: '/feedback' } : undefined,
+    filter: feedback.length ? { label: '搜索反馈', placeholder: '搜索标题、ID、正文或来源 URL…', value: query, onChange: setQuery } : undefined,
+    groups: [{ id: 'feedback', label: '反馈列表', items: visible.map(item => ({
+      id: item.document.path, title: item.document.metadata.title, href: `/feedback/${encodeURIComponent(item.document.metadata.id)}`,
+      active: item.document.metadata.id === id, searchText: searchText(item),
+      suffix: <span className="text-xs text-muted-foreground">{feedbackTriageLabel(item.triage)} · {feedbackProviderLabel(item.provider)}{item.warnings.length > 0 && <span title={item.warnings.join("；")}> · 有提醒</span>}</span>,
+    })), filterable: false, emptyMessage: feedback.length ? '没有匹配的反馈' : '还没有反馈',
+    actions: feedback.length > 0 ? <div className="feedback-toolbar"><Select value={provider} onValueChange={(value) => setProvider(value as ProviderFilter)}><SelectTrigger aria-label="按来源筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部来源</SelectItem><SelectItem value="local">仅本地</SelectItem><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select><Select value={triage} onValueChange={(value) => setTriage(value as TriageFilter)}><SelectTrigger aria-label="按处理状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="pending">待处理</SelectItem><SelectItem value="linked">已关联</SelectItem><SelectItem value="closed">已关闭</SelectItem></SelectContent></Select></div> : undefined,
+    }],
+  }} />
 }
 
 export function FeedbackPage() {
   const { snapshot } = useWorkspace()
   const feedback = snapshot.feedback
   const connections = snapshot.project?.feedbackConnections ?? []
-  const [query, setQuery] = React.useState("")
-  const [provider, setProvider] = React.useState<ProviderFilter>("all")
-  const [triage, setTriage] = React.useState<TriageFilter>("all")
   const [receiptNotices, setReceiptNotices] = React.useState<readonly string[]>([])
-  const normalized = query.trim().toLocaleLowerCase()
-  const visible = feedback.filter((item) => (provider === "all" || providerOf(item) === provider) && (triage === "all" || item.triage === triage) && (!normalized || searchText(item).includes(normalized)))
-  return <><PageHeader title="反馈" description="浏览并处理本地与远端反馈。远端来源只在手动同步或导入时更新。" actions={<><CreateLocalFeedback />{connections.length > 0 && <ImportFeedback connections={connections} onReceipt={setReceiptNotices} />}</>} />
+  return <><div role="toolbar" aria-label="反馈操作" className="button-row justify-end mb-3"><CreateLocalFeedback />{connections.length > 0 && <ImportFeedback connections={connections} onReceipt={setReceiptNotices} />}</div>
     <FeedbackSources connections={connections} onReceipt={setReceiptNotices} />
     {receiptNotices.length > 0 && <div className="callout callout--warning feedback-receipt-warnings"><div><strong>同步已完成，但有提醒</strong>{receiptNotices.map((warning) => <p key={warning}>{warning}</p>)}</div><Button size="sm" variant="ghost" onClick={() => setReceiptNotices([])}>关闭</Button></div>}
-    <PanelHeader title="反馈列表" actions={feedback.length > 0 ? <span className="muted">{visible.length} / {feedback.length} 项</span> : undefined} />
-    {feedback.length > 0 && <div className="feedback-toolbar"><Input aria-label="搜索反馈" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索标题、ID、正文或来源 URL…" /><Select value={provider} onValueChange={(value) => setProvider(value as ProviderFilter)}><SelectTrigger aria-label="按来源筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部来源</SelectItem><SelectItem value="local">仅本地</SelectItem><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select><Select value={triage} onValueChange={(value) => setTriage(value as TriageFilter)}><SelectTrigger aria-label="按处理状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="pending">待处理</SelectItem><SelectItem value="linked">已关联</SelectItem><SelectItem value="closed">已关闭</SelectItem></SelectContent></Select></div>}
-    {feedback.length === 0 ? <PanelEmpty title="还没有反馈">新建本地反馈，或前往<Link to="/settings?tab=feedback">反馈来源设置</Link>添加连接。</PanelEmpty> : visible.length === 0 ? <PanelEmpty title="没有匹配的反馈">调整搜索词或筛选条件。</PanelEmpty> : <RecordList>{visible.map((item) => <FeedbackCard key={item.document.path} item={item} />)}</RecordList>}
+    {feedback.length === 0 ? <PanelEmpty title="新建第一条反馈">新建本地反馈，或前往<Link to="/settings?tab=feedback">反馈来源设置</Link>添加连接。</PanelEmpty> : <PanelEmpty title="选择反馈">从内容导航选择反馈，查看正文、来源与处理状态。</PanelEmpty>}
+
   </>
 }
 
@@ -167,5 +171,5 @@ export function FeedbackDetailPage() {
   const { id = "" } = useParams(); const { snapshot } = useWorkspace()
   const item = snapshot.feedback.find((candidate) => candidate.document.metadata.id === id)
   if (!item) return <Empty kind="missing" title="找不到反馈">它可能已被移动、删除或尚未导入。</Empty>
-  return <><Link className="back-link" to="/feedback">返回反馈列表</Link><DocumentDetailPage kind="issue" relatedContent={<><PanelHeader title="来源与关联" /><RemoveLocalDraft item={item} /><div className="feedback-detail-context"><SourcePanel item={item} /><FeatureLinker item={item} /></div></>} /></>
+  return <><DocumentDetailPage kind="issue" relatedContent={<><PanelHeader title="来源与关联" /><RemoveLocalDraft item={item} /><div className="feedback-detail-context"><SourcePanel item={item} /><FeatureLinker item={item} /></div></>} /></>
 }

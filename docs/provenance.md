@@ -32,4 +32,6 @@ Research 模板后来按自由研究契约收敛为标题，来源、观察日�
 
 ## 文档写作检查
 
-`lint/docs/writing.ts` 的 SVG 文本解析及写作检查语义被独立移植。当前领域术语改由按目录归属的 `concord.concepts/v1` JSON 定义，`concord.writing/v2` 政策声明禁词、长度和 SVG 检查；早期 Markdown 概念表解释不再是运行时定义来源，迁移需作者审核。Markdown 正文语法复用 Concord 已有解析器，文件读取复用 Repository 安全快照。NiceEval 的 calledTool 等产品 API 规则与站点特定政策不进入通用实现。
+写作检查源自 `lint/docs/writing.ts`；早期移植的 SVG 文本检查已移除，当前只扫描 Markdown/MDX。当前领域术语改由按目录归属的 `concord.concepts/v1` JSON 定义，`concord.writing/v2` 政策声明禁词、长度和概念使用检查；早期 Markdown 概念表解释不再是运行时定义来源，迁移需作者审核。Markdown 正文语法复用 Concord 已有解析器，文件读取复用 Repository 安全快照。NiceEval 的 calledTool 等产品 API 规则与站点特定政策不进入通用实现。
+
+初始化写作预设提取 NiceEval `docs/writing-rules.json` 的通用可读性规则：句长 140、段长 320，以及含糊表达的替换建议和理由。规则随 Concord 分发，不在运行时读取 NiceEval。产品专属词库、API 和站点规则不进入预设。

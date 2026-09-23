@@ -2,6 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/README.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
+import { DOCUMENT_NAME_PATTERN } from './document-name.js';
 import { FeedbackConnectionsSchema, FeedbackSourceSchema } from './feedback-schema.js';
 export * from './feedback-schema.js';
 export { TEST_REFERENCE_VERSION, deriveTestReference } from './test-reference.js';
@@ -26,6 +27,7 @@ export function decode<A>(schema: Schema.ConstraintDecoder<A, never>, value: unk
 }
 export const Text = Schema.String.check(Schema.isMinLength(1));
 export const Slug = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/));
+export const DocumentName = Schema.String.check(Schema.isPattern(DOCUMENT_NAME_PATTERN));
 export function slug(value: string): string { return decode(Slug, value, 'identifier'); }
 export const Nat = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export const Strings = Schema.Array(Text);
@@ -118,7 +120,7 @@ export const ResolutionSchema = Schema.Union([
 export type Resolution = typeof ResolutionSchema.Type;
 export const HistorySchema = Schema.Struct({ at: Text, action: Text, reason: Text, ref: Schema.optional(Text), resolution: Schema.optional(ResolutionSchema), commit: Schema.optional(GitCommit), source: Schema.optional(SourceRecordSchema), eventAt: Schema.optional(Text) });
 export type HistoryEntry = typeof HistorySchema.Type;
-const base = { format: Schema.Literal('concord.document/v1'), id: Slug, title: Text, createdAt: Text,
+const base = { format: Schema.Literal('concord.document/v1'), id: DocumentName, title: Text, createdAt: Text,
   createdAtSource: Schema.optional(Schema.Struct({ kind: Schema.Literal('first-recorded'), path: Text, commit: GitCommit })),
   description: Schema.optional(Text),
 };
@@ -126,7 +128,7 @@ export const FeatureSchema = Schema.Struct({ ...base, kind: Schema.Literal('feat
 export const UseCaseSchema = Schema.Struct({ ...base, kind: Schema.Literal('use-case'), feature: Text });
 export const ResearchSchema = Schema.Struct({ ...base, kind: Schema.Literal('research'), observedAt: Schema.optional(Text), sources: Strings });
 export const HistoricalDispositionSchema = Schema.Struct({ reason: Text, source: SourceRecordSchema, eventAt: Schema.optional(Text) });
-export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.NonEmptyArray(Slug), constitutionRefs: Schema.optional(Strings), decision: Schema.optional(Schema.Struct({ selected: Slug, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
+export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.NonEmptyArray(DocumentName), constitutionRefs: Schema.optional(Strings), decision: Schema.optional(Schema.Struct({ selected: DocumentName, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
 export const RoadmapSchema = Schema.Struct({ ...base, kind: Schema.Literal('roadmap'), state: Schema.Literals(['planned', 'adopted', 'cancelled']), adoptedAs: Schema.optional(Text), cancellation: Schema.optional(HistoricalDispositionSchema) });
 export const EngineeringSchema = Schema.Struct({ ...base, kind: Schema.Literal('engineering') });
 export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), memoryKind: Schema.Literals(['problem', 'decision', 'insight', 'note']), state: Schema.Literals(['captured', 'open', 'resolved', 'current', 'superseded']), epoch: Nat, evidenceRequirement: Schema.optional(Schema.Literals(['command', 'concord.native-reliability/v1'])), promotions: Strings, history: Schema.Array(HistorySchema), resolution: Schema.optional(ResolutionSchema), supersededBy: Schema.optional(Text), supersession: Schema.optional(Schema.Struct({ statement: Text, source: SourceRecordSchema })) });

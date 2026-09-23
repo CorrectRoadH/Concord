@@ -402,3 +402,34 @@ test('Issue closure rejects missing references and duplicate cycles', () => Effe
   write(root, first.path, renderDocument({ ...first.metadata, state: 'closed', closure: { kind: 'fixed', memory: 'memory/missing.md', proof: ['historical declaration'] } }, first.body));
   assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => finding.message.includes('missing')));
 }))));
+
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('Unicode document names retain identity through pages, references, adoption and Design decisions', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+  createDocument(repo, 'feature', { id: '角色NPC', title: '角色' });
+  createDocument(repo, 'use-case', { id: '扩展NPC动作', title: '扩展 NPC 动作', feature: '角色NPC' });
+  addPage(repo, 'feature', '角色NPC', '认知与执行');
+  const topic = showPage(repo, 'feature', '角色NPC', '认知与执行');
+  setPage(repo, 'feature', '角色NPC', '认知与执行', '# 认知与执行\n\n## 动作\n', topic.digest);
+  const documents = loadDocuments(repo);
+  assert.equal(findDocument(documents, '扩展NPC动作').path, 'docs/feature/角色NPC/use-case/扩展NPC动作.md');
+  assert.equal(resolveReference(repo, documents, 'docs/feature/角色NPC/认知与执行.md#动作').metadata.id, '角色NPC');
+  throwsCode('DocumentExists', () => createDocument(repo, 'feature', { id: '角色NPC', title: '重复' }));
+  throwsCode('PreimageChanged', () => setPage(repo, 'feature', '角色NPC', '认知与执行', '# stale\n', topic.digest));
+  for (const id of ['δοκιμή', 'नमस्ते', 'cafe\u0301', '日本語-１２３']) {
+    createDocument(repo, 'engineering', { id, title: id });
+    assert.equal(findDocument(loadDocuments(repo), id).metadata.id, id);
+  }
+  createDocument(repo, 'roadmap', { id: '地图规划', title: '地图规划' });
+  addPage(repo, 'roadmap', '地图规划', '地形');
+  adoptRoadmap(repo, '地图规划', '地图', false);
+  assert.equal(showPage(repo, 'feature', '地图', '地形').path, 'docs/feature/地图/地形.md');
+  createDocument(repo, 'design', { id: '存储方案', title: '存储', alternatives: ['本地', '远端'] });
+  authorDesignFixture(root, '存储方案', ['本地', '远端'], '本地');
+  decideDesign(repo, '存储方案', '本地', [], '本地读取');
+  const design = findDocument(loadDocuments(repo), '存储方案');
+  assert.ok(design.metadata.kind === 'design' && design.metadata.decision?.selected === '本地');
+  for (const name of ['../越界', '目录/子项', '目录\\子项', 'a#段落', 'a?b', '%2f', '带 空格', 'a\n', 'a\u202eb', 'a\0b', '-中文', '中文--名', '\u0301']) {
+    throwsCode('InvalidData', () => createDocument(repo, 'feature', { id: name, title: 'Invalid' }));
+    throwsCode('InvalidPage', () => addPage(repo, 'feature', '角色NPC', name));
+  }
+}))));

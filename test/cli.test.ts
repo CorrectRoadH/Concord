@@ -428,13 +428,13 @@ test('packed Research creates only its title and edits arbitrary nested supporti
 });
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
-test('packed writing checks consumer policy, readable prose, SVG, and safe input boundaries', () => Effect.runPromise(Effect.sync(() => {
+test('packed writing checks consumer policy, readable prose and safe input boundaries while excluding SVG', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('writing');
  const reportSchema = Schema.Struct({ ok: Schema.Boolean, files: Schema.Int, findings: Schema.Array(Schema.Struct({ file: Schema.String, line: Schema.Int, rule: Schema.String, message: Schema.String })) });
  const policy = {
   format: 'concord.writing/v2', roots: ['guide', 'guide/page.md'],
   bannedTerms: [{ term: 'bad', use: 'clear', why: 'Be precise', exempt: ['guide/exempt'] }, { term: '旧词', use: '新词', why: 'One vocabulary', allowIn: ['旧词典'] }],
-  sentenceLength: 20, paragraphLength: 30, unusedConcepts: true, svgTerms: true, svgStyle: 'guide/style.css',
+  sentenceLength: 20, paragraphLength: 30, unusedConcepts: true,
  };
  mkdirSync(join(root, 'guide'));
  writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify(policy));
@@ -449,8 +449,8 @@ test('packed writing checks consumer policy, readable prose, SVG, and safe input
  writeFileSync(join(root, 'guide/view.mdx'), ['<Panel', ' title="bad"', '>', 'clear', '</Panel>', '{/* GENERATED:BEGIN fields */}', 'bad', '{/* GENERATED:END fields */}'].join('\n'));
  writeFileSync(join(root, 'guide/figure.svg'), '<svg><style>.label { fill: black; }</style><text class="label">新<tspan>词</tspan></text><desc>bad</desc></svg>');
  const first = call(root, ['docs', 'check'], reportSchema, '', 1);
- assert.equal(first.files, 3);
- assert(first.findings.filter(hit => hit.rule === 'bannedTerm').length >= 5);
+ assert.equal(first.files, 2);
+ assert(first.findings.filter(hit => hit.rule === 'bannedTerm').length >= 4);
  assert.equal(first.findings.filter(hit => hit.rule === 'sentenceLength').length, 1);
  assert.equal(first.findings.filter(hit => hit.rule === 'paragraphLength').length, 1);
  assert(first.findings.some(hit => hit.file === 'guide/page.md' && hit.line === 22));
@@ -465,11 +465,22 @@ test('packed writing checks consumer policy, readable prose, SVG, and safe input
  writeFileSync(join(root, 'guide/page.md'), 'clear');
  writeFileSync(join(root, 'guide/figure.svg'), '<svg><text class="label">幽灵</text></svg>');
  const missing = call(root, ['docs', 'check'], reportSchema, '', 1);
- for (const rule of ['unusedConcept', 'svgTerm', 'svgStyle']) assert(missing.findings.some(hit => hit.rule === rule), rule);
- for (const invalid of [{ ...policy, unknown: true }, { ...policy, roots: ['../outside'] }, { ...policy, bannedTerms: [{ term: 'bad', use: '', why: 'reason' }] }]) {
+ assert(missing.findings.some(hit => hit.rule === 'unusedConcept'));
+ assert(!missing.findings.some(hit => hit.file.endsWith('.svg')));
+ for (const invalid of [{ ...policy, svgTerms: false }, { ...policy, svgStyle: null }, { ...policy, unknown: true }, { ...policy, roots: ['../outside'] }, { ...policy, bannedTerms: [{ term: 'bad', use: '', why: 'reason' }] }]) {
   writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify(invalid));
   assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'InvalidWritingPolicy');
  }
+ writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ ...policy, svgTerms: false, svgStyle: null }));
+ const obsolete = call(root, ['writing', 'show'], Schema.Struct({ state: Schema.String, digest: Schema.String, source: Schema.String }));
+ assert.equal(obsolete.state, 'invalid');
+ writeFileSync(join(root, 'clean-policy.json'), JSON.stringify(policy));
+ call(root, ['--dry-run', 'writing', 'set', '--body', join(root, 'clean-policy.json'), '--expected-digest', obsolete.digest], DryRunOutput);
+ assert.equal(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'), obsolete.source);
+ call(root, ['writing', 'set', '--body', join(root, 'clean-policy.json'), '--expected-digest', obsolete.digest], Ack);
+ assert.deepEqual(JSON.parse(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')), policy);
+ writeFileSync(join(root, 'svg-action.json'), JSON.stringify({ action: 'writing.set', policy: { ...policy, svgTerms: false }, expectedDigest: obsolete.digest }));
+ call(root, ['action', '--input', join(root, 'svg-action.json')], ErrorOutput, '', 1);
  writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ ...policy, roots: ['missing'] }));
  assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'WritingInputNotFound');
  writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify(policy));
@@ -502,4 +513,29 @@ test('packed scoped owner commands use path, JSON body, null creation CAS, and s
  assert.equal(call(external, ['docs', 'check', '--rules', 'rules.json'], CheckOutput).ok, true);
  write(external, 'docs/concord-writing.json', JSON.stringify({ format: 'concord.writing/v1', roots: ['docs'], bannedTerms: [] }));
  assert.equal(call(external, ['docs', 'check', '--rules', 'rules.json'], CheckOutput).ok, true);
+})));
+
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('packed CLI creates and resolves Unicode Use Cases and supporting pages', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('unicode-names');
+ call(root, ['feature', 'create', 'npc', '--title', 'NPC'], Ack);
+ const paths = Schema.Struct({ changedPaths: Schema.Array(Schema.String) });
+ const useCase = ['use-case', 'create', '扩展NPC动作', '--feature', 'npc', '--title', '扩展 NPC 动作'];
+ const expectedPath = 'docs/feature/npc/use-case/扩展NPC动作.md';
+ assert.deepEqual(call(root, ['--dry-run', ...useCase], paths).changedPaths, [expectedPath]);
+ assert.equal(existsSync(join(root, expectedPath)), false);
+ call(root, useCase, Ack);
+ for (const page of ['认知与执行', '常识与上下文']) {
+   call(root, ['feature', 'page', 'add', 'npc', page], Ack);
+   const before = call(root, ['feature', 'page', 'show', 'npc', page], PageOutput);
+   call(root, ['feature', 'page', 'set', 'npc', page, '--body', '-', '--expected-digest', before.digest], Ack, `# ${page}\n\n中文正文。\n`);
+   assert.match(call(root, ['feature', 'page', 'show', 'npc', page], PageOutput).body, /中文正文/u);
+ }
+ const shown = call(root, ['use-case', 'show', '扩展NPC动作'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
+ assert.equal(shown.document.path, expectedPath);
+ write(root, 'test/unicode.test.ts', `// @use-case ${expectedPath}\n// @name 中文用例\n`);
+ const trace = call(root, ['trace', 'show', expectedPath], TraceOutput);
+ assert.equal(trace.tests.length, 1);
+ assert.equal(call(root, ['feature', 'page', 'add', 'npc', '../越界'], ErrorOutput, '', 1).error, 'InvalidPage');
+ assert.equal(call(root, ['use-case', 'create', '坏/名称', '--feature', 'npc', '--title', '坏名称'], ErrorOutput, '', 1).error, 'InvalidData');
 })));

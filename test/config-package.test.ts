@@ -19,6 +19,15 @@ test('packed config has usable type hints and rejects misspelled fields', () => 
     const project = join(scratch, 'consumer'); mkdirSync(project);
     writeFileSync(join(project, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
     execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(scratch, packed[0]!.filename)], { cwd: project, encoding: 'utf8', timeout: 60_000 });
+    const consumer = join(scratch, 'initialized');
+    execFileSync('git', ['init', '-q', consumer]);
+    const cli = join(project, 'node_modules/concord-sdlc/dist/entry.js');
+    execFileSync(process.execPath, [cli, '--root', consumer, 'init', '--docs-only'], { encoding: 'utf8', timeout: 30_000 });
+    const preset = JSON.parse(execFileSync(process.execPath, [cli, '--root', consumer, 'writing', 'show', '--json'], { encoding: 'utf8', timeout: 30_000 }));
+    assert.equal(preset.state, 'valid');
+    assert.equal(preset.policy.sentenceLength, 140);
+    assert.equal(preset.policy.paragraphLength, 320);
+    assert.ok(preset.policy.bannedTerms.some((ban: { term: string }) => ban.term === '兜底'));
     writeFileSync(join(project, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'NodeNext', moduleResolution: 'NodeNext', noEmit: true }, include: ['concord.config.ts'] }));
     const valid = `import type { ProjectConfig } from 'concord-sdlc/config';\nexport default { format: 'concord.project/v1', projectId: 'typed', testRoots: [], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } } as const satisfies ProjectConfig;\n`;
     writeFileSync(join(project, 'concord.config.ts'), valid);

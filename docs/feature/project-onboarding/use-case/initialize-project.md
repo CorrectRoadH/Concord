@@ -28,6 +28,7 @@ feature: docs/feature/project-onboarding/README.md
 - 新项目必有 docs/constitution.md；不将未填写原则或模板示例当成已采用规则。
 - 没有 AGENTS.md 时创建；已有文件只追加或刷新边界明确的托管区块，保留区块外的原字节。标记残缺时原子拒绝，不覆盖未知内容。
 - DESIGN.md 仅在选中时创建，已有文档保留。
+- 缺失的全局写作政策直接采用随包预设，已有政策保留原文。新项目生成的指南和模板通过这套规则；预设值与来源见[写作管理](../../documentation-quality/use-case/manage-writing.md)。
 - 取消、非法选项或文件冲突不得留下部分初始化；dry-run 不写项目文件。已有 owner 或锁文件的仓库预览必须遵守共享 lease 及两套 journal 障碍；无 owner、无锁的新仓库不创建私有状态。
 - 非 TTY 不等待交互，结果确定；重跑不覆盖既有项目配置。
 - 配置迁移的具体文件加载、冲突与恢复行为以设计裁决为准。

@@ -24,7 +24,7 @@ Feature 与 Design 可重复传 `--constitution-ref docs/constitution.md#c-001` 
 
 Engineering 默认 README 包含目标、机制、使用和验收，按内容用 `engineering page add` 扩展，不接受创建时的 `--pages`。已有包不迁移或删除页面；依赖旧全量默认的脚本应显式选择全套。`page add` 不修改作者 README，新增页后维护其入口链接。页面维护命令为：
 
-除了完整模板页，也可用小写 slug 新增专题页，例如 `migration`、`goals` 或 `plan-history`。专题页仍属于 package，不成为独立 owner。Design 外层支持专题页，候选中的页面用 `--plan`；既有目标、约束和裁决页保留各自位置。
+除了完整模板页，也可用 Unicode 名称新增专题页，例如 `认知与执行`、`常识与上下文` 或 `plan-history`。专题页仍属于 package，不成为独立 owner。Design 外层支持专题页，候选中的页面用 `--plan`；既有目标、约束和裁决页保留各自位置。
 
 ```sh
 concord feature page show login cli --json
@@ -66,3 +66,5 @@ concepts 使用 concord.concepts/v1：稳定局部 id、definition、多语言 p
 `concord docs check --json` 自动发现政策与概念；`--rules <path>` 选择受管政策的扫描根，或使用外部只读 profile。报告说明实际范围与输入快照。发现问题退出 1，逐处核对上下文，不机械全仓替换；这不是测试覆盖率或实现证明。
 
 旧 writing/v1 的普通检查返回 WritingMigrationRequired。先 show 取得原文与摘要，作者审核并用 concepts.set 保存 JSON，再用 writing.set 和旧摘要显式替换为 v2。概念编辑不因仍存在旧政策而被阻断，中间阶段不宣称检查通过。不要从旧表的名字编造定义；有旧 journal 时先用匹配的旧 CLI 恢复，不能绕过新授权边界。
+
+文档 ID 与专题名允许 Unicode 字母、组合标记和数字，可用单连字符分隔；例如 `concord use-case create 扩展NPC动作 --feature npc --title "扩展 NPC 动作"` 和 `concord feature page add npc 认知与执行`。名称保留原样，不翻译或自动更改大小写；禁止路径分隔符、空白和路径穿越。固定入口 README.md、architecture.md 等继续保留。
