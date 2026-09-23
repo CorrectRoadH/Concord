@@ -239,7 +239,7 @@ const feedback = Command.make('feedback').pipe(Command.withDescription('Triage l
   feedbackConnection,
 ]));
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
-  Command.make('annotate', { contract: text('contract'), regression: many('regression') }, args => withRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.regression)))).pipe(Command.withDescription('Print @feature or @use-case path annotations above a real test. Does not edit or run tests.')),
+  Command.make('annotate', { contract: text('contract'), regression: many('regression') }, args => withRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.regression)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
   Command.make('list', {}, () => withRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache};}))),
   Command.make('show', { id }, args => withRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-show',case:selectCase(t.annotations.cases,args.id),evidenceScope:'command'};}))),
   Command.make('run', { id }, args => withRepo((repo,s) => Effect.gen(function*(){

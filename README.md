@@ -213,9 +213,9 @@ concord test evidence ccev_REPLACE_WITH_RECEIPT_ID
 concord --skill test
 ```
 
-把 `@feature` 或 `@use-case` 注释放在真实测试声明正上方，关联历史问题时加 `@regression docs/memory/<problem-id>.md`。通用测试用 `@status retired` 退役关联；Repository profile 还支持 `@issue` 和 helper 的 `@test-file`。测试 ID 由 Concord 自动派生 `neref_...`，无需人工分配或测试关系 JSON。
+把 `@feature` 或 `@use-case` 标记放进测试文件。`//`、`#` 和 `--` 都是标记。关联历史问题时加 `@regression docs/memory/<problem-id>.md`。通用测试用 `@status retired` 退役关联；Repository profile 还支持 `@issue` 和 helper 的 `@test-file`，那是另一套注释解析。测试 ID 由文件和标记派生 `neref_...`，无需人工分配或测试关系 JSON。没有 `@name` 时不按测试标题选择用例。
 
-默认 runner 使用 Node 原生测试。索引支持 `node:test`、Vitest、Playwright 的直接 import 绑定、顶层字面量测试名和静态 callback；已知 skip/todo 不能作为 fixed 证据。其它 runner 在项目配置（仅 `concord.config.ts`，旧 JSON 须先离线迁移）设置 `runner`，初始化时也可用 `--runner-config <file>`。例如已有 Vitest 消费项目可以配置：
+默认 runner 使用 Node 原生测试，运行标记所在文件。索引不解析宿主测试语法，也不从 `test.skip` / `test.todo` 推断跳过；`@status retired` 不能作为 fixed 证据。其它 runner 在项目配置（仅 `concord.config.ts`，旧 JSON 须先离线迁移）设置 `runner`，初始化时也可用 `--runner-config <file>`。例如已有 Vitest 消费项目可以配置：
 
 ```json
 {

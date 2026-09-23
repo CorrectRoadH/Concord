@@ -13,7 +13,7 @@ kind: engineering
 ## 目标
 
 - 自举配置使用公开 runner argv，不依赖 shell 或 NiceEval。
-- 测试声明直接绑定 `node:test`，执行回调通过 Effect。
+- 本仓库测试由配置的 `node:test` runner 执行，回调通过 Effect。关联由 Concord 标记拥有。
 - sourceFiles 纳入测试支持、TypeScript 配置、包清单与锁文件。
 - smoke 只读检查当前仓库的配置与可扫描注释，不递归运行 `pnpm check`，也不修改当前仓库。
 

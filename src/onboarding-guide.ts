@@ -43,11 +43,11 @@ Lifecycle metadata remains owned by the corresponding Concord commands.
 
 ## Connect a real test
 
-Place \`// @use-case docs/feature/login/use-case/expired-token.md\` immediately above an existing supported test declaration. Concord derives the execution reference from the test file and test name; no manual ID or attach step is needed.
+Place \`// @use-case docs/feature/login/use-case/expired-token.md\` in the test file. \`//\`, \`#\`, and \`--\` are markers. Concord derives the execution reference from the file and marker; no manual ID or attach step is needed.
 Then run \`concord check\`, \`concord test list\`, and \`concord trace show docs/feature/login/README.md\`.
 Run \`concord trace gaps --json\` to find contracts and documented CLI pages without explicit code or active test relationships. These are relationship gaps, not coverage results; product-owned inventory is still required to discover undocumented commands.
 Use \`--regression memory/<problem>.md\` when a test protects a recorded Problem.
-Source annotations are the only source of these test relations; reverse lists are derived. Put \`// @feature <canonical path>\` or \`// @use-case <canonical path>\` above a top-level test. Concord derives the \`neref_...\` test reference; use \`@regression\` for a Problem and \`@status retired\` to retire a generic relation. Repository profile additionally supports \`@issue\` and helper \`@test-file\`.
+Source annotations are the only source of these test relations; reverse lists are derived. A marker is the case. Concord does not parse host test syntax. Concord derives the \`neref_...\` test reference from the file and marker; use \`@regression\` for a Problem and \`@status retired\` to retire a generic relation. Without \`@name\`, a run covers the marked file and does not claim a native case passed. Repository profile additionally supports \`@issue\` and helper \`@test-file\`; that parser is separate.
 
 ## Configure and run verification
 

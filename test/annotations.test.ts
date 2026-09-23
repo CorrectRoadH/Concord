@@ -42,8 +42,9 @@ const interpolatedFixture = \`// @feature \${contract}
     const cold = scan(root);
     assert.equal(cold.cache.status, 'miss'); assert.equal(cold.cases.length, 2);
     assert.deepEqual(cold.findings, []);
-    assert.equal(cold.cases.find(item => item.name === 'old parser')?.skipped, true);
-    assert.equal(cold.cases.find(item => item.name === 'old parser')?.status, 'retired');
+    assert.equal(cold.cases.find(item => item.status === 'retired')?.skipped, false);
+    assert.equal(cold.cases.find(item => item.status === 'retired')?.status, 'retired');
+    assert.equal(cold.cases.every(item => item.framework === 'marker'), true);
     const warm = scan(root); assert.equal(warm.cache.status, 'hit'); assert.equal(warm.digest, cold.digest);
     write(root, 'test/example.test.mjs', `import { test } from 'vitest';
 // @feature docs/feature/new-parser/README.md
@@ -59,7 +60,34 @@ test('parses comments v2', { skip: true }, () => {});
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-test('reports unsupported, duplicate, orphan annotations and a corrupt cache without trusting it', () => Effect.runPromise(Effect.sync(() => {
+test('indexes comment markers in any language and ignores host test syntax', () => Effect.runPromise(Effect.sync(() => {
+  const root = consumer();
+  try {
+    write(root, 'test/session_failure.py', '# @use-case docs/feature/session/use-case/failure.md\ndef test_session():\n    assert True\n');
+    write(root, 'test/session_failure_test.go', '// @name fails closed\n// @feature docs/feature/session/README.md\nfunc TestSession(t *testing.T) {}\n');
+    write(root, 'test/browser.test.ts', `import { test } from '@playwright/test';
+// @feature docs/feature/session/README.md
+test.describe('session', () => {
+  test('fails closed', async () => {});
+});
+// @feature docs/feature/session/README.md
+// @feature docs/feature/other/README.md
+test.each([])('dynamic', () => {});
+const fake = \`// @feature docs/feature/template/README.md\`;
+`);
+    const scanned = scan(root);
+    assert.equal(scanned.cases.length, 3);
+    assert.ok(scanned.cases.some(item => item.file === 'test/session_failure.py' && item.contractKind === 'use-case'));
+    assert.equal(scanned.cases.find(item => item.file.endsWith('.go'))?.name, 'fails closed');
+    assert.equal(scanned.cases.find(item => item.file.endsWith('.go'))?.named, true);
+    assert.ok(scanned.findings.some(item => item.code === 'DuplicateContractAnnotation'));
+    assert.equal(scanned.findings.some(item => item.code === 'UnsupportedTestDeclaration'), false);
+    assert.equal(scanned.cases.some(item => item.contract === 'docs/feature/template/README.md'), false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
+test('reports malformed markers and a corrupt cache without trusting it', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
     write(root, 'test/findings.test.ts', `import * as nodeTest from 'node:test';
@@ -73,16 +101,14 @@ nodeTest.test.each([])('dynamic', () => {});
 const fake = ` + '`ordinary text: @feature template-fake`' + `;
 `);
     const first = scan(root);
-    assert.ok(first.findings.some(item => item.code === 'AmbiguousTestDeclaration'));
-    assert.ok(first.findings.some(item => item.code === 'OrphanAnnotation'));
-    assert.equal(first.findings.filter(item => item.code === 'OrphanAnnotation').length, 1);
-    assert.ok(first.findings.some(item => item.code === 'UnsupportedTestDeclaration'));
+    assert.equal(first.findings.some(item => item.code === 'UnsupportedTestDeclaration'), false);
+    assert.equal(first.cases.length, 3);
     const repo = new LocalRepository(root); let path: string;
     try { path = repo.privateDir + '/cache.sqlite'; } finally { repo.close(); }
     writeFileSync(path, 'not a sqlite database');
     const recovered = scan(root);
     assert.equal(recovered.cache.status, 'unavailable');
-    assert.equal(recovered.cases.length, 2);
+    assert.equal(recovered.cases.length, 3);
     rmSync(path);
     const db = new DatabaseSync(path); try {
       db.exec('CREATE TABLE annotation_cache (cache_key TEXT PRIMARY KEY, payload TEXT NOT NULL)');

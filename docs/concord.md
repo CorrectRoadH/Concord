@@ -12,7 +12,7 @@ Concord 用当前 checkout 构建并 link 的公开 CLI 维护自身契约。当
 node --import tsx --test --test-name-pattern {pattern} {file}
 ```
 
-维护文档时先阅读 [本地 SDLC 闭环](feature/local-sdlc/README.md) 与 [Concord 自举维护](engineering/concord-self-hosting/README.md)。新增或调整测试必须在真实、由 `node:test` 直接导入的顶层声明正上方放置 `@feature <canonical path>` 或 `@use-case <canonical path>`；可附加 `@regression`、`@issue`、`@test-file` 和 `@status`。测试 ID 由 Concord 自动派生，不人工分配。测试回调通过 `Effect.runPromise` 执行 `Effect.sync` 或现有 Effect program。不要通过包装函数假注册测试。
+维护文档时先阅读 [本地 SDLC 闭环](feature/local-sdlc/README.md) 与 [Concord 自举维护](engineering/concord-self-hosting/README.md)。新增或调整测试时，在测试文件里放置 `@feature <canonical path>` 或 `@use-case <canonical path>`；可附加 `@regression` 和 `@status`。标记存在即构成关联，不要求特定测试声明形状。本仓库 runner 仍是上面的 `node:test` 命令，文件需要能被该命令执行。测试 ID 由文件和标记派生，不人工分配。测试回调通过 `Effect.runPromise` 执行 `Effect.sync` 或现有 Effect program。
 
 日常自举检查使用：
 
@@ -68,7 +68,7 @@ Lifecycle metadata remains owned by the corresponding Concord commands.
 
 ## Connect a real test
 
-Place `// @use-case docs/feature/login/use-case/expired-token.md` immediately above an existing supported test declaration. Concord derives the execution reference from its file and name; no manual ID or attach step is needed.
+Place `// @use-case docs/feature/login/use-case/expired-token.md` in the test file. `//`, `#`, and `--` are markers. Concord derives the execution reference from the file and marker; no manual ID or attach step is needed. The marker is the case; Concord does not parse host test syntax.
 Then run `concord check`, `concord test list`, and `concord trace show docs/feature/login/README.md`.
 Use `--regression memory/<problem>.md` when a test protects a recorded Problem.
 Source annotations are the only contract source of these test relations; reverse lists are derived.

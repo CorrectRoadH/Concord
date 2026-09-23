@@ -77,7 +77,7 @@ export function humanOutput(value: unknown): string {
       lines.push(`${label(key)}:`, indent(humanOutput(item), 2));
     } else lines.push(`${label(key)}: ${scalar(item)}`);
   }
-  if (value.operation === 'test-list' && Array.isArray(value.cases) && value.cases.length === 0) lines.push('Next: concord test annotate --contract <Feature or Use Case path>', 'Place the output directly above a supported test declaration, then run concord check.');
+  if (value.operation === 'test-list' && Array.isArray(value.cases) && value.cases.length === 0) lines.push('Next: concord test annotate --contract <Feature or Use Case path>', 'Place the marker in a test file, then run concord check.');
   if (value.operation === 'code-list' && Array.isArray(value.codes) && value.codes.length === 0) lines.push('Next: configure sourceRoots in concord.config.ts, then use concord --skill code.');
   if (value.operation === 'check' && value.cases === 0) lines.push('No test annotations found. This checks document integrity; it does not establish test coverage.');
   return lines.join('\n');

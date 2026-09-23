@@ -2,7 +2,7 @@
 
 ## 编译管线
 
-Concord 从严格 YAML frontmatter 的 Markdown owner 和 TypeScript AST 可识别的代码、测试声明读取事实，解析 canonical path 与 anchor，验证目标类型、重复关系和循环，再生成 trace、review 与检查结果。sourceRoots 与 testRoots 分别控制实现和测试扫描；代码声明解析可按文件命中可删除 SQLite 投影，键含 worktree、解析器版本、路径和字节摘要；归属和关系不缓存，始终用当前 Markdown 重算。测试投影仍按整次扫描键缓存。命中都严格解码。
+Concord 从严格 YAML frontmatter 的 Markdown owner、TypeScript AST 可识别的代码声明，以及测试根里的 Concord 标记读取事实，解析 canonical path 与 anchor，验证目标类型、重复关系和循环，再生成 trace、review 与检查结果。测试标记不解析宿主测试语法。sourceRoots 与 testRoots 分别控制实现和测试扫描；代码声明解析可按文件命中可删除 SQLite 投影，键含 worktree、解析器版本、路径和字节摘要；归属和关系不缓存，始终用当前 Markdown 重算。测试投影仍按整次扫描键缓存。命中都严格解码。
 
 ## 自举
 

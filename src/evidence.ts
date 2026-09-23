@@ -70,9 +70,10 @@ function buildDefinition(repo: Repository, selected: AnnotatedCase, config: Proj
   const sourceFiles = config.runner.sourceFiles.map((path) => { if (owners.has(path)) fail('InvalidDefinition', 'A Concord Markdown owner cannot be a runner source file'); const target = repo.absolute(path); regular(target); return { path, digest: digest(readFileSync(target)) }; });
   const runner = config.runner;
   let argv: readonly string[];
-  if (runner.kind === 'node-test') { if (selected.framework !== 'node:test') fail('UnsupportedRunner', 'The node-test runner only supports node:test annotations'); argv = ['node', '--test', '--test-reporter=tap', '--test-name-pattern', `^${selected.name.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&')}$`, selected.file]; }
+  const pattern = selected.named === true ? `^${selected.name.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&')}$` : '.*';
+  if (runner.kind === 'node-test') argv = ['node', '--test', '--test-reporter=tap', ...(selected.named === true ? ['--test-name-pattern', pattern] : []), selected.file];
   else {
-    const replacement: Record<string, string> = { '{file}': selected.file, '{name}': selected.name, '{pattern}': `^${selected.name.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&')}$` };
+    const replacement: Record<string, string> = { '{file}': selected.file, '{name}': selected.name, '{pattern}': pattern };
     argv = runner.argv.map((part) => { if (/\{(?:file|name|pattern)\}/u.test(part) && !(part in replacement)) fail('InvalidRunner', 'Runner placeholders must occupy an entire argv element'); if (/\{[^}]*\}/u.test(part) && !(part in replacement)) fail('InvalidRunner', `Unknown runner placeholder: ${part}`); return replacement[part] ?? part; });
   }
   return { digest: objectDigest({ annotation: selected, testFile: { path: selected.file, digest: digest(readFileSync(test)) }, runner, sourceFiles, config: { path: repo.configSnapshot.path, digest: repo.configSnapshot.digest } }), argv };

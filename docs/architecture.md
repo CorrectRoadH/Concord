@@ -44,9 +44,9 @@ docs/constitution.md 必需，默认可明确为 draft；作者显式采用 acti
 
 模板安装在工具包内，由严格 manifest 校验名称、路径、库存和普通文件类型，不依赖消费仓库或 NiceEval checkout。init 一次生成完整分类目录、docs/concord.md、docs/_template/ 全套可读参考模板，以及缺失的 docs/README.md、docs/concepts.md 和 docs/architecture.md。已有上述根文档保留。根 AGENTS.md 由 init 保留既有正文并追加或刷新一个带明确边界的 Concord 托管区块，指向当前安装版本的 `concord --skill` 路由；缺失时创建。标记残缺时拒绝写入，不猜测或覆盖用户内容。参考模板不成为契约 owner，create 使用随包模板，不把参考文件解释为自定义配置。
 
-路径是文档 canonical identity；测试声明使用紧邻的 `// @feature <path>` 或 `// @use-case <path>`，并可使用 `// @regression`、`// @issue`、`// @test-file`、`// @status` 元数据。测试身份由 `deriveTestReference` 自动生成 `neref_...`；无需人工 ID、分配或 attach 步骤。反向列表由当前源码派生，不写回契约，也不保存 JSON 测试关系副本。
+路径是文档 canonical identity。测试关联是测试根里的 Concord 标记：`//`、`#` 或 `--` 开头的 `@feature <path>` 或 `@use-case <path>`，并可使用 `@regression`、`@status retired` 和可选 `@name`。标记存在即表示测试存在。身份由文件和标记派生 `neref_...`：有 `@name` 时用该名称，否则用契约路径加同文件序号。无需人工 ID、分配或 attach 步骤。反向列表由当前源码派生，不写回契约，也不保存 JSON 测试关系副本。
 
-注释解析使用 TypeScript AST，初期支持 JS/TS 中可明确绑定的静态 test/it 声明。悬空标注、重复 ID、动态/歧义声明产生明确 finding；静态索引不是 native runner inventory。项目配置保存 testRoots、runner argv、附加 sourceFiles、timeout。argv 的 {file}/{name}/{pattern} 占位符仅按参数替换，不经过 shell。运行收据明确 scope: command 和 selectedCaseId；不渲染为 native case passed，零测试或 skip 不能因此被称作 case 已通过。
+扫描不解析宿主测试声明。JS/TS 只用 TypeScript 注释范围排除字符串、模板和正则中的伪标记；其它文本文件按注释前缀认标记。缺值、一块标记上的重复契约、以及只有 `@regression`/`@status`/`@name` 的块产生 finding。不认识的测试写法不是 finding。静态索引不是 native runner inventory。项目配置保存 testRoots、runner argv、附加 sourceFiles、timeout。argv 的 {file}/{name}/{pattern} 占位符仅按参数替换，不经过 shell。没有 `@name` 时 `{pattern}` 为 `.*`，默认 Node runner 运行整个标记文件。运行收据明确 scope: command 和 selectedCaseId；不渲染为 native case passed，零测试或 skip 不能因此被称作 case 已通过。
 
 SQLite 位于 Git-private `cache.sqlite`，只拥有可重建缓存。每次查询核对路径集合、内容摘要与解析器/schema版本，cache 命中仍需严格解码；缓存损坏、schema不符或写入失败回退到源文件编译，不返回陈旧结果。只缓存解析结果和投影，不缓存可绕过核验的授权或 Problem fixed 判定。clear 不删除 evidence、journal 或 Memory。一次 SQL transaction 更新同一代投影，源文件不是 SQL transaction 的一部分，必须通过前后摘要检测读取漂移。
 
@@ -105,7 +105,7 @@ Memory 其他关闭理由需要非空说明；reopen 追加历史并移除 curre
 
 开发者可正常编辑注释并以 Git 审阅，也可通过共享 `source.set` 操作替换配置范围内既有 JS/TS 文件；该操作使用完整文件摘要保护和受限恢复日志。scan/check 不改写源文件或补写历史。文档与 Memory 的具名写命令使用同一当前 journal 格式；其唯一提交点是全部 planned 文件发布并持久化 committed journal。缓存在源事实提交以后刷新；cache 失败不回滚源文件。
 
-AST 识别必须核对受支持 runner import 的绑定，不因任意函数叫 test 就视为测试。known skip/todo 的声明不允许生成 fixed 证据；命令结果显示 observed execution 为 unknown，或由明确支持的默认 Node TAP 计数观察为 nonzero/zero/skipped。已知零执行或全跳过的收据不能用于 fixed。通用命令的 unknown 不被显示成原生 case passed。
+测试标记不核对 runner import，也不把函数名 `test` 当成测试声明。`@status retired` 的标记不能生成 fixed 证据。命令结果显示 observed execution 为 unknown，或由明确支持的默认 Node TAP 计数观察为 nonzero/zero/skipped。已知零执行或全跳过的收据不能用于 fixed。通用命令的 unknown 不被显示成原生 case passed。
 
 缓存身份包含 projectId、root/privateDir（worktree）、testRoots/runner配置、完整路径集合、每文件字节摘要和解析器版本。无论冷热缓存，关系验证都使用当前 Markdown。fixed gate 从权威源码重新构建并核对，不信任 cache 的状态判断。
 

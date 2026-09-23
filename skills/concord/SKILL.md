@@ -5,7 +5,7 @@ description: 在本地 Git 仓库中使用 Concord 维护产品契约、代码�
 
 # Concord
 
-Concord 把 Markdown 契约、测试声明旁的注释和工程 Memory 留在各自 owner 中，再动态推导关系。先遵守消费仓库的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
+Concord 把 Markdown 契约、测试源码里的 Concord 标记和工程 Memory 留在各自 owner 中，再动态推导关系。先遵守消费仓库的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
 
 只在任务授权范围内执行写命令。`check`、`trace` 或命令收据不等于原生测试覆盖率，也不证明 原生 E2E 可靠性；提交、push、发布、部署和远端消息仍需独立授权。
 

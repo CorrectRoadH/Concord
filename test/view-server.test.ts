@@ -1,4 +1,4 @@
-import { deriveTestReference } from '../dist/test-reference.js';
+import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -286,7 +286,7 @@ test('workspace diagnostics never dereference unsafe config or evidence paths', 
   }
 });
 
-const viewJobCase = deriveTestReference('test/view-case.test.js', 'test/view-case.test.js', 'view job case');
+const viewJobCase = deriveTestReference('test/view-case.test.js', 'test/view-case.test.js', caseDiscriminator('docs/feature/web/README.md', 0));
 
 function writeCase(root: string, slow: boolean): void {
   mkdirSync(join(root, 'test'), { recursive: true });

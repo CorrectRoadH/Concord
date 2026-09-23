@@ -76,7 +76,7 @@ const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(root: stri
     if (revision.stdout.trim()) {
       const candidates = yield* runGit(root, ['grep', '-l', '-z', '-F', '-e', '@feature', '-e', '@use-case', revision.stdout.trim()], [1]);
       if (candidates.truncated) return yield* Effect.fail(new ConcordError('GitOutputLimit', 'Test baseline inventory exceeds the preview limit.'));
-      for (const object of candidates.stdout.split('\0').filter(object => /\.(?:[cm]?[jt]sx?)$/u.test(object))) {
+      for (const object of candidates.stdout.split('\0').filter(object => object.includes(':'))) {
         const path = object.slice(object.indexOf(':') + 1);
         if (testRoots !== undefined && !testRoots.some(root => root === '.' || path === root || path.startsWith(root.replace(/\/$/u, '') + '/'))) continue;
         const source = yield* runGit(root, ['show', object]);

@@ -9,7 +9,7 @@ import { Effect, Schema } from 'effect';
 import { authorDesignFixture } from './design-fixture.js';
 import { readProjectConfig } from './support.js';
 import { ProjectSchema } from '../dist/shared.js';
-import { deriveTestReference } from '../dist/test-reference.js';
+import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
 import { parseDocumentRecord, renderDocument } from '../dist/documents.js';
 const Ack = Schema.Struct({});
 const ErrorOutput = Schema.Struct({ error: Schema.String });
@@ -256,7 +256,7 @@ test('installed onboarding creates editable packages and connects supporting-pag
  const annotation = call(root, ['test', 'annotate', '--contract', 'docs/feature/accounts/cli.md#sign-in', '--regression', 'memory/expired.md'], AnnotationOutput);
  assert.equal(existsSync(join(root, 'test')), false, 'annotate must not edit test sources');
  write(root, 'test/accounts.test.mjs', `import test from 'node:test';\n${annotation.snippet}test('rejects expired tokens', () => {});\n`);
- const accountCase = deriveTestReference('test/accounts.test.mjs', 'test/accounts.test.mjs', 'rejects expired tokens');
+ const accountCase = deriveTestReference('test/accounts.test.mjs', 'test/accounts.test.mjs', caseDiscriminator('docs/feature/accounts/cli.md#sign-in', 0));
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
  const tracedTest = call(root, ['trace', 'show', 'accounts'], TraceOutput).tests[0];
  assert.ok(tracedTest);
@@ -328,7 +328,7 @@ test('installed CLI connects contracts, real red/green execution, Memory history
  call(root,['memory','add','sum-bug','--kind','problem','--title','Incorrect sum','--body','-'],Ack);
  write(root,'src/math.mjs','export const sum=(a,b)=>a-b;\n');
  write(root,'test/math.test.mjs',`import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport {sum} from '../src/math.mjs';\n// @use-case docs/feature/arithmetic/use-case/addition.md\n// @regression memory/sum-bug.md\ntest('adds numbers',()=>assert.equal(sum(2,3),5));\n`);
- const sumCase = deriveTestReference('test/math.test.mjs', 'test/math.test.mjs', 'adds numbers');
+ const sumCase = deriveTestReference('test/math.test.mjs', 'test/math.test.mjs', caseDiscriminator('docs/feature/arithmetic/use-case/addition.md', 0));
  assert.equal(call(root,['check'],CheckOutput).ok,true);
  const red=call(root,['test','run',sumCase],EvidenceOutput,'',1);assert.equal(red.commandOutcome,'fail');assert.equal(red.execution,'nonzero');
  write(root,'src/math.mjs','export const sum=(a,b)=>a+b;\n');
@@ -370,8 +370,10 @@ test('installed CLI adoption moves current promotions atomically; local issue li
 test('installed CLI returns a named failure for a known skipped declaration',()=>Effect.runPromise(Effect.sync(()=>{
  const root=consumer('skipped');
  call(root,['feature','create','skip-feature','--title','Skip feature','--body','-'],Ack);
- write(root,'test/skipped.test.mjs',"import test from 'node:test';\n// @feature docs/feature/skip-feature/README.md\ntest.skip('skipped',()=>{});\n");
- const skippedCase = deriveTestReference('test/skipped.test.mjs', 'test/skipped.test.mjs', 'skipped');
+ write(root,'test/skipped.test.mjs',"import test from 'node:test';\n// @feature docs/feature/skip-feature/README.md\n// @status retired\ntest.skip('skipped',()=>{});\n");
+ write(root,'test/browser.test.ts',"// @feature docs/feature/skip-feature/README.md\ntest.describe('session', () => { test('fails closed', () => {}); });\n");
+ const skippedCase = deriveTestReference('test/skipped.test.mjs', 'test/skipped.test.mjs', caseDiscriminator('docs/feature/skip-feature/README.md', 0));
+ assert.equal(call(root,['check'],CheckOutput).ok,true);
  assert.equal(call(root,['test','run',skippedCase],ErrorOutput,'',1).error,'CaseNotRunnable');
 })));
 // @use-case docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md

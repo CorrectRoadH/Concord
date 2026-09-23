@@ -443,7 +443,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.reload();
     await expect(page.getByRole('tab',{name:'测试',exact:true})).toBeVisible();
     await page.getByRole('tab',{name:'测试',exact:true}).click();
-    await expect(page.getByText('Added browser test',{exact:true})).toBeVisible();
+    const markerName = 'docs/feature/browser-feature/use-case/browser-flow.md#0';
+    await expect(page.getByText(markerName,{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'查看测试源码',exact:true}).click();
     await expect(page.getByRole('dialog')).toContainText('Added browser test');
     await page.keyboard.press('Escape');
@@ -457,13 +458,13 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByRole('tab',{name:/Docs 变更/})).toHaveAttribute('aria-selected','true');
     await expect(page.getByRole('region',{name:'新增测试用例',exact:true})).toHaveCount(0);
     await page.getByRole('tab',{name:/测试用例变更/}).click();
-    await expect(gitTree).toContainText('Added browser test');
+    await expect(gitTree).toContainText(markerName);
     await expect(gitTree).not.toContainText('src/demo.ts');
-    await gitTree.getByRole('button').filter({hasText:'Added browser test'}).click();
+    await gitTree.getByRole('button').filter({hasText:markerName}).click();
     await expect(page.locator('[data-git-diff]')).toContainText('Added browser test');
     await expect(page.getByRole('dialog')).toHaveCount(0);
-    await expect(page).toHaveURL(/line=3/);
-    await expect(page.locator('[data-git-diff] #git-line-3')).toBeVisible();
+    await expect(page).toHaveURL(/line=2/);
+    await expect(page.locator('[data-git-diff] #git-line-2')).toBeVisible();
     const diffScroll = page.getByTestId('git-diff-scroll');
     await diffScroll.evaluate(element => { element.scrollTop = 250; });
     await expect.poll(() => diffScroll.evaluate(element => element.scrollTop)).toBe(250);

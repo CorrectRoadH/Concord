@@ -5,13 +5,14 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Schema } from 'effect';
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from './shared.js';
-import { deriveTestReference } from './test-reference.js';
+import { caseDiscriminator, deriveTestReference } from './test-reference.js';
 import type * as TypeScript from 'typescript';
-import { lazyTypeScript, typescriptPackageVersion } from './typescript-host.js';
+import { lazyTypeScript } from './typescript-host.js';
 
-const ts = lazyTypeScript();
-function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-annotations-v3-test-reference`; }
+function parserVersion(): string { return 'concord-annotations-v4-marker'; }
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
+const TEXT_LIMIT = 1_048_576;
+const COMMENT_LINE = /^[ \t]*(?:\/\/+|#|--)[ \t]?(.*)$/u;
 const FindingSchema = Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int) });
 const CachedSnapshotSchema = Schema.Struct({
   cases: Schema.Array(AnnotatedCaseSchema),
@@ -21,103 +22,43 @@ const CachedSnapshotSchema = Schema.Struct({
 });
 type CachedSnapshot = typeof CachedSnapshotSchema.Type;
 
-type Framework = AnnotatedCase['framework'];
-interface Binding { readonly framework: Framework; readonly namespace: boolean }
 interface Source { readonly path: string; readonly text: string; readonly digest: string }
 interface Parsed { readonly cases: AnnotatedCase[]; readonly findings: Finding[] }
 
-function lineAt(source: TypeScript.SourceFile, position: number): number { return source.getLineAndCharacterOfPosition(position).line + 1; }
 function finding(findings: Finding[], code: string, path: string, message: string, line?: number): void { findings.push(line === undefined ? { code, path, message } : { code, path, message, line }); }
-function runner(module: string): Framework | undefined {
-  return module === 'node:test' || module === 'vitest' || module === '@playwright/test' ? module : undefined;
-}
-function imports(source: TypeScript.SourceFile): Map<string, Binding> {
-  const bindings = new Map<string, Binding>();
-  for (const statement of source.statements) {
-    if (!ts.isImportDeclaration(statement) || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
-    const framework = runner(statement.moduleSpecifier.text);
-    if (!framework || !statement.importClause) continue;
-    const clause = statement.importClause;
-    if (framework === 'node:test' && clause.name) bindings.set(clause.name.text, { framework, namespace: false });
-    if (clause.namedBindings && ts.isNamespaceImport(clause.namedBindings)) bindings.set(clause.namedBindings.name.text, { framework, namespace: true });
-    if (clause.namedBindings && ts.isNamedImports(clause.namedBindings)) for (const specifier of clause.namedBindings.elements) {
-      const imported = specifier.propertyName?.text ?? specifier.name.text;
-      if (imported === 'test' || imported === 'it') bindings.set(specifier.name.text, { framework, namespace: false });
-    }
-  }
-  return bindings;
-}
-function calleeInfo(expression: TypeScript.Expression, bindings: Map<string, Binding>): { readonly binding: Binding; readonly modifier?: 'skip' | 'todo' | 'each' } | undefined {
-  if (ts.isIdentifier(expression)) {
-    const binding = bindings.get(expression.text);
-    return binding && !binding.namespace ? { binding } : undefined;
-  }
-  if (!ts.isPropertyAccessExpression(expression)) return undefined;
-  if (ts.isIdentifier(expression.expression)) {
-    const binding = bindings.get(expression.expression.text);
-    if (binding?.namespace && (expression.name.text === 'test' || expression.name.text === 'it')) return { binding };
-  }
-  const modifier = expression.name.text;
-  if (modifier !== 'skip' && modifier !== 'todo' && modifier !== 'each') return undefined;
-  if (ts.isIdentifier(expression.expression)) {
-    const binding = bindings.get(expression.expression.text);
-    if (binding && !binding.namespace) return { binding, modifier };
-  }
-  if (ts.isPropertyAccessExpression(expression.expression) && ts.isIdentifier(expression.expression.expression)) {
-    const binding = bindings.get(expression.expression.expression.text);
-    if (binding?.namespace && (expression.expression.name.text === 'test' || expression.expression.name.text === 'it')) return { binding, modifier };
-  }
-  return undefined;
-}
-function staticBooleanOptions(node: TypeScript.Expression): { readonly skipped: boolean } | undefined {
-  if (!ts.isObjectLiteralExpression(node)) return undefined;
-  let skipped = false;
-  for (const property of node.properties) {
-    if (!ts.isPropertyAssignment(property) || (!ts.isIdentifier(property.name) && !ts.isStringLiteral(property.name))) return undefined;
-    const name = property.name.text;
-    if (name !== 'skip' && name !== 'todo') return undefined;
-    if (property.initializer.kind !== ts.SyntaxKind.TrueKeyword && property.initializer.kind !== ts.SyntaxKind.FalseKeyword) return undefined;
-    if (property.initializer.kind === ts.SyntaxKind.TrueKeyword) skipped = true;
-  }
-  return { skipped };
-}
-function annotationLines(text: string, source: TypeScript.SourceFile, statement: TypeScript.Statement): { readonly values: string[]; readonly lines: number[] } {
-  const lines = text.split(/\r?\n/);
-  let index = source.getLineAndCharacterOfPosition(statement.getStart(source)).line - 1;
-  const values: string[] = [], resultLines: number[] = [];
-  while (index >= 0) {
-    const match = /^\s*\/\/\s?(.*)$/.exec(lines[index] ?? '');
-    if (!match) break;
-    values.unshift(match[1] ?? ''); resultLines.unshift(index + 1); index--;
-  }
-  return { values, lines: resultLines };
-}
-function parseAnnotations(values: readonly string[], lines: readonly number[], path: string, findings: Finding[]): { readonly contract?: string; readonly contractKind?: 'feature' | 'use-case'; readonly regressions: string[]; readonly status: 'active' | 'retired'; readonly used: Set<number> } {
-  let contract: string | undefined, contractKind: 'feature' | 'use-case' | undefined, status: 'active' | 'retired' = 'active';
-  const regressions: string[] = [], used = new Set<number>();
+function parseAnnotations(values: readonly string[], lines: readonly number[], path: string, findings: Finding[]): { readonly contract?: string; readonly contractKind?: 'feature' | 'use-case'; readonly contractLine?: number; readonly regressions: string[]; readonly status: 'active' | 'retired'; readonly name?: string; readonly recognized: boolean; readonly rejected: boolean } {
+  let contract: string | undefined, contractKind: 'feature' | 'use-case' | undefined, contractLine: number | undefined, status: 'active' | 'retired' = 'active', name: string | undefined, recognized = false, rejected = false;
+  const regressions: string[] = [];
   for (let index = 0; index < values.length; index++) {
-    const value = values[index] ?? '';
-    const match = /^@(feature|use-case|regression|status)(?:\s+(.+?))?\s*$/.exec(value);
+    const match = /^@(feature|use-case|regression|status|name)(?:\s+(.+?))?\s*$/u.exec(values[index] ?? '');
     if (!match) continue;
-    used.add(lines[index] ?? 0);
-    const kind = match[1], argument = match[2]?.trim();
-    if (!argument) { finding(findings, 'InvalidAnnotation', path, `@${kind} requires a value`, lines[index]); continue; }
-    if (kind === 'feature' || kind === 'use-case') { if (contract !== undefined) finding(findings, 'DuplicateContractAnnotation', path, 'A test declaration has more than one @feature/@use-case target', lines[index]); else { contract = argument; contractKind = kind; } }
-    else if (kind === 'regression') regressions.push(argument);
-    else if (argument === 'retired') status = 'retired';
-    else finding(findings, 'InvalidAnnotation', path, '@status must be retired', lines[index]);
+    recognized = true;
+    const kind = match[1], argument = match[2]?.trim(), line = lines[index];
+    if (!argument) { finding(findings, 'InvalidAnnotation', path, `@${kind} requires a value`, line); rejected = true; continue; }
+    if (kind === 'feature' || kind === 'use-case') {
+      if (contract !== undefined) { finding(findings, 'DuplicateContractAnnotation', path, 'A test marker has more than one @feature/@use-case target', line); rejected = true; }
+      else { contract = argument; contractKind = kind; contractLine = line; }
+    } else if (kind === 'regression') regressions.push(argument);
+    else if (kind === 'name') {
+      if (name !== undefined) { finding(findings, 'InvalidAnnotation', path, '@name must appear once', line); rejected = true; }
+      else name = argument;
+    } else if (argument === 'retired') status = 'retired';
+    else { finding(findings, 'InvalidAnnotation', path, '@status must be retired', line); rejected = true; }
   }
-  return { contract, contractKind, regressions, status, used };
+  return { contract, contractKind, contractLine, regressions, status, name, recognized, rejected };
 }
-function annotationCommentLines(text: string, source: TypeScript.SourceFile): number[] {
+function realCommentLines(path: string, text: string): ReadonlySet<number> | undefined {
+  if (!SOURCE_EXTENSION.test(path)) return undefined;
+  const ts = lazyTypeScript();
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
   const lines = new Set<number>();
   const collect = (ranges: readonly TypeScript.CommentRange[] | undefined): void => {
     for (const range of ranges ?? []) {
-      if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia && /^\/\/\s*@(?:feature|use-case|regression|status)\b/.test(text.slice(range.pos, range.end))) lines.add(lineAt(source, range.pos));
+      if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia) lines.add(source.getLineAndCharacterOfPosition(range.pos).line + 1);
     }
   };
-  // The parser owns template/regex/JSX token boundaries. A context-free scanner
-  // can mistake template text following an interpolation for source comments.
+  // Comment ranges only. Template, string, and regex text are not markers.
+  // The host test declaration is not interpreted.
   const visit = (node: TypeScript.Node): void => {
     const children = node.getChildren(source);
     if (children.length > 0) { for (const child of children) visit(child); return; }
@@ -125,70 +66,67 @@ function annotationCommentLines(text: string, source: TypeScript.SourceFile): nu
     collect(ts.getTrailingCommentRanges(text, node.end));
   };
   visit(source);
-  return [...lines].sort((a, b) => a - b);
+  return lines;
 }
 export function parseTestDeclarations(path: string, text: string): { readonly cases: readonly AnnotatedCase[]; readonly findings: readonly Finding[] } {
   return parseSource({ path, text, digest: digest(text) });
 }
 
 function parseSource(input: Source): Parsed {
-  const source = ts.createSourceFile(input.path, input.text, ts.ScriptTarget.Latest, true);
-  const bindings = imports(source), findings: Finding[] = [], cases: AnnotatedCase[] = [];
-  const attached = new Set<number>();
-  const inspect = (call: TypeScript.CallExpression, statement: TypeScript.Statement, supported: boolean): void => {
-    const info = calleeInfo(call.expression, bindings);
-    if (!info) return;
-    const line = lineAt(source, call.getStart(source));
-    if (!supported || info.modifier === 'each') { finding(findings, 'UnsupportedTestDeclaration', input.path, 'Only a top-level static test/it call is supported', line); return; }
-    const annotations = annotationLines(input.text, source, statement);
-    const parsed = parseAnnotations(annotations.values, annotations.lines, input.path, findings);
-    for (const item of parsed.used) attached.add(item);
-    if (parsed.contract === undefined && parsed.regressions.length === 0 && parsed.status === 'active') return;
-    const [name, second, third] = call.arguments;
-    if (supported && name && (ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name))) {
-      const prior = source.statements.find((candidate) => {
-        if (!ts.isExpressionStatement(candidate) || !ts.isCallExpression(candidate.expression) || candidate.expression === call) return false;
-        const other = candidate.expression.arguments[0];
-        return !!other && (ts.isStringLiteral(other) || ts.isNoSubstitutionTemplateLiteral(other)) && other.text === name.text && !!calleeInfo(candidate.expression.expression, bindings);
-      });
-      if (prior) finding(findings, 'AmbiguousTestDeclaration', input.path, `Test name ${name.text} is declared more than once at the top level`, line);
+  if (input.text.includes('\0')) return { cases: [], findings: [] };
+  const comments = realCommentLines(input.path, input.text);
+  const lines = input.text.split(/\r?\n/u);
+  const findings: Finding[] = [], cases: AnnotatedCase[] = [];
+  const ordinals = new Map<string, number>();
+  let index = 0;
+  while (index < lines.length) {
+    const comment = COMMENT_LINE.exec(lines[index] ?? '');
+    const lineNumber = index + 1;
+    if (!comment || (comments !== undefined && !comments.has(lineNumber))) { index++; continue; }
+    const values: string[] = [], valueLines: number[] = [];
+    while (index < lines.length) {
+      const next = COMMENT_LINE.exec(lines[index] ?? '');
+      const nextLine = index + 1;
+      if (!next || (comments !== undefined && !comments.has(nextLine))) break;
+      values.push(next[1] ?? '');
+      valueLines.push(nextLine);
+      index++;
     }
-    if (!name || !(ts.isStringLiteral(name) || ts.isNoSubstitutionTemplateLiteral(name))) { finding(findings, 'DynamicTestName', input.path, 'Annotated test declarations need a literal test name', line); return; }
-    let callback: TypeScript.Expression | undefined, skipped = info.modifier === 'skip' || info.modifier === 'todo';
-    if (call.arguments.length === 2) callback = second;
-    else if (call.arguments.length === 3 && second && third) {
-      const options = staticBooleanOptions(second);
-      if (!options) { finding(findings, 'UnknownTestOptions', input.path, 'Test options must be a static skip/todo object', line); return; }
-      skipped ||= options.skipped; callback = third;
-    } else { finding(findings, 'AmbiguousTestDeclaration', input.path, 'Annotated test declarations need a literal name and explicit callback', line); return; }
-    if (!callback || (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback))) { finding(findings, 'AmbiguousTestDeclaration', input.path, 'Annotated test declarations need an explicit callback', line); return; }
-    if (!parsed.contract) { finding(findings, 'MissingContract', input.path, 'Annotated test declaration is missing @feature or @use-case', line); return; }
-    const id = deriveTestReference(input.path, input.path, name.text);
+    const parsed = parseAnnotations(values, valueLines, input.path, findings);
+    const markerLine = valueLines[0] ?? lineNumber;
+    if (!parsed.recognized) continue;
+    if (parsed.rejected || parsed.contract === undefined || parsed.contractKind === undefined || parsed.contractLine === undefined) {
+      if (!parsed.rejected) finding(findings, 'MissingContract', input.path, 'Concord test marker is missing @feature or @use-case', markerLine);
+      continue;
+    }
+    const ordinal = ordinals.get(parsed.contract) ?? 0;
+    if (parsed.name === undefined) ordinals.set(parsed.contract, ordinal + 1);
+    const name = parsed.name ?? caseDiscriminator(parsed.contract, ordinal);
+    const id = deriveTestReference(input.path, input.path, name);
     try {
-      const value = { id, file: input.path, line, name: name.text, contract: parsed.contract, contractKind: parsed.contractKind, regressions: parsed.regressions, status: parsed.status, framework: info.binding.framework, skipped };
-      cases.push(decode(AnnotatedCaseSchema, value, `${input.path}:${line}`));
-    }
-    catch (cause) { finding(findings, 'InvalidAnnotation', input.path, cause instanceof Error ? cause.message : String(cause), line); }
-  };
-  for (const statement of source.statements) {
-    const visit = (node: TypeScript.Node): void => {
-      if (ts.isCallExpression(node)) inspect(node, statement, false);
-      ts.forEachChild(node, visit);
-    };
-    if (ts.isExpressionStatement(statement) && ts.isCallExpression(statement.expression)) {
-      inspect(statement.expression, statement, true);
-      ts.forEachChild(statement.expression, visit);
-    } else ts.forEachChild(statement, visit);
-  }
-  for (const line of annotationCommentLines(input.text, source)) {
-    if (!attached.has(line)) finding(findings, 'OrphanAnnotation', input.path, 'Concord annotation is not immediately attached to a supported test declaration', line);
+      cases.push(decode(AnnotatedCaseSchema, {
+        id, file: input.path, line: parsed.contractLine, name, contract: parsed.contract, contractKind: parsed.contractKind,
+        regressions: parsed.regressions, status: parsed.status, framework: 'marker', skipped: false, named: parsed.name !== undefined,
+      }, `${input.path}:${parsed.contractLine}`));
+    } catch (cause) { finding(findings, 'InvalidAnnotation', input.path, cause instanceof Error ? cause.message : String(cause), parsed.contractLine); }
   }
   return { cases, findings };
 }
 
 function sources(repo: Repository): Source[] {
-  const paths = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root)))].filter(path => SOURCE_EXTENSION.test(path)).sort();
-  return paths.map(path => { const text = repo.read(path); if (text === undefined) throw new ConcordError('SourceChanged', `${path} disappeared while it was scanned`); return { path, text, digest: digest(text) }; });
+  const paths = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root)))].sort();
+  const selected: Source[] = [];
+  for (const path of paths) {
+    const absolute = repo.absolute(path);
+    let stat;
+    try { stat = lstatSync(absolute); } catch { continue; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > TEXT_LIMIT) continue;
+    const text = repo.read(path);
+    if (text === undefined) throw new ConcordError('SourceChanged', `${path} disappeared while it was scanned`);
+    if (text.includes('\0')) continue;
+    selected.push({ path, text, digest: digest(text) });
+  }
+  return selected;
 }
 function cachePath(repo: Repository): string { return join(repo.privateDir, 'cache.sqlite'); }
 function assertCacheSafe(path: string): void {

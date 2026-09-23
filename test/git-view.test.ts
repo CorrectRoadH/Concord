@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { getGitDiff, getGitStatus, type GitBaselineCache } from '../dist/git-view.js';
-import { deriveTestReference } from '../dist/test-reference.js';
+import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('Git panel distinguishes staged changes, later edits, odd filenames, binary and symlinks', async () => {
@@ -56,12 +56,14 @@ test('Git test baseline derives IDs from the committed declaration path', async 
     writeFileSync(join(root, 'renamed.test.ts'), source + "// @feature docs/feature/example/README.md\ntest('New', () => {});\n");
     git('add', 'renamed.test.ts');
     const status = await Effect.runPromise(getGitStatus(root, true, cache));
-    assert.deepEqual(status.baselineCaseIds, [deriveTestReference('old.test.ts', 'old.test.ts', 'Existing')]);
+    const existing = deriveTestReference('old.test.ts', 'old.test.ts', caseDiscriminator('docs/feature/example/README.md', 0));
+    assert.deepEqual(status.baselineCaseIds, [existing]);
     const cached = cache.value;
-    assert.deepEqual((await Effect.runPromise(getGitStatus(root, true, cache))).baselineCaseIds, [deriveTestReference('old.test.ts', 'old.test.ts', 'Existing')]);
+    assert.deepEqual((await Effect.runPromise(getGitStatus(root, true, cache))).baselineCaseIds, [existing]);
     assert.equal(cache.value, cached, 'unchanged HEAD reuses its baseline');
     git('commit', '-qm', 'new baseline');
-    assert.deepEqual((await Effect.runPromise(getGitStatus(root, true, cache))).baselineCaseIds, [deriveTestReference('renamed.test.ts', 'renamed.test.ts', 'Existing'), deriveTestReference('renamed.test.ts', 'renamed.test.ts', 'New')]);
+    const contract = 'docs/feature/example/README.md';
+    assert.deepEqual((await Effect.runPromise(getGitStatus(root, true, cache))).baselineCaseIds, [deriveTestReference('renamed.test.ts', 'renamed.test.ts', caseDiscriminator(contract, 0)), deriveTestReference('renamed.test.ts', 'renamed.test.ts', caseDiscriminator(contract, 1))]);
     assert.notEqual(cache.value?.revision, cached?.revision);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

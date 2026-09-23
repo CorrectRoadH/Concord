@@ -1,12 +1,12 @@
 # 测试注释与命令证据
 
-Concord 从受支持的 JS/TS 静态测试声明旁读取唯一正向关系。先让目标 Feature 或 Use Case 存在，再生成注释：
+Concord 从测试根里的 Concord 标记读取唯一正向关系，不解析宿主测试语法。标记存在即表示该测试关联存在。先让目标 Feature 或 Use Case 存在，再生成注释：
 
 ```sh
 concord test annotate --contract docs/feature/login/use-case/expired-token.md --regression memory/expired-token-accepted.md
 ```
 
-把输出紧邻放在真实 `test` / `it` 声明正上方；可重复 `--regression`。示意：
+把输出放进测试文件；`//`、`#` 和 `--` 都是标记。可重复 `--regression`。没有 `@name` 时运行覆盖整个文件，不声称选中了某个原生用例。示意：
 
 ```ts
 // @use-case docs/feature/login/use-case/expired-token.md
@@ -16,7 +16,7 @@ test('rejects expired tokens', () => {})
 
 指向整个 Feature 时改用 `// @feature docs/feature/login/README.md`，每个测试只选择一个契约目标。
 
-不要另建测试关系 JSON。Git 保存测试演进；动态、悬空、重复或歧义声明会形成 finding。退役关系使用 `// @status retired`。先检查并发现 case：
+不要另建测试关系 JSON。Git 保存测试演进。缺值、一块标记上的重复契约、以及只有 `@regression` / `@status` / `@name` 的块会形成 finding；不认识的测试写法不是 finding。退役关系使用 `// @status retired`。Repository profile 的注释解析是另一套规则，不由本页的 CLI 扫描代替。先检查并发现 case：
 
 ```sh
 concord check --json

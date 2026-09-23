@@ -91,7 +91,7 @@ test('warm workspace caches observe changed bytes with unchanged timestamps and 
     const removed = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
     assert.deepEqual(removed.codes, []);
     assert.deepEqual(removed.sources, []);
-    assert.ok(!removed.pages.some(page => page.path.endsWith('/architecture.md')));
+    assert.ok(!removed.pages.some(page => page.path === 'docs/feature/cached/architecture.md'));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

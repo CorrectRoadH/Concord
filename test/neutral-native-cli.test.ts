@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
+import { deriveTestReference } from '../dist/test-reference.js';
 
 const PackSchema = Schema.Array(Schema.Struct({ filename: Schema.String }));
 const CaseListSchema = Schema.Struct({
@@ -92,9 +93,10 @@ test('packed CLI accepts only real neutral Vitest native evidence through the au
     assert.match(readFileSync(join(root, 'memory/calculator.md'), 'utf8'), /evidenceRequirement: concord\.native-reliability\/v1/u);
 
     const listed = coreJson(['test', 'list'], CaseListSchema);
-    const selected = listed.cases.find(item => item.file === 'acceptance/calculator.test.ts' && item.name === 'adds two numbers');
+    const selected = listed.cases.find(item => item.file === 'acceptance/calculator.test.ts');
     assert.ok(selected);
-    const selector = `acceptance/calculator.test.ts#${selected.id}`;
+    // Repository profile still keys its selector by the native title. CLI test run uses the marker id.
+    const selector = `acceptance/calculator.test.ts#${deriveTestReference('acceptance/calculator.test.ts', 'acceptance/calculator.test.ts', 'adds two numbers')}`;
     const commandRed = coreJson(['test', 'run', selected.id], CommandEvidenceSchema, 1);
     assert.equal(commandRed.commandOutcome, 'fail');
     assert.notEqual(commandRed.exitCode, 0);

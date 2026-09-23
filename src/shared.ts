@@ -166,8 +166,8 @@ export interface Finding { readonly code: string; readonly path: string; readonl
 export const AnnotatedCaseSchema = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(/^neref_[0-9a-f]{32}$/u)), file: Text, line: Schema.Int, name: Text,
   contract: Text, contractKind: Schema.Literals(['feature', 'use-case']), regressions: Strings,
-  status: Schema.Literals(['active', 'retired']), framework: Schema.Literals(['node:test', 'vitest', '@playwright/test']),
-  skipped: Schema.Boolean,
+  status: Schema.Literals(['active', 'retired']), framework: Schema.Literals(['node:test', 'vitest', '@playwright/test', 'marker']),
+  skipped: Schema.Boolean, named: Schema.optional(Schema.Boolean),
 });
 export type AnnotatedCase = typeof AnnotatedCaseSchema.Type;
 export interface AnnotationSnapshot {

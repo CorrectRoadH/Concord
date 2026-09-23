@@ -29,6 +29,12 @@ amendments:
       - docs/feature/project-onboarding/use-case/evolve-constitution.md
       - docs/design/onboarding-contracts/plans/compatible/governance.md
     impact: 现有项目的宪法修订无需版本号；旧文件只读兼容，首次授权修订投影为无版本历史
+  - date: 2026-09-22
+    reason: 测试关联改为源码标记，不再解析宿主测试语法
+    sources:
+      - docs/constitution.md#c-010
+      - docs/architecture.md
+    impact: 标记存在即构成测试关联；旧的按测试标题派生的 neref_ 不再视为同一身份，已有命令证据须重新取证。不改变代码声明的 AST 规则，也不把命令收据升级为原生用例通过
 ---
 
 # Concord 项目宪法
@@ -108,3 +114,12 @@ Concord 面向软件项目规定唯一事实来源、统一契约布局、显式
 项目与 Problem 已采用的证据要求是关闭结论的下限，不能通过换入口、删除配置或降级 command 证据绕过。原生与可靠性结论由 Concord 统一核验事实；adapter 负责真实观察与资源终结。政策变更及跨仓库切换必须保留历史、互斥和恢复边界。Concord 自身的 TypeScript、Effect 与 pnpm 工程约束不自动成为消费者的技术栈要求。
 
 来源：用户 2026-09-20 授权、docs/feature/neutral-project-governance/README.md、docs/design/neutral-project-governance/README.md。
+
+<a id="c-011"></a>
+## 测试关联由源码标记拥有，不解析宿主测试语法
+
+测试根中的 Concord 标记是测试关联的唯一正向来源。标记存在即表示该测试关联存在；工具不解析宿主语言的测试声明、框架绑定、回调或 skip/todo。JS/TS 仅用注释范围排除字符串和模板中的伪标记。其它文本文件接受以 `//`、`#` 或 `--` 开头的标记行。
+
+执行仍由消费者的 runner 命令负责。没有显式 `@name` 时，运行覆盖标记所在文件，不声称选中了某个原生用例。缺少逐 case 选择能力只限制选择性执行，不使标记关联失效。
+
+来源：用户 2026-09-22 授权、docs/constitution.md#c-010、docs/architecture.md。

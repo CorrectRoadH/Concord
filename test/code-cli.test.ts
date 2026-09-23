@@ -8,7 +8,7 @@ import { Effect, Schema } from 'effect';
 import { CodeDeclarationSchema } from '../dist/code.js';
 import { ProjectSchema } from '../dist/shared.js';
 import { readProjectConfig, writeProjectConfig } from './support.js';
-import { deriveTestReference } from '../dist/test-reference.js';
+import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('packed CLI traces code scopes and preserves the original fixed evidence gate', () => Effect.runPromise(Effect.sync(() => {
@@ -137,7 +137,7 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
       `// @use-case ${useCase}`, `// @regression ${problem}`,
       "test('result', () => { assert.equal(result(), 2); });", '',
     ].join('\n'));
-    const resultCase = deriveTestReference('test/result.test.mjs', 'test/result.test.mjs', 'result');
+    const resultCase = deriveTestReference('test/result.test.mjs', 'test/result.test.mjs', caseDiscriminator(useCase, 0));
     const product = (value: number) => `// @concord-unknown-label invalid\nexport function result() { return ${value}; }\n`;
     writeFileSync(join(root, 'src/result.mjs'), product(1));
     assert.equal(call(['check'], Schema.Struct({ ok: Schema.Boolean }), 1).ok, false);
