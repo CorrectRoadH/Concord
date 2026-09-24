@@ -57,6 +57,29 @@ function sendRaw(server: ViewServerHandle, requestText: string): Promise<Respons
 const parsed = (response: ResponseResult): { readonly ok: boolean; readonly value?: unknown; readonly error?: string } => JSON.parse(response.body) as { readonly ok: boolean; readonly value?: unknown; readonly error?: string };
 const jsonHeaders = { 'content-type': 'application/json' };
 
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('view writes request failures to stderr with a bounded request path and error code', async () => {
+  const { root, webRoot } = fixture();
+  let server: ViewServerHandle | undefined;
+  const logs: string[] = [];
+  const write = process.stderr.write;
+  try {
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot });
+    process.stderr.write = ((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; }) as typeof process.stderr.write;
+    const result = await send(server, '/api/missing?token=private');
+    assert.equal(result.status, 404);
+    assert.equal(parsed(result).error, 'ApiNotFound');
+    assert.equal(logs.length, 1);
+    assert.match(logs[0]!, /"path":"\/api\/missing"/u);
+    assert.match(logs[0]!, /"status":404,"code":"ApiNotFound"/u);
+    assert.doesNotMatch(logs[0]!, /private/u);
+  } finally {
+    process.stderr.write = write;
+    await server?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 async function waitFor(manager: ViewJobManager, id: string, state: readonly string[], timeoutMs = 8_000) {
   const deadline = Date.now() + timeoutMs;
   for (;;) {

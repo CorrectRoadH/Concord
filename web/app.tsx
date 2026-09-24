@@ -18,7 +18,7 @@ import { SettingsPage } from './pages/settings';
 import { GitPage } from './pages/git';
 import { FeedbackDetailPage, FeedbackNavigation, FeedbackPage } from './pages/feedback';
 import { WritingPage } from './pages/writing';
-import { ConcordApi } from './lib/api';
+import { ApiError, ConcordApi } from './lib/api';
 import { projectDocHref, projectDocPages, projectDocTitle } from './lib/project-docs';
 import { humanKind } from './lib/utils';
 import { WorkspaceProvider, useWorkspace } from './workspace';
@@ -113,17 +113,24 @@ function breadcrumb(pathname: string, search = ''): string {
 export function App() {
   const [api] = useState(() => new ConcordApi());
   const [snapshot, setSnapshot] = useState<WorkspaceSnapshot | null>(null);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<{ code: string; message: string } | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
     const controller = new AbortController();
-    setError('');
+    setError(null);
     void api.workspace(controller.signal).then(
       value => { if (!controller.signal.aborted) setSnapshot(value); },
-      cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause)); },
+      cause => { if (!controller.signal.aborted) setError({ code: cause instanceof ApiError ? cause.code : 'OperationFailed', message: cause instanceof Error ? cause.message : String(cause) }); },
     );
     return () => controller.abort();
   }, [api, attempt]);
-  if (!snapshot) return <main className="startup-page"><section className="startup-card"><div className="brand-mark">C</div><h1>{error ? '无法加载工作台' : '正在加载工作台…'}</h1>{error ? <><p role="alert">{error}</p><Button onClick={() => setAttempt(value => value + 1)}>重试</Button></> : <p role="status">正在读取项目工作区。</p>}</section></main>;
+  if (!snapshot) return <main className="startup-page"><section className="startup-card"><div className="brand-mark">C</div><h1>{error ? '无法加载工作台' : '正在加载工作台…'}</h1>{error ? <><p role="alert">{error.message}</p><Button disabled={recovering} onClick={() => setAttempt(value => value + 1)}>重试</Button>{error.code === 'RepositoryBusy' && <Button disabled={recovering} variant="outline" onClick={() => {
+    setRecovering(true);
+    void api.action({ action: 'recover' }).then(
+      () => setAttempt(value => value + 1),
+      cause => setError({ code: cause instanceof ApiError ? cause.code : 'OperationFailed', message: cause instanceof Error ? cause.message : String(cause) }),
+    ).finally(() => setRecovering(false));
+  }}>恢复中断的发布</Button>}</> : <p role="status">正在读取项目工作区。</p>}</section></main>;
   return <WorkspaceProvider initial={snapshot} api={api}><ThemeToggle /><Shell /></WorkspaceProvider>;
 }

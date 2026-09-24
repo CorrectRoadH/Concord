@@ -82,6 +82,27 @@ test('file reads recover from real lease contention, cancel on navigation, and a
     await expect(page.locator('[contenteditable="true"]').first()).toContainText('Lease content');
     await expect(readme).toHaveAttribute('data-active', 'true');
     await expect(retry).toHaveCount(0);
+
+    holder = await hold(lockPath);
+    await page.reload();
+    const recover = page.getByRole('button', { name: '恢复中断的发布' });
+    await expect(recover).toBeVisible();
+    await recover.click();
+    await expect(page.getByRole('alert')).toContainText('owner is still alive');
+    await release(holder); holder = undefined;
+    await page.getByRole('button', { name: '重试', exact: true }).click();
+    await expect(page.getByRole('link', { name: '总览', exact: true })).toBeVisible();
+
+    holder = await hold(lockPath);
+    const dead = holder;
+    const stopped = once(dead, 'close');
+    dead.kill('SIGKILL');
+    await stopped;
+    holder = undefined;
+    await page.reload();
+    await expect(recover).toBeVisible();
+    await recover.click();
+    await expect(page.getByRole('link', { name: '总览', exact: true })).toBeVisible();
   } finally {
     if (holder) await release(holder);
     await browser?.close();

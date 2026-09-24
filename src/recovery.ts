@@ -3,9 +3,17 @@
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';
-import { acquireTraceLeaseSync, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from './coordination.js';
+import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from './coordination.js';
 import { ConcordError, failure } from './shared.js';
 import { assertCurrentRuntimeFormat, discoverRoot, LocalRepository } from './storage.js';
+
+function recoveryFailure(cause: unknown): ConcordError {
+  if (cause instanceof CoordinationError) {
+    const code = cause.message.includes('busy') ? 'RepositoryBusy' : 'CoordinationFailed';
+    return new ConcordError(code, cause.message, { operation: cause.operation, phase: cause.phase, path: cause.path });
+  }
+  return failure(cause);
+}
 
 /** Dispatch is read-only. Each selected recovery rechecks its journals under its
  * own lease, so a concurrent recovery between selection and entry cannot grant
@@ -24,7 +32,7 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
       if (pending.length > 1) throw new ConcordError('RecoveryConflict', 'Multiple publication journals exist; preserve the conflicting recovery state');
       return { root, trace: pending.length === 1 && pending[0] !== journals[0] };
     } finally { releaseTraceLeaseSync(lease, 'recover-dispatch'); }
-  }, catch: failure });
+  }, catch: recoveryFailure });
   if (selected.trace) {
     // Repository code is built after the core CLI; retain the package-relative
     // runtime boundary rather than importing repository source into this build.

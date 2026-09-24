@@ -79,10 +79,13 @@ function statusFor(error: ConcordError): number {
   return 400;
 }
 
-function failed(response: ServerResponse, cause: unknown): void {
+function failed(request: IncomingMessage, response: ServerResponse, cause: unknown): void {
   const error = failure(cause);
   const value: ViewFailure = { ok: false, error: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) };
-  json(response, statusFor(error), value);
+  const status = statusFor(error);
+  const path = (request.url ?? '').split('?', 1)[0]!.slice(0, 256);
+  process.stderr.write(`Concord view error ${JSON.stringify({ method: request.method ?? 'GET', path, status, code: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }), ...(cause instanceof Error && !(cause instanceof ConcordError) ? { stack: cause.stack?.slice(0, 4096) } : {}) })}\n`);
+  if (!response.destroyed) json(response, status, value);
 }
 
 interface Authority {
@@ -320,7 +323,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         } else {
           throw new ConcordError('MethodNotAllowed', 'Only GET is available for the static application');
         }
-      } catch (cause) { if (!response.destroyed) failed(response, cause); }
+      } catch (cause) { failed(request, response, cause); }
     })();
   });
   server.requestTimeout = 15_000;
