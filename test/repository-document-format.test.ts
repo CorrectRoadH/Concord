@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
@@ -8,9 +8,14 @@ import { NodeServices } from "@effect/platform-node";
 import { Effect } from "effect";
 
 import { compileTrace } from "../dist/repository/docs/trace/compiler.js";
-import { createFeatureAt } from "../dist/repository/docs/feature-structure.js";
+import { createFeatureAt, addFeaturePageAt, setFeaturePageAt } from "../dist/repository/docs/feature-structure.js";
 import { createUseCaseAt } from "../dist/repository/docs/use-case/domain.js";
 import { decodeDesignReadme, encodeDecidedDesignReadme } from "../dist/repository/docs/design/codec.js";
+import { MemoryRepository } from '../dist/repository/memory/repository.js';
+import { FeedbackRepository } from '../dist/repository/feedback/repository.js';
+import { leafOwnerSelection, assertSameLeafSelection } from '../dist/repository/document-owners.js';
+import { traceDigest } from '../dist/repository/docs/trace/relation-mutation.js';
+import { MemoryStore, NodeMemoryStoreLive } from '../dist/repository/memory/services.js';
 
 function write(root: string, path: string, source: string): void {
   const target = join(root, path);
@@ -78,6 +83,61 @@ decision:
 }
 
 const run = <A, E>(effect: Effect.Effect<A, E, never>): Promise<A> => Effect.runPromise(effect);
+
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('advanced governance shares Unicode paths, metadata identity and historical classification', async () => {
+  const root = fixture();
+  try {
+    renameSync(join(root, 'docs/feature/migrated'), join(root, 'docs/feature/中文功能'));
+    const flow = readFileSync(join(root, 'docs/feature/中文功能/use-case/flow.md'), 'utf8').replaceAll('docs/feature/migrated', 'docs/feature/中文功能');
+    rmSync(join(root, 'docs/feature/中文功能/use-case/flow.md'));
+    write(root, 'docs/feature/中文功能/use-case/中文路径.md', flow);
+    const design = readFileSync(join(root, 'docs/design/storage/README.md'), 'utf8').replaceAll('docs/feature/migrated', 'docs/feature/中文功能');
+    write(root, 'docs/design/storage/README.md', design);
+    write(root, 'memory/design/README.md', design);
+    renameSync(join(root, 'memory/problem.md'), join(root, 'memory/中文问题.md'));
+    renameSync(join(root, 'docs/issues/issue.md'), join(root, 'docs/issues/中文观察.md'));
+    const snapshot = await run(compileTrace(root).pipe(Effect.provide(NodeServices.layer)));
+    assert.equal(snapshot.nodes.find(node => node.id === 'flow')?.path, 'docs/feature/中文功能/use-case/中文路径.md');
+    assert.deepEqual(snapshot.memory.map(owner => owner.path), ['memory/中文问题.md']);
+    assert.equal(snapshot.feedback[0]?.path, 'docs/issues/中文观察.md');
+    assert.equal(new MemoryRepository(root).ownerPath('problem'), 'memory/中文问题.md');
+    assert.equal(new FeedbackRepository({ root }).ownerPath('issue'), 'docs/issues/中文观察.md');
+    const initialMemory = new MemoryRepository(root).read('problem').metadata;
+    const receipt = await run(Effect.gen(function*() {
+      const store = yield* MemoryStore;
+      return yield* store.resolve('problem', { kind: 'not-a-bug', reason: 'Reviewed current owner' }, false);
+    }).pipe(Effect.provide(NodeMemoryStoreLive(root)), Effect.provide(NodeServices.layer)));
+    assert.equal(receipt.owner, 'memory/中文问题.md');
+    assert.equal(new MemoryRepository(root).read('problem').metadata.state, 'resolved');
+    await run(createUseCaseAt(root, { slug: '新增动作', parent: 'migrated', title: '新增动作', body: '# 新增动作\n', dryRun: false }).pipe(Effect.provide(NodeServices.layer)));
+    assert.match(readFileSync(join(root, 'docs/feature/中文功能/use-case/新增动作.md'), 'utf8'), /feature: docs\/feature\/中文功能\/README.md/u);
+    write(root, 'docs/_template/feature-design/README.md', '# <功能或候选名>\n');
+    await assert.rejects(run(createFeatureAt(root, { slug: 'migrated', title: 'Duplicate', pages: [], dryRun: false }).pipe(Effect.provide(NodeServices.layer))), /already exists/u);
+    write(root, 'docs/_template/feature-design/library.md', '# <功能或候选名> library\n');
+    const pageAdded = await run(addFeaturePageAt(root, { feature: 'migrated', page: 'library', dryRun: false }).pipe(Effect.provide(NodeServices.layer)));
+    assert.equal(pageAdded.feature.slug, 'migrated');
+    const pagePath = 'docs/feature/中文功能/library.md';
+    await run(setFeaturePageAt(root, { feature: 'migrated', page: 'library', body: '# Updated', expectedPreimageDigest: traceDigest(readFileSync(join(root, pagePath), 'utf8')), dryRun: false }).pipe(Effect.provide(NodeServices.layer)));
+    assert.equal(readFileSync(join(root, pagePath), 'utf8'), '# Updated\n');
+    const frozen = leafOwnerSelection(root, 'memory', 'problem');
+    renameSync(join(root, 'memory/中文问题.md'), join(root, 'memory/移动问题.md'));
+    assert.throws(() => assertSameLeafSelection(root, 'memory', 'problem', frozen), /changed identity, path, or content/u);
+    write(root, 'memory/重名问题.md', readFileSync(join(root, 'memory/移动问题.md'), 'utf8'));
+    assert.throws(() => new MemoryRepository(root).read('problem'), /ambiguous/u);
+    assert.equal(new MemoryRepository(root).read('memory/移动问题.md').metadata.id, 'problem');
+    const exact = leafOwnerSelection(root, 'memory', 'memory/移动问题.md');
+    write(root, 'memory/移动问题.md', readFileSync(join(root, 'memory/移动问题.md'), 'utf8').replace('id: problem', 'id: replaced'));
+    assert.throws(() => assertSameLeafSelection(root, 'memory', 'memory/移动问题.md', exact), /changed identity, path, or content/u);
+    const created = await run(Effect.gen(function*() {
+      const store = yield* MemoryStore;
+      return yield* store.create(initialMemory, '# Independent path identity\n', false);
+    }).pipe(Effect.provide(NodeMemoryStoreLive(root)), Effect.provide(NodeServices.layer)));
+    assert.equal(created.owner, 'memory/problem.md');
+    assert.throws(() => new MemoryRepository(root).read('problem'), /ambiguous/u);
+    assert.equal(new MemoryRepository(root).read('memory/problem.md').metadata.id, 'problem');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 // @use-case docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
 test("repository profile reads and writes concord.document/v1 owners", async () => {

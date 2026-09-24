@@ -328,7 +328,7 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
   const findings: Finding[] = [];
   const comments = actualLineComments(source);
   for (const comment of comments) {
-    if (!CODE_FAMILIES.has(comment.family) && !OTHER_FAMILIES.has(comment.family)) addFinding(findings, 'UnknownConcordAnnotation', input.path, `Unknown annotation family @concord-${comment.family}`, comment.line);
+    if (!CODE_FAMILIES.has(comment.family) && !OTHER_FAMILIES.has(comment.family)) addFinding(findings, 'UnknownConcordAnnotation', input.path, `Unknown annotation family @concord-${comment.family}${comment.family === 'verifies' ? '; declare test relationships with @feature or @use-case in a configured test root' : ''}`, comment.line);
     if (['file', 'code', 'begin', 'end'].includes(comment.family) && (comment.argument !== undefined || !comment.ownLine)) addFinding(findings, 'InvalidCodeAnnotation', input.path, `@concord-${comment.family} must be a standalone marker without a parameter`, comment.line);
   }
   const hasCodeMarker = comments.some(comment => CODE_FAMILIES.has(comment.family));
@@ -338,7 +338,7 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
   }
   const prepared = startMarkers(comments, input.path, findings);
   for (const comment of comments) {
-    if (comment.family === 'implements' && !prepared.consumedImplements.has(comment.pos)) addFinding(findings, 'OrphanCodeImplements', input.path, '@concord-implements is not immediately owned by a starting code marker', comment.line);
+    if (comment.family === 'implements' && !prepared.consumedImplements.has(comment.pos)) addFinding(findings, 'OrphanCodeImplements', input.path, '@concord-implements must immediately follow @concord-file, @concord-code, or @concord-begin; for test relationships use @feature or @use-case in a configured test root', comment.line);
   }
   const declarations: CodeDeclaration[] = [];
   const allFileMarkers = prepared.starts.filter(start => start.family === 'file');
@@ -446,7 +446,7 @@ function sameSources(left: readonly Source[], right: readonly Source[]): boolean
   return left.length === right.length && left.every((source, index) => source.path === right[index]?.path && source.digest === right[index]?.digest);
 }
 
-function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-code-parse/v1`; }
+function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-code-parse/v2`; }
 const codeContentCache = new ContentCache<ParsedFile>('code_parse', parserVersion(), Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), findings: Schema.Array(FindingSchema) }));
 function fileKey(repo: Repository, source: Source): string {
   return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, parser: parserVersion(), path: source.path, sourceDigest: source.digest });

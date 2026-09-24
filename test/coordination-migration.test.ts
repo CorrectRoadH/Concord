@@ -47,12 +47,12 @@ test("the shared lease also excludes a separate Node process", async (t) => {
   }
 });
 
-test("multi-file deletion journals and recovers an interrupted transaction", async (t) => {
+test("multi-file deletion journals and recovers an interrupted Unicode path without resolving an ID", async (t) => {
   const root = isolatedRepository(t);
-  writeFileSync(join(root, "docs.md"), "before\n");
+  writeFileSync(join(root, "中文文档.md"), "before\n");
   const before = traceDigest("before\n");
   await assert.rejects(
-    Effect.runPromise(mutateTraceFiles({ root, operation: "delete-fixture", changes: [{ path: "docs.md", bytes: null, expectedDigest: before }], injectFailureAfterRename: 1 })),
+    Effect.runPromise(mutateTraceFiles({ root, operation: "delete-fixture", changes: [{ path: "中文文档.md", bytes: null, expectedDigest: before }], injectFailureAfterRename: 1 })),
     /injected interruption/,
   );
   assert.equal(readFileSync(join(tracePrivateDirectorySync(root), "multi-file-publication-journal.json"), "utf8").includes('"kind":"absent"'), true);
@@ -60,7 +60,7 @@ test("multi-file deletion journals and recovers an interrupted transaction", asy
   assert.equal(recovered.status, 'trace-recovered');
   const receipt = recovered.receipt;
   assert.equal(receipt.recovered, true);
-  assert.equal(readFileSync(join(root, "docs.md"), "utf8"), "before\n");
+  assert.equal(readFileSync(join(root, "中文文档.md"), "utf8"), "before\n");
   assert.equal((await Effect.runPromise(recoverTrace(root))).recovered, false);
   const repository = new LocalRepository(root, { dryRun: true });
   assert.equal(repository.config.projectId, "coordination-test");

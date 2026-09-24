@@ -11,6 +11,7 @@ import type { FeedbackDocument } from "./codec.js";
 import type { FeedbackError } from "./errors.js";
 import { feedbackEffect, FeedbackRepository, type FeedbackCheckReceipt } from "./repository.js";
 import type { FeedbackEnvelopeV1 } from "./schema.js";
+import { leafOwnerSelection, assertSameLeafSelection } from '../document-owners.js';
 
 export interface FeedbackMutationChanges {
   readonly created?: boolean;
@@ -42,12 +43,14 @@ export const NodeFeedbackStoreLive = (root: string) => Layer.succeed(FeedbackSto
     return execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { env, encoding: 'utf8' }).trim();
   };
   const dryReceipt = (path: string, bytes: string, value: IssueMeta, changes: FeedbackMutationChanges, generation: number): FeedbackMutationReceipt => ({ format: "concord.docs-trace/multi-file-mutation/v1", transactionId: "dry-run", generationBefore: generation, generationAfter: generation, preimages: [{ path, digest: existsSync(repository.safePath(path)) ? traceDigest(readFileSync(repository.safePath(path), "utf8")) : null }], plannedDigests: [{ path, digest: traceDigest(bytes) }], committed: false, value, changes });
-  const mutate = (id: string, operation: string, dryRun: boolean, plan: (source: string | undefined, at: string, commit: string) => { readonly bytes: string; readonly value: IssueMeta; readonly changes: FeedbackMutationChanges }): Effect.Effect<FeedbackMutationReceipt, FeedbackStoreError, FileSystem.FileSystem> => {
-    const owner = repository.ownerPath(id);
+  const mutate = (id: string, operation: string, dryRun: boolean, plan: (source: string | undefined, at: string, commit: string) => { readonly bytes: string; readonly value: IssueMeta; readonly changes: FeedbackMutationChanges }): Effect.Effect<FeedbackMutationReceipt, FeedbackStoreError, FileSystem.FileSystem> => Effect.gen(function*() {
+    const frozen = yield* withTraceReadLease(root, () => feedbackEffect(operation, () => leafOwnerSelection(root, 'issue', id)));
+    const owner = frozen.path;
     let plannedValue: IssueMeta | undefined;
     let plannedChanges: FeedbackMutationChanges = {};
     let plannedBytes = ''; let generation = 0;
     const prepare = compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => feedbackEffect(operation, () => {
+      assertSameLeafSelection(root, 'issue', id, frozen);
       const path = repository.safePath(owner); const source = existsSync(path) ? readFileSync(path, "utf8") : undefined; const planned = plan(source, new Date().toISOString(), headCommit()); plannedValue = planned.value; plannedChanges = planned.changes;
       repository.validateIssue(planned.value, snapshot); plannedBytes = planned.bytes; generation = snapshot.generation;
       const refs = [...planned.value.memoryRelations.map(relation => relation.memory), ...planned.value.adoptions.current];
@@ -58,11 +61,11 @@ export const NodeFeedbackStoreLive = (root: string) => Layer.succeed(FeedbackSto
       const guards = [...new Set(refs.map(ref => ref.split('#')[0]!))].filter(ref => ref !== owner).map(ref => { const target = repository.targetSource(ref); return { path: ref, bytes: target.source, expectedDigest: traceDigest(target.source) }; });
       return [{ path: owner, bytes: planned.bytes, expectedDigest: source === undefined ? null : traceDigest(source) }, ...guards];
     })));
-    if (dryRun) return withTraceReadLease(root, () => prepare.pipe(Effect.map(() => dryReceipt(owner, plannedBytes, plannedValue!, plannedChanges, generation))));
-    return mutateTraceFiles({ root, operation, prepareUnderLease: prepare }).pipe(Effect.map((receipt) => {
+    if (dryRun) return yield* withTraceReadLease(root, () => prepare.pipe(Effect.map(() => dryReceipt(owner, plannedBytes, plannedValue!, plannedChanges, generation))));
+    return yield* mutateTraceFiles({ root, operation, prepareUnderLease: prepare }).pipe(Effect.map((receipt) => {
       return { ...receipt, value: plannedValue!, changes: plannedChanges };
     }));
-  };
+  });
   const create = (document: FeedbackDocument, dryRun: boolean) => mutate(document.metadata.id, "issue-add", dryRun, () => { const planned = repository.planCreate(document); return { bytes: planned.bytes, value: planned.metadata, changes: { created: true } }; });
   return {
     list: () => withTraceReadLease(root, () => feedbackEffect("list", () => repository.list())),

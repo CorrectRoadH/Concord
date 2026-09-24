@@ -1,4 +1,5 @@
 import { repositoryRoot } from "../../root.js";
+import { isDocumentName } from 'concord-sdlc/document-layout';
 import { designContentPaths, validateDesignContent, type DesignContentResult } from "concord-sdlc/design-content";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, resolve, sep } from "node:path";
@@ -86,7 +87,7 @@ function readText(root: string, path: string): Effect.Effect<string, DesignIoErr
 
 function selectDesign(snapshot: TraceSnapshot, selector: string): Effect.Effect<TraceNode, DesignSelectorMissing | DesignSelectorAmbiguous> {
   const matches = snapshot.nodes.filter((node) => node.kind === "design" &&
-    (node.path === selector || designSlug(node.path) === selector));
+    (node.path === selector || node.id === selector));
   if (matches.length === 0) {
     return Effect.fail(new DesignSelectorMissing({
       selector,
@@ -208,7 +209,7 @@ function prepareCreate(root: string, input: DesignCreateOptions): Effect.Effect<
     const snapshot = yield* compileTraceUnderLease(root);
     const bundle = yield* loadDesignTemplates(root);
     const target = `docs/design/${input.slug}`;
-    if (snapshot.nodes.some((node) => node.path === `${target}/README.md`) || existsSync(resolve(root, target))) {
+    if (snapshot.nodes.some((node) => node.path === `${target}/README.md` || node.kind === 'design' && node.id === input.slug) || existsSync(resolve(root, target))) {
       return yield* new DesignConflict({ operation: "create", path: target, message: "Design package already exists" });
     }
     return {
@@ -404,7 +405,7 @@ function expectedPlanSelectors(count: number): readonly string[] {
 function directoryPlanSelectors(root: string, packageRoot: string): Effect.Effect<readonly string[], DesignIoError> {
   return Effect.try({
     try: () => readdirSync(resolve(root, packageRoot, "plans"), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(entry.name))
+      .filter((entry) => entry.isDirectory() && isDocumentName(entry.name))
       .map((entry) => entry.name)
       .sort((left, right) => Number.parseInt(left.slice("plan-".length), 10) - Number.parseInt(right.slice("plan-".length), 10)),
     catch: (cause) => new DesignIoError({ operation: "scan Plans", path: packageRoot, message: designErrorMessage(cause) }),
@@ -465,7 +466,7 @@ function checkDesignPackage(
       operation: "design-check",
       ok: findings.length === 0,
       design: {
-        slug: designSlug(design.path),
+        slug: design.id ?? designSlug(design.path),
         ref: design.path,
         title: displayDesignTitle(design.title),
         state,
@@ -573,7 +574,7 @@ function prepareDecision(
         design: design.path,
         plan: plan.path,
         findings: packageCheck.findings.map((item) => `${item.code}: ${item.path}: ${item.message}`),
-        nextStep: `Fix the Design findings from pnpm run repo docs design check ${designSlug(design.path)} before deciding.`,
+        nextStep: `Fix the Design findings from pnpm run repo docs design check ${design.path} before deciding.`,
       });
     }
     const content = yield* captureDesignContent(root, design.path, planSelector(plan.path));
@@ -618,22 +619,29 @@ export function decideDesignAt(
     readonly file: DesignFileReceipt;
   }
   interface DecideChanges { readonly selectedPlan: string }
-  return mutateTraceOwner<DecideValue, DecideChanges, DesignCommandError, FileSystem.FileSystem>({
+  return Effect.gen(function*() {
+    const initial = yield* withTraceReadLease(root, () => Effect.gen(function*() {
+      const snapshot = yield* compileTraceUnderLease(root);
+      const design = yield* selectDesign(snapshot, designSelector);
+      return { path: design.path, id: design.id, digest: traceDigest(yield* readText(root, design.path)) };
+    }));
+    return yield* mutateTraceOwner<DecideValue, DecideChanges, DesignCommandError, FileSystem.FileSystem>({
     root,
     operation: "design-decide",
-    ownerPath: designSelector.startsWith("docs/design/")
-      ? designSelector
-      : `docs/design/${designSelector}/README.md`,
+    ownerPath: initial.path,
     dryRun,
-    prepareUnderLease: prepareDecision(root, designSelector, requestedPlan),
+    prepareUnderLease: Effect.gen(function*() {
+      const snapshot = yield* compileTraceUnderLease(root);
+      const design = yield* selectDesign(snapshot, designSelector);
+      if (design.path !== initial.path || design.id !== initial.id || traceDigest(yield* readText(root, design.path)) !== initial.digest) return yield* new DesignConflict({ operation: "decide", path: initial.path, message: "Design changed identity, path, or content; read it again before deciding" });
+      return yield* prepareDecision(root, initial.path, requestedPlan);
+    }),
     plan: ({ source, preparation }) => Effect.gen(function*() {
       const target = preparation.target;
       if (target === undefined || target.kind !== "design-plan") {
         return yield* new DesignConflict({ operation: "decide", path: designSelector, message: "validated direct Plan target is missing" });
       }
-      const designPath = designSelector.startsWith("docs/design/")
-        ? designSelector
-        : `docs/design/${designSelector}/README.md`;
+      const designPath = initial.path;
       if (source === undefined) return yield* new DesignConflict({ operation: "decide", path: designPath, message: "Design README disappeared" });
       const decoded = decodeDesignReadme(designPath, source);
       if (decoded.state._tag === "decided") {
@@ -660,7 +668,7 @@ export function decideDesignAt(
       return {
         bytes,
         value: {
-          slug: designSlug(designPath),
+          slug: decoded.id,
           ref: designPath,
           title: displayDesignTitle(title),
           state,
@@ -693,6 +701,7 @@ export function decideDesignAt(
     projectionDigest: mutation.value.projectionDigest,
     selectedPlan: mutation.value.state.selectedPlan,
   })));
+  });
 }
 
 export function runDesignCommandAt(

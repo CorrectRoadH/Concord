@@ -11,6 +11,8 @@ import { FeedbackContentInvalid, FeedbackFileMissing, FeedbackIoError, FeedbackR
 import { adoptFeedback, closeFeedback, linkMemory, reopenFeedback, retireFeedback } from "./state.js";
 import { FeedbackEnvelopeV1Schema } from './schema.js';
 import { traceDigest, type TraceMultiFileChange } from '../docs/trace/relation-mutation.js';
+import { leafOwners, leafOwnerSelection } from '../document-owners.js';
+import { isDocumentName, validLeafPath } from 'concord-sdlc/document-layout';
 
 export interface FeedbackRepositoryOptions { readonly root?: string }
 export interface FeedbackCheckReceipt { readonly ok: boolean; readonly checked: number; readonly findings: readonly string[] }
@@ -31,17 +33,14 @@ export class FeedbackRepository {
     }
     return join(this.#root, path);
   }
-  ownerPath(id: string): string { this.#guardId(id); return "docs/issues/" + id + ".md"; }
+  ownerPath(id: string): string { return leafOwnerSelection(this.#root, 'issue', id).path; }
   absoluteOwnerPath(id: string): string { return this.safePath(this.ownerPath(id)); }
-  #guardId(id: string): void { if (!/^[a-z0-9][a-z0-9-]*$/u.test(id)) throw new FeedbackContentInvalid({ operation: "resolve id", message: "unsafe Issue id" }); }
+  #guardId(id: string): void { if (!isDocumentName(id)) throw new FeedbackContentInvalid({ operation: "resolve id", message: "unsafe Issue id" }); }
   list(): readonly FeedbackDocument[] {
-    const dir = this.safePath('docs/issues'); if (!existsSync(dir)) return [];
-    return readdirSync(dir, { withFileTypes: true }).filter((entry) => {
-      if (entry.isSymbolicLink()) throw new FeedbackReferenceConflict({ operation: 'list', path: entry.name, message: 'symbolic links are forbidden' });
-      return entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'README.md';
-    }).map((entry) => this.read(entry.name.slice(0, -3))).sort((a, b) => a.metadata.id.localeCompare(b.metadata.id));
+    return leafOwners(this.#root, 'issue').flatMap(record => record.metadata.kind === 'issue' ? [{ metadata: record.metadata, body: record.body }] : []);
   }
   read(id: string): FeedbackDocument {
+    if (leafOwnerSelection(this.#root, 'issue', id).record === undefined) throw new FeedbackFileMissing({ operation: 'read', path: this.ownerPath(id), message: 'not found' });
     const path = this.absoluteOwnerPath(id); if (!existsSync(path)) throw new FeedbackFileMissing({ operation: "read", path: this.ownerPath(id), message: "not found" });
     try { return decodeFeedbackDocument(this.ownerPath(id), readFileSync(path, "utf8")); } catch (cause) { if (cause instanceof FeedbackContentInvalid) throw cause; throw new FeedbackIoError({ operation: "read", path: this.ownerPath(id), message: message(cause) }); }
   }
@@ -87,9 +86,8 @@ export class FeedbackRepository {
     return { ok: findings.length === 0, checked: issues.length, findings };
   }
   #readMemory(ref: string) {
-    const match = /^memory\/([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/.exec(ref);
-    if (!match?.[1]) throw new FeedbackReferenceConflict({ operation: 'memory', path: ref, message: 'expected canonical Memory path' });
-    try { return decodeMemoryDocument(ref, match[1], readFileSync(this.safePath(ref), 'utf8')).metadata; }
+    if (leafOwnerSelection(this.#root, 'memory', ref).record === undefined || !ref.startsWith('memory/')) throw new FeedbackReferenceConflict({ operation: 'memory', path: ref, message: 'expected canonical Memory path' });
+    try { return decodeMemoryDocument(ref, ref, readFileSync(this.safePath(ref), 'utf8')).metadata; }
     catch (cause) { throw new FeedbackReferenceConflict({ operation: 'memory', path: ref, message: message(cause) }); }
   }
   validateIssue(issue: IssueMeta, snapshot?: TraceSnapshot): void {
@@ -122,9 +120,8 @@ export class FeedbackRepository {
       while (cursor !== undefined) {
         if (seen.has(cursor)) fail('duplicate Issue cycle');
         seen.add(cursor);
-        const match = /^docs\/issues\/([a-z0-9]+(?:-[a-z0-9]+)*)\.md$/.exec(cursor);
-        if (!match?.[1]) fail('duplicate target must be a canonical Issue path');
-        const target = this.read(match![1]!);
+        if (!validLeafPath('docs/issues', cursor)) fail('duplicate target must be a canonical Issue path');
+        const target = this.read(cursor);
         cursor = target.metadata.closure?.kind === 'duplicate' ? target.metadata.closure.canonical : undefined;
       }
     }

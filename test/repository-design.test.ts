@@ -40,11 +40,12 @@ test('repository Design shares content gates, guards dry-run inputs, and retains
     assert.match(readFileSync(join(root, 'docs/design/storage/plans/plan-1/README.md'), 'utf8'), /## Limits/u);
     await assert.rejects(run(decideDesignAt(root, 'storage', 'plan-2', true)), /DesignDecisionIncomplete/u);
     authorDesignFixture(root, 'storage', ['plan-1', 'plan-2'], 'plan-2');
-    const decisionPath = join(root, 'docs/design/storage/DECISION.md');
+    fs.renameSync(join(root, 'docs/design/storage'), join(root, 'docs/design/中文决策'));
+    const decisionPath = join(root, 'docs/design/中文决策/DECISION.md');
     writeFileSync(decisionPath, readFileSync(decisionPath, 'utf8').replace('query the local store', 'query the `local` store'));
     assert.equal((await run(checkDesignAt(root, 'storage'))).ok, true);
-    const ownerPath = join(root, 'docs/design/storage/README.md'); const owner = readFileSync(ownerPath, 'utf8');
-    const goalsPath = join(root, 'docs/design/storage/GOALS.md'); const goals = readFileSync(goalsPath, 'utf8');
+    const ownerPath = join(root, 'docs/design/中文决策/README.md'); const owner = readFileSync(ownerPath, 'utf8');
+    const goalsPath = join(root, 'docs/design/中文决策/GOALS.md'); const goals = readFileSync(goalsPath, 'utf8');
     const originalRead = fs.readFileSync;
     let reads = 0; let driftAt = Number.POSITIVE_INFINITY;
     const spy = mock.method(fs, 'readFileSync', ((...args: Parameters<typeof readFileSync>) => {
@@ -61,6 +62,8 @@ test('repository Design shares content gates, guards dry-run inputs, and retains
       assert.equal(readFileSync(ownerPath, 'utf8'), owner);
     } finally { spy.mock.restore(); syncBuiltinESMExports(); writeFileSync(goalsPath, goals); }
     const selected = await run(decideDesignAt(root, 'storage', 'plan-2', false));
+    assert.equal(selected.design.ref, 'docs/design/中文决策/README.md');
+    assert.equal(selected.design.slug, 'storage');
     assert.deepEqual(selected.plans.map(plan => plan.selector), ['plan-1', 'plan-2']);
     const next = readFileSync(ownerPath, 'utf8');
     assert.match(next, /\[plan-1\]\(plans\/plan-1\/README.md\)/u);

@@ -1,16 +1,10 @@
 import { Effect, Result, Schema, SchemaIssue } from "effect";
+import { DocumentName } from 'concord-sdlc/model';
 
 import { UseCaseInputInvalid } from "./errors.js";
 import type { UseCaseCreateInput } from "./model.js";
 
-const SingleSegmentSlug = Schema.String.pipe(
-  Schema.check(
-    Schema.isTrimmed(),
-    Schema.isPattern(/^[\p{Letter}\p{Number}]+(?:-[\p{Letter}\p{Number}]+)*$/u, {
-      message: "must be one non-empty path segment made of Unicode letters or numbers separated by single hyphens",
-    }),
-  ),
-);
+const SingleSegmentSlug = DocumentName;
 const NonEmptyTrimmedString = Schema.String.check(Schema.isTrimmed(), Schema.isMinLength(1));
 const ParentSelector = NonEmptyTrimmedString.check(Schema.makeFilter((value: string) =>
   !value.startsWith("/") &&

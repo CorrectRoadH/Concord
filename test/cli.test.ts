@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
@@ -524,9 +524,10 @@ test('packed scoped owner commands use path, JSON body, null creation CAS, and s
 test('packed CLI creates and resolves Unicode Use Cases and supporting pages', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('unicode-names');
  call(root, ['feature', 'create', 'npc', '--title', 'NPC'], Ack);
+ renameSync(join(root, 'docs/feature/npc'), join(root, 'docs/feature/角色目录'));
  const paths = Schema.Struct({ changedPaths: Schema.Array(Schema.String) });
  const useCase = ['use-case', 'create', '扩展NPC动作', '--feature', 'npc', '--title', '扩展 NPC 动作'];
- const expectedPath = 'docs/feature/npc/use-case/扩展NPC动作.md';
+ const expectedPath = 'docs/feature/角色目录/use-case/扩展NPC动作.md';
  assert.deepEqual(call(root, ['--dry-run', ...useCase], paths).changedPaths, [expectedPath]);
  assert.equal(existsSync(join(root, expectedPath)), false);
  call(root, useCase, Ack);
@@ -541,6 +542,17 @@ test('packed CLI creates and resolves Unicode Use Cases and supporting pages', (
  write(root, 'test/unicode.test.ts', `// @use-case ${expectedPath}\n// @name 中文用例\n`);
  const trace = call(root, ['trace', 'show', expectedPath], TraceOutput);
  assert.equal(trace.tests.length, 1);
+ call(root, ['use-case', 'create', 'internal-id', '--feature', 'npc', '--title', '内部身份与文件名独立'], Ack);
+ const namedPath = 'docs/feature/角色目录/use-case/中文文件名.md';
+ renameSync(join(root, 'docs/feature/角色目录/use-case/internal-id.md'), join(root, namedPath));
+ assert.equal(call(root, ['use-case', 'show', 'internal-id'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) })).document.path, namedPath);
+ write(root, 'test/named.test.ts', `// @use-case ${namedPath}\n`);
+ assert.equal(call(root, ['check'], CheckOutput).ok, true);
+ assert.equal(call(root, ['trace', 'check'], CheckOutput).ok, true);
+ assert.equal(call(root, ['trace', 'show', namedPath], TraceOutput).tests.length, 1);
+ call(root, ['trace', 'gaps'], Ack);
+ renameSync(join(root, namedPath), join(root, 'docs/feature/角色目录/中文文件名.md'));
+ assert.equal(call(root, ['check'], CheckOutput, '', 1).ok, false);
  assert.equal(call(root, ['feature', 'page', 'add', 'npc', '../越界'], ErrorOutput, '', 1).error, 'InvalidPage');
  assert.equal(call(root, ['use-case', 'create', '坏/名称', '--feature', 'npc', '--title', '坏名称'], ErrorOutput, '', 1).error, 'InvalidData');
 })));

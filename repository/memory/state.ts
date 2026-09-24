@@ -28,10 +28,10 @@ export function reopenProblem(memory: MemoryMeta, reason: string, at: string, co
   catch (cause) { return conflict("reopen", cause instanceof Error ? cause.message : String(cause)); }
 }
 
-export function supersedeMemory(memory: MemoryMeta, replacement: MemoryMeta, replacementRef: string, reason: string, at: string, commit?: string): Result.Result<MemoryMeta, MemoryReferenceConflict> {
+export function supersedeMemory(memory: MemoryMeta, replacement: MemoryMeta, replacementRef: string, reason: string, at: string, commit?: string, sourceRef?: string): Result.Result<MemoryMeta, MemoryReferenceConflict> {
   const sourceEligible = memory.memoryKind === "problem" ? memory.state === "open" || memory.state === "resolved" : memory.state === "current";
   const replacementEligible = replacement.memoryKind === "problem" ? replacement.state === "open" || replacement.state === "resolved" : replacement.state === "current";
-  if (memory.id === replacement.id || replacement.memoryKind !== memory.memoryKind || !sourceEligible || !replacementEligible) return conflict("supersede", "supersede requires a same-kind active replacement and source");
+  if ((sourceRef === undefined ? memory.id === replacement.id : sourceRef === replacementRef) || replacement.memoryKind !== memory.memoryKind || !sourceEligible || !replacementEligible) return conflict("supersede", "supersede requires a same-kind active replacement and source");
   const history = [...memory.history, ...memory.promotions.map((ref) => ({ action: "retire-promotion", at, reason, ...(commit === undefined ? {} : { commit }), ref })), { action: "supersede", at, reason, ...(commit === undefined ? {} : { commit }), ref: replacementRef, ...(memory.resolution === undefined ? {} : { resolution: memory.resolution }) }];
   const { resolution: _resolution, ...withoutResolution } = memory;
   return Result.succeed({ ...withoutResolution, state: "superseded", supersededBy: replacementRef, promotions: [], history });

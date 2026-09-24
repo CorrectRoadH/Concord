@@ -5,6 +5,7 @@ import {
   GitBranch, Home, Layers3, Map, Menu, MessageSquareText, PanelTop, Search, Settings, Shapes, SpellCheck, X,
 } from 'lucide-react';
 import * as stylex from '@stylexjs/stylex';
+import { documentHref } from './lib/document-routing';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigationScroll } from './hooks/use-navigation-scroll';
 import { Link, Navigate, Route, Routes, useBlocker, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -60,8 +61,8 @@ function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(valu
   const { snapshot } = useWorkspace(); const navigate = useNavigate(); const [query, setQuery] = useState('');
   const results = useMemo(() => {
     const q = query.trim().toLocaleLowerCase(); if (!q) return [];
-    const contractHref = (reference: string, tab: string) => { const path = reference.split('#')[0]; const ownerPath = snapshot.pages.find(page => page.path === path)?.documentPath ?? path; const owner = snapshot.documents.find(doc => doc.path === ownerPath); return owner ? `${documentHref(owner)}?tab=${tab}` : '/features'; };
-    const documents = snapshot.documents.filter(doc => `${doc.metadata.title} ${doc.metadata.id} ${doc.path} ${doc.body}`.toLocaleLowerCase().includes(q)).map(doc => ({ key: doc.path, title: doc.metadata.title, detail: `${humanKind(doc.metadata.kind)} · ${doc.path}`, href: documentHref(doc) }));
+    const contractHref = (reference: string, tab: string) => { const path = reference.split('#')[0]; const ownerPath = snapshot.pages.find(page => page.path === path)?.documentPath ?? path; const owner = snapshot.documents.find(doc => doc.path === ownerPath); return owner ? `${documentHref(owner, snapshot.documents)}?tab=${tab}` : '/features'; };
+    const documents = snapshot.documents.filter(doc => `${doc.metadata.title} ${doc.metadata.id} ${doc.path} ${doc.body}`.toLocaleLowerCase().includes(q)).map(doc => ({ key: doc.path, title: doc.metadata.title, detail: `${humanKind(doc.metadata.kind)} · ${doc.path}`, href: documentHref(doc, snapshot.documents) }));
     const projectDocs = projectDocPages(snapshot).filter(page => `${projectDocTitle(page)} ${page.path} ${page.body}`.toLocaleLowerCase().includes(q)).map(page => ({ key: page.path, title: projectDocTitle(page), detail: `文档 · ${page.path}`, href: projectDocHref(page.path) }));
     const cases = snapshot.cases.filter(item => `${item.id} ${item.name} ${item.file} ${item.contract}`.toLocaleLowerCase().includes(q)).map(item => ({ key: `case:${item.id}`, title: item.name, detail: `测试 · ${item.id}`, href: contractHref(item.contract, 'testing') }));
     const codes = snapshot.codes.filter(item => `${item.id} ${item.file} ${item.symbol ?? ''} ${item.contracts.join(' ')}`.toLocaleLowerCase().includes(q)).map(item => ({ key: `code:${item.id}`, title: item.symbol ?? `${item.file}:${item.line}`, detail: `实现 · ${item.file}:${item.line}`, href: contractHref(item.contracts[0] ?? '', 'implementation') }));
@@ -69,17 +70,6 @@ function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(valu
   }, [query, snapshot]);
   const go = (href: string) => { onOpenChange(false); setQuery(''); navigate(href); };
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="search-dialog"><DialogHeader><DialogTitle>全局搜索</DialogTitle><DialogDescription>搜索项目文档、契约、Feature 内的 Use Case、测试与实现声明。</DialogDescription></DialogHeader><div className="search-box"><Search size={18} /><Input aria-label="搜索工作区" autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="名称、ID、路径或正文…" /></div><div className="search-results">{query && results.length === 0 && <p className="muted">没有匹配内容。</p>}{results.map(item => <button key={item.key} onClick={() => go(item.href)}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div></DialogContent></Dialog>;
-}
-
-function documentHref(doc: WorkspaceSnapshot['documents'][number]): string {
-  const kind = doc.metadata.kind;
-  if (kind === 'use-case') {
-    const featureRef = doc.metadata.feature;
-    const featureId = featureRef.split('/').filter(Boolean).at(-2) ?? featureRef;
-    return `/features/${encodeURIComponent(featureId)}/use-cases/${encodeURIComponent(doc.metadata.id)}`;
-  }
-  const section: Record<string, string> = { feature: 'features', engineering: 'engineering', roadmap: 'roadmap', design: 'design', research: 'research', memory: 'memory', issue: 'feedback' };
-  return `/${section[kind] ?? 'features'}/${encodeURIComponent(doc.metadata.id)}`;
 }
 
 function LegacyIssueRedirect() {

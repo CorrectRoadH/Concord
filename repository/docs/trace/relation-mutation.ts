@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { validPackagePath } from 'concord-sdlc/document-layout';
 import { createHash, randomUUID } from "node:crypto";
 import {
   closeSync,
@@ -491,8 +492,8 @@ function validateJournal(root: string, directory: string, input: unknown): Publi
       /^feedback\/\.stage-[0-9a-f-]{36}$/u.test(journal.stage) &&
       /^feedback\/(?!\.)[^/]+$/u.test(journal.target);
     const docsDirectory = journal.publication === "new-docs-directory" &&
-      /^docs\/design\/\.stage-[0-9a-f-]{36}$/u.test(journal.stage) &&
-      /^docs\/design\/[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(journal.target);
+      /^docs\/(?:design|feature)\/\.stage-[0-9a-f-]{36}$/u.test(journal.stage) &&
+      (validPackagePath('design', `${journal.target}/README.md`) || validPackagePath('feature', `${journal.target}/README.md`));
     if ((!feedbackDirectory && !docsDirectory) || journal.owner !== `${journal.target}/README.md` ||
       dirname(stage) !== dirname(target)) {
       throw new TraceRecoveryConflict({ path: journalPath(directory), message: "directory publication paths are invalid" });

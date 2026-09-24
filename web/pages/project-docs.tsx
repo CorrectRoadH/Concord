@@ -57,7 +57,7 @@ export function ProjectDocsPage() {
     const owner = snapshot.documents.find(item => item.path === (targetFile?.documentPath ?? targetDocument?.path));
     if (!owner) return false;
     const query = target.path === owner.path ? '' : `?file=${encodeURIComponent(target.path)}`;
-    navigate(`${documentHref(owner)}${query}${target.hash}`);
+    navigate(`${documentHref(owner, snapshot.documents)}${query}${target.hash}`);
     return true;
   };
 

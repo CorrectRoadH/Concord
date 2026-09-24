@@ -4,6 +4,9 @@ import { join, posix, relative, sep } from "node:path";
 import { Effect, Result, Schema, SchemaIssue } from "effect";
 import { parse } from "yaml";
 import { DocumentSchema } from 'concord-sdlc/model';
+import type { DocumentRecord } from 'concord-sdlc/model';
+import { decodeDocumentSource } from 'concord-sdlc/document-codec';
+import { documentDisposition, documentPlacementError, validPackagePath, validDesignPlanPath } from 'concord-sdlc/document-layout';
 
 import { decodeFeedbackDocument } from "../../feedback/codec.js";
 import { decodeMemoryDocument } from "../../memory/codec.js";
@@ -72,90 +75,43 @@ function parseFrontmatter(path: string, text: string): { readonly value: unknown
   }
 }
 
-function decodeNode(path: string, text: string): TraceNode | undefined {
-  const parsed = parseFrontmatter(path, text);
-  if (parsed === undefined) return undefined;
-  if (
-    typeof parsed.value !== "object" ||
-    parsed.value === null ||
-    !("format" in parsed.value) ||
-    parsed.value.format !== "concord.document/v1"
-  ) return undefined;
-  const decoded = Schema.decodeUnknownResult(DocumentSchema, { errors: "all", onExcessProperty: "error" })(parsed.value);
-  if (Result.isFailure(decoded)) {
-    throw new TraceFormatError({
-      path,
-      subject: "frontmatter",
-      message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue),
-    });
-  }
-  const metadata = decoded.success;
+function decodeNode(record: DocumentRecord, owners: readonly DocumentRecord[]): TraceNode | undefined {
+  const { path, metadata } = record;
   if (metadata.kind === 'research' || metadata.kind === 'issue' || metadata.kind === 'memory') return undefined;
-  const expectedPath = (() => {
-    switch (metadata.kind) {
-      case "feature": return `docs/feature/${metadata.id}/README.md`;
-      case "roadmap": return `docs/roadmap/${metadata.id}/README.md`;
-      case "engineering": return `docs/engineering/${metadata.id}/README.md`;
-      case "design": return `docs/design/${metadata.id}/README.md`;
-      case "use-case": {
-        const feature = referenceParts(metadata.feature);
-        if (feature.anchor !== undefined || !/^docs\/feature\/[a-z0-9]+(?:-[a-z0-9]+)*\/README\.md$/u.test(feature.path)) {
-          throw new TraceFormatError({ path, subject: "feature", message: "Use Case feature must be an exact canonical Feature README path" });
-        }
-        return `${feature.path.slice(0, -"README.md".length)}use-case/${metadata.id}.md`;
-      }
-    }
-  })();
-  if (expectedPath !== path) throw new TraceFormatError({ path, subject: "placement", message: `canonical owner path is ${expectedPath}` });
+  const features = metadata.kind === 'use-case' ? owners.filter(owner => owner.metadata.kind === 'feature' && owner.path === metadata.feature) : [];
+  const featurePath = features.length === 1 ? features[0]!.path : undefined;
+  const placement = documentPlacementError(metadata.kind, path, featurePath);
+  if (placement !== undefined) throw new TraceFormatError({ path, subject: 'placement', message: placement });
   if (metadata.kind === "design" && metadata.decision !== undefined && !metadata.alternatives.includes(metadata.decision.selected)) {
     throw new TraceFormatError({ path, subject: "decision", message: "decision.selected must be one declared alternative" });
   }
   const relations: Record<string, readonly string[]> = {};
   if (metadata.kind === "feature" && metadata.origin !== undefined) relations.buildsOn = [metadata.origin];
-  if (metadata.kind === "use-case") relations.composes = [metadata.feature];
+  if (metadata.kind === "use-case") relations.composes = [featurePath!];
   if (metadata.kind === "design" && metadata.decision !== undefined) {
     relations.selectedPlan = [`${posix.dirname(path)}/plans/${metadata.decision.selected}/README.md`];
     if (metadata.decision.targets.length > 0) relations.decides = [...metadata.decision.targets].sort();
   }
   return {
     kind: metadata.kind,
+    id: metadata.id,
     path,
     title: metadata.title,
     relations,
   };
 }
 
-function validUseCasePlacement(path: string): boolean {
-  const segments = path.split("/");
-  const marker = segments.indexOf("use-case", 2);
-  if (marker < 0) return false;
-  const suffix = segments.slice(marker + 1);
-  const filename = suffix.at(-1);
-  if (filename === undefined || !filename.endsWith(".md")) return false;
-  if (filename === "README.md" && suffix.length < 2) return false;
-  if (segments[0] === "docs" && segments[1] === "feature") {
-    if (marker === 2) return filename === "README.md" && suffix.length >= 2;
-    return marker >= 3;
-  }
-  if (segments[0] === "docs" && segments[1] === "roadmap") return marker >= 3;
-    return segments[0] === "docs" && segments[1] === "design" &&
-    segments[2] !== undefined && segments[3] === "plans" && marker === 5;
-}
-
 function validNodePlacement(node: TraceNode): boolean {
   switch (node.kind) {
     case "feature":
-      return /^docs\/feature\/(?!README\.md$)(?!use-case(?:\/|$))(?!.*\/use-case\/).+\/README\.md$/u.test(node.path);
     case "roadmap":
-      return /^docs\/roadmap\/(?!README\.md$)(?!use-case(?:\/|$))(?!.*\/use-case\/).+\/README\.md$/u.test(node.path);
     case "engineering":
-      return /^docs\/engineering\/(?!README\.md$)(?!_template(?:\/|$)).+\/README\.md$/u.test(node.path);
     case "design":
-      return /^docs\/design\/[^/]+\/README\.md$/u.test(node.path);
+      return validPackagePath(node.kind, node.path);
     case "design-plan":
-      return /^docs\/design\/[^/]+\/plans\/[a-z0-9]+(?:-[a-z0-9]+)*\/README\.md$/u.test(node.path);
+      return validDesignPlanPath(node.path);
     case "use-case":
-      return validUseCasePlacement(node.path);
+      return documentPlacementError('use-case', node.path, node.relations.composes?.[0]) === undefined;
   }
 }
 
@@ -491,7 +447,7 @@ function traceInputPaths(root: string, paths: readonly string[], config: Reposit
   return sorted(paths.filter((path) => {
     const file = slash(relative(root, path));
     if (/^docs\/.*\.md$/u.test(file)) return true;
-    if (/^memory\/(?!INDEX\.md$).*\.md$/u.test(file)) return true;
+    if (/^memory\/.*\.md$/u.test(file)) return true;
     if (file === config.historyPath) return true;
     return /\.(?:[cm]?[jt]sx?)$/u.test(file) && config.suites.some(suite => inDirectory(file, suite.root));
   }), (path) => slash(relative(root, path)));
@@ -582,10 +538,23 @@ function compileTraceAtGeneration(
       Effect.map((source) => [slash(relative(root, path)), source] as const),
     ));
     const documentIndex = new Map(documentSources);
-    const nodeValues = yield* Effect.forEach(
+    const ownerValues = yield* Effect.forEach(
       documentSources,
-      ([path, source]) => pure(path, "frontmatter", () => decodeNode(path, source)),
+      ([path, source]) => pure(path, "frontmatter", () => decodeDocumentSource(path, source)),
     );
+    const owners = ownerValues.filter((owner): owner is DocumentRecord => owner !== undefined && documentDisposition(owner.metadata.kind, owner.path, ['memory']) === 'current');
+    const identities = new Set<string>();
+    for (const owner of owners) {
+      if (owner.metadata.kind === 'memory') continue;
+      if (owner.metadata.kind !== 'use-case') {
+        const placement = documentPlacementError(owner.metadata.kind, owner.path);
+        if (placement !== undefined) return yield* new TraceFormatError({ path: owner.path, subject: 'placement', message: placement });
+      }
+      const identity = `${owner.metadata.kind}:${owner.metadata.id}`;
+      if (identities.has(identity)) return yield* new TraceFormatError({ path: owner.path, subject: 'identity', message: `${identity} is not unique` });
+      identities.add(identity);
+    }
+    const nodeValues = yield* Effect.forEach(owners, owner => pure(owner.path, 'placement', () => decodeNode(owner, owners)));
     const parsedNodes = nodeValues.filter((item): item is TraceNode => item !== undefined);
     const nodes = sorted(
       [...parsedNodes, ...deriveDesignPlans(parsedNodes, documentSources)],
@@ -690,13 +659,13 @@ function compileTraceAtGeneration(
       knownCaseIds.set(entry.event.caseId, historyPath);
     }
 
-    const memoryIndex = join(root, "memory", "INDEX.md");
     const memoryFiles = all.filter((path) =>
-      path.startsWith(join(root, "memory") + sep) && path.endsWith(".md") && path !== memoryIndex && path !== join(root, 'memory', 'README.md')
+      path.startsWith(join(root, "memory") + sep) && path.endsWith(".md")
     );
-    const memorySources = yield* Effect.forEach(memoryFiles, (path) => read(path).pipe(
+    const allMemorySources = yield* Effect.forEach(memoryFiles, (path) => read(path).pipe(
       Effect.map((source) => [slash(relative(root, path)), source] as const),
     ));
+    const memorySources = yield* pure('memory', 'classification', () => allMemorySources.filter(([path, source]) => decodeDocumentSource(path, source)?.metadata.kind === 'memory'));
     const memorySourceIndex = new Map(memorySources);
     const memory = yield* Effect.forEach(memorySources, ([relativePath, source]) => pure(
       relativePath,
@@ -733,9 +702,7 @@ function compileTraceAtGeneration(
       () => validateRegressions(tests, memory, memorySourceIndex),
     );
 
-    const feedbackFiles = all.filter((path) =>
-      /^docs\/issues\/(?!\.|README\.md$)[^/]+\.md$/u.test(slash(relative(root, path)))
-    );
+    const feedbackFiles = owners.filter(owner => owner.metadata.kind === 'issue').map(owner => join(root, owner.path));
     const feedback = yield* Effect.forEach(feedbackFiles, (path) => read(path).pipe(
       Effect.flatMap((source) => {
         const relativePath = slash(relative(root, path));

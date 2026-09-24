@@ -16,6 +16,8 @@ test('rejects expired tokens', () => {})
 
 指向整个 Feature 时改用 `// @feature docs/feature/login/README.md`，每个测试只选择一个契约目标。
 
+测试关联没有 `@concord-verifies` 标记。`@concord-implements` 声明实现归属，必须紧随 `@concord-file`、`@concord-code` 或 `@concord-begin`；不能用它代替测试关联。测试文件也可以显式声明实现归属，但只有测试根中的 `@feature` / `@use-case` 才建立测试关系。目标路径使用 owner 的实际文件名，中文名称与内部 ID 可以不同。
+
 不要另建测试关系 JSON。Git 保存测试演进。缺值、一块标记上的重复契约、以及只有 `@regression` / `@status` / `@name` 的块会形成 finding；不认识的测试写法不是 finding。退役关系使用 `// @status retired`。Repository profile 的注释解析是另一套规则，不由本页的 CLI 扫描代替。先检查并发现 case：
 
 ```sh

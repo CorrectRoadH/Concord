@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -19,10 +19,11 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     initialize(repo, false, { testRoots: [] });
     const body = '# Navigation\n\n' + 'A paragraph for restoring the reading position.\n\n'.repeat(60);
     createDocument(repo, 'feature', { id: 'navigation', title: 'Navigation', body });
+    renameSync(join(root, 'docs/feature/navigation'), join(root, 'docs/feature/中文导航'));
     createDocument(repo, 'use-case', { id: 'history', title: 'History', feature: 'navigation', body });
   } finally { repo.close(); }
   mkdirSync(join(root, 'src'));
-  writeFileSync(join(root, 'src/navigation.ts'), '// @concord-file\n// @concord-implements docs/feature/navigation/use-case/history.md\nexport const navigation = true;\n');
+  writeFileSync(join(root, 'src/navigation.ts'), '// @concord-file\n// @concord-implements docs/feature/中文导航/use-case/history.md\nexport const navigation = true;\n');
   writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'] });
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
@@ -50,9 +51,9 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await page.getByRole('tab', { name: '实现', exact: true }).click();
     release();
     await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active', { timeout: 15000 }).catch(async cause => {
-      throw new Error(`Navigation failed at ${page.url()}: ${await page.locator('.form-error').allTextContents()}; ${errors}; ${await page.getByLabel('文档标题', { exact: true }).inputValue()}; ${readFileSync(join(root, 'docs/feature/navigation/README.md'), 'utf8')}`, { cause });
+      throw new Error(`Navigation failed at ${page.url()}: ${await page.locator('.form-error').allTextContents()}; ${errors}; ${await page.getByLabel('文档标题', { exact: true }).inputValue()}; ${readFileSync(join(root, 'docs/feature/中文导航/README.md'), 'utf8')}`, { cause });
     });
-    assert.match(readFileSync(join(root, 'docs/feature/navigation/README.md'), 'utf8'), /title: Latest revision/);
+    assert.match(readFileSync(join(root, 'docs/feature/中文导航/README.md'), 'utf8'), /title: Latest revision/);
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'implementation');
     await page.unroute('**/api/action');
 

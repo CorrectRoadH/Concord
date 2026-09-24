@@ -5,9 +5,10 @@ import { randomUUID } from "node:crypto";
 import * as FileSystem from "effect/FileSystem";
 import { Data, Effect } from "effect";
 import { stringify } from "yaml";
+import { isDocumentName, defaultDocumentPath } from 'concord-sdlc/document-layout';
 
 import { compileTraceUnderLease } from "./trace/compiler.js";
-import { mutateTraceOwner, traceDigest, type TraceDirectoryManifestEntry, type TraceMutationPreparation } from "./trace/relation-mutation.js";
+import { mutateTraceOwner, withTraceReadLease, traceDigest, type TraceDirectoryManifestEntry, type TraceMutationPreparation } from "./trace/relation-mutation.js";
 
 const PAGES = ["library", "cli", "architecture", "lifecycle", "use-case"] as const;
 type FeaturePage = typeof PAGES[number];
@@ -42,9 +43,9 @@ const slash = (path: string) => path.split(sep).join("/");
 const fail = (operation: FeatureStructureError["operation"], path: string, message: string) =>
   new FeatureStructureError({ operation, path, message });
 function slug(value: string, operation: FeatureStructureError["operation"]): Effect.Effect<string, FeatureStructureError> {
-  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(value)
+  return isDocumentName(value)
     ? Effect.succeed(value)
-    : Effect.fail(fail(operation, value, "slug must contain lowercase letters, digits, and single hyphens"));
+    : Effect.fail(fail(operation, value, "name must contain Unicode letters, marks, digits, and single hyphens"));
 }
 function page(value: string, operation: FeatureStructureError["operation"]): Effect.Effect<FeaturePage, FeatureStructureError> {
   return (PAGES as readonly string[]).includes(value)
@@ -94,9 +95,9 @@ function stage(root: string, slug: string, files: readonly { readonly path: stri
 function removeStage(root: string, stagePath: string): Effect.Effect<void, FeatureStructureError> {
   return Effect.try({ try: () => rmSync(resolve(root, stagePath), { recursive: true, force: true }), catch: (cause) => fail("create", stagePath, cause instanceof Error ? cause.message : String(cause)) });
 }
-function featureFromSnapshot(snapshot: { readonly nodes: readonly { readonly kind: string; readonly path: string; readonly title: string; readonly relations: Readonly<Record<string, readonly string[]>> }[] }, selector: string, operation: FeatureStructureError["operation"]) {
-  const node = snapshot.nodes.find((candidate) => candidate.kind === "feature" && (candidate.path === selector || candidate.path === `docs/feature/${selector}/README.md`));
-  return node === undefined ? Effect.fail(fail(operation, selector, "Feature must already exist; use an exact Feature slug or canonical README path")) : Effect.succeed(node);
+function featureFromSnapshot(snapshot: { readonly nodes: readonly { readonly id?: string; readonly kind: string; readonly path: string; readonly title: string; readonly relations: Readonly<Record<string, readonly string[]>> }[] }, selector: string, operation: FeatureStructureError["operation"]) {
+  const node = snapshot.nodes.find((candidate) => candidate.kind === "feature" && (candidate.path === selector || candidate.id === selector));
+  return node === undefined ? Effect.fail(fail(operation, selector, "Feature must already exist; use an exact Feature ID or canonical README path")) : Effect.succeed(node);
 }
 function authorAndManaged(source: string, operation: FeatureStructureError["operation"], path: string): Effect.Effect<{ readonly prefix: string; readonly managed: string }, FeatureStructureError> {
   const start = source.indexOf(managedStart); const end = source.indexOf(managedEnd);
@@ -119,11 +120,11 @@ export function createFeatureAt(root: string, input: { readonly slug: string; re
       Effect.map((source) => ({ path: PAGE_FILES[item], source, bytes: render(source, input.title) })),
     )));
     const files = [{ path: "README.md", bytes: render(rootSource, input.title, true, value, createdAt) }, ...optional];
-    const ownerPath = `docs/feature/${value}/README.md`;
+    const ownerPath = defaultDocumentPath('feature', value);
     const execute = (publication?: { readonly stagePath: string; readonly targetPath: string }) => mutateTraceOwner({ root, operation: "feature-create", ownerPath, dryRun: input.dryRun,
       prepareUnderLease: Effect.gen(function*() {
         const snapshot = yield* compileTraceUnderLease(root);
-        if (snapshot.nodes.some((node) => node.path === ownerPath)) return yield* fail("create", ownerPath, "Feature package already exists");
+        if (snapshot.nodes.some((node) => node.path === ownerPath || node.kind === 'feature' && node.id === value)) return yield* fail("create", ownerPath, "Feature package or ID already exists");
         return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: [
           { path: resolve(root, `${TEMPLATE}/README.md`), digest: traceDigest(rootSource) },
           ...selected.map((item, index) => ({ path: resolve(root, `${TEMPLATE}/${PAGE_FILES[item]}`), digest: traceDigest(optional[index]!.source) })),
@@ -142,27 +143,33 @@ export function addFeaturePageAt(root: string, input: { readonly feature: string
     const requested = yield* page(input.page, "page-add"); const templateSource = yield* template(root, PAGE_FILES[requested], "page-add");
     let selected: { readonly path: string; readonly title: string } | undefined;
     const prepare = Effect.gen(function*() {
-      const snapshot = yield* compileTraceUnderLease(root); const feature = yield* featureFromSnapshot(snapshot, input.feature, "page-add"); selected = feature;
+      const snapshot = yield* compileTraceUnderLease(root); const feature = yield* featureFromSnapshot(snapshot, input.feature, "page-add"); if (feature.path !== initial.path || feature.id !== initial.id || traceDigest(yield* read(root, feature.path, "page-add")) !== initial.digest) return yield* fail("page-add", initial.path, "Feature changed identity, path, or content; read it again before updating"); selected = feature;
       return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: [{ path: resolve(root, feature.path), digest: traceDigest(yield* read(root, feature.path, "page-add")) }] } satisfies TraceMutationPreparation;
     });
-    const initial = yield* compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => featureFromSnapshot(snapshot, input.feature, "page-add")));
+    const initial = yield* withTraceReadLease(root, () => Effect.gen(function*() {
+      const feature = yield* compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => featureFromSnapshot(snapshot, input.feature, "page-add")));
+      return { ...feature, digest: traceDigest(yield* read(root, feature.path, "page-add")) };
+    }));
     const ownerPath = `${dirname(initial.path)}/${PAGE_FILES[requested]}`;
     const mutation = yield* mutateTraceOwner({ root, operation: "feature-page-add", ownerPath, dryRun: input.dryRun, prepareUnderLease: prepare,
       plan: ({ source }) => source === undefined
         ? Effect.succeed({ bytes: render(templateSource, selected?.title ?? initial.title), value: undefined, changes: { added: requested } })
         : Effect.fail(fail("page-add", ownerPath, "page already exists")),
     });
-    return { format: "concord.docs-feature/structure-v1", operation: "feature-page-add", dryRun: input.dryRun, feature: { slug: dirname(initial.path).split("/").at(-1)!, ref: initial.path, title: initial.title }, page: requested, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? [ownerPath] : [] };
+    return { format: "concord.docs-feature/structure-v1", operation: "feature-page-add", dryRun: input.dryRun, feature: { slug: initial.id ?? dirname(initial.path).split("/").at(-1)!, ref: initial.path, title: initial.title }, page: requested, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? [ownerPath] : [] };
   });
 }
 
 export function setFeaturePageAt(root: string, input: { readonly feature: string; readonly page: string; readonly body: string; readonly expectedPreimageDigest: string; readonly dryRun: boolean }): Effect.Effect<FeatureStructureReceipt, FeatureStructureError | import("./trace/errors.js").TraceError | import("./trace/relation-mutation.js").TraceCoordinationError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const requested = input.page === "overview" ? "overview" : yield* page(input.page, "page-set");
-    const initial = yield* compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => featureFromSnapshot(snapshot, input.feature, "page-set")));
+    const initial = yield* withTraceReadLease(root, () => Effect.gen(function*() {
+      const feature = yield* compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => featureFromSnapshot(snapshot, input.feature, "page-set")));
+      return { ...feature, digest: traceDigest(yield* read(root, feature.path, "page-set")) };
+    }));
     const ownerPath = requested === "overview" ? initial.path : `${dirname(initial.path)}/${PAGE_FILES[requested]}`;
     const mutation = yield* mutateTraceOwner({ root, operation: "feature-page-set", ownerPath, dryRun: input.dryRun,
-      prepareUnderLease: Effect.gen(function*() { const snapshot = yield* compileTraceUnderLease(root); const feature = yield* featureFromSnapshot(snapshot, input.feature, "page-set"); return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: [{ path: resolve(root, feature.path), digest: traceDigest(yield* read(root, feature.path, "page-set")) }] }; }),
+      prepareUnderLease: Effect.gen(function*() { const snapshot = yield* compileTraceUnderLease(root); const feature = yield* featureFromSnapshot(snapshot, input.feature, "page-set"); if (feature.path !== initial.path || feature.id !== initial.id || traceDigest(yield* read(root, feature.path, "page-set")) !== initial.digest) return yield* fail("page-set", initial.path, "Feature changed identity, path, or content; read it again before updating"); return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: [{ path: resolve(root, feature.path), digest: traceDigest(yield* read(root, feature.path, "page-set")) }] }; }),
       plan: ({ source }) => Effect.gen(function*() {
         if (source === undefined) return yield* fail("page-set", ownerPath, "page does not exist; add an allowed page first");
         if (traceDigest(source) !== input.expectedPreimageDigest) return yield* fail("page-set", ownerPath, "page preimage digest changed; read the page again before updating it");
@@ -172,6 +179,6 @@ export function setFeaturePageAt(root: string, input: { readonly feature: string
         return { bytes: `${protectedPrefix}${input.body.trimEnd()}\n${regions.managed}`, value: undefined, changes: { updated: requested } };
       }),
     });
-    return { format: "concord.docs-feature/structure-v1", operation: "feature-page-set", dryRun: input.dryRun, feature: { slug: dirname(initial.path).split("/").at(-1)!, ref: initial.path, title: initial.title }, page: requested, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? [ownerPath] : [] };
+    return { format: "concord.docs-feature/structure-v1", operation: "feature-page-set", dryRun: input.dryRun, feature: { slug: initial.id ?? dirname(initial.path).split("/").at(-1)!, ref: initial.path, title: initial.title }, page: requested, snapshotDigest: mutation.snapshotDigest, generation: mutation.generation, nextGeneration: mutation.nextGeneration, preimageDigest: mutation.preimageDigest, plannedBytesDigest: mutation.plannedBytesDigest, changedPaths: mutation.changed ? [ownerPath] : [] };
   });
 }

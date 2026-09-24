@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -35,6 +35,7 @@ test('repository feedback uses canonical owners and validates links, adoption, c
   assert('receipt' in preview && 'committed' in preview.receipt && !preview.receipt.committed);
   assert.equal(existsSync(join(root, 'docs/issues/observation.md')), false);
   await run(root, { operation: 'add', document: { metadata: issue('observation'), body: '# Account\n' }, dryRun: false });
+  renameSync(join(root, 'docs/issues/observation.md'), join(root, 'docs/issues/中文观察.md'));
   await run(root, { operation: 'link', id: 'observation', relation: { kind: 'investigation', memory: 'memory/problem.md' }, dryRun: false });
   await assert.rejects(run(root, { operation: 'close', id: 'observation', closure: { kind: 'fixed', memory: 'memory/problem.md', proof: ['account'] }, dryRun: false }), /resolved fixed Problem/);
   await assert.rejects(run(root, { operation: 'adopt', id: 'observation', to: 'docs/feature/missing/README.md', dryRun: false }), /missing|not found|ENOENT/);

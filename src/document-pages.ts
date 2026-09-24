@@ -2,7 +2,8 @@
 // @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { posix } from 'node:path';
-import { ConcordError, digest, decode, DocumentName, type DocumentKind, type MutationReceipt, type Repository } from './shared.js';
+import { ConcordError, digest, decode, DocumentName, inRepositorySnapshot, type DocumentKind, type MutationReceipt, type Repository } from './shared.js';
+import { documentPlacementError } from './document-layout.js';
 import { findDocument, loadDocuments, setAuthor } from './documents.js';
 import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { canonicalPath } from './storage.js';
@@ -38,7 +39,8 @@ function pagePath(repo: Repository, kind: DocumentKind, selector: string, page: 
   }
   const value = checkedPage(page);
   const owner = findDocument(loadDocuments(repo), selector, kind);
-  if (owner.path !== `docs/${kind}/${owner.metadata.id}/README.md`) throw new ConcordError('InvalidPlacement', `Invalid package owner placement: ${owner.path}`);
+  const placement = documentPlacementError(kind, owner.path);
+  if (placement !== undefined) throw new ConcordError('InvalidPlacement', `${owner.path}: ${placement}`);
   const title = owner.metadata.title;
   if (value === 'README' || value === 'readme') {
     if (kind === 'design' && plan !== undefined) {
@@ -73,15 +75,18 @@ function template(page: DocumentPage): string | undefined {
 }
 
 export function addPage(repo: Repository, kind: DocumentKind, selector: string, page: string, dryRun = false, plan?: string): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan);
   if (repo.read(target.path) !== undefined) throw new ConcordError('PageExists', `${target.path} already exists`);
   if (kind === 'research') return repo.publish('add-page', [{ path: target.path, before: null, after: `# ${posix.basename(target.path, '.md')}\n` }], dryRun);
   const name = plan !== undefined && (page === 'README' || page === 'readme') ? 'design-plan' : template(checkedPage(page));
   const content = name === undefined ? `# ${target.title}: ${page}\n\nDescribe this topic and link to the package contract.\n` : templateBody(name, target.title, []);
   return repo.publish('add-page', [{ path: target.path, before: null, after: body(content) }], dryRun);
+  });
 }
 
 export function showPage(repo: Repository, kind: DocumentKind, selector: string, page: string, plan?: string): { operation: string; path: string; body: string; digest: string } {
+  return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan); const source = repo.read(target.path);
   if (source === undefined) throw new ConcordError('PageNotFound', `${target.path} does not exist`);
   if ((page === 'README' || page === 'readme' || kind === 'research' && page === 'README.md') && plan === undefined) {
@@ -89,12 +94,15 @@ export function showPage(repo: Repository, kind: DocumentKind, selector: string,
     return { operation: 'show-page', path: target.path, body: owner.body, digest: owner.digest };
   }
   return { operation: 'show-page', path: target.path, body: source, digest: digest(source) };
+  });
 }
 
 export function setPage(repo: Repository, kind: DocumentKind, selector: string, page: string, next: string, expectedDigest: string, dryRun = false, plan?: string): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan); const source = repo.read(target.path);
   if (source === undefined) throw new ConcordError('PageNotFound', `${target.path} does not exist`);
   if (digest(source) !== expectedDigest) throw new ConcordError('PreimageChanged', `${target.path} changed; use its current digest`);
   if ((page === 'README' || page === 'readme' || kind === 'research' && page === 'README.md') && plan === undefined) return setAuthor(repo, target.path, next, expectedDigest, dryRun);
   return repo.publish('set-page', [{ path: target.path, before: source, after: body(next) }], dryRun);
+  });
 }

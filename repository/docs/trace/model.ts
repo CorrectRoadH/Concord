@@ -7,6 +7,7 @@ export type TraceScope = "feature" | "use-case";
 export type TracePageRole = "overview" | "library" | "cli" | "architecture" | "lifecycle" | "reference" | "supporting";
 
 export interface TraceNode {
+  readonly id?: string;
   readonly kind: DocsNodeKind;
   readonly path: string;
   readonly title: string;

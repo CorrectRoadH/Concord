@@ -1,4 +1,5 @@
 import { Effect, Schema, SchemaIssue } from "effect";
+import { DocumentName } from 'concord-sdlc/model';
 
 import { DesignInputInvalid } from "./errors.js";
 
@@ -28,7 +29,7 @@ export const DocsTemplateManifestSchema = Schema.Struct({
 });
 export type DocsTemplateManifest = typeof DocsTemplateManifestSchema.Type;
 
-const SlugSchema = NonEmptyTrimmedString.check(Schema.isPattern(/^[a-z0-9]+(?:-[a-z0-9]+)*$/u));
+const SlugSchema = DocumentName;
 const PlansSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(2));
 const PagesSchema = Schema.Array(DesignPageSchema).check(Schema.makeFilter<readonly DesignPage[]>((values) => new Set(values).size === values.length, { message: "pages must be unique" }));
 

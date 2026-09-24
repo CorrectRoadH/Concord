@@ -1,6 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
+import { matchingOwners } from '../../src/document-layout'
+import { documentHref } from '../lib/document-routing'
+export { documentHref } from '../lib/document-routing'
 import {
   ArrowLeft,
   ChevronRight,
@@ -151,23 +154,6 @@ const documentStyles = stylex.create({
   skeletonLineShort: { width: "66%" },
 })
 
-export function documentHref(document: DocumentRecord): string {
-  if (document.metadata.kind === "use-case") {
-    const feature = document.metadata.feature.split("/").filter(Boolean).at(-2) ?? document.metadata.feature
-    return `/features/${encodeURIComponent(feature)}/use-cases/${encodeURIComponent(document.metadata.id)}`
-  }
-  const sections: Record<string, string> = {
-    feature: "features",
-    engineering: "engineering",
-    roadmap: "roadmap",
-    design: "design",
-    research: "research",
-    memory: "memory",
-    issue: "issues",
-  }
-  return `/${sections[document.metadata.kind] ?? "features"}/${encodeURIComponent(document.metadata.id)}`
-}
-
 export function relativeMarkdownTarget(currentPath: string, href: string): { path: string; hash: string } | undefined {
   if (!href || href.startsWith("#") || href.startsWith("/") || /^[a-z][a-z\d+.-]*:/iu.test(href)) return undefined
   try {
@@ -186,8 +172,7 @@ export function relativeMarkdownTarget(currentPath: string, href: string): { pat
 function featureMatches(reference: string, feature: DocumentRecord): boolean {
   return (
     reference === feature.path ||
-    reference === feature.metadata.id ||
-    reference.endsWith(`/${feature.metadata.id}/README.md`)
+    reference === feature.metadata.id
   )
 }
 
@@ -386,7 +371,7 @@ export function DocumentsListPage({
   )
   if (["feature", "engineering", "roadmap", "design", "research", "memory"].includes(kind)) {
     const first = snapshot.documents.find(document => document.metadata.kind === kind)
-    if (first) return dirty ? null : <Navigate to={documentHref(first)} replace />
+    if (first) return dirty ? null : <Navigate to={documentHref(first, snapshot.documents)} replace />
   }
 
   return (
@@ -412,7 +397,7 @@ export function DocumentsListPage({
           {documents.map((document) => (
             <RecordItem key={document.path}>
             <Link
-              to={documentHref(document)}
+              to={documentHref(document, snapshot.documents)}
               className="block"
             >
                   <div className="card-title-row">
@@ -530,9 +515,8 @@ export function DocumentDetailPage({ kind, relatedContent }: { kind: DocumentKin
   const params = useParams()
   const id = kind === "use-case" ? params.useCaseId : params.id
   const { snapshot } = useWorkspace()
-  const document = snapshot.documents.find(
-    (item) => item.metadata.kind === kind && item.metadata.id === id
-  )
+  const matches = matchingOwners(snapshot.documents, id ?? '', kind)
+  const document = matches.length === 1 ? matches[0] : undefined
   if (!document) {
     return <Empty kind="missing" title={`找不到 ${humanKind(kind)}`}>它可能已被移动或删除。</Empty>
   }
@@ -669,7 +653,7 @@ function DocumentFiles({
       return true
     }
     const query = target.path === owner.path ? "" : `?file=${encodeURIComponent(target.path)}`
-    navigate(`${documentHref(owner)}${query}${target.hash}`)
+    navigate(`${documentHref(owner, snapshot.documents)}${query}${target.hash}`)
     return true
   }
   const [selected, setSelected] = React.useState<ViewFile | null>(null)
@@ -717,7 +701,7 @@ function DocumentFiles({
           | "design"
           | "engineering"
           | "research",
-        id: document.metadata.id,
+        id: document.path,
         page,
         ...(plan ? { plan } : {}),
       },
@@ -1016,14 +1000,14 @@ function LifecycleActions({ document }: { document: DocumentRecord }) {
         )}
         {metadata.kind === "memory" && (
           <>
-            {metadata.state === "captured" && metadata.memoryKind !== "note" && <><Field label="激活理由"><Textarea aria-label="Memory 激活理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.activate", id: metadata.id, reason }, "Memory 已激活。")}>激活 Memory</Button></>}
+            {metadata.state === "captured" && metadata.memoryKind !== "note" && <><Field label="激活理由"><Textarea aria-label="Memory 激活理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.activate", id: document.path, reason }, "Memory 已激活。")}>激活 Memory</Button></>}
             {metadata.state === "open" ? (
-              <><Field label="关闭类型"><Select value={resolution} onValueChange={(value) => setResolution(value as typeof resolution)}><SelectTrigger aria-label="Memory 关闭类型"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="fixed">Fixed（命令证据）</SelectItem><SelectItem value="not-a-bug">Not a bug</SelectItem><SelectItem value="wont-fix">Won&apos;t fix</SelectItem><SelectItem value="external-fixed">External fixed</SelectItem></SelectContent></Select></Field>{resolution === "fixed" && <div className="two-column"><Field label="Red evidence"><Input aria-label="Red evidence" value={red} onChange={(event) => setRed(event.target.value)} list="evidence-ids" /></Field><Field label="Green evidence"><Input aria-label="Green evidence" value={green} onChange={(event) => setGreen(event.target.value)} list="evidence-ids" /></Field></div>}<Field label="理由"><Textarea aria-label="Memory 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.resolve", id: metadata.id, kind: resolution, reason, ...(resolution === "fixed" ? { red, green } : {}) }, "Memory 已关闭。")}>关闭 Memory</Button></>
+              <><Field label="关闭类型"><Select value={resolution} onValueChange={(value) => setResolution(value as typeof resolution)}><SelectTrigger aria-label="Memory 关闭类型"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="fixed">Fixed（命令证据）</SelectItem><SelectItem value="not-a-bug">Not a bug</SelectItem><SelectItem value="wont-fix">Won&apos;t fix</SelectItem><SelectItem value="external-fixed">External fixed</SelectItem></SelectContent></Select></Field>{resolution === "fixed" && <div className="two-column"><Field label="Red evidence"><Input aria-label="Red evidence" value={red} onChange={(event) => setRed(event.target.value)} list="evidence-ids" /></Field><Field label="Green evidence"><Input aria-label="Green evidence" value={green} onChange={(event) => setGreen(event.target.value)} list="evidence-ids" /></Field></div>}<Field label="理由"><Textarea aria-label="Memory 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.resolve", id: document.path, kind: resolution, reason, ...(resolution === "fixed" ? { red, green } : {}) }, "Memory 已关闭。")}>关闭 Memory</Button></>
             ) : (
-              <><Field label="重开理由"><Textarea aria-label="Memory 重开理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "memory.reopen", id: metadata.id, reason }, "Memory 已重开。")}>重新打开</Button></>
+              <><Field label="重开理由"><Textarea aria-label="Memory 重开理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "memory.reopen", id: document.path, reason }, "Memory 已重开。")}>重新打开</Button></>
             )}
             <Field label="目标或替代 Memory"><Input aria-label="Memory 目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field>
-            <div className="button-row"><Button variant="outline" onClick={() => invoke({ action: "memory.promote", id: metadata.id, target }, "Memory 已提升。")}>提升到契约</Button><Button variant="outline" onClick={() => invoke({ action: "memory.supersede", id: metadata.id, replacement: target, reason }, "Memory 已被替代。")}>标记替代</Button><Button variant="outline" onClick={() => invoke({ action: "memory.retire", id: metadata.id, target, reason }, "关联已退役。")}>退役关联</Button></div>
+            <div className="button-row"><Button variant="outline" onClick={() => invoke({ action: "memory.promote", id: document.path, target }, "Memory 已提升。")}>提升到契约</Button><Button variant="outline" onClick={() => invoke({ action: "memory.supersede", id: document.path, replacement: target, reason }, "Memory 已被替代。")}>标记替代</Button><Button variant="outline" onClick={() => invoke({ action: "memory.retire", id: document.path, target, reason }, "关联已退役。")}>退役关联</Button></div>
             <datalist id="evidence-ids">{snapshot.evidenceIds.map((id) => <option key={id} value={id} />)}</datalist>
           </>
         )}

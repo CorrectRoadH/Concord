@@ -4,6 +4,7 @@ import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type
 import { renderTypeScriptConfig } from './config.js';
 import { documentRoots, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
 import type { LocalRepository } from './storage.js';
+import { documentDisposition } from './document-layout.js';
 
 export interface ViewFile {
   readonly path: string;
@@ -49,7 +50,11 @@ function inspectMarkdown(repo: Repository, path: string, roots: readonly string[
   if (source === undefined) return {};
   try {
     const document = parseDocumentRecord(path, source);
-    if (document) return { document };
+    if (document) {
+      const disposition = documentDisposition(document.metadata.kind, path, (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path));
+      if (disposition === 'current') return { document };
+      return { page: { path, body: source, digest: digest(source), readOnly: true, reason: disposition === 'historical' ? 'Historical contract in a Memory source; preserved read-only and excluded from current contracts.' : 'Concord metadata outside current document roots is shown read-only.' } };
+    }
     if (path === CONSTITUTION_PATH || isLooseProjectDoc(path, roots)) return { page: projectPage(path, source) };
     return { page: { path, body: source, digest: digest(source), readOnly: false } };
   } catch (cause) {
@@ -78,7 +83,7 @@ export function inspectDocumentFile(repo: Repository, path: string): ViewFile | 
     const ancestorPath = `${segments.slice(0, depth).join('/')}/README.md`;
     if (!roots.some(root => underRoot(ancestorPath, root))) continue;
     const ancestor = ancestorPath === path ? target : inspectMarkdown(repo, ancestorPath, roots);
-    if (ancestor.page?.readOnly) return { ...target.page, readOnly: true, reason: `Repair malformed owner ${ancestorPath} before editing this directory.` };
+    if (ancestor.page?.readOnly) return { ...target.page, readOnly: true, reason: ancestor.page.reason ?? `Owner ${ancestorPath} is read-only.` };
     if (ancestor.document) owner = ancestorPath;
   }
   return owner ? { ...target.page, documentPath: owner } : target.page;
@@ -101,7 +106,7 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
   const ownedPages = pages.map(page => {
     if (page.path === CONSTITUTION_PATH || isLooseProjectDoc(page.path, roots)) return page;
     const malformedBoundary = pages.find(candidate => candidate.readOnly && candidate.path.endsWith('/README.md') && page.path.startsWith(candidate.path.slice(0, -'README.md'.length)));
-    if (malformedBoundary) return { ...page, readOnly: true, reason: `Repair malformed owner ${malformedBoundary.path} before editing this directory.` };
+    if (malformedBoundary) return { ...page, readOnly: true, reason: malformedBoundary.reason ?? `Owner ${malformedBoundary.path} is read-only.` };
     const owner = packageOwners.find(document => page.path.startsWith(document.path.slice(0, -'README.md'.length)));
     return owner ? { ...page, documentPath: owner.path } : page;
   });

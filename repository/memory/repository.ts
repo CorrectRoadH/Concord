@@ -8,6 +8,8 @@ import { traceDigest } from "../docs/trace/relation-mutation.js";
 import { readGovernanceConfiguration, governanceSuiteForFile } from "concord-sdlc/governance-config";
 import { adoptMemoryEvidenceRequirement, validateNativeEvidence, decodeNativeEvidenceIndex, NativeReliabilityCertificateSchema, evidenceSignature, usedMemoryInvocations } from "concord-sdlc/evidence-policy";
 import { decodeMemoryDocument, encodeMemoryDocument } from "./codec.js";
+import { leafOwners, leafOwnerSelection } from '../document-owners.js';
+import { isDocumentName } from 'concord-sdlc/document-layout';
 import { MemoryContentInvalid, MemoryFileMissing, MemoryIoError, MemoryReferenceConflict, EvidenceMigrationRequired, type MemoryError } from "./errors.js";
 import type { MemoryDocument, ProblemResolutionIntent, PromotionKind } from "./schema.js";
 import { activateMemory, promoteMemory, reopenProblem, resolveProblem, retirePromotion, supersedeMemory } from "./state.js";
@@ -33,24 +35,26 @@ export class MemoryRepository {
   readonly #root: string;
   constructor(root = process.cwd()) { this.#root = resolve(root); }
   get root(): string { return this.#root; }
-  ownerPath(id: string): string { this.#guardId(id); return "memory/" + id + ".md"; }
+  ownerPath(id: string): string { return leafOwnerSelection(this.#root, 'memory', id).path; }
   absoluteOwnerPath(id: string): string { return join(this.#root, this.ownerPath(id)); }
-  #guardId(id: string): void { if (!/^[a-z0-9][a-z0-9-]*$/u.test(id)) throw new MemoryContentInvalid({ operation: "resolve id", message: "unsafe Memory id " + JSON.stringify(id) }); }
+  #guardId(id: string): void { if (!isDocumentName(id)) throw new MemoryContentInvalid({ operation: "resolve id", message: "unsafe Memory id " + JSON.stringify(id) }); }
   list(): readonly MemoryDocument[] {
-    const dir = join(this.#root, "memory");
-    if (!existsSync(dir)) return [];
-    return readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isFile() && entry.name.endsWith(".md") && entry.name !== "INDEX.md" && entry.name !== "README.md").map((entry) => this.read(entry.name.slice(0, -3))).sort((a, b) => a.metadata.id.localeCompare(b.metadata.id));
+    return leafOwners(this.#root, 'memory').flatMap(record => record.metadata.kind === 'memory' ? [{ metadata: record.metadata, body: record.body }] : []);
   }
   read(id: string): MemoryDocument {
-    const path = this.absoluteOwnerPath(id);
+    const selected = leafOwnerSelection(this.#root, 'memory', id);
+    if (selected.record === undefined) throw new MemoryFileMissing({ operation: 'read', path: selected.path, message: 'not found' });
+    const path = join(this.#root, selected.path);
     this.#assertOwnerPath(id, path);
     if (!existsSync(path)) throw new MemoryFileMissing({ operation: "read", path: this.ownerPath(id), message: "not found" });
-    try { return decodeMemoryDocument(this.ownerPath(id), id, readFileSync(path, "utf8")); } catch (cause) { if (cause instanceof MemoryContentInvalid || cause instanceof MemoryFileMissing) throw cause; throw new MemoryIoError({ operation: "read", path: this.ownerPath(id), message: message(cause) }); }
+    try { return decodeMemoryDocument(selected.path, id, readFileSync(path, "utf8")); } catch (cause) { if (cause instanceof MemoryContentInvalid || cause instanceof MemoryFileMissing) throw cause; throw new MemoryIoError({ operation: "read", path: selected.path, message: message(cause) }); }
   }
   readAuthorSnapshot(id: string): MemoryAuthorSnapshot {
-    const path = this.absoluteOwnerPath(id); this.#assertOwnerPath(id, path);
+    const selected = leafOwnerSelection(this.#root, 'memory', id);
+    if (selected.record === undefined) throw new MemoryFileMissing({ operation: 'read', path: selected.path, message: 'not found' });
+    const path = join(this.#root, selected.path); this.#assertOwnerPath(id, path);
     const source = readFileSync(path, "utf8");
-    const document = decodeMemoryDocument(this.ownerPath(id), id, source);
+    const document = decodeMemoryDocument(selected.path, id, source);
     return { document, ownerPreimageDigest: traceDigest(source), authorRegionDigest: traceDigest(authorRegion(document.body)) };
   }
   #assertOwnerPath(id: string, path: string): void {
@@ -64,7 +68,8 @@ export class MemoryRepository {
     this.#guardId(metadata.id);
     if (metadata.promotions.length !== 0 || metadata.history.length !== 0 || metadata.resolution !== undefined || metadata.supersededBy !== undefined || metadata.supersession !== undefined) throw new MemoryReferenceConflict({ operation: "add", message: "new Memory has no history, resolution, promotion, or supersession" });
     const valid = metadata.memoryKind === "problem" ? metadata.state === "open" : metadata.memoryKind === "note" ? metadata.state === "captured" : metadata.state === "current";
-    if (!valid || existsSync(this.absoluteOwnerPath(metadata.id))) throw new MemoryReferenceConflict({ operation: "add", path: this.ownerPath(metadata.id), message: "invalid initial Memory state or existing owner" });
+    const path = `memory/${metadata.id}.md`;
+    if (!valid || existsSync(join(this.#root, path))) throw new MemoryReferenceConflict({ operation: "add", path, message: "invalid initial Memory state or existing owner" });
     return { bytes: encodeMemoryDocument(metadata, body), metadata };
   }
   planTransition(id: string, source: string | undefined, transition: (value: MemoryMeta) => Result.Result<MemoryMeta, MemoryReferenceConflict>) {
@@ -95,7 +100,7 @@ export class MemoryRepository {
   }
   planActivate(id: string, source: string | undefined, reason: string, at: string, commit?: string) { return this.planTransition(id, source, (value) => activateMemory(value, reason, at, commit)); }
   planReopen(id: string, source: string | undefined, reason: string, at: string, commit?: string) { return this.planTransition(id, source, (value) => reopenProblem(value, reason, at, commit)); }
-  planSupersede(id: string, source: string | undefined, replacement: MemoryMeta, reason: string, at: string, replacementRef: string, commit?: string) { return this.planTransition(id, source, (value) => supersedeMemory(value, replacement, replacementRef, reason, at, commit)); }
+  planSupersede(id: string, source: string | undefined, replacement: MemoryMeta, reason: string, at: string, replacementRef: string, commit?: string) { return this.planTransition(id, source, (value) => supersedeMemory(value, replacement, replacementRef, reason, at, commit, this.ownerPath(id))); }
   planPromote(id: string, source: string | undefined, target: string, at: string, commit?: string) { return this.planTransition(id, source, (value) => promoteMemory(value, target, at, commit)); }
   planRetire(id: string, source: string | undefined, target: string, reason: string, at: string, commit?: string) { return this.planTransition(id, source, (value) => retirePromotion(value, target, reason, at, commit)); }
   targetSource(target: unknown) {
@@ -119,7 +124,7 @@ export class MemoryRepository {
   validateFixedEvidence(snapshot: TraceSnapshot, memoryPath: string, options: { readonly requireOpen?: boolean; readonly implementationDigest?: string; readonly validatedAt?: string } = {}): FixedEvidenceValidation {
     if (options.implementationDigest === undefined) throw new MemoryReferenceConflict({ operation: "resolve", path: memoryPath, message: "current native implementation digest is unavailable; request the host capability" });
     const related = snapshot.tests.filter((test) => test.regressions.some((reference) => reference.split("#", 1)[0] === memoryPath));
-    const memoryId = memoryPath.slice("memory/".length, -3); const owner = this.readAuthorSnapshot(memoryId); const memory = owner.document.metadata;
+    const owner = this.readAuthorSnapshot(memoryPath); const memory = owner.document.metadata;
     if (memory.memoryKind !== "problem" || (options.requireOpen !== false && memory.state !== "open")) throw new MemoryReferenceConflict({ operation: "resolve", path: memoryPath, message: "fixed gate requires the current open Problem Memory" });
     if (related.length === 0) throw new MemoryReferenceConflict({ operation: "resolve", path: memoryPath, message: "fixed gate requires a current regression case" });
     const preimages = new Set<string>([memoryPath]); const cases: unknown[] = [];
@@ -172,8 +177,9 @@ export class MemoryRepository {
   }
   search(pattern: string): readonly MemoryDocument[] { const needle = pattern.toLocaleLowerCase(); return this.list().filter((item) => (item.metadata.id + "\n" + item.metadata.title + "\n" + item.body).toLocaleLowerCase().includes(needle)); }
   check(snapshot: TraceSnapshot, implementationDigest?: string): MemoryCheckReceipt {
-    const findings: string[] = []; const documents = this.list(); const byRef = new Map(documents.map((item) => ["memory/" + item.metadata.id + ".md", item.metadata]));
+    const findings: string[] = []; const documents = leafOwners(this.#root, 'memory'); const byRef = new Map(documents.flatMap(item => item.metadata.kind === 'memory' ? [[item.path, item.metadata] as const] : []));
     for (const item of documents) {
+      if (item.metadata.kind !== 'memory') continue;
       const m = item.metadata;
       if (m.state === "captured" && (m.resolution !== undefined || m.promotions.length > 0)) findings.push(m.id + ": captured Memory cannot have resolution or promotion");
       if (m.memoryKind === "note" && (m.state !== "captured" || m.resolution !== undefined || m.promotions.length > 0)) findings.push(m.id + ": note Memory must remain captured");
@@ -184,10 +190,10 @@ export class MemoryRepository {
       }
       if (m.supersededBy !== undefined && byRef.get(m.supersededBy) === undefined) findings.push(m.id + ": supersededBy target is missing");
       for (const target of m.promotions) try { this.validateTarget(snapshot, target); } catch (cause) { findings.push(m.id + ": " + message(cause)); }
-      const seen = new Set<string>(); let cursor: MemoryMeta | undefined = m;
+      const seen = new Set<string>(); let cursor: MemoryMeta | undefined = m; let cursorPath = item.path;
       while (cursor?.supersededBy !== undefined) {
-        if (seen.has(cursor.id)) { findings.push(m.id + ": supersession cycle"); break; }
-        seen.add(cursor.id); const next = byRef.get(cursor.supersededBy);
+        if (seen.has(cursorPath)) { findings.push(m.id + ": supersession cycle"); break; }
+        seen.add(cursorPath); cursorPath = cursor.supersededBy; const next = byRef.get(cursorPath);
         if (next === undefined) break;
         if (next.memoryKind !== m.memoryKind) break;
         cursor = next;
@@ -195,8 +201,8 @@ export class MemoryRepository {
       if (m.resolution?.kind === "fixed" && m.resolution.evidenceLevel === "command" && adoptMemoryEvidenceRequirement(m).evidenceRequirement === "concord.native-reliability/v1") findings.push(m.id + ": command evidence does not satisfy the persisted native requirement");
       if (m.resolution?.kind === "fixed" && m.resolution.evidenceLevel === "repository") {
         try {
-          if (m.resolution.repositoryEvidence.epoch !== m.epoch || m.resolution.repositoryEvidence.memory !== "memory/" + m.id + ".md") throw new Error("repository evidence is not bound to the current Memory epoch/path");
-          const current = this.validateFixedEvidence(snapshot, "memory/" + m.id + ".md", { requireOpen: false, ...(implementationDigest === undefined ? {} : { implementationDigest }) }).evidence;
+          if (m.resolution.repositoryEvidence.epoch !== m.epoch || m.resolution.repositoryEvidence.memory !== item.path) throw new Error("repository evidence is not bound to the current Memory epoch/path");
+          const current = this.validateFixedEvidence(snapshot, item.path, { requireOpen: false, ...(implementationDigest === undefined ? {} : { implementationDigest }) }).evidence;
           const { validatedAt: _storedAt, ...storedFacts } = m.resolution.repositoryEvidence;
           const { validatedAt: _currentAt, ...currentFacts } = current;
           if (canonical(storedFacts) !== canonical(currentFacts)) findings.push(m.id + ": repository evidence facts changed; re-resolve with current evidence");

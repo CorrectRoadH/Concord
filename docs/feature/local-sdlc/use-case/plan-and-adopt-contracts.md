@@ -22,6 +22,9 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 验收
 
+- 所有文档的 metadata.id 与物理名称独立维护。创建默认以 ID 命名；Feature、Roadmap、Design、Engineering 位于各分类下的单层安全名称目录并使用 README.md；Use Case 直属实际 Feature 目录的 use-case，Issue 为 docs/issues 下的安全 .md 文件。Research 保留嵌套主题，Memory 保留来源内路径身份。中文等 Unicode 名称在 CLI、高级治理、页面编辑与 Web 中使用同一政策。
+- 实际路径拥有 canonical 身份；短 ID 仅用于唯一查询，非 Memory 同 kind ID 不得重复，Memory 重名须用完整路径。创建子文档、Roadmap 采用、页面保存、关系及证据均使用实际 owner；发布与恢复不得重新按 ID 猜路径。移动文件不使原路径绑定的证据自动有效。
+- Memory 来源中严格解码成功的其他 kind 是只读历史材料，不进入现行契约图，也不改写成 Memory。Web 保留原文和历史目录边界，现行关系指向历史材料仍拒绝；错误格式和现行根中的错位 owner 继续诊断。高级治理保持原有静态来源范围，普通入口的配置来源授权保持不变。
 - 相同 kind 的重复 id、嵌套 owner、附件、symlink、目标冲突和不支持的链接均拒绝且不留下部分写入。
 - supporting page 可被精确 path/anchor 解析到所属 Feature，但相邻 package 不混入。
 - adoption 期间源集合或字节变化会阻止 publication。

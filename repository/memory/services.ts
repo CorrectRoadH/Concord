@@ -14,6 +14,7 @@ import {
   withTraceReadLease,
 } from "../docs/trace/relation-mutation.js";
 import { decodeMemoryDocument } from "./codec.js";
+import { leafOwnerSelection, assertSameLeafSelection } from '../document-owners.js';
 import { MemoryReferenceConflict, type MemoryError } from "./errors.js";
 import { memoryEffect, MemoryRepository, type MemoryAuthorSnapshot, type MemoryCheckReceipt } from "./repository.js";
 import type { MemoryDocument, MemoryMeta, ProblemResolutionIntent, PromotionKind } from "./schema.js";
@@ -63,7 +64,7 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       const snapshot = yield* compileTraceUnderLease(root);
       const implementationDigest = regressionMemory === undefined ? undefined : yield* managedInventoryImplementationDigest(root).pipe(Effect.mapError(cause => new MemoryReferenceConflict({ operation: "resolve", message: cause.message })));
       const prepared = yield* memoryEffect("trace preparation", () => {
-        const regressionTarget = regressionMemory === undefined ? undefined : `memory/${regressionMemory}.md`;
+        const regressionTarget = regressionMemory === undefined ? undefined : repository.ownerPath(regressionMemory);
         const fixedEvidence = regressionTarget === undefined
           ? { selectors: [] as readonly string[], preimagePaths: [] as readonly string[], preimageDigests: {} as Readonly<Record<string, string>>, evidence: undefined }
           : repository.validateFixedEvidence(snapshot, regressionTarget, { ...(implementationDigest === undefined ? {} : { implementationDigest }), ...(validatedAt === undefined ? {} : { validatedAt }) });
@@ -103,6 +104,7 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
     readonly dryRun: boolean;
     readonly target?: RepoRef;
     readonly extraPaths?: readonly string[];
+    readonly relatedIds?: readonly string[];
     readonly regressionMemory?: string;
     readonly plan: (
       source: string | undefined,
@@ -110,16 +112,25 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       preparation: TraceMutationPreparation,
     ) => { readonly bytes: string; readonly metadata: MemoryMeta; readonly changes: Changes };
   }): Effect.Effect<TraceMutationReceipt<MemoryMeta, Changes>, MemoryStoreError, FileSystem.FileSystem> =>
-    Effect.suspend(() => {
+    Effect.gen(function*() {
+      const selector = options.operation === 'memory-add' ? `memory/${options.id}.md` : options.id;
+      const frozen = yield* withTraceReadLease(root, () => memoryEffect(options.operation, () => leafOwnerSelection(root, 'memory', selector)));
+      const related = yield* withTraceReadLease(root, () => memoryEffect(options.operation, () => (options.relatedIds ?? []).map(id => ({ id, selection: leafOwnerSelection(root, 'memory', id) }))));
+      const assertSelections = () => {
+        assertSameLeafSelection(root, 'memory', selector, frozen);
+        for (const item of related) assertSameLeafSelection(root, 'memory', item.id, item.selection);
+      };
       // Both publication preflight passes observe one validation operation.
       const validatedAt = new Date().toISOString();
-      return mutateTraceOwner({
+      return yield* mutateTraceOwner({
         root,
         operation: options.operation,
-        ownerPath: repository.ownerPath(options.id),
+        ownerPath: frozen.path,
         dryRun: options.dryRun,
-        prepareUnderLease: prepareUnderLease(options.target, options.extraPaths, options.regressionMemory, validatedAt),
+        prepareUnderLease: memoryEffect(options.operation, assertSelections).pipe(Effect.andThen(prepareUnderLease(options.target, [...(options.extraPaths ?? []), ...related.map(item => item.selection.path)], options.regressionMemory, validatedAt))),
         plan: ({ source, headCommit, preparation }) => memoryEffect(options.operation, () => {
+          assertSelections();
+          if ((source === undefined ? undefined : traceDigest(source)) !== frozen.record?.digest) throw new MemoryReferenceConflict({ operation: options.operation, path: frozen.path, message: 'selected owner preimage changed' });
           const planned = options.plan(source, headCommit, preparation);
           return { bytes: planned.bytes, value: planned.metadata, changes: planned.changes };
         }),
@@ -175,7 +186,7 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       id,
       operation: "memory-supersede",
       dryRun,
-      extraPaths: [repository.ownerPath(replacementId)],
+      relatedIds: [replacementId],
       plan: (source, commit) => {
         if (source === undefined) {
           throw new MemoryReferenceConflict({

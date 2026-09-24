@@ -7,8 +7,9 @@
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 import { posix } from 'node:path';
 import { existsSync } from 'node:fs';
-import { Predicate, Schema } from 'effect';
-import { parseDocument, stringify } from 'yaml';
+import { Schema } from 'effect';
+import { stringify } from 'yaml';
+import { decodeDocumentSource as parseDocumentSource } from './document-codec.js';
 import {
   ConcordError,
   DocumentSchema,
@@ -43,8 +44,9 @@ import { ContentCache } from './content-cache.js';
 import { readGovernanceConfiguration } from './governance-config.js';
 import { adoptMemoryEvidenceRequirement, memoryEvidenceRequirement } from './evidence-policy.js';
 import { designContentPaths, formatDesignMarkdown, validateDesignContent } from './design-content.js';
+import { DOCUMENT_ROOTS, defaultDocumentPath, documentDisposition, documentPlacementError, matchingOwners } from './document-layout.js';
 
-export const DOCUMENT_ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/research', 'docs/engineering', 'docs/issues'] as const;
+export { DOCUMENT_ROOTS } from './document-layout.js';
 export function documentRoots(repo: Repository): readonly string[] {
   return inRepositorySnapshot(repo, () => { return [...DOCUMENT_ROOTS, ...(repo.config.memorySources ?? [{ path: 'memory' }]).map((source) => source.path)];   });
 }
@@ -70,57 +72,9 @@ export function parseDocumentRecord(path: string, source: string): DocumentRecor
   return documentContentCache.get(path, source, () => parseDocumentSource(path, source));
 }
 
-function parseDocumentSource(path: string, source: string): DocumentRecord | undefined {
-  if (!/^---\r?\n/u.test(source)) return undefined;
-  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(source);
-  const frontmatter = match?.[1] ?? source.slice(0, 64 * 1024);
-  const claimsConcord = /(?:^|\n)\s*format\s*:[^\n]*concord\.document\//u.test(frontmatter);
-  if (match === null) {
-    if (claimsConcord) throw new ConcordError('InvalidData', `${path}: unterminated Concord frontmatter`);
-    return undefined;
-  }
-  const yaml = parseDocument(match[1]!, { uniqueKeys: true, merge: false });
-  if (yaml.errors.length > 0) {
-    if (claimsConcord) throw new ConcordError('InvalidData', `${path}: ${yaml.errors.map(error => error.message).join('; ')}`);
-    return undefined;
-  }
-  const value: unknown = yaml.toJS({ maxAliasCount: 0 });
-  if (!Predicate.isObject(value) || typeof value.format !== 'string') {
-    if (claimsConcord) throw new ConcordError('InvalidData', `${path}: invalid Concord frontmatter`);
-    return undefined;
-  }
-  if (!value.format.startsWith('concord.document/')) return undefined;
-  const metadata = decode(DocumentSchema, value, path);
-  if (metadata.kind === 'research' && !path.endsWith('/README.md')) {
-    throw new ConcordError('ResearchMigrationRequired', `${path}: Research owners must use a topic directory with README.md; run the offline document package migration`);
-  }
-  const rawBody = match[2]!.replace(/^\r?\n/u, '');
-  return { path, metadata, body: rawBody, digest: digest(source) };
-}
-
 export function renderDocument(metadata: DocumentMeta, body: string): string {
   const valid = decode(DocumentSchema, metadata, `${metadata.kind}:${metadata.id}`);
-  return `---\n${stringify(valid, { lineWidth: 0 }).trimEnd()}\n---\n\n${authorBody(body)}`;
-}
-
-function expectedPath(metadata: DocumentMeta, documents: readonly DocumentRecord[]): string | undefined {
-  switch (metadata.kind) {
-    case 'feature': return `docs/feature/${metadata.id}/README.md`;
-    case 'roadmap': return `docs/roadmap/${metadata.id}/README.md`;
-    case 'design': return `docs/design/${metadata.id}/README.md`;
-    case 'engineering': return `docs/engineering/${metadata.id}/README.md`;
-    // Research is identified by its safe source path; migrated nested pages do
-    // not acquire a synthetic root slug.
-    case 'research': return undefined;
-    case 'memory': return documents.find((document) => document.metadata === metadata)?.path;
-    case 'issue': return `docs/issues/${metadata.id}.md`;
-    case 'use-case': {
-      try {
-        const feature = findDocument(documents, metadata.feature, 'feature');
-        return `docs/feature/${feature.metadata.id}/use-case/${metadata.id}.md`;
-      } catch { return undefined; }
-    }
-  }
+  return `---\n${stringify(valid, { lineWidth: 0, aliasDuplicateObjects: false }).trimEnd()}\n---\n\n${authorBody(body)}`;
 }
 
 function changed(repo: Repository, operation: string, record: DocumentRecord, metadata: DocumentMeta, body = record.body, dryRun = false): MutationReceipt {
@@ -163,7 +117,8 @@ function loadDocumentsUnderSnapshot(repo: Repository): DocumentRecord[] {
     if (source === undefined) continue;
     inputs.push({ path, source });
   }
-  return documentContentCache.getMany(inputs, input => parseDocumentSource(input.path, input.source)).filter((record): record is DocumentRecord => record !== undefined);
+  const roots = (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path);
+  return documentContentCache.getMany(inputs, input => parseDocumentSource(input.path, input.source)).filter((record): record is DocumentRecord => record !== undefined && documentDisposition(record.metadata.kind, record.path, roots) === 'current');
 }
 
 export function findDocument(documents: readonly DocumentRecord[], selector: string, kind?: DocumentKind): DocumentRecord {
@@ -172,11 +127,7 @@ export function findDocument(documents: readonly DocumentRecord[], selector: str
     const parsed = parseReference(selector);
     if (parsed.anchor !== undefined) throw new ConcordError('InvalidReference', 'Document selectors cannot contain anchors');
   } else decode(DocumentName, selector, 'selector');
-  const pool = kind === undefined ? documents : documents.filter(document => document.metadata.kind === kind);
-  const exact = pool.filter(document => document.path === selector);
-  if (exact.length === 1) return exact[0]!;
-  if (exact.length > 1) throw new ConcordError('AmbiguousDocument', `More than one document has path ${selector}`);
-  const byId = pool.filter(document => document.metadata.id === selector);
+  const byId = matchingOwners(documents, selector, kind);
   if (byId.length === 0) throw new ConcordError('DocumentNotFound', `No${kind === undefined ? '' : ` ${kind}`} document matches ${selector}`);
   if (byId.length > 1) throw new ConcordError('AmbiguousDocument', `Document id ${selector} is ambiguous; use its canonical path`);
   return byId[0]!;
@@ -214,11 +165,12 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
   for (const document of documents) {
     const key = document.metadata.kind === 'memory' ? `memory-path:${document.path}` : `${document.metadata.kind}:${document.metadata.id}`;
     identities.set(key, [...(identities.get(key) ?? []), document]);
-    const expected = expectedPath(document.metadata, documents);
-    if (document.metadata.kind === 'research') {
-      if (!/^docs\/research(?:\/[^/]+)*\/[^/]+\.md$/u.test(document.path) || document.path.includes('..')) finding(findings, 'InvalidPlacement', document.path, 'Research documents must retain a safe path below docs/research');
-    } else if (expected === undefined) finding(findings, 'InvalidPlacement', document.path, 'Owner relationship is invalid, so its canonical placement cannot be determined');
-    else if (expected !== document.path) finding(findings, 'InvalidPlacement', document.path, `Expected ${expected}`);
+    let featurePath: string | undefined;
+    if (document.metadata.kind === 'use-case') {
+      try { featurePath = findDocument(documents, document.metadata.feature, 'feature').path; } catch { /* Report placement and relation below. */ }
+    }
+    const placement = documentPlacementError(document.metadata.kind, document.path, featurePath);
+    if (placement !== undefined) finding(findings, 'InvalidPlacement', document.path, placement);
 
     const metadata = document.metadata;
     if (metadata.kind === 'use-case') checkRef(findings, repo, documents, document, metadata.feature, ['feature'], 'feature');
@@ -402,22 +354,24 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   let metadata: DocumentMeta;
   let template: string = kind;
   switch (kind) {
-    case 'feature': path = `docs/feature/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, ...(input.constitutionRefs === undefined ? {} : { constitutionRefs: [...input.constitutionRefs] }) }; break;
+    case 'feature': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, ...(input.constitutionRefs === undefined ? {} : { constitutionRefs: [...input.constitutionRefs] }) }; break;
     case 'use-case': {
       const feature = findDocument(documents, required(input.feature, 'feature'), 'feature');
-      path = `docs/feature/${feature.metadata.id}/use-case/${id}.md`;
+      const placement = documentPlacementError('feature', feature.path);
+      if (placement !== undefined) throw new ConcordError('InvalidPlacement', placement);
+      path = defaultDocumentPath(kind, id, feature.path);
       metadata = { format: 'concord.document/v1', id, title, createdAt, kind, feature: feature.path };
       break;
     }
-    case 'roadmap': path = `docs/roadmap/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'planned' }; break;
+    case 'roadmap': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'planned' }; break;
     case 'design': {
       const alternatives = input.alternatives?.map(value => decode(DocumentName, value, 'alternative')) ?? [];
       if (alternatives.length === 0 || new Set(alternatives).size !== alternatives.length) throw new ConcordError('InvalidInput', 'Design requires unique non-empty alternatives');
-      path = `docs/design/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]], ...(input.constitutionRefs === undefined ? {} : { constitutionRefs: [...input.constitutionRefs] }) };
+      path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]], ...(input.constitutionRefs === undefined ? {} : { constitutionRefs: [...input.constitutionRefs] }) };
       break;
     }
-    case 'engineering': path = `docs/engineering/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind }; break;
-    case 'research': path = `docs/research/${id}/README.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, ...(input.observedAt === undefined ? {} : { observedAt: required(input.observedAt, 'observedAt') }), sources: input.sources ?? [] }; break;
+    case 'engineering': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind }; break;
+    case 'research': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, ...(input.observedAt === undefined ? {} : { observedAt: required(input.observedAt, 'observedAt') }), sources: input.sources ?? [] }; break;
     case 'memory': {
       const memoryKind = input.memoryKind;
       if (memoryKind === undefined) throw new ConcordError('InvalidInput', 'memoryKind is required');
@@ -430,7 +384,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
       metadata = { format: 'concord.document/v1', id, title, createdAt, kind, memoryKind, state: memoryKind === 'note' ? 'captured' : memoryKind === 'problem' ? 'open' : 'current', epoch: 0, promotions: [], history: [] };
       break;
     }
-    case 'issue': path = `docs/issues/${id}.md`; metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }; break;
+    case 'issue': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }; break;
   }
   const body = bodyFor(template);
   if (metadata.kind === 'memory') metadata = adoptMemoryEvidenceRequirement(metadata, governance!.policy);
@@ -553,7 +507,8 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   const documents = loadDocuments(repo); const roadmap = findDocument(documents, selector, 'roadmap');
   if (roadmap.metadata.kind !== 'roadmap') throw new ConcordError('InvalidDocumentKind', selector);
   if (roadmap.metadata.state !== 'planned') throw new ConcordError('InvalidRoadmapState', 'Only a planned Roadmap can be adopted');
-  const id = decode(DocumentName, featureId, 'featureId'); const featurePath = `docs/feature/${id}/README.md`;
+  const id = decode(DocumentName, featureId, 'featureId'); const featurePath = defaultDocumentPath('feature', id);
+  if (documents.some(document => document.metadata.kind === 'feature' && document.metadata.id === id)) throw new ConcordError('DocumentExists', `Feature id ${id} already exists`);
   if (repo.read(featurePath) !== undefined) throw new ConcordError('DocumentExists', `${featurePath} already exists`);
   const at = now();
   const feature: DocumentMeta = { format: 'concord.document/v1', id, title: roadmap.metadata.title, createdAt: at, kind: 'feature', origin: roadmap.path };

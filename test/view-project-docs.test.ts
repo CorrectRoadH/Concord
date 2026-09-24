@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { chromium, expect, type Browser } from '@playwright/test';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { createDocument } from '../dist/documents.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('the docs sidebar renders and edits constitution body through an explicit revision', async () => {
@@ -16,7 +17,11 @@ test('the docs sidebar renders and edits constitution body through an explicit r
   try {
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
-    try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+    try {
+      initialize(repo, false, { testRoots: [] });
+      createDocument(repo, 'design', { id: 'history', title: 'Historical Design', alternatives: ['local'] });
+    } finally { repo.close(); }
+    renameSync(join(root, 'docs/design/history'), join(root, 'memory/history'));
     appendFileSync(join(root, 'docs/architecture.md'), '\n[Constitution clause](constitution.md#c-example)\n');
     appendFileSync(join(root, 'docs/constitution.md'), `\n[Jump to principle](#c-example)\n${'\nSpacer paragraph.\n'.repeat(90)}\n<a id="c-example"></a>\n## Example principle\n\n<script>window.concordInjected = true</script>\n\n<img src="invalid-image" onerror="window.concordInjected = true" />\n`);
     const constitution = readFileSync(join(root, 'docs/constitution.md'), 'utf8');
@@ -31,6 +36,12 @@ test('the docs sidebar renders and edits constitution body through an explicit r
     await page.goto(`http://127.0.0.1:${server.port}/`);
     await page.getByRole('link', { name: '文档', exact: true }).click();
     const preview = page.getByTestId('project-doc-preview');
+    await expect(preview.getByRole('heading', { name: 'Project documentation' })).toBeVisible();
+    await page.locator('a[href="/docs?file=memory%2Fhistory%2FREADME.md"]').click();
+    await expect(preview).toContainText('Historical contract');
+    await expect(preview.locator('[contenteditable="true"]')).toHaveCount(0);
+    assert.match(readFileSync(join(root, 'memory/history/README.md'), 'utf8'), /kind: design/u);
+    await page.goto(`http://127.0.0.1:${server.port}/docs`);
     await expect(preview.getByRole('heading', { name: 'Project documentation' })).toBeVisible();
     await expect(preview).toContainText('Where facts belong');
     await preview.getByRole('link', { name: 'Architecture', exact: true }).click();

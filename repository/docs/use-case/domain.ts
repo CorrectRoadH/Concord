@@ -171,7 +171,7 @@ function replaceProjection(indexPath: string, source: string, projection: string
 
 function selectParent(snapshot: TraceSnapshot, selector: string): TraceNode {
   const matches = snapshot.nodes.filter((node) => node.kind === "feature" && (
-    node.path === selector || node.path.replace(/^docs\/feature\//u, "").replace(/\/README\.md$/u, "") === selector
+    node.path === selector || node.id === selector
   ));
   if (matches.length !== 1) {
     throw new UseCaseParentMissing({
@@ -209,6 +209,7 @@ function makePlan(
     const inspected = yield* Effect.try({
       try: () => {
         const parent = selectParent(snapshot, input.parent);
+        if (snapshot.nodes.some(node => node.kind === 'use-case' && node.id === input.slug)) throw new UseCaseTargetConflict({ path: input.slug, message: 'Use Case ID already exists; select its actual path' });
         const featureRoot = dirname(parent.path);
         const indexPath = `${featureRoot}/use-case/README.md`;
         const targetPath = `${featureRoot}/use-case/${input.slug}.md`;

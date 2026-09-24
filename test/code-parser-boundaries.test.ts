@@ -63,12 +63,14 @@ test('retains duplicate, unsupported, orphan, and unknown annotation findings', 
       '// @concord-code', `// @concord-implements ${contract}`, "overloaded('value');", `[1].map(\n  // @concord-code\n  // @concord-implements ${contract}\n  value => value + 1,\n);`,
       '// @concord-code', `// @concord-implements ${contract}`, `// @concord-implements ${contract}`, 'function duplicateContracts() {}',
       '// @concord-code', '// ordinary comment blocks ownership', `// @concord-implements ${contract}`, 'function separatedContract() {}',
-      `// @concord-implements ${contract}`, '// @concord-end', '// @concord-mystery actual-unknown',
+      `// @concord-implements ${contract}`, '// @concord-end', '// @concord-mystery actual-unknown', `// @concord-verifies ${contract}`,
     ].join('\n'));
     const result = scan(root); const codes = new Set(result.findings.map(item => item.code));
     assert.ok(codes.has('DuplicateFileCode')); assert.ok(codes.has('DuplicateNodeCode')); assert.ok(codes.has('UnsupportedCodeNode'));
     assert.ok(codes.has('OrphanCodeAnnotation')); assert.ok(codes.has('DuplicateCodeContract'));
     assert.ok(codes.has('MissingCodeContract')); assert.ok(codes.has('OrphanCodeImplements')); assert.ok(codes.has('OrphanCodeEnd')); assert.ok(codes.has('UnknownConcordAnnotation'));
+    assert.ok(result.findings.some(item => item.code === 'OrphanCodeImplements' && item.message.includes('@use-case')));
+    assert.ok(result.findings.some(item => item.code === 'UnknownConcordAnnotation' && item.message.includes('@concord-verifies') && item.message.includes('@feature')));
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 

@@ -1,6 +1,7 @@
 import { FileText, Folder } from 'lucide-react';
 import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs';
 import { researchTopicDirectory, researchTopics } from '../lib/research-topics';
+import { documentHref } from '../lib/document-routing';
 import { Link, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../workspace';
 import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar';
@@ -29,7 +30,7 @@ export function DocumentNavigation() {
   const section = sections.find(item => pathname === item.href || pathname.startsWith(`${item.href}/`));
   if (!section) return null;
   const documents = snapshot.documents.filter(document => document.metadata.kind === section.kind);
-  const selected = documents.find(document => pathname.split('/')[2] === encodeURIComponent(document.metadata.id));
+  const selected = documents.find(document => { const href = documentHref(document, snapshot.documents); return pathname === href || pathname.startsWith(`${href}/`); });
   const groups: ContentSidebarGroup[] = [{
     id: 'documents', label: `${section.label} 列表`, emptyMessage: `暂无 ${section.label}`,
     items: section.kind === 'research' ? researchTopics(documents).map(topic => ({
@@ -37,7 +38,7 @@ export function DocumentNavigation() {
       title: topic.title, active: selected !== undefined && researchTopicDirectory(selected.path) === topic.directory,
       icon: <Folder size={16} />,
     })) : documents.map(document => ({
-      id: document.path, href: `${section.href}/${encodeURIComponent(document.metadata.id)}`,
+      id: document.path, href: documentHref(document, snapshot.documents),
       title: document.metadata.title, active: selected?.path === document.path, icon: <FileText size={16} />,
     })),
   }];

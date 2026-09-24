@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -17,6 +17,7 @@ import {
   findDocument,
   linkIssue,
   loadDocuments,
+  parseDocumentRecord,
   promoteMemory,
   reopenMemory,
   resolveMemory,
@@ -30,6 +31,7 @@ import {
 } from '../dist/documents.js';
 import { LocalRepository, initialize } from '../dist/storage.js';
 import { inspectResolutionEvidence } from '../dist/evidence.js';
+import { inspectDocuments, inspectDocumentFile } from '../dist/editing.js';
 import { MemorySchema, ResolutionSchema, decode, type Resolution } from '../dist/shared.js';
 
 function createConsumer() {
@@ -56,6 +58,12 @@ function write(root: string, path: string, contents: string): void {
 function throwsCode(code: string, operation: () => unknown): void {
   assert.throws(operation, error => typeof error === 'object' && error !== null && 'code' in error && error.code === code);
 }
+
+test('shared owner decoding retains bounded YAML references and names malformed aliases', () => {
+  const source = '---\nformat: concord.document/v1\nid: example\ntitle: &title Shared title\ncreatedAt: *title\nkind: feature\n---\n# Body\n';
+  assert.equal(parseDocumentRecord('docs/feature/示例/README.md', source)?.metadata.createdAt, 'Shared title');
+  throwsCode('InvalidData', () => parseDocumentRecord('docs/feature/示例/README.md', source.replace('createdAt: *title', 'createdAt: *missing')));
+});
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('creates strict owners, resolves feature supporting pages, and only replaces author prose', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   createDocument(repo, 'feature', { id: 'login', title: 'Login', body: '# Login contract\n\nCurrent behavior.\n' });
@@ -401,6 +409,63 @@ test('Issue closure rejects missing references and duplicate cycles', () => Effe
   if (first.metadata.kind !== 'issue') throw new Error('Expected Issue');
   write(root, first.path, renderDocument({ ...first.metadata, state: 'closed', closure: { kind: 'fixed', memory: 'memory/missing.md', proof: ['historical declaration'] } }, first.body));
   assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => finding.message.includes('missing')));
+}))));
+
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('all owners keep independent physical names and historical contracts stay read-only outside the graph', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+  for (const kind of ['feature', 'roadmap', 'design', 'engineering', 'research'] as const) {
+    createDocument(repo, kind, { id: `${kind}-id`, title: kind, ...(kind === 'design' ? { alternatives: ['本地', '远端'] } : {}) });
+    renameSync(join(root, `docs/${kind}/${kind}-id`), join(root, `docs/${kind}/中文目录`));
+    addPage(repo, kind, `${kind}-id`, '中文专题');
+    const page = showPage(repo, kind, `${kind}-id`, '中文专题');
+    assert.equal(page.path, `docs/${kind}/中文目录/中文专题.md`);
+    setPage(repo, kind, `${kind}-id`, '中文专题', '# 保存\n', page.digest);
+    throwsCode('DocumentExists', () => createDocument(repo, kind, { id: `${kind}-id`, title: 'Duplicate' }));
+  }
+  createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'feature-id' });
+  assert.equal(findDocument(loadDocuments(repo), 'flow').path, 'docs/feature/中文目录/use-case/flow.md');
+  throwsCode('DocumentExists', () => adoptRoadmap(repo, 'roadmap-id', 'feature-id', false));
+  createDocument(repo, 'issue', { id: 'issue-id', title: 'Issue' });
+  renameSync(join(root, 'docs/issues/issue-id.md'), join(root, 'docs/issues/中文观察.md'));
+  createDocument(repo, 'memory', { id: 'note-id', title: 'Note', memoryKind: 'note' });
+  renameSync(join(root, 'memory/note-id.md'), join(root, 'memory/中文记忆.md'));
+  assert.equal(findDocument(loadDocuments(repo), 'issue-id').path, 'docs/issues/中文观察.md');
+  assert.equal(findDocument(loadDocuments(repo), 'note-id').path, 'memory/中文记忆.md');
+  const historical = readFileSync(join(root, 'docs/design/中文目录/README.md'), 'utf8');
+  write(root, 'memory/design/README.md', historical);
+  write(root, 'memory/design/原始材料.md', '# 历史材料\n');
+  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
+  assert.equal(loadDocuments(repo).some(record => record.path === 'memory/design/README.md'), false);
+  const view = inspectDocuments(repo);
+  assert.equal(view.documents.some(record => record.path === 'memory/design/README.md'), false);
+  const page = view.pages.find(item => item.path === 'memory/design/README.md');
+  assert.equal(page?.body, historical);
+  assert.equal(page?.readOnly, true);
+  assert.equal(inspectDocumentFile(repo, 'memory/design/原始材料.md')?.readOnly, true);
+  throwsCode('ReferenceNotFound', () => resolveReference(repo, loadDocuments(repo), 'memory/design/README.md'));
+  write(root, 'memory/design/README.md', historical.replace('kind: design', 'kind: unknown'));
+  throwsCode('InvalidData', () => loadDocuments(repo));
+}))));
+
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('Use Case placement permits independent filenames while enforcing ownership and unique IDs', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+  createDocument(repo, 'feature', { id: 'sample', title: 'Sample' });
+  createDocument(repo, 'use-case', { id: 'internal-id', title: '独立名称', feature: 'sample' });
+  const original = findDocument(loadDocuments(repo), 'internal-id', 'use-case');
+  rmSync(join(root, original.path));
+  const namedPath = 'docs/feature/sample/use-case/中文名称.md';
+  write(root, namedPath, renderDocument(original.metadata, original.body));
+  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
+  assert.equal(resolveReference(repo, loadDocuments(repo), namedPath).metadata.id, 'internal-id');
+  write(root, original.path, renderDocument(original.metadata, original.body));
+  assert.ok(checkDocuments(repo, loadDocuments(repo)).some(item => item.code === 'DuplicateIdentity'));
+  rmSync(join(root, original.path));
+  rmSync(join(root, namedPath));
+  for (const path of ['docs/feature/sample/中文名称.md', 'docs/feature/sample/use-case/nested/中文名称.md', 'docs/feature/sample/use-case/带 空格.md']) {
+    write(root, path, renderDocument(original.metadata, original.body));
+    assert.ok(checkDocuments(repo, loadDocuments(repo)).some(item => item.code === 'InvalidPlacement'), path);
+    rmSync(join(root, path));
+  }
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md

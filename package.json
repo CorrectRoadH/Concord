@@ -83,6 +83,14 @@
     "@effect/platform-node-shared": "4.0.0-rc.112"
   },
   "exports": {
+    "./document-codec": {
+      "types": "./dist/document-codec.d.ts",
+      "default": "./dist/document-codec.js"
+    },
+    "./document-layout": {
+      "types": "./dist/document-layout.d.ts",
+      "default": "./dist/document-layout.js"
+    },
     "./design-content": {
       "types": "./dist/design-content.d.ts",
       "default": "./dist/design-content.js"
