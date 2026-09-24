@@ -312,6 +312,26 @@ kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28
 }
 .wysiwyg__content { min-height: 430px; padding: 2rem max(1.3rem, calc((100% - 850px) / 2)); color: #263a3d; font-family: "Noto Sans SC Variable", system-ui, sans-serif; font-size: .96rem; line-height: 1.75; }
 .wysiwyg__content h1, .wysiwyg__content h2, .wysiwyg__content h3 { font-family: "Noto Sans SC Variable", Georgia, "Noto Serif CJK SC", serif; }
+.wysiwyg__content > :is(h1, h2, h3, h4, h5, h6) { margin: 1.6em 0 .65em; font-weight: 650; line-height: 1.35; }
+.wysiwyg__content > h1 { font-size: 2em; }
+.wysiwyg__content > h2 { font-size: 1.5em; }
+.wysiwyg__content > h3 { font-size: 1.25em; }
+.wysiwyg__content > :first-child { margin-top: 0; }
+.wysiwyg__content > :is(p, ul, ol, blockquote, pre, table, hr) { margin-bottom: 1em; }
+.wysiwyg__content :is(ul, ol) { padding-left: 1.6em; }
+.wysiwyg__content ul { list-style-type: disc; }
+.wysiwyg__content ol { list-style-type: decimal; }
+.wysiwyg__content li + li { margin-top: .3em; }
+.wysiwyg__content blockquote { border-left: 3px solid var(--border); padding-left: 1em; color: var(--muted-foreground); }
+.wysiwyg__content hr { margin-top: 1.5em; border-top: 1px solid var(--border); }
+.wysiwyg__content img { max-width: 100%; height: auto; }
+/* Plain Markdown tables; MDXEditor's interactive tables retain their own controls. */
+.wysiwyg__content > table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; }
+.wysiwyg__content > table :is(th, td) { min-width: 5em; padding: .65em .85em; border: 1px solid var(--border); vertical-align: top; }
+.wysiwyg__content > table th { background: var(--muted); font-weight: 650; }
+.mermaid-source { min-width: 0; text-align: left; }
+.mermaid-source > summary { width: fit-content; margin-bottom: .6rem; color: var(--muted-foreground); cursor: pointer; font-size: .85rem; }
+.mermaid-source > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .wysiwyg__content a { color: var(--primary); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: .18em; cursor: pointer; }
 .wysiwyg__content a:hover { text-decoration-color: currentColor; }
 .wysiwyg__content code { border-radius: .25rem; background: #ecebe5; padding: .12rem .28rem; }

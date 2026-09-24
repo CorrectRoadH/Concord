@@ -58,6 +58,10 @@ test('long documents remain reachable and code blocks follow theme without chang
     }
     const codeWithLongLine = page.locator('.cm-editor').filter({ hasText: 'nowrapProbe' }).first();
     const mermaidWithLongLine = page.locator('.cm-editor').filter({ hasText: 'nowrap-' }).first();
+    await expect(page.getByLabel('Mermaid 图表预览').locator('svg')).toBeVisible();
+    await expect(mermaidWithLongLine).not.toBeVisible();
+    await page.getByText('编辑 Mermaid 源码', { exact: true }).click();
+    await expect(mermaidWithLongLine).toBeVisible();
     for (const block of [codeWithLongLine, mermaidWithLongLine]) {
       await expect(block.locator('.cm-scroller')).toHaveCSS('overflow-x', 'auto');
       await expect(block.locator('.cm-line').first()).toHaveCSS('white-space', 'pre');

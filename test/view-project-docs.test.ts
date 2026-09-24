@@ -24,6 +24,7 @@ test('the docs sidebar renders and edits constitution body through an explicit r
     renameSync(join(root, 'docs/design/history'), join(root, 'memory/history'));
     appendFileSync(join(root, 'docs/architecture.md'), '\n[Constitution clause](constitution.md#c-example)\n');
     appendFileSync(join(root, 'docs/constitution.md'), `\n[Jump to principle](#c-example)\n${'\nSpacer paragraph.\n'.repeat(90)}\n<a id="c-example"></a>\n## Example principle\n\n<script>window.concordInjected = true</script>\n\n<img src="invalid-image" onerror="window.concordInjected = true" />\n`);
+    appendFileSync(join(root, 'docs/constitution.md'), '\n| 层 | 负责 | 不负责 |\n| --- | --- | --- |\n| 游戏 | 通过公共 API 定义规则、状态与玩家视图 | 运行宿主、根调度与平台适配 |\n| 剧本 | 提供人物、地图、物件与配置 | 规则计算与执行逻辑 |\n\n- 列表样式检查\n\nParagraph spacing probe.\n');
     const constitution = readFileSync(join(root, 'docs/constitution.md'), 'utf8');
     mkdirSync(join(root, 'docs/_template/design-decision/plans/example'), { recursive: true });
     writeFileSync(join(root, 'docs/_template/design-decision/plans/example/architecture.md'), '# Nested architecture\n\nTemplate body.\n');
@@ -62,6 +63,18 @@ test('the docs sidebar renders and edits constitution body through an explicit r
     await expect(preview.locator('textarea')).toHaveCount(0);
     await expect(preview.locator('#user-content-c-example')).toHaveCount(1);
     await expect(preview.locator('script, [onerror]')).toHaveCount(0);
+    const table = rendered.getByRole('table');
+    const firstCell = table.getByRole('cell', { name: '游戏', exact: true });
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(firstCell).toHaveCSS('border-top-style', 'solid');
+      const cellSize = await firstCell.evaluate(element => ({ width: element.getBoundingClientRect().width, minimum: 5 * parseFloat(getComputedStyle(element).fontSize) }));
+      assert.ok(cellSize.width >= cellSize.minimum - .5, `short Chinese labels have enough column width: ${JSON.stringify(cellSize)}`);
+      assert.ok(await table.evaluate(element => element.clientWidth <= element.parentElement!.clientWidth), 'tables remain inside the document viewport');
+    }
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await expect(rendered.locator('ul')).toHaveCSS('list-style-type', 'disc');
+    assert.ok(await rendered.getByText('Paragraph spacing probe.', { exact: true }).evaluate(element => parseFloat(getComputedStyle(element).marginBottom) > 0));
     assert.equal(await page.evaluate(() => 'concordInjected' in window), false);
     await preview.getByRole('link', { name: 'Jump to principle' }).click();
     await expect(preview.getByRole('heading', { name: 'Example principle' })).toBeInViewport();

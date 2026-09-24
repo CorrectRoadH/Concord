@@ -123,7 +123,10 @@ function MermaidCodeBlockEditor(props: CodeBlockEditorProps) {
     <div aria-label="Mermaid 图表预览" {...stylex.props(markdownStyles.mermaidPreview)}>
       {svg ? <div {...stylex.props(markdownStyles.mermaidSvg)} dangerouslySetInnerHTML={{ __html: svg }} /> : error ? <pre {...stylex.props(markdownStyles.mermaidError)}>{error}</pre> : <span role="status">正在渲染图表…</span>}
     </div>
-    <CodeMirrorEditor {...props} />
+    <details className="mermaid-source">
+      <summary>编辑 Mermaid 源码</summary>
+      <CodeMirrorEditor {...props} />
+    </details>
   </div>;
 }
 
