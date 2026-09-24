@@ -6,7 +6,7 @@ Concord owns source validation, package bytes and source Release. The tap owns p
 
 ## Create
 
-Validate the source tag and package version, acquire ordinary repository coordination, build one tgz, then hand its immutable artifact identity to platform jobs. The tap accepts only the fixed public repository, canonical tag and unique matching asset.
+Validate the source tag, derive the release version, update package metadata in the CI checkout, build one tgz, then hand its immutable artifact identity to platform jobs. The tap accepts only the fixed public repository, canonical tag and unique matching asset.
 
 ## Run
 

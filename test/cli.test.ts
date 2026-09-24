@@ -44,6 +44,7 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  const locked=Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({packages:Schema.Record(Schema.String,Schema.Unknown)})))(readFileSync(join(packageRoot,'npm-shrinkwrap.json'),'utf8'));
  assert.deepEqual(Schema.decodeUnknownSync(manifest)(locked.packages['']),published,'packed dependency lock must match the manifest for offline npm ci');
  cli=join(install,'node_modules/concord-sdlc/dist/entry.js');
+ assert.equal(execFileSync(process.execPath,[cli,'--version'],{encoding:'utf8'}).trim(),`concord v${published.version}`);
 })));
 after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
 

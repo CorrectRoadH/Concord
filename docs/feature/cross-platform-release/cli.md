@@ -2,9 +2,9 @@
 
 ## Command
 
-Maintainers release by creating and pushing an annotated `v<package.version>` tag on an already pushed commit. The workflow rejects a version mismatch or an existing tag/release with different identity.
+Maintainers release by creating and pushing an annotated `v<version>` tag on an already pushed commit. The workflow uses the tag as the release version and rejects an invalid tag or an existing tag/release with different identity.
 
-Update `package.json`, both root versions in `npm-shrinkwrap.json`, and the CLI version before tagging. The workflow also accepts `concord-v<package.version>` for compatibility. Manual dispatch without a tag validates only and does not publish.
+The workflow updates the package and shrinkwrap root versions in its runner before building; the CLI reads its installed package version. Source package and shrinkwrap versions must agree before this update. The workflow also accepts `concord-v<version>` for compatibility. Manual dispatch without a tag validates only and does not publish.
 
 ## Output
 

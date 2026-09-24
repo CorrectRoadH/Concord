@@ -6,7 +6,7 @@ The source tag and package metadata are owned by CorrectRoadH/Concord. Its GitHu
 
 ## Data Flow
 
-The tag workflow validates tag/version, runs checks, packs once, installs that artifact on the supported matrix, tests the same packed build on Apple Silicon macOS 14/15, then publishes the source Release. The tap periodically or manually discovers a newer public release, verifies tag/package/asset identity, computes hashes, prepares Formula/Nix, validates the candidate checkout, and only then commits and tags the recipe.
+The tag workflow derives package metadata from the validated tag in CI, runs checks, packs once, installs that artifact on the supported matrix, tests the same packed build on Apple Silicon macOS 14/15, then publishes the source Release. The tap periodically or manually discovers a newer public release, verifies tag/package/asset identity, computes hashes, prepares Formula/Nix, validates the candidate checkout, and only then commits and tags the recipe.
 
 ## Invariants
 
