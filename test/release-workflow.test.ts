@@ -13,6 +13,44 @@ const Workflow = Schema.Struct({
   })) }) }),
 });
 
+const Job = Schema.Struct({
+  needs: Schema.optional(Schema.Union([Schema.String, Schema.Array(Schema.String)])),
+  strategy: Schema.optional(Schema.Struct({ matrix: Schema.Struct({ shard: Schema.optional(Schema.Array(Schema.Number)) }) })),
+  steps: Schema.Array(Schema.Struct({
+    uses: Schema.optional(Schema.String),
+    run: Schema.optional(Schema.String),
+    with: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  })),
+});
+
+// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
+test('publication waits for all shards and platforms testing the single packed build', async () => {
+  await Effect.runPromise(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Job) }))(
+      parse(yield* fs.readFileString('.github/workflows/release.yml')),
+    );
+    const { package: pack, tests, portable, publish } = graph.jobs;
+    assert.ok(pack && tests && portable && publish);
+    assert.deepEqual(publish.needs, ['package', 'tests', 'portable']);
+    assert.deepEqual(tests.strategy?.matrix.shard, [1, 2, 3, 4]);
+    assert.ok(pack.steps.some(step => step.run === 'pnpm typecheck'));
+    for (const job of [tests, portable]) {
+      assert.equal(job.needs, 'package');
+      assert.ok(job.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
+      const commands = job.steps.map(step => step.run ?? '').join('\n');
+      assert.match(commands, /--check release\/SHA256SUMS/);
+      assert.match(commands, /--strip-components=1 package\/dist/);
+      assert.doesNotMatch(commands, /pnpm (?:build|check|typecheck)|scripts\/build/);
+    }
+    assert.ok(tests.steps.some(step => step.run?.includes('--test-shard="$TEST_SHARD/4" test/*.test.ts')));
+    const check = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Struct({ push: Schema.Struct({ branches: Schema.Array(Schema.String) }) }) }))(
+      parse(yield* fs.readFileString('.github/workflows/check.yml')),
+    );
+    assert.deepEqual(check.on.push.branches, ['**']);
+  }).pipe(Effect.provide(NodeServices.layer)));
+});
+
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('release identity accepts both tag formats and blocks inconsistent package metadata', async () => {
   await Effect.runPromise(Effect.gen(function*() {

@@ -43,7 +43,9 @@ jobs:
           node-version: '24.19.0'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: rustup toolchain install 1.97.1 --profile minimal
+      - uses: ./.github/actions/setup-native
+        with:
+          platform: ${{ matrix.os }}-${{ matrix.target }}
       - name: Verify native transaction failure and crash recovery
         run: |
           node --import tsx scripts/build-native.ts --output dist/native --test-hooks
@@ -91,13 +93,12 @@ jobs:
       - run: pnpm install --frozen-lockfile --ignore-scripts
       - name: Install public runtime helpers
         run: sudo apt-get update && sudo apt-get install -y ripgrep
-      - run: pnpm exec playwright install --with-deps chromium
       - uses: actions/download-artifact@v4
         with:
           pattern: concord-hawdb-*
           path: native-artifacts
           merge-multiple: true
-      - run: pnpm check
+      - run: pnpm typecheck
         env:
           CONCORD_NATIVE_ARTIFACTS: native-artifacts
           CONCORD_REQUIRE_PORTABLE_NATIVE: '1'
@@ -125,6 +126,43 @@ jobs:
           path: release/
           if-no-files-found: error
           retention-days: 7
+
+  tests:
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - run: pnpm exec playwright install --with-deps chromium
+      - uses: actions/download-artifact@v4
+        with:
+          name: concord-release-package
+          path: release
+      - name: Test a shard against the exact packed build
+        env:
+          TEST_SHARD: ${{ matrix.shard }}
+        run: |
+          sha256sum --check release/SHA256SUMS
+          version="$(node -p "require('./package.json').version")"
+          tar -xzf "release/concord-sdlc-$version.tgz" --strip-components=1 package/dist
+          node --import tsx --test --test-shard="$TEST_SHARD/4" test/*.test.ts
 
   portable:
     needs: package
@@ -173,7 +211,7 @@ jobs:
           node --import tsx scripts/verify-installed-native.ts "$consumer/tool/node_modules/concord-sdlc"
 
   publish:
-    needs: [package, portable]
+    needs: [package, tests, portable]
     if: github.event_name == 'push' || inputs.tag != ''
     runs-on: ubuntu-24.04
     permissions:

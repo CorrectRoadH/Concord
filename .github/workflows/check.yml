@@ -1,10 +1,11 @@
 name: Check
 on:
   push:
+    branches: ['**']
   pull_request:
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -15,7 +16,9 @@ jobs:
           node-version: '24.19.0'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
-      - run: rustup toolchain install 1.97.1 --profile minimal
+      - uses: ./.github/actions/setup-native
+        with:
+          platform: ubuntu-24.04-linux-x64-glibc
       - name: Verify native transaction failure and crash recovery
         run: |
           node --import tsx scripts/build-native.ts --output dist/native --test-hooks
@@ -23,3 +26,31 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm check
+
+  native-macos:
+    # Tag caches cannot warm another tag; seed macOS on the default branch.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    runs-on: macos-14
+    permissions:
+      contents: read
+    env:
+      MACOSX_DEPLOYMENT_TARGET: '14.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: ./.github/actions/setup-native
+        with:
+          platform: macos-14-darwin-arm64
+      - name: Verify native transaction failure and crash recovery
+        run: |
+          node --import tsx scripts/build-native.ts --output dist/native --test-hooks
+          node --import tsx --test test/hawdb-native.test.ts
+      - name: Build the pinned host engine
+        run: node --import tsx scripts/build-native.ts --output native-artifacts

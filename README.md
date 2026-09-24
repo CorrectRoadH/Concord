@@ -366,7 +366,7 @@ concord --skill all
 
 ### 发版
 
-源仓库使用 `v<package.version>` annotated tag。一台 Ubuntu 24.04 runner 校验版本、运行完整检查、构建一次平台无关的 npm tgz，并从该精确资产隔离安装后才创建 GitHub Release；目标平台的可选原生依赖由 npm 在安装时选择。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
+源仓库使用 `v<package.version>` annotated tag。一台 Ubuntu 24.04 runner 校验版本、构建并检查类型、打包一次并隔离安装。四路 Ubuntu 测试分片与 macOS 14/15 验证并行运行，均使用该包中的构建产物；全部通过后才创建 GitHub Release。Cargo 缓存按平台、工具链、锁文件与原生源码区分，命中后仍编译和测试。目标平台的可选原生依赖由 npm 在安装时选择。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
 
 ### Nix / NixOS
 

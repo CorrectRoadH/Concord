@@ -1,0 +1,23 @@
+name: Set up cached native toolchain
+description: Restore Cargo compilation inputs and outputs; callers still build and test.
+inputs:
+  platform:
+    description: Pinned runner image and native target
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index
+          ~/.cargo/registry/cache
+          ~/.cargo/registry/src
+          ~/.cargo/git/db
+          ~/.cargo/git/checkouts
+          native/hawdb/target
+        key: cargo-v1-${{ inputs.platform }}-deployment14-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-${{ hashFiles('native/hawdb/Cargo.toml', 'native/hawdb/build.rs', 'native/hawdb/src/**', 'scripts/build-native.ts', 'src/hawdb-native.ts', 'src/hawdb-native-contract.ts') }}
+        restore-keys: |
+          cargo-v1-${{ inputs.platform }}-deployment14-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-
+    - shell: bash
+      run: rustup toolchain install 1.97.1 --profile minimal
