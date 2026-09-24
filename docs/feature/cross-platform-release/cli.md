@@ -2,7 +2,9 @@
 
 ## Command
 
-Maintainers release by creating and pushing an annotated `concord-v<package.version>` tag on an already pushed commit. The workflow rejects a version mismatch or an existing tag/release with different identity.
+Maintainers release by creating and pushing an annotated `v<package.version>` tag on an already pushed commit. The workflow rejects a version mismatch or an existing tag/release with different identity.
+
+Update `package.json`, both root versions in `npm-shrinkwrap.json`, and the CLI version before tagging. The workflow also accepts `concord-v<package.version>` for compatibility. Manual dispatch without a tag validates only and does not publish.
 
 ## Output
 
@@ -15,6 +17,6 @@ Any source check, package identity, exact-candidate installation/check, digest, 
 ## Minimal Example
 
 ```sh
-git tag -a concord-v0.6.0 -m 'Concord 0.6.0'
-git push origin concord-v0.6.0
+git tag -a v0.7.4 -m 'Concord 0.7.4'
+git push origin v0.7.4
 ```

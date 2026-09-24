@@ -16,7 +16,7 @@ A maintainer pushes one version tag and receives a tested Concord package plus a
 ## Complete Path
 
 1. Finish Concord-driven contract, implementation and test work on a pushed commit; `package.json`, shrinkwrap and CLI version agree.
-2. Create and push `concord-v<version>`.
+2. Create and push `v<version>`.
 3. Target jobs first build the pinned linux-x64-glibc and darwin-arm64 engines. One Ubuntu 24.04 runner runs `pnpm check`, packs once, verifies the digest, and installs that exact npm artifact containing both target-native engines with isolated `init`/`check` and genuine HawDB miss/hit/clear/recall checks with Rust and HawDB helpers absent from PATH.
 4. Check the same packed build and isolated CLI installation on Apple Silicon macOS 14 and 15; only after every required job passes, publish the source GitHub Release and its tgz.
 5. The public tap discovers the release, verifies version/tag/asset/hash, prepares Formula and Linux Nix metadata, validates candidate installs, then commits and tags the recipe.
