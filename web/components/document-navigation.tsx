@@ -1,4 +1,5 @@
 import { FileText, Folder } from 'lucide-react';
+import { Suspense, lazy } from 'react';
 import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs';
 import { researchTopicDirectory, researchTopics } from '../lib/research-topics';
 import { documentHref } from '../lib/document-routing';
@@ -6,7 +7,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../workspace';
 import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar';
 import { useSidebar } from './ui/sidebar';
-import { CreateDocument } from '../pages/documents';
+const CreateDocument = lazy(() => import('../pages/documents').then(module => ({ default: module.CreateDocument })));
 
 type NavigationKind = 'feature' | 'engineering' | 'roadmap' | 'design' | 'research' | 'memory';
 const sections: readonly { href: string; kind: NavigationKind; label: string }[] = [
@@ -42,7 +43,7 @@ export function DocumentNavigation() {
       title: document.metadata.title, active: selected?.path === document.path, icon: <FileText size={16} />,
     })),
   }];
-  return <ContentSidebar key={section.kind} actions={<CreateDocument kind={section.kind} />} model={{ label: section.label, title: section.label,
+  return <ContentSidebar key={section.kind} actions={<Suspense fallback={null}><CreateDocument kind={section.kind} /></Suspense>} model={{ label: section.label, title: section.label,
     filter: { label: `筛选 ${section.label}`, placeholder: '按标题或 ID 筛选…' }, groups }} />;
 }
 

@@ -68,7 +68,7 @@ Trace 与定向 Review 按解析得到的 owner 汇总 Feature supporting page �
 
 Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。0.6.0 采用[可移植发布协调](design/portable-publication/README.md)：文档发布协调仅用 Node 文件 API，移除外部 flock、stat、diskutil、plutil 和卷名称准入探测。支持同主机、同 PID 命名空间内的 Linux/macOS 本地工作树；网络多机协调与 Windows 执行不在保证内。macOS 保留大小写、Unicode 路径碰撞和 symlink 防护。
 
-一个非空 publication.lease 目录拥有短快照与提交互斥；完整 token owner 经临时目录 fsync/rename 原子公布。构造 LocalRepository 不持有命令全程锁；显式 snapshot 读取完整规划输入，提交在同一短 lease 下复核首次读取、缺失文件、目录集合与类型、配置和完整前像，再写 preimage journal、逐文件原子 rename。正常释放与显式死 PID 恢复只删除准确 token；不按年龄抢占，不递归删除活动锁目录。HawDB 只保存可删除重建的缓存，其持久连接和清理也在快照内。旧锁协议不迁移、不支持混合版本同时运行。
+publication.lease 目录以完整 token owner 记录短快照：只读快照可同时持有共享 owner，发布与恢复使用独占 owner，二者互斥。首个 owner 经临时目录 fsync/rename 原子公布，后续共享 owner 以完整文件的原子 hard link 加入；旧版本的单 owner 记录一律按独占处理。构造 LocalRepository 不持有命令全程锁；显式 snapshot 读取完整规划输入，提交在同一短 lease 下复核首次读取、缺失文件、目录集合与类型、配置和完整前像，再写 preimage journal、逐文件原子 rename。正常释放与显式死 PID 恢复只删除准确 token；不按年龄抢占，不递归删除活动锁目录。HawDB 只保存可删除重建的缓存，其持久连接和清理也在快照内。旧锁协议不迁移、不支持混合版本同时运行。
 
 `concord recover` 路由当前唯一的普通或 Trace journal；多 journal 现场冲突时保留并拒绝。各恢复入口获锁后重查类型和现场，只在内容符合 preimage 或 planned digest 时恢复。dry-run 执行同一规划校验，不发布 owner、journal 或缓存；已有项目的短协调可能创建 Git-private 目录。
 

@@ -27,6 +27,7 @@ Read and prepare local changes without installing an external lock or disk-inspe
 - Built CLI works without flock, diskutil, plutil or stat executables.
 - Opening two repositories does not grant either a command-long writer lock.
 - Competing commit and snapshot sections exclude each other; independent worktrees do not.
+- Independent read-only snapshots can run concurrently, including from separate processes; an exclusive publication can acquire ownership only after every shared owner exits.
 - A change in an authorization dependency, missing file or scanned directory invalidates the plan even if the write target is unchanged.
 - Concurrent dead-owner recovery and a newly arriving writer cannot delete the new owner.
 - Snapshot consumers never return a successfully validated mixed publication; failed or interrupted publication preserves recoverable state.

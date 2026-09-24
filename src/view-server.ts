@@ -5,6 +5,7 @@ import { isIP } from 'node:net';
 import { dirname, extname, join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
 import { Effect, Schema } from 'effect';
 import { executeViewAction, getViewGitStatus, getViewFile, getWorkspaceSnapshot, validateViewRoot } from './application.js';
 import { closeGitBaselineCache, getGitDiff, type GitArea, type GitBaselineCache } from './git-view.js';
@@ -60,6 +61,19 @@ function securityHeaders(response: ServerResponse): void {
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('X-Frame-Options', 'DENY');
   response.setHeader('Cache-Control', 'no-store');
+}
+
+function acceptsGzip(request: IncomingMessage): boolean {
+  return /(?:^|,)\s*gzip(?:\s*;\s*q=(?!0(?:\.0*)?(?:,|$))[^,]*)?(?:,|$)/iu.test(request.headers['accept-encoding'] ?? '');
+}
+
+function sendCompressible(request: IncomingMessage, response: ServerResponse, body: string | Buffer): void {
+  response.setHeader('Vary', 'Accept-Encoding');
+  const bytes = Buffer.isBuffer(body) ? body : Buffer.from(body);
+  const output = acceptsGzip(request) && bytes.byteLength >= 1024 ? gzipSync(bytes) : bytes;
+  if (output !== bytes) response.setHeader('Content-Encoding', 'gzip');
+  response.setHeader('Content-Length', output.byteLength);
+  response.end(output);
 }
 
 function json(response: ServerResponse, status: number, value: ViewResponse<unknown>): void {
@@ -210,7 +224,7 @@ function exactQuery(url: URL, names: readonly string[]): void {
   for (const name of names) if (!url.searchParams.has(name)) throw new ConcordError('InvalidQuery', `Missing query parameter: ${name}`);
 }
 
-function serveStatic(response: ServerResponse, pathname: string, webRoot: string): void {
+function serveStatic(request: IncomingMessage, response: ServerResponse, pathname: string, webRoot: string): void {
   const index = join(webRoot, 'index.html');
   let target = index;
   if (pathname.startsWith('/assets/')) {
@@ -224,9 +238,12 @@ function serveStatic(response: ServerResponse, pathname: string, webRoot: string
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size > STATIC_LIMIT) throw new ConcordError('InvalidFile', 'Web assets must be bounded regular files');
   securityHeaders(response);
   response.statusCode = 200;
-  response.setHeader('Content-Type', CONTENT_TYPES[extname(target)] ?? 'application/octet-stream');
-  response.setHeader('Content-Length', stat.size);
-  response.end(readFileSync(target));
+  const contentType = CONTENT_TYPES[extname(target)] ?? 'application/octet-stream';
+  response.setHeader('Content-Type', contentType);
+  if (pathname.startsWith('/assets/')) response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  const body = readFileSync(target);
+  if (/^(?:text\/|application\/json)/u.test(contentType)) sendCompressible(request, response, body);
+  else { response.setHeader('Content-Length', body.byteLength); response.end(body); }
 }
 
 async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, runAction: (input: unknown, response: ServerResponse) => Promise<unknown>): Promise<void> {
@@ -238,13 +255,14 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
     const etag = `"${digest(body)}"`;
     securityHeaders(response);
     response.setHeader('ETag', etag);
+    response.setHeader('Vary', 'Accept-Encoding');
     if (request.headers['if-none-match'] === etag) {
       response.statusCode = 304;
       response.end();
     } else {
       response.statusCode = 200;
       response.setHeader('Content-Type', 'application/json; charset=utf-8');
-      response.end(body);
+      sendCompressible(request, response, body);
     }
     return;
   }
@@ -319,7 +337,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
         if (url.pathname.startsWith('/api/')) {
           await api(request, response, url, root, jobs, baselineCache, runAction);
         } else if (request.method === 'GET') {
-          serveStatic(response, url.pathname, webRoot);
+          serveStatic(request, response, url.pathname, webRoot);
         } else {
           throw new ConcordError('MethodNotAllowed', 'Only GET is available for the static application');
         }

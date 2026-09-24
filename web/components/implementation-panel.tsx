@@ -1,5 +1,5 @@
 import { Clipboard, FileCode2 } from 'lucide-react';
-import { useState } from 'react';
+import { Suspense, lazy, useState } from 'react';
 import { Link } from 'react-router-dom';
 import type { DocumentRecord } from '../../src/shared';
 import { useWorkspace } from '../workspace';
@@ -8,7 +8,7 @@ import { ActionResult as ResultCard } from './action-result';
 import { Field } from './page';
 import { ContentSection, PanelEmpty, PanelHeader, RecordItem, RecordList } from './content-layout';
 import { ScanNotice } from './repository-tests';
-import { SourceDrawer } from './source-drawer';
+const SourceDrawer = lazy(() => import('./source-drawer').then(module => ({ default: module.SourceDrawer })));
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
@@ -56,7 +56,7 @@ export function ImplementationPanel({ document }: { document: DocumentRecord }) 
           </RecordItem>)}</RecordList>}
       </ContentSection>)}</div>
     </>
-    <SourceDrawer location={sourceNavigation.location} editable onClose={sourceNavigation.close} />
+    {sourceNavigation.location && <Suspense fallback={null}><SourceDrawer location={sourceNavigation.location} editable onClose={sourceNavigation.close} /></Suspense>}
     {result !== null && <ResultCard title="归属注释" value={result} />}
 <Dialog open={annotate} onOpenChange={setAnnotate}><DialogContent><form onSubmit={event => settle(annotation(event))}><DialogHeader><DialogTitle>生成代码归属注释</DialogTitle><DialogDescription>返回可粘贴的关联注释片段，不直接改写源码。</DialogDescription></DialogHeader><div className="form-grid"><Field label="关联目标"><Select value={references.includes(contracts) ? contracts : ''} onValueChange={setContracts}><SelectTrigger aria-label="实现关联目标"><SelectValue placeholder="自定义契约引用" /></SelectTrigger><SelectContent>{owners.map(owner => <SelectItem key={owner.path} value={owner.path}>{owner.metadata.title}</SelectItem>)}{snapshot.pages.filter(page => page.documentPath && owners.some(owner => owner.path === page.documentPath)).map(page => <SelectItem key={page.path} value={page.path}>{page.path}</SelectItem>)}</SelectContent></Select></Field><Field label="Scope"><Select value={scope} onValueChange={value => setScope(value as typeof scope)}><SelectTrigger aria-label="代码声明范围"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="file">File</SelectItem><SelectItem value="node">Node</SelectItem><SelectItem value="region">Region</SelectItem></SelectContent></Select></Field><Field label="契约引用" hint="每行一个；支持 supporting page 与 #anchor"><Textarea aria-label="实现契约引用" value={contracts} onChange={event => setContracts(event.target.value)} required /></Field></div><DialogFooter><Button type="button" variant="outline" onClick={() => setAnnotate(false)}>取消</Button><Button type="submit">生成</Button></DialogFooter></form></DialogContent></Dialog>
   </>;

@@ -230,3 +230,23 @@ jobs:
           gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
             --notes "Built and fully tested on Ubuntu 24.04. The same packed candidate, including pinned Linux x64 and macOS arm64 HawDB engines, passed cache, coordination, recovery, and isolated installation checks on Apple Silicon macOS 14 and 15. Consumer installation requires neither Rust nor a HawDB service. No old lock migration or mixed-version coordination is provided. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."
+      - name: Notify Homebrew tap of the published release
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_WORKFLOW_TOKEN }}
+          RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
+        run: |
+          if test -z "$GH_TOKEN"; then
+            echo '::warning::Homebrew tap notification skipped: HOMEBREW_TAP_WORKFLOW_TOKEN is not configured'
+            echo 'Homebrew tap notification skipped; scheduled sync remains available.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          for delay in 0 2 5; do
+            if test "$delay" -gt 0; then sleep "$delay"; fi
+            if gh workflow run concord-release-sync.yml \
+              --repo CorrectRoadH/homebrew-tap --ref main --field "tag=$RELEASE_TAG"; then
+              echo "Homebrew tap sync requested for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+          done
+          echo "::warning::Homebrew tap notification failed for $RELEASE_TAG; scheduled sync remains available"
+          echo "Homebrew tap notification failed for $RELEASE_TAG; scheduled sync remains available." >> "$GITHUB_STEP_SUMMARY"

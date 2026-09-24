@@ -209,7 +209,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     let findings = [...inspected.findings];
     let diagnostics: unknown;
     try {
-      const trace = buildTrace(repo, cache);
+      const trace = buildTrace(repo, cache, { documents: inspected.documents });
       cases = trace.annotations;
       codes = trace.codeDeclarations;
       codeFiles = trace.codeFiles;
@@ -254,7 +254,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       }
     }
     return { ...snapshot, repositoryTests };
-  }), { dryRun: cache === 'off' });
+  }), { dryRun: true });
 });
 
 /** Git needs current configuration, not the document, code, or evidence projections. */

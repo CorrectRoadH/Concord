@@ -11,11 +11,11 @@ import { checkConstitution, showConstitution } from './constitution.js';
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
-export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean } = {}) {
+export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; documents?: readonly DocumentRecord[] } = {}) {
   return repo.snapshot === undefined ? buildUnderSnapshot(repo, cache, options) : repo.snapshot(() => buildUnderSnapshot(repo, cache, options));
 }
-function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean }) {
-  const documents = loadDocuments(repo);
+function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; documents?: readonly DocumentRecord[] }) {
+  const documents = options.documents ?? loadDocuments(repo);
   const annotations = scanAnnotations(repo, { cache });
   const constitutionFindings = checkConstitution(repo);
   const advisories = constitutionFindings.filter((finding) => finding.code === 'ConstitutionDraft');

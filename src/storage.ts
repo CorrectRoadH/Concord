@@ -367,7 +367,7 @@ export class LocalRepository implements Repository {
   beginSnapshot(): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
     try {
-      this.traceLease = acquireFileLease(this.root, this.coordinationDirectory, PUBLICATION_LEASE, 'exclusive', 'snapshot', !this.previewWithoutState);
+      this.traceLease = acquireFileLease(this.root, this.coordinationDirectory, PUBLICATION_LEASE, this.noWrite ? 'shared' : 'exclusive', 'snapshot', !this.previewWithoutState);
       this.snapshotDepth = 1;
       this.assertReady();
     } catch (cause) { this.close(); throw storageCoordinationFailure(cause); }
