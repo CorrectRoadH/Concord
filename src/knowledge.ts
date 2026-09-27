@@ -2,14 +2,14 @@
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 // @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
-import { findDocument, loadDocuments, setAuthor } from './documents.js';
+import { findDocument, loadDocuments, readDocumentSelector, setAuthor } from './documents.js';
 import { buildTrace, requireValidTrace } from './trace.js';
 import { ConcordError, digest, inRepositorySnapshot, type DocumentKind, type DocumentRecord, type MutationReceipt, type Repository } from './shared.js';
 
 type KnowledgeKind = Extract<DocumentKind, 'memory' | 'issue'>;
 
 function ownerRecords(repo: Repository, kind: KnowledgeKind): readonly DocumentRecord[] {
-  return loadDocuments(repo).filter(record => record.metadata.kind === kind).sort((left, right) => left.path.localeCompare(right.path));
+  return loadDocuments(repo, [kind]).sort((left, right) => left.path.localeCompare(right.path));
 }
 
 function summary(record: DocumentRecord) {
@@ -33,7 +33,7 @@ export function knowledgeRecall(repo: Repository, kind: KnowledgeKind, query: st
 
 export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-    const record = findDocument(loadDocuments(repo), selector, kind);
+    const record = readDocumentSelector(repo, selector, kind);
     return setAuthor(repo, record.path, body, expectedDigest, dryRun);
   });
 }

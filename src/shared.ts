@@ -68,6 +68,7 @@ export interface ConfigSnapshot { readonly path: 'concord.config.ts'; readonly s
 export interface Change { readonly path: string; readonly before: string | null; readonly after: string | null }
 export interface MutationReceipt { readonly operation: string; readonly dryRun: boolean; readonly changedPaths: readonly string[]; readonly recoveryRequired?: boolean }
 export interface Repository {
+  readonly access?: 'read' | 'write';
   readonly root: string;
   readonly privateDir: string;
   readonly config: ProjectConfig;

@@ -53,7 +53,7 @@ export function readLeaseOwner(path: string, operation: string): LeaseOwner | un
   return owners[0];
 }
 
-function readLeaseOwners(path: string, operation: string): LeaseOwner[] {
+function readLeaseOwners(path: string, operation: string, allowJoiningReaders = false): LeaseOwner[] {
   try {
     assertLeasePath(path);
     const stat = lstatSync(path, { throwIfNoEntry: false });
@@ -63,6 +63,7 @@ function readLeaseOwners(path: string, operation: string): LeaseOwner[] {
     try { entries = readdirSync(path); }
     catch (cause) { if (errno(cause, 'ENOENT')) return []; throw cause; }
     const owners = entries.flatMap(name => {
+      if (!/^[0-9a-f-]{36}\.json$/u.test(name)) throw new Error('lease contains unexpected files; preserve coordination state');
       const file = join(path, name);
       const ownerStat = lstatSync(file, { throwIfNoEntry: false });
       if (ownerStat === undefined) return [];
@@ -74,7 +75,10 @@ function readLeaseOwners(path: string, operation: string): LeaseOwner[] {
       if (owner.root !== resolve(owner.root) || owner.host.length === 0 || name !== `${owner.token}.json`) throw new Error('lease owner identity does not match its path');
       return [owner];
     });
-    if (owners.length > 1 && owners.some(owner => owner.mode !== 'shared')) throw new Error('lease mixes shared and exclusive owners; preserve coordination state');
+    const writers = owners.filter(owner => owner.mode !== 'shared');
+    if (writers.length > 1 || owners.length > 1 && writers.length > 0 && (!allowJoiningReaders || owners.some(owner => owner.root !== writers[0]!.root || owner.host !== writers[0]!.host))) {
+      throw new Error('lease mixes shared and exclusive owners; preserve coordination state');
+    }
     return owners;
   } catch (cause) { throw error(operation, path, cause); }
 }
@@ -95,14 +99,23 @@ export function acquireFileLease(root: string, directory: string, name: string, 
     try { renameSync(temporary, path); }
     catch (cause) {
       if (errno(cause, 'EEXIST') || errno(cause, 'ENOTEMPTY')) {
-        const owners = readLeaseOwners(path, operation);
+        const owners = readLeaseOwners(path, operation, true);
         if (mode !== 'shared' || owners.some(existing => existing.mode !== 'shared' || existing.root !== owner.root)) throw new Error(`${mode} publication lease is busy; retry after the operation finishes, or recover a dead owner`);
+        let joined = false;
         try {
           const target = join(path, `${owner.token}.json`);
           linkSync(join(temporary, `${owner.token}.json`), target);
+          joined = true;
           syncLeaseDirectory(path);
+          // The last reader may have left and a writer replaced the directory
+          // between the initial scan and link. The link alone grants no access.
+          const current = readLeaseOwners(path, operation, true);
+          if (!current.some(existing => existing.token === owner.token) || current.some(existing => existing.mode !== 'shared' || existing.root !== owner.root || existing.host !== owner.host)) {
+            throw new Error('shared publication lease is busy; ownership changed while joining');
+          }
           return { directory, path, owner, mode };
         } catch (joinCause) {
+          if (joined) removeObservedOwner(path, owner);
           if (errno(joinCause, 'ENOENT') && attempt < 3) return acquireFileLease(root, directory, name, mode, operation, create, attempt + 1);
           throw joinCause;
         }
@@ -135,7 +148,9 @@ function removeObservedOwner(path: string, owner: LeaseOwner): boolean {
 export function releaseFileLease(lease: FileLease, operation: string): void {
   if (released.has(lease)) return;
   try {
-    const current = lease.mode === 'shared' ? readLeaseOwners(lease.path, operation).find(owner => owner.token === lease.owner.token) : readLeaseOwner(lease.path, operation);
+    // A prospective reader may be validating its link while this writer exits.
+    // It cannot read protected data until the exclusive token has disappeared.
+    const current = readLeaseOwners(lease.path, operation, true).find(owner => owner.token === lease.owner.token);
     if (current === undefined || current.token !== lease.owner.token) { released.add(lease); return; }
     if (current.root !== lease.owner.root || current.host !== lease.owner.host || current.pid !== lease.owner.pid) throw new Error('lease identity changed; preserve coordination state');
     removeObservedOwner(lease.path, current);
@@ -150,11 +165,11 @@ export function ownerIsAlive(owner: LeaseOwner): boolean {
 }
 
 /** Only document leases are reclaimable this way; dead parents do not prove dead runners. */
-export function recoverFileLease(root: string, path: string, operation: string): void {
+export function recoverFileLease(root: string, path: string, operation: string): readonly string[] {
   try {
-    const owners = readLeaseOwners(path, operation);
+    const owners = readLeaseOwners(path, operation, true);
     if (owners.some(owner => owner.root !== resolve(root))) throw new Error('lease belongs to another worktree');
     if (owners.some(ownerIsAlive)) throw new Error('publication lease is busy: its owner is still alive');
-    for (const owner of owners) removeObservedOwner(path, owner);
+    return owners.filter(owner => removeObservedOwner(path, owner)).map(owner => owner.token);
   } catch (cause) { throw error(operation, path, cause, 'cleanup'); }
 }

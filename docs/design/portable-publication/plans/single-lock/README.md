@@ -1,5 +1,7 @@
 # One portable publication lease
 
+本页保存 2026-09-22 采用时的协议基线。后续已实现的共享读取以 [当前 Use Case](../../../../feature/portable-coordination/use-case/coordinate-local-publications.md) 与 [总架构](../../../../architecture.md) 为准；下文“不增加 shared-reader protocol”和 SQLite 指当时方案，不是当前限制。当前缓存为 HawDB。
+
 Prepare a unique temporary directory containing a complete token-named owner file, then atomically rename it onto the nonempty lease directory. Competing claims cannot replace an occupied directory. Release and explicit dead-owner recovery unlink only the observed token; never recursively delete the live lease path. Snapshot and publication sections use this same primitive. No age-based stealing.
 
 ## Goals

@@ -37,6 +37,15 @@ export function humanOutput(value: unknown): string {
     ...(Array.isArray(value.local) ? value.local.map(address => `  Local:   ${String(address)}`) : []),
     ...(Array.isArray(value.network) ? value.network.map(address => `  Network: ${String(address)}`) : []),
   ].join('\n');
+  if (value.operation === 'recover') {
+    const coordination = Predicate.isObject(value.coordination) ? value.coordination : {};
+    const publication = Predicate.isObject(coordination.publication) ? coordination.publication : {};
+    const runner = Predicate.isObject(coordination.runner) ? coordination.runner : {};
+    return [`Recovery: ${String(value.status)}`, `Journal: ${String(value.journalStatus ?? value.status)}`,
+      `Publication tokens reclaimed: ${Array.isArray(publication.reclaimedTokens) ? publication.reclaimedTokens.length : 0}`,
+      `Runner: ${String(runner.status ?? 'unknown')}`, ...(typeof runner.message === 'string' ? [runner.message] : []),
+      ...(Array.isArray(value.changedPaths) ? value.changedPaths.map(path => `  ${String(path)}`) : [])].join('\n');
+  }
   if ('changedPaths' in value && Array.isArray(value.changedPaths)) {
     const lines = [`${value.dryRun ? 'Would apply' : 'Applied'} ${String(value.operation)}:`, ...value.changedPaths.map(path => `  ${String(path)}`)];
     if ((value.operation === 'feedback-sync' || value.operation === 'feedback-import') && typeof value.fetched === 'number' && typeof value.imported === 'number') {

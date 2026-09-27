@@ -16,6 +16,7 @@ const RunState = Schema.Struct({
 });
 type RunState = typeof RunState.Type;
 export interface RunLease { readonly lease: FileLease; }
+export type RunnerStatus = { readonly status: 'absent' } | { readonly status: 'running'; readonly token: string } | { readonly status: 'blocked'; readonly code: 'CleanupFailed'; readonly message: string };
 const location = (root: string) => genericPrivateDirectorySync(root);
 const statePath = (root: string, owner: LeaseOwner) => join(location(root), `run-${owner.token}.json`);
 const quarantinePath = (root: string, owner: LeaseOwner) => join(location(root), `run-${owner.token}.quarantine`);
@@ -43,6 +44,21 @@ function writeState(root: string, owner: LeaseOwner, state: RunState): void {
     renameSync(temporary, path); renamed = true;
     syncLeaseDirectory(location(root));
   } finally { if (!renamed) { try { unlinkSync(temporary); } catch (cause) { if (!errno(cause, 'ENOENT')) throw cause; } } }
+}
+
+/** Observation only, under publication ownership. Never authorizes runner reclamation. */
+export function inspectRunner(root: string): RunnerStatus {
+  try {
+    const owner = readLeaseOwner(join(location(root), 'runner.lease'), 'recover');
+    if (owner === undefined) return { status: 'absent' };
+    const state = readState(root, owner);
+    if (!ownerIsAlive(owner) || state.phase !== 'running' || lstatSync(quarantinePath(root, owner), { throwIfNoEntry: false }) !== undefined) {
+      return { status: 'blocked', code: 'CleanupFailed', message: 'Runner cleanup is unconfirmed; preserve runner.lease and run state. Confirm child-process cleanup before publication.' };
+    }
+    return { status: 'running', token: owner.token };
+  } catch (cause) {
+    return { status: 'blocked', code: 'CleanupFailed', message: cause instanceof Error ? cause.message : String(cause) };
+  }
 }
 
 /** Caller holds the document snapshot lease for every state transition. */

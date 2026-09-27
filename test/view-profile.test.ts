@@ -191,7 +191,8 @@ it('invalid target', () => {});
     assert.equal(failed.repositoryTests?.status, 'failed');
     const failurePage = await browser.newPage();
     await failurePage.goto(`http://127.0.0.1:${server.port}/features/adapters?tab=testing`);
-    await expect(failurePage.getByRole('alert')).toContainText('项目测试接入失败');
+    await expect(failurePage.getByRole('alert').filter({ hasText: '项目测试接入失败' })).toBeVisible();
+    await expect(failurePage.getByRole('alert').filter({ hasText: '工作区扫描不完整' })).toBeVisible();
     await expect(failurePage.getByText('未发现当前契约的关联测试', { exact: true })).toHaveCount(0);
   } finally { await browser.close(); await server.close(); rmSync(root, { recursive: true, force: true }); }
 });

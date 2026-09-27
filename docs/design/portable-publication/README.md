@@ -22,19 +22,19 @@ decision:
 
 # Portable publication coordination
 
-Before comparing plans, read `docs/constitution.md` and record every applicable real clause anchor in this Design's `constitutionRefs` metadata.
+本页保留 2026-09-22 的发布协调裁决。当前共享读取以 [功能验收](../../feature/portable-coordination/use-case/coordinate-local-publications.md) 和 [总架构](../../architecture.md) 为准；缓存引擎以 HawDB 设计为准。历史 reason 与候选中的 SQLite、串行快照描述不重新定义当前运行时。
 
 ## Problem
 
-Describe the decision to make and why comparing alternatives is necessary.
+本地文件发布需要跨进程互斥、完整前像核验和中断恢复，同时安装后的 CLI 不应依赖外部 flock 或平台磁盘探测工具。比较 Node 文件协调与保留外部 flock 两种实现，保持事实 owner 与证据来源不变。
 
 ## Core Mental Model
 
-Define the concepts and evaluation criteria shared by every candidate.
+publication owner 保护短快照与文件事务；journal 保存已准备的完整变更集；runner owner 保护长执行及其进程清理。缓存可丢弃，不能授权发布、恢复或证据关闭。候选须同时满足互斥、安全回收、来源漂移检测与安装可移植性。
 
 ## Scope and Tradeoffs
 
-State the decision's boundaries and the tradeoffs the comparison must resolve.
+保证范围为同主机、同 PID 命名空间的 Linux/macOS 本地 worktree。保守处理未知 owner 和 runner 清理状态，不按时间抢占，不承诺网络多机协调或混合版本互操作。当前操作依赖范围的重构候选另见 [operation-boundaries](../operation-boundaries/README.md)，其采用状态由对应 metadata 表达。
 
 ## Entry Points
 
@@ -42,7 +42,4 @@ State the decision's boundaries and the tradeoffs the comparison must resolve.
 - [Limits](LIMITS.md): constraints shared by every candidate.
 - [Cases](CASES.md): neutral scenarios for the comparison.
 - [Decision](DECISION.md): explanatory evidence.
-Each candidate in plans/ is a self-contained feature design package.
-The decision is recorded only by `concord design decide`; writing prose does not select a candidate.
-
-Goals and Limits use stable G/L-numbered H2 entries. Every candidate README must respond to all entries in its Goals and Limits tables, including failures and pending evidence. Run `concord design check <id>` before deciding. `concord design format <id>` only normalizes supported layout; it never supplies a choice or evidence. Record the exact selected slug and link in DECISION, explain accepted Goal gaps, then decide. All selected-plan Limits must be satisfied.
+候选中的设计论证不替代构建、打包及真实进程验收。历史裁决保留原选择；后续行为通过明确的新契约替代。

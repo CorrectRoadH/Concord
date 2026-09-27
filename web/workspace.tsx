@@ -112,7 +112,9 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     try {
       const result = await api.action(action);
       await refresh();
-      notify(success, 'success');
+      if (action.action === 'recover' && typeof result === 'object' && result !== null && 'status' in result && result.status === 'blocked') {
+        notify('恢复仍被阻塞，现场已保留。请查看恢复结果中的诊断。', 'error');
+      } else notify(success, 'success');
       return result;
     } catch (cause) {
       notify(message(cause), 'error');

@@ -5,6 +5,7 @@ import { renderTypeScriptConfig } from './config.js';
 import { documentRoots, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
 import type { LocalRepository } from './storage.js';
 import { documentDisposition } from './document-layout.js';
+import { existsSync } from 'node:fs';
 
 export interface ViewFile {
   readonly path: string;
@@ -95,6 +96,9 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
   const documents: DocumentRecord[] = [];
   const findings: Finding[] = [];
   const pages: ViewFile[] = [];
+  for (const source of repo.config.memorySources ?? []) {
+    if (!existsSync(repo.absolute(source.path))) findings.push({ code: 'MemorySourceUnavailable', path: source.path, message: `Configured Memory source does not exist: ${source.path}` });
+  }
   for (const path of markdownPaths(repo, roots)) {
     const value = inspectMarkdown(repo, path, roots);
     if (value.document) documents.push(value.document);

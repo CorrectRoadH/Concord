@@ -185,6 +185,7 @@ export function clearCache(repo: Repository): { readonly status: string; readonl
   return repo.snapshot === undefined ? clearUnderSnapshot(repo) : repo.snapshot(() => clearUnderSnapshot(repo));
 }
 function clearUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string } {
+  if (repo.access === 'read') throw new ConcordError('ReadOnlyRepository', 'Cache clear requires write access');
   const inventory = inspectCacheClear(repo.privateDir);
   if (!inventory.existing && inventory.legacy.length === 0) return { status: 'empty', path: inventory.path };
   closeRepositoryCache(repo);

@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
-import { resolveReference } from './documents.js';
+import { readDocumentReference } from './documents.js';
 import { buildTrace, requireValidTrace } from './trace.js';
-import { ConcordError, digest, type Repository } from './shared.js';
+import { ConcordError, digest, inRepositorySnapshot, type Repository } from './shared.js';
 
 // Code Declaration: an author's explicit implementation association, not evidence.
 // @concord-code
@@ -25,14 +25,15 @@ export function locateCode(repo: Repository, file: string, line: number) {
 }
 
 export function codeSnippet(repo: Repository, scope: 'file' | 'node' | 'region', contracts: readonly string[]) {
+  return inRepositorySnapshot(repo, () => {
   if (!contracts.length) throw new ConcordError('MissingCodeContract', 'Repeat --contract for one or more Feature, Use Case, or Engineering references');
   if (new Set(contracts).size !== contracts.length) throw new ConcordError('DuplicateCodeContract', 'Each exact contract reference must appear once');
-  const trace = buildTrace(repo, 'off'); requireValidTrace(trace);
-  for (const ref of contracts) resolveReference(repo, trace.documents, ref, ['feature', 'use-case', 'engineering']);
+  for (const ref of contracts) readDocumentReference(repo, ref, ['feature', 'use-case', 'engineering']);
   // @concord-begin
   // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
   const tag = scope === 'node' ? 'code' : scope === 'region' ? 'begin' : 'file';
   const snippet = [`// @concord-${tag}`, ...contracts.map(ref => `// @concord-implements ${ref}`), ...(scope === 'region' ? ['// Place complete statements here.', '// @concord-end'] : [])].join('\n') + '\n';
   // @concord-end
   return { operation: 'code-annotate', scope, snippet };
+  });
 }

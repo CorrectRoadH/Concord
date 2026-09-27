@@ -1,5 +1,7 @@
 # Decision record
 
+本页解释历史选择。共享读取和 HawDB 的后续当前契约见 [总架构](../../architecture.md)，不以本页历史风险描述覆盖当前功能验收。
+
 ## Decision
 
 Selected: [single-lock](plans/single-lock/README.md)

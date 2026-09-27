@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
+import fs from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { type TestContext } from 'node:test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from '../dist/coordination.js';
 import { LocalRepository, initialize } from '../dist/storage.js';
 import { beginRun, finalizeRun } from '../dist/run-coordination.js';
@@ -13,6 +15,10 @@ import { runCase } from '../dist/evidence.js';
 import { OwnedProcessLive } from '../dist/owned-process.js';
 import { buildTrace, requireValidTrace } from '../dist/trace.js';
 import { createDocument } from '../dist/documents.js';
+import type { FileLease } from '../dist/file-lease.js';
+import { digest } from '../dist/shared.js';
+import { recoverLocalState } from '../dist/recovery.js';
+import { mutateTraceFiles } from '../dist/repository/docs/trace/relation-mutation.js';
 
 const entry = resolve('dist/entry.js');
 function fixture(t: TestContext): string {
@@ -102,6 +108,188 @@ test('real owner death and competing recoverers never grant two live writers', a
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @name recover-interrupted-reader-admission
+test('recover reclaims a real reader killed after linking beside a dead writer', async t => {
+  const root = fixture(t);
+  const original = acquireTraceLeaseSync(root, 'shared', 'original')!;
+  // A built-API JavaScript consumer pauses only at the filesystem boundary;
+  // production lease code creates and validates every owner record.
+  const reader = spawn(process.execPath, ['--input-type=module', '-e', `
+    import fs from 'node:fs';
+    import { syncBuiltinESMExports } from 'node:module';
+    import { acquireTraceLeaseSync } from './dist/coordination.js';
+    const link = fs.linkSync;
+    fs.linkSync = (source, target) => {
+      console.log('before-link');
+      fs.readSync(0, Buffer.alloc(1), 0, 1, null);
+      link(source, target);
+      console.log('after-link');
+      fs.readSync(0, Buffer.alloc(1), 0, 1, null);
+    };
+    syncBuiltinESMExports();
+    acquireTraceLeaseSync(process.argv[1], 'shared', 'interrupted-reader');
+  `, root], { cwd: process.cwd(), stdio: ['pipe', 'pipe', 'inherit'] });
+  let writer: ChildProcess | undefined;
+  try {
+    assert.equal(await line(reader), 'before-link');
+    releaseTraceLeaseSync(original, 'original-exit');
+    writer = holder(root);
+    assert.equal(await line(writer), 'held');
+    const linked = line(reader);
+    reader.stdin!.write('1');
+    assert.equal(await linked, 'after-link');
+    const tokens = readdirSync(original.path).map(name => name.slice(0, -5)).sort();
+    assert.equal(tokens.length, 2);
+    await stop(reader);
+    assert.throws(() => recoverPublicationLeaseSync(root), /busy/);
+    assert.deepEqual(readdirSync(original.path).map(name => name.slice(0, -5)).sort(), tokens);
+    await stop(writer);
+    const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'recover'], { encoding: 'utf8', timeout: 15000 });
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({
+      status: Schema.Literal('clean'), journalStatus: Schema.Literal('clean'),
+      coordination: Schema.Struct({ publication: Schema.Struct({ reclaimedTokens: Schema.Array(Schema.String) }), runner: Schema.Struct({ status: Schema.Literal('absent') }) }),
+    })))(result.stdout);
+    assert.deepEqual([...report.coordination.publication.reclaimedTokens].sort(), tokens);
+    const next = acquireTraceLeaseSync(root, 'exclusive', 'next-writer')!;
+    try { assert.throws(() => recoverPublicationLeaseSync(root), /busy/); }
+    finally { releaseTraceLeaseSync(next, 'next-writer'); }
+  } finally {
+    await stop(reader);
+    if (writer !== undefined) await stop(writer);
+    releaseTraceLeaseSync(original, 'original-finally');
+  }
+});
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @name cli-shared-operation-access
+test('ordinary CLI queries share ownership with a live reader', t => Effect.runPromise(Effect.sync(() => {
+  const root = fixture(t);
+  const setup = new LocalRepository(root);
+  try { setup.snapshot(() => createDocument(setup, 'feature', { id: 'target', title: 'Target' })); }
+  finally { setup.close(); }
+  const reader = acquireTraceLeaseSync(root, 'shared', 'query-observer')!;
+  try {
+    for (const args of [
+      ['memory', 'list'], ['memory', 'index'], ['memory', 'recall', 'missing'],
+      ['code', 'annotate', '--scope', 'file', '--contract', 'docs/feature/target/README.md'],
+      ['test', 'annotate', '--contract', 'docs/feature/target/README.md'],
+    ]) {
+      const result = spawnSync(process.execPath, [entry, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 15000 });
+      assert.equal(result.status, 0, `${args.join(' ')}: ${result.stderr}`);
+    }
+    assert.ok(existsSync(join(reader.path, `${reader.owner.token}.json`)), 'queries must not remove another live reader');
+    assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'blocked-writer'), /busy/);
+  } finally { releaseTraceLeaseSync(reader, 'query-observer'); }
+})));
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @name recovery-reports-runner-blocker
+test('CLI recovery reports quarantined runner instead of claiming clean readiness', t => Effect.runPromise(Effect.sync(() => {
+  const root = fixture(t);
+  const repo = new LocalRepository(root);
+  try {
+    const run = repo.snapshot(() => beginRun(root));
+    repo.snapshot(() => finalizeRun(root, run, false));
+    const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'recover'], { encoding: 'utf8', timeout: 15000 });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.String })))(result.stdout);
+    assert.equal(report.status, 'blocked');
+    assert.ok(existsSync(join(run.lease.path, `${run.lease.owner.token}.json`)));
+    const observed = spawnSync(process.execPath, [entry, '--root', root, '--json', 'memory', 'list'], { encoding: 'utf8', timeout: 15000 });
+    assert.equal(observed.status, 0, observed.stderr);
+    assert.throws(() => repo.publish('still-blocked', [{ path: 'memory/blocked.md', before: null, after: 'no' }]), { code: 'CleanupFailed' });
+  } finally { repo.close(); }
+})));
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+test('recovery preserves prepared and committed journals when runner cleanup is unknown', t => Effect.runPromise(Effect.sync(() => {
+  for (const phase of ['prepared', 'committed']) {
+    const root = fixture(t);
+    const repo = new LocalRepository(root);
+    try {
+      const run = repo.snapshot(() => beginRun(root));
+      repo.snapshot(() => finalizeRun(root, run, false));
+      const config = repo.configSnapshot;
+      const journal = JSON.stringify({ format: 'concord.journal', root, privateDir: join(root, '.git/concord'), projectId: config.config.projectId,
+        operation: 'interrupted', phase, directories: [],
+        scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: config.source, configDigest: config.digest },
+        changes: [{ path: 'memory/interrupted.md', before: null, after: 'pending\n', beforeDigest: null, afterDigest: digest('pending\n'), mode: 420 }],
+      });
+      const path = join(root, '.git/concord/journal.json');
+      writeFileSync(join(root, 'memory/interrupted.md'), 'pending\n');
+      writeFileSync(path, journal);
+      for (const args of [['recover'], ['action', '--input', '-']]) {
+        const result = spawnSync(process.execPath, [entry, '--root', root, '--json', ...args], { input: JSON.stringify({ action: 'recover' }), encoding: 'utf8', timeout: 15000 });
+        assert.equal(result.status, 1, result.stdout + result.stderr);
+        const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.Literal('blocked'), journalStatus: Schema.Literal('pending') })))(result.stdout);
+        assert.equal(report.status, 'blocked');
+        assert.equal(readFileSync(path, 'utf8'), journal);
+        assert.equal(readFileSync(join(root, 'memory/interrupted.md'), 'utf8'), 'pending\n');
+      }
+    } finally { repo.close(); }
+  }
+})));
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+test('recovery final verification reports a competing publication owner', async t => {
+  const root = fixture(t);
+  const close = LocalRepository.prototype.close;
+  let concurrent: ReturnType<typeof acquireTraceLeaseSync>;
+  let closes = 0;
+  LocalRepository.prototype.close = function() {
+    close.call(this);
+    if (++closes === 2) concurrent = acquireTraceLeaseSync(root, 'exclusive', 'between-recovery-and-verification');
+  };
+  try {
+    await assert.rejects(Effect.runPromise(recoverLocalState(root)), { code: 'RepositoryBusy' });
+    assert.ok(concurrent);
+    assert.ok(existsSync(join(concurrent.path, `${concurrent.owner.token}.json`)));
+  } finally {
+    LocalRepository.prototype.close = close;
+    if (concurrent !== undefined) releaseTraceLeaseSync(concurrent, 'test-cleanup');
+  }
+});
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+test('recovery preserves a new dead owner between dispatch and either recovery engine', async t => {
+  for (const trace of [false, true]) {
+    const root = fixture(t);
+    if (trace) {
+      execFileSync('git', ['-C', root, 'add', 'concord.config.ts']);
+      execFileSync('git', ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
+      await assert.rejects(Effect.runPromise(mutateTraceFiles({ root, operation: 'stage-barrier', changes: [{ path: 'interrupted.md', bytes: 'planned\n' }], injectFailureAfterRename: 1 })), /injected interruption/);
+    }
+    const publicationPath = join(tracePrivateDirectorySync(root), 'publication.lease');
+    const original = fs.rmdirSync;
+    let token = '';
+    fs.rmdirSync = (path, options) => {
+      original(path, options);
+      if (path === publicationPath && token === '') {
+        token = 'starting';
+        // The dispatcher has released its owner. A real process acquires the
+        // resource and exits without releasing before the selected engine runs.
+        const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
+          import { acquireTraceLeaseSync } from './dist/coordination.js';
+          console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'interstage-owner').owner.token);
+        `, root], { cwd: process.cwd(), encoding: 'utf8', timeout: 15000 });
+        assert.equal(child.status, 0, child.stderr);
+        token = child.stdout.trim();
+      }
+    };
+    syncBuiltinESMExports();
+    try {
+      await assert.rejects(Effect.runPromise(recoverLocalState(root)), { code: 'RepositoryBusy' });
+      assert.ok(existsSync(join(publicationPath, `${token}.json`)), 'the selected engine must not perform an unreported second reclamation');
+      if (trace) assert.ok(existsSync(join(tracePrivateDirectorySync(root), 'multi-file-publication-journal.json')));
+    } finally { fs.rmdirSync = original; syncBuiltinESMExports(); }
+    const retried = await Effect.runPromise(recoverLocalState(root));
+    assert.deepEqual(retried.coordination.publication.reclaimedTokens, [token]);
+    assert.equal(retried.status, trace ? 'trace-recovered' : 'clean');
+  }
+});
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('unknown lock state and repeated old close preserve a new owner', t => {
   const root = fixture(t);
   const first = acquireTraceLeaseSync(root, 'exclusive', 'first')!;
@@ -114,6 +302,47 @@ test('unknown lock state and repeated old close preserve a new owner', t => {
   assert.throws(() => releaseTraceLeaseSync(second, 'unknown'), /unexpected files/);
   assert.equal(readFileSync(join(second.path, 'unknown'), 'utf8'), 'preserve');
 });
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @name shared-join-directory-replacement
+test('reader admission rechecks a replaced directory and writer release tolerates pending readers', t => Effect.runPromise(Effect.sync(() => {
+  const root = fixture(t);
+  for (const writerExitsBeforeValidation of [false, true]) {
+    const first = acquireTraceLeaseSync(root, 'shared', 'first-reader')!;
+    let writer: FileLease | undefined, joined: FileLease | undefined;
+    const originalLink = fs.linkSync;
+    let injected = false;
+    // Only the filesystem scheduling boundary is intercepted. All ownership
+    // transitions and protected checks execute the production implementation.
+    fs.linkSync = (source, destination) => {
+      if (!injected) {
+        injected = true;
+        releaseTraceLeaseSync(first, 'last-reader-exits');
+        writer = acquireTraceLeaseSync(root, 'exclusive', 'replacement-writer')!;
+        originalLink(source, destination);
+        if (writerExitsBeforeValidation) releaseTraceLeaseSync(writer, 'writer-exits');
+      } else originalLink(source, destination);
+    };
+    syncBuiltinESMExports();
+    try {
+      if (writerExitsBeforeValidation) {
+        joined = acquireTraceLeaseSync(root, 'shared', 'joining-reader')!;
+        assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'third-writer'), /busy/);
+      } else {
+        assert.throws(() => acquireTraceLeaseSync(root, 'shared', 'joining-reader'), /busy/);
+        assert.ok(writer);
+        assert.deepEqual(readdirSync(writer.path), [`${writer.owner.token}.json`]);
+      }
+      assert.equal(injected, true);
+    } finally {
+      fs.linkSync = originalLink; syncBuiltinESMExports();
+      if (joined) releaseTraceLeaseSync(joined, 'reader-done');
+      if (writer) releaseTraceLeaseSync(writer, 'writer-done');
+      releaseTraceLeaseSync(first, 'first-done');
+    }
+    assert.equal(existsSync(first.path), false);
+  }
+})));
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('built CLI initializes and publishes with only Node and Git on PATH', t => {

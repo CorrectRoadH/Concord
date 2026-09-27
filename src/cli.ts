@@ -68,12 +68,15 @@ function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: 
   return Effect.gen(function*() {
     const settings = yield* root;
     const repo = yield* Effect.acquireRelease(
-      Effect.try({ try: () => new LocalRepository(Option.getOrUndefined(settings.root), { initialize: options.initialize, recover: options.recover, dryRun: options.readonly === true || settings.dryRun }), catch: failure }),
+      Effect.try({ try: () => new LocalRepository(Option.getOrUndefined(settings.root), { initialize: options.initialize, recover: options.recover, access: options.readonly ? 'read' : 'write', dryRun: options.initialize && options.readonly || settings.dryRun }), catch: failure }),
       repo => Effect.sync(() => repo.close()),
     );
     if (!options.unlocked) yield* Effect.acquireRelease(sync(() => repo.beginSnapshot()), () => Effect.sync(() => repo.endSnapshot()));
     return yield* operation(repo, settings).pipe(Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
   }).pipe(Effect.scoped);
+}
+function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>) {
+  return withRepo(operation, { readonly: true });
 }
 const sync = <A>(fn: () => A) => Effect.try({ try: fn, catch: failure });
 const cached = (dry: boolean) => dry ? 'off' as const : 'use' as const;
@@ -140,6 +143,7 @@ const recover = Command.make('recover', {}, () => Effect.gen(function*() {
   const settings = yield* root;
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'recover does not accept --dry-run'));
   const receipt = yield* recoverLocalState(Option.getOrUndefined(settings.root));
+  if (receipt.status === 'blocked') process.exitCode = 1;
   yield* Effect.sync(() => emit(receipt, settings.json));
 })).pipe(Command.withDescription('Recover the current document or Trace publication; preserve conflicting external edits.'));
 
@@ -148,8 +152,8 @@ function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
     if (args.noPages && args.pages.length) throw new ConcordError('ConflictingOptions', '--no-pages cannot be combined with --pages');
     return createDocument(repo, kind, { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, feature: Option.getOrUndefined(args.feature), observedAt: Option.getOrUndefined(args.observedAt), sources: args.source, alternatives: args.alternative, pages: args.noPages ? [] : args.pages.length ? args.pages.flatMap(value => value.split(',').map(page => page.trim())) : undefined, constitutionRefs: args.constitutionRef.length ? args.constitutionRef : undefined, dryRun: s.dryRun });
   }))).pipe(Command.withDescription('Create a writing scaffold. Feature/Roadmap/Design omitted pages use project defaults; --no-pages explicitly creates README only. Feature/Design accept repeated --constitution-ref.'));
-  const list = Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation: `${kind}-list`, documents: loadDocuments(repo).filter(d => d.metadata.kind === kind).map(d => ({ path: d.path, ...d.metadata })) }))));
-  const show = Command.make('show', { id }, ({ id }) => withRepo((repo, settings) => sync(() => documentShow(repo, id, kind, cached(settings.dryRun)))));
+  const list = Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: `${kind}-list`, documents: loadDocuments(repo).filter(d => d.metadata.kind === kind).map(d => ({ path: d.path, ...d.metadata })) }))));
+  const show = Command.make('show', { id }, ({ id }) => withReadRepo((repo, settings) => sync(() => documentShow(repo, id, kind, cached(settings.dryRun)))));
   const adopt = Command.make('adopt', { id, feature: text('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, args.feature, s.dryRun))));
   const decide = Command.make('decide', { id, selected: text('selected'), target: many('target'), reason: text('reason') }, args => withRepo((repo, s) => sync(() => decideDesign(repo, args.id, args.selected, args.target, args.reason, s.dryRun))));
   const designCheck = Command.make('check', { id }, args => withRepo(repo => sync(() => { const result = checkDesign(repo, args.id); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true }));
@@ -157,7 +161,7 @@ function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
   const pageName = Argument.string('page');
   const page = Command.make('page').pipe(Command.withDescription('Add, inspect, or replace a package page. Use --plan <alternative> for a Design candidate.'), Command.withSubcommands([
     Command.make('add', { id, page: pageName, plan: optional('plan') }, args => withRepo((repo,s) => sync(() => addPage(repo,kind,args.id,args.page,s.dryRun,Option.getOrUndefined(args.plan))))),
-    Command.make('show', { id, page: pageName, plan: optional('plan') }, args => withRepo(repo => sync(() => showPage(repo,kind,args.id,args.page,Option.getOrUndefined(args.plan))))),
+    Command.make('show', { id, page: pageName, plan: optional('plan') }, args => withReadRepo(repo => sync(() => showPage(repo,kind,args.id,args.page,Option.getOrUndefined(args.plan))))),
     Command.make('set', { id, page: pageName, body: text('body'), expectedDigest: text('expected-digest'), plan: optional('plan') }, args => withRepo((repo,s) => sync(() => setPage(repo,kind,args.id,args.page,body(args.body),args.expectedDigest,s.dryRun,Option.getOrUndefined(args.plan))))),
   ]));
   const commands = kind === 'roadmap' ? [create, list, show, page, adopt] : kind === 'design' ? [create, list, show, page, decide, designCheck, designFormat] : kind === 'feature' || kind === 'engineering' || kind === 'research' ? [create, list, show, page] : [create, list, show];
@@ -167,9 +171,9 @@ const author = Command.make('author').pipe(Command.withDescription('Edit author 
   Command.make('set', { ref: Argument.string('reference'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => setAuthor(repo, args.ref, body(args.body), args.expectedDigest, s.dryRun)))),
 ]));
 const memoryAdd = Command.make('add', { id, title: text('title'), kind: Flag.choice('kind', ['problem','decision','insight','note']), body: optional('body'), source: optional('source') }, args => withRepo((repo,s) => sync(() => createDocument(repo, 'memory', { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, memoryKind: args.kind, memorySource: Option.getOrUndefined(args.source), dryRun: s.dryRun }))));
-const memoryList = Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation: 'memory-list', memories: loadDocuments(repo).filter(d => d.metadata.kind === 'memory').map(d => ({path:d.path,...d.metadata})) }))));
-const memoryShow = Command.make('show', { id }, args => withRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'memory', cached(settings.dryRun)))));
-const memorySearch = Command.make('search', { query: Argument.string('query') }, args => withRepo(repo => sync(() => ({ operation: 'memory-search', memories: loadDocuments(repo).filter(d => d.metadata.kind === 'memory' && `${d.metadata.title}\n${d.body}`.toLocaleLowerCase().includes(args.query.toLocaleLowerCase())) }))));
+const memoryList = Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'memory-list', memories: loadDocuments(repo, ['memory']).map(d => ({path:d.path,...d.metadata})) }))));
+const memoryShow = Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'memory', cached(settings.dryRun)))));
+const memorySearch = Command.make('search', { query: Argument.string('query') }, args => withReadRepo(repo => sync(() => ({ operation: 'memory-search', memories: loadDocuments(repo, ['memory']).filter(d => `${d.metadata.title}\n${d.body}`.toLocaleLowerCase().includes(args.query.toLocaleLowerCase())) }))));
 const memoryResolve = Command.make('resolve', { id, kind: Flag.choice('kind', ['fixed','not-a-bug','wont-fix','external-fixed']), reason: text('reason'), red: optional('red'), green: optional('green') }, args => withRepo((repo,s) => sync(() => {
   const trace = buildTrace(repo, 'off', { includeCode: false }); requireValidTrace(trace);
   const problem = findDocument(trace.documents, args.id, 'memory');
@@ -193,17 +197,17 @@ const memory = Command.make('memory').pipe(Command.withDescription('Maintain Pro
 const issue = Command.make('issue').pipe(Command.withDescription('Maintain local observation drafts; no remote GitHub mutations.'), Command.withSubcommands([
   Command.make('draft', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))),
   Command.make('create', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))),
-  Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation:'issue-list', drafts:loadDocuments(repo).filter(d=>d.metadata.kind==='issue') })))),
+  Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation:'issue-list', drafts:loadDocuments(repo, ['issue']) })))),
   Command.make('index', {}, () => withRepo(repo => sync(() => knowledgeIndex(repo, 'issue')), { readonly: true })),
   Command.make('recall', { query: Argument.string('query') }, args => withRepo(repo => sync(() => knowledgeRecall(repo, 'issue', args.query)), { readonly: true })),
-  Command.make('show', { id }, args => withRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'issue', cached(settings.dryRun))))),
+  Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'issue', cached(settings.dryRun))))),
   Command.make('edit', { id, body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => editKnowledge(repo, 'issue', args.id, body(args.body), args.expectedDigest, s.dryRun)))),
   Command.make('remove', { id, expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => removeIssue(repo, args.id, args.expectedDigest, s.dryRun)))),
   Command.make('link', { id, memory: text('memory') }, args => withRepo((repo,s) => sync(() => linkIssue(repo,args.id,args.memory,s.dryRun)))),
   Command.make('close', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => closeIssue(repo,args.id,args.reason,s.dryRun)))),
 ]));
 const feedbackConnection = Command.make('connection').pipe(Command.withDescription('Configure feedback providers; GitHub CLI mode reuses the server machine login.'), Command.withSubcommands([
-  Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] })))),
+  Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] })))),
   Command.make('add', {
     id: text('id'),
     provider: Flag.choice('provider', ['github', 'linear']),
@@ -252,12 +256,12 @@ const feedbackImport = Command.make('import', { url: Argument.string('url'), con
   yield* Effect.sync(() => emit(receipt, settings.json));
 }));
 const feedback = Command.make('feedback').pipe(Command.withDescription('Triage local observations and explicitly import or synchronize configured remote feedback.'), Command.withSubcommands([
-  Command.make('list', {}, () => withRepo(repo => sync(() => ({ operation: 'feedback-list', feedback: listFeedback(repo) })))),
-  Command.make('show', { id }, args => withRepo((repo, settings) => sync(() => {
+  Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'feedback-list', feedback: listFeedback(repo) })))),
+  Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => {
     const item = listFeedback(repo).find(candidate => candidate.document.metadata.id === args.id);
     if (!item) throw new ConcordError('DocumentNotFound', `No feedback matches ${args.id}`);
     const relations = documentShow(repo, item.document.path, 'issue', cached(settings.dryRun));
-    return { operation: 'feedback-show', feedback: { ...item, document: relations.document }, incoming: relations.incoming, outgoing: relations.outgoing, findings: relations.findings };
+    return { operation: 'feedback-show', feedback: { ...item, document: relations.document }, incoming: relations.incoming, outgoing: relations.outgoing, complete: relations.complete, findings: relations.findings };
   }))),
   Command.make('create', { id, title: text('title'), body: optional('body') }, args => withRepo((repo, settings) => sync(() => createDocument(repo, 'issue', { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, dryRun: settings.dryRun })))),
   Command.make('link', { id, feature: text('feature') }, args => withRepo((repo, settings) => sync(() => linkFeedbackFeature(repo, args.id, args.feature, settings.dryRun)))),
@@ -267,9 +271,9 @@ const feedback = Command.make('feedback').pipe(Command.withDescription('Triage l
   feedbackConnection,
 ]));
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
-  Command.make('annotate', { contract: text('contract'), regression: many('regression') }, args => withRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.regression)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
-  Command.make('list', {}, () => withRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache};}))),
-  Command.make('show', { id }, args => withRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-show',case:selectCase(t.annotations.cases,args.id),evidenceScope:'command'};}))),
+  Command.make('annotate', { contract: text('contract'), regression: many('regression') }, args => withReadRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.regression)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
+  Command.make('list', {}, () => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache};}))),
+  Command.make('show', { id }, args => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-show',case:selectCase(t.annotations.cases,args.id),evidenceScope:'command'};}))),
   Command.make('run', { id }, args => withRepo((repo,s) => Effect.gen(function*(){
     if(s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','test run does not accept --dry-run; use test show to inspect the declaration'));
     const t=yield* sync(()=>repo.snapshot(()=>buildTrace(repo,'off',{includeCode:false})));yield* sync(()=>requireValidTrace(t));
@@ -278,15 +282,15 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
     if(evidence.commandOutcome!=='pass') yield* Effect.sync(()=>{process.exitCode=1;});
     return evidence;
   }), { unlocked: true })),
-  Command.make('evidence', { id }, args => withRepo(repo => sync(()=>readEvidence(repo,args.id)))),
+  Command.make('evidence', { id }, args => withReadRepo(repo => sync(()=>readEvidence(repo,args.id)))),
 ]));
 const code = Command.make('code').pipe(Command.withDescription('Associate files, functions and statement regions with Feature, Use Case or Engineering contracts. No coverage or completion claim.'), Command.withSubcommands([
-  Command.make('list', {}, () => withRepo(repo => sync(() => listCode(repo)))).pipe(Command.withDescription('List current declarations from configured sourceRoots.')),
-  Command.make('locate', { file: Argument.string('path'), line: Flag.integer('line').pipe(Flag.withDescription('1-based source line; returns every containing scope.')) }, args => withRepo(repo => sync(() => locateCode(repo, args.file, args.line)))).pipe(Command.withDescription('Find all explicit declarations containing a repository-relative source line.')),
-  Command.make('annotate', { scope: Flag.choice('scope', ['file', 'node', 'region']), contract: many('contract') }, args => withRepo(repo => sync(() => codeSnippet(repo, args.scope, args.contract)))).pipe(Command.withDescription('Print validated source comments; repeat --contract for multiple targets. Does not edit source.')),
+  Command.make('list', {}, () => withReadRepo(repo => sync(() => listCode(repo)))).pipe(Command.withDescription('List current declarations from configured sourceRoots.')),
+  Command.make('locate', { file: Argument.string('path'), line: Flag.integer('line').pipe(Flag.withDescription('1-based source line; returns every containing scope.')) }, args => withReadRepo(repo => sync(() => locateCode(repo, args.file, args.line)))).pipe(Command.withDescription('Find all explicit declarations containing a repository-relative source line.')),
+  Command.make('annotate', { scope: Flag.choice('scope', ['file', 'node', 'region']), contract: many('contract') }, args => withReadRepo(repo => sync(() => codeSnippet(repo, args.scope, args.contract)))).pipe(Command.withDescription('Print validated source comments; repeat --contract for multiple targets. Does not edit source.')),
 ]));
 const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear, or rebuild disposable HawDB projections.'),Command.withSubcommands([
-  Command.make('status',{},()=>withRepo(repo=>sync(()=>cacheStatus(repo)))),
+  Command.make('status',{},()=>withReadRepo(repo=>sync(()=>cacheStatus(repo)))),
   Command.make('clear',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) return {operation:'cache-clear',dryRun:true};return clearCache(repo);}))),
   Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');const annotations=scanAnnotations(repo,{cache:'rebuild'});const code=scanCode(repo,{cache:'rebuild'});return {...annotations,codeCache:code.cache};}))),
 ]));
@@ -309,35 +313,36 @@ const concepts = Command.make('concepts').pipe(Command.withDescription('Discover
   Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showConcepts(repo, Option.getOrUndefined(args.path))), { readonly: true })),
   Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setConcepts(repo, jsonBody(args.body, ConceptCatalogSchema, 'concept catalog'), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a catalog with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
 ]));
-const check = Command.make('check',{},()=>withRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'check',ok:t.findings.length===0,findings:t.findings,advisories:t.advisories,documents:t.documents.length,cases:t.annotations.cases.length,codeDeclarations:t.codeDeclarations.length,memoryEvidence:t.memories,cache:t.annotations.cache,codeCache:t.codeCache};}))).pipe(Command.withDescription('Validate current source ownership and references; do not execute tests.'));
+const check = Command.make('check',{},()=>withReadRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'check',ok:t.complete,complete:t.complete,findings:t.findings,advisories:t.advisories,documents:t.documents.length,cases:t.annotations.cases.length,codeDeclarations:t.codeDeclarations.length,memoryEvidence:t.memories,cache:t.annotations.cache,codeCache:t.codeCache};}))).pipe(Command.withDescription('Validate current source ownership and references; do not execute tests.'));
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
-  Command.make('show',{ref:Argument.string('reference')},args=>withRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))))),
-  Command.make('gaps',{},()=>withRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))))).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),
-  Command.make('check',{},()=>withRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'trace-check',ok:!t.findings.length,findings:t.findings,edges:t.edges};}))),
+  Command.make('show',{ref:Argument.string('reference')},args=>withReadRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))))),
+  Command.make('gaps',{},()=>withReadRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))))).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),
+  Command.make('check',{},()=>withReadRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'trace-check',ok:t.complete,complete:t.complete,findings:t.findings,edges:t.edges};}))),
 ]));
 const review = Command.make('review').pipe(Command.withDescription('Generate local review material from current contracts and history.'),Command.withSubcommands([
-  Command.make('render',{ref:Argument.string('reference').pipe(Argument.optional)},args=>withRepo((repo,s)=>sync(()=>renderReview(repo,Option.getOrUndefined(args.ref),cached(s.dryRun))))),
+  Command.make('render',{ref:Argument.string('reference').pipe(Argument.optional)},args=>withReadRepo((repo,s)=>sync(()=>renderReview(repo,Option.getOrUndefined(args.ref),cached(s.dryRun))))),
 ]));
 const templates = Command.make('template').pipe(Command.withDescription('Inspect built-in writing templates without a project.'), Command.withSubcommands([
   Command.make('list', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* sync(() => ({ operation: 'template-list', templates: listTemplates() })); yield* Effect.sync(() => emit(result, settings.json)); })),
   Command.make('show', { name: Argument.string('name'), title: optional('title') }, args => Effect.gen(function*() { const settings = yield* root; const result = yield* sync(() => ({ operation: 'template-show', name: args.name, body: templateBody(args.name, Option.getOrElse(args.title, () => 'Your title')) })); yield* Effect.sync(() => emit(result, settings.json)); })),
 ]));
 const config = Command.make('config').pipe(Command.withDescription('Inspect or replace the normalized project configuration with whole-file CAS.'), Command.withSubcommands([
-  Command.make('show', {}, () => withRepo(repo => sync(() => ({ ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source })))),
+  Command.make('show', {}, () => withReadRepo(repo => sync(() => ({ ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source })))),
   Command.make('set', { input: text('input'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setConfig(repo, decode(ProjectSchema, JSON.parse(body(args.input)), 'configuration input'), args.expectedDigest, settings.dryRun)))),
 ]));
 const constitution = Command.make('constitution').pipe(Command.withDescription('Inspect, initialize, adopt, and amend the single project constitution with CAS.'), Command.withSubcommands([
-  Command.make('show', {}, () => withRepo(repo => sync(() => ({ operation: 'constitution-show', constitution: showConstitution(repo), affected: loadDocuments(repo).filter((document) => (document.metadata.kind === 'feature' || document.metadata.kind === 'design') && (document.metadata.constitutionRefs?.length ?? 0) > 0).map((document) => ({ path: document.path, refs: document.metadata.kind === 'feature' || document.metadata.kind === 'design' ? document.metadata.constitutionRefs ?? [] : [] })) })))),
+  Command.make('show', {}, () => withReadRepo(repo => sync(() => ({ operation: 'constitution-show', constitution: showConstitution(repo), affected: loadDocuments(repo).filter((document) => (document.metadata.kind === 'feature' || document.metadata.kind === 'design') && (document.metadata.constitutionRefs?.length ?? 0) > 0).map((document) => ({ path: document.path, refs: document.metadata.kind === 'feature' || document.metadata.kind === 'design' ? document.metadata.constitutionRefs ?? [] : [] })) })))),
   Command.make('initialize', {}, () => withRepo((repo, settings) => sync(() => initializeConstitution(repo, settings.dryRun)))),
   Command.make('adopt', { body: text('body'), reason: text('reason'), impact: text('impact'), source: many('source'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => adoptConstitution(repo, body(args.body), args.reason, args.impact, args.source, args.expectedDigest, settings.dryRun)))),
   Command.make('amend', { body: text('body'), reason: text('reason'), impact: text('impact'), source: many('source'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => amendConstitution(repo, body(args.body), args.reason, args.impact, args.source, args.expectedDigest, settings.dryRun)))),
 ]));
-const diagnose = Command.make('doctor', {}, () => withRepo(repo => sync(() => { const result = doctor(repo); if (!result.ok) process.exitCode = 1; return result; }))).pipe(Command.withDescription('Inspect project configuration and onboarding gaps without running tests.'));
+const diagnose = Command.make('doctor', {}, () => withReadRepo(repo => sync(() => { const result = doctor(repo); if (!result.ok) process.exitCode = 1; return result; }))).pipe(Command.withDescription('Inspect project configuration and onboarding gaps without running tests.'));
 const viewRoot = (settings: { readonly root: Option.Option<string> }): string => Option.getOrUndefined(settings.root) ?? process.cwd();
 const action = Command.make('action', { input: text('input') }, args => Effect.gen(function*() {
   const settings = yield* root;
   const input = yield* sync(() => { try { return applyViewDryRun(JSON.parse(body(args.input)) as unknown, settings.dryRun); } catch (cause) { throw cause instanceof ConcordError ? cause : new ConcordError('InvalidJson', `Action input is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`); } });
   const result = yield* executeViewAction(viewRoot(settings), input);
+  if (input.action === 'recover' && typeof result === 'object' && result !== null && 'status' in result && result.status === 'blocked') process.exitCode = 1;
   yield* Effect.sync(() => emit(result, settings.json));
 })).pipe(Command.withDescription('Execute one strict shared ViewAction from --input <file|->.'));
 const workspace = Command.make('workspace').pipe(Command.withDescription('Inspect the shared human/agent workspace projection.'), Command.withSubcommands([

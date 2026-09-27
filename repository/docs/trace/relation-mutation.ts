@@ -290,8 +290,8 @@ function durableReplace(path: string, bytes: string | Uint8Array, mode: number):
   } finally { rmSync(temporary, { force: true }); }
 }
 
-function acquireLease(root: string, mode: TraceLease["mode"], operation: string, create: boolean): Effect.Effect<TraceLease | undefined, TraceMutationError> {
-  if (operation === "trace-recover") {
+function acquireLease(root: string, mode: TraceLease["mode"], operation: string, create: boolean, reclaimPublication = true): Effect.Effect<TraceLease | undefined, TraceMutationError> {
+  if (operation === "trace-recover" && reclaimPublication) {
     try { recoverPublicationLeaseSync(root); } catch (cause) { return Effect.fail(mutationFailure(operation, "lock", cause)); }
   }
   return acquireTraceLease(root, mode, operation, create).pipe(Effect.mapError((cause) => mutationFailure(operation, cause.phase === "git-private" ? "git-private" : (cause.phase as string) === "migration" ? "migration" : cause.phase === "cleanup" ? "cleanup" : "lock", cause, cause.path)));
@@ -307,9 +307,10 @@ function withLease<A, E, R>(
   operation: string,
   create: boolean,
   use: (lease: TraceLease | undefined) => Effect.Effect<A, E, R>,
+  reclaimPublication = true,
 ): Effect.Effect<A, E | TraceMutationError, R> {
   return Effect.uninterruptibleMask((restore) => Effect.gen(function*() {
-    const lease = yield* acquireLease(root, mode, operation, create);
+    const lease = yield* acquireLease(root, mode, operation, create, reclaimPublication);
     const useExit = yield* Effect.exit(restore(use(lease)));
     if (lease === undefined) {
       if (Exit.isFailure(useExit)) return yield* Effect.failCause(useExit.cause);
@@ -672,7 +673,7 @@ function recoverUnderLease(root: string, directory: string): TraceRecoveryReceip
   return journal.publication === "file-replace" ? recoverFileJournal(root, directory, journal) : recoverDirectoryJournal(root, directory, journal);
 }
 
-export function recoverTrace(root: string): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError> {
+export function recoverTrace(root: string, options: { readonly reclaimPublication?: boolean } = {}): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError> {
   return withLease(root, "exclusive", "trace-recover", true, (lease) => Effect.try({
     try: () => {
       if (lease === undefined) throw new Error("exclusive Trace lease was not created");
@@ -684,7 +685,7 @@ export function recoverTrace(root: string): Effect.Effect<TraceRecoveryReceipt, 
       return single.recovered ? single : recoverMultiUnderLease(root, lease.directory);
     },
     catch: (cause) => cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired || cause instanceof TraceJournalMigrationRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
-  }));
+  }), options.reclaimPublication !== false);
 }
 
 function writeGeneration(directory: string, generation: number, operation: string): void {

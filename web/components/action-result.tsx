@@ -11,6 +11,7 @@ import { json } from '../lib/utils';
 const labels: Readonly<Record<string, string>> = {
   id: '标识', caseId: '测试', operation: '操作', name: '名称', kind: '类型', status: '状态',
   ok: '检查通过', findings: '发现的问题', message: '说明', code: '诊断代码', path: '路径',
+  complete: '扫描完整', journalStatus: '事务恢复状态', coordination: '协调状态', publication: '发布协调', reclaimedTokens: '已回收的所有权', runner: '执行进程',
   file: '文件', line: '行号', contract: '契约', contracts: '契约关联', regressions: '回归关联',
   startedAt: '开始时间', finishedAt: '结束时间', exitCode: '退出码', cancelled: '已取消',
   timedOut: '已超时', durationMs: '耗时（毫秒）', stdout: '标准输出', stderr: '错误输出',

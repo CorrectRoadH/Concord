@@ -12,11 +12,14 @@ constitutionRefs:
   - docs/constitution.md#c-005
   - docs/constitution.md#c-006
   - docs/constitution.md#c-007
+  - docs/constitution.md#c-013
 ---
 
 # Portable coordination with short publication leases
 
-Concord coordinates local Markdown publication through Node filesystem APIs. SQLite remains a disposable parsing cache; it does not own locks, transactions or recovery.
+Concord coordinates local Markdown publication through Node filesystem APIs. HawDB remains a disposable parsing cache; it does not own publication leases, source transactions or journal recovery.
+
+The [architecture](architecture.md) defines access modes, reader admission and recovery results.
 
 ## User goals
 

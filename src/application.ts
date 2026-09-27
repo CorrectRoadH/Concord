@@ -116,7 +116,7 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
 function withRepository<A>(
   root: string,
   operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError>,
-  options: { readonly initialize?: boolean; readonly recover?: boolean; readonly dryRun?: boolean } = {},
+  options: { readonly initialize?: boolean; readonly recover?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write' } = {},
 ): Effect.Effect<A, ConcordError> {
   return Effect.acquireRelease(
     sync('view.openRepository', () => new LocalRepository(root, options)),
@@ -183,6 +183,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     return {
       root,
       project: null,
+      complete: false,
       configDigest: config.configDigest,
       documents: [],
       feedback: [],
@@ -209,12 +210,12 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     let findings = [...inspected.findings];
     let diagnostics: unknown;
     try {
-      const trace = buildTrace(repo, cache, { documents: inspected.documents });
+      const trace = buildTrace(repo, cache, { inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
       cases = trace.annotations;
       codes = trace.codeDeclarations;
       codeFiles = trace.codeFiles;
       edges = trace.edges;
-      findings = [...inspected.findings, ...trace.findings];
+      findings = [...trace.findings];
       diagnostics = doctor(repo, trace);
     } catch (cause) {
       cases = scanAnnotations(repo, { cache });
@@ -223,10 +224,12 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       codeFiles = code.files;
       findings = [...inspected.findings, ...cases.findings, ...code.findings];
       const error = failure(cause);
+      findings.push({ code: error.code, path: '.', message: error.message });
       diagnostics = { ok: false, error: error.code, message: error.message, details: error.details };
     }
     return {
       root: repo.root,
+      complete: findings.length === 0,
       project: repo.config,
       configDigest: digest(currentConfigSource),
       documents: inspected.documents,
@@ -253,8 +256,8 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
         repositoryTests = { status: 'failed', tests: [], error: { code: cause.code ?? cause._tag ?? 'RepositoryProfileReadFailed', message: cause.message ?? String(result.failure) } };
       }
     }
-    return { ...snapshot, repositoryTests };
-  }), { dryRun: true });
+    return { ...snapshot, complete: snapshot.complete && repositoryTests.status !== 'failed', repositoryTests };
+  }), { access: 'read' });
 });
 
 /** Git needs current configuration, not the document, code, or evidence projections. */
@@ -262,7 +265,7 @@ export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(roo
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const config = directConfig(root);
   const testRoots = config.project === null ? [] : yield* withRepository(root,
-    repo => Effect.succeed(repo.config.testRoots), { dryRun: true });
+    repo => Effect.succeed(repo.config.testRoots), { access: 'read' });
   return yield* getGitStatus(root, true, baselineCache, testRoots);
 });
 
@@ -302,7 +305,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
       }));
     }
     return yield* Effect.fail(new ConcordError('FileNotFound', 'The requested path is not in the Concord document, configured source, or explicitly associated project test inventory'));
-  }), { dryRun: true });
+  }), { access: 'read' });
 });
 
 function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>): unknown {
@@ -365,15 +368,27 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     }
     case 'check': {
       const trace = buildTrace(repo);
-      return { operation: 'check', ok: trace.findings.length === 0, findings: trace.findings, advisories: trace.advisories, documents: trace.documents.length, cases: trace.annotations.cases.length, codeDeclarations: trace.codeDeclarations.length, memoryEvidence: trace.memories, cache: trace.annotations.cache, codeCache: trace.codeCache };
+      return { operation: 'check', ok: trace.complete, complete: trace.complete, findings: trace.findings, advisories: trace.advisories, documents: trace.documents.length, cases: trace.annotations.cases.length, codeDeclarations: trace.codeDeclarations.length, memoryEvidence: trace.memories, cache: trace.annotations.cache, codeCache: trace.codeCache };
     }
     case 'trace.check': {
       const trace = buildTrace(repo);
-      return { operation: 'trace-check', ok: trace.findings.length === 0, findings: trace.findings, edges: trace.edges };
+      return { operation: 'trace-check', ok: trace.complete, complete: trace.complete, findings: trace.findings, edges: trace.edges };
     }
     case 'trace.show': return traceShow(repo, action.reference);
     case 'review.render': return { operation: 'review-render', markdown: renderReview(repo, action.reference) };
     case 'doctor': return doctor(repo);
+  }
+}
+
+/** Shared by HTTP and CLI action; unknown future actions conservatively require write access. */
+function actionAccess(action: ViewAction['action']): 'read' | 'write' {
+  switch (action) {
+    case 'design.check': case 'memory.index': case 'memory.recall': case 'issue.index': case 'issue.recall':
+    case 'writing.index': case 'writing.show': case 'writing.check': case 'concepts.index': case 'concepts.show':
+    case 'code.annotate': case 'code.locate': case 'test.annotate': case 'evidence.show': case 'cache.status':
+    case 'check': case 'trace.check': case 'trace.show': case 'review.render': case 'doctor': case 'template.show':
+      return 'read';
+    default: return 'write';
   }
 }
 
@@ -403,5 +418,5 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
   if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { dryRun: action.action === 'design.check' || action.action === 'memory.index' || action.action === 'memory.recall' || action.action === 'issue.index' || action.action === 'issue.recall' || action.action === 'writing.index' || action.action === 'writing.show' || action.action === 'writing.check' || action.action === 'concepts.index' || action.action === 'concepts.show' || dryRun });
+  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun });
 });

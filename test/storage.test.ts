@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, chmodS
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { LocalRepository, initialize } from '../dist/storage.js';
 import { renderTypeScriptConfig } from '../dist/config.js';
 import { digest } from '../dist/shared.js';
@@ -69,7 +69,8 @@ test('unified journal recovers interrupted init, preflights every target, and pr
    {path:'concord.config.ts',before:null,after:config,beforeDigest:null,afterDigest:digest(config),mode:420},
    {path:'docs/concord.md',before:null,after:guide,beforeDigest:null,afterDigest:digest(guide),mode:420},
   ]})+'\n');
-  repo=new LocalRepository(root,{recover:true});assert.equal(repo.recover().status,'rolled-back');assert.equal(existsSync(join(root,'concord.config.ts')),false);assert.equal(existsSync(join(root,'docs/concord.md')),false);repo.close();repo=undefined;
+  const recovered = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({status: Schema.Literal('rolled-back'), journalStatus: Schema.Literal('rolled-back')})))(execFileSync(process.execPath, ['dist/entry.js', '--root', root, '--json', 'recover'], {encoding:'utf8'}));
+  assert.equal(recovered.status,'rolled-back');assert.equal(existsSync(join(root,'concord.config.ts')),false);assert.equal(existsSync(join(root,'docs/concord.md')),false);
   const initial=new LocalRepository(root,{initialize:true});initialize(initial);initial.close();
   writeFileSync(join(root,'memory/a.md'),'before-a');writeFileSync(join(root,'memory/b.md'),'before-b');const marker=readFileSync(join(root,projectConfigPath(root)),'utf8');
   const batch={format:'concord.journal',root,privateDir:join(root,'.git','concord'),projectId:readProjectConfig(root).projectId,operation:'batch',phase:'prepared',directories:[],scope:{kind:'documents',configPath:'concord.config.ts',configSource:marker,configDigest:digest(marker)},changes:[

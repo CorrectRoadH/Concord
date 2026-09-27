@@ -3,6 +3,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { posix } from 'node:path';
 import { ConcordError, type DocumentKind, type DocumentRecord, type Repository } from './shared.js';
+import { decodeDocumentSource } from './document-codec.js';
 
 export interface ParsedReference {
   readonly path: string;
@@ -64,11 +65,20 @@ export function resolveReference(
     if (!parsed.path.endsWith('.md')) throw new ConcordError('ReferenceNotFound', `Reference is not a Concord document or supporting Markdown page: ${input}`);
     source = repo.read(parsed.path);
     if (source === undefined) throw new ConcordError('ReferenceNotFound', `Reference target does not exist: ${input}`);
+    // A partial inventory may have omitted a malformed or historical owner.
+    // Its bytes still define a boundary; never reinterpret it as an ancestor's page.
+    if (decodeDocumentSource(parsed.path, source) !== undefined) throw new ConcordError('ReferenceNotFound', `Reference owner is absent from the current inventory: ${input}`);
     owner = documents
       .filter(document => document.metadata.kind === 'feature' || document.metadata.kind === 'engineering' || document.metadata.kind === 'research')
       .filter(document => parsed.path.startsWith(`${posix.dirname(document.path)}/`))
       .sort((left, right) => right.path.length - left.path.length)[0];
     if (owner === undefined) throw new ConcordError('ReferenceNotFound', `Supporting Markdown is outside a Feature, Engineering, or Research package: ${input}`);
+    for (let directory = posix.dirname(parsed.path); directory !== posix.dirname(owner.path); directory = posix.dirname(directory)) {
+      const boundary = `${directory}/README.md`;
+      if (boundary === parsed.path) continue;
+      const bytes = repo.read(boundary);
+      if (bytes !== undefined && decodeDocumentSource(boundary, bytes) !== undefined) throw new ConcordError('InvalidReferenceTarget', `Supporting Markdown crosses owner ${boundary}; reference its owner directly`);
+    }
     const nestedOwner = documents.find(document =>
       document.path !== owner?.path &&
       parsed.path.startsWith(`${posix.dirname(document.path)}/`) &&

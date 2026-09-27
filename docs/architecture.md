@@ -25,14 +25,15 @@ docs/constitution.md 必需，默认可明确为 draft；作者显式采用 acti
 - `design create/check/format/decide/list/show`：候选比较、逐项检查、有限格式化、唯一裁决及关联目标。
 - `roadmap create/adopt/list/show`：已定稿方向与显式采用。采用创建 Feature，Roadmap 标记 adopted 并保留历史；当前契约只在 Feature。
 - `test list/show/run`：从测试声明旁的源码注释派生测试执行引用并发现目标契约与 regression Memory；项目级配置拥有 argv、附加 sourceFiles 和 timeout。源码正常编辑与 Git 保存测试演进，Concord 不再建立测试关系 sidecar。
-- `test annotate`：验证 Feature / Use Case 目标与 Problem 引用后输出注释片段。它不改测试源文件，也不自动运行测试。
+- `test annotate`：验证每个指定 canonical reference、归属链、类型与 anchor 后输出注释片段。显式 regression 还验证 Problem。它使用共享 snapshot，不改测试源文件，不加载全局 Trace，也不自动运行测试。
 - `cache status/rebuild/clear`：维护可删除重建的 HawDB 解析缓存。
 - `memory add/list/show/search/activate/resolve/reopen/supersede/promote/retire`：Problem、Decision、Insight、Note 及历史；captured 表示尚未确认当前生命周期。
 - `author set`：用完整 owner preimage digest 更换契约或 Memory 正文，保留工具拥有的 metadata 与历史。
 - `issue draft/list/show/link/close`：本地 Observation 与 Memory 链接；`feedback` 统一提供本地反馈和 GitHub / Linear 读取接入，来源快照与本地状态分离，不执行远端发布。详见 [Feedback 契约](feature/feedback/architecture.md)。
-- `trace show/check`：从各 owner 编译图，检查目标存在、类型、重复及循环，动态反查测试和 Memory。不输出虚构覆盖率。
-- `review render`：从契约、当前测试、证据和 Memory 生成本地 Markdown 审阅材料，不自动写 GitHub。
-- `check` 与 `recover`：完整性和中断写入恢复。
+- `trace show/check`：二者构建全局关系图。show 在图不完整时拒绝；check 返回 findings 与 `complete`。检查目标存在、类型、重复及循环，动态反查测试和 Memory，不输出虚构覆盖率。
+- `review render`：从契约、当前测试、证据和 Memory 生成本地 Markdown 审阅材料，不自动写 GitHub。需要完整图的结论拒绝不完整输入。
+- `check`：各 owner 解析错误累计为 findings，inventory 传播 `complete: false`，并返回 `ok: false`。
+- `recover`：回收已死 publication token，在独占保护下恢复唯一 journal，再以短独占快照核验 journal 与 runner。`journalStatus` 保留 journal 处理结果；runner `blocked` 使 CLI 失败退出。
 
 ## 存储契约
 
@@ -68,11 +69,41 @@ Trace 与定向 Review 按解析得到的 owner 汇总 Feature supporting page �
 
 Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。0.6.0 采用[可移植发布协调](design/portable-publication/README.md)：文档发布协调仅用 Node 文件 API，移除外部 flock、stat、diskutil、plutil 和卷名称准入探测。支持同主机、同 PID 命名空间内的 Linux/macOS 本地工作树；网络多机协调与 Windows 执行不在保证内。macOS 保留大小写、Unicode 路径碰撞和 symlink 防护。
 
-publication.lease 目录以完整 token owner 记录短快照：只读快照可同时持有共享 owner，发布与恢复使用独占 owner，二者互斥。首个 owner 经临时目录 fsync/rename 原子公布，后续共享 owner 以完整文件的原子 hard link 加入；旧版本的单 owner 记录一律按独占处理。构造 LocalRepository 不持有命令全程锁；显式 snapshot 读取完整规划输入，提交在同一短 lease 下复核首次读取、缺失文件、目录集合与类型、配置和完整前像，再写 preimage journal、逐文件原子 rename。正常释放与显式死 PID 恢复只删除准确 token；不按年龄抢占，不递归删除活动锁目录。HawDB 只保存可删除重建的缓存，其持久连接和清理也在快照内。旧锁协议不迁移、不支持混合版本同时运行。
+publication.lease 目录以完整 token owner 记录短快照。`access: read` 使用共享 snapshot，并拒绝真正发布；非 dry-run 的 `access: write` 与恢复使用独占 snapshot。dryRun 表示变更预览，沿用共享 snapshot，不授权实际发布；它与访问类别分别建模。
 
-`concord recover` 路由当前唯一的普通或 Trace journal；多 journal 现场冲突时保留并拒绝。各恢复入口获锁后重查类型和现场，只在内容符合 preimage 或 planned digest 时恢复。dry-run 执行同一规划校验，不发布 owner、journal 或缓存；已有项目的短协调可能创建 Git-private 目录。
+首个 owner 经临时目录 fsync/rename 原子公布，后续共享 owner 以完整文件的原子 hard link 加入。加入后重读 owner 集合，确认自己的 token 且全部为同 worktree 的 shared，才进入受保护读取。旧版本的单 owner 记录一律按独占处理。构造 LocalRepository 不持有命令全程锁。
+
+显式 snapshot 读取该操作的依赖输入；提交在同一短 lease 下复核首次读取、缺失文件、目录集合与类型、配置和完整前像，再写 preimage journal、逐文件原子 rename。正常释放与显式死 PID 恢复只删除准确 token。不按年龄抢占，不递归删除固定 lease 目录。
+
+同 worktree、同 host、最多一个 exclusive 加多个 shared 的死亡暂态，由 recover 在全部 owner 确认 ESRCH 后逐 token 回收。HawDB 只保存可删除重建的缓存。持久句柄在 snapshot 结束前关闭；读取期缓存更新不取得独占发布锁，不能安全使用时回源。旧锁协议不迁移，不支持混合版本同时运行。
+
+`concord recover` 先回收观察到的已死 publication token，再在独占保护下选择当前唯一的普通或 Trace journal。多 journal 冲突先于 runner 具名拒绝并保留现场。各恢复入口获锁后重查类型和现场，只在内容符合 preimage 或 planned digest 时恢复。
+
+完成后重新取得短独占快照，直接核验 worktree 私有协调路径上的 journal 与 runner。init 回滚后不要求配置文件仍在。并发发布可使该核验 Busy，早先 journal 结果不能据此称为恢复完成。返回保留 journal 结果为 `journalStatus`，并附带 coordination。
+
+runner 为 blocked 时 CLI 失败退出。初次独占检查已发现 blocked 时不开始 journal 恢复。dry-run 执行同一规划校验，不发布 owner、journal 或缓存。已有项目的短协调可能创建 Git-private 目录。`recover` 不接受 dry-run。
 
 CLI/Web 测试共用独立 runner.lease，长执行不占文档 lease。持久 run 状态区分 running、finalizing、quarantined，只有同主机活进程的 running 状态允许发布，并且发布前必须持久标记该次 run 已失效；A→B→A 和回滚不撤销失效标记。结束在新快照中核对起止 candidate、配置、定义、契约、epoch、失效与清理结果，再写证据。父进程死亡不能授权回收 runner，清理未知时保留阻断；若最终快照无法取得，则留下只会收紧权限的 token-bound quarantine 标记。此协议不宣称能够观察不合作编辑器的每次瞬时修改。
+
+## 操作依赖与资源边界
+
+共享读取准入和操作依赖范围由[已采用方案](design/operation-boundaries/plans/scoped/architecture.md)定义，采用事实由 Design metadata 记录。[可移植发布协调](design/portable-publication/README.md)选择的 Node 文件租约机制保留。跨功能规则见 [c-013](constitution.md#c-013)。
+
+局部查询按命令依赖读取 owner，并使用共享 snapshot。memory 与 issue 的列表、索引和检索读取相应来源的全部候选。精确路径编辑只取指定 owner 与当前摘要。短 ID 编辑读取该类别全部候选，并要求唯一匹配。create 校验目标路径和写来源权限；Issue 还校验同类 ID，Problem 还校验证据政策。
+
+`code annotate` 与 `test annotate` 只验证指定引用及其归属链、类型和 anchor，不加载全局 Trace。文档 show、trace、review 仍构建全局关系图；文档 show 可返回标明不完整的关系，trace show 与 review 要求图完整，否则拒绝。
+
+全局诊断的 inventory 同时携带 documents、findings 与 complete。逐文件保留解码错误的路径和具名代码，并传播 `complete: false`。单独的 documents 数组不表示集合完整。check 把各 owner 解析错误累计为 findings，返回 `ok: false`。关系 show 与 Web workspace 返回 complete，以及全部相关完整性诊断。需要完整图的结论拒绝不完整输入。requireValidTrace 同时检查 complete 和 findings。部分图不能关闭 Problem、删除 Issue 或批准关系迁移。
+
+共享 token 加入后，只有重读确认自己的 token、且全部 owner 为同 worktree shared，才授权读取。writer 已替换目录时，加入者撤销自己的 token 并报告 Busy。writer 只删除自己的 owner。尚未通过准入的合法 shared 记录不授予读取，也不阻止释放。未知文件、其它 exclusive token 或身份改变保留并拒绝。全部 owner 已确认 ESRCH 时，recover 逐 token 回收合法加入暂态。任一活 owner、host 不匹配、EPERM、PID 复用或未知 owner 都保留现场。加入后的 fsync 或核验失败时清理本次 token；清理失败保留具名错误和现场。
+
+recover 返回 operation、原 journal 结果、changedPaths 和 coordination。publication 列出 reclaimedTokens。runner 区分为 absent、running 或 blocked，blocked 带具名原因。无事务且 runner 为 absent 或健康 running 时可以返回 clean。
+
+runner 不确定时返回 blocked，并保留 journal 的实际处理结果。初次检查已是 blocked 时，journalStatus 为 pending 或 clean，changedPaths 为空。journal 恢复之后 runner 变为 blocked 时，保留已完成的 journalStatus，总 status 设为 blocked。
+
+统一入口保留 prepared 和 committed 现场。recover 不删除 runner.lease、run state、证据或未知文件。blocked 表示当前操作无法恢复完整写能力。
+
+未完成的多文件 journal 仍阻断普通快照。局部解析隔离仍使用 publication lease，并在未完成 journal 前停止。来源扫描按当前配置和安全目录读取。文件名不推导作者 ID。协调细节见[可移植协调架构](feature/portable-coordination/architecture.md)，文档读取职责见[本地 SDLC 架构](feature/local-sdlc/architecture.md)。随包步骤由 `concord --skill recovery` 提供。
 
 ## Design 逐项比较与裁决
 
@@ -129,7 +160,7 @@ Code Declaration 是维护者对实现与契约关系的显式声明，源文件
 
 `id` 由版本、canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用；文件移动、改名、作用域和顺序变化可能使旧引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list/locate 并核对位置。固定元组、名称和序号规则见[采用架构](design/derived-code-reference/plans/derived/architecture.md)。
 
-`code annotate` 与对应 action 不接收或返回 ID；`code list` 和 `code locate` 提供声明查询。按 ID 查询的命令已删除，不提供兼容入口或迁移协议。Web 以符号、位置和显式关联呈现实现。范围标记不接受参数，无效 begin 仍参与边界检查；普通扫描不写源码。
+`code annotate` 与对应 action 不接收或返回 ID。它们在共享 snapshot 中验证每个指定 canonical reference、归属链、类型和 anchor，不加载全局 Trace。`code list` 和 `code locate` 提供声明查询。按 ID 查询的命令已删除，不提供兼容入口或迁移协议。Web 以符号、位置和显式关联呈现实现。范围标记不接受参数，无效 begin 仍参与边界检查；普通扫描不写源码。
 
 代码错误阻断 code/check/trace/review/doctor；test list/show/run 与 memory resolve 显式不包含代码投影，仍保留全部原有文档、测试关系和证据校验。evidence 不接收 code ID，完整源码及候选摘要不会因为新注释被剥离。公开打包入口验证三种 scope、反查与位置查询、源码变更、非法边界和此隔离行为。
 
@@ -162,4 +193,4 @@ Research 以目录 README 为 owner，支持安全相对路径的自由附页；
 
 ## 工具式工程知识与本地观察
 
-Memory/Issue 的索引与 recall 从当前 owner 派生，通过 Concord 工具读取和更新，不新增人工索引。Local 与 GitHub、Linear 是派生的来源视图；本地观察沿用现有 Issue owner，不创建虚假的连接或迁移持久化 source。正文、关系、生命周期与来源继续各自拥有事实。没有历史或关系的本地草稿可通过最新摘要删除，进入调查的记录保留既有生命周期。详见[记忆工具契约](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察契约](feature/feedback/use-case/manage-local-observations.md)。
+Memory/Issue 的索引与 recall 从当前 owner 派生，通过 Concord 工具读取和更新，不新增人工索引。list、index、recall、search 读取相应来源的全部候选，并报告范围内坏记录、来源缺失和事务障碍。精确路径不要求其它同类别内容有效；短 ID 必须读完候选集合，避免隐藏未解码记录中的同 ID。Local 与 GitHub、Linear 是派生的来源视图；本地观察沿用现有 Issue owner，不创建虚假的连接或迁移持久化 source。正文、关系、生命周期与来源继续各自拥有事实。没有历史或关系的本地草稿可通过最新摘要删除，进入调查的记录保留既有生命周期。详见[记忆工具契约](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察契约](feature/feedback/use-case/manage-local-observations.md)。

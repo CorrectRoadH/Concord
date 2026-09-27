@@ -48,6 +48,35 @@ before(() => Effect.runPromise(Effect.sync(()=>{
 })));
 after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
 
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @name packed-operation-boundaries
+test('packed local operations isolate unrelated malformed contracts and check reports all failures', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('operation-boundaries');
+ call(root, ['feature', 'create', 'target', '--title', 'Target', '--no-pages'], Ack);
+ call(root, ['feature', 'create', 'broken-a', '--title', 'Broken A', '--no-pages'], Ack);
+ call(root, ['feature', 'create', 'broken-b', '--title', 'Broken B', '--no-pages'], Ack);
+ for (const id of ['broken-a', 'broken-b']) write(root, `docs/feature/${id}/README.md`, '---\nformat: concord.document/v1\nkind: feature\n---\n# Incomplete owner\n');
+ const target = 'docs/feature/target/README.md';
+ assert.match(call(root, ['code', 'annotate', '--scope', 'file', '--contract', target], AnnotationOutput).snippet, /@concord-implements docs\/feature\/target\/README.md/u);
+ assert.match(call(root, ['test', 'annotate', '--contract', target], AnnotationOutput).snippet, /@feature docs\/feature\/target\/README.md/u);
+ call(root, ['memory', 'add', 'repair-note', '--title', 'Repair note', '--kind', 'note'], Ack);
+ const index = call(root, ['memory', 'index'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })) }));
+ const note = index.documents.find(record => record.path === 'memory/repair-note.md');
+ assert.ok(note);
+ call(root, ['memory', 'edit', note.path, '--body', '-', '--expected-digest', note.digest], Ack, 'Observed broken contract metadata.\n');
+ const recalled = call(root, ['memory', 'recall', 'broken contract'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ body: Schema.String })) }));
+ assert.equal(recalled.documents.length, 1);
+ assert.match(recalled.documents[0]!.body, /Observed broken contract metadata/u);
+ const listed = call(root, ['memory', 'list'], Schema.Struct({ memories: Schema.Array(Schema.Struct({ id: Schema.String })) }));
+ assert.equal(listed.memories[0]?.id, 'repair-note');
+ call(root, ['issue', 'draft', 'repair-observation', '--title', 'Repair observation'], Ack);
+ assert.equal(call(root, ['issue', 'index'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ id: Schema.String })) })).documents[0]?.id, 'repair-observation');
+ const checked = call(root, ['check'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String })) }), '', 1);
+ assert.equal(checked.ok, false);
+ for (const id of ['broken-a', 'broken-b']) assert.ok(checked.findings.some(finding => finding.path === `docs/feature/${id}/README.md`));
+ assert.equal(call(root, ['code', 'annotate', '--scope', 'file', '--contract', 'docs/feature/broken-a/README.md'], ErrorOutput, '', 1).error, 'InvalidData');
+})));
+
 // @use-case docs/feature/local-data-engine/use-case/query-current-projections.md
 test('installed HawDB caches and current recall work without Rust or a database helper', () =>
   Effect.runPromise(verifyInstalledNative(join(scratch, 'tool/node_modules/concord-sdlc')).pipe(Effect.asVoid)));

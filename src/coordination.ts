@@ -54,8 +54,8 @@ function acquireNow(root: string, mode: TraceLease['mode'], operation: string, c
   return acquireFileLease(root, tracePrivateDirectorySync(root), PUBLICATION_LEASE, mode, operation, create);
 }
 
-export function recoverPublicationLeaseSync(root: string): void {
-  recoverFileLease(root, join(tracePrivateDirectorySync(root), PUBLICATION_LEASE), 'recover');
+export function recoverPublicationLeaseSync(root: string): readonly string[] {
+  return recoverFileLease(root, join(tracePrivateDirectorySync(root), PUBLICATION_LEASE), 'recover');
 }
 
 // These helpers belong to the existing offline governance migration tool. They

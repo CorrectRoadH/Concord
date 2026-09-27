@@ -2,7 +2,7 @@
 format: concord.constitution/v1
 status: active
 ratifiedAt: 2026-09-14
-amendedAt: 2026-09-23
+amendedAt: 2026-09-27
 amendments:
   - date: 2026-09-14
     reason: 汇总已采用的工程约束，并落实本轮 dogfood 要求
@@ -53,6 +53,12 @@ amendments:
       - docs/design/hawdb-data-engine/README.md
       - docs/feature/local-data-engine/README.md
     impact: 所有可重建缓存采用HawDB；只允许引擎桥接与所有权适配使用Rust，事实owner、证据、授权和TS/Effect领域职责不变；实现须满足已记录的生命周期、预算及同包平台验收
+  - date: 2026-09-27
+    reason: 按操作所需事实划分依赖，分开只读访问、发布协调与证据裁决
+    sources:
+      - docs/design/operation-boundaries/README.md
+      - docs/architecture.md
+    impact: 适用于当前架构重构与后续命令；保留 owner/journal 格式、路径安全、完整图门禁及既有证据下限，不声明未复现平台故障已解决
 ---
 
 # Concord 项目宪法
@@ -155,3 +161,12 @@ Concord 面向软件项目规定唯一事实来源、统一契约布局、显式
 本地 Issue 不依赖外部服务。Local、GitHub、Linear 可以统一展示来源，但远端写入仍需单独授权；本地操作不得自动投射为远端变更。此规则约束工具工作流，不宣称操作系统阻止用户编辑文件，也不把已有历史材料批量重写。
 
 来源：用户 2026-09-23 要求、docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md、docs/feature/feedback/use-case/manage-local-observations.md。
+
+<a id="c-013"></a>
+## 操作依赖、发布协调和证据裁决分别定义
+
+每个操作按目标与不变量声明所需输入。局部知识读取和精确引用验证不以无关 owner、代码或测试全部有效为前提；目标身份、来源、归属与路径安全仍须严格校验。全局诊断保留可读取记录和所有已发现错误，完整性必须随投影与关系输出传播，不完整输入不能授权依赖完整图的裁决。
+
+只读访问使用共享短快照，发布继续使用独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态继续阻断发布。恢复须区分 journal 结果、实际回收 token 与 runner 状态，并在返回成功前核验恢复后的协调状态，不用无 journal 推断仓库整体可写。
+
+来源：docs/design/operation-boundaries/README.md、docs/feature/portable-coordination/README.md、docs/feature/local-sdlc/README.md。

@@ -30,6 +30,7 @@ export interface ViewFile {
 }
 
 export interface WorkspaceSnapshot {
+  readonly complete?: boolean;
   readonly repositoryTests?: import('./view-profile.js').RepositoryTestView;
   readonly root: string;
   readonly project: ProjectConfig | null;

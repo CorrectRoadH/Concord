@@ -197,6 +197,7 @@ function withAgentInstructions(source: string): string {
 }
 
 export class LocalRepository implements Repository {
+  readonly access: 'read' | 'write';
   readonly root: string;
   readonly privateDir: string;
   config: ProjectConfig;
@@ -210,10 +211,12 @@ export class LocalRepository implements Repository {
   private observing = true;
   private readonly observedFiles = new Map<string, string | undefined>();
   private readonly observedDirectories = new Map<string, string>();
-  constructor(input?: string, options: { initialize?: boolean; recover?: boolean; dryRun?: boolean } = {}) {
+  constructor(input?: string, options: { initialize?: boolean; recover?: boolean; reclaimPublication?: boolean; dryRun?: boolean; access?: 'read' | 'write' } = {}) {
     this.root = discoverRoot(input, options.initialize);
     this.recovering = options.recover ?? false;
     this.noWrite = options.dryRun ?? false;
+    this.access = options.access ?? 'write';
+    if (options.recover && this.access === 'read') throw new ConcordError('InvalidOption', 'Recovery requires write access');
     if (options.recover && this.noWrite) throw new ConcordError('InvalidOption', 'recover does not accept --dry-run');
     if (process.platform !== 'linux' && process.platform !== 'darwin') throw new ConcordError('UnsupportedHost', 'Concord supports Linux and Darwin/macOS hosts');
     if (git(this.root, ['rev-parse', '--show-toplevel']) !== this.root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
@@ -230,8 +233,8 @@ export class LocalRepository implements Repository {
         && !['concord.config.ts', 'concord.json', 'docs', 'memory', 'DESIGN.md'].some(path => present(this.absolute(path)))
         && ![join(this.privateDir, 'lock.json'), join(this.privateDir, 'journal.json'), join(coordinationDir, PUBLICATION_LEASE), join(coordinationDir, 'publication-journal.json'), join(coordinationDir, 'multi-file-publication-journal.json')].some(present);
       this.previewWithoutState = emptyPreview;
-      if (options.recover) recoverPublicationLeaseSync(this.root);
-      try { this.traceLease = acquireTraceLeaseSync(this.root, this.noWrite ? 'shared' : 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview); }
+      if (options.recover && options.reclaimPublication !== false) recoverPublicationLeaseSync(this.root);
+      try { this.traceLease = acquireTraceLeaseSync(this.root, this.noWrite || this.access === 'read' ? 'shared' : 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview); }
       catch (cause) { throw storageCoordinationFailure(cause); }
       assertCurrentRuntimeFormat(this.root);
       const traceDir = coordinationDir;
@@ -367,7 +370,7 @@ export class LocalRepository implements Repository {
   beginSnapshot(): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
     try {
-      this.traceLease = acquireFileLease(this.root, this.coordinationDirectory, PUBLICATION_LEASE, this.noWrite ? 'shared' : 'exclusive', 'snapshot', !this.previewWithoutState);
+      this.traceLease = acquireFileLease(this.root, this.coordinationDirectory, PUBLICATION_LEASE, this.noWrite || this.access === 'read' ? 'shared' : 'exclusive', 'snapshot', !this.previewWithoutState);
       this.snapshotDepth = 1;
       this.assertReady();
     } catch (cause) { this.close(); throw storageCoordinationFailure(cause); }
@@ -422,6 +425,7 @@ export class LocalRepository implements Repository {
   // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
   publish(operation: string, changes: readonly Change[], dryRun = false, catalogGuard?: readonly { path: string; digest: string }[]): MutationReceipt {
+    if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const managedJson = (path: string) => path.startsWith('docs/') && (path.endsWith(`/${policyName}`) || path.endsWith(`/${catalogName}`));
     if (operation === 'set-writing-policy' || changes.some(change => managedJson(change.path) && change.path.endsWith(`/${policyName}`))) {
       if (operation === 'init') {
@@ -479,6 +483,7 @@ export class LocalRepository implements Repository {
   }
   /** Publishes one existing configured JS/TS file using the unified source-set journal. */
   publishSource(path: string, before: string, after: string, dryRun = false): MutationReceipt {
+    if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const frozen = this.currentSnapshot();
     const configSource = frozen.source;
     const config = frozen.config;
@@ -516,7 +521,8 @@ export class LocalRepository implements Repository {
     // Validate the complete set before persisting a prepared journal; dry-run follows this same guard.
     this.preflight(journal);
     if (dryRun || this.noWrite) return { operation: journal.operation, dryRun: true, changedPaths };
-    if (this.traceLease === undefined) throw new ConcordError('RepositoryBusy', 'Publication requires an owned lease');
+    if (this.access !== 'write') throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
+    if (this.traceLease?.mode !== 'exclusive') throw new ConcordError('RepositoryBusy', 'Publication requires an owned exclusive lease');
     invalidateActiveRun(this.root);
     const journalPath = join(this.privateDir, 'journal.json');
     if (present(journalPath)) throw new ConcordError('RecoveryRequired', 'Run concord recover before another publication');

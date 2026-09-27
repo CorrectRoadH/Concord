@@ -19,7 +19,9 @@ Agent 使用 `concord memory index` 获取当前派生索引，使用 `concord m
 
 index 与 recall 不修改来源，跨来源重复短 ID 仍明确拒绝并要求 canonical path。Memory edit 不得修改其它文档 kind，不改变 evidenceRequirement、epoch、证明或关联。read-only 来源在原发布边界拒绝修改。
 
-现有 memory list/search/show、issue list/show 与 author set 继续有效；新入口补齐一致的工具式工作流，不改变既有生命周期和证据门禁。
+list、index、recall 与 search 在共享 snapshot 中读取相应来源的全部候选 owner。范围内坏记录、来源缺失、配置错误或未完成事务使该查询失败。集合查询先按物理来源限定路径，再解码。精确 canonical path 的编辑只要求指定 owner 与当前摘要有效，并使用独占 publication。短 ID 编辑读取该类别的全部候选，唯一匹配后才写入；集合不完整或 ID 歧义时拒绝。create 校验目标路径和写来源权限。Issue 还校验同类 ID 集合，Problem 还校验证据政策。精确路径不要求其它 Memory 内容有效。短 ID 必须看见未成功解码的候选，避免隐藏其中的同 ID。
+
+现有 memory list/search/show、issue list/show 与 author set 继续有效；新入口补齐一致的工具式工作流，不改变既有生命周期和证据门禁。读取范围与失败边界见[本地 SDLC 架构](../architecture.md)。
 
 ## 验收
 

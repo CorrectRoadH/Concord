@@ -101,14 +101,22 @@ function memory(record: DocumentRecord): MemoryMeta {
   return record.metadata;
 }
 
-export function loadDocuments(repo: Repository): DocumentRecord[] {
-  return repo.snapshot === undefined ? loadDocumentsUnderSnapshot(repo) : repo.snapshot(() => loadDocumentsUnderSnapshot(repo));
+export function loadDocuments(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
+  return inRepositorySnapshot(repo, () => loadDocumentsUnderSnapshot(repo, kinds));
 }
-function loadDocumentsUnderSnapshot(repo: Repository): DocumentRecord[] {
+function documentInputs(repo: Repository, kinds?: readonly DocumentKind[], findings?: Finding[]): { path: string; source: string }[] {
   const paths = new Set<string>();
   const memoryRoots = new Set((repo.config.memorySources ?? []).map((source) => source.path));
-  for (const root of documentRoots(repo)) {
-    if (memoryRoots.has(root) && !existsSync(repo.absolute(root))) throw new ConcordError('MemorySourceUnavailable', `Configured Memory source does not exist: ${root}`);
+  const roots = kinds === undefined ? documentRoots(repo) : [...new Set(kinds.flatMap(kind => kind === 'memory'
+    ? (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path)
+    : [kind === 'use-case' ? 'docs/feature' : kind === 'issue' ? 'docs/issues' : `docs/${kind}`]))];
+  for (const root of roots) {
+    if (memoryRoots.has(root) && !existsSync(repo.absolute(root))) {
+      const error = new ConcordError('MemorySourceUnavailable', `Configured Memory source does not exist: ${root}`);
+      if (findings === undefined) throw error;
+      findings.push({ code: error.code, path: root, message: error.message });
+      continue;
+    }
     for (const path of repo.files(root)) if (path.endsWith('.md')) paths.add(path);
   }
   const inputs: { path: string; source: string }[] = [];
@@ -117,8 +125,86 @@ function loadDocumentsUnderSnapshot(repo: Repository): DocumentRecord[] {
     if (source === undefined) continue;
     inputs.push({ path, source });
   }
-  const roots = (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path);
-  return documentContentCache.getMany(inputs, input => parseDocumentSource(input.path, input.source)).filter((record): record is DocumentRecord => record !== undefined && documentDisposition(record.metadata.kind, record.path, roots) === 'current');
+  return inputs;
+}
+
+function currentDocument(repo: Repository, record: DocumentRecord | undefined): record is DocumentRecord {
+  return record !== undefined && documentDisposition(record.metadata.kind, record.path, (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path)) === 'current';
+}
+
+function loadDocumentsUnderSnapshot(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
+  return documentContentCache.getMany(documentInputs(repo, kinds), input => parseDocumentSource(input.path, input.source))
+    .filter((record): record is DocumentRecord => currentDocument(repo, record) && (kinds === undefined || kinds.includes(record.metadata.kind)));
+}
+
+export interface DocumentInventory {
+  readonly documents: readonly DocumentRecord[];
+  readonly findings: readonly Finding[];
+  readonly complete: boolean;
+}
+
+/** Diagnostic records and completeness travel together across projection boundaries. */
+export function diagnoseDocuments(repo: Repository): DocumentInventory {
+  return inRepositorySnapshot(repo, () => {
+    const documents: DocumentRecord[] = [], findings: Finding[] = [];
+    for (const input of documentInputs(repo, undefined, findings)) {
+      try {
+        const record = parseDocumentRecord(input.path, input.source);
+        if (currentDocument(repo, record)) documents.push(record);
+      } catch (cause) {
+        if (!(cause instanceof ConcordError) || !['InvalidData', 'ResearchMigrationRequired'].includes(cause.code)) throw cause;
+        findings.push({ code: cause.code, path: input.path, message: cause.message });
+      }
+    }
+    return { documents, findings, complete: findings.length === 0 };
+  });
+}
+
+/** Read only a canonical target and its physical owner boundary, never an unrelated inventory. */
+export function readDocumentReference(repo: Repository, reference: string, kinds?: readonly DocumentKind[]): DocumentRecord {
+  return inRepositorySnapshot(repo, () => {
+    const parsed = parseReference(reference);
+    const roots = documentRoots(repo);
+    if (!roots.some(root => parsed.path.startsWith(`${root}/`))) throw new ConcordError('ReferenceNotFound', `Reference is outside document sources: ${reference}`);
+    const records: DocumentRecord[] = [];
+    const read = (path: string): DocumentRecord | undefined => {
+      const source = repo.read(path);
+      const record = source === undefined ? undefined : parseDocumentRecord(path, source);
+      if (record !== undefined && !currentDocument(repo, record)) throw new ConcordError('InvalidReferenceTarget', `${path} is not a current owner`);
+      return record;
+    };
+    let owner = read(parsed.path);
+    if (owner === undefined) {
+      for (let directory = posix.dirname(parsed.path); roots.some(root => directory.startsWith(`${root}/`)); directory = posix.dirname(directory)) {
+        const candidate = `${directory}/README.md`;
+        if (candidate === parsed.path) continue;
+        owner = read(candidate);
+        if (owner !== undefined) break;
+      }
+    }
+    if (owner !== undefined) {
+      if (kinds !== undefined && !kinds.includes(owner.metadata.kind)) throw new ConcordError('InvalidReferenceTarget', `${reference} resolves to ${owner.metadata.kind}; expected ${kinds.join(', ')}`);
+      records.push(owner);
+      let featurePath: string | undefined;
+      if (owner.metadata.kind === 'use-case') {
+        const feature = readDocumentReference(repo, owner.metadata.feature, ['feature']);
+        if (feature.path !== owner.metadata.feature) throw new ConcordError('InvalidPlacement', 'Use Case requires an exact Feature owner');
+        featurePath = feature.path;
+      }
+      const placement = documentPlacementError(owner.metadata.kind, owner.path, featurePath);
+      if (placement !== undefined) throw new ConcordError('InvalidPlacement', placement);
+    }
+    return resolveReference(repo, records, reference, kinds);
+  });
+}
+
+export function readDocumentSelector(repo: Repository, selector: string, kind: DocumentKind): DocumentRecord {
+  if (!selector.includes('/')) return findDocument(loadDocuments(repo, [kind]), selector, kind);
+  const parsed = parseReference(selector);
+  if (parsed.anchor !== undefined) throw new ConcordError('InvalidReference', 'Document selectors cannot contain anchors');
+  const record = readDocumentReference(repo, selector, [kind]);
+  if (record.path !== parsed.path) throw new ConcordError('InvalidReferenceTarget', 'Expected an exact document owner');
+  return record;
 }
 
 export function findDocument(documents: readonly DocumentRecord[], selector: string, kind?: DocumentKind): DocumentRecord {
@@ -328,7 +414,7 @@ export interface CreateDocumentInput {
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  const governance = kind === 'memory' ? problemPolicy(repo) : undefined;
+  const governance = kind === 'memory' && input.memoryKind === 'problem' ? problemPolicy(repo) : undefined;
   const id = decode(DocumentName, input.id, 'id');
   const title = required(input.title, 'title');
   if (input.feature !== undefined && kind !== 'use-case') throw new ConcordError('InvalidInput', 'feature is only valid for use-case');
@@ -346,7 +432,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   const requested = TEMPLATE_PAGES.filter(page => selected.includes(page));
   const bodyFor = (name: string) => authorBody(input.body ?? templateBody(name, title, requested));
   const createdAt = now();
-  const documents = loadDocuments(repo);
+  const documents = kind === 'memory' ? [] : loadDocuments(repo, kind === 'issue' ? ['issue'] : undefined);
   if (kind !== 'memory' && documents.some(document => document.metadata.kind === kind && document.metadata.id === id)) {
     throw new ConcordError('DocumentExists', `${kind} id ${id} already exists; use its canonical path`);
   }
@@ -387,7 +473,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     case 'issue': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }; break;
   }
   const body = bodyFor(template);
-  if (metadata.kind === 'memory') metadata = adoptMemoryEvidenceRequirement(metadata, governance!.policy);
+  if (metadata.kind === 'memory' && metadata.memoryKind === 'problem') metadata = adoptMemoryEvidenceRequirement(metadata, governance!.policy);
   if (kind === 'research' && repo.files(posix.dirname(path)).length > 0) throw new ConcordError('DocumentExists', `${posix.dirname(path)} already contains files; creating an owner would change their ownership`);
   const changes = [{ path, before: null, after: renderDocument(metadata, body) }];
   const allowed = kind === 'feature' || kind === 'roadmap';
@@ -412,7 +498,7 @@ export { addPage, setPage, showPage } from './document-pages.js';
 
 export function setAuthor(repo: Repository, ref: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  const record = resolveReference(repo, loadDocuments(repo), ref);
+  const record = readDocumentReference(repo, ref);
   if (record.path !== parseReference(ref).path) throw new ConcordError('InvalidReferenceTarget', 'Author body belongs to an exact Concord owner, not supporting Markdown');
   if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);
   return changed(repo, 'set-author', record, record.metadata, authorBody(body), dryRun);

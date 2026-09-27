@@ -2,9 +2,8 @@
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 import { existsSync } from 'node:fs';
-import { loadDocuments, resolveReference } from './documents.js';
-import { scanAnnotations } from './annotations.js';
-import { ConcordError, type Repository } from './shared.js';
+import { readDocumentReference } from './documents.js';
+import { ConcordError, inRepositorySnapshot, type Repository } from './shared.js';
 import { buildTrace } from './trace.js';
 import { checkConstitution } from './constitution.js';
 
@@ -20,15 +19,15 @@ export function doctor(repo: Repository, trace = buildTrace(repo, 'off')) {
 }
 
 export function annotationSnippet(repo: Repository, contract: string, regressions: readonly string[]) {
-  const documents = loadDocuments(repo);
-  const target = resolveReference(repo, documents, contract, ['feature', 'use-case']);
+  return inRepositorySnapshot(repo, () => {
+  const target = readDocumentReference(repo, contract, ['feature', 'use-case']);
   if (new Set(regressions).size !== regressions.length) throw new ConcordError('DuplicateRegression', 'Each Problem reference must appear once');
   for (const ref of regressions) {
-    const owner = resolveReference(repo, documents, ref, ['memory']);
+    const owner = readDocumentReference(repo, ref, ['memory']);
     if (owner.metadata.kind !== 'memory' || owner.metadata.memoryKind !== 'problem') throw new ConcordError('InvalidRegression', `${ref} is not a Problem Memory`);
   }
-  scanAnnotations(repo, { cache: 'off' });
   const tag = target.metadata.kind === 'use-case' ? '@use-case' : '@feature';
   const snippet = [`// ${tag} ${contract}`, ...regressions.map(ref => `// @regression ${ref}`)].join('\n') + '\n';
   return { operation: 'test-annotate', snippet };
+  });
 }

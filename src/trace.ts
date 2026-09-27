@@ -3,7 +3,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { scanAnnotations } from './annotations.js';
 import { scanCode, type CodeDeclaration } from './code.js';
-import { checkDocuments, findDocument, loadDocuments, resolveReference } from './documents.js';
+import { checkDocuments, diagnoseDocuments, findDocument, resolveReference, type DocumentInventory } from './documents.js';
 import { inspectResolutionEvidence } from './evidence.js';
 import { ConcordError, type AnnotatedCase, type DocumentRecord, type Finding, type Repository } from './shared.js';
 import { checkConstitution, showConstitution } from './constitution.js';
@@ -11,15 +11,17 @@ import { checkConstitution, showConstitution } from './constitution.js';
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
-export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; documents?: readonly DocumentRecord[] } = {}) {
+export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory } = {}) {
   return repo.snapshot === undefined ? buildUnderSnapshot(repo, cache, options) : repo.snapshot(() => buildUnderSnapshot(repo, cache, options));
 }
-function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; documents?: readonly DocumentRecord[] }) {
-  const documents = options.documents ?? loadDocuments(repo);
+function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory }) {
+  const inventory = options.inventory ?? diagnoseDocuments(repo);
+  const documents = inventory.documents;
   const annotations = scanAnnotations(repo, { cache });
   const constitutionFindings = checkConstitution(repo);
   const advisories = constitutionFindings.filter((finding) => finding.code === 'ConstitutionDraft');
-  const findings: Finding[] = [...checkDocuments(repo, documents), ...annotations.findings, ...constitutionFindings.filter((finding) => finding.code !== 'ConstitutionDraft')];
+  const findings: Finding[] = [...inventory.findings, ...checkDocuments(repo, documents), ...annotations.findings, ...constitutionFindings.filter((finding) => finding.code !== 'ConstitutionDraft')];
+  if (!inventory.complete && inventory.findings.length === 0) findings.push({ code: 'IncompleteInventory', path: '.', message: 'Document inventory is incomplete; no complete-graph conclusion is available' });
   const edges: TraceEdge[] = [];
   for (const doc of documents) {
     const m = doc.metadata;
@@ -67,15 +69,22 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
   const memories = documents.flatMap(doc => doc.metadata.kind === 'memory' && doc.metadata.resolution !== undefined
     ? [{ path: doc.path, evidenceLevel: doc.metadata.resolution.evidenceLevel, evidence: inspectResolutionEvidence(repo, doc.metadata.resolution) }]
     : []);
-  return { documents, annotations, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, advisories, memories, codeCache: code?.cache };
+  return { documents, annotations, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, advisories, memories, codeCache: code?.cache };
 }
 export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
-  if (trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);
+  if (!trace.complete || trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);
 }
 const pathOf = (ref: string) => ref.split('#')[0]!;
 function belongsTo(repo: Repository, trace: ReturnType<typeof buildTrace>, selectedPaths: ReadonlySet<string>, ref: string): boolean {
-  const owner = resolveReference(repo, trace.documents, ref);
-  return selectedPaths.has(owner.path) || (owner.metadata.kind === 'use-case' && selectedPaths.has(owner.metadata.feature));
+  try {
+    const owner = resolveReference(repo, trace.documents, ref);
+    return selectedPaths.has(owner.path) || (owner.metadata.kind === 'use-case' && selectedPaths.has(owner.metadata.feature));
+  } catch (cause) {
+    // Findings retain missing/malformed endpoints. Partial displays must not
+    // turn one unresolved edge into a failure to inspect a healthy subject.
+    if (!trace.complete && cause instanceof ConcordError && ['ReferenceNotFound', 'InvalidReferenceTarget', 'AnchorNotFound', 'InvalidReference', 'InvalidData', 'ResearchMigrationRequired'].includes(cause.code)) return false;
+    throw cause;
+  }
 }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
@@ -149,7 +158,8 @@ export function documentShow(repo: Repository, selector: string, kind: DocumentR
     outgoing: trace.edges.filter(edge => relatedPaths.has(edge.from)),
     tests: trace.annotations.cases.filter(testCase => testIds.has(testCase.id)),
     codeDeclarations: trace.codeDeclarations.filter(declaration => codeIds.has(declaration.id)),
-    findings: trace.findings.filter(finding => relatedPaths.has(finding.path)),
+    complete: trace.complete,
+    findings: trace.findings,
   };
 }
 export function selectCase(cases: readonly AnnotatedCase[], id: string): AnnotatedCase {
