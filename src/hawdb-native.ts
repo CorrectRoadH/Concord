@@ -4,7 +4,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
-import { HAWDB_ABI, HAWDB_REVISION, decodeNativeArtifact, hawdbTarget } from './hawdb-native-contract.js';
+import { HAWDB_ABI, HAWDB_REVISION, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget } from './hawdb-native-contract.js';
 
 export { HAWDB_ABI, HAWDB_REVISION };
 export type HawdbNamespace = 'document_parse' | 'code_parse' | 'git_baseline' | 'annotation_cache' | 'code_cache' | 'config_cache' | 'feedback_cache';
@@ -83,7 +83,7 @@ function loadArtifact(): NativeModule {
   if (metadata.target !== target || metadata.sourceDigest.length !== 64 || metadata.cargoLockDigest.length !== 64 || metadata.binarySha256.length !== 64 || metadata.noticesSha256.length !== 64) {
     throw new HawdbFailure('HawdbIncompatible', 'native artifact identity is incomplete');
   }
-  if (target === 'darwin-arm64' && metadata.deploymentTarget !== '14.0') {
+  if (target === 'darwin-arm64' && metadata.deploymentTarget !== HAWDB_MACOS_DEPLOYMENT_TARGET) {
     throw new HawdbFailure('HawdbIncompatible', 'macOS deployment target differs');
   }
   const noticesDigest = createHash('sha256').update(readFileSync(join(base, 'THIRD-PARTY-NOTICES.txt'))).digest('hex');

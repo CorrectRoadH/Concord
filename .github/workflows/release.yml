@@ -24,13 +24,13 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: linux-x64-glibc
-          - os: macos-14
+          - os: macos-15
             target: darwin-arm64
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
     env:
-      MACOSX_DEPLOYMENT_TARGET: '14.0'
+      MACOSX_DEPLOYMENT_TARGET: '15.0'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -163,9 +163,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
-            full: true
           - os: macos-15
+            full: true
+          - os: macos-26
             full: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -237,6 +237,7 @@ jobs:
             version "$version"
             sha256 "$digest"
             depends_on "node"
+            depends_on macos: :sequoia
             preserve_rpath
             def install
               system "npm", "install", *std_npm_args, "--ignore-scripts"
@@ -256,7 +257,7 @@ jobs:
           installed="$(brew --prefix concord/validation/concord)/libexec/lib/node_modules/concord-sdlc"
           shasum -a 256 "$installed/dist/native/darwin-arm64/hawdb.node"
           node --import tsx scripts/verify-installed-native.ts "$installed"
-      - name: Smoke test the same package on macOS 15
+      - name: Smoke test the same package on macOS 26
         if: ${{ !matrix.full }}
         run: |
           shasum -a 256 --check release/SHA256SUMS
@@ -297,7 +298,7 @@ jobs:
           digest="$(cut -d' ' -f1 release/SHA256SUMS)"
           gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
-            --notes "Built and fully tested on Ubuntu 24.04. The same packed candidate, including pinned Linux x64 and macOS arm64 HawDB engines, passed cache, coordination, recovery, and isolated installation checks on Apple Silicon macOS 14. macOS 15 passed installed CLI, native loading, and cache smoke checks. Consumer installation requires neither Rust nor a HawDB service. No old lock migration or mixed-version coordination is provided. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."
+            --notes "Requires Apple Silicon macOS 15 or newer, including macOS 27; macOS 14 is no longer supported. Built and fully tested on Ubuntu 24.04. The same packed candidate, including pinned Linux x64 and macOS arm64 HawDB engines, passed cache, coordination, recovery, isolated installation and Homebrew native integrity checks on Apple Silicon macOS 15. macOS 26 passed installed CLI, native loading, and cache smoke checks. macOS 27 is permitted but has not been tested by this CI matrix. Consumer installation requires neither Rust nor a HawDB service. No old lock migration or mixed-version coordination is provided. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap; source publication does not imply channel synchronization is complete."
       - name: Notify Homebrew tap of the published release
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_WORKFLOW_TOKEN }}

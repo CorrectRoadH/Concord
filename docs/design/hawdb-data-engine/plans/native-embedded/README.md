@@ -79,7 +79,7 @@ segment cache 为 16 MiB，graph manifest 为 8 MiB，out-of-core delta 不超�
 
 ## Release identity
 
-发行产物集合固定为 linux-x64-glibc 与 darwin-arm64，后者 deployment target 为 macOS 14.0，符合当前 Ubuntu 24.04 与 Apple Silicon macOS 14/15 验收矩阵。native manifest 绑定同一桥接源码、Cargo lock、ABI、HawDB revision 和二进制摘要。构建先清空 dist，再汇入完整平台集合；后续 host build 不能擦掉其它目标。只 pack 一次，各平台验证同一个 SHA-256。缺项或不匹配阻断发行，本机 Nix 产物不进入通用发行物。
+发行产物集合固定为 linux-x64-glibc 与 darwin-arm64，后者 deployment target 为 macOS 15.0，符合当前 Ubuntu 24.04 与 Apple Silicon macOS 15/26 验收矩阵。native manifest 绑定同一桥接源码、Cargo lock、ABI、HawDB revision 和二进制摘要。构建先清空 dist，再汇入完整平台集合；后续 host build 不能擦掉其它目标。只 pack 一次，各平台验证同一个 SHA-256。缺项或不匹配阻断发行，本机 Nix 产物不进入通用发行物。
 
 ## Adoption conditions
 

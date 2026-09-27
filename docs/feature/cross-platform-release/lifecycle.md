@@ -10,7 +10,7 @@ Concord 拥有源码校验、包字节与源码 Release，tap 拥有包管理器
 
 ## 运行
 
-Linux 与 macOS 原生任务各自产生目标引擎。一个 Ubuntu 24.04 任务类型检查并合成唯一 npm tgz，核验摘要，并在隔离 Git 消费者中安装该资产执行 `init` 与 `check`。四个 Ubuntu 分片从该打包产物运行完整测试，与 macOS 14 的完整可移植回归和 macOS 15 的安装冒烟验证并行。
+Linux 与 macOS 原生任务各自产生目标引擎。一个 Ubuntu 24.04 任务类型检查并合成唯一 npm tgz，核验摘要，并在隔离 Git 消费者中安装该资产执行 `init` 与 `check`。四个 Ubuntu 分片从该打包产物运行完整测试，与 macOS 15 的完整可移植回归和 macOS 26 的安装冒烟验证并行。
 
 所有分片与平台成功后才发布。安装时由 npm 选择目标平台的可选依赖。Homebrew 提供运行时与 `ripgrep`，不需要外部锁工具。源码发布后，tap 同步先准备并验证 Formula 与 Nix，再更新分支与 recipe 标签。
 

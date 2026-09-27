@@ -5,7 +5,7 @@ import { cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'nod
 import { join, resolve } from 'node:path';
 import { Effect, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, decodeNativeArtifact, hawdbTarget, type NativeArtifact } from '../src/hawdb-native-contract.js';
+import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget, type NativeArtifact } from '../src/hawdb-native-contract.js';
 
 const root = resolve(import.meta.dirname, '..');
 const crate = join(root, 'native/hawdb');
@@ -56,7 +56,7 @@ function validateArtifact(folder: string, target: string, requirePortable: boole
   if (artifact.sourceDigest !== digestSources() || artifact.cargoLockDigest !== shaFile(join(crate, 'Cargo.lock'))) throw new Error(`native source/lock mismatch: ${folder}`);
   if (artifact.binarySha256 !== shaFile(join(folder, 'hawdb.node'))) throw new Error(`native binary digest mismatch: ${folder}`);
   if (artifact.noticesSha256 !== shaFile(join(folder, 'THIRD-PARTY-NOTICES.txt'))) throw new Error(`native dependency notices mismatch: ${folder}`);
-  if (target === 'darwin-arm64' && artifact.deploymentTarget !== '14.0') throw new Error(`native deployment target mismatch: ${folder}`);
+  if (target === 'darwin-arm64' && artifact.deploymentTarget !== HAWDB_MACOS_DEPLOYMENT_TARGET) throw new Error(`native deployment target mismatch: ${folder}`);
   if (requirePortable && artifact.testHooks) throw new Error(`test-hook native artifact cannot ship: ${folder}`);
   if (requirePortable && !artifact.portable) throw new Error(`native artifact is not portable: ${folder}`);
   return artifact;
@@ -66,7 +66,8 @@ function portableLinkage(binary: string, target: string): boolean {
     try {
       const loadCommands = execFileSync('otool', ['-l', binary], { encoding: 'utf8' });
       const identity = execFileSync('otool', ['-D', binary], { encoding: 'utf8' }).trim().split('\n').at(-1)?.trim();
-      return process.env.MACOSX_DEPLOYMENT_TARGET === '14.0' && /\bminos\s+14\.0(?:\D|$)/u.test(loadCommands) && identity === '@rpath/hawdb.node';
+      const minimum = /\bminos\s+(\d+\.\d+)(?:\s|$)/u.exec(loadCommands)?.[1];
+      return process.env.MACOSX_DEPLOYMENT_TARGET === HAWDB_MACOS_DEPLOYMENT_TARGET && minimum === HAWDB_MACOS_DEPLOYMENT_TARGET && identity === '@rpath/hawdb.node';
     } catch { return false; }
   }
   try {
@@ -95,7 +96,7 @@ const program = Effect.gen(function*() {
     return;
   }
   const target = yield* Effect.sync(hawdbTarget);
-  if (target === 'darwin-arm64' && process.env.MACOSX_DEPLOYMENT_TARGET !== '14.0') return yield* Effect.fail(new Error('MACOSX_DEPLOYMENT_TARGET=14.0 required'));
+  if (target === 'darwin-arm64' && process.env.MACOSX_DEPLOYMENT_TARGET !== HAWDB_MACOS_DEPLOYMENT_TARGET) return yield* Effect.fail(new Error(`MACOSX_DEPLOYMENT_TARGET=${HAWDB_MACOS_DEPLOYMENT_TARGET} required`));
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const exitCode = yield* spawner.exitCode(ChildProcess.make('cargo', ['+1.97.1', 'build', '--release', '--locked', '--manifest-path', join(crate, 'Cargo.toml'), ...(args.testHooks ? ['--features', 'test-hooks'] : [])], { stdout: 'inherit', stderr: 'inherit' }));
   if (exitCode !== 0) return yield* Effect.fail(new Error(`cargo native build failed: ${exitCode}`));
@@ -112,7 +113,7 @@ const program = Effect.gen(function*() {
       target, abi: HAWDB_ABI, revision: HAWDB_REVISION,
       sourceDigest: digestSources(), cargoLockDigest: shaFile(join(crate, 'Cargo.lock')),
       binarySha256: shaFile(binary), noticesSha256: shaFile(join(dest, 'THIRD-PARTY-NOTICES.txt')), portable: !args.testHooks && portableLinkage(binary, target), testHooks: args.testHooks,
-      ...(target === 'darwin-arm64' ? { deploymentTarget: '14.0' } : {}),
+      ...(target === 'darwin-arm64' ? { deploymentTarget: HAWDB_MACOS_DEPLOYMENT_TARGET } : {}),
     };
     writeFileSync(join(dest, 'artifact.json'), `${JSON.stringify(artifact, null, 2)}\n`);
     validateArtifact(dest, target, args.requirePortable);

@@ -30,7 +30,9 @@ Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份
 
 ## 范围
 
-唯一的 npm 发布产物内含 Linux 与 macOS 分别编译的目标原生引擎，在一台 Ubuntu 24.04 runner 上类型检查、合包并隔离安装。四个 Ubuntu 测试分片对打包产物运行完整测试；Apple Silicon macOS 14 验证锁、恢复与隔离安装，macOS 15 验证同一包的原生加载、缓存与 CLI 安装。所有分片与平台通过后才发布。
+唯一的 npm 发布产物内含 Linux 与 macOS 分别编译的目标原生引擎，在一台 Ubuntu 24.04 runner 上类型检查、合包并隔离安装。四个 Ubuntu 测试分片对打包产物运行完整测试；Apple Silicon macOS 15 验证锁、恢复、隔离安装与 Homebrew 原生产物完整性，macOS 26 验证同一包的原生加载、缓存与 CLI 安装。所有分片与平台通过后才发布。
+
+macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安装范围内；CI 验收范围为 15 与 26，不声明已完成 macOS 27 的实际验收。Homebrew 候选在 Ubuntu 24.04、macOS 15 与 26 安装验证，Nix 在 Ubuntu 24.04 验证。源码发布成功与渠道同步成功分别报告。
 
 安装时由 npm 选择目标平台的可选依赖。运行时协调在本地 Linux 与 macOS 工作树上使用 Node 文件 API，不依赖 flock 或磁盘检查工具。依赖为 Node.js 24.15+、Git 与 Repository 工具使用的 ripgrep。Nix 只支持 Linux。
 
@@ -42,6 +44,6 @@ Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份
 - [架构](architecture.md)
 - [生命周期](lifecycle.md)
 
-包内含同一固定源码与 Cargo lock 构建的 linux-x64-glibc 与 darwin-arm64 HawDB N-API 引擎，macOS 部署目标为 14.0。原生目标任务先于唯一的打包任务；ABI、源码身份、上游 revision 或摘要缺失或不一致都会阻止发布。
+包内含同一固定源码与 Cargo lock 构建的 linux-x64-glibc 与 darwin-arm64 HawDB N-API 引擎，macOS 部署目标为 15.0。原生目标任务先于唯一的打包任务；ABI、源码身份、上游 revision 或摘要缺失或不一致都会阻止发布。
 
 消费者以 `--ignore-scripts` 安装，不需要 Rust 或 HawDB 服务。仅在本机构建的 Nix 产物只用于本地验证。

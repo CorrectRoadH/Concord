@@ -5,6 +5,7 @@ import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { parse } from 'yaml';
+import { HAWDB_MACOS_DEPLOYMENT_TARGET } from '../src/hawdb-native-contract.js';
 
 const Workflow = Schema.Struct({
   on: Schema.Struct({ push: Schema.Struct({ tags: Schema.Array(Schema.String) }) }),
@@ -15,7 +16,13 @@ const Workflow = Schema.Struct({
 
 const Job = Schema.Struct({
   needs: Schema.optional(Schema.Union([Schema.String, Schema.Array(Schema.String)])),
-  strategy: Schema.optional(Schema.Struct({ matrix: Schema.Struct({ shard: Schema.optional(Schema.Array(Schema.Number)) }) })),
+  env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  strategy: Schema.optional(Schema.Struct({ matrix: Schema.Struct({
+    shard: Schema.optional(Schema.Array(Schema.Number)),
+    include: Schema.optional(Schema.Array(Schema.Struct({
+      os: Schema.String, target: Schema.optional(Schema.String), full: Schema.optional(Schema.Boolean),
+    }))),
+  }) })),
   steps: Schema.Array(Schema.Struct({
     uses: Schema.optional(Schema.String),
     run: Schema.optional(Schema.String),
@@ -30,8 +37,11 @@ test('publication waits for all shards and platforms testing the single packed b
     const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Job) }))(
       parse(yield* fs.readFileString('.github/workflows/release.yml')),
     );
-    const { package: pack, tests, portable, publish } = graph.jobs;
-    assert.ok(pack && tests && portable && publish);
+    const { native, package: pack, tests, portable, publish } = graph.jobs;
+    assert.ok(native && pack && tests && portable && publish);
+    assert.equal(native.env?.MACOSX_DEPLOYMENT_TARGET, HAWDB_MACOS_DEPLOYMENT_TARGET);
+    assert.deepEqual(native.strategy?.matrix.include?.find(target => target.target === 'darwin-arm64'), { os: 'macos-15', target: 'darwin-arm64' });
+    assert.deepEqual(portable.strategy?.matrix.include, [{ os: 'macos-15', full: true }, { os: 'macos-26', full: false }]);
     assert.deepEqual(publish.needs, ['package', 'tests', 'portable']);
     assert.deepEqual(tests.strategy?.matrix.shard, [1, 2, 3, 4]);
     assert.ok(pack.steps.some(step => step.run === 'pnpm typecheck'));

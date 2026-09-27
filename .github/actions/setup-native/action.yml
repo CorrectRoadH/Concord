@@ -16,8 +16,8 @@ runs:
           ~/.cargo/git/db
           ~/.cargo/git/checkouts
           native/hawdb/target
-        key: cargo-v1-${{ inputs.platform }}-deployment14-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-${{ hashFiles('native/hawdb/Cargo.toml', 'native/hawdb/build.rs', 'native/hawdb/src/**', 'scripts/build-native.ts', 'src/hawdb-native.ts', 'src/hawdb-native-contract.ts') }}
+        key: cargo-v1-${{ inputs.platform }}-deployment15-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-${{ hashFiles('native/hawdb/Cargo.toml', 'native/hawdb/build.rs', 'native/hawdb/src/**', 'scripts/build-native.ts', 'src/hawdb-native.ts', 'src/hawdb-native-contract.ts') }}
         restore-keys: |
-          cargo-v1-${{ inputs.platform }}-deployment14-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-
+          cargo-v1-${{ inputs.platform }}-deployment15-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-
     - shell: bash
       run: rustup toolchain install 1.97.1 --profile minimal
