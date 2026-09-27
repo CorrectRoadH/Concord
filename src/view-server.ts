@@ -88,7 +88,7 @@ const success = (response: ServerResponse, value: unknown, status = 200): void =
 function statusFor(error: ConcordError): number {
   if (error.code === 'ForbiddenAuthority') return 403;
   if (error.code === 'BodyTooLarge') return 413;
-  if (['RepositoryBusy', 'RecoveryRequired', 'RecoveryConflict', 'PreimageChanged', 'ProjectExists', 'DocumentExists', 'DecisionExists', 'DuplicatePromotion', 'DuplicateLink', 'InvalidMemoryState', 'InvalidRoadmapState', 'InvalidIssueState', 'OpenProblem', 'JobBusy', 'CleanupFailed', 'ServerStopping', 'CodeSourceChanged'].includes(error.code)) return 409;
+  if (['RepositoryBusy', 'RecoveryRequired', 'RecoveryConflict', 'PreimageChanged', 'ProjectExists', 'DocumentExists', 'DecisionExists', 'DecisionSourceUncommitted', 'DuplicatePromotion', 'DuplicateLink', 'InvalidMemoryState', 'InvalidRoadmapState', 'InvalidIssueState', 'OpenProblem', 'JobBusy', 'CleanupFailed', 'ServerStopping', 'CodeSourceChanged'].includes(error.code)) return 409;
   if (error.code === 'FileNotFound' || error.code === 'JobNotFound' || error.code === 'GitChangeNotFound' || error.code === 'ApiNotFound') return 404;
   return 400;
 }

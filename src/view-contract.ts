@@ -108,6 +108,7 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('page.add'), kind: Schema.Literals(['feature', 'roadmap', 'design', 'engineering', 'research']), id: Text, page: Text, plan: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('roadmap.adopt'), id: Text, feature: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('design.decide'), id: Text, selected: Text, targets: Strings, reason: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('design.correct-reason'), id: Text, reason: Text, memory: Text, explanation: Text, expectedDigest: Text, expectedMemoryDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('design.check'), id: Text }),
   Schema.Struct({ action: Schema.Literal('design.format'), id: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.resolve'), id: Text, kind: Schema.Literals(['fixed', 'not-a-bug', 'wont-fix', 'external-fixed']), reason: Text, red: Schema.optional(Text), green: Schema.optional(Text), ...DryRun }),

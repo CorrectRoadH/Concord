@@ -176,7 +176,7 @@ concord roadmap create greeting-locale --title "Localized greetings"
 concord roadmap adopt greeting-locale --feature localized-greeting
 ```
 
-Feature、Roadmap 和每个 Design 候选会生成 README、library、cli、architecture、lifecycle 与 use-case 结构。`--body <file>` 提供作者正文，`--body -` 从 stdin 读取。Design 的 `DECISION.md` 可补写分析，正式裁决由 `design decide` 保存。
+Feature、Roadmap 和每个 Design 候选会生成 README、library、cli、architecture、lifecycle 与 use-case 结构。`--body <file>` 提供作者正文，`--body -` 从 stdin 读取。Design 的 `DECISION.md` 可补写分析，正式裁决由 `design decide` 保存；已有裁决的理由可用 `design correct-reason` 配合受管 Memory 留存来源后更正。
 
 更新已有正文时，先读取最新 digest，再用 `--expected-digest` 防止覆盖并发修改。以下 digest 是需要替换的占位符：
 
@@ -366,7 +366,7 @@ concord --skill all
 
 ### 发版
 
-源仓库使用 `v<发行版本>` annotated tag；流水线从 tag 设置包与 shrinkwrap 的版本。一台 Ubuntu 24.04 runner 校验版本、构建并检查类型、打包一次并隔离安装。四路 Ubuntu 测试分片与 macOS 14/15 验证并行运行，均使用该包中的构建产物；全部通过后才创建 GitHub Release。Cargo 缓存按平台、工具链、锁文件与原生源码区分，命中后仍编译和测试。目标平台的可选原生依赖由 npm 在安装时选择。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
+源仓库使用 `v<发行版本>` annotated tag；流水线从 tag 设置包与 shrinkwrap 的版本。Linux 与 macOS 各自编译原生引擎，一台 Ubuntu 24.04 runner 类型检查、合包一次并隔离安装。四路 Ubuntu 测试分片、macOS 14 可移植回归和 macOS 15 安装冒烟均使用同一包；全部通过后才创建 GitHub Release。Cargo 缓存按平台、工具链、锁文件与原生源码区分，命中后仍编译和测试。目标平台的可选原生依赖由 npm 在安装时选择。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
 
 ### Nix / NixOS
 

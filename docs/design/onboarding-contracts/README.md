@@ -16,7 +16,7 @@ constitutionRefs:
   - docs/constitution.md#c-008
 decision:
   selected: compatible
-  reason: 独立 Astra CONDITIONAL 四项条件已落实到治理格式、anchor解析、恢复授权与组合验收定义。采用兼容演进，隔离 worktree 实施，未声明实现验收通过。
+  reason: 采用兼容演进，明确治理格式、条款 anchor 解析、恢复授权与组合验收的边界。
   at: 2026-09-14T14:00:13.281Z
   targets:
     - docs/feature/project-onboarding/README.md

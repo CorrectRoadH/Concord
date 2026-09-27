@@ -19,7 +19,7 @@ constitutionRefs:
   - docs/constitution.md#c-012
 decision:
   selected: directory-owned
-  reason: 独立 Astra CONDITIONAL 的六项有限条件已逐项写入采用方案并核对；采用目录归属、JSON 真源和派生汇总
+  reason: 采用目录归属、JSON 真源和派生汇总，明确局部术语作用域与迁移边界。
   at: 2026-09-23T02:53:33.141Z
   targets:
     - docs/feature/documentation-quality/use-case/manage-scoped-terminology.md

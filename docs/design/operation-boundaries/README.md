@@ -16,7 +16,7 @@ constitutionRefs:
   - docs/constitution.md#c-013
 decision:
   selected: scoped
-  reason: 按操作依赖划分边界；GPT-6 Astra 独立挑战后的精确架构已通过，保留完整性、证据及恢复门禁。
+  reason: 按操作依赖划分读取与发布边界，同时保留完整性、证据与恢复门禁。
   at: 2026-09-27T00:03:15.879Z
   targets:
     - docs/feature/portable-coordination/README.md

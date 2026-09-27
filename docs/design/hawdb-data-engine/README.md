@@ -20,7 +20,7 @@ constitutionRefs:
   - docs/constitution.md#c-012
 decision:
   selected: native-embedded
-  reason: 独立 Astra CONDITIONAL 的打开模式、预算、窄原生例外和发行边界已落实；clear 子方案 PASS，原型证据与实现后验收明确分离
+  reason: 采用受限 HawDB 原生引擎，明确打开模式、资源预算、窄原生边界、发行条件与缓存清理的所有权。
   at: 2026-09-23T04:42:27.706Z
   targets:
     - docs/feature/local-data-engine/README.md

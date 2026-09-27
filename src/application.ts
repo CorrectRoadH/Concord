@@ -16,6 +16,7 @@ import {
   adoptRoadmap,
   closeIssue,
   createDocument,
+  correctDesignReason,
   decideDesign,
   checkDesign,
   formatDesign,
@@ -86,6 +87,7 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'page.add':
     case 'roadmap.adopt':
     case 'design.decide':
+    case 'design.correct-reason':
     case 'design.format':
     case 'memory.resolve':
     case 'memory.edit':
@@ -318,6 +320,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'page.add': return addPage(repo, action.kind, action.id, action.page, dryRun, action.plan);
     case 'roadmap.adopt': return adoptRoadmap(repo, action.id, action.feature, dryRun);
     case 'design.decide': return decideDesign(repo, action.id, action.selected, action.targets, action.reason, dryRun);
+    case 'design.correct-reason': return correctDesignReason(repo, action.id, action.reason, action.memory, action.explanation, action.expectedDigest, action.expectedMemoryDigest, dryRun);
     case 'design.check': return checkDesign(repo, action.id);
     case 'design.format': return formatDesign(repo, action.id, dryRun);
     case 'memory.resolve': {

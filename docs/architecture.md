@@ -27,7 +27,7 @@ Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只
 - `engineering`：仓库测试与维护机制的目标、使用与验收。
 - `template list/show`：在任意 cwd 查看随包写作模板，无需初始化。
 - `doctor`：检查配置、缺失测试目录和当前关联，给出接入步骤，不执行 runner。
-- `design create/check/format/decide/list/show`：候选比较、逐项检查、有限格式化、唯一裁决及关联目标。
+- `design create/check/format/decide/correct-reason/list/show`：候选比较、逐项检查、有限格式化、唯一裁决、受管理由更正及关联目标。
 - `roadmap create/adopt/list/show`：定稿方向与显式采用。采用创建 Feature，Roadmap 标记 adopted；当前契约只在 Feature。
 - `test list/show/run`：从测试源码标记派生执行引用，发现目标契约与 regression Memory；项目配置拥有 argv、附加 sourceFiles 和 timeout。
 - `test annotate`：验证指定 canonical reference、归属链、类型与 anchor 后输出注释片段，regression 还验证 Problem。使用共享 snapshot，不改源文件，不加载全局 Trace。
@@ -138,7 +138,7 @@ runner 不确定时返回 blocked，并保留 journal 的实际处理结果。�
 
 详细行为见[逐项比较方案并明确裁决](feature/local-sdlc/use-case/compare-design-plans.md)。GOALS 与 LIMITS 每条是带稳定 G/L 编号的 H2，候选以四列表格逐项回应。DECISION 选择的 slug 与链接须与请求及 metadata 一致，所选候选满足全部 Limit，Goal 缺口逐项解释。
 
-`design check` 检查当前正文，普通读取及全局 check 不追溯写作门槛；正文变化不重写已有裁决。`design format` 只整理识别出的 H2 与四列表格空白，不补充选择或证据。
+`design check` 检查当前正文，普通读取及全局 check 不追溯写作门槛；正文变化不重写已有裁决。已定案的选择、目标、时间和来源保持不变；`design correct-reason` 只在 Design owner 与当前 Git HEAD 内容一致且两个 owner 的摘要匹配时更正理由，并在一个受管 Memory 中原子追加原文的 Git 提交与摘要、更正时间和说明。更正不重新运行定案门槛，也不在 Design 增加历史字段。`design format` 只整理识别出的 H2 与四列表格空白，不补充选择或证据。
 
 定案绑定 owner、GOALS、LIMITS、DECISION 和全部候选 README 的同一次读取；同内容 guard 实际重写并计入 changedPaths，沿用 journal 恢复。repository 入口使用自己的 lease 与前像，dry-run 返回前也复核完整输入。候选投影按 `metadata.alternatives` 顺序派生。裁决不证明自然语言声称的满足度。
 

@@ -20,7 +20,8 @@ feature: docs/feature/local-sdlc/README.md
 3. 每个候选 README 的 `## Limits` 和 `## Goals` 各有一张四列表格：要求链接、结论、满足方式或缺口、依据。每条要求恰好回应一次，不能只列成功项。Limits 支持 satisfied/not-satisfied/pending（满足/不满足/待验证）；Goals 还支持 partial（部分满足）。依据可以是设计论证或实际验证材料，必须说明实际证明范围。
 4. DECISION 的 `## Decision` 声明一个直接候选 README 链接，例如 `选择 [plan-2](plans/plan-2/README.md)。`；未选择写“未定案”。`## Rationale` 解释比较和接受的 Goal 缺口，`## Rejected Options` 说明否决原因，`## Residual Risks` 说明遗留风险。作者正文不能替代 metadata 中的正式裁决。
 5. `design check` 报告结构、遗漏、重复、引用、状态和选择冲突；`design decide` 在同一校验通过且所选候选每条 Limit 均满足后记录唯一裁决。其他候选可以不满足约束。Goal 缺口必须显式出现在裁决依据中。
-6. `design format` 只规范已识别的 H2 标题和四列表格空白；支持 dry-run 和现有 publication 前像保护，不补选择、结论、理由或证据。保留原有换行风格、标题锚点和代码块，格式化成功不等于校验通过。
+6. 已有裁决的理由可通过 `design correct-reason` 更正。作者提供当前 Design 与 Memory 摘要、新理由和更正说明；Design 必须与 Git HEAD 中的版本一致。命令原子更新理由并在指定的受管 Memory 追加原文提交、摘要、更正时间和说明，不改变选择、目标、定案时间或来源，不重新运行定案门槛。Memory 承载更正过程，Design 保持声明式。
+7. `design format` 只规范已识别的 H2 标题和四列表格空白；支持 dry-run 和现有 publication 前像保护，不补选择、结论、理由或证据。保留原有换行风格、标题锚点和代码块，格式化成功不等于校验通过。
 
 ## 异常与验收
 
@@ -28,4 +29,5 @@ feature: docs/feature/local-sdlc/README.md
 - 未定案草稿允许编辑和保存；正式定案检查全部候选的回应完整性。所选候选的硬约束不满足或待验证时零写入失败。
 - CLI、结构化 action/Web 及 repository 定案入口执行同一内容规则。读取的 GOALS、LIMITS、DECISION 和所有候选 README 发生漂移时阻止发布，dry-run 也完整校验。
 - 历史已定案文件保留原内容与含义；普通读取及全局完整性检查不追溯施加新写作门槛。显式 design check 对当前正文给出新规则诊断，不把历史 metadata 或模板当作验证证据。
+- 理由更正拒绝不存在的裁决、未提交的 Design、相同或空白的新理由、非当前 Note/Decision Memory 及任一过期摘要；dry-run 执行相同校验且不写入。原理由可由 Memory 记录的 Git 提交和摘要找回。
 - 使用构建及打包后的公开 CLI 在隔离 Git 消费者验证创建、检查、格式化、拒绝定案和成功定案。结构检查不能证明方案在现实中满足目标或约束。

@@ -10,7 +10,7 @@
 | Use Case | `use-case create --feature <ref>` | 所属 Feature 内创建 |
 | 正文与页面 | `author set`、各包 `page add/show/set` | 富文本与源码编辑 |
 | 作者字段、源码、配置 | `action --input <file|->` | 详情、源码、设置表单 |
-| 生命周期 | `memory`、`issue`、`design decide`、`roadmap adopt` | 对应记录的操作表单 |
+| 生命周期 | `memory`、`issue`、`design decide/correct-reason`、`roadmap adopt` | 对应记录的操作表单或结构化 action |
 | 测试与证据 | `test run/evidence` | 测试、运行及证据页 |
 | 注释辅助 | `code annotate`、`test annotate` | 代码与测试声明助手 |
 | Git 变化 | `git status`、`git diff <path> --area staged|unstaged|untracked` | Git 面板 |

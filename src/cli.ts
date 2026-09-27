@@ -16,7 +16,7 @@ import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, Option, Schema } from 'effect';
 import { Argument, CliError, Command, Flag, Prompt } from 'effect/unstable/cli';
 import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
-import { activateMemory, addPage, showPage, setPage, adoptRoadmap, closeIssue, createDocument, decideDesign, findDocument, linkFeedbackFeature, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
+import { activateMemory, addPage, showPage, setPage, adoptRoadmap, closeIssue, correctDesignReason, createDocument, decideDesign, findDocument, linkFeedbackFeature, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
 import { checkDesign, formatDesign } from './documents.js';
 import { listFeedback, syncFeedback } from './feedback.js';
 import { editKnowledge, knowledgeIndex, knowledgeRecall, knowledgeSearch, removeIssue } from './knowledge.js';
@@ -157,6 +157,7 @@ function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
   const show = Command.make('show', { id }, ({ id }) => withReadRepo((repo, settings) => sync(() => documentShow(repo, id, kind, cached(settings.dryRun)))));
   const adopt = Command.make('adopt', { id, feature: text('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, args.feature, s.dryRun))));
   const decide = Command.make('decide', { id, selected: text('selected'), target: many('target'), reason: text('reason') }, args => withRepo((repo, s) => sync(() => decideDesign(repo, args.id, args.selected, args.target, args.reason, s.dryRun))));
+  const correctReason = Command.make('correct-reason', { id, reason: text('reason'), memory: text('memory'), explanation: text('explanation'), expectedDigest: text('expected-digest'), expectedMemoryDigest: text('expected-memory-digest') }, args => withRepo((repo, s) => sync(() => correctDesignReason(repo, args.id, args.reason, args.memory, args.explanation, args.expectedDigest, args.expectedMemoryDigest, s.dryRun))));
   const designCheck = Command.make('check', { id }, args => withRepo(repo => sync(() => { const result = checkDesign(repo, args.id); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true }));
   const designFormat = Command.make('format', { id }, args => withRepo((repo, s) => sync(() => formatDesign(repo, args.id, s.dryRun))));
   const pageName = Argument.string('page');
@@ -165,7 +166,7 @@ function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
     Command.make('show', { id, page: pageName, plan: optional('plan') }, args => withReadRepo(repo => sync(() => showPage(repo,kind,args.id,args.page,Option.getOrUndefined(args.plan))))),
     Command.make('set', { id, page: pageName, body: text('body'), expectedDigest: text('expected-digest'), plan: optional('plan') }, args => withRepo((repo,s) => sync(() => setPage(repo,kind,args.id,args.page,body(args.body),args.expectedDigest,s.dryRun,Option.getOrUndefined(args.plan))))),
   ]));
-  const commands = kind === 'roadmap' ? [create, list, show, page, adopt] : kind === 'design' ? [create, list, show, page, decide, designCheck, designFormat] : kind === 'feature' || kind === 'engineering' || kind === 'research' ? [create, list, show, page] : [create, list, show];
+  const commands = kind === 'roadmap' ? [create, list, show, page, adopt] : kind === 'design' ? [create, list, show, page, decide, correctReason, designCheck, designFormat] : kind === 'feature' || kind === 'engineering' || kind === 'research' ? [create, list, show, page] : [create, list, show];
   return Command.make(kind).pipe(Command.withDescription(`Maintain ${kind} contracts.`), Command.withSubcommands(commands));
 }
 const author = Command.make('author').pipe(Command.withDescription('Edit author prose while retaining managed metadata and history.'), Command.withSubcommands([

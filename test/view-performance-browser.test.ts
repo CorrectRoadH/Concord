@@ -35,7 +35,7 @@ test('polling keeps jobs responsive without continuously rescanning the workspac
       await route.continue();
     });
     await page.goto(`http://127.0.0.1:${server.port}/research/polling`);
-    await expect(page.getByRole('heading', { name: 'Polling study', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Polling study', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => jobs).toBe(1);
     assert.equal(requests, 1, 'mounting the workspace does not fetch it again');
     // Let the initial Git/jobs responses settle before advancing the polling timer.

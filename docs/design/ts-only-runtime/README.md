@@ -17,7 +17,7 @@ constitutionRefs:
   - docs/constitution.md#c-009
 decision:
   selected: ts-only
-  reason: 用户禁止legacy运行时；独立挑战的错误优先级、拒绝识别及prepared-init例外条件已落实为契约与验收定义，旧兼容设计被本裁决替代。
+  reason: 仅接受 TypeScript 配置运行时；旧格式离线迁移，错误优先级、拒绝识别与 prepared-init 的例外由契约约束。
   at: 2026-09-14T15:33:25.190Z
   targets:
     - docs/feature/project-onboarding/README.md

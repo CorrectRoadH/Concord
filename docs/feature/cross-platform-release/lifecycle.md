@@ -10,7 +10,7 @@ Concord 拥有源码校验、包字节与源码 Release，tap 拥有包管理器
 
 ## 运行
 
-一个 Ubuntu 24.04 任务构建并类型检查，生成含两个目标原生引擎的唯一 npm tgz，核验摘要，并在隔离 Git 消费者中安装该资产执行 `init` 与 `check`。四个 Ubuntu 分片从该打包产物运行完整测试，与 macOS 14 和 15 的验证并行。
+Linux 与 macOS 原生任务各自产生目标引擎。一个 Ubuntu 24.04 任务类型检查并合成唯一 npm tgz，核验摘要，并在隔离 Git 消费者中安装该资产执行 `init` 与 `check`。四个 Ubuntu 分片从该打包产物运行完整测试，与 macOS 14 的完整可移植回归和 macOS 15 的安装冒烟验证并行。
 
 所有分片与平台成功后才发布。安装时由 npm 选择目标平台的可选依赖。Homebrew 提供运行时与 `ripgrep`，不需要外部锁工具。源码发布后，tap 同步先准备并验证 Formula 与 Nix，再更新分支与 recipe 标签。
 
@@ -18,7 +18,7 @@ Concord 拥有源码校验、包字节与源码 Release，tap 拥有包管理器
 
 重试任务可以复用成功的不可变产物。commit、版本、资产摘要或生成的依赖哈希变化时不能复用。
 
-Cargo 缓存按 runner 镜像、原生目标、部署目标、Rust 工具链、lockfile 与原生构建源码划分，默认分支的检查为两个平台预热缓存。命中缓存仍运行锁定构建与原生恢复测试，缓存编译不是测试证据。普通 Check 在分支与 pull request 上运行，发布标签使用完整的 Release 验证图。
+Cargo 缓存按 runner 镜像、原生目标、部署目标、Rust 工具链、lockfile 与原生构建源码划分。命中缓存仍运行锁定构建与原生恢复测试，缓存编译不是测试证据。普通 Check 在分支与 pull request 上执行 Linux 全量检查；发布标签执行两平台原生构建及同包验证。
 
 ## 清理
 

@@ -162,7 +162,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]
+        include:
+          - os: macos-14
+            full: true
+          - os: macos-15
+            full: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     permissions:
@@ -171,17 +175,26 @@ jobs:
       TMPDIR: /private/tmp
     steps:
       - uses: actions/checkout@v4
+        if: matrix.full
         with:
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
       - uses: pnpm/action-setup@v4
+        if: matrix.full
         with:
           version: 11.18.0
       - uses: actions/setup-node@v4
+        if: matrix.full
         with:
           node-version: '24.19.0'
           cache: pnpm
+      - uses: actions/setup-node@v4
+        if: ${{ !matrix.full }}
+        with:
+          node-version: '24.19.0'
       - run: pnpm install --frozen-lockfile --ignore-scripts
+        if: matrix.full
       - name: Prepare test checkout version from release tag
+        if: matrix.full
         env:
           RELEASE_TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
         run: node --import tsx scripts/prepare-release.ts
@@ -190,12 +203,14 @@ jobs:
           name: concord-release-package
           path: release
       - name: Verify portable locks and recovery from the packed build
+        if: matrix.full
         run: |
           shasum -a 256 --check release/SHA256SUMS
           version="$(node -p "require('./package.json').version")"
           tar -xzf "release/concord-sdlc-$version.tgz" --strip-components=1 package/dist
           node --import tsx --test test/portable-coordination.test.ts test/storage.test.ts test/runtime-portability.test.ts test/coordination-migration.test.ts test/hawdb-native.test.ts test/hawdb-cache.test.ts test/content-cache.test.ts test/annotations.test.ts test/code-cache.test.ts test/feedback.test.ts
       - name: Install and exercise the same candidate CLI
+        if: matrix.full
         run: |
           version="$(node -p "require('./package.json').version")"
           consumer="$(mktemp -d /private/tmp/concord-install.XXXXXXXX)"
@@ -206,6 +221,24 @@ jobs:
           "$cli" --root "$consumer" init --docs-only
           "$cli" --root "$consumer" check
           node --import tsx scripts/verify-installed-native.ts "$consumer/tool/node_modules/concord-sdlc"
+      - name: Smoke test the same package on macOS 15
+        if: ${{ !matrix.full }}
+        run: |
+          shasum -a 256 --check release/SHA256SUMS
+          tgz="$(find release -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' -print -quit)"
+          test -n "$tgz"
+          version="$(tar -xOf "$tgz" package/package.json | node -e 'let data=""; process.stdin.on("data", chunk => data += chunk); process.stdin.on("end", () => console.log(JSON.parse(data).version))')"
+          consumer="$(mktemp -d /private/tmp/concord-install.XXXXXXXX)"
+          git -C "$consumer" init --quiet
+          npm install --prefix "$consumer/tool" --ignore-scripts --no-audit --no-fund "$PWD/$tgz"
+          installed="$consumer/tool/node_modules/concord-sdlc"
+          cli="$consumer/tool/node_modules/.bin/concord"
+          test "$("$cli" --version)" = "concord v$version"
+          node --input-type=module -e 'const { hawdbIdentity } = await import(process.argv[1]); if (hawdbIdentity().target !== "darwin-arm64") process.exit(1)' "$installed/dist/hawdb-native.js"
+          "$cli" --root "$consumer" init --docs-only
+          "$cli" --root "$consumer" check
+          "$cli" --root "$consumer" --json test list >/dev/null
+          "$cli" --root "$consumer" --json test list | node -e 'let data=""; process.stdin.on("data", chunk => data += chunk); process.stdin.on("end", () => { if (JSON.parse(data).cache.status !== "hit") process.exit(1); })'
 
   publish:
     needs: [package, tests, portable]
@@ -229,7 +262,7 @@ jobs:
           digest="$(cut -d' ' -f1 release/SHA256SUMS)"
           gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
-            --notes "Built and fully tested on Ubuntu 24.04. The same packed candidate, including pinned Linux x64 and macOS arm64 HawDB engines, passed cache, coordination, recovery, and isolated installation checks on Apple Silicon macOS 14 and 15. Consumer installation requires neither Rust nor a HawDB service. No old lock migration or mixed-version coordination is provided. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."
+            --notes "Built and fully tested on Ubuntu 24.04. The same packed candidate, including pinned Linux x64 and macOS arm64 HawDB engines, passed cache, coordination, recovery, and isolated installation checks on Apple Silicon macOS 14. macOS 15 passed installed CLI, native loading, and cache smoke checks. Consumer installation requires neither Rust nor a HawDB service. No old lock migration or mixed-version coordination is provided. Package SHA-256: $digest. Homebrew/Nix synchronization is owned by CorrectRoadH/homebrew-tap."
       - name: Notify Homebrew tap of the published release
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_WORKFLOW_TOKEN }}

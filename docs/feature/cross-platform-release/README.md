@@ -30,7 +30,7 @@ Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份
 
 ## 范围
 
-唯一的 npm 发布产物内含目标平台原生引擎，在一台 Ubuntu 24.04 runner 上构建、类型检查、打包，并从该 tgz 安装。四个 Ubuntu 测试分片对打包产物运行完整测试，Apple Silicon macOS 14 与 15 验证锁、恢复与隔离安装。所有分片与平台通过后才发布。
+唯一的 npm 发布产物内含 Linux 与 macOS 分别编译的目标原生引擎，在一台 Ubuntu 24.04 runner 上类型检查、合包并隔离安装。四个 Ubuntu 测试分片对打包产物运行完整测试；Apple Silicon macOS 14 验证锁、恢复与隔离安装，macOS 15 验证同一包的原生加载、缓存与 CLI 安装。所有分片与平台通过后才发布。
 
 安装时由 npm 选择目标平台的可选依赖。运行时协调在本地 Linux 与 macOS 工作树上使用 Node 文件 API，不依赖 flock 或磁盘检查工具。依赖为 Node.js 24.15+、Git 与 Repository 工具使用的 ripgrep。Nix 只支持 Linux。
 

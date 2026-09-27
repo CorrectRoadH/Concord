@@ -17,7 +17,7 @@ constitutionRefs:
   - docs/constitution.md#c-009
 decision:
   selected: derived
-  reason: 用户要求保留 implements、删除手写声明 ID；独立 Herdr Astra 挑战三项问答后 PASS，采用有明确失效与复用边界的当前 AST 派生引用。
+  reason: 采用由 canonical 源路径、scope 与完整 AST 结构位置派生的引用；保留 implements 关系，删除手写声明 ID，并明确失效与复用边界。
   at: 2026-09-20T08:42:30.587Z
   targets:
     - docs/feature/local-sdlc/use-case/trace-code-ownership.md

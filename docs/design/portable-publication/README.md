@@ -14,7 +14,7 @@ constitutionRefs:
   - docs/constitution.md#c-007
 decision:
   selected: single-lock
-  reason: Use Node file leases and short snapshots; preserve cache-only SQLite, current journal recovery and persistent runner cleanup states. Independent Astra design challenge passed.
+  reason: 以 Node 文件租约和短快照协调发布，保留缓存可重建、journal 恢复与持久 runner 清理状态。
   at: 2026-09-22T00:22:46.603Z
   targets:
     - docs/feature/portable-coordination/README.md

@@ -15,7 +15,7 @@ constitutionRefs:
   - docs/constitution.md#c-009
 decision:
   selected: preserve-identities
-  reason: 保留现有身份、历史来源与当前引用，Research统一目录并允许自由正文；独立设计挑战PASS。
+  reason: 保留现有身份、历史来源与当前引用；Research 以目录归属并允许自由正文。
   at: 2026-09-15T01:01:58.907Z
   targets:
     - docs/feature/document-packages/README.md

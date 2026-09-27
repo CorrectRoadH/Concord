@@ -18,7 +18,7 @@ constitutionRefs:
   - docs/constitution.md#c-010
 decision:
   selected: generalize-profile
-  reason: 独立 Herdr Astra design_grill 经 Q1–Q9 问答获 PASS：保留中立高级治理入口，归还产品工具，统一最低证据要求和 formal 校验，不重写原生执行编排。PASS 是设计裁决，实际消费者验收另行完成。
+  reason: 采用中立高级治理入口，保留项目工具所有权，统一最低证据要求与 formal 校验，原生执行编排由消费者承担。
   at: 2026-09-20T07:07:09.887Z
   targets:
     - docs/feature/neutral-project-governance/README.md

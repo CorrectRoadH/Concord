@@ -6,6 +6,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/inherit-template-defaults.md
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 import { posix } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { Schema } from 'effect';
 import { stringify } from 'yaml';
@@ -44,6 +45,7 @@ import { ContentCache } from './content-cache.js';
 import { readGovernanceConfiguration } from './governance-config.js';
 import { adoptMemoryEvidenceRequirement, memoryEvidenceRequirement } from './evidence-policy.js';
 import { designContentPaths, formatDesignMarkdown, validateDesignContent } from './design-content.js';
+import { git } from './storage.js';
 import { DOCUMENT_ROOTS, defaultDocumentPath, documentDisposition, documentPlacementError, matchingOwners } from './document-layout.js';
 
 export { DOCUMENT_ROOTS } from './document-layout.js';
@@ -550,6 +552,57 @@ export function decideDesign(repo: Repository, selector: string, selected: strin
   const { deferral: _deferral, ...metadata } = record.metadata;
   const next = renderDocument({ ...metadata, decision: { selected: choice, reason: required(reason, 'reason'), at: now(), targets } }, record.body);
   return repo.publish('decide-design', [...snapshot].map(([path, source]) => ({ path, before: source!, after: path === record.path ? next : source! })), dryRun);
+  });
+}
+
+/** Correct a reason without replacing the historical choice or changing the Design schema. */
+export function correctDesignReason(
+  repo: Repository,
+  selector: string,
+  reason: string,
+  memorySelector: string,
+  explanation: string,
+  expectedDigest: string,
+  expectedMemoryDigest: string,
+  dryRun = false,
+): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
+    const documents = loadDocuments(repo);
+    const design = findDocument(documents, selector, 'design');
+    const note = findDocument(documents, memorySelector, 'memory');
+    if (design.metadata.kind !== 'design' || note.metadata.kind !== 'memory') throw new ConcordError('InvalidDocumentKind', 'Design reason correction requires Design and Memory owners');
+    if (design.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${design.path} changed; use its current digest`);
+    if (note.digest !== expectedMemoryDigest) throw new ConcordError('PreimageChanged', `${note.path} changed; use its current digest`);
+    const decision = design.metadata.decision;
+    if (decision === undefined) throw new ConcordError('DecisionMissing', `${design.path} has no recorded decision`);
+    if ((note.metadata.memoryKind !== 'note' && note.metadata.memoryKind !== 'decision') || !['captured', 'current'].includes(note.metadata.state)) {
+      throw new ConcordError('InvalidMemoryState', 'Reason corrections require a captured Note or current Decision Memory');
+    }
+    const nextReason = required(reason, 'reason');
+    if (nextReason === decision.reason) throw new ConcordError('InvalidInput', 'The corrected reason must differ from the current reason');
+    const why = required(explanation, 'explanation');
+    const before = preimage(repo, design);
+    const memoryBefore = preimage(repo, note);
+    let commit: string;
+    try { commit = git(repo.root, ['rev-parse', 'HEAD']); }
+    catch { throw new ConcordError('DecisionSourceUncommitted', 'Commit the Design before correcting its reason'); }
+    const env = { ...process.env };
+    for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+    let committed: string;
+    try {
+      committed = execFileSync('git', ['-C', repo.root, 'show', `${commit}:${design.path}`], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 10 * 1024 * 1024, timeout: 10_000 });
+    } catch {
+      throw new ConcordError('DecisionSourceUncommitted', `${design.path} has no readable HEAD version`);
+    }
+    if (committed !== before) throw new ConcordError('DecisionSourceUncommitted', `${design.path} differs from HEAD; commit it before correcting the reason`);
+    const source = { path: design.path, commit, digest: digest(committed) };
+    const nextDesign = renderDocument({ ...design.metadata, decision: { ...decision, reason: nextReason } }, design.body);
+    const at = now();
+    const nextMemory = renderDocument({ ...note.metadata, history: [...note.metadata.history, { at, action: 'correct-design-reason', reason: why, ref: design.path, source }] }, note.body);
+    return repo.publish('correct-design-reason', [
+      { path: design.path, before, after: nextDesign },
+      { path: note.path, before: memoryBefore, after: nextMemory },
+    ], dryRun);
   });
 }
 
