@@ -47,8 +47,12 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     execFileSync('git', ['init', '-q', root]);
     const write = (path: string, value: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), value); };
     const repo = new LocalRepository(root, { initialize: true });
-    const body = '# Interactive sketches\n\n```p5 css="./demo/style.css"\n' + inline + '\n```\n\n```p5 src="./demo/main.js"\n```\n\n```p5 mode="global"\nfunction setup() { createCanvas(40, 40, WEBGL); background(0, 255, 0); noLoop(); createSpan("global ready"); }\n```\n';
-    try { initialize(repo, false, { testRoots: [] }); createDocument(repo, 'feature', { id: 'sketch', title: 'Interactive sketches', body }); }
+    const body = '# Interactive sketches\n\n```p5 css="./demo/style.css"\n' + inline + '\n```\n\n```p5 mode="global"\nfunction setup() { createCanvas(40, 40, WEBGL); background(0, 255, 0); noLoop(); createSpan("global ready"); }\n```\n';
+    try {
+      initialize(repo, false, { testRoots: [] });
+      createDocument(repo, 'feature', { id: 'sketch', title: 'Interactive sketches', body });
+      createDocument(repo, 'feature', { id: 'sketch-webgl', title: 'Brush sketch', body: '# Brush sketch\n\n```p5 src="../sketch/demo/main.js"\n```\n' });
+    }
     finally { repo.close(); }
     writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound'] } });
     write('vendor/addon.js', 'window.localAddon = "local extension ready";');
@@ -79,9 +83,8 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     }));
     await page.goto(`${address}/features/sketch`);
     const blocks = page.getByTestId('p5-sketch');
-    await expect(blocks).toHaveCount(3, { timeout: 20000 });
-    await expect(page.locator('iframe')).toHaveCount(0);
-    await blocks.nth(0).getByRole('button', { name: '运行 p5', exact: true }).click();
+    await expect(blocks).toHaveCount(2, { timeout: 20000 });
+    await expect(blocks.nth(0).getByRole('button', { name: '运行 p5', exact: true })).toHaveCount(0);
     await expect.poll(async () => {
       const block = blocks.nth(0);
       const status = await block.getByRole('status').textContent();
@@ -98,40 +101,36 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     await expect(first.locator('.restart')).toHaveCSS('background-color', 'rgb(1, 2, 3)');
     await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(1);
     assert.deepEqual(await first.locator('canvas').evaluate(canvas => Array.from((canvas as HTMLCanvasElement).getContext('2d')!.getImageData(5, 5, 1, 1).data)), [255, 0, 0, 255]);
-    await blocks.nth(0).getByRole('button', { name: '暂停动画', exact: true }).click();
-    await expect(blocks.nth(0).getByRole('status')).toHaveText('动画已暂停');
+    await blocks.nth(0).evaluate(element => { element.style.transform = 'translateX(-10000px)'; });
     await page.waitForTimeout(100);
     const paused = await first.locator('#ticks').textContent();
     await page.waitForTimeout(150);
     assert.equal(await first.locator('#ticks').textContent(), paused);
-    await blocks.nth(0).getByRole('button', { name: '继续动画', exact: true }).click();
+    await blocks.nth(0).evaluate(element => { element.style.transform = ''; });
     await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(Number(paused));
-    await blocks.nth(0).getByRole('button', { name: '暂停动画', exact: true }).click();
-    await expect(blocks.nth(0).getByRole('status')).toHaveText('动画已暂停');
     await first.getByRole('button', { name: '关闭循环' }).click();
+    await page.waitForTimeout(100);
     const stoppedBySketch = await first.locator('#ticks').textContent();
-    await blocks.nth(0).getByRole('button', { name: '继续动画', exact: true }).click();
+    await blocks.nth(0).evaluate(element => { element.style.transform = 'translateX(-10000px)'; });
+    await page.waitForTimeout(100);
+    await blocks.nth(0).evaluate(element => { element.style.transform = ''; });
     await page.waitForTimeout(250);
     assert.equal(await first.locator('#ticks').textContent(), stoppedBySketch);
     await first.getByRole('button', { name: '重新绘制' }).click();
     await expect.poll(async () => Number(await first.locator('#ticks').textContent())).toBeGreaterThan(Number(stoppedBySketch));
-    await blocks.nth(0).getByRole('button', { name: '停止', exact: true }).click();
-    await expect(blocks.nth(0).locator('iframe')).toHaveCount(0);
-    await blocks.nth(0).getByRole('button', { name: '运行 p5', exact: true }).click();
+    await page.reload();
     await expect(blocks.nth(0).frameLocator('iframe').locator('#ticks')).toHaveText(/[1-9]\d*/, { timeout: 20000 });
-    await blocks.nth(0).getByRole('button', { name: '停止', exact: true }).click();
-    await expect(blocks.nth(0).locator('iframe')).toHaveCount(0);
+    await expect(blocks.nth(1).frameLocator('iframe').getByText('global ready')).toBeVisible({ timeout: 20000 });
     writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound', 'p5.brush', './vendor/addon.js'] } });
-    await blocks.nth(1).getByRole('button', { name: '运行 p5', exact: true }).click();
-    const second = blocks.nth(1).frameLocator('iframe');
+    await page.goto(`${address}/features/sketch-webgl`);
+    await expect(blocks).toHaveCount(1);
+    const second = blocks.nth(0).frameLocator('iframe');
     await expect(second.locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
     await expect(second.locator('canvas')).toBeVisible();
     assert.equal(await second.locator('canvas').evaluate(canvas => (canvas as HTMLCanvasElement).getContext('webgl2') !== null), true);
     await expect(second.getByRole('img', { name: 'local pixel' })).toBeVisible();
     await second.getByRole('button', { name: '启动声音' }).click();
     await expect(second.locator('#audio-result')).toHaveText(/audio:running:[1-9]\d*/, { timeout: 10000 });
-    await blocks.nth(2).getByRole('button', { name: '运行 p5', exact: true }).click();
-    await expect(blocks.nth(2).frameLocator('iframe').getByText('global ready')).toBeVisible({ timeout: 20000 });
     const sandboxFrame = page.frames().find(frame => frame.url().endsWith('/p5-frame'))!;
     assert.equal(await sandboxFrame.evaluate(() => { try { void parent.document.body; return false; } catch { return true; } }), true);
     assert.equal(await sandboxFrame.evaluate(async address => { try { await fetch(address + '/api/workspace'); return false; } catch { return true; } }, address), true);
@@ -142,7 +141,6 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     const readonly = page.getByTestId('markdown-preview');
     await expect(readonly.getByTestId('p5-sketch')).toHaveCount(1);
     await expect(readonly.getByText('spoofed p5 source')).toBeVisible();
-    await readonly.getByRole('button', { name: '运行 p5', exact: true }).click();
     await expect(readonly.frameLocator('iframe').locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
     await page.goto(`${address}/settings`);
     await expect(page.locator('iframe')).toHaveCount(0);

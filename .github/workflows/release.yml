@@ -221,6 +221,32 @@ jobs:
           "$cli" --root "$consumer" init --docs-only
           "$cli" --root "$consumer" check
           node --import tsx scripts/verify-installed-native.ts "$consumer/tool/node_modules/concord-sdlc"
+      - name: Verify macOS Homebrew preserves the native artifact
+        if: matrix.full
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          package="$PWD/release/concord-sdlc-$version.tgz"
+          digest="$(shasum -a 256 "$package" | cut -d' ' -f1)"
+          brew tap-new concord/validation
+          formula="$(brew --repository concord/validation)/Formula/concord.rb"
+          cat > "$formula" <<RUBY
+          class Concord < Formula
+            desc "Concord release installation verification"
+            homepage "https://github.com/CorrectRoadH/Concord"
+            url "file://$package"
+            version "$version"
+            sha256 "$digest"
+            depends_on "node"
+            preserve_rpath
+            def install
+              system "npm", "install", *std_npm_args, "--ignore-scripts"
+              (bin/"concord").write_env_script libexec/"bin/concord", PATH: "#{Formula["node"].opt_bin}:\$PATH"
+            end
+          end
+          RUBY
+          HOMEBREW_NO_AUTO_UPDATE=1 brew install concord/validation/concord
+          installed="$(brew --prefix concord/validation/concord)/libexec/lib/node_modules/concord-sdlc"
+          node --import tsx scripts/verify-installed-native.ts "$installed"
       - name: Smoke test the same package on macOS 15
         if: ${{ !matrix.full }}
         run: |

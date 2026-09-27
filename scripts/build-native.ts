@@ -65,7 +65,8 @@ function portableLinkage(binary: string, target: string): boolean {
   if (target === 'darwin-arm64') {
     try {
       const loadCommands = execFileSync('otool', ['-l', binary], { encoding: 'utf8' });
-      return process.env.MACOSX_DEPLOYMENT_TARGET === '14.0' && /\bminos\s+14\.0(?:\D|$)/u.test(loadCommands);
+      const identity = execFileSync('otool', ['-D', binary], { encoding: 'utf8' }).trim().split('\n').at(-1)?.trim();
+      return process.env.MACOSX_DEPLOYMENT_TARGET === '14.0' && /\bminos\s+14\.0(?:\D|$)/u.test(loadCommands) && identity === '@rpath/hawdb.node';
     } catch { return false; }
   }
   try {

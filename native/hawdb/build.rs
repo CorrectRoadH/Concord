@@ -4,5 +4,8 @@ fn main() {
         println!("cargo:rustc-cdylib-link-arg=-Wl");
         println!("cargo:rustc-cdylib-link-arg=-undefined");
         println!("cargo:rustc-cdylib-link-arg=dynamic_lookup");
+        // The Homebrew formula preserves this relocatable identity, keeping
+        // the verified binary and its signature byte-for-byte intact.
+        println!("cargo:rustc-cdylib-link-arg=-Wl,-install_name,@rpath/hawdb.node");
     }
 }

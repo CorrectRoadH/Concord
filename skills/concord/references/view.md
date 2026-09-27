@@ -8,7 +8,7 @@
 
 Feature、Engineering、Roadmap、Design、Research 是侧栏入口；Use Case 必须归属于 Feature，在 Feature 内创建和浏览。「文档」列出 `docs/` 下没有分类 owner 的项目文档和参考模板，例如架构与宪法。宪法只读，不能在工作台里改写成合规证据。正文用富文本编辑，元数据与生命周期由单独操作管理。未知 Markdown 可用源码视图，初始加载不会自动保存归一化内容。
 
-Markdown 的 `p5` 代码块在阅读与编辑页面由读者显式点击运行。内联块可写 `p.setup`、`p.draw` 或默认导出实例函数。外部入口用 `src="./demo/main.ts"`，可用 `css="./demo/style.css"`；两者均相对 Markdown。
+Markdown 的 `p5` 代码块在阅读与编辑页面自动加载运行，像动画图片一样直接展示，无需编译或播放操作。内联块可写 `p.setup`、`p.draw` 或默认导出实例函数。外部入口用 `src="./demo/main.ts"`，可用 `css="./demo/style.css"`；两者均相对 Markdown。
 
 项目扩展统一由 `concord.config.ts` 的 `p5: { libraries: ['p5.sound', 'p5.brush', './vendor/addon.js'] }` 声明，按声明顺序加载。Markdown 不接受 `libraries` 选项；省略配置只加载 p5 核心。自定义传统库用项目根相对 `.js` 路径，模块代码通过相对 `import` 引入。只配置实际需要且兼容当前 p5 的库，内建名称为 `p5.sound` 与 `p5.brush`；其它库不自动安装。
 

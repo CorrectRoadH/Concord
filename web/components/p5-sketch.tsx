@@ -19,28 +19,25 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
   const request = useRef<AbortController | undefined>(undefined);
   const [bundle, setBundle] = useState<P5Bundle>();
   const [error, setError] = useState('');
-  const [status, setStatus] = useState('点击运行 p5 图解');
-  const [paused, setPaused] = useState(false);
+  const [status, setStatus] = useState('正在加载图解…');
   const [height, setHeight] = useState(300);
   const [generation, setGeneration] = useState(0);
   const [loading, setLoading] = useState(false);
   const visibility = useRef(true);
-  const pausedRef = useRef(false);
-  pausedRef.current = paused;
-  const updateLoop = () => frame.current?.contentWindow?.postMessage({ kind: pausedRef.current || !visibility.current || document.hidden ? 'pause' : 'resume' }, '*');
+  const updateLoop = () => frame.current?.contentWindow?.postMessage({ kind: !visibility.current || document.hidden ? 'pause' : 'resume' }, '*');
 
   const stop = () => {
     request.current?.abort(); request.current = undefined;
-    setBundle(undefined); setLoading(false); setPaused(false);
-    setStatus('已停止');
+    setBundle(undefined); setLoading(false);
   };
   useEffect(() => {
-    stop(); setError(''); setStatus('点击运行 p5 图解');
-    return () => { request.current?.abort(); };
+    stop(); setError(''); setStatus('正在加载图解…');
+    const timer = window.setTimeout(run, 250);
+    return () => { window.clearTimeout(timer); request.current?.abort(); };
   }, [code, meta, documentPath]);
 
   const run = () => {
-    stop(); setError(''); setLoading(true); setStatus('正在编译…');
+    stop(); setError(''); setLoading(true); setStatus('正在加载图解…');
     const controller = new AbortController(); request.current = controller;
     void Effect.runPromise(Effect.tryPromise({ try: async () => {
       parseP5Options(meta);
@@ -60,7 +57,7 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
   useEffect(() => {
     if (!bundle) return;
     let ready = false;
-    const timer = window.setTimeout(() => { if (!ready) { setError('P5StartupTimeout: 图解未能启动，可停止后重试'); setStatus('启动超时'); } }, 15000);
+    const timer = window.setTimeout(() => { if (!ready) { setError('P5StartupTimeout: 图解未能启动，请重试'); setStatus('启动超时'); } }, 15000);
     const receive = (event: MessageEvent<unknown>) => {
       if (event.source !== frame.current?.contentWindow || event.origin !== 'null') return;
       const decoded = Schema.decodeUnknownOption(P5EventSchema, { onExcessProperty: 'error' })(event.data);
@@ -82,15 +79,11 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
     document.addEventListener('visibilitychange', updateLoop);
     updateLoop();
     return () => { observer.disconnect(); document.removeEventListener('visibilitychange', updateLoop); };
-  }, [bundle, paused, generation]);
+  }, [bundle, generation]);
 
   return <div ref={container} className="p5-sketch" data-testid="p5-sketch">
-    <div className="p5-controls" contentEditable={false}>
-      <Button type="button" variant="outline" size="sm" onClick={run} disabled={loading}>{bundle ? '重新运行' : '运行 p5'}</Button>
-      {bundle && <Button type="button" variant="outline" size="sm" onClick={() => setPaused(value => !value)}>{paused ? '继续动画' : '暂停动画'}</Button>}
-      {(bundle || loading) && <Button type="button" variant="outline" size="sm" onClick={stop}>停止</Button>}
-      <span role="status">{paused ? '动画已暂停' : status}</span>
-    </div>
+    <span role="status" className={bundle && !error ? 'sr-only' : undefined}>{status}</span>
+    {error && <Button type="button" variant="outline" size="sm" onClick={run} disabled={loading}>重试</Button>}
     {error && <pre role="alert" className="p5-error">{error}</pre>}
     {bundle && <iframe key={generation} ref={frame} title="p5 图解" src="/p5-frame" sandbox="allow-scripts allow-downloads" allow="camera 'none'; microphone 'none'; geolocation 'none'" referrerPolicy="no-referrer" style={{ height }} />}
   </div>;
