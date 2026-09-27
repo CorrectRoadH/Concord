@@ -159,13 +159,13 @@ test('public constitution adoption ignores example anchors and diagnoses referen
   const legacySource = activeSource.replace('status: active\n', 'status: active\nversion: 1.0.0\n').replace('  - date:', '  - version: 1.0.0\n    date:');
   assert.notEqual(legacySource, activeSource);
   writeFileSync(join(root, path), legacySource);
-  assert.match(run(root, ['constitution', 'show']), /Adopt project rules/);
+  assert.match(run(root, ['constitution', 'show'], '', 1), /version/);
   assert.equal(readFileSync(join(root, path), 'utf8'), legacySource);
   assert.match(action(root, { action: 'constitution.amend', version: '2.0.0', body: activeSource, reason: 'Old call', impact: 'None', sources: [], expectedDigest: fileDigest(root, path) }, 1), /error|invalid|version/i);
   assert.equal(readFileSync(join(root, path), 'utf8'), legacySource);
   writeFileSync(join(root, path), activeSource.replace('<a id="c-one"></a>', ''));
   run(root, ['check'], '', 1);
-  writeFileSync(join(root, path), legacySource);
+  writeFileSync(join(root, path), activeSource);
   action(root, { action: 'document.create', kind: 'feature', id: 'governed', title: 'Governed', constitutionRefs: ['docs/constitution.md#c-one'] });
   run(root, ['check']);
   assert.match(run(root, ['review', 'render', 'docs/feature/governed/README.md']), /Writes must preserve unknown changes/);

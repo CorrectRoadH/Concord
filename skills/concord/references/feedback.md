@@ -36,3 +36,5 @@ concord feedback close <id> --reason "调查结论"
 本地标题、正文与关联是作者事实；source 是首次导入摘录，缓存 remote 是可重建观察。重复同步不覆盖笔记。关闭反馈仍受 open Problem 门禁；远端 Closed / Done 不证明本地修复，Memory fixed 继续要求正常证据流程。
 
 同一外部对象换连接或清空缓存后仍是同一反馈。不要按标题自动合并，也不要用远端显示编号作为对象身份。`cache clear` 只删投影，保留来源和笔记。需要修订正文时用现有摘要保护的 `author set`，或在 Web 反馈详情中编辑 Markdown。
+
+列表可组合筛选：`concord issue list --state draft --provider local --triage pending --query "关键词" --json`；`feedback list` 使用同样参数。state 为 draft/closed，triage 为 pending/linked/closed，来源为 local/github/linear。这些都是本地读取，不触发同步。当前命令不提供独立评论、重开或远端评论读取；正文编辑不能代替评论记录。

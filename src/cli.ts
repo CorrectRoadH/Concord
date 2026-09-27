@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, Option, Schema } from 'effect';
 import { Argument, CliError, Command, Flag, Prompt } from 'effect/unstable/cli';
-import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
+import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from './annotations.js';
 import { activateMemory, addPage, showPage, setPage, adoptRoadmap, closeIssue, correctDesignReason, createDocument, decideDesign, findDocument, linkFeedbackFeature, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
 import { checkDesign, formatDesign } from './documents.js';
 import { listFeedback, syncFeedback } from './feedback.js';
@@ -40,7 +40,7 @@ import { viewAddresses } from './view-addresses.js';
 import { adoptConstitution, amendConstitution, initializeConstitution, showConstitution } from './constitution.js';
 
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
-  root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise discover concord.config.ts from cwd; old concord.json requires offline migration.')),
+  root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise discover concord.config.ts from cwd; unsupported configuration is refused without conversion.')),
   json: Flag.boolean('json').pipe(Flag.withDefault(false)),
   dryRun: Flag.boolean('dry-run').pipe(Flag.withDefault(false), Flag.withDescription('Validate a document mutation without writing.')),
 }));
@@ -196,10 +196,19 @@ const memory = Command.make('memory').pipe(Command.withDescription('Maintain Pro
   Command.make('promote', { id, target: text('target') }, args => withRepo((repo,s) => sync(() => promoteMemory(repo,args.id,args.target,s.dryRun)))),
   Command.make('retire', { id, target: text('target'), reason: text('reason') }, args => withRepo((repo,s) => sync(() => retirePromotion(repo,args.id,args.target,args.reason,s.dryRun)))),
 ]));
+const feedbackFilters = {
+  state: Flag.choice('state', ['draft', 'closed']).pipe(Flag.optional),
+  provider: Flag.choice('provider', ['local', 'github', 'linear']).pipe(Flag.optional),
+  triage: Flag.choice('triage', ['pending', 'linked', 'closed']).pipe(Flag.optional),
+  query: optional('query'),
+};
+const selectedFeedbackFilters = (args: { state: Option.Option<'draft' | 'closed'>; provider: Option.Option<'local' | 'github' | 'linear'>; triage: Option.Option<'pending' | 'linked' | 'closed'>; query: Option.Option<string> }) => ({
+  state: Option.getOrUndefined(args.state), provider: Option.getOrUndefined(args.provider), triage: Option.getOrUndefined(args.triage), query: Option.getOrUndefined(args.query),
+});
 const issue = Command.make('issue').pipe(Command.withDescription('Maintain local observation drafts; no remote GitHub mutations.'), Command.withSubcommands([
   Command.make('draft', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))),
   Command.make('create', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))),
-  Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation:'issue-list', drafts:loadDocuments(repo, ['issue']) })))),
+  Command.make('list', feedbackFilters, args => withReadRepo(repo => sync(() => ({ operation:'issue-list', drafts:listFeedback(repo, undefined, selectedFeedbackFilters(args)).map(item => item.document) })))),
   Command.make('index', {}, () => withRepo(repo => sync(() => knowledgeIndex(repo, 'issue')), { readonly: true })),
   Command.make('recall', { query: Argument.string('query') }, args => withRepo(repo => sync(() => knowledgeRecall(repo, 'issue', args.query)), { readonly: true })),
   Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'issue', cached(settings.dryRun))))),
@@ -258,7 +267,7 @@ const feedbackImport = Command.make('import', { url: Argument.string('url'), con
   yield* Effect.sync(() => emit(receipt, settings.json));
 }));
 const feedback = Command.make('feedback').pipe(Command.withDescription('Triage local observations and explicitly import or synchronize configured remote feedback.'), Command.withSubcommands([
-  Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'feedback-list', feedback: listFeedback(repo) })))),
+  Command.make('list', feedbackFilters, args => withReadRepo(repo => sync(() => ({ operation: 'feedback-list', feedback: listFeedback(repo, undefined, selectedFeedbackFilters(args)) })))),
   Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => {
     const item = listFeedback(repo).find(candidate => candidate.document.metadata.id === args.id);
     if (!item) throw new ConcordError('DocumentNotFound', `No feedback matches ${args.id}`);
@@ -293,7 +302,7 @@ const code = Command.make('code').pipe(Command.withDescription('Associate files,
 ]));
 const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear, or rebuild disposable HawDB projections.'),Command.withSubcommands([
   Command.make('status',{},()=>withReadRepo(repo=>sync(()=>cacheStatus(repo)))),
-  Command.make('clear',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) return {operation:'cache-clear',dryRun:true};return clearCache(repo);}))),
+  Command.make('clear',{},()=>withRepo((repo,s)=>sync(()=>s.dryRun ? previewCacheClear(repo) : clearCache(repo)))),
   Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');const annotations=scanAnnotations(repo,{cache:'rebuild'});const code=scanCode(repo,{cache:'rebuild'});return {...annotations,codeCache:code.cache};}))),
 ]));
 const docs = Command.make('docs').pipe(Command.withDescription('Check authored prose and terminology using consumer-owned writing policy.'), Command.withSubcommands([

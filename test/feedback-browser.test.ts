@@ -40,6 +40,13 @@ test('feedback browser separates remote observations from local editing and prot
     const errors:string[]=[];
     page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);
+    const filtered = await page.request.post(`http://127.0.0.1:${server.port}/api/action`, { data: { action: 'feedback.list', provider: 'github', state: 'draft', triage: 'pending', query: 'original remote' } });
+    assert.equal(filtered.status(), 200);
+    const filteredValue = await filtered.json() as { ok: boolean; value: { feedback: { document: { metadata: { id: string } } }[] } };
+    assert.equal(filteredValue.ok, true);
+    assert.deepEqual(filteredValue.value.feedback.map(item => item.document.metadata.id), ['remote-observation']);
+    const invalidFilter = await page.request.post(`http://127.0.0.1:${server.port}/api/action`, { data: { action: 'issue.list', state: 'open' } });
+    assert.equal(invalidFilter.status(), 400);
     await expect(page.getByRole('complementary',{name:'反馈 侧栏'})).toBeVisible();
     await expect(page.getByRole('button',{name:'添加连接',exact:true})).toHaveCount(0);
     await page.getByRole('link',{name:'管理反馈来源'}).click();

@@ -8,7 +8,7 @@ Concord 把契约、测试归属、工程记忆与审阅闭环做成可安装到
 
 ## 初始化与项目治理
 
-新项目生成静态 `concord.config.ts`。存在 `concord.json` 或双配置时返回 `ProjectMigrationRequired`，不执行 TS 模块。配置快照拥有原文前像、路径与摘要，写入、恢复与证据使用同一协议。运行时格式边界见 [TS-only 方案](design/ts-only-runtime/plans/ts-only/README.md)。
+新项目生成静态 `concord.config.ts`。存在 `concord.json` 或双配置时返回 `ProjectMigrationRequired`，不执行 TS 模块，不提供格式转换入口。配置快照拥有原文前像、路径与摘要，写入、恢复与证据使用同一协议。运行时格式边界见 [TS-only 方案](design/ts-only-runtime/plans/ts-only/README.md)。
 
 Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只读权限在 publication 统一执行。
 
@@ -67,6 +67,8 @@ supporting Markdown 进入 candidate 摘要，不成为独立 owner 或测试证
 项目配置保存 testRoots、runner argv、附加 sourceFiles 与 timeout。argv 的 `{file}`、`{name}`、`{pattern}` 只按参数替换，不经过 shell；没有 `@name` 时 `{pattern}` 为 `.*`。运行收据标明 scope: command 和 selectedCaseId，不渲染为 native case passed。
 
 HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对路径集合、内容摘要与解析器和 schema 身份，命中仍严格解码。损坏、schema 不符或写入失败时回源编译，不返回陈旧结果。
+
+缓存状态验证安装包原生产物；摘要不符时列出安装路径、预期与实际摘要并提示修复安装。clear 仅管理 cache.hawdb，dry-run 展示清理条目、保留路径及原生可用性，实际执行重新取得所有权。目录外文件不参与缓存状态或清理。
 
 缓存只保存解析结果和投影，不缓存授权或 Problem fixed 判定。clear 不删除 evidence、journal 或 Memory。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。
 

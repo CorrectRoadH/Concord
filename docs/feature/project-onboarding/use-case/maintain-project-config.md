@@ -15,7 +15,7 @@ feature: docs/feature/project-onboarding/README.md
 
 ## 完整路径
 
-1. 仅读取 concord.config.ts；既有 concord.json 项目先显式离线迁移。
+1. 仅读取 concord.config.ts，严格校验当前 Schema；格式不符时保留原件并拒绝。
 2. 使用静态 export default 对象表达配置；允许明确支持的类型语法，不执行消费者模块。
 3. 通过公开配置读取入口取得正文摘要，再用相同前像提交配置修改。
 4. 调整后新命令读取新配置；旧文档不被隐式重写。

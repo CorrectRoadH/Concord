@@ -35,11 +35,11 @@ export function DocumentNavigation() {
   const groups: ContentSidebarGroup[] = [{
     id: 'documents', label: `${section.label} 列表`, emptyMessage: `暂无 ${section.label}`,
     items: section.kind === 'research' ? researchTopics(documents).map(topic => ({
-      id: topic.directory, href: `${section.href}/${encodeURIComponent(topic.document.metadata.id)}`,
+      id: topic.directory, path: topic.directory, href: `${section.href}/${encodeURIComponent(topic.document.metadata.id)}`,
       title: topic.title, active: selected !== undefined && researchTopicDirectory(selected.path) === topic.directory,
       icon: <Folder size={16} />,
     })) : documents.map(document => ({
-      id: document.path, href: documentHref(document, snapshot.documents),
+      id: document.path, path: document.path, href: documentHref(document, snapshot.documents),
       title: document.metadata.title, active: selected?.path === document.path, icon: <FileText size={16} />,
     })),
   }];
@@ -54,7 +54,7 @@ function ProjectDocNavigation({ search }: { readonly search: string }) {
   const root = pages.filter(page => !page.path.startsWith('docs/_template/'));
   const templates = pages.filter(page => page.path.startsWith('docs/_template/'));
   const item = (page: typeof pages[number]) => ({
-    id: page.path,
+    id: page.path, path: page.path,
     href: projectDocHref(page.path),
     title: projectDocTitle(page),
     active: selected === page.path,

@@ -173,7 +173,8 @@ test('the docs sidebar renders and edits constitution body through an explicit r
       .replace(/^  - date:/gmu, '  - version: 1.0.0\n    date:');
     writeFileSync(join(root, 'docs/constitution.md'), legacy);
     await page.reload();
-    await expect(page.getByRole('button', { name: '编辑宪法' })).toBeVisible();
+    await expect(preview.getByText('宪法 frontmatter 无法识别，不能在此编辑。')).toBeVisible();
+    await expect(page.getByRole('button', { name: '编辑宪法' })).toHaveCount(0);
     writeFileSync(join(root, 'docs/constitution.md'), legacy.replace('format: concord.constitution/v1\n', 'format: concord.constitution/v1\nunknownField: true\n'));
     await page.reload();
     await expect(preview.getByText('宪法 frontmatter 无法识别，不能在此编辑。')).toBeVisible();

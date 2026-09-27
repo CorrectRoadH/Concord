@@ -1,3 +1,4 @@
+import { PathContextMenu } from '../../components/path-context-menu';
 import * as stylex from '@stylexjs/stylex';
 import { ChevronRight, FileDiff, Folder } from 'lucide-react';
 import { useState } from 'react';
@@ -23,9 +24,9 @@ interface TreeProps {
 function Directory({ node, selected, cases, select }: TreeProps) {
   const [open, setOpen] = useState(true);
   return <>
-    <button type="button" className="document-navigation__folder" aria-expanded={open} aria-label={node.path + ' 目录'} onClick={() => setOpen(value => !value)}>
+    <PathContextMenu path={node.path}><button type="button" className="document-navigation__folder" aria-expanded={open} aria-label={node.path + ' 目录'} onClick={() => setOpen(value => !value)}>
       <ChevronRight {...stylex.props(styles.icon, open && styles.expanded)} /><Folder {...stylex.props(styles.icon)} /><span {...stylex.props(styles.name)}>{node.name}</span>
-    </button>
+    </button></PathContextMenu>
     {open && <div {...stylex.props(styles.nested)}><FileTree node={node} selected={selected} cases={cases} select={select} /></div>}
   </>;
 }
@@ -34,14 +35,14 @@ export function FileTree({ node, selected, cases, select }: TreeProps) {
   const nodes = [...node.children.values()].sort((a, b) => Number(!a.children.size) - Number(!b.children.size) || a.name.localeCompare(b.name));
   return <ul {...stylex.props(styles.list)}>{nodes.map(child => <li key={child.path}>
     {child.entry && <>
-      <SidebarItem item={{ id: child.path, title: child.name, ariaLabel: child.path, active: selected === child.path,
+      <SidebarItem item={{ id: child.path, path: child.path, title: child.name, ariaLabel: child.path, active: selected === child.path,
         icon: <FileDiff {...stylex.props(styles.icon)} />,
         suffix: <code {...stylex.props(styles.metadata)}>{child.entry.conflicted ? '冲突' : child.entry.untracked ? 'A' : (child.entry.index + child.entry.worktree).trim()}</code>,
         onSelect: () => select(child.entry!),
       }} tooltip={child.entry.previousPath ? child.path + '（从 ' + child.entry.previousPath + '）' : child.path} onNavigate={() => undefined} />
       {cases.some(item => item.file === child.path) && <ul {...stylex.props(styles.list, styles.nested, styles.cases)} aria-label={child.path + ' 新增测试'}>
         {cases.filter(item => item.file === child.path).map(item => <li key={item.id}>
-          <SidebarItem item={{ id: item.id, title: item.name, suffix: <small {...stylex.props(styles.metadata)}>+ L{item.line}</small>, onSelect: () => select(child.entry!, item.line) }} onNavigate={() => undefined} />
+          <SidebarItem item={{ id: item.id, path: child.path, title: item.name, suffix: <small {...stylex.props(styles.metadata)}>+ L{item.line}</small>, onSelect: () => select(child.entry!, item.line) }} onNavigate={() => undefined} />
         </li>)}
       </ul>}
     </>}

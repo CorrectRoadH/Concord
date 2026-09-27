@@ -2,9 +2,9 @@
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 import { lstatSync } from 'node:fs';
 import { Schema } from 'effect';
-import { cacheDatabasePath, assertCacheDatabaseSafe, inspectCacheClear, deleteInspectedCache, prepareCacheClearRoot } from './cache-file.js';
+import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache } from './cache-file.js';
 import { withPersistentCache, closeRepositoryCache } from './cache-store.js';
-import { acquireHawdbClearGuard } from './hawdb-native.js';
+import { acquireHawdbClearGuard, hawdbIdentity } from './hawdb-native.js';
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from './shared.js';
 import { caseDiscriminator, deriveTestReference } from './test-reference.js';
 import type * as TypeScript from 'typescript';
@@ -184,12 +184,26 @@ function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild
 export function clearCache(repo: Repository): { readonly status: string; readonly path: string } {
   return repo.snapshot === undefined ? clearUnderSnapshot(repo) : repo.snapshot(() => clearUnderSnapshot(repo));
 }
+export function previewCacheClear(repo: Repository) {
+  const preview = () => {
+    const inventory = inspectCacheClear(repo.privateDir);
+    let native: { status: 'ready' | 'unavailable'; detail?: string };
+    try { hawdbIdentity(); native = { status: 'ready' }; }
+    catch (cause) { native = { status: 'unavailable', detail: cause instanceof Error ? cause.message : String(cause) }; }
+    return {
+      operation: 'cache-clear' as const, dryRun: true as const, engine: 'hawdb' as const,
+      path: inventory.path, existing: inventory.existing, remove: inventory.entries,
+      preserve: [inventory.path, `${inventory.path}/owner.hawdb.lock`], native,
+      ownership: 'checked-on-execution' as const,
+    };
+  };
+  return repo.snapshot === undefined ? preview() : repo.snapshot(preview);
+}
 function clearUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string } {
   if (repo.access === 'read') throw new ConcordError('ReadOnlyRepository', 'Cache clear requires write access');
   const inventory = inspectCacheClear(repo.privateDir);
-  if (!inventory.existing && inventory.legacy.length === 0) return { status: 'empty', path: inventory.path };
+  if (!inventory.existing) return { status: 'empty', path: inventory.path };
   closeRepositoryCache(repo);
-  prepareCacheClearRoot(inventory);
   const guard = acquireHawdbClearGuard(inventory.path);
   try { deleteInspectedCache(inspectCacheClear(repo.privateDir)); }
   finally { guard.close(); }
@@ -201,8 +215,8 @@ export function cacheStatus(repo: Repository): { readonly status: string; readon
 function statusUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string; readonly detail?: string } {
   const path = cachePath(repo); try {
     const inventory = inspectCacheClear(repo.privateDir);
-    if (inventory.legacy.length > 0) return { status: 'unavailable', path, detail: 'Legacy SQLite cache remnants require explicit clear' };
-    if (!assertCacheDatabaseSafe(path) || inventory.empty) return { status: 'empty', path };
+    hawdbIdentity();
+    if (!inventory.existing || inventory.empty) return { status: 'empty', path };
     return withPersistentCache(repo, false, db => {
       const projections = db!.namespaces().filter(name => name.endsWith('_cache'));
       for (const namespace of projections) db!.scan(namespace);

@@ -32,4 +32,4 @@ concord repo memory resolve --help
 
 Problem 已采用的最低要求不能通过 command 入口或删除配置降级。reopen 后须按新 epoch 重新取证，旧 invocation 不复用。red 的缺陷候选可以与 green 不同，green 和六次可靠性观察必须对应同一修复候选。
 
-遇到 stale、缺失能力、绑定歧义或清理失败时处理具体原因，不补摘要绕过。旧配置和旧事务使用显式离线迁移；普通恢复查看 `concord repo docs trace recover --help`，保留未知编辑和未完成现场。
+遇到 stale、缺失能力、绑定歧义或清理失败时处理具体原因，不补摘要绕过。不受支持的配置和事务保留原件，使用匹配版本处理；普通恢复查看 `concord repo docs trace recover --help`，保留未知编辑和未完成现场。

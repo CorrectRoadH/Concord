@@ -66,7 +66,7 @@ const IndexHistory = Schema.Union([
 ]);
 export const NativeEvidenceIndexSchema = Schema.Struct({ format: Schema.Literal('concord.case-evidence-index/v1'), current: Schema.Record(Schema.String, Schema.Record(Schema.String, NativeEvidenceEntrySchema)), history: Schema.optional(Schema.Array(IndexHistory)) });
 export function decodeNativeEvidenceIndex(input: unknown, path: string) {
-  if (Predicate.isObject(input) && input.format === 'niceeval.e2e-case-evidence-index/v1') throw new ConcordError('EvidenceMigrationRequired', `${path}: legacy native evidence index requires explicit offline migration; preserve original proof bytes`);
+  if (Predicate.isObject(input) && input.format === 'niceeval.e2e-case-evidence-index/v1') throw new ConcordError('EvidenceMigrationRequired', `${path}: unsupported native evidence index; preserve original proof bytes and obtain current evidence`);
   return decode(NativeEvidenceIndexSchema, input, path);
 }
 export const canonicalEvidenceJson = (value: unknown): string => Array.isArray(value) ? '[' + value.map(canonicalEvidenceJson).join(',') + ']' : Predicate.isObject(value) ? '{' + Object.keys(value).sort().map(key => JSON.stringify(key) + ':' + canonicalEvidenceJson(value[key])).join(',') + '}' : JSON.stringify(value);

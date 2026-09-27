@@ -241,6 +241,15 @@ test('packed feedback commands persist connections and local triage without remo
  assert.match(JSON.stringify(listed),/observation/);
  call(root,['feedback','show','observation'],Schema.Unknown);
  call(root,['feedback','close','observation','--reason','Investigation complete'],Ack);
+ call(root,['issue','create','pending','--title','Pending observation'],Ack);
+ const feedbackList=Schema.Struct({feedback:Schema.Array(Schema.Struct({document:Schema.Struct({metadata:Schema.Struct({id:Schema.String})})}))});
+ const issueList=Schema.Struct({drafts:Schema.Array(Schema.Struct({metadata:Schema.Struct({id:Schema.String})}))});
+ assert.deepEqual(call(root,['feedback','list','--provider','local','--state','closed','--triage','closed','--query','LOCAL'],feedbackList).feedback.map(item=>item.document.metadata.id),['observation']);
+ assert.deepEqual(call(root,['issue','list','--state','draft','--triage','pending'],issueList).drafts.map(item=>item.metadata.id),['pending']);
+ assert.deepEqual(call(root,['issue','list','--provider','github'],issueList).drafts,[]);
+ assert.deepEqual(call(root,['action','--input','-'],feedbackList,JSON.stringify({action:'feedback.list',provider:'local',state:'draft',triage:'pending'})).feedback.map(item=>item.document.metadata.id),['pending']);
+ assert.deepEqual(call(root,['action','--input','-'],issueList,JSON.stringify({action:'issue.list',state:'closed'})).drafts.map(item=>item.metadata.id),['observation']);
+ call(root,['action','--input','-'],ErrorOutput,JSON.stringify({action:'feedback.list',state:'open'}),1);
  const closed=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
  assert.equal(closed?.metadata.kind==='issue'&&closed.metadata.state,'closed');
  call(root,['feedback','connection','remove','github-main'],Ack);

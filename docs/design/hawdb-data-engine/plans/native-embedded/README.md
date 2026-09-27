@@ -31,7 +31,7 @@ Git-private 的版本化 HawDB 目录容纳注解、代码、配置及远端观�
 
 Memory/Issue 的 index 和 recall 继续核对当前目录和源字节；共享的解析投影改用 HawDB。现有子串查询及排序不被伪装为 BM25 或语义检索。Trace 的关系有效性、权限和 fixed 仍从当前权威输入推导。
 
-清理在独占 repository lease 内执行，须区分活动句柄和损坏库。打开失败本身不代表可删除；具体所有权证明经独立挑战确定。只清理受管缓存目录和显式列出的 SQLite 历史残留，不读取或迁移旧 SQLite，不删除 evidence/journal。远端缓存丢失后只有显式刷新可以重新获得观察，本地已捕获 Issue 保留。
+清理在独占 repository lease 内执行，须区分活动句柄和损坏库。打开失败本身不代表可删除；原生所有权锁授权清理。只清理受管 HawDB 目录内的缓存内容，保留目录与所有权锁 inode，不删除 evidence/journal。预览列出清理范围与原生产物可用性，执行时重新验证所有权。远端缓存丢失后只有显式刷新可以重新获得观察，本地已捕获 Issue 保留。
 
 原生依赖、Rust toolchain 与 Cargo lock 精确固定。构建编排保持严格 TypeScript/Effect；c-005 与 AGENTS 的窄原生例外在采用前显式修订。发行流程先在 Ubuntu 与 Apple Silicon macOS 构建 native 产物，再装入同一个 tgz，通过目标系统的真实安装后才能发布。消费者不需要 Rust、全局 HawDB 或安装脚本。缺少或错误的平台产物返回具名错误，不隐藏切回 SQLite。
 

@@ -2,6 +2,8 @@
 
 React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node 服务固定一个 Git 工作区，HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
 
+反馈列表使用 `/feedback`，详情使用 `/feedback/:id`。页面链接直接使用当前路由，不维护版本兼容别名。
+
 结构化术语由 `docs/**/concepts.json` 拥有，目录决定作用域；文档术语页通过 concepts 工具读取当前文档目录的有效定义、直接导入与来源诊断，不解析 Markdown 表格或自行实现第二套合成规则。`docs/concepts.md` 保留为可编辑的解释页面。全项目汇总与写作页共享同一后端 JSON 来源，不建立术语注册表。
 
 `docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering、Issue 或 Memory 来源的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 提供专用正文编辑入口，草稿采用与正式修订分别调用 constitution adopt 与 amend；普通 document.set 仍不能覆写宪法元数据与历史。阅读不是合规证据。
@@ -33,3 +35,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 存在 `concord.repository.json` 时，工作区在已有仓库租约内严格读取 profile 配置，复用 `compileTraceUnderLease` 和 `showFeature`，从用户已写入的测试注释、Engineering owner 与 Feature／Use Case 派生关系。内部 `repositoryTests` 投影返回读取状态、测试身份、路径、owner、契约、执行器与运行通道，不写第二份登记表、不加载宿主模块。Web 将它与通用 case 投影统一呈现为用户已关联的测试；profile 测试仍由原有宿主 CLI 执行。
 
 测试页合并呈现两种来源并标注来源；Feature 汇总使用 profile 自身的归属规则，Use Case 匹配原始契约。实现页按 Feature 公共实现及各个 Use Case 分组，只展示明确关联的实现文件、符号、范围和契约；同一源码可出现在多个实际关联组。测试文件保留在测试页。点击实现位置打开源码并选择对应行范围；空组提供预填当前契约的关联入口。未配置目录、扫描失败、筛选无匹配和确实无关联分别呈现；profile 失败不得回退成空列表成功。
+
+服务将慢请求写入 stderr：处理耗时或采样到的事件循环延迟达到 250 ms 时，记录方法、规范化路由、状态、完成标志、耗时、阶段及有限原因标签。每分钟最多 20 条，后续记录带被抑制数量；stderr 积压达到 64 KiB 时跳过。阶段至多 16 个命名项及一个汇总项，不记录请求正文、查询参数、文件路径、请求头或原始错误详情。
+
+处理耗时从 HTTP handler 接纳请求开始；事件循环延迟为进程采样观察，不能作为该请求的精确排队时间。嵌套阶段时间包含子阶段，不能相加。客户端全程耗时应由独立进程测量。HTTP 200 只表示响应成功，列表完整性须读取 complete 和 findings；缓存不可用、扫描期间来源变化与孤立标注分别诊断。

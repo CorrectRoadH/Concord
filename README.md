@@ -126,11 +126,11 @@ concord init --docs-only
 concord init --docs-only --source-root src
 ```
 
-`init` 创建静态、不会被执行的 `concord.config.ts`、必需的 `docs/constitution.md`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板；根 `DESIGN.md` 可选。它补齐缺失的 `docs/README.md`、`docs/concepts.md`、空 `docs/concepts.json` 和 `docs/architecture.md`，已有根文档保留。它还在根 `AGENTS.md` 新建或刷新一个带边界标记的 Concord-driven development 区块，保留区块外内容，并指向当前安装版本的 `concord --skill`。标记残缺或其它目标冲突时零写入失败。旧 `concord.json`（包括双配置）返回 `ProjectMigrationRequired`，须先显式离线迁移。
+`init` 创建静态、不会被执行的 `concord.config.ts`、必需的 `docs/constitution.md`、分类索引、`docs/concord.md` 和 `docs/_template/` 全套模板；根 `DESIGN.md` 可选。它补齐缺失的 `docs/README.md`、`docs/concepts.md`、空 `docs/concepts.json` 和 `docs/architecture.md`，已有根文档保留。它还在根 `AGENTS.md` 新建或刷新一个带边界标记的 Concord-driven development 区块，保留区块外内容，并指向当前安装版本的 `concord --skill`。标记残缺或其它目标冲突时零写入失败。旧 `concord.json`（包括双配置）返回 `ProjectMigrationRequired`，保留原件并使用匹配版本处理。
 
 改功能前先读取或更新 Feature、叶子 Use Case、CLI supporting page 和必要 Design，再进入实现与测试。运行 `concord trace gaps --json` 可列出没有显式 code/test 关系的 Feature、Use Case 与已建档 CLI 页面；它是关系缺口，不是覆盖率，也不能发现从未建档的命令。
 
-已有 Concord 项目直接维护配置：`sourceRoots` 控制代码扫描，缺省 `[]`；`testRoots: []` 关闭测试发现。两组根可重叠，新增代码功能无需迁移已有测试关系。源码关系在注释里；静态 TypeScript 配置保存目录、runner、模板默认值和本地 Memory 来源，旧 JSON 配置仍可读取。
+已有 Concord 项目直接维护配置：`sourceRoots` 控制代码扫描，缺省 `[]`；`testRoots: []` 关闭测试发现。两组根可重叠，新增代码功能无需迁移已有测试关系。源码关系在注释里；静态 TypeScript 配置保存目录、runner、模板默认值和本地 Memory 来源，配置输入按当前 Schema 严格校验。
 
 ```sh
 concord --dry-run init --docs-only
@@ -223,7 +223,7 @@ concord --skill test
 
 把 `@feature` 或 `@use-case` 标记放进测试文件。`//`、`#` 和 `--` 都是标记。关联历史问题时加 `@regression docs/memory/<problem-id>.md`。通用测试用 `@status retired` 退役关联；Repository profile 还支持 `@issue` 和 helper 的 `@test-file`，那是另一套注释解析。测试 ID 由文件和标记派生 `neref_...`，无需人工分配或测试关系 JSON。没有 `@name` 时不按测试标题选择用例。
 
-默认 runner 使用 Node 原生测试，运行标记所在文件。索引不解析宿主测试语法，也不从 `test.skip` / `test.todo` 推断跳过；`@status retired` 不能作为 fixed 证据。其它 runner 在项目配置（仅 `concord.config.ts`，旧 JSON 须先离线迁移）设置 `runner`，初始化时也可用 `--runner-config <file>`。例如已有 Vitest 消费项目可以配置：
+默认 runner 使用 Node 原生测试，运行标记所在文件。索引不解析宿主测试语法，也不从 `test.skip` / `test.todo` 推断跳过；`@status retired` 不能作为 fixed 证据。其它 runner 在项目配置（仅 `concord.config.ts`，输入须符合当前 Schema）设置 `runner`，初始化时也可用 `--runner-config <file>`。例如已有 Vitest 消费项目可以配置：
 
 ```json
 {

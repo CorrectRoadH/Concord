@@ -1,12 +1,12 @@
 # TS-only 运行时边界
 
-用户要求普通运行时不提供旧版本兼容；一次性迁移位于 scripts，不能作为 runtime registry 或 CLI fallback。
+运行时只接受当前严格 Schema，不提供兼容投影或格式转换入口。
 
 ## 拒绝与协调
 
 安全定位消费者后，只读识别旧 journal。旧事务优先返回 JournalMigrationRequired，指向离线恢复。只有旧 marker（包括 dual 与 dangling symlink）时返回 ProjectMigrationRequired，仅用 lstat 检测其存在，不读取正文。未知或损坏 journal 仍按 InvalidData 拒绝。锁外检查只能拒绝，不授权任何读写。可继续者仍取得共享或独占 lease 并锁内重验；CLI、init、dry-run、recover 和 workspace 采用一致分类。
 
-拒绝静态旧现场不得创建、删除、chmod 或改写配置、journal、generic lock、publication.lock、事务目标及临时文件。若需要处理历史事务，先由显式离线恢复严格验证现场，再执行 JSON→TS 迁移；本次运行时和配置迁移脚本均不声称提供旧 journal 恢复。不可建议删除现场或循环执行普通 recover。
+拒绝静态旧现场不得创建、删除、chmod 或改写配置、journal、generic lock、publication.lock、事务目标及临时文件。历史事务须由匹配的工具版本在隔离环境严格验证和恢复。不可建议删除现场或循环执行普通 recover。
 
 ## 格式与恢复
 

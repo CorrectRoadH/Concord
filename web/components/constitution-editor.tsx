@@ -6,7 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal, flushSync } from 'react-dom';
 import { parseDocument } from 'yaml';
 import type { ViewFile } from '../../src/view-contract';
-import { ConstitutionSchema, LegacyConstitutionSchema } from '../../src/constitution-schema';
+import { ConstitutionSchema } from '../../src/constitution-schema';
 import { ApiError } from '../lib/api';
 import { useWorkspace } from '../workspace';
 import { RecordDetails, Surface } from './content-layout';
@@ -31,9 +31,7 @@ function constitutionParts(source: string): ConstitutionParts | null {
     if (yaml.errors.length > 0) return null;
     const value: unknown = yaml.toJS({ maxAliasCount: 0 });
     if (!Predicate.isObject(value)) return null;
-    const metadata = 'version' in value
-      ? Schema.decodeUnknownSync(LegacyConstitutionSchema, { onExcessProperty: 'error' })(value)
-      : Schema.decodeUnknownSync(ConstitutionSchema, { onExcessProperty: 'error' })(value);
+    const metadata = Schema.decodeUnknownSync(ConstitutionSchema, { onExcessProperty: 'error' })(value);
     if ((metadata.status === 'draft') !== (metadata.ratifiedAt === null)) return null;
     return { metadata: match[1]!, body: match[2]!.replace(/^\r?\n/u, ''), status: metadata.status };
   } catch { return null; }

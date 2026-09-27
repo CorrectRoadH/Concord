@@ -6,7 +6,7 @@
 - [架构：操作依赖、事实来源与恢复边界](architecture.md)
 - [工作台 UI 设计](../DESIGN.md)
 - [Agent 工作入口](agent-workflow.md)
-- [文档模型与迁移](document-migration.md)
+- [文档模型与格式边界](document-migration.md)
 - [高级测试治理](repository-profile.md)
 - [来源与抽取边界](provenance.md)
 - [Feature：当前产品契约](feature/README.md)

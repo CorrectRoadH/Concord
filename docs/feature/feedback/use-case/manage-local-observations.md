@@ -19,6 +19,7 @@ Local、GitHub、Linear 在同一反馈列表中作为三个来源呈现。Local
 ## 操作契约
 
 - `issue create` 与现有 `issue draft` 创建本地观察；feedback create 继续有效。
+- `issue list` 与 `feedback list` 接受 `--state draft|closed`、`--provider local|github|linear`、`--triage pending|linked|closed` 及 `--query`。筛选相交，空结果返回空列表；query 不区分大小写，匹配 ID、标题、正文与已保存来源。`issue.list`、`feedback.list` 受管操作使用相同筛选；Web 来源与处理状态筛选复用同一规则。筛选不读取远端网络，也不依赖无关契约可解析。
 - `issue index` 提供动态摘要索引，`issue recall <query>` 检索标题和正文并返回正文、当前摘要与来源；`issue show` 保持现有行为。
 - `issue edit <id> --body <file> --expected-digest <digest>` 仅修改作者正文，保留来源、关系和生命周期；标题通过既有 document.metadata 操作修改。
 - `issue remove <id> --expected-digest <digest>` 只允许删除尚未建立关系或历史的本地 draft。条件是：无 source、origin、closure、history、Memory 关系、当前或历史 Feature adoption，Trace 也没有指向它或其 anchor 的关系。拒绝格式/关系不完整的仓库与陈旧摘要。删除复用当前发布日志与恢复，不运行远端调用。

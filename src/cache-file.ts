@@ -1,10 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
-import { lstatSync, mkdirSync, readdirSync, rmSync, unlinkSync } from 'node:fs';
+import { lstatSync, readdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConcordError } from './shared.js';
 
-export const LEGACY_CACHE_SUFFIXES = ['', '-wal', '-shm', '-journal'] as const;
 const MAX_FILES = 4096;
 const MAX_BYTES = 256 * 1024 * 1024;
 
@@ -33,13 +32,13 @@ export function cacheRootOwnerOnly(path: string): boolean {
   return true;
 }
 
-export interface CacheClearInventory { readonly path: string; readonly existing: boolean; readonly empty: boolean; readonly legacy: readonly string[] }
+export interface CacheClearInventory { readonly path: string; readonly existing: boolean; readonly empty: boolean; readonly entries: readonly string[] }
 
 /** Preflight the complete deletion set before any cache handle is closed or file is removed. */
 export function inspectCacheClear(privateDir: string): CacheClearInventory {
   const path = cacheDatabasePath(privateDir);
   const existing = assertCacheDatabaseSafe(path);
-  const legacy: string[] = [];
+  let entries: string[] = [];
   let files = 0, bytes = 0;
   const count = (target: string): ReturnType<typeof lstatSync> => {
     const stat = lstatSync(target);
@@ -55,28 +54,16 @@ export function inspectCacheClear(privateDir: string): CacheClearInventory {
   if (existing) {
     walk(path);
     const names = readdirSync(path);
-    empty = names.length === 1 && names[0] === 'owner.hawdb.lock';
+    entries = names.filter(name => name !== 'owner.hawdb.lock').sort().map(name => join(path, name));
+    empty = entries.length === 0;
     const lock = cacheStat(join(path, 'owner.hawdb.lock'));
     if (lock !== undefined && (!lock.isFile() || lock.nlink !== 1)) throw new ConcordError('UnsafePath', 'Cache owner lock must be an unlinked regular file');
   }
-  for (const suffix of LEGACY_CACHE_SUFFIXES) {
-    const target = join(privateDir, `cache.sqlite${suffix}`);
-    const stat = cacheStat(target);
-    if (stat === undefined) continue;
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1) throw new ConcordError('UnsafePath', `Legacy cache must be an unlinked regular file: ${target}`);
-    count(target);
-    legacy.push(target);
-  }
-  return { path, existing, empty: empty && legacy.length === 0, legacy };
+  return { path, existing, empty, entries };
 }
 
 export function deleteInspectedCache(inventory: CacheClearInventory): void {
   if (inventory.existing) for (const name of readdirSync(inventory.path)) {
     if (name !== 'owner.hawdb.lock') rmSync(join(inventory.path, name), { recursive: true });
   }
-  for (const path of inventory.legacy) unlinkSync(path);
-}
-
-export function prepareCacheClearRoot(inventory: CacheClearInventory): void {
-  if (!inventory.existing) mkdirSync(inventory.path);
 }

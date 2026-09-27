@@ -63,8 +63,20 @@ interface NativeModule {
   OwnerGuard: new(path: string) => { close(): void };
 }
 let loaded: NativeModule | undefined;
+let rejected: { readonly error: HawdbFailure; readonly retryAt: number } | undefined;
 function load(): NativeModule {
   if (loaded) return loaded;
+  if (rejected !== undefined && performance.now() < rejected.retryAt) throw rejected.error;
+  try { return loadArtifact(); }
+  catch (cause) {
+    const error = asFailure(cause);
+    // Installation failures never authorize cached domain data. Bound repeated
+    // hashing during fallback scans, then retry so a repaired install recovers.
+    rejected = { error, retryAt: performance.now() + 1000 };
+    throw error;
+  }
+}
+function loadArtifact(): NativeModule {
   const target = hawdbTarget();
   const base = fileURLToPath(new URL(`../dist/native/${target}/`, import.meta.url));
   const metadata = decodeNativeArtifact(JSON.parse(readFileSync(join(base, 'artifact.json'), 'utf8')));
@@ -78,10 +90,11 @@ function load(): NativeModule {
   if (noticesDigest !== metadata.noticesSha256) throw new HawdbFailure('HawdbIncompatible', 'native notices digest differs');
   const binary = join(base, 'hawdb.node');
   const digest = createHash('sha256').update(readFileSync(binary)).digest('hex');
-  if (digest !== metadata.binarySha256) throw new HawdbFailure('HawdbIncompatible', 'native binary digest differs');
+  if (digest !== metadata.binarySha256) throw new HawdbFailure('HawdbIncompatible', `native binary digest differs: ${binary}; expected ${metadata.binarySha256} from ${join(base, 'artifact.json')}; actual ${digest}. Reinstall a verified Concord package; cache clear cannot repair installation artifacts.`);
   const native = createRequire(import.meta.url)(binary) as NativeModule;
   readIdentity(native.nativeIdentity());
   loaded = native;
+  rejected = undefined;
   return native;
 }
 class Database implements HawdbDatabase {

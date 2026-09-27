@@ -58,17 +58,6 @@ export function recoverPublicationLeaseSync(root: string): readonly string[] {
   return recoverFileLease(root, join(tracePrivateDirectorySync(root), PUBLICATION_LEASE), 'recover');
 }
 
-// These helpers belong to the existing offline governance migration tool. They
-// do not provide mixed-version lock compatibility or a runtime migration path.
-export interface CoordinationMigrationLeases { readonly legacy: TraceLease; readonly current: TraceLease; }
-export function acquireCoordinationMigrationLeasesSync(root: string, operation: string): CoordinationMigrationLeases {
-  const legacy = acquireFileLease(root, legacyTracePrivateDirectorySync(root), PUBLICATION_LEASE, 'exclusive', operation)!;
-  try { return { legacy, current: acquireFileLease(root, tracePrivateDirectorySync(root), PUBLICATION_LEASE, 'exclusive', operation)! }; }
-  catch (cause) { releaseFileLease(legacy, operation); throw cause; }
-}
-export function releaseCoordinationMigrationLeasesSync(leases: CoordinationMigrationLeases, operation: string): void {
-  try { releaseFileLease(leases.current, operation); } finally { releaseFileLease(leases.legacy, operation); }
-}
 export function acquireTraceLeaseSync(root: string, mode: TraceLease['mode'], operation: string, create = true): TraceLease | undefined {
   return acquireNow(root, mode, operation, create);
 }

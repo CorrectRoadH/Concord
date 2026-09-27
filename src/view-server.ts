@@ -12,6 +12,7 @@ import { closeGitBaselineCache, getGitDiff, type GitArea, type GitBaselineCache 
 import { ConcordError, decode, digest, failure } from './shared.js';
 import { ViewJobManager } from './view-jobs.js';
 import type { ViewFailure, ViewResponse } from './view-contract.js';
+import { ViewRequestLog, type RequestTiming } from './view-request-log.js';
 
 const BODY_LIMIT = 4 * 1024 * 1024;
 const STATIC_LIMIT = 16 * 1024 * 1024;
@@ -97,8 +98,8 @@ function failed(request: IncomingMessage, response: ServerResponse, cause: unkno
   const error = failure(cause);
   const value: ViewFailure = { ok: false, error: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) };
   const status = statusFor(error);
-  const path = (request.url ?? '').split('?', 1)[0]!.slice(0, 256);
-  process.stderr.write(`Concord view error ${JSON.stringify({ method: request.method ?? 'GET', path, status, code: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }), ...(cause instanceof Error && !(cause instanceof ConcordError) ? { stack: cause.stack?.slice(0, 4096) } : {}) })}\n`);
+  // Error details are returned to the caller, not copied into request logs.
+  process.stderr.write(`Concord view error ${JSON.stringify({ status, code: error.code })}\n`);
   if (!response.destroyed) json(response, status, value);
 }
 
@@ -246,12 +247,14 @@ function serveStatic(request: IncomingMessage, response: ServerResponse, pathnam
   else { response.setHeader('Content-Length', body.byteLength); response.end(body); }
 }
 
-async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, runAction: (input: unknown, response: ServerResponse) => Promise<unknown>): Promise<void> {
+async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming): Promise<void> {
   const method = request.method ?? 'GET';
+  const respond = (value: unknown, status = 200) => timing.sync('http.response', () => success(response, value, status));
   if (method === 'GET' && url.pathname === '/api/workspace') {
     exactQuery(url, []);
-    const value = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
-    const body = `${JSON.stringify({ ok: true, value })}\n`;
+    const value = await timing.async('http.workspace', () => Effect.runPromise(getWorkspaceSnapshot(root, 'use', timing)));
+    timing.workspace(value);
+    const body = timing.sync('http.serialize', () => `${JSON.stringify({ ok: true, value })}\n`);
     const etag = `"${digest(body)}"`;
     securityHeaders(response);
     response.setHeader('ETag', etag);
@@ -262,43 +265,44 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
     } else {
       response.statusCode = 200;
       response.setHeader('Content-Type', 'application/json; charset=utf-8');
-      sendCompressible(request, response, body);
+      timing.sync('http.compressResponse', () => sendCompressible(request, response, body));
     }
     return;
   }
   if (method === 'GET' && url.pathname === '/api/file') {
     exactQuery(url, ['path']);
-    return success(response, await Effect.runPromise(getViewFile(root, url.searchParams.get('path')!)));
+    return respond(await timing.async('http.file', () => Effect.runPromise(getViewFile(root, url.searchParams.get('path')!, timing))));
   }
   if (method === 'POST' && url.pathname === '/api/action') {
     exactQuery(url, []);
     mutationJson(request);
-    return success(response, await runAction(await readJson(request), response));
+    const input = await timing.async('http.readBody', () => readJson(request));
+    return respond(await timing.async('http.action', () => runAction(input, response, timing)));
   }
   if (method === 'GET' && url.pathname === '/api/jobs') {
     exactQuery(url, []);
-    return success(response, jobs.list());
+    return respond(timing.sync('http.jobs', () => jobs.list()));
   }
   if (method === 'POST' && url.pathname === '/api/jobs') {
     exactQuery(url, []);
     mutationJson(request);
-    const input = decode(JOB_INPUT, await readJson(request), 'job request');
-    return success(response, jobs.start(input.caseId), 202);
+    const input = decode(JOB_INPUT, await timing.async('http.readBody', () => readJson(request)), 'job request');
+    return respond(timing.sync('http.startJob', () => jobs.start(input.caseId)), 202);
   }
   const cancel = /^\/api\/jobs\/(ccjob_[0-9a-f-]+)$/u.exec(url.pathname);
   if (method === 'DELETE' && cancel !== null) {
     exactQuery(url, []);
-    return success(response, jobs.cancel(cancel[1]!));
+    return respond(timing.sync('http.cancelJob', () => jobs.cancel(cancel[1]!)));
   }
   if (method === 'GET' && url.pathname === '/api/git') {
     exactQuery(url, []);
-    return success(response, await Effect.runPromise(getViewGitStatus(root, baselineCache)));
+    return respond(await timing.async('http.git', () => Effect.runPromise(getViewGitStatus(root, baselineCache))));
   }
   if (method === 'GET' && url.pathname === '/api/git/diff') {
     exactQuery(url, ['path', 'area']);
     const area = url.searchParams.get('area');
     if (area !== 'staged' && area !== 'unstaged' && area !== 'untracked') throw new ConcordError('InvalidInput', 'area must be staged, unstaged, or untracked');
-    return success(response, await Effect.runPromise(getGitDiff(root, url.searchParams.get('path')!, area satisfies GitArea)));
+    return respond(await timing.async('http.gitDiff', () => Effect.runPromise(getGitDiff(root, url.searchParams.get('path')!, area satisfies GitArea))));
   }
   throw new ConcordError('ApiNotFound', 'Unknown API endpoint');
 }
@@ -311,33 +315,34 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   const webRoot = options.webRoot ?? join(dirname(fileURLToPath(import.meta.url)), 'web');
   const jobs = new ViewJobManager(root);
   const baselineCache: GitBaselineCache = {};
+  const requestLog = new ViewRequestLog();
   let stopping = false;
   const feedbackControllers = new Set<AbortController>();
   const feedbackTasks = new Set<Promise<unknown>>();
-  const runAction = (input: unknown, response: ServerResponse): Promise<unknown> => {
+  const runAction = (input: unknown, response: ServerResponse, timing: RequestTiming): Promise<unknown> => {
     if (stopping) throw new ConcordError('ServerStopping', 'The workbench is shutting down');
     const action = input !== null && typeof input === 'object' && 'action' in input ? input.action : undefined;
-    if (action !== 'feedback.sync' && action !== 'feedback.check') return Effect.runPromise(executeViewAction(root, input));
+    if (action !== 'feedback.sync' && action !== 'feedback.check') return Effect.runPromise(executeViewAction(root, input, undefined, timing));
     const controller = new AbortController();
     feedbackControllers.add(controller);
     const onClose = () => { if (!response.writableFinished) controller.abort(); };
     response.once('close', onClose);
     if (response.destroyed) controller.abort();
-    const task = Effect.runPromise(executeViewAction(root, input, controller.signal), { signal: controller.signal });
+    const task = Effect.runPromise(executeViewAction(root, input, controller.signal, timing), { signal: controller.signal });
     feedbackTasks.add(task);
     void task.finally(() => { feedbackTasks.delete(task); feedbackControllers.delete(controller); response.off('close', onClose); }).catch(() => {});
     return task;
   };
   const server = createServer((request, response) => {
+    const timing = requestLog.begin(request, response);
     void (async () => {
       try {
         if (stopping) throw new ConcordError('ServerStopping', 'The workbench is shutting down');
-        const hostAuthority = validateAuthority(request);
-        const url = parseRequestTarget(request, hostAuthority);
+        const url = timing.sync('http.validate', () => parseRequestTarget(request, validateAuthority(request)));
         if (url.pathname.startsWith('/api/')) {
-          await api(request, response, url, root, jobs, baselineCache, runAction);
+          await api(request, response, url, root, jobs, baselineCache, runAction, timing);
         } else if (request.method === 'GET') {
-          serveStatic(request, response, url.pathname, webRoot);
+          timing.sync('http.static', () => serveStatic(request, response, url.pathname, webRoot));
         } else {
           throw new ConcordError('MethodNotAllowed', 'Only GET is available for the static application');
         }
@@ -348,7 +353,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 5_000;
   await new Promise<void>((resolveReady, reject) => {
-    const onError = (cause: Error) => { server.off('listening', onListening); reject(failure(cause)); };
+    const onError = (cause: Error) => { requestLog.close(); server.off('listening', onListening); reject(failure(cause)); };
     const onListening = () => { server.off('error', onError); resolveReady(); };
     server.once('error', onError);
     server.once('listening', onListening);
@@ -356,6 +361,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   });
   const address = server.address();
   if (address === null || typeof address === 'string') {
+    requestLog.close();
     server.close();
     throw new ConcordError('ServerAddressUnavailable', 'Could not determine the view server port');
   }
@@ -373,7 +379,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       const closed = new Promise<void>((resolveClosed, reject) => server.close((cause) => cause ? reject(failure(cause)) : resolveClosed()));
       server.closeIdleConnections();
       try { await Promise.allSettled([...feedbackTasks]); await jobs.close(); await closed; }
-      finally { closeGitBaselineCache(baselineCache); }
+      finally { requestLog.close(); closeGitBaselineCache(baselineCache); }
     })(),
   };
   return handle;

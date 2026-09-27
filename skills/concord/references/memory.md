@@ -1,6 +1,6 @@
 # 工程 Memory
 
-Memory 保存 Problem、Decision、Insight 与未分类 Note，不复制契约正文或测试关系。唯一当前格式是 `concord.document/v1`，旧文件需要一次性迁移。
+Memory 保存 Problem、Decision、Insight 与未分类 Note，不复制契约正文或测试关系。唯一当前格式是 `concord.document/v1`，输入严格校验，不提供格式转换入口。
 
 索引、检索和正文读取使用 `concord memory index --json`、`concord memory recall "查询词" --json`。recall 返回匹配的实际正文与摘要，是本地文本检索，不调用模型。不要直接读取或编辑 Memory 文件，不维护人工 INDEX。需要查看状态与关系仍可使用 show；index/list 与 recall/search 都从当前 owner 派生。
 

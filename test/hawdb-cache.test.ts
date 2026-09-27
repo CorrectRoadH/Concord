@@ -9,7 +9,7 @@ import { hawdbIdentity } from '../dist/hawdb-native.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('clear keeps the HawDB lock inode and removes only bounded cache data and explicit SQLite remnants', () => {
+test('clear keeps the HawDB lock inode and removes only bounded HawDB cache data', () => {
   assert.equal(hawdbIdentity().engine, 'hawdb');
   const root = mkdtempSync(join(tmpdir(), 'concord-hawdb-clear-'));
   try {
@@ -24,17 +24,17 @@ test('clear keeps the HawDB lock inode and removes only bounded cache data and e
       assert.equal(scanAnnotations(repo).cache.status, 'miss');
       const lock = join(path, 'owner.hawdb.lock');
       const inode = statSync(lock).ino;
-      const legacy = join(repo.privateDir, 'cache.sqlite-wal');
-      writeFileSync(legacy, 'old disposable bytes');
+      const unrelated = join(repo.privateDir, 'unrelated-data');
+      writeFileSync(unrelated, 'preserve these bytes');
       assert.equal(clearCache(repo).status, 'cleared');
-      assert.equal(existsSync(legacy), false);
+      assert.equal(existsSync(unrelated), true);
       assert.equal(statSync(lock).ino, inode);
       assert.equal(cacheStatus(repo).status, 'empty');
       assert.equal(clearCache(repo).status, 'empty');
       assert.equal(statSync(lock).ino, inode);
-      const unsafe = join(repo.privateDir, 'cache.sqlite-journal');
+      const unsafe = join(path, 'unexpected-link');
       symlinkSync(join(repo.privateDir, 'absent'), unsafe);
-      assert.throws(() => clearCache(repo), /Legacy cache|UnsafePath/u);
+      assert.throws(() => clearCache(repo), /Unsupported cache entry|UnsafePath/u);
       assert.equal(statSync(lock).ino, inode);
       rmSync(unsafe);
     } finally { repo.close(); }

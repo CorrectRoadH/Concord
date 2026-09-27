@@ -58,7 +58,7 @@ const parsed = (response: ResponseResult): { readonly ok: boolean; readonly valu
 const jsonHeaders = { 'content-type': 'application/json' };
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('view writes request failures to stderr with a bounded request path and error code', async () => {
+test('view writes request failure codes without copying request targets or diagnostics into logs', async () => {
   const { root, webRoot } = fixture();
   let server: ViewServerHandle | undefined;
   const logs: string[] = [];
@@ -70,9 +70,8 @@ test('view writes request failures to stderr with a bounded request path and err
     assert.equal(result.status, 404);
     assert.equal(parsed(result).error, 'ApiNotFound');
     assert.equal(logs.length, 1);
-    assert.match(logs[0]!, /"path":"\/api\/missing"/u);
     assert.match(logs[0]!, /"status":404,"code":"ApiNotFound"/u);
-    assert.doesNotMatch(logs[0]!, /private/u);
+    assert.doesNotMatch(logs[0]!, /private|\/api\/missing|message|details|stack/u);
   } finally {
     process.stderr.write = write;
     await server?.close();

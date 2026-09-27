@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+import { PathContextMenu } from '../components/path-context-menu'
 import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
 import { matchingOwners } from '../../src/document-layout'
 import { documentHref } from '../lib/document-routing'
@@ -723,6 +724,7 @@ function DocumentFiles({
         </div>
         <FileTree
           nodes={tree}
+          ownerDirectory={ownerDirectory}
           expanded={expanded}
           selectedPath={selectedPath}
           onToggle={(path) => setExpanded((current) => {
@@ -836,8 +838,9 @@ function treeDirectoryPaths(nodes: readonly FileTreeNode[]): readonly string[] {
   return nodes.flatMap((node) => node.children.length > 0 ? [node.relativePath, ...treeDirectoryPaths(node.children)] : [])
 }
 
-function FileTree({ nodes, expanded, selectedPath, onToggle, onSelect, depth = 0 }: {
+function FileTree({ nodes, ownerDirectory, expanded, selectedPath, onToggle, onSelect, depth = 0 }: {
   nodes: readonly FileTreeNode[]
+  ownerDirectory: string
   expanded: ReadonlySet<string>
   selectedPath: string
   onToggle: (path: string) => void
@@ -848,7 +851,7 @@ function FileTree({ nodes, expanded, selectedPath, onToggle, onSelect, depth = 0
     const directory = node.children.length > 0
     const open = expanded.has(node.relativePath)
     return <React.Fragment key={node.relativePath}>
-      <button
+      <PathContextMenu path={node.path ?? `${ownerDirectory}${node.relativePath}`}><button
         type="button"
         data-active={node.path === selectedPath || undefined}
         aria-label={node.relativePath}
@@ -860,8 +863,8 @@ function FileTree({ nodes, expanded, selectedPath, onToggle, onSelect, depth = 0
         {directory ? <><ChevronRight {...stylex.props(documentStyles.treeIcon, documentStyles.chevron, open && documentStyles.openChevron)} /><Folder {...stylex.props(documentStyles.treeIcon)} /></> : <><span {...stylex.props(documentStyles.treeSpacer)} /><FileText {...stylex.props(documentStyles.treeIcon)} /></>}
         <span {...stylex.props(documentStyles.treeName)}>{node.name}</span>
         {node.readOnly && <small {...stylex.props(documentStyles.treeMetadata)}>只读</small>}
-      </button>
-      {directory && open && <FileTree nodes={node.children} expanded={expanded} selectedPath={selectedPath} onToggle={onToggle} onSelect={onSelect} depth={depth + 1} />}
+      </button></PathContextMenu>
+      {directory && open && <FileTree ownerDirectory={ownerDirectory} nodes={node.children} expanded={expanded} selectedPath={selectedPath} onToggle={onToggle} onSelect={onSelect} depth={depth + 1} />}
     </React.Fragment>
   })}</div>
 }

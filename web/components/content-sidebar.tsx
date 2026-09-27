@@ -5,9 +5,11 @@ import { useIsMobile } from '../hooks/use-mobile';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
+import { PathContextMenu } from './path-context-menu';
 
 interface SidebarItemContent {
   readonly id: string;
+  readonly path?: string;
   readonly title: string;
   readonly active?: boolean;
   readonly icon?: ReactNode;
@@ -41,9 +43,10 @@ export interface ContentSidebarModel {
 
 export function SidebarItem({ item, label = item.title, tooltip = item.title, onNavigate }: { item: ContentSidebarItem; label?: string; tooltip?: string; onNavigate(): void }) {
   const content = <>{item.icon}<span>{label}</span>{item.suffix}</>;
-  return item.onSelect
+  const element = item.onSelect
     ? <button className="document-navigation__item" type="button" aria-label={item.ariaLabel} title={tooltip} aria-current={item.active ? 'page' : undefined} onClick={() => { item.onSelect(); onNavigate(); }}>{content}</button>
     : <Link className="document-navigation__item" to={item.href} aria-label={item.ariaLabel} title={tooltip} aria-current={item.active ? 'page' : undefined} onClick={onNavigate}>{content}</Link>;
+  return item.path ? <PathContextMenu path={item.path}>{element}</PathContextMenu> : element;
 }
 
 interface Directory {
@@ -80,7 +83,7 @@ function DirectoryLinks({ items, root, query, onNavigate }: { items: readonly Co
   const render = (directory: Directory): ReactNode => <>
     {[...directory.directories.values()].sort((a, b) => a.name.localeCompare(b.name)).map(child => {
       const open = Boolean(query.trim()) || (expanded[child.path] ?? Boolean(active?.startsWith(`${child.path}/`)));
-      return <li key={child.path}><button type="button" className="document-navigation__folder" aria-expanded={open} title={child.path} onClick={() => setExpanded(previous => ({ ...previous, [child.path]: !open }))}><ChevronRight size={14} className={open ? 'rotate-90' : undefined} /><Folder size={16} /><span>{child.name}</span></button>
+      return <li key={child.path}><PathContextMenu path={child.path}><button type="button" className="document-navigation__folder" aria-expanded={open} title={child.path} onClick={() => setExpanded(previous => ({ ...previous, [child.path]: !open }))}><ChevronRight size={14} className={open ? 'rotate-90' : undefined} /><Folder size={16} /><span>{child.name}</span></button></PathContextMenu>
         {open && <ul className="document-navigation__branch">{render(child)}</ul>}
       </li>;
     })}

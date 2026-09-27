@@ -1,3 +1,4 @@
+import { PathContextMenu } from './path-context-menu';
 import { Clipboard, FileCode2 } from 'lucide-react';
 import { Suspense, lazy, useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -47,7 +48,7 @@ export function ImplementationPanel({ document }: { document: DocumentRecord }) 
             <div className="implementation-record">
               <div className="implementation-record__source">
                 <div className="flex flex-wrap items-center gap-2"><strong>{code.symbol ?? code.file.split('/').at(-1)}</strong><Badge variant="outline">{{ file: '整个文件', node: '类／函数', region: '代码段' }[code.scope]}</Badge></div>
-                <Button className="h-auto max-w-full whitespace-normal text-left px-0" variant="link" onClick={() => sourceNavigation.open({ path: code.file, line: code.line, endLine: code.endLine })}><FileCode2 /><span className="min-w-0 break-all">{code.file} · 第 {code.line}–{code.endLine} 行</span></Button>
+                <PathContextMenu path={code.file}><Button className="h-auto max-w-full whitespace-normal text-left px-0" variant="link" onClick={() => sourceNavigation.open({ path: code.file, line: code.line, endLine: code.endLine })}><FileCode2 /><span className="min-w-0 break-all">{code.file} · 第 {code.line}–{code.endLine} 行</span></Button></PathContextMenu>
               </div>
               <div className="implementation-record__relations">
                 <div className="text-sm text-muted-foreground">关联契约：{code.contracts.filter(ref => references.has(ref.split('#')[0]!)).map(ref => <code className="block break-all" key={ref}>{ref}</code>)}</div>

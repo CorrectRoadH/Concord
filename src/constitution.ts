@@ -4,7 +4,7 @@ import { Predicate } from 'effect';
 import { parseDocument, stringify } from 'yaml';
 import { ConcordError, ProjectSchema, Slug, Text, decode, digest, type Finding, type MutationReceipt, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
-import { ConstitutionSchema, LegacyConstitutionSchema, type ConstitutionMeta } from './constitution-schema.js';
+import { ConstitutionSchema, type ConstitutionMeta } from './constitution-schema.js';
 
 export { ConstitutionSchema } from './constitution-schema.js';
 export type { ConstitutionMeta } from './constitution-schema.js';
@@ -65,13 +65,7 @@ export function parseConstitution(source: string): ConstitutionRecord {
   if (yaml.errors.length > 0) throw new ConcordError('InvalidConstitution', yaml.errors.map((error) => error.message).join('; '));
   const value: unknown = yaml.toJS({ maxAliasCount: 0 });
   if (!Predicate.isObject(value)) throw new ConcordError('InvalidConstitution', 'Constitution frontmatter must be an object');
-  const metadata = 'version' in value ? (() => {
-    const legacy = decode(LegacyConstitutionSchema, value, 'docs/constitution.md');
-    return decode(ConstitutionSchema, {
-      format: legacy.format, status: legacy.status, ratifiedAt: legacy.ratifiedAt, amendedAt: legacy.amendedAt,
-      amendments: legacy.amendments.map(({ date, reason, sources, impact }) => ({ date, reason, sources, impact })),
-    }, 'docs/constitution.md');
-  })() : decode(ConstitutionSchema, value, 'docs/constitution.md');
+  const metadata = decode(ConstitutionSchema, value, 'docs/constitution.md');
   if ((metadata.status === 'draft') !== (metadata.ratifiedAt === null)) throw new ConcordError('InvalidConstitution', 'draft requires ratifiedAt:null and active requires a ratified date');
   const body = match[2]!.replace(/^\r?\n/u, '');
   const anchors = constitutionAnchors(body);

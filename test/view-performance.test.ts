@@ -27,6 +27,28 @@ function fixture(): string {
 }
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('HTTP 200 retains orphan annotation incompleteness and observes its repair', async () => {
+  const root = fixture();
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const path = join(root, 'src/main.ts');
+  const original = readFileSync(path, 'utf8');
+  try {
+    writeFileSync(path, `${original}\n// @concord-file\n// @concord-implements docs/feature/cached/README.md\n`);
+    const response = await fetch(`http://127.0.0.1:${server.port}/api/workspace`);
+    assert.equal(response.status, 200);
+    const value = await response.json() as { ok: boolean; value: { complete: boolean; findings: { code: string }[] } };
+    assert.equal(value.ok, true);
+    assert.equal(value.value.complete, false);
+    assert.ok(value.value.findings.some(item => item.code === 'OrphanCodeAnnotation'));
+    writeFileSync(path, original);
+    const repaired = await fetch(`http://127.0.0.1:${server.port}/api/workspace`);
+    const healthy = await repaired.json() as { value: { complete: boolean; findings: unknown[] } };
+    assert.equal(healthy.value.complete, true);
+    assert.deepEqual(healthy.value.findings, []);
+  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('direct file reads preserve owner diagnostics and inspect only the target and ancestors', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   const repo = new LocalRepository(root);

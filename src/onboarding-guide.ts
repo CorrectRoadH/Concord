@@ -90,7 +90,7 @@ Without \`@name\`, a run covers the marked file and does not claim a native case
 
 ## Configure and run verification
 
-\`concord.config.ts\` owns testRoots and runner configuration for projects; old \`concord.json\` requires explicit offline migration. Defaults scan test/ and tests/ using Node native tests.
+\`concord.config.ts\` owns testRoots and runner configuration for projects. Unsupported input is rejected without conversion. Defaults scan test/ and tests/ using Node native tests.
 
 For a documentation-only repository, initialize with \`concord init --docs-only\`: testRoots is empty and no test directories are required.
 Add real test roots to the project configuration when tests exist. A successful documentation check does not establish test coverage.

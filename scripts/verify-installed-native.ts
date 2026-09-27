@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -8,8 +8,14 @@ import { NodeRuntime } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
 
 const Ack = Schema.Struct({});
-const CacheResult = Schema.Struct({ cache: Schema.Struct({ status: Schema.String, path: Schema.String }) });
-const CacheStatus = Schema.Struct({ status: Schema.String, path: Schema.String });
+const CacheStatus = Schema.Struct({ status: Schema.String, path: Schema.String, detail: Schema.optional(Schema.String) });
+const CacheResult = Schema.Struct({ cache: CacheStatus });
+const CachePreview = Schema.Struct({
+  operation: Schema.Literal('cache-clear'), dryRun: Schema.Literal(true), engine: Schema.Literal('hawdb'),
+  path: Schema.String, existing: Schema.Boolean, remove: Schema.Array(Schema.String), preserve: Schema.Array(Schema.String),
+  native: Schema.Struct({ status: Schema.String, detail: Schema.optional(Schema.String) }),
+  ownership: Schema.Literal('checked-on-execution'),
+});
 const Memory = Schema.Struct({ document: Schema.Struct({ digest: Schema.String }) });
 const Recall = Schema.Struct({ documents: Schema.Array(Schema.Struct({ path: Schema.String, body: Schema.String })) });
 const Identity = Schema.Struct({ engine: Schema.Literal('hawdb'), revision: Schema.String, abi: Schema.String, target: Schema.String });
@@ -53,6 +59,10 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
       run(join(bin, 'git'), ['init', '-q', root]);
       call(['init', '--docs-only'], Ack);
       call(['cache', 'clear'], Ack);
+      const absentPreview = call(['cache', 'clear', '--dry-run'], CachePreview);
+      assert.equal(absentPreview.existing, false);
+      assert.deepEqual(absentPreview.remove, []);
+      assert.equal(existsSync(absentPreview.path), false, 'preview must not create the cache');
       const cold = call(['test', 'list'], CacheResult);
       const warm = call(['test', 'list'], CacheResult);
       assert.equal(cold.cache.status, 'miss', 'a fallback parse does not prove HawDB installation');
@@ -79,6 +89,70 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
       assert.equal(call(['memory', 'show', 'native-recall'], Memory).document.digest, currentDigest);
       call(['cache', 'clear'], Ack);
       assert.equal(call(['test', 'list'], CacheResult).cache.status, 'miss');
+      assert.equal(call(['test', 'list'], CacheResult).cache.status, 'hit');
+      const cachePath = warm.cache.path;
+      const beforePreview = readdirSync(cachePath).sort();
+      const lockInode = statSync(join(cachePath, 'owner.hawdb.lock')).ino;
+      const preview = call(['cache', 'clear', '--dry-run'], CachePreview);
+      assert.equal(preview.native.status, 'ready');
+      assert.deepEqual(preview.remove, beforePreview.filter(name => name !== 'owner.hawdb.lock').map(name => join(cachePath, name)));
+      assert.deepEqual(preview.preserve, [cachePath, join(cachePath, 'owner.hawdb.lock')]);
+      assert.equal(call(['test', 'list'], CacheResult).cache.status, 'hit', 'preview must preserve cached projections');
+      assert.equal(statSync(join(cachePath, 'owner.hawdb.lock')).ino, lockInode);
+
+      const nativeFolder = join(installed, 'dist/native', identity.target);
+      const nativeBinary = join(nativeFolder, 'hawdb.node');
+      const binaryBytes = readFileSync(nativeBinary);
+      try {
+        // Mutate this isolated installed consumer, never the packed candidate.
+        writeFileSync(nativeBinary, Buffer.concat([binaryBytes, Buffer.from('digest mismatch')]));
+        const unavailable = call(['cache', 'status'], CacheStatus);
+        assert.equal(unavailable.status, 'unavailable');
+        assert.match(unavailable.detail!, /native binary digest differs:.*expected .*actual .*Reinstall/u);
+        assert.ok(unavailable.detail!.includes(nativeBinary));
+        assert.ok(unavailable.detail!.includes(join(nativeFolder, 'artifact.json')));
+        const fallback = call(['test', 'list'], CacheResult);
+        assert.equal(fallback.cache.status, 'unavailable');
+        assert.equal(fallback.cache.detail, unavailable.detail);
+        const blockedPreview = call(['cache', 'clear', '--dry-run'], CachePreview);
+        assert.equal(blockedPreview.native.status, 'unavailable');
+        assert.equal(blockedPreview.native.detail, unavailable.detail);
+        const failedClear = spawnSync(process.execPath, [cli, '--root', root, '--json', 'cache', 'clear'], { cwd: root, env, encoding: 'utf8', timeout: 30_000 });
+        assert.notEqual(failedClear.status, 0);
+        assert.deepEqual(readdirSync(cachePath).sort(), beforePreview);
+        assert.equal(statSync(join(cachePath, 'owner.hawdb.lock')).ino, lockInode);
+        assert.equal(call(['memory', 'show', 'native-recall'], Memory).document.digest, currentDigest);
+        const originalPath = join(scratch, 'native-original');
+        writeFileSync(originalPath, binaryBytes);
+        // JavaScript consumer fixture: exercise the installed loader across
+        // repeated failures, a retry window, and an in-process installation repair.
+        const retry = run(process.execPath, ['--input-type=module', '-e', `
+          import fs from 'node:fs';
+          import { syncBuiltinESMExports } from 'node:module';
+          import { setTimeout as delay } from 'node:timers/promises';
+          const [loader, binary, original] = process.argv.slice(1);
+          const { hawdbIdentity } = await import(loader);
+          const read = fs.readFileSync;
+          let reads = 0, failures = 0;
+          fs.readFileSync = function(path, ...args) {
+            if (path === binary) reads++;
+            return read.call(this, path, ...args);
+          };
+          syncBuiltinESMExports();
+          for (let i = 0; i < 100; i++) {
+            try { hawdbIdentity(); } catch (error) {
+              if (error.code !== 'HawdbIncompatible') throw error;
+              failures++;
+            }
+          }
+          const failedReads = reads;
+          fs.writeFileSync(binary, read(original));
+          await delay(1100);
+          const identity = hawdbIdentity();
+          console.log(JSON.stringify({ failedReads, failures, engine: identity.engine }));
+        `, pathToFileURL(join(installed, 'dist/hawdb-native.js')).href, nativeBinary, originalPath]);
+        assert.deepEqual(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ failedReads: Schema.Number, failures: Schema.Number, engine: Schema.String })))(retry), { failedReads: 1, failures: 100, engine: 'hawdb' });
+      } finally { writeFileSync(nativeBinary, binaryBytes); }
       assert.equal(call(['test', 'list'], CacheResult).cache.status, 'hit');
       return { ...identity, compilerOnPath: false, helperOnPath: false, persistentHit: true, currentRecall: true, rebuilt: true };
     } finally { rmSync(scratch, { recursive: true, force: true }); }

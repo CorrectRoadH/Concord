@@ -88,7 +88,7 @@ test('native validator rejects signed adversarial observations and preserves dif
     assert.throws(() => validateNativeEvidence({ ...f.input, certificate: signCertificate({ ...f.certificate, observations: { ...f.certificate.observations, cleanup: ['green'] } }) }, f.context), /cleanup coverage/);
     assert.throws(() => validateNativeEvidence({ ...f.input, red: signReceipt({ ...f.red, result: { ...f.red.result, exitCode: 0 } }) }, f.context), /ordinary regression/);
     assert.throws(() => validateNativeEvidence({ ...f.input, red: { ...f.red, passed: true } }, f.context), /passed/);
-    assert.throws(() => decodeNativeEvidenceIndex({ format: 'niceeval.e2e-case-evidence-index/v1', current: {} }, 'legacy'), /offline migration/);
+    assert.throws(() => decodeNativeEvidenceIndex({ format: 'niceeval.e2e-case-evidence-index/v1', current: {} }, 'legacy'), /preserve original proof bytes and obtain current evidence/);
   })).pipe(Effect.provide(NodeServices.layer)));
 });
 

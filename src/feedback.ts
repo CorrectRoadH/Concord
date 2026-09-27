@@ -19,6 +19,7 @@ import { checkGhConnection, fetchGhFeedback } from './feedback-gh.js';
 import { ConcordError, ProjectSchema, canonical, decode, digest, failure, type DocumentMeta, type DocumentRecord, type MutationReceipt } from './shared.js';
 import { LocalRepository } from './storage.js';
 import { renderTypeScriptConfig } from './config.js';
+import { FeedbackFilterSchema, matchesFeedback, type FeedbackFilter } from './feedback-filter.js';
 
 export interface FeedbackSyncOptions {
   readonly url?: string;
@@ -110,14 +111,15 @@ function issueRecord(record: DocumentRecord): FeedbackItem['document'] {
   return record as FeedbackItem['document'];
 }
 
-export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonly DocumentRecord[]): readonly FeedbackItem[] {
-  const documents = (inspectedDocuments ?? loadDocuments(repo)).filter((document): document is DocumentRecord & { readonly metadata: Extract<DocumentMeta, { kind: 'issue' }> } => document.metadata.kind === 'issue');
+export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonly DocumentRecord[], filter: FeedbackFilter = {}): readonly FeedbackItem[] {
+  const selected = decode(FeedbackFilterSchema, filter, 'feedback filters');
+  const documents = (inspectedDocuments ?? loadDocuments(repo, ['issue'])).filter((document): document is DocumentRecord & { readonly metadata: Extract<DocumentMeta, { kind: 'issue' }> } => document.metadata.kind === 'issue');
   let cached: ReturnType<typeof readFeedbackCache> = { items: new Map(), warnings: [] };
   let cacheWarning: string | undefined;
   try { cached = readFeedbackCache(repo); }
   catch (cause) { cacheWarning = `Feedback cache unavailable: ${cause instanceof Error ? cause.message : String(cause)}`; }
   const identities = new Map<string, string>();
-  return documents.map((document) => {
+  return documents.map((document): FeedbackItem => {
     const source = document.metadata.source;
     const warnings = [...cached.warnings];
     let remote: RemoteFeedback | null = null;
@@ -136,7 +138,7 @@ export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonl
       ? 'closed'
       : features.length > 0 || document.metadata.memoryRelations.length > 0 ? 'linked' : 'pending';
     return { document: issueRecord(document), provider: source?.provider ?? 'local', triage, remote, availability, warnings };
-  });
+  }).filter(item => matchesFeedback(item, selected));
 }
 
 export const syncFeedback = Effect.fn('feedback.sync')(function*(

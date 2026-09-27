@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
+import { matchesFeedback } from "../../src/feedback-filter"
 import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
 import { ExternalLink, GitPullRequestArrow, Link2, Plus, RefreshCw, Trash2 } from "lucide-react"
 import * as React from "react"
@@ -97,13 +98,12 @@ export function FeedbackNavigation() {
   const [query, setQuery] = React.useState("")
   const [provider, setProvider] = React.useState<ProviderFilter>("all")
   const [triage, setTriage] = React.useState<TriageFilter>("all")
-  const normalized = query.trim().toLocaleLowerCase()
-  const visible = feedback.filter((item) => (provider === "all" || providerOf(item) === provider) && (triage === "all" || item.triage === triage) && (!normalized || searchText(item).includes(normalized)))
+  const visible = feedback.filter(item => matchesFeedback(item, { query, ...(provider === "all" ? {} : { provider }), ...(triage === "all" ? {} : { triage }) }))
   return <ContentSidebar model={{ label: '反馈', title: '反馈',
     back: id ? { title: '返回反馈列表', href: '/feedback' } : undefined,
     filter: feedback.length ? { label: '搜索反馈', placeholder: '搜索标题、ID、正文或来源 URL…', value: query, onChange: setQuery } : undefined,
     groups: [{ id: 'feedback', label: '反馈列表', items: visible.map(item => ({
-      id: item.document.path, title: item.document.metadata.title, href: `/feedback/${encodeURIComponent(item.document.metadata.id)}`,
+      id: item.document.path, path: item.document.path, title: item.document.metadata.title, href: `/feedback/${encodeURIComponent(item.document.metadata.id)}`,
       active: item.document.metadata.id === id, searchText: searchText(item),
       suffix: <span className="text-xs text-muted-foreground">{feedbackTriageLabel(item.triage)} · {feedbackProviderLabel(item.provider)}{item.warnings.length > 0 && <span title={item.warnings.join("；")}> · 有提醒</span>}</span>,
     })), filterable: false, emptyMessage: feedback.length ? '没有匹配的反馈' : '还没有反馈',

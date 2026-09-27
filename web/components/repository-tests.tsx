@@ -1,3 +1,4 @@
+import { PathContextMenu } from './path-context-menu';
 import { Link } from 'react-router-dom';
 import type { DocumentRecord } from '../../src/shared';
 import type { WorkspaceSnapshot } from '../../src/view-contract';
@@ -16,7 +17,7 @@ export function RepositoryTestCards({ snapshot, document, onOpenSource }: { snap
   if (view?.status === 'failed') return <li role="alert" className="form-error">项目测试接入失败：{view.error?.code} — {view.error?.message}</li>;
   const tests = relatedRepositoryTests(snapshot, document);
   return <>{tests.map(test => <RecordItem key={test.selector}>
-    <div className="card-title-row"><strong>{test.name}</strong><Button asChild variant="ghost" size="sm"><Link to={`/git?path=${encodeURIComponent(test.file)}&tab=tests`}>查看文件变更</Link></Button></div><div><Button className="h-auto max-w-full justify-start whitespace-normal p-0 text-left" variant="link" onClick={() => onOpenSource(test.file)}>{test.file}</Button></div>
+    <div className="card-title-row"><strong>{test.name}</strong><Button asChild variant="ghost" size="sm"><Link to={`/git?path=${encodeURIComponent(test.file)}&tab=tests`}>查看文件变更</Link></Button></div><div><PathContextMenu path={test.file}><Button className="h-auto max-w-full justify-start whitespace-normal p-0 text-left" variant="link" onClick={() => onOpenSource(test.file)}>{test.file}</Button></PathContextMenu></div>
     <RecordDetails><dl>
       <Definition label="契约"><code>{test.contract}</code></Definition>
     </dl></RecordDetails>

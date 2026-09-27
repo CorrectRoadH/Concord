@@ -12,7 +12,7 @@ concord cache rebuild
 
 `cache clear` 通过与固定 HawDB revision 相同的所有权锁清理数据，保留目录和锁 inode；不要手工删除 owner.hawdb.lock 来抢占。只读观察、status 和 dry-run 不补建引擎或锁文件。clear 可能因占用、路径异常或 I/O 失败而拒绝或部分完成；保留现场，处理原因后重试，不把打开失败当作可删证明。
 
-旧 cache.sqlite 及 -wal/-shm/-journal 不被读取或自动迁移，仅由显式 clear 安全清理。远端快照消失后需显式 fetch 才能刷新，本地已捕获 Issue 与 Memory 保留。短期解析及 Git baseline 使用进程内 HawDB；清理当前进程不表示其它进程的短期缓存也已清空，它们仍须核对当前来源。
+缓存只管理 cache.hawdb，目录外文件不参与状态判定或清理。clear --dry-run 展示清理条目、保留路径与原生产物可用性；真实执行重新验证所有权。native binary digest differs 表示安装产物与包内摘要不符，应修复安装，清缓存不能修复该错误。远端快照消失后需显式 fetch 才能刷新，本地已捕获 Issue 与 Memory 保留。短期解析及 Git baseline 使用进程内 HawDB；清理当前进程不表示其它进程的短期缓存也已清空，它们仍须核对当前来源。
 
 文档、配置、Memory 与源码写入使用短 publication lease、preimage journal 和逐文件原子 rename。查询声明 `access: read`，使用共享 snapshot，并拒绝真正发布。非 dry-run 的写入、外部执行、恢复、cache rebuild 与 cache clear 使用独占 snapshot。dry-run 预览沿用共享 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
 
@@ -26,7 +26,7 @@ concord recover --json
 
 共享 token 加入现有目录后，须重读完整 owner 集合。只有自己的 token 存在，且全部 owner 为同 worktree 的 shared，才开始受保护读取。writer 已替换目录时，加入者撤销自己的 token 并报告 Busy，不能开始读取。writer 释放时只删除自己的 owner。尚未通过准入的 shared 记录不授予读取，也不阻止 writer 释放。
 
-`JournalMigrationRequired` 表示历史事务，只能显式离线恢复；保留 journal、锁和目标文件，不反复调用普通 recover。`ProjectMigrationRequired` 表示旧配置须先离线迁移。缺当前配置绑定的旧收据返回 `EvidenceMigrationRequired`，保留原收据并重新取证。
+`JournalMigrationRequired` 表示历史事务，只能显式离线恢复；保留 journal、锁和目标文件，不反复调用普通 recover。`ProjectMigrationRequired` 表示配置不受支持；当前工具不提供格式转换入口，保留原件并使用匹配版本处理。缺当前配置绑定的旧收据返回 `EvidenceMigrationRequired`，保留原收据并重新取证。
 
 `--dry-run` 与 access 分开。它走同一规划校验，不发布项目文件。既有 dry-run 仍是预览，不会因为查询使用 read 而变成写入。已有 owner 的仓库仍须短快照 lease 和当前 journal 障碍，可能首次创建私有协调目录。只有全新且无 owner/锁的 init 预览可以完全不创建私有状态。它不等于真实发布完成。`recover` 不接受 `--dry-run`。
 

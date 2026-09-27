@@ -135,9 +135,9 @@ function currentJournal(path: string): Journal {
 export function assertCurrentRuntimeFormat(root: string, privateDir = genericPrivateDirectorySync(root)): void {
   const journal = join(privateDir, 'journal.json');
   const governanceMigration = join(privateDir, 'neutral-governance-migration-journal.json');
-  if (present(governanceMigration)) throw new ConcordError('CoordinationMigrationRequired', 'An interrupted neutral-governance migration is present; preserve it and run scripts/migrate-neutral-governance.ts --recover before ordinary runtime work.');
+  if (present(governanceMigration)) throw new ConcordError('CoordinationMigrationRequired', 'An unsupported interrupted transaction is present; preserve the journal, locks, and files. Recovery requires the matching historical tool version.');
   if (present(journal)) currentJournal(journal);
-  if (present(join(root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'concord.json is not a runtime configuration; explicitly migrate it to concord.config.ts offline. Preserve any interrupted journals and locks for offline recovery first.');
+  if (present(join(root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'concord.json is not a runtime configuration. No format conversion is provided; preserve original files, interrupted journals, and locks for handling with the matching tool version.');
 }
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
@@ -348,7 +348,7 @@ export class LocalRepository implements Repository {
     if (source?.access === 'read-only') throw new ConcordError('ReadOnlyMemorySource', `Memory source ${source.name} is read-only: ${path}`);
   }
   private currentSnapshot(): ConfigSnapshot {
-    if (present(join(this.root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'Old project configuration appeared; explicit offline migration is required');
+    if (present(join(this.root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'Unsupported project configuration appeared; preserve it and use the matching tool version');
     const source = this.read('concord.config.ts');
     if (source === undefined) throw new ConcordError('ProjectNotFound', 'Project configuration disappeared');
     return snapshot('concord.config.ts', source, this.privateDir);

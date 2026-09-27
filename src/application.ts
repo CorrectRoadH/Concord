@@ -7,7 +7,7 @@ import { Effect, Result } from 'effect';
 import { recoverLocalState } from './recovery.js';
 import { readRepositoryTestView, type RepositoryTestView } from './view-profile.js';
 import { getGitStatus, type GitBaselineCache } from './git-view.js';
-import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
+import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from './annotations.js';
 import { codeSnippet, locateCode } from './code-commands.js';
 import { scanCode } from './code.js';
 import {
@@ -55,11 +55,14 @@ import { showWriting, setWriting, writingIndex } from './writing-management.js';
 import { checkWriting } from './writing.js';
 import { checkProject } from './project-check.js';
 import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
+import type { RequestTiming } from './view-request-log.js';
 
 const sync = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> => Effect.try({
   try: evaluate,
   catch: failure,
 }).pipe(Effect.withSpan(name));
+const measuredSync = (timing?: RequestTiming) => <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> =>
+  sync(name, () => timing === undefined ? evaluate() : timing.sync(name, evaluate));
 
 export function validateViewRoot(input: string): string {
   const root = discoverRoot(input, true);
@@ -120,10 +123,11 @@ function withRepository<A>(
   root: string,
   operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError>,
   options: { readonly initialize?: boolean; readonly recover?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write' } = {},
+  timing?: RequestTiming,
 ): Effect.Effect<A, ConcordError> {
   return Effect.acquireRelease(
-    sync('view.openRepository', () => new LocalRepository(root, options)),
-    (repo) => Effect.sync(() => repo.close()),
+    measuredSync(timing)('view.openRepository', () => new LocalRepository(root, options)),
+    (repo) => Effect.sync(() => timing === undefined ? repo.close() : timing.sync('view.closeRepository', () => repo.close())),
   ).pipe(Effect.flatMap(operation), Effect.scoped);
 }
 
@@ -179,9 +183,10 @@ function directConfig(root: string): {
 }
 
 /** Missing or malformed project configuration remains inspectable without manufacturing identity. */
-export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(function*(rootInput: string, cache: 'use' | 'off' = 'off'): Effect.fn.Return<WorkspaceSnapshot, ConcordError> {
+export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(function*(rootInput: string, cache: 'use' | 'off' = 'off', timing?: RequestTiming): Effect.fn.Return<WorkspaceSnapshot, ConcordError> {
+  const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
-  const config = directConfig(root);
+  const config = yield* sync('view.readConfig', () => directConfig(root));
   if (config.project === null) {
     return {
       root,
@@ -205,7 +210,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
   return yield* withRepository(root, (repo) => Effect.gen(function*() {
     const snapshot = yield* sync('view.compileWorkspace', () => repo.snapshot(() => {
     const currentConfigSource = repo.configSnapshot.source;
-    const inspected = inspectDocuments(repo);
+    const inspected = timing === undefined ? inspectDocuments(repo) : timing.sync('view.inspectDocuments', () => inspectDocuments(repo));
     let cases: ReturnType<typeof scanAnnotations>;
     let codes: ReturnType<typeof scanCode>['codes'];
     let codeFiles: ReturnType<typeof scanCode>['files'];
@@ -213,7 +218,9 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     let findings = [...inspected.findings];
     let diagnostics: unknown;
     try {
-      const trace = buildTrace(repo, cache, { inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
+      const compile = () => buildTrace(repo, cache, { inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
+      const trace = timing === undefined ? compile() : timing.sync('view.buildTrace', compile);
+      timing?.cache(trace.codeCache);
       cases = trace.annotations;
       codes = trace.codeDeclarations;
       codeFiles = trace.codeFiles;
@@ -223,6 +230,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     } catch (cause) {
       cases = scanAnnotations(repo, { cache });
       const code = scanCode(repo, { cache });
+      timing?.cache(code.cache);
       codes = code.codes;
       codeFiles = code.files;
       findings = [...inspected.findings, ...cases.findings, ...code.findings];
@@ -260,7 +268,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       }
     }
     return { ...snapshot, complete: snapshot.complete && repositoryTests.status !== 'failed', repositoryTests };
-  }), { access: 'read' });
+  }), { access: 'read' }, timing);
 });
 
 /** Git needs current configuration, not the document, code, or evidence projections. */
@@ -272,9 +280,10 @@ export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(roo
   return yield* getGitStatus(root, true, baselineCache, testRoots);
 });
 
-export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string): Effect.fn.Return<ViewFile, ConcordError> {
+export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string, timing?: RequestTiming): Effect.fn.Return<ViewFile, ConcordError> {
+  const sync = measuredSync(timing);
   const validatedRoot = yield* sync('view.validateRoot', () => validateViewRoot(root));
-  const config = directConfig(validatedRoot);
+  const config = yield* sync('view.readConfig', () => directConfig(validatedRoot));
   if (config.project === null) {
     if (path !== config.path || config.source === undefined) return yield* Effect.fail(new ConcordError('FileNotFound', 'Only the malformed project configuration diagnostic is available until configuration is repaired'));
     return { path, body: config.source, digest: config.configDigest!, readOnly: true, reason: 'Invalid configuration must be repaired locally before Concord can reconstruct managed state.' };
@@ -308,7 +317,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
       }));
     }
     return yield* Effect.fail(new ConcordError('FileNotFound', 'The requested path is not in the Concord document, configured source, or explicitly associated project test inventory'));
-  }), { access: 'read' });
+  }), { access: 'read' }, timing);
 });
 
 function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>): unknown {
@@ -341,6 +350,8 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'memory.promote': return promoteMemory(repo, action.id, action.target, dryRun);
     case 'memory.retire': return retirePromotion(repo, action.id, action.target, action.reason, dryRun);
     case 'issue.link': return linkIssue(repo, action.id, action.memory, dryRun);
+    case 'issue.list': { const { action: _, ...filter } = action; return { operation: 'issue-list', drafts: listFeedback(repo, undefined, filter).map(item => item.document) }; }
+    case 'feedback.list': { const { action: _, ...filter } = action; return { operation: 'feedback-list', feedback: listFeedback(repo, undefined, filter) }; }
     case 'issue.index': return knowledgeIndex(repo, 'issue');
     case 'issue.recall': return knowledgeRecall(repo, 'issue', action.query);
     case 'issue.edit': return editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun);
@@ -364,7 +375,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'test.annotate': return annotationSnippet(repo, action.contract, action.regressions);
     case 'evidence.show': return readEvidence(repo, action.id);
     case 'cache.status': return cacheStatus(repo);
-    case 'cache.clear': return dryRun ? { operation: 'cache-clear', dryRun: true } : clearCache(repo);
+    case 'cache.clear': return dryRun ? previewCacheClear(repo) : clearCache(repo);
     case 'cache.rebuild': {
       const annotations = scanAnnotations(repo, { cache: 'rebuild' });
       const code = scanCode(repo, { cache: 'rebuild' });
@@ -386,7 +397,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
 /** Shared by HTTP and CLI action; unknown future actions conservatively require write access. */
 function actionAccess(action: ViewAction['action']): 'read' | 'write' {
   switch (action) {
-    case 'design.check': case 'memory.index': case 'memory.recall': case 'issue.index': case 'issue.recall':
+    case 'design.check': case 'memory.index': case 'memory.recall': case 'issue.index': case 'issue.recall': case 'issue.list': case 'feedback.list':
     case 'writing.index': case 'writing.show': case 'writing.check': case 'concepts.index': case 'concepts.show':
     case 'code.annotate': case 'code.locate': case 'test.annotate': case 'evidence.show': case 'cache.status':
     case 'check': case 'trace.check': case 'trace.show': case 'review.render': case 'doctor': case 'template.show':
@@ -395,7 +406,8 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
   }
 }
 
-export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal): Effect.fn.Return<unknown, ConcordError> {
+export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError> {
+  const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const action = yield* sync('view.decodeAction', () => decodeViewAction(input));
   if (action.action === 'template.show') return yield* sync('view.template', () => ({ operation: 'template-show', name: action.name, body: templateBody(action.name, action.title ?? 'Your title') }));
@@ -415,11 +427,11 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
       constitutionImpact: action.constitutionImpact,
       constitutionSources: action.constitutionSources,
       memorySources: action.memorySources,
-    }))), { initialize: true, dryRun });
+    }))), { initialize: true, dryRun }, timing);
   }
   if (action.action === 'recover') return yield* recoverLocalState(root);
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
   if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun });
+  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
 });

@@ -2,6 +2,7 @@
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { Schema } from 'effect';
+import { FeedbackFilterFields } from './feedback-filter.js';
 import { TEMPLATE_PAGES } from './template-pages.js';
 import type { CodeDeclaration } from './code.js';
 import type { Evidence } from './evidence.js';
@@ -122,6 +123,8 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('memory.retire'), id: Text, target: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.link'), id: Text, memory: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.index') }),
+  Schema.Struct({ action: Schema.Literal('issue.list'), ...FeedbackFilterFields }),
+  Schema.Struct({ action: Schema.Literal('feedback.list'), ...FeedbackFilterFields }),
   Schema.Struct({ action: Schema.Literal('issue.recall'), query: Text }),
   Schema.Struct({ action: Schema.Literal('issue.edit'), id: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.remove'), id: Text, expectedDigest: Text, ...DryRun }),

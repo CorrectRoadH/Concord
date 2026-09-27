@@ -140,7 +140,7 @@ export function readGovernanceConfiguration(root: string): GovernanceConfigurati
     throw new GovernanceConfigurationError('GovernanceConfigurationInvalid', `${GOVERNANCE_CONFIGURATION_PATH}: ${cause instanceof Error ? cause.message : String(cause)}`);
   }
   if (typeof input === 'object' && input !== null && 'format' in input && input.format === 'concord.repository/v1') {
-    throw new GovernanceConfigurationError('GovernanceConfigurationMigrationRequired', 'concord.repository/v1 is read-only legacy state; migrate it offline to concord.repository/v2.');
+    throw new GovernanceConfigurationError('GovernanceConfigurationMigrationRequired', 'Unsupported governance configuration; current input must use concord.repository/v2. Preserve original files; no format conversion is provided.');
   }
   let config: GovernanceConfiguration;
   try {
