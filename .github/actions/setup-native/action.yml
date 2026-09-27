@@ -1,9 +1,12 @@
 name: Set up cached native toolchain
-description: Restore Cargo compilation inputs and outputs; callers still build and test.
+description: Restore Cargo compilation inputs and outputs; callers still run the locked build.
 inputs:
   platform:
     description: Pinned runner image and native target
     required: true
+  deployment-target:
+    description: macOS deployment target; none for Linux
+    default: none
 runs:
   using: composite
   steps:
@@ -16,8 +19,9 @@ runs:
           ~/.cargo/git/db
           ~/.cargo/git/checkouts
           native/hawdb/target
-        key: cargo-v1-${{ inputs.platform }}-deployment15-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-${{ hashFiles('native/hawdb/Cargo.toml', 'native/hawdb/build.rs', 'native/hawdb/src/**', 'scripts/build-native.ts', 'src/hawdb-native.ts', 'src/hawdb-native-contract.ts') }}
+        key: cargo-v2-${{ inputs.platform }}-deployment${{ inputs.deployment-target }}-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-${{ hashFiles('native/hawdb/Cargo.toml', 'native/hawdb/build.rs', 'native/hawdb/src/**') }}
         restore-keys: |
+          cargo-v2-${{ inputs.platform }}-deployment${{ inputs.deployment-target }}-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-
           cargo-v1-${{ inputs.platform }}-deployment15-${{ hashFiles('native/hawdb/rust-toolchain.toml') }}-${{ hashFiles('native/hawdb/Cargo.lock') }}-
     - shell: bash
       run: rustup toolchain install 1.97.1 --profile minimal

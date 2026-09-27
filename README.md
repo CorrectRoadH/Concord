@@ -4,7 +4,7 @@
 
 Concord 是面向开发者与 coding agent 的本地 SDLC CLI。产品契约保存在 Markdown，代码与测试关系写在实际源码旁，Memory 保存问题和裁决历史；Trace 动态反查这些关系，不需要第二份关系 JSON。
 
-Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux/macOS 本地工作树，发行验收覆盖 Ubuntu 24.04 与 Apple Silicon macOS 15/26；需要 Node.js 24.15+、Git，Repository 工具使用 `ripgrep`。发布协调只用 Node 文件 API，不需要 `flock`、`stat`、`diskutil` 或 `plutil`。HawDB 统一承接可重建缓存，安装包自带原生引擎，运行不需要 Rust。源码开发使用 pnpm 11.18.0；Windows 执行与网络多机协调尚未纳入兼容声明。 macOS 最低支持版本为 15；macOS 27 允许安装，但尚未由该 CI 矩阵验证。
+Concord 使用项目自己的 Git worktree，不依赖其它产品 checkout、云服务或模型 API。当前支持 Linux/macOS 本地工作树，原生构建覆盖 Ubuntu 24.04 与 Apple Silicon macOS 15，macOS 最低支持 15；需要 Node.js 24.15+、Git，Repository 工具使用 `ripgrep`。发布协调只用 Node 文件 API，不需要 `flock`、`stat`、`diskutil` 或 `plutil`。HawDB 统一承接可重建缓存，安装包自带原生引擎，运行不需要 Rust。源码开发使用 pnpm 11.18.0；Windows 执行与网络多机协调尚未纳入兼容声明。 macOS 最低支持版本为 15；macOS 27 允许安装，但尚未由该 CI 矩阵验证。
 
 - [Quick start](#quick-start)：从空仓库跑通契约、代码、测试和反查。
 - [常用 usage](#常用-usage)：接入已有项目、维护文档、关联代码、测试与 Memory。
@@ -333,7 +333,7 @@ readlink -f "$(command -v concord)"
 
 本地目录安装会创建包与 bin 的符号链接；修改源码后运行 `pnpm build` 即生效，无需重新安装。移动 checkout 后需要重新链接。若先前使用 Nix 用户 profile 安装 Concord，先用 `nix profile remove concord` 移除旧入口。全局链接供日常自举，`pnpm check` 仍构建、打包并在隔离消费者中安装验收。
 
-Linux 与 Apple Silicon macOS 15/26 可以从 Homebrew tap 安装。Formula 提供 Node、Git 和 `ripgrep`；0.6.0 的发布协调不再需要 `util-linux` flock：
+Linux 与 Apple Silicon macOS 15+ 可以从 Homebrew tap 安装。Formula 提供 Node、Git 和 `ripgrep`；0.6.0 的发布协调不再需要 `util-linux` flock：
 
 ```sh
 brew install CorrectRoadH/tap/concord
@@ -366,7 +366,7 @@ concord --skill all
 
 ### 发版
 
-源仓库使用 `v<发行版本>` annotated tag；流水线从 tag 设置包与 shrinkwrap 的版本。Linux 与 macOS 各自编译原生引擎，一台 Ubuntu 24.04 runner 类型检查、合包一次并隔离安装。四路 Ubuntu 测试分片、macOS 15 可移植回归和 macOS 26 安装冒烟均使用同一包；全部通过后才创建 GitHub Release。Cargo 缓存按平台、工具链、锁文件与原生源码区分，命中后仍编译和测试。目标平台的可选原生依赖由 npm 在安装时选择。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
+源仓库使用 `v<发行版本>` annotated tag，标签自动调度默认分支的发布工作流，构建始终检出对应标签。Linux 与 macOS 15 各构建原生引擎，一台 Ubuntu 24.04 runner 合包一次并验证版本与摘要。自动发布不跑测试或真实安装；完整 Check 按需手动执行。Cargo 缓存跨版本复用，失败仅自动重试失败任务一次。公开 tap 自动发现新 Release，核验同一资产的版本与摘要后，生成 Formula/Nix 配方并更新渠道完成收据。无新版本时直接退出；源码发布不等于渠道已同步。
 
 ### Nix / NixOS
 

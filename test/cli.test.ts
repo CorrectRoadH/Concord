@@ -78,8 +78,12 @@ test('packed local operations isolate unrelated malformed contracts and check re
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/query-current-projections.md
-test('installed HawDB caches and current recall work without Rust or a database helper', () =>
-  Effect.runPromise(verifyInstalledNative(join(scratch, 'tool/node_modules/concord-sdlc')).pipe(Effect.asVoid)));
+test('installed HawDB caches and current recall work through an installation symlink without Rust or a database helper', () =>
+  Effect.runPromise(Effect.gen(function*() {
+    const alias = join(scratch, 'opt-concord');
+    yield* Effect.sync(() => symlinkSync(join(scratch, 'tool/node_modules/concord-sdlc'), alias));
+    yield* verifyInstalledNative(alias);
+  })));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
 test('packed Design commands require complete responses and preserve formatting and decision semantics', () => Effect.runPromise(Effect.sync(() => {

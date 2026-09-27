@@ -33,7 +33,7 @@ Memory/Issue 的 index 和 recall 继续核对当前目录和源字节；共享�
 
 清理在独占 repository lease 内执行，须区分活动句柄和损坏库。打开失败本身不代表可删除；原生所有权锁授权清理。只清理受管 HawDB 目录内的缓存内容，保留目录与所有权锁 inode，不删除 evidence/journal。预览列出清理范围与原生产物可用性，执行时重新验证所有权。远端缓存丢失后只有显式刷新可以重新获得观察，本地已捕获 Issue 保留。
 
-原生依赖、Rust toolchain 与 Cargo lock 精确固定。构建编排保持严格 TypeScript/Effect；c-005 与 AGENTS 的窄原生例外在采用前显式修订。发行流程先在 Ubuntu 与 Apple Silicon macOS 构建 native 产物，再装入同一个 tgz，通过目标系统的真实安装后才能发布。消费者不需要 Rust、全局 HawDB 或安装脚本。缺少或错误的平台产物返回具名错误，不隐藏切回 SQLite。
+原生依赖、Rust toolchain 与 Cargo lock 精确固定。构建编排保持严格 TypeScript/Effect；c-005 与 AGENTS 的窄原生例外在采用前显式修订。发行流程先在 Ubuntu 与 Apple Silicon macOS 构建 native 产物，再装入同一个 tgz，核验完整目标集合、版本与摘要后发布；自动流水线不执行测试或真实安装，安装验证保留为手动入口。消费者不需要 Rust、全局 HawDB 或安装脚本。缺少或错误的平台产物返回具名错误，不隐藏切回 SQLite。
 
 ## Evidence and tradeoffs
 
@@ -79,7 +79,7 @@ segment cache 为 16 MiB，graph manifest 为 8 MiB，out-of-core delta 不超�
 
 ## Release identity
 
-发行产物集合固定为 linux-x64-glibc 与 darwin-arm64，后者 deployment target 为 macOS 15.0，符合当前 Ubuntu 24.04 与 Apple Silicon macOS 15/26 验收矩阵。native manifest 绑定同一桥接源码、Cargo lock、ABI、HawDB revision 和二进制摘要。构建先清空 dist，再汇入完整平台集合；后续 host build 不能擦掉其它目标。只 pack 一次，各平台验证同一个 SHA-256。缺项或不匹配阻断发行，本机 Nix 产物不进入通用发行物。
+发行产物集合固定为 linux-x64-glibc 与 darwin-arm64，后者 deployment target 为 macOS 15.0，符合 Ubuntu 24.04 与 Apple Silicon macOS 15 构建基线。native manifest 绑定同一桥接源码、Cargo lock、ABI、HawDB revision 和二进制摘要。构建先清空 dist，再汇入完整平台集合；后续 host build 不能擦掉其它目标。只 pack 一次，各渠道验证同一个 SHA-256。缺项或不匹配阻断发行，本机 Nix 产物不进入通用发行物。
 
 ## Adoption conditions
 

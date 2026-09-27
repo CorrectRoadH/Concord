@@ -12,7 +12,7 @@ The Concord release contains exactly one `concord-sdlc-<version>.tgz` with a rec
 
 ## Errors
 
-Any source check, package identity, exact-candidate installation/check, digest, Formula or Nix failure prevents the corresponding publication step. A failed tag run does not publish a successful compatibility claim. Reruns may reuse only identical tags and bytes.
+Any build, package identity, digest or channel metadata generation failure prevents the corresponding publication step. Automatic publication runs no tests or real installations and does not establish runtime compatibility. Reruns may reuse only identical tags and bytes.
 
 ## Minimal Example
 

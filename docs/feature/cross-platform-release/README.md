@@ -18,21 +18,21 @@ constitutionRefs:
 
 ## 问题
 
-Concord 的 Node 运行时与 POSIX 进程所有权支持 Linux 与 macOS。一个版本标签必须对应一份经过测试的发布，打包、上传、计算哈希、更新 tap 和逐平台验证都由自动化完成。
+Concord 的 Node 运行时与 POSIX 进程所有权支持 Linux 与 macOS。一个版本标签必须对应一份身份明确的发布，构建、打包、上传、计算哈希与更新 tap 都由自动化完成。
 
 ## 核心模型
 
-Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份不可变的包，只有同一份字节通过支持的操作系统矩阵后才发布。
+Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份不可变的包，核验版本与摘要后发布源码资产。完整测试属于开发验证，可通过本地 `pnpm check` 或手动 Check 工作流执行。
 
-公开的 Homebrew tap 发现该发布，核验身份，更新 Formula 与仅限 Linux 的 Nix 输入，测试候选 recipe，再记录自己的 recipe 标签。两个标签共享版本号，但指向不同的 commit。
+公开的 Homebrew tap 发现该发布，核验身份，更新 Formula 与仅限 Linux 的 Nix 输入，生成候选 recipe，再记录自己的 recipe 标签。两个标签共享版本号，但指向不同的 commit。
 
 该工作流同样采用 Concord 驱动开发：先更新契约与设计，再改运行时或发布自动化。平台检查、显式实现关联与测试只证明各自的实际范围。
 
 ## 范围
 
-唯一的 npm 发布产物内含 Linux 与 macOS 分别编译的目标原生引擎，在一台 Ubuntu 24.04 runner 上类型检查、合包并隔离安装。四个 Ubuntu 测试分片对打包产物运行完整测试；Apple Silicon macOS 15 验证锁、恢复、隔离安装与 Homebrew 原生产物完整性，macOS 26 验证同一包的原生加载、缓存与 CLI 安装。所有分片与平台通过后才发布。
+唯一的 npm 发布产物内含 Ubuntu 24.04 与 macOS 15 分别编译的目标原生引擎，在一台 Ubuntu 24.04 runner 上构建、类型检查并合包。发布流水线不运行测试或真实安装，不据此声明运行时验收通过。
 
-macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安装范围内；CI 验收范围为 15 与 26，不声明已完成 macOS 27 的实际验收。Homebrew 候选在 Ubuntu 24.04、macOS 15 与 26 安装验证，Nix 在 Ubuntu 24.04 验证。源码发布成功与渠道同步成功分别报告。
+macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安装范围内，但不声明已完成其 CI 实测。渠道同步仅在 Ubuntu 上核验包身份、摘要与生成 Formula/Nix 元数据，不安装 Concord。同一包供所有渠道使用。源码发布成功与渠道同步成功分别报告，tap 同版本 Release 是渠道完成记录。
 
 安装时由 npm 选择目标平台的可选依赖。运行时协调在本地 Linux 与 macOS 工作树上使用 Node 文件 API，不依赖 flock 或磁盘检查工具。依赖为 Node.js 24.15+、Git 与 Repository 工具使用的 ripgrep。Nix 只支持 Linux。
 

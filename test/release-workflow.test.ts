@@ -8,7 +8,7 @@ import { parse } from 'yaml';
 import { HAWDB_MACOS_DEPLOYMENT_TARGET } from '../src/hawdb-native-contract.js';
 
 const Workflow = Schema.Struct({
-  on: Schema.Struct({ push: Schema.Struct({ tags: Schema.Array(Schema.String) }) }),
+  on: Schema.Record(Schema.String, Schema.Unknown),
   jobs: Schema.Struct({ package: Schema.Struct({ steps: Schema.Array(Schema.Struct({
     name: Schema.optional(Schema.String), run: Schema.optional(Schema.String),
   })) }) }),
@@ -31,36 +31,68 @@ const Job = Schema.Struct({
 });
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('publication waits for all shards and platforms testing the single packed build', async () => {
+test('release builds two native targets and packs once without installation or test jobs', async () => {
   await Effect.runPromise(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Job) }))(
       parse(yield* fs.readFileString('.github/workflows/release.yml')),
     );
-    const { native, package: pack, tests, portable, publish } = graph.jobs;
-    assert.ok(native && pack && tests && portable && publish);
+    const { native, package: pack, publish } = graph.jobs;
+    assert.ok(native && pack && publish);
+    assert.deepEqual(Object.keys(graph.jobs), ['native', 'package', 'publish']);
     assert.equal(native.env?.MACOSX_DEPLOYMENT_TARGET, HAWDB_MACOS_DEPLOYMENT_TARGET);
     assert.deepEqual(native.strategy?.matrix.include?.find(target => target.target === 'darwin-arm64'), { os: 'macos-15', target: 'darwin-arm64' });
-    assert.deepEqual(portable.strategy?.matrix.include, [{ os: 'macos-15', full: true }, { os: 'macos-26', full: false }]);
-    assert.deepEqual(publish.needs, ['package', 'tests', 'portable']);
-    assert.deepEqual(tests.strategy?.matrix.shard, [1, 2, 3, 4]);
-    assert.ok(pack.steps.some(step => step.run === 'pnpm typecheck'));
-    assert.ok(pack.steps.findIndex(step => step.run === 'node --import tsx scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === 'pnpm typecheck'));
-    for (const job of [tests, portable]) {
-      assert.equal(job.needs, 'package');
-      assert.ok(job.steps.some(step => step.run === 'node --import tsx scripts/prepare-release.ts'));
-      assert.ok(job.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
-      const commands = job.steps.map(step => step.run ?? '').join('\n');
-      assert.match(commands, /--check release\/SHA256SUMS/);
-      assert.match(commands, /--strip-components=1 package\/dist/);
-      assert.doesNotMatch(commands, /pnpm (?:build|check|typecheck)|scripts\/build/);
-    }
-    assert.ok(tests.steps.some(step => step.run?.includes('--test-shard="$TEST_SHARD/4" test/*.test.ts')));
-    const check = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Struct({ push: Schema.Struct({ branches: Schema.Array(Schema.String) }) }) }))(
+    assert.equal(native.strategy?.matrix.include?.length, 2);
+    assert.equal(pack.needs, 'native');
+    assert.equal(publish.needs, 'package');
+    const build = 'pnpm build && pnpm exec tsc -p tsconfig.scripts.json';
+    assert.ok(pack.steps.some(step => step.run === build));
+    assert.ok(pack.steps.findIndex(step => step.run === 'node --import tsx scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === build));
+    const commands = pack.steps.map(step => step.run ?? '').join('\n');
+    assert.match(commands, /sha256sum release\/concord-sdlc-\*\.tgz > release\/SHA256SUMS/);
+    assert.equal((commands.match(/npm pack /gu) ?? []).length, 1);
+    assert.ok(publish.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
+    assert.doesNotMatch(Object.values(graph.jobs).flatMap(job => job.steps.map(step => step.run ?? '')).join('\n'), /--test(?:\s|$)|playwright install|pnpm check|npm install --prefix|brew install|verify-installed-native/u);
+    const check = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Record(Schema.String, Schema.Unknown) }))(
       parse(yield* fs.readFileString('.github/workflows/check.yml')),
     );
-    assert.deepEqual(check.on.push.branches, ['**']);
+    assert.deepEqual(Object.keys(check.on), ['workflow_dispatch']);
   }).pipe(Effect.provide(NodeServices.layer)));
+});
+
+// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
+test('publication retry reuses identical assets and refuses a different digest', async () => {
+  await Effect.runPromise(Effect.gen(function*() {
+    const fs = yield* FileSystem.FileSystem;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Job) }))(
+      parse(yield* fs.readFileString('.github/workflows/release.yml')),
+    );
+    const script = graph.jobs.publish?.steps.find(step => step.run?.includes('gh release create'))?.run;
+    assert.ok(script);
+    const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-publish-retry-' });
+    yield* fs.makeDirectory(join(root, 'bin'));
+    yield* fs.makeDirectory(join(root, 'release'));
+    const digest = 'a'.repeat(64);
+    yield* fs.writeFileString(join(root, 'release/SHA256SUMS'), `${digest}  release/concord-sdlc-0.8.2.tgz\n`);
+    // Only the remote GitHub boundary is simulated; execute the actual workflow shell.
+    yield* fs.writeFileString(join(root, 'bin/gh'), '#!/usr/bin/env bash\nif test "$1" = api; then\n  if test "$GH_CASE" = absent; then exit 1; fi\n  cat "$GH_FIXTURE"\nelse\n  printf "%s\\n" "$*" >> "$GH_CALLS"\nfi\n');
+    yield* fs.chmod(join(root, 'bin/gh'), 0o755);
+    for (const kind of ['same', 'different', 'absent']) {
+      yield* fs.writeFileString(join(root, 'fixture.json'), JSON.stringify({ assets: [{ name: 'concord-sdlc-0.8.2.tgz', digest: `sha256:${kind === 'different' ? 'b'.repeat(64) : digest}` }] }));
+      const calls = join(root, `${kind}.calls`);
+      const status: number = yield* spawner.exitCode(ChildProcess.make('bash', ['-e', '-c', script], {
+        cwd: root, extendEnv: true, env: {
+          PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, RELEASE_TAG: 'v0.8.2',
+          GITHUB_REPOSITORY: 'fixture/concord', GITHUB_STEP_SUMMARY: join(root, 'summary'),
+          GH_CASE: kind, GH_FIXTURE: join(root, 'fixture.json'), GH_CALLS: calls,
+        },
+      }));
+      assert.equal(Number(status) === 0, kind !== 'different');
+      assert.equal(yield* fs.exists(calls), kind === 'absent', 'existing release must never be overwritten');
+      if (kind === 'absent') assert.match(yield* fs.readFileString(calls), /^release create v0\.8\.2 /u);
+    }
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 });
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
@@ -69,8 +101,14 @@ test('release tag sets package and shrinkwrap versions while rejecting invalid m
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const workflow = yield* Schema.decodeUnknownEffect(Workflow)(parse(yield* fs.readFileString('.github/workflows/release.yml')));
-    assert.ok(workflow.on.push.tags.includes('v[0-9]*.[0-9]*.[0-9]*'));
-    assert.ok(workflow.on.push.tags.includes('concord-v*'));
+    assert.deepEqual(Object.keys(workflow.on), ['workflow_dispatch']);
+    const dispatch = yield* Schema.decodeUnknownEffect(Schema.Struct({
+      on: Schema.Struct({ push: Schema.Struct({ tags: Schema.Array(Schema.String) }) }),
+      jobs: Schema.Record(Schema.String, Job),
+    }))(parse(yield* fs.readFileString('.github/workflows/release-tag.yml')));
+    assert.ok(dispatch.on.push.tags.includes('v[0-9]*.[0-9]*.[0-9]*'));
+    assert.ok(dispatch.on.push.tags.includes('concord-v*'));
+    assert.ok(dispatch.jobs.dispatch?.steps.some(step => step.run?.includes('gh workflow run release.yml --ref "$RELEASE_BRANCH" --field "tag=$RELEASE_TAG"')));
     const script = workflow.jobs.package.steps.find(step => step.name === 'Prepare package version from release tag')?.run;
     assert.equal(script, 'node --import tsx scripts/prepare-release.ts');
     const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-release-identity-' });

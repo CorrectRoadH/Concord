@@ -23,7 +23,7 @@ const Identity = Schema.Struct({ engine: Schema.Literal('hawdb'), revision: Sche
 /** Exercise only the installed package, with no Rust compiler or database helper on PATH. */
 export const verifyInstalledNative = (packageRoot: string) => Effect.try({
   try: () => {
-    const installed = resolve(packageRoot);
+    const installed = realpathSync(resolve(packageRoot));
     const cli = join(installed, 'dist/entry.js');
     assert.ok(existsSync(cli), 'installed CLI is required');
     const scratch = mkdtempSync(join(tmpdir(), 'concord-native-install-'));

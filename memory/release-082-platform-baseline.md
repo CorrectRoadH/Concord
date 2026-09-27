@@ -5,10 +5,15 @@ title: 0.8.2 平台基线与发布去重
 createdAt: 2026-09-27T13:50:01.763Z
 kind: memory
 memoryKind: decision
-state: current
+state: superseded
 epoch: 0
 promotions: []
-history: []
+history:
+  - at: 2026-09-27T14:18:31.226Z
+    action: supersede
+    reason: 用户要求发布CI精简为构建与安装冒烟，并自动完成调度及渠道同步
+    ref: memory/lean-release-automation.md
+supersededBy: memory/lean-release-automation.md
 ---
 
 # 0.8.2 平台基线与发布去重
