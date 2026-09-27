@@ -2,7 +2,7 @@
 
 ## G1: Portable runtime
 
-Use the installed Node runtime without external lock or disk-inspection helpers.
+Use the installed Node runtime without external lock or disk-inspection programs.
 
 ## G2: Short ownership
 

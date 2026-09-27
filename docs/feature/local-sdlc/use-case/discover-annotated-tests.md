@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
+
 # 发现测试并重建缓存
 
 ## 场景
@@ -24,6 +25,6 @@ feature: docs/feature/local-sdlc/README.md
 
 - JS/TS 字符串或模板中的伪注释不注册 case。其它语言里单独成行、且以注释前缀开头的标记会注册。
 - 缺值、重复契约目标、以及缺少契约的标记产生明确 finding。不认识的测试写法不产生 finding。
-- `@status retired` 不能用于 fixed 证据。工具不从测试语法推断 skip/todo。
+- `@status retired` 不能用于 fixed 证据。工具不从测试语法推断 skip 或待办状态。
 
 每个标记只选择一个契约目标；多个标记可关联同一 Feature 或 Use Case。工具从文件和标记派生执行引用，不需要人工维护 ID。

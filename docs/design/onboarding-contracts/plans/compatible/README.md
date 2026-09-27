@@ -28,7 +28,7 @@
 
 ## Status
 
-已采用。共享 lease 与模型迁移的主仓库集成已通过 `pnpm check` 132 项测试；Concord 自身已通过公开 CLI 采用宪法并关联 Feature/Design 条款。
+共享 lease、模型迁移、宪法采用和 Feature/Design 条款关联都须通过公开 CLI 与完整测试验收。
 
 ## Limits
 

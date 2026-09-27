@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/documentation-quality/README.md
 ---
 
+
 # 检查文档写作与术语一致性
 
 ## 主流程
@@ -14,6 +15,7 @@ feature: docs/feature/documentation-quality/README.md
 1. 维护者在目录所属 JSON 定义概念与写作政策，选择禁用表达、替换理由，以及所需的长度与概念检查。
 2. 运行 `concord docs check --json`，或通过 `--rules` 选择另一份规则。Concord 严格解码规则，在同一仓库读取快照内扫描文件。
 3. 作者按诊断逐处修改正文，再运行同一命令。CLI 不自动替换上下文用词，不保存第二份命中清单。
+4. 交付前运行 `concord check`，关系、生命周期与写作检查全部通过才算通过。
 
 ## 验收
 
@@ -25,5 +27,9 @@ feature: docs/feature/documentation-quality/README.md
 - 领域定义只读 scoped concepts.json；每个语言的 deprecated 派生禁词，preferred/aliases 才算合法使用。按 canonical 概念与有效范围统计，不用兄弟同名概念或定义自身证明使用；引用和汇总均派生。
 - 路径逃逸与 symlink 拒绝。规则、正文、配置在读取过程中发生变化时，遵守现有仓库快照的一致性错误；不发布部分检查结果。
 - 发现问题返回完整 findings 和非零退出码；清零后通过。静态写作检查不能变成测试覆盖率或实现合规证明。
+- `concord check` 在只有写作违规、只有关系违规、两类同时违规时都返回退出码 1，finding 的 `category` 与 `checks` 分项正确标明来源；修复后返回 0。
+- 政策缺失、无效或需要迁移时，`concord check` 返回 `complete: false` 与具名 code 并退出 1；保存有效政策后通过。
+- `docs check --rules` 使用独立 profile 通过时，`concord check` 仍按默认范围判定。CLI、结构化 action 与 Web 的项目检查结果一致。
+- 聚合门禁失败时，`docs check`、`writing`、`concepts`、`author set`、`page set` 与局部读取命令照常工作。
 
-扫描集合、祖先合成、显式 --rules 模式、冲突去重和输入摘要采用[目录方案](../../../design/scoped-terminology/plans/directory-owned/README.md)。旧 writing/v1 返回迁移诊断。
+扫描集合、祖先合成、显式 --rules 模式、冲突去重和输入摘要采用[目录方案](../../../design/scoped-terminology/plans/directory-owned/README.md)。writing/v1 返回迁移诊断。

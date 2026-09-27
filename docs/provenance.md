@@ -1,37 +1,29 @@
-# 从 NiceEval 独立出来的边界
+# 来源与抽取边界
 
-Concord 来源于 NiceEval revision `e1c66d31115208ceaae2f5bd4d730a7abf67048d` 的仓库工程体系。
-目标领域的原始 import 闭包约为 70 个 TypeScript 文件、13,132 行；保留原有测试执行还会拉入 E2E runner、Testkit 与产品场景。
-因此独立化采用领域规则移植和宿主边界重建，不整包复制。
+Concord 的领域规则来源于 NiceEval revision `e1c66d31115208ceaae2f5bd4d730a7abf67048d` 的仓库工程体系。Concord 移植领域规则并重建宿主边界，不整包复制产品构建、E2E runner、Testkit 或产品场景。
 
-| 来源 | Concord 中的处理 |
+| 来源 | Concord 中的对应 |
 |---|---|
-| `packages/repo-tools/src/memory/state.ts` | 移植 Problem resolve/reopen、Decision/Insight supersede、promotion/retire 规则，加入独立证据等级和 Problem epoch |
-| `packages/repo-tools/src/docs/trace/ref.ts` | 移植 canonical repo-relative reference 与 Markdown anchor 校验 |
-| `packages/e2e-runner/src/owned-process.ts` | 复用 Effect Scope 拥有 POSIX 进程组及 TERM/grace/KILL 收尾机制，替换产品命名 |
-| `packages/repo-tools/src/docs/trace/compiler.ts` | 保留正向归属、动态反查思想；扫描范围和 schema 由 Concord 重建 |
-| `packages/repo-tools/src/docs/trace/relation-mutation.ts` | 保留 preimage、journal、原子写入与恢复模型；独立存储 owner 不依赖 NiceEval 目录或协议 |
-| Feature / Use Case / Design / Research 领域 | 由 Concord 拥有通用文档模型、模板与具名命令 |
-| Test sidecar 与 planner | 保留当前唯一身份、来源归属和显式退役原则；注释拥有 current 关系，Git 保存测试演进；命令证据拥有独立的 scope |
-| PR editor | 保留本地审阅中关联契约、测试与 Memory 的目标；使用 Concord 审阅格式 |
-| Issue 领域 | 提供本地 Observation 草稿与 Memory 关联，不冒充远端 GitHub 工作项状态 |
+| `packages/repo-tools/src/memory/state.ts` | Problem 的 `resolve` 与 `reopen`、Decision 与 Insight 的 `supersede`、promotion 与 retire 规则，以及独立证据等级和 Problem epoch |
+| `packages/repo-tools/src/docs/trace/ref.ts` | canonical repo-relative reference 与 Markdown anchor 校验 |
+| `packages/e2e-runner/src/owned-process.ts` | Effect Scope 拥有 POSIX 进程组及 TERM、grace、KILL 收尾机制 |
+| `packages/repo-tools/src/docs/trace/compiler.ts` | 正向归属与动态反查；扫描范围和 schema 由 Concord 定义 |
+| `packages/repo-tools/src/docs/trace/relation-mutation.ts` | preimage、journal、原子写入与恢复模型；owner 存储不依赖来源目录或协议 |
+| Feature、Use Case、Design、Research 领域 | Concord 拥有的通用文档模型、模板与具名命令 |
+| 测试关系与 planner | 当前唯一身份、来源归属和显式退役；源码标记拥有 current 关系，Git 保存测试演进，命令证据拥有独立 scope |
+| PR editor | 本地审阅中关联契约、测试与 Memory；使用 Concord 审阅格式 |
+| Issue 领域 | 本地 Observation 与 Memory 关联，不表示远端工作项状态 |
+| `lint/docs/writing.ts` | Markdown 与 MDX 写作检查；术语由 `concord.concepts/v1` 定义，政策使用 `concord.writing/v2` |
+| `docs/writing-rules.json` | init 写作预设中的通用可读性规则：句长 140、段长 320，以及含糊表达的替换建议和理由 |
 
-早期 Repository profile 曾整体迁入 NiceEval 的仓库工具，消费仓库通过转出 Concord 包使用它；其中也包含 Mint、Preview、Examples 和下游领域及 runner 类型快照。这是抽取阶段的历史边界，已由下述中立治理裁决替代。
+随包 `templates/` 的文档体裁对应 NiceEval 的 feature-design、design-decision、research 与 engineering 模板。它们保留问题、目标、约束、候选、架构、生命周期与验收的写作分工，不包含 NiceEval 专属命令、Sandbox 和判分要求。通用模式使用 `concord.templates/v1` manifest。
 
-Research、Memory、Issue 采用 Concord 当前文档格式。显式迁移保留正文、来源及历史；旧 evidence 不改写，历史处理声明保持未验证状态。通用命令结果仍称为 `command` evidence，原生可靠性由显式采用的 Concord 政策和当前证据核验，二者不能互相冒充。
+## 不进入 Concord 的内容
 
-本地发布包不依赖原始 checkout。所有运行时 import、模板、schema 与 Agent 指引都由 Concord 自己提供。
+产品构建与部署、Preview、Examples、下游领域、站点、PR 组合、Mintlify、Netlify 与产品 E2E 编排由消费者拥有。产品专属词库、API 规则与站点政策不进入写作预设。NiceEval 的研究主题与工程文档属于 NiceEval 消费仓库。
 
-随包 `templates/` 的文档体裁提取自 NiceEval `docs/_template/feature-design`、`design-decision`、`research` 和 `docs/engineering/_template`：保留问题、目标、约束、候选、架构、生命周期与验收的写作分工，移除 NiceEval 专属命令、Sandbox 和判分要求。通用模式使用独立的 `concord.templates/v1` manifest；它不加载 repository profile 的 `niceeval.docs-template/v1` 模板或复制其测试 sidecar。
+## 运行时独立
 
-Research 模板后来按自由研究契约收敛为标题，来源、观察日期、章节和附页均不强制。历史 NiceEval 主题仍属于 NiceEval 消费仓库；离线目录迁移只补齐其当前格式与路径，不复制进 Concord 自身文档。
+发布包不依赖来源 checkout。运行时 import、模板、schema 与 Agent 指引都由 Concord 提供，写作预设随 Concord 分发，不在运行时读取来源仓库。
 
-## 2026-09-20 中立治理裁决
-
-前述 Repository profile 是历史抽取阶段的归属记录。当前采用 [中立治理方案](design/neutral-project-governance/README.md)：将产品 Preview、Examples、下游、站点与 PR 组合归还消费者，保留并提升身份、证据、生命周期和恢复规则为 Concord 标准。原始来源说明继续保留；NiceEval 作为消费者适配中立配置与协议，不再决定 Concord 的产品字段。
-
-## 文档写作检查
-
-写作检查源自 `lint/docs/writing.ts`；早期移植的 SVG 文本检查已移除，当前只扫描 Markdown/MDX。当前领域术语改由按目录归属的 `concord.concepts/v1` JSON 定义，`concord.writing/v2` 政策声明禁词、长度和概念使用检查；早期 Markdown 概念表解释不再是运行时定义来源，迁移需作者审核。Markdown 正文语法复用 Concord 已有解析器，文件读取复用 Repository 安全快照。NiceEval 的 calledTool 等产品 API 规则与站点特定政策不进入通用实现。
-
-初始化写作预设提取 NiceEval `docs/writing-rules.json` 的通用可读性规则：句长 140、段长 320，以及含糊表达的替换建议和理由。规则随 Concord 分发，不在运行时读取 NiceEval。产品专属词库、API 和站点规则不进入预设。
+Research、Memory 与 Issue 使用 Concord 文档格式。通用命令结果称为 `command` evidence；原生可靠性由显式采用的 Concord 政策和当前证据核验，二者不能互相冒充。

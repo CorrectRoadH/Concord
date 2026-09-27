@@ -2,7 +2,7 @@
 
 Research、Memory 和 Issue 的当前 owner 统一使用 `concord.document/v1`，类型与严格 Schema 由 `concord-sdlc/model` 导出。普通命令不解析旧 Memory、Feedback frontmatter，也不建立另一个历史列表。旧文件必须通过一次性迁移转换；迁移收据仅作审计，列表和关系发现不依赖收据。
 
-Research owner 位于 `docs/research/<主题>/README.md`，可以嵌套；已有单文件通过离线工具移入同名目录并保留 ID。有独立问题和研究结论的页面成为 owner；纯导航、来源清单和执行收据保留为 supporting 页面。嵌套 owner 截断祖先归属。`observedAt` 表示原文明确的观察日期，可以缺省。使用 Git 首次记录时间填写 `createdAt` 时，必须保存 `createdAtSource`，不得将其描述为观察日期或实际创作日期。
+Research owner 位于 `docs/research/<主题>/README.md`，可以嵌套；已有单文件通过离线工具移入同名目录并保留 ID。有独立问题和研究结论的页面成为 owner；纯导航、来源清单和执行收据保留为 supporting 页面。嵌套 owner 截断祖先归属。`observedAt` 表示原文明确的观察日期，可以省略。使用 Git 首次记录时间填写 `createdAt` 时，必须保存 `createdAtSource`，不得将其描述为观察日期或实际创作日期。
 
 Memory 在 `memory/<id>.md`。Problem、Decision、Insight 保存已明确的分类，Note 表示未分类笔记。`captured` 表示已经捕获但尚未确认当前生命周期；它适用于所有分类，Note 只允许这一状态。`memory activate --reason` 将已分类的 captured Problem 激活为 open，将 Decision／Insight 激活为 current，并追加历史。captured 不能用于 fixed 或 promotion。`superseded` 表示记录不再适用，Problem 也可处于此状态，绝不等价于修复。替代目标未知时保存原声明及来源，不生成虚构图边。
 

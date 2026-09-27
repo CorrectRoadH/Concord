@@ -8,7 +8,7 @@ Selected: [compatible](plans/compatible/README.md)
 
 ## Rationale
 
-已通过 `concord design decide` 采用 compatible。独立只读 design_grill 的四项有限条件已落实，具体边界见 plans/compatible/governance.md。
+选择 compatible。格式、锚点、恢复授权和组合验收边界见 [governance](plans/compatible/governance.md)。
 
 G1: compatible 原文定义新 init、严格可解析 TS 数据配置和非交互行为，但其部分旧 JSON 运行时兼容后来被 TS-only 裁决替代；历史目标不能据此解释为当前 runtime 支持。
 
@@ -22,7 +22,7 @@ G5: compatible 定义宪法引用、修订 CAS 与 review 读取当前正文和�
 
 TS 的允许语法与安全加载、旧配置兼容、Memory 多来源身份与证据边界、宪法修订与恢复协议。
 
-正文不替代 owner metadata 中的裁决。主仓库集成已通过完整 `pnpm check` 132 项测试，并完成实际终端确认冲突与自身宪法采用验证；这些是原历史记录，不扩展为当前所有设计的实现证明。
+正文不替代 owner metadata 中的裁决。实现验收须覆盖共享协调锁、模型迁移、配置恢复、宪法引用和实际终端冲突。
 
 ## Rejected Options
 

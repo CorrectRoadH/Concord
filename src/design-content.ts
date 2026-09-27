@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/compare-design-plans.md
-import { fromMarkdown } from 'mdast-util-from-markdown';
+import { fromMarkdown } from './markdown-parser.js';
 import type { RootContent, Nodes } from 'mdast';
 import { Schema } from 'effect';
 import { markdownAnchor } from './refs.js';

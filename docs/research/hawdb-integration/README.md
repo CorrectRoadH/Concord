@@ -14,7 +14,7 @@ sources:
 
 核验源码 revision 为 1e9f76428be6649a18a6f99d75b0ccfef16bf545。HawDB 是嵌入式 Rust 图数据库，公开 facade 提供参数化 Cypher、关系查询、事务及搜索能力。该 revision 的 Cargo 与 rust-toolchain 声明 Rust 1.97.1；仓库未提供 Node N-API 包。
 
-[源码](https://github.com/nowledge-co/hawdb/tree/1e9f76428be6649a18a6f99d75b0ccfef16bf545)与 [embedded runtime contract](https://github.com/nowledge-co/hawdb/blob/1e9f76428be6649a18a6f99d75b0ccfef16bf545/docs/specs/EMBEDDED_RUNTIME_SPEC.md)要求一个持久目录同时仅有一个进程和 root handle；生产应用使用进程内 library API，不能依赖 HawDB CLI、helper 进程或环境控制面。
+[源码](https://github.com/nowledge-co/hawdb/tree/1e9f76428be6649a18a6f99d75b0ccfef16bf545)与 [embedded runtime contract](https://github.com/nowledge-co/hawdb/blob/1e9f76428be6649a18a6f99d75b0ccfef16bf545/docs/specs/EMBEDDED_RUNTIME_SPEC.md)要求一个持久目录同时仅有一个进程和 root handle；生产应用使用进程内 library API，不能依赖 HawDB CLI、辅助进程或环境控制面。
 
 ## Concord 的现有边界
 

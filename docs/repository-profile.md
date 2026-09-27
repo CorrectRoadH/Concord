@@ -16,7 +16,7 @@
 }
 ```
 
-套件 ID 唯一，目录必须是 canonical 仓库相对路径，不能重叠、逃逸或经过 symlink。`historyPath` 显式指定套件目录之外的历史/退役归档；current 关系仍只在真实测试声明旁的注释。测试身份由 native 文件、声明文件与静态名称派生；helper 通过 `@test-file` 关联 native 文件。
+套件 ID 唯一，目录必须是 canonical 仓库相对路径，不能重叠、逃逸或经过 symlink。`historyPath` 显式指定套件目录之外的历史/退役归档；current 关系仍只在真实测试声明旁的注释。测试身份由 native 文件、声明文件与静态名称派生；测试支持文件通过 `@test-file` 关联 native 文件。
 
 不读取 Nx metadata，也没有固定 e2e 目录、host/provider 分类或 pr/main/nightly/release 通道。Concord 规定声明与证明的含义，项目决定用什么工具、在哪里和何时执行。
 

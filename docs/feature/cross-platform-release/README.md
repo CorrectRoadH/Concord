@@ -14,26 +14,34 @@ constitutionRefs:
   - docs/constitution.md#c-010
 ---
 
-# Cross-platform tagged releases
+# 跨平台标签发布
 
-## Problem
+## 问题
 
-Concord's published package and Homebrew formula are Linux-only even though its Node runtime and POSIX process ownership can support macOS. A maintainer currently has to pack, upload, hash, edit the tap, and verify each platform by hand, so a tag does not identify one tested release.
+Concord 的 Node 运行时与 POSIX 进程所有权支持 Linux 与 macOS。一个版本标签必须对应一份经过测试的发布，打包、上传、计算哈希、更新 tap 和逐平台验证都由自动化完成。
 
-## Core Mental Model
+## 核心模型
 
-The Concord repository owns source, version and source tag. Its tag workflow builds one immutable package and publishes it only after the same bytes pass the supported OS matrix. The public Homebrew tap discovers that release, verifies its identity, updates Formula and Linux-only Nix inputs, tests the candidate recipe, then records its own recipe tag. The two tags share a version but identify different commits.
+Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份不可变的包，只有同一份字节通过支持的操作系统矩阵后才发布。
 
-Concord-driven development applies to this workflow itself: the contract and design are updated before runtime or release automation. Platform checks, explicit implementation relationships and tests remain evidence of their actual scope.
+公开的 Homebrew tap 发现该发布，核验身份，更新 Formula 与仅限 Linux 的 Nix 输入，测试候选 recipe，再记录自己的 recipe 标签。两个标签共享版本号，但指向不同的 commit。
 
-## Scope
+该工作流同样采用 Concord 驱动开发：先更新契约与设计，再改运行时或发布自动化。平台检查、显式实现关联与测试只证明各自的实际范围。
 
-The single npm release artifact with bundled target-native engines is built, typechecked, packed and installed from its exact tgz on one Ubuntu 24.04 runner. Four Ubuntu test shards run the full test suite against that packed build while Apple Silicon macOS 14/15 jobs verify locks, recovery and isolated CLI installation. Every shard and platform must pass before publication. npm selects target-specific optional dependencies during installation. Runtime coordination uses Node file APIs on local Linux/macOS worktrees, with no flock or disk-inspection helper. Node.js 24.15+, Git and Repository-tool ripgrep remain dependencies. Nix remains Linux-only. Windows execution and network/multi-host coordination are outside the current guarantee. HawDB remains disposable cache; old lock migration and mixed-version coordination are not provided.
+## 范围
 
-## Entry Points
+唯一的 npm 发布产物内含目标平台原生引擎，在一台 Ubuntu 24.04 runner 上构建、类型检查、打包，并从该 tgz 安装。四个 Ubuntu 测试分片对打包产物运行完整测试，Apple Silicon macOS 14 与 15 验证锁、恢复与隔离安装。所有分片与平台通过后才发布。
+
+安装时由 npm 选择目标平台的可选依赖。运行时协调在本地 Linux 与 macOS 工作树上使用 Node 文件 API，不依赖 flock 或磁盘检查工具。依赖为 Node.js 24.15+、Git 与 Repository 工具使用的 ripgrep。Nix 只支持 Linux。
+
+不保证 Windows 执行与网络多机协调。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时运行。
+
+## 入口
 
 - [CLI](cli.md)
-- [Architecture](architecture.md)
-- [Lifecycle](lifecycle.md)
+- [架构](architecture.md)
+- [生命周期](lifecycle.md)
 
-The package contains linux-x64-glibc and darwin-arm64 HawDB N-API engines from the same pinned source and Cargo lock. macOS deployment target is 14.0. Native target jobs precede the one package build; missing or inconsistent ABI, source identity, upstream revision, or digest blocks release. Consumer installation uses --ignore-scripts and requires neither Rust nor a HawDB service. Host-only Nix builds are local validation artifacts.
+包内含同一固定源码与 Cargo lock 构建的 linux-x64-glibc 与 darwin-arm64 HawDB N-API 引擎，macOS 部署目标为 14.0。原生目标任务先于唯一的打包任务；ABI、源码身份、上游 revision 或摘要缺失或不一致都会阻止发布。
+
+消费者以 `--ignore-scripts` 安装，不需要 Rust 或 HawDB 服务。仅在本机构建的 Nix 产物只用于本地验证。

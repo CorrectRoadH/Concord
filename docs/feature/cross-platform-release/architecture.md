@@ -1,27 +1,31 @@
-# Cross-platform tagged releases
+# 跨平台标签发布
 
-## Entity Ownership
+## 实体所有权
 
-The source tag and package metadata are owned by CorrectRoadH/Concord. Its GitHub Release owns the tgz. CorrectRoadH/homebrew-tap owns Formula, Nix expressions and the recipe tag. Runtime coordination follows [portable publication](../../design/portable-publication/README.md): one Node file lease for short snapshots and commits. HawDB remains disposable cache. Version 0.6.0 provides no old lock migration or mixed-version coordination.
+源码标签与包元数据由 CorrectRoadH/Concord 拥有，其 GitHub Release 拥有 tgz。CorrectRoadH/homebrew-tap 拥有 Formula、Nix 表达式与 recipe 标签。
 
-## Data Flow
+运行时协调遵循[可移植发布协调](../../design/portable-publication/README.md)：短快照与提交使用同一 Node 文件租约。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时协调。
 
-The tag workflow derives package metadata from the validated tag in CI, runs checks, packs once, installs that artifact on the supported matrix, tests the same packed build on Apple Silicon macOS 14/15, then publishes the source Release. The tap periodically or manually discovers a newer public release, verifies tag/package/asset identity, computes hashes, prepares Formula/Nix, validates the candidate checkout, and only then commits and tags the recipe.
+## 数据流
 
-## Invariants
+标签工作流在 CI 中从校验后的标签派生包元数据，运行检查并只打包一次，在支持的矩阵上安装该产物，在 Apple Silicon macOS 14 与 15 上测试同一份打包产物，然后发布源码 Release。
 
-- Ordinary runtime does not probe filesystem names or invoke external lock/disk helpers; supported coordination is local to one host and PID namespace.
-- Darwin preserves exact component spelling; aliases cannot create a second owner identity.
-- Only ESRCH proves an owned POSIX process group is gone. Cleanup uncertainty cannot produce green evidence.
-- Release jobs install the exact candidate tgz; tap tests resolve the candidate recipe, not an older remote tap.
-- Versions never move backward and an existing identity cannot be overwritten with different bytes.
+tap 定期或手动发现更新的公开发布，核验标签、包与资产身份，计算哈希，准备 Formula 与 Nix，验证候选 checkout，之后才提交并打 recipe 标签。
 
-## Errors
+## 不变量
 
-Unsupported hosts, unavailable filesystem primitives, unsafe aliases and cleanup uncertainty remain named runtime failures. Source publication failures belong to the source workflow; Formula/Nix failures belong to the tap sync. Neither failure is converted into a successful release claim.
+- 普通运行时不探测文件系统名称，不调用外部锁或磁盘工具；支持的协调限于同一主机与 PID 命名空间。
+- Darwin 保留路径段的精确拼写，别名不能产生第二个 owner 身份。
+- 只有 ESRCH 证明所拥有的 POSIX 进程组已结束。清理不确定时不能产生 green 证据。
+- 发布任务安装精确的候选 tgz；tap 测试使用候选 recipe，不使用更早的远端 tap。
+- 版本不回退，已有身份不能被不同字节覆盖。
 
-## Identity and Reuse
+## 错误
 
-Version, source tag commit, package metadata, tgz SHA-256 and recipe commit form the release mapping. A rerun may continue an interrupted stage only when those identities match exactly.
+不支持的主机、不可用的文件系统原语、不安全的别名与清理不确定都是具名运行时失败。源码发布失败归源码工作流，Formula 与 Nix 失败归 tap 同步。任何失败都不转换为发布成功的声明。
 
-Native engines are built on their target systems before packaging. The packaging job cleans dist before collecting the complete verified native set, then packs once. Later validation extracts that exact artifact without rebuilding or deleting another target. Portable checks must assert an actual HawDB cache miss followed by hit; source fallback alone is insufficient.
+## 身份与复用
+
+版本、源码标签 commit、包元数据、tgz SHA-256 与 recipe commit 构成发布映射。只有这些身份完全一致时，重跑才能继续中断的阶段。
+
+原生引擎在各自目标系统上先于打包构建。打包任务先清理 dist，再收集完整且经核验的原生产物集合，只打包一次。后续验证解压该产物，不重新构建，也不删除其它目标。可移植检查必须断言真实的 HawDB 缓存未命中后命中，只回源不算通过。

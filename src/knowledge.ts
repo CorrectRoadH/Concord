@@ -22,12 +22,31 @@ export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
   return inRepositorySnapshot(repo, () => ({ operation: `${kind}-index`, documents: ownerRecords(repo, kind).map(summary) }));
 }
 
+function queryTerms(query: string): readonly string[] {
+  const terms = query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean);
+  if (terms.length === 0) throw new ConcordError('InvalidInput', 'recall/search query must be non-empty');
+  return terms;
+}
+
+function matchingRecords(records: readonly DocumentRecord[], terms: readonly string[]): readonly DocumentRecord[] {
+  return records.filter(record => {
+    const text = `${record.metadata.title}\n${record.body}`.toLocaleLowerCase();
+    return terms.every(term => text.includes(term));
+  });
+}
+
 export function knowledgeRecall(repo: Repository, kind: KnowledgeKind, query: string) {
   return inRepositorySnapshot(repo, () => {
-    const needle = query.trim().toLocaleLowerCase();
-    if (!needle) throw new ConcordError('InvalidInput', 'recall query must be non-empty');
-    const documents = ownerRecords(repo, kind).filter(record => `${record.metadata.title}\n${record.body}`.toLocaleLowerCase().includes(needle));
+    const terms = queryTerms(query);
+    const documents = matchingRecords(ownerRecords(repo, kind), terms);
     return { operation: `${kind}-recall`, query, documents: documents.map(record => ({ ...summary(record), body: record.body })) };
+  });
+}
+
+export function knowledgeSearch(repo: Repository, query: string) {
+  return inRepositorySnapshot(repo, () => {
+    const terms = queryTerms(query);
+    return { operation: 'memory-search', query, memories: matchingRecords(ownerRecords(repo, 'memory'), terms) };
   });
 }
 

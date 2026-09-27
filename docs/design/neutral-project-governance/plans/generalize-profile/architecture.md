@@ -2,7 +2,7 @@
 
 ## 所有权
 
-Concord 拥有 canonical 契约、声明注释/helper 映射、稳定身份派生、trace、回归关系与历史、Memory 生命周期、证据 schema、证据要求和最终 fixed 判定。CLI 与 Web 共用权威投影；入口和存储适配可以不同，生命周期及证据不变量只能有一个解释。
+Concord 拥有 canonical 契约、声明注释与测试支持文件映射、稳定身份派生、trace、回归关系与历史、Memory 生命周期、证据 schema、证据要求和最终 fixed 判定。CLI 与 Web 共用权威投影；入口和存储适配可以不同，生命周期及证据不变量只能有一个解释。
 
 消费者拥有 native collection、执行副本、候选产品构建安装、原生 runner 结果观察与进程 Scope。NiceEval 的 Preview、下游链接、示例同步、仓库 setup、Mint 文档站、产品 reference/diff/generators、具体术语和 work 检查、PR 编辑格式移回 NiceEval。Concord 的本地 `review render` 保留契约、测试、Memory 和证据的审阅能力。
 
@@ -23,11 +23,11 @@ Concord 拥有 canonical 契约、声明注释/helper 映射、稳定身份派�
 
 host 只声明中立 inventory、red/takeover 读取等必要能力，不携带产品 QUERY_PROTOCOL 或复制消费者的 runner 类型图。可分别提供能力；Concord 逐能力校验，不以缺少其它能力拒绝静态接入。
 
-本地作者维护的 adapter 是可信执行代码，Concord 对输入严格解码并校验事实；不接受一个裸 passed/verified 布尔值替代证据。adapter 负责原生唯一绑定、真实副本、执行观察及取消清理；Concord 拥有最终核验与发布。完整性摘要不声称防御恶意本地作者。
+本地作者维护的 adapter 是可信执行代码，Concord 对输入严格解码并校验事实；不接受单独的 passed/verified 布尔值替代证据。adapter 负责原生唯一绑定、真实副本、执行观察及取消清理；Concord 拥有最终核验与发布。完整性摘要不声称防御恶意本地作者。
 
 ## 证据要求
 
-项目要求是下限。Problem 在创建、activate、reopen 或离线迁移时持久化其当前 epoch 的最低要求；历史 repository resolution 及已采用的高要求不能因删除配置消失。本轮不提供降级入口。CLI、Web、action 和 repo 在 fixed 写入前使用同一政策检查，command 证据不能关闭要求 native-reliability 的 Problem。
+项目要求是下限。Problem 在创建、activate、reopen 或离线迁移时持久化其当前 epoch 的最低要求；历史 repository resolution 及已采用的高要求不能因删除配置消失。不提供降级入口。CLI、Web、action 和 repo 在 fixed 写入前使用同一政策检查，command 证据不能关闭要求 native-reliability 的 Problem。
 
 政策版本、配置原文摘要、adapter 实现身份进入新证据的当前身份绑定，并参加发布前像检查。旧证据不补字段或重签，只可作为历史原件；旧 repository resolution、epoch、已使用 invocation 的记录保留，不能用于新 fixed。
 

@@ -9,9 +9,9 @@
 | Limit | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
 | [L1](../../LIMITS.md#l1-不强迫技术栈或纯文档目标) | satisfied | 使用中立协议和声明式 suite，产品执行由消费者 CLI 组合，不要求 Concord 开发栈。 | 原候选正文明确不依赖产品包名、Nx 或产品协议。 |
-| [L2](../../LIMITS.md#l2-保留编辑并禁止外部副作用) | pending | 架构明确保留 Web 编辑，并限定真实验收无付费、无远端副作用；本次迁移不复验这些运行时/现场结果。 | [有限真实验收](architecture.md#有限真实验收)记录设计要求；这是设计论证，不是执行证明。 |
+| [L2](../../LIMITS.md#l2-保留编辑并禁止外部副作用) | satisfied | 保留 Web 未提交编辑；验收只读，不调用付费模型或远端写入。 | [有限真实验收](architecture.md#有限真实验收)规定验收边界；实现仍须另行验证。 |
 | [L3](../../LIMITS.md#l3-证据类型与旧原件不可降级) | satisfied | 原生证据 validator 与 fixed 门槛由 Concord 权威实现，不把证据判定搬回消费者。 | 原候选正文明确证据判定边界。 |
-| [L4](../../LIMITS.md#l4-身份绑定与-redgreen-候选规则) | satisfied | 架构绑定 helper、policy、配置和 adapter 身份；red 可使用缺陷候选，green/reliability 必须使用同一修复候选。 | [证据要求](architecture.md#证据要求)明确这些规则；这是设计论证，不是执行证明。 |
+| [L4](../../LIMITS.md#l4-身份绑定与-redgreen-候选规则) | satisfied | 架构绑定测试支持文件、policy、配置和 adapter 身份；red 可使用缺陷候选，green/reliability 必须使用同一修复候选。 | [证据要求](architecture.md#证据要求)明确这些规则；这是设计论证，不是执行证明。 |
 | [L5](../../LIMITS.md#l5-fixed-门槛与迁移保护统一) | satisfied | 所有 fixed 入口共享最低要求；迁移在停写窗口持有旧、新 exclusive flock，校验 journal 和完整前像并保留可恢复现场。 | [离线切换](architecture.md#离线切换)明确共同门槛、锁、journal 和前像机制；这是设计论证，不是执行证明。 |
 
 ## Goals

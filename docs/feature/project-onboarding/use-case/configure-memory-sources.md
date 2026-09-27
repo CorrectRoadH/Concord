@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/project-onboarding/README.md
 ---
 
+
 # 配置和使用多个 Memory 来源
 
 ## 用户目标
@@ -15,7 +16,7 @@ feature: docs/feature/project-onboarding/README.md
 
 ## 完整路径
 
-1. 首版默认提供项目本地文件来源；provider 只有本地文件时不展示虚假多选。
+1. 默认提供项目本地文件来源；provider 只有本地文件时不展示虚假多选。
 2. 添加或调整具体来源，明确名称、位置和读写能力。
 3. 查询能辨认来源；新增与生命周期写入有明确目标。
 4. 遇到重复身份、不可用来源、只读写入或非法路径时得到可解释结果。

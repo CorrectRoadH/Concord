@@ -1,27 +1,29 @@
-# Cross-platform tagged releases
+# 跨平台标签发布
 
-## Owners
+## Owner
 
-Concord owns source validation, package bytes and source Release. The tap owns package-manager metadata and installation verification. Short runtime scopes own publication file leases; runner scopes separately own detached POSIX process groups and persistent cleanup state.
+Concord 拥有源码校验、包字节与源码 Release，tap 拥有包管理器元数据与安装验证。短运行时作用域拥有发布文件租约；runner 作用域另行拥有分离的 POSIX 进程组与持久清理状态。
 
-## Create
+## 创建
 
-Validate the source tag, derive the release version, update package metadata in the CI checkout, build one tgz, then hand its immutable artifact identity to platform jobs. The tap accepts only the fixed public repository, canonical tag and unique matching asset.
+校验源码标签，派生发布版本，在 CI checkout 中更新包元数据，构建一个 tgz，再把其不可变产物身份交给平台任务。tap 只接受固定的公开仓库、规范标签与唯一匹配的资产。
 
-## Run
+## 运行
 
-One Ubuntu 24.04 job builds and typechecks, creates the single npm tgz containing both target-native engines, verifies its digest, and installs that exact asset in an isolated Git consumer for `init` and `check`. Four Ubuntu shards execute the complete test suite from this packed build, in parallel with macOS 14/15 verification. Publication requires every shard and platform to succeed. npm owns target-specific optional dependency selection at installation. Homebrew supplies the runtime and `ripgrep`; no external lock helper is required. After source publication, tap sync prepares and validates Formula/Nix before updating its branch and recipe tag.
+一个 Ubuntu 24.04 任务构建并类型检查，生成含两个目标原生引擎的唯一 npm tgz，核验摘要，并在隔离 Git 消费者中安装该资产执行 `init` 与 `check`。四个 Ubuntu 分片从该打包产物运行完整测试，与 macOS 14 和 15 的验证并行。
 
-## Reuse
+所有分片与平台成功后才发布。安装时由 npm 选择目标平台的可选依赖。Homebrew 提供运行时与 `ripgrep`，不需要外部锁工具。源码发布后，tap 同步先准备并验证 Formula 与 Nix，再更新分支与 recipe 标签。
 
-Successful immutable artifacts may be reused by retry jobs. A changed commit, version, asset digest or generated dependency hash invalidates reuse.
+## 复用
 
-Cargo caches are scoped by runner image, native target, deployment target, Rust toolchain, lockfile and native build sources. Default-branch checks seed both platforms. A cache hit still runs the locked build and native recovery tests; cached compilation is not test evidence. Ordinary Check runs on branches and pull requests; release tags use the complete Release validation graph.
+重试任务可以复用成功的不可变产物。commit、版本、资产摘要或生成的依赖哈希变化时不能复用。
 
-## Cleanup
+Cargo 缓存按 runner 镜像、原生目标、部署目标、Rust 工具链、lockfile 与原生构建源码划分，默认分支的检查为两个平台预热缓存。命中缓存仍运行锁定构建与原生恢复测试，缓存编译不是测试证据。普通 Check 在分支与 pull request 上运行，发布标签使用完整的 Release 验证图。
 
-Repository leases retain existing finalizers. Owned processes receive TERM, a bounded grace period and KILL; failure to observe group disappearance is cleanup failure. CI temporary consumers and candidate taps are runner-local and removed after each job.
+## 清理
 
-## Failure Ownership
+Repository 租约保留既有的收尾逻辑。所拥有的进程依次收到 TERM、有界宽限期与 KILL；观察不到进程组消失即为清理失败。CI 临时消费者与候选 tap 属于 runner 本地资源，每个任务结束后删除。
 
-Runtime cleanup failure overrides command success for evidence. Source matrix failure prevents source Release. Tap validation failure leaves the source Release installable as a raw package but does not update Homebrew/Nix availability.
+## 失败归属
+
+运行时清理失败使命令成功不能作为证据。源码矩阵失败阻止源码 Release。tap 验证失败时源码 Release 仍可作为原始包安装，但 Homebrew 与 Nix 不更新。

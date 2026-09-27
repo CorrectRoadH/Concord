@@ -1,6 +1,6 @@
 # Retain descriptor-backed flock
 
-Keep the existing external helper and command-long coordination protocol. This avoids changing lock mechanics but does not meet the user requirement to remove system helper dependencies.
+Keep the external `flock` program and command-long coordination protocol. This preserves lock mechanics but does not meet the requirement to remove system program dependencies.
 
 ## Goals
 

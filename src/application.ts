@@ -52,6 +52,7 @@ import { buildTrace, renderReview, requireValidTrace, traceShow } from './trace.
 import { ViewActionSchema, type ViewAction, type ViewFile, type WorkspaceSnapshot } from './view-contract.js';
 import { showWriting, setWriting, writingIndex } from './writing-management.js';
 import { checkWriting } from './writing.js';
+import { checkProject } from './project-check.js';
 import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
 
 const sync = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> => Effect.try({
@@ -367,8 +368,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
       return { ...annotations, codeCache: code.cache };
     }
     case 'check': {
-      const trace = buildTrace(repo);
-      return { operation: 'check', ok: trace.complete, complete: trace.complete, findings: trace.findings, advisories: trace.advisories, documents: trace.documents.length, cases: trace.annotations.cases.length, codeDeclarations: trace.codeDeclarations.length, memoryEvidence: trace.memories, cache: trace.annotations.cache, codeCache: trace.codeCache };
+      return checkProject(repo);
     }
     case 'trace.check': {
       const trace = buildTrace(repo);

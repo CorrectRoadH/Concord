@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/project-onboarding/README.md
 ---
 
+
 # 渐进选择并初始化项目
 
 ## 用户目标
@@ -18,7 +19,7 @@ feature: docs/feature/project-onboarding/README.md
 1. 运行 init，组合选择 Library、CLI 等项目特点，或保留通用默认值。
 2. 创建必需的项目宪法；没有已采用原则时保留明确 draft，后续由作者显式采用为 active。独立选择是否生成 DESIGN.md，调整后续文档默认页面。
 3. 确认测试根、源码根和 runner；无测试项目允许空测试根。
-4. 配置 Memory 来源，首版仅选择本地文件 provider。
+4. 配置 Memory 来源，provider 为本地文件。
 5. 预览配置与完整文件变更后完成；非交互输入能表达相同选择。
 6. 在根 AGENTS.md 读取 Concord 托管指引，通过 `concord --skill` 获取当前安装版本的任务路由和主题说明。
 7. 运行 doctor，查看真实配置与待完善项。

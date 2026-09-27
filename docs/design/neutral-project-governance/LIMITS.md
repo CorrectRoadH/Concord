@@ -14,7 +14,7 @@
 
 ## L4: 身份绑定与 red/green 候选规则
 
-源码/helper、契约、policy、配置和 adapter 身份必须绑定。red 允许使用不同的缺陷候选，green/reliability 必须使用同一修复候选。来源：原设计约束。判定依据是候选是否表达这些身份与候选选择规则。
+源码与测试支持文件、契约、policy、配置和 adapter 身份必须绑定。red 允许使用不同的缺陷候选，green/reliability 必须使用同一修复候选。来源：原设计约束。判定依据是候选是否表达这些身份与候选选择规则。
 
 ## L5: fixed 门槛与迁移保护统一
 

@@ -10,7 +10,7 @@ Selected: [native-embedded](plans/native-embedded/README.md)
 
 ## Rejected Options
 
-keep-sqlite 保留当前安装复杂度，但继续维护两种数据缓存，不满足 G1。使用 HawDB CLI 或 helper 作为运行时控制面不符合上游嵌入式契约，因此不作为采用方案。
+keep-sqlite 保留当前安装复杂度，但继续维护两种数据缓存，不满足 G1。使用 HawDB CLI 或外部进程作为运行时控制面不符合上游嵌入式契约，因此不作为采用方案。
 
 ## Residual Risks
 

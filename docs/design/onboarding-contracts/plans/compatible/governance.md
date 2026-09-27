@@ -4,7 +4,7 @@
 
 ## 宪法单一格式
 
-docs/constitution.md 是 Markdown 文件，使用严格 YAML frontmatter：format 为 concord.constitution/v1，status 为 draft 或 active，version 为三段非负整数版本字符串，ratifiedAt 为 ISO 日期或 null，amendedAt 为 ISO 日期，amendments 为追加记录数组。记录含 version、date、reason、sources（仓库相对引用数组）和 impact（非空作者说明）。这些字段仅在 frontmatter 存储，不在正文维护第二份。
+docs/constitution.md 是 Markdown 文件，使用严格 YAML frontmatter。format 为 concord.constitution/v1，status 为 draft 或 active，version 为三段非负整数版本字符串。ratifiedAt 为 ISO 日期或 null，amendedAt 为 ISO 日期，amendments 为追加记录数组。记录含 version、date、reason、sources（仓库相对引用数组）和 impact（非空作者说明）。这些字段仅在 frontmatter 存储，不在正文维护第二份。
 
 默认初始化为 draft、0.1.0、ratifiedAt:null、amendments:[]，正文明确尚未采用项目原则。提供正文不会自动 active；显式采用必须提供真实条款、理由与影响，首次采用设置 ratifiedAt，后续保持。修订由具名操作整文件 CAS，保持历史前缀并更新 amendedAt；普通正文编辑不能悄悄改状态或历史。结构合法不等于治理通过。
 
@@ -26,6 +26,6 @@ init 的 projectId、配置路径和 Memory 范围取自最终计划配置快照
 4. 配置仅改注释使新 fixed 证据失效；额外来源中的非 owner 文件仍影响 candidate。
 5. 非 TTY 默认 draft；显式采用 active；伪 anchor 不被认领；重复 anchor 和删除引用有诊断；宪法缺失不阻碍 recover。
 
-## 挑战记录
+## 验收边界
 
-2026-09-14：Herdr concord-init-grill-0914，GPT-6 Astra，只读独立上下文。六项首轮问答后给 CONDITIONAL，条件为上述格式/状态、锚点解析、恢复授权和组合验收定义。父 agent 已将前三项写成明确契约、第四项写成验收定义并逐项核对。该记录不表示实现通过。
+格式与状态、锚点解析、恢复授权和组合验收分别按本页约束检查。设计约束不能替代实现验收。

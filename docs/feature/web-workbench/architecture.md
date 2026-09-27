@@ -4,7 +4,9 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node �
 
 结构化术语由 `docs/**/concepts.json` 拥有，目录决定作用域；文档术语页通过 concepts 工具读取当前文档目录的有效定义、直接导入与来源诊断，不解析 Markdown 表格或自行实现第二套合成规则。`docs/concepts.md` 保留为可编辑的解释页面。全项目汇总与写作页共享同一后端 JSON 来源，不建立术语注册表。
 
-`docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering、Issue 或 Memory 来源的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 提供专用正文编辑入口，草稿采用与正式修订分别调用 constitution adopt 与 amend；普通 document.set 仍不能覆写宪法元数据与历史。阅读不是合规证据。`docs/README.md`、`docs/architecture.md`、`docs/concepts.md`、`docs/concord.md` 和 `docs/_template/` 下无 frontmatter 的参考模板沿用支持页面的摘要保护写入。其余未授权路径只读。单文件读取仍不枚举全仓库。
+`docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering、Issue 或 Memory 来源的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 提供专用正文编辑入口，草稿采用与正式修订分别调用 constitution adopt 与 amend；普通 document.set 仍不能覆写宪法元数据与历史。阅读不是合规证据。
+
+`docs/README.md`、`docs/architecture.md`、`docs/concepts.md`、`docs/concord.md` 和 `docs/_template/` 下无 frontmatter 的参考模板沿用支持页面的摘要保护写入。其余未授权路径只读。单文件读取仍不枚举全仓库。
 
 只读 Markdown 按 [MDXEditor 官方建议](https://mdxeditor.dev/editor/docs/overview) 使用独立阅读渲染器。复用 react-markdown，通过 remark-frontmatter 识别元数据；rehype-raw 后接 rehype-sanitize，不使用未经净化的 HTML。保留净化器的 DOM clobbering 前缀，由阅读导航映射源锚点，不能为保留锚点关闭净化。正文和原文／元数据详情来自同一读取结果；预览不产生写入或自动归一化。可编辑正文继续使用 MDXEditor 及原文回退，错误不得清空草稿。
 
@@ -20,7 +22,11 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node �
 
 文档与源码使用一套当前恢复日志，按写入范围区分文档事务和源码事务，不维护历史格式兼容分支。源码事务冻结经过验证的配置范围与身份，仅替换既有 JS/TS 常规文件，不与配置修改混合。prepared 可回滚，committed 只核验完成后的内容；外部改动导致具名冲突，不删除恢复现场。
 
-Web 操作者拥有与本地 CLI 相同的仓库代码执行能力。默认监听 0.0.0.0:4317，不使用访问密钥或身份认证；任何能连接端口的人都可以读取和修改仓库、运行配置的测试命令。Host 接受合法的域名、IPv4 与 IPv6 authority；请求携带 Origin 时必须为 HTTP/HTTPS 且与 Host 匹配；不携带 Origin 的请求仍可访问，默认端口按 Origin 协议归一化。拒绝重复 Host、非法 Origin 和能改变 authority 的请求路径。Host/Origin 校验不提供身份认证或 DNS rebinding 防护。浏览器直接加载工作区，加载失败显示错误并允许重试，刷新保留当前深链接。HTTP 面向可信网络；TLS 终止代理必须保留浏览器使用的外部 Host（含非默认端口），不自动信任代理转发头。Markdown 不执行嵌入脚本或 MDX。
+Web 操作者拥有与本地 CLI 相同的仓库代码执行能力。默认监听 0.0.0.0:4317，不使用访问密钥或身份认证；任何能连接端口的人都可以读取和修改仓库、运行配置的测试命令。
+
+Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时必须为 HTTP/HTTPS 且与 Host 匹配；不携带 Origin 的请求仍可访问，默认端口按 Origin 协议归一化。拒绝重复 Host、非法 Origin 和能改变 authority 的请求路径。Host/Origin 校验不提供身份认证或 DNS rebinding 防护。
+
+浏览器直接加载工作区，加载失败显示错误并允许重试，刷新保留当前深链接。HTTP 面向可信网络；TLS 终止代理必须保留浏览器使用的外部 Host（含非默认端口），不自动信任代理转发头。Markdown 不执行嵌入脚本或 MDX。
 
 ## 项目测试只读投影
 

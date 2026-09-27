@@ -7,28 +7,29 @@ kind: use-case
 feature: docs/feature/cross-platform-release/README.md
 ---
 
-# Release tested macOS and Linux packages from a tag
+# 从标签发布经过测试的 macOS 与 Linux 包
 
-## User Goal
+## 用户目标
 
-A maintainer pushes one version tag and receives a tested Concord package plus automatically synchronized Homebrew and Linux Nix recipes without rebuilding different bytes per platform.
+维护者推送一个版本标签，得到经过测试的 Concord 包，以及自动同步的 Homebrew 与 Linux Nix recipe，各平台使用同一份字节。
 
-## Complete Path
+## 完整路径
 
-1. Finish Concord-driven contract, implementation and test work on a pushed commit; source `package.json` and shrinkwrap root versions agree.
-2. Create and push `v<version>`.
-3. Target jobs first build the pinned linux-x64-glibc and darwin-arm64 engines. The package job derives the release version from the tag and updates package metadata in its runner. One Ubuntu 24.04 runner builds and typechecks, packs once, verifies the digest, and installs that exact npm artifact containing both target-native engines with isolated `init`/`check` and genuine HawDB miss/hit/clear/recall checks with Rust and HawDB helpers absent from PATH.
-4. Run all tests in four Ubuntu shards against the packed build, alongside the same packed build and isolated CLI installation checks on Apple Silicon macOS 14 and 15. Together the build, typecheck and test shards perform the checks exposed locally by `pnpm check`. Only after every required job passes, publish the source GitHub Release and its tgz.
-5. The public tap discovers the release, verifies version/tag/asset/hash, prepares Formula and Linux Nix metadata, validates candidate installs, then commits and tags the recipe.
-6. Users install with `brew install CorrectRoadH/tap/concord` or the documented Nix flake and observe the tagged version.
+1. 在已推送的 commit 上完成 Concord 驱动的契约、实现与测试工作；源码 `package.json` 与 shrinkwrap 根版本一致。
+2. 创建并推送 `v<version>`。
+3. 目标任务先构建固定版本的 linux-x64-glibc 与 darwin-arm64 引擎。打包任务从标签派生发布版本，并在其 runner 中更新包元数据。
+4. 一台 Ubuntu 24.04 runner 构建、类型检查、只打包一次并核验摘要，然后安装含两个目标原生引擎的 npm 产物。安装后在隔离消费者中执行 `init` 与 `check`，并在 PATH 中没有 Rust 与 HawDB 工具的情况下验证真实的 HawDB 未命中、命中、清理与 recall。
+5. 四个 Ubuntu 分片对打包产物运行全部测试，同时在 Apple Silicon macOS 14 与 15 上检查同一打包产物与隔离安装。构建、类型检查与测试分片合起来执行本地 `pnpm check` 覆盖的检查。全部必需任务通过后，才发布源码 GitHub Release 与 tgz。
+6. 公开 tap 发现该发布，核验版本、标签、资产与哈希，准备 Formula 与 Linux Nix 元数据，验证候选安装，然后提交并打 recipe 标签。
+7. 用户通过 `brew install CorrectRoadH/tap/concord` 或文档中的 Nix flake 安装，看到对应标签的版本。
 
-## Result
+## 结果
 
-Successful channels resolve to identical package bytes and `concord --version`. Matrix, identity, digest, runtime cleanup, Formula or Nix failures remain visible and stop their publication stage. The workflow does not claim network/multi-host coordination or Windows execution support.
+各渠道得到相同的包字节与 `concord --version`。矩阵、身份、摘要、运行时清理、Formula 或 Nix 失败都可见，并停止所在的发布阶段。该工作流不声称支持网络多机协调或 Windows 执行。
 
-## Contract Sources
+## 契约来源
 
 - [CLI](../cli.md)
-- [Architecture](../architecture.md)
-- [Lifecycle](../lifecycle.md)
-- [Portable runtime and release coordination design](../../../design/portable-release-coordination/README.md)
+- [架构](../architecture.md)
+- [生命周期](../lifecycle.md)
+- [可移植发布协调设计](../../../design/portable-publication/README.md)

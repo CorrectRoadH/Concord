@@ -5,6 +5,7 @@
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { checkWriting } from './writing.js';
+import { checkProject } from './project-check.js';
 import { showWriting, setWriting, writingIndex } from './writing-management.js';
 import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
 import { WritingPolicySchema } from './writing-schema.js';
@@ -13,12 +14,12 @@ import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, Option, Schema } from 'effect';
-import { Argument, Command, Flag, Prompt } from 'effect/unstable/cli';
+import { Argument, CliError, Command, Flag, Prompt } from 'effect/unstable/cli';
 import { cacheStatus, clearCache, scanAnnotations } from './annotations.js';
 import { activateMemory, addPage, showPage, setPage, adoptRoadmap, closeIssue, createDocument, decideDesign, findDocument, linkFeedbackFeature, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
 import { checkDesign, formatDesign } from './documents.js';
 import { listFeedback, syncFeedback } from './feedback.js';
-import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from './knowledge.js';
+import { editKnowledge, knowledgeIndex, knowledgeRecall, knowledgeSearch, removeIssue } from './knowledge.js';
 import { FeedbackConnectionSchema } from './feedback-schema.js';
 import { setConfig, showConfig } from './editing.js';
 import { readEvidence, runCase, verifyFixedEvidence } from './evidence.js';
@@ -173,7 +174,7 @@ const author = Command.make('author').pipe(Command.withDescription('Edit author 
 const memoryAdd = Command.make('add', { id, title: text('title'), kind: Flag.choice('kind', ['problem','decision','insight','note']), body: optional('body'), source: optional('source') }, args => withRepo((repo,s) => sync(() => createDocument(repo, 'memory', { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, memoryKind: args.kind, memorySource: Option.getOrUndefined(args.source), dryRun: s.dryRun }))));
 const memoryList = Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'memory-list', memories: loadDocuments(repo, ['memory']).map(d => ({path:d.path,...d.metadata})) }))));
 const memoryShow = Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'memory', cached(settings.dryRun)))));
-const memorySearch = Command.make('search', { query: Argument.string('query') }, args => withReadRepo(repo => sync(() => ({ operation: 'memory-search', memories: loadDocuments(repo, ['memory']).filter(d => `${d.metadata.title}\n${d.body}`.toLocaleLowerCase().includes(args.query.toLocaleLowerCase())) }))));
+const memorySearch = Command.make('search', { query: Argument.string('query') }, args => withReadRepo(repo => sync(() => knowledgeSearch(repo, args.query))));
 const memoryResolve = Command.make('resolve', { id, kind: Flag.choice('kind', ['fixed','not-a-bug','wont-fix','external-fixed']), reason: text('reason'), red: optional('red'), green: optional('green') }, args => withRepo((repo,s) => sync(() => {
   const trace = buildTrace(repo, 'off', { includeCode: false }); requireValidTrace(trace);
   const problem = findDocument(trace.documents, args.id, 'memory');
@@ -313,7 +314,7 @@ const concepts = Command.make('concepts').pipe(Command.withDescription('Discover
   Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showConcepts(repo, Option.getOrUndefined(args.path))), { readonly: true })),
   Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setConcepts(repo, jsonBody(args.body, ConceptCatalogSchema, 'concept catalog'), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a catalog with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
 ]));
-const check = Command.make('check',{},()=>withReadRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'check',ok:t.complete,complete:t.complete,findings:t.findings,advisories:t.advisories,documents:t.documents.length,cases:t.annotations.cases.length,codeDeclarations:t.codeDeclarations.length,memoryEvidence:t.memories,cache:t.annotations.cache,codeCache:t.codeCache};}))).pipe(Command.withDescription('Validate current source ownership and references; do not execute tests.'));
+const check = Command.make('check',{},()=>withReadRepo((repo,s)=>sync(()=>{const result=checkProject(repo,cached(s.dryRun));if(!result.ok)process.exitCode=1;return result;}))).pipe(Command.withDescription('Validate source ownership, references and writing policy; do not execute tests.'));
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
   Command.make('show',{ref:Argument.string('reference')},args=>withReadRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))))),
   Command.make('gaps',{},()=>withReadRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))))).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),
@@ -360,8 +361,10 @@ const view = Command.make('view', {
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view does not accept --dry-run'));
   return yield* serveViewServer({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) }, settings.json));
 })).pipe(Command.withDescription('Serve the local Web workbench.'));
-root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,docs,writing,concepts,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'))).version}),Effect.catch(cause=>Effect.sync(()=>{
-  const error=failure(cause);
+root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,docs,writing,concepts,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
+  const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
+    ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))
+    : failure(cause);
   const result = {ok:false,error:error.code,message:error.message,...(error.details===undefined?{}:{details:error.details})};
   process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;
 })),Effect.provide(NodeServices.layer),Effect.provide(OwnedProcessLive),NodeRuntime.runMain);

@@ -37,7 +37,7 @@ id 在本文件内唯一，完整身份为 canonical catalog path#id。定义至
 
 全局和祖先目录的定义自动适用；imports 可显式引用其它目录的直接定义，例如 docs/feature/payments/concepts.json#payment。引用不递归导入另一文件的 imports，也不复制定义。移除或改名被引用的 ID 会被拒绝。不同兄弟目录的同名概念可以并存；有效范围相交的歧义携带双方来源，不静默覆盖。
 
-Markdown 适合解释概念关系、场景和例子。结构化定义只在 JSON 维护；旧 Markdown 表格不再作为运行时术语来源。
+Markdown 适合解释概念关系、场景和例子。结构化定义只在 JSON 维护，Markdown 不是运行时术语来源。
 
 ## 写作政策
 
@@ -55,7 +55,7 @@ Markdown 适合解释概念关系、场景和例子。结构化定义只在 JSON
 
 roots 可省略：全局默认为 docs，局部默认为所在目录。全局 roots 可显式选择仓库其它文档目录；局部 roots 不得越出所在目录。所有路径均为仓库相对路径，不自动按文件位置重新解释。
 
-默认 `concord docs check --json` 选择全部政策 roots，加上没有同目录政策的概念目录；因此局部 owner 可以启动被全局窄 roots 排除的目录扫描。没有政策也可以检查概念。没有任何相关来源时具名报错；明确选中的根没有文档时也不静默通过。
+默认 `concord docs check --json` 选择全部政策 roots，加上没有同目录政策的概念目录；因此局部 owner 可以启动被全局窄 roots 排除的目录扫描。没有政策也可以检查概念。没有任何相关来源时具名报错；明确选中的根没有文档时也不静默通过。`concord check` 的聚合门禁范围见 [Feature](README.md#聚合门禁)。
 
 选文件与应用规则是两个步骤。对已经选中的文件，全局和祖先政策共同生效；roots 不取消祖先约束，单条禁词的 roots/exempt/allowIn 只限制它自身。禁词累加，长度和概念使用选项采用最近目录的显式值：省略表示继承，数字阈值的 null 表示清除，布尔 false 表示关闭。
 
@@ -82,7 +82,7 @@ init 只在缺失时创建空的全局 concepts.json，并绑定真实的新配�
 
 普通检查遇到 v1 返回 WritingMigrationRequired，不自动解释旧概念表。先用 show 获取旧政策原文与 digest；作者审核概念定义、别名与弃用名，用 concepts.set 保存 JSON；最后用 writing.set 和旧政策 digest 显式替换为 v2。迁移中间阶段仍明确拒绝旧政策检查。
 
-catalog 编辑不依赖写作政策解析，因此现存 v1 不会阻断迁移。各无效来源可逐项修复，但已知引用不能被破坏。保留旧 Markdown 解释/历史时应明确其不再是术语定义来源。禁止从名称自动编造 definition，也不把全部 aliases 自动当成 deprecated。
+catalog 编辑不依赖写作政策解析，因此 v1 政策不会阻断迁移。各无效来源可逐项修复，但已知引用不能被破坏。迁移不从名称自动编造 definition，也不把全部 aliases 自动当成 deprecated。
 
 升级前若存在 v1 journal，先用匹配的旧 CLI 完成恢复；新运行时不暗中恢复旧事务或改写其证据。详细合成、修复及恢复条件见[采用方案](../../design/scoped-terminology/plans/directory-owned/README.md)。
 
@@ -106,12 +106,6 @@ concord docs check --rules docs/feature/payments/concord-writing.json --json
 
 init 在全局政策缺失时创建随包通用预设，并保留既有政策原文。初始化和恢复只允许精确的随包预设、全局路径及空前像；自定义政策继续通过 writing.set 保存。
 
-## 删除旧 SVG 检查配置
+## 检查的文件类型
 
-写作检查只扫描 Markdown/MDX；SVG 与 CSS 不参与文件计数、命中或输入摘要。仅含 SVG 的扫描根返回 WritingInputNotFound。普通 SVG 图片、图标及 Mermaid 展示不受影响。
-
-政策中的 svgTerms、svgStyle 已删除，包含任何取值（包括 false、null）都会被拒绝。先停止写入，用产生未完成事务的旧版本完成 recover，再切换版本。旧 init 预设或旧政策的 prepared/committed journal 不能由移除 SVG 检查后的程序恢复；如已升级，保留现场并用原版本恢复，不修改 journal 或摘要。
-
-运行 concord writing show --path <政策路径> --json，保留 source 与 digest。将 source 另存为 JSON，仅删除 svgTerms、svgStyle 两个键，审核其余字段未变；先运行 concord --dry-run writing set --path <政策路径> --body <JSON文件> --expected-digest <digest>，再去掉 --dry-run 保存。全局、局部政策分别处理；独立 --rules 文件由作者采用同样的字段清理。并发修改时重新读取，不绕过摘要保护。清理字段的事务仍能回滚到含旧字段的原始前像。
-
-Web 对这类旧政策展示原文、摘要和清理提示，不提供用默认预设覆盖的修复按钮。
+写作检查只扫描 Markdown 与 MDX，其它文件不参与文件计数、命中或输入摘要。只含其它文件的扫描根返回 WritingInputNotFound。政策 Schema 严格，未声明的字段被拒绝。

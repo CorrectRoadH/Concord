@@ -22,7 +22,7 @@ decision:
 
 # Portable publication coordination
 
-本页保留 2026-09-22 的发布协调裁决。当前共享读取以 [功能验收](../../feature/portable-coordination/use-case/coordinate-local-publications.md) 和 [总架构](../../architecture.md) 为准；缓存引擎以 HawDB 设计为准。历史 reason 与候选中的 SQLite、串行快照描述不重新定义当前运行时。
+本设计比较 Node 文件协调与外部 `flock`。共享读取的行为以 [功能验收](../../feature/portable-coordination/use-case/coordinate-local-publications.md) 和 [总架构](../../architecture.md) 为准；缓存边界见 HawDB 设计。
 
 ## Problem
 
@@ -42,4 +42,4 @@ publication owner 保护短快照与文件事务；journal 保存已准备的完
 - [Limits](LIMITS.md): constraints shared by every candidate.
 - [Cases](CASES.md): neutral scenarios for the comparison.
 - [Decision](DECISION.md): explanatory evidence.
-候选中的设计论证不替代构建、打包及真实进程验收。历史裁决保留原选择；后续行为通过明确的新契约替代。
+候选中的设计论证不替代构建、打包及真实进程验收。

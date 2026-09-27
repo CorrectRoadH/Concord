@@ -22,6 +22,7 @@ decision:
     - docs/feature/project-onboarding/README.md
 ---
 
+
 > 历史裁决：其中旧配置、journal 和收据的运行时兼容规则已被 [TS-only 裁决](../ts-only-runtime/README.md) 替代；以下保留原设计记录。
 
 # 初始化配置与项目治理契约
@@ -39,11 +40,11 @@ decision:
 
 ## 候选
 
-- compatible：保留既有 JSON 消费者，新 init 生成严格可解析的 TS 数据配置，不执行消费者代码；新增可选字段保留原有缺省语义。本地 Memory 来源限定消费者 worktree 内，明确单一写入目标与来源身份。通过显式接入补齐旧项目宪法。
+- compatible：保留既有 JSON 消费者，新 init 生成严格可解析的 TS 数据配置，不执行消费者代码；新增可选字段保留原有默认语义。本地 Memory 来源限定消费者 worktree 内，明确单一写入目标与来源身份。通过显式接入补齐旧项目宪法。
 - replacement：立即只接受可执行 TS 配置，迁移所有消费者，采用通用跨目录后端与统一来源身份。影响信任边界、历史引用与恢复，迁移和回滚成本更高。
 
 ## 裁决与验收
 
 采用 compatible。静态 TS 不支持任意运行时模块。多来源保留现有 memory/<id>.md canonical 引用及 red/green 证据边界。既有项目缺少宪法时明确待接入，不隐式覆盖，也不阻断 recovery。
 
-独立 Herdr design_grill 给出 CONDITIONAL，四项格式、锚点、恢复授权和组合验收条件已落实到 governance 后记录采用。集成 `pnpm check` 132 项通过，涵盖共享协调锁、迁移后的模型、配置恢复及宪法引用。
+格式与状态、锚点解析、恢复授权和组合验收的约束见 [governance](plans/compatible/governance.md)。

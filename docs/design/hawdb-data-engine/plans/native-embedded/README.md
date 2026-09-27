@@ -69,7 +69,11 @@ clear 先关闭本进程受管持久句柄，在独占 repository lease 下通�
 
 桥接单条输入最多 8 MiB，每次批量最多 1000 条且总输入最多 16 MiB。native 查询最多 20000 行、64 MiB payload；大于该预算的完整 namespace 读取须分批且仍受 namespace 总预算约束。持久目录最多 4096 个条目、256 MiB；超出时不继续打开和扩大，显式 clear 可在同一安全遍历预算内处理，否则具名拒绝。
 
-HawDB 的 max_wal_replay_entries=100000、max_wal_replay_bytes=128 MiB、max_wal_record_bytes=64 MiB、max_wal_batch_operations=50000；checkpoint encoded<=256 MiB、decoded<=512 MiB；segment cache=16 MiB、graph manifest=8 MiB、out-of-core delta<=16 MiB。严格恢复，不自动修复坏 WAL；不用上游 TiB 级默认解码额度。达到 4 MiB WAL 增量或累计 32 个写事务后执行公开 checkpoint，失败使缓存不可用并保留现场；只读不 checkpoint。内存表定期重建与持久 checkpoint 都是缓存维护，不改来源。
+HawDB 的 WAL 上限：max_wal_replay_entries=100000、max_wal_replay_bytes=128 MiB、max_wal_record_bytes=64 MiB、max_wal_batch_operations=50000。checkpoint 的 encoded 上限为 256 MiB，decoded 上限为 512 MiB。
+
+segment cache 为 16 MiB，graph manifest 为 8 MiB，out-of-core delta 不超过 16 MiB。严格恢复，不自动修复坏 WAL；不用上游 TiB 级默认解码额度。
+
+达到 4 MiB WAL 增量或累计 32 个写事务后执行公开 checkpoint，失败使缓存不可用并保留现场；只读不 checkpoint。内存表定期重建与持久 checkpoint 都是缓存维护，不改来源。
 
 同批重复 feedback identity 按输入顺序与本批已合并值继续比较；保留单调时间戳和同版本冲突语义，最后一个 putBatch 原子发布。
 
@@ -79,8 +83,8 @@ HawDB 的 max_wal_replay_entries=100000、max_wal_replay_bytes=128 MiB、max_wal
 
 ## Adoption conditions
 
-独立 Astra 挑战为 CONDITIONAL，区分以下定案条件与实现后验收：所有权 guard、明确打开模式、明确预算、窄原生例外和发行身份。定案条件分别由本页的 Open modes and ownership、Resource budgets、Release identity，以及修订后的 constitution c-001/c-005、AGENTS 和架构契约落实。
+所有权 guard、打开模式、资源预算、窄原生边界和发行身份分别由本页的 Open modes and ownership、Resource budgets、Release identity，以及宪法 C-001/C-005 和架构契约约束。
 
-所有权原型验证了同进程与跨进程互斥、损坏 manifest 的受锁清理、同一锁 inode 保留和空库重开。预算字段已核对固定 revision 的公开 DatabaseConfig，不采用 TiB 级默认值。生产路径守卫、崩溃恢复、实际缓存语义、真实请求延迟及打包消费者属于实现后验收，本设计不声称它们已经通过。
+同进程与跨进程互斥、损坏 manifest 的受锁清理、同一锁 inode 保留和空库重开都属于验收范围。预算字段须匹配固定 revision 的公开 DatabaseConfig，不采用 TiB 级默认值。生产路径守卫、崩溃恢复、缓存语义、请求延迟及打包消费者也须验收。
 
 clear 的进一步边界：目录不存在时无操作；只有完整预检为 owner-only 的目录才报告 empty，未知内容不归为空。删除并不原子化；中断或部分失败保留现场，后续显式 clear 可重新取 guard 继续，不自动调用数据库恢复。原型仅覆盖同进程双向互斥及跨进程 guard 阻止 HawDB，反方向和明确 busy 类别由生产测试补齐。

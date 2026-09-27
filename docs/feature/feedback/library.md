@@ -4,7 +4,7 @@
 
 适配器的 `fetchFeedback(connection, options)` 返回 Effect，结果包含绑定后的连接、规范化条目及读取时间。可注入 transport 以模拟 HTTP 边界；该接口不会赋予 provider 修改项目文档的权限，也不持有仓库写锁。
 
-连接 Schema 区分 API 与 GitHub gh：API 分支的 `transport` 缺省或为 `api`，必须包含 `credentialEnv`；gh 分支必须显式指定 `transport: gh`，并拒绝 `credentialEnv`。transport 不进入远端对象去重键，适配器返回值不能自行修改连接的读取方式或目标范围。
+连接 Schema 区分 API 与 GitHub gh：API 分支的 `transport` 省略或为 `api`，必须包含 `credentialEnv`；gh 分支必须显式指定 `transport: gh`，并拒绝 `credentialEnv`。transport 不进入远端对象去重键，适配器返回值不能自行修改连接的读取方式或目标范围。
 
 显式 action `feedback.check` 接受已保存的连接 ID，仅支持 gh 连接；返回 `connectionId`、`provider: github`、`transport: gh`、`target` 与 `checkedAt`。检测不返回密钥、原始命令输出或账号清单，不发布远端绑定或缓存。Web 先完成当前设置草稿保存，再调用检测；旧结果不能回写新配置。
 

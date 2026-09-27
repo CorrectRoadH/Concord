@@ -29,7 +29,7 @@ CLI 模式只生成固定的只读请求，不执行远端写入、安装、登�
 
 ## 接入与信任契约
 
-1. **模式和授权。**缺省或 `transport: 'api'` 继续要求 `credentialEnv`，由 Concord 拒绝 HTTP 重定向并限制网络响应读取；GitHub 的 `transport: 'gh'` 禁止 `credentialEnv`，将认证及 HTTP/TLS、内部重定向和网络缓冲委托给受信 gh。Concord 只保证固定初始只读请求与下面的输出、生命周期、身份和发布约束。两者不自动回退。工作台是受信操作入口：能访问并操作工作台的人可以触发服务器账号对配置范围的读取，选择 CLI 不构成浏览器用户身份认证。界面明确账号来自运行 Concord 的机器。
+1. **模式和授权。**省略 transport 或 `transport: 'api'` 继续要求 `credentialEnv`。Concord 拒绝 HTTP 重定向并限制网络响应读取。GitHub 的 `transport: 'gh'` 禁止 `credentialEnv`，将认证、HTTP/TLS、内部重定向和网络缓冲委托给受信 gh。Concord 只保证固定初始只读请求与下面的输出、生命周期、身份和发布约束。两者不自动回退。工作台是受信操作入口：能访问并操作工作台的人可以触发服务器账号对配置范围的读取。选择 CLI 不构成浏览器用户身份认证。界面明确账号来自运行 Concord 的机器。
 2. **可执行文件和配置。**从服务的受信启动环境解析 gh，排除空、相对、node_modules 及消费者仓库内的 PATH 条目；真实路径与 symlink 目标同样检查。整轮使用核验后的同一绝对可执行文件，无 shell、自动安装、下载 shim 或项目覆盖。独立临时 cwd 不位于仓库内；HOME、GH_CONFIG_DIR、XDG_CONFIG_HOME 仅来自启动环境，先解析绝对路径，不能随临时 cwd 改变含义。
 3. **环境允许列表。**认证优先级为 GH_TOKEN、GITHUB_TOKEN、已保存凭据；只保留必要的系统 keyring 会话变量。强制非交互、无颜色、关闭更新通知与 `GH_TELEMETRY=false`。不传 GH_FORCE_TTY、debug、pager、Git 定位、endpoint 覆盖或运行时注入变量。网络设置只允许启动环境的 HTTP_PROXY、HTTPS_PROXY、NO_PROXY 及小写形式，以及受支持 gh 使用的 SSL_CERT_FILE、SSL_CERT_DIR；不接受项目或浏览器提供的环境，任何值都不进入诊断。
 4. **预算和清理证明。**每轮创建 Effect Scope 拥有的进程服务；单次 stdout、stderr 和响应头合计最多 2 MiB，整轮 16 MiB、100 页、10,000 条。每次原始字节上限为单次与剩余额度的较小值；解码保留跨块 UTF-8。30 秒是读取截止时间，之后允许有界 TERM/grace/KILL 收尾。清理结果必须显式记录，包括取消路径；不能以活动计数归零代替清理成功。清理失败或未知禁止发布，并阻止继续启动 CLI 读取；不保留跨遍历的全部输出。

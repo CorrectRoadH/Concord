@@ -2,7 +2,9 @@
 
 This complete reference set is installed by concord init. Create commands use bundled templates, not editable configuration from this directory. These examples are not adopted contracts or test evidence.
 
-Feature, Roadmap, and Design candidates require README only. Select optional pages with --pages library,cli,architecture,lifecycle,use-case (or repeat --pages). Omitted pages use project defaults; --no-pages explicitly creates README only. Design always includes its decision wrapper. Engineering starts with goal, mechanism, usage, and acceptance in README; expand with page add when needed.
+Feature, Roadmap, and Design candidates require README only. Select optional pages with --pages library,cli,architecture,lifecycle,use-case (or repeat --pages). Omitted pages use project defaults; --no-pages explicitly creates README only. Design always includes its decision wrapper.
+
+Engineering starts with goal, mechanism, usage, and acceptance in README; expand with page add when needed.
 
 | Optional page | Use when |
 | --- | --- |
@@ -48,5 +50,6 @@ Feature, Roadmap, and Design candidates require README only. Select optional pag
 - [memory/problem.md](memory/problem.md)
 - [memory/decision.md](memory/decision.md)
 - [memory/insight.md](memory/insight.md)
+- [memory/note.md](memory/note.md)
 - [constitution.md](constitution.md)
 - [project-DESIGN.md](project-DESIGN.md)

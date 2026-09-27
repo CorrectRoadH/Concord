@@ -16,6 +16,7 @@ constitutionRefs:
   - docs/constitution.md#c-010
 ---
 
+
 # 统一项目治理与中立测试接入
 
 ## 目标
@@ -36,7 +37,7 @@ NiceEval 是实践来源与接入消费者。公开入口验收、原生测试�
 
 项目拥有测试框架、执行环境、运行通道、构建产物和部署方式。Concord 不把 host/provider、固定通道、特定产品包名或 Nx 布局当作通用治理字段。
 
-本功能面向软件项目，不以纯文档项目作为方案成立或能力拆分的理由。具体中立能力与消费者迁移边界由 [Design](../../design/neutral-project-governance/README.md) 在独立挑战后定案；本页不宣称尚未实现的验收已通过。
+本功能面向软件项目，不以纯文档项目作为方案成立或能力拆分的理由。具体中立能力与消费者迁移边界由 [Design](../../design/neutral-project-governance/README.md) 定案；契约声明不等于验收通过。
 
 ## 用户路径
 

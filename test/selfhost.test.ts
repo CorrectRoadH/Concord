@@ -41,9 +41,7 @@ test('current checkout configures a version-matched runner whose annotations sca
     cpSync(join(root, 'test'), join(consumer, 'test'), { recursive: true });
     cpSync(join(root, 'src'), join(consumer, 'src'), { recursive: true });
     cpSync(join(root, 'web'), join(consumer, 'web'), { recursive: true });
-    mkdirSync(join(consumer, 'docs'));
-    if (project.constitution !== undefined) cpSync(join(root, project.constitution.path), join(consumer, project.constitution.path));
-    cpSync(join(root, 'docs/feature'), join(consumer, 'docs/feature'), { recursive: true });
+    cpSync(join(root, 'docs'), join(consumer, 'docs'), { recursive: true });
     for (const sourceFile of ['tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']) {
       cpSync(join(root, sourceFile), join(consumer, sourceFile));
     }

@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
+
 # 从源码追踪实现归属
 
 ## 场景
@@ -15,7 +16,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 主流程
 
-1. 在 concord.config.ts 配置 sourceRoots，或新项目用 init --source-root src；缺省不扫描实现源码。
+1. 在 concord.config.ts 配置 sourceRoots，或新项目用 init --source-root src；未配置时不扫描实现源码。
 2. code annotate --scope file|node|region --contract <canonical-ref> 生成无 ID 注释，多目标重复 --contract；维护者把片段放到实际源码。file/code/begin/end 标记均无参数，implements 保留显式引用。annotate 与 test annotate 在共享 snapshot 中验证每个指定 canonical reference、归属链、类型和 anchor；显式 regression 还验证 Problem。失败范围限于这些指定依赖，不加载全局 Trace。
 3. code list 返回当前声明；code locate <path> --line <n> 返回该行所有包含作用域。生成片段无需身份，使用者按符号与源码位置查看实现。
 4. trace show <feature-or-use-case-or-engineering> 汇总代码 implements 边；review render 分别列出代码和测试。二者返回所展示关系图的 findings，并传播 inventory 的 `complete`。`complete: false` 或 findings 非空时，需要完整图的结论拒绝输入。Web 以符号、文件位置和关联契约展示，不要求输入或显示声明 ID。
@@ -29,8 +30,8 @@ feature: docs/feature/local-sdlc/README.md
 - 源码中的字符串、模板、正则和 JSX 文本不产生伪声明；未知标签、重复作用域、缺失目标、错误边界和标注文件的语法错误均产生 finding。
 - 范围标记不接受参数，按当前语法校验，无兼容分支或迁移专用诊断。无效 begin 也参与边界配对，不允许跳过后让 end 消耗外层 begin。普通扫描不改写源码。
 - 不提供按声明 ID 查询的命令、身份输入或复制 ID 界面；图关系使用内部派生引用。
-- 引用支持 Feature / Use Case / Engineering owner、Feature 或 Engineering supporting page 与有效 anchor，保留 exactRef；Feature 反查包含其 Use Case，Engineering 不拥有 Use Case 子树，按自动查询引用去重。
+- 引用支持 Feature / Use Case / Engineering owner、Feature 或 Engineering supporting page 与有效 anchor，保留 exactRef。Feature 反查包含其 Use Case，Engineering 不拥有 Use Case 子树，按自动查询引用去重。
 - 文件、函数与代码段可完整包含；region 不可嵌套，跨函数/半表达式/空 region 被拒绝。查询返回所有包含的显式作用域，不推断继承、优先级或完成度。
 - sourceRoots 可选且遵循既有安全路径边界。代码标注错误阻断代码及全图命令，但不新增测试执行或 Problem fixed 的前置条件；既有真实测试、候选摘要和 red/green 证据校验继续生效。
 - 全局 check 逐文件保留 owner 解析错误，累计为 findings，返回 `ok: false`，并传播 `complete: false`。单独的 documents 数组不表示集合完整。关闭 Problem、删除 Issue 和关系迁移同时检查 `complete` 与 findings。精确引用规则见[本地 SDLC 架构](../architecture.md)。
-- JS/TS 首版仅支持明确的 AST 节点，见 concord --skill code；不对其他语言宣称支持。
+- JS/TS 仅支持明确的 AST 节点，见 concord --skill code；不对其他语言宣称支持。

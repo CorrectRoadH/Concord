@@ -14,4 +14,4 @@ Capture evidence, ruled-out explanations, and remaining hypotheses.
 
 ## Resolution Evidence
 
-When resolved, record the verified cause, corrective action, and evidence. Do not fill this section with an assumed conclusion.
+After verifying the fix, document the verified cause, corrective action, and evidence. Do not fill this section with an assumed conclusion.

@@ -366,7 +366,7 @@ concord --skill all
 
 ### 发版
 
-源仓库使用 `v<package.version>` annotated tag。一台 Ubuntu 24.04 runner 校验版本、构建并检查类型、打包一次并隔离安装。四路 Ubuntu 测试分片与 macOS 14/15 验证并行运行，均使用该包中的构建产物；全部通过后才创建 GitHub Release。Cargo 缓存按平台、工具链、锁文件与原生源码区分，命中后仍编译和测试。目标平台的可选原生依赖由 npm 在安装时选择。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
+源仓库使用 `v<发行版本>` annotated tag；流水线从 tag 设置包与 shrinkwrap 的版本。一台 Ubuntu 24.04 runner 校验版本、构建并检查类型、打包一次并隔离安装。四路 Ubuntu 测试分片与 macOS 14/15 验证并行运行，均使用该包中的构建产物；全部通过后才创建 GitHub Release。Cargo 缓存按平台、工具链、锁文件与原生源码区分，命中后仍编译和测试。目标平台的可选原生依赖由 npm 在安装时选择。公开 tap 定时或手动发现新 Release，严格核对版本与摘要，验证候选 Formula/Nix 后更新渠道。定时发现可能延迟；失败时使用 tap 的手动 workflow 重跑相同身份，不移动 tag 或覆盖资产。
 
 ### Nix / NixOS
 
@@ -395,7 +395,7 @@ concord repo --help
 ## 更多资料
 
 - [架构与行为契约](docs/architecture.md)
-- [独立化设计](docs/design.md)
+- [工作台 UI 设计](DESIGN.md)
 - [来源与抽取边界](docs/provenance.md)
 - [Agent 工作入口](docs/agent-workflow.md)
 - [代码声明使用细节](skills/concord/references/code.md)

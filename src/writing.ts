@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-import { fromMarkdown } from 'mdast-util-from-markdown';
+import { fromMarkdown } from './markdown-parser.js';
 import type { Nodes } from 'mdast';
 import { Predicate } from 'effect';
 import { ConcordError, inRepositorySnapshot, type Repository } from './shared.js';

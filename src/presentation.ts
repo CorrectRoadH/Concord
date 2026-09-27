@@ -3,8 +3,22 @@
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { Predicate } from 'effect';
 
-const label = (key: string): string => key.replace(/([a-z])([A-Z])/gu, '$1 $2').replaceAll('-', ' ');
+const label = (key: string): string => key.replaceAll('-', ' ');
 const scalar = (value: unknown): string => value === null ? 'none' : String(value);
+
+function bodySnippet(body: string, firstTerm: string): string {
+  const text = body.replace(/\s+/gu, ' ').trim();
+  if (!text) return '(empty body)';
+  const index = text.toLocaleLowerCase().indexOf(firstTerm.toLocaleLowerCase());
+  const start = index < 0 ? 0 : Math.max(0, index - 40);
+  const end = Math.min(text.length, index < 0 ? 100 : Math.max(index + firstTerm.length, index + 100));
+  return `${index < 0 ? '[first term matched title] ' : ''}${start > 0 ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}`;
+}
+
+function matchingSnippet(body: string, terms: readonly string[]): string {
+  const lowered = body.toLocaleLowerCase();
+  return bodySnippet(body, terms.find(term => lowered.includes(term.toLocaleLowerCase())) ?? terms[0] ?? '');
+}
 
 /** Human output is a view; JSON continues to expose the original result. */
 export function humanOutput(value: unknown): string {
@@ -46,6 +60,16 @@ export function humanOutput(value: unknown): string {
       `Runner: ${String(runner.status ?? 'unknown')}`, ...(typeof runner.message === 'string' ? [runner.message] : []),
       ...(Array.isArray(value.changedPaths) ? value.changedPaths.map(path => `  ${String(path)}`) : [])].join('\n');
   }
+  if ((value.operation === 'memory-recall' || value.operation === 'issue-recall' || value.operation === 'memory-search') && typeof value.query === 'string') {
+    const entries = value.operation === 'memory-search' ? value.memories : value.documents;
+    if (!Array.isArray(entries) || entries.length === 0) return `${label(value.operation)}\nNone.`;
+    const terms = value.query.trim().split(/\s+/u);
+    return [label(value.operation), ...entries.filter(Predicate.isObject).flatMap(entry => [
+      `${String(entry.path)} — ${String(entry.title ?? (Predicate.isObject(entry.metadata) ? entry.metadata.title : ''))}`,
+      `  ${String(entry.memoryKind ?? (Predicate.isObject(entry.metadata) ? entry.metadata.memoryKind : 'issue'))}: ${String(entry.state ?? (Predicate.isObject(entry.metadata) ? entry.metadata.state : 'unknown'))}`,
+      `  ${matchingSnippet(typeof entry.body === 'string' ? entry.body : '', terms)}`,
+    ])].join('\n');
+  }
   if ('changedPaths' in value && Array.isArray(value.changedPaths)) {
     const lines = [`${value.dryRun ? 'Would apply' : 'Applied'} ${String(value.operation)}:`, ...value.changedPaths.map(path => `  ${String(path)}`)];
     if ((value.operation === 'feedback-sync' || value.operation === 'feedback-import') && typeof value.fetched === 'number' && typeof value.imported === 'number') {
@@ -54,7 +78,7 @@ export function humanOutput(value: unknown): string {
     if (Array.isArray(value.warnings) && value.warnings.length > 0) lines.push('', 'Warnings:', ...value.warnings.map(warning => `  ${String(warning)}`));
     if (value.recoveryRequired) lines.push('', 'Recovery required: run concord recover before another operation.');
     if (value.operation === 'init') lines.push('', 'Start here: docs/concord.md', 'Next: concord feature create <id> --title "Your feature"', 'Inspect configuration: concord doctor');
-    else lines.push('', 'Next: edit the author prose, then run concord check.');
+    else if (!value.dryRun && value.changedPaths.length > 0) lines.push('', typeof value.operation === 'string' && value.operation.startsWith('create-') ? 'Next: edit the author prose, then run concord check.' : 'Next: concord check.');
     return lines.join('\n');
   }
   if ((value.operation === 'test-annotate' || value.operation === 'code-annotate') && typeof value.snippet === 'string') return value.snippet;
@@ -81,7 +105,7 @@ export function humanOutput(value: unknown): string {
         if (Predicate.isObject(entry) && typeof entry.path === 'string') {
           const metadata = Predicate.isObject(entry.metadata) ? entry.metadata : entry;
           lines.push(`  ${entry.path}${entry.line ? `:${String(entry.line)}` : ''}${metadata.title ? ` — ${String(metadata.title)}` : ''}${metadata.kind ? ` (${String(metadata.kind)})` : ''}`);
-          if (entry.state) lines.push(`    ${String(entry.memoryKind ?? entry.kind)}: ${String(entry.state)}`);
+          if (entry.state) lines.push(`    ${String(entry.memoryKind ?? entry.kind ?? (value.operation === 'issue-index' ? 'issue' : 'memory'))}: ${String(entry.state)}`);
           if (entry.message) lines.push(`    ${String(entry.code ?? 'Finding')}: ${String(entry.message)}`);
           if (entry.evidence) lines.push(indent(humanOutput(entry.evidence), 4));
         } else if (Predicate.isObject(entry) && typeof entry.file === 'string' && Array.isArray(entry.contracts)) {

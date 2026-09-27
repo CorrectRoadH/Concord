@@ -7,11 +7,11 @@ kind: use-case
 feature: docs/feature/portable-coordination/README.md
 ---
 
-# Coordinate local edits without external lock helpers
+# Coordinate local edits without external lock programs
 
 ## User goal
 
-Read and prepare local changes without installing an external lock or disk-inspection program, then commit a complete validated change with an explainable recovery path.
+Read and prepare local changes without external lock or disk-inspection programs. Commit a complete validated change with an explainable recovery path.
 
 ## Complete path
 

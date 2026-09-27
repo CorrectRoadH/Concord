@@ -26,7 +26,7 @@ Repository 只负责安全读取、配置身份、依赖观察和发布。文档
 
 精确引用读取目标和沿路径最近 README owner 边界。声明 Concord 格式的 frontmatter 必须严格解码；普通非 Concord frontmatter 保留 supporting page 语义。不允许把损坏 Concord owner 当成普通页面。最近 owner 的 kind 不支持附页时拒绝，不向更高祖先回退。精确目标验证受管来源、current disposition 与 placement；Use Case 还须验证其 feature 确实为当前 canonical Feature，路径符合归属；回归目标必须为 Problem。路径安全、目标类型和 anchor 校验均保留。
 
-全局诊断 inventory 整体携带 documents、findings 与 complete，禁止用裸 documents 数组默认声明完整。逐文件收集解码错误，保留错误路径与具名代码；关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断，不把无关错误从完整性判断中滤掉。有效记录不是完整集合证明；所有 requireValidTrace 门禁同时检查 complete 和 findings，不能用部分图关闭 Problem、删除 Issue 或批准关系迁移。
+全局诊断 inventory 整体携带 documents、findings 与 complete，禁止用单独的 documents 数组默认声明完整。逐文件收集解码错误，保留错误路径与具名代码；关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断，不把无关错误从完整性判断中滤掉。有效记录不是完整集合证明；所有 requireValidTrace 门禁同时检查 complete 和 findings，不能用部分图关闭 Problem、删除 Issue 或批准关系迁移。
 
 ## 访问模式
 
@@ -58,4 +58,4 @@ recover 不删除 runner.lease、run state、证据或未知文件。父 PID 死
 
 采用后更新 docs/architecture.md、portable-coordination 功能契约、local-sdlc 架构及随包 recovery 指引。portable-publication 的历史裁决保留，并明确共享读取与操作范围已由本方案替代；不改写其历史选择或伪造 review 结果。
 
-宪法 c-013 定义跨功能规则：操作按必要依赖验证，明确局部失败范围；全局诊断不得伪装完整性；存储、进程和信任边界的不确定性仍按实际共享资源阻断。理由是开发状态允许局部不完整；来源为本设计、portable-coordination Use Case 与 GitHub issue #1；影响所有新增入口及本轮修改入口，不宣称历史入口已全部符合。
+宪法 C-013 定义跨功能规则：操作按必要依赖验证，明确局部失败范围；全局诊断不得伪装完整性；存储、进程和信任边界的不确定性仍按实际共享资源阻断。开发状态允许局部不完整；新增及修改入口都须遵守。

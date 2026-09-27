@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
+
 # 加载中立项目治理接入
 
 ## 场景
@@ -27,7 +28,7 @@ feature: docs/feature/local-sdlc/README.md
 - host 缺少当前协议、所需能力或配置损坏时返回具体诊断。
 - 加载即失败的 host 不妨碍 help、静态关系与 Web。
 - 非 Nx、非 e2e 目录且没有 executor/lanes 字段的软件项目能够接入。
-- helper、声明名称、源码集合、契约、配置或 adapter 身份变化使旧 proof 失效。
+- 测试支持文件、声明名称、源码集合、契约、配置或 adapter 身份变化使旧 proof 失效。
 - command 收据不能绕过原生可靠性下限；真实原生验收须单独执行，不能以 help/fake-host 测试代替。
 
 ## 权威契约
