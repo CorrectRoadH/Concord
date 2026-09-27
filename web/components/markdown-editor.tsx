@@ -35,6 +35,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from './ui/textarea';
 import { SourceEditor } from './source-editor';
 import { MarkdownPreview } from './markdown-preview';
+import { P5DocumentContext, p5CodeBlockDescriptor } from './p5-sketch';
 
 interface Props {
   readonly initial: ViewFile;
@@ -280,7 +281,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     event.stopPropagation();
   };
 
-  return <div className="editor-shell" data-dirty={dirty} onClickCapture={followLink}>
+  return <P5DocumentContext.Provider value={file.path}><div className="editor-shell" data-dirty={dirty} onClickCapture={followLink}>
     {toolbarTarget && !source && createPortal(toolbarActions, toolbarTarget)}
     {(!toolbarTarget || source) && <div className="editor-shell__bar" data-compact={!source || undefined}>
       {source && !hideSourceHeading && <div>
@@ -293,7 +294,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     {file.readOnly && <div className="callout callout--warning"><AlertTriangle /> <div><strong>只读</strong><p>{file.reason ?? '当前内容不能由工作台安全修改。'}</p></div></div>}
     {external && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘内容已变化</strong><p>当前草稿没有被覆盖。请比较后保留草稿或重新载入。</p></div></div>}
     {unsupported && !file.readOnly && <div className="callout callout--warning"><AlertTriangle /><div><strong>已切换为原文编辑</strong><p>WYSIWYG 无法无损解析该语法：{unsupported}。原始字节内容保持不变，只有你的明确编辑才会标记为未保存。</p></div></div>}
-    {source ? <SourceEditor value={draft} path={file.path} readOnly={file.readOnly || busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : file.readOnly ? <MarkdownPreview markdown={file.body} onFollowLink={onFollowLink} /> : unsupported ? rawEditor : <MarkdownErrorBoundary
+    {source ? <SourceEditor value={draft} path={file.path} readOnly={file.readOnly || busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : file.readOnly ? <MarkdownPreview markdown={file.body} documentPath={file.path} onFollowLink={onFollowLink} /> : unsupported ? rawEditor : <MarkdownErrorBoundary
       fallback={rawEditor}
       onError={error => setUnsupported(error.message)}
     >
@@ -313,8 +314,8 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
         }}
         plugins={[
           headingsPlugin(), listsPlugin(), quotePlugin(), linkPlugin(), linkDialogPlugin(), imagePlugin(), tablePlugin(), thematicBreakPlugin(),
-          codeBlockPlugin({ defaultCodeBlockLanguage: '', codeBlockEditorDescriptors: [mermaidCodeBlockDescriptor] }),
-          codeMirrorPlugin({ codeMirrorExtensions, autoLoadLanguageSupport: true, codeBlockLanguages: { '': 'Plain text', ts: 'TypeScript', typescript: 'TypeScript', tsx: 'TSX', js: 'JavaScript', javascript: 'JavaScript', jsx: 'JSX', json: 'JSON', bash: 'Shell', sh: 'Shell', yaml: 'YAML', yml: 'YAML', python: 'Python', py: 'Python', sql: 'SQL', css: 'CSS', html: 'HTML', markdown: 'Markdown', mermaid: 'Mermaid' } }),
+          codeBlockPlugin({ defaultCodeBlockLanguage: '', codeBlockEditorDescriptors: [mermaidCodeBlockDescriptor, p5CodeBlockDescriptor] }),
+          codeMirrorPlugin({ codeMirrorExtensions, autoLoadLanguageSupport: true, codeBlockLanguages: { '': 'Plain text', ts: 'TypeScript', typescript: 'TypeScript', tsx: 'TSX', js: 'JavaScript', javascript: 'JavaScript', jsx: 'JSX', json: 'JSON', bash: 'Shell', sh: 'Shell', yaml: 'YAML', yml: 'YAML', python: 'Python', py: 'Python', sql: 'SQL', css: 'CSS', html: 'HTML', markdown: 'Markdown', mermaid: 'Mermaid', p5: 'p5.js' } }),
         ]}
       />
     </MarkdownErrorBoundary>}
@@ -328,5 +329,5 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
         <DialogFooter><Button variant="outline" onClick={() => setCompareOpen(false)}>继续编辑草稿</Button><Button variant="destructive" disabled={!external} onClick={() => { if (external) replaceWith(external); setCompareOpen(false); }}>丢弃草稿并载入</Button></DialogFooter>
       </DialogContent>
     </Dialog>
-  </div>;
+  </div></P5DocumentContext.Provider>;
 }

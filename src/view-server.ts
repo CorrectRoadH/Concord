@@ -57,7 +57,7 @@ export function formatViewAddress(host: string, port: number): string {
 }
 
 function securityHeaders(response: ServerResponse): void {
-  response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
+  response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   response.setHeader('Referrer-Policy', 'no-referrer');
   response.setHeader('X-Content-Type-Options', 'nosniff');
   response.setHeader('X-Frame-Options', 'DENY');
@@ -247,6 +247,19 @@ function serveStatic(request: IncomingMessage, response: ServerResponse, pathnam
   else { response.setHeader('Content-Length', body.byteLength); response.end(body); }
 }
 
+function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoot: string): void {
+  const target = join(webRoot, 'p5-runtime.js');
+  const stat = lstatSync(target, { throwIfNoEntry: false });
+  if (!stat?.isFile() || stat.isSymbolicLink() || stat.size > STATIC_LIMIT) throw new ConcordError('P5RuntimeMissing', 'The packaged p5 runtime is unavailable');
+  securityHeaders(response);
+  response.setHeader('Content-Security-Policy', "sandbox allow-scripts allow-downloads; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; style-src 'unsafe-inline' blob: data:; img-src data: blob:; media-src data: blob:; font-src data: blob:; connect-src data: blob:; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
+  response.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()');
+  response.setHeader('Content-Type', 'text/html; charset=utf-8');
+  const runtime = readFileSync(target, 'utf8').replace(/<\/script/giu, '<\\/script');
+  sendCompressible(request, response, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:white;color:#171717}body{margin:8px;font-family:system-ui;min-height:84px}canvas{display:block;max-width:100%;height:auto}</style></head><body><script>${runtime}</script></body></html>`);
+}
+
 async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming): Promise<void> {
   const method = request.method ?? 'GET';
   const respond = (value: unknown, status = 200) => timing.sync('http.response', () => success(response, value, status));
@@ -272,6 +285,13 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   if (method === 'GET' && url.pathname === '/api/file') {
     exactQuery(url, ['path']);
     return respond(await timing.async('http.file', () => Effect.runPromise(getViewFile(root, url.searchParams.get('path')!, timing))));
+  }
+  if (method === 'POST' && url.pathname === '/api/p5/compile') {
+    exactQuery(url, []);
+    mutationJson(request);
+    const input = await readJson(request);
+    const { compileP5 } = await import('./p5-compiler.js');
+    return respond(await Effect.runPromise(compileP5(root, input)));
   }
   if (method === 'POST' && url.pathname === '/api/action') {
     exactQuery(url, []);
@@ -339,7 +359,11 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       try {
         if (stopping) throw new ConcordError('ServerStopping', 'The workbench is shutting down');
         const url = timing.sync('http.validate', () => parseRequestTarget(request, validateAuthority(request)));
-        if (url.pathname.startsWith('/api/')) {
+        if (['iframe', 'frame'].includes(request.headers['sec-fetch-dest'] as string) && url.pathname !== '/p5-frame') throw new ConcordError('ForbiddenAuthority', 'Only the p5 runtime may be loaded in a frame');
+        if (request.method === 'GET' && url.pathname === '/p5-frame') {
+          exactQuery(url, []);
+          serveP5Frame(request, response, webRoot);
+        } else if (url.pathname.startsWith('/api/')) {
           await api(request, response, url, root, jobs, baselineCache, runAction, timing);
         } else if (request.method === 'GET') {
           timing.sync('http.static', () => serveStatic(request, response, url.pathname, webRoot));

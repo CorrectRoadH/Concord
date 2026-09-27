@@ -178,7 +178,7 @@ export function ConstitutionEditor({ initial, onSaved, toolbarTarget, onFollowLi
         <Field label="影响"><Input aria-label="修订影响" value={impact} readOnly={saving || busy} onChange={event => setImpact(event.target.value)} placeholder="适用范围与受影响内容" /></Field>
       </div>
       <Field label="来源" hint="可选，每行一项"><Textarea aria-label="修订来源" value={sources} readOnly={saving || busy} onChange={event => setSources(event.target.value)} placeholder="docs/feature/…/README.md" /></Field>
-    </div> : <MarkdownPreview markdown={parts.body} onFollowLink={onFollowLink} />}
+    </div> : <MarkdownPreview markdown={parts.body} documentPath={file.path} onFollowLink={onFollowLink} />}
     {parts && <div className="constitution-editor__metadata"><RecordDetails title="查看元数据与修订历史"><pre>{parts.metadata}</pre></RecordDetails></div>}
     <Dialog open={compareOpen} onOpenChange={setCompareOpen}>
       <DialogContent className="dialog--wide"><DialogHeader><DialogTitle>比较宪法草稿</DialogTitle><DialogDescription>左侧是当前草稿，右侧是磁盘版本。重新载入会丢弃草稿与本次修订说明。</DialogDescription></DialogHeader>

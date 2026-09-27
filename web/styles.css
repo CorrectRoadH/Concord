@@ -330,6 +330,12 @@ kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28
 .wysiwyg__content > table :is(th, td) { min-width: 5em; padding: .65em .85em; border: 1px solid var(--border); vertical-align: top; }
 .wysiwyg__content > table th { background: var(--muted); font-weight: 650; }
 .mermaid-source { min-width: 0; text-align: left; }
+.p5-sketch { min-width: 0; margin-block: .75rem; }
+.p5-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; font-size: .85rem; }
+.p5-sketch iframe { display: block; width: 100%; border: 1px solid var(--border); border-radius: .5rem; background: white; }
+.p5-error { color: var(--destructive); white-space: pre-wrap; overflow-wrap: anywhere; }
+.p5-source { min-width: 0; }
+.p5-source summary { cursor: pointer; color: var(--muted-foreground); margin-block: .5rem; }
 .mermaid-source > summary { width: fit-content; margin-bottom: .6rem; color: var(--muted-foreground); cursor: pointer; font-size: .85rem; }
 .mermaid-source > summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .wysiwyg__content a { color: var(--primary); text-decoration: underline; text-decoration-color: color-mix(in srgb, currentColor 45%, transparent); text-underline-offset: .18em; cursor: pointer; }

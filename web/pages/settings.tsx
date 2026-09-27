@@ -43,6 +43,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   const [source, setSource] = React.useState(json(initial))
   const [testRootsText, setTestRootsText] = React.useState(lines(initial.testRoots))
   const [sourceRootsText, setSourceRootsText] = React.useState(lines(initial.sourceRoots ?? []))
+  const [p5LibrariesText, setP5LibrariesText] = React.useState(lines(initial.p5?.libraries ?? []))
   const [sourceFilesText, setSourceFilesText] = React.useState(lines(initial.runner.sourceFiles))
   const [argvText, setArgvText] = React.useState(initial.runner.kind === "command" ? lines(initial.runner.argv) : "")
   const [timeoutText, setTimeoutText] = React.useState(String(initial.runner.timeoutMs))
@@ -54,7 +55,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   const connectionEditRevision = React.useRef(0)
   const latestDigest = useWorkspace().snapshot.configDigest
   const formDirty = testRootsText !== lines(baseline.config.testRoots) || sourceRootsText !== lines(baseline.config.sourceRoots ?? []) || sourceFilesText !== lines(baseline.config.runner.sourceFiles) || timeoutText !== String(baseline.config.runner.timeoutMs) || draft.runner.kind !== baseline.config.runner.kind || (draft.runner.kind === "command" && argvText !== (baseline.config.runner.kind === "command" ? lines(baseline.config.runner.argv) : ""))
-  const dirty = formDirty || source !== json(baseline.config)
+  const dirty = formDirty || p5LibrariesText !== lines(baseline.config.p5?.libraries ?? []) || source !== json(baseline.config)
   const externallyChanged = latestDigest !== null && latestDigest !== baseline.digest
 
 
@@ -70,24 +71,27 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
     setSource(json(next))
     setTestRootsText(lines(next.testRoots))
     setSourceRootsText(lines(next.sourceRoots ?? []))
+    setP5LibrariesText(lines(next.p5?.libraries ?? []))
     setSourceFilesText(lines(next.runner.sourceFiles))
     setArgvText(next.runner.kind === "command" ? lines(next.runner.argv) : "")
     setTimeoutText(String(next.runner.timeoutMs))
   }
 
   function formConfig(): ProjectConfig {
+    const libraries = values(p5LibrariesText)
+    const p5Config = libraries.length || draft.p5 ? { p5: { libraries } } : {}
     const timeoutMs = Number(timeoutText)
     if (!Number.isInteger(timeoutMs) || timeoutMs < 1) throw new Error("请输入有效的超时时间。")
     if (draft.runner.kind === "command") {
       const argv = argvText.split("\n").filter((item) => item.length > 0)
       if (!argv[0]) throw new Error("自定义命令至少需要一个参数。")
-      return { ...draft, testRoots: values(testRootsText), sourceRoots: values(sourceRootsText), runner: { kind: "command", argv: [argv[0], ...argv.slice(1)], sourceFiles: values(sourceFilesText), timeoutMs } }
+      return { ...draft, ...p5Config, testRoots: values(testRootsText), sourceRoots: values(sourceRootsText), runner: { kind: "command", argv: [argv[0], ...argv.slice(1)], sourceFiles: values(sourceFilesText), timeoutMs } }
     }
-    return { ...draft, testRoots: values(testRootsText), sourceRoots: values(sourceRootsText), runner: { kind: "node-test", sourceFiles: values(sourceFilesText), timeoutMs } }
+    return { ...draft, ...p5Config, testRoots: values(testRootsText), sourceRoots: values(sourceRootsText), runner: { kind: "node-test", sourceFiles: values(sourceFilesText), timeoutMs } }
   }
 
 
-  const revision = JSON.stringify([tab, draft, source, testRootsText, sourceRootsText, sourceFilesText, argvText, timeoutText])
+  const revision = JSON.stringify([tab, draft, source, testRootsText, sourceRootsText, p5LibrariesText, sourceFilesText, argvText, timeoutText])
   const currentRevision = React.useRef(revision)
   currentRevision.current = revision
 
@@ -168,6 +172,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
                 <Field label="测试目录" hint="每行一个"><Textarea aria-label="测试目录" value={testRootsText} onChange={(event) => setTestRootsText(event.target.value)} /></Field>
                 <Field label="源码目录" hint="每行一个"><Textarea aria-label="源码目录" value={sourceRootsText} onChange={(event) => setSourceRootsText(event.target.value)} /></Field>
               </div></ContentSection>
+              <ContentSection title="p5 图解"><Field label="项目共享扩展库" hint="每行一个，按顺序加载。内建：p5.sound、p5.brush；也可填写相对项目根的 ./vendor/addon.js。留空只加载 p5 核心。"><Textarea aria-label="p5 扩展库" value={p5LibrariesText} onChange={event => setP5LibrariesText(event.target.value)} /></Field></ContentSection>
               <ContentSection title="测试运行"><div className="form-grid"><Field label="运行方式"><Select value={runner.kind} onValueChange={(kind) => change({ ...draft, runner: kind === "node-test" ? { kind: "node-test", sourceFiles: values(sourceFilesText), timeoutMs: Number(timeoutText) } : { kind: "command", argv: ["node"], sourceFiles: values(sourceFilesText), timeoutMs: Number(timeoutText) } })}><SelectTrigger aria-label="运行方式"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="node-test">Node test</SelectItem><SelectItem value="command">自定义命令</SelectItem></SelectContent></Select></Field>
               {runner.kind === "command" && <Field label="命令参数" hint="每行一个参数，不经过 shell"><Textarea aria-label="命令参数" value={argvText} onChange={(event) => setArgvText(event.target.value)} /></Field>}
               <Field label="相关文件" hint="每行一个"><Textarea aria-label="运行相关文件" value={sourceFilesText} onChange={(event) => setSourceFilesText(event.target.value)} /></Field>

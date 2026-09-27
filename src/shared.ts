@@ -54,6 +54,9 @@ export const ProjectSchema = Schema.Struct({
   projectId: Text,
   testRoots: Schema.Array(Text),
   sourceRoots: Schema.optional(Schema.Array(Text)),
+  p5: Schema.optional(Schema.Struct({
+    libraries: Schema.Array(Text).check(Schema.isMaxLength(16), Schema.makeFilter(values => new Set(values).size === values.length)),
+  })),
   runner: RunnerSchema,
   feedbackConnections: Schema.optional(FeedbackConnectionsSchema),
   projectTypes: Schema.optional(Schema.Array(Schema.Literals(['library', 'cli']))),

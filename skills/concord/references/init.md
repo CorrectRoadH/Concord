@@ -33,6 +33,8 @@ concord template show feature --title "登录"
 
 模板只是写作提示，不是完成状态、测试执行或覆盖证明。初始化后先读 `docs/concord.md` 与 `docs/_template/README.md`，再用 `doctor --json` 查看缺失测试根和当前关联；`doctor` 不运行 runner。
 
+模板中的图示提示保留 Mermaid，并允许用 p5 表达动态过程；不要为每篇文档自动添加动画。p5 核心随安装包提供，扩展库按需在 `concord.config.ts` 的 `p5.libraries` 配置，初始化无需安装浏览器 CDN。运行 `concord --skill view` 获取内联、外部入口与项目配置示例。
+
 init 的 AGENTS 托管区与 docs/concord.md 必须把 Agent 引到当前安装版本的 skill：契约声明目标，开发过程与经验归 Memory，观察归 Issue；Memory/Issue 通过 Concord 工具索引、recall、读取和修改，禁止手工维护 owner 文件或 INDEX。检查生成指引时保留 AGENTS 托管区外内容。已有项目不会因升级安装包自动改写历史文档；运行 `concord --skill` 读取当前规则。
 
 概念的结构化定义使用全局或局部 concepts.json，解释和案例保留在 Markdown；concepts 工具提供派生汇总。局部 concord-writing.json 的目录决定 scope，不能用 roots 扩大局部范围。旧 writing/v1 须显式迁移，init 不从历史概念表猜测定义或弃用词。

@@ -24,6 +24,7 @@ export interface ProjectConfig {
   readonly projectId: string;
   readonly testRoots: readonly string[];
   readonly sourceRoots?: readonly string[];
+  readonly p5?: { readonly libraries: readonly string[] };
   readonly runner: Runner;
   readonly feedbackConnections?: readonly FeedbackConnection[];
   readonly projectTypes?: readonly ('library' | 'cli')[];

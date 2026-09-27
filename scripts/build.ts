@@ -2,6 +2,8 @@ import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import ts from 'typescript';
+import { build as bundle } from 'esbuild';
+import { P5_LIBRARIES } from '../src/p5-contract.js';
 
 class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
   project: Schema.String,
@@ -62,6 +64,13 @@ const build = Effect.gen(function*() {
   }
   const webExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/vite/bin/vite.js', 'build'], { stdout: 'inherit', stderr: 'inherit' }));
   if (webExit !== 0) return yield* new BuildFailed({ project: 'web', exitCode: webExit });
+  yield* Effect.tryPromise(() => bundle({ entryPoints: ['web/p5/runtime.ts'], outfile: 'dist/web/p5-runtime.js', bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'linked', define: { IS_MINIFIED: 'true' } }));
+  yield* fs.copyFile('node_modules/p5/license.txt', 'dist/web/P5-LICENSE.txt');
+  yield* fs.makeDirectory('dist/web/p5-libraries', { recursive: true });
+  for (const library of Object.values(P5_LIBRARIES)) {
+    yield* fs.copyFile(library.source, `dist/web/p5-libraries/${library.file}`);
+    yield* fs.copyFile(library.license, `dist/web/p5-libraries/${library.file}.LICENSE`);
+  }
   yield* fs.copyFile('node_modules/@fontsource-variable/noto-sans-sc/LICENSE', 'dist/web/FONT-LICENSE.txt');
   yield* fs.remove('dist/repository/host-types', { recursive: true, force: true });
   yield* fs.copy('repository/host-types', 'dist/repository/host-types');

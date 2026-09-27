@@ -6,11 +6,13 @@ createdAt: 2026-09-14T00:00:00.000Z
 kind: feature
 constitutionRefs:
   - docs/constitution.md#c-001
+  - docs/constitution.md#c-002
   - docs/constitution.md#c-003
   - docs/constitution.md#c-004
   - docs/constitution.md#c-005
   - docs/constitution.md#c-006
   - docs/constitution.md#c-007
+  - docs/constitution.md#c-012
   - docs/constitution.md#c-013
   - docs/constitution.md#c-014
 ---
@@ -37,9 +39,12 @@ Git 内容侧栏保留「Git 变更」标题，标题下提供「文档」和「
 
 正文使用 MDXEditor，基础交互使用 shadcn/ui。React Router 管理地址与导航，Vite 构建静态资源并随 CLI 包分发。仓库文件始终是事实来源，关系仍从源码和文档推导，不增加 Web 专属注册表。
 
+Markdown 支持 Mermaid 结构图与 p5 交互图解。p5 采用内联代码块或仓库内入口文件，允许自定义动画、模拟、控件、样式和本地扩展；两种入口共用固定版本的完整 p5 核心与独立沙箱。读者显式运行图解，普通代码、HTML 和 MDX 不执行脚本。能力与环境边界见[交互图解](use-case/embed-p5-sketch.md)。
+
 ## 使用场景
 
 - [使用 Web 工作台](use-case/use-web-workbench.md)
+- [在 Markdown 中运行 p5 交互图解](use-case/embed-p5-sketch.md)
 
 ## 范围
 
