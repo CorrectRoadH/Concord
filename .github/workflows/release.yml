@@ -240,12 +240,21 @@ jobs:
             preserve_rpath
             def install
               system "npm", "install", *std_npm_args, "--ignore-scripts"
+              (libexec/"lib/node_modules/concord-sdlc/dist/native").glob("*/hawdb.node").each do |binary|
+                system "gzip", "-n", binary
+              end
               (bin/"concord").write_env_script libexec/"bin/concord", PATH: "#{Formula["node"].opt_bin}:\$PATH"
+            end
+            def post_install
+              (libexec/"lib/node_modules/concord-sdlc/dist/native").glob("*/hawdb.node.gz").each do |binary|
+                system "gunzip", binary
+              end
             end
           end
           RUBY
           HOMEBREW_NO_AUTO_UPDATE=1 brew install concord/validation/concord
           installed="$(brew --prefix concord/validation/concord)/libexec/lib/node_modules/concord-sdlc"
+          shasum -a 256 "$installed/dist/native/darwin-arm64/hawdb.node"
           node --import tsx scripts/verify-installed-native.ts "$installed"
       - name: Smoke test the same package on macOS 15
         if: ${{ !matrix.full }}

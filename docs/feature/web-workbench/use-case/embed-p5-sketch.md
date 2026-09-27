@@ -11,19 +11,38 @@ feature: docs/feature/web-workbench/README.md
 
 维护者用 Mermaid 描述结构，用 p5 sketch 展示动画、模拟和可操作的解释。Markdown 的阅读与编辑入口使用相同的 p5 运行环境。普通代码块只展示源码，HTML 和 MDX 不执行脚本。
 
+## 流程动画的默认表达
+
+架构讲解推荐使用自动循环的流程动作：按顺序突出当前阶段，沿连线展示事实或控制的传递，完成后短暂停留，再回到起点。每轮只解释一个过程，阶段名称和简短说明跟随动画，读者无需操作即可看完。
+
+默认直接用 `p.draw` 驱动流程，不额外添加播放、暂停、上一步、下一步或重置控制器。只有需要读者调整参数、操作模拟时才加入交互控件；这是表达建议，不限制 p5 API。视口与页面隐藏的绘制暂停由 Concord 管理。按绘制时间累计进度时限制单帧时间增量，避免恢复可见后突然跳过多个阶段。
+
+动画只解释契约声明的过程，不把演示中的成功状态当成实际执行或验收证据。静态归属、目录结构和无需时间顺序的关系仍适合静态图。
+
 ## 内联与文件引用
 
 小型图解直接写在 `p5` 围栏内。默认实例模式提供带 p5 类型的 `p`，支持辅助函数、状态、类和 p5 2.3.4 的完整核心 API。
 
 ````markdown
 ```p5
+const stages = ['读取事实', '验证关系', '生成视图'];
+let elapsed = 0;
 p.setup = () => {
-  p.createCanvas(480, 200);
-  p.describe('一个圆点沿水平方向往复运动');
+  p.createCanvas(540, 160);
+  p.describe('读取事实、验证关系、生成视图按顺序自动循环');
+  p.textAlign(p.CENTER, p.CENTER);
+  p.textSize(16);
 };
 p.draw = () => {
+  elapsed = (elapsed + Math.min(p.deltaTime, 100)) % 6000;
+  const step = Math.floor(elapsed / 2000);
   p.background(245);
-  p.circle(240 + p.sin(p.millis() / 1000) * 160, 100, 30);
+  stages.forEach((label, i) => {
+    p.fill(i === step ? '#d8eee7' : '#ffffff');
+    p.rect(20 + i * 180, 45, 140, 60, 8);
+    p.fill('#203b33');
+    p.text(label, 90 + i * 180, 75);
+  });
 };
 ```
 ````
@@ -37,7 +56,7 @@ p.draw = () => {
 
 `src` 与 `css` 相对 Markdown 文件解析。入口支持 `.ts`、`.js` 和 `.mjs`；模块内部相对引用以当前模块为基准。入口及其依赖必须位于当前 Git 仓库内，不允许 symlink、隐藏目录、隐藏文件或 `node_modules`。模块导入使用相对路径，`p5` 类型与运行库由 Concord 提供；工具不运行消费者的构建配置或安装脚本。
 
-外部实例模式入口如下。内联和外部入口共享绘图、事件、控件、样式与资源能力。
+外部实例模式入口使用同样的默认导出函数。需要读者操作的交互式模拟也可以创建控件，下面展示这种交互例外；流程讲解仍默认自动循环。
 
 ```ts
 import type P5 from 'p5';

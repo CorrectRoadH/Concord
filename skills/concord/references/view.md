@@ -14,19 +14,46 @@ Markdown 的 `p5` 代码块在阅读与编辑页面自动加载运行，像动�
 
 项目启用 `p5.brush` 后所有图块都会加载它，画布须满足该库的 WebGL 要求；下面的普通 2D 示例使用仅核心或只启用 `p5.sound` 的配置。
 
-保留 Mermaid 表达结构和流程；需要动画或交互时，在文档中加入以下完整示例，并在图旁说明想让读者观察什么：
+保留 Mermaid 表达静态结构。架构讲解的 p5 默认推荐**流程动作循环**：自动推进阶段、沿连线传递、适当停留、回到起点；一轮解释一个过程，并显示当前阶段说明。直接用 `p.draw` 驱动，不额外写播放、暂停、上一步、下一步、重置控制器。只有参数实验或交互式模拟才添加操作控件。动画展示的是声明的机制，不是实际运行证据。
+
+以下示例自动循环“读取事实 → 验证关系 → 生成视图”，不需要读者点击。累计绘制时间并限制单帧增量，避免隐藏页面恢复后突然跳过流程：
 
 ````markdown
 ```p5
 import type P5 from 'p5';
 export default function (p: P5) {
+  const stages = ['读取事实', '验证关系', '生成视图'];
+  let elapsed = 0;
   p.setup = () => {
-    p.createCanvas(480, 180);
-    p.describe('圆点随时间左右往复运动');
+    p.createCanvas(540, 180);
+    p.describe('读取事实、验证关系、生成视图依次突出显示，完成后自动开始下一轮');
+    p.textAlign(p.CENTER, p.CENTER);
+    p.textSize(16);
   };
   p.draw = () => {
+    elapsed = (elapsed + Math.min(p.deltaTime, 100)) % 6000;
+    const step = Math.floor(elapsed / 2000);
+    const progress = p.constrain((elapsed % 2000 - 800) / 1200, 0, 1);
     p.background(245);
-    p.circle(240 + 160 * p.sin(p.millis() / 1000), 90, 30);
+    for (let i = 0; i < stages.length; i++) {
+      const x = 90 + i * 180;
+      p.stroke(140);
+      p.fill(i === step ? '#d8eee7' : '#ffffff');
+      p.rect(x - 65, 45, 130, 60, 8);
+      p.noStroke(); p.fill('#203b33');
+      p.text(stages[i]!, x, 75);
+      if (i < stages.length - 1) {
+        p.stroke(140); p.line(x + 65, 75, x + 115, 75);
+        p.noStroke(); p.fill('#28775c');
+        p.triangle(x + 115, 75, x + 108, 71, x + 108, 79);
+      }
+    }
+    if (step < stages.length - 1) {
+      p.fill('#28775c');
+      p.circle(155 + step * 180 + progress * 50, 75, 9);
+    }
+    p.fill('#203b33');
+    p.text(step === 2 ? '视图生成后，开始下一轮读取' : `当前阶段：${stages[step]}`, 270, 140);
   };
 }
 ```
@@ -41,7 +68,7 @@ export default function (p: P5) {
 
 `main.ts` 默认导出 `(p: P5) => void`，类型用 `import type P5 from 'p5'` 引入；`.js` / `.mjs` 也可作为入口。传统全局函数示例使用 `mode="global"`，例如 `function setup()` 与 `function draw()`。CSS 和 p5 DOM 控件只影响当前图块。图片等资源应通过相对 `import` 获得内嵌 URL；`loadImage('./image.png')` 不会自动读取仓库文件。
 
-每个图块显式运行，在 opaque-origin 沙箱内执行完整固定版本 p5 核心；没有父 DOM、仓库 API、外网或设备权限。音频播放需要图块内用户手势，麦克风不可用。暂停控制绘制循环，停止或离开文档销毁图块；一般错误显示在图块中，同步死循环不保证可强制终止。运行不保存文档，编辑源码仍走正常自动保存。不要把第三方库全部描述为已兼容，也不要把动画运行当作产品验收。
+每个图块自动启动，在 opaque-origin 沙箱内执行完整固定版本 p5 核心；没有父 DOM、仓库 API、外网或设备权限。音频播放需要图块内用户手势，麦克风不可用。视口外或页面隐藏时暂停绘制，修改输入或离开文档时销毁图块；一般错误显示在图块中，同步死循环不保证可强制终止。运行不保存文档，编辑源码仍走正常自动保存。不要把第三方库全部描述为已兼容，也不要把动画运行当作产品验收。
 
 AI 继续优先使用已有 CLI 命令与 `--json`。新增结构化操作可由 `concord action --input <file|->` 调用，与 Web 共用校验。先读取当前摘要，再提交正文、源码或配置更新；`PreimageChanged` 表示文件被外部修改，重新读取、合并意图后重试，不能强行覆盖。
 
