@@ -74,3 +74,16 @@ JS产物摘要：基线 7e1e4bd50ad84417e71459939866515fdde95ea6230557e95a90e149
 七项针对性测试通过：满额缓存失败保留结果、旧扫描不得吞掉新请求、目录大小变化、无共享租约读取、竞争写入拒绝、持有写所有权时ABA、真实CLI退出后刷新与当前门禁。
 
 最终 `nix shell nixpkgs#gcc --command pnpm check` 通过：321 tests，319 pass，0 fail，2 skipped。两项跳过是生产原生构建未启用 test-hooks 的注入回滚与提交前 SIGKILL 测试，不声称覆盖这些注入场景。此前一轮浏览器导航断言出现时序失败，单独复测4/4通过，最终完整重跑也通过；未修改该UI用例。`concord docs check`、`concord check`、Design check 与 git diff --check 均通过。
+
+## 发布资产验收
+
+发布提交 `30f728d59b107be2997e180200f76c6c669249f1`，标签 `v0.8.5`；发布流水线 https://github.com/CorrectRoadH/Concord/actions/runs/36388016566 全部成功，包含 Linux x64 与 macOS arm64 原生产物。实际下载 tarball 与 SHA256SUMS、GitHub asset digest 一致：`133ebbcd6568e6a09c1ff360f752e5ef1a4a018b10574f464381b13121193154`。
+
+隔离 npm 安装使用 --ignore-scripts，CLI 报 concord v0.8.5。verify-installed-native.ts 在 PATH 不含 Rust 编译器或数据库辅助程序时通过 Linux 原生缓存命中、当前 Memory recall、清理重建与安装身份校验。实际发布 CLI 通过冷缓存 QueryPending、独立进程刷新、历史结果、文档写入、--fresh 与 check 拒绝无效当前来源。该记录不声称 macOS 运行时或 Homebrew/Nix 安装验证。
+
+同一冻结参照消费者上的已发布安装包连续七次缓存测量：
+- trace gaps：p50 382ms；样本 370, 378, 382, 401, 398, 393, 377ms；600ms预算与波动判据通过。
+- trace show docs/feature/local-sdlc/README.md：p50 399ms；样本 392, 396, 399, 408, 730, 512, 394ms；600ms预算与波动判据通过。
+- review render：p50 406ms；样本 406, 610, 411, 393, 398, 568, 386ms；600ms预算与波动判据通过。
+
+渠道自动通知因未配置 HOMEBREW_TAP_WORKFLOW_TOKEN 跳过，随后用已有用户授权触发同步工作流 https://github.com/CorrectRoadH/homebrew-tap/actions/runs/36388343710 ，成功回执 https://github.com/CorrectRoadH/homebrew-tap/releases/tag/v0.8.5 确认 Homebrew/Linux Nix 元数据映射0.8.5及相同包摘要；同步流程自身不执行安装或测试。
