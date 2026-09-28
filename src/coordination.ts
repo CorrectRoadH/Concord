@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, lstatSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { Effect } from 'effect';
-import { acquireFileLease, assertLeasePath, CoordinationError, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
+import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
 export { CoordinationError } from './file-lease.js';
 export { invalidateActiveRun } from './run-coordination.js';
 export type TraceLease = FileLease;
@@ -49,21 +49,22 @@ export function assertLegacyTraceStateMigratedSync(root: string, operation: stri
   if (payload.length > 0) throw new CoordinationError({ operation, phase: 'migration', path: directory, message: 'Historical Trace state is unsupported; preserve it and use its original offline recovery tools.' });
 }
 
-function acquireNow(root: string, mode: TraceLease['mode'], operation: string, create: boolean): TraceLease | undefined {
+function acquireNow(root: string, mode: TraceLease['mode'], operation: string, create: boolean, reclaimDead = false): TraceLease | undefined {
   assertLegacyTraceStateMigratedSync(root, operation);
-  return acquireFileLease(root, tracePrivateDirectorySync(root), PUBLICATION_LEASE, mode, operation, create);
+  const acquire = reclaimDead ? acquireRecoverablePublicationLease : acquireFileLease;
+  return acquire(root, tracePrivateDirectorySync(root), PUBLICATION_LEASE, mode, operation, create);
 }
 
 export function recoverPublicationLeaseSync(root: string): readonly string[] {
   return recoverFileLease(root, join(tracePrivateDirectorySync(root), PUBLICATION_LEASE), 'recover');
 }
 
-export function acquireTraceLeaseSync(root: string, mode: TraceLease['mode'], operation: string, create = true): TraceLease | undefined {
-  return acquireNow(root, mode, operation, create);
+export function acquireTraceLeaseSync(root: string, mode: TraceLease['mode'], operation: string, create = true, reclaimDead = false): TraceLease | undefined {
+  return acquireNow(root, mode, operation, create, reclaimDead);
 }
 export function releaseTraceLeaseSync(lease: TraceLease, operation: string): void { releaseFileLease(lease, operation); }
-export function acquireTraceLease(root: string, mode: TraceLease['mode'], operation: string, create: boolean): Effect.Effect<TraceLease | undefined, CoordinationError> {
-  return Effect.try({ try: () => acquireNow(root, mode, operation, create), catch: cause => cause instanceof CoordinationError ? cause : new CoordinationError({ operation, phase: 'lock', message: cause instanceof Error ? cause.message : String(cause) }) });
+export function acquireTraceLease(root: string, mode: TraceLease['mode'], operation: string, create: boolean, reclaimDead = false): Effect.Effect<TraceLease | undefined, CoordinationError> {
+  return Effect.try({ try: () => acquireNow(root, mode, operation, create, reclaimDead), catch: cause => cause instanceof CoordinationError ? cause : new CoordinationError({ operation, phase: 'lock', message: cause instanceof Error ? cause.message : String(cause) }) });
 }
 export function releaseTraceLease(lease: TraceLease, operation: string): Effect.Effect<void, CoordinationError> {
   return Effect.try({ try: () => releaseTraceLeaseSync(lease, operation), catch: cause => cause instanceof CoordinationError ? cause : new CoordinationError({ operation, phase: 'cleanup', message: cause instanceof Error ? cause.message : String(cause) }) });

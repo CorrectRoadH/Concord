@@ -5,6 +5,7 @@
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { checkWriting } from './writing.js';
+import { waitForPublication } from './publication-wait.js';
 import { checkProject } from './project-check.js';
 import { showWriting, setWriting, writingIndex } from './writing-management.js';
 import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
@@ -69,10 +70,10 @@ function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: 
   return Effect.gen(function*() {
     const settings = yield* root;
     const repo = yield* Effect.acquireRelease(
-      Effect.try({ try: () => new LocalRepository(Option.getOrUndefined(settings.root), { initialize: options.initialize, recover: options.recover, access: options.readonly ? 'read' : 'write', dryRun: options.initialize && options.readonly || settings.dryRun }), catch: failure }),
+      waitForPublication(reclaimDead => Effect.try({ try: () => new LocalRepository(Option.getOrUndefined(settings.root), { reclaimPublication: reclaimDead, initialize: options.initialize, recover: options.recover, access: options.readonly ? 'read' : 'write', dryRun: options.initialize && options.readonly || settings.dryRun }), catch: failure })),
       repo => Effect.sync(() => repo.close()),
     );
-    if (!options.unlocked) yield* Effect.acquireRelease(sync(() => repo.beginSnapshot()), () => Effect.sync(() => repo.endSnapshot()));
+    if (!options.unlocked) yield* Effect.acquireRelease(waitForPublication(reclaimDead => sync(() => repo.beginSnapshot(reclaimDead))), () => Effect.sync(() => repo.endSnapshot()));
     return yield* operation(repo, settings).pipe(Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
   }).pipe(Effect.scoped);
 }

@@ -5,6 +5,8 @@ import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Result } from 'effect';
 import { recoverLocalState } from './recovery.js';
+import { waitForPublication } from './publication-wait.js';
+import { allowPersistentCacheRecovery } from './cache-store.js';
 import { readRepositoryTestView, type RepositoryTestView } from './view-profile.js';
 import { getGitStatus, type GitBaselineCache } from './git-view.js';
 import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from './annotations.js';
@@ -126,9 +128,17 @@ function withRepository<A>(
   timing?: RequestTiming,
 ): Effect.Effect<A, ConcordError> {
   return Effect.acquireRelease(
-    measuredSync(timing)('view.openRepository', () => new LocalRepository(root, options)),
+    waitForPublication(reclaimDead => measuredSync(timing)('view.openRepository', () => new LocalRepository(root, { ...options, reclaimPublication: reclaimDead }))),
     (repo) => Effect.sync(() => timing === undefined ? repo.close() : timing.sync('view.closeRepository', () => repo.close())),
   ).pipe(Effect.flatMap(operation), Effect.scoped);
+}
+
+function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefined, name: string, evaluate: () => A): Effect.Effect<A, ConcordError> {
+  return Effect.acquireUseRelease(
+    waitForPublication(reclaimDead => sync(`${name}.acquire`, () => repo.beginSnapshot(reclaimDead))),
+    () => measuredSync(timing)(name, evaluate),
+    () => Effect.sync(() => repo.endSnapshot()),
+  );
 }
 
 function evidenceIds(repo: Repository): readonly string[] {
@@ -208,7 +218,8 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     };
   }
   return yield* withRepository(root, (repo) => Effect.gen(function*() {
-    const snapshot = yield* sync('view.compileWorkspace', () => repo.snapshot(() => {
+    const snapshot = yield* snapshotSync(repo, timing, 'view.compileWorkspace', () => repo.snapshot(() => {
+    if (cache === 'use') allowPersistentCacheRecovery(repo);
     const currentConfigSource = repo.configSnapshot.source;
     const inspected = timing === undefined ? inspectDocuments(repo) : timing.sync('view.inspectDocuments', () => inspectDocuments(repo));
     let cases: ReturnType<typeof scanAnnotations>;
@@ -289,7 +300,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
     return { path, body: config.source, digest: config.configDigest!, readOnly: true, reason: 'Invalid configuration must be repaired locally before Concord can reconstruct managed state.' };
   }
   return yield* withRepository(validatedRoot, (repo) => Effect.gen(function*() {
-    const ordinary = yield* sync('view.readFile', () => repo.snapshot(() => {
+    const ordinary = yield* snapshotSync(repo, timing, 'view.readFile', () => repo.snapshot(() => {
       const listed = inspectDocumentFile(repo, path);
       if (listed !== undefined) return listed;
       if (isSourcePath(repo, path)) {
@@ -310,7 +321,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
 
     const projected = yield* Effect.result(readRepositoryTestView(validatedRoot));
     if (Result.isSuccess(projected) && projected.success.some(test => test.file === path)) {
-      return yield* sync('view.readRepositoryTestFile', () => repo.snapshot(() => {
+      return yield* snapshotSync(repo, timing, 'view.readRepositoryTestFile', () => repo.snapshot(() => {
         const body = repo.read(path);
         if (body === undefined) throw new ConcordError('FileNotFound', 'The explicitly associated project test file no longer exists');
         return { path, body, digest: digest(body), readOnly: true, reason: 'Project test source is available here for inspection only.' };
@@ -414,7 +425,7 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   if (action.action === 'init') {
     if (action.docsOnly && (action.testRoots?.length ?? 0) > 0) return yield* Effect.fail(new ConcordError('ConflictingOptions', 'docsOnly cannot be combined with testRoots'));
     const dryRun = action.dryRun ?? false;
-    return yield* withRepository(root, (repo) => sync('view.initialize', () => repo.snapshot(() => initialize(repo, dryRun, {
+    return yield* withRepository(root, (repo) => snapshotSync(repo, timing, 'view.initialize', () => repo.snapshot(() => initialize(repo, dryRun, {
       testRoots: action.docsOnly ? [] : action.testRoots,
       sourceRoots: action.sourceRoots,
       runner: action.runner,
@@ -433,5 +444,5 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
   if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
-  return yield* withRepository(root, (repo) => sync(`view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
+  return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
 });

@@ -69,7 +69,7 @@ clear 先关闭本进程受管持久句柄，在独占 repository lease 下通�
 
 文档解析分配 9872 条、15 MiB；静态配置解析分配 128 条、1 MiB。二者使用各自进程期内存句柄和解析器身份，合计保持文档解析预算。配置命中只复用严格解码的值，每次操作仍读取配置原文并执行仓库安全与协调检查。
 
-桥接单条输入最多 8 MiB，每次批量最多 1000 条且总输入最多 16 MiB。native 查询最多 20000 行、64 MiB payload；大于该预算的完整 namespace 读取须分批且仍受 namespace 总预算约束。持久目录最多 4096 个条目、256 MiB；超出时不继续打开和扩大，显式 clear 可在同一安全遍历预算内处理，否则具名拒绝。
+桥接单条输入最多 8 MiB，每次批量最多 1000 条且总输入最多 16 MiB。native 查询最多 20000 行、64 MiB payload；大于该预算的完整 namespace 读取须分批且仍受 namespace 总预算约束。持久目录的总字节数和条目数量不构成打开、状态检查或清理的拒绝条件。目录检查逐项校验路径、文件类型和链接；清理在完整检查与原生所有权守卫内执行，保留锁 inode。物理文件增长不使缓存失去清理入口。
 
 HawDB 的 WAL 上限：max_wal_replay_entries=100000、max_wal_replay_bytes=128 MiB、max_wal_record_bytes=64 MiB、max_wal_batch_operations=50000。checkpoint 的 encoded 上限为 256 MiB，decoded 上限为 512 MiB。
 

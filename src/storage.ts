@@ -17,7 +17,7 @@ import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Chan
 import { renderTypeScriptConfig, snapshot } from './config.js';
 import { closeRepositoryCache } from './cache-store.js';
 import { invalidateActiveRun } from './run-coordination.js';
-import { acquireFileLease } from './file-lease.js';
+import { acquireFileLease, acquireRecoverablePublicationLease } from './file-lease.js';
 import { initialConstitutionSource } from './constitution.js';
 import { onboardingGuide } from './onboarding-guide.js';
 import { projectTemplateFiles, templateBody } from './templates.js';
@@ -238,7 +238,7 @@ export class LocalRepository implements Repository {
         && ![join(this.privateDir, 'lock.json'), join(this.privateDir, 'journal.json'), join(coordinationDir, PUBLICATION_LEASE), join(coordinationDir, 'publication-journal.json'), join(coordinationDir, 'multi-file-publication-journal.json')].some(present);
       this.previewWithoutState = emptyPreview;
       if (options.recover && options.reclaimPublication !== false) recoverPublicationLeaseSync(this.root);
-      try { this.traceLease = acquireTraceLeaseSync(this.root, this.noWrite || this.access === 'read' ? 'shared' : 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview); }
+      try { this.traceLease = acquireTraceLeaseSync(this.root, this.noWrite || this.access === 'read' ? 'shared' : 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview, !options.recover && options.reclaimPublication !== false); }
       catch (cause) { throw storageCoordinationFailure(cause); }
       assertCurrentRuntimeFormat(this.root);
       const traceDir = coordinationDir;
@@ -293,18 +293,9 @@ export class LocalRepository implements Repository {
     return this.snapshotDepth === 0 ? this.underLease(() => this.filesObserved(prefix)) : this.filesObserved(prefix);
   }
   private filesObserved(prefix: string): string[] {
-    if (this.observing && !this.observedDirectories.has(prefix)) this.observedDirectories.set(prefix, this.directoryObservation(prefix));
-    const base = this.absolute(prefix);
-    if (!present(base)) return [];
-    const paths: string[] = [];
-    const walk = (path: string) => {
-      assertNoSymlink(path);
-      const stat = lstatSync(path);
-      if (stat.isFile()) { paths.push(relative(this.root, path).split(sep).join('/')); return; }
-      if (!stat.isDirectory()) throw new ConcordError('InvalidFile', `Unsupported file type: ${path}`);
-      for (const name of readdirSync(path).sort()) { if (name === '.git' || name === 'node_modules') continue; walk(join(path, name)); }
-    };
-    walk(base); return paths;
+    const scanned = this.scanDirectory(prefix);
+    if (this.observing && !this.observedDirectories.has(prefix)) this.observedDirectories.set(prefix, scanned.observation);
+    return scanned.files;
   }
   private sourcePath(path: string, roots: readonly string[]): void {
     canonicalPath(path);
@@ -371,10 +362,11 @@ export class LocalRepository implements Repository {
     this.beginSnapshot();
     try { return read(); } finally { this.endSnapshot(); }
   }
-  beginSnapshot(): void {
+  beginSnapshot(reclaimDead = true): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
     try {
-      this.traceLease = acquireFileLease(this.root, this.coordinationDirectory, PUBLICATION_LEASE, this.noWrite || this.access === 'read' ? 'shared' : 'exclusive', 'snapshot', !this.previewWithoutState);
+      const acquire = this.recovering || !reclaimDead ? acquireFileLease : acquireRecoverablePublicationLease;
+      this.traceLease = acquire(this.root, this.coordinationDirectory, PUBLICATION_LEASE, this.noWrite || this.access === 'read' ? 'shared' : 'exclusive', 'snapshot', !this.previewWithoutState);
       this.snapshotDepth = 1;
       this.assertReady();
     } catch (cause) { this.close(); throw storageCoordinationFailure(cause); }
@@ -407,20 +399,26 @@ export class LocalRepository implements Repository {
     if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('PreimageChanged', 'Project configuration changed; open a fresh repository snapshot');
   }
   private directoryObservation(prefix: string): string {
+    return this.scanDirectory(prefix).observation;
+  }
+  private scanDirectory(prefix: string): { observation: string; files: string[] } {
     const target = this.absolute(prefix);
-    if (!present(target)) return 'absent';
+    if (!present(target)) return { observation: 'absent', files: [] };
     const entries: string[] = [];
+    const files: string[] = [];
     const visit = (path: string, name: string): void => {
       assertNoSymlink(path);
       const stat = lstatSync(path);
       entries.push(`${name}:${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}:${stat.mode & 0o777}`);
+      if (stat.isFile()) files.push(name);
+      else if (!stat.isDirectory()) throw new ConcordError('InvalidFile', `Unsupported file type: ${path}`);
       if (stat.isDirectory()) for (const child of readdirSync(path).sort()) {
         if (child === '.git' || child === 'node_modules') continue;
         visit(join(path, child), `${name}/${child}`);
       }
     };
     visit(target, prefix);
-    return canonical(entries);
+    return { observation: canonical(entries), files };
   }
   private validateObservations(): void {
     for (const [path, source] of this.observedFiles) if (this.readCurrent(path) !== source) throw new ConcordError('PreimageChanged', `${path} changed after planning; take a fresh snapshot`);

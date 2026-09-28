@@ -58,9 +58,10 @@ test('file reads recover from real lease contention, cancel on navigation, and a
     const lockPath = root;
     const busyResponse = () => page.waitForResponse(response => response.url().includes('/api/file?') && response.status() === 409);
     holder = await hold(lockPath);
-    const busy = busyResponse();
+    const started = page.waitForRequest(request => request.url().includes('/api/file?'));
     await architecture.click();
-    assert.equal((await (await busy).json()).error, 'RepositoryBusy');
+    await started;
+    await new Promise(resolve => setTimeout(resolve, 100));
     await release(holder); holder = undefined;
     await expect(page.locator('[contenteditable="true"]').first()).toBeVisible();
     await expect(page.getByRole('button', { name: '重试', exact: true })).toHaveCount(0);
@@ -100,9 +101,8 @@ test('file reads recover from real lease contention, cancel on navigation, and a
     await stopped;
     holder = undefined;
     await page.reload();
-    await expect(recover).toBeVisible();
-    await recover.click();
     await expect(page.getByRole('link', { name: '总览', exact: true })).toBeVisible();
+    await expect(recover).toHaveCount(0);
   } finally {
     if (holder) await release(holder);
     await browser?.close();

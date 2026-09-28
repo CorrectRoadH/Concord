@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -8,6 +8,35 @@ import { chromium, expect } from '@playwright/test';
 import { createDocument } from '../dist/documents.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer } from '../dist/view-server.js';
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+// @name dismissible-workspace-health-navigation
+test('incomplete workspace notice opens health diagnostics and dismisses without hiding findings', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-health-notice-'));
+  execFileSync('git', ['init', '-q', root]);
+  const repo = new LocalRepository(root, { initialize: true });
+  try {
+    initialize(repo, false, { testRoots: [] });
+    createDocument(repo, 'research', { id: 'health', title: 'Health example' });
+  } finally { repo.close(); }
+  mkdirSync(join(root, 'docs/feature/broken'));
+  writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\nid: broken\n---\n');
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
+  const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
+  try {
+    const page = await browser.newPage();
+    await page.goto(`http://127.0.0.1:${server.port}/research/health`);
+    const notice = page.getByRole('link', { name: /查看工作区健康/ });
+    await expect(notice).toBeVisible({ timeout: 15000 });
+    await notice.click();
+    await expect(page).toHaveURL(/\/#workspace-health$/);
+    await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
+    await page.getByRole('button', { name: '关闭工作区健康提示' }).click();
+    await expect(notice).toHaveCount(0);
+    await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
+  } finally { await browser.close(); await server.close(); rmSync(root, { recursive: true, force: true }); }
+});
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('polling keeps jobs responsive without continuously rescanning the workspace', async () => {

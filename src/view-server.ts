@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { Effect, Schema } from 'effect';
-import { executeViewAction, getViewGitStatus, getViewFile, getWorkspaceSnapshot, validateViewRoot } from './application.js';
+import { executeViewAction, getViewGitStatus, getViewFile, validateViewRoot } from './application.js';
+import { ViewScanManager } from './view-scan.js';
 import { closeGitBaselineCache, getGitDiff, type GitArea, type GitBaselineCache } from './git-view.js';
 import { ConcordError, decode, digest, failure } from './shared.js';
 import { ViewJobManager } from './view-jobs.js';
@@ -260,14 +261,20 @@ function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoo
   sendCompressible(request, response, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:white;color:#171717}body{margin:8px;font-family:system-ui;min-height:84px}canvas{display:block;max-width:100%;height:auto}</style></head><body><script>${runtime}</script></body></html>`);
 }
 
-async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming): Promise<void> {
+async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, scans: ViewScanManager, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming): Promise<void> {
   const method = request.method ?? 'GET';
   const respond = (value: unknown, status = 200) => timing.sync('http.response', () => success(response, value, status));
   if (method === 'GET' && url.pathname === '/api/workspace') {
     exactQuery(url, []);
-    const value = await timing.async('http.workspace', () => Effect.runPromise(getWorkspaceSnapshot(root, 'use', timing)));
-    timing.workspace(value);
-    const body = timing.sync('http.serialize', () => `${JSON.stringify({ ok: true, value })}\n`);
+    const controller = new AbortController();
+    const cancel = () => { if (!response.writableFinished) controller.abort(); };
+    response.once('close', cancel);
+    if (response.destroyed) controller.abort();
+    const scan = await timing.async('http.workspace', () => scans.scan(controller.signal)).finally(() => response.off('close', cancel));
+    for (const phase of scan.phases) timing.record(phase.name, phase.ms);
+    for (const observation of scan.observations) timing.observations.add(observation);
+    Object.assign(timing.caches, scan.caches);
+    const body = `${scan.body}\n`;
     const etag = `"${digest(body)}"`;
     securityHeaders(response);
     response.setHeader('ETag', etag);
@@ -334,6 +341,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? join(dirname(fileURLToPath(import.meta.url)), 'web');
   const jobs = new ViewJobManager(root);
+  const scans = new ViewScanManager(root);
   const baselineCache: GitBaselineCache = {};
   const requestLog = new ViewRequestLog();
   let stopping = false;
@@ -364,7 +372,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
           exactQuery(url, []);
           serveP5Frame(request, response, webRoot);
         } else if (url.pathname.startsWith('/api/')) {
-          await api(request, response, url, root, jobs, baselineCache, runAction, timing);
+          await api(request, response, url, root, jobs, baselineCache, scans, runAction, timing);
         } else if (request.method === 'GET') {
           timing.sync('http.static', () => serveStatic(request, response, url.pathname, webRoot));
         } else {
@@ -402,7 +410,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       for (const controller of feedbackControllers) controller.abort();
       const closed = new Promise<void>((resolveClosed, reject) => server.close((cause) => cause ? reject(failure(cause)) : resolveClosed()));
       server.closeIdleConnections();
-      try { await Promise.allSettled([...feedbackTasks]); await jobs.close(); await closed; }
+      try { await Promise.allSettled([...feedbackTasks]); await Promise.all([scans.close(), jobs.close(), closed]); }
       finally { requestLog.close(); closeGitBaselineCache(baselineCache); }
     })(),
   };

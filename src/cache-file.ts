@@ -1,11 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
-import { lstatSync, readdirSync, rmSync } from 'node:fs';
+import { lstatSync, readdirSync, rmdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { ConcordError } from './shared.js';
-
-const MAX_FILES = 4096;
-const MAX_BYTES = 256 * 1024 * 1024;
+import { assertLeasePath } from './file-lease.js';
 
 export function cacheDatabasePath(privateDir: string): string { return join(privateDir, 'cache.hawdb'); }
 
@@ -39,14 +37,10 @@ export function inspectCacheClear(privateDir: string): CacheClearInventory {
   const path = cacheDatabasePath(privateDir);
   const existing = assertCacheDatabaseSafe(path);
   let entries: string[] = [];
-  let files = 0, bytes = 0;
   const count = (target: string): ReturnType<typeof lstatSync> => {
     const stat = lstatSync(target);
     if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw new ConcordError('UnsafePath', `Unsupported cache entry: ${target}`);
     if (stat.isFile() && stat.nlink !== 1) throw new ConcordError('UnsafePath', `Linked cache entry: ${target}`);
-    files++;
-    bytes += stat.size;
-    if (files > MAX_FILES || bytes > MAX_BYTES) throw new ConcordError('HawdbLimit', 'Cache directory exceeds clear inspection budget');
     return stat;
   };
   const walk = (directory: string): void => { for (const name of readdirSync(directory)) { const target = join(directory, name); if (count(target)?.isDirectory()) walk(target); } };
@@ -62,8 +56,26 @@ export function inspectCacheClear(privateDir: string): CacheClearInventory {
   return { path, existing, empty, entries };
 }
 
-export function deleteInspectedCache(inventory: CacheClearInventory): void {
+export function deleteInspectedCache(inventory: CacheClearInventory, verifyOwnership: () => void): void {
+  const safePath = (path: string): void => {
+    try { assertLeasePath(path); }
+    catch (cause) { throw new ConcordError('UnsafePath', cause instanceof Error ? cause.message : `Unsafe cache path: ${path}`); }
+  };
+  const remove = (path: string): void => {
+    verifyOwnership();
+    safePath(path);
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory()) || stat.isFile() && stat.nlink !== 1) throw new ConcordError('UnsafePath', `Cache entry changed during clear: ${path}`);
+    if (stat.isDirectory()) {
+      for (const name of readdirSync(path)) remove(join(path, name));
+      verifyOwnership();
+      safePath(path);
+      rmdirSync(path);
+    } else { unlinkSync(path); }
+  };
+  verifyOwnership();
   if (inventory.existing) for (const name of readdirSync(inventory.path)) {
-    if (name !== 'owner.hawdb.lock') rmSync(join(inventory.path, name), { recursive: true });
+    if (name !== 'owner.hawdb.lock') remove(join(inventory.path, name));
   }
+  verifyOwnership();
 }

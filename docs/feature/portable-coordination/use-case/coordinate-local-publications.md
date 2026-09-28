@@ -27,6 +27,14 @@ Read and prepare local changes without external lock or disk-inspection programs
 
 Admission, access, and recovery fields are specified in [Architecture](../architecture.md).
 
+## Contention
+
+Ordinary repository admission may reclaim observed tokens when every owner is in this worktree and host and is confirmed ESRCH. It retries once. This does not recover journals or reclaim runner ownership.
+
+CLI and Web acquisition waits asynchronously for up to three seconds. Later attempts cannot reclaim new owners. A timeout includes PID, host and mode; it does not revoke ownership or replay a mutation.
+
+Synchronous APIs report contention immediately. Explicit recovery retains its token receipt and does not automatically reclaim a newly arriving owner.
+
 ## Acceptance
 
 - Built CLI works without flock, diskutil, plutil or stat executables.

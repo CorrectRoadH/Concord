@@ -42,6 +42,7 @@ export class ConcordApi {
       try { return await request(); }
       catch (cause) {
         if (!(cause instanceof ApiError) || cause.code !== 'RepositoryBusy' || attempt >= waits.length) throw cause;
+        if (typeof cause.details === 'object' && cause.details !== null && 'waitedMs' in cause.details) throw cause;
         await delay(waits[attempt]!, signal);
       }
     }

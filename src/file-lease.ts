@@ -11,14 +11,24 @@ export class CoordinationError extends Data.TaggedError('CoordinationError')<{
   readonly phase: 'git-private' | 'migration' | 'lock' | 'cleanup';
   readonly path?: string;
   readonly message: string;
+  readonly reason?: 'occupied' | 'admission-changed';
 }> {}
+
+const Token = Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/u));
+let publicationToken: string | undefined;
+
+/** A dedicated scan process uses its parent's token for its sequential snapshots. */
+export function setPublicationToken(token: string): void {
+  if (publicationToken !== undefined) throw new Error('Publication token is already configured');
+  publicationToken = Schema.decodeUnknownSync(Token)(token);
+}
 
 const Owner = Schema.Struct({
   format: Schema.Literal('concord.file-lease/v1'),
   root: Schema.String,
   host: Schema.String,
   pid: Schema.Int.check(Schema.isGreaterThan(0)),
-  token: Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/u)),
+  token: Token,
   mode: Schema.optional(Schema.Literal('shared')),
 });
 export type LeaseOwner = typeof Owner.Type;
@@ -31,6 +41,11 @@ export interface FileLease {
 const released = new WeakSet<FileLease>();
 export const errno = (cause: unknown, code: string): boolean => cause instanceof Error && 'code' in cause && cause.code === code;
 const error = (operation: string, path: string, cause: unknown, phase: CoordinationError['phase'] = 'lock'): CoordinationError => cause instanceof CoordinationError ? cause : new CoordinationError({ operation, phase, path, message: cause instanceof Error ? cause.message : String(cause) });
+
+function busyOwners(mode: FileLease['mode'], owners: readonly LeaseOwner[], operation: string, path: string): CoordinationError {
+  const details = owners.map(owner => `pid=${owner.pid} host=${owner.host} mode=${owner.mode ?? 'exclusive'}`).join('; ');
+  return new CoordinationError({ operation, path, phase: 'lock', reason: 'occupied', message: `${mode} publication lease is busy (${details}); retry after the operation finishes. For an interrupted operation run concord recover; do not delete the lease directory.` });
+}
 
 export function assertLeasePath(path: string): void {
   let part: string = sep;
@@ -91,7 +106,7 @@ export function acquireFileLease(root: string, directory: string, name: string, 
     assertLeasePath(path);
     if (!create && lstatSync(path, { throwIfNoEntry: false }) === undefined) return undefined;
     mkdirSync(directory, { recursive: true, mode: 0o700 });
-    const owner: LeaseOwner = { format: 'concord.file-lease/v1', root: resolve(root), host: hostname(), pid: process.pid, token: randomUUID(), ...(mode === 'shared' ? { mode } : {}) };
+    const owner: LeaseOwner = { format: 'concord.file-lease/v1', root: resolve(root), host: hostname(), pid: process.pid, token: name === 'publication.lease' ? publicationToken ?? randomUUID() : randomUUID(), ...(mode === 'shared' ? { mode } : {}) };
     temporary = mkdtempSync(join(directory, `.${name}-`));
     const descriptor = openSync(join(temporary, `${owner.token}.json`), 'wx', 0o600);
     try { writeFileSync(descriptor, `${JSON.stringify(owner)}\n`); fsyncSync(descriptor); } finally { closeSync(descriptor); }
@@ -100,7 +115,7 @@ export function acquireFileLease(root: string, directory: string, name: string, 
     catch (cause) {
       if (errno(cause, 'EEXIST') || errno(cause, 'ENOTEMPTY')) {
         const owners = readLeaseOwners(path, operation, true);
-        if (mode !== 'shared' || owners.some(existing => existing.mode !== 'shared' || existing.root !== owner.root)) throw new Error(`${mode} publication lease is busy; retry after the operation finishes, or recover a dead owner`);
+        if (mode !== 'shared' || owners.some(existing => existing.mode !== 'shared' || existing.root !== owner.root)) throw busyOwners(mode, owners, operation, path);
         let joined = false;
         try {
           const target = join(path, `${owner.token}.json`);
@@ -111,7 +126,7 @@ export function acquireFileLease(root: string, directory: string, name: string, 
           // between the initial scan and link. The link alone grants no access.
           const current = readLeaseOwners(path, operation, true);
           if (!current.some(existing => existing.token === owner.token) || current.some(existing => existing.mode !== 'shared' || existing.root !== owner.root || existing.host !== owner.host)) {
-            throw new Error('shared publication lease is busy; ownership changed while joining');
+            throw new CoordinationError({ operation, path, phase: 'lock', reason: 'admission-changed', message: 'shared publication lease is busy; ownership changed while joining' });
           }
           return { directory, path, owner, mode };
         } catch (joinCause) {
@@ -134,6 +149,9 @@ export function acquireFileLease(root: string, directory: string, name: string, 
 }
 
 function removeObservedOwner(path: string, owner: LeaseOwner): boolean {
+  const current = readLeaseOwners(path, 'release-observed-owner', true).find(value => value.token === owner.token);
+  if (current === undefined) return false;
+  if (current.root !== owner.root || current.host !== owner.host || current.pid !== owner.pid || current.mode !== owner.mode) throw new Error('lease identity changed before removal; preserve coordination state');
   try { unlinkSync(join(path, `${owner.token}.json`)); }
   catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; }
   try { rmdirSync(path); }
@@ -143,6 +161,19 @@ function removeObservedOwner(path: string, owner: LeaseOwner): boolean {
   }
   syncLeaseDirectory(dirname(path));
   return true;
+}
+
+/** Successful replies must relinquish publication ownership before idle reuse. */
+export function assertScanTokenReleased(path: string, token: string): void {
+  if (readLeaseOwners(path, 'scan-idle', true).some(owner => owner.token === token)) throw error('scan-idle', path, new Error('Workspace scan replied while its publication token remains'), 'cleanup');
+}
+
+/** Caller must first confirm that this exact owned child process group has exited. */
+export function releaseExitedScanToken(root: string, path: string, token: string, pid: number): void {
+  const owner = readLeaseOwners(path, 'scan-cleanup', true).find(value => value.token === token);
+  if (owner === undefined) return;
+  if (owner.root !== resolve(root) || owner.host !== hostname() || owner.pid !== pid || owner.mode !== 'shared') throw error('scan-cleanup', path, new Error('scan token identity changed; preserve coordination state'), 'cleanup');
+  removeObservedOwner(path, owner);
 }
 
 export function releaseFileLease(lease: FileLease, operation: string): void {
@@ -172,4 +203,23 @@ export function recoverFileLease(root: string, path: string, operation: string):
     if (owners.some(ownerIsAlive)) throw new Error('publication lease is busy: its owner is still alive');
     return owners.filter(owner => removeObservedOwner(path, owner)).map(owner => owner.token);
   } catch (cause) { throw error(operation, path, cause, 'cleanup'); }
+}
+
+/** Publication only: runner parent death never authorizes runner reclamation. */
+export function acquireRecoverablePublicationLease(root: string, directory: string, name: 'publication.lease', mode: FileLease['mode'], operation: string, create = true): FileLease | undefined {
+  try { return acquireFileLease(root, directory, name, mode, operation, create); }
+  catch (cause) {
+    if (!(cause instanceof CoordinationError) || cause.reason !== 'occupied') throw cause;
+    const path = join(directory, name);
+    const owners = readLeaseOwners(path, operation, true);
+    // Inspect the complete observed set before deleting anything. Unknown hosts,
+    // EPERM and reused live PIDs retain ownership, as in explicit recovery.
+    let dead = false;
+    try { dead = owners.length > 0 && owners.every(owner => owner.root === resolve(root) && !ownerIsAlive(owner)); }
+    catch { throw cause; }
+    if (!dead) throw cause;
+    for (const owner of owners) removeObservedOwner(path, owner);
+    // One retry only. A new arrival owns its token, even if it subsequently dies.
+    return acquireFileLease(root, directory, name, mode, operation, create);
+  }
 }

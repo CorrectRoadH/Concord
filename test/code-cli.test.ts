@@ -171,17 +171,24 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     const quickStart = readme.split('## Quick start\n')[1]?.split('\n## ')[0];
     const script = quickStart === undefined ? undefined : /```sh\n([\s\S]*?)\n```/u.exec(quickStart)?.[1];
     assert.ok(script, 'README must contain a runnable quick start');
+    const demo = join(scratch, 'concord-demo'); mkdirSync(demo);
+    execFileSync('git', ['init', '-q', demo]);
     const demoRun = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
-      cwd: scratch, encoding: 'utf8', timeout: 60000,
+      cwd: demo, encoding: 'utf8', timeout: 60000,
       env: { ...process.env, PATH: `${join(install, 'node_modules/.bin')}:${process.env.PATH ?? ''}` },
     });
     assert.equal(demoRun.status, 0, demoRun.stdout + demoRun.stderr);
-    assert.match(demoRun.stdout, /"commandOutcome":"pass"/u);
-    const demoCheck = spawnSync(process.execPath, [cli, '--root', join(scratch, 'concord-demo'), '--json', 'check'], { encoding: 'utf8', timeout: 10000 });
+    // Quick start assumes an existing Git repository and shows source/test annotations separately.
+    const snippets = [...quickStart!.matchAll(/```ts\n([\s\S]*?)\n```/gu)].map(match => match[1]!);
+    assert.equal(snippets.length, 2);
+    mkdirSync(join(demo, 'src')); mkdirSync(join(demo, 'test'));
+    writeFileSync(join(demo, 'src/greeting.ts'), snippets[0]!);
+    writeFileSync(join(demo, 'test/greeting.test.ts'), `${snippets[1]}\nimport test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { greet } from '../src/greeting.ts';\ntest('greet', () => assert.equal(greet('world'), 'Hello, world!'));\n`);
+    const demoCheck = spawnSync(process.execPath, [cli, '--root', demo, '--json', 'check'], { encoding: 'utf8', timeout: 10000 });
     assert.equal(demoCheck.status, 0, demoCheck.stderr);
-    assert.deepEqual(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ok: Schema.Boolean, codeDeclarations: Schema.Int, cases: Schema.Int })))(demoCheck.stdout), { ok: true, codeDeclarations: 3, cases: 1 });
-    const demoLocate = spawnSync(process.execPath, [cli, '--root', join(scratch, 'concord-demo'), '--json', 'code', 'locate', 'src/greeting.mjs', '--line', '9'], { encoding: 'utf8', timeout: 10000 });
+    assert.deepEqual(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ok: Schema.Boolean, codeDeclarations: Schema.Int, cases: Schema.Int })))(demoCheck.stdout), { ok: true, codeDeclarations: 1, cases: 1 });
+    const demoLocate = spawnSync(process.execPath, [cli, '--root', demo, '--json', 'code', 'locate', 'src/greeting.ts', '--line', '3'], { encoding: 'utf8', timeout: 10000 });
     assert.equal(demoLocate.status, 0, demoLocate.stderr);
-    assert.deepEqual(new Set(Schema.decodeUnknownSync(Schema.fromJsonString(codes))(demoLocate.stdout).codes.map(item => item.scope)), new Set(['file', 'node', 'region']));
+    assert.deepEqual(new Set(Schema.decodeUnknownSync(Schema.fromJsonString(codes))(demoLocate.stdout).codes.map(item => item.scope)), new Set(['node']));
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 })));

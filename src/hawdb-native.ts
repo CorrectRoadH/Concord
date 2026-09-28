@@ -60,7 +60,7 @@ interface NativeBridge {
 interface NativeModule {
   nativeIdentity(): unknown;
   CacheBridge: { new(path: string, readOnly: boolean, create: boolean): NativeBridge; memory(): NativeBridge };
-  OwnerGuard: new(path: string) => { close(): void };
+  OwnerGuard: new(path: string) => { verify(): void; close(): void };
 }
 let loaded: NativeModule | undefined;
 let rejected: { readonly error: HawdbFailure; readonly retryAt: number } | undefined;
@@ -122,10 +122,10 @@ export function openHawdb(path: string, options: { readonly readOnly: boolean; r
   return boundary(() => { const mode = decodeOptions(options); return new Database(new (load().CacheBridge)(decodePath(path), mode.readOnly, mode.create)); });
 }
 export function createMemoryHawdb(): HawdbDatabase { return boundary(() => new Database(load().CacheBridge.memory())); }
-export function acquireHawdbClearGuard(path: string): { close(): void } {
+export function acquireHawdbClearGuard(path: string): { verify(): void; close(): void } {
   return boundary(() => {
     const guard = new (load().OwnerGuard)(decodePath(path));
-    return { close: () => boundary(() => guard.close()) };
+    return { verify: () => boundary(() => guard.verify()), close: () => boundary(() => guard.close()) };
   });
 }
 export function hawdbIdentity(): { readonly engine: 'hawdb'; readonly revision: string; readonly abi: string; readonly target: string } {

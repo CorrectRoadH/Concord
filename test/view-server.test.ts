@@ -58,6 +58,44 @@ const parsed = (response: ResponseResult): { readonly ok: boolean; readonly valu
 const jsonHeaders = { 'content-type': 'application/json' };
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+// @name workspace-scan-keeps-http-responsive
+test('a real thousand-file workspace scan leaves static and document HTTP requests responsive', async t => {
+  const f = fixture();
+  const repo = new LocalRepository(f.root, { initialize: true });
+  try { initialize(repo, false, { testRoots: ['test'], sourceRoots: ['src'] }); }
+  finally { repo.close(); }
+  mkdirSync(join(f.root, 'src'), { recursive: true });
+  mkdirSync(join(f.root, 'test'), { recursive: true });
+  for (let index = 0; index < 1072; index++) {
+    writeFileSync(join(f.root, 'src', `source-${index}.ts`), `export const value${index} = ${index};\n`);
+    writeFileSync(join(f.root, 'test', `test-${index}.ts`), `export const value${index} = ${index};\n`);
+  }
+  const server = await startViewServer({ ...f, host: '127.0.0.1', port: 0 });
+  try {
+    let finished = false;
+    const started = performance.now();
+    const workspace = send(server, '/api/workspace').finally(() => { finished = true; });
+    const lease = join(f.root, '.git/concord/trace/publication.lease');
+    const deadline = performance.now() + 15000;
+    while (!existsSync(lease) && !finished && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(finished, false, 'scan must still be active when concurrent requests are sent');
+    assert.ok(existsSync(lease), 'real scanning process has acquired its lease');
+    const responsiveAt = performance.now();
+    const [asset, document] = await Promise.all([send(server, '/assets/app.js'), send(server, '/api/file?path=docs%2Fconstitution.md')]);
+    assert.equal(asset.status, 200, asset.body);
+    assert.equal(document.status, 200, document.body);
+    const responseMs = performance.now() - responsiveAt;
+    assert.equal(finished, false, 'static and document requests finish before the full scan');
+    const response = await workspace;
+    const coldMs = performance.now() - started;
+    assert.equal(response.status, 200, response.body);
+    const second = await send(server, '/api/workspace');
+    assert.equal(second.status, 200, second.body);
+    t.diagnostic(`1072 source + 1072 test files: concurrent response ${Math.round(responseMs)}ms; cold workspace ${Math.round(coldMs)}ms`);
+  } finally { await server.close(); rmSync(f.root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view writes request failure codes without copying request targets or diagnostics into logs', async () => {
   const { root, webRoot } = fixture();
   let server: ViewServerHandle | undefined;

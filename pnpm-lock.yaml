@@ -26,9 +26,6 @@ importers:
       mdast-util-from-markdown:
         specifier: 2.0.3
         version: 2.0.3
-      p5:
-        specifier: 2.3.4
-        version: 2.3.4
       tsx:
         specifier: 4.23.12
         version: 4.23.12
@@ -102,6 +99,9 @@ importers:
       mermaid:
         specifier: 11.12.2
         version: 11.12.2
+      p5:
+        specifier: 2.3.4
+        version: 2.3.4
       p5.brush:
         specifier: 2.2.3
         version: 2.2.3(p5@2.3.4)

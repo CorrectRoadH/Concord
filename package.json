@@ -35,7 +35,6 @@
     "effect": "4.0.0-rc.112",
     "esbuild": "0.28.2",
     "mdast-util-from-markdown": "2.0.3",
-    "p5": "2.3.4",
     "tsx": "4.23.12",
     "typescript": "6.0.3",
     "yaml": "2.9.0"
@@ -62,6 +61,7 @@
     "clsx": "2.1.1",
     "lucide-react": "1.45.0",
     "mermaid": "11.12.2",
+    "p5": "2.3.4",
     "p5.brush": "2.2.3",
     "p5.sound": "0.4.1",
     "radix-ui": "1.6.7",

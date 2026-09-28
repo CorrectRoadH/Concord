@@ -66,6 +66,7 @@ const build = Effect.gen(function*() {
   if (webExit !== 0) return yield* new BuildFailed({ project: 'web', exitCode: webExit });
   yield* Effect.tryPromise(() => bundle({ entryPoints: ['web/p5/runtime.ts'], outfile: 'dist/web/p5-runtime.js', bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'linked', define: { IS_MINIFIED: 'true' } }));
   yield* fs.copyFile('node_modules/p5/license.txt', 'dist/web/P5-LICENSE.txt');
+  yield* fs.copy('node_modules/p5/types', 'dist/p5-types');
   yield* fs.makeDirectory('dist/web/p5-libraries', { recursive: true });
   for (const library of Object.values(P5_LIBRARIES)) {
     yield* fs.copyFile(library.source, `dist/web/p5-libraries/${library.file}`);

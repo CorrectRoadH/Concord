@@ -112,20 +112,14 @@ fn inspect_path(path: &Path, create: bool) -> napi::Result<bool> {
 }
 fn inspect_tree(path: &Path) -> napi::Result<()> {
     let mut pending = vec![path.to_owned()];
-    let mut count = 0_usize;
-    let mut bytes = 0_u64;
     while let Some(dir) = pending.pop() {
         for entry in fs::read_dir(dir).map_err(unsafe_path)? {
             let entry = entry.map_err(unsafe_path)?;
             let metadata = fs::symlink_metadata(entry.path()).map_err(unsafe_path)?;
-            count += 1;
-            if count > 4096 { return Err(limit("database directory entry budget exceeded")); }
             if metadata.file_type().is_symlink() { return Err(unsafe_path("symlink in database directory")); }
             if metadata.is_dir() { pending.push(entry.path()); }
             else if metadata.is_file() {
                 if metadata.nlink() != 1 { return Err(unsafe_path("hard link in database directory")); }
-                bytes = bytes.saturating_add(metadata.len());
-                if bytes > (256*MIB) as u64 { return Err(limit("database directory byte budget exceeded")); }
             } else { return Err(unsafe_path("special file in database directory")); }
         }
     }
@@ -336,7 +330,7 @@ impl CacheBridge {
     pub fn close(&self) -> napi::Result<()> {
         let mut handle = self.handle.lock().map_err(unavailable)?;
         let mut db = handle.db.take();
-        let checkpoint = if !handle.memory && !handle.read_only && !handle.poisoned && handle.writes > 0 {
+        let checkpoint = if !handle.memory && !handle.read_only && !handle.poisoned {
             db.as_mut().map(|db| db.checkpoint()).transpose().map(|_| ()).map_err(unavailable)
         } else { Ok(()) };
         drop(db);
@@ -371,9 +365,6 @@ fn maintain(handle: &mut Handle, bytes: usize, count: usize) -> napi::Result<()>
             handle.churn = 0; handle.writes = 0;
         }
     } else {
-        if let Some(path) = &handle.path {
-            if let Err(error) = inspect_tree(path) { handle.poisoned = true; return Err(error); }
-        }
         if handle.churn < 4*MIB && handle.writes < 32 { return Ok(()); }
         if let Err(error) = active_mut(handle)?.checkpoint() {
             handle.poisoned = true;
@@ -391,7 +382,7 @@ fn is_owner_only(path: &Path) -> napi::Result<bool> {
 }
 
 #[napi]
-pub struct OwnerGuard { file: Option<File> }
+pub struct OwnerGuard { file: Option<File>, path: PathBuf }
 #[napi]
 impl OwnerGuard {
     #[napi(constructor)]
@@ -400,10 +391,26 @@ impl OwnerGuard {
         inspect_path(path, true)?;
         let file = inspect_lock(path, true)?.ok_or_else(|| unavailable("ownership lock unavailable"))?;
         match file.try_lock() {
-            Ok(()) => Ok(Self { file: Some(file) }),
+            Ok(()) => {
+                let guard = Self { file: Some(file), path: path.to_owned() };
+                guard.verify()?;
+                Ok(guard)
+            },
             Err(std::fs::TryLockError::WouldBlock) => Err(err("HawdbBusy", "database directory is owned by another handle")),
             Err(std::fs::TryLockError::Error(error)) => Err(unavailable(error)),
         }
+    }
+    #[napi]
+    pub fn verify(&self) -> napi::Result<()> {
+        let file = self.file.as_ref().ok_or_else(|| err("HawdbClosed", "ownership guard is closed"))?;
+        let root = fs::symlink_metadata(&self.path).map_err(unsafe_path)?;
+        if !root.is_dir() || root.file_type().is_symlink() { return Err(unsafe_path("database root changed during clear")); }
+        let opened = file.metadata().map_err(unsafe_path)?;
+        let linked = fs::symlink_metadata(self.path.join(LOCK)).map_err(unsafe_path)?;
+        if !linked.is_file() || linked.file_type().is_symlink() || linked.nlink() != 1 || opened.nlink() != 1 || opened.dev() != linked.dev() || opened.ino() != linked.ino() {
+            return Err(unsafe_path("ownership lock inode changed during clear"));
+        }
+        Ok(())
     }
     #[napi]
     pub fn close(&mut self) { self.file = None; }

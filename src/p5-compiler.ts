@@ -1,7 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/embed-p5-sketch.md
 import { lstatSync, readFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, posix, resolve } from 'node:path';
 import { Effect } from 'effect';
@@ -41,8 +40,7 @@ function sketchSource(source: string, mode: 'instance' | 'global', inline: boole
 
 /** Type checking reads only the captured graph and trusted compiler/p5 declarations. */
 function checkTypes(sources: Map<string, string>, resolutions: Map<string, string>, global: boolean, captureType: (specifier: string, importer: string) => { path: string; source: string }): void {
-  const require = createRequire(import.meta.url);
-  const p5Types = resolve(dirname(require.resolve('p5')), '../types/p5.d.ts');
+  const p5Types = fileURLToPath(new URL('./p5-types/p5.d.ts', import.meta.url));
   const globalTypes = join(dirname(p5Types), 'global.d.ts');
   const libRoot = dirname(ts.getDefaultLibFilePath({}));
   const ambient = '/__concord_p5_assets.d.ts';

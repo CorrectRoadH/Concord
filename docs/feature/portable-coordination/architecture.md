@@ -22,6 +22,10 @@ Owner-format validity and critical-section admission are separate judgments. The
 
 When every owner is confirmed ESRCH, recover reclaims that transient one token at a time. Any live owner stays. Host mismatch, EPERM, PID reuse, and an unknown owner also stay. Recovery does not infer death from age.
 
+Ordinary repository admission uses the same death and identity checks to remove an entirely dead observed owner set and retry once. This does not process journals or runner ownership. Explicit recovery records its own reclamation without this automatic retry.
+
+CLI and Web acquisition waits yield the event loop, expire after three seconds, and report owner identity. Later attempts cannot reclaim new owners. Only acquisition is retried; published operations are never replayed.
+
 Failed fsync or failed verification after a join removes that exact token. A failed cleanup keeps the named error and the scene. Recovery never recursively deletes the fixed lease directory.
 
 Recover first records and reclaims observed dead publication tokens. It then selects the single journal under exclusive protection. Later engine stages do not reclaim again.

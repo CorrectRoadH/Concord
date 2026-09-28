@@ -205,7 +205,7 @@ function clearUnderSnapshot(repo: Repository): { readonly status: string; readon
   if (!inventory.existing) return { status: 'empty', path: inventory.path };
   closeRepositoryCache(repo);
   const guard = acquireHawdbClearGuard(inventory.path);
-  try { deleteInspectedCache(inspectCacheClear(repo.privateDir)); }
+  try { deleteInspectedCache(inspectCacheClear(repo.privateDir), () => guard.verify()); }
   finally { guard.close(); }
   return { status: inventory.empty ? 'empty' : 'cleared', path: inventory.path };
 }
