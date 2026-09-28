@@ -24,7 +24,7 @@ function isolatedRepository(t: TestContext): string {
 test("generic and Trace operations share one portable publication lease", (t) => {
   const root = isolatedRepository(t);
   const lease = acquireTraceLeaseSync(root, "exclusive", "test-hold", true);
-  assert.throws(() => new LocalRepository(root, { dryRun: true }), { code: "RepositoryBusy" });
+  new LocalRepository(root, { dryRun: true }).close();
   assert.throws(() => acquireTraceLeaseSync(root, "shared", "test-shared", true), /busy|lease/i);
   releaseTraceLeaseSync(lease!, "test-release");
   const repository = new LocalRepository(root, { dryRun: true });
@@ -40,7 +40,7 @@ test("the shared lease also excludes a separate Node process", async (t) => {
       child.stdout.once("data", (data) => data.toString().includes("ready") ? resolve() : reject(new Error(`unexpected child output: ${data}`)));
       child.once("error", reject);
     });
-    assert.throws(() => new LocalRepository(root, { dryRun: true }), /busy|lease/i);
+    new LocalRepository(root, { dryRun: true }).close();
   } finally {
     child.stdin.end();
     await new Promise<void>((resolve) => child.once("exit", () => resolve()));
@@ -212,19 +212,19 @@ test("invalid generated mode or oversized bytes are rejected before a journal is
   assert.throws(() => readFileSync(join(tracePrivateDirectorySync(root), "multi-file-publication-journal.json"), "utf8"), /ENOENT/);
 });
 
-test("full LocalRepository and Trace entry points exclude each other across processes", async (t) => {
+test("source reads remain available while generic and Trace writers hold ownership", async (t) => {
   const root = isolatedRepository(t);
   const genericChild = spawn(process.execPath, ["--import", "tsx", "--eval", `import { LocalRepository } from './src/storage.ts'; const repository = new LocalRepository(process.argv[1]); repository.beginSnapshot(); console.log('ready'); process.stdin.once('data', () => repository.close());`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
   t.after(() => { if (genericChild.exitCode === null) genericChild.kill("SIGTERM"); });
   try {
     await new Promise<void>((resolve, reject) => { genericChild.stdout.once("data", (data) => data.toString().includes("ready") ? resolve() : reject(new Error("generic child did not become ready"))); genericChild.once("error", reject); });
-    await assert.rejects(Effect.runPromise(withTraceReadLease(root, () => Effect.succeed(true))), /busy|lease/i);
+    assert.equal(await Effect.runPromise(withTraceReadLease(root, () => Effect.succeed(true))), true);
   } finally { genericChild.stdin.end("done"); await new Promise<void>((resolve) => genericChild.once("exit", () => resolve())); }
 
   const profileChild = spawn(process.execPath, ["--import", "tsx", "--eval", `import { Effect } from 'effect'; import { mutateTraceFiles } from './repository/docs/trace/relation-mutation.ts'; await Effect.runPromise(mutateTraceFiles({ root: process.argv[1], operation: 'hold-profile', prepareUnderLease: Effect.promise(() => { console.log('ready'); return new Promise((resolve) => process.stdin.once('data', () => resolve([{ path: 'held.md', bytes: 'held\\n' }]))); }) }));`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
   t.after(() => { if (profileChild.exitCode === null) profileChild.kill("SIGTERM"); });
   try {
     await new Promise<void>((resolve, reject) => { profileChild.stdout.once("data", (data) => data.toString().includes("ready") ? resolve() : reject(new Error("profile child did not become ready"))); profileChild.once("error", reject); });
-    assert.throws(() => new LocalRepository(root, { dryRun: true }), /busy|lease/i);
+    new LocalRepository(root, { dryRun: true }).close();
   } finally { profileChild.stdin.end("done"); await new Promise<void>((resolve) => profileChild.once("exit", () => resolve())); }
 });

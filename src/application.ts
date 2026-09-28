@@ -128,7 +128,7 @@ function withRepository<A>(
   timing?: RequestTiming,
 ): Effect.Effect<A, ConcordError> {
   return Effect.acquireRelease(
-    waitForPublication(reclaimDead => measuredSync(timing)('view.openRepository', () => new LocalRepository(root, { ...options, reclaimPublication: reclaimDead }))),
+    waitForPublication(reclaimDead => measuredSync(timing)('view.openRepository', () => new LocalRepository(root, { optimistic: true, ...options, reclaimPublication: reclaimDead }))),
     (repo) => Effect.sync(() => timing === undefined ? repo.close() : timing.sync('view.closeRepository', () => repo.close())),
   ).pipe(Effect.flatMap(operation), Effect.scoped);
 }
@@ -136,7 +136,7 @@ function withRepository<A>(
 function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefined, name: string, evaluate: () => A): Effect.Effect<A, ConcordError> {
   return Effect.acquireUseRelease(
     waitForPublication(reclaimDead => sync(`${name}.acquire`, () => repo.beginSnapshot(reclaimDead))),
-    () => measuredSync(timing)(name, evaluate),
+    () => measuredSync(timing)(name, () => { const value = evaluate(); repo.verifySnapshot(); return value; }),
     () => Effect.sync(() => repo.endSnapshot()),
   );
 }

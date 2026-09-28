@@ -93,7 +93,7 @@ test('acquisition waiting does not reclaim an owner that arrived after its first
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name ordinary-query-reclaims-dead-publication
-test('ordinary built CLI reclaims a killed publication owner without manual deletion', async t => {
+test('ordinary built CLI reads despite a killed publication owner and preserves its token', async t => {
   const root = fixture(t);
   const dead = holder(root);
   try {
@@ -101,13 +101,13 @@ test('ordinary built CLI reclaims a killed publication owner without manual dele
     await stop(dead);
     const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'memory', 'list'], { encoding: 'utf8', timeout: 15000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.equal(existsSync(join(tracePrivateDirectorySync(root), 'publication.lease')), false);
-  } finally { await stop(dead); }
+    assert.equal(existsSync(join(tracePrivateDirectorySync(root), 'publication.lease')), true);
+  } finally { await stop(dead); recoverPublicationLeaseSync(root); }
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name live-publication-wait-is-bounded
-test('built CLI waits for live publication owners, times out with identity, and preserves their tokens', async t => {
+test('built CLI reads without waiting for live publication owners and preserves their tokens', async t => {
   const root = fixture(t);
   const live = holder(root);
   try {
@@ -116,10 +116,7 @@ test('built CLI waits for live publication owners, times out with identity, and 
     const before = readdirSync(path);
     const started = performance.now();
     const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'memory', 'list'], { encoding: 'utf8', timeout: 15000 });
-    assert.notEqual(result.status, 0);
-    assert.ok(performance.now() - started >= 2900);
-    assert.match(result.stdout + result.stderr, /Timed out waiting/);
-    assert.match(result.stdout + result.stderr, new RegExp(`pid=${live.pid}`));
+    assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.deepEqual(readdirSync(path), before);
   } finally { await stop(live); recoverPublicationLeaseSync(root); }
 });
@@ -151,7 +148,7 @@ test('repository construction releases ownership; snapshots and commits use one 
     b.snapshot(() => assert.ok(b.read('concord.config.ts')));
     a.publish('independent', [{ path: 'memory/one.md', before: null, after: 'one' }]);
     b.publish('independent', [{ path: 'memory/two.md', before: null, after: 'two' }]);
-    assert.deepEqual(readdirSync(tracePrivateDirectorySync(root)), []);
+    assert.deepEqual(readdirSync(tracePrivateDirectorySync(root)), ['publication.revision']);
   } finally { a.close(); b.close(); }
 });
 

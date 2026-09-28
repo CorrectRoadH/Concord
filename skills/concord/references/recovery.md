@@ -14,7 +14,7 @@ concord cache rebuild
 
 缓存只管理 cache.hawdb，目录外文件不参与状态判定或清理。clear --dry-run 展示清理条目、保留路径与原生产物可用性；真实执行重新验证所有权。native binary digest differs 表示安装产物与包内摘要不符，应修复安装，清缓存不能修复该错误。远端快照消失后需显式 fetch 才能刷新，本地已捕获 Issue 与 Memory 保留。短期解析及 Git baseline 使用进程内 HawDB；清理当前进程不表示其它进程的短期缓存也已清空，它们仍须核对当前来源。
 
-文档、配置、Memory 与源码写入使用短 publication lease、preimage journal 和逐文件原子 rename。查询声明 `access: read`，使用共享 snapshot，并拒绝真正发布。非 dry-run 的写入、外部执行、恢复、cache rebuild 与 cache clear 使用独占 snapshot。dry-run 预览沿用共享 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
+文档、配置、Memory 与源码写入使用短 publication lease、preimage journal 和逐文件原子 rename。查询声明 `access: read`，使用乐观 snapshot，并拒绝真正发布。普通写入仅在提交阶段取得独占所有权；外部执行、恢复、cache rebuild 与 cache clear 保留各自的独占边界。dry-run 预览使用乐观 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
 
 ```sh
 concord recover --json

@@ -6,6 +6,7 @@
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { checkWriting } from './writing.js';
 import { waitForPublication } from './publication-wait.js';
+import { cachedQuery, type Query } from './query-cache.js';
 import { checkProject } from './project-check.js';
 import { showWriting, setWriting, writingIndex } from './writing-management.js';
 import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
@@ -43,6 +44,7 @@ import { adoptConstitution, amendConstitution, initializeConstitution, showConst
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
   root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise discover concord.config.ts from cwd; unsupported configuration is refused without conversion.')),
   json: Flag.boolean('json').pipe(Flag.withDefault(false)),
+  fresh: Flag.boolean('fresh').pipe(Flag.withDefault(false), Flag.withDescription('Wait for current diagnostic sources instead of reading an asynchronously refreshed snapshot.')),
   dryRun: Flag.boolean('dry-run').pipe(Flag.withDefault(false), Flag.withDescription('Validate a document mutation without writing.')),
 }));
 const text = (name: string) => Flag.string(name);
@@ -70,15 +72,23 @@ function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: 
   return Effect.gen(function*() {
     const settings = yield* root;
     const repo = yield* Effect.acquireRelease(
-      waitForPublication(reclaimDead => Effect.try({ try: () => new LocalRepository(Option.getOrUndefined(settings.root), { reclaimPublication: reclaimDead, initialize: options.initialize, recover: options.recover, access: options.readonly ? 'read' : 'write', dryRun: options.initialize && options.readonly || settings.dryRun }), catch: failure })),
+      waitForPublication(reclaimDead => Effect.try({ try: () => new LocalRepository(Option.getOrUndefined(settings.root), { optimistic: !options.unlocked, reclaimPublication: reclaimDead, initialize: options.initialize, recover: options.recover, access: options.readonly ? 'read' : 'write', dryRun: options.initialize && options.readonly || settings.dryRun }), catch: failure })),
       repo => Effect.sync(() => repo.close()),
     );
     if (!options.unlocked) yield* Effect.acquireRelease(waitForPublication(reclaimDead => sync(() => repo.beginSnapshot(reclaimDead))), () => Effect.sync(() => repo.endSnapshot()));
-    return yield* operation(repo, settings).pipe(Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
+    return yield* operation(repo, settings).pipe(Effect.tap(() => sync(() => repo.verifySnapshot())), Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
   }).pipe(Effect.scoped);
 }
-function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>) {
-  return withRepo(operation, { readonly: true });
+function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, query?: Query) {
+  return Effect.gen(function*() {
+    const settings = yield* root;
+    if (query !== undefined && !settings.fresh && !settings.dryRun) {
+      const value = yield* cachedQuery(Option.getOrUndefined(settings.root), query);
+      yield* Effect.sync(() => emit(value, settings.json));
+      return value;
+    }
+    return yield* withRepo(operation, { readonly: true });
+  });
 }
 const sync = <A>(fn: () => A) => Effect.try({ try: fn, catch: failure });
 const cached = (dry: boolean) => dry ? 'off' as const : 'use' as const;
@@ -327,12 +337,12 @@ const concepts = Command.make('concepts').pipe(Command.withDescription('Discover
 ]));
 const check = Command.make('check',{},()=>withReadRepo((repo,s)=>sync(()=>{const result=checkProject(repo,cached(s.dryRun));if(!result.ok)process.exitCode=1;return result;}))).pipe(Command.withDescription('Validate source ownership, references and writing policy; do not execute tests.'));
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
-  Command.make('show',{ref:Argument.string('reference')},args=>withReadRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))))),
-  Command.make('gaps',{},()=>withReadRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))))).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),
+  Command.make('show',{ref:Argument.string('reference')},args=>withReadRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))), ['trace', 'show', args.ref])),
+  Command.make('gaps',{},()=>withReadRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))), ['trace', 'gaps'])).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),
   Command.make('check',{},()=>withReadRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'trace-check',ok:t.complete,complete:t.complete,findings:t.findings,edges:t.edges};}))),
 ]));
 const review = Command.make('review').pipe(Command.withDescription('Generate local review material from current contracts and history.'),Command.withSubcommands([
-  Command.make('render',{ref:Argument.string('reference').pipe(Argument.optional)},args=>withReadRepo((repo,s)=>sync(()=>renderReview(repo,Option.getOrUndefined(args.ref),cached(s.dryRun))))),
+  Command.make('render',{ref:Argument.string('reference').pipe(Argument.optional)},args=>withReadRepo((repo,s)=>sync(()=>renderReview(repo,Option.getOrUndefined(args.ref),cached(s.dryRun))), Option.isSome(args.ref) ? ['review', 'render', args.ref.value] : ['review', 'render'])),
 ]));
 const templates = Command.make('template').pipe(Command.withDescription('Inspect built-in writing templates without a project.'), Command.withSubcommands([
   Command.make('list', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* sync(() => ({ operation: 'template-list', templates: listTemplates() })); yield* Effect.sync(() => emit(result, settings.json)); })),

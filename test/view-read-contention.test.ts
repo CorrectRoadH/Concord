@@ -24,7 +24,7 @@ async function release(child: ChildProcess): Promise<void> {
 }
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('file reads recover from real lease contention, cancel on navigation, and align tree rows', async () => {
+test('file reads and navigation remain available with live or dead publication owners', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-read-contention-'));
   let server: ViewServerHandle | undefined;
   let browser: Browser | undefined;
@@ -56,43 +56,19 @@ test('file reads recover from real lease contention, cancel on navigation, and a
     assert.ok(Math.abs(folderLabel.x - fileLabel.x) < 1, 'same-depth labels align');
 
     const lockPath = root;
-    const busyResponse = () => page.waitForResponse(response => response.url().includes('/api/file?') && response.status() === 409);
-    holder = await hold(lockPath);
-    const started = page.waitForRequest(request => request.url().includes('/api/file?'));
-    await architecture.click();
-    await started;
-    await new Promise(resolve => setTimeout(resolve, 100));
-    await release(holder); holder = undefined;
-    await expect(page.locator('[contenteditable="true"]').first()).toBeVisible();
-    await expect(page.getByRole('button', { name: '重试', exact: true })).toHaveCount(0);
-
-    holder = await hold(lockPath);
-    await readme.click();
     const retry = page.getByRole('button', { name: '重试', exact: true });
-    await expect(retry).toBeVisible();
-    await release(holder); holder = undefined;
-    await retry.click();
-    await expect(page.locator('[contenteditable="true"]').first()).toContainText('Lease content');
-
+    const recover = page.getByRole('button', { name: '恢复中断的发布' });
     holder = await hold(lockPath);
-    const interrupted = busyResponse();
     await architecture.click();
-    await interrupted;
+    await expect(page.locator('[contenteditable="true"]').first()).toBeVisible();
+    await expect(retry).toHaveCount(0);
     await readme.click();
-    await release(holder); holder = undefined;
     await expect(page.locator('[contenteditable="true"]').first()).toContainText('Lease content');
     await expect(readme).toHaveAttribute('data-active', 'true');
-    await expect(retry).toHaveCount(0);
-
-    holder = await hold(lockPath);
     await page.reload();
-    const recover = page.getByRole('button', { name: '恢复中断的发布' });
-    await expect(recover).toBeVisible();
-    await recover.click();
-    await expect(page.getByRole('alert')).toContainText('owner is still alive');
-    await release(holder); holder = undefined;
-    await page.getByRole('button', { name: '重试', exact: true }).click();
     await expect(page.getByRole('link', { name: '总览', exact: true })).toBeVisible();
+    await expect(recover).toHaveCount(0);
+    await release(holder); holder = undefined;
 
     holder = await hold(lockPath);
     const dead = holder;

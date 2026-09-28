@@ -6,7 +6,7 @@ Memory/Issue 查询和正文维护按所属来源读取；指定路径的注释�
 
 ## G2: Read concurrency
 
-CLI 与 Web 的普通查询声明只读访问，使用共享短快照；写入、恢复与证据提交保持独占。操作类别不再借用 dry-run 表达。
+CLI 与 Web 的普通查询声明只读访问，使用乐观来源快照；普通写入只在提交阶段独占，恢复与证据签发保持独占。操作类别不再借用 dry-run 表达。
 
 ## G3: Explain recovery
 

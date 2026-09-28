@@ -16,6 +16,7 @@ constitutionRefs:
   - docs/constitution.md#c-009
   - docs/constitution.md#c-012
   - docs/constitution.md#c-014
+  - docs/constitution.md#c-013
 ---
 
 # 统一的本地缓存与检索引擎
@@ -24,7 +25,7 @@ Concord 的持久缓存与派生检索由统一嵌入式数据引擎承接。源
 
 缓存命名空间区分各类投影及资源预算。所有权守卫覆盖缓存目录的清理过程，取得守卫后才允许删除缓存数据，锁文件及其 inode 保留。
 
-目标引擎为 HawDB。注解、代码、配置及远端反馈快照不再依赖 SQLite。短期文档与代码解析缓存同样使用 HawDB，保持容量上限、当前源字节身份与可丢弃语义，不另建 Map 解析缓存。缓存必须严格解码、核对来源摘要，并在不可用时保留现有回源或具名诊断行为。检索索引的命中必须对应当前来源，不返回删除或变更后的陈旧正文。
+目标引擎为 HawDB。注解、代码、配置及远端反馈快照不再依赖 SQLite。短期文档与代码解析缓存同样使用 HawDB，保持容量上限、当前源字节身份与可丢弃语义，不另建 Map 解析缓存。当前来源缓存必须严格解码、核对来源摘要，并在不可用时保留回源或具名诊断行为。诊断历史投影按[异步查询契约](use-case/query-asynchronous-projections.md)返回构建时结果，不授权当前事实门禁。检索索引的命中必须对应当前来源，不返回删除或变更后的陈旧正文。
 
 CLI 与 Web 使用同一入口和生命周期约束。安装包在支持的 Linux 与 macOS 上携带所需运行产物，消费者无需 Rust 编译器、HawDB checkout、全局程序或额外数据库服务。目标平台缺少产物须明确诊断，不以另一个数据库冒充 HawDB。
 
@@ -34,3 +35,5 @@ CLI 与 Web 使用同一入口和生命周期约束。安装包在支持的 Linu
 
 - [替换持久缓存](use-case/use-unified-cache.md)
 - [管理当前来源的检索投影](use-case/query-current-projections.md)
+
+- [读取异步诊断投影](use-case/query-asynchronous-projections.md)

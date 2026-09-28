@@ -59,12 +59,13 @@ fn namespace_quota(namespace: &str, memory: bool) -> napi::Result<(usize, usize)
         (false, "code_cache") => Ok((20_000, 32*MIB)),
         (false, "config_cache") => Ok((128, 8*MIB)),
         (false, "feedback_cache") => Ok((10_000, 32*MIB)),
+        (false, "query_cache") => Ok((64, 16*MIB)),
         _ => Err(err("HawdbIncompatible", "namespace is unavailable in this database mode")),
     }
 }
 fn namespaces(memory: bool) -> &'static [&'static str] {
     if memory { &["document_parse", "code_parse", "git_baseline"] }
-    else { &["annotation_cache", "code_cache", "config_cache", "feedback_cache"] }
+    else { &["annotation_cache", "code_cache", "config_cache", "feedback_cache", "query_cache"] }
 }
 fn config(read_only: bool) -> DatabaseConfig {
     DatabaseConfig {

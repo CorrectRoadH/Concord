@@ -5,8 +5,9 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, lstatSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { Effect } from 'effect';
-import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
+import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, publicationRevision, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
 export { CoordinationError } from './file-lease.js';
+export { advancePublicationRevision } from './file-lease.js';
 export { invalidateActiveRun } from './run-coordination.js';
 export type TraceLease = FileLease;
 const TRACE_PRIVATE_PATH = 'concord/trace';
@@ -31,6 +32,10 @@ function gitPath(root: string, name: string): string {
 }
 
 export function tracePrivateDirectorySync(root: string): string { return gitPath(root, TRACE_PRIVATE_PATH); }
+export function readPublicationRevisionSync(root: string): string {
+  assertLegacyTraceStateMigratedSync(root, 'read');
+  return publicationRevision(tracePrivateDirectorySync(root));
+}
 export function legacyTracePrivateDirectorySync(root: string): string { return gitPath(root, LEGACY_TRACE_PRIVATE_PATH); }
 export function genericPrivateDirectorySync(root: string): string { return gitPath(root, "concord"); }
 export function genericJournalPath(root: string): string {

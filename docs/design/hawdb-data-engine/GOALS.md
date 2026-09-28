@@ -2,7 +2,7 @@
 
 ## G1: Unified engine
 
-四类持久缓存和短期解析缓存使用 HawDB，不保留 SQLite 或另一套 Map 解析缓存。
+持久缓存和短期解析缓存使用 HawDB，不保留 SQLite 或另一套 Map 解析缓存。
 
 ## G2: Current projections
 

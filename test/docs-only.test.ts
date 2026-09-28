@@ -25,7 +25,7 @@ test('packed CLI manages documentation without test roots and can later discover
     mkdirSync(root);
     execFileSync('git', ['init', '-q', root]);
     function call<A>(args: readonly string[], schema: Schema.ConstraintDecoder<A, never>, status = 0): A {
-      const result = spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20000 });
+      const result = spawnSync(process.execPath, [cli, '--root', root, '--json', '--fresh', ...args], { encoding: 'utf8', timeout: 20000 });
       assert.equal(result.status, status, result.stdout + result.stderr);
       const output = result.stdout || result.stderr;
       try { return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(output); }

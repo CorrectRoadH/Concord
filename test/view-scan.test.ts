@@ -9,20 +9,17 @@ import { ViewScanManager } from '../dist/view-scan.js';
 import { acquireTraceLeaseSync, releaseTraceLeaseSync } from '../dist/coordination.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 
-const Owner = Schema.Struct({ pid: Schema.Int, token: Schema.String });
 async function scanPid(root: string): Promise<number> {
-  const path = join(root, '.git/concord/trace/publication.lease');
   const deadline = performance.now() + 15000;
   while (performance.now() < deadline) {
-    try {
-      for (const name of readdirSync(path)) {
-        const owner = Schema.decodeUnknownSync(Schema.fromJsonString(Owner))(readFileSync(join(path, name), 'utf8'));
-        if (owner.pid !== process.pid) return owner.pid;
-      }
-    } catch { /* snapshots acquire and release while the observer polls */ }
-    await new Promise(resolve => setTimeout(resolve, 2));
+    const rows = execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' }).split('\n');
+    for (const row of rows) {
+      const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/u.exec(row);
+      if (match && Number(match[2]) === process.pid && match[3]!.includes('view-scan-worker.js') && match[3]!.includes(root)) return Number(match[1]);
+    }
+    await new Promise(resolve => setTimeout(resolve, 10));
   }
-  throw new Error('Scan process did not acquire a snapshot');
+  throw new Error('Scan process did not start');
 }
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-scan-lifecycle-'));
@@ -36,7 +33,7 @@ function fixture(): string {
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name scan-child-termination-releases-exact-token
-test('last scan waiter cancellation kills a stopped child and releases only its owned token', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('last scan waiter cancellation kills a stopped child without altering publication owners', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = fixture();
   const other = acquireTraceLeaseSync(root, 'shared', 'unrelated-reader')!;
   const manager = new ViewScanManager(root);
@@ -45,17 +42,8 @@ test('last scan waiter cancellation kills a stopped child and releases only its 
   const b = manager.scan(second.signal).catch(error => error);
   let childPid: number | undefined;
   try {
-    const deadline = performance.now() + 15000;
-    while (performance.now() < deadline && childPid === undefined) {
-      for (const name of readdirSync(other.path)) {
-        try {
-          const owner = Schema.decodeUnknownSync(Schema.fromJsonString(Owner))(readFileSync(join(other.path, name), 'utf8'));
-          if (owner.pid !== process.pid) childPid = owner.pid;
-        } catch { /* a short snapshot may already have released its token */ }
-      }
-      if (childPid === undefined) await new Promise(resolve => setTimeout(resolve, 2));
-    }
-    assert.ok(childPid, 'worker acquired its own shared lease');
+    childPid = await scanPid(root);
+    assert.deepEqual(readdirSync(other.path), [`${other.owner.token}.json`], 'scan owns no publication token');
     process.kill(childPid, 'SIGSTOP');
     first.abort();
     await a;

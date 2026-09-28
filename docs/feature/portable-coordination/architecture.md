@@ -1,32 +1,24 @@
 # Short publication leases
 
-Concord coordinates one worktree with Node file leases. HawDB remains a disposable cache. This page owns access, shared admission, and recovery results. The user path is [Coordinate local publications](use-case/coordinate-local-publications.md). Document dependency scope is in the [local SDLC architecture](../local-sdlc/architecture.md). The precise operation matrix is the [scoped operation-boundary contract](../../design/operation-boundaries/plans/scoped/architecture.md).
+Concord coordinates one worktree with Node file leases. HawDB remains a disposable cache. This page owns optimistic source access, exclusive commit, and recovery results. The user path is [Coordinate local publications](use-case/coordinate-local-publications.md). Document dependency scope is in the [local SDLC architecture](../local-sdlc/architecture.md). The precise operation matrix is the [scoped operation-boundary contract](../../design/operation-boundaries/plans/scoped/architecture.md).
 
 ## Entity ownership
 
-Publication lease records complete token owners for a short snapshot. Read access takes a shared snapshot and rejects publication. Non-dry-run write access takes an exclusive snapshot.
+Source queries do not acquire publication ownership. They record file preimages, missing paths and directory membership, then verify them before returning.
 
-Dry-run chooses whether a write plan is published. It does not change the access class. A dry-run preview uses a shared snapshot and never authorizes publication.
+A persistent publication revision advances when an exclusive owner enters and exits. A changed revision rejects the current result with SourceChanged. Unfinished journals still prevent a current successful snapshot.
 
-The first owner is published by a temporary directory, fsync, and atomic rename. A later shared owner joins by an atomic hard link of its complete token file. A single-owner record from the previous format is treated as exclusive. Constructing LocalRepository does not hold a command-long writer lock.
+Ordinary document mutations plan optimistically and acquire an exclusive lease only for commit. Commit verifies configuration, observations and the entire change set before writing the journal and publishing files. Concurrent plans cannot overwrite the winning writer. Explicit write snapshots protect runner transitions and recovery; they do not wrap ordinary queries.
 
-Runner lease, run state, and evidence have their own owners. Recover does not delete them. A journal owns one prepared change set. An unfinished multi-file journal still blocks an ordinary snapshot.
+Historical diagnostic projections live in HawDB and refresh asynchronously. Their [query contract](../local-data-engine/use-case/query-asynchronous-projections.md) defines freshness and failure behavior. They never authorize publication, check success or evidence decisions.
+
+Runner state and database directory ownership retain their own boundaries. Persistent handles close before the source snapshot ends. Cache access never requires publication ownership.
 
 ## Data flow
 
-A shared joiner re-reads the complete owner set before any protected read. The read is authorized only when its own token is present and every owner is shared for the same worktree. If the last reader has left and a writer has replaced the directory, the joiner removes its own token and reports Busy.
+A publication owner is published by temporary directory, fsync and atomic rename. Release deletes only its exact token. Ordinary write admission can reclaim an entirely dead observed set and retry once, without processing journals or runner ownership. Unknown hosts, live or reused PIDs, EPERM and unknown records preserve the scene.
 
-A writer release checks and deletes only its own owner. A legitimate shared join record that has not passed admission does not authorize a read. It also does not block that release. Unknown files, another exclusive token, or an identity change stay in place and reject the operation.
-
-Owner-format validity and critical-section admission are separate judgments. The same worktree and host, at most one exclusive owner, and any number of shared owners form a legitimate join transient. Several exclusive owners, an unknown file, or an identity mismatch do not.
-
-When every owner is confirmed ESRCH, recover reclaims that transient one token at a time. Any live owner stays. Host mismatch, EPERM, PID reuse, and an unknown owner also stay. Recovery does not infer death from age.
-
-Ordinary repository admission uses the same death and identity checks to remove an entirely dead observed owner set and retry once. This does not process journals or runner ownership. Explicit recovery records its own reclamation without this automatic retry.
-
-CLI and Web acquisition waits yield the event loop, expire after three seconds, and report owner identity. Later attempts cannot reclaim new owners. Only acquisition is retried; published operations are never replayed.
-
-Failed fsync or failed verification after a join removes that exact token. A failed cleanup keeps the named error and the scene. Recovery never recursively deletes the fixed lease directory.
+Source queries do not reclaim live or dead publication tokens. Writers and recovery serialize changes; source readers detect drift. A historical cache hit remains readable during source publication when the cache engine is available.
 
 Recover first records and reclaims observed dead publication tokens. It then selects the single journal under exclusive protection. Later engine stages do not reclaim again.
 
@@ -36,17 +28,15 @@ That check uses the worktree-private coordination path directly. It does not req
 
 ## Invariants
 
-- Read and write access stay separate from dry-run. CLI queries declare read. CLI actions and Web use the same action classification. External execution, recovery, cache rebuild, cache clear, and document writes use write.
-- Persistent cache handles close before the snapshot ends. A cache update during a read is not a reason to take the exclusive publication lock. An unsafe cache reads the source.
-- A reader that passes verification after the writer has released may start. The directory then has no writer. Its nonempty token prevents a later exclusive rename.
-- Partial document parsing still uses the publication lease. It does not bypass recovery.
-- The unified recovery entry keeps prepared and committed scenes. It does not gain cleanup authority by reinterpreting an engine phase.
-- Blocked means this operation cannot restore full write capability. It does not add a claim that an owner file is corrupt or that evidence is invalid.
-- Reclaiming a dead publication token proves ESRCH for that token. It does not identify an unreproduced macOS scene.
+- Read access rejects publication. Dry-run expresses a preview and never publishes source changes or starts background refresh.
+- Source reads validate observations and publication revision without shared ownership. Partial parsing follows the same rule.
+- Prepared and committed journals remain recoverable; unknown edits cannot be overwritten.
+- HawDB directory ownership and runner cleanup remain independent of query projections.
+- Recovery success describes the verified coordination state, not the absence of journals alone.
 
 ## Errors
 
-A writer that replaces the lease directory makes the joiner Busy. Multiple journals are a named conflict. That conflict is reported before the runner result, and the scene stays. Content that matches neither the preimage nor the planned digest stays for a person to judge.
+Competing writers report Busy. Multiple journals are a named conflict. That conflict is reported before the runner result, and the scene stays. Content that matches neither the preimage nor the planned digest stays for a person to judge.
 
 The recovery result keeps operation, the journal outcome, and changedPaths. It also adds coordination. Publication lists reclaimedTokens. Runner status is absent, running, or blocked. Blocked carries a named reason.
 

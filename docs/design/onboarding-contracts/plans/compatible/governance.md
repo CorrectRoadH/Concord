@@ -16,7 +16,7 @@ docs/constitution.md 是 Markdown 文件，使用严格 YAML frontmatter。forma
 
 init 的 projectId、配置路径和 Memory 范围取自最终计划配置快照；目录只能是计划文件必要祖先。Memory 来源不能与固定 docs 根、其他来源、源码测试根、Git-private 范围重叠。发布与恢复均检查 canonical 路径、symlink 及完整前像集合。旧 journal 只采用独立保留的旧白名单。
 
-协调层集成约束：只有尚未初始化、无受管 owner 且不存在任何锁文件的新仓库，init 预览才可不建立写 lease；已有 Concord 配置或 owner 的预览必须经过共享 lease，并同时尊重通用与 repository profile 两套 journal 障碍。确认发布后取得完整独占锁并重新验收全部前像。主线集成已验证该约束，不得以 `create=false` 绕过首次协调锁。确认期间变化的创建或保留文件必须触发 PreimageChanged；预览共享锁先释放，再获取独占锁校验完整前像。
+协调层集成约束：init 预览采用乐观快照，并同时尊重通用与 repository profile 的 journal 障碍。确认发布后取得独占所有权并重新验收全部前像。确认期间变化的创建或保留文件必须触发 PreimageChanged；预览结束后再获取提交所有权。
 
 ## 必需的组合验收定义
 

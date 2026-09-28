@@ -25,6 +25,10 @@ export function humanOutput(value: unknown): string {
   if (typeof value === 'string') return value;
   if (!Predicate.isObject(value)) return scalar(value);
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
+  if (Predicate.isObject(value.projection)) {
+    const { projection, ...result } = value;
+    return `Diagnostic snapshot: ${String(projection.builtAt)} (historical; refresh ${String(projection.refresh)})\n${projection.lastError ? `Last refresh failed: ${JSON.stringify(projection.lastError)}\n` : ''}${humanOutput(result.operation === 'cached-query' ? result.body : result)}`;
+  }
   if (value.operation === 'docs-check' && Array.isArray(value.findings)) {
     return [
       `Documentation writing: ${value.ok ? 'passed' : 'failed'} (${String(value.files)} files)`,

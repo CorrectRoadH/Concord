@@ -76,10 +76,9 @@ test('a real thousand-file workspace scan leaves static and document HTTP reques
     const started = performance.now();
     const workspace = send(server, '/api/workspace').finally(() => { finished = true; });
     const lease = join(f.root, '.git/concord/trace/publication.lease');
-    const deadline = performance.now() + 15000;
-    while (!existsSync(lease) && !finished && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 5));
+    await new Promise(resolve => setTimeout(resolve, 200));
     assert.equal(finished, false, 'scan must still be active when concurrent requests are sent');
-    assert.ok(existsSync(lease), 'real scanning process has acquired its lease');
+    assert.equal(existsSync(lease), false, 'source scanning does not acquire publication ownership');
     const responsiveAt = performance.now();
     const [asset, document] = await Promise.all([send(server, '/assets/app.js'), send(server, '/api/file?path=docs%2Fconstitution.md')]);
     assert.equal(asset.status, 200, asset.body);

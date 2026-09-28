@@ -25,7 +25,7 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     const root = join(scratch, 'consumer'); mkdirSync(root);
     execFileSync('git', ['init', '-q', root]);
     function call<A>(args: readonly string[], schema: Schema.ConstraintDecoder<A, never>, status = 0): A {
-      const result = spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 30000 });
+      const result = spawnSync(process.execPath, [cli, '--root', root, '--json', '--fresh', ...args], { encoding: 'utf8', timeout: 30000 });
       assert.equal(result.status, status, result.stdout + result.stderr);
       return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(result.stdout.trim() || result.stderr.trim());
     }

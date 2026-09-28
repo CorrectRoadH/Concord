@@ -9,7 +9,7 @@ import { LocalRepository, initialize } from '../dist/storage.js';
 import { acquireTraceLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from '../dist/coordination.js';
 
 // @use-case docs/feature/project-onboarding/use-case/initialize-project.md
-test('init preview is write-free only before owners or coordination locks exist', () => Effect.runPromise(Effect.sync(() => {
+test('init preview is write-free and independent of publication owners but rejects pending journals', () => Effect.runPromise(Effect.sync(() => {
   const root = mkdtempSync(join(tmpdir(), 'concord-init-coordination-'));
   let repo: LocalRepository | undefined;
   try {
@@ -23,11 +23,14 @@ test('init preview is write-free only before owners or coordination locks exist'
     writeFileSync(join(root, 'docs/README.md'), '# Existing owner\n');
     repo = new LocalRepository(root, { initialize: true, dryRun: true });
     assert.equal(existsSync(join(traceDir, 'publication.lease')), false);
-    repo.snapshot(() => assert.throws(() => acquireTraceLeaseSync(root, 'exclusive', 'competing-writer', true), /busy/));
+    assert.throws(() => repo!.snapshot(() => {
+      const concurrent = acquireTraceLeaseSync(root, 'exclusive', 'competing-writer', true)!;
+      releaseTraceLeaseSync(concurrent, 'competing-writer');
+    }), { code: 'SourceChanged' });
     repo.close(); repo = undefined;
     const lease = acquireTraceLeaseSync(root, 'exclusive', 'writer', true);
     try {
-      assert.throws(() => new LocalRepository(root, { initialize: true, dryRun: true }), { code: 'RepositoryBusy' });
+      new LocalRepository(root, { initialize: true, dryRun: true }).close();
     } finally { releaseTraceLeaseSync(lease!, 'writer'); }
     for (const name of ['publication-journal.json', 'multi-file-publication-journal.json']) {
       writeFileSync(join(traceDir, name), '{}\n');

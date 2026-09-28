@@ -25,13 +25,13 @@
 
 Node 通过窄 N-API bridge 调用固定 revision 的 HawDB 公开 facade。关系缓存使用参数化 SQL；参数不拼进语句。领域决策、严格 Schema、源摘要和发布授权由 TypeScript/Effect 维护。原生边界限于嵌入式引擎、类型转换、预算和句柄生命周期。
 
-Git-private 的版本化 HawDB 目录容纳注解、代码、配置及远端观察命名空间。持久句柄在短快照内按需打开和复用，在 lease 释放前关闭，不跨网络请求或 Web 空闲时间持有。只读发现不能因为命名空间缺失创建表。缺失、损坏和占用分别沿用具名诊断与当前来源回退，不静默使用过期数据。
+Git-private 的版本化 HawDB 目录容纳注解、代码、配置及远端观察命名空间。持久句柄在短快照内按需打开和复用，在来源快照结束前关闭，不跨网络请求或 Web 空闲时间持有。只读发现不能因为命名空间缺失创建表。缺失、损坏和占用分别沿用具名诊断与当前来源回退，不静默使用过期数据。
 
 短期文档解析、代码解析及不可变 Git 测试基线使用 HawDB 内存实例。纯解析入口不依赖 Repository 或磁盘目录；namespace 区分数据，源摘要与解析器身份区分代次。缓存有条目数及字节上限，不另存 Map payload 缓存。批量加载采用有界批量读取/写入；一次请求的临时结果集合不构成第二个缓存。
 
 Memory/Issue 的 index 和 recall 继续核对当前目录和源字节；共享的解析投影改用 HawDB。现有子串查询及排序不被伪装为 BM25 或语义检索。Trace 的关系有效性、权限和 fixed 仍从当前权威输入推导。
 
-清理在独占 repository lease 内执行，须区分活动句柄和损坏库。打开失败本身不代表可删除；原生所有权锁授权清理。只清理受管 HawDB 目录内的缓存内容，保留目录与所有权锁 inode，不删除 evidence/journal。预览列出清理范围与原生产物可用性，执行时重新验证所有权。远端缓存丢失后只有显式刷新可以重新获得观察，本地已捕获 Issue 保留。
+清理由原生目录所有权保护，须区分活动句柄和损坏库。打开失败本身不代表可删除；原生所有权锁授权清理。只清理受管 HawDB 目录内的缓存内容，保留目录与所有权锁 inode，不删除 evidence/journal。预览列出清理范围与原生产物可用性，执行时重新验证所有权。远端缓存丢失后只有显式刷新可以重新获得观察，本地已捕获 Issue 保留。
 
 原生依赖、Rust toolchain 与 Cargo lock 精确固定。构建编排保持严格 TypeScript/Effect；c-005 与 AGENTS 的窄原生例外在采用前显式修订。发行流程先在 Ubuntu 与 Apple Silicon macOS 构建 native 产物，再装入同一个 tgz，核验完整目标集合、版本与摘要后发布；自动流水线不执行测试或真实安装，安装验证保留为手动入口。消费者不需要 Rust、全局 HawDB 或安装脚本。缺少或错误的平台产物返回具名错误，不隐藏切回 SQLite。
 
@@ -43,11 +43,11 @@ HawDB 统一引擎会增加原生包体、构建矩阵、查询与序列化成�
 
 ## Open modes and ownership
 
-构造配置读取、feedback 观察和 status 仅 existing-only/read-only 打开；缺目录、格式标记、ownership 文件或表时不补写，回源或报告 empty/unavailable。dry-run 不创建持久引擎文件。Concord 当前 shared/exclusive 名称均进入同一个短期独占文件临界区，不引入新的锁升级协议。
+构造配置读取、feedback 观察和 status 仅 existing-only/read-only 打开；缺目录、格式标记、ownership 文件或表时不补写，回源或报告 empty/unavailable。dry-run 不创建持久引擎文件。来源读取不取得 publication lease，数据库目录仍由引擎所有权协议保护。
 
-最外层 snapshot 拥有按需句柄，嵌套调用只复用。只读句柄需要写入时，在同一 repository lease 内关闭后重新以写模式打开；没有跨调用逃逸的 native transaction。所有路径都先释放数据库，再释放 repository lease。纯解析的无磁盘内存句柄属于进程，关闭或失效后允许重建。
+最外层 snapshot 拥有按需句柄，嵌套调用只复用。只读句柄需要写入时，关闭后重新以写模式打开，并重新竞争引擎所有权；没有跨调用逃逸的 native transaction。持久句柄在来源快照结束时释放；存在独占提交时，数据库先于提交 owner 释放。纯解析的无磁盘内存句柄属于进程，关闭或失效后允许重建。
 
-clear 先关闭本进程受管持久句柄，在独占 repository lease 下通过 native guard 对固定 revision 的 owner.hawdb.lock 执行非截断 File::try_lock。只在取得锁后删缓存数据，保留目录和同一个锁 inode。WouldBlock、权限、I/O 或未知错误均拒绝删除；损坏 manifest 不影响独立取锁。owner-only 目录视为空。缺锁文件只在明确写入/clear 且路径已验证时创建，读取与 dry-run 不补建。非目录缓存根、symlink、硬链接锁、特殊文件或前后 inode 不符均拒绝。
+clear 先关闭本进程受管持久句柄，通过 native guard 对固定 revision 的 owner.hawdb.lock 执行非截断 File::try_lock。只在取得锁后删缓存数据，保留目录和同一个锁 inode。WouldBlock、权限、I/O 或未知错误均拒绝删除；损坏 manifest 不影响独立取锁。owner-only 目录视为空。缺锁文件只在明确写入/clear 且路径已验证时创建，读取与 dry-run 不补建。非目录缓存根、symlink、硬链接锁、特殊文件或前后 inode 不符均拒绝。
 
 该锁适配是对固定 revision 协议的显式窄依赖，不是 HawDBError 字符串推断，也不绕过公开数据 API。互斥保证覆盖遵守 Concord 协调协议和已持有 HawDB 文件锁的进程；不宣称抵抗任意外部路径替换。
 
@@ -65,7 +65,7 @@ clear 先关闭本进程受管持久句柄，在独占 repository lease 下通�
 | config_cache | 128 | 8 MiB |
 | feedback_cache | 10000 | 32 MiB |
 
-内存缓存总逻辑预算 36 MiB，持久缓存总逻辑预算 96 MiB。淘汰采用可解释的插入顺序；新批次自身超过预算则整批拒绝，不能提交部分结果。短期内部代次按累计写入/删除量有界重建，避免只删除逻辑行而无限累积引擎 tombstone；重建期间旧/新实例合计最多两份既定逻辑预算。
+内存缓存总逻辑预算 36 MiB，持久缓存总逻辑预算 96 MiB。query_cache 命名空间最多 64 行、16 MiB，并与其它命名空间共享总预算。淘汰采用可解释的插入顺序；新批次自身超过预算则整批拒绝，不能提交部分结果。短期内部代次按累计写入/删除量有界重建，避免只删除逻辑行而无限累积引擎 tombstone；重建期间旧/新实例合计最多两份既定逻辑预算。
 
 文档解析分配 9872 条、15 MiB；静态配置解析分配 128 条、1 MiB。二者使用各自进程期内存句柄和解析器身份，合计保持文档解析预算。配置命中只复用严格解码的值，每次操作仍读取配置原文并执行仓库安全与协调检查。
 

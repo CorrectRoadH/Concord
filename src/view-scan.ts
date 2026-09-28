@@ -1,12 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
-import { randomUUID } from 'node:crypto';
-import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
 import { makeOwnedProcessService } from './owned-process.js';
-import { assertScanTokenReleased, releaseExitedScanToken } from './file-lease.js';
-import { tracePrivateDirectorySync } from './coordination.js';
 import { ConcordError } from './shared.js';
 import { MAX_SCAN_REPLY_BYTES, ScanMessage, type ScanSuccess } from './view-scan-protocol.js';
 
@@ -26,8 +22,7 @@ export class ViewScanManager {
   private readonly queued = new Set<Waiter>();
   private stopping = false;
   private cleanupFailed = false;
-  private readonly publicationPath: string;
-  constructor(private readonly root: string) { this.publicationPath = join(tracePrivateDirectorySync(root), 'publication.lease'); }
+  constructor(private readonly root: string) {}
 
   scan(signal?: AbortSignal): Promise<ScanSuccess> {
     if (this.cleanupFailed) return Promise.reject(new ConcordError('CleanupFailed', 'Workspace scan cleanup is unconfirmed'));
@@ -64,14 +59,13 @@ export class ViewScanManager {
   }
 
   private startWorker(): ScanProcess {
-    const token = randomUUID();
     const service = makeOwnedProcessService();
     let ready!: (send: (message: unknown) => Promise<void>) => void;
     const worker: ScanProcess = { controller: new AbortController(), ready: new Promise(resolve => { ready = resolve; }), settled: Promise.resolve() };
     this.worker = worker;
     const root = this.root;
     let failure: unknown = new ConcordError('WorkspaceScanFailed', 'Workspace scan process exited');
-    const task = service.run([process.execPath, fileURLToPath(new URL('./view-scan-worker.js', import.meta.url)), root, token], {
+    const task = service.run([process.execPath, fileURLToPath(new URL('./view-scan-worker.js', import.meta.url)), root], {
       cwd: root,
       ipc: {
         ready,
@@ -87,10 +81,9 @@ export class ViewScanManager {
               return;
             }
             if (Buffer.byteLength(message.reply.body, 'utf8') > MAX_SCAN_REPLY_BYTES) throw new ConcordError('WorkspaceScanOutputLimit', 'Workspace reply exceeds 128 MiB');
-            assertScanTokenReleased(this.publicationPath, token);
             worker.pending = undefined;
             pending.resolve(message.reply);
-          } catch (cause) { worker.stopError = cause instanceof ConcordError ? cause : new ConcordError('WorkspaceScanProtocol', 'Invalid workspace scan reply or retained publication ownership'); worker.controller.abort(); }
+          } catch (cause) { worker.stopError = cause instanceof ConcordError ? cause : new ConcordError('WorkspaceScanProtocol', 'Invalid workspace scan reply'); worker.controller.abort(); }
         },
       },
     }).pipe(Effect.scoped);
@@ -101,11 +94,10 @@ export class ViewScanManager {
       try {
         for (const result of results) {
           if (result.processGroupOwned && (result.groupCleanup.gone !== true || result.groupCleanup.groupId === undefined)) throw new Error('Scan process group exit is unconfirmed');
-          if (result.groupCleanup.groupId !== undefined) releaseExitedScanToken(root, this.publicationPath, token, result.groupCleanup.groupId);
         }
       } catch {
         this.cleanupFailed = true;
-        failure = new ConcordError('CleanupFailed', 'Workspace scan process or token cleanup could not be confirmed');
+        failure = new ConcordError('CleanupFailed', 'Workspace scan process cleanup could not be confirmed');
       }
       if (this.worker === worker) this.worker = undefined;
       worker.pending?.reject(this.cleanupFailed ? failure : worker.stopError ?? failure);

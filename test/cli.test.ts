@@ -48,6 +48,26 @@ before(() => Effect.runPromise(Effect.sync(()=>{
 })));
 after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
 
+// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+test('packed diagnostic CLI refreshes after exit and marks cached output as historical', async () => {
+ const root = consumer('async-query');
+ call(root, ['feature', 'create', 'cached', '--title', 'Cached'], Ack);
+ const query = () => spawnSync(process.execPath, [cli, '--root', root, '--json', 'trace', 'gaps'], { encoding: 'utf8', timeout: 20000 });
+ const first = query();
+ assert.equal(first.status, 1, first.stdout + first.stderr);
+ assert.match(first.stderr, /QueryPending/);
+ const deadline = Date.now() + 30000;
+ let result = first;
+ while (result.status !== 0 && Date.now() < deadline) {
+  await Effect.runPromise(Effect.sleep('1 second'));
+  result = query();
+ }
+ assert.equal(result.status, 0, result.stdout + result.stderr);
+ const value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ projection: Schema.Struct({ current: Schema.Literal(false), builtAt: Schema.String, refresh: Schema.String }) })))(result.stdout);
+ assert.equal(value.projection.refresh, 'requested');
+ assert.ok(Number.isFinite(Date.parse(value.projection.builtAt)));
+});
+
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name packed-operation-boundaries
 test('packed local operations isolate unrelated malformed contracts and check reports all failures', () => Effect.runPromise(Effect.sync(() => {
@@ -216,7 +236,7 @@ test('installed create selects optional pages, keeps README required, and reject
  assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/cli.md')), false);
 })));
 function call<A>(root: string,args: readonly string[],schema: Schema.ConstraintDecoder<A, never>,input='Contract body.\n',status=0): A {
- const result=spawnSync(process.execPath,[cli,'--root',root,'--json',...args],{input,encoding:'utf8',timeout:20000});
+ const result=spawnSync(process.execPath,[cli,'--root',root,'--json','--fresh',...args],{input,encoding:'utf8',timeout:20000});
  assert.equal(result.status,status,JSON.stringify({args,stdout:result.stdout,stderr:result.stderr,error:result.error}));
  return Schema.decodeUnknownSync(Schema.fromJsonString(schema), { onExcessProperty: 'ignore', errors: 'all' })(status===0||result.stdout.trim()?result.stdout:result.stderr);
 }
@@ -366,8 +386,7 @@ test('installed init previews configuration, preserves existing docs, and never 
  const args = ['init', '--test-root', 'spec', '--runner-config', join(root, 'runner.json')];
  assert.equal(call(root, ['--dry-run', ...args], DryRunOutput).dryRun, true);
  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
- assert.deepEqual(readdirSync(join(root, '.git/concord')), ['trace']);
- assert.deepEqual(readdirSync(join(root, '.git/concord/trace')), []);
+ assert.equal(existsSync(join(root, '.git/concord')), false);
  call(root, args, Ack);
  const config = readProjectConfig(root);
  assert.deepEqual(config.testRoots, ['spec']); assert.deepEqual(config.runner, runner);

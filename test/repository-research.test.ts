@@ -81,6 +81,8 @@ test("Research reports migration for old standalone owners and rejects symlinks 
   assert.equal(old.ok, false); assert.equal(old.findings[0]?.code, "research-migration-required");
   symlinkSync(join(root, "docs/research/old"), join(root, "docs/research/linked"));
   await assert.rejects(run(root, { command: "check", ref: "research:docs/research/linked/page.md" }), /symbolic links/);
-  const privateDir = tracePrivateDirectorySync(root); writeFileSync(join(privateDir, "multi-file-publication-journal.json"), "{}");
+  const privateDir = tracePrivateDirectorySync(root);
+  mkdirSync(privateDir, { recursive: true });
+  writeFileSync(join(privateDir, "multi-file-publication-journal.json"), "{}");
   await assert.rejects(run(root, { command: "check", ref: "research:docs/research/old/page.md" }), { _tag: "TraceRecoveryRequired" });
 });

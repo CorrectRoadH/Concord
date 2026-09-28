@@ -39,6 +39,24 @@ export interface FileLease {
   readonly mode: 'shared' | 'exclusive';
 }
 const released = new WeakSet<FileLease>();
+/** A persistent change token detects a complete publication between two reads. */
+export function publicationRevision(directory: string): string {
+  const path = join(directory, 'publication.revision');
+  assertLeasePath(path);
+  const stat = lstatSync(path, { throwIfNoEntry: false });
+  if (stat === undefined) return '';
+  if (!stat.isFile() || stat.size > 128) throw new Error('Invalid publication revision');
+  return Schema.decodeUnknownSync(Token)(readFileSync(path, 'utf8').trim());
+}
+export function advancePublicationRevision(directory: string): void {
+  const path = join(directory, 'publication.revision');
+  assertLeasePath(path);
+  const temporary = join(directory, `.revision-${randomUUID()}`);
+  const fd = openSync(temporary, 'wx', 0o600);
+  try { writeFileSync(fd, randomUUID()); fsyncSync(fd); } finally { closeSync(fd); }
+  try { renameSync(temporary, path); syncLeaseDirectory(directory); }
+  finally { rmSync(temporary, { force: true }); }
+}
 export const errno = (cause: unknown, code: string): boolean => cause instanceof Error && 'code' in cause && cause.code === code;
 const error = (operation: string, path: string, cause: unknown, phase: CoordinationError['phase'] = 'lock'): CoordinationError => cause instanceof CoordinationError ? cause : new CoordinationError({ operation, phase, path, message: cause instanceof Error ? cause.message : String(cause) });
 
@@ -139,6 +157,7 @@ export function acquireFileLease(root: string, directory: string, name: string, 
     }
     published = true;
     syncLeaseDirectory(directory);
+    if (name === 'publication.lease' && mode === 'exclusive') advancePublicationRevision(directory);
     return { directory, path, owner, mode };
   } catch (cause) { throw error(operation, path, cause); }
   finally {
@@ -152,6 +171,7 @@ function removeObservedOwner(path: string, owner: LeaseOwner): boolean {
   const current = readLeaseOwners(path, 'release-observed-owner', true).find(value => value.token === owner.token);
   if (current === undefined) return false;
   if (current.root !== owner.root || current.host !== owner.host || current.pid !== owner.pid || current.mode !== owner.mode) throw new Error('lease identity changed before removal; preserve coordination state');
+  if (path.endsWith(`${sep}publication.lease`) && owner.mode !== 'shared') advancePublicationRevision(dirname(path));
   try { unlinkSync(join(path, `${owner.token}.json`)); }
   catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; }
   try { rmdirSync(path); }

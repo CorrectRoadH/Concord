@@ -4,7 +4,7 @@
 
 Concord 从 Markdown owner、TypeScript AST 可识别的代码声明，以及测试根里的 Concord 标记读取事实。工具解析 canonical path 与 anchor，验证目标类型、重复关系和循环，再生成 trace、review 与检查结果。测试标记不解析宿主测试语法。
 
-sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析可按文件命中可删除 HawDB 投影，键含 worktree、解析器版本、路径和字节摘要。归属和关系不缓存，始终用当前 Markdown 重算。测试投影仍按整次扫描键缓存。命中都严格解码。
+sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析可按文件命中可删除 HawDB 投影，键含 worktree、解析器版本、路径和字节摘要。当前事实门禁从当前 Markdown 重算；诊断历史投影按异步查询契约保存。测试投影仍按整次扫描键缓存。命中都严格解码。
 
 ## 自举
 
@@ -28,13 +28,13 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 
 | 操作 | 内容依赖 | 协调 | 失败范围 |
 | --- | --- | --- | --- |
-| memory/issue list、index、recall、search | 相应来源内全部候选 owner | 共享 snapshot | 范围内坏记录、来源缺失、配置或事务障碍 |
+| memory/issue list、index、recall、search | 相应来源内全部候选 owner | 乐观来源 snapshot | 范围内坏记录、来源缺失、配置或事务障碍 |
 | memory/issue edit 的 canonical path | 指定 owner 与当前摘要 | 独占 publication | 目标或其授权依赖、写入资源障碍 |
 | memory/issue edit 的短 ID | 相应类别的来源集合及唯一匹配 owner | 独占 publication | 集合不完整、歧义或写入资源障碍 |
 | memory/issue create | 目标路径、写来源权限；Issue 的同类 ID 集合；Problem 的证据政策 | 独占 publication | 身份冲突、必要依赖或写入资源障碍 |
-| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 regression Problem | 共享 snapshot | 指定依赖缺陷，不加载全局 Trace |
-| show、trace、review | 展示的关系图 | 共享 snapshot | 输出 findings；需要完整图的结论拒绝不完整输入 |
-| check | 全仓库事实与关联 | 共享 snapshot | 各 owner 解析错误累计为 findings，`ok: false` |
+| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 regression Problem | 乐观来源 snapshot | 指定依赖缺陷，不加载全局 Trace |
+| show、trace、review | 展示的关系图 | 乐观来源 snapshot | 输出 findings；需要完整图的结论拒绝不完整输入 |
+| check | 全仓库事实与关联 | 乐观来源 snapshot | 各 owner 解析错误累计为 findings，`ok: false` |
 | fixed、关系变更、删除 | 当前证明与保证关系完整所需的集合 | 独占 publication | 保留现有严格身份、证据下限和逆向关系要求 |
 
 集合查询先按物理来源限定路径，再解码。Feature 与 Use Case 共用物理根时，同根候选中的坏记录必须报错。Memory 精确路径不需要其它 Memory 内容有效。短 ID 读取全部候选，避免隐藏未解码记录中的同 ID。文件名不推导作者 ID。来源扫描按当前配置和安全目录读取。
@@ -45,4 +45,4 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 
 全局诊断 inventory 同时携带 documents、findings 与 complete。单独的 documents 数组不表示集合完整。逐文件收集解码错误，保留错误路径与具名代码，并传播 `complete: false`。关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断。有效记录不能单独证明集合完整。requireValidTrace 同时检查 complete 和 findings。部分图不能关闭 Problem、删除 Issue 或批准关系迁移。
 
-未完成的多文件 journal 仍阻断普通快照。局部解析隔离仍使用 publication lease，并在未完成 journal 前停止。读写 access 与 dryRun 的分离、共享加入复核和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../constitution.md#c-013)。
+未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有 publication lease，返回前校验来源观察与发布代次，并在未完成 journal 前停止。读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../constitution.md#c-013)。

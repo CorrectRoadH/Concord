@@ -6,7 +6,6 @@ import { getWorkspaceSnapshot } from './application.js';
 import { ConcordError, failure } from './shared.js';
 import { RequestTiming } from './view-request-log.js';
 import { MAX_SCAN_REPLY_BYTES, ScanRequest, ScanMessage } from './view-scan-protocol.js';
-import { setPublicationToken } from './file-lease.js';
 
 const scan = (root: string, id: number) => Effect.gen(function*() {
   const timing = new RequestTiming(performance.now());
@@ -23,7 +22,6 @@ const scan = (root: string, id: number) => Effect.gen(function*() {
 
 const main = Effect.gen(function*() {
   const root = yield* Schema.decodeUnknownEffect(Schema.String.check(Schema.isMinLength(1)))(process.argv[2]);
-  yield* Effect.try(() => setPublicationToken(process.argv[3] ?? ''));
   const requests = yield* Queue.unbounded<unknown>();
   const message = (input: unknown) => { Queue.offerUnsafe(requests, input); };
   const disconnect = () => { Queue.offerUnsafe(requests, null); };

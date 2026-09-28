@@ -25,6 +25,8 @@ import { Cause, Data, Effect, Exit, Result, Schema, SchemaIssue } from "effect";
 
 import {
   acquireTraceLease,
+  advancePublicationRevision,
+  readPublicationRevisionSync,
   genericJournalPath,
   invalidateActiveRun,
   recoverPublicationLeaseSync,
@@ -337,12 +339,18 @@ function pendingRecovery(root: string, directory: string): { readonly path: stri
 }
 
 export function withTraceReadLease<A, E, R>(root: string, read: () => Effect.Effect<A, E, R>): Effect.Effect<A, E | TraceMutationError | TraceRecoveryRequired, R> {
-  return withLease(root, "shared", "read", true, (lease) => Effect.gen(function*() {
-    const directory = lease?.directory ?? (yield* tracePrivateDirectory(root));
+  return Effect.gen(function*() {
+    const revision = () => Effect.try({ try: () => readPublicationRevisionSync(root), catch: cause => mutationFailure('read', 'preimage', cause) });
+    const before = yield* revision();
+    const directory = yield* tracePrivateDirectory(root);
     const pending = pendingRecovery(root, directory);
     if (pending !== undefined) return yield* new TraceRecoveryRequired(pending);
-    return yield* read();
-  }));
+    const result = yield* read();
+    const afterPending = pendingRecovery(root, directory);
+    if (afterPending !== undefined) return yield* new TraceRecoveryRequired(afterPending);
+    if ((yield* revision()) !== before) return yield* new TraceMutationError({ operation: 'read', phase: 'preimage', message: 'Publication changed while reading Trace sources' });
+    return result;
+  });
 }
 
 export function isTraceMutationActive(root: string): Effect.Effect<boolean, TraceMutationError> {
@@ -518,7 +526,7 @@ function readJournal(root: string, directory: string): PublicationJournal | unde
   }
 }
 function writeJournal(directory: string, journal: PublicationJournal): void { durableReplace(journalPath(directory), `${JSON.stringify(journal, null, 2)}\n`, 0o600); }
-function removeJournal(directory: string): void { rmSync(journalPath(directory), { force: true }); fsyncDirectory(directory); }
+function removeJournal(directory: string): void { advancePublicationRevision(directory); rmSync(journalPath(directory), { force: true }); fsyncDirectory(directory); }
 
 function removeExactFile(path: string, expected: FileJournal["planned"], operation: string): void {
   const current = readFileSnapshot(path, operation);
@@ -1002,7 +1010,7 @@ function readMultiJournal(root: string, directory: string): MultiFileJournalV2 |
   catch (cause) { throw new TraceRecoveryConflict({ path, message: `invalid multi-file journal: ${message(cause)}` }); }
   return validateMultiJournal(root, directory, value);
 }
-function removeMultiJournal(directory: string): void { rmSync(multiJournalPath(directory), { force: true }); fsyncDirectory(directory); }
+function removeMultiJournal(directory: string): void { advancePublicationRevision(directory); rmSync(multiJournalPath(directory), { force: true }); fsyncDirectory(directory); }
 function assertMultiGit(root: string, journal: MultiFileJournalV2): void {
   if (headCommit(root, "multi-file-recover") !== journal.headCommit || journal.files.some((file) => indexEntry(root, file.path, "multi-file-recover") !== journal.indexEntries[file.path])) {
     throw new TraceRecoveryConflict({ path: multiJournalPath(root), message: "HEAD or Git index changed while multi-file journal was active" });

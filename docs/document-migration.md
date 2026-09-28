@@ -19,7 +19,7 @@ Repository 证据保存原文件字节摘要、owner／contract／source 摘要�
 
 Issue 在 `docs/issues/<id>.md`。`memoryRelations` 保存调查、根因、裁决和交付角色；`adoptions.current/history` 保存契约采用与退役；`closure` 保存明确处理理由和引用。远端 `source` 与本地 `origin` 分开，dev／dogfood 记录不伪造成 GitHub 来源。历史 fixed closure 保留原声明，但不会因此产生新执行证据。
 
-发布与恢复使用 Git-private 的短 publication lease 和当前 journal 协议。读取使用共享快照，实际发布使用独占快照；dry-run 不发布文件，实际执行仍须重新校验。未知格式或不完整事务保留现场并具名拒绝，恢复使用与现场匹配的工具版本。
+发布与恢复使用 Git-private 的短 publication lease 和当前 journal 协议。读取使用乐观快照，实际提交使用短期独占保护；dry-run 不发布文件，实际执行仍须重新校验。未知格式或不完整事务保留现场并具名拒绝，恢复使用与现场匹配的工具版本。
 
 项目配置使用静态 concord.config.ts。Schema、配置原文和摘要共同确定当前输入身份；不支持的配置不被读取为当前授权。
 

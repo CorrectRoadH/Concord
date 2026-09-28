@@ -6,17 +6,17 @@
 
 | 操作 | 内容依赖 | 协调 | 失败范围 |
 |---|---|---|---|
-| memory/issue list、index、recall、search | 相应来源内全部候选 owner | 共享 snapshot | 范围内坏记录、来源缺失、配置或事务障碍 |
+| memory/issue list、index、recall、search | 相应来源内全部候选 owner | 乐观来源 snapshot | 范围内坏记录、来源缺失、配置或事务障碍 |
 | memory/issue edit 的 canonical path | 指定 owner 与当前摘要 | 独占 publication | 目标或其授权依赖、写入资源障碍 |
 | memory/issue edit 的短 ID | 相应类别的来源集合及唯一匹配 owner | 独占 publication | 集合不完整、歧义或写入资源障碍 |
 | memory/issue create | 目标路径、写来源权限；Issue 的同类 ID 集合；Problem 的证据政策 | 独占 publication | 身份冲突、必要依赖或写入资源障碍 |
-| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 regression Problem | 共享 snapshot | 指定依赖缺陷，不加载全局 Trace |
-| show、trace、review | 展示的关系图 | 共享 snapshot | 输出 findings；需要完整图的结论拒绝不完整输入 |
-| check | 全仓库事实与关联 | 共享 snapshot | 各 owner 解析错误累计为 findings，ok=false |
+| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 regression Problem | 乐观来源 snapshot | 指定依赖缺陷，不加载全局 Trace |
+| show、trace、review | 展示的关系图 | 乐观来源 snapshot | 输出 findings；需要完整图的结论拒绝不完整输入 |
+| check | 全仓库事实与关联 | 乐观来源 snapshot | 各 owner 解析错误累计为 findings，ok=false |
 | fixed、关系变更、删除 | 当前证明与保证关系完整所需的集合 | 独占 publication | 保留现有严格身份、证据下限和逆向关系要求 |
 | recover | publication owner、全部 journal 的排他选择、runner 状态 | 回收已死 publication token 后独占 snapshot | 不确定现场保留；报告剩余阻塞 |
 
-未完成多文件 journal 仍阻断普通快照，避免把半套发布当作有效事实。局部解析隔离不是无锁读取或绕过恢复。来源扫描严格按当前配置和安全目录读取，文件名不推导作者 ID。
+未完成多文件 journal 仍阻断普通快照，避免把半套发布当作有效事实。乐观读取不绕过未完成事务的恢复要求。来源扫描严格按当前配置和安全目录读取，文件名不推导作者 ID。
 
 ## 文档读取职责
 
@@ -30,19 +30,15 @@ Repository 只负责安全读取、配置身份、依赖观察和发布。文档
 
 ## 访问模式
 
-LocalRepository 增加显式 access: read/write。read 使用共享 snapshot 并拒绝真正发布；非 dry-run 的 write 使用独占 snapshot。dry-run 决定是否发布规划结果，与访问类别分开；预览沿用共享 snapshot，不授权真正发布。既有 dryRun 调用保留预览语义，不能因引入 access 而变成实际写入。
+LocalRepository 增加显式 access: read/write。read 使用乐观来源 snapshot 并拒绝真正发布；普通 write 的规划使用乐观 snapshot，提交阶段使用独占 publication。dry-run 决定是否发布规划结果，与访问类别分开；预览沿用乐观来源 snapshot，不授权真正发布。既有 dryRun 调用保留预览语义，不能因引入 access 而变成实际写入。
 
 CLI 的全部普通查询必须声明 read；CLI action 与 Web 使用同一 action 分类。只有外部执行、恢复、cache rebuild/clear 和文档写操作使用 write。所有持久缓存句柄在 snapshot 结束前关闭；读取期间缓存更新不得成为获取独占发布锁的理由，无法安全使用缓存则回源。
 
-## 共享加入与发布竞争
+## 乐观读取与发布竞争
 
-共享 token 加入现有目录后，在进入受保护读取前重新读取完整 owner 集合，确认自己的 token 存在且所有 owner 为同 worktree 的 shared。只有这一步成功才授权读取。若最后一个 reader 已离开且 writer 替换目录，加入者必须撤销自己的 token 并报告 Busy，不能开始读取。
+来源读者不登记 shared owner。读取前后核验文件、缺失路径、目录集合和发布代次；合作发布推进代次，变化返回 SourceChanged。当前查询发现未完成 journal 时拒绝成功结果。诊断历史投影不要求当前来源可读，但必须标明构建时间和非当前事实语义。
 
-writer 释放时精确核对并删除自己的 owner；短暂存在的合法 shared 加入记录不授予该 reader 读取权限，也不得使 writer 无法释放。未知文件、其它 exclusive token 或身份改变保留并拒绝。reader 在 writer 释放后验证成功的场景是安全的：它开始工作时目录已无 writer，自己的非空 token 阻止后续独占 rename。
-
-owner 格式合法与临界区准入分开判断。同 worktree、同 host、最多一个 exclusive 加多个 shared 是合法加入暂态；多个 exclusive、未知文件或身份不符不是。若所有 owner 已确认 ESRCH，recover 可逐 token 回收该暂态；任何活 owner 均保留，不能把加入过程的双进程死亡变成永久不可恢复状态。
-
-加入后的 fsync 或核验失败，清理准确的本次 token；清理失败保留具名错误和现场。禁止递归删除固定 lease 目录。恢复不以年龄推断死亡，host 不匹配、EPERM、PID 复用或未知 owner 仍保守拒绝。
+普通写入准备不持锁，提交获取独占 owner 后重新校验所有观察与完整前像。随机发布代次在独占开始与结束推进。恢复保留精确 token、身份与死亡核验；未知 host、EPERM、PID 复用或未知 owner 不授权清理。
 
 ## 恢复结果
 

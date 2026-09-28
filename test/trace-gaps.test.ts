@@ -65,18 +65,14 @@ test('shared reference targets are read once and reverified, including external 
     assert.equal(healthy.complete, true);
     assert.equal(healthy.edges.filter(edge => edge.to === path).length, 60);
     assert.ok(reads <= 4, `shared target had ${reads} reads for 60 references`);
-    const changed = buildTrace(repo, 'use', { timing: { sync(name, operation) {
+    assert.throws(() => buildTrace(repo, 'use', { timing: { sync(name, operation) {
       if (name === 'trace.verifyReferences') writeFileSync(target, `${original}\nExternal edit\n`);
       return operation();
-    } } });
-    assert.equal(changed.complete, false);
-    assert.ok(changed.findings.some(finding => finding.code === 'SourceChanged' && finding.path === path));
+    } } }), { code: 'PreimageChanged' });
     writeFileSync(target, original);
-    const unsafe = buildTrace(repo, 'use', { timing: { sync(name, operation) {
+    assert.throws(() => buildTrace(repo, 'use', { timing: { sync(name, operation) {
       if (name === 'trace.verifyReferences') { rmSync(target); symlinkSync(join(root, 'docs/constitution.md'), target); }
       return operation();
-    } } });
-    assert.equal(unsafe.complete, false);
-    assert.ok(unsafe.findings.some(finding => finding.code === 'UnsafePath' && finding.path === path));
+    } } }), { code: 'UnsafePath' });
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 })));

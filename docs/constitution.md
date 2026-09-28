@@ -2,7 +2,7 @@
 format: concord.constitution/v1
 status: active
 ratifiedAt: 2026-09-14
-amendedAt: 2026-09-27
+amendedAt: 2026-09-28
 amendments:
   - date: 2026-09-14
     reason: 汇总已采用的工程约束，并落实本轮 dogfood 要求
@@ -66,6 +66,12 @@ amendments:
       - docs/engineering/concord-self-hosting/performance.md
       - docs/feature/local-sdlc/README.md
     impact: 改写全部条款为编号规则，正文不再附来源行。C-010 要求接入项目采用 Concord 方法论（技术栈仍中立），concord check 纳入写作政策检查，属消费者兼容变更，契约与验收见 documentation-quality；C-012 禁止 docs 记录实施过程与点名已删除内容；新增 C-014 性能预算、测量方法与缓存一致性。经未参与方案的 GPT-6 Astra reviewer 只读审查三轮，全部阻断意见已按建议修订，结论 PASS。
+  - date: 2026-09-28
+    reason: 分离历史诊断与当前事实门禁，采用乐观读取及短期提交协调
+    sources:
+      - docs/design/asynchronous-projections/README.md
+      - docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+    impact: 诊断查询可异步刷新并返回明确标识的历史投影；当前事实与证据门禁保持严格；普通读取不再持共享租约
 ---
 
 # Concord 项目宪法
@@ -114,7 +120,7 @@ amendments:
 1. 实现、测试和构建脚本采用严格 TypeScript，执行与副作用通过 Effect 组织。不添加手工维护的 JavaScript，不绕过类型检查；编译输出和 JavaScript 消费者兼容 fixture 除外。
 2. Effect 依赖精确固定，使用 API 前读取安装包指引。不可信边界严格 Schema 解码并返回具名失败。
 3. 唯一原生例外是 `native/hawdb`：Rust N-API 桥接、链接胶水、字节转换、预算执行与固定 revision 的目录所有权锁适配。领域决策、来源核验、测试和构建编排仍属 TypeScript/Effect。
-4. 桥接、引擎、Rust toolchain 与依赖精确固定。持久句柄受短快照生命周期管理，内存句柄按进程管理。发行包携带目标平台产物，消费者不需要 Rust、全局 HawDB 或数据库服务。锁协议与上游 revision 绑定，升级必须重新验证互斥与清理。
+4. 桥接、引擎、Rust toolchain 与依赖精确固定。持久句柄受来源快照生命周期管理，内存句柄按进程管理。发行包携带目标平台产物，消费者不需要 Rust、全局 HawDB 或数据库服务。锁协议与上游 revision 绑定，升级必须重新验证互斥与清理。
 5. 本条约束 Concord 自身。接入项目的语言、包管理器和运行时由其自行选择。
 
 <a id="c-006"></a>
@@ -178,7 +184,7 @@ amendments:
 
 1. 每个操作按目标与不变量声明所需输入。局部读取与精确引用验证不以无关 owner、代码或测试全部有效为前提；目标身份、来源、归属与路径安全仍须严格校验。
 2. 全局诊断保留可读取记录和全部已发现错误。完整性随投影与关系输出传播，不完整输入不能授权依赖完整图的裁决。
-3. 只读访问使用共享短快照，发布使用独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
+3. 只读来源访问使用乐观快照并核验观察集合和发布代次；普通写入规划不持锁，提交使用短期独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
 4. 恢复区分 journal 结果、实际回收 token 与 runner 状态，返回成功前核验恢复后的协调状态，不用无 journal 推断仓库整体可写。
 
 <a id="c-014"></a>
@@ -187,4 +193,4 @@ amendments:
 1. Concord 是 agent 高频调用的本地工具。高频公开操作必须具有由其契约 owner 声明的性能预算。[性能验收](engineering/concord-self-hosting/performance.md)统一声明参照环境、数据规模、冷暖状态、测量边界、采样方法及失败判据；超预算或缺少必需测量证据均不能判为通过。
 2. 命令只读取完成目标所需的输入，不为只读操作加载无关子命令、启动无关进程或扫描无关 owner。所需输入包括安全、来源一致性及完整性验证所需的全部输入。
 3. 优化前必须测量并定位瓶颈，优化后用同一方法复测；测量结果进入 Memory，预算与方法进入契约。不得为性能跳过摘要或 Schema 校验、路径安全、完整性门禁、授权检查，或缩减全局诊断范围。
-4. 缓存只加速。成功结果的领域事实与有效性判断必须与同源回源一致；无法安全回源时具名失败，不返回陈旧或未经校验的成功结果。
+4. 缓存只加速。成功结果的领域事实与有效性判断必须与同源回源一致；无法安全回源时具名失败。明确声明为历史诊断的查询可返回带构建时间和刷新状态的完整投影；该结果不表示当前来源有效，不得授权 check 成功、写入、恢复或证据裁决。其它当前事实查询不返回陈旧或未经校验的成功结果。

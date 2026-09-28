@@ -6,7 +6,7 @@ Markdown、JSON、源码与证据保持各自所有权；缓存不能决定授�
 
 ## L2: Lifecycle and safety
 
-一个持久目录同一时间仅有一个进程/root handle；持久句柄、事务和缓存清理在短 lease 生命周期内结束；无磁盘内存句柄按进程管理，不持锁等待网络。拒绝 unsafe path 和 symlink，故障不破坏来源。
+一个持久目录同一时间仅有一个进程/root handle；持久句柄、事务和缓存清理在来源快照生命周期内结束；无磁盘内存句柄按进程管理，不持锁等待网络。拒绝 unsafe path 和 symlink，故障不破坏来源。
 
 ## L3: Packaging and implementation
 

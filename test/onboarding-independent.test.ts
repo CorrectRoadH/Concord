@@ -10,7 +10,7 @@ import { Effect, Schema } from 'effect';
 const cli = resolve('dist/entry.js');
 const ConfigView = Schema.Struct({ project: Schema.Record(Schema.String, Schema.Unknown), configDigest: Schema.String });
 const run = (root: string, args: readonly string[], input = '', status = 0): string => {
-  const output = spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { input, encoding: 'utf8', timeout: 20_000 });
+  const output = spawnSync(process.execPath, [cli, '--root', root, '--json', '--fresh', ...args], { input, encoding: 'utf8', timeout: 20_000 });
   assert.equal(output.status, status, JSON.stringify({ args, stdout: output.stdout, stderr: output.stderr, error: output.error }));
   return output.stdout || output.stderr;
 };

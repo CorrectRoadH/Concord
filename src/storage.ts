@@ -12,12 +12,12 @@ import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readF
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Predicate, Schema } from 'effect';
 import { DOCUMENT_ROOTS, inDocumentRoot } from './document-layout.js';
-import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from './coordination.js';
+import { acquireTraceLeaseSync, assertLegacyTraceStateMigratedSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from './coordination.js';
 import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Change, type ConfigSnapshot, type MemorySource, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig, snapshot } from './config.js';
 import { closeRepositoryCache } from './cache-store.js';
 import { invalidateActiveRun } from './run-coordination.js';
-import { acquireFileLease, acquireRecoverablePublicationLease } from './file-lease.js';
+import { acquireFileLease, acquireRecoverablePublicationLease, advancePublicationRevision, publicationRevision } from './file-lease.js';
 import { initialConstitutionSource } from './constitution.js';
 import { onboardingGuide } from './onboarding-guide.js';
 import { projectTemplateFiles, templateBody } from './templates.js';
@@ -213,13 +213,16 @@ export class LocalRepository implements Repository {
   private previewWithoutState = false;
   private readonly recovering: boolean;
   private observing = true;
+  private readonly optimistic: boolean;
+  private revision = '';
   private readonly observedFiles = new Map<string, string | undefined>();
   private readonly observedDirectories = new Map<string, string>();
-  constructor(input?: string, options: { initialize?: boolean; recover?: boolean; reclaimPublication?: boolean; dryRun?: boolean; access?: 'read' | 'write' } = {}) {
+  constructor(input?: string, options: { initialize?: boolean; recover?: boolean; reclaimPublication?: boolean; dryRun?: boolean; access?: 'read' | 'write'; optimistic?: boolean } = {}) {
     this.root = discoverRoot(input, options.initialize);
     this.recovering = options.recover ?? false;
     this.noWrite = options.dryRun ?? false;
     this.access = options.access ?? 'write';
+    this.optimistic = !options.recover && (this.access === 'read' || this.noWrite || options.optimistic === true);
     if (options.recover && this.access === 'read') throw new ConcordError('InvalidOption', 'Recovery requires write access');
     if (options.recover && this.noWrite) throw new ConcordError('InvalidOption', 'recover does not accept --dry-run');
     if (process.platform !== 'linux' && process.platform !== 'darwin') throw new ConcordError('UnsupportedHost', 'Concord supports Linux and Darwin/macOS hosts');
@@ -238,7 +241,11 @@ export class LocalRepository implements Repository {
         && ![join(this.privateDir, 'lock.json'), join(this.privateDir, 'journal.json'), join(coordinationDir, PUBLICATION_LEASE), join(coordinationDir, 'publication-journal.json'), join(coordinationDir, 'multi-file-publication-journal.json')].some(present);
       this.previewWithoutState = emptyPreview;
       if (options.recover && options.reclaimPublication !== false) recoverPublicationLeaseSync(this.root);
-      try { this.traceLease = acquireTraceLeaseSync(this.root, this.noWrite || this.access === 'read' ? 'shared' : 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview, !options.recover && options.reclaimPublication !== false); }
+      try {
+        assertLegacyTraceStateMigratedSync(this.root, 'repository');
+        if (!this.optimistic) this.traceLease = acquireTraceLeaseSync(this.root, 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview, !options.recover && options.reclaimPublication !== false);
+        this.revision = publicationRevision(this.coordinationDirectory);
+      }
       catch (cause) { throw storageCoordinationFailure(cause); }
       assertCurrentRuntimeFormat(this.root);
       const traceDir = coordinationDir;
@@ -263,6 +270,7 @@ export class LocalRepository implements Repository {
       for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...this.config.runner.sourceFiles]) this.absolute(path);
       this.validateMemorySources(this.config);
       if (recoveryJournal !== undefined) this.preflight(recoveryJournal, true);
+      if (this.optimistic) this.verifySnapshot();
 
     } catch (cause) { this.close(); throw cause; }
     finally { this.close(); }
@@ -360,13 +368,21 @@ export class LocalRepository implements Repository {
   }
   private underLease<A>(read: () => A): A {
     this.beginSnapshot();
-    try { return read(); } finally { this.endSnapshot(); }
+    try { const value = read(); if (this.snapshotDepth === 1) this.verifySnapshot(); return value; } finally { this.endSnapshot(); }
+  }
+  /** Optimistic reads never hold up a publisher; changed inputs reject the result. */
+  verifySnapshot(): void {
+    if (!this.optimistic || this.snapshotDepth === 0) return;
+    this.assertReady();
+    this.validateObservations();
+    if (publicationRevision(this.coordinationDirectory) !== this.revision) throw new ConcordError('SourceChanged', 'Publication changed during the source snapshot; retry the query');
   }
   beginSnapshot(reclaimDead = true): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
     try {
       const acquire = this.recovering || !reclaimDead ? acquireFileLease : acquireRecoverablePublicationLease;
-      this.traceLease = acquire(this.root, this.coordinationDirectory, PUBLICATION_LEASE, this.noWrite || this.access === 'read' ? 'shared' : 'exclusive', 'snapshot', !this.previewWithoutState);
+      if (!this.optimistic) this.traceLease = acquire(this.root, this.coordinationDirectory, PUBLICATION_LEASE, 'exclusive', 'snapshot', !this.previewWithoutState);
+      this.revision = publicationRevision(this.coordinationDirectory);
       this.snapshotDepth = 1;
       this.assertReady();
     } catch (cause) { this.close(); throw storageCoordinationFailure(cause); }
@@ -386,7 +402,7 @@ export class LocalRepository implements Repository {
     }
   }
   close(): void {
-    this.snapshotDepth = this.traceLease === undefined ? 0 : 1;
+    this.snapshotDepth = this.snapshotDepth > 0 || this.traceLease !== undefined ? 1 : 0;
     this.endSnapshot();
     closeRepositoryCache(this);
   }
@@ -409,7 +425,7 @@ export class LocalRepository implements Repository {
     const visit = (path: string, name: string): void => {
       assertNoSymlink(path);
       const stat = lstatSync(path);
-      entries.push(`${name}:${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}:${stat.mode & 0o777}`);
+      entries.push(`${name}:${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}:${stat.mode & 0o777}:${stat.isFile() ? stat.size : ''}`);
       if (stat.isFile()) files.push(name);
       else if (!stat.isDirectory()) throw new ConcordError('InvalidFile', `Unsupported file type: ${path}`);
       if (stat.isDirectory()) for (const child of readdirSync(path).sort()) {
@@ -508,13 +524,36 @@ export class LocalRepository implements Repository {
   }
   private publishJournal(journal: Journal, dryRun: boolean): MutationReceipt {
     return this.underLease(() => {
+      // Planning is optimistic. Only validation and publication serialize writers.
+      const commitLease = this.optimistic && !dryRun && !this.noWrite
+        ? acquireTraceLeaseSync(this.root, 'exclusive', 'publication', true, true) : undefined;
+      if (commitLease !== undefined) this.traceLease = commitLease;
+      try {
+      this.assertReady();
       this.validateObservations();
       this.observing = false;
       try {
         const receipt = this.publishUnderLease(journal, dryRun);
-        if (!receipt.dryRun) { this.observedFiles.clear(); this.observedDirectories.clear(); }
+        if (!receipt.dryRun) {
+          this.observedFiles.clear(); this.observedDirectories.clear();
+          const config = journal.changes.find(change => change.path === 'concord.config.ts');
+          if (config?.after !== undefined && config.after !== null) {
+            this.configSnapshot = snapshot('concord.config.ts', config.after, this.privateDir);
+            this.config = this.configSnapshot.config;
+          }
+        }
         return receipt;
       } finally { this.observing = true; }
+      } finally {
+        if (commitLease !== undefined) {
+          try { closeRepositoryCache(this); }
+          finally {
+            this.traceLease = undefined;
+            releaseTraceLeaseSync(commitLease, 'publication');
+            this.revision = publicationRevision(this.coordinationDirectory);
+          }
+        }
+      }
     });
   }
   private publishUnderLease(journal: Journal, dryRun: boolean): MutationReceipt {
@@ -545,7 +584,7 @@ export class LocalRepository implements Repository {
     } catch (cause) {
       throw new ConcordError('RecoveryRequired', `Publication stopped: ${cause instanceof Error ? cause.message : String(cause)}; run concord recover`);
     }
-    try { rmSync(journalPath); syncDirectory(this.privateDir); }
+    try { advancePublicationRevision(this.coordinationDirectory); rmSync(journalPath); syncDirectory(this.privateDir); }
     catch { return { operation: journal.operation, dryRun: false, changedPaths, recoveryRequired: true }; }
     return { operation: journal.operation, dryRun: false, changedPaths };
   }
@@ -693,6 +732,7 @@ export class LocalRepository implements Repository {
         if (present(target)) { try { rmdirSync(target); } catch (cause) { if (!errno(cause, 'ENOTEMPTY')) throw cause; } }
       }
     }
+    advancePublicationRevision(this.coordinationDirectory);
     rmSync(path); syncDirectory(this.privateDir);
     return { operation: 'recover', status: journal.phase === 'prepared' ? 'rolled-back' : 'committed', changedPaths: journal.changes.filter(change => change.path !== 'concord.repository.json' || change.before !== change.after).map(c => c.path) };
   }

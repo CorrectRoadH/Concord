@@ -189,7 +189,7 @@ test('independent readers share a lease while publication still requires exclusi
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('recovery preserves live readers and removes only dead shared owners', async () => {
+test('recovery removes dead owners while optimistic readers remain unregistered', async () => {
   const root = fixture();
   const reader = new LocalRepository(root, { dryRun: true });
   const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync } from './dist/coordination.js'; acquireTraceLeaseSync(process.argv[1], 'shared', 'dead-reader'); process.stdout.write('held'); process.stdin.resume();", root], { stdio: ['pipe', 'pipe', 'pipe'] });
@@ -199,7 +199,7 @@ test('recovery preserves live readers and removes only dead shared owners', asyn
     const closed = once(child, 'close');
     child.kill('SIGKILL');
     await closed;
-    assert.throws(() => recoverPublicationLeaseSync(root), /owner is still alive/);
+    assert.equal(recoverPublicationLeaseSync(root).length, 1);
     reader.endSnapshot();
     recoverPublicationLeaseSync(root);
     const writer = new LocalRepository(root);
