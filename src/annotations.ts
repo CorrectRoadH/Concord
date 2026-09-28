@@ -74,7 +74,7 @@ export function parseTestDeclarations(path: string, text: string): { readonly ca
 }
 
 function parseSource(input: Source): Parsed {
-  if (input.text.includes('\0')) return { cases: [], findings: [] };
+  if (input.text.includes('\0') || !/@(?:feature|use-case|regression|status|name)(?:\s|$)/u.test(input.text)) return { cases: [], findings: [] };
   const comments = realCommentLines(input.path, input.text);
   const lines = input.text.split(/\r?\n/u);
   const findings: Finding[] = [], cases: AnnotatedCase[] = [];

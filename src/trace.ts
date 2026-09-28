@@ -7,22 +7,25 @@ import { checkDocuments, diagnoseDocuments, findDocument, resolveReference, type
 import { inspectResolutionEvidence } from './evidence.js';
 import { ConcordError, type AnnotatedCase, type DocumentRecord, type Finding, type Repository } from './shared.js';
 import { checkConstitution, showConstitution } from './constitution.js';
+import { measureScan, type ScanTiming } from './scan-timing.js';
+import { referenceResolver } from './refs.js';
 
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
-export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory } = {}) {
+export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming } = {}) {
   return repo.snapshot === undefined ? buildUnderSnapshot(repo, cache, options) : repo.snapshot(() => buildUnderSnapshot(repo, cache, options));
 }
-function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory }) {
+function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming }) {
   const inventory = options.inventory ?? diagnoseDocuments(repo);
   const documents = inventory.documents;
-  const annotations = scanAnnotations(repo, { cache });
-  const constitutionFindings = checkConstitution(repo);
+  const annotations = measureScan(options.timing, 'trace.annotations', () => scanAnnotations(repo, { cache }));
+  const constitutionFindings = measureScan(options.timing, 'trace.constitution', () => checkConstitution(repo));
   const advisories = constitutionFindings.filter((finding) => finding.code === 'ConstitutionDraft');
-  const findings: Finding[] = [...inventory.findings, ...checkDocuments(repo, documents), ...annotations.findings, ...constitutionFindings.filter((finding) => finding.code !== 'ConstitutionDraft')];
+  const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents)), ...annotations.findings, ...constitutionFindings.filter((finding) => finding.code !== 'ConstitutionDraft')];
   if (!inventory.complete && inventory.findings.length === 0) findings.push({ code: 'IncompleteInventory', path: '.', message: 'Document inventory is incomplete; no complete-graph conclusion is available' });
   const edges: TraceEdge[] = [];
+  const references = referenceResolver(repo, documents);
   for (const doc of documents) {
     const m = doc.metadata;
     const add = (to: string, relation: string) => edges.push({ from: doc.path, to, relation });
@@ -49,7 +52,7 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
     for (const [target, relation] of [[item.contract, 'contract'], ...item.regressions.map(r => [r, 'regression'])] as const) {
       if (target === undefined || relation === undefined) continue;
       try {
-        const owner = resolveReference(repo, documents, target, relation === 'contract' ? ['feature', 'use-case'] : ['memory']);
+        const owner = references.resolve(target, relation === 'contract' ? ['feature', 'use-case'] : ['memory']);
         if (relation === 'contract' && owner.metadata.kind !== item.contractKind) throw new ConcordError('ContractKindMismatch', `@${item.contractKind} must point to a ${item.contractKind} contract`);
         if (relation === 'regression' && (owner.metadata.kind !== 'memory' || owner.metadata.memoryKind !== 'problem')) throw new ConcordError('InvalidRegression', 'Regression targets must be Problem Memory');
         if (item.status === 'active') edges.push({ from: source, to: target, relation });
@@ -57,15 +60,16 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
     }
   }
   // Implementation associations are independent of test declarations and fixed evidence.
-  const code = options.includeCode === false ? undefined : scanCode(repo, { cache });
+  const code = options.includeCode === false ? undefined : measureScan(options.timing, 'trace.code', () => scanCode(repo, { cache, timing: options.timing }));
   const codeDeclarations: readonly CodeDeclaration[] = code?.codes ?? [];
   findings.push(...(code?.findings ?? []));
   for (const item of codeDeclarations) for (const target of item.contracts) {
     try {
-      resolveReference(repo, documents, target, ['feature', 'use-case', 'engineering']);
+      references.resolve(target, ['feature', 'use-case', 'engineering']);
       edges.push({ from: `code:${item.id}`, to: target, relation: 'implements' });
     } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
+  findings.push(...measureScan(options.timing, 'trace.verifyReferences', () => references.verify()));
   const memories = documents.flatMap(doc => doc.metadata.kind === 'memory' && doc.metadata.resolution !== undefined
     ? [{ path: doc.path, evidenceLevel: doc.metadata.resolution.evidenceLevel, evidence: inspectResolutionEvidence(repo, doc.metadata.resolution) }]
     : []);

@@ -51,7 +51,8 @@ export function darwinPathCollisionKey(path: string): string {
 }
 
 export function hasExactDarwinEntry(entries: readonly Buffer[], requested: string): boolean {
-  return entries.some((entry) => entry.equals(Buffer.from(requested)));
+  const bytes = Buffer.from(requested);
+  return entries.some((entry) => entry.equals(bytes));
 }
 
 function assertNoSymlink(path: string): void {
@@ -68,7 +69,10 @@ function assertNoSymlink(path: string): void {
       }
     }
     part = target;
-    if (present(part) && lstatSync(part).isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${part}`);
+    let stat;
+    try { stat = lstatSync(part); }
+    catch (cause) { if (!errno(cause, 'ENOENT')) throw cause; }
+    if (stat?.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${part}`);
   }
 }
 

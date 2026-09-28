@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { posix } from 'node:path';
-import { ConcordError, type DocumentKind, type DocumentRecord, type Repository } from './shared.js';
+import { ConcordError, type DocumentKind, type DocumentRecord, type Finding, type Repository } from './shared.js';
 import { decodeDocumentSource } from './document-codec.js';
 
 export interface ParsedReference {
@@ -51,7 +51,7 @@ function hasAnchor(source: string, expected: string): boolean {
  * runtime-specific Result errors intentionally do not cross this boundary.
  */
 export function resolveReference(
-  repo: Repository,
+  repo: Pick<Repository, 'read'>,
   documents: readonly DocumentRecord[],
   input: string,
   allowedKinds?: readonly DocumentKind[],
@@ -92,4 +92,37 @@ export function resolveReference(
     throw new ConcordError('AnchorNotFound', `Anchor ${parsed.anchor} does not exist in ${parsed.path}`);
   }
   return owner;
+}
+
+/** One graph compilation owns these temporary results and rechecks all read bytes. */
+export function referenceResolver(repo: Repository, documents: readonly DocumentRecord[]) {
+  const sources = new Map<string, string | undefined>();
+  const resolved = new Map<string, DocumentRecord>();
+  const reader = { read(path: string): string | undefined {
+    if (sources.has(path)) return sources.get(path);
+    const source = repo.read(path);
+    sources.set(path, source);
+    return source;
+  } };
+  return {
+    resolve(input: string, allowedKinds?: readonly DocumentKind[]): DocumentRecord {
+      const key = JSON.stringify([input, allowedKinds]);
+      const previous = resolved.get(key);
+      if (previous !== undefined) return previous;
+      const owner = resolveReference(reader, documents, input, allowedKinds);
+      resolved.set(key, owner);
+      return owner;
+    },
+    verify(): Finding[] {
+      const findings: Finding[] = [];
+      for (const [path, source] of sources) {
+        try {
+          if (repo.read(path) !== source) findings.push({ code: 'SourceChanged', path, message: 'Reference source changed while the relationship graph was compiled' });
+        } catch (cause) {
+          findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path, message: cause instanceof Error ? cause.message : String(cause) });
+        }
+      }
+      return findings;
+    },
+  };
 }

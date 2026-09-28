@@ -218,9 +218,9 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     let findings = [...inspected.findings];
     let diagnostics: unknown;
     try {
-      const compile = () => buildTrace(repo, cache, { inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
+      const compile = () => buildTrace(repo, cache, { timing, inventory: { documents: inspected.documents, findings: inspected.findings, complete: inspected.findings.length === 0 } });
       const trace = timing === undefined ? compile() : timing.sync('view.buildTrace', compile);
-      timing?.cache(trace.codeCache);
+      timing?.cache(trace.codeCache, 'code');
       cases = trace.annotations;
       codes = trace.codeDeclarations;
       codeFiles = trace.codeFiles;
@@ -230,7 +230,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     } catch (cause) {
       cases = scanAnnotations(repo, { cache });
       const code = scanCode(repo, { cache });
-      timing?.cache(code.cache);
+      timing?.cache(code.cache, 'code');
       codes = code.codes;
       codeFiles = code.files;
       findings = [...inspected.findings, ...cases.findings, ...code.findings];

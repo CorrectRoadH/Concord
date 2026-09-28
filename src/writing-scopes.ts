@@ -26,8 +26,9 @@ export function discovered(repo: Repository, kind: 'policy' | 'catalog'): string
 }
 export function indexWritingScopes(repo: Repository) {
   return inRepositorySnapshot(repo, () => {
-    const policies = new Set(discovered(repo, 'policy'));
-    const catalogs = new Set(discovered(repo, 'catalog'));
+    const paths = repo.files('docs').filter(path => path.split('/').every(part => part !== '_template' && part !== '.git' && part !== 'node_modules'));
+    const policies = new Set(paths.filter(path => path.endsWith(`/${policyName}`)));
+    const catalogs = new Set(paths.filter(path => path.endsWith(`/${catalogName}`)));
     const scopes = new Set(['docs', ...[...policies, ...catalogs].map(dirname)]);
     return { operation: 'writing-index', scopes: [...scopes].sort().map(scope => ({ scope, policyPath: `${scope}/${policyName}`, catalogPath: `${scope}/${catalogName}`, hasPolicy: policies.has(`${scope}/${policyName}`), hasCatalog: catalogs.has(`${scope}/${catalogName}`) })) };
   });

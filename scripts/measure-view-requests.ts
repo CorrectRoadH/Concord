@@ -1,6 +1,6 @@
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { createHash } from 'node:crypto';
 import { cpus } from 'node:os';
@@ -16,6 +16,21 @@ const Workspace = Schema.Struct({ ok: Schema.Boolean, value: Schema.Struct({
   cache: Schema.Struct({ status: Schema.String }),
 }) });
 const Response = Schema.Struct({ ok: Schema.Boolean });
+
+function artifactDigest(artifact: string): string {
+  const hash = createHash('sha256');
+  const visit = (folder: string, prefix: string): void => {
+    for (const entry of readdirSync(folder, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const path = join(folder, entry.name), name = `${prefix}/${entry.name}`;
+      if (entry.isDirectory()) visit(path, name);
+      else if (entry.isFile() && /(?:\.js|\.node|artifact\.json)$/u.test(entry.name)) {
+        hash.update(name); hash.update('\0'); hash.update(readFileSync(path)); hash.update('\0');
+      }
+    }
+  };
+  visit(join(artifact, 'dist'), 'dist');
+  return hash.digest('hex');
+}
 
 /** Separate HTTP client and server processes: client timings include event-loop admission delay. */
 const measure = Effect.tryPromise({ try: async () => {
@@ -78,7 +93,7 @@ const measure = Effect.tryPromise({ try: async () => {
       ]);
       samples.push({ workspace: (await workspace).ms, jobs: jobs.ms, file: file.ms, action: action.ms });
     }
-    const result = { artifact, artifactDigest: createHash('sha256').update(readFileSync(join(artifact, 'dist/hawdb-native.js'))).digest('hex'), platform: process.platform, arch: process.arch, cpu: cpus()[0]?.model, root, node: process.version, commit: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), scale: { sourceFiles: 1112, supportingPages: 110 }, coldMs: cold.ms, complete: state.complete, findings: state.findings.map(item => item.code), cache: state.cache.status, samples };
+    const result = { artifact, artifactDigest: artifactDigest(artifact), platform: process.platform, arch: process.arch, cpu: cpus()[0]?.model, root, node: process.version, commit: execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(), scale: { sourceFiles: 1112, supportingPages: 110 }, firstRequestMs: cold.ms, complete: state.complete, findings: state.findings.map(item => item.code), cache: state.cache.status, samples };
     writeFileSync(resolve(outputArg), `${JSON.stringify(result, null, 2)}\n`);
     writeFileSync(`${resolve(outputArg)}.stderr`, stderr);
     process.stdout.write(`${JSON.stringify(result)}\n`);

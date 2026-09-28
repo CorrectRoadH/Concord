@@ -68,10 +68,14 @@ function authorBody(value: string): string {
 }
 
 const DocumentRecordCacheSchema = Schema.Struct({ path: Schema.String, metadata: DocumentSchema, body: Schema.String, digest: Schema.String });
-const documentContentCache = new ContentCache<DocumentRecord | undefined>('document_parse', 'concord-document-parse/v1', Schema.Union([DocumentRecordCacheSchema, Schema.Undefined]));
+const documentContentCache = new ContentCache<DocumentRecord | undefined>('document_parse', 'concord-document-parse/v1', Schema.Union([DocumentRecordCacheSchema, Schema.Undefined]), { maxEntries: 9872, maxBytes: 15 * 1024 * 1024 });
 
 export function parseDocumentRecord(path: string, source: string): DocumentRecord | undefined {
   return documentContentCache.get(path, source, () => parseDocumentSource(path, source));
+}
+
+export function inspectDocumentRecords(inputs: readonly { readonly path: string; readonly source: string }[]) {
+  return documentContentCache.getManyResults(inputs, input => parseDocumentSource(input.path, input.source));
 }
 
 export function renderDocument(metadata: DocumentMeta, body: string): string {
@@ -149,9 +153,13 @@ export interface DocumentInventory {
 export function diagnoseDocuments(repo: Repository): DocumentInventory {
   return inRepositorySnapshot(repo, () => {
     const documents: DocumentRecord[] = [], findings: Finding[] = [];
-    for (const input of documentInputs(repo, undefined, findings)) {
+    const inputs = documentInputs(repo, undefined, findings);
+    const results = inspectDocumentRecords(inputs);
+    for (const [index, input] of inputs.entries()) {
       try {
-        const record = parseDocumentRecord(input.path, input.source);
+        const result = results[index]!;
+        if (!result.ok) throw result.cause;
+        const record = result.value;
         if (currentDocument(repo, record)) documents.push(record);
       } catch (cause) {
         if (!(cause instanceof ConcordError) || !['InvalidData', 'ResearchMigrationRequired'].includes(cause.code)) throw cause;

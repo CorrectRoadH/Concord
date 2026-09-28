@@ -74,7 +74,26 @@ HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对
 
 HawDB 的[引擎边界与预算](design/hawdb-data-engine/plans/native-embedded/README.md)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 只读打开完整库，缺少 ownership 文件或命名空间不补建。持久句柄与事务先于 repository lease 释放。
 
-文档解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。当前源文件集合和字节每次读取。
+文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
+
+CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验。集合解析按批读取和写入缓存，逐文件保留解析失败；大批键查询使用有界命名空间扫描后选择请求的键，单键查询保持定向读取。临时查询结果只属于当前调用，不形成跨请求缓存。缓存命中仍核对原文摘要、解析器身份和 Schema，来源前后核验保留。
+
+同次关系图编译复用相同引用与目标类型的解析结果。读取的目标及 README 边界在返回前逐一复核字节和安全路径；变化或复核失败保留 finding，不能返回完整图。临时引用结果随本次编译结束释放，不跨请求保存。
+
+```mermaid
+flowchart TD
+  CLI[CLI trace / check] --> Scan[公共扫描与关系校验]
+  Web[Web workspace] --> Scan
+  Scan --> Sources[当前目录集合与安全文件读取]
+  Sources --> Keys[原文摘要与解析器身份]
+  Keys --> Cache[有界 HawDB 批量查询]
+  Cache --> Decode[严格解码命中结果]
+  Cache --> Parse[未命中或不可用时回源解析]
+  Parse --> Write[批量写入可重建缓存]
+  Decode --> Validate[来源复核与关系校验]
+  Parse --> Validate
+  Validate --> Result[结果与完整性诊断]
+```
 
 cache clear 在独占 repository lease 下取得与 HawDB revision 相同的原生文件锁，保留目录与锁 inode。锁错误不授权删除；损坏库通过独立锁 guard 清理。clear 不删除源 owner、证据和发布日志。
 

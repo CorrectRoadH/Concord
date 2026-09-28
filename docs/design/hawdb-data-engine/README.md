@@ -18,6 +18,7 @@ constitutionRefs:
   - docs/constitution.md#c-008
   - docs/constitution.md#c-009
   - docs/constitution.md#c-012
+  - docs/constitution.md#c-014
 decision:
   selected: native-embedded
   reason: 采用受限 HawDB 原生引擎，明确打开模式、资源预算、窄原生边界、发行条件与缓存清理的所有权。

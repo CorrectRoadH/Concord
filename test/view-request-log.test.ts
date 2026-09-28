@@ -23,6 +23,7 @@ test('real HTTP slow logs redact inputs, distinguish incomplete 200 responses, a
     timing.sync('view.compileWorkspace', () => { now += 300; });
     for (let index = 0; index < 100; index++) timing.record(`untrusted/${index}`, 1);
     timing.workspace({ complete: false, findings: [{ code: 'CodeSourceChanged' }], cache: { status: 'unavailable', detail: 'native binary digest differs: secret-install-path' } });
+    timing.cache({ status: 'unavailable', hits: 12, misses: 3, detail: 'HawdbBusy: secret-cache-path' }, 'code');
     request.resume(); response.end('ok');
   });
   try {
@@ -49,6 +50,8 @@ test('real HTTP slow logs redact inputs, distinguish incomplete 200 responses, a
     assert.ok(first.reasons.includes('source-changed'));
     assert.ok(first.reasons.includes('native-artifact-mismatch'));
     assert.ok(first.phases.length <= 17);
+    const raw = JSON.parse(lines[0]!.replace(/^Concord view slow request /u, '')) as { caches: unknown };
+    assert.deepEqual(raw.caches, { annotations: { status: 'unavailable', failure: 'unknown' }, code: { status: 'unavailable', hits: 12, misses: 3, failure: 'HawdbBusy' } });
     const last = parse(lines.at(-1)!);
     assert.equal(last.route, '/api/unknown'); assert.equal(last.suppressed, 5);
     for (const line of lines) { assert.ok(Buffer.byteLength(line) < 4096); assert.doesNotMatch(line, /secret|untrusted/u); }

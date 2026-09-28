@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
-import { documentRoots, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
+import { documentRoots, inspectDocumentRecords, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
 import type { LocalRepository } from './storage.js';
 import { documentDisposition } from './document-layout.js';
 import { existsSync } from 'node:fs';
@@ -46,11 +46,12 @@ function markdownPaths(repo: Repository, roots: readonly string[]): readonly str
   return [...new Set([...markdown('docs'), ...outsideDocs])].sort();
 }
 
-function inspectMarkdown(repo: Repository, path: string, roots: readonly string[]): { document?: DocumentRecord; page?: ViewFile; finding?: Finding } {
-  const source = repo.read(path);
+function inspectMarkdown(repo: Repository, path: string, roots: readonly string[], captured?: { source: string; result: ReturnType<typeof inspectDocumentRecords>[number] }): { document?: DocumentRecord; page?: ViewFile; finding?: Finding } {
+  const source = captured === undefined ? repo.read(path) : captured.source;
   if (source === undefined) return {};
   try {
-    const document = parseDocumentRecord(path, source);
+    if (captured !== undefined && !captured.result.ok) throw captured.result.cause;
+    const document = captured === undefined ? parseDocumentRecord(path, source) : captured.result.ok ? captured.result.value : undefined;
     if (document) {
       const disposition = documentDisposition(document.metadata.kind, path, (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path));
       if (disposition === 'current') return { document };
@@ -99,8 +100,13 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
   for (const source of repo.config.memorySources ?? []) {
     if (!existsSync(repo.absolute(source.path))) findings.push({ code: 'MemorySourceUnavailable', path: source.path, message: `Configured Memory source does not exist: ${source.path}` });
   }
-  for (const path of markdownPaths(repo, roots)) {
-    const value = inspectMarkdown(repo, path, roots);
+  const inputs = markdownPaths(repo, roots).flatMap(path => {
+    const source = repo.read(path);
+    return source === undefined ? [] : [{ path, source }];
+  });
+  const results = inspectDocumentRecords(inputs);
+  for (const [index, input] of inputs.entries()) {
+    const value = inspectMarkdown(repo, input.path, roots, { source: input.source, result: results[index]! });
     if (value.document) documents.push(value.document);
     if (value.page) pages.push(value.page);
     if (value.finding) findings.push(value.finding);

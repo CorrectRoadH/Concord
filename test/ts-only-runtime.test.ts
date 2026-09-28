@@ -17,6 +17,19 @@ const fixture = (body: (root: string) => void) => {
 };
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
+test('warm configuration parsing preserves caller isolation and rejects changed source bytes', () => Effect.runPromise(Effect.sync(() => fixture(root => {
+  const initial = new LocalRepository(root, { initialize: true });
+  try { initialize(initial); } finally { initial.close(); }
+  const source = readFileSync(join(root, 'concord.config.ts'), 'utf8');
+  const first = snapshot('concord.config.ts', source);
+  const expected = [...first.config.testRoots];
+  (first.config.testRoots as string[]).push('caller-only');
+  assert.deepEqual(snapshot('concord.config.ts', source).config.testRoots, expected);
+  assert.throws(() => snapshot('concord.config.ts', source.replace('testRoots', 'testRootz')), { code: 'InvalidData' });
+  assert.deepEqual(snapshot('concord.config.ts', source).config.testRoots, expected);
+}))));
+
+// @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('JSON-only and dual-config projects require migration without interpreting old bytes', () => Effect.runPromise(Effect.sync(() => fixture(root => {
   const source = '{ deliberately invalid old configuration }\n';
   writeFileSync(join(root, 'concord.json'), source);

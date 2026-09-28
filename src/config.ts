@@ -3,9 +3,11 @@
 import { readCachedProjectConfig } from './config-cache.js';
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type ProjectConfig } from './shared.js';
 import type * as TypeScript from 'typescript';
-import { lazyTypeScript } from './typescript-host.js';
+import { lazyTypeScript, typescriptPackageVersion } from './typescript-host.js';
+import { ContentCache } from './content-cache.js';
 
 const ts = lazyTypeScript();
+const configContentCache = new ContentCache<ProjectConfig>('document_parse', `typescript-ast/${typescriptPackageVersion()}/concord-config-parse/v1`, ProjectSchema, { maxEntries: 128, maxBytes: 1024 * 1024 });
 
 function unwrap(expression: TypeScript.Expression): TypeScript.Expression {
   if (ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isParenthesizedExpression(expression)) return unwrap(expression.expression);
@@ -63,10 +65,9 @@ export function renderTypeScriptConfig(config: ProjectConfig): string {
 export function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string): ConfigSnapshot {
   if (path !== 'concord.config.ts') throw new ConcordError('ProjectMigrationRequired', 'Runtime configuration must be concord.config.ts; migrate old configuration explicitly offline');
   const sourceDigest = digest(source);
-  if (privateDir !== undefined) {
-    const cached = readCachedProjectConfig(privateDir, sourceDigest);
-    if (cached !== undefined) return { path, source, digest: sourceDigest, config: cached };
-  }
-  const config = parseTypeScriptConfig(source, path);
+  const config = configContentCache.get(path, source, () => {
+    const cached = privateDir === undefined ? undefined : readCachedProjectConfig(privateDir, sourceDigest);
+    return cached ?? parseTypeScriptConfig(source, path);
+  });
   return { path, source, digest: sourceDigest, config };
 }

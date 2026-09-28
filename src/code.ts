@@ -8,6 +8,7 @@ import { persistNotedConfig } from './config-cache.js';
 import { decode, canonical, digest, objectDigest, Slug, Text, type Finding, type Repository } from './shared.js';
 import { parseReference } from './refs.js';
 import { ContentCache } from './content-cache.js';
+import { measureScan, type ScanTiming } from './scan-timing.js';
 import type * as TypeScript from 'typescript';
 import { lazyTypeScript, typescriptPackageVersion } from './typescript-host.js';
 
@@ -430,12 +431,8 @@ function sourceRoots(repo: Repository): readonly string[] {
 }
 
 function readSources(repo: Repository): readonly Source[] {
-  const paths = [...new Set(sourceRoots(repo).flatMap(root => {
-    repo.absolute(root);
-    return repo.files(root);
-  }))].filter(path => SOURCE_EXTENSION.test(path)).sort();
+  const paths = [...new Set(sourceRoots(repo).flatMap(root => repo.files(root)))].filter(path => SOURCE_EXTENSION.test(path)).sort();
   return paths.map(path => {
-    repo.absolute(path);
     const text = repo.read(path);
     if (text === undefined) throw new CodeSourceReadChanged(`Code source changed while reading ${path}`);
     return { path, text, digest: digest(text) };
@@ -536,19 +533,19 @@ function finish(repo: Repository, compiled: CompiledFiles, current: readonly Sou
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
-export function scanCode(repo: Repository, options: { cache?: CodeMode } = {}): CodeSnapshot {
+export function scanCode(repo: Repository, options: { cache?: CodeMode; timing?: ScanTiming } = {}): CodeSnapshot {
   return repo.snapshot === undefined ? scanCodeUnderSnapshot(repo, options) : repo.snapshot(() => scanCodeUnderSnapshot(repo, options));
 }
-function scanCodeUnderSnapshot(repo: Repository, options: { cache?: CodeMode }): CodeSnapshot {
+function scanCodeUnderSnapshot(repo: Repository, options: { cache?: CodeMode; timing?: ScanTiming }): CodeSnapshot {
   const mode = options.cache ?? 'use';
   const cachePath = cacheDatabasePath(repo.privateDir);
   let before: readonly Source[];
   let changed = false;
-  try { before = readSources(repo); }
+  try { before = measureScan(options.timing, 'code.readSources', () => readSources(repo)); }
   catch (cause) { if (cause instanceof CodeSourceReadChanged) { before = []; changed = true; } else throw cause; }
-  const initial = compileCached(repo, before, mode, changed);
+  const initial = measureScan(options.timing, 'code.cacheAndParse', () => compileCached(repo, before, mode, changed));
   let after: readonly Source[];
-  try { after = readSources(repo); }
+  try { after = measureScan(options.timing, 'code.verifySources', () => readSources(repo)); }
   catch (cause) { if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath); else throw cause; }
   if (sameSources(before, after)) return finish(repo, initial, before, changed, mode, cachePath);
   const fresh = compileCached(repo, after, mode, true);

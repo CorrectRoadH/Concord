@@ -4,12 +4,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 type Observation = 'incomplete-scan' | 'source-changed' | 'orphan-annotation' | 'cache-unavailable' | 'native-artifact-mismatch';
 interface Phase { name: string; ms: number; count: number }
+interface CacheObservation { status: string; hits?: number; misses?: number; failure?: string }
 const rounded = (value: number): number => Math.round(Math.max(0, value) * 100) / 100;
 
 /** Labels are application-owned; no URL query, body, path argument, or error message is retained. */
 export class RequestTiming {
   private readonly phases = new Map<string, Phase>();
   readonly observations = new Set<Observation>();
+  readonly caches: Partial<Record<'annotations' | 'code', CacheObservation>> = {};
   constructor(readonly started: number, private readonly now: () => number = performance.now.bind(performance)) {}
   sync<A>(name: string, operation: () => A): A {
     const started = this.now();
@@ -20,7 +22,7 @@ export class RequestTiming {
     try { return await operation(); } finally { this.record(name, this.now() - started); }
   }
   record(name: string, ms: number): void {
-    const key = /^[a-zA-Z.]{1,64}$/u.test(name) && (this.phases.has(name) || this.phases.size < 16) ? name : 'other';
+    const key = /^[a-zA-Z.]{1,64}$/u.test(name) && (this.phases.has(name) || this.phases.size < 24) ? name : 'other';
     const phase = this.phases.get(key) ?? { name: key, ms: 0, count: 0 };
     phase.ms += ms; phase.count++;
     this.phases.set(key, phase);
@@ -32,7 +34,21 @@ export class RequestTiming {
     if (value.findings.some(item => item.code === 'OrphanCodeAnnotation')) this.observations.add('orphan-annotation');
     this.cache(value.cache);
   }
-  cache(value: unknown): void {
+  cache(value: unknown, namespace: 'annotations' | 'code' = 'annotations'): void {
+    if (typeof value === 'object' && value !== null && 'status' in value && typeof value.status === 'string') {
+      const status = ['hit', 'miss', 'partial', 'off', 'unavailable', 'source-changed'].includes(value.status) ? value.status : 'unknown';
+      const observation: CacheObservation = { status };
+      for (const field of ['hits', 'misses'] as const) {
+        if (field in value) {
+          const count = (value as Record<string, unknown>)[field];
+          if (typeof count === 'number' && Number.isSafeInteger(count) && count >= 0) observation[field] = count;
+        }
+      }
+      if ('detail' in value && typeof value.detail === 'string') {
+        observation.failure = ['HawdbBusy', 'HawdbUnavailable', 'HawdbIncompatible', 'HawdbLimit', 'HawdbClosed', 'UnsafePath', 'InvalidData'].find(code => value.detail === code || (value.detail as string).startsWith(`${code}:`)) ?? 'unknown';
+      }
+      this.caches[namespace] = observation;
+    }
     if (typeof value === 'object' && value !== null && 'status' in value && value.status === 'unavailable') {
       this.observations.add('cache-unavailable');
       if ('detail' in value && typeof value.detail === 'string' && value.detail.startsWith('native binary digest differs')) this.observations.add('native-artifact-mismatch');
@@ -93,7 +109,7 @@ export class ViewRequestLog {
       if (this.count >= 20) { this.suppressed = Math.min(Number.MAX_SAFE_INTEGER, this.suppressed + 1); return; }
       const phases = timing.result();
       const line = `Concord view slow request ${JSON.stringify({ method, route, status: response.statusCode, completed: response.writableFinished, durationMs, eventLoopDelayMs,
-        phase: phases.find(phase => phase.name.startsWith('view.'))?.name ?? phases[0]?.name ?? 'response', reasons: [...timing.observations, ...(eventLoopDelayMs >= this.thresholdMs ? ['event-loop-delay-observed'] : [])], phases, suppressed: this.suppressed })}\n`;
+        phase: phases.find(phase => phase.name.startsWith('view.'))?.name ?? phases[0]?.name ?? 'response', reasons: [...timing.observations, ...(eventLoopDelayMs >= this.thresholdMs ? ['event-loop-delay-observed'] : [])], phases, caches: timing.caches, suppressed: this.suppressed })}\n`;
       try {
         if (this.write(line)) { this.count++; this.suppressed = 0; }
         else this.suppressed = Math.min(Number.MAX_SAFE_INTEGER, this.suppressed + 1);
