@@ -13,7 +13,7 @@ export function projectDocPages(snapshot: WorkspaceSnapshot): WorkspaceSnapshot[
   const memoryRoots = (snapshot.project?.memorySources ?? [{ path: 'memory' }]).map(source => source.path);
   const roots = [...DOCUMENT_ROOTS, ...memoryRoots];
   return snapshot.pages
-    .filter(page => page.path.endsWith('.md') && (page.path.startsWith('docs/') && !roots.some(root => under(page.path, root)) || page.readOnly && page.documentPath === undefined && memoryRoots.some(root => under(page.path, root))))
+    .filter(page => page.path.endsWith('.md') && (page.path.startsWith('docs/') && !roots.some(root => under(page.path, root)) || page.documentPath === undefined && memoryRoots.some(root => under(page.path, root))))
     .sort((left, right) => projectDocSort(left.path).localeCompare(projectDocSort(right.path)));
 }
 

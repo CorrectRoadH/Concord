@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import type { ViewFile } from '../../src/view-contract';
 import { useWorkspace } from '../workspace';
 import { DetailDrawer } from './detail-drawer';
-import { MarkdownEditor } from './markdown-editor';
+import { MarkdownEditor, codeMirrorExtensions } from './markdown-editor';
+import { SourceEditor } from './source-editor';
 
 export interface SourceLocation {
   readonly path: string;
@@ -35,7 +36,9 @@ export function SourceDrawer({ location, editable = false, onClose }: {
     description: location ? `第 ${location.line}–${location.endLine} 行` : '源码位置',
   }}>
     {error ? <p role="alert">源码读取失败：{error}</p> : file && location && file.path === location.path
-      ? <MarkdownEditor key={file.path} initial={editable ? file : { ...file, readOnly: true, reason: '测试源码在此处仅供检查。' }} source sourceLocation={location} hideSourceHeading />
+      ? editable
+        ? <MarkdownEditor key={file.path} initial={file} source sourceLocation={location} hideSourceHeading />
+        : <SourceEditor key={file.path} value={file.body} path={file.path} readOnly extensions={codeMirrorExtensions} location={location} onChange={() => undefined} />
       : <p role="status">正在读取源码…</p>}
   </DetailDrawer>;
 }

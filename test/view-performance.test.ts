@@ -61,7 +61,7 @@ test('direct file reads preserve owner diagnostics and inspect only the target a
     const inventory = inspectDocuments(repo);
     for (const page of inventory.pages) assert.deepEqual(inspectDocumentFile(repo, page.path), page);
     for (const document of inventory.documents) assert.deepEqual(inspectDocumentFile(repo, document.path), {
-      path: document.path, body: document.body, digest: document.digest, readOnly: false, documentPath: document.path,
+      path: document.path, body: document.body, digest: document.digest, documentPath: document.path,
     });
     const reads: string[] = [];
     let walks = 0;
@@ -213,7 +213,7 @@ test('recovery removes dead owners while optimistic readers remain unregistered'
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('supporting-page saves avoid inventory scans and preserve conflict and owner guards', () => Effect.runPromise(Effect.sync(() => {
+test('supporting-page saves avoid inventory scans and preserve conflict checks', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   const repo = new LocalRepository(root);
   try {
@@ -227,9 +227,6 @@ test('supporting-page saves avoid inventory scans and preserve conflict and owne
     assert.equal(readFileSync(join(root, path), 'utf8'), '# Saved\n');
     assert.equal(walks, 0, 'saving one supporting page must not enumerate unrelated documents');
     assert.throws(() => setMarkdown(repo, path, '# Stale\n', page.digest), { code: 'PreimageChanged' });
-    writeFileSync(join(root, 'docs/feature/cached/README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\nBroken\n');
-    assert.throws(() => setMarkdown(repo, path, '# Invalid\n', page.digest), { code: 'ReadOnlyDocument' });
-    assert.equal(readFileSync(join(root, path), 'utf8'), '# Saved\n');
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 })));
 

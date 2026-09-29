@@ -25,8 +25,6 @@ export interface ViewFile {
   readonly path: string;
   readonly body: string;
   readonly digest: string;
-  readonly readOnly: boolean;
-  readonly reason?: string;
   readonly documentPath?: string;
 }
 

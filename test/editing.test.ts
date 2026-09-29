@@ -64,11 +64,6 @@ test('editing exposes configured source and known Markdown only, preserving mana
   assert.ok(page);
   setMarkdown(repo, page.path, '# Rewritten\n', page.digest);
   throwsCode('FileNotFound', () => setMarkdown(repo, 'README.md', '# no\n', 'sha256:none'));
-  writeFileSync(join(root, 'memory', 'bad.md'), '---\nformat: concord.document/v1\nid: bad\n---\nbody\n');
-  const malformed = inspectDocuments(repo).pages.find(item => item.path === 'memory/bad.md');
-  assert.equal(malformed?.readOnly, true);
-  assert.match(malformed?.body ?? '', /format: concord\.document/u);
-  throwsCode('ReadOnlyDocument', () => setMarkdown(repo, malformed!.path, '# Repair\n', malformed!.digest));
 }))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -77,11 +72,8 @@ test('project documents under docs are readable without becoming category owners
   const architecture = inventory.pages.find(page => page.path === 'docs/architecture.md');
   const constitution = inventory.pages.find(page => page.path === 'docs/constitution.md');
   const template = inventory.pages.find(page => page.path === 'docs/_template/feature-design/library.md');
-  assert.equal(architecture?.readOnly, false);
   assert.equal(architecture?.documentPath, undefined);
-  assert.equal(constitution?.readOnly, true);
-  assert.match(constitution?.reason ?? '', /not compliance evidence/);
-  assert.equal(template?.readOnly, false);
+  assert.ok(template);
   assert.equal(inventory.documents.some(document => document.path === 'docs/architecture.md' || document.path === 'docs/constitution.md'), false);
 
   let walks = 0;
@@ -94,15 +86,18 @@ test('project documents under docs are readable without becoming category owners
   const saved = setMarkdown(repo, architecture!.path, '# Project architecture\n\nSaved from the workbench.\n', architecture!.digest);
   assert.deepEqual(saved.changedPaths, ['docs/architecture.md']);
   assert.match(readFileSync(join(root, 'docs/architecture.md'), 'utf8'), /Saved from the workbench/);
-  throwsCode('ReadOnlyDocument', () => setMarkdown(repo, constitution!.path, '# Rewritten constitution\n', constitution!.digest));
+  setMarkdown(repo, constitution!.path, `${constitution!.body}\nAdditional principle.\n`, constitution!.digest);
   assert.match(readFileSync(join(root, 'docs/constitution.md'), 'utf8'), /concord\.constitution\/v1/);
 
   mkdirSync(join(root, 'docs/notes'), { recursive: true });
   writeFileSync(join(root, 'docs/notes/extra.md'), '# Extra\n');
   const extra = inspectDocuments(repo).pages.find(page => page.path === 'docs/notes/extra.md');
-  assert.equal(extra?.readOnly, true);
-  throwsCode('ReadOnlyDocument', () => setMarkdown(repo, extra!.path, '# Changed\n', extra!.digest));
-  assert.equal(readFileSync(join(root, 'docs/notes/extra.md'), 'utf8'), '# Extra\n');
+  setMarkdown(repo, extra!.path, '---\ntitle: Changed\n---\n# Changed\n', extra!.digest);
+  assert.equal(readFileSync(join(root, 'docs/notes/extra.md'), 'utf8'), '---\ntitle: Changed\n---\n# Changed\n');
+  const updated = inspectDocumentFile(repo, extra!.path)!;
+  throwsCode('PreimageChanged', () => setMarkdown(repo, updated.path, '# Stale\n', extra!.digest));
+  setMarkdown(repo, updated.path, '', updated.digest);
+  assert.equal(readFileSync(join(root, updated.path), 'utf8'), '');
 }))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

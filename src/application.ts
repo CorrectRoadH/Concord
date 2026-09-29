@@ -205,7 +205,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       configDigest: config.configDigest,
       documents: [],
       feedback: [],
-      pages: config.source === undefined ? [] : [{ path: config.path, body: config.source, digest: config.configDigest!, readOnly: true, reason: 'Invalid configuration must be repaired locally before Concord can reconstruct managed state.' }],
+      pages: config.source === undefined ? [] : [{ path: config.path, body: config.source, digest: config.configDigest! }],
       cases: [],
       codes: [],
       edges: [],
@@ -297,7 +297,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
   const config = yield* sync('view.readConfig', () => directConfig(validatedRoot));
   if (config.project === null) {
     if (path !== config.path || config.source === undefined) return yield* Effect.fail(new ConcordError('FileNotFound', 'Only the malformed project configuration diagnostic is available until configuration is repaired'));
-    return { path, body: config.source, digest: config.configDigest!, readOnly: true, reason: 'Invalid configuration must be repaired locally before Concord can reconstruct managed state.' };
+    return { path, body: config.source, digest: config.configDigest! };
   }
   return yield* withRepository(validatedRoot, (repo) => Effect.gen(function*() {
     const ordinary = yield* snapshotSync(repo, timing, 'view.readFile', () => repo.snapshot(() => {
@@ -310,10 +310,10 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
           if (cause instanceof ConcordError && cause.code === 'SourceNotFound') return undefined;
           throw cause;
         }
-        return { path: source.path, body: source.body, digest: source.digest, readOnly: false };
+        return { path: source.path, body: source.body, digest: source.digest };
       }
       if (path === repo.configSnapshot.path) {
-        return { path, body: repo.configSnapshot.source, digest: repo.configSnapshot.digest, readOnly: true, reason: 'Edit configuration through config.set so project identity and validation are preserved.' };
+        return { path, body: repo.configSnapshot.source, digest: repo.configSnapshot.digest };
       }
       return undefined;
     }));
@@ -324,7 +324,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
       return yield* snapshotSync(repo, timing, 'view.readRepositoryTestFile', () => repo.snapshot(() => {
         const body = repo.read(path);
         if (body === undefined) throw new ConcordError('FileNotFound', 'The explicitly associated project test file no longer exists');
-        return { path, body, digest: digest(body), readOnly: true, reason: 'Project test source is available here for inspection only.' };
+        return { path, body, digest: digest(body) };
       }));
     }
     return yield* Effect.fail(new ConcordError('FileNotFound', 'The requested path is not in the Concord document, configured source, or explicitly associated project test inventory'));

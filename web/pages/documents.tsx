@@ -146,7 +146,6 @@ const documentStyles = stylex.create({
   openChevron: { transform: "rotate(90deg)" },
   treeSpacer: { flexShrink: 0, width: 15 },
   treeName: { minWidth: 0, overflow: "hidden", fontWeight: 600, textOverflow: "ellipsis", whiteSpace: "nowrap" },
-  treeMetadata: { marginLeft: "auto", color: "var(--muted-foreground)", fontSize: 10 },
   skeleton: { minHeight: 520, padding: "48px clamp(28px, 7vw, 100px)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: "var(--radius)", backgroundColor: "var(--card)" },
   skeletonTitle: { width: "58%", height: 48, marginBottom: 28, borderRadius: 8, backgroundColor: "var(--muted)", animationName: stylex.keyframes({ "0%, 100%": { opacity: .45 }, "50%": { opacity: .9 } }), animationDuration: "1.25s", animationIterationCount: "infinite" },
   skeletonLine: { height: 17, marginBottom: 14, borderRadius: 5, backgroundColor: "var(--muted)", animationName: stylex.keyframes({ "0%, 100%": { opacity: .4 }, "50%": { opacity: .78 } }), animationDuration: "1.25s", animationIterationCount: "infinite" },
@@ -623,7 +622,7 @@ function DocumentFiles({
   const topicDirectory = document.metadata.kind === "research" ? researchTopicDirectory(document.path) : undefined
   const topicDocuments = topicDirectory ? snapshot.documents.filter(item => item.metadata.kind === "research" && item.path.startsWith(topicDirectory)) : []
   const topicPages = topicDirectory ? snapshot.pages.filter(item => item.path.startsWith(topicDirectory)) : pages
-  const files = [...new Map([{ path: document.path, readOnly: false }, ...topicDocuments.map(item => ({ path: item.path, readOnly: false })), ...topicPages].map(item => [item.path, item])).values()]
+  const files = [...new Map([{ path: document.path }, ...topicDocuments.map(item => ({ path: item.path })), ...topicPages].map(item => [item.path, item])).values()]
   const requestedFile = params.get("file")
   const selectedPath = requestedFile && files.some(file => file.path === requestedFile) ? requestedFile : document.path
   const layoutRef = React.useRef<HTMLDivElement>(null)
@@ -804,12 +803,11 @@ interface FileTreeNode {
   readonly name: string
   readonly relativePath: string
   readonly path?: string
-  readonly readOnly?: boolean
   readonly children: readonly FileTreeNode[]
 }
 
-function buildFileTree(files: readonly { path: string; readOnly: boolean }[], ownerDirectory: string): readonly FileTreeNode[] {
-  type MutableNode = { name: string; relativePath: string; path?: string; readOnly?: boolean; children: MutableNode[] }
+function buildFileTree(files: readonly { path: string }[], ownerDirectory: string): readonly FileTreeNode[] {
+  type MutableNode = { name: string; relativePath: string; path?: string; children: MutableNode[] }
   const root: MutableNode = { name: "", relativePath: "", children: [] }
   for (const file of files) {
     const relative = file.path.startsWith(ownerDirectory) ? file.path.slice(ownerDirectory.length) : file.path
@@ -823,7 +821,6 @@ function buildFileTree(files: readonly { path: string; readOnly: boolean }[], ow
       }
       if (index === relative.split("/").length - 1) {
         node.path = file.path
-        node.readOnly = file.readOnly
       }
       parent = node
     }
@@ -862,7 +859,6 @@ function FileTree({ nodes, ownerDirectory, expanded, selectedPath, onToggle, onS
       >
         {directory ? <><ChevronRight {...stylex.props(documentStyles.treeIcon, documentStyles.chevron, open && documentStyles.openChevron)} /><Folder {...stylex.props(documentStyles.treeIcon)} /></> : <><span {...stylex.props(documentStyles.treeSpacer)} /><FileText {...stylex.props(documentStyles.treeIcon)} /></>}
         <span {...stylex.props(documentStyles.treeName)}>{node.name}</span>
-        {node.readOnly && <small {...stylex.props(documentStyles.treeMetadata)}>只读</small>}
       </button></PathContextMenu>
       {directory && open && <FileTree ownerDirectory={ownerDirectory} nodes={node.children} expanded={expanded} selectedPath={selectedPath} onToggle={onToggle} onSelect={onSelect} depth={depth + 1} />}
     </React.Fragment>

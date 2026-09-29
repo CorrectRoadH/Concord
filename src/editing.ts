@@ -11,33 +11,20 @@ export interface ViewFile {
   readonly path: string;
   readonly body: string;
   readonly digest: string;
-  readonly readOnly: boolean;
-  readonly reason?: string;
   readonly documentPath?: string;
 }
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
-const CONSTITUTION_PATH = 'docs/constitution.md';
-const WRITABLE_PROJECT_PAGES = new Set(['docs/README.md', 'docs/concord.md', 'docs/concepts.md', 'docs/architecture.md']);
 const sourceForbidden = (path: string): boolean => path.split('/').some(part => part === '.git' || part === 'node_modules');
 const claimsConcordOwner = (source: string): boolean => /(?:^|\n)\s*format\s*:[^\n]*concord\.document\//u.test(source.slice(0, 64 * 1024));
-const hasFrontmatter = (source: string): boolean => /^(?:\uFEFF)?---(?:\r?\n|$)/u.test(source);
 const underRoot = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 
 function isLooseProjectDoc(path: string, roots: readonly string[]): boolean {
   return path.startsWith('docs/') && path.endsWith('.md') && !sourceForbidden(path) && !roots.some(root => underRoot(path, root));
 }
 
-function writableProjectPage(path: string): boolean {
-  return WRITABLE_PROJECT_PAGES.has(path) || /^docs\/_template\/.+\.md$/u.test(path);
-}
-
 function projectPage(path: string, source: string): ViewFile {
-  const base = { path, body: source, digest: digest(source) };
-  if (path === CONSTITUTION_PATH) return { ...base, readOnly: true, reason: 'The constitution is maintained through constitution adopt and amend. This view is read-only and is not compliance evidence.' };
-  if (!writableProjectPage(path)) return { ...base, readOnly: true, reason: 'This project document is outside the writable owner set and is shown read-only.' };
-  if (hasFrontmatter(source)) return { ...base, readOnly: true, reason: 'Project documents that begin with frontmatter cannot be rewritten through the supporting-page editor.' };
-  return { ...base, readOnly: false };
+  return { path, body: source, digest: digest(source) };
 }
 
 function markdownPaths(repo: Repository, roots: readonly string[]): readonly string[] {
@@ -46,7 +33,7 @@ function markdownPaths(repo: Repository, roots: readonly string[]): readonly str
   return [...new Set([...markdown('docs'), ...outsideDocs])].sort();
 }
 
-function inspectMarkdown(repo: Repository, path: string, roots: readonly string[], captured?: { source: string; result: ReturnType<typeof inspectDocumentRecords>[number] }): { document?: DocumentRecord; page?: ViewFile; finding?: Finding } {
+function inspectMarkdown(repo: Repository, path: string, captured?: { source: string; result: ReturnType<typeof inspectDocumentRecords>[number] }): { document?: DocumentRecord; page?: ViewFile; finding?: Finding } {
   const source = captured === undefined ? repo.read(path) : captured.source;
   if (source === undefined) return {};
   try {
@@ -55,15 +42,14 @@ function inspectMarkdown(repo: Repository, path: string, roots: readonly string[
     if (document) {
       const disposition = documentDisposition(document.metadata.kind, path, (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path));
       if (disposition === 'current') return { document };
-      return { page: { path, body: source, digest: digest(source), readOnly: true, reason: disposition === 'historical' ? 'Historical contract in a Memory source; preserved read-only and excluded from current contracts.' : 'Concord metadata outside current document roots is shown read-only.' } };
+      return { page: projectPage(path, source) };
     }
-    if (path === CONSTITUTION_PATH || isLooseProjectDoc(path, roots)) return { page: projectPage(path, source) };
-    return { page: { path, body: source, digest: digest(source), readOnly: false } };
+    return { page: projectPage(path, source) };
   } catch (cause) {
-    if (!claimsConcordOwner(source)) return { page: { path, body: source, digest: digest(source), readOnly: false } };
+    if (!claimsConcordOwner(source)) return { page: { path, body: source, digest: digest(source) } };
     return {
       finding: { code: cause instanceof ConcordError ? cause.code : 'InvalidData', path, message: cause instanceof Error ? cause.message : String(cause) },
-      page: { path, body: source, digest: digest(source), readOnly: true, reason: 'Malformed Concord owner metadata is read-only. Repair the original source locally before editing managed content.' },
+      page: projectPage(path, source),
     };
   }
 }
@@ -72,11 +58,11 @@ function inspectMarkdown(repo: Repository, path: string, roots: readonly string[
 export function inspectDocumentFile(repo: Repository, path: string): ViewFile | undefined {
   return inRepositorySnapshot(repo, () => {
   const roots = documentRoots(repo);
-  const loose = path === CONSTITUTION_PATH || isLooseProjectDoc(path, roots);
+  const loose = isLooseProjectDoc(path, roots);
   const inDocumentInventory = roots.some(root => underRoot(path, root));
   if (!path.endsWith('.md') || sourceForbidden(path) || (!inDocumentInventory && !loose)) return undefined;
-  const target = inspectMarkdown(repo, path, roots);
-  if (target.document) return { path, body: target.document.body, digest: target.document.digest, readOnly: false, documentPath: path };
+  const target = inspectMarkdown(repo, path);
+  if (target.document) return { path, body: target.document.body, digest: target.document.digest, documentPath: path };
   if (!target.page) return undefined;
   if (loose) return target.page;
   let owner: string | undefined;
@@ -84,8 +70,7 @@ export function inspectDocumentFile(repo: Repository, path: string): ViewFile | 
   for (let depth = 1; depth < segments.length; depth += 1) {
     const ancestorPath = `${segments.slice(0, depth).join('/')}/README.md`;
     if (!roots.some(root => underRoot(ancestorPath, root))) continue;
-    const ancestor = ancestorPath === path ? target : inspectMarkdown(repo, ancestorPath, roots);
-    if (ancestor.page?.readOnly) return { ...target.page, readOnly: true, reason: ancestor.page.reason ?? `Owner ${ancestorPath} is read-only.` };
+    const ancestor = ancestorPath === path ? target : inspectMarkdown(repo, ancestorPath);
     if (ancestor.document) owner = ancestorPath;
   }
   return owner ? { ...target.page, documentPath: owner } : target.page;
@@ -106,7 +91,7 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
   });
   const results = inspectDocumentRecords(inputs);
   for (const [index, input] of inputs.entries()) {
-    const value = inspectMarkdown(repo, input.path, roots, { source: input.source, result: results[index]! });
+    const value = inspectMarkdown(repo, input.path, { source: input.source, result: results[index]! });
     if (value.document) documents.push(value.document);
     if (value.page) pages.push(value.page);
     if (value.finding) findings.push(value.finding);
@@ -114,9 +99,7 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
   const packageOwners = documents.filter(document => document.path.endsWith('/README.md'))
     .sort((left, right) => right.path.length - left.path.length);
   const ownedPages = pages.map(page => {
-    if (page.path === CONSTITUTION_PATH || isLooseProjectDoc(page.path, roots)) return page;
-    const malformedBoundary = pages.find(candidate => candidate.readOnly && candidate.path.endsWith('/README.md') && page.path.startsWith(candidate.path.slice(0, -'README.md'.length)));
-    if (malformedBoundary) return { ...page, readOnly: true, reason: malformedBoundary.reason ?? `Owner ${malformedBoundary.path} is read-only.` };
+    if (isLooseProjectDoc(page.path, roots)) return page;
     const owner = packageOwners.find(document => page.path.startsWith(document.path.slice(0, -'README.md'.length)));
     return owner ? { ...page, documentPath: owner.path } : page;
   });
@@ -194,21 +177,14 @@ export function setMetadata(repo: LocalRepository, reference: string, fields: { 
   });
 }
 
-function pageBody(value: string): string {
-  if (value.trim().length === 0) throw new ConcordError('InvalidInput', 'body must be non-empty');
-  if (/^(?:\uFEFF)?---(?:\r?\n|$)/u.test(value)) throw new ConcordError('InvalidAuthorBody', 'Supporting Markdown cannot begin with frontmatter');
-  return value.endsWith('\n') ? value : `${value}\n`;
-}
-
 export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const page = inspectDocumentFile(repo, path);
   if (page === undefined) throw new ConcordError('FileNotFound', 'Markdown editing is limited to the Concord document and supporting-page inventory');
-  if (page.readOnly) throw new ConcordError('ReadOnlyDocument', page.reason ?? `${path} is read-only`);
   if (page.documentPath === path) return setAuthor(repo, path, body, expectedDigest, dryRun);
   if (page.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; use its current digest`);
   const before = repo.read(path);
   if (before === undefined) throw new ConcordError('FileNotFound', `${path} disappeared before publication`);
-  return repo.publish('set-markdown', [{ path, before, after: pageBody(body) }], dryRun);
+  return repo.publish('set-markdown', [{ path, before, after: body }], dryRun);
   });
 }

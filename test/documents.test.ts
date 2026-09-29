@@ -31,7 +31,7 @@ import {
 } from '../dist/documents.js';
 import { LocalRepository, initialize } from '../dist/storage.js';
 import { inspectResolutionEvidence } from '../dist/evidence.js';
-import { inspectDocuments, inspectDocumentFile } from '../dist/editing.js';
+import { inspectDocuments } from '../dist/editing.js';
 import { MemorySchema, ResolutionSchema, decode, type Resolution } from '../dist/shared.js';
 
 function createConsumer() {
@@ -412,7 +412,7 @@ test('Issue closure rejects missing references and duplicate cycles', () => Effe
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
-test('all owners keep independent physical names and historical contracts stay read-only outside the graph', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+test('all owners keep independent physical names and historical contracts remain outside the graph', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   for (const kind of ['feature', 'roadmap', 'design', 'engineering', 'research'] as const) {
     createDocument(repo, kind, { id: `${kind}-id`, title: kind, ...(kind === 'design' ? { alternatives: ['本地', '远端'] } : {}) });
     renameSync(join(root, `docs/${kind}/${kind}-id`), join(root, `docs/${kind}/中文目录`));
@@ -440,8 +440,6 @@ test('all owners keep independent physical names and historical contracts stay r
   assert.equal(view.documents.some(record => record.path === 'memory/design/README.md'), false);
   const page = view.pages.find(item => item.path === 'memory/design/README.md');
   assert.equal(page?.body, historical);
-  assert.equal(page?.readOnly, true);
-  assert.equal(inspectDocumentFile(repo, 'memory/design/原始材料.md')?.readOnly, true);
   throwsCode('ReferenceNotFound', () => resolveReference(repo, loadDocuments(repo), 'memory/design/README.md'));
   write(root, 'memory/design/README.md', historical.replace('kind: design', 'kind: unknown'));
   throwsCode('InvalidData', () => loadDocuments(repo));

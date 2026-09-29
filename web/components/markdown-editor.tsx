@@ -34,7 +34,6 @@ import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 import { Textarea } from './ui/textarea';
 import { SourceEditor } from './source-editor';
-import { MarkdownPreview } from './markdown-preview';
 import { P5DocumentContext, p5CodeBlockDescriptor } from './p5-sketch';
 
 interface Props {
@@ -49,7 +48,7 @@ interface Props {
 }
 
 // Stable extensions use CSS variables so theme changes preserve selection and undo history.
-const codeMirrorExtensions = [
+export const codeMirrorExtensions = [
   EditorView.theme({
     '&': { backgroundColor: 'var(--card)', color: 'var(--foreground)' },
     '.cm-scroller': {
@@ -175,12 +174,13 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
   const currentDraft = useRef(initial.body);
   const savingNow = useRef(false);
   const [unsupported, setUnsupported] = useState<string | null>(null);
+  const hasFrontmatter = /^(?:\uFEFF)?---(?:\r?\n|$)/u.test(file.body);
   const [external, setExternal] = useState<ViewFile | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
   const [editorKey, setEditorKey] = useState(initial.digest);
   const currentDocument = snapshot.documents.find(document => document.path === initial.path);
   const observed = snapshot.pages.find(page => page.path === initial.path)
-    ?? (currentDocument ? { path: currentDocument.path, body: currentDocument.body, digest: currentDocument.digest, readOnly: false, documentPath: currentDocument.path } : undefined);
+    ?? (currentDocument ? { path: currentDocument.path, body: currentDocument.body, digest: currentDocument.digest, documentPath: currentDocument.path } : undefined);
   const observedDigest = useRef(observed?.digest);
 
 
@@ -251,25 +251,24 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
       throw cause;
     } finally { savingNow.current = false; }
   }, [api, external, onSaved, refresh, source]);
-  const autoSave = useAutoSave({ dirty, revision: draft, save, discard: () => { replaceWith(baseline.current); setCompareOpen(false); }, enabled: !file.readOnly });
+  const autoSave = useAutoSave({ dirty, revision: draft, save, discard: () => { replaceWith(baseline.current); setCompareOpen(false); } });
   const saving = autoSave.saving;
   const changeDraft = (value: string) => { currentDraft.current = value; setDraft(value); setLocalDirty(value !== baseline.current.body); };
   const rawEditor = <Textarea
     aria-label={source ? '源码原文' : 'Markdown 原文'}
     className="raw-editor"
     value={draft}
-    readOnly={file.readOnly || busy}
+    readOnly={busy}
     onChange={event => changeDraft(event.target.value)}
   />;
   const toolbarActions = <div className="toolbar-actions">
     {external && <Button variant="outline" size="sm" onClick={() => setCompareOpen(true)}><GitCompareArrows /> 外部变更</Button>}
     <Button variant="outline" size="sm" onClick={() => void reload()} disabled={saving}><RefreshCw /> 重新载入</Button>
-    <span role="status">{file.readOnly ? '只读' : autoSave.status}</span>
+    <span role="status">{autoSave.status}</span>
     {autoSave.error && <Button variant="outline" size="sm" onClick={() => { void autoSave.flush().catch(() => undefined); }}>重试保存</Button>}
   </div>;
 
   const followLink = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (file.readOnly && !source) return;
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const target = event.target;
     const anchor = target instanceof Element ? target.closest('a[href]') : null;
@@ -291,10 +290,9 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
       {toolbarActions}
     </div>}
     {autoSave.error && <div className="form-error" role="alert">{autoSave.error}</div>}
-    {file.readOnly && <div className="callout callout--warning"><AlertTriangle /> <div><strong>只读</strong><p>{file.reason ?? '当前内容不能由工作台安全修改。'}</p></div></div>}
     {external && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘内容已变化</strong><p>当前草稿没有被覆盖。请比较后保留草稿或重新载入。</p></div></div>}
-    {unsupported && !file.readOnly && <div className="callout callout--warning"><AlertTriangle /><div><strong>已切换为原文编辑</strong><p>WYSIWYG 无法无损解析该语法：{unsupported}。原始字节内容保持不变，只有你的明确编辑才会标记为未保存。</p></div></div>}
-    {source ? <SourceEditor value={draft} path={file.path} readOnly={file.readOnly || busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : file.readOnly ? <MarkdownPreview markdown={file.body} documentPath={file.path} onFollowLink={onFollowLink} /> : unsupported ? rawEditor : <MarkdownErrorBoundary
+    {unsupported && <div className="callout callout--warning"><AlertTriangle /><div><strong>已切换为原文编辑</strong><p>WYSIWYG 无法无损解析该语法：{unsupported}。原始字节内容保持不变，只有你的明确编辑才会标记为未保存。</p></div></div>}
+    {source ? <SourceEditor value={draft} path={file.path} readOnly={busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : hasFrontmatter || unsupported ? rawEditor : <MarkdownErrorBoundary
       fallback={rawEditor}
       onError={error => setUnsupported(error.message)}
     >
@@ -305,7 +303,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
         markdown={file.body}
         trim={false}
         suppressHtmlProcessing
-        readOnly={file.readOnly || busy}
+        readOnly={busy}
         placeholder="开始撰写正文…"
         onError={({ error }) => setUnsupported(error)}
         onChange={(markdown, initialMarkdownNormalize) => {

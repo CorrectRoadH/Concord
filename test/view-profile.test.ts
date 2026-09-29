@@ -43,7 +43,6 @@ it('SDK adapter flow', () => { throw new Error('DO NOT EXECUTE'); });
     assert.equal(snapshot.cases.length, 0);
     assert.deepEqual(snapshot.repositoryTests?.tests[0]?.features, ['docs/feature/adapters/README.md']);
     const projectedTestFile = await Effect.runPromise(getViewFile(root, nativePath));
-    assert.equal(projectedTestFile.readOnly, true);
     assert.match(projectedTestFile.body, /SDK adapter flow/);
     await assert.rejects(() => Effect.runPromise(getViewFile(root, 'host.ts')), (cause: unknown) => cause instanceof Error && 'code' in cause && cause.code === 'FileNotFound');
     const page = await browser.newPage();
