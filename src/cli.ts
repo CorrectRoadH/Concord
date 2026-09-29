@@ -35,7 +35,8 @@ import { humanOutput } from './presentation.js';
 import { annotationSnippet, doctor } from './onboarding.js';
 import { scanCode } from './code.js';
 import { codeSnippet, listCode, locateCode } from './code-commands.js';
-import { applyViewDryRun, executeViewAction, getWorkspaceSnapshot } from './application.js';
+import { applyViewDryRun, executeViewAction, getWorkspaceSnapshot, validateViewRoot } from './application.js';
+import { readWorkspaceProjection, workspaceProjectionContext } from './workspace-projection.js';
 import { getGitDiff, getGitStatus } from './git-view.js';
 import { serveViewServer } from './view-server.js';
 import { viewAddresses } from './view-addresses.js';
@@ -369,6 +370,7 @@ const action = Command.make('action', { input: text('input') }, args => Effect.g
 })).pipe(Command.withDescription('Execute one strict shared ViewAction from --input <file|->.'));
 const workspace = Command.make('workspace').pipe(Command.withDescription('Inspect the shared human/agent workspace projection.'), Command.withSubcommands([
   Command.make('show', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* getWorkspaceSnapshot(viewRoot(settings), settings.dryRun ? 'off' : 'use'); yield* Effect.sync(() => emit(result, settings.json)); })),
+  Command.make('projection', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* sync(() => readWorkspaceProjection(workspaceProjectionContext(validateViewRoot(viewRoot(settings))))); yield* Effect.sync(() => emit({ operation: 'workspace-projection', ...result }, settings.json)); })),
 ]));
 const gitView = Command.make('git').pipe(Command.withDescription('Inspect readonly working-tree status and diffs.'), Command.withSubcommands([
   Command.make('status', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* getGitStatus(viewRoot(settings)); yield* Effect.sync(() => emit(result, settings.json)); })),

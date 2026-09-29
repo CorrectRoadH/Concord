@@ -1,4 +1,4 @@
-import type { DocumentRecord } from '../../src/shared'
+import type { WorkspaceDocument } from '../../src/view-contract'
 
 /** Physical topic grouping is presentation only; nested owners keep their identities. */
 export function researchTopicDirectory(path: string): string {
@@ -7,8 +7,8 @@ export function researchTopicDirectory(path: string): string {
   return parts.slice(0, root + 2).join('/') + '/'
 }
 
-export function researchTopics(documents: readonly DocumentRecord[]) {
-  const topics = new Map<string, DocumentRecord>()
+export function researchTopics(documents: readonly WorkspaceDocument[]) {
+  const topics = new Map<string, WorkspaceDocument>()
   for (const document of documents) {
     if (document.metadata.kind !== 'research') continue
     const directory = researchTopicDirectory(document.path)

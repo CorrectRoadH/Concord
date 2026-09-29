@@ -31,7 +31,8 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
       const before = readFileSync(join(root, path), 'utf8');
       const workspace = page.waitForResponse(response => new URL(response.url()).pathname === '/api/workspace', { timeout: 65000 });
       await page.goto(`http://127.0.0.1:${server.port}/docs?file=${encodeURIComponent(path)}`);
-      assert.equal((await workspace).status(), 200);
+      const firstStatus = (await workspace).status();
+      assert.ok([200, 202].includes(firstStatus), `workspace response was ${firstStatus}`);
       const editor = page.getByTestId('project-doc-preview');
       if (path === paths[0]) {
         const text = editor.locator('[contenteditable="true"]').first();
@@ -48,7 +49,8 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
       if (path !== paths[0]) assert.equal(readFileSync(join(root, path), 'utf8'), `${before}\n通过浏览器保存。\n`);
       const reloadedWorkspace = page.waitForResponse(response => new URL(response.url()).pathname === '/api/workspace', { timeout: 65000 });
       await page.reload();
-      assert.equal((await reloadedWorkspace).status(), 200);
+      const reloadedStatus = (await reloadedWorkspace).status();
+      assert.ok([200, 202].includes(reloadedStatus), `workspace response was ${reloadedStatus}`);
       if (path === paths[0]) await expect(editor.locator('[contenteditable="true"]').first()).toContainText('通过浏览器保存');
       else await expect(editor.getByLabel('Markdown 原文')).toHaveValue(`${before}\n通过浏览器保存。\n`);
     }

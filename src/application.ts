@@ -193,7 +193,7 @@ function directConfig(root: string): {
 }
 
 /** Missing or malformed project configuration remains inspectable without manufacturing identity. */
-export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(function*(rootInput: string, cache: 'use' | 'off' = 'off', timing?: RequestTiming): Effect.fn.Return<WorkspaceSnapshot, ConcordError> {
+const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const config = yield* sync('view.readConfig', () => directConfig(root));
@@ -218,7 +218,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     };
   }
   return yield* withRepository(root, (repo) => Effect.gen(function*() {
-    const snapshot = yield* snapshotSync(repo, timing, 'view.compileWorkspace', () => repo.snapshot(() => {
+    const compile = () => repo.snapshot(() => {
     if (cache === 'use') allowPersistentCacheRecovery(repo);
     const currentConfigSource = repo.configSnapshot.source;
     const inspected = timing === undefined ? inspectDocuments(repo) : timing.sync('view.inspectDocuments', () => inspectDocuments(repo));
@@ -239,6 +239,7 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       findings = [...trace.findings];
       diagnostics = doctor(repo, trace);
     } catch (cause) {
+      if (observe !== undefined && cause instanceof ConcordError && ['UnsafePath', 'RecoveryRequired', 'InvalidFile'].includes(cause.code)) throw cause;
       cases = scanAnnotations(repo, { cache });
       const code = scanCode(repo, { cache });
       timing?.cache(code.cache, 'code');
@@ -267,7 +268,10 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
       cache: cases.cache,
       diagnostics,
     };
-    }));
+    });
+    const snapshot = yield* observe === undefined
+      ? snapshotSync(repo, timing, 'view.compileWorkspace', compile)
+      : sync('view.observeProjection', () => { const result = repo.observeProjection(compile); observe(result.drift); return result.value; });
     let repositoryTests: RepositoryTestView = { status: 'not-configured', tests: [] };
     const hasProfile = yield* sync('view.detectRepositoryProfile', () => lstatSync(join(root, 'concord.repository.json'), { throwIfNoEntry: false }) !== undefined);
     if (hasProfile) {
@@ -280,6 +284,13 @@ export const getWorkspaceSnapshot = Effect.fn('view.getWorkspaceSnapshot')(funct
     }
     return { ...snapshot, complete: snapshot.complete && repositoryTests.status !== 'failed', repositoryTests };
   }), { access: 'read' }, timing);
+});
+
+export const getWorkspaceSnapshot = (root: string, cache: 'use' | 'off' = 'off', timing?: RequestTiming) => compileWorkspace(root, cache, timing);
+export const observeWorkspaceProjection = Effect.fn('view.observeWorkspaceProjection')(function*(root: string, timing?: RequestTiming) {
+  let drift = { files: [] as string[], directories: [] as string[], publicationChanged: false };
+  const snapshot = yield* compileWorkspace(root, 'off', timing, value => { drift = value; });
+  return { snapshot, drift };
 });
 
 /** Git needs current configuration, not the document, code, or evidence projections. */
@@ -302,7 +313,9 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
   return yield* withRepository(validatedRoot, (repo) => Effect.gen(function*() {
     const ordinary = yield* snapshotSync(repo, timing, 'view.readFile', () => repo.snapshot(() => {
       const listed = inspectDocumentFile(repo, path);
-      if (listed !== undefined) return listed;
+      if (listed !== undefined) return listed.document?.metadata.kind === 'issue'
+        ? { ...listed, feedback: listFeedback(repo, [listed.document])[0] }
+        : listed;
       if (isSourcePath(repo, path)) {
         let source: ReturnType<typeof readSource>;
         try { source = readSource(repo, path); }
@@ -313,7 +326,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
         return { path: source.path, body: source.body, digest: source.digest };
       }
       if (path === repo.configSnapshot.path) {
-        return { path, body: repo.configSnapshot.source, digest: repo.configSnapshot.digest };
+        return { path, body: repo.configSnapshot.source, digest: repo.configSnapshot.digest, project: repo.config };
       }
       return undefined;
     }));

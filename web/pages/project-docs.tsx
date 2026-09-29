@@ -9,11 +9,12 @@ import { useUrlNavigation } from '../hooks/use-url-navigation';
 import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs';
 import { documentHref, relativeMarkdownTarget } from './documents';
 import { Empty, PageHeader } from '../components/page';
-import { useWorkspace } from '../workspace';
+import { projectionIsConclusive, useWorkspace } from '../workspace';
 import type { ViewFile } from '../../src/view-contract';
 
 export function ProjectDocsPage() {
-  const { snapshot, api } = useWorkspace();
+  const { snapshot, api, projection } = useWorkspace();
+  const conclusive = projectionIsConclusive(projection);
   const navigate = useNavigate();
   const pages = projectDocPages(snapshot);
   const { params } = useUrlNavigation();
@@ -38,12 +39,14 @@ export function ProjectDocsPage() {
   }, [api, attempt, selectedPath]);
 
   if (!selectedPath) {
-    return <><PageHeader title="文档" description="docs 下还没有可查看的项目文档。" /><Empty title="没有项目文档">初始化后的架构、宪法和参考模板会出现在这里。</Empty></>;
+    return conclusive
+      ? <><PageHeader title="文档" description="docs 下还没有可查看的项目文档。" /><Empty title="没有项目文档">初始化后的架构、宪法和参考模板会出现在这里。</Empty></>
+      : <><PageHeader title="文档" description="当前导航代次未显示项目文档。" /><Empty title="暂时无法确认项目文档列表">投影尚未完整且一致，暂时无法确认是否存在项目文档。</Empty></>;
   }
   if (requested !== selectedPath) return <Navigate to={projectDocHref(selectedPath)} replace />;
 
   const listed = pages.find(page => page.path === selectedPath);
-  const title = projectDocTitle(listed ?? { path: selectedPath, body: selected?.body ?? '' });
+  const title = projectDocTitle(listed ?? { path: selectedPath });
   const follow = (href: string) => {
     const target = relativeMarkdownTarget(selectedPath, href);
     if (!target) return false;

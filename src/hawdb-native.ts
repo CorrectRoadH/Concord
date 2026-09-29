@@ -7,7 +7,7 @@ import { Effect, Schema } from 'effect';
 import { HAWDB_ABI, HAWDB_REVISION, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget } from './hawdb-native-contract.js';
 
 export { HAWDB_ABI, HAWDB_REVISION };
-export type HawdbNamespace = 'document_parse' | 'code_parse' | 'git_baseline' | 'annotation_cache' | 'code_cache' | 'config_cache' | 'feedback_cache' | 'query_cache';
+export type HawdbNamespace = 'document_parse' | 'code_parse' | 'git_baseline' | 'annotation_cache' | 'code_cache' | 'config_cache' | 'feedback_cache' | 'query_cache' | 'workspace_projection';
 export interface HawdbEntry { readonly key: string; readonly payload: string; }
 export interface HawdbLimits { readonly maxEntries: number; readonly maxBytes: number; }
 export interface HawdbDatabase {
@@ -25,7 +25,7 @@ export class HawdbFailure extends Error {
   }
 }
 const EntrySchema = Schema.Struct({ key: Schema.String, payload: Schema.String });
-const NamespaceSchema = Schema.Literals(['document_parse', 'code_parse', 'git_baseline', 'annotation_cache', 'code_cache', 'config_cache', 'feedback_cache', 'query_cache']);
+const NamespaceSchema = Schema.Literals(['document_parse', 'code_parse', 'git_baseline', 'annotation_cache', 'code_cache', 'config_cache', 'feedback_cache', 'query_cache', 'workspace_projection']);
 const OptionsSchema = Schema.Struct({ readOnly: Schema.Boolean, create: Schema.Boolean });
 const KeysSchema = Schema.Array(Schema.String);
 const decodeNamespace = Schema.decodeUnknownSync(NamespaceSchema, { errors: 'all' });

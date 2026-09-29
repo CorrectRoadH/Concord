@@ -3,8 +3,8 @@
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { DocumentRecord } from '../../src/shared';
 import type { showConcepts } from '../../src/concepts';
+import type { WorkspaceDocument } from '../../src/view-contract';
 import { useWorkspace } from '../workspace';
 import { Button } from './ui/button';
 import { PanelEmpty, PanelHeader, RecordList, RecordItem } from './content-layout';
@@ -15,7 +15,7 @@ function catalogPath(documentPath: string): string {
   return `${documentPath.slice(0, documentPath.lastIndexOf('/'))}/concepts.json`;
 }
 
-export function TerminologyPanel({ document }: { readonly document: DocumentRecord }) {
+export function TerminologyPanel({ document }: { readonly document: WorkspaceDocument }) {
   const { api } = useWorkspace();
   const path = catalogPath(document.path);
   const currentPath = useRef(path);

@@ -3,9 +3,10 @@ import type {
   GitStatus,
   ViewAction,
   ViewFailure,
+  ViewFile,
   ViewJob,
   ViewResponse,
-  WorkspaceSnapshot,
+  WorkspaceProjection,
 } from '../../src/view-contract';
 
 export class ApiError extends Error {
@@ -34,7 +35,7 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 export class ConcordApi {
-  private readonly workspaceCache: { current?: { etag: string; value: WorkspaceSnapshot } } = {};
+  private readonly workspaceCache: { current?: { etag: string; value: WorkspaceProjection } } = {};
 
   private async retryBusy<T>(request: () => Promise<T>, signal?: AbortSignal): Promise<T> {
     const waits = [100, 250, 500, 1000];
@@ -67,12 +68,22 @@ export class ConcordApi {
     return payload.value;
   }
 
-  workspace(signal?: AbortSignal): Promise<WorkspaceSnapshot> {
-    return this.retryBusy(() => this.request('/api/workspace', { signal }, this.workspaceCache), signal);
+  workspace(signal?: AbortSignal): Promise<WorkspaceProjection> {
+    return this.retryBusy(() => this.request('/api/workspace', { signal }, this.workspaceCache), signal).catch((cause: unknown) => {
+      // Never let a failed read leave an ETag that can silently revive the old
+      // snapshot on the next conditional request. Aborted effect reads are not
+      // failures and retain the last known ETag.
+      if (!signal?.aborted) this.workspaceCache.current = undefined;
+      throw cause;
+    });
   }
-  async file(path: string, signal?: AbortSignal) {
+  /** Write-level merged refresh request. It never waits for the scan to finish. */
+  async requestWorkspaceRefresh(signal?: AbortSignal): Promise<{ readonly status: 'requested' }> {
+    return this.request<{ readonly status: 'requested' }>('/api/workspace', { method: 'POST', body: '{}', signal });
+  }
+  async file(path: string, signal?: AbortSignal): Promise<ViewFile> {
     const endpoint = `/api/file?path=${encodeURIComponent(path)}`;
-    return this.retryBusy(() => this.request<import('../../src/view-contract').ViewFile>(endpoint, { signal }), signal);
+    return this.retryBusy(() => this.request<ViewFile>(endpoint, { signal }), signal);
   }
   action(action: ViewAction, signal?: AbortSignal): Promise<unknown> {
     const request = () => this.request('/api/action', { method: 'POST', body: JSON.stringify(action), signal });

@@ -174,6 +174,8 @@ code, pre, kbd { font-family: "SFMono-Regular", Consolas, "Liberation Mono", mon
 .search-trigger span { flex: 1; text-align: left; }
 kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28rem; background: var(--card); font-size: .68rem; }
 .dirty-badge { border-color: #cf8c3a; color: #8b5521; }
+.projection-status { display: flex; align-items: center; gap: .4rem; color: var(--muted-foreground); font-size: .72rem; white-space: nowrap; }
+.projection-status__pending { display: inline-flex; align-items: center; gap: .25rem; }
 .page { --page-padding: clamp(1.2rem, 3vw, 2.5rem); width: 100%; max-width: 1540px; margin: 0 auto; padding: var(--page-padding); }
 .page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1.5rem; margin-bottom: 1.8rem; }
 .page-header h1 { font-size: clamp(1.5rem, 2.4vw, 1.75rem); }
@@ -427,7 +429,7 @@ kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28
   .page-header__actions > * { flex: 1; }
   .search-trigger { min-width: 40px; width: 40px; }
   .search-trigger span, .search-trigger kbd { display: none; }
-  .dirty-badge { display: none; }
+  .dirty-badge, .projection-status { display: none; }
   .dashboard-grid, .two-column, .lifecycle-grid, .compare-grid, .feedback-source-snapshots { grid-template-columns: 1fr; }
   .feedback-source-markdown { padding: 1rem 0 0; border-top: 1px solid var(--border); border-left: 0; }
   .kind-strip { grid-template-columns: repeat(2, 1fr); }

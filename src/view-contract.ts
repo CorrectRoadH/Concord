@@ -10,6 +10,7 @@ import type { GitDiff, GitStatus } from './git-view.js';
 import type {
   AnnotatedCase,
   DocumentKind,
+  DocumentMeta,
   DocumentRecord,
   Finding,
   ProjectConfig,
@@ -17,7 +18,7 @@ import type {
 } from './shared.js';
 import { MemorySourceSchema, ProjectSchema } from './shared.js';
 import type { TraceEdge } from './trace.js';
-import { FeedbackConnectionsSchema, type FeedbackItem } from './feedback-schema.js';
+import { FeedbackConnectionsSchema, type FeedbackAvailability, type FeedbackItem, type FeedbackTriage, type RemoteFeedback } from './feedback-schema.js';
 import { WritingPolicySchema } from './writing-schema.js';
 import { ConceptCatalogSchema } from './concepts-schema.js';
 
@@ -26,6 +27,9 @@ export interface ViewFile {
   readonly body: string;
   readonly digest: string;
   readonly documentPath?: string;
+  readonly document?: DocumentRecord;
+  readonly project?: ProjectConfig;
+  readonly feedback?: FeedbackItem;
 }
 
 export interface WorkspaceSnapshot {
@@ -46,6 +50,85 @@ export interface WorkspaceSnapshot {
   readonly templates: readonly { readonly name: string; readonly description: string }[];
   readonly cache: unknown;
   readonly diagnostics: unknown;
+}
+
+/**
+ * Durable, body-free projection collections shared by Web and CLI.
+ * `WorkspaceDocument` is a `DocumentRecord` without its body; an issue's
+ * `metadata.source.body` is removed as well. Detail bodies are always read
+ * through directed current `/api/file` reads, never from this cache.
+ */
+export type WorkspaceRemote =
+  | Omit<Extract<RemoteFeedback, { readonly provider: 'github' }>, 'body'>
+  | Omit<Extract<RemoteFeedback, { readonly provider: 'linear' }>, 'body'>;
+export type WorkspaceFeedbackSource = WorkspaceRemote & { readonly connectionId: string; readonly importedAt: string };
+export type WorkspaceDocumentMetadata =
+  | Exclude<DocumentMeta, { readonly kind: 'issue' }>
+  | (Omit<Extract<DocumentMeta, { readonly kind: 'issue' }>, 'source'> & { readonly source?: WorkspaceFeedbackSource });
+export interface WorkspaceDocument {
+  readonly path: string;
+  readonly metadata: WorkspaceDocumentMetadata;
+  readonly digest: string;
+}
+export interface WorkspaceIssueDocument {
+  readonly path: string;
+  readonly metadata: Extract<WorkspaceDocumentMetadata, { readonly kind: 'issue' }>;
+  readonly digest: string;
+}
+export interface WorkspacePage {
+  readonly path: string;
+  readonly digest: string;
+  readonly documentPath?: string;
+  readonly derivedTitle?: string;
+}
+export interface WorkspaceFeedback {
+  readonly document: WorkspaceIssueDocument;
+  readonly provider: 'local' | 'github' | 'linear';
+  readonly triage: FeedbackTriage;
+  readonly availability: FeedbackAvailability;
+  readonly warnings: readonly string[];
+  readonly remote: WorkspaceRemote | null;
+}
+/** Navigator-only derivation of `WorkspaceSnapshot`; never authorizes current facts. */
+export interface WorkspaceProjectionSnapshot {
+  readonly complete?: boolean;
+  readonly repositoryTests?: import('./view-profile.js').RepositoryTestView;
+  readonly root: string;
+  readonly project: ProjectConfig | null;
+  readonly configDigest: string | null;
+  readonly documents: readonly WorkspaceDocument[];
+  readonly feedback: readonly WorkspaceFeedback[];
+  readonly pages: readonly WorkspacePage[];
+  readonly cases: readonly AnnotatedCase[];
+  readonly codes: readonly CodeDeclaration[];
+  readonly edges: readonly TraceEdge[];
+  readonly findings: readonly Finding[];
+  readonly sources: readonly { readonly path: string; readonly digest: string }[];
+  readonly evidenceIds: readonly string[];
+  readonly templates: readonly { readonly name: string; readonly description: string }[];
+  readonly cache: unknown;
+  readonly diagnostics: unknown;
+}
+export interface WorkspaceProjectionRefreshError { readonly failedAt: string; readonly code: string; readonly message: string }
+export interface WorkspaceProjectionAttempt { readonly at: string; readonly complete: boolean; readonly changedPaths: readonly string[] }
+/** `consistent` marks a drift-free build; `complete` keeps the scan/finding semantics. Never current facts. */
+export interface WorkspaceProjectionStatus {
+  readonly status: 'ready' | 'refresh-failed' | 'blocked';
+  readonly current: false;
+  readonly refreshOwner: 'active' | 'none';
+  readonly builtAt: string;
+  readonly builtFrom: string;
+  readonly builtUntil: string;
+  readonly consistent: boolean;
+  readonly complete: boolean;
+  readonly changedPaths: readonly string[];
+  readonly unknownRelations: boolean;
+  readonly lastError?: WorkspaceProjectionRefreshError;
+  readonly lastAttempt?: WorkspaceProjectionAttempt;
+}
+export interface WorkspaceProjection {
+  readonly snapshot: WorkspaceProjectionSnapshot;
+  readonly projection: WorkspaceProjectionStatus;
 }
 
 export type ViewJobState = 'queued' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed' | 'cleanup-failed';

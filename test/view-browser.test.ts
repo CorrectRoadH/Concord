@@ -8,7 +8,7 @@ import { chromium, expect, type Browser } from '@playwright/test';
 import { addPage, createDocument } from '../dist/documents.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { projectConfigPath, readProjectConfig, writeProjectConfig } from './support.js';
+import { pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from './support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser opens and refreshes a deep link without credentials and retries initial load failures', async () => {
@@ -44,7 +44,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
       if (new URL(request.url()).pathname.startsWith('/api/')) authorizations.push(request.headers().authorization);
     });
     page.on('pageerror', error => errors.push(error.message));
-    await page.route('**/api/workspace', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'FixtureUnavailable', message: '工作区暂时不可用' }) }));
+    await page.route('**/api/workspace', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'WorkspaceProjectionUnavailable', message: '工作区暂时不可用' }) }));
     const url = `http://127.0.0.1:${server.port}/features/web`;
     await page.goto(url);
     await expect(page.getByRole('alert')).toHaveText('工作区暂时不可用');
@@ -147,15 +147,17 @@ test('browser opens and refreshes a deep link without credentials and retries in
     const originalConfiguration = readFileSync(configurationPath, 'utf8');
     const invalidConfiguration = 'export default { broken: ; }';
     writeFileSync(configurationPath, invalidConfiguration);
+    await page.request.post(`http://127.0.0.1:${server.port}/api/workspace`, { data: {} });
     await page.goto(`http://127.0.0.1:${server.port}/settings`);
-    await expect(page.getByRole('heading', { name: '项目配置无法读取', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '项目配置无法读取', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByLabel('无效配置原文', { exact: true })).toHaveValue(invalidConfiguration);
     await expect(page.getByLabel('无效配置原文', { exact: true })).not.toBeEditable();
     await expect(page.getByRole('button', { name: '初始化', exact: true })).toHaveCount(0);
     assert.equal(readFileSync(configurationPath, 'utf8'), invalidConfiguration);
     writeFileSync(configurationPath, originalConfiguration);
+    await page.request.post(`http://127.0.0.1:${server.port}/api/workspace`, { data: {} });
     await page.getByRole('button', { name: '重新载入', exact: true }).click();
-    await expect(page.getByLabel('Project ID', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Project ID', { exact: true })).toBeVisible({ timeout: 15_000 });
     assert.ok(authorizations.length > 0);
     assert.ok(authorizations.every(value => value === undefined));
     assert.deepEqual(errors, []);
@@ -340,6 +342,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
       } else await route.continue();
     });
     await editor.fill('Browser edited paragraph.');
+    await expect(page.locator('.editor-shell')).toHaveAttribute('data-dirty', 'true');
     await page.getByRole('tab',{name:'术语',exact:true}).click();
     await expect(page.getByRole('tab',{name:'术语',exact:true})).toHaveAttribute('data-state', 'active');
     await expect(page.getByRole('dialog')).toHaveCount(0);
@@ -350,9 +353,9 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.unroute('**/api/action');
     await page.getByRole('tab',{name:'元数据',exact:true}).click();
     await page.getByLabel('文档标题',{exact:true}).fill('Browser authoring renamed');
-    await expect(featureList.getByRole('link',{name:'Browser authoring renamed',exact:true})).toBeVisible();
+    await expect(featureList.getByRole('link',{name:'Browser authoring renamed',exact:true})).toBeVisible({ timeout: 15_000 });
     await page.getByLabel('文档标题',{exact:true}).fill('Browser authoring');
-    await expect(featureList.getByRole('link',{name:'Browser authoring',exact:true})).toBeVisible();
+    await expect(featureList.getByRole('link',{name:'Browser authoring',exact:true})).toBeVisible({ timeout: 15_000 });
     await page.getByRole('tab',{name:'正文',exact:true}).click();
     await expect(editor).toBeVisible();
     let releaseSave: (() => void) | undefined;
@@ -505,6 +508,10 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     writeFileSync(join(root,'src/demo.ts'),'// @concord-file\n// @concord-implements docs/feature/browser-feature/README.md\nexport const demo = 1;\n');
     mkdirSync(join(root,'test'),{recursive:true});
     writeFileSync(join(root,'test/demo.test.ts'),"import test from 'node:test';\n// @use-case docs/feature/browser-feature/use-case/browser-flow.md\ntest('Added browser test', () => {});\n" + Array.from({length:100},(_,index)=>`// Reading fixture ${index}\n`).join(''));
+    const base = `http://127.0.0.1:${server.port}`;
+    assert.equal((await page.request.post(`${base}/api/workspace`, { data: {} })).status(), 202);
+    await pollUntil(async () => (await waitForWorkspaceProjection(base)).snapshot.cases.some(item => item.file === 'test/demo.test.ts') ? true : undefined,
+      { description: 'external test declaration generation' });
     await page.reload();
     await expect(page.getByRole('tab',{name:'测试',exact:true})).toBeVisible();
     await page.getByRole('tab',{name:'测试',exact:true}).click();

@@ -5,7 +5,8 @@
 | 能力 | CLI | Web |
 | --- | --- | --- |
 | 启动工作台 | `view --host <host> --port <port>` | 直接打开与项目导航 |
-| 项目完整快照 | `workspace show --json` | 概览、列表、搜索 |
+| 当前项目完整快照 | `workspace show --json` | 定向当前读取提供编辑前像 |
+| 工作区历史结构投影 | `workspace projection --json` | 概览、列表、搜索 |
 | 创建契约 | 各类型 `create` | 对应入口的创建表单 |
 | Use Case | `use-case create --feature <ref>` | 所属 Feature 内创建 |
 | 正文与页面 | `author set`、各包 `page add/show/set` | 富文本与源码编辑 |
@@ -19,3 +20,5 @@
 | 审阅、模板 | `review render`、`template list/show` | 审阅与模板操作 |
 
 结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新仍执行原有领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。高级原生证据入口执行同一最低证明要求，不能由通用 command 操作绕过。
+
+`workspace projection` 只读与 Web 相同的代次，附构建时间、一致性和刷新状态。没有 View 服务时不启动后台进程；无代次报告 WorkspaceProjectionPending，不可读报告 WorkspaceProjectionUnavailable。`workspace show` 仍等待当前来源扫描。

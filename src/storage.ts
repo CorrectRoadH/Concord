@@ -365,6 +365,23 @@ export class LocalRepository implements Repository {
     if (this.snapshotDepth === 0) { this.observedFiles.clear(); this.observedDirectories.clear(); }
     return this.underLease(read);
   }
+  /** Historical navigation only. Current queries and publications still verify strictly. */
+  observeProjection<A>(read: () => A): { value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } } {
+    if (this.snapshotDepth !== 0 || !this.optimistic) throw new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot');
+    this.observedFiles.clear(); this.observedDirectories.clear();
+    this.beginSnapshot();
+    try {
+      const value = read();
+      // The candidate owns decoded values now; drift collection needs no cache handle.
+      closeRepositoryCache(this);
+      this.assertReady();
+      const files = [...this.observedFiles].filter(([path, source]) => this.readCurrent(path) !== source).map(([path]) => path).sort();
+      const directories = [...this.observedDirectories].filter(([path, source]) => this.directoryObservation(path) !== source).map(([path]) => path).sort();
+      const publicationChanged = publicationRevision(this.coordinationDirectory) !== this.revision;
+      this.assertReady();
+      return { value, drift: { files, directories, publicationChanged } };
+    } finally { this.endSnapshot(); }
+  }
   private underLease<A>(read: () => A): A {
     this.beginSnapshot();
     try { const value = read(); if (this.snapshotDepth === 1) this.verifySnapshot(); return value; } finally { this.endSnapshot(); }

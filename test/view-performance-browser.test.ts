@@ -8,6 +8,7 @@ import { chromium, expect } from '@playwright/test';
 import { createDocument } from '../dist/documents.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer } from '../dist/view-server.js';
+import { waitForWorkspaceProjection } from './support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name dismissible-workspace-health-navigation
@@ -54,6 +55,7 @@ test('polling keeps jobs responsive without continuously rescanning the workspac
   const gate = new Promise<void>(resolve => { release = resolve; });
   try {
     const page = await browser.newPage();
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await page.clock.install({ time: 0 });
     await page.clock.pauseAt(1000);
     let requests = 0, jobs = 0;

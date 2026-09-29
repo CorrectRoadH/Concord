@@ -7,10 +7,11 @@ import test, { after, before } from 'node:test';
 import { once } from 'node:events';
 import { Effect, Schema } from 'effect';
 import { authorDesignFixture } from './design-fixture.js';
-import { readProjectConfig } from './support.js';
+import { readProjectConfig, waitForWorkspaceProjection } from './support.js';
 import { ProjectSchema, digest } from '../dist/shared.js';
 import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
 import { parseDocumentRecord, renderDocument } from '../dist/documents.js';
+import { HAWDB_REVISION } from '../dist/hawdb-native.js';
 import { verifyInstalledNative } from '../scripts/verify-installed-native.js';
 const Ack = Schema.Struct({});
 const ErrorOutput = Schema.Struct({ error: Schema.String });
@@ -311,12 +312,75 @@ test('packed view serves its frontend and API without credentials in an isolated
   const asset=await fetch(new URL(script,base)); assert.equal(asset.status,200);
   assert.match(asset.headers.get('content-type')??'',/javascript/);
   assert.ok((await asset.arrayBuffer()).byteLength > 0);
-  const workspace=await fetch(base+'api/workspace');assert.equal(workspace.status,200);
-  const response=Schema.decodeUnknownSync(Schema.Struct({ok:Schema.Boolean,value:Schema.Struct({root:Schema.String})}),{onExcessProperty:'ignore'})(await workspace.json());
-  assert.equal(response.ok,true);assert.equal(response.value.root,root);
+  const workspace = await waitForWorkspaceProjection(base, { timeoutMs: 60_000 });
+  assert.ok(workspace.snapshot.root === root);
+  assert.equal(workspace.projection.current, false);
   assert.equal((await fetch(base+'api/missing')).status,404);
   assert.equal(call(root,['check'],CheckOutput).ok,true,'idle server must not lock out the CLI');
  } finally {process.kill('SIGTERM');await exited;}
+});
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('packed workspace projection reads the shared generation and holds warm budgets', async t => {
+ const root = consumer('packed-projection');
+ call(root,['feature','create','projected','--title','Projected','--pages','architecture'],Ack);
+ const server = spawn(globalThis.process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
+ const exited = once(server, 'exit');
+ try {
+  const ready = await new Promise<{address:string}>((resolveReady, reject) => {
+   let buffer='';
+   const timer=setTimeout(()=>reject(new Error('Packed view did not become ready')),15000);
+   server.once('exit',()=>{clearTimeout(timer);reject(new Error('Packed view exited before readiness'));});
+   server.stdout.on('data',(chunk:Buffer)=>{
+    buffer+=chunk.toString('utf8');
+    const newline=buffer.indexOf('\n'); if(newline<0)return;
+    try {const value=Schema.decodeUnknownSync(Schema.Struct({operation:Schema.Literal('view'),address:Schema.String}),{onExcessProperty:'ignore'})(JSON.parse(buffer.slice(0,newline)));clearTimeout(timer);resolveReady(value);} catch (cause) { clearTimeout(timer); reject(cause); }
+   });
+  });
+  const base=ready.address.replace('localhost','127.0.0.1');
+  const initial = await waitForWorkspaceProjection(base, { timeoutMs: 60_000 });
+  let projectionBytes = 0;
+  const httpSample = async () => {
+   const started = performance.now();
+   const response = await fetch(base+'api/workspace');
+   const size = (await response.arrayBuffer()).byteLength;
+   const ms = performance.now() - started;
+   assert.equal(response.status, 200);
+   projectionBytes = size;
+   return ms;
+  };
+  await httpSample();
+  const httpTimes: number[] = [];
+  for (let index = 0; index < 7; index += 1) httpTimes.push(await httpSample());
+  const cliSample = () => {
+   const started = performance.now();
+   const result = spawnSync(globalThis.process.execPath, [cli, '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20000 });
+   const ms = performance.now() - started;
+   assert.equal(result.status, 0, result.stdout + result.stderr);
+   const value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({
+    operation: Schema.Literal('workspace-projection'),
+    snapshot: Schema.Struct({ root: Schema.String, documents: Schema.Array(Schema.Unknown) }),
+    projection: Schema.Struct({ status: Schema.Literal('ready'), current: Schema.Literal(false), refreshOwner: Schema.Literal('none'), builtAt: Schema.String, consistent: Schema.Boolean, complete: Schema.Boolean }),
+   })), { onExcessProperty: 'ignore', errors: 'all' })(result.stdout);
+   assert.equal(value.snapshot.root, root);
+   assert.equal(value.projection.builtAt, initial.projection.builtAt, 'the explicit entry reads the server-published generation');
+   return ms;
+  };
+  cliSample();
+  const cliTimes = Array.from({ length: 7 }, cliSample).sort((a, b) => a - b);
+  httpTimes.sort((a, b) => a - b);
+  const percentile = (sorted: readonly number[], fraction: number) => sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)]!;
+  const httpP50 = percentile(httpTimes, 0.5), httpP95 = percentile(httpTimes, 0.95), cliP50 = percentile(cliTimes, 0.5);
+  t.diagnostic(`workspace projection: docs=${initial.snapshot.documents.length} pages=${initial.snapshot.pages.length} bytes=${projectionBytes} native=${HAWDB_REVISION} node=${process.version} ${process.platform}-${process.arch}`);
+  t.diagnostic(`HTTP warm p50=${httpP50.toFixed(1)}ms p95=${httpP95.toFixed(1)}ms; workspace projection p50=${cliP50.toFixed(1)}ms`);
+  assert.ok(httpP50 <= 250, `HTTP warm p50 ${httpP50}ms exceeds 250ms`);
+  assert.ok(httpP95 <= 600, `HTTP warm p95 ${httpP95}ms exceeds 600ms`);
+  assert.ok(cliP50 <= 600, `workspace projection p50 ${cliP50}ms exceeds 600ms`);
+  const show = spawnSync(globalThis.process.execPath, [cli, '--root', root, '--json', 'workspace', 'show'], { encoding: 'utf8', timeout: 20000 });
+  assert.equal(show.status, 0, show.stderr);
+  const shown = JSON.parse(show.stdout) as Record<string, unknown>;
+  assert.equal('projection' in shown, false, 'workspace show keeps its current-source JSON shape');
+  assert.ok(Array.isArray(shown.documents));
+ } finally {server.kill('SIGTERM');await exited;}
 });
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('packed templates work outside a project and fail clearly when their inventory is damaged', () => Effect.runPromise(Effect.sync(() => {

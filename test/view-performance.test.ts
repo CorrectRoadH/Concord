@@ -12,6 +12,7 @@ import { createDocument } from '../dist/documents.js';
 import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from '../dist/editing.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer } from '../dist/view-server.js';
+import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection } from './support.js';
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-performance-'));
@@ -27,24 +28,36 @@ function fixture(): string {
 }
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('HTTP 200 retains orphan annotation incompleteness and observes its repair', async () => {
+test('HTTP projection retains orphan annotation incompleteness and observes its repair', async () => {
   const root = fixture();
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const base = `http://127.0.0.1:${server.port}`;
   const path = join(root, 'src/main.ts');
   const original = readFileSync(path, 'utf8');
+  const requestRefresh = () => fetch(`${base}/api/workspace`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  const waitForFinding = (code: string) => pollUntil(async () => {
+    const response = await fetch(`${base}/api/workspace`);
+    if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
+    const value = parseWorkspaceProjection(await response.text());
+    if (value === undefined) return undefined;
+    return value.snapshot.findings.some(item => item.code === code) ? value : undefined;
+  }, { description: `workspace generation with ${code}`, timeoutMs: 45_000 });
   try {
+    await waitForWorkspaceProjection(base);
     writeFileSync(path, `${original}\n// @concord-file\n// @concord-implements docs/feature/cached/README.md\n`);
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/workspace`);
-    assert.equal(response.status, 200);
-    const value = await response.json() as { ok: boolean; value: { complete: boolean; findings: { code: string }[] } };
-    assert.equal(value.ok, true);
-    assert.equal(value.value.complete, false);
-    assert.ok(value.value.findings.some(item => item.code === 'OrphanCodeAnnotation'));
+    await requestRefresh();
+    const orphaned = await waitForFinding('OrphanCodeAnnotation');
+    assert.equal(orphaned.projection.consistent, true);
+    assert.equal(orphaned.projection.complete, false);
     writeFileSync(path, original);
-    const repaired = await fetch(`http://127.0.0.1:${server.port}/api/workspace`);
-    const healthy = await repaired.json() as { value: { complete: boolean; findings: unknown[] } };
-    assert.equal(healthy.value.complete, true);
-    assert.deepEqual(healthy.value.findings, []);
+    await requestRefresh();
+    const healthy = await pollUntil(async () => {
+      const response = await fetch(`${base}/api/workspace`);
+      if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
+      const value = parseWorkspaceProjection(await response.text());
+      return value !== undefined && value.snapshot.complete === true && value.projection.builtAt !== orphaned.projection.builtAt ? value : undefined;
+    }, { description: 'repaired workspace generation', timeoutMs: 45_000 });
+    assert.deepEqual(healthy.snapshot.findings, []);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -61,7 +74,7 @@ test('direct file reads preserve owner diagnostics and inspect only the target a
     const inventory = inspectDocuments(repo);
     for (const page of inventory.pages) assert.deepEqual(inspectDocumentFile(repo, page.path), page);
     for (const document of inventory.documents) assert.deepEqual(inspectDocumentFile(repo, document.path), {
-      path: document.path, body: document.body, digest: document.digest, documentPath: document.path,
+      path: document.path, body: document.body, digest: document.digest, documentPath: document.path, document,
     });
     const reads: string[] = [];
     let walks = 0;
@@ -120,24 +133,25 @@ test('warm workspace caches observe changed bytes with unchanged timestamps and 
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('unchanged workspace responses omit the payload and external edits invalidate their ETag', async () => {
+test('unchanged projections 304 until a refresh publishes, and external edits change the ETag only then', async () => {
   const root = fixture();
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const base = `http://127.0.0.1:${server.port}`;
+  const url = `${base}/api/workspace`;
   try {
-    const url = `http://127.0.0.1:${server.port}/api/workspace`;
-    await (await fetch(url)).arrayBuffer();
-    const warm = await fetch(url);
-    await warm.arrayBuffer();
-    const etag = warm.headers.get('etag');
-    assert.ok(etag);
-    const unchanged = await fetch(url, { headers: { 'If-None-Match': etag } });
-    assert.equal(unchanged.status, 304);
-    assert.equal(await unchanged.text(), '');
+    await waitForWorkspaceProjection(base);
+    const etag = await waitForWorkspaceNotModified(base);
     writeFileSync(join(root, 'docs/feature/cached/architecture.md'), '# External edit\n');
-    const edited = await fetch(url, { headers: { 'If-None-Match': etag } });
-    assert.equal(edited.status, 200);
-    assert.notEqual(edited.headers.get('etag'), etag);
-    assert.match(await edited.text(), /External edit/);
+    // Polling is throttled, so the cached generation (and its ETag) stays readable.
+    assert.equal(await waitForWorkspaceNotModified(base), etag);
+    await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const refreshed = await pollUntil(async () => {
+      const response = await fetch(url);
+      if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
+      const value = parseWorkspaceProjection(await response.text());
+      return value?.snapshot.pages.some(page => page.derivedTitle === 'External edit') ? response : undefined;
+    }, { description: 'refreshed projection', timeoutMs: 45_000 });
+    assert.notEqual(refreshed.headers.get('etag'), etag);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -147,6 +161,7 @@ test('workbench compresses workspace data and caches fingerprinted assets only',
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
     const base = `http://127.0.0.1:${server.port}`;
+    await waitForWorkspaceProjection(base);
     const workspace = await fetch(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip' } });
     assert.equal(workspace.status, 200);
     assert.equal(workspace.headers.get('content-encoding'), 'gzip');
@@ -177,7 +192,7 @@ test('independent readers share a lease while publication still requires exclusi
     assert.equal(file.status, 200);
     assert.match(await file.text(), /Cached/);
     const workspace = await fetch(`http://127.0.0.1:${server.port}/api/workspace`);
-    assert.equal(workspace.status, 200);
+    assert.ok([200, 202].includes(workspace.status), await workspace.text());
     assert.throws(() => new LocalRepository(root), { code: 'RepositoryBusy' });
   } finally {
     const closed = once(child, 'close');

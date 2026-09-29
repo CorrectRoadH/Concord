@@ -76,14 +76,16 @@ HawDB 的[引擎边界与预算](design/hawdb-data-engine/plans/native-embedded/
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
-CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验。集合解析按批读取和写入缓存，逐文件保留解析失败；大批键查询使用有界命名空间扫描后选择请求的键，单键查询保持定向读取。临时查询结果只属于当前调用，不形成跨请求缓存。缓存命中仍核对原文摘要、解析器身份和 Schema，来源前后核验保留。
+CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验。集合解析按批读取和写入缓存，逐文件保留解析失败；大批键查询使用有界命名空间扫描后选择请求的键，单键查询保持定向读取。当前来源查询的临时结果只属于当前调用。Web 工作区导航独立读取异步结构投影，不把历史代次用于当前事实授权。缓存命中仍核对原文摘要、解析器身份和 Schema，来源前后核验保留。
 
 同次关系图编译复用相同引用与目标类型的解析结果。读取的目标及 README 边界在返回前逐一复核字节和安全路径；变化或复核失败保留 finding，不能返回完整图。临时引用结果随本次编译结束释放，不跨请求保存。
 
 ```mermaid
 flowchart TD
   CLI[CLI trace / check] --> Scan[公共扫描与关系校验]
-  Web[Web workspace] --> Scan
+  Web[Web workspace] --> Projection[HawDB 结构投影]
+  Refresh[服务端异步刷新] --> Scan
+  Result --> Projection
   Scan --> Sources[当前目录集合与安全文件读取]
   Sources --> Keys[原文摘要与解析器身份]
   Keys --> Cache[有界 HawDB 批量查询]
@@ -256,3 +258,5 @@ Local、GitHub 与 Linear 是派生的来源视图，本地观察使用 Issue ow
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。发行 tgz 携带 Linux x64/glibc 与 macOS arm64 原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一打包，在目标平台安装同一份包验收。
 
 `pnpm check` 构建后检查测试与脚本类型，再执行领域、恢复和 package smoke；公开 CLI 验收使用独立安装后的命令。
+
+工作区导航采用[只读结构投影](design/workspace-projection/plans/shared-projection/PROTOCOL.md)，由 View 主进程在独占刷新租约内发布。其独立命名空间只保存一条有界记录。来源一致性与诊断完整性分别声明，来源漂移可提供标注未知的导航；缓存不可用具名失败。正文与编辑前像通过定向当前读取，CLI `workspace show` 保持当前来源语义，`workspace projection` 显式读取历史代次。

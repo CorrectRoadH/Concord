@@ -46,7 +46,7 @@ export class ViewJobManager {
   private active: JobRecord | undefined;
   private stopped = false;
 
-  constructor(readonly root: string) {}
+  constructor(readonly root: string, private readonly onEvidencePublished: () => void = () => {}) {}
 
   list(): readonly ViewJob[] {
     return [...this.jobs.values()].map(publicJob).reverse();
@@ -135,6 +135,7 @@ export class ViewJobManager {
       }
     } finally {
       repo?.close();
+      if (job.evidence !== undefined) this.onEvidencePublished();
       job.finishedAt ??= now();
       if (job.state !== 'cleanup-failed' && this.active === job) this.active = undefined;
       this.trim();

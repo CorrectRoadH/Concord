@@ -4,7 +4,7 @@ import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project
 import { researchTopicDirectory, researchTopics } from '../lib/research-topics';
 import { documentHref } from '../lib/document-routing';
 import { Link, useLocation } from 'react-router-dom';
-import { useWorkspace } from '../workspace';
+import { projectionIsConclusive, useWorkspace } from '../workspace';
 import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar';
 import { useSidebar } from './ui/sidebar';
 const CreateDocument = lazy(() => import('../pages/documents').then(module => ({ default: module.CreateDocument })));
@@ -25,7 +25,8 @@ export function CloseMobileOnNavigate({ children, href, onClick, ...props }: Omi
 }
 
 export function DocumentNavigation() {
-  const { snapshot } = useWorkspace();
+  const { snapshot, projection } = useWorkspace();
+  const conclusive = projectionIsConclusive(projection);
   const { pathname, search } = useLocation();
   if (pathname === '/docs') return <ProjectDocNavigation search={search} />;
   const section = sections.find(item => pathname === item.href || pathname.startsWith(`${item.href}/`));
@@ -33,7 +34,8 @@ export function DocumentNavigation() {
   const documents = snapshot.documents.filter(document => document.metadata.kind === section.kind);
   const selected = documents.find(document => { const href = documentHref(document, snapshot.documents); return pathname === href || pathname.startsWith(`${href}/`); });
   const groups: ContentSidebarGroup[] = [{
-    id: 'documents', label: `${section.label} 列表`, emptyMessage: `暂无 ${section.label}`,
+    id: 'documents', label: `${section.label} 列表`, emptyMessage: conclusive ? `暂无 ${section.label}` : `当前代次暂未显示 ${section.label}`,
+    filterEmptyMessage: conclusive ? `没有匹配的 ${section.label}` : `当前代次未显示匹配项，列表可能不完整`,
     items: section.kind === 'research' ? researchTopics(documents).map(topic => ({
       id: topic.directory, path: topic.directory, href: `${section.href}/${encodeURIComponent(topic.document.metadata.id)}`,
       title: topic.title, active: selected !== undefined && researchTopicDirectory(selected.path) === topic.directory,
@@ -48,7 +50,8 @@ export function DocumentNavigation() {
 }
 
 function ProjectDocNavigation({ search }: { readonly search: string }) {
-  const { snapshot } = useWorkspace();
+  const { snapshot, projection } = useWorkspace();
+  const conclusive = projectionIsConclusive(projection);
   const selected = new URLSearchParams(search).get('file');
   const pages = projectDocPages(snapshot);
   const root = pages.filter(page => !page.path.startsWith('docs/_template/'));
@@ -61,7 +64,7 @@ function ProjectDocNavigation({ search }: { readonly search: string }) {
     icon: <FileText size={16} />,
   });
   const groups: ContentSidebarGroup[] = [
-    { id: 'project', label: '项目文档', heading: '项目文档', items: root.map(item), emptyMessage: '暂无项目文档' },
+    { id: 'project', label: '项目文档', heading: '项目文档', items: root.map(item), emptyMessage: conclusive ? '暂无项目文档' : '当前代次暂未包含全部项目文档', filterEmptyMessage: conclusive ? '没有匹配的项目文档' : '当前代次未显示匹配文档，列表可能不完整' },
     ...(templates.length === 0 ? [] : [{ id: 'templates', label: '参考模板', heading: '参考模板', treeRoot: 'docs/_template/', items: templates.map(item) }]),
   ];
   return <ContentSidebar key="docs" model={{

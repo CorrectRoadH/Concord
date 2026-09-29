@@ -1,7 +1,7 @@
-import type { DocumentRecord } from '../../src/shared';
+import type { WorkspaceDocument } from '../../src/view-contract';
 import { matchingOwners } from '../../src/document-layout';
 
-export function documentHref(document: DocumentRecord, documents: readonly DocumentRecord[]): string {
+export function documentHref(document: Pick<WorkspaceDocument, 'path' | 'metadata'>, documents: readonly WorkspaceDocument[]): string {
   if (document.metadata.kind === 'use-case') {
     const owners = matchingOwners(documents, document.metadata.feature, 'feature');
     if (owners.length !== 1) return '/features';

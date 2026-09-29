@@ -2,8 +2,8 @@ import { PathContextMenu } from './path-context-menu';
 import { Clipboard, FileCode2 } from 'lucide-react';
 import { Suspense, lazy, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { DocumentRecord } from '../../src/shared';
-import { useWorkspace } from '../workspace';
+import type { WorkspaceDocument } from '../../src/view-contract';
+import { projectionIsConclusive, useWorkspace } from '../workspace';
 import { useSourceNavigation } from '../hooks/use-url-navigation';
 import { ActionResult as ResultCard } from './action-result';
 import { Field } from './page';
@@ -18,8 +18,9 @@ import { Textarea } from './ui/textarea';
 
 function settle(task: Promise<unknown>): void { void task.catch(() => undefined); }
 
-export function ImplementationPanel({ document }: { document: DocumentRecord }) {
-  const { snapshot, act } = useWorkspace();
+export function ImplementationPanel({ document }: { document: WorkspaceDocument }) {
+  const { snapshot, projection, act } = useWorkspace();
+  const conclusive = projectionIsConclusive(projection);
   const sourceNavigation = useSourceNavigation();
   const [result, setResult] = useState<unknown>(null);
   const [annotate, setAnnotate] = useState(false);
@@ -41,10 +42,10 @@ export function ImplementationPanel({ document }: { document: DocumentRecord }) 
   return <>
     <PanelHeader title="实现" actions={<Button variant="outline" onClick={() => addAssociation(document.path)}><Clipboard />添加关联</Button>} />
     <>
-      {!hasImplementations && <PanelEmpty title="尚未建立实现关联">配置源码目录并添加归属注释。<Link className="underline" to="/settings">配置源码目录</Link></PanelEmpty>}
+      {!hasImplementations && <PanelEmpty title={conclusive ? "尚未建立实现关联" : "当前代次未显示实现关联"}>{conclusive ? <>配置源码目录并添加归属注释。<Link className="underline" to="/settings">配置源码目录</Link></> : "投影尚未完整且一致，暂时无法确认是否存在实现关联。"}</PanelEmpty>}
       <ScanNotice snapshot={snapshot} kind="sources" />
-      <div>{groups.map(({ owner, codes, references }) => <ContentSection key={owner.path} className="implementation-section" aria-label={owner.metadata.title + '的实现'} title={owner !== document && owner.metadata.kind === 'use-case' ? <Link className="hover:underline" to={`/features/${encodeURIComponent(document.metadata.id)}/use-cases/${encodeURIComponent(owner.metadata.id)}`}>{owner.metadata.title}</Link> : owner.metadata.title} summary={<>{codes.length} 处实现 · {new Set(codes.map(code => code.file)).size} 个文件</>}>
-          {codes.length === 0 ? <p className="muted">尚未关联实现</p> : <RecordList>{codes.map(code => <RecordItem key={code.id}>
+      <div>{groups.map(({ owner, codes, references }) => <ContentSection key={owner.path} className="implementation-section" aria-label={owner.metadata.title + '的实现'} title={owner !== document && owner.metadata.kind === 'use-case' ? <Link className="hover:underline" to={`/features/${encodeURIComponent(document.metadata.id)}/use-cases/${encodeURIComponent(owner.metadata.id)}`}>{owner.metadata.title}</Link> : owner.metadata.title} summary={<>{conclusive ? codes.length : `当前代次显示 ${codes.length}`} 处实现 · {new Set(codes.map(code => code.file)).size} 个文件</>}>
+          {codes.length === 0 ? <p className="muted">{conclusive ? "尚未关联实现" : "当前代次未显示实现关联；列表可能不完整"}</p> : <RecordList>{codes.map(code => <RecordItem key={code.id}>
             <div className="implementation-record">
               <div className="implementation-record__source">
                 <div className="flex flex-wrap items-center gap-2"><strong>{code.symbol ?? code.file.split('/').at(-1)}</strong><Badge variant="outline">{{ file: '整个文件', node: '类／函数', region: '代码段' }[code.scope]}</Badge></div>

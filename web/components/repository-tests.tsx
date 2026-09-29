@@ -1,18 +1,17 @@
 import { PathContextMenu } from './path-context-menu';
 import { Link } from 'react-router-dom';
-import type { DocumentRecord } from '../../src/shared';
-import type { WorkspaceSnapshot } from '../../src/view-contract';
+import type { WorkspaceDocument, WorkspaceProjectionSnapshot } from '../../src/view-contract';
 import { Definition } from './page';
 import { Button } from './ui/button';
 import { RecordDetails, RecordItem } from './content-layout';
 
-export function relatedRepositoryTests(snapshot: WorkspaceSnapshot, document: DocumentRecord) {
+export function relatedRepositoryTests(snapshot: WorkspaceProjectionSnapshot, document: WorkspaceDocument) {
   return (snapshot.repositoryTests?.tests ?? []).filter(test => document.metadata.kind === 'feature'
     ? test.features.includes(document.path)
     : test.contract.split('#')[0] === document.path);
 }
 
-export function RepositoryTestCards({ snapshot, document, onOpenSource }: { snapshot: WorkspaceSnapshot; document: DocumentRecord; onOpenSource: (path: string) => void }) {
+export function RepositoryTestCards({ snapshot, document, onOpenSource }: { snapshot: WorkspaceProjectionSnapshot; document: WorkspaceDocument; onOpenSource: (path: string) => void }) {
   const view = snapshot.repositoryTests;
   if (view?.status === 'failed') return <li role="alert" className="form-error">项目测试接入失败：{view.error?.code} — {view.error?.message}</li>;
   const tests = relatedRepositoryTests(snapshot, document);
@@ -24,12 +23,12 @@ export function RepositoryTestCards({ snapshot, document, onOpenSource }: { snap
   </RecordItem>)}</>;
 }
 
-export function scanFindings(snapshot: WorkspaceSnapshot, kind: 'tests' | 'sources') {
+export function scanFindings(snapshot: WorkspaceProjectionSnapshot, kind: 'tests' | 'sources') {
   const roots = (kind === 'tests' ? snapshot.project?.testRoots : snapshot.project?.sourceRoots) ?? [];
   return snapshot.findings.filter(finding => roots.some(root => finding.path === root || finding.path.startsWith(`${root}/`)));
 }
 
-export function ScanNotice({ snapshot, kind }: { snapshot: WorkspaceSnapshot; kind: 'tests' | 'sources' }) {
+export function ScanNotice({ snapshot, kind }: { snapshot: WorkspaceProjectionSnapshot; kind: 'tests' | 'sources' }) {
   const roots = (kind === 'tests' ? snapshot.project?.testRoots : snapshot.project?.sourceRoots) ?? [];
   const label = kind === 'tests' ? '通用测试' : '源码声明';
   if (kind === 'tests' && roots.length === 0 && snapshot.repositoryTests?.status === 'ready') return null;

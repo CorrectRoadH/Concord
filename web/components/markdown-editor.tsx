@@ -166,7 +166,7 @@ function markdownLinkUrls(markdown: string): readonly string[] {
 
 export function MarkdownEditor({ initial, source = false, title, sourceLocation, hideSourceHeading = false, onSaved, toolbarTarget, onFollowLink }: Props) {
   const theme = useTheme();
-  const { api, refresh, notify, snapshot, busy } = useWorkspace();
+  const { api, requestRefresh, notify, snapshot, projection, busy } = useWorkspace();
   const [file, setFile] = useState(initial);
   const [draft, setDraft] = useState(initial.body);
   const [dirty, setLocalDirty] = useState(false);
@@ -178,79 +178,101 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
   const [external, setExternal] = useState<ViewFile | null>(null);
   const [compareOpen, setCompareOpen] = useState(false);
   const [editorKey, setEditorKey] = useState(initial.digest);
-  const currentDocument = snapshot.documents.find(document => document.path === initial.path);
-  const observed = snapshot.pages.find(page => page.path === initial.path)
-    ?? (currentDocument ? { path: currentDocument.path, body: currentDocument.body, digest: currentDocument.digest, documentPath: currentDocument.path } : undefined);
-  const observedDigest = useRef(observed?.digest);
-
-
-
-  useEffect(() => {
-    const controller = new AbortController();
-    const id = window.setInterval(() => {
-      void api.file(file.path, controller.signal).then(next => {
-        if (savingNow.current || next.digest === baseline.current.digest) return;
-        if (dirty) setExternal(next);
-        else {
-          baseline.current = next; currentDraft.current = next.body;
-          setFile(next); setDraft(next.body); setEditorKey(next.digest); setUnsupported(null);
-        }
-      }).catch(() => undefined);
-    }, 6000);
-    return () => { controller.abort(); window.clearInterval(id); };
-  }, [api, dirty, file.digest, file.path]);
+  const observedDigest = snapshot.documents.find(document => document.path === initial.path)?.digest
+    ?? snapshot.pages.find(page => page.path === initial.path)?.digest;
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
+  const checkedGeneration = useRef<string | null>(null);
+  const checkToken = useRef(0);
+  const readSequence = useRef(0);
 
   const replaceWith = useCallback((next: ViewFile) => {
+    checkToken.current += 1;
+    readSequence.current += 1;
     baseline.current = next; currentDraft.current = next.body;
     setFile(next); setDraft(next.body); setLocalDirty(false); setExternal(null);
     setUnsupported(null); setEditorKey(next.digest); onSaved?.(next);
   }, [onSaved]);
 
+  // External edits should be noticed without waiting for the slower navigation
+  // refresh. Each poll remains a targeted current-file read, and response order
+  // cannot let an older read replace a newer baseline.
   useEffect(() => {
-    // Only react to a newly observed workspace version, never an older snapshot
-    // still on screen between a successful save and its workspace refresh.
-    if (!observed || observedDigest.current === observed.digest || savingNow.current) return;
-    observedDigest.current = observed.digest;
-    if (observed.digest === file.digest) return;
-    if (dirty) setExternal(observed);
-    else replaceWith(observed);
-  }, [observed, file.digest, dirty, replaceWith]);
+    const controller = new AbortController();
+    const id = window.setInterval(() => {
+      if (savingNow.current) return;
+      const epoch = checkToken.current;
+      const sequence = ++readSequence.current;
+      void api.file(initial.path, controller.signal).then(next => {
+        if (controller.signal.aborted || epoch !== checkToken.current || sequence !== readSequence.current || savingNow.current) return;
+        if (next.digest === baseline.current.digest) return;
+        if (dirtyRef.current) setExternal(next);
+        else replaceWith(next);
+      }).catch(() => undefined);
+    }, 6000);
+    return () => { controller.abort(); window.clearInterval(id); };
+  }, [api, initial.path, replaceWith]);
+
+  useEffect(() => {
+    // The projection digest only triggers a check. At most one targeted current
+    // read runs per published generation, and a newer baseline is never replaced
+    // by an older generation still arriving out of order.
+    const generation = projection.builtAt;
+    if (!generation || generation === checkedGeneration.current) return;
+    if (!observedDigest || observedDigest === baseline.current.digest || savingNow.current) { checkedGeneration.current = generation; return; }
+    checkedGeneration.current = generation;
+    const token = checkToken.current;
+    const sequence = ++readSequence.current;
+    void api.file(initial.path).then(next => {
+      if (checkToken.current !== token || sequence !== readSequence.current || next.digest === baseline.current.digest) return;
+      if (dirtyRef.current) setExternal(next);
+      else replaceWith(next);
+    }).catch(() => undefined);
+  }, [projection.builtAt, observedDigest, api, initial.path, replaceWith]);
 
   const reload = useCallback(async () => {
+    const token = ++checkToken.current;
+    const sequence = ++readSequence.current;
     try {
       const next = await api.file(file.path);
-      if (dirty) { setExternal(next); setCompareOpen(true); return; }
+      if (token !== checkToken.current || sequence !== readSequence.current) return;
+      if (dirtyRef.current) { setExternal(next); setCompareOpen(true); return; }
       replaceWith(next);
       notify('已载入磁盘上的最新版本。', 'info');
     } catch (cause) { notify(cause instanceof Error ? cause.message : String(cause), 'error'); }
-  }, [api, dirty, file.path, notify, replaceWith]);
+  }, [api, file.path, notify, replaceWith]);
 
   const save = useCallback(async () => {
     if (external) { setCompareOpen(true); throw new Error('磁盘内容已变化，请先比较版本。'); }
     const sent = currentDraft.current;
     const before = baseline.current;
+    const token = ++checkToken.current;
+    readSequence.current += 1;
     savingNow.current = true;
     try {
       await api.action(source
         ? { action: 'source.set', path: before.path, body: sent, expectedDigest: before.digest }
         : { action: 'document.set', path: before.path, body: sent, expectedDigest: before.digest });
+      const sequence = ++readSequence.current;
       const next = await api.file(before.path);
+      if (token !== checkToken.current || sequence !== readSequence.current) return;
       flushSync(() => {
-        baseline.current = next; setFile(next); observedDigest.current = next.digest;
+        baseline.current = next; setFile(next); checkedGeneration.current = projection.builtAt;
         if (currentDraft.current === sent) { currentDraft.current = next.body; setDraft(next.body); setLocalDirty(false); }
         else setLocalDirty(currentDraft.current !== next.body);
         setExternal(null); onSaved?.(next);
       });
-      await refresh();
+      await requestRefresh().catch(() => undefined);
     } catch (cause) {
       if (cause instanceof ApiError && cause.status === 409) {
+        const sequence = ++readSequence.current;
         const next = await api.file(before.path).catch(() => null);
-        if (next) setExternal(next);
+        if (next && token === checkToken.current && sequence === readSequence.current) setExternal(next);
         setCompareOpen(true);
       }
       throw cause;
     } finally { savingNow.current = false; }
-  }, [api, external, onSaved, refresh, source]);
+  }, [api, external, onSaved, requestRefresh, projection.builtAt, source]);
   const autoSave = useAutoSave({ dirty, revision: draft, save, discard: () => { replaceWith(baseline.current); setCompareOpen(false); } });
   const saving = autoSave.saving;
   const changeDraft = (value: string) => { currentDraft.current = value; setDraft(value); setLocalDirty(value !== baseline.current.body); };

@@ -26,6 +26,8 @@ import { useWorkspace } from "@/workspace"
 function lines(value: readonly string[]): string { return value.join("\n") }
 function values(value: string): string[] { return value.split("\n").map((item) => item.trim()).filter(Boolean) }
 
+const CONFIG_PATH = "concord.config.ts"
+
 export function SettingsPage() {
   const { snapshot } = useWorkspace()
   if (!snapshot.project) {
@@ -33,11 +35,35 @@ export function SettingsPage() {
     const missing = typeof diagnostics === "object" && diagnostics !== null && "error" in diagnostics && diagnostics.error === "ProjectNotFound"
     return missing ? <InitializeProject /> : <InvalidConfiguration />
   }
-  return <ConfigurationEditor key={snapshot.project.projectId} initial={snapshot.project} digest={snapshot.configDigest ?? ""} />
+  return <ConfigurationLoader />
+}
+
+/** The editable configuration baseline is the current target read, not a historical generation. */
+function ConfigurationLoader() {
+  const { api } = useWorkspace()
+  const [loaded, setLoaded] = React.useState<{ readonly config: ProjectConfig; readonly digest: string } | null>(null)
+  const [error, setError] = React.useState("")
+  const [attempt, setAttempt] = React.useState(0)
+  React.useEffect(() => {
+    const controller = new AbortController()
+    setLoaded(null)
+    setError("")
+    void api.file(CONFIG_PATH, controller.signal).then((file) => {
+      if (controller.signal.aborted) return
+      if (!file.project) { setError("无法读取当前项目配置。"); return }
+      setLoaded({ config: file.project, digest: file.digest })
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
+    })
+    return () => controller.abort()
+  }, [api, attempt])
+  if (error) return <><PageHeader title="项目设置" /><div className="form-error" role="alert">{error} <Button size="sm" variant="outline" onClick={() => setAttempt((value) => value + 1)}>重试</Button></div></>
+  if (!loaded) return <><PageHeader title="项目设置" description="修改保存前会检查磁盘版本，避免覆盖其他编辑。" /><p role="status">正在读取当前项目配置…</p></>
+  return <ConfigurationEditor key={loaded.config.projectId} initial={loaded.config} digest={loaded.digest} />
 }
 
 function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; digest: string }) {
-  const { api, refresh, notify } = useWorkspace()
+  const { api, requestRefresh, notify } = useWorkspace()
   const [baseline, setBaseline] = React.useState({ config: initial, digest })
   const [draft, setDraft] = React.useState<ProjectConfig>(initial)
   const [source, setSource] = React.useState(json(initial))
@@ -53,10 +79,17 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   const [saving, setSaving] = React.useState(false)
   const [reloadOpen, setReloadOpen] = React.useState(false)
   const connectionEditRevision = React.useRef(0)
-  const latestDigest = useWorkspace().snapshot.configDigest
+  const { projection, snapshot } = useWorkspace()
+  const [externalConfig, setExternalConfig] = React.useState<{ readonly config: ProjectConfig; readonly digest: string } | null>(null)
   const formDirty = testRootsText !== lines(baseline.config.testRoots) || sourceRootsText !== lines(baseline.config.sourceRoots ?? []) || sourceFilesText !== lines(baseline.config.runner.sourceFiles) || timeoutText !== String(baseline.config.runner.timeoutMs) || draft.runner.kind !== baseline.config.runner.kind || (draft.runner.kind === "command" && argvText !== (baseline.config.runner.kind === "command" ? lines(baseline.config.runner.argv) : ""))
   const dirty = formDirty || p5LibrariesText !== lines(baseline.config.p5?.libraries ?? []) || source !== json(baseline.config)
-  const externallyChanged = latestDigest !== null && latestDigest !== baseline.digest
+  const externallyChanged = externalConfig !== null
+  const checkedGeneration = React.useRef<string | null>(null)
+  const checkingGeneration = React.useRef<string | null>(null)
+  const currentRead = React.useRef(0)
+  const savingRef = React.useRef(false)
+  const dirtyRef = React.useRef(dirty)
+  dirtyRef.current = dirty
 
 
 
@@ -77,6 +110,42 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
     setTimeoutText(String(next.runner.timeoutMs))
   }
 
+  React.useEffect(() => {
+    const generation = projection.builtAt
+    if (!generation || generation === checkedGeneration.current || generation === checkingGeneration.current) return
+    if (savingRef.current) { checkedGeneration.current = generation; return }
+    if (!snapshot.configDigest || snapshot.configDigest === baseline.digest) {
+      checkedGeneration.current = generation
+      return
+    }
+    checkingGeneration.current = generation
+    const token = ++currentRead.current
+    void api.file(CONFIG_PATH).then((file) => {
+      if (token !== currentRead.current) return
+      checkingGeneration.current = null
+      checkedGeneration.current = generation
+      if (!file.project) { setError("当前配置无法读取，请重新载入后检查。"); return }
+      if (file.digest === baseline.digest) { setExternalConfig(null); return }
+      const next = { config: file.project, digest: file.digest }
+      if (dirtyRef.current) setExternalConfig(next)
+      else {
+        setBaseline(next)
+        sync(next.config)
+        setExternalConfig(null)
+      }
+    }).catch((cause: unknown) => {
+      if (token === currentRead.current) {
+        checkingGeneration.current = null
+        checkedGeneration.current = generation
+        setError(cause instanceof Error ? cause.message : String(cause))
+      }
+    })
+    return () => {
+      if (token === currentRead.current) currentRead.current += 1
+      if (checkingGeneration.current === generation) checkingGeneration.current = null
+    }
+  }, [api, baseline.digest, projection.builtAt, snapshot.configDigest])
+
   function formConfig(): ProjectConfig {
     const libraries = values(p5LibrariesText)
     const p5Config = libraries.length || draft.p5 ? { p5: { libraries } } : {}
@@ -96,35 +165,46 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   currentRevision.current = revision
 
   async function persist(config: ProjectConfig): Promise<void> {
+    if (externalConfig) throw new Error("磁盘配置已变化，请先重新载入当前设置。")
     const sent = revision
+    const token = ++currentRead.current
+    checkedGeneration.current = projection.builtAt
+    savingRef.current = true
     setSaving(true)
     setError("")
     try {
       await api.action({ action: "config.set", config, expectedDigest: baseline.digest })
-      const latest = await api.workspace()
-      if (!latest.project || !latest.configDigest) throw new Error("保存后无法读取项目配置。")
-      const saved = { config: latest.project, digest: latest.configDigest }
+      const file = await api.file(CONFIG_PATH)
+      if (token !== currentRead.current) return
+      if (!file.project) throw new Error("保存后无法读取项目配置。")
+      const saved = { config: file.project, digest: file.digest }
+      setExternalConfig(null)
       flushSync(() => {
         setBaseline(saved)
         if (currentRevision.current === sent) sync(saved.config)
       })
-      await refresh().catch(() => undefined)
+      await requestRefresh().catch(() => undefined)
 
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : String(cause)
       setError(message)
       throw cause
     } finally {
+      savingRef.current = false
       setSaving(false)
     }
   }
 
   async function reload(): Promise<void> {
+    const token = ++currentRead.current
     try {
-      const latest = await api.workspace()
-      if (!latest.project || !latest.configDigest) throw new Error("当前配置无法读取。")
-      setBaseline({ config: latest.project, digest: latest.configDigest })
-      sync(latest.project)
+      const file = await api.file(CONFIG_PATH)
+      if (token !== currentRead.current) return
+      if (!file.project) throw new Error("当前配置无法读取。")
+      setBaseline({ config: file.project, digest: file.digest })
+      sync(file.project)
+      setExternalConfig(null)
+      checkedGeneration.current = projection.builtAt
       setError("")
       setReloadOpen(false)
       notify("已载入磁盘上的最新设置。", "info")
@@ -147,7 +227,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
     const before = connectionEditRevision.current
     await autoSave.flush()
     if (connectionEditRevision.current !== before) throw new Error("设置在保存期间已改变，请重试检测。")
-    const saved = await api.workspace()
+    const saved = await api.file(CONFIG_PATH)
     const configured = saved.project?.feedbackConnections?.find((item) => item.id === connection.id)
     if (!configured || configured.provider !== "github" || configured.transport !== "gh" || connection.transport !== "gh" || configured.owner !== connection.owner || configured.repo !== connection.repo || configured.repositoryId !== connection.repositoryId) throw new Error("连接尚未保存为当前配置，请先解决保存冲突。")
   }
@@ -160,7 +240,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
         description="修改保存前会检查磁盘版本，避免覆盖其他编辑。"
         actions={<Button variant="outline" onClick={() => dirty ? setReloadOpen(true) : void reload()}><RefreshCw /> 重新载入</Button>}
       />
-      {externallyChanged && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘设置已变化</strong><p>当前草稿没有被覆盖。保存会要求你先比较或重新载入。</p></div></div>}
+      {externallyChanged && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘设置已变化</strong><p>当前草稿没有被覆盖。请重新载入当前设置后再保存。</p></div></div>}
       <Tabs value={tab} onValueChange={next => update({ tab: next })}>
         <TabsList><TabsTrigger value="form">常用设置</TabsTrigger><TabsTrigger value="feedback">反馈来源</TabsTrigger><TabsTrigger value="advanced">高级 JSON</TabsTrigger><TabsTrigger value="diagnostics">诊断</TabsTrigger></TabsList>
         <TabsContent value="form">
@@ -200,9 +280,23 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
 }
 
 function InvalidConfiguration() {
-  const { snapshot, refresh, notify } = useWorkspace()
-  const file = snapshot.pages.find(page => page.path === "concord.config.ts")
-  return <><PageHeader title="项目配置无法读取" actions={<Button variant="outline" onClick={() => { void refresh().catch(cause => notify(cause instanceof Error ? cause.message : String(cause), "error")) }}><RefreshCw />重新载入</Button>} /><div className="callout callout--warning"><AlertTriangle /><div><strong>请检查 concord.config.ts 和下方诊断</strong><p>请在本地修复配置；需要迁移时遵循诊断指引。此页不修改原文件。</p></div></div><ContentSection title="诊断"><pre>{json(snapshot.diagnostics)}</pre></ContentSection><ContentSection title="原始配置">{file ? <Textarea className="json-editor" aria-label="无效配置原文" value={file.body} readOnly /> : <Empty title="无法安全读取配置原文">请根据诊断检查文件路径、大小或迁移状态。</Empty>}</ContentSection></>
+  const { api, snapshot, requestRefresh, notify } = useWorkspace()
+  const [source, setSource] = React.useState<string | null>(null)
+  const [error, setError] = React.useState("")
+  const [attempt, setAttempt] = React.useState(0)
+  React.useEffect(() => {
+    const controller = new AbortController()
+    setSource(null)
+    setError("")
+    void api.file(CONFIG_PATH, controller.signal).then((file) => {
+      if (!controller.signal.aborted) setSource(file.body)
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
+    })
+    return () => controller.abort()
+  }, [api, attempt])
+  const reload = () => { void requestRefresh().catch(cause => notify(cause instanceof Error ? cause.message : String(cause), "error")); setAttempt((value) => value + 1) }
+  return <><PageHeader title="项目配置无法读取" actions={<Button variant="outline" onClick={reload}><RefreshCw />重新载入</Button>} /><div className="callout callout--warning"><AlertTriangle /><div><strong>请检查 concord.config.ts 和下方诊断</strong><p>请在本地修复配置；需要迁移时遵循诊断指引。此页不修改原文件。</p></div></div><ContentSection title="诊断"><pre>{json(snapshot.diagnostics)}</pre></ContentSection><ContentSection title="原始配置">{source !== null ? <Textarea className="json-editor" aria-label="无效配置原文" value={source} readOnly /> : error ? <Empty title="无法安全读取配置原文">{error}</Empty> : <p role="status">正在读取配置原文…</p>}</ContentSection></>
 }
 
 function InitializeProject() {

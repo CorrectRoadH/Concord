@@ -30,13 +30,15 @@ test('browser preserves blocked recovery and labels incomplete workspace relatio
     const page = await browser.newPage();
     // Simulate only the initial HTTP read failure. Recovery and subsequent
     // workspace reads go through the real server and repository implementation.
-    await page.route('**/api/workspace', route => route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'RepositoryBusy', message: 'Publication requires recovery' }) }));
+    await page.route('**/api/workspace', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'RecoveryRequired', message: 'Publication requires recovery' }) }));
     await page.goto(`http://127.0.0.1:${server.port}/`);
     await page.getByRole('button', { name: '恢复中断的发布', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('恢复仍被执行进程清理状态阻塞');
     assert.ok(existsSync(join(root, '.git/concord/runner.lease')));
+    await expect(page.getByRole('heading', { name: 'View 清理失败，需要重启', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: '重试', exact: true })).toHaveCount(0);
     await page.unroute('**/api/workspace');
-    await page.getByRole('button', { name: '重试', exact: true }).click();
+    await page.reload();
     await expect(page.getByRole('alert').filter({ hasText: '工作区扫描不完整' })).toBeVisible();
     await expect(page.getByText('InvalidData', { exact: true })).toBeVisible();
   } finally {

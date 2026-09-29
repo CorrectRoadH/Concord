@@ -6,13 +6,7 @@ import { documentRoots, inspectDocumentRecords, parseDocumentRecord, setAuthor, 
 import type { LocalRepository } from './storage.js';
 import { documentDisposition } from './document-layout.js';
 import { existsSync } from 'node:fs';
-
-export interface ViewFile {
-  readonly path: string;
-  readonly body: string;
-  readonly digest: string;
-  readonly documentPath?: string;
-}
+import type { ViewFile } from './view-contract.js';
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
 const sourceForbidden = (path: string): boolean => path.split('/').some(part => part === '.git' || part === 'node_modules');
@@ -62,7 +56,7 @@ export function inspectDocumentFile(repo: Repository, path: string): ViewFile | 
   const inDocumentInventory = roots.some(root => underRoot(path, root));
   if (!path.endsWith('.md') || sourceForbidden(path) || (!inDocumentInventory && !loose)) return undefined;
   const target = inspectMarkdown(repo, path);
-  if (target.document) return { path, body: target.document.body, digest: target.document.digest, documentPath: path };
+  if (target.document) return { path, body: target.document.body, digest: target.document.digest, documentPath: path, document: target.document };
   if (!target.page) return undefined;
   if (loose) return target.page;
   let owner: string | undefined;

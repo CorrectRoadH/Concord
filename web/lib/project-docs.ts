@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
-import type { WorkspaceSnapshot } from '../../src/view-contract';
+import type { WorkspacePage, WorkspaceProjectionSnapshot } from '../../src/view-contract';
 import { DOCUMENT_ROOTS } from '../../src/document-layout';
 
 const ROOT_RANK = ['docs/README.md', 'docs/architecture.md', 'docs/constitution.md', 'docs/concepts.md', 'docs/concord.md'];
@@ -9,7 +9,7 @@ function under(path: string, root: string): boolean {
   return path === root || path.startsWith(`${root}/`);
 }
 
-export function projectDocPages(snapshot: WorkspaceSnapshot): WorkspaceSnapshot['pages'][number][] {
+export function projectDocPages(snapshot: WorkspaceProjectionSnapshot): readonly WorkspacePage[] {
   const memoryRoots = (snapshot.project?.memorySources ?? [{ path: 'memory' }]).map(source => source.path);
   const roots = [...DOCUMENT_ROOTS, ...memoryRoots];
   return snapshot.pages
@@ -17,10 +17,10 @@ export function projectDocPages(snapshot: WorkspaceSnapshot): WorkspaceSnapshot[
     .sort((left, right) => projectDocSort(left.path).localeCompare(projectDocSort(right.path)));
 }
 
-export function projectDocTitle(page: { readonly path: string; readonly body: string }): string {
+/** Titles come from the projected single-line derivedTitle, never a body excerpt. */
+export function projectDocTitle(page: Pick<WorkspacePage, 'path' | 'derivedTitle'>): string {
   if (page.path.startsWith('docs/_template/')) return page.path.slice('docs/'.length);
-  const heading = /^#\s+(.+)$/mu.exec(page.body)?.[1]?.replace(/\s+#+\s*$/u, '').trim();
-  return heading || (page.path.startsWith('docs/') ? page.path.slice('docs/'.length) : page.path);
+  return page.derivedTitle ?? (page.path.startsWith('docs/') ? page.path.slice('docs/'.length) : page.path);
 }
 
 export function projectDocHref(path: string): string {

@@ -25,6 +25,7 @@ import { Link, Navigate, Outlet, useNavigate, useParams } from "react-router-dom
 
 import type { DocumentKind, DocumentRecord } from "../../src/shared"
 import type { ViewAction, ViewFile } from "../../src/view-contract"
+import type { WorkspaceDocument, WorkspacePage } from "../../src/view-contract"
 import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../src/template-pages"
 import { MarkdownEditor } from "@/components/markdown-editor"
 import { Definition, Empty, Field, PageHeader } from "@/components/page"
@@ -64,7 +65,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { humanKind } from "@/lib/utils"
 import { researchTopicDirectory } from "@/lib/research-topics"
-import { useWorkspace } from "@/workspace"
+import { projectionIsConclusive, useWorkspace } from "@/workspace"
 
 import { contractIdentities, ImplementationPanel, TestingPanel } from './operations'
 
@@ -169,7 +170,7 @@ export function relativeMarkdownTarget(currentPath: string, href: string): { pat
   }
 }
 
-function featureMatches(reference: string, feature: DocumentRecord): boolean {
+function featureMatches(reference: string, feature: Pick<WorkspaceDocument, "path" | "metadata">): boolean {
   return (
     reference === feature.path ||
     reference === feature.metadata.id
@@ -360,12 +361,13 @@ export function DocumentsListPage({
 }: {
   kind: Exclude<DocumentKind, "use-case">
 }) {
-  const { snapshot, dirty } = useWorkspace()
+  const { snapshot, projection, dirty } = useWorkspace()
+  const conclusive = projectionIsConclusive(projection)
   const [filter, setFilter] = React.useState("")
   const documents = snapshot.documents.filter(
     (document) =>
       document.metadata.kind === kind &&
-      `${document.metadata.title} ${document.metadata.id}`
+      `${document.metadata.title} ${document.metadata.id} ${document.path}`
         .toLocaleLowerCase()
         .includes(filter.toLocaleLowerCase())
   )
@@ -391,7 +393,9 @@ export function DocumentsListPage({
         <Badge variant="secondary">{documents.length} 项</Badge>
       </div>
       {documents.length === 0 ? (
-        <Empty kind={filter ? "filtered" : "empty"} title={filter ? "没有匹配的文档" : `还没有 ${humanKind(kind)}`}>{filter ? "调整筛选条件后重试。" : "使用新建入口创建第一项。"}</Empty>
+        <Empty kind={filter ? "filtered" : "empty"} title={conclusive ? filter ? "没有匹配的文档" : `还没有 ${humanKind(kind)}` : `当前代次未显示${humanKind(kind)}`}>
+          {conclusive ? filter ? "调整筛选条件后重试。" : "使用新建入口创建第一项。" : "投影尚未完整且一致，暂时无法确认是否还有匹配项。"}
+        </Empty>
       ) : (
         <RecordList>
           {documents.map((document) => (
@@ -415,7 +419,7 @@ export function DocumentsListPage({
   )
 }
 
-function DocumentSummary({ document }: { document: DocumentRecord }) {
+function DocumentSummary({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   if (metadata.kind === "roadmap") {
     return <Badge variant="secondary">{metadata.state}</Badge>
@@ -443,19 +447,22 @@ function DocumentSummary({ document }: { document: DocumentRecord }) {
   if (metadata.kind === "issue") {
     return <Badge variant="outline">{metadata.state}</Badge>
   }
-  return <p>{document.body.slice(0, 150) || "等待撰写"}</p>
+  return null
 }
 
 export function FeatureDetailPage() {
   const navigation = useUrlNavigation()
   const { id = "", useCaseId } = useParams()
-  const { snapshot } = useWorkspace()
+  const { snapshot, projection } = useWorkspace()
+  const conclusive = projectionIsConclusive(projection)
   const feature = snapshot.documents.find(
     (document) =>
       document.metadata.kind === "feature" && document.metadata.id === id
   )
   if (!feature) {
-    return <Empty kind="missing" title="找不到 Feature">它可能已被移动或删除。</Empty>
+    return conclusive
+      ? <Empty kind="missing" title="找不到 Feature">它可能已被移动或删除。</Empty>
+      : <Empty title="当前代次未包含此 Feature">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
   }
   const useCases = snapshot.documents.filter(
     (document) =>
@@ -466,8 +473,8 @@ export function FeatureDetailPage() {
     <section className="feature-use-cases">
       <PanelHeader title="Use Cases" actions={<CreateDocument kind="use-case" feature={feature.path} />} />
       {useCases.length === 0 ? (
-        <PanelEmpty title="还没有 Use Case">
-          从这里创建时会自动绑定 {feature.metadata.title}。
+        <PanelEmpty title={conclusive ? "还没有 Use Case" : "当前代次暂未显示 Use Case"}>
+          {conclusive ? `从这里创建时会自动绑定 ${feature.metadata.title}。` : "投影尚未完整且一致，暂时无法确认是否还有 Use Case。"}
         </PanelEmpty>
       ) : (
         <RecordList>
@@ -498,27 +505,33 @@ export function FeatureDetailPage() {
 export function UseCaseDrawer() {
   const navigation = useUrlNavigation()
   const { id, useCaseId } = useParams()
-  const { snapshot } = useWorkspace()
+  const { snapshot, projection } = useWorkspace()
+  const conclusive = projectionIsConclusive(projection)
   const navigate = useNavigate()
   const feature = snapshot.documents.find(item => item.metadata.kind === "feature" && item.metadata.id === id)
   const document = snapshot.documents.find(item => item.metadata.kind === "use-case" && item.metadata.id === useCaseId && feature !== undefined && featureMatches(item.metadata.feature, feature))
   const close = () => navigation.close(`/features/${encodeURIComponent(id ?? "")}?tab=use-cases`)
   return <DetailDrawer open onClose={close} model={{
-    title: document?.metadata.title ?? "找不到 Use Case",
+    title: document?.metadata.title ?? (conclusive ? "找不到 Use Case" : "当前代次未包含此 Use Case"),
     description: `所属 Feature：${feature?.metadata.title ?? id}`,
   }}>
-    {document ? <DocumentLayout key={document.path} document={document} /> : <Empty kind="missing" title="找不到 Use Case">此 Feature 下没有该 Use Case。</Empty>}
+    {document ? <DocumentLayout key={document.path} document={document} /> : conclusive
+      ? <Empty kind="missing" title="找不到 Use Case">此 Feature 下没有该 Use Case。</Empty>
+      : <Empty title="当前代次未包含此 Use Case">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>}
   </DetailDrawer>
 }
 
 export function DocumentDetailPage({ kind, relatedContent }: { kind: DocumentKind; relatedContent?: React.ReactNode }) {
   const params = useParams()
   const id = kind === "use-case" ? params.useCaseId : params.id
-  const { snapshot } = useWorkspace()
+  const { snapshot, projection } = useWorkspace()
+  const conclusive = projectionIsConclusive(projection)
   const matches = matchingOwners(snapshot.documents, id ?? '', kind)
   const document = matches.length === 1 ? matches[0] : undefined
   if (!document) {
-    return <Empty kind="missing" title={`找不到 ${humanKind(kind)}`}>它可能已被移动或删除。</Empty>
+    return conclusive
+      ? <Empty kind="missing" title={`找不到 ${humanKind(kind)}`}>它可能已被移动或删除。</Empty>
+      : <Empty title={`当前代次未包含此${humanKind(kind)}`}>投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
   }
   let back: React.ReactNode = null
   if (document.metadata.kind === "use-case") {
@@ -547,7 +560,7 @@ function DocumentLayout({
   relatedContent,
   background = false,
 }: {
-  document: DocumentRecord
+  document: WorkspaceDocument
   extra?: React.ReactNode
   relatedContent?: React.ReactNode
   background?: boolean
@@ -611,8 +624,8 @@ function DocumentFiles({
   extra,
   toolbarTarget,
 }: {
-  document: DocumentRecord
-  pages: readonly ViewFile[]
+  document: WorkspaceDocument
+  pages: readonly WorkspacePage[]
   extra?: React.ReactNode
   toolbarTarget?: HTMLElement | null
 }) {
@@ -865,11 +878,36 @@ function FileTree({ nodes, ownerDirectory, expanded, selectedPath, onToggle, onS
   })}</div>
 }
 
-function MetadataForm({ document }: { document: DocumentRecord }) {
-  const { api, refresh, notify } = useWorkspace()
-  const [baseline, setBaseline] = React.useState(document)
-  const [title, setTitle] = React.useState(document.metadata.title)
-  const research = document.metadata.kind === "research" ? document.metadata : null
+function MetadataForm({ document }: { document: WorkspaceDocument }) {
+  const { api } = useWorkspace()
+  const [loaded, setLoaded] = React.useState<DocumentRecord | null>(null)
+  const [error, setError] = React.useState("")
+  const [attempt, setAttempt] = React.useState(0)
+  // The edit baseline is the current owner digest, never a historical projection.
+  React.useEffect(() => {
+    const controller = new AbortController()
+    setLoaded(null)
+    setError("")
+    void api.file(document.path, controller.signal).then((file) => {
+      if (controller.signal.aborted) return
+      const record = file.document
+      if (!record || record.path !== document.path) { setError("无法建立当前文档前像，请重新载入。"); return }
+      setLoaded(record)
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
+    })
+    return () => controller.abort()
+  }, [api, attempt, document.path])
+  if (error) return <><PanelHeader title="元数据" /><div className="form-error" role="alert">{error} <Button size="sm" variant="outline" onClick={() => setAttempt((value) => value + 1)}>重试</Button></div></>
+  if (!loaded) return <><PanelHeader title="元数据" /><p role="status">正在读取当前文档前像…</p></>
+  return <MetadataEditor key={document.path} initial={loaded} />
+}
+
+function MetadataEditor({ initial }: { initial: DocumentRecord }) {
+  const { api, requestRefresh } = useWorkspace()
+  const [baseline, setBaseline] = React.useState(initial)
+  const [title, setTitle] = React.useState(initial.metadata.title)
+  const research = initial.metadata.kind === "research" ? initial.metadata : null
   const [observedAt, setObservedAt] = React.useState(research?.observedAt ?? "")
   const [sources, setSources] = React.useState(research?.sources.join("\n") ?? "")
   const dirty = title !== baseline.metadata.title ||
@@ -882,36 +920,32 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
 
   async function submit(): Promise<void> {
     const sent = revision
-    try {
-      await api.action({
-        action: "document.metadata",
-        reference: baseline.path,
-        expectedDigest: baseline.digest,
-        title,
-        ...(baseline.metadata.kind === "research"
-          ? {
-              observedAt: observedAt.trim() || null,
-              sources: sources.split("\n").map((value) => value.trim()).filter(Boolean),
-            }
-          : {}),
-      })
-      await refresh()
-      const latest = await api.workspace()
-      const saved = latest.documents.find((item) => item.path === baseline.path)
-      if (!saved) throw new Error("保存后无法重新读取文档。")
-      flushSync(() => {
-        setBaseline(saved)
-        if (currentRevision.current === sent) {
-          setTitle(saved.metadata.title)
-          if (saved.metadata.kind === "research") {
-            setObservedAt(saved.metadata.observedAt ?? "")
-            setSources(saved.metadata.sources.join("\n"))
+    await api.action({
+      action: "document.metadata",
+      reference: baseline.path,
+      expectedDigest: baseline.digest,
+      title,
+      ...(baseline.metadata.kind === "research"
+        ? {
+            observedAt: observedAt.trim() || null,
+            sources: sources.split("\n").map((value) => value.trim()).filter(Boolean),
           }
+        : {}),
+    })
+    const file = await api.file(baseline.path)
+    const saved = file.document
+    if (!saved) throw new Error("保存后无法重新读取文档。")
+    flushSync(() => {
+      setBaseline(saved)
+      if (currentRevision.current === sent) {
+        setTitle(saved.metadata.title)
+        if (saved.metadata.kind === "research") {
+          setObservedAt(saved.metadata.observedAt ?? "")
+          setSources(saved.metadata.sources.join("\n"))
         }
-      })
-    } catch (cause) {
-      throw cause
-    }
+      }
+    })
+    await requestRefresh().catch(() => undefined)
   }
   const autoSave = useAutoSave({ dirty, revision, save: submit, discard: () => {
     setTitle(baseline.metadata.title)
@@ -924,7 +958,7 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
     <>
       <PanelHeader title="元数据" actions={<span className="form-status" role="status">{autoSave.status}</span>} />
       <ContentSection title="身份信息" className="form-section">
-        <dl><Definition label="类型">{humanKind(document.metadata.kind)}</Definition><Definition label="ID"><code>{document.metadata.id}</code></Definition><Definition label="创建于">{document.metadata.createdAt}</Definition></dl>
+        <dl><Definition label="类型">{humanKind(baseline.metadata.kind)}</Definition><Definition label="ID"><code>{baseline.metadata.id}</code></Definition><Definition label="创建于">{baseline.metadata.createdAt}</Definition></dl>
       </ContentSection>
       <ContentSection title="可编辑字段" className="form-section">
         <form className="form-grid" onSubmit={event => { event.preventDefault(); void autoSave.flush().catch(() => undefined) }}>
@@ -944,7 +978,7 @@ function MetadataForm({ document }: { document: DocumentRecord }) {
   )
 }
 
-function Lifecycle({ document }: { document: DocumentRecord }) {
+function Lifecycle({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   const history = metadata.kind === "memory" || metadata.kind === "issue" ? metadata.history : []
   return (
@@ -970,7 +1004,7 @@ function Lifecycle({ document }: { document: DocumentRecord }) {
   )
 }
 
-function LifecycleActions({ document }: { document: DocumentRecord }) {
+function LifecycleActions({ document }: { document: WorkspaceDocument }) {
   const { act, snapshot } = useWorkspace()
   const metadata = document.metadata
   const [reason, setReason] = React.useState("")

@@ -218,7 +218,7 @@ function statusUnderSnapshot(repo: Repository): { readonly status: string; reado
     hawdbIdentity();
     if (!inventory.existing || inventory.empty) return { status: 'empty', path };
     return withPersistentCache(repo, false, db => {
-      const projections = db!.namespaces().filter(name => name.endsWith('_cache'));
+      const projections = db!.namespaces().filter(name => name.endsWith('_cache') || name === 'workspace_projection');
       for (const namespace of projections) db!.scan(namespace);
       return { status: projections.length === 0 ? 'empty' : 'ready', path, detail: `projections: ${projections.join(', ')}` };
     });

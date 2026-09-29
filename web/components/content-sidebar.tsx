@@ -27,6 +27,7 @@ export interface ContentSidebarGroup {
   readonly heading?: string;
   readonly items: readonly ContentSidebarItem[];
   readonly emptyMessage?: string;
+  readonly filterEmptyMessage?: string;
   readonly treeRoot?: string;
   readonly filterable?: boolean;
   readonly actions?: SidebarSlot;
@@ -108,14 +109,14 @@ export function ContentSidebar({ model, actions }: { model: ContentSidebarModel;
     </div>
     {model.filter && <Input className="mb-3" aria-label={model.filter.label} placeholder={model.filter.placeholder} value={query} onChange={event => setQuery(event.target.value)} />}
     {model.groups.map((group, index) => {
-      const items = group.items.filter(item => !model.filter || group.filterable === false || `${item.title} ${item.id} ${item.searchText ?? ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
+      const items = group.items.filter(item => !model.filter || group.filterable === false || `${item.title} ${item.id} ${item.path ?? ''} ${item.searchText ?? ''}`.toLocaleLowerCase().includes(query.toLocaleLowerCase()));
       return <section key={group.id} className={index ? 'document-navigation__section' : undefined}>
       {group.heading && <h2>{group.heading}</h2>}
       {slot(group.actions)}
       {group.content ? slot(group.content) : <ul aria-label={group.label}>{group.treeRoot ? <DirectoryLinks items={items} root={group.treeRoot} query={query} onNavigate={() => setOpen(false)} /> : items.map(item => <li key={item.id}>
         <SidebarItem item={item} onNavigate={() => setOpen(false)} />
       </li>)}</ul>}
-      {!group.content && items.length === 0 && <p className="muted">{query && group.filterable !== false ? "没有匹配项" : group.emptyMessage}</p>}
+      {!group.content && items.length === 0 && <p className="muted">{query && group.filterable !== false ? group.filterEmptyMessage ?? "没有匹配项" : group.emptyMessage}</p>}
       {slot(group.footer)}
     </section>; })}
   </nav>;

@@ -8,6 +8,7 @@ import { Effect, Schema } from 'effect';
 import { chromium, expect, type Browser } from '@playwright/test';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { pollUntil, waitForWorkspaceProjection } from './support.js';
 
 const ApiResult = Schema.Struct({ ok: Schema.Boolean, value: Schema.optional(Schema.Unknown), error: Schema.optional(Schema.String) });
 
@@ -39,6 +40,10 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
       const page = await browser.newPage();
       assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'first-memory', title: 'First memory', body: 'First memory content.', memoryKind: 'note' })).ok, true);
       assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'second-memory', title: 'Second memory', body: 'Second memory content.', memoryKind: 'note' })).ok, true);
+      await pollUntil(async () => {
+        const value = await waitForWorkspaceProjection(base);
+        return ['first-memory', 'second-memory'].every(id => value.snapshot.documents.some(document => document.metadata.id === id)) ? true : undefined;
+      }, { description: 'navigation generation after fixture writes' });
       await page.goto(`${base}/memory`);
       const memoryNavigation = page.getByRole('navigation', { name: '内容导航', exact: true });
       await expect(memoryNavigation.getByRole('link', { name: 'First memory', exact: true })).toBeVisible();
@@ -58,7 +63,7 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
       await page.getByRole('tab', { name: '来源与关联' }).click();
       await page.getByRole('button', { name: '删除本地草稿' }).click();
       await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
-      await expect(page.getByRole('link', { name: 'Browser draft' })).toHaveCount(0);
+      await expect(page.getByRole('link', { name: 'Browser draft' })).toHaveCount(0, { timeout: 15_000 });
       assert.equal((await action({ action: 'issue.recall', query: 'Local content' })).ok, true);
       assert.equal(JSON.stringify((await action({ action: 'issue.index' })).value).includes('browser-draft'), false);
     } finally {

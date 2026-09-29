@@ -7,8 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { Effect, Schema } from 'effect';
-import { executeViewAction, getViewGitStatus, getViewFile, validateViewRoot } from './application.js';
-import { ViewScanManager } from './view-scan.js';
+import { decodeViewAction, executeViewAction, getViewGitStatus, getViewFile, validateViewRoot } from './application.js';
+import { ViewProjectionManager } from './view-projection.js';
 import { closeGitBaselineCache, getGitDiff, type GitArea, type GitBaselineCache } from './git-view.js';
 import { ConcordError, decode, digest, failure } from './shared.js';
 import { ViewJobManager } from './view-jobs.js';
@@ -88,6 +88,8 @@ function json(response: ServerResponse, status: number, value: ViewResponse<unkn
 const success = (response: ServerResponse, value: unknown, status = 200): void => json(response, status, { ok: true, value });
 
 function statusFor(error: ConcordError): number {
+  if (error.code === 'WorkspaceProjectionPending') return 202;
+  if (error.code === 'WorkspaceProjectionUnavailable') return 503;
   if (error.code === 'ForbiddenAuthority') return 403;
   if (error.code === 'BodyTooLarge') return 413;
   if (['RepositoryBusy', 'RecoveryRequired', 'RecoveryConflict', 'PreimageChanged', 'ProjectExists', 'DocumentExists', 'DecisionExists', 'DecisionSourceUncommitted', 'DuplicatePromotion', 'DuplicateLink', 'InvalidMemoryState', 'InvalidRoadmapState', 'InvalidIssueState', 'OpenProblem', 'JobBusy', 'CleanupFailed', 'ServerStopping', 'CodeSourceChanged'].includes(error.code)) return 409;
@@ -100,7 +102,7 @@ function failed(request: IncomingMessage, response: ServerResponse, cause: unkno
   const value: ViewFailure = { ok: false, error: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) };
   const status = statusFor(error);
   // Error details are returned to the caller, not copied into request logs.
-  process.stderr.write(`Concord view error ${JSON.stringify({ status, code: error.code })}\n`);
+  if (error.code !== 'WorkspaceProjectionPending') process.stderr.write(`Concord view error ${JSON.stringify({ status, code: error.code })}\n`);
   if (!response.destroyed) json(response, status, value);
 }
 
@@ -261,20 +263,18 @@ function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoo
   sendCompressible(request, response, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:white;color:#171717}body{margin:8px;font-family:system-ui;min-height:84px}canvas{display:block;max-width:100%;height:auto}</style></head><body><script>${runtime}</script></body></html>`);
 }
 
-async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, scans: ViewScanManager, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming): Promise<void> {
+async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, scans: ViewProjectionManager, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming): Promise<void> {
   const method = request.method ?? 'GET';
   const respond = (value: unknown, status = 200) => timing.sync('http.response', () => success(response, value, status));
   if (method === 'GET' && url.pathname === '/api/workspace') {
     exactQuery(url, []);
-    const controller = new AbortController();
-    const cancel = () => { if (!response.writableFinished) controller.abort(); };
-    response.once('close', cancel);
-    if (response.destroyed) controller.abort();
-    const scan = await timing.async('http.workspace', () => scans.scan(controller.signal)).finally(() => response.off('close', cancel));
-    for (const phase of scan.phases) timing.record(phase.name, phase.ms);
-    for (const observation of scan.observations) timing.observations.add(observation);
-    Object.assign(timing.caches, scan.caches);
-    const body = `${scan.body}\n`;
+    let value;
+    try { value = timing.sync('http.workspaceCache', () => scans.read()); }
+    catch (cause) {
+      if (cause instanceof ConcordError && cause.code === 'RecoveryRequired') return json(response, 503, { ok: false, error: cause.code, message: cause.message });
+      throw cause;
+    }
+    const body = `${JSON.stringify({ ok: true, value })}\n`;
     const etag = `"${digest(body)}"`;
     securityHeaders(response);
     response.setHeader('ETag', etag);
@@ -288,6 +288,13 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
       timing.sync('http.compressResponse', () => sendCompressible(request, response, body));
     }
     return;
+  }
+  if (method === 'POST' && url.pathname === '/api/workspace') {
+    exactQuery(url, []);
+    mutationJson(request);
+    decode(Schema.Record(Schema.String, Schema.Never), await readJson(request), 'workspace refresh');
+    scans.retry();
+    return respond({ status: 'requested' }, 202);
   }
   if (method === 'GET' && url.pathname === '/api/file') {
     exactQuery(url, ['path']);
@@ -303,8 +310,11 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   if (method === 'POST' && url.pathname === '/api/action') {
     exactQuery(url, []);
     mutationJson(request);
-    const input = await timing.async('http.readBody', () => readJson(request));
-    return respond(await timing.async('http.action', () => runAction(input, response, timing)));
+    const input = decodeViewAction(await timing.async('http.readBody', () => readJson(request)));
+    const result = await timing.async('http.action', () => runAction(input, response, timing));
+    if (typeof result === 'object' && result !== null && ('changedPaths' in result && Array.isArray(result.changedPaths) && result.changedPaths.length > 0 && !('dryRun' in result && result.dryRun)
+      || ['recover', 'feedback.sync', 'cache.clear', 'cache.rebuild'].includes(input.action) && !('dryRun' in input && input.dryRun))) scans.request(true);
+    return respond(result);
   }
   if (method === 'GET' && url.pathname === '/api/jobs') {
     exactQuery(url, []);
@@ -340,8 +350,8 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   const requestedPort = options.port ?? 4317;
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? join(dirname(fileURLToPath(import.meta.url)), 'web');
-  const jobs = new ViewJobManager(root);
-  const scans = new ViewScanManager(root);
+  const scans = new ViewProjectionManager(root);
+  const jobs = new ViewJobManager(root, () => scans.request(true));
   const baselineCache: GitBaselineCache = {};
   const requestLog = new ViewRequestLog();
   let stopping = false;
@@ -414,6 +424,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       finally { requestLog.close(); closeGitBaselineCache(baselineCache); }
     })(),
   };
+  scans.request();
   return handle;
 }
 

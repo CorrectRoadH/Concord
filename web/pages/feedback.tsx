@@ -1,7 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
-import { matchesFeedback } from "../../src/feedback-filter"
 import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
 import { ExternalLink, GitPullRequestArrow, Link2, Plus, RefreshCw, Trash2 } from "lucide-react"
 import * as React from "react"
@@ -10,8 +9,8 @@ import ReactMarkdown from "react-markdown"
 import { Link, useMatch, useNavigate, useParams } from "react-router-dom"
 import remarkGfm from "remark-gfm"
 
-import type { FeedbackConnection, FeedbackItem, FeedbackSource } from "../../src/feedback-schema"
-import type { ViewAction } from "../../src/view-contract"
+import type { FeedbackConnection, FeedbackItem } from "../../src/feedback-schema"
+import type { ViewAction, WorkspaceFeedback } from "../../src/view-contract"
 import { connectionSummary } from "@/components/feedback-connections"
 import { DocumentDetailPage } from "@/pages/documents"
 import { Definition, Empty, Field } from "@/components/page"
@@ -24,7 +23,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { availabilityLabel, dateTime, feedbackProviderLabel, feedbackTriageLabel } from "@/lib/utils"
-import { useWorkspace } from "@/workspace"
+import { projectionIsConclusive, useWorkspace } from "@/workspace"
 
 type ProviderFilter = "all" | "local" | FeedbackConnection["provider"]
 type TriageFilter = "all" | FeedbackItem["triage"]
@@ -35,15 +34,17 @@ function receiptWarnings(value: unknown): readonly string[] {
   return value.warnings.filter((warning): warning is string => typeof warning === "string")
 }
 
-function sourceOf(item: FeedbackItem): FeedbackSource | undefined {
-  return item.document.metadata.kind === "issue" ? item.document.metadata.source : undefined
+/** Search indexes identity, titles and URLs only; owner bodies stay out of the projection. */
+function searchText(item: WorkspaceFeedback | FeedbackItem): string {
+  const metadata = item.document.metadata
+  const source = metadata.kind === "issue" ? metadata.source : undefined
+  return [metadata.id, metadata.title, item.document.path, item.remote?.url, item.remote?.title, source?.url, source?.title].filter(Boolean).join(" ").toLocaleLowerCase()
 }
-function providerOf(item: FeedbackItem): FeedbackItem["provider"] {
-  return item.provider
-}
-function searchText(item: FeedbackItem): string {
-  const source = sourceOf(item)
-  return [item.document.metadata.id, item.document.metadata.title, item.document.body, item.remote?.title, item.remote?.body, item.remote?.url, source?.title, source?.body, source?.url, providerOf(item)].filter(Boolean).join(" ").toLocaleLowerCase()
+function matchesProjectedFeedback(item: WorkspaceFeedback, filter: { readonly query: string; readonly provider: ProviderFilter; readonly triage: TriageFilter }): boolean {
+  if (filter.provider !== "all" && item.provider !== filter.provider) return false
+  if (filter.triage !== "all" && item.triage !== filter.triage) return false
+  const query = filter.query.trim().toLocaleLowerCase()
+  return query.length === 0 || searchText(item).includes(query)
 }
 function CreateLocalFeedback() {
   const { act, busy } = useWorkspace()
@@ -92,54 +93,89 @@ function FeedbackSources({ connections, onReceipt }: { connections: readonly Fee
 }
 
 export function FeedbackNavigation() {
-  const { snapshot } = useWorkspace()
+  const { snapshot, projection } = useWorkspace()
+  const conclusive = projectionIsConclusive(projection)
   const id = useMatch("/feedback/:id")?.params.id
   const feedback = snapshot.feedback
   const [query, setQuery] = React.useState("")
   const [provider, setProvider] = React.useState<ProviderFilter>("all")
   const [triage, setTriage] = React.useState<TriageFilter>("all")
-  const visible = feedback.filter(item => matchesFeedback(item, { query, ...(provider === "all" ? {} : { provider }), ...(triage === "all" ? {} : { triage }) }))
+  const visible = feedback.filter(item => matchesProjectedFeedback(item, { query, provider, triage }))
+  const filtered = query.trim().length > 0 || provider !== "all" || triage !== "all"
   return <ContentSidebar model={{ label: '反馈', title: '反馈',
     back: id ? { title: '返回反馈列表', href: '/feedback' } : undefined,
-    filter: feedback.length ? { label: '搜索反馈', placeholder: '搜索标题、ID、正文或来源 URL…', value: query, onChange: setQuery } : undefined,
+    filter: feedback.length ? { label: '搜索反馈', placeholder: '搜索标题、ID、路径或来源 URL…', value: query, onChange: setQuery } : undefined,
     groups: [{ id: 'feedback', label: '反馈列表', items: visible.map(item => ({
       id: item.document.path, path: item.document.path, title: item.document.metadata.title, href: `/feedback/${encodeURIComponent(item.document.metadata.id)}`,
       active: item.document.metadata.id === id, searchText: searchText(item),
       suffix: <span className="text-xs text-muted-foreground">{feedbackTriageLabel(item.triage)} · {feedbackProviderLabel(item.provider)}{item.warnings.length > 0 && <span title={item.warnings.join("；")}> · 有提醒</span>}</span>,
-    })), filterable: false, emptyMessage: feedback.length ? '没有匹配的反馈' : '还没有反馈',
+    })), filterable: false, emptyMessage: filtered
+      ? conclusive ? '没有匹配的反馈' : '当前代次未显示匹配反馈；列表可能不完整'
+      : feedback.length ? '没有匹配的反馈' : conclusive ? '还没有反馈' : '当前代次未显示反馈；列表可能不完整',
     actions: feedback.length > 0 ? <div className="feedback-toolbar"><Select value={provider} onValueChange={(value) => setProvider(value as ProviderFilter)}><SelectTrigger aria-label="按来源筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部来源</SelectItem><SelectItem value="local">仅本地</SelectItem><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select><Select value={triage} onValueChange={(value) => setTriage(value as TriageFilter)}><SelectTrigger aria-label="按处理状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="pending">待处理</SelectItem><SelectItem value="linked">已关联</SelectItem><SelectItem value="closed">已关闭</SelectItem></SelectContent></Select></div> : undefined,
     }],
   }} />
 }
 
 export function FeedbackPage() {
-  const { snapshot } = useWorkspace()
+  const { snapshot, projection } = useWorkspace()
+  const conclusive = projectionIsConclusive(projection)
   const feedback = snapshot.feedback
   const connections = snapshot.project?.feedbackConnections ?? []
   const [receiptNotices, setReceiptNotices] = React.useState<readonly string[]>([])
   return <><div role="toolbar" aria-label="反馈操作" className="button-row justify-end mb-3"><CreateLocalFeedback />{connections.length > 0 && <ImportFeedback connections={connections} onReceipt={setReceiptNotices} />}</div>
     <FeedbackSources connections={connections} onReceipt={setReceiptNotices} />
     {receiptNotices.length > 0 && <div className="callout callout--warning feedback-receipt-warnings"><div><strong>同步已完成，但有提醒</strong>{receiptNotices.map((warning) => <p key={warning}>{warning}</p>)}</div><Button size="sm" variant="ghost" onClick={() => setReceiptNotices([])}>关闭</Button></div>}
-    {feedback.length === 0 ? <PanelEmpty title="新建第一条反馈">新建本地反馈，或前往<Link to="/settings?tab=feedback">反馈来源设置</Link>添加连接。</PanelEmpty> : <PanelEmpty title="选择反馈">从内容导航选择反馈，查看正文、来源与处理状态。</PanelEmpty>}
+    {feedback.length === 0 ? conclusive
+      ? <PanelEmpty title="新建第一条反馈">新建本地反馈，或前往<Link to="/settings?tab=feedback">反馈来源设置</Link>添加连接。</PanelEmpty>
+      : <PanelEmpty title="当前代次未显示反馈">投影尚未完整且一致，暂时无法确认反馈是否存在。</PanelEmpty>
+      : <PanelEmpty title="选择反馈">从内容导航选择反馈，查看正文、来源与处理状态。</PanelEmpty>}
 
   </>
 }
 
-function SourcePanel({ item }: { item: FeedbackItem }) {
-  const source = sourceOf(item); const remote = item.remote
-  if (!source) return <Card className="feedback-source-card"><CardHeader><CardTitle>来源</CardTitle><CardDescription>这是本地创建的反馈，没有远端来源快照。</CardDescription></CardHeader></Card>
-  return <Card className="feedback-source-card"><CardHeader><div className="card-title-row"><div><CardTitle>远端来源（只读）</CardTitle><CardDescription>“上次观察缓存”来自最近一次成功同步，不代表远端实时最新；页面只展示已保存的信息。</CardDescription></div><Button asChild size="sm" variant="outline"><a href={source.url} target="_blank" rel="noreferrer"><ExternalLink /> 打开远端</a></Button></div></CardHeader><CardContent><div className="feedback-source-facts"><Definition label="来源">{feedbackProviderLabel(source.provider)}</Definition><Definition label="连接"><code>{source.connectionId}</code></Definition><Definition label="远端 ID"><code>{source.id}</code></Definition><Definition label="本地状态"><Badge variant="outline">{item.document.metadata.state}</Badge></Definition><Definition label="可用性">{availabilityLabel(item.availability)}</Definition></div><div className="feedback-source-snapshots"><section><div className="feedback-snapshot-heading"><div><strong>首次导入快照</strong><small>永久保留，不被刷新替换</small></div><span>{dateTime(source.updatedAt)}</span></div><Badge variant="outline">远端状态：{source.state}</Badge><article className="feedback-source-markdown"><h3>{source.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{source.body}</ReactMarkdown></article><small>导入于 {dateTime(source.importedAt)}</small></section><section><div className="feedback-snapshot-heading"><div><strong>上次观察缓存</strong><small>非实时；只表示最近成功观察</small></div><span>{remote ? dateTime(remote.updatedAt) : "不可用"}</span></div>{remote ? <><Badge variant="secondary">远端状态：{remote.state}</Badge><article className="feedback-source-markdown"><h3>{remote.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{remote.body}</ReactMarkdown></article></> : <p className="muted">当前没有可读的远端缓存；首次导入快照仍可用。</p>}</section></div>{item.warnings.length > 0 && <div className="callout callout--warning"><div><strong>来源提醒</strong>{item.warnings.map((warning) => <p key={warning}>{warning}</p>)}</div></div>}</CardContent></Card>
+/** Full source body always comes from the targeted current read, never the projection. */
+function SourcePanel({ item }: { item: WorkspaceFeedback }) {
+  const { api } = useWorkspace()
+  const [full, setFull] = React.useState<FeedbackItem | null>(null)
+  const [error, setError] = React.useState("")
+  const [attempt, setAttempt] = React.useState(0)
+  React.useEffect(() => {
+    const controller = new AbortController()
+    setFull(null); setError("")
+    void api.file(item.document.path, controller.signal).then((file) => {
+      if (!controller.signal.aborted) {
+        if (file.feedback) setFull(file.feedback)
+        else setError("当前文件响应不包含反馈正文。")
+      }
+    }).catch((cause: unknown) => {
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
+    })
+    return () => controller.abort()
+  }, [api, attempt, item.document.path])
+  // Cross-file warnings can only come from the structural projection, not the directed read.
+  const warnings = item.warnings
+  const warningCallout = warnings.length > 0 && <div className="callout callout--warning"><div><strong>来源提醒</strong>{warnings.map((warning) => <p key={warning}>{warning}</p>)}</div></div>
+  if (error) return <><Card className="feedback-source-card"><CardHeader><CardTitle>来源</CardTitle><CardDescription>无法读取反馈来源正文。<Button size="sm" variant="outline" onClick={() => setAttempt((value) => value + 1)}>重试</Button></CardDescription></CardHeader></Card>{warningCallout}</>
+  if (!full) return <><Card className="feedback-source-card"><CardHeader><CardTitle>来源</CardTitle><CardDescription>正在读取来源正文…</CardDescription></CardHeader></Card>{warningCallout}</>
+  return <><SourceFacts item={full} />{warningCallout}</>
 }
 
-function RemoveLocalDraft({ item }: { item: FeedbackItem }) {
-  const { snapshot, act, busy } = useWorkspace()
+function SourceFacts({ item }: { item: FeedbackItem }) {
+  const source = item.document.metadata.kind === "issue" ? item.document.metadata.source : undefined; const remote = item.remote
+  if (!source) return <Card className="feedback-source-card"><CardHeader><CardTitle>来源</CardTitle><CardDescription>这是本地创建的反馈，没有远端来源快照。</CardDescription></CardHeader></Card>
+  return <Card className="feedback-source-card"><CardHeader><div className="card-title-row"><div><CardTitle>远端来源（只读）</CardTitle><CardDescription>“上次观察缓存”来自最近一次成功同步，不代表远端实时最新；页面只展示已保存的信息。</CardDescription></div><Button asChild size="sm" variant="outline"><a href={source.url} target="_blank" rel="noreferrer"><ExternalLink /> 打开远端</a></Button></div></CardHeader><CardContent><div className="feedback-source-facts"><Definition label="来源">{feedbackProviderLabel(source.provider)}</Definition><Definition label="连接"><code>{source.connectionId}</code></Definition><Definition label="远端 ID"><code>{source.id}</code></Definition><Definition label="本地状态"><Badge variant="outline">{item.document.metadata.state}</Badge></Definition><Definition label="可用性">{availabilityLabel(item.availability)}</Definition></div><div className="feedback-source-snapshots"><section><div className="feedback-snapshot-heading"><div><strong>首次导入快照</strong><small>永久保留，不被刷新替换</small></div><span>{dateTime(source.updatedAt)}</span></div><Badge variant="outline">远端状态：{source.state}</Badge><article className="feedback-source-markdown"><h3>{source.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{source.body}</ReactMarkdown></article><small>导入于 {dateTime(source.importedAt)}</small></section><section><div className="feedback-snapshot-heading"><div><strong>上次观察缓存</strong><small>非实时；只表示最近成功观察</small></div><span>{remote ? dateTime(remote.updatedAt) : "不可用"}</span></div>{remote ? <><Badge variant="secondary">远端状态：{remote.state}</Badge><article className="feedback-source-markdown"><h3>{remote.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{remote.body}</ReactMarkdown></article></> : <p className="muted">当前没有可读的远端缓存；首次导入快照仍可用。</p>}</section></div></CardContent></Card>
+}
+
+function RemoveLocalDraft({ item }: { item: WorkspaceFeedback }) {
+  const { snapshot, projection, act, busy } = useWorkspace()
   const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [error, setError] = React.useState("")
   const metadata = item.document.metadata
   const candidate = item.provider === "local" && metadata.state === "draft" && metadata.source === undefined && metadata.origin === undefined && metadata.closure === undefined && metadata.history.length === 0 && metadata.memoryRelations.length === 0 && metadata.adoptions.current.length === 0 && metadata.adoptions.history.length === 0
   const incoming = snapshot.edges.some((edge) => edge.from !== item.document.path && [item.document.path, metadata.id].includes(edge.to.split("#")[0] ?? ""))
-  if (!candidate || incoming || snapshot.findings.length > 0) return null
+  if (!projectionIsConclusive(projection) || !candidate || incoming || snapshot.findings.length > 0) return null
   async function remove(): Promise<void> {
     setError("")
     try {
@@ -151,8 +187,9 @@ function RemoveLocalDraft({ item }: { item: FeedbackItem }) {
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline"><Trash2 /> 删除本地草稿</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>删除本地草稿</DialogTitle><DialogDescription>将删除 {metadata.title} 的本地 Issue 文件。已有来源、关系或历史的记录不能删除。</DialogDescription></DialogHeader>{error && <div className="form-error" role="alert">{error}</div>}<DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="button" variant="destructive" disabled={busy} onClick={() => fire(remove())}>删除</Button></DialogFooter></DialogContent></Dialog>
 }
 
-function FeatureLinker({ item }: { item: FeedbackItem }) {
-  const { snapshot, act, busy } = useWorkspace()
+function FeatureLinker({ item }: { item: WorkspaceFeedback }) {
+  const { snapshot, projection, act, busy } = useWorkspace()
+  const conclusive = projectionIsConclusive(projection)
   const features = snapshot.documents.filter((document) => document.metadata.kind === "feature")
   const linked = item.document.metadata.kind === "issue" ? item.document.metadata.adoptions.current : []
   const available = features.filter((candidate) => !linked.some((reference) => reference === candidate.path || reference === candidate.metadata.id))
@@ -164,12 +201,14 @@ function FeatureLinker({ item }: { item: FeedbackItem }) {
     try { const action: ViewAction = { action: "feedback.link", id: item.document.metadata.id, feature }; await act(action, "反馈已关联 Feature。") }
     catch (cause) { setError(errorMessage(cause)) }
   }
-  return <Card className="feedback-feature-card"><CardHeader><CardTitle>Feature 关联</CardTitle><CardDescription>关联后处理状态会变为“已关联”；Memory 关系和关闭操作在生命周期页签中维护。</CardDescription></CardHeader><CardContent>{linked.length > 0 && <div className="tag-list">{linked.map((reference) => <code key={reference}>{reference}</code>)}</div>}{available.length > 0 ? <div className="feedback-link-row"><Select value={feature} onValueChange={setFeature}><SelectTrigger aria-label="关联 Feature"><SelectValue placeholder="选择 Feature" /></SelectTrigger><SelectContent>{available.map((candidate) => <SelectItem key={candidate.path} value={candidate.path}>{candidate.metadata.title} · {candidate.metadata.id}</SelectItem>)}</SelectContent></Select><Button variant="outline" disabled={busy || !feature} onClick={() => fire(linkFeature())}><Link2 /> 关联 Feature</Button></div> : <p className="muted">{features.length === 0 ? "项目中还没有 Feature。" : "已关联所有可用 Feature。"}</p>}{error && <div className="form-error" role="alert">{error}</div>}</CardContent></Card>
+  return <Card className="feedback-feature-card"><CardHeader><CardTitle>Feature 关联</CardTitle><CardDescription>关联后处理状态会变为“已关联”；Memory 关系和关闭操作在生命周期页签中维护。</CardDescription></CardHeader><CardContent>{linked.length > 0 && <div className="tag-list">{linked.map((reference) => <code key={reference}>{reference}</code>)}</div>}{available.length > 0 ? <><div className="feedback-link-row"><Select value={feature} onValueChange={setFeature}><SelectTrigger aria-label="关联 Feature"><SelectValue placeholder="选择 Feature" /></SelectTrigger><SelectContent>{available.map((candidate) => <SelectItem key={candidate.path} value={candidate.path}>{candidate.metadata.title} · {candidate.metadata.id}</SelectItem>)}</SelectContent></Select><Button variant="outline" disabled={!conclusive || busy || !feature} onClick={() => fire(linkFeature())}><Link2 /> 关联 Feature</Button></div>{!conclusive && <p className="muted">当前投影不完整或关系未知，暂不能确认可关联的 Feature。</p>}</> : <p className="muted">{!conclusive ? "当前代次无法确认 Feature 列表或关联状态。" : features.length === 0 ? "项目中还没有 Feature。" : "已关联所有可用 Feature。"}</p>}{error && <div className="form-error" role="alert">{error}</div>}</CardContent></Card>
 }
 
 export function FeedbackDetailPage() {
-  const { id = "" } = useParams(); const { snapshot } = useWorkspace()
+  const { id = "" } = useParams(); const { snapshot, projection } = useWorkspace()
   const item = snapshot.feedback.find((candidate) => candidate.document.metadata.id === id)
-  if (!item) return <Empty kind="missing" title="找不到反馈">它可能已被移动、删除或尚未导入。</Empty>
+  if (!item) return projectionIsConclusive(projection)
+    ? <Empty kind="missing" title="找不到反馈">它可能已被移动、删除或尚未导入。</Empty>
+    : <Empty title="当前代次未包含此反馈">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
   return <><DocumentDetailPage kind="issue" relatedContent={<><PanelHeader title="来源与关联" /><RemoveLocalDraft item={item} /><div className="feedback-detail-context"><SourcePanel item={item} /><FeatureLinker item={item} /></div></>} /></>
 }

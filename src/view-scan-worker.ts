@@ -2,17 +2,20 @@
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { NodeRuntime } from '@effect/platform-node';
 import { Effect, Queue, Schema } from 'effect';
-import { getWorkspaceSnapshot } from './application.js';
+import { observeWorkspaceProjection } from './application.js';
+import { makeWorkspaceProjectionRecord, WORKSPACE_PROJECTION_LIMIT } from './workspace-projection.js';
 import { ConcordError, failure } from './shared.js';
 import { RequestTiming } from './view-request-log.js';
-import { MAX_SCAN_REPLY_BYTES, ScanRequest, ScanMessage } from './view-scan-protocol.js';
+import { ScanRequest, ScanMessage } from './view-scan-protocol.js';
 
 const scan = (root: string, id: number) => Effect.gen(function*() {
   const timing = new RequestTiming(performance.now());
-  const value = yield* getWorkspaceSnapshot(root, 'use', timing);
-  timing.workspace(value);
-  const body = JSON.stringify({ ok: true, value });
-  if (Buffer.byteLength(body, 'utf8') > MAX_SCAN_REPLY_BYTES) return yield* Effect.fail(new ConcordError('WorkspaceScanOutputLimit', 'Workspace reply exceeds 128 MiB'));
+  const builtFrom = new Date().toISOString();
+  const { snapshot, drift } = yield* observeWorkspaceProjection(root, timing);
+  timing.workspace(snapshot);
+  const value = yield* Effect.try({ try: () => makeWorkspaceProjectionRecord(snapshot, drift, builtFrom), catch: failure });
+  const body = JSON.stringify(value);
+  if (Buffer.byteLength(body, 'utf8') > WORKSPACE_PROJECTION_LIMIT) return yield* Effect.fail(new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds 8 MiB'));
   return { kind: 'success' as const, body, phases: timing.result(), observations: [...timing.observations], caches: timing.caches };
 }).pipe(
   Effect.catch(cause => { const error = failure(cause); return Effect.succeed({ kind: 'failure' as const, code: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) }); }),
