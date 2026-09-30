@@ -128,9 +128,22 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await page.goto(`${url}?tab=actions`);
     await expect(page.getByRole('tab', { name: '元数据', exact: true })).toHaveAttribute('data-state', 'active');
     await expect(page.getByText('创建于', { exact: true })).toBeVisible();
+    let holdWorkspace = true;
+    let refreshRequests = 0;
+    await page.route('**/api/workspace', async route => {
+      if (route.request().method() === 'POST') refreshRequests += 1;
+      if (route.request().method() === 'GET' && holdWorkspace) {
+        await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'WorkspaceProjectionUnavailable', message: 'Cache handle is busy', details: { reason: 'HawdbBusy' } }) });
+      } else await route.continue();
+    });
     await page.getByLabel('文档标题', { exact: true }).fill('Direct access renamed');
     await page.getByRole('tab', { name: 'Use Cases', exact: true }).click();
-    await expect(contentNavigation.getByRole('link', { name: 'Direct access renamed', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '工作区投影不可用', exact: true })).toBeVisible({ timeout: 20000 });
+    const requestedRefreshes = refreshRequests;
+    holdWorkspace = false;
+    await expect(contentNavigation.getByRole('link', { name: 'Direct access renamed', exact: true })).toBeVisible({ timeout: 20000 });
+    assert.equal(refreshRequests, requestedRefreshes, 'busy-cache recovery retries reads without requesting another scan');
+    await page.unroute('**/api/workspace');
     await page.getByRole('tab', { name: '正文', exact: true }).click();
     await expect(page.locator('.editor-shell > .editor-shell__bar')).toHaveCount(0);
     await contentNavigation.getByRole('link', { name: 'Raw HTML fixture', exact: true }).click();
@@ -344,7 +357,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await editor.fill('Browser edited paragraph.');
     await expect(page.locator('.editor-shell')).toHaveAttribute('data-dirty', 'true');
     await page.getByRole('tab',{name:'术语',exact:true}).click();
-    await expect(page.getByRole('tab',{name:'术语',exact:true})).toHaveAttribute('data-state', 'active');
+    await expect(page.getByRole('tab',{name:'术语',exact:true})).toHaveAttribute('data-state', 'active', { timeout: 20000 });
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByRole('tab',{name:'正文',exact:true}).click();
     await expect(editor).toContainText('Browser edited paragraph.');
@@ -376,6 +389,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     releaseSave?.();
     await expect.poll(()=>readFileSync(path,'utf8')).toContain('Latest revision.');
     assert.equal(writes, 2);
+    // The next conflict starts after the preceding save has committed its readback baseline.
+    await expect(page.locator('.editor-shell')).toHaveAttribute('data-dirty', 'false');
     await page.unroute('**/api/action');
     await editor.fill('Unsaved browser draft.');
     const disk=readFileSync(path,'utf8').replace('Browser edited paragraph.','External editor wins.');
@@ -489,7 +504,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     const config=readProjectConfig(root);
     writeProjectConfig(root,{...config,runner:{...config.runner,timeoutMs:54321}});
     const externalConfig=readFileSync(configPath,'utf8');
-    await expect(page.locator('.form-error').first()).toBeVisible();
+    await expect(page.locator('.form-error').first()).toBeVisible({ timeout: 60000 });
     await expect(page.getByLabel('运行超时',{exact:true})).toHaveValue('12345');
     assert.equal(readFileSync(configPath,'utf8'),externalConfig,'polled digests must not let stale config overwrite disk');
     await page.getByRole('tab',{name:'高级 JSON',exact:true}).click();

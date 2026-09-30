@@ -6,7 +6,7 @@ import type { GitStatus, ViewAction, ViewJob, WorkspaceProjection, WorkspaceProj
 import { ApiError, ConcordApi } from './lib/api';
 
 interface Notice { readonly id: number; readonly tone: 'success' | 'error' | 'info'; readonly text: string }
-export interface WorkspaceIssue { readonly code: string; readonly message: string; readonly hint?: string }
+export interface WorkspaceIssue { readonly code: string; readonly message: string; readonly hint?: string; readonly reason?: string }
 export interface DraftOwner {
   flush(): Promise<void>;
   discard(): Promise<void>;
@@ -54,7 +54,14 @@ function workspaceIssue(cause: unknown): WorkspaceIssue {
   const hint = typeof details === 'object' && details !== null && 'hint' in details && typeof details.hint === 'string'
     ? details.hint
     : undefined;
-  return { code, message: text, ...(hint ? { hint } : {}) };
+  const reason = typeof details === 'object' && details !== null && 'reason' in details && typeof details.reason === 'string'
+    ? details.reason
+    : undefined;
+  return { code, message: text, ...(hint ? { hint } : {}), ...(reason ? { reason } : {}) };
+}
+
+function retryableProjection(issue: WorkspaceIssue | null): boolean {
+  return issue?.code === 'WorkspaceProjectionPending' || issue?.code === 'WorkspaceProjectionUnavailable' && issue.reason === 'HawdbBusy';
 }
 
 /** Actions that change current sources and therefore request a navigation refresh. */
@@ -135,7 +142,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
       const problem = workspaceIssue(cause);
       workspaceProblemRef.current = problem;
       setWorkspaceProblem(problem);
-      if (problem.code !== 'WorkspaceProjectionPending') {
+      if (!retryableProjection(problem)) {
         writtenAt.current = 0;
         setNavigationUpdating(false);
       }
@@ -177,11 +184,11 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
       // heavier, especially in large dirty worktrees, so refresh them every
       // eighth cycle instead of keeping the repository lock almost continuous.
       // While a write is still waiting for its generation, poll it every cycle.
-      const pending = workspaceProblemRef.current?.code === 'WorkspaceProjectionPending';
+      const pending = retryableProjection(workspaceProblemRef.current);
       if (pending || !initial && (cycle % 8 === 0 || navigationUpdatingRef.current)) await refresh(true);
       else if (initial) await refresh(false);
       else await api.jobs().then(setJobs).catch(() => undefined);
-      if (!stopped) timer = window.setTimeout(() => void poll(), workspaceProblemRef.current?.code === 'WorkspaceProjectionPending' ? 2000 : 4000);
+      if (!stopped) timer = window.setTimeout(() => void poll(), retryableProjection(workspaceProblemRef.current) ? 2000 : 4000);
     };
     // App has just loaded the workspace; only fetch the remaining panels now.
     void poll(true);

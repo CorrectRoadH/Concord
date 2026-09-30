@@ -23,7 +23,9 @@ test('project outlines preview without writes and recover using exact document p
   }
   repo.close();
   repo = new LocalRepository(root, { initialize: true }); initialize(repo);
-  assert.throws(() => repo!.publish('out-of-scope', [{ path: 'docs/arbitrary.md', before: null, after: '# No\n' }]), { code: 'InvalidChange' });
+  repo.publish('project-markdown', [{ path: 'docs/arbitrary.md', before: null, after: '# Project page\n' }]);
+  assert.equal(repo.read('docs/arbitrary.md'), '# Project page\n');
+  assert.throws(() => repo!.publish('out-of-scope', [{ path: 'arbitrary.md', before: null, after: '# No\n' }]), { code: 'InvalidChange' });
   const projectId = repo.config.projectId;
   const frozen = { kind: 'documents', configPath: repo.configSnapshot.path, configSource: repo.configSnapshot.source, configDigest: repo.configSnapshot.digest };
   const changes = ['docs/concepts.md', 'docs/architecture.md'].map(path => {

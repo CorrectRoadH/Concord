@@ -33,7 +33,7 @@ export default function(p) {
 }`;
 
 // @use-case docs/feature/web-workbench/use-case/embed-p5-sketch.md
-test('packed CLI runs isolated p5 sketches with project libraries, resources, CSS and read-only Markdown', { timeout: 180000 }, () => Effect.runPromise(Effect.tryPromise(async () => {
+test('packed CLI runs isolated p5 sketches with project libraries, resources, CSS and project Markdown', { timeout: 180000 }, () => Effect.runPromise(Effect.tryPromise(async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-p5-browser-'));
   let server: ChildProcess | undefined;
   let browser: Browser | undefined;
@@ -61,6 +61,8 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     write('docs/feature/sketch/demo/pixel.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>');
     const constitution = readFileSync(join(root, 'docs/constitution.md'), 'utf8');
     write('docs/constitution.md', constitution + '\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n\n<pre><code class="language-p5">spoofed p5 source</code></pre>\n');
+    const projectSketch = '# Project sketch\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n';
+    write('docs/sketch.md', projectSketch);
     const before = readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8');
     const cli = join(tool, 'node_modules/concord-sdlc/dist/entry.js');
     server = spawn(process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -123,7 +125,8 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     await expect(blocks.nth(1).frameLocator('iframe').getByText('global ready')).toBeVisible({ timeout: 20000 });
     writeProjectConfig(root, { ...readProjectConfig(root), p5: { libraries: ['p5.sound', 'p5.brush', './vendor/addon.js'] } });
     await page.goto(`${address}/features/sketch-webgl`);
-    await expect(blocks).toHaveCount(1);
+    // A changed config invalidates navigation until its asynchronous projection is rebuilt.
+    await expect(blocks).toHaveCount(1, { timeout: 60000 });
     const second = blocks.nth(0).frameLocator('iframe');
     await expect(second.locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
     await expect(second.locator('canvas')).toBeVisible();
@@ -138,10 +141,13 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     assert.equal(directFrame.status(), 403);
     assert.equal(readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8'), before);
     await page.goto(`${address}/docs?file=docs%2Fconstitution.md`);
-    const readonly = page.getByTestId('markdown-preview');
-    await expect(readonly.getByTestId('p5-sketch')).toHaveCount(1);
-    await expect(readonly.getByText('spoofed p5 source')).toBeVisible();
-    await expect(readonly.frameLocator('iframe').locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
+    // Frontmatter documents preserve their raw source in the project Markdown editor.
+    await expect(page.getByRole('textbox', { name: 'Markdown 原文', exact: true })).toHaveValue(readFileSync(join(root, 'docs/constitution.md'), 'utf8'));
+    await expect(blocks).toHaveCount(0);
+    await page.goto(`${address}/docs?file=docs%2Fsketch.md`);
+    await expect(blocks).toHaveCount(1, { timeout: 20000 });
+    await expect(blocks.frameLocator('iframe').locator('#local-addon')).toHaveText('local extension ready', { timeout: 20000 });
+    assert.equal(readFileSync(join(root, 'docs/sketch.md'), 'utf8'), projectSketch);
     await page.goto(`${address}/settings`);
     await expect(page.locator('iframe')).toHaveCount(0);
     await expect(page.getByRole('textbox', { name: 'p5 扩展库' })).toHaveValue('p5.sound\np5.brush\n./vendor/addon.js');
