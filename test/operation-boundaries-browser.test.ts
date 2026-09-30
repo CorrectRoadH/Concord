@@ -40,6 +40,7 @@ test('browser preserves blocked recovery and labels incomplete workspace relatio
     await page.unroute('**/api/workspace');
     await page.reload();
     await expect(page.getByRole('alert').filter({ hasText: '工作区扫描不完整' })).toBeVisible();
+    await page.getByRole('link', { name: '总览', exact: true }).click();
     await expect(page.getByText('InvalidData', { exact: true })).toBeVisible();
   } finally {
     await browser?.close();

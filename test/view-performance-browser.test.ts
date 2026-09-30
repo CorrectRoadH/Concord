@@ -31,7 +31,7 @@ test('incomplete workspace notice opens health diagnostics and dismisses without
     const notice = page.getByRole('link', { name: /查看工作区健康/ });
     await expect(notice).toBeVisible({ timeout: 15000 });
     await notice.click();
-    await expect(page).toHaveURL(/\/#workspace-health$/);
+    await expect(page).toHaveURL(/\/overview#workspace-health$/);
     await expect(page.locator('#workspace-health')).toContainText('docs/feature/broken/README.md');
     await page.getByRole('button', { name: '关闭工作区健康提示' }).click();
     await expect(notice).toHaveCount(0);

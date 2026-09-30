@@ -40,6 +40,7 @@ import { readWorkspaceProjection, workspaceProjectionContext } from './workspace
 import { getGitDiff, getGitStatus } from './git-view.js';
 import { serveViewServer } from './view-server.js';
 import { viewAddresses } from './view-addresses.js';
+import { exportChangePreview } from './change-preview-export.js';
 import { adoptConstitution, amendConstitution, initializeConstitution, showConstitution } from './constitution.js';
 
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
@@ -383,7 +384,17 @@ const view = Command.make('view', {
   const settings = yield* root;
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view does not accept --dry-run'));
   return yield* serveViewServer({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) }, settings.json));
-})).pipe(Command.withDescription('Serve the local Web workbench.'));
+})).pipe(Command.withDescription('Review local changes, or export a static committed comparison.'), Command.withSubcommands([
+  Command.make('export', {
+    base: Flag.string('base'), head: Flag.string('head').pipe(Flag.withDefault('HEAD')),
+    baseLabel: Flag.string('base-label').pipe(Flag.optional), out: Flag.string('out'),
+  }, args => Effect.gen(function*() {
+    const settings = yield* root;
+    if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view export does not accept --dry-run'));
+    const result = yield* exportChangePreview({ root: viewRoot(settings), base: args.base, head: args.head, baseLabel: Option.getOrUndefined(args.baseLabel), out: args.out });
+    yield* Effect.sync(() => emit(result, settings.json));
+  })).pipe(Command.withDescription('Export a readonly static comparison from the unique merge-base to head; requires complete local Git history and a new output directory.')),
+]));
 root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,docs,writing,concepts,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))

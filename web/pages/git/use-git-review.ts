@@ -6,7 +6,7 @@ import { useWorkspace } from '../../workspace';
 import { entriesFor, fileTree, firstArea, sortedFiles, validArea, type Category } from './model';
 
 export function useGitReview() {
-  const { api, git, snapshot, refresh, notify } = useWorkspace();
+  const { api, git, gitIssue, snapshot, refresh, notify } = useWorkspace();
   const [params, setParams] = useSearchParams();
   const [diff, setDiff] = useState<GitDiff | null>(null);
   const [error, setError] = useState('');
@@ -21,8 +21,9 @@ export function useGitReview() {
     return git?.entries.filter(entry => isTest(entry.path) || !!entry.previousPath && isTest(entry.previousPath)) ?? [];
   }, [git, snapshot.cases, snapshot.project]);
   const requested = params.get('path');
-  const tab: Category = params.get('tab') === 'tests' || !params.has('tab') && tests.some(item => item.path === requested) ? 'tests' : 'docs';
-  const entries = tab === 'docs' ? docs : tests;
+  const tab: Category = urlChoice(params.get('tab'), ['all', 'docs', 'tests'], 'all');
+  const all = git?.entries ?? [];
+  const entries = tab === 'docs' ? docs : tab === 'tests' ? tests : all;
   const tree = useMemo(() => fileTree(entries), [entries]);
   const entry = entries.find(item => item.path === requested) ?? entries.find(item => item.path === params.get(`${tab}Path`)) ?? sortedFiles(tree)[0];
   const requestedArea = params.get('area') ?? (entry?.path === params.get(`${tab}Path`) ? params.get(`${tab}Area`) : null) ?? null;
@@ -52,7 +53,7 @@ export function useGitReview() {
   const addedCases = tab === 'tests' && git?.baselineCaseIds ? snapshot.cases.filter(item => !baseline.has(item.id)) : [];
 
   function changeCategory(value: string): void {
-    const category: Category = value === 'tests' ? 'tests' : 'docs';
+    const category: Category = urlChoice(value, ['all', 'docs', 'tests'], 'all');
     const next = new URLSearchParams(params);
     if (path && area) { next.set(`${tab}Path`, path); next.set(`${tab}Area`, area); }
     next.set('tab', category); next.delete('line');
@@ -65,5 +66,5 @@ export function useGitReview() {
   function refreshGit(): void {
     void refresh().catch(cause => notify(cause instanceof Error ? cause.message : String(cause), 'error'));
   }
-  return { git, view, setView, docs, tests, tab, tree, entry, area, path, line, readingKey, visibleDiff, error, select, addedCases, changeCategory, refreshGit, positions };
+  return { git, gitIssue, view, setView, all, docs, tests, tab, tree, entry, area, path, line, readingKey, visibleDiff, error, select, addedCases, changeCategory, refreshGit, positions };
 }

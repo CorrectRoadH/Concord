@@ -19,4 +19,4 @@ kind: engineering
 
 ## 完成条件
 
-当前 checkout 可由 link 的 `concord v0.3.0` 完成 `doctor`、`check`、`test list`、`trace show/check` 与 `review render`；TypeScript 类型检查和相关测试通过。
+当前 checkout 可由当前构建并 link 的 Concord 完成 `doctor`、`check`、`test list`、`trace show/check` 与 `review render`；TypeScript 类型检查和相关测试通过。

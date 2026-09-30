@@ -87,6 +87,10 @@
     "@effect/platform-node-shared": "4.0.0-rc.112"
   },
   "exports": {
+    "./change-preview": {
+      "types": "./dist/change-preview.d.ts",
+      "default": "./dist/change-preview.js"
+    },
     "./document-codec": {
       "types": "./dist/document-codec.d.ts",
       "default": "./dist/document-codec.js"

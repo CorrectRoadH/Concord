@@ -74,6 +74,12 @@ AI 继续优先使用已有 CLI 命令与 `--json`。新增结构化操作可由
 
 Git 面板显示已暂存（HEAD 对 index）、未暂存（index 对工作区）与未跟踪文件。它与编辑器内未保存的差异不是同一比较。查看 Git 不隐含暂存、提交、回滚或 push 授权。
 
+打开工作台默认进入 Git 变更页，先列出全部变更；可筛选文档或测试，选择文件后切换暂存区域与差异布局。总览仍从侧栏进入。读取失败会显示错误，可点击刷新重试。
+
+PR 只读预览使用 `concord view export --base <actual-base-commit> --head <head-commit> --base-label <target-branch> --out <new-directory>`。比较唯一最佳 merge-base 到 head，不假定 main，不包含工作树脏内容，不加载消费者配置或文档代码。消费者先准备完整 Git 历史，并核对真实 PR 身份；Concord 不联网、不部署。输出目录可放到静态站点子路径；文件选择与阅读模式存入 hash。静态 Markdown 不运行 p5、不接受原始 HTML、不加载图片。Schema 由 `concord-sdlc/change-preview` 拥有。
+
+导出只接受受信父目录下不存在的目标，拒绝 symlink 祖先和 Git-private 路径。失败保留不完整输出，检查现场后选择新路径；不要自动覆盖或清理未知文件。超出 2000 文件、单 blob 4 MiB、单 Markdown 正文 1 MiB 或 JSON 8 MiB 时明确失败。
+
 服务空闲时不持仓库锁，CLI 可以正常协作。测试运行持锁至进程清理完成；取消后等任务终态再继续写改。`cleanup-failed` 必须保留现场，不用删锁来掩盖尚未确认退出的进程。
 
 证据、历史和身份字段通过受管操作维护，不能当普通 JSON 任意编辑。损坏的配置或 frontmatter 显示原文诊断，无法确认的身份与历史需本机修复。高级原生执行使用项目声明的能力，静态 Web 关系不能表述为原生执行证据。

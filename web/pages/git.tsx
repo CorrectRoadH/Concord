@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/use-case/review-local-changes.md
 import * as stylex from '@stylexjs/stylex';
 import { AlertTriangle, FileDiff, RefreshCw } from 'lucide-react';
 import { Empty } from '../components/page';
@@ -32,16 +33,18 @@ export function GitPage() {
   const state = useGitReview();
   const { git, tab, tree, path, entry, area, view, line, readingKey, visibleDiff } = state;
   const navigationHost = document.getElementById('content-navigation');
-  const count = tab === 'docs' ? state.docs.length : state.tests.length;
+  const count = tab === 'docs' ? state.docs.length : tab === 'tests' ? state.tests.length : state.all.length;
   const navigation = (close: () => void) => <nav aria-label="Git 文件树">
     <p>变更文件 · {count}</p>
     <FileTree node={tree} selected={path} cases={state.addedCases} select={(file, line) => { state.select(file, firstArea(file), line); close(); }} />
-    {!git ? <p role="status">正在读取 Git 变更…</p> : !count && <p {...stylex.props(styles.note)}>{tab === 'docs' ? '没有 docs 文档变更' : '没有测试文件变更'}</p>}
+    {!git ? !state.gitIssue && <p role="status">正在读取 Git 变更…</p> : !count && <p {...stylex.props(styles.note)}>{tab === 'docs' ? '没有 docs 文档变更' : tab === 'tests' ? '没有测试文件变更' : '没有未提交变更'}</p>}
     {tab === 'tests' && <p {...stylex.props(styles.note)}>{git?.baselineError ? `无法比较新增测试：${git.baselineError}` : '新增声明列在所属文件下；diff 按文件展示。'}</p>}
   </nav>;
   return <>
-    <div role="toolbar" aria-label="Git 操作" className="button-row justify-end mb-3"><span className="text-sm text-muted-foreground">{git?.branch ?? 'Git'}</span><Button variant="outline" onClick={state.refreshGit}><RefreshCw />刷新</Button></div>
+    <div role="toolbar" aria-label="Git 操作" className="button-row justify-end mb-3"><span className="text-sm text-muted-foreground">{git?.branch ?? 'Git'} · 未提交变更</span><Button variant="outline" onClick={state.refreshGit}><RefreshCw />刷新</Button></div>
+    {state.gitIssue && <div role="alert" {...stylex.props(styles.notice)}><AlertTriangle /><div><strong>无法读取 Git 变更</strong><p>{state.gitIssue.message}</p><p>{state.gitIssue.code} · 可点击刷新重试</p></div></div>}
     {navigationHost && createPortal(<ContentSidebar model={{ label: 'Git 变更', title: 'Git 变更', groups: [{ id: 'files', label: '变更文件', items: [], actions: <Tabs value={tab} onValueChange={state.changeCategory}><TabsList aria-label="变更分类" className="w-full">
+      <TabsTrigger value="all">全部 <Badge variant="secondary">{state.all.length}</Badge></TabsTrigger>
       <TabsTrigger value="docs">文档 <Badge variant="secondary">{state.docs.length}</Badge></TabsTrigger>
       <TabsTrigger value="tests">测试用例 <Badge variant="secondary">{state.tests.length}</Badge></TabsTrigger>
     </TabsList></Tabs>, content: navigation }] }} />, navigationHost)}
@@ -56,7 +59,7 @@ export function GitPage() {
           </TabsList></Tabs></div>
         </header>}
         {state.error && <div {...stylex.props(styles.notice)}><AlertTriangle /><div><strong>无法读取 diff</strong><p>{state.error}</p></div></div>}
-        {visibleDiff ? <DiffReading key={readingKey} value={visibleDiff} view={view} line={line} position={state.positions.current.get(readingKey) ?? 0} remember={position => state.positions.current.set(readingKey, position)} /> : !state.error && (!git || entry ? <p role="status">正在读取 diff…</p> : <Empty title="没有可审阅的变更" />)}
+        {visibleDiff ? <DiffReading key={readingKey} value={visibleDiff} view={view} line={line} position={state.positions.current.get(readingKey) ?? 0} remember={position => state.positions.current.set(readingKey, position)} /> : !state.error && !state.gitIssue && (!git || entry ? <p role="status">正在读取 diff…</p> : <Empty title="没有可审阅的变更" />)}
       </section>
     </div>
   </>;

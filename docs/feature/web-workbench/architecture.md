@@ -2,6 +2,8 @@
 
 React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node 服务固定一个 Git 工作区，HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
 
+工作台根地址进入 `/git`，总览位于 `/overview`。Git 页默认列出全部未提交文件，文档与测试作为筛选；Git 读取失败独立显示错误和重试入口，不伪装为空列表。PR 静态产物的比较身份与发布边界见[变更预览](change-preview.md)。
+
 反馈列表使用 `/feedback`，详情使用 `/feedback/:id`。页面链接直接使用当前路由，不维护版本兼容别名。
 
 结构化术语由 `docs/**/concepts.json` 拥有，目录决定作用域；文档术语页通过 concepts 工具读取当前文档目录的有效定义、直接导入与来源诊断，不解析 Markdown 表格或自行实现第二套合成规则。`docs/concepts.md` 保留为可编辑的解释页面。全项目汇总与写作页共享同一后端 JSON 来源，不建立术语注册表。

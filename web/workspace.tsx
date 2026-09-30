@@ -21,6 +21,7 @@ interface WorkspaceValue {
   /** True until the next published generation reflects a completed write. */
   readonly navigationUpdating: boolean;
   readonly git: GitStatus | null;
+  readonly gitIssue: WorkspaceIssue | null;
   readonly jobs: readonly ViewJob[];
   readonly busy: boolean;
   readonly dirty: boolean;
@@ -74,6 +75,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
   const [refreshProblem, setRefreshProblem] = useState<WorkspaceIssue | null>(null);
   const [navigationUpdating, setNavigationUpdating] = useState(false);
   const [git, setGit] = useState<GitStatus | null>(null);
+  const [gitIssue, setGitIssue] = useState<WorkspaceIssue | null>(null);
   const [jobs, setJobs] = useState<readonly ViewJob[]>([]);
   const [busy, setBusy] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -149,7 +151,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     const pending = (async () => {
       const value = includeWorkspace ? await readWorkspace() : initial;
       const tasks: Promise<unknown>[] = [api.jobs().then(setJobs)];
-      if (value) tasks.push(api.git().then(setGit));
+      if (value) tasks.push(api.git().then(result => { setGit(result); setGitIssue(null); }, cause => { setGit(null); setGitIssue(workspaceIssue(cause)); }));
       await Promise.allSettled(tasks);
     })();
     refreshInFlight.current = pending;
@@ -213,7 +215,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     catch (cause) { notify(message(cause), 'error'); }
   }, [api, notify]);
 
-  const value = useMemo<WorkspaceValue>(() => ({ api, snapshot, projection, workspaceIssue: workspaceProblem, refreshIssue: refreshProblem, navigationUpdating, git, jobs, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, requestRefresh, act, runCase, cancelJob, notify, clearNotice }), [api, snapshot, projection, workspaceProblem, refreshProblem, navigationUpdating, git, jobs, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, requestRefresh, act, runCase, cancelJob, notify, clearNotice]);
+  const value = useMemo<WorkspaceValue>(() => ({ api, snapshot, projection, workspaceIssue: workspaceProblem, refreshIssue: refreshProblem, navigationUpdating, git, gitIssue, jobs, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, requestRefresh, act, runCase, cancelJob, notify, clearNotice }), [api, snapshot, projection, workspaceProblem, refreshProblem, navigationUpdating, git, gitIssue, jobs, busy, dirty, notices, reportDirty, registerAutoSave, flushAutoSave, discardAutoSave, refresh, requestRefresh, act, runCase, cancelJob, notify, clearNotice]);
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
 }
 

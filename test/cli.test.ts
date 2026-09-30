@@ -5,7 +5,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
 import { once } from 'node:events';
+import { createServer } from 'node:http';
+import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
+import { chromium, expect, type Browser } from '@playwright/test';
 import { authorDesignFixture } from './design-fixture.js';
 import { readProjectConfig, waitForWorkspaceProjection } from './support.js';
 import { ProjectSchema, digest } from '../dist/shared.js';
@@ -281,11 +284,122 @@ test('packed feedback commands persist connections and local triage without remo
  assert.ok(existsSync(join(root,relative)),'removing a connection must preserve local observations');
  assert.equal(call(root,['check'],CheckOutput).ok,true);
 })));
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/feature/web-workbench/use-case/review-pull-request.md
+test('packed PR export compares the actual target and serves a safe static review under a subpath', async () => {
+ const root = join(scratch, 'pr-export'); mkdirSync(root);
+ const git = (...args: string[]) => execFileSync('git', ['-C', root, ...args], {encoding:'utf8'}).trim();
+ git('init', '-q', '-b', 'release'); git('config','user.name','Fixture'); git('config','user.email','fixture@example.invalid');
+ write(root,'docs/old.md','# Before\n\nShared text.\n');
+ write(root,'source.ts','export const value = 1;\n');
+ git('add','.'); git('commit','-qm','ancestor'); const ancestor = git('rev-parse','HEAD');
+ git('checkout','-qb','topic');
+ git('mv','docs/old.md','docs/renamed.md');
+ write(root,'source.ts','export const value = 2;\n');
+ write(root,'docs/new.md','# After\n\n<script>window.previewExecuted = true</script>\n\n![remote](https://example.invalid/tracker.png)\n\n```p5\nwindow.previewExecuted = true\n```\n');
+ writeFileSync(join(root,'binary.dat'),Buffer.from([0,1,2,3]));
+ git('add','.'); git('commit','-qm','PR changes'); const head = git('rev-parse','HEAD');
+ git('checkout','-q','release'); write(root,'target-only.txt','Do not show in PR\n'); git('add','.');git('commit','-qm','target advance');const base = git('rev-parse','HEAD');
+ git('checkout','-q','topic'); write(root,'source.ts','PRIVATE DIRTY CONTENT\n');
+ write(root,'.gitattributes','* -diff\n'); write(root,'concord.config.ts','throw new Error("must not execute configuration");\n');
+ git('config','diff.external','must-not-run'); git('config','diff.ignoreSubmodules','all');
+ const out = join(scratch,'exported-pr');
+ const result = spawnSync(process.execPath,['--no-addons',cli,'--root',join(root,'docs'),'--json','view','export','--base',base,'--head',head,'--base-label','release','--out',out],{encoding:'utf8',timeout:120000});
+ assert.equal(result.status,0,result.stderr + result.stdout);
+ const { decodeChangePreview } = await import(pathToFileURL(join(cli,'../change-preview.js')).href) as typeof import('../src/change-preview.js');
+ const data = decodeChangePreview(JSON.parse(readFileSync(join(out,'changes.json'),'utf8')));
+ assert.deepEqual(data.comparison,{base,head,mergeBase:ancestor,baseLabel:'release'});
+ assert.deepEqual(data.entries.map(entry=>entry.path).sort(),['binary.dat','docs/new.md','docs/renamed.md','source.ts']);
+ assert.equal(data.entries.find(entry=>entry.path==='docs/renamed.md')?.previousPath,'docs/old.md');
+ assert.equal(data.entries.find(entry=>entry.path==='binary.dat')?.binary,true);
+ assert.match(data.entries.find(entry=>entry.path==='source.ts')!.patch,/\+export const value = 2/u);
+ assert.doesNotMatch(JSON.stringify(data),/PRIVATE DIRTY|target-only/u);
+ assert.throws(()=>decodeChangePreview({...data,unrecognized:true}));
+ assert.throws(()=>decodeChangePreview({...data,entries:[...data.entries,data.entries[0]]}));
+ const again = spawnSync(process.execPath,[cli,'--root',root,'--json','view','export','--base',base,'--head',head,'--out',out],{encoding:'utf8'});
+ assert.equal(again.status,1); assert.match(again.stderr,/PreviewOutputExists/u);
+ const server = createServer((request,response)=>{
+  const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+  if(!pathname.startsWith('/pr/concord/')){response.writeHead(404).end();return;}
+  const relative = decodeURIComponent(pathname.slice('/pr/concord/'.length)) || 'index.html';
+  if(relative.split('/').includes('..')){response.writeHead(400).end();return;}
+  try {const bytes = readFileSync(join(out,relative));response.setHeader('Content-Type',relative.endsWith('.js')?'text/javascript':relative.endsWith('.css')?'text/css':relative.endsWith('.json')?'application/json':'text/html');response.end(bytes);}
+  catch {response.writeHead(404).end();}
+ });
+ let browser: Browser | undefined;
+ try {
+  server.listen(0,'127.0.0.1');await once(server,'listening');const address = server.address();assert.ok(address && typeof address==='object');
+  const executablePath=process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium')?'/run/current-system/sw/bin/chromium':undefined);
+  browser=await chromium.launch({headless:true,...(executablePath?{executablePath}:{}),args:['--no-sandbox']});
+  const page=await browser.newPage();const unexpected:string[]=[];
+  page.on('request',request=>{if(new URL(request.url()).hostname!=='127.0.0.1'||new URL(request.url()).pathname.startsWith('/api/'))unexpected.push(request.url());});
+  await page.goto(`http://127.0.0.1:${address.port}/pr/concord/`);
+  await expect(page.getByText('release',{exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'source.ts',exact:true}).click();await expect(page.locator('[data-git-diff]')).toContainText('value = 2');
+  await page.getByRole('button',{name:'docs/new.md',exact:true}).click();
+  await page.getByRole('button',{name:'变更后',exact:true}).click();await expect(page.getByRole('heading',{name:'After',exact:true})).toBeVisible();
+  await expect(page.locator('img')).toHaveCount(0);assert.equal(await page.evaluate(()=>Reflect.get(window,'previewExecuted')),undefined);
+  await page.reload();await expect(page.getByRole('heading',{name:'After',exact:true})).toBeVisible();assert.deepEqual(unexpected,[]);
+ } finally {try {await browser?.close();} finally {await new Promise<void>((resolveClose,reject)=>server.close(error=>error?reject(error):resolveClose()));}}
+});
+
+// @use-case docs/feature/web-workbench/use-case/review-pull-request.md
+test('packed PR export preserves Git object types and refuses unsafe or incomplete exports', async () => {
+ const root=join(scratch,'pr-export-boundaries');mkdirSync(root);
+ const git=(...args:string[])=>execFileSync('git',['-C',root,...args],{encoding:'utf8'}).trim();
+ git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
+ write(root,'empty.md','');write(root,'type.txt','ordinary content\n');write(root,'executable.sh','echo hello\n');write(root,'old.md','# Kept\n');
+ git('add','.');git('commit','-qm','base');const base=git('rev-parse','HEAD');
+ rmSync(join(root,'empty.md'));rmSync(join(root,'type.txt'));symlinkSync('/etc/passwd',join(root,'type.txt'));
+ git('mv','old.md','空 白\n名.md');git('add','.');git('update-index','--chmod=+x','executable.sh');git('update-index','--add','--cacheinfo',`160000,${base},submodule`);
+ git('commit','-qm','object types');const head=git('rev-parse','HEAD');git('replace',head,base);git('config','diff.ignoreSubmodules','all');
+ const invoke=(out:string,baseline=base,candidate=head)=>spawnSync(process.execPath,[cli,'--root',root,'--json','view','export','--base',baseline,'--head',candidate,'--out',out],{encoding:'utf8',timeout:120000});
+ const out=join(scratch,'types-preview');const success=invoke(out);assert.equal(success.status,0,success.stderr);
+ const {decodeChangePreview}=await import(pathToFileURL(join(cli,'../change-preview.js')).href) as typeof import('../src/change-preview.js');
+ const data=decodeChangePreview(JSON.parse(readFileSync(join(out,'changes.json'),'utf8')));
+ assert.equal(data.entries.find(entry=>entry.path==='submodule')?.after?.mode,'160000');
+ assert.equal(data.entries.find(entry=>entry.path==='type.txt')?.status,'T');assert.equal(data.entries.find(entry=>entry.path==='type.txt')?.after?.mode,'120000');
+ assert.equal(data.entries.find(entry=>entry.path==='executable.sh')?.after?.mode,'100755');
+ const removed=data.entries.find(entry=>entry.path==='empty.md');assert.equal(removed?.beforeMarkdown,'');assert.equal(removed?.after,null);
+ assert.equal(data.entries.find(entry=>entry.path==='空 白\n名.md')?.previousPath,'old.md');assert.doesNotMatch(JSON.stringify(data),/root:x:/u);
+ const sentinel=join(out,'keep');writeFileSync(sentinel,'unknown');assert.match(invoke(out).stderr,/PreviewOutputExists/u);assert.equal(readFileSync(sentinel,'utf8'),'unknown');
+ assert.match(invoke(root).stderr,/PreviewUnsafeOutput/u);assert.match(invoke(join(root,'.git','export')).stderr,/PreviewUnsafeOutput/u);
+ const alias=join(scratch,'preview-output-alias');symlinkSync(scratch,alias,'dir');assert.match(invoke(join(alias,'no-output')).stderr,/PreviewUnsafeOutput/u);
+ const missing=join(scratch,'missing-history-preview');assert.equal(invoke(missing,'no-such-branch').status,1);assert.equal(existsSync(missing),false);
+ const shallow=join(scratch,'shallow-pr');execFileSync('git',['clone','--quiet','--depth','1',pathToFileURL(root).href,shallow]);
+ const shallowResult=spawnSync(process.execPath,[cli,'--root',shallow,'--json','view','export','--base','HEAD','--out',join(scratch,'shallow-out')],{encoding:'utf8'});assert.match(shallowResult.stderr,/PreviewShallowRepository/u);
+ git('replace','-d',head);
+ writeFileSync(join(root,'oversized.txt'),Buffer.alloc(4*1024*1024+1,97));git('add','oversized.txt');git('commit','-qm','large object');
+ const large=join(scratch,'large-out');assert.match(invoke(large,head,'HEAD').stderr,/PreviewBudgetExceeded/u);assert.equal(existsSync(large),false);
+ rmSync(join(root,'oversized.txt'));git('add','-A');git('commit','-qm','remove large object');const clean=git('rev-parse','HEAD');
+ if(process.platform!=='win32'){
+  const invalid=Buffer.concat([Buffer.from(root+'/'),Buffer.from([255])]);writeFileSync(invalid,'bytes');git('add','-A');git('commit','-qm','non UTF-8 path');
+  assert.match(invoke(join(scratch,'invalid-path-out'),clean,'HEAD').stderr,/GitPathEncodingUnsupported/u);
+  const shim=join(scratch,'cancel-git');mkdirSync(shim);const temporary=join(scratch,'cancel-tmp');mkdirSync(temporary);const pidFile=join(scratch,'cancel-git.pid');
+  const realGit=execFileSync('sh',['-c','command -v git'],{encoding:'utf8'}).trim();
+  const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
+  writeFileSync(join(shim,'git'),`#!/bin/sh\ncase " $* " in *" diff "*) echo $$ > "$CONCORD_TEST_GIT_PID"; sleep 60 & wait;; *) exec ${quote(realGit)} "$@";; esac\n`,{mode:0o755});
+  const child=spawn(process.execPath,[cli,'--root',root,'--json','view','export','--base',base,'--head',head,'--out',join(scratch,'cancelled-out')],{env:{...process.env,PATH:shim+':'+process.env.PATH,TMPDIR:temporary,CONCORD_TEST_GIT_PID:pidFile},stdio:'ignore'});
+  const exited=once(child,'exit');
+  try{
+   const deadline=Date.now()+15000;while(!existsSync(pidFile)&&Date.now()<deadline)await Effect.runPromise(Effect.sleep('20 millis'));
+   assert.ok(existsSync(pidFile),'export reached the scoped Git comparison');const pid=Number(readFileSync(pidFile,'utf8').trim());
+   child.kill('SIGTERM');await exited;assert.throws(()=>process.kill(pid,0));assert.deepEqual(readdirSync(temporary),[],'interruption releases the temporary Git repository');
+  }finally{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await exited;}}
+ }
+});
+
+// @use-case docs/feature/web-workbench/use-case/review-local-changes.md
 test('packed view serves its frontend and API without credentials in an isolated Git consumer', async () => {
  const root = consumer('packed-web');
+ write(root, 'implementation.ts', 'export const value = "original";\n');
+ execFileSync('git', ['-C', root, 'add', '.']);
+ execFileSync('git', ['-C', root, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'baseline']);
+ write(root, 'implementation.ts', 'export const value = "staged";\n');
+ execFileSync('git', ['-C', root, 'add', 'implementation.ts']);
+ write(root, 'implementation.ts', 'export const value = "working";\n');
  const process = spawn(globalThis.process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
  const exited = once(process, 'exit');
+ let browser: Browser | undefined;
  try {
   const ready = await new Promise<{address:string;host:string;port:number;local:readonly string[];network:readonly string[]}>((resolveReady, reject) => {
    let buffer='';
@@ -312,12 +426,31 @@ test('packed view serves its frontend and API without credentials in an isolated
   const asset=await fetch(new URL(script,base)); assert.equal(asset.status,200);
   assert.match(asset.headers.get('content-type')??'',/javascript/);
   assert.ok((await asset.arrayBuffer()).byteLength > 0);
-  const workspace = await waitForWorkspaceProjection(base, { timeoutMs: 60_000 });
+  const workspace = await waitForWorkspaceProjection(new URL(base).origin, { timeoutMs: 60_000 });
   assert.ok(workspace.snapshot.root === root);
   assert.equal(workspace.projection.current, false);
   assert.equal((await fetch(base+'api/missing')).status,404);
   assert.equal(call(root,['check'],CheckOutput).ok,true,'idle server must not lock out the CLI');
- } finally {process.kill('SIGTERM');await exited;}
+  const executablePath = globalThis.process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
+  browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
+  const page = await browser.newPage();
+  await page.route('**/api/git', route => route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'GitFailed', message: 'Git fixture unavailable' }) }));
+  await page.goto(base);
+  await expect(page).toHaveURL(new URL('git', base).href);
+  await expect(page.getByRole('alert')).toContainText('Git fixture unavailable');
+  await page.unroute('**/api/git');
+  await page.getByRole('button', { name: '刷新', exact: true }).click();
+  await expect(page.getByRole('tab', { name: /全部/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('button', { name: 'implementation.ts', exact: true })).toBeVisible();
+  await expect(page.locator('[data-git-diff]')).toContainText('working');
+  await page.getByRole('tab', { name: '已暂存', exact: true }).click();
+  await expect(page.locator('[data-git-diff]')).toContainText('original');
+  await expect(page.locator('[data-git-diff]')).not.toContainText('working');
+  await page.reload();
+  await expect(page.getByRole('tab', { name: '已暂存', exact: true })).toHaveAttribute('aria-selected', 'true');
+  await page.getByRole('tab', { name: /文档/ }).click();
+  await expect(page.getByRole('button', { name: 'implementation.ts', exact: true })).toHaveCount(0);
+ } finally {try {await browser?.close();} finally {process.kill('SIGTERM');await exited;}}
 });
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('packed workspace projection reads the shared generation and holds warm budgets', async t => {
@@ -337,7 +470,7 @@ test('packed workspace projection reads the shared generation and holds warm bud
    });
   });
   const base=ready.address.replace('localhost','127.0.0.1');
-  const initial = await waitForWorkspaceProjection(base, { timeoutMs: 60_000 });
+  const initial = await waitForWorkspaceProjection(new URL(base).origin, { timeoutMs: 60_000 });
   let projectionBytes = 0;
   const httpSample = async () => {
    const started = performance.now();

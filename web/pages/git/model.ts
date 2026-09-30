@@ -1,7 +1,7 @@
 import type { GitEntry } from '../../../src/git-view';
 
 export type Area = 'staged' | 'unstaged' | 'untracked';
-export type Category = 'docs' | 'tests';
+export type Category = 'all' | 'docs' | 'tests';
 export interface Selection { readonly path: string; readonly area: Area }
 export interface CaseLink { readonly id: string; readonly name: string; readonly file: string; readonly line: number }
 export interface TreeNode { readonly name: string; readonly path: string; entry?: GitEntry; readonly children: Map<string, TreeNode> }

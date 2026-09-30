@@ -64,6 +64,8 @@ const build = Effect.gen(function*() {
   }
   const webExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/vite/bin/vite.js', 'build'], { stdout: 'inherit', stderr: 'inherit' }));
   if (webExit !== 0) return yield* new BuildFailed({ project: 'web', exitCode: webExit });
+  const previewExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.preview.config.ts'], { stdout: 'inherit', stderr: 'inherit' }));
+  if (previewExit !== 0) return yield* new BuildFailed({ project: 'preview', exitCode: previewExit });
   yield* Effect.tryPromise(() => bundle({ entryPoints: ['web/p5/runtime.ts'], outfile: 'dist/web/p5-runtime.js', bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'linked', define: { IS_MINIFIED: 'true' } }));
   yield* fs.copyFile('node_modules/p5/license.txt', 'dist/web/P5-LICENSE.txt');
   yield* fs.copy('node_modules/p5/types', 'dist/p5-types');
@@ -73,6 +75,8 @@ const build = Effect.gen(function*() {
     yield* fs.copyFile(library.license, `dist/web/p5-libraries/${library.file}.LICENSE`);
   }
   yield* fs.copyFile('node_modules/@fontsource-variable/noto-sans-sc/LICENSE', 'dist/web/FONT-LICENSE.txt');
+  const fontLicense = yield* fs.readFileString('node_modules/@fontsource-variable/noto-sans-sc/LICENSE');
+  yield* fs.writeFileString('dist/preview/FONT-LICENSE.html', `<!doctype html><meta charset="utf-8"><title>Font license</title><pre>${fontLicense.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`);
   yield* fs.remove('dist/repository/host-types', { recursive: true, force: true });
   yield* fs.copy('repository/host-types', 'dist/repository/host-types');
   yield* fs.chmod('dist/entry.js', 0o755);

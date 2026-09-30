@@ -22,7 +22,7 @@ export function WorkspaceHealthNotice() {
   const changed = projection.changedPaths ?? [];
   return <div role="alert" className="flex items-start justify-between gap-3 text-amber-700">
     <div>
-      <Link className="underline underline-offset-4" to="/#workspace-health">{reasons.join('；')}。查看工作区健康</Link>
+      <Link className="underline underline-offset-4" to="/overview#workspace-health">{reasons.join('；')}。查看工作区健康</Link>
       {changed.length > 0 && <p className="muted">变化路径：{changed.slice(0, 6).join('、')}{changed.length > 6 ? ` 等 ${changed.length} 项` : ''}</p>}
     </div>
     <Button variant="ghost" size="icon" aria-label="关闭工作区健康提示" onClick={() => setDismissed(signature)}><X /></Button>

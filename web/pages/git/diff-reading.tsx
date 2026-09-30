@@ -4,6 +4,7 @@ import { AlertTriangle, FileDiff } from 'lucide-react';
 import { useLayoutEffect, useMemo, useRef } from 'react';
 import type { GitDiff } from '../../../src/git-view';
 import { Badge } from '../../components/ui/badge';
+type DiffContent = Pick<GitDiff, 'path' | 'patch' | 'binary' | 'truncated' | 'message'>;
 
 const styles = stylex.create({
   scroll: { flex: 1, minHeight: 0, overflow: 'auto', overscrollBehavior: 'contain' },
@@ -12,7 +13,7 @@ const styles = stylex.create({
     padding: 12, minWidth: 0,
     '--diff-background-color': 'var(--card)',
     '--diff-text-color': 'var(--foreground)',
-    '--diff-font-family': '"SFMono-Regular", Consolas, monospace',
+    '--diff-font-family': '"SFMono-Regular", Consolas, "Noto Sans SC Variable", monospace',
     '--diff-code-insert-background-color': 'color-mix(in srgb, #228b4b 16%, var(--card))',
     '--diff-code-delete-background-color': 'color-mix(in srgb, #be4034 16%, var(--card))',
     '--diff-gutter-insert-background-color': 'color-mix(in srgb, #228b4b 28%, var(--card))',
@@ -27,7 +28,7 @@ const styles = stylex.create({
 });
 
 export function DiffReading({ value, view, line, position, remember }: {
-  value: GitDiff; view: 'split' | 'unified'; line?: number; position: number;
+  value: DiffContent; view: 'split' | 'unified'; line?: number; position: number;
   remember(position: number): void;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -44,7 +45,7 @@ export function DiffReading({ value, view, line, position, remember }: {
   </div>;
 }
 
-function DiffView({ value, view }: { value: GitDiff; view: 'split' | 'unified' }) {
+function DiffView({ value, view }: { value: DiffContent; view: 'split' | 'unified' }) {
   const parsed = useMemo(() => {
     try { return { files: parseDiff(value.patch, { nearbySequences: 'zip' }), error: '' }; }
     catch (cause) { return { files: [], error: cause instanceof Error ? cause.message : String(cause) }; }

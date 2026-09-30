@@ -527,7 +527,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect.poll(()=>readFileSync(join(root,'src/demo.ts'),'utf8')).toBe('export const demo = 2;\n');
     await page.getByRole('button',{name:'Close',exact:true}).click();
     await sidebar.getByRole('link',{name:'Git 变更',exact:true}).click();
-    await expect(page.getByRole('tab',{name:/文档/})).toHaveAttribute('aria-selected','true');
+    await expect(page.getByRole('tab',{name:/全部/})).toHaveAttribute('aria-selected','true');
+    await expect(gitTree.getByRole('button',{name:'src/demo.ts',exact:true})).toBeVisible();
     await expect(page.getByRole('region',{name:'新增测试用例',exact:true})).toHaveCount(0);
     await page.getByRole('tab',{name:/测试用例/}).click();
     await expect(gitTree).toContainText(markerName);
