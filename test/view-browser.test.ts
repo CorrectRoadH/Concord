@@ -23,6 +23,10 @@ test('browser opens and refreshes a deep link without credentials and retries in
       createDocument(repo, 'feature', { id: 'web', title: 'Direct access fixture' });
       createDocument(repo, 'use-case', { id: 'floating-path', title: 'Floating user path', feature: 'web' });
       createDocument(repo, 'engineering', { id: 'floating-tooling', title: 'Floating tooling' });
+      createDocument(repo, 'feature', { id: 'child-code', title: 'Feature with child implementation' });
+      createDocument(repo, 'use-case', { id: 'implemented', title: 'Implemented child', feature: 'child-code' });
+      createDocument(repo, 'feature', { id: 'child-test', title: 'Feature with child test' });
+      createDocument(repo, 'use-case', { id: 'tested', title: 'Tested child', feature: 'child-test' });
       createDocument(repo, 'roadmap', { id: 'planned', title: 'Planned direction' });
       createDocument(repo, 'feature', {
         id: 'html',
@@ -34,6 +38,11 @@ test('browser opens and refreshes a deep link without credentials and retries in
     writeFileSync(join(root, 'docs/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'direct-access', definition: '浏览器直接打开工作台', names: { zh: { preferred: '直接访问', aliases: ['直接打开'], deprecated: ['旧访问'] }, en: { preferred: 'Direct access', aliases: ['Open directly'] } } }] }));
     writeFileSync(join(root, 'docs/feature/web/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'workbench', definition: 'Web Feature 所属定义', names: { en: { preferred: 'Workbench' } } }] }));
     writeFileSync(join(root, 'docs/feature/html/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'html-only', definition: '相邻 Feature 定义', names: { en: { preferred: 'HTML Only' } } }] }));
+    mkdirSync(join(root, 'src'));
+    mkdirSync(join(root, 'test'));
+    writeFileSync(join(root, 'src/child.ts'), '// @concord-file\n// @concord-implements docs/feature/child-code/use-case/implemented.md\nexport const implemented = true;\n');
+    writeFileSync(join(root, 'test/child.test.ts'), '// @use-case docs/feature/child-test/use-case/tested.md\n');
+    writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'], testRoots: ['test'] });
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
     browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
@@ -58,6 +67,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await expect(floating.getByRole('link', { name: /Direct access fixture/ })).toBeVisible();
     await expect(floating.getByRole('link', { name: /Floating user path/ })).toBeVisible();
     await expect(floating.getByRole('link', { name: /Floating tooling/ })).toBeVisible();
+    await expect(floating.getByRole('link', { name: /Feature with child implementation|Implemented child|Feature with child test|Tested child/ })).toHaveCount(0);
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin: `http://127.0.0.1:${server.port}` });
     await floating.getByRole('button', { name: '复制全部', exact: true }).click();
     await expect(page.getByText(/已复制 \d+ 项悬空功能。/)).toBeVisible();

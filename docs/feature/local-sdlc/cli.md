@@ -2,7 +2,7 @@
 
 ## 接入
 
-`concord --skill` 读取简短 Agent 入口；`--skill <topic>` 按 init/document/code/test/memory/trace/recovery/repository 展开具体命令，`--skill all` 提供全文。这个入口在任意 cwd 可读，不加载 host 或修改文件。
+`concord --skill` 读取简短 Agent 入口；`--skill <topic>` 按入口列出的主题展开具体命令，`--skill all` 提供全文。这个入口在任意 cwd 可读，不加载 host 或修改文件。
 
 维护者先运行 `concord init`，再用 `doctor` 查看测试根和关联缺口。`template list/show` 可在尚未初始化的目录中查看随包模板。
 

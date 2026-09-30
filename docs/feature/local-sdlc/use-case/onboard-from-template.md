@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
+
 # 接入并取得模板
 
 ## 场景
@@ -23,13 +24,13 @@ feature: docs/feature/local-sdlc/README.md
 ## 验收
 
 - 缺失的 `docs/README.md`、`docs/concepts.md` 和 `docs/architecture.md` 得到阅读入口、概念解释和系统架构骨架；缺失的 `docs/concepts.json` 得到空的全局结构化词库。已有根文档和概念 JSON 原样保留；`AGENTS.md` 仅创建或刷新带边界标记的 Concord 指引区块，保留区块外内容。
-- Feature README 必需；CLI、Library、Architecture、Lifecycle、Use Case 索引用 `--pages` 按需选择，省略时只建 README。模板生成的入口只链接所选页，自定义正文保留；Use Case 索引不创建叶子 owner。Engineering 从目标、机制、使用、验收开始，按主题扩展。
+- Feature README 必需；CLI、Library、Architecture、Lifecycle、Use Case 索引用 `--pages` 按需选择；省略时采用项目默认，`--no-pages` 只建 README。模板生成的入口只链接所选页，自定义正文保留；Use Case 索引不创建叶子 owner。Engineering 从目标、机制、使用、验收开始，按主题扩展。
 - 模板 manifest 缺失或库存损坏产生具名错误。
 - `init --dry-run` 不创建 Git-private 状态，也不运行配置命令。
 
 ## Agent 按需指引
 
-在任意 cwd 使用 `concord --skill` 读取精简的技能入口，用 `concord --skill <topic>` 获取 init、document、code、test、memory、trace、recovery 或 repository 的完整用法。`concord --skill all` 提供完整离线资料；普通任务只读取相关主题。
+在任意 cwd 使用 `concord --skill` 读取精简入口及可用主题，用 `concord --skill <topic>` 获取对应主题的完整用法。`concord --skill all` 提供完整离线资料；普通任务只读取相关主题。
 
 技能来自安装包，不加载消费者配置或执行 host。未知主题和与 mutation 混用的参数必须明确失败且不产生写入。
 

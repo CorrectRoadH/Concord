@@ -21,6 +21,7 @@ constitutionRefs:
 
 
 
+
 # 本地 SDLC 闭环
 
 Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品契约、可执行验收和工程记忆。它面向离线、可移植的开发流程：文档与源码是事实来源；Git-private HawDB 只保存可删除重建的缓存，命令证据与未完成事务 journal 则必须保留并按各自完整性规则处理。
@@ -57,7 +58,7 @@ Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal
 
 - 参照消费者：本仓库 commit `6346f4cf78bc3553448a0119443f8f2ec681f5d5` 的独立 clone，含 61 份文档 owner、6 条 Memory、232 个测试标记与 97 个代码声明。
 - 参照环境：AMD Ryzen 7 5800X，Linux x64，Node v24.19.0。
-- 阈值依据：`--help`、`memory index`、`issue list`、`feature list`、`trace show`、`docs check` 与不含写作门禁的 `check` 有启动优化后的探索性实测。阈值为实测 p50 加约 20% 余量取整；同组其它命令沿用组内阈值。含写作门禁的 `check` 为 `check` 与 `docs check` 实测之和的估算。每项预算在交付验收时按完整采样实测确认。
+- 阈值规则：每组阈值为参照实测 p50 加约 20% 余量取整，同组命令共用阈值；交付验收按完整采样实测确认。测量记录归 Memory。
 
 | 基准命令（参数完整） | p50 预算 |
 | --- | ---: |

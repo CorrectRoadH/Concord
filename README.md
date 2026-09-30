@@ -87,12 +87,12 @@ concord trace show greeting
 ## Open the web workspace
 
 ```sh
-concord view --host 127.0.0.1
+concord view
 ```
 
 Open the address printed in the terminal. The bundled workspace provides document editing, implementation and test relationships, execution evidence, Memory, feedback, terminology, and Git diffs. Use cases live inside their feature.
 
-Without `--host`, the server listens on `0.0.0.0:4317`. It has no authentication: anyone who can reach the port can edit the repository and run configured tests. Use that binding only on a trusted network.
+Without `--host`, the server listens on `127.0.0.1:4317`. It has no authentication: anyone who can reach the port can edit the repository and run configured tests. Pass `--host 0.0.0.0` only on a trusted network.
 
 ## Work with an agent
 

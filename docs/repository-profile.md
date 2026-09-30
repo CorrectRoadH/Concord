@@ -34,8 +34,8 @@ red 使用真实缺陷候选；green 与六次可靠性观察使用同一修复�
 
 项目要求是下限，Problem 持久化已采用的最低要求。command 级 red/green 无法从 CLI、Web 或 action 绕过可靠原生证据门槛。reopen 增加 epoch，历史 invocation 不得再用于关闭。基础 `concord test run` 仍只记录 command 证据，不声称原生覆盖或可靠性。
 
-## 迁移与历史
+## 格式边界
 
-v1 配置与旧协调现场须通过显式离线迁移切换。旧、新写入器停写，核对锁和未完成事务后切换配置、入口和安装依赖；未知前像拒绝覆盖，中断保留恢复现场。旧 receipts、resolution、epoch 和已使用 invocation 保留，不补字段、不重签、不宣称是当前验证。
+只读取 `concord.repository/v2`；其它格式返回具名迁移诊断，保留原件。已签发的 receipts、resolution、epoch 和已使用 invocation 保留原样，不补字段、不重签，也不作为当前验证展示。
 
 NiceEval 的 Preview、Examples、下游链接、产品文档站和 PR 编辑组合由 NiceEval 自己拥有。来源历史见 [provenance](provenance.md)，当前设计与验收要求见 [中立治理裁决](design/neutral-project-governance/README.md)。

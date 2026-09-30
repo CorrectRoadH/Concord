@@ -16,7 +16,7 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node �
 
 参考模板树从现有 inventory 的路径派生，由共享 ContentSidebar 渲染；不新增存储索引。树形导航采用 [WAI 折叠导航模式](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/examples/disclosure-navigation/) 的嵌套列表、aria-expanded 按钮和 aria-current 链接。目录展开是展示状态，文件选择由 URL 拥有；筛选和当前文件定位不建立另一份导航来源。
 
-每次领域操作独立取得、释放 LocalRepository。长期打开网页不占锁。测试由服务拥有的单槽 job 管理，每个 job 使用独立 runner；浏览器断开不取消任务。取消须确认子进程组退出，才能释放锁和运行槽，失败时保留锁并提供诊断。
+每次领域操作独立取得、释放 LocalRepository；读取与规划不持锁，提交短暂取得独占 publication lease。测试由服务拥有的单槽 job 管理，浏览器断开不取消任务。取消须确认子进程组退出，才能释放租约和运行槽，失败时保留租约并提供诊断。
 
 工作区请求读取独立 HawDB workspace_projection 命名空间的一条结构记录。服务持有刷新租约，扫描子进程编译候选，父进程重新核验身份后原子发布。完整协议见[工作区只读投影](../../design/workspace-projection/plans/shared-projection/PROTOCOL.md)。
 
@@ -28,7 +28,7 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node �
 
 文档与源码使用一套当前恢复日志，按写入范围区分文档事务和源码事务，不维护历史格式兼容分支。源码事务冻结经过验证的配置范围与身份，仅替换既有 JS/TS 常规文件，不与配置修改混合。prepared 可回滚，committed 只核验完成后的内容；外部改动导致具名冲突，不删除恢复现场。
 
-Web 操作者拥有与本地 CLI 相同的仓库代码执行能力。默认监听 0.0.0.0:4317，不使用访问密钥或身份认证；任何能连接端口的人都可以读取和修改仓库、运行配置的测试命令。
+Web 操作者拥有与本地 CLI 相同的仓库代码执行能力。默认只监听 127.0.0.1:4317，不使用访问密钥或身份认证；显式 `--host` 开放后，任何能连接端口的人都可以读取和修改仓库、运行配置的测试命令。
 
 Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时必须为 HTTP/HTTPS 且与 Host 匹配；不携带 Origin 的请求仍可访问，默认端口按 Origin 协议归一化。拒绝重复 Host、非法 Origin 和能改变 authority 的请求路径。Host/Origin 校验不提供身份认证或 DNS rebinding 防护。
 
@@ -46,7 +46,7 @@ CSS 与静态资源进入当前图块的编译结果。项目配置的 `p5.libra
 
 ## 项目测试只读投影
 
-存在 `concord.repository.json` 时，工作区在已有仓库租约内严格读取 profile 配置，复用 `compileTraceUnderLease` 和 `showFeature`，从用户已写入的测试注释、Engineering owner 与 Feature／Use Case 派生关系。内部 `repositoryTests` 投影返回读取状态、测试身份、路径、owner、契约、执行器与运行通道，不写第二份登记表、不加载宿主模块。Web 将它与通用 case 投影统一呈现为用户已关联的测试；profile 测试仍由原有宿主 CLI 执行。
+存在 `concord.repository.json` 时，工作区在同一次来源快照内严格读取 profile 配置，复用 `compileTraceUnderLease` 和 `showFeature`，从用户已写入的测试注释、Engineering owner 与 Feature／Use Case 派生关系。内部 `repositoryTests` 投影返回读取状态、测试身份、路径、owner、契约、执行器与运行通道，不写第二份登记表、不加载宿主模块。Web 将它与通用 case 投影统一呈现为用户已关联的测试；profile 测试仍由原有宿主 CLI 执行。
 
 测试页合并呈现两种来源并标注来源；Feature 汇总使用 profile 自身的归属规则，Use Case 匹配原始契约。实现页按 Feature 公共实现及各个 Use Case 分组，只展示明确关联的实现文件、符号、范围和契约；同一源码可出现在多个实际关联组。测试文件保留在测试页。点击实现位置打开源码并选择对应行范围；空组提供预填当前契约的关联入口。未配置目录、扫描失败、筛选无匹配和确实无关联分别呈现；profile 失败不得回退成空列表成功。
 

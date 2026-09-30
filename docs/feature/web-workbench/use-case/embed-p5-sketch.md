@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/web-workbench/README.md
 ---
 
+
 # 在 Markdown 中运行 p5 交互图解
 
 维护者用 Mermaid 描述结构，用 p5 sketch 展示动画、模拟和可操作的解释。Markdown 的阅读与编辑入口使用相同的 p5 运行环境。普通代码块只展示源码，HTML 和 MDX 不执行脚本。
@@ -111,5 +112,5 @@ sketch 在 `allow-scripts allow-downloads` 且具有 opaque origin 的 iframe �
 - 编辑和只读页面均识别 p5 块及选项，未知普通代码块仍为源码，Mermaid 行为保留。加载与运行不改写 Markdown 字节。
 - 自动启动、视口暂停与恢复、多实例隔离、修改和离页清理有可观察结果；保持 sketch 的 noLoop 意图，语法和类型错误不得替换为成功画布。
 - 源码、扩展与 CSS 依赖拒绝越界、symlink、隐藏路径、未知扩展库及远程 import；编译不执行作者代码。最终核对读取集合中的文件字节，变化返回 `P5SourceChanged`。
-- 每次编译最多观察 128 个路径，输入合计不超过 8 MiB，单块内联正文不超过 256 KiB，编译输出不超过 16 MiB。失败不留下文件、持久句柄或仓库租约；Web 首屏不加载 p5 运行库。
+- 每次编译最多观察 128 个路径，输入合计不超过 8 MiB，单块内联正文不超过 256 KiB，编译输出不超过 16 MiB。失败不留下文件、持久句柄或租约；Web 首屏不加载 p5 运行库。
 - 运行时和内建扩展随安装包离线可用。通过打包后的公开 CLI 启动隔离 Git 消费者，验证动画、扩展与安全边界，不依赖开发仓库的全局安装。

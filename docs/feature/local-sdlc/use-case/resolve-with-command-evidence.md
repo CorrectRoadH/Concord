@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
+
 # 记录命令证据并关闭 Problem
 
 ## 场景
@@ -15,7 +16,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 主流程
 
-1. active case 通过 `@concord-regression` 指向 open Problem。
+1. active case 通过 `@regression` 标记指向 open Problem。
 2. `test run` 在消费者 cwd 以 argv、`shell=false` 和 timeout 启动进程，记录输出摘要、执行观察与清理结果。
 3. 修复前普通非零退出形成 red；修复后命令成功且进程组清理完整形成 green。通用 runner 可以保留 `unknown` execution，默认 Node runner则解析 TAP 观察。
 4. `memory resolve --kind fixed` 核对相同 case、契约、当前 epoch、definition digest 与当前候选摘要，并保存非空作者原因。

@@ -378,7 +378,7 @@ const gitView = Command.make('git').pipe(Command.withDescription('Inspect readon
   Command.make('diff', { path: Argument.string('path'), area: Flag.choice('area', ['staged', 'unstaged', 'untracked']) }, args => Effect.gen(function*() { const settings = yield* root; const result = yield* getGitDiff(viewRoot(settings), args.path, args.area); yield* Effect.sync(() => emit(result, settings.json)); })),
 ]));
 const view = Command.make('view', {
-  host: Flag.string('host').pipe(Flag.withDefault('0.0.0.0')),
+  host: Flag.string('host').pipe(Flag.withDefault('127.0.0.1')),
   port: Flag.integer('port').pipe(Flag.withDefault(4317)),
 }, args => Effect.gen(function*() {
   const settings = yield* root;

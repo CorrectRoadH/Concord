@@ -112,6 +112,12 @@ export class ViewProjectionManager {
       this.lastFailure = undefined;
     } catch (cause) {
       const error = projectionFailure(cause);
+      if (error.code === 'WorkspaceProjectionIdentityChanged') {
+        // The new identity has no generation yet; build it now instead of reporting a failure.
+        this.lastFailure = undefined;
+        this.pending = true;
+        return;
+      }
       this.lastFailure = error;
       this.retryAfter = Date.now() + 30_000;
       if (error.code === 'CleanupFailed') this.cleanupFailed = true;

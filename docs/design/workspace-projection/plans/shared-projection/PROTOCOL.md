@@ -16,7 +16,7 @@
 
 现有 `snapshot()`、`verifySnapshot()`、当前 CLI、check、写入和证据路径保持原语义。
 
-刷新开始与写入前都重新计算身份键，不一致时丢弃候选。
+刷新开始与写入前都重新计算身份键，不一致时丢弃候选并立即以新身份重新刷新，不记为刷新失败。安装身份在进程启动后首次计算并保持到进程结束；配置字节每次重新读取。
 
 文件内容、目录集合或无待恢复 journal 的 publication revision 漂移可发布 `consistent:false`、`complete:false` 的结构代次。
 
@@ -38,7 +38,7 @@
 
 首次即可发布不完整结构。
 
-已有 consistent:true 代次不被 consistent:false 代次替换，最近尝试只附时间、变化路径和状态。
+已有 consistent:true 代次不被 consistent:false 代次替换，最近尝试只附时间、变化路径和状态；这种保留不是刷新失败，status 保持 ready，不写入 error。
 
 新的 consistent:true 代次即使存在 finding，也必须替换旧代次。
 
@@ -174,7 +174,7 @@ View 主进程持有刷新租约，worker 只返回候选、不写持久库。
 | 状态 | 可恢复条件 | 用户可见动作 |
 | --- | --- | --- |
 | building | 首次安全结构代次写入 | 自动每 2 秒重试，可手动重试 |
-| refresh-failed | 下一次成功刷新 | 展示旧代次、失败码和重试刷新 |
+| refresh-failed | 下一次成功刷新 | 展示旧代次、失败码和重试刷新；来源漂移与身份变化不进入此状态 |
 | unavailable:native | 修复安装并重启 View | 展示原生模块诊断和重启提示 |
 | unavailable:corrupt | writer 用同键新记录覆盖；数据库不可安全打开时明确清理缓存 | 展示损坏码，允许重试刷新；必要时提示 concord cache clear |
 | blocked:recovery-required | 显式 concord recover 或现有 HTTP recover 成功 | 展示恢复中断发布按钮和错误码；恢复后立即申请刷新 |

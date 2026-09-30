@@ -359,7 +359,7 @@ test('a new consistent generation with findings replaces the previous healthy ge
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('a drifted candidate retains the last consistent generation and reports refresh-failed', async () => {
+test('a drifted candidate retains the last consistent generation and reports the attempt without failing', async () => {
   const root = fixture();
   const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));
   const context = workspaceProjectionContext(root);
@@ -369,10 +369,10 @@ test('a drifted candidate retains the last consistent generation and reports ref
     assert.equal(healthy.projection.status, 'ready');
     storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: ['src/main.ts'], directories: [], publicationChanged: false }, new Date().toISOString()));
     const retained = readWorkspaceProjection(context);
-    assert.equal(retained.projection.status, 'refresh-failed');
+    assert.equal(retained.projection.status, 'ready', 'source drift during editing is not a refresh failure');
     assert.equal(retained.projection.consistent, true, 'the last consistent generation stays the navigation result');
     assert.deepEqual(retained.projection.changedPaths, []);
-    assert.equal(retained.projection.lastError?.code, 'WorkspaceProjectionDrift');
+    assert.equal(retained.projection.lastError, undefined);
     assert.deepEqual(retained.projection.lastAttempt?.changedPaths, ['src/main.ts']);
     assert.equal(retained.projection.lastAttempt?.complete, false);
   } finally { rmSync(root, { recursive: true, force: true }); }

@@ -7,6 +7,7 @@ kind: use-case
 feature: docs/feature/portable-coordination/README.md
 ---
 
+
 # Coordinate local edits without external lock programs
 
 ## User goal
@@ -50,6 +51,6 @@ Synchronous APIs report contention immediately. Explicit recovery retains its to
 
 ## Compatibility
 
-Only the current coordination protocol is supported. This release does not migrate prior lock formats or coordinate with old executables. A legitimate join transient belongs to this protocol and is reclaimed only after every owner is ESRCH.
+Only the current coordination protocol is supported; lock formats are not migrated and other executable versions are not coordinated. A legitimate join transient belongs to this protocol and is reclaimed only after every owner is ESRCH.
 
 Existing document and evidence source files remain their own facts. Do not delete journals or evidence as though they were cache. Reclaiming a dead publication token proves ESRCH for that token. It does not identify an unreproduced macOS scene.

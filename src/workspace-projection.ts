@@ -87,22 +87,30 @@ function identifyWorkspaceProjection(input: string): WorkspaceProjectionContext 
   const stat = lstatSync(configPath, { throwIfNoEntry: false });
   if (stat && (!stat.isFile() || stat.size > 4 * 1024 * 1024)) throw new ConcordError('InvalidConfig', 'Configuration must be a regular file within 4 MiB');
   const config = stat === undefined ? 'absent' : digest(readFileSync(configPath));
+  return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config, 'workspace', installationIdentity()])) };
+}
+
+let installation: string | undefined;
+/** The running executable is fixed at process start; later edits to the install directory do not change it. */
+function installationIdentity(): string {
+  if (installation !== undefined) return installation;
   const directory = dirname(fileURLToPath(import.meta.url));
-  const installation: string[][] = [];
+  const files: string[][] = [];
   const visit = (path: string, relative: string): void => {
     for (const name of readdirSync(path).sort()) {
       const target = join(path, name), rel = relative ? `${relative}/${name}` : name;
       const entry = lstatSync(target);
       if (entry.isSymbolicLink()) throw new ConcordError('UnsafePath', 'Installation contains a symbolic link');
       if (entry.isDirectory()) visit(target, rel);
-      else if (entry.isFile() && (name.endsWith('.js') || rel.startsWith('native/'))) installation.push([rel, digest(readFileSync(target))]);
+      else if (entry.isFile() && (name.endsWith('.js') || rel.startsWith('native/'))) files.push([rel, digest(readFileSync(target))]);
     }
   };
   visit(directory, '');
   for (const name of ['artifact.json', 'hawdb.node', 'THIRD-PARTY-NOTICES.txt']) {
-    if (!installation.some(([path]) => path === `native/${hawdbTarget()}/${name}`)) throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; repair the installation and restart View');
+    if (!files.some(([path]) => path === `native/${hawdbTarget()}/${name}`)) throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; repair the installation and restart View');
   }
-  return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config, 'workspace', installation])) };
+  installation = digest(JSON.stringify(files));
+  return installation;
 }
 
 /** Explicit construction, followed by strict decoding, keeps source bodies out of persistent storage. */
@@ -181,10 +189,10 @@ export function storeWorkspaceProjection(context: WorkspaceProjectionContext, ca
     const retain = next !== undefined && !next.consistent && prior?.record?.consistent === true;
     const record = retain || next === undefined ? prior?.record : next;
     const lastAttempt = next ? { at: next.builtUntil, complete: next.complete, changedPaths: next.changedPaths } : prior?.lastAttempt;
-    const refreshError = error ?? (retain ? new ConcordError('WorkspaceProjectionDrift', 'Sources changed during refresh; retained the last consistent navigation') : undefined);
+    // A drifted attempt that keeps the last consistent generation is reported through lastAttempt, not as a failure.
     const envelope = decodeEnvelope({ format: 'concord.workspace-projection/v1', identity: context.identity,
       ...(record ? { record } : {}), ...(lastAttempt ? { lastAttempt } : {}),
-      ...(refreshError ? { error: { failedAt: new Date().toISOString(), code: refreshError.code, message: refreshError.message.slice(0, 4096) } } : {}) });
+      ...(error ? { error: { failedAt: new Date().toISOString(), code: error.code, message: error.message.slice(0, 4096) } } : {}) });
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) + Buffer.byteLength(key) + Buffer.byteLength('workspace_projection') > WORKSPACE_PROJECTION_LIMIT) throw new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds its 8 MiB budget');
     database.put('workspace_projection', [{ key, payload: serialized }]);

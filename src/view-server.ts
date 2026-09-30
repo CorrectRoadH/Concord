@@ -102,7 +102,9 @@ function failed(request: IncomingMessage, response: ServerResponse, cause: unkno
   const value: ViewFailure = { ok: false, error: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) };
   const status = statusFor(error);
   // Error details are returned to the caller, not copied into request logs.
-  if (error.code !== 'WorkspaceProjectionPending') process.stderr.write(`Concord view error ${JSON.stringify({ status, code: error.code })}\n`);
+  // Pending builds and short cache lock collisions are retried by the client; they are not server errors.
+  const transient = error.code === 'WorkspaceProjectionPending' || error.code === 'WorkspaceProjectionUnavailable' && typeof error.details === 'object' && error.details !== null && (error.details as { reason?: unknown }).reason === 'HawdbBusy';
+  if (!transient) process.stderr.write(`Concord view error ${JSON.stringify({ status, code: error.code })}\n`);
   if (!response.destroyed) json(response, status, value);
 }
 
@@ -346,7 +348,7 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
 
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
   const root = validateViewRoot(options.root);
-  const host = options.host ?? '0.0.0.0';
+  const host = options.host ?? '127.0.0.1';
   const requestedPort = options.port ?? 4317;
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? join(dirname(fileURLToPath(import.meta.url)), 'web');

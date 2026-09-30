@@ -16,7 +16,7 @@ concord doctor --json
 
 `--runner-config` 指向严格 JSON 文件。默认 runner 是 Node 原生测试；自定义 command runner 的 argv 不经过 shell，`{file}`、`{name}`、`{pattern}` 必须各占一个完整参数。新项目生成静态 `concord.config.ts`；先用 `concord config show --json` 取得同一次读取的 digest，再通过 `config set` 做整文件 CAS。普通运行时仅接受 `concord.config.ts`；检测到旧 `concord.json`（包括双配置）返回 `ProjectMigrationRequired`，保留原件并使用匹配版本处理；当前工具不提供格式转换入口。
 
-交互 `init` 渐进选择项目类型、根 `DESIGN.md`、默认页面和本地 Memory 来源，在确认前展示最终配置及创建/保留清单；取消不写项目文件。仅无 owner、无锁的新仓库预览不创建 Git-private 状态；已有仓库预览遵守共享 lease 和两套 journal 障碍，确认后取得独占锁重验。非 TTY 采用确定默认。`docs/constitution.md` 必需，默认是明确 draft；只有提供真实条款、理由和影响并显式采用才是 active。
+交互 `init` 渐进选择项目类型、根 `DESIGN.md`、默认页面和本地 Memory 来源，在确认前展示最终配置及创建/保留清单；取消不写项目文件。仅无 owner、无锁的新仓库预览不创建 Git-private 状态；已有仓库预览遵守未完成 journal 障碍，确认后在短期独占提交中重验。非 TTY 采用确定默认。`docs/constitution.md` 必需，默认是明确 draft；只有提供真实条款、理由和影响并显式采用才是 active。
 
 `init` 一次创建配置、分类目录、`docs/concord.md`、缺失的 `docs/README.md`、`docs/concepts.md`、空 `docs/concepts.json`、预设 `docs/concord-writing.json`、`docs/architecture.md` 与 `docs/_template/`。它先检查完整目标集，冲突时零写入失败；已有根文档、概念 JSON 和写作政策原样保留。`AGENTS.md` 只创建或刷新 Concord 受管区块，保留区块外内容。预览可用：
 

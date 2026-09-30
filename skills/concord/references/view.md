@@ -1,6 +1,6 @@
 # Web 工作台与 AI CLI
 
-在目标 Git 工作区运行 `concord view`，或显式使用 `concord --root <worktree> view`。默认监听 `0.0.0.0:4317`；`--host 127.0.0.1` 限制本机访问，`--port` 调整端口。浏览器打开终端显示的地址即可进入工作台，无需登录或访问密钥。
+在目标 Git 工作区运行 `concord view`，或显式使用 `concord --root <worktree> view`。默认只监听本机 `127.0.0.1:4317`；`--host 0.0.0.0` 在可信网络开放访问，`--port` 调整端口。浏览器打开终端显示的地址即可进入工作台，无需登录或访问密钥。
 
 启动输出分别列出实际 Host / Port、Local 与各网卡 Network URL。域名和 NAT 入口也可用；反向代理必须保留浏览器使用的外部 Host（含非默认端口），不依赖 forwarded headers 绕过检查。修改安装代码后需重启已有 view 进程才能生效。
 
@@ -80,6 +80,6 @@ PR 只读预览使用 `concord view export --base <actual-base-commit> --head <h
 
 导出只接受受信父目录下不存在的目标，拒绝 symlink 祖先和 Git-private 路径。失败保留不完整输出，检查现场后选择新路径；不要自动覆盖或清理未知文件。超出 2000 文件、单 blob 4 MiB、单 Markdown 正文 1 MiB 或 JSON 8 MiB 时明确失败。
 
-服务空闲时不持仓库锁，CLI 可以正常协作。测试运行持锁至进程清理完成；取消后等任务终态再继续写改。`cleanup-failed` 必须保留现场，不用删锁来掩盖尚未确认退出的进程。
+服务空闲时不持租约，CLI 可以正常协作。测试运行持租约至进程清理完成；取消后等任务终态再继续写改。`cleanup-failed` 必须保留现场，不用删锁来掩盖尚未确认退出的进程。
 
 证据、历史和身份字段通过受管操作维护，不能当普通 JSON 任意编辑。损坏的配置或 frontmatter 显示原文诊断，无法确认的身份与历史需本机修复。高级原生执行使用项目声明的能力，静态 Web 关系不能表述为原生执行证据。

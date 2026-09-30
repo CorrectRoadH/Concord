@@ -15,6 +15,8 @@ constitutionRefs:
   - docs/constitution.md#c-013
 ---
 
+
+
 # Portable coordination with short publication leases
 
 Concord coordinates local Markdown publication through Node filesystem APIs. HawDB remains a disposable parsing cache; it does not own publication leases, source transactions or journal recovery.
@@ -31,7 +33,9 @@ The [architecture](architecture.md) defines access modes, reader admission and r
 
 ## Scope
 
-Linux and macOS local worktrees on one host and in one PID namespace. No legacy lock migration or mixed-version coordination is provided. Git remains required for repository identity. Network and multi-host coordination are outside the guarantee; removing disk-name probing does not certify every storage device. Windows process execution is outside this release.
+Linux and macOS local worktrees on one host and in one PID namespace. Only the current coordination protocol is supported; lock formats are not migrated and mixed executable versions are not coordinated.
+
+Git remains required for repository identity. Network and multi-host coordination are outside the guarantee, and no storage device is certified. Platform support is owned by [cross-platform release](../cross-platform-release/README.md).
 
 ## Contract
 

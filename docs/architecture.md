@@ -18,8 +18,8 @@ Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只
 
 `concord --root <repo>` 指定消费者，默认从 cwd 向上发现 `concord.config.ts`。`init` 只初始化显式目录或 cwd，安装目录不充当消费者根。
 
-- `--skill [topic]`：在任意 cwd 读取随包 Agent 指引，不加载 host、不写文件。默认输出短路由，按 init/document/test/memory/feedback/trace/recovery/repository 分题，all 展开全部。未知 topic 或混用写命令具名拒绝。
-- `init`：在 Git 仓库建立 `concord.config.ts`、`docs/constitution.md`、完整分类目录、`docs/concord.md`、缺失的 `docs/README.md` 与 `docs/_template` 模板；根 `DESIGN.md` 可选。已有文件保留或具名报冲突。
+- `--skill [topic]`：在任意 cwd 读取随包 Agent 指引，不加载 host、不写文件。默认输出短路由和主题列表，all 展开全部。未知 topic 或混用写命令具名拒绝。
+- `init`：在 Git 仓库建立 `concord.config.ts`、`docs/constitution.md`、完整分类目录、`docs/concord.md`、缺失的 `docs/README.md` 与 `docs/_template` 模板；根 `DESIGN.md` 可选。已有文件保留；待创建文件冲突时零写入失败。
 - `init` 选项：`--test-root` 可重复，`--runner-config` 接受严格 runner JSON，默认是 Node 原生测试。纯文档仓库用 `--docs-only` 保存空 testRoots，与 `--test-root` 互斥。
 - `feature`、`use-case`：当前目标及其叶子用户路径。
 - owner `show`：返回路径、metadata、digest 与派生关系，不重复输出 Markdown 正文；Feature 汇总直属 Use Case 及其测试与实现声明。`page show` 与模板查看返回请求的正文。
@@ -37,7 +37,9 @@ Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只
 - `author set`：用完整 owner 前像 digest 更换正文，保留工具拥有的 metadata 与历史。
 - `trace show/check`：构建全局关系图。show 在图不完整时拒绝，check 返回 findings 与 `complete`。不输出虚构覆盖率。
 - `review render`：从契约、测试、证据和 Memory 生成本地 Markdown 审阅材料，不写 GitHub；需要完整图的结论拒绝不完整输入。
-- `check`：汇总关系、生命周期和项目写作政策的 findings。关系或写作输入不完整时返回 `complete: false`；各 finding 标注 `relation` 或 `writing`，分项结果见 `checks`。不执行测试。
+- `check`：汇总关系、生命周期和项目写作政策的 findings，不执行测试。结果与退出码由[聚合门禁](feature/documentation-quality/README.md#聚合门禁)拥有。
+- `trace gaps`：派生契约与 CLI 页面的实现/测试关系缺口，见[对应 Use Case](feature/local-sdlc/use-case/inspect-relationship-gaps.md)。
+- `code`、`docs`、`writing`、`concepts`、`constitution`、`page`、`config`、`repo`、`view`、`workspace`、`git`、`action`：分别由下文对应章节及链接的 Feature 拥有行为；参数以 `--help` 为准。
 - `recover`：回收已死 publication token，在独占保护下恢复唯一 journal，再以短独占快照核验 journal 与 runner。runner `blocked` 使 CLI 失败退出。
 
 ## 存储契约
@@ -68,11 +70,9 @@ supporting Markdown 进入 candidate 摘要，不成为独立 owner 或测试证
 
 HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对路径集合、内容摘要与解析器和 schema 身份，命中仍严格解码。损坏、schema 不符或写入失败时回源编译，不返回陈旧结果。
 
-缓存状态验证安装包原生产物；摘要不符时列出安装路径、预期与实际摘要并提示修复安装。clear 仅管理 cache.hawdb，dry-run 展示清理条目、保留路径及原生可用性，实际执行重新取得所有权。目录外文件不参与缓存状态或清理。
+缓存只保存解析结果和投影，不缓存授权或 Problem fixed 判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有。
 
-缓存只保存解析结果和投影，不缓存授权或 Problem fixed 判定。clear 不删除 evidence、journal 或 Memory。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。
-
-HawDB 的[引擎边界与预算](design/hawdb-data-engine/plans/native-embedded/README.md)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 只读打开完整库，缺少 ownership 文件或命名空间不补建。持久句柄与事务先于 repository lease 释放。
+HawDB 的[引擎边界与预算](design/hawdb-data-engine/plans/native-embedded/README.md)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 只读打开完整库，缺少 ownership 文件或命名空间不补建。持久句柄与事务先于 publication lease 释放。
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
@@ -97,11 +97,11 @@ flowchart TD
   Validate --> Result[结果与完整性诊断]
 ```
 
-cache clear 在独占 repository lease 下取得与 HawDB revision 相同的原生文件锁，保留目录与锁 inode。锁错误不授权删除；损坏库通过独立锁 guard 清理。clear 不删除源 owner、证据和发布日志。
+cache clear 在独占 publication lease 下取得与 HawDB revision 相同的原生文件锁，保留目录与锁 inode。锁错误不授权删除；损坏库通过独立锁 guard 清理。clear 只管理 cache.hawdb，不删除源 owner、证据、journal 和 Memory。
 
 Memory 保存 current promotion 与追加的生命周期 history。Problem 使用递增 epoch，reopen 增加 epoch，red 与 green 都必须绑定当前 epoch。
 
-init 作用于 Git worktree 顶层，子目录项目与 bare repo 明确拒绝。`concord.config.ts` 是 concord.project/v1 项目标记，采用固定的 docs/feature、docs/roadmap、docs/design、docs/engineering、docs/research 约定及配置声明的 Memory 来源。init 遇到要创建的文件冲突时零写入失败。
+init 作用于 Git worktree 顶层，子目录项目与 bare repo 明确拒绝。`concord.config.ts` 是 concord.project/v1 项目标记，采用固定的 docs/feature、docs/roadmap、docs/design、docs/engineering、docs/research 约定及配置声明的 Memory 来源。
 
 Roadmap adoption 递归复制 Markdown 页面并保留目录结构，Roadmap 保存 adopted 历史，新 Feature 拥有当前契约。内部链接指向新副本，集合外相对链接保持原目标。不能安全处理的链接、非 Markdown 附件、嵌套 owner、symlink 与目标冲突具名拒绝。
 
@@ -163,7 +163,7 @@ runner 不确定时返回 blocked，并保留 journal 的实际处理结果。�
 
 `design check` 检查当前正文，普通读取及全局 check 不追溯写作门槛；正文变化不重写已有裁决。已定案的选择、目标、时间和来源保持不变；`design correct-reason` 只在 Design owner 与当前 Git HEAD 内容一致且两个 owner 的摘要匹配时更正理由，并在一个受管 Memory 中原子追加原文的 Git 提交与摘要、更正时间和说明。更正不重新运行定案门槛，也不在 Design 增加历史字段。`design format` 只整理识别出的 H2 与四列表格空白，不补充选择或证据。
 
-定案绑定 owner、GOALS、LIMITS、DECISION 和全部候选 README 的同一次读取；同内容 guard 实际重写并计入 changedPaths，沿用 journal 恢复。repository 入口使用自己的 lease 与前像，dry-run 返回前也复核完整输入。候选投影按 `metadata.alternatives` 顺序派生。裁决不证明自然语言声称的满足度。
+定案绑定 owner、GOALS、LIMITS、DECISION 和全部候选 README 的同一次读取；同内容 guard 实际重写并计入 changedPaths，沿用 journal 恢复。repository 入口使用同一提交协调与前像，dry-run 返回前也复核完整输入。候选投影按 `metadata.alternatives` 顺序派生。裁决不证明自然语言声称的满足度。
 
 ## 测试执行和证据边界
 
@@ -229,25 +229,15 @@ Research、Memory、Issue 共用 `concord.document/v1` 模型。协调路径为 
 
 ## Web 工作台
 
-`concord view` 提供随包分发的 React 工作台，默认监听 `0.0.0.0:4317`。Feature、Engineering、Roadmap、Design、Research 是独立入口，Use Case 在所属 Feature 内。编辑、基础交互与 Git diff 展示使用 MDXEditor、shadcn/ui、react-diff-view。
-
-Web API 与 CLI 结构化 action 共用完整应用校验，fixed 的 red/green 验证不因入口不同而省略。正文、作者字段、配置和源码各有写入口，历史、身份和证据不能通过任意 JSON 覆盖。行为见 [Web 工作台契约](feature/web-workbench/README.md)，界面设计见根目录 `DESIGN.md`。
-
-日志只接受当前格式，scope 区分文档和源码授权范围，未知格式严格拒绝并保留现场。源码日志保存同一次读取的配置原文及摘要，发布和恢复都检查配置一致。文档初始化支持批量创建及回滚。
-
-Research 以目录 README 为 owner，支持安全相对路径的自由附页；界面从物理目录派生主题分组，嵌套 owner 保留独立 ID 与关系。Research 没有默认章节、必填日期或必填来源。
+`concord view` 提供随包分发的 React 工作台。Web API 与 CLI 结构化 action 共用完整应用校验，fixed 的 red/green 验证不因入口不同而省略；历史、身份和证据不能通过任意 JSON 覆盖。行为、信任边界与工作区导航投影见 [Web 工作台契约](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见根目录 `DESIGN.md`。
 
 ## 文档写作检查
 
-`concord docs check` 按消费者的写作政策检查正文和术语，一次只读快照覆盖政策与输入文件。政策解码、纯文本解析和扫描编排各自独立，CLI 不拥有词库或文件遍历。init 把随包预设写入缺失的全局政策；检查只读取已保存政策。静态命中不作为执行证据。见[文档写作契约](feature/documentation-quality/README.md)与[规则格式](feature/documentation-quality/policy.md)。
-
-`writing index/show/set/check` 与 `concepts index/show/set` 通过 CLI 和 Web 共用领域操作。docs 下精确命名的 JSON 按目录拥有 scope，全局汇总只读派生，Markdown 解释概念。publication 与 recovery 检查路径、操作、Schema 和 CAS，concepts journal 还绑定其它 catalog 的集合与摘要。约束见[目录作用域方案](design/scoped-terminology/plans/directory-owned/README.md)。
+写作政策、术语作用域与聚合门禁由[文档写作契约](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/policy.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
 
 ## 工程知识与本地观察
 
-Memory 与 Issue 的索引与 recall 从当前 owner 派生，通过 Concord 工具读取和更新。list、index、recall、search 读取相应来源的全部候选，报告坏记录、来源缺失和事务障碍。精确路径不要求同类其它内容有效；短 ID 必须读完候选集合。
-
-Local、GitHub 与 Linear 是派生的来源视图，本地观察使用 Issue owner。正文、关系、生命周期与来源各自拥有事实。没有历史或关系的本地草稿可以凭最新摘要删除，进入调查的记录保留生命周期。见[记忆工具契约](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察契约](feature/feedback/use-case/manage-local-observations.md)。
+Memory 与 Issue 的索引、检索与更新由[记忆工具契约](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察契约](feature/feedback/use-case/manage-local-observations.md)拥有，读取范围见上文“操作依赖与资源边界”。
 
 ## 验收
 
@@ -258,5 +248,3 @@ Local、GitHub 与 Linear 是派生的来源视图，本地观察使用 Issue ow
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。发行 tgz 携带 Linux x64/glibc 与 macOS arm64 原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一打包，在目标平台安装同一份包验收。
 
 `pnpm check` 构建后检查测试与脚本类型，再执行领域、恢复和 package smoke；公开 CLI 验收使用独立安装后的命令。
-
-工作区导航采用[只读结构投影](design/workspace-projection/plans/shared-projection/PROTOCOL.md)，由 View 主进程在独占刷新租约内发布。其独立命名空间只保存一条有界记录。来源一致性与诊断完整性分别声明，来源漂移可提供标注未知的导航；缓存不可用具名失败。正文与编辑前像通过定向当前读取，CLI `workspace show` 保持当前来源语义，`workspace projection` 显式读取历史代次。

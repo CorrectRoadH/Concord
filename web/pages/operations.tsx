@@ -47,7 +47,7 @@ export function OverviewPage() {
   ].filter((value): value is string => value !== null);
   const floating = conclusive ? docs.filter(document => {
     if (!['feature', 'use-case', 'engineering'].includes(document.metadata.kind)) return false;
-    const identities = new Set([document.path, ...snapshot.pages.filter(page => page.documentPath === document.path).map(page => page.path)]);
+    const identities = contractIdentities(snapshot, document);
     const hasCode = snapshot.codes.some(code => code.contracts.some(contract => identities.has(contract.split('#')[0]!)));
     const hasTest = snapshot.cases.some(testCase => identities.has(testCase.contract.split('#')[0]!))
       || relatedRepositoryTests(snapshot, document).length > 0;

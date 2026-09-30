@@ -8,6 +8,7 @@ feature: docs/feature/local-sdlc/README.md
 ---
 
 
+
 # 加载中立项目治理接入
 
 ## 场景
@@ -33,4 +34,4 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 权威契约
 
-[高级测试治理](../../../repository-profile.md)拥有当前配置、source v4/projection v3、证据和迁移边界；[中立治理设计](../../../design/neutral-project-governance/README.md)记录裁决。
+[高级测试治理](../../../repository-profile.md)拥有当前配置、证据和迁移边界；[中立治理设计](../../../design/neutral-project-governance/README.md)记录裁决。
