@@ -1,3 +1,5 @@
+import { CaseExcluded, TraceIncomplete } from "../trace/errors.js";
+import { NodeServices } from "@effect/platform-node";
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -5,8 +7,8 @@ import { resolve } from "node:path";
 import { Effect, Option, Result } from "effect";
 import { collectRepoCaseInventory, collectWorkspaceCaseInventory, managedInventoryImplementationDigest, readManagedInventoryReceipt, readManagedRedEvidence, readManagedTakeoverEvidence } from "../../host.js";
 import { REPOSITORY_ROOT } from "../runtime.js";
-import { compileTrace, compileTraceUnderLease } from "../trace/index.js";
-import { mutateTraceFiles, traceDigest } from "../trace/relation-mutation.js";
+import { compileTrace, compileTraceUnderLease, compileTraceReport, requireCompleteTraceUnderLease } from "../trace/index.js";
+import { mutateTraceFiles, traceDigest, withTraceReadLease } from "../trace/relation-mutation.js";
 import { planCaseRelation, type CaseRelationAction } from "./planner.js";
 import { parseCaseSelector, selectCurrentCase, type CaseSelector } from "./selector.js";
 import { decodeCaseRelationsSidecar, encodeCaseRelationsSidecar, type CaseIssue, type CaseRelationsSidecar } from "./sidecar.js";
@@ -65,9 +67,10 @@ function sourceFiles(): readonly string[] {
   catch (cause) { const status = typeof cause === "object" && cause !== null && "status" in cause ? cause.status : undefined; if (status !== 1) throw cause; }
   return output === "" ? [] : output.split("\n").filter((path) => path !== historyPath()).sort();
 }
-function annotatedCases(): readonly AnnotatedCase[] {
+function annotatedCases(excluded: ReadonlySet<string> = new Set()): readonly AnnotatedCase[] {
   const all: AnnotatedCase[] = [];
   for (const path of sourceFiles()) {
+    if (excluded.has(path)) continue;
     const decoded = decodeAnnotatedCases(path, read(path));
     const found = Result.match(decoded, { onFailure: (error) => fail(error._tag, `${error.path}: ${error.message}`), onSuccess: (value) => value });
     all.push(...found);
@@ -91,9 +94,9 @@ function archive() {
   const decoded = decodeCaseArchive(historyPath(), read(historyPath()));
   return Result.isSuccess(decoded) ? decoded.success : fail(decoded.failure._tag, `${decoded.failure.path}: ${decoded.failure.message}`);
 }
-const decodeSidecar = (path: string, allowAbsent = false): CaseRelationsSidecar => {
+const decodeSidecar = (path: string, allowAbsent = false, declarations = annotatedCases()): CaseRelationsSidecar => {
   const testFile = path.endsWith(".cases.json") ? path.slice(0, -".cases.json".length) : path;
-  const current = Object.fromEntries(annotatedCases().filter((item) => item.testFile === testFile).map((item) => [item.caseId, { contract: item.contract, contractKind: item.contractKind, regressions: [...item.regressions], issues: [...item.issues] }]));
+  const current = Object.fromEntries(declarations.filter((item) => item.testFile === testFile).map((item) => [item.caseId, { contract: item.contract, contractKind: item.contractKind, regressions: [...item.regressions], issues: [...item.issues] }]));
   const saved = archive();
   if (!allowAbsent && Object.keys(current).length === 0 && !saved.tombstones.some((entry) => entry.testFile === testFile)) fail("CaseNotCurrent", `no current or archived case owner exists for ${testFile}`);
   return { ...emptySidecar(testFile), current, history: saved.history.filter((entry) => entry.testFile === testFile).map((entry) => entry.event), tombstones: saved.tombstones.filter((entry) => entry.testFile === testFile).map((entry) => entry.event) };
@@ -143,14 +146,13 @@ const collectInventory = Effect.fn("collectInventory")(function*(action: Invento
     Effect.map((inventory) => inventory as InventoryReceipt),
   );
 });
-function sidecarFiles(): readonly string[] {
-  return [...new Set([...annotatedCases().map((item) => sidecarPath(item.testFile)), ...archive().tombstones.map((entry) => sidecarPath(entry.testFile))])].sort();
+function sidecarFiles(declarations = annotatedCases()): readonly string[] {
+  return [...new Set([...declarations.map((item) => sidecarPath(item.testFile)), ...archive().tombstones.map((entry) => sidecarPath(entry.testFile))])].sort();
 }
 const inventoryForId = Effect.fn("inventoryForId")(function*(id: Maybe<string>) { const value = optional(id); if (value === undefined) return undefined; const implementation = yield* managedInventoryImplementationDigest(REPOSITORY_ROOT); return parseInventory(value, implementation); });
-function records(history: boolean, inventory?: InventoryReceipt) {
+function records(history: boolean, inventory?: InventoryReceipt, declarations = annotatedCases()) {
   const collected = new Map(inventory?.cases.map((item) => [`${item.path}#${item.caseId}`, item]));
-  const declarations = annotatedCases();
-  return sidecarFiles().flatMap((path) => { const sidecar = decodeSidecar(path); const digest = traceDigest(declarations.filter((item) => item.testFile === sidecar.testFile).map((item) => { const source = read(item.declarationPath); return item.annotationRanges.map((range) => source.slice(range.start, range.end)).join("\n"); }).join("\n")); return [
+  return sidecarFiles(declarations).flatMap((path) => { const sidecar = decodeSidecar(path, false, declarations); const digest = traceDigest(declarations.filter((item) => item.testFile === sidecar.testFile).map((item) => { const source = read(item.declarationPath); return item.annotationRanges.map((range) => source.slice(range.start, range.end)).join("\n"); }).join("\n")); return [
     ...Object.entries(sidecar.current).map(([caseId, relation]) => {
       const evidenceFile = evidencePath(sidecar.testFile);
       const evidence = existsSync(absolute(evidenceFile)) ? decodeNativeEvidenceIndex(JSON.parse(read(evidenceFile)) as unknown, evidenceFile) : undefined;
@@ -259,14 +261,15 @@ function publish<E, R>(
   operation: string,
   dryRun: boolean,
   prepareUnderLease: Effect.Effect<PublicationPlan, E, R>,
-): Effect.Effect<unknown, E | import("../trace/relation-mutation.js").TraceCoordinationError, R> {
+): Effect.Effect<unknown, E | import("../trace/errors.js").TraceError | import("../trace/relation-mutation.js").TraceCoordinationError, R> {
+  const prepare = requireCompleteTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.provide(NodeServices.layer), Effect.andThen(prepareUnderLease));
   const receipt = ({ changes, value }: PublicationPlan) => transactionReceipt(operation, dryRun, changes, value);
-  if (dryRun) return prepareUnderLease.pipe(Effect.map(receipt));
+  if (dryRun) return withTraceReadLease(REPOSITORY_ROOT, () => prepare.pipe(Effect.map(receipt)));
   let prepared: PublicationPlan | undefined;
   return mutateTraceFiles({
     root: REPOSITORY_ROOT,
     operation,
-    prepareUnderLease: prepareUnderLease.pipe(Effect.tap((value) => Effect.sync(() => { prepared = value; })), Effect.map(({ changes }) => changes)),
+    prepareUnderLease: prepare.pipe(Effect.tap((value) => Effect.sync(() => { prepared = value; })), Effect.map(({ changes }) => changes)),
   }).pipe(Effect.map((mutation) => ({
     ...receipt(prepared!),
     transactionId: mutation.transactionId,
@@ -284,8 +287,8 @@ function assertExpected(path: string, expected: Maybe<string>): string | null {
   return actual;
 }
 function audit() { return { atCommit: execFileSync("git", ["rev-parse", "HEAD"], { cwd: REPOSITORY_ROOT, encoding: "utf8" }).trim(), transactionId: `netxn_${randomUUID().replaceAll("-", "")}` }; }
-function planOne(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean): Effect.Effect<unknown, CaseCliError | import("../trace/relation-mutation.js").TraceCoordinationError, never>;
-function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean, validateUnderLease: Effect.Effect<void, E, R>): Effect.Effect<unknown, E | CaseCliError | import("../trace/relation-mutation.js").TraceCoordinationError, R>;
+function planOne(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean): Effect.Effect<unknown, CaseCliError | import("../trace/errors.js").TraceError | import("../trace/relation-mutation.js").TraceCoordinationError, never>;
+function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean, validateUnderLease: Effect.Effect<void, E, R>): Effect.Effect<unknown, E | CaseCliError | import("../trace/errors.js").TraceError | import("../trace/relation-mutation.js").TraceCoordinationError, R>;
 function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean, validateUnderLease?: Effect.Effect<void, E, R>) {
   const plan = Effect.sync(() => {
     const path = sidecarPath(action.selector.path); const before = decodeSidecar(path);
@@ -509,13 +512,16 @@ export const inventoryCases = Effect.fn("inventoryCases")(function*(input: Inven
 });
 
 export const listCases = Effect.fn("listCases")(function*(input: ListCasesInput) {
+  const report = yield* compileTraceReport(REPOSITORY_ROOT);
+  const declarations = yield* Effect.try({ try: () => annotatedCases(new Set(report.findings.map(f => f.path))), catch: cause => cause });
   const inventory = yield* inventoryForId(input.inventory);
   return yield* Effect.try({
     try: () => {
-      const all = records(input.history, inventory);
+      const all = records(input.history, inventory, declarations);
       const pattern = optional(input.pattern);
       return {
         format: "concord.case-list/v1",
+        complete: report.complete, findings: report.findings,
         cases: pattern === undefined ? all : all.filter((item) => JSON.stringify(item).includes(pattern)),
       };
     },
@@ -524,13 +530,23 @@ export const listCases = Effect.fn("listCases")(function*(input: ListCasesInput)
 });
 
 export const showCase = Effect.fn("showCase")(function*(input: ShowCaseInput) {
+  const report = yield* compileTraceReport(REPOSITORY_ROOT);
+  const declarations = yield* Effect.try({ try: () => annotatedCases(new Set(report.findings.map(f => f.path))), catch: cause => cause });
   const inventory = yield* inventoryForId(input.inventory);
   return yield* Effect.try({
     try: () => {
       const parsed = selector(input.selector);
       const canonical = `${parsed.path}#${parsed.caseId}`;
-      return records(input.history, inventory).find((entry) => entry.selector === canonical)
+      const excluded = report.findings.filter(finding => {
+        if (finding.path === parsed.path) return true;
+        const source = readFileSync(resolve(REPOSITORY_ROOT, finding.path), "utf8");
+        const decoded = decodeCaseDeclarations(finding.path, source);
+        return Result.isSuccess(decoded) && decoded.success.some(item => item.testFile === parsed.path && item.caseId === parsed.caseId);
+      });
+      if (excluded.length > 0) throw new CaseExcluded({ selector: input.selector, findings: excluded });
+      const found = records(input.history, inventory, declarations).find((entry) => entry.selector === canonical)
         ?? fail("CaseNotCurrent", input.selector);
+      return { ...found, complete: report.complete, findings: report.findings };
     },
     catch: (cause) => cause,
   });
@@ -561,15 +577,21 @@ export const auditCases = Effect.fn("auditCases")(function*(input: AuditCasesInp
   };
 });
 
+const preflightCompleteTrace = Effect.fn("preflightCompleteTrace")(function*() {
+  const report = yield* compileTraceReport(REPOSITORY_ROOT);
+  if (!report.complete) return yield* new TraceIncomplete({ findings: report.findings });
+});
+
 export const retireCase = Effect.fn("retireCase")(function*(input: RetireCaseInput) {
   const parsed = selector(input.selector);
   return yield* planOne({ _tag: "RetireCase", selector: parsed, reason: input.reason }, undefined, "test-case-retire", input.dryRun);
 });
-export const addCaseRegression = Effect.fn("addCaseRegression")(function*(input: AddRegressionInput) { return yield* addRegression(input, selector(input.selector)); });
-export const refreshCaseRegression = Effect.fn("refreshCaseRegression")(function*(input: RefreshRegressionInput) { return yield* addRegression(input, selector(input.selector), true); });
-export const retireCaseRegression = Effect.fn("retireCaseRegression")(function*(input: RetireRegressionInput) { return yield* retireRegression(input, selector(input.selector)); });
+export const addCaseRegression = Effect.fn("addCaseRegression")(function*(input: AddRegressionInput) { yield* preflightCompleteTrace(); return yield* addRegression(input, selector(input.selector)); });
+export const refreshCaseRegression = Effect.fn("refreshCaseRegression")(function*(input: RefreshRegressionInput) { yield* preflightCompleteTrace(); return yield* addRegression(input, selector(input.selector), true); });
+export const retireCaseRegression = Effect.fn("retireCaseRegression")(function*(input: RetireRegressionInput) { yield* preflightCompleteTrace(); return yield* retireRegression(input, selector(input.selector)); });
 export const addCaseIssue = Effect.fn("addCaseIssue")(function*(input: AddIssueInput) {
   const parsed = selector(input.selector);
+  yield* preflightCompleteTrace();
   const verified = verifyIssue(input.url, input.selector, input.verificationReceipt);
   return yield* publish("test-issue-add", input.dryRun, Effect.sync(() => {
     // This second boundary read is the publication CAS.  It deliberately
@@ -590,5 +612,5 @@ export const retireCaseIssue = Effect.fn("retireCaseIssue")(function*(input: Ret
   const parsed = selector(input.selector);
   return yield* planOne({ _tag: "RetireIssue", selector: parsed, url: input.url, reason: input.reason }, undefined, "test-issue-retire", input.dryRun);
 });
-export function renderCaseCommandError(error: unknown): string { return `${(error instanceof CaseCliError || error instanceof ConcordError) ? `${error.code}: ${error.message}` : detail(error)}\n`; }
+export function renderCaseCommandError(error: unknown): string { return `${(error instanceof CaseCliError || error instanceof ConcordError) ? `${error.code}: ${error.message}` : error instanceof Error ? `${error.name}: ${error.message}` : detail(error)}\n`; }
 export function renderCaseReceipt(value: unknown): string { if (typeof value === "object" && value !== null && "cases" in value && Array.isArray(value.cases)) return `${value.cases.map((item) => typeof item === "object" && item !== null && "selector" in item ? String(item.selector) : JSON.stringify(item)).join("\n")}\n`; return `${JSON.stringify(value, null, 2)}\n`; }

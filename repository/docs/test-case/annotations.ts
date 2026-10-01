@@ -132,6 +132,11 @@ function managedLineRange(source: string, start: number, end: number, path: stri
   return { start: lineStart, end: lineEnd };
 }
 
+function validateContractAnnotation(path: string, contract: string, contractKind: "feature" | "use-case"): void {
+  if (contractKind === "feature" && !/^docs\/feature\/(?!.*\/use-case\/).+\/README\.md$/u.test(contract)) throw new CaseRelationsFormatError({ path, message: "@feature must target a Feature package README (docs/feature/<package>/README.md); use @use-case for a leaf Use Case", ...(contract.includes("/use-case/") ? { suggestion: `@use-case ${contract}` } : /^docs\/feature\/.+\//u.test(contract) ? { suggestion: `${contract.slice(0, contract.lastIndexOf("/"))}/README.md` } : {}) });
+  if (contractKind === "use-case" && !/^docs\/feature\/.+\/use-case\/.+\.md$/u.test(contract)) throw new CaseRelationsFormatError({ path, message: "@use-case must target a leaf Use Case (docs/feature/<package>/use-case/<name>.md)", ...(contract.endsWith("/README.md") && !contract.includes("/use-case/") ? { suggestion: `@feature ${contract}` } : {}) });
+}
+
 export function decodeCaseDeclarations(path: string, source: string): Result.Result<readonly CaseDeclaration[], CaseRelationsFormatError> {
   try {
     const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
@@ -158,8 +163,7 @@ export function decodeCaseDeclarations(path: string, source: string): Result.Res
             const caseId = deriveTestReference(testFile, path, call.title);
             const contract = canonicalPath((features[0] ?? useCases[0])!.value, path, "contract");
             const contractKind = features.length === 1 ? "feature" as const : "use-case" as const;
-            if (contractKind === "feature" && !/^docs\/feature\/(?!.*\/use-case\/).+\/README\.md$/u.test(contract)) throw new CaseRelationsFormatError({ path, message: "feature annotation must target docs/feature" });
-            if (contractKind === "use-case" && !/^docs\/feature\/.+\/use-case\/.+\.md$/u.test(contract)) throw new CaseRelationsFormatError({ path, message: "use-case annotation must target a feature use-case path" });
+            validateContractAnnotation(path, contract, contractKind);
             const regressions = byName("regression").map((entry) => canonicalPath(entry.value, path, "regression"));
             if (new Set(regressions).size !== regressions.length) throw new CaseRelationsFormatError({ path, message: `regressions for ${caseId} contain duplicates` });
             const issues = byName("issue").map((entry) => {
@@ -191,7 +195,13 @@ export function decodeCaseDeclarations(path: string, source: string): Result.Res
         ...(ts.getTrailingCommentRanges(source, node.getEnd()) ?? []),
       ];
       for (const range of ranges) {
-        if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia && MANAGED.test(source.slice(range.pos, range.end))) managedCommentStarts.add(range.pos);
+        if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia) {
+          const marker = MANAGED.exec(source.slice(range.pos, range.end));
+          if (marker !== null) {
+            if (marker[1] === "feature" || marker[1] === "use-case") validateContractAnnotation(path, marker[2]!, marker[1]);
+            managedCommentStarts.add(range.pos);
+          }
+        }
       }
       ts.forEachChild(node, collectComments);
     };

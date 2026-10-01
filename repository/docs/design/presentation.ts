@@ -45,6 +45,9 @@ function humanError(error: DesignPresentationError): string {
       return `${error._tag}: ${error.path} (${error.format}): ${error.message}`;
     case "TraceRecoveryConflict":
       return `${error._tag}: ${error.path}: ${error.message}`;
+    case "CaseExcluded":
+    case "TraceIncomplete":
+      return `${error._tag}: ${error.message}`;
     case "TraceIoError":
       return `${error._tag}: ${error.operation} ${error.path}: ${error.message}`;
     case "TraceFormatError":

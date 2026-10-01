@@ -2,9 +2,9 @@
 
 先用 `concord feedback connection list --json` 和 `concord feedback list --json` 了解连接与本地观察。Feedback 是产品称呼，受管 Markdown 仍是 `docs/issues/<id>.md` 的 `kind: issue`，不能新建第二份关系索引。
 
-Local、GitHub、Linear 是并列来源。Local 无需账号、连接或同步：用 `concord issue create <id> --title <title>` 创建，`issue index --json` 获取派生索引，`issue recall "查询词" --json` 读取实际正文和摘要。原有 issue draft、feedback create、list/show 仍可用。不要直接读写 Issue owner 或维护人工索引。
+Local、GitHub、Linear 是并列来源。Local 无需账号、连接或同步：用 `concord issue create <id> --title <title>` 创建，`issue index --json` 获取派生索引，`issue recall "查询词" --json` 读取实际正文和摘要。issue draft、list/show 同样维护本地 Issue。不要直接读写 Issue owner 或维护人工索引。
 
-正文修改使用 `issue edit <id> --body <file> --expected-digest <digest>`；关联使用 issue link / feedback link。删除使用 `issue remove <id> --expected-digest <digest>`，仅允许无来源、无关系、无历史的本地 draft。已进入调查、关闭或导入的记录保留生命周期，不能通过删除绕过证据；本地命令不删除 GitHub/Linear 对象。
+正文修改使用 `issue edit <id> --body <file> --expected-digest <digest>`；Memory 关联使用 issue link --kind；契约采用使用 issue adopt --to，退役使用 issue retire --from，重开使用 issue reopen --reason。删除使用 `issue remove <id> --expected-digest <digest>`，仅允许无来源、无关系、无历史的本地 draft。已进入调查、关闭或导入的记录保留生命周期，不能通过删除绕过证据；本地命令不删除 GitHub/Linear 对象。
 
 ## 建立连接并读取
 
@@ -27,14 +27,24 @@ API 连接只存凭据环境变量名，省略 transport 仍为 API。GitHub 可
 
 ```sh
 concord feedback show <id> --json
-concord feedback create observation --title "调查观察"
-concord feedback link <id> --feature docs/feature/example/README.md
+concord issue create observation --title "调查观察"
+concord issue adopt <id> --to docs/feature/example/README.md
 concord issue link <id> --memory memory/example.md
-concord feedback close <id> --reason "调查结论"
+concord issue close <id> --reason "调查结论"
 ```
 
 本地标题、正文与关联是作者事实；source 是首次导入摘录，缓存 remote 是可重建观察。重复同步不覆盖笔记。关闭反馈仍受 open Problem 门禁；远端 Closed / Done 不证明本地修复，Memory fixed 继续要求正常证据流程。
 
 同一外部对象换连接或清空缓存后仍是同一反馈。不要按标题自动合并，也不要用远端显示编号作为对象身份。`cache clear` 只删投影，保留来源和笔记。需要修订正文时用现有摘要保护的 `author set`，或在 Web 反馈详情中编辑 Markdown。
 
-列表可组合筛选：`concord issue list --state draft --provider local --triage pending --query "关键词" --json`；`feedback list` 使用同样参数。state 为 draft/closed，triage 为 pending/linked/closed，来源为 local/github/linear。这些都是本地读取，不触发同步。当前命令不提供独立评论、重开或远端评论读取；正文编辑不能代替评论记录。
+列表可组合筛选：`concord issue list --state draft --provider local --triage pending --query "关键词" --json`；`feedback list` 使用同样参数。state 为 draft/closed，triage 为 pending/linked/closed，来源为 local/github/linear。这些都是本地读取，不触发同步。本地重开使用 issue reopen --reason；独立评论和远端评论读取不属于本地操作；正文编辑不能代替评论记录。
+
+## 远端 Issue 写入
+
+远端写入仅支持已绑定 `repositoryId` 的 GitHub `gh` 连接，复用当前机器的 `gh auth login` 登录态，不改本地 Issue owner。
+
+1. 先只读计划：`concord issue plan close 12 --connection product-gh --reason completed --json`。create、body-set、comment-add 用 `--body <file|->`，labels-add 用可重复的 `--label`，labels-remove 每个计划只接受一个 `--label`；reopen 只需编号和连接。
+2. 把 plan 返回的 `authorize` 串（绑定动作、仓库、编号及 payload）交给用户确认。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传 `--authorize`；不得因 plan 成功、工具可用或权限宽松推断授权。
+3. 得到当次明确同意后执行：`concord issue execute <receipt-id> --connection product-gh --authorize '<plan 返回的原串>' --json`。
+
+计划有效期为五分钟、只能消费一次；前像变化会拒绝写入。`IssueMutationUncertain` 不自动重试：必须重新 plan，manual create 与评论先人工核对远端。多个标签的移除分别 plan、确认并 execute。

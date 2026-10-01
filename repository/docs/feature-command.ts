@@ -1,3 +1,4 @@
+import { renderRepositoryFailure } from "../cli-support.js";
 import { Argument as Args, Command, Flag as Options } from "effect/unstable/cli";
 import { Effect, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -13,7 +14,7 @@ import {
 import { REPOSITORY_ROOT } from "./runtime.js";
 import { renderTraceFailure } from "./trace-command-presentation.js";
 import {
-  compileTrace,
+  compileTraceReport,
   listFeatures,
   renderTraceReceipt,
   showFeature,
@@ -47,8 +48,8 @@ function makeFeatureCommand(deliver: TerminalDeliverySink) {
     json: jsonOption,
   }, ({ json, pattern }) => {
     const selected = Option.getOrUndefined(pattern);
-    const program = compileTrace(REPOSITORY_ROOT).pipe(
-      Effect.map((snapshot) => listFeatures(snapshot, selected === undefined ? {} : { pattern: selected })),
+    const program = compileTraceReport(REPOSITORY_ROOT).pipe(
+      Effect.map(({ snapshot, complete, findings }) => ({ ...listFeatures(snapshot, selected === undefined ? {} : { pattern: selected }), complete, findings })),
     );
     return deliverDomainResult(program, json, present, deliver);
   }).pipe(Command.withDescription("List Feature IDs that can be passed to feature show."));
@@ -57,7 +58,7 @@ function makeFeatureCommand(deliver: TerminalDeliverySink) {
     feature: Args.string("feature-id-or-path"),
     json: jsonOption,
   }, ({ feature, json }) => deliverDomainResult(
-    compileTrace(REPOSITORY_ROOT).pipe(Effect.flatMap((snapshot) => showFeature(snapshot, feature))),
+    compileTraceReport(REPOSITORY_ROOT).pipe(Effect.flatMap(({ snapshot, complete, findings }) => showFeature(snapshot, feature).pipe(Effect.map(receipt => ({ ...receipt, complete, findings }))))),
     json,
     present,
     deliver,
@@ -72,7 +73,7 @@ function makeFeatureCommand(deliver: TerminalDeliverySink) {
   ).pipe(Command.withDescription("Add one allowed page to an existing Feature."));
   const set = Command.make("set", { feature: Args.string("feature-ref"), page: Args.string("page"), stdin: Options.boolean("stdin").pipe(Options.withDefault(false)), file: Options.string("file").pipe(Options.optional), expectedPreimageDigest: Options.string("expected-preimage-digest"), dryRun, json: jsonOption }, ({ dryRun, expectedPreimageDigest, feature, file, json, page, stdin }) => {
     const path = Option.getOrUndefined(file);
-    if ((stdin && path !== undefined) || (!stdin && path === undefined)) return deliver(stderrDelivery("FeatureStructureError: page set requires exactly one of --stdin or --file\n"));
+    if ((stdin && path !== undefined) || (!stdin && path === undefined)) return deliver(stderrDelivery(renderRepositoryFailure(new FeatureStructureError({ operation: "page-set", path: feature, message: "page set requires exactly one of --stdin or --file" }), json)));
     const body = stdin ? Effect.callback<string, FeatureStructureError>((resume) => {
       let source = "";
       const onData = (chunk: string | Buffer) => { source += chunk.toString(); };

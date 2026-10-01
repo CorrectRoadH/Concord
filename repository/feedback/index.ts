@@ -4,3 +4,4 @@ export * from "./repository.js";
 export * from "./schema.js";
 export * from "./services.js";
 export * from "./state.js";
+export * from "./cli.js";

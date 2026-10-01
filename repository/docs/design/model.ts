@@ -55,6 +55,7 @@ export interface DesignCheckFinding {
 }
 
 export interface DesignCheckReceipt {
+  readonly complete?: boolean;
   readonly format: "concord.docs-design/check-v1";
   readonly operation: "design-check";
   readonly ok: boolean;

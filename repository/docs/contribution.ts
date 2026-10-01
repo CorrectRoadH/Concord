@@ -1,3 +1,4 @@
+import { renderRepositoryFailure } from "../cli-support.js";
 import type { Command } from "effect/unstable/cli";
 import type * as NodeServicesRequirement from "@effect/platform-node/NodeServices";
 import { Effect } from "effect";
@@ -17,11 +18,7 @@ export type TerminalDeliverySink = (
 // Command.withSubcommands. Keep that existential type in this composition seam.
 export type MountedDocsCommand = Command.Command<any, never, unknown, never, NodeServicesRequirement.NodeServices>;
 
-export interface DocsCommandContribution<Name extends string = string> {
-  readonly name: Name;
-  readonly summary: string;
-  readonly makeCommand: (deliver: TerminalDeliverySink) => MountedDocsCommand;
-}
+export type DocsCommandContribution<Name extends string = string> = import("../contribution.js").RepositoryCommandContribution<Name, NodeServicesRequirement.NodeServices>;
 
 export function defineDocsCommandContribution<const Name extends string>(
   contribution: DocsCommandContribution<Name>,
@@ -51,7 +48,10 @@ export function deliverDomainResult<A, E, R>(
   deliver: TerminalDeliverySink,
 ): Effect.Effect<void, never, R> {
   return Effect.matchEffect(program, {
-    onFailure: (error) => deliver(stderrDelivery(presentation.failure(error, json))),
-    onSuccess: (value) => deliver(stdoutDelivery(presentation.success(value, json))),
+    onFailure: (error) => deliver(stderrDelivery(renderRepositoryFailure(error, json))),
+    onSuccess: (value) => {
+      const findings = typeof value === "object" && value !== null && "complete" in value && "findings" in value ? (value as { findings: readonly import("./trace/model.js").TraceFinding[] }).findings : [];
+      return deliver({ stdout: presentation.success(value, json), stderr: json ? "" : findings.map(f => `warning: ${f.path}: ${f.message}\n`).join(""), exitCode: 0 });
+    },
   });
 }

@@ -14,6 +14,7 @@ import { repositoryConfiguration } from "../../root.js";
 import { decodeCaseDeclarations, decodeCaseArchive } from "../test-case/annotations.js";
 import {
   TraceFormatError,
+  TraceIncomplete,
   TraceInputChanged,
   TraceIoError,
   TraceMutationActive,
@@ -34,6 +35,7 @@ import type {
   TracePage,
   TracePageRole,
   TraceSnapshot,
+  TraceFinding,
   TraceTest,
 } from "./model.js";
 import { ADOPTABLE_DOCS_NODE_KINDS, DOCS_NODE_KINDS } from "./model.js";
@@ -315,6 +317,34 @@ function featuresForContract(nodes: readonly TraceNode[], contractPath: string):
   return owner === undefined ? [] : [owner];
 }
 
+/** Defensive domain check: every declaration owner of a conflicting ID is excluded. */
+export function findCaseIdConflicts(
+  declarations: readonly import("../test-case/annotations.js").CaseDeclaration[],
+  historyPath: string,
+  tombstoneCaseIds: readonly string[],
+): ReadonlyMap<string, readonly TraceFinding[]> {
+  const owners = new Map<string, Set<string>>();
+  for (const declaration of declarations) {
+    const paths = owners.get(declaration.caseId) ?? new Set<string>();
+    paths.add(declaration.declarationPath);
+    owners.set(declaration.caseId, paths);
+  }
+  const tombstones = new Set(tombstoneCaseIds);
+  const conflicts = new Map<string, TraceFinding[]>();
+  for (const [caseId, paths] of [...owners].sort(([left], [right]) => left.localeCompare(right))) {
+    if (paths.size < 2 && !tombstones.has(caseId)) continue;
+    for (const path of [...paths].sort()) {
+      const conflictsWith = [...paths].filter(other => other !== path);
+      if (tombstones.has(caseId)) conflictsWith.push(historyPath);
+      conflictsWith.sort();
+      const fileFindings = conflicts.get(path) ?? [];
+      fileFindings.push({ code: "CaseIdConflict", path, subject: "caseId", message: `${caseId} conflicts with ${conflictsWith.join(", ")}`, conflictsWith });
+      conflicts.set(path, fileFindings);
+    }
+  }
+  return new Map([...conflicts].sort(([left], [right]) => left.localeCompare(right)));
+}
+
 function validateRegressions(
   tests: readonly TraceTest[],
   memory: readonly TraceMemory[],
@@ -475,6 +505,7 @@ function compileTraceAtGeneration(
   root: string,
   generation: number,
   attempt: number,
+  findings?: TraceFinding[],
 ): Effect.Effect<TraceSnapshot, TraceError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
@@ -586,77 +617,102 @@ function compileTraceAtGeneration(
     const annotated = [] as import("../test-case/annotations.js").CaseDeclaration[];
     for (const candidate of candidateSources) {
       const decoded = decodeCaseDeclarations(candidate.path, candidate.source);
-      if (Result.isFailure(decoded)) return yield* Effect.fail(new TraceFormatError({
-        path: candidate.path,
-        subject: "case relations",
-        message: decoded.failure.message,
-      }));
+      if (Result.isFailure(decoded)) {
+        if (findings === undefined) return yield* new TraceFormatError({ path: candidate.path, subject: "case relations", message: decoded.failure.message });
+        findings.push({ code: "CaseAnnotationInvalid", path: candidate.path, subject: "case relations", message: decoded.failure.message, ...(decoded.failure.suggestion === undefined ? {} : { suggestion: decoded.failure.suggestion }) });
+        continue;
+      }
       annotated.push(...decoded.success);
     }
     const historyPath = profile.config.historyPath;
     const archived = relativeFiles.has(historyPath) ? decodeCaseArchive(historyPath, yield* read(join(root, historyPath))) : Result.succeed({ history: [], tombstones: [] });
     if (Result.isFailure(archived)) return yield* Effect.fail(new TraceFormatError({ path: historyPath, subject: "case history", message: archived.failure.message }));
-    for (const item of annotated) {
-      if (!relativeFiles.has(item.testFile)) return yield* Effect.fail(new TraceFormatError({ path: item.declarationPath, subject: "testFile", message: `${item.testFile} does not exist` }));
-      {
-        const caseId = item.caseId;
-        const previous = knownCaseIds.get(caseId);
-        if (previous !== undefined) return yield* Effect.fail(new TraceFormatError({
-          path: item.declarationPath,
-          subject: "caseId",
-          message: `${caseId} is already owned by ${previous}`,
-        }));
-        knownCaseIds.set(caseId, item.declarationPath);
-      }
-
-      const contract = item.contract;
-      if (item.contract !== undefined) {
-        const contractPath = referenceParts(contract).path;
-        const target = validateRepoRefTarget(targetSnapshot, contract, ["feature", "use-case"], documentIndex.get(contractPath));
-        if (Result.isFailure(target)) return yield* Effect.fail(new TraceFormatError({
-          path: item.declarationPath, subject: "contract", message: target.failure.message,
-        }));
-        if (target.success.kind !== item.contractKind) return yield* Effect.fail(new TraceFormatError({
-          path: item.declarationPath, subject: "contract", message: `@${item.contractKind} must point to a ${item.contractKind} contract`,
-        }));
-        if (featuresForContract(nodes, target.success.path).length === 0) return yield* Effect.fail(new TraceFormatError({
-          path: item.declarationPath, subject: "contract", message: `${contract} is not a Feature contract or composed Use Case`,
-        }));
-      }
-
-      const suites = profile.config.suites.filter(suite => inDirectory(item.testFile, suite.root));
-      if (suites.length !== 1) {
-        return yield* Effect.fail(new TraceFormatError({
-          path: item.declarationPath,
-          subject: "suite",
-          message: `${item.testFile} must belong to exactly one configured suite`,
-        }));
-      }
-      const suite = suites[0]!;
-      if (!inDirectory(item.declarationPath, suite.root)) {
-        return yield* Effect.fail(new TraceFormatError({
-          path: item.declarationPath,
-          subject: "suite",
-          message: `declaration helper and native test must belong to suite ${suite.id}`,
-        }));
-      }
-      {
-        tests.push({
-          caseId: item.caseId,
-          title: item.title,
-          selector: `${item.testFile}#${item.caseId}`,
-          path: item.testFile,
-          contract,
-          regressions: [...item.regressions],
-          issues: item.issues.map((issue) => issue.url),
-          suite: suite.id,
-        });
-      }
-    }
+    const archivedIds = new Set<string>();
     for (const entry of archived.success.tombstones) {
-      const previous = knownCaseIds.get(entry.event.caseId);
-      if (previous !== undefined) return yield* Effect.fail(new TraceFormatError({ path: historyPath, subject: "caseId", message: `${entry.event.caseId} is already current at ${previous}` }));
-      knownCaseIds.set(entry.event.caseId, historyPath);
+      if (archivedIds.has(entry.event.caseId)) return yield* new TraceFormatError({ path: historyPath, subject: "caseId", message: `${entry.event.caseId} has duplicate tombstones` });
+      archivedIds.add(entry.event.caseId);
+    }
+    const casesByFile = new Map<string, typeof annotated>();
+    for (const item of annotated) {
+      const fileCases = casesByFile.get(item.declarationPath) ?? [];
+      fileCases.push(item);
+      casesByFile.set(item.declarationPath, fileCases);
+    }
+    const conflictsByFile = findCaseIdConflicts(annotated, historyPath, archived.success.tombstones.map(entry => entry.event.caseId));
+    for (const [declarationPath, fileCases] of casesByFile) {
+      const conflicts = conflictsByFile.get(declarationPath);
+      if (conflicts !== undefined) {
+        if (findings === undefined) return yield* new TraceFormatError({ path: declarationPath, subject: "caseId", message: conflicts[0]!.message });
+        findings.push(...conflicts);
+        continue;
+      }
+      const start = tests.length;
+      const validated = yield* Effect.result(Effect.gen(function*() {
+        for (const item of fileCases) {
+          if (!relativeFiles.has(item.testFile)) return yield* Effect.fail(new TraceFormatError({ path: item.declarationPath, subject: "testFile", message: `${item.testFile} does not exist` }));
+          {
+            const caseId = item.caseId;
+            const previous = knownCaseIds.get(caseId);
+            if (previous !== undefined) return yield* Effect.fail(new TraceFormatError({
+              path: item.declarationPath,
+              subject: "caseId",
+              message: `${caseId} is already owned by ${previous}`,
+            }));
+            knownCaseIds.set(caseId, item.declarationPath);
+          }
+
+          const contract = item.contract;
+          if (item.contract !== undefined) {
+            const contractPath = referenceParts(contract).path;
+            const target = validateRepoRefTarget(targetSnapshot, contract, ["feature", "use-case"], documentIndex.get(contractPath));
+            if (Result.isFailure(target)) return yield* Effect.fail(new TraceFormatError({
+              path: item.declarationPath, subject: "contract", message: target.failure.message,
+            }));
+            if (target.success.kind !== item.contractKind) return yield* Effect.fail(new TraceFormatError({
+              path: item.declarationPath, subject: "contract", message: `@${item.contractKind} must point to a ${item.contractKind} contract`,
+            }));
+            if (featuresForContract(nodes, target.success.path).length === 0) return yield* Effect.fail(new TraceFormatError({
+              path: item.declarationPath, subject: "contract", message: `${contract} is not a Feature contract or composed Use Case`,
+            }));
+          }
+
+          const suites = profile.config.suites.filter(suite => inDirectory(item.testFile, suite.root));
+          if (suites.length !== 1) {
+            return yield* Effect.fail(new TraceFormatError({
+              path: item.declarationPath,
+              subject: "suite",
+              message: `${item.testFile} must belong to exactly one configured suite`,
+            }));
+          }
+          const suite = suites[0]!;
+          if (!inDirectory(item.declarationPath, suite.root)) {
+            return yield* Effect.fail(new TraceFormatError({
+              path: item.declarationPath,
+              subject: "suite",
+              message: `declaration helper and native test must belong to suite ${suite.id}`,
+            }));
+          }
+          {
+            tests.push({
+              caseId: item.caseId,
+              title: item.title,
+              selector: `${item.testFile}#${item.caseId}`,
+              path: item.testFile,
+              contract,
+              regressions: [...item.regressions],
+              issues: item.issues.map((issue) => issue.url),
+              suite: suite.id,
+            });
+          }
+        }
+      }));
+      if (Result.isFailure(validated)) {
+        tests.splice(start);
+        for (const item of fileCases) if (knownCaseIds.get(item.caseId) === declarationPath) knownCaseIds.delete(item.caseId);
+        if (findings === undefined) return yield* Effect.fail(validated.failure);
+        const error = validated.failure;
+        findings.push({ code: error.subject === "caseId" ? "CaseIdConflict" : error.subject === "suite" ? "CaseSuiteInvalid" : "CaseContractInvalid", path: declarationPath, subject: error.subject, message: error.message });
+      }
     }
 
     const memoryFiles = all.filter((path) =>
@@ -696,11 +752,17 @@ function compileTraceAtGeneration(
         };
       },
     ));
-    yield* pure(
-      "memory",
-      "regression",
-      () => validateRegressions(tests, memory, memorySourceIndex),
-    );
+    for (const [declarationPath, fileCases] of casesByFile) {
+      const ids = new Set(fileCases.map(item => item.caseId));
+      const fileTests = tests.filter(test => ids.has(test.caseId));
+      if (fileTests.length === 0) continue;
+      const validation = yield* Effect.result(pure(declarationPath, "regression", () => validateRegressions(fileTests, memory, memorySourceIndex)));
+      if (Result.isFailure(validation)) {
+        if (findings === undefined) return yield* Effect.fail(validation.failure);
+        findings.push({ code: "CaseRegressionInvalid", path: declarationPath, subject: "regression", message: validation.failure.message });
+        for (let index = tests.length - 1; index >= 0; index--) if (ids.has(tests[index]!.caseId)) tests.splice(index, 1);
+      }
+    }
 
     const feedbackFiles = owners.filter(owner => owner.metadata.kind === 'issue').map(owner => join(root, owner.path));
     const feedback = yield* Effect.forEach(feedbackFiles, (path) => read(path).pipe(
@@ -764,15 +826,17 @@ function readTraceConsistency<A>(
 function compileStableTrace(
   root: string,
   attempt: number,
+  findings?: TraceFinding[],
 ): Effect.Effect<TraceSnapshot, TraceError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const before = yield* readTraceConsistency(root, readTraceGeneration(root));
-    const compiled = yield* Effect.result(compileTraceAtGeneration(root, before, attempt));
+    const compiled = yield* Effect.result(compileTraceAtGeneration(root, before, attempt, findings));
     const after = yield* readTraceConsistency(root, readTraceGeneration(root));
     if (after !== before) {
       if (attempt < maximumStableReadAttempts) {
         yield* Effect.yieldNow;
-        return yield* compileStableTrace(root, attempt + 1);
+        if (findings !== undefined) findings.length = 0;
+        return yield* compileStableTrace(root, attempt + 1, findings);
       }
       return yield* new TraceSnapshotChanged({
         path: root,
@@ -784,7 +848,8 @@ function compileStableTrace(
     if (Result.isFailure(compiled)) {
       if (compiled.failure instanceof TraceInputChanged && attempt < maximumStableReadAttempts) {
         yield* Effect.yieldNow;
-        return yield* compileStableTrace(root, attempt + 1);
+        if (findings !== undefined) findings.length = 0;
+        return yield* compileStableTrace(root, attempt + 1, findings);
       }
       return yield* Effect.fail(compiled.failure);
     }
@@ -807,4 +872,30 @@ export function compileTrace(root: string): Effect.Effect<TraceSnapshot, TraceEr
 /** Internal entry for a caller already holding the repo-wide shared/exclusive Trace lease. */
 export function compileTraceUnderLease(root: string): Effect.Effect<TraceSnapshot, TraceError, FileSystem.FileSystem> {
   return compileStableTrace(root, 1);
+}
+
+export interface TraceCompileReport {
+  readonly snapshot: TraceSnapshot;
+  readonly complete: boolean;
+  readonly findings: readonly TraceFinding[];
+}
+export const compileTraceReportUnderLease = Effect.fn("compileTraceReportUnderLease")(function*(root: string) {
+  const findings: TraceFinding[] = [];
+  const snapshot = yield* compileStableTrace(root, 1, findings);
+  return { snapshot, complete: findings.length === 0, findings } satisfies TraceCompileReport;
+});
+export function compileTraceReport(root: string) {
+  return withTraceReadLease(root, () => compileTraceReportUnderLease(root)).pipe(Effect.mapError(error => {
+    if (!(error instanceof TraceMutationError)) return error;
+    if (error.phase === "lock" && error.message.includes("busy")) return new TraceMutationActive({ path: error.path ?? root, attempts: 1 });
+    return new TraceIoError({ operation: "read", path: error.path ?? root, message: error.message });
+  }));
+}
+export function requireCompleteTraceUnderLease(root: string) {
+  return compileTraceReportUnderLease(root).pipe(Effect.flatMap(report => report.complete ? compileTraceUnderLease(root) : Effect.fail(new TraceIncomplete({ findings: report.findings }))));
+}
+
+/** Require a complete relation graph while holding one read lease. */
+export function requireCompleteTrace(root: string) {
+  return withTraceReadLease(root, () => requireCompleteTraceUnderLease(root));
 }

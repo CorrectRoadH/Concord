@@ -18,7 +18,7 @@ import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, Option, Schema } from 'effect';
 import { Argument, CliError, Command, Flag, Prompt } from 'effect/unstable/cli';
 import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from './annotations.js';
-import { activateMemory, addPage, showPage, setPage, adoptRoadmap, closeIssue, correctDesignReason, createDocument, decideDesign, findDocument, linkFeedbackFeature, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
+import { activateMemory, addPage, showPage, setPage, adoptRoadmap, adoptIssue, retireIssue, reopenIssue, closeIssue, correctDesignReason, createDocument, decideDesign, findDocument, linkIssue, loadDocuments, promoteMemory, reopenMemory, resolveMemory, retirePromotion, setAuthor, supersedeMemory } from './documents.js';
 import { checkDesign, formatDesign } from './documents.js';
 import { listFeedback, syncFeedback } from './feedback.js';
 import { editKnowledge, knowledgeIndex, knowledgeRecall, knowledgeSearch, removeIssue } from './knowledge.js';
@@ -29,7 +29,7 @@ import { OwnedProcessLive } from './owned-process.js';
 import { initialize, LocalRepository } from './storage.js';
 import { recoverLocalState } from './recovery.js';
 import { buildTrace, documentShow, renderReview, requireValidTrace, selectCase, traceGaps, traceShow } from './trace.js';
-import { ConcordError, MemorySourceSchema, ProjectSchema, RunnerSchema, decode, failure, type DocumentKind } from './shared.js';
+import { ConcordError, IssueClosureSchema, MEMORY_RELATION_KINDS, MemorySourceSchema, ProjectSchema, RunnerSchema, decode, failure, type DocumentKind } from './shared.js';
 import { listTemplates, templateBody } from './templates.js';
 import { humanOutput } from './presentation.js';
 import { annotationSnippet, doctor } from './onboarding.js';
@@ -218,17 +218,49 @@ const feedbackFilters = {
 const selectedFeedbackFilters = (args: { state: Option.Option<'draft' | 'closed'>; provider: Option.Option<'local' | 'github' | 'linear'>; triage: Option.Option<'pending' | 'linked' | 'closed'>; query: Option.Option<string> }) => ({
   state: Option.getOrUndefined(args.state), provider: Option.getOrUndefined(args.provider), triage: Option.getOrUndefined(args.triage), query: Option.getOrUndefined(args.query),
 });
-const issue = Command.make('issue').pipe(Command.withDescription('Maintain local observation drafts; no remote GitHub mutations.'), Command.withSubcommands([
-  Command.make('draft', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))),
-  Command.make('create', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))),
-  Command.make('list', feedbackFilters, args => withReadRepo(repo => sync(() => ({ operation:'issue-list', drafts:listFeedback(repo, undefined, selectedFeedbackFilters(args)).map(item => item.document) })))),
-  Command.make('index', {}, () => withRepo(repo => sync(() => knowledgeIndex(repo, 'issue')), { readonly: true })),
-  Command.make('recall', { query: Argument.string('query') }, args => withRepo(repo => sync(() => knowledgeRecall(repo, 'issue', args.query)), { readonly: true })),
-  Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'issue', cached(settings.dryRun))))),
-  Command.make('edit', { id, body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => editKnowledge(repo, 'issue', args.id, body(args.body), args.expectedDigest, s.dryRun)))),
-  Command.make('remove', { id, expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => removeIssue(repo, args.id, args.expectedDigest, s.dryRun)))),
-  Command.make('link', { id, memory: text('memory') }, args => withRepo((repo,s) => sync(() => linkIssue(repo,args.id,args.memory,s.dryRun)))),
-  Command.make('close', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => closeIssue(repo,args.id,args.reason,s.dryRun)))),
+const closureFlags = { kind: Flag.choice('kind', ['fixed', 'delivered', 'duplicate', 'declined', 'invalid', 'external-fixed', 'closed']).pipe(Flag.withDefault('closed')), memory: optional('memory'), target: optional('target'), proof: many('proof'), canonical: optional('canonical'), evidence: many('evidence'), dependency: optional('dependency'), version: optional('version'), reason: optional('reason') };
+const retiredFeedback = (name: string, replacement: string) => Command.make(name, {}, () => sync(() => { throw new ConcordError('CommandRetired', `Use ${replacement}`, { command: `concord feedback ${name}`, replacement }); })).pipe(Command.withDescription(`Use ${replacement} to maintain an Issue.`));
+// Retired commands ignore their former operands and flags before CLI parsing.
+const retiredFeedbackIndex = process.argv.indexOf('feedback');
+if (retiredFeedbackIndex >= 2 && ['create', 'link', 'close'].includes(process.argv[retiredFeedbackIndex + 1] ?? '')) {
+  const json = process.argv.includes('--json'); process.argv.splice(retiredFeedbackIndex + 2); if (json) process.argv.push('--json');
+}
+// @concord-begin
+// @concord-implements docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
+const issueContributionPath = new URL(import.meta.url).pathname.endsWith('.ts') ? '../repository/issue/contribution.ts' : './repository/issue/contribution.js';
+const issueNodePath = new URL(import.meta.url).pathname.endsWith('.ts') ? '../repository/issue/node.ts' : './repository/issue/node.js';
+const issueRemoteContribution = await import(issueContributionPath) as { makeIssueRemoteSubcommands: (deliver: (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.Effect<void>, run: <A>(connection: string, execute: boolean, program: Effect.Effect<A, unknown, unknown>) => Effect.Effect<A, ConcordError, Command.CommandContext<"concord">>, sharedJson?: boolean) => readonly Command.Command<any, never, unknown, never, Command.CommandContext<"concord">>[] };
+const issueRemoteNode = await import(issueNodePath) as { makeNodeIssueCommandRunner: (root?: string) => <A>(connection: string, execute: boolean, program: Effect.Effect<A, unknown, unknown>) => Effect.Effect<A, ConcordError> };
+const issueRemoteCommands = issueRemoteContribution.makeIssueRemoteSubcommands(
+  (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.sync(() => {
+    process.stdout.write(delivery.stdout); process.stderr.write(delivery.stderr); if (delivery.exitCode !== 0) process.exitCode = delivery.exitCode;
+  }),
+  <A>(connection: string, execute: boolean, program: Effect.Effect<A, unknown, unknown>) => Effect.gen(function*() {
+    const settings = yield* root;
+    if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidInput', 'Issue plan/execute does not accept --dry-run'));
+    return yield* issueRemoteNode.makeNodeIssueCommandRunner(Option.getOrUndefined(settings.root))(connection, execute, program);
+  }),
+  true,
+);
+// @concord-end
+const issue = Command.make('issue').pipe(Command.withDescription('Maintain local Issue owners; remote GitHub writes only through plan and execute.'), Command.withSubcommands([
+  ...issueRemoteCommands,
+  Command.make('draft', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))).pipe(Command.withDescription('Create a local Issue draft.')),
+  Command.make('create', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))).pipe(Command.withDescription('Create a local Issue.')),
+  Command.make('list', feedbackFilters, args => withReadRepo(repo => sync(() => ({ operation:'issue-list', drafts:listFeedback(repo, undefined, selectedFeedbackFilters(args)).map(item => item.document) })))).pipe(Command.withDescription('List local Issues.')),
+  Command.make('index', {}, () => withRepo(repo => sync(() => knowledgeIndex(repo, 'issue')), { readonly: true })).pipe(Command.withDescription('Index local Issues.')),
+  Command.make('recall', { query: Argument.string('query') }, args => withRepo(repo => sync(() => knowledgeRecall(repo, 'issue', args.query)), { readonly: true })).pipe(Command.withDescription('Recall local Issues.')),
+  Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'issue', cached(settings.dryRun))))).pipe(Command.withDescription('Show a local Issue.')),
+  Command.make('edit', { id, body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => editKnowledge(repo, 'issue', args.id, body(args.body), args.expectedDigest, s.dryRun)))).pipe(Command.withDescription('Edit an Issue author body.')),
+  Command.make('remove', { id, expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => removeIssue(repo, args.id, args.expectedDigest, s.dryRun)))).pipe(Command.withDescription('Remove an untouched local Issue draft.')),
+  Command.make('link', { id, memory: text('memory'), kind: Flag.choice('kind', MEMORY_RELATION_KINDS).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(() => linkIssue(repo,args.id,args.memory,s.dryRun,args.kind)))).pipe(Command.withDescription('Relate a draft Issue to Memory.')),
+  Command.make('adopt', { id, to: text('to') }, args => withRepo((repo,s) => sync(() => adoptIssue(repo,args.id,args.to,s.dryRun)))).pipe(Command.withDescription('Adopt a draft Issue into a contract owner.')),
+  Command.make('retire', { id, from: text('from') }, args => withRepo((repo,s) => sync(() => retireIssue(repo,args.id,args.from,s.dryRun)))).pipe(Command.withDescription('Retire an Issue adoption at current HEAD.')),
+  Command.make('reopen', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => reopenIssue(repo,args.id,args.reason,s.dryRun)))).pipe(Command.withDescription('Reopen a closed Issue with a reason.')),
+  Command.make('close', { id, ...closureFlags }, args => withRepo((repo,s) => sync(() => {
+    const closure = { kind: args.kind, ...Object.fromEntries(['memory','target','canonical','dependency','version','reason'].flatMap(key => { const value = Option.getOrUndefined(args[key as 'memory']); return value === undefined ? [] : [[key,value]]; })), ...(args.proof.length ? { proof: args.proof } : {}), ...(args.evidence.length ? { evidence: args.evidence } : {}) };
+    return closeIssue(repo,args.id,decode(IssueClosureSchema,closure,'Issue closure'),s.dryRun);
+  }))).pipe(Command.withDescription('Close an Issue with a validated conclusion.')),
 ]));
 const feedbackConnection = Command.make('connection').pipe(Command.withDescription('Configure feedback providers; GitHub CLI mode reuses the server machine login.'), Command.withSubcommands([
   Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] })))),
@@ -279,7 +311,7 @@ const feedbackImport = Command.make('import', { url: Argument.string('url'), con
   const receipt = yield* syncFeedback(viewRoot(settings), args.connection, { url: args.url, dryRun: settings.dryRun });
   yield* Effect.sync(() => emit(receipt, settings.json));
 }));
-const feedback = Command.make('feedback').pipe(Command.withDescription('Triage local observations and explicitly import or synchronize configured remote feedback.'), Command.withSubcommands([
+const feedback = Command.make('feedback').pipe(Command.withDescription('Connect external feedback sources and import observations as local Issues.'), Command.withSubcommands([
   Command.make('list', feedbackFilters, args => withReadRepo(repo => sync(() => ({ operation: 'feedback-list', feedback: listFeedback(repo, undefined, selectedFeedbackFilters(args)) })))),
   Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => {
     const item = listFeedback(repo).find(candidate => candidate.document.metadata.id === args.id);
@@ -287,9 +319,9 @@ const feedback = Command.make('feedback').pipe(Command.withDescription('Triage l
     const relations = documentShow(repo, item.document.path, 'issue', cached(settings.dryRun));
     return { operation: 'feedback-show', feedback: { ...item, document: relations.document }, incoming: relations.incoming, outgoing: relations.outgoing, complete: relations.complete, findings: relations.findings };
   }))),
-  Command.make('create', { id, title: text('title'), body: optional('body') }, args => withRepo((repo, settings) => sync(() => createDocument(repo, 'issue', { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, dryRun: settings.dryRun })))),
-  Command.make('link', { id, feature: text('feature') }, args => withRepo((repo, settings) => sync(() => linkFeedbackFeature(repo, args.id, args.feature, settings.dryRun)))),
-  Command.make('close', { id, reason: text('reason') }, args => withRepo((repo, settings) => sync(() => closeIssue(repo, args.id, args.reason, settings.dryRun)))),
+  retiredFeedback('create', 'concord issue create'),
+  retiredFeedback('link', 'concord issue adopt --to'),
+  retiredFeedback('close', 'concord issue close'),
   feedbackSync,
   feedbackImport,
   feedbackConnection,
@@ -318,13 +350,21 @@ const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear
   Command.make('clear',{},()=>withRepo((repo,s)=>sync(()=>s.dryRun ? previewCacheClear(repo) : clearCache(repo)))),
   Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');const annotations=scanAnnotations(repo,{cache:'rebuild'});const code=scanCode(repo,{cache:'rebuild'});return {...annotations,codeCache:code.cache};}))),
 ]));
+// @concord-begin
+// @concord-implements docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
+const docsWorkContributionPath = new URL(import.meta.url).pathname.endsWith('.ts') ? '../repository/docs/work/index.ts' : './repository/docs/work/index.js';
 const docs = Command.make('docs').pipe(Command.withDescription('Check authored prose and terminology using consumer-owned writing policy.'), Command.withSubcommands([
+  (await import(docsWorkContributionPath) as { makeDocsWorkCommand: <R>(deliver: (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.Effect<void>, settings: Effect.Effect<{ root: string | undefined; json: boolean; dryRun: boolean }, never, R>) => Command.Command<any, never, unknown, never, NodeServices.NodeServices | R> }).makeDocsWorkCommand(
+    (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.sync(() => { process.stdout.write(delivery.stdout); process.stderr.write(delivery.stderr); if (delivery.exitCode !== 0) process.exitCode = delivery.exitCode; }),
+    root.pipe(Effect.map(settings => ({ root: Option.getOrUndefined(settings.root), json: settings.json, dryRun: settings.dryRun }))),
+  ),
   Command.make('check', { rules: optional('rules') }, args => withRepo(repo => sync(() => {
     const report = checkWriting(repo, Option.getOrUndefined(args.rules));
     if (!report.ok) process.exitCode = 1;
     return report;
   }), { readonly: true })),
 ]));
+// @concord-end
 const expected = (value: string): string | null => value === 'null' ? null : value;
 const writing = Command.make('writing').pipe(Command.withDescription('Discover and manage directory-owned writing policies.'), Command.withSubcommands([
   Command.make('index', {}, () => withRepo(repo => sync(() => writingIndex(repo)), { readonly: true })),

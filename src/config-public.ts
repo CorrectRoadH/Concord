@@ -26,6 +26,17 @@ export interface ProjectConfig {
   readonly sourceRoots?: readonly string[];
   readonly p5?: { readonly libraries: readonly string[] };
   readonly runner: Runner;
+  readonly docsWork?: {
+    readonly checks?: Readonly<Record<string, {
+      readonly argv: readonly [string, ...string[]];
+      readonly timeoutMs?: number;
+    }>>;
+    readonly finalizer?: {
+      readonly argv: readonly [string, ...string[]];
+      readonly timeoutMs?: number;
+    };
+    readonly sharedPaths?: readonly string[];
+  };
   readonly feedbackConnections?: readonly FeedbackConnection[];
   readonly projectTypes?: readonly ('library' | 'cli')[];
   readonly documentDefaults?: {

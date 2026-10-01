@@ -1,3 +1,5 @@
+import { renderRepositoryFailure } from "../../cli-support.js";
+import { compileTraceReport } from "../trace/compiler.js";
 import { Argument as Args, Command, Flag as Options } from "effect/unstable/cli";
 import { Effect, Option } from "effect";
 
@@ -43,26 +45,29 @@ function contentFrom(options: {
 }
 
 function deliverResearchOutcome(
-  program: Effect.Effect<ResearchOutcome, import("./errors.js").ResearchError>,
+  program: Effect.Effect<ResearchOutcome, import("./errors.js").ResearchError, import("effect").FileSystem.FileSystem>,
   json: boolean,
   deliver: TerminalDeliverySink,
 ) {
   return Effect.matchEffect(program, {
-    onFailure: (error) => deliver(stderrDelivery(
-      json ? jsonDocument({ ok: false, error }) : `${renderResearchError(error)}\n`,
-    )),
+    onFailure: (error) => deliver(stderrDelivery(renderRepositoryFailure(error, json))),
     onSuccess: (outcome) => deliver((outcome.command === "check" && !outcome.ok)
-      ? { stdout: json ? jsonDocument(outcome) : `${renderResearchOutcome(outcome)}\n`, stderr: "", exitCode: 1 }
+      ? { stdout: json ? jsonDocument(outcome) : `${renderResearchOutcome(outcome)}\n`, stderr: !json && outcome.complete === false ? outcome.findings.map(f => `warning: ${f.path}: ${f.message}\n`).join("") : "", exitCode: 1 }
       : stdoutDelivery(json ? jsonDocument(outcome) : `${renderResearchOutcome(outcome)}\n`)),
   });
 }
 
 /** Builds the independent Research command contribution for the Docs command tree. */
 export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSITORY_ROOT) {
+  const run = (input: unknown) => compileTraceReport(root).pipe(Effect.flatMap(report => {
+    return runResearchAt(root, input).pipe(Effect.map(receipt => receipt.command === "check"
+      ? { ...receipt, complete: report.complete, ok: receipt.ok && report.complete, findings: [...receipt.findings, ...report.findings] }
+      : receipt));
+  }));
 
   const createPage = Command.make("page", {
     json: jsonOption,
-  }, ({ json }) => deliverResearchOutcome(runResearchAt(root, {
+  }, ({ json }) => deliverResearchOutcome(run({
     command: "create-page",
   }), json, deliver)).pipe(
     Command.withDescription("Standalone Research pages require offline migration."),
@@ -76,7 +81,7 @@ export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSI
     ...packageOptions,
     dryRun: dryRunOption,
     json: jsonOption,
-  }, ({ dryRun, json, path, ...content }) => deliverResearchOutcome(runResearchAt(root, {
+  }, ({ dryRun, json, path, ...content }) => deliverResearchOutcome(run({
     command: "create-package",
     path,
     content: contentFrom(content),
@@ -96,7 +101,7 @@ export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSI
     ...addPageOptions,
     dryRun: dryRunOption,
     json: jsonOption,
-  }, ({ dryRun, json, page, parent, ...content }) => deliverResearchOutcome(runResearchAt(root, {
+  }, ({ dryRun, json, page, parent, ...content }) => deliverResearchOutcome(run({
     command: "add-page",
     parent,
     page,
@@ -110,7 +115,7 @@ export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSI
     ref: Args.string("exact-research-ref"),
     json: jsonOption,
   }, ({ json, ref }) => deliverResearchOutcome(
-    runResearchAt(root, { command: "check", ref }),
+    run({ command: "check", ref }),
     json,
     deliver,
   )).pipe(

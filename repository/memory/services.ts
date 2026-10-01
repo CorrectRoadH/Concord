@@ -1,8 +1,9 @@
+import { compileTraceReport, compileTraceReportUnderLease } from "../docs/trace/compiler.js";
 import { managedInventoryImplementationDigest } from "../host.js";
 import { readGovernanceConfiguration } from "concord-sdlc/governance-config";
 import { Context, Effect, FileSystem, Layer } from "effect";
 
-import { compileTrace, compileTraceUnderLease } from "../docs/trace/compiler.js";
+import { compileTrace, requireCompleteTraceUnderLease } from "../docs/trace/compiler.js";
 import type { TraceError } from "../docs/trace/errors.js";
 import type { RepoRef } from "../docs/trace/ref.js";
 import {
@@ -33,6 +34,7 @@ export type MemoryMutationReceipt = TraceMutationReceipt<MemoryMeta, MemoryMutat
 export type MemoryStoreError = MemoryError | TraceError | TraceCoordinationError;
 
 export interface MemoryStoreService {
+  readonly traceReport?: () => Effect.Effect<import("../docs/trace/compiler.js").TraceCompileReport, MemoryStoreError, FileSystem.FileSystem>;
   readonly list: () => Effect.Effect<readonly MemoryDocument[], MemoryStoreError>;
   readonly read: (id: string) => Effect.Effect<MemoryDocument, MemoryStoreError>;
   readonly readAuthor: (id: string) => Effect.Effect<MemoryAuthorSnapshot, MemoryStoreError>;
@@ -59,9 +61,10 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
     extraPaths: readonly string[] = [],
     regressionMemory?: string,
     validatedAt?: string,
+    completeGraph = false,
   ): Effect.Effect<TraceMutationPreparation, MemoryStoreError, FileSystem.FileSystem> =>
     Effect.gen(function*() {
-      const snapshot = yield* compileTraceUnderLease(root);
+      const snapshot = yield* (completeGraph || regressionMemory !== undefined ? requireCompleteTraceUnderLease(root) : compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)));
       const implementationDigest = regressionMemory === undefined ? undefined : yield* managedInventoryImplementationDigest(root).pipe(Effect.mapError(cause => new MemoryReferenceConflict({ operation: "resolve", message: cause.message })));
       const prepared = yield* memoryEffect("trace preparation", () => {
         const regressionTarget = regressionMemory === undefined ? undefined : repository.ownerPath(regressionMemory);
@@ -127,7 +130,7 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
         operation: options.operation,
         ownerPath: frozen.path,
         dryRun: options.dryRun,
-        prepareUnderLease: memoryEffect(options.operation, assertSelections).pipe(Effect.andThen(prepareUnderLease(options.target, [...(options.extraPaths ?? []), ...related.map(item => item.selection.path)], options.regressionMemory, validatedAt))),
+        prepareUnderLease: memoryEffect(options.operation, assertSelections).pipe(Effect.andThen(prepareUnderLease(options.target, [...(options.extraPaths ?? []), ...related.map(item => item.selection.path)], options.regressionMemory, validatedAt, options.operation === "memory-supersede"))),
         plan: ({ source, headCommit, preparation }) => memoryEffect(options.operation, () => {
           assertSelections();
           if ((source === undefined ? undefined : traceDigest(source)) !== frozen.record?.digest) throw new MemoryReferenceConflict({ operation: options.operation, path: frozen.path, message: 'selected owner preimage changed' });
@@ -138,6 +141,7 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
     });
 
   return {
+    traceReport: () => compileTraceReport(root),
     list: () => withTraceReadLease(root, () => memoryEffect("list", () => repository.list())),
     read: (id) => withTraceReadLease(root, () => memoryEffect("read", () => repository.read(id))),
     readAuthor: (id) => withTraceReadLease(root, () => memoryEffect("read author", () => repository.readAuthorSnapshot(id))),
@@ -231,7 +235,7 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
         };
       },
     }),
-    check: () => withTraceReadLease(root, () => compileTraceUnderLease(root).pipe(
+    check: () => withTraceReadLease(root, () => compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot),
       Effect.flatMap(snapshot => Effect.gen(function*() {
         const memories = yield* memoryEffect("check", () => repository.list());
         const hasNative = memories.some(memory => memory.metadata.resolution?.evidenceLevel === "repository");

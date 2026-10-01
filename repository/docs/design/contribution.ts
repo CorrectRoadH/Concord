@@ -1,3 +1,4 @@
+import { renderRepositoryFailure } from "../../cli-support.js";
 import { Argument as Args, Command, Flag as Options } from "effect/unstable/cli";
 import { Effect, Option } from "effect";
 
@@ -33,12 +34,13 @@ function deliverDesign(
   deliver: TerminalDeliverySink,
 ) {
   return Effect.matchEffect(program, {
-    onFailure: (error) => deliver(stderrDelivery(renderDesignError(error, json))),
+    onFailure: (error) => deliver(stderrDelivery(renderRepositoryFailure(error, json))),
     onSuccess: (receipt: DesignReceipt) => {
       const output = renderDesignReceipt(receipt, json);
+      const warnings = !json && receipt.operation === "design-check" && receipt.complete === false ? receipt.findings.map(f => `warning: ${f.path}: ${f.message}\n`).join("") : "";
       return deliver(receipt.operation === "design-check" && !receipt.ok
-        ? { stdout: output, stderr: "", exitCode: 1 }
-        : stdoutDelivery(output));
+        ? { stdout: output, stderr: warnings, exitCode: 1 }
+        : { ...stdoutDelivery(output), stderr: warnings });
     },
   });
 }

@@ -1,3 +1,6 @@
+import { Effect } from "effect";
+import { withTraceReadLease } from "./trace/relation-mutation.js";
+import { requireCompleteTraceUnderLease } from "./trace/compiler.js";
 import { Command, Flag as Options } from "effect/unstable/cli";
 
 import {
@@ -8,7 +11,7 @@ import {
 } from "./contribution.js";
 import { REPOSITORY_ROOT } from "./runtime.js";
 import { renderTraceFailure } from "./trace-command-presentation.js";
-import { recoverTrace, type TraceRecoveryReceipt } from "./trace/index.js";
+import { compileTraceReport, recoverTrace, type TraceRecoveryReceipt } from "./trace/index.js";
 
 const jsonOption = Options.boolean("json").pipe(
   Options.withDefault(false),
@@ -23,7 +26,7 @@ function renderRecovery(receipt: TraceRecoveryReceipt): string {
 
 function makeTraceCommand(deliver: TerminalDeliverySink) {
   const recover = Command.make("recover", { json: jsonOption }, ({ json }) => deliverDomainResult(
-    recoverTrace(REPOSITORY_ROOT),
+    recoverTrace(REPOSITORY_ROOT).pipe(Effect.flatMap(receipt => withTraceReadLease(REPOSITORY_ROOT, () => requireCompleteTraceUnderLease(REPOSITORY_ROOT)).pipe(Effect.as(receipt)))),
     json,
     {
       success: (receipt, structured) => structured ? jsonDocument(receipt) : renderRecovery(receipt),
@@ -32,7 +35,11 @@ function makeTraceCommand(deliver: TerminalDeliverySink) {
     deliver,
   )).pipe(Command.withDescription("Recover or finish one interrupted trace relation publication."));
 
-  return Command.make("trace").pipe(
+  return Command.make("trace", { json: jsonOption }, ({ json }) => deliverDomainResult(
+    compileTraceReport(REPOSITORY_ROOT), json,
+    { success: (report, structured) => structured ? jsonDocument(report) : `Trace generation ${report.snapshot.generation}: ${report.snapshot.nodes.length} nodes, ${report.snapshot.tests.length} tests\n`, failure: renderTraceFailure },
+    deliver,
+  )).pipe(
     Command.withDescription("Coordinate and recover repository trace relation publications."),
     Command.withSubcommands([recover]),
   );

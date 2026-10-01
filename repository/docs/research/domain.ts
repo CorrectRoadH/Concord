@@ -1,3 +1,5 @@
+import { renderDocsTraceError } from "../trace-command-presentation.js";
+import { isTraceError } from "../trace/errors.js";
 import { readdirSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import { Effect, Schema, SchemaIssue } from "effect";
@@ -451,11 +453,8 @@ export function renderResearchOutcome(outcome: ResearchOutcome): string {
 }
 
 export function renderResearchError(error: ResearchError): string {
+  if (isTraceError(error)) return renderDocsTraceError(error);
   switch (error._tag) {
-    case "TraceRecoveryRequired": return `Unfinished journal at ${error.path}; run ${error.nextStep}.`;
-    case "TraceJournalMigrationRequired":
-      return `${error._tag}: ${error.path} (${error.format}): ${error.message}`;
-    case "TraceRecoveryConflict": return `Recovery conflict at ${error.path}: ${error.message}`;
     case "TraceMutationError": return `Research publication ${error.phase}: ${error.message}`;
     case "ResearchInputError": return `Research input is invalid: ${error.message}`;
     case "ResearchMigrationRequired": return `ResearchMigrationRequired: ${error.message}`;

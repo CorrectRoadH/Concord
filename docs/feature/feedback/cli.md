@@ -15,10 +15,10 @@ concord feedback import https://github.com/example/product/issues/123 --connecti
 concord feedback sync --connection product-linear
 concord feedback list --json
 concord feedback show <id> --json
-concord feedback create local-observation --title "调查观察"
-concord feedback link <id> --feature docs/feature/example/README.md
+concord issue create local-observation --title "调查观察"
+concord issue adopt <id> --to docs/feature/example/README.md
 concord issue link <id> --memory memory/example.md
-concord feedback close <id> --reason "调查结论"
+concord issue close <id> --reason "调查结论"
 concord feedback connection remove product-github
 ```
 
@@ -48,3 +48,21 @@ concord issue link output-confusion --memory memory/output-investigation.md
 ```
 
 摘要取自工具返回的当前记录。没有来源、关系或历史的本地草稿可用 `issue remove <id> --expected-digest <digest>` 删除；关联后通过 close 等生命周期处理，不能删除来绕过调查与证明。本地 CRUD 从不自动写入 GitHub 或 Linear。
+
+## 本地 Issue 生命周期
+
+`concord issue` 是本地 Issue 写入口；这些命令不读取 concord.repository.json，也不要求 Trace 完整。link 和 adopt 要求 draft；closed Issue 通过 reopen 继续调查。
+
+```sh
+concord issue link observation --memory memory/investigation.md --kind root-cause
+concord issue adopt observation --to docs/feature/example/README.md
+concord issue retire observation --from docs/feature/example/README.md
+concord issue close observation --kind closed --reason "调查结论"
+concord issue reopen observation --reason "新增观察"
+```
+
+link 的 kind 为 investigation、root-cause、decision、delivery，默认 investigation，同一 kind 与 Memory 不重复。retire 使用当前 HEAD，无提交返回 IssueRetireRequiresCommit。
+
+close 参数按结论选择：fixed 使用 memory 与至少一个 proof；delivered 另需 target，目标属于当前或历史采用。duplicate 使用 canonical；declined 使用 memory；invalid 使用至少一个 evidence；external-fixed 使用 dependency、version 与至少一个 proof。closed 使用 reason。proof 与 evidence 可以重复传入。省略 kind 等同 closed。
+
+全部 close kind 检查关联 Problem，captured 或 open 返回 OpenProblem。fixed 要求已记录 fixed 结论的 Problem，declined 要求 current Decision，duplicate 不得形成环。duplicate、declined、invalid 要求先 retire 全部当前采用。闭合与引用检查复用 concord check 的规则，失败退出 1 且零写入。

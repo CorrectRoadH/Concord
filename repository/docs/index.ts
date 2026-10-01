@@ -7,3 +7,4 @@ export { researchCommandContribution } from "./research/index.js";
 export { testCommandContribution } from "./test-command.js";
 export { traceCommandContribution } from "./trace-command.js";
 export { useCaseCommandContribution } from "./use-case/index.js";
+export { docsWorkCommandContribution } from "./work/index.js";

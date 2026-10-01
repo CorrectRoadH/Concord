@@ -257,8 +257,8 @@ test('packed feedback commands persist connections and local triage without remo
  const project=readProjectConfig(root);
  assert.deepEqual(project.feedbackConnections?.map(connection=>connection.provider),['github','linear']);
  call(root,['feature','create','feedback-target','--title','Feedback target'],Ack);
- call(root,['feedback','create','observation','--title','Local observation'],Ack);
- call(root,['feedback','link','observation','--feature','docs/feature/feedback-target/README.md'],Ack);
+ call(root,['issue','create','observation','--title','Local observation'],Ack);
+ call(root,['issue','adopt','observation','--to','docs/feature/feedback-target/README.md'],Ack);
  const relative='docs/issues/observation.md';
  const linked=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
  assert.equal(linked?.metadata.kind,'issue');
@@ -268,7 +268,7 @@ test('packed feedback commands persist connections and local triage without remo
  const listed=call(root,['feedback','list'],Schema.Unknown);
  assert.match(JSON.stringify(listed),/observation/);
  call(root,['feedback','show','observation'],Schema.Unknown);
- call(root,['feedback','close','observation','--reason','Investigation complete'],Ack);
+ call(root,['issue','close','observation','--reason','Investigation complete'],Ack);
  call(root,['issue','create','pending','--title','Pending observation'],Ack);
  const feedbackList=Schema.Struct({feedback:Schema.Array(Schema.Struct({document:Schema.Struct({metadata:Schema.Struct({id:Schema.String})})}))});
  const issueList=Schema.Struct({drafts:Schema.Array(Schema.Struct({metadata:Schema.Struct({id:Schema.String})}))});

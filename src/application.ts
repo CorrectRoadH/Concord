@@ -16,6 +16,9 @@ import {
   addPage,
   activateMemory,
   adoptRoadmap,
+  adoptIssue,
+  retireIssue,
+  reopenIssue,
   closeIssue,
   createDocument,
   correctDesignReason,
@@ -24,7 +27,6 @@ import {
   formatDesign,
   findDocument,
   linkIssue,
-  linkFeedbackFeature,
   promoteMemory,
   reopenMemory,
   resolveMemory,
@@ -46,7 +48,7 @@ import {
 } from './editing.js';
 import { readEvidence, verifyFixedEvidence } from './evidence.js';
 import { annotationSnippet, doctor } from './onboarding.js';
-import { ConcordError, ProjectSchema, decode, digest, failure, type Repository } from './shared.js';
+import { ConcordError, IssueClosureSchema, ProjectSchema, decode, digest, failure, type Repository } from './shared.js';
 import { assertCurrentRuntimeFormat, discoverRoot, git, initialize, LocalRepository } from './storage.js';
 import { snapshot as parseConfigSnapshot } from './config.js';
 import { adoptConstitution, amendConstitution, initializeConstitution } from './constitution.js';
@@ -101,6 +103,9 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'memory.supersede':
     case 'memory.promote':
     case 'memory.retire':
+    case 'issue.adopt':
+    case 'issue.retire':
+    case 'issue.reopen':
     case 'issue.link':
     case 'issue.edit':
     case 'issue.remove':
@@ -373,15 +378,18 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'memory.supersede': return supersedeMemory(repo, action.id, action.replacement, action.reason, dryRun);
     case 'memory.promote': return promoteMemory(repo, action.id, action.target, dryRun);
     case 'memory.retire': return retirePromotion(repo, action.id, action.target, action.reason, dryRun);
-    case 'issue.link': return linkIssue(repo, action.id, action.memory, dryRun);
+    case 'issue.link': return linkIssue(repo, action.id, action.memory, dryRun, action.kind);
     case 'issue.list': { const { action: _, ...filter } = action; return { operation: 'issue-list', drafts: listFeedback(repo, undefined, filter).map(item => item.document) }; }
     case 'feedback.list': { const { action: _, ...filter } = action; return { operation: 'feedback-list', feedback: listFeedback(repo, undefined, filter) }; }
     case 'issue.index': return knowledgeIndex(repo, 'issue');
     case 'issue.recall': return knowledgeRecall(repo, 'issue', action.query);
     case 'issue.edit': return editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun);
     case 'issue.remove': return removeIssue(repo, action.id, action.expectedDigest, dryRun);
-    case 'issue.close': return closeIssue(repo, action.id, action.reason, dryRun);
-    case 'feedback.link': return linkFeedbackFeature(repo, action.id, action.feature, dryRun);
+    case 'issue.adopt': return adoptIssue(repo, action.id, action.to, dryRun);
+    case 'issue.retire': return retireIssue(repo, action.id, action.from, dryRun);
+    case 'issue.reopen': return reopenIssue(repo, action.id, action.reason, dryRun);
+    case 'issue.close': { const { action: _, id, dryRun: __, ...closure } = action; return closeIssue(repo, id, decode(IssueClosureSchema, { ...closure, kind: closure.kind ?? 'closed' }, 'Issue closure'), dryRun); }
+    case 'feedback.link': throw new ConcordError('CommandRetired', 'Use concord issue adopt --to', { command: 'concord feedback link', replacement: 'concord issue adopt --to' });
     case 'source.set': return setSource(repo, action.path, action.body, action.expectedDigest, dryRun);
     case 'writing.index': return writingIndex(repo);
     case 'writing.show': return showWriting(repo, action.path);

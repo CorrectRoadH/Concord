@@ -3,6 +3,7 @@ import { Data } from "effect";
 export class CaseRelationsFormatError extends Data.TaggedError("CaseRelationsFormatError")<{
   readonly path: string;
   readonly message: string;
+  readonly suggestion?: string;
 }> {}
 
 export class InvalidCaseToken extends Data.TaggedError("InvalidCaseToken")<{ readonly selector: string }> {}

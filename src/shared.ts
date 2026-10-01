@@ -58,6 +58,11 @@ export const ProjectSchema = Schema.Struct({
     libraries: Schema.Array(Text).check(Schema.isMaxLength(16), Schema.makeFilter(values => new Set(values).size === values.length)),
   })),
   runner: RunnerSchema,
+  docsWork: Schema.optional(Schema.Struct({
+    checks: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ argv: Schema.NonEmptyArray(Text), timeoutMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))) }))),
+    finalizer: Schema.optional(Schema.Struct({ argv: Schema.NonEmptyArray(Text), timeoutMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))) })),
+    sharedPaths: Schema.optional(Schema.Array(Text)),
+  })),
   feedbackConnections: Schema.optional(FeedbackConnectionsSchema),
   projectTypes: Schema.optional(Schema.Array(Schema.Literals(['library', 'cli']))),
   documentDefaults: Schema.optional(DocumentDefaultsSchema),

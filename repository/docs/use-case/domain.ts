@@ -5,7 +5,7 @@ import * as FileSystem from "effect/FileSystem";
 import { Effect } from "effect";
 import { stringify } from "yaml";
 
-import { compileTraceUnderLease } from "../trace/compiler.js";
+import { compileTraceReportUnderLease } from "../trace/compiler.js";
 import {
   mutateTraceFiles,
   traceDigest,
@@ -205,7 +205,7 @@ function makePlan(
         ? cause
         : new UseCaseInputInvalid({ source: "body", message: pathMessage(cause) }),
     });
-    const snapshot = yield* compileTraceUnderLease(root);
+    const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot));
     const inspected = yield* Effect.try({
       try: () => {
         const parent = selectParent(snapshot, input.parent);

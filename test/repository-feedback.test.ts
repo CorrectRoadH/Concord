@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test, { type TestContext } from 'node:test';
@@ -29,32 +29,20 @@ function owner(fields: object): string { return `---\n${JSON.stringify({ format:
 function issue(id: string): IssueMeta { return { format: 'concord.document/v1', id, title: id, createdAt: '2026-09-14T00:00:00.000Z', kind: 'issue', state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }; }
 const run = (root: string, input: unknown) => Effect.runPromise(runFeedbackCommand(input).pipe(Effect.provide(NodeFeedbackStoreLive(root)), Effect.provide(NodeServices.layer)));
 
-test('repository feedback uses canonical owners and validates links, adoption, closure and Git history', async t => {
+test('repository feedback local writes return CommandRetired without creating owners', async t => {
   const root = fixture(t);
-  const preview = await run(root, { operation: 'add', document: { metadata: issue('observation'), body: '# Account\n' }, dryRun: true });
-  assert('receipt' in preview && 'committed' in preview.receipt && !preview.receipt.committed);
+  for (const operation of ['link', 'adopt', 'retire', 'close', 'reopen']) {
+    await assert.rejects(run(root, { operation, obsolete: 'ignored' }), /Use concord issue/);
+  }
   assert.equal(existsSync(join(root, 'docs/issues/observation.md')), false);
-  await run(root, { operation: 'add', document: { metadata: issue('observation'), body: '# Account\n' }, dryRun: false });
-  renameSync(join(root, 'docs/issues/observation.md'), join(root, 'docs/issues/中文观察.md'));
-  await run(root, { operation: 'link', id: 'observation', relation: { kind: 'investigation', memory: 'memory/problem.md' }, dryRun: false });
-  await assert.rejects(run(root, { operation: 'close', id: 'observation', closure: { kind: 'fixed', memory: 'memory/problem.md', proof: ['account'] }, dryRun: false }), /resolved fixed Problem/);
-  await assert.rejects(run(root, { operation: 'adopt', id: 'observation', to: 'docs/feature/missing/README.md', dryRun: false }), /missing|not found|ENOENT/);
-  await run(root, { operation: 'adopt', id: 'observation', to: 'docs/feature/flow/README.md', dryRun: false });
-  await run(root, { operation: 'retire', id: 'observation', from: 'docs/feature/flow/README.md', dryRun: false });
-  const shown = await run(root, { operation: 'show', id: 'observation' });
-  assert('document' in shown);
-  assert.equal(shown.document.metadata.adoptions.history[0]?.commit, execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
-  await run(root, { operation: 'close', id: 'observation', closure: { kind: 'closed', reason: 'Reviewed account' }, dryRun: false });
-  const checked = await run(root, { operation: 'check' });
-  assert('receipt' in checked && 'ok' in checked.receipt && checked.receipt.ok);
-  assert.equal(existsSync(join(root, 'feedback')), false);
 });
 
-test('repository feedback rejects duplicate cycles, symlinks and invalid current metadata', async t => {
+test('repository feedback read and check preserve historical Issue validation', async t => {
   const root = fixture(t);
-  for (const id of ['first', 'second']) await run(root, { operation: 'add', document: { metadata: issue(id), body: '# Account\n' }, dryRun: false });
-  await run(root, { operation: 'close', id: 'first', closure: { kind: 'duplicate', canonical: 'docs/issues/second.md' }, dryRun: false });
-  await assert.rejects(run(root, { operation: 'close', id: 'second', closure: { kind: 'duplicate', canonical: 'docs/issues/first.md' }, dryRun: false }), /cycle/);
+  write(root, 'docs/issues/first.md', owner({ ...issue('first'), state: 'closed', closure: { kind: 'duplicate', canonical: 'docs/issues/second.md' } }));
+  write(root, 'docs/issues/second.md', owner({ ...issue('second'), state: 'closed', closure: { kind: 'duplicate', canonical: 'docs/issues/first.md' } }));
+  const checked = await run(root, { operation: 'check' });
+  assert('receipt' in checked && 'ok' in checked.receipt && !checked.receipt.ok);
   symlinkSync(join(root, 'memory/problem.md'), join(root, 'docs/issues/unsafe.md'));
   await assert.rejects(run(root, { operation: 'show', id: 'unsafe' }), /symbolic links/);
 });

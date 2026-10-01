@@ -1,3 +1,4 @@
+import { renderRepositoryFailure } from "../../cli-support.js";
 import { Argument as Args, Command, Flag as Options } from "effect/unstable/cli";
 import { Effect, Option } from "effect";
 import * as FileSystem from "effect/FileSystem";
@@ -68,7 +69,7 @@ function makeUseCaseCommand(deliver: TerminalDeliverySink) {
         source: "body",
         message: "create requires exactly one of --file or --stdin",
       });
-      return deliver(stderrDelivery(renderUseCaseError(error, json)));
+      return deliver(stderrDelivery(renderRepositoryFailure(error, json)));
     }
     const body = stdin ? readStdin() : readBody(path!);
     return Effect.matchEffect(
@@ -80,7 +81,7 @@ function makeUseCaseCommand(deliver: TerminalDeliverySink) {
         dryRun,
       }))),
       {
-        onFailure: (error) => deliver(stderrDelivery(renderUseCaseError(error, json))),
+        onFailure: (error) => deliver(stderrDelivery(renderRepositoryFailure(error, json))),
         onSuccess: (receipt) => deliver(stdoutDelivery(renderUseCaseReceipt(receipt, json))),
       },
     );

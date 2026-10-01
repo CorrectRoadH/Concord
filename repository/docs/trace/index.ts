@@ -27,7 +27,7 @@ import type {
 } from "./model.js";
 import { parseRepoRef, resolveRepoRefScope } from "./ref.js";
 
-export { compileTrace, compileTraceUnderLease } from "./compiler.js";
+export { compileTrace, compileTraceUnderLease, compileTraceReport, compileTraceReportUnderLease, requireCompleteTraceUnderLease, requireCompleteTrace } from "./compiler.js";
 export * from "./errors.js";
 export * from "./ref.js";
 export * from "./relation-mutation.js";

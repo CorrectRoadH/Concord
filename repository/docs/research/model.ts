@@ -75,16 +75,13 @@ export interface ResearchMutationReceipt {
 
 export interface ResearchCheckFinding {
   readonly path: string;
-  readonly code:
-    | "unmanaged"
-    | "invalid-document"
-    | "research-migration-required"
-    | "nested-owner"
-    | "invalid-package-root";
+  readonly code: string;
+  readonly suggestion?: string;
   readonly message: string;
 }
 
 export interface ResearchCheckReceipt {
+  readonly complete?: boolean;
   readonly format: "concord.docs-research/check/v1";
   readonly command: "check";
   readonly ok: boolean;

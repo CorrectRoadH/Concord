@@ -14,6 +14,10 @@ import { decodeDocumentSource as parseDocumentSource } from './document-codec.js
 import {
   ConcordError,
   DocumentSchema,
+  IssueClosureSchema,
+  MEMORY_RELATION_KINDS,
+  type IssueClosure,
+  type IssueMemoryRelation,
   DocumentName,
   Text,
   decode,
@@ -254,6 +258,34 @@ function validateConstitutionRefs(repo: Repository, refs: readonly string[]): vo
   }
 }
 
+function checkIssueClosure(repo: Repository, documents: readonly DocumentRecord[], document: DocumentRecord): Finding[] {
+  const findings: Finding[] = []; const metadata = document.metadata;
+  if (metadata.kind !== 'issue') return findings;
+  if (metadata.closure?.kind === 'fixed' || metadata.closure?.kind === 'declined') {
+    const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
+    if (closureMemory?.metadata.kind === 'memory') {
+      const m = closureMemory.metadata;
+      if (metadata.closure.kind === 'fixed' && (m.memoryKind !== 'problem' || m.state !== 'resolved' || m.resolution?.kind !== 'fixed')) finding(findings, 'InvalidState', document.path, 'Fixed closure requires a Problem with a recorded fixed resolution');
+      if (metadata.closure.kind === 'declined' && (m.memoryKind !== 'decision' || m.state !== 'current')) finding(findings, 'InvalidState', document.path, 'Declined closure requires a current Decision');
+    }
+  }
+  if (metadata.closure?.kind === 'delivered') {
+    const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
+    if (closureMemory?.metadata.kind === 'memory' && !(closureMemory.metadata.memoryKind === 'problem' && closureMemory.metadata.state === 'resolved' || closureMemory.metadata.memoryKind === 'decision' && closureMemory.metadata.state === 'current')) finding(findings, 'InvalidState', document.path, 'Delivery requires a resolved Problem or current Decision');
+    checkRef(findings, repo, documents, document, metadata.closure.target, CONTRACT_KINDS, 'closure target');
+    if (![...metadata.adoptions.current, ...metadata.adoptions.history.map(entry => entry.target)].includes(metadata.closure.target)) finding(findings, 'InvalidState', document.path, 'Delivered target must occur in adoption current or history');
+  }
+  if (metadata.closure?.kind === 'duplicate') checkRef(findings, repo, documents, document, metadata.closure.canonical, ['issue'], 'canonical Issue');
+  if (metadata.closure !== undefined && ['duplicate', 'declined', 'invalid'].includes(metadata.closure.kind) && metadata.adoptions.current.length !== 0) finding(findings, 'InvalidState', document.path, 'This closure requires current adoptions to be retired explicitly');
+  const seen = new Set<string>(); let cursor: DocumentRecord | undefined = document;
+  while (cursor?.metadata.kind === 'issue' && cursor.metadata.closure?.kind === 'duplicate') {
+    if (seen.has(cursor.path)) { finding(findings, 'ReferenceCycle', document.path, 'Issue duplicate closure contains a cycle'); break; }
+    seen.add(cursor.path);
+    try { cursor = resolveReference(repo, documents, cursor.metadata.closure.canonical, ['issue']); } catch { break; }
+  }
+  return findings;
+}
+
 export function checkDocuments(repo: Repository, documents: readonly DocumentRecord[]): Finding[] {
   return inRepositorySnapshot(repo, () => {
   const findings: Finding[] = [];
@@ -351,22 +383,7 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
     if (metadata.kind === 'issue') {
       if (metadata.state === 'closed' && metadata.closure === undefined) finding(findings, 'InvalidState', document.path, 'Closed Issue must declare closure');
       if (metadata.state === 'draft' && metadata.closure !== undefined) finding(findings, 'InvalidState', document.path, 'Draft Issue cannot declare closure');
-      if (metadata.closure?.kind === 'fixed' || metadata.closure?.kind === 'declined') {
-        const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
-        if (closureMemory?.metadata.kind === 'memory') {
-          const m = closureMemory.metadata;
-          if (metadata.closure.kind === 'fixed' && (m.memoryKind !== 'problem' || m.state !== 'resolved' || m.resolution?.kind !== 'fixed')) finding(findings, 'InvalidState', document.path, 'Fixed closure requires a Problem with a recorded fixed resolution');
-          if (metadata.closure.kind === 'declined' && (m.memoryKind !== 'decision' || m.state !== 'current')) finding(findings, 'InvalidState', document.path, 'Declined closure requires a current Decision');
-        }
-      }
-      if (metadata.closure?.kind === 'delivered') {
-        const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
-        if (closureMemory?.metadata.kind === 'memory' && !(closureMemory.metadata.memoryKind === 'problem' && closureMemory.metadata.state === 'resolved' || closureMemory.metadata.memoryKind === 'decision' && closureMemory.metadata.state === 'current')) finding(findings, 'InvalidState', document.path, 'Delivery requires a resolved Problem or current Decision');
-        checkRef(findings, repo, documents, document, metadata.closure.target, CONTRACT_KINDS, 'closure target');
-        if (![...metadata.adoptions.current, ...metadata.adoptions.history.map(entry => entry.target)].includes(metadata.closure.target)) finding(findings, 'InvalidState', document.path, 'Delivered target must occur in adoption current or history');
-      }
-      if (metadata.closure?.kind === 'duplicate') checkRef(findings, repo, documents, document, metadata.closure.canonical, ['issue'], 'canonical Issue');
-      if (metadata.closure !== undefined && ['duplicate', 'declined', 'invalid'].includes(metadata.closure.kind) && metadata.adoptions.current.length !== 0) finding(findings, 'InvalidState', document.path, 'This closure requires current adoptions to be retired explicitly');
+      findings.push(...checkIssueClosure(repo, documents, document));
       const relations = metadata.memoryRelations;
       const relationKeys = relations.map((relation) => `${relation.kind}\u0000${relation.memory}`);
       if (new Set(relationKeys).size !== relationKeys.length) finding(findings, 'InvalidState', document.path, 'Issue Memory relations must be unique');
@@ -391,14 +408,6 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       if (seen.has(cursor.path)) { finding(findings, 'ReferenceCycle', start.path, 'Memory supersession contains a cycle'); break; }
       seen.add(cursor.path);
       try { cursor = resolveReference(repo, documents, cursor.metadata.supersededBy, ['memory']); } catch { break; }
-    }
-  }
-  for (const start of documents.filter(document => document.metadata.kind === 'issue')) {
-    const seen = new Set<string>(); let cursor: DocumentRecord | undefined = start;
-    while (cursor?.metadata.kind === 'issue' && cursor.metadata.closure?.kind === 'duplicate') {
-      if (seen.has(cursor.path)) { finding(findings, 'ReferenceCycle', start.path, 'Issue duplicate closure contains a cycle'); break; }
-      seen.add(cursor.path);
-      try { cursor = resolveReference(repo, documents, cursor.metadata.closure.canonical, ['issue']); } catch { break; }
     }
   }
   return findings.sort((left, right) => left.path.localeCompare(right.path) || left.code.localeCompare(right.code));
@@ -784,14 +793,15 @@ export function retirePromotion(repo: Repository, selector: string, target: stri
   });
 }
 
-export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false): MutationReceipt {
+export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false, kind: IssueMemoryRelation['kind'] = 'investigation'): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
   if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
   if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed Issue cannot gain links');
+  decode(Schema.Literals(MEMORY_RELATION_KINDS), kind, 'relation kind');
   const target = resolveReference(repo, documents, memoryRef, ['memory']); const canonical = target.path;
-  if (record.metadata.memoryRelations.some((relation) => relation.memory === canonical && relation.kind === 'investigation')) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
-  return changed(repo, 'link-issue', record, { ...record.metadata, memoryRelations: [...record.metadata.memoryRelations, { kind: 'investigation', memory: canonical }] }, record.body, dryRun);
+  if (record.metadata.memoryRelations.some((relation) => relation.memory === canonical && relation.kind === kind)) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
+  return changed(repo, 'link-issue', record, { ...record.metadata, memoryRelations: [...record.metadata.memoryRelations, { kind, memory: canonical }] }, record.body, dryRun);
   });
 }
 
@@ -799,16 +809,12 @@ export function linkIssue(repo: Repository, selector: string, memoryRef: string,
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 export function linkFeedbackFeature(repo: Repository, selector: string, featureRef: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
-  if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-  if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed feedback cannot gain links');
-  const target = findDocument(documents, featureRef, 'feature'); const canonical = target.path;
-  if (record.metadata.adoptions.current.includes(canonical)) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
-  return changed(repo, 'link-feedback', record, { ...record.metadata, adoptions: { ...record.metadata.adoptions, current: [...record.metadata.adoptions.current, canonical] } }, record.body, dryRun);
+    const target = findDocument(loadDocuments(repo), featureRef, 'feature');
+    return adoptIssue(repo, selector, target.path, dryRun);
   });
 }
 
-export function closeIssue(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
+export function closeIssue(repo: Repository, selector: string, closureInput: string | IssueClosure, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
   if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
@@ -818,7 +824,49 @@ export function closeIssue(repo: Repository, selector: string, reason: string, d
     const target = resolveReference(repo, documents, ref, ['memory']);
     if (target.metadata.kind === 'memory' && target.metadata.memoryKind === 'problem' && (target.metadata.state === 'captured' || target.metadata.state === 'open')) throw new ConcordError('OpenProblem', `Activate and resolve linked Problem ${ref} before closing the Issue`);
   }
-  const at = now(); const why = required(reason, 'reason');
-  return changed(repo, 'close-issue', record, { ...record.metadata, state: 'closed', closure: { kind: 'closed', reason: why }, history: [...record.metadata.history, lifecycleHistory('close', why, at)] }, record.body, dryRun);
+  const closure = decode(IssueClosureSchema, typeof closureInput === 'string' ? { kind: 'closed', reason: closureInput } : closureInput, 'Issue closure');
+  const at = now(); const why = closure.kind === 'closed' ? closure.reason : closure.kind;
+  const metadata = { ...record.metadata, state: 'closed' as const, closure, history: [...record.metadata.history, lifecycleHistory('close', why, at)] };
+  const candidate = { ...record, metadata };
+  const findings = checkIssueClosure(repo, documents.map(document => document.path === record.path ? candidate : document), candidate);
+  if (findings.length > 0) throw new ConcordError(findings[0]!.code, findings[0]!.message, { findings });
+  return changed(repo, 'close-issue', record, metadata, record.body, dryRun);
+  });
+}
+
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
+export function adoptIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
+    const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
+    if (record.metadata.kind !== 'issue' || record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Only a draft Issue can adopt a contract');
+    const parsed = parseReference(reference);
+    const target = resolveReference(repo, documents, reference, CONTRACT_KINDS);
+    if (target.path !== parsed.path) throw new ConcordError('InvalidReferenceTarget', 'Adoption requires an exact contract owner');
+    const canonical = parsed.ref;
+    if (record.metadata.adoptions.current.includes(canonical)) throw new ConcordError('DuplicateLink', `${canonical} is already adopted`);
+    return changed(repo, 'adopt-issue', record, { ...record.metadata, adoptions: { ...record.metadata.adoptions, current: [...record.metadata.adoptions.current, canonical] } }, record.body, dryRun);
+  });
+}
+
+export function retireIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
+    const record = findDocument(loadDocuments(repo), selector, 'issue');
+    if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
+    const canonical = parseReference(reference).ref;
+    if (!record.metadata.adoptions.current.includes(canonical)) throw new ConcordError('InvalidIssueState', `${canonical} is not a current adoption`);
+    let commit: string;
+    try { commit = git(repo.root, ['rev-parse', '--verify', 'HEAD']); }
+    catch { throw new ConcordError('IssueRetireRequiresCommit', 'Issue retirement requires a current HEAD commit'); }
+    return changed(repo, 'retire-issue', record, { ...record.metadata, adoptions: { current: record.metadata.adoptions.current.filter(target => target !== canonical), history: [...record.metadata.adoptions.history, { target: canonical, commit }] } }, record.body, dryRun);
+  });
+}
+
+export function reopenIssue(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
+    const record = findDocument(loadDocuments(repo), selector, 'issue');
+    if (record.metadata.kind !== 'issue' || record.metadata.state !== 'closed') throw new ConcordError('InvalidIssueState', 'Only a closed Issue can reopen');
+    const why = required(reason, 'reason'); const { closure: _, ...metadata } = record.metadata;
+    return changed(repo, 'reopen-issue', record, { ...metadata, state: 'draft', history: [...metadata.history, lifecycleHistory('reopen', why, now())] }, record.body, dryRun);
   });
 }

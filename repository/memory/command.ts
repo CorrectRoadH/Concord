@@ -36,11 +36,12 @@ export const MemoryCommandInputSchema = Schema.Union([
 export type MemoryCommandInput = typeof MemoryCommandInputSchema.Type;
 
 type MutationOperation = "add" | "author-set" | "resolve" | "activate" | "reopen" | "supersede" | "promote" | "retire";
+type ReadReport = { readonly complete: boolean; readonly findings: readonly import("../docs/trace/model.js").TraceFinding[] };
 export type MemoryCommandOutcome =
   | { readonly domain: "memory"; readonly operation: MutationOperation; readonly dryRun: boolean; readonly memory: import("concord-sdlc/model").MemoryMeta; readonly receipt: MemoryMutationReceipt }
-  | { readonly domain: "memory"; readonly operation: "list" | "search"; readonly memories: readonly MemoryDocument[] }
-  | { readonly domain: "memory"; readonly operation: "show"; readonly memory: MemoryDocument; readonly ownerPreimageDigest: string; readonly authorRegionDigest: string }
-  | { readonly domain: "memory"; readonly operation: "check"; readonly receipt: MemoryCheckReceipt };
+  | (ReadReport & { readonly domain: "memory"; readonly operation: "list" | "search"; readonly memories: readonly MemoryDocument[] })
+  | (ReadReport & { readonly domain: "memory"; readonly operation: "show"; readonly memory: MemoryDocument; readonly ownerPreimageDigest: string; readonly authorRegionDigest: string })
+  | ({ readonly complete: boolean; readonly domain: "memory"; readonly operation: "check"; readonly ok: boolean; readonly violations: readonly string[]; readonly incomplete: readonly import("../docs/trace/model.js").TraceFinding[]; readonly receipt: MemoryCheckReceipt });
 
 function decodeInput(input: unknown): Effect.Effect<MemoryCommandInput, MemoryContentInvalid> {
   return Schema.decodeUnknownEffect(MemoryCommandInputSchema, { errors: "all", onExcessProperty: "error" })(input).pipe(
@@ -60,6 +61,7 @@ export function runMemoryCommand(
 ): Effect.Effect<MemoryCommandOutcome, MemoryStoreError | MemoryContentInvalid, MemoryStore | FileSystem.FileSystem> {
   return decodeInput(input).pipe(Effect.flatMap((decoded) => Effect.gen(function*() {
     const store = yield* MemoryStore;
+    const report = store.traceReport === undefined ? { complete: true, findings: [] } : yield* store.traceReport();
     switch (decoded.operation) {
       case "add": {
         const receipt = yield* store.create(decoded.metadata, decoded.body, decoded.dryRun);
@@ -67,11 +69,11 @@ export function runMemoryCommand(
       }
       case "list": {
         const memories = yield* store.list();
-        return { domain: "memory" as const, operation: decoded.operation, memories };
+        return { domain: "memory" as const, operation: decoded.operation, complete: report.complete, findings: report.findings, memories };
       }
       case "show": {
         const snapshot = yield* store.readAuthor(decoded.id);
-        return { domain: "memory" as const, operation: decoded.operation, memory: snapshot.document, ownerPreimageDigest: snapshot.ownerPreimageDigest, authorRegionDigest: snapshot.authorRegionDigest };
+        return { domain: "memory" as const, operation: decoded.operation, complete: report.complete, findings: report.findings, memory: snapshot.document, ownerPreimageDigest: snapshot.ownerPreimageDigest, authorRegionDigest: snapshot.authorRegionDigest };
       }
       case "author-set": {
         const receipt = yield* store.setAuthor(decoded.id, decoded.body, decoded.expectedOwnerDigest, decoded.expectedAuthorDigest, decoded.dryRun);
@@ -79,7 +81,7 @@ export function runMemoryCommand(
       }
       case "search": {
         const memories = yield* store.search(decoded.pattern);
-        return { domain: "memory" as const, operation: decoded.operation, memories };
+        return { domain: "memory" as const, operation: decoded.operation, complete: report.complete, findings: report.findings, memories };
       }
       case "resolve": {
         const receipt = yield* store.resolve(decoded.id, decoded.resolution, decoded.dryRun);
@@ -107,7 +109,7 @@ export function runMemoryCommand(
       }
       case "check": {
         const receipt = yield* store.check();
-        return { domain: "memory" as const, operation: decoded.operation, receipt };
+        return { domain: "memory" as const, operation: decoded.operation, complete: report.complete, ok: receipt.ok && report.complete, violations: receipt.findings, incomplete: report.findings, receipt };
       }
     }
   })));

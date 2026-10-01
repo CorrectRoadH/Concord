@@ -16,7 +16,7 @@ import type {
   ProjectConfig,
   Runner,
 } from './shared.js';
-import { MemorySourceSchema, ProjectSchema } from './shared.js';
+import { MEMORY_RELATION_KINDS, MemorySourceSchema, ProjectSchema } from './shared.js';
 import type { TraceEdge } from './trace.js';
 import { FeedbackConnectionsSchema, type FeedbackAvailability, type FeedbackItem, type FeedbackTriage, type RemoteFeedback } from './feedback-schema.js';
 import { WritingPolicySchema } from './writing-schema.js';
@@ -202,14 +202,17 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('memory.supersede'), id: Text, replacement: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.promote'), id: Text, target: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.retire'), id: Text, target: Text, reason: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('issue.link'), id: Text, memory: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.link'), id: Text, memory: Text, kind: Schema.optional(Schema.Literals(MEMORY_RELATION_KINDS)), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.adopt'), id: Text, to: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.retire'), id: Text, from: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.reopen'), id: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.index') }),
   Schema.Struct({ action: Schema.Literal('issue.list'), ...FeedbackFilterFields }),
   Schema.Struct({ action: Schema.Literal('feedback.list'), ...FeedbackFilterFields }),
   Schema.Struct({ action: Schema.Literal('issue.recall'), query: Text }),
   Schema.Struct({ action: Schema.Literal('issue.edit'), id: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.remove'), id: Text, expectedDigest: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('issue.close'), id: Text, reason: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.close'), id: Text, kind: Schema.optional(Schema.Literals(['fixed','delivered','duplicate','declined','invalid','external-fixed','closed'])), reason: Schema.optional(Text), memory: Schema.optional(Text), target: Schema.optional(Text), proof: Schema.optional(Schema.NonEmptyArray(Text)), canonical: Schema.optional(Text), evidence: Schema.optional(Schema.NonEmptyArray(Text)), dependency: Schema.optional(Text), version: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('feedback.sync'), connection: Text, url: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('feedback.check'), connection: Text }),
   Schema.Struct({ action: Schema.Literal('feedback.link'), id: Text, feature: Text, ...DryRun }),

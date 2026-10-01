@@ -33,7 +33,7 @@ Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只
 - `test annotate`：验证指定 canonical reference、归属链、类型与 anchor 后输出注释片段，regression 还验证 Problem。使用乐观 snapshot，不改源文件，不加载全局 Trace。
 - `cache status/rebuild/clear`：维护可删除重建的 HawDB 缓存。
 - `memory`：`add`、`index`、`list`、`show`、`recall`、`search`、`edit`、`activate`、`resolve`、`reopen`、`supersede`、`promote`、`retire`。captured 表示尚未确认当前生命周期。
-- `issue`：draft、create、index、list、recall、show、edit、link、close、remove；`feedback` 提供本地反馈与 GitHub、Linear 读取接入，不执行远端发布。见 [Feedback 契约](feature/feedback/architecture.md)。
+- `issue`：draft、create、index、list、recall、show、edit、link、adopt、retire、close、reopen、remove、plan、execute。`feedback` 提供 connection、sync、import、list、show，接入外部来源并导入本地 Issue。见 [Feedback 契约](feature/feedback/architecture.md)。
 - `author set`：用完整 owner 前像 digest 更换正文，保留工具拥有的 metadata 与历史。
 - `trace show/check`：构建全局关系图。show 在图不完整时拒绝，check 返回 findings 与 `complete`。不输出虚构覆盖率。
 - `review render`：从契约、测试、证据和 Memory 生成本地 Markdown 审阅材料，不写 GitHub；需要完整图的结论拒绝不完整输入。
@@ -41,6 +41,7 @@ Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只
 - `trace gaps`：派生契约与 CLI 页面的实现/测试关系缺口，见[对应 Use Case](feature/local-sdlc/use-case/inspect-relationship-gaps.md)。
 - `code`、`docs`、`writing`、`concepts`、`constitution`、`page`、`config`、`repo`、`view`、`workspace`、`git`、`action`：分别由下文对应章节及链接的 Feature 拥有行为；参数以 `--help` 为准。
 - `recover`：回收已死 publication token，在独占保护下恢复唯一 journal，再以短独占快照核验 journal 与 runner。runner `blocked` 使 CLI 失败退出。
+- `docs work`：规划互斥文档写集，运行声明的检查并重新验证收据，由 finalizer 收尾；不分派 Agent。见[并行切分文档工作](feature/neutral-project-governance/use-case/coordinate-docs-work.md)。
 
 ## 存储契约
 

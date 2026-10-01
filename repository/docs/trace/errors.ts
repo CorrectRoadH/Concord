@@ -56,11 +56,19 @@ export class TraceJournalMigrationRequired extends Data.TaggedError("TraceJourna
   readonly message: string;
 }> {}
 
-export type TraceError = TraceIoError | TraceFormatError | TraceSelectorMissing | TraceSelectorAmbiguous |
+export class TraceIncomplete extends Data.TaggedError("TraceIncomplete")<{ readonly findings: readonly import("./model.js").TraceFinding[] }> {
+  override get message() { return this.findings.map(finding => `${finding.path}: ${finding.message}`).join("; "); }
+}
+
+export class CaseExcluded extends Data.TaggedError("CaseExcluded")<{ readonly selector: string; readonly findings: readonly import("./model.js").TraceFinding[] }> {
+  override get message() { return `${this.selector} belongs to an excluded test source: ${this.findings.map(f => `${f.path}: ${f.message}`).join("; ")}`; }
+}
+
+export type TraceError = CaseExcluded | TraceIncomplete | TraceIoError | TraceFormatError | TraceSelectorMissing | TraceSelectorAmbiguous |
   TraceSnapshotChanged | TraceMutationActive | TraceInputChanged | TraceRecoveryRequired | TraceRecoveryConflict | TraceJournalMigrationRequired;
 
 export function isTraceError(value: unknown): value is TraceError {
-  return value instanceof TraceIoError ||
+  return value instanceof CaseExcluded || value instanceof TraceIncomplete || value instanceof TraceIoError ||
     value instanceof TraceFormatError ||
     value instanceof TraceSelectorMissing ||
     value instanceof TraceSelectorAmbiguous ||

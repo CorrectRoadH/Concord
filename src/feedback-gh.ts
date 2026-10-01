@@ -1,4 +1,5 @@
 // @concord-file
+// @concord-implements docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { accessSync, constants, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -98,7 +99,7 @@ function classifyExit(stderr: string): ConcordError {
   return error('GhRequestFailed', 'GitHub CLI could not read the configured repository');
 }
 
-function ghTraversal<A, E>(root: string, use: (run: (args: readonly string[]) => Effect.Effect<{ readonly stdout: string; readonly stderr: string; readonly status: number }, ConcordError>) => Effect.Effect<A, E>): Effect.Effect<A, E | ConcordError> {
+function ghTraversal<A, E>(root: string, use: (run: (args: readonly string[], stdin?: string, beforeSpawn?: () => void) => Effect.Effect<{ readonly stdout: string; readonly stderr: string; readonly status: number }, ConcordError>) => Effect.Effect<A, E>, budgets: { readonly total: number; readonly deadline: number; readonly issue?: boolean } = { total: TOTAL, deadline: DEADLINE_MS }): Effect.Effect<A, E | ConcordError> {
   return Effect.scoped(Effect.gen(function* () {
     if (process.platform === 'win32') return yield* Effect.fail(error('GhPlatformUnsupported', 'GitHub CLI feedback requires POSIX process groups'));
     yield* Effect.acquireRelease(Effect.try({
@@ -123,30 +124,38 @@ function ghTraversal<A, E>(root: string, use: (run: (args: readonly string[]) =>
     const trusted = yield* Effect.try({ try: () => trustedExecutable(root), catch: (cause) => cause instanceof ConcordError ? cause : error('GhUnavailable', 'Could not resolve a trusted GitHub CLI executable') });
     const env = ghEnvironment(trusted.path);
     let spent = 0;
-    const deadline = Date.now() + DEADLINE_MS;
-    const run = (args: readonly string[]): Effect.Effect<{ readonly stdout: string; readonly stderr: string; readonly status: number }, ConcordError> => Effect.gen(function* () {
-      const remaining = Math.min(PER_CALL, TOTAL - spent);
+    const deadline = Date.now() + budgets.deadline;
+    const run = (args: readonly string[], stdin?: string, beforeSpawn?: () => void): Effect.Effect<{ readonly stdout: string; readonly stderr: string; readonly status: number }, ConcordError> => Effect.gen(function* () {
+      const remaining = Math.min(PER_CALL, budgets.total - spent);
       const time = deadline - Date.now();
-      if (remaining < 1) return yield* Effect.fail(error('GhLimitExceeded', 'GitHub CLI feedback exceeded its total output budget'));
+      if (remaining < 1) return yield* Effect.fail(error(budgets.issue ? 'IssueRemoteBudgetExceeded' : 'GhLimitExceeded', 'GitHub CLI feedback exceeded its total output budget'));
       if (time < 1) return yield* Effect.fail(error('GhTimeout', 'GitHub CLI feedback read timed out'));
-      const result = yield* Effect.scoped(processService.run([trusted.executable, ...args], { cwd: directory, env, timeoutMs: time, outputLimitBytes: remaining })).pipe(
+      if (beforeSpawn !== undefined) yield* Effect.sync(beforeSpawn);
+      const result = yield* Effect.scoped(processService.run([trusted.executable, ...args], { cwd: directory, env, timeoutMs: time, outputLimitBytes: remaining, ...(stdin === undefined ? {} : { stdin }) })).pipe(
         Effect.mapError(() => error('GhUnavailable', 'Could not start GitHub CLI')),
       );
       spent += result.outputBytes;
       if (!hasConfirmedOwnedGroupCleanup(result)) { poisoned = true; return yield* Effect.fail(error('GhCleanupUnconfirmed', 'GitHub CLI process cleanup could not be confirmed')); }
-      if (result.outputLimitExceeded || spent > TOTAL) return yield* Effect.fail(error('GhLimitExceeded', 'GitHub CLI feedback exceeded its output budget'));
+      if (result.outputLimitExceeded || spent > budgets.total) return yield* Effect.fail(error(budgets.issue ? 'IssueRemoteBudgetExceeded' : 'GhLimitExceeded', 'GitHub CLI feedback exceeded its output budget'));
       if (result.timedOut || Date.now() > deadline) return yield* Effect.fail(error('GhTimeout', 'GitHub CLI feedback read timed out'));
       if (result.cancelled) return yield* Effect.fail(error('GhCancelled', 'GitHub CLI feedback read was cancelled'));
       if (result.error !== undefined) return yield* Effect.fail(error('GhUnavailable', 'Could not run GitHub CLI'));
       if (result.exitCode !== 0 && args[0] !== 'api') return yield* Effect.fail(error('GhProtocolInvalid', 'GitHub CLI does not support the required API command'));
       return { stdout: result.stdout, stderr: result.stderr, status: result.exitCode ?? -1 };
     });
-    const version = yield* run(['--version']);
-    const match = /^gh version (\d+)\.(\d+)\.(\d+)/mu.exec(version.stdout);
-    if (match === null || Number(match[1]) < 2 || (Number(match[1]) === 2 && Number(match[2]) < 98)) return yield* Effect.fail(error('GhProtocolInvalid', 'GitHub CLI version 2.98.0 or newer is required'));
-    const help = yield* run(['api', '--help']);
-    if (help.status !== 0 || !['--hostname', '--method', '--include'].every((flag) => help.stdout.includes(flag))) return yield* Effect.fail(error('GhProtocolInvalid', 'GitHub CLI lacks required API flags'));
-    return yield* use(run);
+    const capabilities = Effect.gen(function*() {
+      const version = yield* run(['--version']);
+      const match = /^gh version (\d+)\.(\d+)\.(\d+)/mu.exec(version.stdout);
+      if (match === null || Number(match[1]) < 2 || (Number(match[1]) === 2 && Number(match[2]) < 98)) return yield* Effect.fail(error('GhProtocolInvalid', 'GitHub CLI version 2.98.0 or newer is required'));
+      const help = yield* run(['api', '--help']);
+      if (help.status !== 0 || !['--hostname', '--method', '--include', ...(budgets.issue ? ['--input'] : [])].every(flag => help.stdout.includes(flag))) return yield* Effect.fail(error('GhProtocolInvalid', 'GitHub CLI lacks required API flags'));
+    });
+    if (!budgets.issue) { yield* capabilities; return yield* use(run); }
+    let checked = false;
+    return yield* use((args, stdin, beforeSpawn) => Effect.gen(function*() {
+      if (!checked) { yield* capabilities; checked = true; }
+      return yield* run(args, stdin, beforeSpawn);
+    }));
   })).pipe(Effect.flatMap((value) => poisoned ? Effect.fail(error('GhCleanupUnconfirmed', 'GitHub CLI cleanup could not be confirmed')) : Effect.succeed(value)));
 }
 
@@ -185,4 +194,43 @@ export function checkGhConnection(root: string, connection: GhConnection): Effec
     if (connection.repositoryId !== undefined && connection.repositoryId !== String(repositoryId)) return yield* Effect.fail(error('ConnectionIdentityMismatch', 'The GitHub repository identity no longer matches the bound connection'));
     return { connectionId: connection.id, provider: 'github' as const, transport: 'gh' as const, target: `${connection.owner}/${connection.repo}`, checkedAt: DateTime.formatIso(yield* DateTime.now) };
   }));
+}
+
+/** Issue-only traversal: writes are available solely to execute callers. */
+export function withGhIssueTransport<A, E>(root: string, connection: GhConnection, execute: boolean, use: (request: (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, payload?: unknown) => Effect.Effect<{ readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: unknown }, ConcordError>) => Effect.Effect<A, E>): Effect.Effect<A, E | ConcordError> {
+  return ghTraversal(root, run => {
+    const prefix = `repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}`;
+    const request = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, payload?: unknown) => Effect.gen(function*() {
+      if (method === 'GET' && ((path !== prefix && !path.startsWith(`${prefix}/`)) || payload !== undefined)) return yield* Effect.fail(error('GhProtocolInvalid', 'Unsupported Issue read request'));
+      if (method !== 'GET' && (!execute || !allowedIssueWrite(method, path, prefix, payload))) return yield* Effect.fail(error('GhProtocolInvalid', 'Unsupported Issue write request'));
+      let sent = false;
+      const result = yield* run(['api', '--hostname', 'github.com', '--method', method, '--include', ...(method === 'GET' ? [] : ['--input', '-']), path], method === 'GET' ? undefined : JSON.stringify(payload ?? {}), () => { sent = true; }).pipe(
+        Effect.mapError(cause => method === 'GET' || !sent ? cause : error('IssueMutationUncertain', 'Issue write result is uncertain')),
+      );
+      let response: typeof HeaderSchema.Type;
+      try { response = parseResponse(result.stdout); }
+      catch (cause) {
+        // HTTP 204 has an empty body (label deletion).
+        if (method !== 'GET' && /^HTTP\/(?:1\.[01]|2(?:\.0)?|3(?:\.0)?) 204(?:\s|$)/u.test(result.stdout)) return { status: 204, headers: {}, body: null };
+        const status = /^HTTP\/(?:1\.[01]|2(?:\.0)?|3(?:\.0)?) ([45][0-9]{2})(?:\s|$)/u.exec(result.stdout)?.[1];
+        if (method !== 'GET' && status !== undefined) return yield* Effect.fail(new ConcordError('IssueRemoteRejected', 'GitHub rejected the Issue write', { status: Number(status) }));
+        return yield* Effect.fail(method !== 'GET' ? error('IssueMutationUncertain', 'Issue write response could not be parsed') : result.status !== 0 ? classifyExit(result.stderr) : cause instanceof ConcordError ? cause : error('GhProtocolInvalid', 'Invalid Issue response'));
+      }
+      if (response.status < 200 || response.status >= 300) return yield* Effect.fail(method !== 'GET' ? new ConcordError('IssueRemoteRejected', 'GitHub rejected the Issue write', { status: response.status }) : error('GhTargetInaccessible', 'GitHub Issue target is inaccessible'));
+      if (result.status !== 0) return yield* Effect.fail(method !== 'GET' ? error('IssueMutationUncertain', 'Issue write process did not complete successfully') : classifyExit(result.stderr));
+      return response;
+    });
+    return use(request);
+  }, { total: 64 * 1024 * 1024, deadline: 120_000, issue: true });
+}
+function allowedIssueWrite(method: string, path: string, prefix: string, body: unknown): boolean {
+  if (!path.startsWith(`${prefix}/issues`) || typeof body !== 'object' || body === null) return false;
+  const suffix = path.slice(prefix.length);
+  const keys = Object.keys(body).sort().join(',');
+  if (method === 'POST' && suffix === '/issues') return keys === 'body,title';
+  if (method === 'PATCH' && /^\/issues\/[1-9][0-9]*$/u.test(suffix)) {
+    const record = body as Record<string, unknown>;
+    return keys === 'body' || keys === 'state' && (record.state === 'open' || record.state === 'closed') || keys === 'state,state_reason' && record.state === 'closed' && (record.state_reason === 'completed' || record.state_reason === 'not_planned');
+  }
+  return method === 'POST' && /^\/issues\/[1-9][0-9]*\/labels$/u.test(suffix) && keys === 'labels' || method === 'POST' && /^\/issues\/[1-9][0-9]*\/comments$/u.test(suffix) && keys === 'body' || method === 'DELETE' && /^\/issues\/[1-9][0-9]*\/labels\/[^/]+$/u.test(suffix) && keys === '';
 }

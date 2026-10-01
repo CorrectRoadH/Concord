@@ -10,6 +10,7 @@ try {
   } else if (process.argv[2] === 'repo') {
     // @concord-begin
     // @concord-implements docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
+    // @concord-implements docs/feature/neutral-project-governance/use-case/compose-repository-workflows.md
     process.argv.splice(2, 1);
     const entry = './repository/cli.js';
     await import(entry);

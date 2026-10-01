@@ -248,6 +248,9 @@ function testShowTree(receipt: TestShowReceipt): string {
 
 export function renderTraceError(error: TraceError): string {
   switch (error._tag) {
+    case "CaseExcluded":
+    case "TraceIncomplete":
+      return `${error._tag}: ${error.message}`;
     case "TraceIoError":
       return `${error._tag}: ${error.operation} ${error.path}: ${error.message}`;
     case "TraceFormatError":

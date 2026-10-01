@@ -6,6 +6,9 @@ type DocsTraceCommandError = TraceError | TraceCoordinationError;
 
 export function renderDocsTraceError(error: DocsTraceCommandError): string {
   switch (error._tag) {
+    case "CaseExcluded":
+    case "TraceIncomplete":
+      return `${error._tag}: ${error.message}`;
     case "TraceIoError":
       return `${error._tag}: ${error.operation} ${error.path}: ${error.message}`;
     case "TraceFormatError":
@@ -33,6 +36,9 @@ export function renderDocsTraceError(error: DocsTraceCommandError): string {
 
 export function docsTraceErrorDocument(error: DocsTraceCommandError): object {
   switch (error._tag) {
+    case "CaseExcluded":
+    case "TraceIncomplete":
+      return { _tag: error._tag, findings: error.findings };
     case "TraceIoError":
       return { _tag: error._tag, operation: error.operation, path: error.path, message: error.message };
     case "TraceFormatError":

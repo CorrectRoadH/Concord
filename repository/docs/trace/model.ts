@@ -168,6 +168,9 @@ export type TraceIssueProvenance = TraceTargetRelation & ({
 });
 
 export interface TraceFinding {
+  readonly conflictsWith?: readonly string[];
+  readonly path: string;
+  readonly suggestion?: string;
   readonly code: string;
   readonly subject: string;
   readonly message: string;

@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import * as FileSystem from "effect/FileSystem";
 import { Cause, Effect, Exit, Option, Result } from "effect";
 
-import { compileTraceUnderLease } from "../trace/compiler.js";
+import { compileTraceReportUnderLease } from "../trace/compiler.js";
 import type { TraceError } from "../trace/errors.js";
 import type { TraceNode, TraceSnapshot } from "../trace/model.js";
 import { validateRepoRefTarget, type ValidatedRepoRefTarget } from "../trace/ref.js";
@@ -206,7 +206,7 @@ function normalizeCreate(input: Extract<DesignCommandInput, { readonly command: 
 
 function prepareCreate(root: string, input: DesignCreateOptions): Effect.Effect<TraceMutationPreparation, DesignCommandError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
-    const snapshot = yield* compileTraceUnderLease(root);
+    const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot));
     const bundle = yield* loadDesignTemplates(root);
     const target = `docs/design/${input.slug}`;
     if (snapshot.nodes.some((node) => node.path === `${target}/README.md` || node.kind === 'design' && node.id === input.slug) || existsSync(resolve(root, target))) {
@@ -254,6 +254,7 @@ export function createDesignAt(
   input: DesignCreateOptions,
 ): Effect.Effect<DesignCreateReceipt, DesignCommandError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
+    yield* withTraceReadLease(root, () => compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)));
     const initialBundle = yield* loadDesignTemplates(root);
     const createdAt = new Date().toISOString();
     const initial = generateDesignPackage({
@@ -488,10 +489,12 @@ export function checkDesignAt(
   selector: string,
 ): Effect.Effect<DesignCheckReceipt, DesignCommandError, FileSystem.FileSystem> {
   return withTraceReadLease(root, () => Effect.gen(function*() {
-    const snapshot = yield* compileTraceUnderLease(root);
+    const report = yield* compileTraceReportUnderLease(root);
+    const snapshot = report.snapshot;
     const design = yield* selectDesign(snapshot, selector);
     const bundle = yield* loadDesignTemplates(root);
-    return yield* checkDesignPackage(root, snapshot, design, bundle);
+    const receipt = yield* checkDesignPackage(root, snapshot, design, bundle);
+    return { ...receipt, complete: report.complete, ok: receipt.ok && report.complete, findings: [...receipt.findings, ...report.findings] };
   }));
 }
 
@@ -555,7 +558,7 @@ function prepareDecision(
   requestedPlan: string,
 ): Effect.Effect<DesignPreparation, DesignCommandError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
-    const snapshot = yield* compileTraceUnderLease(root);
+    const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot));
     const design = yield* selectDesign(snapshot, designSelector);
     const state = yield* stateOf(root, design);
     if (state._tag === "decided") {
@@ -621,7 +624,7 @@ export function decideDesignAt(
   interface DecideChanges { readonly selectedPlan: string }
   return Effect.gen(function*() {
     const initial = yield* withTraceReadLease(root, () => Effect.gen(function*() {
-      const snapshot = yield* compileTraceUnderLease(root);
+      const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot));
       const design = yield* selectDesign(snapshot, designSelector);
       return { path: design.path, id: design.id, digest: traceDigest(yield* readText(root, design.path)) };
     }));
@@ -631,7 +634,7 @@ export function decideDesignAt(
     ownerPath: initial.path,
     dryRun,
     prepareUnderLease: Effect.gen(function*() {
-      const snapshot = yield* compileTraceUnderLease(root);
+      const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot));
       const design = yield* selectDesign(snapshot, designSelector);
       if (design.path !== initial.path || design.id !== initial.id || traceDigest(yield* readText(root, design.path)) !== initial.digest) return yield* new DesignConflict({ operation: "decide", path: initial.path, message: "Design changed identity, path, or content; read it again before deciding" });
       return yield* prepareDecision(root, initial.path, requestedPlan);

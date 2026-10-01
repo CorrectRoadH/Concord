@@ -70,7 +70,7 @@ const mutatingActions: ReadonlySet<ViewAction['action']> = new Set([
   'document.create', 'document.set', 'document.metadata',
   'page.add', 'roadmap.adopt', 'design.decide', 'design.correct-reason', 'design.format',
   'memory.resolve', 'memory.edit', 'memory.activate', 'memory.reopen', 'memory.supersede', 'memory.promote', 'memory.retire',
-  'issue.link', 'issue.edit', 'issue.remove', 'issue.close',
+  'issue.adopt', 'issue.retire', 'issue.reopen', 'issue.link', 'issue.edit', 'issue.remove', 'issue.close',
   'feedback.sync', 'feedback.link', 'source.set', 'writing.set', 'concepts.set', 'config.set',
   'constitution.initialize', 'constitution.adopt', 'constitution.amend',
 ]);

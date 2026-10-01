@@ -1,8 +1,8 @@
+import { compileTraceReport, compileTraceReportUnderLease } from "../docs/trace/compiler.js";
 import { readFileSync, existsSync } from "node:fs";
 import { execFileSync } from 'node:child_process';
 import { Context, Effect, FileSystem, Layer } from "effect";
 import { type IssueClosure, type IssueMemoryRelation, type IssueMeta } from "concord-sdlc/model";
-import { compileTraceUnderLease } from "../docs/trace/compiler.js";
 import type { TraceError } from "../docs/trace/errors.js";
 import type { RepoRef } from "../docs/trace/ref.js";
 import { mutateTraceFiles, traceDigest, type TraceCoordinationError, type TraceMultiFileReceipt, withTraceReadLease } from "../docs/trace/relation-mutation.js";
@@ -23,6 +23,7 @@ export interface FeedbackMutationChanges {
 export type FeedbackMutationReceipt = Omit<TraceMultiFileReceipt, 'committed'> & { readonly committed: boolean; readonly value: IssueMeta; readonly changes: FeedbackMutationChanges };
 export type FeedbackStoreError = FeedbackError | TraceError | TraceCoordinationError;
 export interface FeedbackStoreService {
+  readonly traceReport?: () => Effect.Effect<import("../docs/trace/compiler.js").TraceCompileReport, FeedbackStoreError, FileSystem.FileSystem>;
   readonly list: () => Effect.Effect<readonly FeedbackDocument[], FeedbackStoreError>;
   readonly read: (id: string) => Effect.Effect<FeedbackDocument, FeedbackStoreError>;
   readonly create: (document: FeedbackDocument, dryRun: boolean) => Effect.Effect<FeedbackMutationReceipt, FeedbackStoreError, FileSystem.FileSystem>;
@@ -49,7 +50,7 @@ export const NodeFeedbackStoreLive = (root: string) => Layer.succeed(FeedbackSto
     let plannedValue: IssueMeta | undefined;
     let plannedChanges: FeedbackMutationChanges = {};
     let plannedBytes = ''; let generation = 0;
-    const prepare = compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => feedbackEffect(operation, () => {
+    const prepare = compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)).pipe(Effect.flatMap((snapshot) => feedbackEffect(operation, () => {
       assertSameLeafSelection(root, 'issue', id, frozen);
       const path = repository.safePath(owner); const source = existsSync(path) ? readFileSync(path, "utf8") : undefined; const planned = plan(source, new Date().toISOString(), headCommit()); plannedValue = planned.value; plannedChanges = planned.changes;
       repository.validateIssue(planned.value, snapshot); plannedBytes = planned.bytes; generation = snapshot.generation;
@@ -68,12 +69,13 @@ export const NodeFeedbackStoreLive = (root: string) => Layer.succeed(FeedbackSto
   });
   const create = (document: FeedbackDocument, dryRun: boolean) => mutate(document.metadata.id, "issue-add", dryRun, () => { const planned = repository.planCreate(document); return { bytes: planned.bytes, value: planned.metadata, changes: { created: true } }; });
   return {
+    traceReport: () => compileTraceReport(root),
     list: () => withTraceReadLease(root, () => feedbackEffect("list", () => repository.list())),
     read: (id) => withTraceReadLease(root, () => feedbackEffect("read", () => repository.read(id))),
     create,
     importEnvelope: (envelope, artifactRoot, reportedAt, dryRun) => {
       let value: IssueMeta | undefined; let bytes = ''; let generation = 0;
-      const prepare = compileTraceUnderLease(root).pipe(Effect.flatMap(snapshot => feedbackEffect('import', () => {
+      const prepare = compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)).pipe(Effect.flatMap(snapshot => feedbackEffect('import', () => {
         const prepared = repository.prepareImport(envelope, artifactRoot, reportedAt);
         value = prepared.document.metadata; bytes = prepared.document.body; generation = snapshot.generation;
         repository.validateIssue(value, snapshot);
@@ -89,6 +91,6 @@ export const NodeFeedbackStoreLive = (root: string) => Layer.succeed(FeedbackSto
     retire: (id, target, dryRun) => mutate(id, "issue-retire", dryRun, (source, _at, commit) => { const planned = repository.planRetire(id, source, target, commit); return { bytes: planned.bytes, value: planned.metadata, changes: { adoptionRetired: { target, commit } } }; }),
     close: (id, closure, dryRun) => mutate(id, "issue-close", dryRun, (source, at) => { const planned = repository.planClose(id, source, closure, at, "close Issue"); return { bytes: planned.bytes, value: planned.metadata, changes: { state: { from: "draft", to: "closed" } } }; }),
     reopen: (id, dryRun) => mutate(id, "issue-reopen", dryRun, (source, at) => { const planned = repository.planReopen(id, source, at, "reopen Issue"); return { bytes: planned.bytes, value: planned.metadata, changes: { state: { from: "closed", to: "draft" } } }; }),
-    check: () => withTraceReadLease(root, () => compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => feedbackEffect("check", () => repository.check(snapshot))))),
+    check: () => withTraceReadLease(root, () => compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot),Effect.flatMap((snapshot) => feedbackEffect("check", () => repository.check(snapshot))))),
   } satisfies FeedbackStoreService;
 })());

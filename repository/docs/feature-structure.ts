@@ -7,7 +7,7 @@ import { Data, Effect } from "effect";
 import { stringify } from "yaml";
 import { isDocumentName, defaultDocumentPath } from 'concord-sdlc/document-layout';
 
-import { compileTraceUnderLease } from "./trace/compiler.js";
+import { compileTraceReportUnderLease } from "./trace/compiler.js";
 import { mutateTraceOwner, withTraceReadLease, traceDigest, type TraceDirectoryManifestEntry, type TraceMutationPreparation } from "./trace/relation-mutation.js";
 
 const PAGES = ["library", "cli", "architecture", "lifecycle", "use-case"] as const;
@@ -115,6 +115,7 @@ export function createFeatureAt(root: string, input: { readonly slug: string; re
     if (input.title.trim().length === 0) return yield* fail("create", value, "title must not be empty");
     const selected = yield* Effect.all(input.pages.map((item) => page(item, "create")));
     if (new Set(selected).size !== selected.length) return yield* fail("create", value, "pages must be unique");
+    yield* withTraceReadLease(root, () => compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)));
     const rootSource = yield* template(root, "README.md", "create");
     const optional = yield* Effect.all(selected.map((item) => template(root, PAGE_FILES[item], "create").pipe(
       Effect.map((source) => ({ path: PAGE_FILES[item], source, bytes: render(source, input.title) })),
@@ -123,7 +124,7 @@ export function createFeatureAt(root: string, input: { readonly slug: string; re
     const ownerPath = defaultDocumentPath('feature', value);
     const execute = (publication?: { readonly stagePath: string; readonly targetPath: string }) => mutateTraceOwner({ root, operation: "feature-create", ownerPath, dryRun: input.dryRun,
       prepareUnderLease: Effect.gen(function*() {
-        const snapshot = yield* compileTraceUnderLease(root);
+        const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot));
         if (snapshot.nodes.some((node) => node.path === ownerPath || node.kind === 'feature' && node.id === value)) return yield* fail("create", ownerPath, "Feature package or ID already exists");
         return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: [
           { path: resolve(root, `${TEMPLATE}/README.md`), digest: traceDigest(rootSource) },
@@ -143,11 +144,11 @@ export function addFeaturePageAt(root: string, input: { readonly feature: string
     const requested = yield* page(input.page, "page-add"); const templateSource = yield* template(root, PAGE_FILES[requested], "page-add");
     let selected: { readonly path: string; readonly title: string } | undefined;
     const prepare = Effect.gen(function*() {
-      const snapshot = yield* compileTraceUnderLease(root); const feature = yield* featureFromSnapshot(snapshot, input.feature, "page-add"); if (feature.path !== initial.path || feature.id !== initial.id || traceDigest(yield* read(root, feature.path, "page-add")) !== initial.digest) return yield* fail("page-add", initial.path, "Feature changed identity, path, or content; read it again before updating"); selected = feature;
+      const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)); const feature = yield* featureFromSnapshot(snapshot, input.feature, "page-add"); if (feature.path !== initial.path || feature.id !== initial.id || traceDigest(yield* read(root, feature.path, "page-add")) !== initial.digest) return yield* fail("page-add", initial.path, "Feature changed identity, path, or content; read it again before updating"); selected = feature;
       return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: [{ path: resolve(root, feature.path), digest: traceDigest(yield* read(root, feature.path, "page-add")) }] } satisfies TraceMutationPreparation;
     });
     const initial = yield* withTraceReadLease(root, () => Effect.gen(function*() {
-      const feature = yield* compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => featureFromSnapshot(snapshot, input.feature, "page-add")));
+      const feature = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)).pipe(Effect.flatMap((snapshot) => featureFromSnapshot(snapshot, input.feature, "page-add")));
       return { ...feature, digest: traceDigest(yield* read(root, feature.path, "page-add")) };
     }));
     const ownerPath = `${dirname(initial.path)}/${PAGE_FILES[requested]}`;
@@ -164,12 +165,12 @@ export function setFeaturePageAt(root: string, input: { readonly feature: string
   return Effect.gen(function*() {
     const requested = input.page === "overview" ? "overview" : yield* page(input.page, "page-set");
     const initial = yield* withTraceReadLease(root, () => Effect.gen(function*() {
-      const feature = yield* compileTraceUnderLease(root).pipe(Effect.flatMap((snapshot) => featureFromSnapshot(snapshot, input.feature, "page-set")));
+      const feature = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)).pipe(Effect.flatMap((snapshot) => featureFromSnapshot(snapshot, input.feature, "page-set")));
       return { ...feature, digest: traceDigest(yield* read(root, feature.path, "page-set")) };
     }));
     const ownerPath = requested === "overview" ? initial.path : `${dirname(initial.path)}/${PAGE_FILES[requested]}`;
     const mutation = yield* mutateTraceOwner({ root, operation: "feature-page-set", ownerPath, dryRun: input.dryRun,
-      prepareUnderLease: Effect.gen(function*() { const snapshot = yield* compileTraceUnderLease(root); const feature = yield* featureFromSnapshot(snapshot, input.feature, "page-set"); if (feature.path !== initial.path || feature.id !== initial.id || traceDigest(yield* read(root, feature.path, "page-set")) !== initial.digest) return yield* fail("page-set", initial.path, "Feature changed identity, path, or content; read it again before updating"); return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: [{ path: resolve(root, feature.path), digest: traceDigest(yield* read(root, feature.path, "page-set")) }] }; }),
+      prepareUnderLease: Effect.gen(function*() { const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot)); const feature = yield* featureFromSnapshot(snapshot, input.feature, "page-set"); if (feature.path !== initial.path || feature.id !== initial.id || traceDigest(yield* read(root, feature.path, "page-set")) !== initial.digest) return yield* fail("page-set", initial.path, "Feature changed identity, path, or content; read it again before updating"); return { generation: snapshot.generation, snapshotDigest: snapshot.digest, preimages: [{ path: resolve(root, feature.path), digest: traceDigest(yield* read(root, feature.path, "page-set")) }] }; }),
       plan: ({ source }) => Effect.gen(function*() {
         if (source === undefined) return yield* fail("page-set", ownerPath, "page does not exist; add an allowed page first");
         if (traceDigest(source) !== input.expectedPreimageDigest) return yield* fail("page-set", ownerPath, "page preimage digest changed; read the page again before updating it");

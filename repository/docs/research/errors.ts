@@ -31,6 +31,7 @@ export class ResearchMigrationRequired extends Data.TaggedError("ResearchMigrati
 }> {}
 
 export type ResearchError =
+  | import("../trace/errors.js").TraceError
   | TraceCoordinationError
   | ResearchInputError
   | ResearchPathError
