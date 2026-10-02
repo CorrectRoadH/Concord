@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -39,10 +40,10 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
   let browser: Browser | undefined;
   let exited: Promise<void> | undefined;
   try {
-    const pack = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ filename: Schema.String }))))(execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: resolve('.'), encoding: 'utf8', timeout: 60000 }));
+    const pack = packConcord(scratch);
     const tool = join(scratch, 'tool'); mkdirSync(tool);
     writeFileSync(join(tool, 'package.json'), '{"private":true}');
-    execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(scratch, pack[0]!.filename)], { cwd: tool, encoding: 'utf8', timeout: 60000 });
+    installConcord(tool, pack);
     const root = join(scratch, 'consumer'); mkdirSync(root);
     execFileSync('git', ['init', '-q', root]);
     const write = (path: string, value: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), value); };

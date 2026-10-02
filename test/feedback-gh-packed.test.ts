@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
@@ -13,11 +14,11 @@ import { initialize, LocalRepository } from '../src/storage.js';
 test('packed public CLI adds gh connection, checks scope, and executes shared feedback action offline', { skip: process.platform === 'win32' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-gh-packed-'));
   try {
-    const pack = JSON.parse(execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: resolve('.'), encoding: 'utf8', timeout: 60_000 })) as readonly { filename: string }[];
+    const pack = packConcord(scratch);
     const tool = join(scratch, 'tool');
     mkdirSync(tool);
     writeFileSync(join(tool, 'package.json'), JSON.stringify({ private: true }));
-    execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(scratch, pack[0]!.filename)], { cwd: tool, encoding: 'utf8', timeout: 60_000 });
+    installConcord(tool, pack);
     const entry = join(tool, 'node_modules/concord-sdlc/dist/entry.js');
     const consumer = join(scratch, 'consumer');
     mkdirSync(consumer);

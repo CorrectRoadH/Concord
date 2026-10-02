@@ -1,8 +1,9 @@
+import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, realpathSync, cpSync, readdirSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -37,16 +38,15 @@ const TemplatesOutput = Schema.Struct({ templates: Schema.Array(Schema.Struct({ 
 const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
 let cli: string;
 before(() => Effect.runPromise(Effect.sync(()=>{
- const packed=Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({filename:Schema.String,files:Schema.Array(Schema.Struct({path:Schema.String}))}))))(execFileSync('npm',['pack','--ignore-scripts','--json','--pack-destination',scratch],{cwd:resolve('.'),encoding:'utf8',timeout:60000}));
- assert.ok(packed[0]);
- assert.ok(packed[0].files.some(file=>file.path==='npm-shrinkwrap.json'), 'package must carry its runtime dependency lock');
+ const packed = packConcord(scratch);
+ assert.ok(packed);
+ assert.ok(packed.files.some(file=>file.path==='pnpm-lock.yaml'), 'package must carry its runtime dependency lock');
  const install=join(scratch,'tool');mkdirSync(install);writeFileSync(join(install,'package.json'),JSON.stringify({private:true}));
- execFileSync('npm',['install','--ignore-scripts','--no-audit','--no-fund','--prefer-offline',join(scratch,packed[0].filename)],{cwd:install,encoding:'utf8',timeout:60000});
+ installConcord(install, packed);
  const packageRoot=join(install,'node_modules/concord-sdlc');
  const manifest=Schema.Struct({version:Schema.String,dependencies:Schema.Record(Schema.String,Schema.String),devDependencies:Schema.Record(Schema.String,Schema.String)});
  const published=Schema.decodeUnknownSync(Schema.fromJsonString(manifest))(readFileSync(join(packageRoot,'package.json'),'utf8'));
- const locked=Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({packages:Schema.Record(Schema.String,Schema.Unknown)})))(readFileSync(join(packageRoot,'npm-shrinkwrap.json'),'utf8'));
- assert.deepEqual(Schema.decodeUnknownSync(manifest)(locked.packages['']),published,'packed dependency lock must match the manifest for offline npm ci');
+ for (const name of ['pnpm-lock.yaml','pnpm-workspace.yaml']) assert.equal(readFileSync(join(packageRoot,name),'utf8'),readFileSync(new URL('../'+name,import.meta.url),'utf8'));
  cli=join(install,'node_modules/concord-sdlc/dist/entry.js');
  assert.equal(execFileSync(process.execPath,[cli,'--version'],{encoding:'utf8'}).trim(),`concord v${published.version}`);
 })));
@@ -697,7 +697,9 @@ test('installed neutral governance keeps lifecycle rules and loads native hosts 
  result=profile(['docs','test','inventory','--repo','suite','--json']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryHostMismatch/);
  write(root,'host.mjs',hostSource);
  rmSync(join(root,'node_modules'));mkdirSync(join(root,'node_modules'));
- const locked=join(root,'node_modules/concord-sdlc');cpSync(join(dependencyRoot,'concord-sdlc'),locked,{recursive:true});
+ const locked=join(root,'node_modules/concord-sdlc');cpSync(join(dependencyRoot,'concord-sdlc'),locked,{recursive:true,dereference:true});
+ // 复制代码以隔离身份修改，同时保留 pnpm 为原包提供的依赖解析目录。
+ symlinkSync(dirname(realpathSync(join(dependencyRoot,'concord-sdlc'))),join(locked,'node_modules'),'dir');
  const identity=join(locked,'dist/evidence-policy.js');writeFileSync(identity,readFileSync(identity,'utf8')+'\n// different installed engine\n');
  result=profile(['--help']);assert.equal(result.status,0,result.stderr);
  result=profile(['docs','test','inventory','--repo','suite','--json']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryEngineMismatch/);

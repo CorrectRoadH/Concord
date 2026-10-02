@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -7,7 +8,6 @@ import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { deriveTestReference } from '../dist/test-reference.js';
 
-const PackSchema = Schema.Array(Schema.Struct({ filename: Schema.String }));
 const CaseListSchema = Schema.Struct({
   cases: Schema.Array(Schema.Struct({ id: Schema.String, file: Schema.String, name: Schema.String }))
 });
@@ -48,10 +48,8 @@ const json = <A>(source: string, schema: Schema.ConstraintDecoder<A, never>): A 
 test('packed CLI accepts only real neutral Vitest native evidence through the authoritative fixed gate', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-neutral-native-'));
   try {
-    const packed = json(execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], {
-      cwd: resolve('.'), encoding: 'utf8', timeout: 60_000
-    }), PackSchema);
-    assert.ok(packed[0]);
+    const packed = packConcord(scratch);
+    assert.ok(packed);
     const root = join(scratch, 'consumer');
     cpSync(resolve('test/fixtures/neutral-native'), root, { recursive: true });
     renameSync(join(root, 'consumer-package.json'), join(root, 'package.json'));
@@ -62,10 +60,7 @@ test('packed CLI accepts only real neutral Vitest native evidence through the au
     execFileSync('git', ['init', '-q', root]);
     execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord Test']);
     execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
-    execFileSync('npm', [
-      'install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', '--no-save', '--package-lock=false',
-      join(scratch, packed[0]!.filename), 'vitest@4.1.11'
-    ], { cwd: root, encoding: 'utf8', timeout: 120_000 });
+    installConcord(root, packed, ['vitest@4.1.11', 'typescript@6.0.3', '@types/node@24.13.3', 'effect@4.0.0-rc.112', '@effect/platform-node@4.0.0-rc.112']);
     execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: root, encoding: 'utf8', timeout: 30_000 });
     const cli = join(root, 'node_modules/concord-sdlc/dist/entry.js');
     const commit = (message: string): string => {

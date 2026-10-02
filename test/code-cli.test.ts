@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,13 +15,11 @@ import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.j
 test('packed CLI traces code scopes and preserves the original fixed evidence gate', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-code-cli-'));
   try {
-    const packed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ filename: Schema.String }))))(
-      execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: resolve('.'), encoding: 'utf8', timeout: 60000 }),
-    );
-    assert.ok(packed[0]);
+    const packed = packConcord(scratch);
+    assert.ok(packed);
     const install = join(scratch, 'tool'); mkdirSync(install);
     writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-    execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(scratch, packed[0].filename)], { cwd: install, encoding: 'utf8', timeout: 60000 });
+    installConcord(install, packed);
     const cli = join(install, 'node_modules/concord-sdlc/dist/entry.js');
     const root = join(scratch, 'consumer'); mkdirSync(root);
     execFileSync('git', ['init', '-q', root]);

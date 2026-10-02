@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 // @concord-file
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -71,9 +72,9 @@ if(args.includes('--input')){process.stdin.setEncoding('utf8');process.stdin.on(
 `, { mode: 0o755 });
 let packedCli: string;
 test.before(() => Effect.runPromise(Effect.sync(() => {
-  const packed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ filename: Schema.String }))), { onExcessProperty: 'ignore' })(execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: resolve('.'), encoding: 'utf8', timeout: 60_000 }));
+  const packed = packConcord(scratch);
   const tool = join(scratch, 'tool'); mkdirSync(tool); writeFileSync(join(tool, 'package.json'), '{"private":true}');
-  execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(scratch, packed[0]!.filename)], { cwd: tool, encoding: 'utf8', timeout: 60_000 });
+  installConcord(tool, packed);
   packedCli = join(tool, 'node_modules/concord-sdlc/dist/entry.js');
 })));
 test.after(() => { rmSync(scratch, { recursive: true, force: true }); });

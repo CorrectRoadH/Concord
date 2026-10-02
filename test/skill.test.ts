@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,20 +7,14 @@ import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
 import { Effect, Schema } from 'effect';
 
-const PackageOutput = Schema.Array(Schema.Struct({
-  filename: Schema.String,
-  files: Schema.Array(Schema.Struct({ path: Schema.String })),
-}));
 const ErrorOutput = Schema.Struct({ error: Schema.String });
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-skill-'));
 let cli: string;
 
 before(() => Effect.runPromise(Effect.sync(() => {
-  const packed = Schema.decodeUnknownSync(Schema.fromJsonString(PackageOutput))(
-    execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: resolve('.'), encoding: 'utf8', timeout: 60_000 }),
-  );
-  const artifact = packed[0];
+  const packed = packConcord(scratch);
+  const artifact = packed;
   assert.ok(artifact);
   for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'skills/concord/references/feedback.md', 'dist/skill.js']) {
     assert.ok(artifact.files.some(file => file.path === path), `packed skill is missing ${path}`);
@@ -27,7 +22,7 @@ before(() => Effect.runPromise(Effect.sync(() => {
   const install = join(scratch, 'tool');
   mkdirSync(install);
   writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(scratch, artifact.filename)], { cwd: install, encoding: 'utf8', timeout: 60_000 });
+  installConcord(install, packed);
   cli = join(install, 'node_modules/concord-sdlc/dist/entry.js');
 })));
 

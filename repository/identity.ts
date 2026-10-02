@@ -25,6 +25,6 @@ export function repositoryImplementationDigest(directory = dirname(fileURLToPath
     if (stat.isSymbolicLink()) throw new Error('Repository engine cannot contain symbolic links');
     if (stat.isFile()) entries.push([relative(directory, path), hash(path)]);
   }
-  for (const name of ['package.json', 'npm-shrinkwrap.json']) entries.push([name, hash(resolve(directory, '../..', name))]);
+  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) entries.push([name, hash(resolve(directory, '../..', name))]);
   return 'sha256:' + createHash('sha256').update(JSON.stringify(entries)).digest('hex');
 }

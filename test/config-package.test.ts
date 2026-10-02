@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -13,12 +14,10 @@ import { LocalRepository, initialize } from '../dist/storage.js';
 test('packed config has usable type hints and rejects misspelled fields', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-config-package-'));
   try {
-    const packed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ filename: Schema.String }))))(
-      execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: resolve('.'), encoding: 'utf8', timeout: 60_000 }),
-    );
+    const packed = packConcord(scratch);
     const project = join(scratch, 'consumer'); mkdirSync(project);
     writeFileSync(join(project, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-    execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(scratch, packed[0]!.filename)], { cwd: project, encoding: 'utf8', timeout: 60_000 });
+    installConcord(project, packed, ['typescript@6.0.3', '@types/node@24.13.3']);
     const consumer = join(scratch, 'initialized');
     execFileSync('git', ['init', '-q', consumer]);
     const cli = join(project, 'node_modules/concord-sdlc/dist/entry.js');

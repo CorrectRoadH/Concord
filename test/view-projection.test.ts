@@ -15,6 +15,7 @@ import { initialize, LocalRepository } from '../dist/storage.js';
 import type { WorkspaceProjection } from '../dist/view-contract.js';
 import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from '../dist/workspace-projection.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { ViewScanManager } from '../dist/view-scan.js';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, parseWorkspaceProjectionOutput, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection } from './support.js';
 
 const cli = join(resolve('.'), 'dist/entry.js');
@@ -280,6 +281,53 @@ test('a busy native cache is explicitly unavailable and recovers after its handl
     const recovered = await waitForWorkspaceProjection(base);
     assert.equal(recovered.projection.builtAt, previous.projection.builtAt);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('a briefly busy workspace cache recovers within the same HTTP request', async () => {
+  const root = fixture();
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const base = baseOf(server);
+  try {
+    const previous = await waitForWorkspaceProjection(base);
+    const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false });
+    const release = setTimeout(() => database.close(), 100);
+    try {
+      const response = await fetch(`${base}/api/workspace`);
+      const body = await response.text();
+      assert.equal(response.status, 200, body);
+      assert.equal(parseWorkspaceProjection(body)?.projection.builtAt, previous.projection.builtAt);
+    } finally { clearTimeout(release); database.close(); }
+  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('a completed workspace scan survives brief contention at publication', async t => {
+  const root = fixture();
+  const scan = ViewScanManager.prototype.scan;
+  let database: ReturnType<typeof openHawdb> | undefined;
+  let release: ReturnType<typeof setTimeout> | undefined;
+  let scans = 0;
+  // 扫描仍走真实子进程；只在它交付候选时放入真实锁竞争，避免靠扫描耗时碰运气。
+  t.mock.method(ViewScanManager.prototype, 'scan', async function(this: ViewScanManager, signal?: AbortSignal) {
+    const reply = await scan.call(this, signal);
+    scans += 1;
+    database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: true });
+    release = setTimeout(() => database?.close(), 100);
+    return reply;
+  });
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  try {
+    await pollUntil(async () => scans > 0 ? true : undefined, { description: 'real scan candidate' });
+    const value = await waitForWorkspaceProjection(baseOf(server), { timeoutMs: 10_000 });
+    assert.equal(value.projection.status, 'ready');
+    assert.equal(scans, 1, 'the completed candidate is published without scanning again');
+  } finally {
+    clearTimeout(release);
+    database?.close();
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

@@ -271,7 +271,7 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   if (method === 'GET' && url.pathname === '/api/workspace') {
     exactQuery(url, []);
     let value;
-    try { value = timing.sync('http.workspaceCache', () => scans.read()); }
+    try { value = await timing.async('http.workspaceCache', () => scans.read()); }
     catch (cause) {
       if (cause instanceof ConcordError && cause.code === 'RecoveryRequired') return json(response, 503, { ok: false, error: cause.code, message: cause.message });
       throw cause;

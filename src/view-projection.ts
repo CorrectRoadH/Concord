@@ -8,7 +8,7 @@ import { HawdbFailure, hawdbIdentity } from './hawdb-native.js';
 import { ConcordError, failure } from './shared.js';
 import { assertCurrentRuntimeFormat } from './storage.js';
 import { ViewScanManager } from './view-scan.js';
-import { decodeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext, type WorkspaceProjectionContext } from './workspace-projection.js';
+import { decodeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext, type WorkspaceProjectionContext, type WorkspaceProjectionRecord } from './workspace-projection.js';
 import type { WorkspaceProjection } from './view-contract.js';
 
 const projectionFailure = (cause: unknown): ConcordError => cause instanceof HawdbFailure ? new ConcordError(cause.code, cause.message) : failure(cause);
@@ -27,7 +27,21 @@ export class ViewProjectionManager {
   private lastFailure: ConcordError | undefined;
   constructor(private readonly root: string) { this.scans = new ViewScanManager(root); }
 
-  read(): WorkspaceProjection {
+  async read(): Promise<WorkspaceProjection> {
+    const deadline = performance.now() + 500;
+    while (true) {
+      try { return this.readOnce(); }
+      catch (cause) {
+        if (!(cause instanceof ConcordError) || cause.code !== 'WorkspaceProjectionUnavailable'
+          || typeof cause.details !== 'object' || cause.details === null || !('reason' in cause.details)
+          || cause.details.reason !== 'HawdbBusy' || this.stopping || performance.now() >= deadline) throw cause;
+        // 短暂写入也会排斥读取；让出事件循环，释放句柄后重新执行完整校验。
+        await Effect.runPromise(Effect.sleep('10 millis'));
+      }
+    }
+  }
+
+  private readOnce(): WorkspaceProjection {
     this.request();
     const context = workspaceProjectionContext(this.root);
     try {
@@ -95,6 +109,21 @@ export class ViewProjectionManager {
     }
   }
 
+  private async persist(context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionRecord, error?: ConcordError): Promise<void> {
+    const deadline = performance.now() + 3000;
+    while (!this.stopping) {
+      this.verify(context);
+      if (candidate !== undefined) this.ready(context);
+      try { storeWorkspaceProjection(context, candidate, error); return; }
+      catch (cause) {
+        if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || performance.now() >= deadline) throw cause;
+        // 候选已经完成扫描，缓存短暂占用不应丢弃它并等待下一轮扫描。
+        // 等待后必须重新检查身份与发布权限，关闭服务后不得写入。
+        await Effect.runPromise(Effect.sleep('25 millis'));
+      }
+    }
+  }
+
   private async refresh(): Promise<void> {
     const context = workspaceProjectionContext(this.root);
     hawdbIdentity();
@@ -106,9 +135,7 @@ export class ViewProjectionManager {
       const reply = await this.scans.scan();
       if (this.stopping) return;
       const candidate = decodeWorkspaceProjectionRecord(JSON.parse(reply.body));
-      this.verify(context);
-      this.ready(context);
-      storeWorkspaceProjection(context, candidate);
+      await this.persist(context, candidate);
       this.lastFailure = undefined;
     } catch (cause) {
       const error = projectionFailure(cause);
@@ -122,8 +149,7 @@ export class ViewProjectionManager {
       this.retryAfter = Date.now() + 30_000;
       if (error.code === 'CleanupFailed') this.cleanupFailed = true;
       if (!this.stopping) {
-        this.verify(context);
-        storeWorkspaceProjection(context, undefined, error);
+        await this.persist(context, undefined, error);
       }
     } finally {
       if (!this.cleanupFailed && !this.stopping) {

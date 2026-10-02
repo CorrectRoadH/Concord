@@ -4,7 +4,7 @@ import { join, resolve } from 'node:path';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { HAWDB_MACOS_DEPLOYMENT_TARGET } from '../src/hawdb-native-contract.js';
 
 const Workflow = Schema.Struct({
@@ -32,32 +32,35 @@ const Job = Schema.Struct({
 });
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('release builds two native targets and packs once without installation or test jobs', async () => {
+test('release builds two native targets and gates publication on the same commit checks', async () => {
   await Effect.runPromise(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
-    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Job) }))(
+    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, check: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(
       parse(yield* fs.readFileString('.github/workflows/release.yml')),
     );
     const { native, package: pack, publish } = graph.jobs;
     assert.ok(native && pack && publish);
-    assert.deepEqual(Object.keys(graph.jobs), ['native', 'package', 'publish']);
+    assert.deepEqual(Object.keys(graph.jobs), ['native', 'package', 'publish', 'check']);
     assert.equal(native.env?.MACOSX_DEPLOYMENT_TARGET, HAWDB_MACOS_DEPLOYMENT_TARGET);
     assert.deepEqual(native.strategy?.matrix.include?.find(target => target.target === 'darwin-arm64'), { os: 'macos-15', target: 'darwin-arm64' });
     assert.equal(native.strategy?.matrix.include?.length, 2);
     assert.equal(pack.needs, 'native');
-    assert.equal(publish.needs, 'package');
+    assert.deepEqual(publish.needs, ['package', 'check']);
+    assert.equal(graph.jobs.check.uses, './.github/workflows/check.yml');
+    assert.match(graph.jobs.check.with.ref, /inputs.tag/);
     const build = 'pnpm build && pnpm exec tsc -p tsconfig.scripts.json';
     assert.ok(pack.steps.some(step => step.run === build));
     assert.ok(pack.steps.findIndex(step => step.run === 'node --import tsx scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === build));
     const commands = pack.steps.map(step => step.run ?? '').join('\n');
     assert.match(commands, /sha256sum release\/concord-sdlc-\*\.tgz > release\/SHA256SUMS/);
-    assert.equal((commands.match(/npm pack /gu) ?? []).length, 1);
+    assert.equal((commands.match(/scripts\/pack-release.ts release/gu) ?? []).length, 1);
     assert.ok(publish.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
-    assert.doesNotMatch(Object.values(graph.jobs).flatMap(job => job.steps.map(step => step.run ?? '')).join('\n'), /--test(?:\s|$)|playwright install|pnpm check|npm install --prefix|brew install|verify-installed-native/u);
+    assert.match(commands, /pnpm install --prod --frozen-lockfile --ignore-scripts/);
+    assert.match(commands, /verify-installed-native.ts/);
     const check = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Record(Schema.String, Schema.Unknown) }))(
       parse(yield* fs.readFileString('.github/workflows/check.yml')),
     );
-    assert.deepEqual(Object.keys(check.on), ['workflow_dispatch']);
+    assert.deepEqual(Object.keys(check.on), ['workflow_dispatch', 'workflow_call']);
   }).pipe(Effect.provide(NodeServices.layer)));
 });
 
@@ -66,7 +69,7 @@ test('publication retry reuses identical assets and refuses a different digest',
   await Effect.runPromise(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Job) }))(
+    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, check: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(
       parse(yield* fs.readFileString('.github/workflows/release.yml')),
     );
     const script = graph.jobs.publish?.steps.find(step => step.run?.includes('gh release create'))?.run;
@@ -97,7 +100,7 @@ test('publication retry reuses identical assets and refuses a different digest',
 });
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('release tag sets package and shrinkwrap versions while rejecting invalid metadata', async () => {
+test('release tag sets the manifest version while preserving and validating the pnpm lock', async () => {
   await Effect.runPromise(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -114,26 +117,26 @@ test('release tag sets package and shrinkwrap versions while rejecting invalid m
     assert.equal(script, 'node --import tsx scripts/prepare-release.ts');
     const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-release-identity-' });
     const cases = [
-      { tag: 'v0.7.5', top: '0.7.4', inner: '0.7.4', pass: true, version: '0.7.5' },
-      { tag: 'concord-v0.7.6', top: '0.7.4', inner: '0.7.4', pass: true, version: '0.7.6' },
-      { tag: '', top: '0.7.4', inner: '0.7.4', pass: true, version: '0.7.4' },
-      { tag: 'v0.7.4-extra', top: '0.7.4', inner: '0.7.4', pass: false },
-      { tag: 'concord-v01.7.4', top: '0.7.4', inner: '0.7.4', pass: false },
-      { tag: 'v0.7.5', top: '0.7.3', inner: '0.7.4', pass: false },
-      { tag: 'v0.7.5', top: '0.7.4', inner: '0.7.3', pass: false },
+      { tag: 'v0.7.5', dependency: '1.0.0', override: '1.0.0', pass: true, version: '0.7.5' },
+      { tag: 'concord-v0.7.6', dependency: '1.0.0', override: '1.0.0', pass: true, version: '0.7.6' },
+      { tag: '', dependency: '1.0.0', override: '1.0.0', pass: true, version: '0.7.4' },
+      { tag: 'v0.7.4-extra', dependency: '1.0.0', override: '1.0.0', pass: false },
+      { tag: 'concord-v01.7.4', dependency: '1.0.0', override: '1.0.0', pass: false },
+      { tag: 'v0.7.5', dependency: '0.9.0', override: '1.0.0', pass: false },
+      { tag: 'v0.7.5', dependency: '1.0.0', override: '0.9.0', pass: false },
     ];
     for (const candidate of cases) {
-      yield* fs.writeFileString(join(root, 'package.json'), JSON.stringify({ version: '0.7.4' }));
-      yield* fs.writeFileString(join(root, 'npm-shrinkwrap.json'), JSON.stringify({ version: candidate.top, packages: { '': { version: candidate.inner } } }));
+      yield* fs.writeFileString(join(root, 'package.json'), JSON.stringify({ version: '0.7.4', dependencies: { fixture: '1.0.0' }, devDependencies: {} }));
+      const lock = stringify({ lockfileVersion: '9.0', overrides: { fixture: candidate.override }, importers: { '.': { dependencies: { fixture: { specifier: candidate.dependency } }, devDependencies: {} } } });
+      yield* fs.writeFileString(join(root, 'pnpm-lock.yaml'), lock);
+      yield* fs.writeFileString(join(root, 'pnpm-workspace.yaml'), stringify({ overrides: { fixture: '1.0.0' } }));
       const status: number = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/prepare-release.ts')], {
         cwd: root, env: { RELEASE_TAG: candidate.tag }, extendEnv: true,
       }));
       assert.equal(Number(status) === 0, candidate.pass, JSON.stringify(candidate));
       const manifest = JSON.parse(yield* fs.readFileString(join(root, 'package.json'))) as { version: string };
-      const shrinkwrap = JSON.parse(yield* fs.readFileString(join(root, 'npm-shrinkwrap.json'))) as { version: string; packages: { '': { version: string } } };
       assert.equal(manifest.version, candidate.version ?? '0.7.4');
-      assert.equal(shrinkwrap.version, candidate.version ?? candidate.top);
-      assert.equal(shrinkwrap.packages[''].version, candidate.version ?? candidate.inner);
+      assert.equal(yield* fs.readFileString(join(root, 'pnpm-lock.yaml')), lock);
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 });
@@ -143,7 +146,7 @@ test('channel notification fails visibly without credentials and resumes from an
  await Effect.runPromise(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const workflow = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Job) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
+  const workflow = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, check: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
   const script = workflow.jobs.publish?.steps.find(step => step.name === 'Notify Homebrew tap of the published release')?.run;
   assert(script);
   const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-channel-notify-' });

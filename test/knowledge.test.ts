@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,14 +15,12 @@ import { humanOutput } from '../dist/presentation.js';
 const scratch = mkdtempSync(join(tmpdir(), 'concord-knowledge-packed-'));
 let cli: string;
 before(() => Effect.runPromise(Effect.sync(() => {
-  const packed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ filename: Schema.String }))))(
-    execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', scratch], { cwd: resolve('.'), encoding: 'utf8', timeout: 60_000 }),
-  );
-  assert.ok(packed[0]);
+  const packed = packConcord(scratch);
+  assert.ok(packed);
   const install = join(scratch, 'tool');
   mkdirSync(install);
   writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(scratch, packed[0].filename)], { cwd: install, encoding: 'utf8', timeout: 60_000 });
+  installConcord(install, packed);
   cli = join(install, 'node_modules/concord-sdlc/dist/entry.js');
 })));
 after(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));

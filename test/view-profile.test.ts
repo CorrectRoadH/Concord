@@ -1,3 +1,4 @@
+import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -152,11 +153,9 @@ export function sendAdapter() { return 'ok'; }
     assert.equal(server.jobs.list()[0]?.error?.code, 'CaseNotFound');
     const installation = mkdtempSync(join(tmpdir(), 'concord-profile-package-'));
     try {
-      const packed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ filename: Schema.String }))))(
-        execFileSync('npm', ['pack', '--ignore-scripts', '--json', '--pack-destination', installation], { cwd: resolve('.'), encoding: 'utf8', timeout: 60_000 }),
-      );
+      const packed = packConcord(installation);
       writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-      execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', '--prefer-offline', join(installation, packed[0]!.filename)], { cwd: installation, encoding: 'utf8', timeout: 60_000 });
+      installConcord(installation, packed);
       const installed = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ repositoryTests: Schema.Struct({ status: Schema.String, tests: Schema.Array(Schema.Struct({ id: Schema.String })) }) })))(
         execFileSync(process.execPath, [join(installation, 'node_modules/concord-sdlc/dist/entry.js'), '--root', root, '--json', 'workspace', 'show'], { cwd: root, encoding: 'utf8', timeout: 30_000 }),
       );

@@ -13,6 +13,11 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  check:
+    uses: ./.github/workflows/check.yml
+    with:
+      ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
+
   native:
     timeout-minutes: 15
     strategy:
@@ -88,9 +93,18 @@ jobs:
       - name: Pack once
         run: |
           mkdir release
-          npm pack --ignore-scripts --pack-destination release
+          node --import tsx scripts/pack-release.ts release
           test "$(find release -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
           sha256sum release/concord-sdlc-*.tgz > release/SHA256SUMS
+      - name: Verify frozen production installation from the final archive
+        run: |
+          sudo apt-get update && sudo apt-get install -y ripgrep
+          candidate="$(mktemp -d)"
+          trap 'rm -rf "$candidate"' EXIT
+          tar -xzf release/concord-sdlc-*.tgz -C "$candidate"
+          (cd "$candidate/package" && pnpm install --prod --frozen-lockfile --ignore-scripts)
+          for name in package.json pnpm-lock.yaml pnpm-workspace.yaml; do cmp "$name" "$candidate/package/$name"; done
+          node --import tsx scripts/verify-installed-native.ts "$candidate/package"
       - uses: actions/upload-artifact@v4
         with:
           name: concord-release-package
@@ -99,7 +113,7 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: package
+    needs: [package, check]
     timeout-minutes: 3
     if: inputs.tag != ''
     runs-on: ubuntu-24.04
@@ -125,7 +139,7 @@ jobs:
           fi
           gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
-            --notes "Apple Silicon macOS 15+ (including macOS 27) and Linux x64/glibc. Built once with pinned native engines; package metadata and SHA-256 verified. This release workflow does not run tests or installation checks and does not claim macOS 27 CI verification. Homebrew/Nix metadata synchronization is tracked at https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Channel completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG . Package SHA-256: $digest."
+            --notes "Apple Silicon macOS 15+ (including macOS 27) and Linux x64/glibc. Built once with pinned native engines; package metadata and SHA-256 verified. The same tag commit passed the repository checks. macOS 27 is not directly covered by CI. Homebrew/Nix metadata synchronization is tracked at https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Channel completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG . Package SHA-256: $digest."
       - name: Notify Homebrew tap of the published release
         env:
           GH_TOKEN: ${{ github.token }}

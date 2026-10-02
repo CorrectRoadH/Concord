@@ -22,7 +22,7 @@ Concord 的 Node 运行时与 POSIX 进程所有权支持 Linux 与 macOS。一�
 
 ## 核心模型
 
-Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份不可变的包，核验版本与摘要后发布源码资产。完整测试属于开发验证，可通过本地 `pnpm check` 或手动 Check 工作流执行。
+Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份不可变的包，核验版本与摘要后发布源码资产。同一标签 commit 的完整检查通过后才允许发布。
 
 公开的 Homebrew tap 发现该发布，核验身份，更新 Formula 与仅限 Linux 的 Nix 输入，生成候选 recipe，再记录自己的 recipe 标签。两个标签共享版本号，但指向不同的 commit。
 
@@ -30,11 +30,11 @@ Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份
 
 ## 范围
 
-唯一的 npm 发布产物内含 Ubuntu 24.04 与 macOS 15 分别编译的目标原生引擎，在一台 Ubuntu 24.04 runner 上构建、类型检查并合包。发布流水线不运行测试或真实安装，不据此声明运行时验收通过。
+唯一的 tgz 发布产物内含 Ubuntu 24.04 与 macOS 15 分别编译的目标原生引擎，在一台 Ubuntu 24.04 runner 上构建、类型检查并合包。发布检查运行构建、类型检查和隔离消费者测试。
 
-macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安装范围内，但不声明已完成其 CI 实测。渠道同步仅在 Ubuntu 上核验包身份、摘要与生成 Formula/Nix 元数据，不安装 Concord。同一包供所有渠道使用。源码发布成功与渠道同步成功分别报告，tap 同版本 Release 是渠道完成记录。
+macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安装范围内，但不声明已完成其 CI 实测。渠道同步核验包身份、摘要并生成候选；Homebrew 与 Nix 安装运行检查通过后才更新渠道。同一包供所有渠道使用。源码发布成功与渠道同步成功分别报告，tap 同版本 Release 是渠道完成记录。
 
-安装时由 npm 选择目标平台的可选依赖。运行时协调在本地 Linux 与 macOS 工作树上使用 Node 文件 API，不依赖 flock 或磁盘检查工具。依赖为 Node.js 24.15+、Git 与 Repository 工具使用的 ripgrep。Nix 只支持 Linux。
+安装时由 pnpm 按冻结锁选择目标平台的依赖。运行时协调在本地 Linux 与 macOS 工作树上使用 Node 文件 API，不依赖 flock 或磁盘检查工具。依赖为 Node.js 24.15+、Git 与 Repository 工具使用的 ripgrep。Nix 只支持 x86_64 Linux。
 
 不保证 Windows 执行与网络多机协调。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时运行。
 
