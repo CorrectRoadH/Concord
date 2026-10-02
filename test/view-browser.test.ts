@@ -558,6 +558,9 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.getByRole('tab',{name:'高级 JSON',exact:true}).click();
     await expect(page.getByRole('dialog',{name:'离开并丢弃未保存内容？'})).toBeVisible();
     await page.getByRole('button',{name:'丢弃并离开',exact:true}).click();
+    // 丢弃冲突草稿后等待当前配置回读，避免在旧投影即将被替换时开始另一份草稿。
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
+    await expect(page.getByLabel('高级项目配置 JSON',{exact:true})).toHaveValue(/"timeoutMs": 54321/u, { timeout: 65_000 });
     await page.getByLabel('高级项目配置 JSON',{exact:true}).fill('{}');
     await page.getByRole('tab',{name:'常用设置',exact:true}).click();
     await expect(page.getByLabel('高级项目配置 JSON',{exact:true})).toHaveValue('{}');
