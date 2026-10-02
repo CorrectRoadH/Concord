@@ -47,9 +47,10 @@ test('long documents remain reachable and code blocks follow theme without chang
     await architectureLink.click();
     assert.equal(new URL(page.url()).pathname, '/features/long');
     const tree = page.getByTestId('document-file-tree');
-    await expect(tree.getByRole('button', { name: 'architecture.md', exact: true })).toHaveAttribute('data-active', 'true');
+    await expect(tree).toBeVisible();
     const disclosure = tree.getByRole('button', { name: '文件', exact: true });
     if (await disclosure.isVisible()) await disclosure.click();
+    await expect(tree.getByRole('button', { name: 'architecture.md', exact: true })).toHaveAttribute('data-active', 'true');
     await tree.getByRole('button', { name: 'README.md', exact: true }).click();
     await page.getByRole('link', { name: 'Read engineering', exact: true }).click();
     await expect(page).toHaveURL(new RegExp('/engineering/long$'));

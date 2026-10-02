@@ -40,7 +40,7 @@ Concord 的开发、测试、打包与渠道安装统一使用 pnpm。`package.j
 
 发布版本只从规范标签写入 `package.json.version`。pnpm 锁的根 importer 不保存项目版本；发布准备核对根 importer 的依赖 specifier、开发依赖 specifier 及 overrides 与源声明一致，不伪造锁中的项目版本。Repository 实现身份包含实际安装的 JavaScript、包元数据、原始 pnpm 锁与 workspace 配置。渠道不得修改这些身份输入，也不读取另一种锁格式作为回退。
 
-隔离消费者测试通过共享测试入口调用 pnpm 打包和添加本地产物，严格解码 pnpm 的单对象 JSON 回执。消费者需要 TypeScript 或 runner 时自行声明固定版本，不依赖依赖提升。包身份测试核对分发锁和配置与源文件字节一致；渠道安装另外验证从解包根目录执行 `pnpm install --prod --frozen-lockfile --ignore-scripts`，不能用 `pnpm add` 的成功替代冻结安装。
+隔离消费者测试通过共享测试入口调用 pnpm 打包和添加本地产物，严格解码 pnpm 的单对象 JSON 回执。消费者需要 TypeScript 或 runner 时自行声明固定版本，不依赖依赖提升。隔离测试从源 workspace 配置采用同一预发布依赖约束，禁止解析到不匹配的稳定版本。包身份测试核对分发锁和配置与源文件字节一致；渠道安装另外验证从解包根目录执行 `pnpm install --prod --frozen-lockfile --ignore-scripts`，不能用 `pnpm add` 的成功替代冻结安装。
 
 Homebrew Formula 声明 `pnpm` 构建依赖，使用其受管理的可执行文件，遵循包内 packageManager 选择固定版本；干净的 Homebrew CI 必须验证冻结安装。Homebrew 将解包内容安装到 `libexec`，在该目录使用冻结锁和 `--package-import-method=copy` 安装生产依赖。外部 launcher 使用 Homebrew Node 运行 `libexec/dist/entry.js`。Formula 保留 `preserve_rpath`，在 Homebrew 重定位前压缩 `dist/native/*/hawdb.node`，在 post-install 恢复原始字节；安装不需要 Rust，不编译原生引擎。
 

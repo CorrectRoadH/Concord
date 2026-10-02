@@ -33,7 +33,8 @@ export function packConcord(destination: string): PackedConcord {
       }
       mkdirSync(destination, { recursive: true });
       const filename = resolve(destination, `${artifact.name}-${artifact.version}.tgz`);
-      execFileSync('tar', ['-czf', filename, '-C', scratch, 'package']);
+      // macOS 的扩展属性会生成 ._ 文件并破坏模板清单；归档只包含受管文件字节。
+      execFileSync('tar', ['-czf', filename, '-C', scratch, 'package'], { env: { ...process.env, COPYFILE_DISABLE: '1' } });
       const files = execFileSync('tar', ['-tzf', filename], { encoding: 'utf8' }).trim().split('\n')
         .filter(path => !path.endsWith('/')).map(path => ({ path: path.replace(/^package\//u, '') }));
       return { ...artifact, filename, files };

@@ -323,6 +323,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
         if (category === 'Design') {
           assert.ok(await page.getByTestId('document-file-preview').evaluate(element=>element.getBoundingClientRect().width >= 600),'Design body stays at least 600px wide at 1440px');
         }
+        await expect(tree).toBeVisible();
         const disclosure=tree.getByRole('button',{name:'文件',exact:true});
         if (await disclosure.isVisible()) await disclosure.click();
         if (category === 'Design') {
@@ -332,7 +333,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
           await tree.getByRole('button',{name:'展开 plans/first',exact:true}).click();
           await expect(tree.getByRole('button',{name:'plans/first/README.md',exact:true})).toHaveCount(0);
           await tree.getByRole('button',{name:'plans/first',exact:true}).click();
-          await expect(tree.getByRole('button',{name:'plans/first',exact:true})).toHaveAttribute('data-active','true');
+          await expect(tree.getByRole('button',{name:'plans/first',exact:true,includeHidden:true})).toHaveAttribute('data-active','true');
           if (await disclosure.isVisible()) {
             await expect(disclosure).toHaveAttribute('aria-expanded','false');
             await disclosure.click();

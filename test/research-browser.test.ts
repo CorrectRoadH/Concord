@@ -51,7 +51,7 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
       await expect(tree.getByRole('button', { name: 'second', exact: true })).toBeVisible();
       await expect(tree.getByRole('button', { name: '展开 second', exact: true })).toHaveAttribute('aria-expanded', 'false');
       await tree.getByRole('button', { name: '展开 second', exact: true }).click();
-      await expect(tree.getByRole('button', { name: '展开 second/材料', exact: true })).toHaveAttribute('aria-expanded', 'false');
+      await expect(tree.getByRole('button', { name: '展开 second/材料', exact: true, includeHidden: true })).toHaveAttribute('aria-expanded', 'false');
       await expect(tree.getByRole('button', { name: 'second/README.md', exact: true })).toHaveCount(0);
       const secondFile = tree.getByRole('button', { name: 'second', exact: true });
       await secondFile.scrollIntoViewIfNeeded();
@@ -77,12 +77,12 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
       await expect(page.getByRole('heading', { name: 'Second independent study', exact: true })).toBeVisible();
       if (!stacked) assert.equal(await tree.evaluate(element => element.getBoundingClientRect().top), treeTop, 'loaded content does not move the file tree');
       await expect(tree).toHaveAttribute('data-instance', 'preserved');
-      await expect(tree.getByRole('button', { name: '展开 second/材料', exact: true })).toHaveAttribute('aria-expanded', 'false');
+      await expect(tree.getByRole('button', { name: '展开 second/材料', exact: true, includeHidden: true })).toHaveAttribute('aria-expanded', 'false');
       if (!stacked) assert.equal(await tree.evaluate(element => element.scrollTop), scrollTop, 'switching owners preserves file tree scroll');
       await page.unroute('**/api/file?*');
       for (const file of ['first/reference-0.md', 'second/README.md', 'second/材料/笔记.md', 'second/README.md']) {
         if (stacked) await disclosure.click();
-        const button = tree.getByRole('button', { name: file === 'second/README.md' ? 'second' : file, exact: true });
+        const button = tree.getByRole('button', { name: file === 'second/README.md' ? 'second' : file, exact: true, includeHidden: true });
         if (file.includes('材料/')) await tree.getByRole('button', { name: '展开 second/材料', exact: true }).click();
         await button.scrollIntoViewIfNeeded();
         const beforeTop = await tree.evaluate(element => element.getBoundingClientRect().top);

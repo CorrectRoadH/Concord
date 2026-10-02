@@ -148,7 +148,8 @@ const documentStyles = stylex.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    width: 30,
+    // 与文件行的左内边距、占位图标和列间距一致，使同层图标严格对齐。
+    width: 29,
     padding: 0,
     borderWidth: 0,
     borderRadius: 7,

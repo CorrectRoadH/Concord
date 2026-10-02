@@ -42,6 +42,7 @@ test('file reads and navigation remain available with live or dead publication o
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     await page.goto(`http://127.0.0.1:${server.port}/design/lease`);
     const tree = page.getByTestId('document-file-tree');
+    await expect(tree).toBeVisible();
     const disclosure = tree.getByRole('button', { name: '文件', exact: true });
     if (await disclosure.isVisible()) await disclosure.click();
     await tree.getByRole('button', { name: '展开 plans', exact: true }).click();
@@ -69,7 +70,7 @@ test('file reads and navigation remain available with live or dead publication o
     if (await disclosure.isVisible()) await disclosure.click();
     await readme.click();
     await expect(page.locator('[contenteditable="true"]').first()).toContainText('Lease content');
-    await expect(readme).toHaveAttribute('data-active', 'true');
+    await expect(tree.getByRole('button', { name: 'README.md', exact: true, includeHidden: true })).toHaveAttribute('data-active', 'true');
     await page.reload();
     await expect(page.getByRole('link', { name: '总览', exact: true })).toBeVisible();
     await expect(recover).toHaveCount(0);

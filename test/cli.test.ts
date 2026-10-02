@@ -1,9 +1,9 @@
 import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, realpathSync, cpSync, readdirSync, renameSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
@@ -698,8 +698,6 @@ test('installed neutral governance keeps lifecycle rules and loads native hosts 
  write(root,'host.mjs',hostSource);
  rmSync(join(root,'node_modules'));mkdirSync(join(root,'node_modules'));
  const locked=join(root,'node_modules/concord-sdlc');cpSync(join(dependencyRoot,'concord-sdlc'),locked,{recursive:true,dereference:true});
- // 复制代码以隔离身份修改，同时保留 pnpm 为原包提供的依赖解析目录。
- symlinkSync(dirname(realpathSync(join(dependencyRoot,'concord-sdlc'))),join(locked,'node_modules'),'dir');
  const identity=join(locked,'dist/evidence-policy.js');writeFileSync(identity,readFileSync(identity,'utf8')+'\n// different installed engine\n');
  result=profile(['--help']);assert.equal(result.status,0,result.stderr);
  result=profile(['docs','test','inventory','--repo','suite','--json']);assert.notEqual(result.status,0);assert.match(result.stderr,/RepositoryEngineMismatch/);
