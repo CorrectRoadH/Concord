@@ -32,7 +32,11 @@ tap 定期或经通知发现更新的公开发布，核验标签、包与资产�
 
 ## pnpm 包与渠道契约
 
-Concord 的开发、测试、打包与渠道安装统一使用 pnpm。`package.json` 的 `packageManager` 固定开发与打包所用版本；`pnpm-lock.yaml` 是唯一依赖锁，`pnpm-workspace.yaml` 独占 overrides 与安装策略。发布包携带这三个文件，不携带另一种包管理器的锁。打包使用 `pnpm --config.ignore-scripts=true pack --skip-manifest-obfuscation`，保留包管理器声明，不运行构建或安装脚本。共享 TypeScript 打包入口将 pnpm 生成的归档解包到临时目录，补入源 `pnpm-lock.yaml` 与 `pnpm-workspace.yaml`（workspace 同时列入 package.json 的 files 白名单），再生成最终 tgz；核对 manifest、锁和 workspace 配置的原始字节，并清理临时目录。测试与发布必须调用同一入口，摘要只针对最终 tgz。
+Concord 的开发、测试、打包与渠道安装统一使用 pnpm。`package.json` 的 `packageManager` 固定开发与打包所用版本；`pnpm-lock.yaml` 是唯一依赖锁，`pnpm-workspace.yaml` 独占 overrides 与安装策略。发布包携带这三个文件，不携带另一种包管理器的锁。
+
+打包使用 `pnpm --config.ignore-scripts=true pack --skip-manifest-obfuscation`，保留包管理器声明，不运行构建或安装脚本。
+
+共享 TypeScript 打包入口将 pnpm 生成的归档解包到临时目录，补入源 `pnpm-lock.yaml` 与 `pnpm-workspace.yaml`，再生成最终 tgz。workspace 同时列入 package.json 的 files 白名单。入口核对 manifest、锁和 workspace 配置的原始字节，并清理临时目录。测试与发布必须调用同一入口，摘要只针对最终 tgz。
 
 发布版本只从规范标签写入 `package.json.version`。pnpm 锁的根 importer 不保存项目版本；发布准备核对根 importer 的依赖 specifier、开发依赖 specifier 及 overrides 与源声明一致，不伪造锁中的项目版本。Repository 实现身份包含实际安装的 JavaScript、包元数据、原始 pnpm 锁与 workspace 配置。渠道不得修改这些身份输入，也不读取另一种锁格式作为回退。
 
