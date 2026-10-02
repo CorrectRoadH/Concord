@@ -37,6 +37,8 @@ test('file context menus copy repository paths without navigating or changing fi
     const path = 'docs/feature/菜单/README.md';
     const before = readFileSync(join(root, path), 'utf8');
     const tree = page.getByTestId('document-file-tree');
+    const disclosure = tree.getByRole('button', { name: '文件', exact: true });
+    if (await disclosure.isVisible()) await disclosure.click();
     const selected = tree.getByRole('button', { name: 'README.md', exact: true });
     await selected.click({ button: 'right' });
     await page.getByRole('menuitem', { name: '复制相对路径', exact: true }).click();

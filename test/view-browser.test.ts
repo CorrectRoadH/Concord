@@ -319,6 +319,25 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
         await page.getByRole('tab',{name:'正文',exact:true}).click();
       }
       if (category !== 'Research') {
+        const tree=page.getByTestId('document-file-tree');
+        if (category === 'Design') {
+          assert.ok(await page.getByTestId('document-file-preview').evaluate(element=>element.getBoundingClientRect().width >= 600),'Design body stays at least 600px wide at 1440px');
+        }
+        const disclosure=tree.getByRole('button',{name:'文件',exact:true});
+        if (await disclosure.isVisible()) await disclosure.click();
+        if (category === 'Design') {
+          await expect(tree.getByRole('button',{name:'展开 plans',exact:true})).toHaveAttribute('aria-expanded','false');
+          await tree.getByRole('button',{name:'展开 plans',exact:true}).click();
+          await expect(tree.getByRole('button',{name:'展开 plans/second',exact:true})).toHaveAttribute('aria-expanded','false');
+          await tree.getByRole('button',{name:'展开 plans/first',exact:true}).click();
+          await expect(tree.getByRole('button',{name:'plans/first/README.md',exact:true})).toHaveCount(0);
+          await tree.getByRole('button',{name:'plans/first',exact:true}).click();
+          await expect(tree.getByRole('button',{name:'plans/first',exact:true})).toHaveAttribute('data-active','true');
+          if (await disclosure.isVisible()) {
+            await expect(disclosure).toHaveAttribute('aria-expanded','false');
+            await disclosure.click();
+          }
+        }
         const supportingPage=page.getByTestId('document-file-tree').getByRole('button',{name:category === 'Design' ? 'plans/first/architecture.md' : 'architecture.md',exact:true});
         await supportingPage.click();
         await expect(page.locator('[contenteditable="true"]').first()).toBeVisible();
@@ -458,7 +477,10 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByRole('tab',{name:'Use Cases',exact:true})).toHaveAttribute('data-state','active');
     await page.getByRole('tab',{name:'正文',exact:true}).click();
     await expect(editor).toContainText('External editor wins.');
+    // Give the main content enough width to exercise the sticky file-tree scroll contract.
+    await page.setViewportSize({width:1920,height:1000});
     const documentTree=page.getByTestId('document-file-tree');
+    await expect(documentTree).toHaveCSS('position','sticky');
     await documentTree.getByRole('button',{name:'architecture.md',exact:true}).click();
     await expect(editor).toContainText('Entity Ownership');
     await editor.fill('Architecture from browser.');
@@ -481,6 +503,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     assert.equal(new URL(page.url()).searchParams.get('file'), 'docs/feature/browser-feature/architecture.md');
     await page.goForward();
     await expect(page).toHaveURL(/file=docs%2Ffeature%2Fbrowser-feature%2Flibrary.md/);
+    await page.setViewportSize({width:1440,height:1000});
     await page.getByRole('link',{name:'Git 变更',exact:true}).click();
     await expect(page.getByRole('complementary',{name:'Git 变更 侧栏'})).toBeVisible();
     const gitTree = page.getByRole('navigation',{name:'Git 文件树',exact:true});

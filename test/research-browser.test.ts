@@ -30,7 +30,7 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
   const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
   const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
   try {
-    for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 1080 }]) {
+    for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 900 }]) {
       const page = await browser.newPage({ viewport });
       await page.goto(`http://127.0.0.1:${server.port}/research/first`);
       const navigation = page.getByRole('navigation', { name: '内容导航', exact: true });
@@ -38,9 +38,22 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
       await expect(navigation.getByRole('link', { name: 'First independent study', exact: true })).toHaveCount(0);
       const tree = page.getByTestId('document-file-tree');
       await expect(tree).toBeVisible();
+      const disclosure = tree.getByRole('button', { name: '文件', exact: true });
+      const stacked = await disclosure.isVisible();
+      if (stacked) {
+        await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+        await expect(disclosure).toContainText('README.md');
+        await disclosure.click();
+      }
+      // Keep the long branch manually open across owner switches to exercise tree scrolling.
+      await tree.getByRole('button', { name: '折叠 first', exact: true }).click();
+      await tree.getByRole('button', { name: '展开 first', exact: true }).click();
       await expect(tree.getByRole('button', { name: 'second', exact: true })).toBeVisible();
-      await tree.getByRole('button', { name: 'second/材料', exact: true }).click();
-      const secondFile = tree.getByRole('button', { name: 'second/README.md', exact: true });
+      await expect(tree.getByRole('button', { name: '展开 second', exact: true })).toHaveAttribute('aria-expanded', 'false');
+      await tree.getByRole('button', { name: '展开 second', exact: true }).click();
+      await expect(tree.getByRole('button', { name: '展开 second/材料', exact: true })).toHaveAttribute('aria-expanded', 'false');
+      await expect(tree.getByRole('button', { name: 'second/README.md', exact: true })).toHaveCount(0);
+      const secondFile = tree.getByRole('button', { name: 'second', exact: true });
       await secondFile.scrollIntoViewIfNeeded();
       await tree.evaluate(element => element.setAttribute('data-instance', 'preserved'));
       const scrollTop = await tree.evaluate(element => element.scrollTop);
@@ -54,21 +67,23 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
         await fileGate;
         await route.continue();
       });
-      await tree.getByRole('button', { name: 'second/README.md', exact: true }).click();
+      await secondFile.click();
       await expect(page).toHaveURL(/\/research\/second\?file=/);
       try {
         await expect(page.getByRole('status', { name: '正在载入文件' })).toBeVisible();
-        assert.equal(await tree.evaluate(element => element.getBoundingClientRect().top), treeTop, 'loading does not move the file tree');
+        if (!stacked) assert.equal(await tree.evaluate(element => element.getBoundingClientRect().top), treeTop, 'loading does not move the file tree');
+        else await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
       } finally { releaseFile(); }
       await expect(page.getByRole('heading', { name: 'Second independent study', exact: true })).toBeVisible();
-      assert.equal(await tree.evaluate(element => element.getBoundingClientRect().top), treeTop, 'loaded content does not move the file tree');
+      if (!stacked) assert.equal(await tree.evaluate(element => element.getBoundingClientRect().top), treeTop, 'loaded content does not move the file tree');
       await expect(tree).toHaveAttribute('data-instance', 'preserved');
-      await expect(tree.getByRole('button', { name: 'second/材料', exact: true })).toHaveAttribute('aria-expanded', 'false');
-      assert.equal(await tree.evaluate(element => element.scrollTop), scrollTop, 'switching owners preserves file tree scroll');
+      await expect(tree.getByRole('button', { name: '展开 second/材料', exact: true })).toHaveAttribute('aria-expanded', 'false');
+      if (!stacked) assert.equal(await tree.evaluate(element => element.scrollTop), scrollTop, 'switching owners preserves file tree scroll');
       await page.unroute('**/api/file?*');
       for (const file of ['first/reference-0.md', 'second/README.md', 'second/材料/笔记.md', 'second/README.md']) {
-        const button = tree.getByRole('button', { name: file, exact: true });
-        if (file.includes('材料/')) await tree.getByRole('button', { name: 'second/材料', exact: true }).click();
+        if (stacked) await disclosure.click();
+        const button = tree.getByRole('button', { name: file === 'second/README.md' ? 'second' : file, exact: true });
+        if (file.includes('材料/')) await tree.getByRole('button', { name: '展开 second/材料', exact: true }).click();
         await button.scrollIntoViewIfNeeded();
         const beforeTop = await tree.evaluate(element => element.getBoundingClientRect().top);
         const samples = tree.evaluate(async element => {
@@ -84,8 +99,13 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
         await expect(page.getByRole('status', { name: '正在载入文件' })).toHaveCount(0);
         const positions = await samples;
         const previewTop = await page.getByTestId('document-file-preview').evaluate(element => element.getBoundingClientRect().top);
-        assert.ok(Math.abs(previewTop - beforeTop) < 1, `${file}: preview ${previewTop}, tree ${beforeTop}`);
-        for (const top of positions) assert.ok(Math.abs(top - beforeTop) < 1, `${file}: tree moved from ${beforeTop} to ${top}`);
+        if (stacked) {
+          await expect(disclosure).toHaveAttribute('aria-expanded', 'false');
+          await expect(button).not.toBeVisible();
+        } else {
+          assert.ok(Math.abs(previewTop - beforeTop) < 1, `${file}: preview ${previewTop}, tree ${beforeTop}`);
+          for (const top of positions) assert.ok(Math.abs(top - beforeTop) < 1, `${file}: tree moved from ${beforeTop} to ${top}`);
+        }
       }
       await page.reload();
       await expect(page.getByRole('heading', { name: 'Second independent study', exact: true })).toBeVisible();

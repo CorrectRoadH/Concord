@@ -97,36 +97,71 @@ const documentStyles = stylex.create({
     backgroundColor: "var(--background)",
   },
   tabsList: { minWidth: 0, overflowX: "auto", scrollbarWidth: "none" },
+  treeContainer: { containerType: "inline-size", containerName: "package-files", minWidth: 0 },
   fileLayout: {
     display: "grid",
-    gridTemplateColumns: { default: "minmax(210px, 260px) minmax(0, 1fr)", "@media (max-width: 760px)": "1fr" },
+    gridTemplateColumns: { default: "minmax(200px, 240px) minmax(0, 1fr)", "@container package-files (width < 960px)": "minmax(0, 1fr)" },
     alignItems: "start",
     gap: 16,
     // Keep the sticky tree supported even when the next file is short.
-    minHeight: { default: "calc(100svh - 76px)", "@media (max-width: 760px)": 0 },
+    minHeight: { default: "calc(100svh - 76px)", "@container package-files (width < 960px)": 0 },
   },
   singleFileLayout: { gridTemplateColumns: "minmax(0, 1fr)" },
   tabPanel: { flex: "none", minHeight: 0 },
   bodyPanel: { overflow: "visible" },
   pathList: {
-    position: { default: "sticky", "@media (max-width: 760px)": "static" },
+    position: { default: "sticky", "@container package-files (width < 960px)": "static" },
     top: 68,
-    maxHeight: { default: "calc(100svh - 180px)", "@media (max-width: 760px)": 230 },
+    maxHeight: { default: "calc(100svh - 180px)", "@container package-files (width < 960px)": 280 },
     overflowY: "auto",
     scrollbarWidth: "none",
-    padding: 12,
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: "var(--border)",
-    borderRadius: "var(--radius)",
-    backgroundColor: "var(--card)",
+    minWidth: 0,
+    paddingRight: { default: 16, "@container package-files (width < 960px)": 0 },
+    borderRightWidth: { default: 1, "@container package-files (width < 960px)": 0 },
+    borderRightStyle: "solid",
+    borderRightColor: "var(--border)",
   },
   preview: { minWidth: 0, minHeight: 0 },
   tree: { display: "grid", gap: 1 },
+  treeContent: { display: { default: "block", "@container package-files (width < 960px)": "none" } },
+  treeContentOpen: { display: "block" },
+  treeDisclosure: {
+    display: { default: "none", "@container package-files (width < 960px)": "grid" },
+    gridTemplateColumns: "14px auto minmax(0, 1fr)",
+    columnGap: 7,
+    alignItems: "center",
+    width: "100%",
+    padding: 8,
+    borderWidth: 0,
+    color: "inherit",
+    backgroundColor: { default: "transparent", ":hover": "var(--accent)" },
+    textAlign: "left",
+    cursor: "pointer",
+    outline: { default: "none", ":focus-visible": "2px solid var(--ring)" },
+    outlineOffset: -2,
+  },
+  treeCurrentFile: { minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "var(--muted-foreground)" },
+  treeDirectoryRow: { display: "flex", minWidth: 0, borderRadius: 7 },
+  treeDirectoryButton: { flex: 1, gridTemplateColumns: "14px minmax(0, 1fr)", paddingLeft: 0 },
+  treeToggle: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+    width: 30,
+    padding: 0,
+    borderWidth: 0,
+    borderRadius: 7,
+    color: "inherit",
+    cursor: "pointer",
+    backgroundColor: { default: "transparent", ":hover": "var(--accent)" },
+    outline: { default: "none", ":focus-visible": "2px solid var(--ring)" },
+    outlineOffset: -2,
+  },
   nested: { marginLeft: 10, paddingLeft: 7, borderLeftWidth: 1, borderLeftStyle: "solid", borderLeftColor: "var(--border)" },
   treeRow: {
     display: "grid",
-    gridTemplateColumns: "15px 15px minmax(0, 1fr) auto",
+    gridTemplateColumns: "14px 14px minmax(0, 1fr) auto",
     alignItems: "center",
     columnGap: 7,
     width: "100%",
@@ -140,12 +175,14 @@ const documentStyles = stylex.create({
     textAlign: "left",
     cursor: "pointer",
     backgroundColor: { default: "transparent", ":hover": "var(--accent)" },
+    outline: { default: "none", ":focus-visible": "2px solid var(--ring)" },
+    outlineOffset: -2,
   },
   selectedTreeRow: { backgroundColor: "var(--accent)", color: "var(--accent-foreground)" },
-  treeIcon: { width: 15, height: 15, flexShrink: 0, color: "var(--muted-foreground)" },
+  treeIcon: { width: 14, height: 14, flexShrink: 0, color: "var(--muted-foreground)" },
   chevron: { transition: "transform 120ms ease" },
   openChevron: { transform: "rotate(90deg)" },
-  treeSpacer: { flexShrink: 0, width: 15 },
+  treeSpacer: { flexShrink: 0, width: 14 },
   treeName: { minWidth: 0, overflow: "hidden", fontWeight: 600, textOverflow: "ellipsis", whiteSpace: "nowrap" },
   skeleton: { minHeight: 520, padding: "48px clamp(28px, 7vw, 100px)", borderWidth: 1, borderStyle: "solid", borderColor: "var(--border)", borderRadius: "var(--radius)", backgroundColor: "var(--card)" },
   skeletonTitle: { width: "58%", height: 48, marginBottom: 28, borderRadius: 8, backgroundColor: "var(--muted)", animationName: stylex.keyframes({ "0%, 100%": { opacity: .45 }, "50%": { opacity: .9 } }), animationDuration: "1.25s", animationIterationCount: "infinite" },
@@ -640,6 +677,8 @@ function DocumentFiles({
   const selectedPath = requestedFile && files.some(file => file.path === requestedFile) ? requestedFile : document.path
   const layoutRef = React.useRef<HTMLDivElement>(null)
   const treeRef = React.useRef<HTMLElement>(null)
+  const [fileListOpen, setFileListOpen] = React.useState(false)
+  const fileListId = React.useId()
   const selectFile = (path: string) => {
     const layout = layoutRef.current
     const tree = treeRef.current
@@ -688,15 +727,12 @@ function DocumentFiles({
   }, [api, selectedPath, fileAttempt])
   const ownerDirectory = topicDirectory ?? document.path.slice(0, document.path.lastIndexOf("/") + 1)
   const tree = React.useMemo(() => buildFileTree(files, ownerDirectory), [files, ownerDirectory])
-  const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(() => new Set(treeDirectoryPaths(tree)))
+  const manualExpansion = React.useRef({ ownerDirectory, paths: new Set<string>() })
+  const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(() => new Set(treeDirectoryPaths(selectedPath, ownerDirectory)))
   React.useEffect(() => {
-    const relative = selectedPath.startsWith(ownerDirectory) ? selectedPath.slice(ownerDirectory.length) : selectedPath
-    const segments = relative.split("/")
-    setExpanded((current) => {
-      const next = new Set(current)
-      for (let index = 1; index < segments.length; index += 1) next.add(segments.slice(0, index).join("/"))
-      return next
-    })
+    if (manualExpansion.current.ownerDirectory !== ownerDirectory) manualExpansion.current = { ownerDirectory, paths: new Set() }
+    setExpanded(new Set([...manualExpansion.current.paths, ...treeDirectoryPaths(selectedPath, ownerDirectory)]))
+    setFileListOpen(false)
   }, [ownerDirectory, selectedPath])
   const allowed = ["feature", "roadmap", "design", "engineering", "research"].includes(
     document.metadata.kind
@@ -724,8 +760,15 @@ function DocumentFiles({
     setPage("")
   }
   return (
+    <div {...stylex.props(documentStyles.treeContainer)}>
     <div ref={layoutRef} {...stylex.props(documentStyles.fileLayout, !showPathList && documentStyles.singleFileLayout)}>
       {showPathList && <aside ref={treeRef} data-testid="document-file-tree" {...stylex.props(documentStyles.pathList)}>
+        <button type="button" aria-expanded={fileListOpen} aria-controls={fileListId} aria-label="文件" title={selectedPath.slice(ownerDirectory.length)} {...stylex.props(documentStyles.treeDisclosure)} onClick={() => setFileListOpen(current => !current)}>
+          <ChevronRight {...stylex.props(documentStyles.treeIcon, documentStyles.chevron, fileListOpen && documentStyles.openChevron)} />
+          <strong>文件</strong>
+          <span {...stylex.props(documentStyles.treeCurrentFile)}>{selectedPath.split("/").at(-1)}</span>
+        </button>
+        <div id={fileListId} {...stylex.props(documentStyles.treeContent, fileListOpen && documentStyles.treeContentOpen)}>
         <div className="section-heading section-heading--compact">
           <strong>文件</strong>
           {allowed && (
@@ -739,14 +782,20 @@ function DocumentFiles({
           ownerDirectory={ownerDirectory}
           expanded={expanded}
           selectedPath={selectedPath}
-          onToggle={(path) => setExpanded((current) => {
-            const next = new Set(current)
-            if (next.has(path)) next.delete(path)
-            else next.add(path)
-            return next
-          })}
-          onSelect={(path) => { if (path !== selectedPath) selectFile(path) }}
+          onToggle={(path) => {
+            const next = new Set(expanded)
+            if (next.has(path)) {
+              next.delete(path)
+              manualExpansion.current.paths.delete(path)
+            } else {
+              next.add(path)
+              manualExpansion.current.paths.add(path)
+            }
+            setExpanded(next)
+          }}
+          onSelect={(path) => { setFileListOpen(false); if (path !== selectedPath) selectFile(path) }}
         />
+        </div>
       </aside>}
       <section data-testid="document-file-preview" {...stylex.props(documentStyles.preview)}>
         {selected?.path !== selectedPath && toolbarTarget && createPortal(<div className="toolbar-actions">
@@ -798,6 +847,7 @@ function DocumentFiles({
         </DialogContent>
       </Dialog>
     </div>
+    </div>
   )
 }
 
@@ -816,36 +866,45 @@ interface FileTreeNode {
   readonly name: string
   readonly relativePath: string
   readonly path?: string
+  readonly directory: boolean
   readonly children: readonly FileTreeNode[]
 }
 
 function buildFileTree(files: readonly { path: string }[], ownerDirectory: string): readonly FileTreeNode[] {
-  type MutableNode = { name: string; relativePath: string; path?: string; children: MutableNode[] }
-  const root: MutableNode = { name: "", relativePath: "", children: [] }
+  type MutableNode = { name: string; relativePath: string; path?: string; directory: boolean; children: MutableNode[] }
+  const root: MutableNode = { name: "", relativePath: "", directory: true, children: [] }
   for (const file of files) {
     const relative = file.path.startsWith(ownerDirectory) ? file.path.slice(ownerDirectory.length) : file.path
     let parent = root
-    for (const [index, name] of relative.split("/").entries()) {
-      const relativePath = relative.split("/").slice(0, index + 1).join("/")
+    const segments = relative.split("/")
+    for (const [index, name] of segments.entries()) {
+      const last = index === segments.length - 1
+      if (last && name === "README.md" && index > 0) {
+        parent.path = file.path
+        break
+      }
+      const relativePath = segments.slice(0, index + 1).join("/")
       let node = parent.children.find((item) => item.name === name)
       if (!node) {
-        node = { name, relativePath, children: [] }
+        node = { name, relativePath, directory: !last, children: [] }
         parent.children.push(node)
       }
-      if (index === relative.split("/").length - 1) {
+      if (last) {
         node.path = file.path
       }
       parent = node
     }
   }
   const sort = (nodes: MutableNode[]): MutableNode[] => nodes
-    .sort((left, right) => Number(right.children.length > 0) - Number(left.children.length > 0) || left.name.localeCompare(right.name))
+    .sort((left, right) => Number(right.directory) - Number(left.directory) || left.name.localeCompare(right.name))
     .map((node) => ({ ...node, children: sort(node.children) }))
   return sort(root.children)
 }
 
-function treeDirectoryPaths(nodes: readonly FileTreeNode[]): readonly string[] {
-  return nodes.flatMap((node) => node.children.length > 0 ? [node.relativePath, ...treeDirectoryPaths(node.children)] : [])
+function treeDirectoryPaths(selectedPath: string, ownerDirectory: string): readonly string[] {
+  const relative = selectedPath.startsWith(ownerDirectory) ? selectedPath.slice(ownerDirectory.length) : selectedPath
+  const segments = relative.split("/")
+  return segments.slice(0, -1).map((_, index) => segments.slice(0, index + 1).join("/"))
 }
 
 function FileTree({ nodes, ownerDirectory, expanded, selectedPath, onToggle, onSelect, depth = 0 }: {
@@ -858,21 +917,28 @@ function FileTree({ nodes, ownerDirectory, expanded, selectedPath, onToggle, onS
   depth?: number
 }) {
   return <div {...stylex.props(documentStyles.tree, depth > 0 && documentStyles.nested)}>{nodes.map((node) => {
-    const directory = node.children.length > 0
+    const directory = node.directory
     const open = expanded.has(node.relativePath)
     return <React.Fragment key={node.relativePath}>
-      <PathContextMenu path={node.path ?? `${ownerDirectory}${node.relativePath}`}><button
+      {directory ? <PathContextMenu path={`${ownerDirectory}${node.relativePath}`}><div {...stylex.props(documentStyles.treeDirectoryRow, node.path === selectedPath && documentStyles.selectedTreeRow)}>
+        <button type="button" aria-label={`${open ? "折叠" : "展开"} ${node.relativePath}`} aria-expanded={open} title={node.relativePath} {...stylex.props(documentStyles.treeToggle)} onClick={() => onToggle(node.relativePath)}>
+          <ChevronRight {...stylex.props(documentStyles.treeIcon, documentStyles.chevron, open && documentStyles.openChevron)} />
+        </button>
+        <button type="button" data-active={node.path === selectedPath || undefined} aria-label={node.relativePath} aria-expanded={node.path ? undefined : open} title={node.relativePath} {...stylex.props(documentStyles.treeRow, documentStyles.treeDirectoryButton, node.path === selectedPath && documentStyles.selectedTreeRow)} onClick={() => node.path ? onSelect(node.path) : onToggle(node.relativePath)}>
+          <Folder {...stylex.props(documentStyles.treeIcon)} />
+          <span {...stylex.props(documentStyles.treeName)}>{node.name}</span>
+        </button>
+      </div></PathContextMenu> : <PathContextMenu path={node.path ?? `${ownerDirectory}${node.relativePath}`}><button
         type="button"
         data-active={node.path === selectedPath || undefined}
         aria-label={node.relativePath}
-        aria-expanded={directory ? open : undefined}
         title={node.relativePath}
         {...stylex.props(documentStyles.treeRow, node.path === selectedPath && documentStyles.selectedTreeRow)}
-        onClick={() => directory ? onToggle(node.relativePath) : node.path && onSelect(node.path)}
+        onClick={() => node.path && onSelect(node.path)}
       >
-        {directory ? <><ChevronRight {...stylex.props(documentStyles.treeIcon, documentStyles.chevron, open && documentStyles.openChevron)} /><Folder {...stylex.props(documentStyles.treeIcon)} /></> : <><span {...stylex.props(documentStyles.treeSpacer)} /><FileText {...stylex.props(documentStyles.treeIcon)} /></>}
+        <span {...stylex.props(documentStyles.treeSpacer)} /><FileText {...stylex.props(documentStyles.treeIcon)} />
         <span {...stylex.props(documentStyles.treeName)}>{node.name}</span>
-      </button></PathContextMenu>
+      </button></PathContextMenu>}
       {directory && open && <FileTree ownerDirectory={ownerDirectory} nodes={node.children} expanded={expanded} selectedPath={selectedPath} onToggle={onToggle} onSelect={onSelect} depth={depth + 1} />}
     </React.Fragment>
   })}</div>

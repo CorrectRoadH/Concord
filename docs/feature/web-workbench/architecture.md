@@ -55,3 +55,15 @@ CSS 与静态资源进入当前图块的编译结果。项目配置的 `p5.libra
 扫描计时区分测试注释、文档关系、宪法、代码来源读取、缓存与解析、来源复核。日志分别记录测试和代码缓存的状态及命中数，不可用原因只输出允许的错误码。`cache status` 的 ready 不作为请求命中证据。公共扫描与缓存批处理见[架构流程图](../../architecture.md#存储契约)；Web 复用该流程，不拥有另一套解析缓存。
 
 处理耗时从 HTTP handler 接纳请求开始；事件循环延迟为进程采样观察，不能作为该请求的精确排队时间。嵌套阶段时间包含子阶段，不能相加。客户端全程耗时应由独立进程测量。HTTP 200 只表示响应成功，列表须读取 projection.consistent、complete 和 findings；缓存不可用、扫描期间来源变化与孤立标注分别诊断。
+
+## URL 与导航状态
+
+URL 是导航状态的唯一来源。文档 `tab`、正文 `file`、Use Case 路径、源码 `source/sourceLine/sourceEndLine`、设置 `tab`、Git `tab/path/area/line/view` 和结果 `resultView` 直接驱动组件。不用 `useState` 或 ref 复制当前导航值再经 effect 双向同步。Git 两类文件的上次选择保存在 URL 的 `docsPath/docsArea/testsPath/testsArea`。未提供或无效的选择按页面能力回落，外部路径仍由服务端验证。`?tab=actions` 在不支持生命周期的对象上回落到元数据。
+
+用户切换产生历史项；前进、后退和深链接使用同一条渲染路径。drawer 关闭只在当前运行实例能证明紧邻父项时后退，否则替换到明确父 URL；刷新后不信任旧 history state。源码关闭保留所属文档的 tab/file，Use Case 关闭回所属 Feature 的 Use Cases。历史 provenance 只证明关闭去向，不保存可见选择。
+
+编辑草稿、请求状态和临时表单由组件拥有。全局路由 blocker 统一处理离开前保存，不维护第二个 pending destination。只读内容不注册自动保存；唯一活动草稿 owner 负责 flush、dirty 与 discard，旧 owner 清理不能影响新 owner。设置的表单与 JSON 在离开前保存当前表示；失败保留原 URL 和草稿，明确丢弃先恢复 baseline 并取消延迟保存。导航等待期间继续编辑必须保存最新 revision，过期导航回调不得跳转。
+
+滚动缓存只属于展示层，按历史项记录桌面、移动容器与 drawer 位置；等待异步内容后恢复，用户主动操作停止补偿。刷新恢复导航位置，不承诺像素位置。结果页视图可深链接，但瞬时命令返回值不会为恢复页面而自动重跑。
+
+浏览器验收覆盖保存冲突、非法 JSON、连续导航、嵌套关闭、刷新和前进后退。

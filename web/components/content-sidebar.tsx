@@ -84,11 +84,11 @@ function DirectoryLinks({ items, root, query, onNavigate }: { items: readonly Co
   const render = (directory: Directory): ReactNode => <>
     {[...directory.directories.values()].sort((a, b) => a.name.localeCompare(b.name)).map(child => {
       const open = Boolean(query.trim()) || (expanded[child.path] ?? Boolean(active?.startsWith(`${child.path}/`)));
-      return <li key={child.path}><PathContextMenu path={child.path}><button type="button" className="document-navigation__folder" aria-expanded={open} title={child.path} onClick={() => setExpanded(previous => ({ ...previous, [child.path]: !open }))}><ChevronRight size={14} className={open ? 'rotate-90' : undefined} /><Folder size={16} /><span>{child.name}</span></button></PathContextMenu>
+      return <li key={child.path} className="document-navigation__tree-item"><PathContextMenu path={child.path}><button type="button" className="document-navigation__folder" aria-expanded={open} title={child.path} onClick={() => setExpanded(previous => ({ ...previous, [child.path]: !open }))}><ChevronRight size={14} className={open ? 'rotate-90' : undefined} /><Folder size={14} /><span>{child.name}</span></button></PathContextMenu>
         {open && <ul className="document-navigation__branch">{render(child)}</ul>}
       </li>;
     })}
-    {[...directory.files].sort((a, b) => a.id.split('/').at(-1)!.localeCompare(b.id.split('/').at(-1)!)).map(item => <li key={item.id}><SidebarItem item={item} label={item.id.split('/').at(-1)} tooltip={item.id} onNavigate={onNavigate} /></li>)}
+    {[...directory.files].sort((a, b) => a.id.split('/').at(-1)!.localeCompare(b.id.split('/').at(-1)!)).map(item => <li key={item.id} className="document-navigation__tree-item"><SidebarItem item={item} label={item.id.split('/').at(-1)} tooltip={item.id} onNavigate={onNavigate} /></li>)}
   </>;
   return render(tree);
 }

@@ -42,13 +42,17 @@ test('file reads and navigation remain available with live or dead publication o
     const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
     await page.goto(`http://127.0.0.1:${server.port}/design/lease`);
     const tree = page.getByTestId('document-file-tree');
+    const disclosure = tree.getByRole('button', { name: '文件', exact: true });
+    if (await disclosure.isVisible()) await disclosure.click();
+    await tree.getByRole('button', { name: '展开 plans', exact: true }).click();
+    await tree.getByRole('button', { name: '展开 plans/first', exact: true }).click();
     const readme = tree.getByRole('button', { name: 'README.md', exact: true });
     const architecture = tree.getByRole('button', { name: 'plans/first/architecture.md', exact: true });
     await expect(architecture).toBeVisible();
     await expect(page.locator('[contenteditable="true"]').first()).toContainText('Lease content');
     const folder = tree.getByRole('button', { name: 'plans', exact: true });
     const [folderIcon, fileIcon, folderLabel, fileLabel] = await Promise.all([
-      folder.locator('svg').nth(1).boundingBox(), readme.locator('svg').boundingBox(),
+      folder.locator('svg').boundingBox(), readme.locator('svg').boundingBox(),
       folder.locator('span').last().boundingBox(), readme.locator('span').last().boundingBox(),
     ]);
     assert.ok(folderIcon && fileIcon && folderLabel && fileLabel);
@@ -62,6 +66,7 @@ test('file reads and navigation remain available with live or dead publication o
     await architecture.click();
     await expect(page.locator('[contenteditable="true"]').first()).toBeVisible();
     await expect(retry).toHaveCount(0);
+    if (await disclosure.isVisible()) await disclosure.click();
     await readme.click();
     await expect(page.locator('[contenteditable="true"]').first()).toContainText('Lease content');
     await expect(readme).toHaveAttribute('data-active', 'true');
