@@ -57,10 +57,12 @@ test('release builds two native targets and gates publication on the same commit
     assert.ok(publish.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
     assert.match(commands, /pnpm install --prod --frozen-lockfile --ignore-scripts/);
     assert.match(commands, /verify-installed-native.ts/);
-    const check = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Record(Schema.String, Schema.Unknown) }))(
+    const check = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Record(Schema.String, Schema.Unknown), jobs: Schema.Struct({ check: Job }) }))(
       parse(yield* fs.readFileString('.github/workflows/check.yml')),
     );
     assert.deepEqual(Object.keys(check.on), ['workflow_dispatch', 'workflow_call']);
+    assert.deepEqual(check.jobs.check.strategy?.matrix.shard, [1, 2, 3, 4]);
+    assert.ok(check.jobs.check.steps.some(step => step.run?.includes('--test-concurrency=1 --test-shard=${{ matrix.shard }}/4')));
   }).pipe(Effect.provide(NodeServices.layer)));
 });
 

@@ -1,3 +1,4 @@
+import { Deferred, Effect } from 'effect';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -370,7 +371,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(featureList.getByRole('link',{name:'Alternate Feature',exact:true})).toHaveCount(0);
     await navigation.getByLabel('筛选 Feature',{exact:true}).fill('');
     const editor=page.locator('[contenteditable="true"]').first();
-    await expect(editor).toBeVisible();
+    await expect(editor).toContainText('Original paragraph.');
     await expect(page.locator('.page .page-header')).toHaveCount(0);
     await expect(page.locator('.editor-shell__bar .eyebrow')).toHaveCount(0);
     const path=join(root,'docs/feature/browser-feature/README.md');
@@ -528,8 +529,21 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByLabel('Project ID',{exact:true})).not.toBeEditable();
     await page.getByLabel('运行超时',{exact:true}).fill('11111');
     await expect.poll(()=>readProjectConfig(root).runner.timeoutMs).toBe(11111);
-    await page.getByLabel('源码目录',{exact:true}).fill('src\n');
-    await expect(page.getByLabel('源码目录',{exact:true})).toHaveValue('src\n');
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
+    await expect(page.getByRole('status')).toContainText('已自动保存');
+    // 暂缓真实保存请求，分别观察草稿与回读，避免把自动保存速度当作断言条件。
+    const configSaveGate = await Effect.runPromise(Deferred.make<void>());
+    await page.route('**/api/action', async route => {
+      await Effect.runPromise(Deferred.await(configSaveGate));
+      await route.continue();
+    });
+    try {
+      await page.getByLabel('源码目录',{exact:true}).fill('src\n');
+      await expect(page.getByLabel('源码目录',{exact:true})).toHaveValue('src\n');
+    } finally {
+      await Effect.runPromise(Deferred.succeed(configSaveGate, undefined));
+    }
+    await page.unroute('**/api/action');
     // Wait for the preceding save/readback to finish before introducing an external edit.
     await expect(page.getByLabel('源码目录',{exact:true})).toHaveValue('src');
     await expect(page.getByRole('status')).toContainText('已自动保存');
@@ -552,6 +566,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await sidebar.getByRole('link',{name:'Feature',exact:true}).click();
     await expect(page.getByRole('dialog')).toBeVisible();
     await page.getByRole('button',{name:'丢弃并离开',exact:true}).click();
+    // 配置身份变化后必须等待新投影；旧身份不能继续提供导航。
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await expect(navigation).toBeVisible();
     await navigation.getByRole('link',{name:'Browser authoring',exact:true}).click();
     writeFileSync(join(root,'src/demo.ts'),'// @concord-file\n// @concord-implements docs/feature/browser-feature/README.md\nexport const demo = 1;\n');

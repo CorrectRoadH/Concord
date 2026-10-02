@@ -7,7 +7,7 @@ import test from 'node:test';
 import { chromium, expect, type Browser } from '@playwright/test';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { readProjectConfig, writeProjectConfig } from './support.js';
+import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from './support.js';
 
 function savedTransport(root: string, index: number): string | undefined {
   const connection = readProjectConfig(root).feedbackConnections?.[index];
@@ -69,6 +69,8 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     assert.equal(savedTransport(root, 0), undefined);
     await page.getByRole('button', { name: '重新载入' }).click();
     await page.getByRole('button', { name: '丢弃并载入' }).click();
+    // 外部配置改变会使旧投影失效，先等当前身份重新可读再操作连接。
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await existing.getByRole('button', { name: '编辑连接 existing' }).click();
     await page.getByRole('combobox', { name: 'GitHub 读取方式' }).click();
