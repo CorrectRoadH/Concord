@@ -60,7 +60,7 @@ test('packed CLI accepts only real neutral Vitest native evidence through the au
     execFileSync('git', ['init', '-q', root]);
     execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord Test']);
     execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
-    installConcord(root, packed, ['vitest@4.1.11', 'typescript@6.0.3', '@types/node@24.13.3', 'effect@4.0.0-rc.112', '@effect/platform-node@4.0.0-rc.112']);
+    installConcord(root, packed, ['vitest@4.1.11', 'tsx@4.23.12', 'typescript@6.0.3', '@types/node@24.13.3', 'effect@4.0.0-rc.112', '@effect/platform-node@4.0.0-rc.112']);
     execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: root, encoding: 'utf8', timeout: 30_000 });
     const cli = join(root, 'node_modules/concord-sdlc/dist/entry.js');
     const commit = (message: string): string => {
