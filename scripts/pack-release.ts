@@ -1,2 +1,3 @@
 import { packConcord } from './release-package.js';
-process.stdout.write(`${JSON.stringify(packConcord(process.argv[2] ?? 'release'))}\n`);
+const { name, version, filename } = packConcord(process.argv[2] ?? 'release');
+process.stdout.write(`${JSON.stringify({ name, version, filename })}\n`);
