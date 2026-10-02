@@ -33,3 +33,11 @@ feature: docs/feature/documentation-quality/README.md
 - 聚合门禁失败时，`docs check`、`writing`、`concepts`、`author set`、`page set` 与局部读取命令照常工作。
 
 扫描集合、祖先合成、显式 --rules 模式、冲突去重和输入摘要采用[目录方案](../../../design/scoped-terminology/plans/directory-owned/README.md)。writing/v1 返回迁移诊断。
+
+## 编辑期间的聚合检查
+
+公共 `concord check` 和结构化 check action 在来源漂移时重新执行完整检查，最多三次，每次重试前等待 50 毫秒。每次尝试关闭缓存和快照后重新打开仓库；只输出最终结果，并只据最终结果设置退出码。稳定输入仅运行一次。
+
+文件、目录成员、类型、大小、权限或发布代次变化均须保持来源核验。已确认的来源漂移包括快照观察冲突与 SourceChanged finding。解析失败时先核验已观察输入，只有确有漂移才重试。未完成恢复现场、安全与权限错误不被跳过。
+
+耗尽后返回 `SourceChanged`、非零退出码及 `complete: false` 错误详情，表示未获得完整的当前输入，不能用于交付通过。写操作的 `PreimageChanged` 不重试。稳定的格式错误继续报告原诊断；历史投影不能替代当前 check。

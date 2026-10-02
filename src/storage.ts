@@ -390,9 +390,9 @@ export class LocalRepository implements Repository {
   /** Optimistic reads never hold up a publisher; changed inputs reject the result. */
   verifySnapshot(): void {
     if (!this.optimistic || this.snapshotDepth === 0) return;
+    if (publicationRevision(this.coordinationDirectory) !== this.revision) throw new ConcordError('SourceChanged', 'Publication changed during the source snapshot; retry the query');
     this.assertReady();
     this.validateObservations();
-    if (publicationRevision(this.coordinationDirectory) !== this.revision) throw new ConcordError('SourceChanged', 'Publication changed during the source snapshot; retry the query');
   }
   beginSnapshot(reclaimDead = true): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
@@ -429,7 +429,7 @@ export class LocalRepository implements Repository {
     const pending = ['publication-journal.json', 'multi-file-publication-journal.json'].filter(name => present(join(directory, name)));
     if (pending.length > 0) throw new ConcordError('RecoveryRequired', 'An interrupted Trace publication exists; run concord recover');
     if (!this.recovering && present(join(this.privateDir, 'journal.json'))) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
-    if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('PreimageChanged', 'Project configuration changed; open a fresh repository snapshot');
+    if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('PreimageChanged', 'Project configuration changed; open a fresh repository snapshot', 'source-observation');
   }
   private directoryObservation(prefix: string): string {
     return this.scanDirectory(prefix).observation;
@@ -454,8 +454,8 @@ export class LocalRepository implements Repository {
     return { observation: canonical(entries), files };
   }
   private validateObservations(): void {
-    for (const [path, source] of this.observedFiles) if (this.readCurrent(path) !== source) throw new ConcordError('PreimageChanged', `${path} changed after planning; take a fresh snapshot`);
-    for (const [path, source] of this.observedDirectories) if (this.directoryObservation(path) !== source) throw new ConcordError('PreimageChanged', `${path} membership or type changed after planning; take a fresh snapshot`);
+    for (const [path, source] of this.observedFiles) if (this.readCurrent(path) !== source) throw new ConcordError('PreimageChanged', `${path} changed after planning; take a fresh snapshot`, 'source-observation');
+    for (const [path, source] of this.observedDirectories) if (this.directoryObservation(path) !== source) throw new ConcordError('PreimageChanged', `${path} directory inputs (membership, type, size or permissions) changed after planning; take a fresh snapshot`, 'source-observation');
   }
   // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md

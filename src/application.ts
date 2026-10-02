@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+import { checkCurrentProject } from './check-current.js';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect, Result } from 'effect';
@@ -461,6 +462,7 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
       memorySources: action.memorySources,
     }))), { initialize: true, dryRun }, timing);
   }
+  if (action.action === 'check') return yield* checkCurrentProject(root);
   if (action.action === 'recover') return yield* recoverLocalState(root);
   if (action.action === 'feedback.sync') return yield* syncFeedback(root, action.connection, { url: action.url, dryRun: action.dryRun, signal });
   if (action.action === 'feedback.check') return yield* checkFeedbackConnection(root, action.connection);

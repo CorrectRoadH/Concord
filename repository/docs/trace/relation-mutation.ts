@@ -525,6 +525,13 @@ function readJournal(root: string, directory: string): PublicationJournal | unde
     throw new TraceRecoveryConflict({ path, message: message(cause) });
   }
 }
+
+/** Exclude only this process's validated staged file from source membership guards. */
+export function ownedPublicationTemporary(root: string): string | undefined {
+  const journal = readJournal(root, tracePrivateDirectorySync(root));
+  return journal?.publication === 'file-replace' && journal.process.pid === process.pid && journal.process.host === hostname()
+    ? journal.temporary : undefined;
+}
 function writeJournal(directory: string, journal: PublicationJournal): void { durableReplace(journalPath(directory), `${JSON.stringify(journal, null, 2)}\n`, 0o600); }
 function removeJournal(directory: string): void { advancePublicationRevision(directory); rmSync(journalPath(directory), { force: true }); fsyncDirectory(directory); }
 

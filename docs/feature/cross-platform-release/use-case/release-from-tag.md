@@ -33,3 +33,9 @@ feature: docs/feature/cross-platform-release/README.md
 - [架构](../architecture.md)
 - [生命周期](../lifecycle.md)
 - [可移植发布协调设计](../../../design/portable-publication/README.md)
+
+## 渠道通知与恢复
+
+Concord Actions Secret `HOMEBREW_TAP_WORKFLOW_TOKEN` 使用仅授权 homebrew-tap、Actions 读写的 fine-grained token。发布后主动请求同步；缺失凭据或通知重试耗尽会使通知步骤非零退出，保留已发布的不可变资产。源码 Release 存在不表示渠道完成。
+
+可通过已有登录态执行 `gh workflow run concord-release-sync.yml --repo CorrectRoadH/homebrew-tap --ref main --field tag=<tag>` 补发同步。确认 tap 的同名 Release 完成回执后，重跑失败发布任务会复用相同资产并识别已有渠道回执。主动通知失败时仍可由定时任务发现新版本，不承诺五分钟延迟。

@@ -1,5 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/compare-design-plans.md
+import { posix } from 'node:path';
+import { designPlanCandidates, resolveDesignPlanPath } from './document-layout.js';
 import { fromMarkdown } from './markdown-parser.js';
 import type { RootContent, Nodes } from 'mdast';
 import { Schema } from 'effect';
@@ -15,7 +17,7 @@ const StatusSchema = Schema.Literals(['satisfied', 'partial', 'not-satisfied', '
 const statusAliases = { 满足: 'satisfied', 部分满足: 'partial', 不满足: 'not-satisfied', 待验证: 'pending' } as const;
 
 export function designContentPaths(base: string, alternatives: readonly string[]): string[] {
-  return [`${base}/README.md`, `${base}/GOALS.md`, `${base}/LIMITS.md`, `${base}/DECISION.md`, ...alternatives.map(plan => `${base}/plans/${plan}/README.md`)];
+  return [`${base}/README.md`, `${base}/GOALS.md`, `${base}/LIMITS.md`, `${base}/DECISION.md`, ...alternatives.flatMap(plan => designPlanCandidates(base, plan))];
 }
 
 function text(node: Nodes): string {
@@ -95,7 +97,12 @@ export function validateDesignContent(base: string, alternatives: readonly strin
   const goals = requirements('GOALS', 'G'); const limits = requirements('LIMITS', 'L');
   const requirementsValid = findings.length === 0;
   const candidates = alternatives.map((plan): PlanAssessment => {
-    const path = `${base}/plans/${plan}/README.md`; const source = sources.get(path) ?? ''; const startFindings = findings.length;
+    const startFindings = findings.length;
+    let path: string;
+    try { path = resolveDesignPlanPath(base, plan, candidate => sources.get(candidate) !== undefined); }
+    catch (cause) { report(base, cause instanceof Error && 'code' in cause ? String(cause.code) : 'InvalidPlan', String(cause)); return { plan, eligible: false, limits: {}, goals: {} }; }
+    const source = sources.get(path) ?? '';
+    if (/^(?:\uFEFF)?---(?:\r?\n|$)/u.test(source)) report(path, 'InvalidPlan', 'Plan pages cannot contain owner frontmatter');
     const nodes = nodesFor(path);
     const responses = (items: Requirement[], file: 'GOALS' | 'LIMITS', names: string[]): Record<string, Status> => {
       const result: Record<string, Status> = {};
@@ -105,7 +112,7 @@ export function validateDesignContent(base: string, alternatives: readonly strin
       const seen = new Set<string>();
       for (const row of tables.flatMap(value => value.slice(2))) {
         const link = inlineLink(row[0]!); const item = items.find(item => item.id === link?.label);
-        if (!item || link?.url !== `../../${file}.md#${item.anchor}`) { report(path, 'DesignRequirementReferenceInvalid', `${row[0]} must link its exact ${file} ID and heading`); continue; }
+        if (!item || link?.url !== `${posix.relative(posix.dirname(path), `${base}/${file}.md`)}#${item.anchor}`) { report(path, 'DesignRequirementReferenceInvalid', `${row[0]} must link its exact ${file} ID and heading`); continue; }
         if (seen.has(item.id)) report(path, 'DesignResponseDuplicate', `${item.id} must occur exactly once`);
         seen.add(item.id);
         try {
@@ -134,10 +141,12 @@ export function validateDesignContent(base: string, alternatives: readonly strin
     const link = children[1]; const suffix = children[2];
     if (link?.type !== 'link' || (suffix !== undefined && (suffix.type !== 'text' || !/^[。.]?$/u.test(suffix.value)))) return [];
     const label = text(link);
-    return alternatives.includes(label) && link.url === `plans/${label}/README.md` ? [label] : [];
+    if (!alternatives.includes(label)) return [];
+    try { return link.url === posix.relative(base, resolveDesignPlanPath(base, label, path => sources.get(path) !== undefined)) ? [label] : []; }
+    catch { return []; }
   });
   const selected = declarations.length === 1 ? declarations[0] : undefined;
-  if (selected === undefined || decision.length !== 1) report(decisionPath, 'DesignSelectionInvalid', 'Decision must contain only one explicit Selected: [slug](plans/slug/README.md) declaration');
+  if (selected === undefined || decision.length !== 1) report(decisionPath, 'DesignSelectionInvalid', 'Decision must contain one explicit Selected declaration linking the actual Plan entry');
   if (expectedSelection !== undefined && selected !== expectedSelection) report(decisionPath, 'DesignSelectionConflict', `DECISION must select ${expectedSelection}`);
   const rationaleNodes = section(decisionPath, decisionNodes, ['Rationale', '依据']);
   const rationale = rationaleNodes.filter(node => node.type === 'paragraph' || node.type === 'list').map(node => raw(sources.get(decisionPath) ?? '', node)).join('\n\n');

@@ -5,6 +5,7 @@
 // @concord-implements docs/feature/project-onboarding/use-case/configure-memory-sources.md
 // @concord-implements docs/feature/project-onboarding/use-case/inherit-template-defaults.md
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
+import { readDesignPlanPaths } from './document-layout.js';
 import { posix } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -320,6 +321,8 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       }
     }
     if (metadata.kind === 'design') {
+      try { repo.files(`${posix.dirname(document.path)}/plans`); readDesignPlanPaths(repo.root, posix.dirname(document.path), metadata.alternatives); }
+      catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidPlan', document.path, String(cause)); }
       if (metadata.decision !== undefined && metadata.deferral !== undefined) finding(findings, 'InvalidState', document.path, 'Design cannot be selected and deferred at the same time');
       if (new Set(metadata.alternatives).size !== metadata.alternatives.length) finding(findings, 'InvalidState', document.path, 'Design alternatives must be unique');
       if (metadata.decision !== undefined) {
@@ -471,7 +474,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     case 'roadmap': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'planned' }; break;
     case 'design': {
       const alternatives = input.alternatives?.map(value => decode(DocumentName, value, 'alternative')) ?? [];
-      if (alternatives.length === 0 || new Set(alternatives).size !== alternatives.length) throw new ConcordError('InvalidInput', 'Design requires unique non-empty alternatives');
+      if (alternatives.length === 0 || alternatives.some(name => name.toLowerCase() === 'readme') || new Set(alternatives).size !== alternatives.length) throw new ConcordError('InvalidInput', 'Design requires unique non-empty alternatives');
       path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]], ...(input.constitutionRefs === undefined ? {} : { constitutionRefs: [...input.constitutionRefs] }) };
       break;
     }
@@ -568,7 +571,7 @@ export function decideDesign(repo: Repository, selector: string, selected: strin
   if (assessment.findings.length) throw new ConcordError('DesignDecisionIncomplete', assessment.findings.map(item => `${item.code}: ${item.path}: ${item.message}`).join('\n'));
   const { deferral: _deferral, ...metadata } = record.metadata;
   const next = renderDocument({ ...metadata, decision: { selected: choice, reason: required(reason, 'reason'), at: now(), targets } }, record.body);
-  return repo.publish('decide-design', [...snapshot].map(([path, source]) => ({ path, before: source!, after: path === record.path ? next : source! })), dryRun);
+  return repo.publish('decide-design', [...snapshot].flatMap(([path, source]) => source === undefined ? [] : [{ path, before: source, after: path === record.path ? next : source }]), dryRun);
   });
 }
 
@@ -625,7 +628,10 @@ export function correctDesignReason(
 
 function designSnapshot(repo: Repository, record: DocumentRecord): Map<string, string | undefined> {
   if (record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', record.path);
-  const paths = designContentPaths(posix.dirname(record.path), record.metadata.alternatives);
+  const base = posix.dirname(record.path);
+  const supporting = repo.files(base).filter(path => path.endsWith('.md'));
+  readDesignPlanPaths(repo.root, base, record.metadata.alternatives);
+  const paths = [...new Set([...designContentPaths(base, record.metadata.alternatives), ...supporting])];
   const snapshot = new Map(paths.map(path => [path, path === record.path ? preimage(repo, record) : repo.read(path)]));
   return snapshot;
 }
@@ -646,7 +652,7 @@ export function formatDesign(repo: Repository, selector: string, dryRun = false)
   const record = findDocument(loadDocuments(repo), selector, 'design');
   const snapshot = designSnapshot(repo, record);
   const changes = [...snapshot].flatMap(([path, source]) => {
-    if (source === undefined) return [];
+    if (source === undefined || record.metadata.kind !== 'design' || !designContentPaths(posix.dirname(record.path), record.metadata.alternatives).includes(path)) return [];
     const next = path === record.path ? source : formatDesignMarkdown(source);
     return next === source ? [] : [{ path, before: source, after: next }];
   });

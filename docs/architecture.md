@@ -51,9 +51,11 @@ Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只
 
 可选页面 library、cli、architecture、lifecycle 与 use-case 通过 `--pages` 选择，省略时采用项目默认，`--no-pages` 或 `pages: []` 只生成 README。未知、重复和不支持的种类明确拒绝。Engineering README 定义目标、机制、使用与验收，按主题用 page add 扩展。
 
-Design 外层包含 GOALS、LIMITS、DECISION 和 CASES，候选放在 `plans/<alternative>/`。候选身份由主 owner 的 alternatives 声明，普通页面不新增 metadata 真源。DECISION 正文不改变 `metadata.decision` 中的裁决。
+Design 外层包含 GOALS、LIMITS、DECISION 和 CASES，候选采用 `plans/<alternative>.md` 或 `plans/<alternative>/README.md`，同名文件和目录同时存在时拒绝。候选身份由主 owner 的 alternatives 声明，普通页面不新增 metadata 真源。DECISION 正文不改变 `metadata.decision` 中的裁决。
 
-`page add/show/set` 维护已存在 package 的页面，也支持安全小写 slug 的专题页 `<slug>.md`，使用整文件 CAS。Design 候选页通过 `--plan` 选择。set 必须提供最新 digest，README 写入保留 metadata。
+`page add/show/set` 维护已存在 package 的页面，也支持安全 Unicode 名称的专题页，使用整文件 CAS。
+
+Design 支持嵌套 Markdown 路径，候选页通过 `--plan` 选择，单文件候选只拥有自身正文。完整边界见 [Plan 内容布局](design/plan-content/architecture.md)。set 必须提供最新 digest，README 写入保留 metadata。
 
 supporting Markdown 进入 candidate 摘要，不成为独立 owner 或测试证据。测试 contract 限于 Feature 与 Use Case；Engineering owner 可作为 Design 裁决和 Memory promotion 的目标。
 
@@ -164,7 +166,7 @@ runner 不确定时返回 blocked，并保留 journal 的实际处理结果。�
 
 `design check` 检查当前正文，普通读取及全局 check 不追溯写作门槛；正文变化不重写已有裁决。已定案的选择、目标、时间和来源保持不变；`design correct-reason` 只在 Design owner 与当前 Git HEAD 内容一致且两个 owner 的摘要匹配时更正理由，并在一个受管 Memory 中原子追加原文的 Git 提交与摘要、更正时间和说明。更正不重新运行定案门槛，也不在 Design 增加历史字段。`design format` 只整理识别出的 H2 与四列表格空白，不补充选择或证据。
 
-定案绑定 owner、GOALS、LIMITS、DECISION 和全部候选 README 的同一次读取；同内容 guard 实际重写并计入 changedPaths，沿用 journal 恢复。repository 入口使用同一提交协调与前像，dry-run 返回前也复核完整输入。候选投影按 `metadata.alternatives` 顺序派生。裁决不证明自然语言声称的满足度。
+定案绑定 owner、GOALS、LIMITS、DECISION 和全部候选实际入口、支持 Markdown 及 plans 目录集合的同一次读取；同内容 guard 实际重写并计入 changedPaths，沿用 journal 恢复。repository 入口使用同一提交协调与前像，dry-run 返回前也复核完整输入。候选投影按 `metadata.alternatives` 顺序派生。裁决不证明自然语言声称的满足度。
 
 ## 测试执行和证据边界
 

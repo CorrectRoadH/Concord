@@ -24,6 +24,7 @@ const Job = Schema.Struct({
     }))),
   }) })),
   steps: Schema.Array(Schema.Struct({
+    name: Schema.optional(Schema.String),
     uses: Schema.optional(Schema.String),
     run: Schema.optional(Schema.String),
     with: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
@@ -135,4 +136,27 @@ test('release tag sets package and shrinkwrap versions while rejecting invalid m
       assert.equal(shrinkwrap.packages[''].version, candidate.version ?? candidate.inner);
     }
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
+});
+
+// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
+test('channel notification fails visibly without credentials and resumes from an existing receipt', async () => {
+ await Effect.runPromise(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const workflow = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Record(Schema.String, Job) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
+  const script = workflow.jobs.publish?.steps.find(step => step.name === 'Notify Homebrew tap of the published release')?.run;
+  assert(script);
+  const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-channel-notify-' });
+  yield* fs.makeDirectory(join(root, 'bin'));
+  yield* fs.writeFileString(join(root, 'bin/gh'), '#!/bin/sh\nif test "$1" = release; then test "$CASE" = receipt; else test "$CASE" = dispatch; fi\n');
+  yield* fs.writeFileString(join(root, 'bin/sleep'), '#!/bin/sh\nexit 0\n');
+  yield* fs.chmod(join(root, 'bin/gh'), 0o755); yield* fs.chmod(join(root, 'bin/sleep'), 0o755);
+  for (const kind of ['missing', 'failed', 'dispatch', 'receipt']) {
+   const status: number = yield* spawner.exitCode(ChildProcess.make('bash', ['-e', '-c', script], { cwd: root, extendEnv: true, env: {
+    PATH: `${join(root, 'bin')}:${process.env.PATH ?? ''}`, RELEASE_TAG: 'v0.11.0', CASE: kind,
+    TAP_WORKFLOW_TOKEN: kind === 'missing' || kind === 'receipt' ? '' : 'fixture-token', GITHUB_STEP_SUMMARY: join(root, 'summary'),
+   } }));
+   assert.equal(Number(status) === 0, kind === 'dispatch' || kind === 'receipt', kind);
+  }
+ }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 });

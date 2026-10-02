@@ -58,6 +58,8 @@ Design decision wrapper pages are always created. Engineering starts with README
 
 Page add adds optional pages or supporting topics using a single Unicode name, such as migration or 认知与执行. Update the author-owned README links after adding pages. Custom pages remain part of their package, with the same digest checks.
 
+Design pages also accept safe nested Markdown paths. A declared Plan uses either plans/name.md or plans/name/README.md, never both; single-file Plans must be moved to directory form before adding pages.
+
 Document IDs and Use Case filenames also accept Unicode letters, combining marks and numbers, with single hyphen separators; spelling is preserved. Names cannot contain path separators, whitespace or traversal components.
 
 ## First feature

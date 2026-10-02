@@ -7,7 +7,7 @@
 import { checkWriting } from './writing.js';
 import { waitForPublication } from './publication-wait.js';
 import { cachedQuery, type Query } from './query-cache.js';
-import { checkProject } from './project-check.js';
+import { checkCurrentProject } from './check-current.js';
 import { showWriting, setWriting, writingIndex } from './writing-management.js';
 import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
 import { WritingPolicySchema } from './writing-schema.js';
@@ -377,7 +377,7 @@ const concepts = Command.make('concepts').pipe(Command.withDescription('Discover
   Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showConcepts(repo, Option.getOrUndefined(args.path))), { readonly: true })),
   Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setConcepts(repo, jsonBody(args.body, ConceptCatalogSchema, 'concept catalog'), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a catalog with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
 ]));
-const check = Command.make('check',{},()=>withReadRepo((repo,s)=>sync(()=>{const result=checkProject(repo,cached(s.dryRun));if(!result.ok)process.exitCode=1;return result;}))).pipe(Command.withDescription('Validate source ownership, references and writing policy; do not execute tests.'));
+const check = Command.make('check', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* checkCurrentProject(Option.getOrUndefined(settings.root), cached(settings.dryRun)); if (!result.ok) process.exitCode = 1; emit(result, settings.json); })).pipe(Command.withDescription('Validate source ownership, references and writing policy; do not execute tests.'));
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
   Command.make('show',{ref:Argument.string('reference')},args=>withReadRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))), ['trace', 'show', args.ref])),
   Command.make('gaps',{},()=>withReadRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))), ['trace', 'gaps'])).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),

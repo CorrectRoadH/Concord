@@ -1,3 +1,4 @@
+import { designPlanName } from 'concord-sdlc/document-layout';
 import { Result, Schema, SchemaIssue } from "effect";
 import { DesignSchema } from "concord-sdlc/model";
 import { parse, stringify } from "yaml";
@@ -23,7 +24,7 @@ function failure(path: string, message: string): DesignInputInvalid {
   return new DesignInputInvalid({ source: path, message });
 }
 
-export function decodeDesignReadme(path: string, source: string): DecodedDesignReadme {
+export function decodeDesignReadme(path: string, source: string, entries?: ReadonlyMap<string, string>): DecodedDesignReadme {
   const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/u.exec(source);
   if (match?.[1] === undefined || match[2] === undefined) throw failure(path, "Design README must have one closed YAML frontmatter block");
   let input: unknown;
@@ -50,7 +51,7 @@ export function decodeDesignReadme(path: string, source: string): DecodedDesignR
     body: match[2],
     state: selected === undefined
       ? metadata.deferral ? { _tag: "deferred", reason: metadata.deferral.reason } : { _tag: "undecided" }
-      : { _tag: "decided", selectedPlan: `${path.slice(0, path.lastIndexOf("/"))}/plans/${selected}/README.md` },
+      : { _tag: "decided", selectedPlan: entries?.get(selected) ?? `${path.slice(0, path.lastIndexOf("/"))}/plans/${selected}/README.md` },
     decides: metadata.decision?.targets ?? [],
   };
 }
@@ -61,7 +62,7 @@ export function encodeDecidedDesignReadme(
   body: string,
   reason = "Design option selected by the repository profile.",
 ): string {
-  const selected = selectedPlan.split("/").at(-2);
+  const selected = designPlanName(selectedPlan);
   if (selected === undefined || !decoded.alternatives.includes(selected)) {
     throw failure(decoded.id, "selected Design alternative is not declared by the owner");
   }

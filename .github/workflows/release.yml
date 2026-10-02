@@ -128,21 +128,27 @@ jobs:
             --notes "Apple Silicon macOS 15+ (including macOS 27) and Linux x64/glibc. Built once with pinned native engines; package metadata and SHA-256 verified. This release workflow does not run tests or installation checks and does not claim macOS 27 CI verification. Homebrew/Nix metadata synchronization is tracked at https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Channel completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG . Package SHA-256: $digest."
       - name: Notify Homebrew tap of the published release
         env:
-          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_WORKFLOW_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          TAP_WORKFLOW_TOKEN: ${{ secrets.HOMEBREW_TAP_WORKFLOW_TOKEN }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
-          if test -z "$GH_TOKEN"; then
-            echo '::warning::Homebrew tap notification skipped: HOMEBREW_TAP_WORKFLOW_TOKEN is not configured'
-            echo 'Homebrew tap notification skipped; scheduled sync remains available.' >> "$GITHUB_STEP_SUMMARY"
+          if gh release view "$RELEASE_TAG" --repo CorrectRoadH/homebrew-tap >/dev/null 2>&1; then
+            echo "Homebrew/Nix channel completion receipt already exists for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
             exit 0
+          fi
+          if test -z "$TAP_WORKFLOW_TOKEN"; then
+            echo '::error::HOMEBREW_TAP_WORKFLOW_TOKEN is not configured; source release exists but channel synchronization is incomplete'
+            echo "Configure a tap-scoped Actions write token, or run: gh workflow run concord-release-sync.yml --repo CorrectRoadH/homebrew-tap --ref main --field tag=$RELEASE_TAG. After the channel receipt exists, rerun this failed job." >> "$GITHUB_STEP_SUMMARY"
+            exit 1
           fi
           for delay in 0 2 5; do
             if test "$delay" -gt 0; then sleep "$delay"; fi
-            if gh workflow run concord-release-sync.yml \
+            if GH_TOKEN="$TAP_WORKFLOW_TOKEN" gh workflow run concord-release-sync.yml \
               --repo CorrectRoadH/homebrew-tap --ref main --field "tag=$RELEASE_TAG"; then
               echo "Homebrew tap sync requested for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
               exit 0
             fi
           done
-          echo "::warning::Homebrew tap notification failed for $RELEASE_TAG; scheduled sync remains available"
+          echo "::error::Homebrew tap notification failed for $RELEASE_TAG"
           echo "Homebrew tap notification failed for $RELEASE_TAG; scheduled sync remains available." >> "$GITHUB_STEP_SUMMARY"
+          exit 1

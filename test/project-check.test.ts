@@ -3,11 +3,13 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import { Effect } from 'effect';
 import { executeViewAction } from '../dist/application.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { checkProject } from '../dist/project-check.js';
+import { checkCurrentProject } from '../dist/check-current.js';
+import { ConcordError } from '../dist/shared.js';
 
 const cli = new URL('../dist/entry.js', import.meta.url).pathname;
 
@@ -61,4 +63,34 @@ test('project check combines relation and writing findings and reports incomplet
   assert.equal(command.status, 1);
   assert.equal(command.output.complete, false);
   assert.equal(command.output.checks.writing.complete, false);
+});
+
+// @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
+test('current check retries real observed edits, closes attempts and refuses persistent drift', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-check-retry-'));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  execFileSync('git', ['init', '-q', root]);
+  const setup = new LocalRepository(root, { initialize: true });
+  try { initialize(setup, false, { testRoots: [] }); } finally { setup.close(); }
+  const original = LocalRepository.prototype.read;
+  const page = join(root, 'docs/architecture.md');
+  let changes = 1; let changed = 0;
+  const spy = mock.method(LocalRepository.prototype, 'read', function(this: LocalRepository, path: string) {
+    const source = original.call(this, path);
+    if (this.root === root && path === 'docs/architecture.md' && changes > 0 && source !== undefined) {
+      changes--; changed++; writeFileSync(page, `${source}\n`);
+    }
+    return source;
+  });
+  try {
+    const result = await Effect.runPromise(checkCurrentProject(root, 'off'));
+    assert.equal(result.ok, true);
+    assert.equal(changed, 1);
+    changes = 100;
+    await assert.rejects(Effect.runPromise(checkCurrentProject(root, 'off')), /after 3 attempts/u);
+  } finally { spy.mock.restore(); }
+  const error = mock.method(LocalRepository.prototype, 'verifySnapshot', () => { throw new ConcordError('UnsafePath', 'fixture unsafe path'); });
+  try { await assert.rejects(Effect.runPromise(checkCurrentProject(root, 'off')), /fixture unsafe path/u); }
+  finally { error.mock.restore(); }
+  assert.equal((await Effect.runPromise(checkCurrentProject(root, 'off'))).ok, true);
 });

@@ -89,7 +89,7 @@ test('source reads do not own a lease and detect a concurrent successful publica
     try { setAuthor(writer, path, '# Changed\n', digest(before)); }
     finally { writer.close(); }
     assert.match(readFileSync(join(root, path), 'utf8'), /Changed/);
-    assert.throws(() => reader.verifySnapshot(), { code: 'PreimageChanged' });
+    assert.throws(() => reader.verifySnapshot(), { code: 'SourceChanged' });
   } finally { reader.close(); rmSync(root, { recursive: true, force: true }); }
 })));
 

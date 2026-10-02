@@ -86,7 +86,7 @@ export function resolveRepoRefScope(
     }));
   }
   const owner = snapshot.nodes
-    .filter((candidate) => candidate.kind === "roadmap" || candidate.kind === "feature" || candidate.kind === "engineering")
+    .filter((candidate) => candidate.kind === "roadmap" || candidate.kind === "feature" || candidate.kind === "engineering" || candidate.kind === "design")
     .filter((candidate) => parsed.success.path.startsWith(`${posix.dirname(candidate.path)}/`))
     .sort((left, right) => right.path.length - left.path.length)[0];
   if (owner === undefined) {

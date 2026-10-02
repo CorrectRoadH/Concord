@@ -226,11 +226,11 @@ export function renderDesignProjection(
     ? plans.find((plan) => plan.ref === state.selectedPlan)
     : undefined;
   const planLines = plans.map((plan) =>
-    `- [${plan.selector}${selected?.ref === plan.ref ? "（已选择）" : ""}](plans/${plan.selector}/README.md)`
+    `- [${plan.selector}${selected?.ref === plan.ref ? "（已选择）" : ""}](${plan.ref.slice(plan.ref.indexOf("/plans/") + 1)})`
   );
   const decision = selected === undefined
     ? state._tag === "deferred" ? `裁决：已暂缓。${state.reason}` : "裁决：尚未写入 `decision.selected`。"
-    : `裁决：[${selected.selector}](plans/${selected.selector}/README.md)。`;
+    : `裁决：[${selected.selector}](${selected.ref.slice(selected.ref.indexOf("/plans/") + 1)})。`;
   return [
     DESIGN_PROJECTION_START,
     "## 候选方案索引（生成）",

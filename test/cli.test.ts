@@ -844,3 +844,20 @@ test('packed CLI creates and resolves Unicode Use Cases and supporting pages', (
  assert.equal(call(root, ['feature', 'page', 'add', 'npc', '../越界'], ErrorOutput, '', 1).error, 'InvalidPage');
  assert.equal(call(root, ['use-case', 'create', '坏/名称', '--feature', 'npc', '--title', '坏名称'], ErrorOutput, '', 1).error, 'InvalidData');
 })));
+
+// @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
+test('packed CLI accepts file Plans and nested directory pages with exact entry links', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('plan-file');
+ call(root, ['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'local', '--alternative', 'remote'], Ack);
+ authorDesignFixture(root, 'storage', ['local', 'remote'], 'local');
+ const base = join(root, 'docs/design/storage');
+ writeFileSync(join(base, 'plans/local.md'), readFileSync(join(base, 'plans/local/README.md'), 'utf8').replaceAll('../../', '../'));
+ rmSync(join(base, 'plans/local'), { recursive: true });
+ writeFileSync(join(base, 'DECISION.md'), readFileSync(join(base, 'DECISION.md'), 'utf8').replace('plans/local/README.md', 'plans/local.md'));
+ call(root, ['design', 'page', 'add', 'storage', '存储/快照.md', '--plan', 'remote'], Ack);
+ const page = call(root, ['design', 'page', 'show', 'storage', '存储/快照.md', '--plan', 'remote'], PageOutput);
+ assert(page.body.includes('存储/快照.md'));
+ call(root, ['design', 'check', 'storage'], CheckOutput);
+ call(root, ['design', 'decide', 'storage', '--selected', 'local', '--reason', 'Local'], Ack);
+ call(root, ['check'], CheckOutput);
+})));

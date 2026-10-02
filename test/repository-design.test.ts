@@ -17,7 +17,7 @@ function write(root: string, path: string, source: string): void {
 }
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
-test('repository Design shares content gates, guards dry-run inputs, and retains the complete plan projection', async () => {
+for (const form of ['directory', 'file']) test(`repository Design ${form} shares content gates, guards dry-run inputs, and retains the complete plan projection`, async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-repository-design-'));
   const run = <A, E>(effect: Effect.Effect<A, E, import('effect').FileSystem.FileSystem>) => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
   try {
@@ -44,6 +44,13 @@ test('repository Design shares content gates, guards dry-run inputs, and retains
     const decisionPath = join(root, 'docs/design/中文决策/DECISION.md');
     writeFileSync(decisionPath, readFileSync(decisionPath, 'utf8').replace('query the local store', 'query the `local` store'));
     assert.equal((await run(checkDesignAt(root, 'storage'))).ok, true);
+    if (form === 'file') {
+      const base = join(root, 'docs/design/中文决策');
+      writeFileSync(join(base, 'plans/plan-2.md'), readFileSync(join(base, 'plans/plan-2/README.md'), 'utf8').replaceAll('../../', '../'));
+      rmSync(join(base, 'plans/plan-2'), { recursive: true });
+      for (const page of ['README.md', 'DECISION.md']) writeFileSync(join(base, page), readFileSync(join(base, page), 'utf8').replaceAll('plans/plan-2/README.md', 'plans/plan-2.md'));
+      assert.equal((await run(checkDesignAt(root, 'storage'))).ok, true);
+    }
     const ownerPath = join(root, 'docs/design/中文决策/README.md'); const owner = readFileSync(ownerPath, 'utf8');
     const goalsPath = join(root, 'docs/design/中文决策/GOALS.md'); const goals = readFileSync(goalsPath, 'utf8');
     const originalRead = fs.readFileSync;

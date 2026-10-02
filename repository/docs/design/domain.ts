@@ -1,5 +1,5 @@
 import { repositoryRoot } from "../../root.js";
-import { isDocumentName } from 'concord-sdlc/document-layout';
+import { isDocumentName, designPlanName, readDesignPlanPaths } from 'concord-sdlc/document-layout';
 import { designContentPaths, validateDesignContent, type DesignContentResult } from "concord-sdlc/design-content";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, resolve, sep } from "node:path";
@@ -14,6 +14,7 @@ import type { TraceNode, TraceSnapshot } from "../trace/model.js";
 import { validateRepoRefTarget, type ValidatedRepoRefTarget } from "../trace/ref.js";
 import {
   mutateTraceOwner,
+  ownedPublicationTemporary,
   traceDigest,
   TraceMutationError,
   type TraceCoordinationError,
@@ -111,11 +112,11 @@ function selectDesign(snapshot: TraceSnapshot, selector: string): Effect.Effect<
 function directPlans(snapshot: TraceSnapshot, design: TraceNode): readonly TraceNode[] {
   const root = dirname(design.path);
   return snapshot.nodes.filter((node) => node.kind === "design-plan" &&
-    dirname(dirname(dirname(node.path))) === root).sort((left, right) => planNumber(left.path) - planNumber(right.path));
+    (node.path.endsWith("/README.md") ? dirname(dirname(dirname(node.path))) : dirname(dirname(node.path))) === root).sort((left, right) => planNumber(left.path) - planNumber(right.path));
 }
 
 function planSelector(path: string): string {
-  return basename(dirname(path));
+  return designPlanName(path);
 }
 
 function planNumber(path: string): number {
@@ -152,12 +153,13 @@ function selectPlan(
 
 function stateOf(root: string, design: TraceNode): Effect.Effect<DesignDecisionState, DesignIoError> {
   return Effect.try({
-    try: () => decodeDesignReadme(design.path, readFileSync(resolve(root, design.path), "utf8")).state,
+    try: () => { const source = readFileSync(resolve(root, design.path), "utf8"); const decoded = decodeDesignReadme(design.path, source); return decodeDesignReadme(design.path, source, readDesignPlanPaths(root, dirname(design.path), decoded.alternatives)).state; },
     catch: cause => new DesignIoError({ operation: "read Design state", path: design.path, message: designErrorMessage(cause) }),
   });
 }
 
 function pagesForPlan(root: string, plan: TraceNode, bundle: DesignTemplateBundle): readonly DesignPage[] {
+  if (!plan.path.endsWith("/README.md")) return [];
   const packageRoot = dirname(plan.path);
   return DESIGN_PAGE_ORDER.filter((page) => (bundle.featureDesign.manifest.optionalFiles[page] ?? [])
     .every((path) => existsSync(resolve(root, packageRoot, path))));
@@ -406,8 +408,8 @@ function expectedPlanSelectors(count: number): readonly string[] {
 function directoryPlanSelectors(root: string, packageRoot: string): Effect.Effect<readonly string[], DesignIoError> {
   return Effect.try({
     try: () => readdirSync(resolve(root, packageRoot, "plans"), { withFileTypes: true })
-      .filter((entry) => entry.isDirectory() && isDocumentName(entry.name))
-      .map((entry) => entry.name)
+      .filter((entry) => entry.isDirectory() && isDocumentName(entry.name) || entry.isFile() && entry.name.endsWith(".md"))
+      .map((entry) => entry.isDirectory() ? entry.name : entry.name.slice(0, -3))
       .sort((left, right) => Number.parseInt(left.slice("plan-".length), 10) - Number.parseInt(right.slice("plan-".length), 10)),
     catch: (cause) => new DesignIoError({ operation: "scan Plans", path: packageRoot, message: designErrorMessage(cause) }),
   });
@@ -441,6 +443,7 @@ function checkDesignPackage(
       findings.push(finding("plan-node-mismatch", design.path, "every plans/plan-N directory must have one derived Design alternative"));
     }
     for (const plan of plans) {
+      if (!plan.path.endsWith("/README.md")) continue;
       validateManifestFiles(
         root,
         dirname(plan.path),
@@ -501,6 +504,8 @@ export function checkDesignAt(
 interface DesignContentSnapshot {
   readonly sources: readonly (readonly [string, string])[];
   readonly assessment: DesignContentResult;
+  readonly base: string;
+  readonly paths: readonly string[];
 }
 interface DesignPreparation extends TraceMutationPreparation {
   readonly content: DesignContentSnapshot;
@@ -517,6 +522,23 @@ function readDesignSource(root: string, path: string): string | undefined {
   return readFileSync(current, "utf8");
 }
 
+function designMarkdownPaths(root: string, base: string): string[] {
+  const paths: string[] = [];
+  const temporary = ownedPublicationTemporary(root);
+  const visit = (directory: string): void => {
+    for (const entry of readdirSync(resolve(root, directory), { withFileTypes: true })) {
+      const path = `${directory}/${entry.name}`;
+      if (path === temporary) continue;
+      if (entry.isSymbolicLink()) throw new Error(`symlink is not allowed: ${path}`);
+      if (entry.isDirectory()) { paths.push(path); visit(path); }
+      else if (entry.isFile()) paths.push(path);
+      else throw new Error(`unsupported file: ${path}`);
+    }
+  };
+  visit(base);
+  return paths.sort();
+}
+
 function captureDesignContent(root: string, path: string, selected?: string): Effect.Effect<DesignContentSnapshot, DesignIoError> {
   return Effect.try({
     try: () => {
@@ -524,9 +546,11 @@ function captureDesignContent(root: string, path: string, selected?: string): Ef
       if (owner === undefined) throw new Error("Design owner is missing");
       const decoded = decodeDesignReadme(path, owner);
       const base = dirname(path);
-      const sources = new Map(designContentPaths(base, decoded.alternatives).map(candidate => [candidate, candidate === path ? owner : readDesignSource(root, candidate)]));
+      readDesignPlanPaths(root, base, decoded.alternatives);
+      const paths = designMarkdownPaths(root, base);
+      const sources = new Map([...new Set([...designContentPaths(base, decoded.alternatives), ...paths.filter(path => path.endsWith('.md'))])].map(candidate => [candidate, candidate === path ? owner : readDesignSource(root, candidate)]));
       const assessment = validateDesignContent(base, decoded.alternatives, sources, selected ?? decoded.metadata.decision?.selected);
-      return { sources: [...sources].flatMap(([file, content]) => content === undefined ? [] : [[file, content] as const]), assessment };
+      return { sources: [...sources].flatMap(([file, content]) => content === undefined ? [] : [[file, content] as const]), assessment, base, paths };
     },
     catch: cause => new DesignIoError({ operation: "read Design content", path, message: designErrorMessage(cause) }),
   });
@@ -535,6 +559,7 @@ function captureDesignContent(root: string, path: string, selected?: string): Ef
 function verifyDesignPreparation(root: string, prepared: DesignPreparation): Effect.Effect<void, DesignConflict> {
   return Effect.try({
     try: () => {
+      if (JSON.stringify(designMarkdownPaths(root, prepared.content.base)) !== JSON.stringify(prepared.content.paths)) throw new Error("Design collection changed after validation");
       for (const [path, source] of prepared.content.sources) {
         if (readDesignSource(root, path) !== source) throw new Error(`${path} changed after validation`);
       }
@@ -588,7 +613,7 @@ function prepareDecision(
     }
     const plans = decoded.alternatives.map(selector => {
       const receipt = packageCheck.plans.find(candidate => candidate.selector === selector)!;
-      const planSource = new Map(content.sources).get(`${dirname(design.path)}/plans/${selector}/README.md`)!;
+      const planSource = new Map(content.sources).get(receipt.ref)!;
       return { ...receipt, title: displayPlanTitle(/^#\s+(.+)$/mu.exec(planSource)?.[1]?.trim() ?? selector) };
     });
     return {

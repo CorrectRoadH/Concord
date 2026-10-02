@@ -6,7 +6,7 @@ import { parse } from "yaml";
 import { DocumentSchema } from 'concord-sdlc/model';
 import type { DocumentRecord } from 'concord-sdlc/model';
 import { decodeDocumentSource } from 'concord-sdlc/document-codec';
-import { documentDisposition, documentPlacementError, validPackagePath, validDesignPlanPath } from 'concord-sdlc/document-layout';
+import { documentDisposition, documentPlacementError, validPackagePath, validDesignPlanPath, readDesignPlanPaths } from 'concord-sdlc/document-layout';
 
 import { decodeFeedbackDocument } from "../../feedback/codec.js";
 import { decodeMemoryDocument } from "../../memory/codec.js";
@@ -77,7 +77,7 @@ function parseFrontmatter(path: string, text: string): { readonly value: unknown
   }
 }
 
-function decodeNode(record: DocumentRecord, owners: readonly DocumentRecord[]): TraceNode | undefined {
+function decodeNode(record: DocumentRecord, owners: readonly DocumentRecord[], root: string): TraceNode | undefined {
   const { path, metadata } = record;
   if (metadata.kind === 'research' || metadata.kind === 'issue' || metadata.kind === 'memory') return undefined;
   const features = metadata.kind === 'use-case' ? owners.filter(owner => owner.metadata.kind === 'feature' && owner.path === metadata.feature) : [];
@@ -91,7 +91,7 @@ function decodeNode(record: DocumentRecord, owners: readonly DocumentRecord[]): 
   if (metadata.kind === "feature" && metadata.origin !== undefined) relations.buildsOn = [metadata.origin];
   if (metadata.kind === "use-case") relations.composes = [featurePath!];
   if (metadata.kind === "design" && metadata.decision !== undefined) {
-    relations.selectedPlan = [`${posix.dirname(path)}/plans/${metadata.decision.selected}/README.md`];
+    relations.selectedPlan = [readDesignPlanPaths(root, posix.dirname(path), metadata.alternatives).get(metadata.decision.selected)!];
     if (metadata.decision.targets.length > 0) relations.decides = [...metadata.decision.targets].sort();
   }
   return {
@@ -117,7 +117,7 @@ function validNodePlacement(node: TraceNode): boolean {
   }
 }
 
-function deriveDesignPlans(nodes: readonly TraceNode[], documents: readonly (readonly [string, string])[]): readonly TraceNode[] {
+function deriveDesignPlans(nodes: readonly TraceNode[], documents: readonly (readonly [string, string])[], root: string): readonly TraceNode[] {
   const sources = new Map(documents);
   return nodes.flatMap((design): TraceNode[] => {
     if (design.kind !== "design") return [];
@@ -127,8 +127,9 @@ function deriveDesignPlans(nodes: readonly TraceNode[], documents: readonly (rea
     if (parsed === undefined) return [];
     const decoded = Schema.decodeUnknownResult(DocumentSchema, { errors: "all", onExcessProperty: "error" })(parsed.value);
     if (Result.isFailure(decoded) || decoded.success.kind !== "design") return [];
+    const entries = readDesignPlanPaths(root, posix.dirname(design.path), decoded.success.alternatives);
     return decoded.success.alternatives.flatMap((alternative): TraceNode[] => {
-      const path = `${posix.dirname(design.path)}/plans/${alternative}/README.md`;
+      const path = entries.get(alternative)!;
       const plan = sources.get(path);
       return plan === undefined ? [] : [{ kind: "design-plan", path, title: markdownTitle(path, plan), relations: {} }];
     });
@@ -262,7 +263,9 @@ function validateNodeRelations(
         }
         if (
           relation === "selectedPlan" &&
-          posix.dirname(posix.dirname(posix.dirname(target.success.path))) !== posix.dirname(node.path)
+          (target.success.path.endsWith('/README.md')
+            ? posix.dirname(posix.dirname(posix.dirname(target.success.path)))
+            : posix.dirname(posix.dirname(target.success.path))) !== posix.dirname(node.path)
         ) {
           throw new TraceFormatError({
             path: node.path,
@@ -585,10 +588,10 @@ function compileTraceAtGeneration(
       if (identities.has(identity)) return yield* new TraceFormatError({ path: owner.path, subject: 'identity', message: `${identity} is not unique` });
       identities.add(identity);
     }
-    const nodeValues = yield* Effect.forEach(owners, owner => pure(owner.path, 'placement', () => decodeNode(owner, owners)));
+    const nodeValues = yield* Effect.forEach(owners, owner => pure(owner.path, 'placement', () => decodeNode(owner, owners, root)));
     const parsedNodes = nodeValues.filter((item): item is TraceNode => item !== undefined);
     const nodes = sorted(
-      [...parsedNodes, ...deriveDesignPlans(parsedNodes, documentSources)],
+      [...parsedNodes, ...(yield* pure(root, "plans", () => deriveDesignPlans(parsedNodes, documentSources, root)))],
       (item) => item.path,
     );
     const pages = deriveFeaturePages(nodes, documentSources);
