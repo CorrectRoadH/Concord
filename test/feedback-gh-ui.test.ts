@@ -72,6 +72,8 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     // 外部配置改变会使旧投影失效，先等当前身份重新可读再操作连接。
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
     await existing.getByRole('button', { name: '编辑连接 existing' }).click();
     await page.getByRole('combobox', { name: 'GitHub 读取方式' }).click();
     await page.getByRole('option', { name: '复用 gh 登录' }).click();

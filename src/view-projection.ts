@@ -8,6 +8,7 @@ import { HawdbFailure, hawdbIdentity } from './hawdb-native.js';
 import { ConcordError, failure } from './shared.js';
 import { assertCurrentRuntimeFormat } from './storage.js';
 import { ViewScanManager } from './view-scan.js';
+import { ViewSourceWatch } from './view-source-watch.js';
 import { decodeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext, type WorkspaceProjectionContext, type WorkspaceProjectionRecord } from './workspace-projection.js';
 import type { WorkspaceProjection } from './view-contract.js';
 
@@ -25,7 +26,40 @@ export class ViewProjectionManager {
   private lastStarted = -Infinity;
   private retryAfter = 0;
   private lastFailure: ConcordError | undefined;
-  constructor(private readonly root: string) { this.scans = new ViewScanManager(root); }
+  private readonly watch: ViewSourceWatch;
+  private watchFailure: ConcordError | undefined;
+  private watchSetup: Promise<void> | undefined;
+  private periodic: NodeJS.Timeout | undefined;
+  private invalidation: NodeJS.Timeout | undefined;
+  private invalidatedAt = 0;
+  constructor(private readonly root: string) {
+    this.scans = new ViewScanManager(root);
+    this.watch = new ViewSourceWatch(root, () => this.invalidate(), error => { this.watchFailure = error; });
+  }
+
+  /** Server-owned refresh continues even when no browser is connected. */
+  start(): void {
+    if (this.periodic || this.stopping) return;
+    this.periodic = setInterval(() => {
+      // A compensation tick never queues another scan behind an active one.
+      if (!this.active && !this.scheduled) this.request(true);
+    }, 30_000);
+    this.periodic.unref();
+    this.watchSetup = this.watch.reconcile(null).then(() => undefined, cause => { this.watchFailure = projectionFailure(cause); });
+    void this.watchSetup.then(() => this.request(true));
+  }
+
+  private invalidate(delay = 250): void {
+    if (this.stopping || this.cleanupFailed) return;
+    const now = Date.now();
+    if (!this.invalidation) this.invalidatedAt = now;
+    else clearTimeout(this.invalidation);
+    this.invalidation = setTimeout(() => {
+      this.invalidation = undefined;
+      this.request(true);
+    }, Math.max(0, Math.min(delay, this.invalidatedAt + 2000 - now)));
+    this.invalidation.unref();
+  }
 
   async read(): Promise<WorkspaceProjection> {
     const deadline = performance.now() + 500;
@@ -42,10 +76,12 @@ export class ViewProjectionManager {
   }
 
   private readOnce(): WorkspaceProjection {
-    this.request();
     const context = workspaceProjectionContext(this.root);
     try {
       const value = readWorkspaceProjection(context);
+      if (this.watchFailure && value.projection.status === 'ready') return { ...value, projection: { ...value.projection, status: 'refresh-failed',
+        lastError: { failedAt: Number.isFinite(this.lastStarted) ? new Date(this.lastStarted).toISOString() : value.projection.builtUntil,
+          code: this.watchFailure.code, message: this.watchFailure.message.slice(0, 4096) } } };
       if (!this.lastFailure || !this.cleanupFailed && Date.parse(value.projection.builtUntil) > this.lastStarted) return value;
       return { ...value, projection: { ...value.projection, status: this.lastFailure.code === 'RecoveryRequired' ? 'blocked' : 'refresh-failed',
         lastError: { failedAt: new Date(this.lastStarted).toISOString(), code: this.lastFailure.code, message: this.lastFailure.message.slice(0, 4096) } } };
@@ -135,7 +171,13 @@ export class ViewProjectionManager {
       const reply = await this.scans.scan();
       if (this.stopping) return;
       const candidate = decodeWorkspaceProjectionRecord(JSON.parse(reply.body));
-      await this.persist(context, candidate);
+      try {
+        if (await this.watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources)) this.pending = true;
+        this.watchFailure = undefined;
+      } catch (cause) { this.watchFailure = projectionFailure(cause); }
+      if (this.stopping) return;
+      await this.persist(context, candidate, this.watchFailure);
+      if (!candidate.consistent) this.invalidate(1000);
       this.lastFailure = undefined;
     } catch (cause) {
       const error = projectionFailure(cause);
@@ -162,8 +204,11 @@ export class ViewProjectionManager {
   async close(): Promise<void> {
     this.stopping = true;
     this.pending = false;
+    if (this.periodic) { clearInterval(this.periodic); this.periodic = undefined; }
+    if (this.invalidation) { clearTimeout(this.invalidation); this.invalidation = undefined; }
+    this.watch.close();
     if (this.scheduled) { clearImmediate(this.scheduled); this.scheduled = undefined; }
-    try { await this.scans.close(); await this.active; }
+    try { await this.watchSetup; await this.scans.close(); await this.active; }
     catch (cause) { this.cleanupFailed = true; throw cause; }
     if (this.cleanupFailed) throw new ConcordError('CleanupFailed', 'Workspace cleanup is unconfirmed; preserve the refresh lease');
     if (this.lease) { releaseFileLease(this.lease, 'workspace-refresh-close'); this.lease = undefined; }

@@ -11,6 +11,8 @@ export default defineConfig(({ command }) => ({
   build: {
     outDir: '../dist/web',
     emptyOutDir: true,
+    // Keep fonts same-origin files: the View CSP intentionally disallows data fonts.
+    assetsInlineLimit: (filePath) => /\.(?:woff2?|ttf|otf)$/i.test(filePath) ? false : undefined,
     target: 'es2022',
     license: true,
   },

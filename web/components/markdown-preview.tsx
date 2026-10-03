@@ -3,12 +3,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkFrontmatter from 'remark-frontmatter';
-import rehypeRaw from 'rehype-raw';
-import rehypeSanitize from 'rehype-sanitize';
+import remarkMath from 'remark-math';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import type { Root, RootContent } from 'mdast';
 import { P5Sketch } from './p5-sketch';
 import { RecordDetails } from './content-layout';
+import { rehypeSafeMath, remarkMathNodes } from './markdown-math';
 
 /** Read-only rendering never round-trips source bytes through an editor. */
 function p5Blocks(markdown: string): ReadonlyMap<number, { code: string; meta: string }> {
@@ -39,7 +39,7 @@ export function MarkdownPreview({ markdown, documentPath, onFollowLink }: { mark
   }, [hash, markdown]);
   return <>
     <article ref={article} className="wysiwyg__content min-h-0" data-testid="markdown-preview">
-      <Markdown remarkPlugins={[remarkGfm, remarkFrontmatter]} rehypePlugins={[rehypeRaw, rehypeSanitize]} components={{
+      <Markdown remarkPlugins={[remarkGfm, remarkFrontmatter, remarkMath, remarkMathNodes]} rehypePlugins={[rehypeSafeMath]} components={{
         pre: ({ children, ...props }) => {
           const offset = props.node?.position?.start.offset;
           const sketch = offset === undefined ? undefined : sketches.get(offset);

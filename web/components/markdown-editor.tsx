@@ -21,7 +21,7 @@ import { tags } from '@lezer/highlight';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import * as stylex from '@stylexjs/stylex';
 import { AlertTriangle, GitCompareArrows, RefreshCw } from 'lucide-react';
-import { Component, useCallback, useEffect, useId, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { ViewFile } from '../../src/view-contract';
@@ -35,6 +35,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from './ui/textarea';
 import { SourceEditor } from './source-editor';
 import { P5DocumentContext, p5CodeBlockDescriptor } from './p5-sketch';
+import { hasMarkdownMath } from './markdown-math';
+import { MarkdownPreview } from './markdown-preview';
 
 interface Props {
   readonly initial: ViewFile;
@@ -169,6 +171,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
   const { api, requestRefresh, notify, snapshot, projection, busy } = useWorkspace();
   const [file, setFile] = useState(initial);
   const [draft, setDraft] = useState(initial.body);
+  const mathDocument = useMemo(() => !source && hasMarkdownMath(file.body), [source, file.body]);
   const [dirty, setLocalDirty] = useState(false);
   const baseline = useRef(initial);
   const currentDraft = useRef(initial.body);
@@ -291,6 +294,9 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
   </div>;
 
   const followLink = (event: React.MouseEvent<HTMLDivElement>) => {
+    // The math preview resolves links from its own parsed tree. The WYSIWYG
+    // source-link index does not understand TeX and must not intercept it.
+    if (mathDocument) return;
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const target = event.target;
     const anchor = target instanceof Element ? target.closest('a[href]') : null;
@@ -314,7 +320,10 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     {autoSave.error && <div className="form-error" role="alert">{autoSave.error}</div>}
     {external && <div className="callout callout--warning"><AlertTriangle /><div><strong>磁盘内容已变化</strong><p>当前草稿没有被覆盖。请比较后保留草稿或重新载入。</p></div></div>}
     {unsupported && <div className="callout callout--warning"><AlertTriangle /><div><strong>已切换为原文编辑</strong><p>WYSIWYG 无法无损解析该语法：{unsupported}。原始字节内容保持不变，只有你的明确编辑才会标记为未保存。</p></div></div>}
-    {source ? <SourceEditor value={draft} path={file.path} readOnly={busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : hasFrontmatter || unsupported ? rawEditor : <MarkdownErrorBoundary
+    {source ? <SourceEditor value={draft} path={file.path} readOnly={busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : mathDocument ? <div className="math-document-editor" data-testid="math-document-editor">
+      <details className="math-document-source"><summary>编辑原文</summary>{rawEditor}</details>
+      <MarkdownPreview markdown={draft} documentPath={file.path} onFollowLink={onFollowLink} />
+    </div> : hasFrontmatter || unsupported ? rawEditor : <MarkdownErrorBoundary
       fallback={rawEditor}
       onError={error => setUnsupported(error.message)}
     >

@@ -426,7 +426,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       finally { requestLog.close(); closeGitBaselineCache(baselineCache); }
     })(),
   };
-  scans.request();
+  scans.start();
   return handle;
 }
 

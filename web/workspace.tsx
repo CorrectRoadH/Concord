@@ -119,8 +119,8 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
   const workspaceProblemRef = useRef<WorkspaceIssue | null>(null);
   workspaceProblemRef.current = workspaceProblem;
   const writtenAt = useRef(0);
-  const navigationUpdatingRef = useRef(false);
-  navigationUpdatingRef.current = navigationUpdating;
+  const lastGitReadAt = useRef(0);
+  const lastJobsReadAt = useRef(0);
   const applyProjection = useCallback((value: WorkspaceProjection) => {
     setSnapshot(value.snapshot);
     setProjection(value.projection);
@@ -150,15 +150,22 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     }
   }, [api, applyProjection]);
 
-  const refresh = useCallback(async (includeWorkspace = true) => {
+  const refresh = useCallback(async ({ includeWorkspace = true, includeGit = true, includeJobs = true } = {}) => {
     // A refresh requested after a write must read after any older refresh finishes.
     while (refreshInFlight.current) await refreshInFlight.current;
     // Git status also loads workspace metadata on the server. Keep it behind the
     // workspace request so one browser refresh cannot contend with itself.
     const pending = (async () => {
       const value = includeWorkspace ? await readWorkspace() : initial;
-      const tasks: Promise<unknown>[] = [api.jobs().then(setJobs)];
-      if (value) tasks.push(api.git().then(result => { setGit(result); setGitIssue(null); }, cause => { setGit(null); setGitIssue(workspaceIssue(cause)); }));
+      const tasks: Promise<unknown>[] = [];
+      if (includeJobs) {
+        lastJobsReadAt.current = Date.now();
+        tasks.push(api.jobs().then(setJobs));
+      }
+      if (includeGit && value) {
+        lastGitReadAt.current = Date.now();
+        tasks.push(api.git().then(result => { setGit(result); setGitIssue(null); }, cause => { setGit(null); setGitIssue(workspaceIssue(cause)); }));
+      }
       await Promise.allSettled(tasks);
     })();
     refreshInFlight.current = pending;
@@ -177,23 +184,21 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
   useEffect(() => {
     let stopped = false;
     let timer: number | undefined;
-    let cycle = 0;
     const poll = async (initial = false) => {
-      cycle += initial ? 0 : 1;
-      // Jobs are cheap and need responsive state. Workspace/Git scans are much
-      // heavier, especially in large dirty worktrees, so refresh them every
-      // eighth cycle instead of keeping the repository lock almost continuous.
-      // While a write is still waiting for its generation, poll it every cycle.
-      const pending = retryableProjection(workspaceProblemRef.current);
-      if (pending || !initial && (cycle % 8 === 0 || navigationUpdatingRef.current)) await refresh(true);
-      else if (initial) await refresh(false);
-      else await api.jobs().then(setJobs).catch(() => undefined);
+      // Workspace GET reads the published cache. Pending reads retry faster,
+      // while jobs and Git retain their own cadences through the same queue.
+      const now = Date.now();
+      await refresh({
+        includeWorkspace: !initial || retryableProjection(workspaceProblemRef.current),
+        includeGit: initial || now - lastGitReadAt.current >= 32_000,
+        includeJobs: initial || now - lastJobsReadAt.current >= 4000,
+      });
       if (!stopped) timer = window.setTimeout(() => void poll(), retryableProjection(workspaceProblemRef.current) ? 2000 : 4000);
     };
     // App has just loaded the workspace; only fetch the remaining panels now.
     void poll(true);
     return () => { stopped = true; window.clearTimeout(timer); };
-  }, [api, refresh]);
+  }, [refresh]);
 
   const act = useCallback(async (action: ViewAction, success = '操作已完成。') => {
     setBusy(true);

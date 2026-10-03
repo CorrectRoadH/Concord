@@ -40,7 +40,7 @@ test('incomplete workspace notice opens health diagnostics and dismisses without
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('polling keeps jobs responsive without continuously rescanning the workspace', async () => {
+test('polling reads the workspace cache with jobs and serializes slow reads', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-polling-'));
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
@@ -62,7 +62,7 @@ test('polling keeps jobs responsive without continuously rescanning the workspac
     page.on('request', request => { if (request.url().endsWith('/api/jobs')) jobs += 1; });
     await page.route('**/api/workspace', async route => {
       requests += 1;
-      if (requests > 1) await gate;
+      if (requests > 8) await gate;
       await route.continue();
     });
     await page.goto(`http://127.0.0.1:${server.port}/research/polling`);
@@ -74,15 +74,15 @@ test('polling keeps jobs responsive without continuously rescanning the workspac
     for (let cycle = 2; cycle <= 8; cycle += 1) {
       const response = page.waitForResponse(result => result.url().endsWith('/api/jobs'));
       await page.clock.runFor(4000);
-      await response;
+      await (await response).finished();
       await expect.poll(() => jobs).toBe(cycle);
     }
-    assert.equal(requests, 1, 'routine job polling must not rescan the workspace');
-    assert.equal(jobs, 8, 'jobs remain responsive between full refreshes');
+    assert.equal(requests, 8, 'each routine cycle reads the published workspace cache');
+    assert.equal(jobs, 8, 'jobs remain responsive alongside cached workspace reads');
     await page.clock.runFor(4000);
-    await expect.poll(() => requests).toBe(2);
+    await expect.poll(() => requests).toBe(9);
     await page.clock.runFor(12000);
-    assert.equal(requests, 2, 'a slow full refresh must not accumulate more workspace requests');
+    assert.equal(requests, 9, 'a slow cache read must not accumulate more workspace requests');
     assert.equal(jobs, 8, 'jobs do not race the workspace portion of a full refresh');
     const completed = page.waitForResponse(response => response.url().endsWith('/api/workspace'));
     release();

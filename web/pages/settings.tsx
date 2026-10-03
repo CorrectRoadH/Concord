@@ -88,6 +88,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   const checkingGeneration = React.useRef<string | null>(null)
   const currentRead = React.useRef(0)
   const savingRef = React.useRef(false)
+  const reloadingRef = React.useRef(false)
   const dirtyRef = React.useRef(dirty)
   dirtyRef.current = dirty
 
@@ -113,6 +114,8 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   React.useEffect(() => {
     const generation = projection.builtAt
     if (!generation || generation === checkedGeneration.current || generation === checkingGeneration.current) return
+    // Explicit reloads own the read until the user's requested disk state is applied.
+    if (reloadingRef.current) return
     if (savingRef.current) { checkedGeneration.current = generation; return }
     if (!snapshot.configDigest || snapshot.configDigest === baseline.digest) {
       checkedGeneration.current = generation
@@ -165,6 +168,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   currentRevision.current = revision
 
   async function persist(config: ProjectConfig): Promise<void> {
+    if (reloadingRef.current) throw new Error("正在重新载入磁盘设置，请稍后再保存。")
     if (externalConfig) throw new Error("磁盘配置已变化，请先重新载入当前设置。")
     const sent = revision
     const token = ++currentRead.current
@@ -196,6 +200,8 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   }
 
   async function reload(): Promise<void> {
+    if (reloadingRef.current) return
+    reloadingRef.current = true
     const token = ++currentRead.current
     try {
       const file = await api.file(CONFIG_PATH)
@@ -210,6 +216,8 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
       notify("已载入磁盘上的最新设置。", "info")
     } catch (cause) {
       notify(cause instanceof Error ? cause.message : String(cause), "error")
+    } finally {
+      reloadingRef.current = false
     }
   }
 

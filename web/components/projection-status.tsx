@@ -54,6 +54,5 @@ export function ProjectionStatus() {
   }
   return <div className="projection-status" aria-label="工作区投影状态" title={range}>
     {navigationUpdating ? <span className="projection-status__pending"><RefreshCw size={13} />导航更新中…</span> : built && <span>构建于 {built}</span>}
-    {projection.consistent === false && <Badge variant="outline">来源已变化</Badge>}
   </div>;
 }

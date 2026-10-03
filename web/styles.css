@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @import "tw-animate-css";
+@import "katex/dist/katex.min.css";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -345,6 +346,13 @@ kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28
 .wysiwyg__content code { border-radius: .25rem; background: var(--muted); color: var(--foreground); padding: .12rem .28rem; }
 .wysiwyg__content pre { overflow: auto; padding: 1rem; border-radius: .55rem; background: var(--muted); color: var(--foreground); }
 .wysiwyg__content pre code { background: transparent; color: inherit; padding: 0; }
+.math-document-editor { min-width: 0; }
+.math-document-source > summary { width: fit-content; margin: .75rem 1.25rem; color: var(--muted-foreground); cursor: pointer; }
+.wysiwyg__content .concord-math { max-width: 100%; color: var(--foreground); }
+.wysiwyg__content .concord-math--inline { display: inline-block; overflow-x: auto; vertical-align: middle; }
+.wysiwyg__content .concord-math--display { overflow-x: auto; overflow-y: hidden; padding-block: .25rem; margin-block: 1rem; }
+.wysiwyg__content .concord-math--display .katex-display { width: max-content; min-width: 100%; margin: .5em 0; }
+.wysiwyg__content .concord-math .katex-error { color: var(--destructive) !important; white-space: pre-wrap; }
 .wysiwyg .cm-editor .cm-scroller { overflow-x: auto; }
 .wysiwyg .cm-editor .cm-content, .wysiwyg .cm-editor .cm-line { white-space: pre; overflow-wrap: normal; word-break: normal; }
 .callout { display: flex; gap: .65rem; margin: .8rem 1rem; padding: .72rem .85rem; border: 1px solid #b8c9c3; border-radius: .5rem; background: #e7f0eb; color: #284b4d; }
