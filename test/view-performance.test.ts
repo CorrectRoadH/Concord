@@ -133,7 +133,7 @@ test('warm workspace caches observe changed bytes with unchanged timestamps and 
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('unchanged projections 304 until a refresh publishes, and external edits change the ETag only then', async () => {
+test('unchanged projections return 304 and published external edits invalidate the previous ETag', async () => {
   const root = fixture();
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = `http://127.0.0.1:${server.port}`;
@@ -142,16 +142,18 @@ test('unchanged projections 304 until a refresh publishes, and external edits ch
     await waitForWorkspaceProjection(base);
     const etag = await waitForWorkspaceNotModified(base);
     writeFileSync(join(root, 'docs/feature/cached/architecture.md'), '# External edit\n');
-    // Polling is throttled, so the cached generation (and its ETag) stays readable.
-    assert.equal(await waitForWorkspaceNotModified(base), etag);
-    await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    // Source watching may publish before the explicit refresh or the next GET.
+    const requested = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    assert.equal(requested.status, 202);
+    await requested.arrayBuffer();
     const refreshed = await pollUntil(async () => {
-      const response = await fetch(url);
+      const response = await fetch(url, { headers: { 'If-None-Match': etag } });
       if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
       const value = parseWorkspaceProjection(await response.text());
       return value?.snapshot.pages.some(page => page.derivedTitle === 'External edit') ? response : undefined;
     }, { description: 'refreshed projection', timeoutMs: 45_000 });
     assert.notEqual(refreshed.headers.get('etag'), etag);
+    await waitForWorkspaceNotModified(base);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

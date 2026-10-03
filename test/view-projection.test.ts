@@ -279,7 +279,9 @@ test('a busy native cache is explicitly unavailable and recovers after its handl
       assert.equal(body.value, undefined);
     } finally { database.close(); }
     const recovered = await waitForWorkspaceProjection(base);
-    assert.equal(recovered.projection.builtAt, previous.projection.builtAt);
+    assert.equal(recovered.projection.status, 'ready');
+    assert.deepEqual(recovered.snapshot.documents, previous.snapshot.documents);
+    assert.deepEqual(recovered.snapshot.sources, previous.snapshot.sources);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -296,7 +298,13 @@ test('a briefly busy workspace cache recovers within the same HTTP request', asy
       const response = await fetch(`${base}/api/workspace`);
       const body = await response.text();
       assert.equal(response.status, 200, body);
-      assert.equal(parseWorkspaceProjection(body)?.projection.builtAt, previous.projection.builtAt);
+      const recovered = parseWorkspaceProjection(body);
+      assert.ok(recovered);
+      // Startup watch reconciliation can publish a newer generation during the retry.
+      assert.equal(recovered.projection.status, 'ready');
+      assert.equal(recovered.projection.consistent, true);
+      assert.deepEqual(recovered.snapshot.documents, previous.snapshot.documents);
+      assert.deepEqual(recovered.snapshot.sources, previous.snapshot.sources);
     } finally { clearTimeout(release); database.close(); }
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
