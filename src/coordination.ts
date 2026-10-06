@@ -2,10 +2,10 @@
 // @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @concord-implements docs/feature/cross-platform-release/use-case/release-from-tag.md
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, lstatSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { existsSync, readdirSync, lstatSync, mkdirSync } from 'node:fs';
+import { resolve, join, sep } from 'node:path';
 import { Effect } from 'effect';
-import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, publicationRevision, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
+import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, errno, publicationRevision, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
 export { CoordinationError } from './file-lease.js';
 export { advancePublicationRevision } from './file-lease.js';
 export { invalidateActiveRun } from './run-coordination.js';
@@ -38,6 +38,23 @@ export function readPublicationRevisionSync(root: string): string {
 }
 export function legacyTracePrivateDirectorySync(root: string): string { return gitPath(root, LEGACY_TRACE_PRIVATE_PATH); }
 export function genericPrivateDirectorySync(root: string): string { return gitPath(root, "concord"); }
+
+/** Explicit cache writers may create this Git-owned child; readers never call this. */
+export function ensureGenericPrivateDirectorySync(root: string, directory: string): void {
+  try {
+    const expected = genericPrivateDirectorySync(root);
+    const gitDirectory = gitPath(root, '.');
+    if (directory !== expected || !expected.startsWith(`${gitDirectory}${sep}`)) throw new Error('Private directory must remain inside the selected Git directory');
+    assertLeasePath(directory);
+    try { mkdirSync(directory, { mode: 0o700 }); }
+    catch (cause) { if (!errno(cause, 'EEXIST')) throw cause; }
+    assertLeasePath(directory);
+    if (!lstatSync(directory).isDirectory()) throw new Error('Private path must be a real directory');
+  } catch (cause) {
+    if (cause instanceof CoordinationError) throw cause;
+    throw new CoordinationError({ operation: 'cache-write', phase: 'git-private', path: directory, message: cause instanceof Error ? cause.message : String(cause) });
+  }
+}
 export function genericJournalPath(root: string): string {
   const path = resolve(genericPrivateDirectorySync(root), "journal.json");
   assertLeasePath(path);

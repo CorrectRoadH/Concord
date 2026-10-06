@@ -18,10 +18,6 @@ constitutionRefs:
   - docs/constitution.md#c-014
 ---
 
-
-
-
-
 # 本地 SDLC 闭环
 
 Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品契约、可执行验收和工程记忆。它面向离线、可移植的开发流程：文档与源码是事实来源；Git-private HawDB 只保存可删除重建的缓存，命令证据与未完成事务 journal 则必须保留并按各自完整性规则处理。
@@ -54,7 +50,7 @@ Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal
 
 ## 性能预算
 
-高频只读命令与检查命令在[性能验收](../../engineering/concord-self-hosting/performance.md)规定的方法下满足以下 warm p50 预算。
+高频只读命令与检查命令的当前来源模式在[性能验收](../../engineering/concord-self-hosting/performance.md)规定的方法下满足以下 warm p50 预算。
 
 - 参照消费者：本仓库 commit `6346f4cf78bc3553448a0119443f8f2ec681f5d5` 的独立 clone，含 61 份文档 owner、6 条 Memory、232 个测试标记与 97 个代码声明。
 - 参照环境：AMD Ryzen 7 5800X，Linux x64，Node v24.19.0。
@@ -67,7 +63,7 @@ Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal
 | `concord issue index`、`concord issue list`、`concord issue recall HawDB` | 500ms |
 | `concord feature list` 与其它文档类别的 `list` | 600ms |
 | `concord docs check` | 1000ms |
-| `concord trace show docs/feature/local-sdlc/README.md`、`concord trace check` | 1300ms |
+| `concord --fresh trace show docs/feature/local-sdlc/README.md`、`concord trace check` | 1300ms |
 | `concord check` | 2300ms |
 
-规模增长导致超出预算时，先按性能验收方法定位瓶颈，再调整实现或经修订调整预算，不跳过校验。
+异步投影的历史读取预算与后台刷新上限由[读取异步刷新的诊断投影](../local-data-engine/use-case/query-asynchronous-projections.md#性能预算)拥有，本表不重复声明。规模增长导致超出预算时，先按性能验收方法定位瓶颈，再调整实现或经修订调整预算，不跳过校验。`pnpm bench cli` 直接读取本表测量，表格保持[预算表格式](../../engineering/concord-self-hosting/performance.md#预算表格式)。

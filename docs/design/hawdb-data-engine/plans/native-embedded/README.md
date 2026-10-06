@@ -89,4 +89,4 @@ segment cache 为 16 MiB，graph manifest 为 8 MiB，out-of-core delta 不超�
 
 同进程与跨进程互斥、损坏 manifest 的受锁清理、同一锁 inode 保留和空库重开都属于验收范围。预算字段须匹配固定 revision 的公开 DatabaseConfig，不采用 TiB 级默认值。生产路径守卫、崩溃恢复、缓存语义、请求延迟及打包消费者也须验收。
 
-clear 的进一步边界：目录不存在时无操作；只有完整预检为 owner-only 的目录才报告 empty，未知内容不归为空。删除并不原子化；中断或部分失败保留现场，后续显式 clear 可重新取 guard 继续，不自动调用数据库恢复。原型仅覆盖同进程双向互斥及跨进程 guard 阻止 HawDB，反方向和明确 busy 类别由生产测试补齐。
+clear 的进一步边界：目录不存在时无操作；只有完整预检为 owner-only 的目录才报告 empty，未知内容不归为空。删除并不原子化；中断或部分失败保留现场，后续显式 clear 可重新取 guard 继续，不自动调用数据库恢复。验收须覆盖同进程双向互斥、跨进程 guard 与 HawDB 引擎锁的双向阻止，以及明确的 busy 类别。

@@ -3,6 +3,7 @@
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from './cache-file.js';
 import { HawdbFailure, openHawdb, type HawdbDatabase } from './hawdb-native.js';
 import type { Repository } from './shared.js';
+import { ensureGenericPrivateDirectorySync } from './coordination.js';
 
 const scopes = new WeakMap<Repository, { database: HawdbDatabase; writable: boolean }>();
 const recoveryAllowed = new WeakSet<Repository>();
@@ -24,6 +25,7 @@ export function withPersistentCache<A>(repo: Repository, writable: boolean, use:
   let scope = scopes.get(repo);
   if (scope !== undefined && writable && !scope.writable) { closeRepositoryCache(repo); scope = undefined; }
   if (scope === undefined) {
+    if (writable) ensureGenericPrivateDirectorySync(repo.root, repo.privateDir);
     let database: HawdbDatabase;
     try { database = openHawdb(path, { readOnly: !writable, create: writable }); }
     catch (cause) {

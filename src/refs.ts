@@ -110,6 +110,7 @@ export function resolveReference(
 export function referenceResolver(repo: Repository, documents: readonly DocumentRecord[]) {
   const sources = new Map<string, string | undefined>();
   const resolved = new Map<string, DocumentRecord>();
+  const failures = new Map<string, unknown>();
   const reader = { read(path: string): string | undefined {
     if (sources.has(path)) return sources.get(path);
     const source = repo.read(path);
@@ -119,10 +120,16 @@ export function referenceResolver(repo: Repository, documents: readonly Document
   return {
     resolve(input: string, allowedKinds?: readonly DocumentKind[]): DocumentRecord {
       const key = JSON.stringify([input, allowedKinds]);
-      const previous = resolved.get(key);
-      if (previous !== undefined) return previous;
-      const owner = resolveReference(reader, documents, input, allowedKinds);
-      resolved.set(key, owner);
+      if (failures.has(key)) throw failures.get(key);
+      const previous = resolved.get(input);
+      if (previous !== undefined) {
+        if (allowedKinds !== undefined && !allowedKinds.includes(previous.metadata.kind)) throw new ConcordError('InvalidReferenceTarget', `${input} resolves to ${previous.metadata.kind}; expected ${allowedKinds.join(', ')}`);
+        return previous;
+      }
+      let owner: DocumentRecord;
+      try { owner = resolveReference(reader, documents, input, allowedKinds); }
+      catch (cause) { failures.set(key, cause); throw cause; }
+      resolved.set(input, owner);
       return owner;
     },
     verify(): Finding[] {

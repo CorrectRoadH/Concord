@@ -22,7 +22,9 @@
 
 ## 检查与审阅
 
-`check`、`trace check`、`trace show` 和 `review render` 都不执行测试。`cache clear/rebuild/status` 只管理派生投影，`recover` 处理未完成 publication。
+`check`、`trace check`、`trace show` 和 `review render` 都不执行测试。`cache clear/rebuild/status` 只管理派生投影，`recover` 处理未完成 publication。`cache rebuild` 在 Git-private 目录缺失时安全创建它；重建后缓存仍不可读时以 `CacheRebuildUnavailable` 失败，JSON 成功结果附 `cacheStatus`。
+
+只读快照内，读取过的条目被按大小写改名时，当前来源命令在快照结束时报 `PreimageChanged`（details 为 `source-observation`），不再在第二次读取时报 `UnsafePath`。非普通文件在初次读取或扫描时报 `InvalidFile`，核验阶段报 `UnsafePath`；symlink 与越界在任何阶段都报 `UnsafePath`。macOS 低于 11 时以 `UnsupportedHost` 拒绝。规则见[读取路径安全检查的成本边界](../../design/path-safety-cost/plans/anchored-root/architecture.md)。
 
 ## 中立高级治理
 

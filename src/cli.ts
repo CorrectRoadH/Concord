@@ -68,6 +68,14 @@ function jsonBody<A>(path: string, schema: Schema.ConstraintDecoder<A, never>, l
 }
 function emit(value: unknown, json: boolean): void {
   const output = json ? JSON.stringify(value) : humanOutput(value);
+  if (!json) {
+    const diagnostic = Schema.decodeUnknownExit(Schema.Struct({ projection: Schema.Struct({ consistent: Schema.Boolean, builtAt: Schema.String, changedPaths: Schema.Array(Schema.String), lastAttempt: Schema.optional(Schema.Struct({ complete: Schema.Boolean, at: Schema.String })) }) }), { onExcessProperty: 'ignore' })(value);
+    if (diagnostic._tag === 'Success') {
+      const projection = diagnostic.value.projection;
+      if (!projection.consistent) process.stdout.write(`历史投影，构建期间来源变化（${projection.changedPaths.length} 个路径），关系可能不完整；使用 --fresh 获取当前结果。\n`);
+      else if (projection.lastAttempt?.complete === false) process.stdout.write(`一致结果构建于 ${projection.builtAt}，此后的刷新在编辑中未能取得一致结果（最近 ${projection.lastAttempt.at}）。\n`);
+    }
+  }
   process.stdout.write(output.endsWith('\n') ? output : `${output}\n`);
 }
 function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, options: { initialize?: boolean; recover?: boolean; readonly?: boolean; unlocked?: boolean } = {}) {
@@ -348,7 +356,16 @@ const code = Command.make('code').pipe(Command.withDescription('Associate files,
 const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear, or rebuild disposable HawDB projections.'),Command.withSubcommands([
   Command.make('status',{},()=>withReadRepo(repo=>sync(()=>cacheStatus(repo)))),
   Command.make('clear',{},()=>withRepo((repo,s)=>sync(()=>s.dryRun ? previewCacheClear(repo) : clearCache(repo)))),
-  Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');const annotations=scanAnnotations(repo,{cache:'rebuild'});const code=scanCode(repo,{cache:'rebuild'});return {...annotations,codeCache:code.cache};}))),
+  Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{
+    if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');
+    const annotations=scanAnnotations(repo,{cache:'rebuild'});
+    const code=scanCode(repo,{cache:'rebuild'});
+    const status=cacheStatus(repo);
+    if(annotations.cache.status !== 'miss' || !['miss','hit'].includes(code.cache.status) || status.status !== 'ready') {
+      throw new ConcordError('CacheRebuildUnavailable','Cache rebuild did not produce readable current projections',{cache:annotations.cache,codeCache:code.cache,cacheStatus:status});
+    }
+    return {...annotations,codeCache:code.cache,cacheStatus:status};
+  }))),
 ]));
 // @concord-begin
 // @concord-implements docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md

@@ -8,7 +8,8 @@
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
+import { closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, rmdirSync, writeFileSync, type BigIntStats } from 'node:fs';
+import { release } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Predicate, Schema } from 'effect';
 import { acquireTraceLeaseSync, assertLegacyTraceStateMigratedSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from './coordination.js';
@@ -27,6 +28,10 @@ import { catalogName, policyName, scopeOf } from './writing-scopes.js';
 
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
+type RootAnchor = { readonly path: string; readonly dev: bigint; readonly ino: bigint };
+class ObservationChanged extends ConcordError {
+  constructor(readonly path: string) { super('PreimageChanged', `${path} changed after planning; take a fresh snapshot`, 'source-observation'); }
+}
 const errno = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code;
 function storageCoordinationFailure(cause: unknown): ConcordError {
   const coordination = cause instanceof CoordinationError || (typeof cause === 'object' && cause !== null && '_tag' in cause && cause._tag === 'CoordinationError');
@@ -73,6 +78,63 @@ function assertNoSymlink(path: string): void {
     catch (cause) { if (!errno(cause, 'ENOENT')) throw cause; }
     if (stat?.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${part}`);
   }
+}
+
+function assertReadHost(): void {
+  if (process.platform !== 'linux' && process.platform !== 'darwin') throw new ConcordError('UnsupportedHost', 'Concord supports Linux and Darwin/macOS hosts');
+  if (process.platform === 'darwin' && Number(release().split('.')[0]) < 20) throw new ConcordError('UnsupportedHost', 'Concord requires macOS 11 or later for O_NOFOLLOW_ANY');
+}
+
+function readCheckedFile(target: string, path: string, stat: BigIntStats, verifying = false): string {
+  if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
+  if (!stat.isFile()) throw new ConcordError(verifying ? 'UnsafePath' : 'InvalidFile', `${path} must be a regular file`);
+  let fd: number | undefined;
+  try {
+    fd = openSync(target, constants.O_RDONLY | (process.platform === 'darwin' ? 0x20000000 : constants.O_NOFOLLOW));
+    if (process.platform === 'linux') {
+      let opened: string;
+      try { opened = readlinkSync(`/proc/self/fd/${fd}`); }
+      catch { throw new ConcordError('UnsafePath', 'Cannot verify opened file through /proc/self/fd'); }
+      if (opened.endsWith(' (deleted)')) {
+        if (verifying) throw new ObservationChanged(path);
+        throw new ConcordError('SourceChanged', `${path} was replaced while opening; retry the query`);
+      }
+      if (opened !== target) throw new ConcordError('UnsafePath', `Opened file resolved outside its expected path: ${path}`);
+    }
+    const opened = fstatSync(fd, { bigint: true });
+    if (!opened.isFile()) throw new ConcordError(verifying ? 'UnsafePath' : 'InvalidFile', `${path} must be a regular file`);
+    if (opened.size !== stat.size || opened.dev !== stat.dev || opened.ino !== stat.ino) {
+      if (verifying) throw new ObservationChanged(path);
+      throw new ConcordError('SourceChanged', `${path} was replaced while opening; retry the query`);
+    }
+    if (opened.size > BigInt(MAX_BYTES)) {
+      if (verifying) throw new ObservationChanged(path);
+      throw new ConcordError('InvalidFile', `${path} exceeds ${MAX_BYTES} bytes`);
+    }
+    return readFileSync(fd, 'utf8');
+  } catch (cause) {
+    if (errno(cause, 'ELOOP')) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
+    if (cause instanceof ConcordError) throw cause;
+    if (verifying) throw new ObservationChanged(path);
+    if (errno(cause, 'ENOENT')) throw new ConcordError('SourceChanged', `${path} disappeared while opening; retry the query`);
+    throw cause;
+  } finally { if (fd !== undefined) closeSync(fd); }
+}
+
+/** Standalone reads keep the full path guard and never reuse snapshot listings. */
+// @concord-code
+// @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+export function readRepositoryFileSync(root: string, path: string): string | undefined {
+  assertReadHost();
+  canonicalPath(path);
+  const repositoryRoot = resolve(root);
+  const target = resolve(repositoryRoot, path);
+  if (!target.startsWith(repositoryRoot.endsWith(sep) ? repositoryRoot : `${repositoryRoot}${sep}`)) throw new ConcordError('UnsafePath', path);
+  assertNoSymlink(target);
+  let stat: BigIntStats;
+  try { stat = lstatSync(target, { bigint: true }); }
+  catch (cause) { if (errno(cause, 'ENOENT')) return undefined; throw cause; }
+  return readCheckedFile(target, path, stat);
 }
 
 export function assertDarwinPublicationPaths(paths: readonly string[], platform: NodeJS.Platform = process.platform): void {
@@ -217,15 +279,30 @@ export class LocalRepository implements Repository {
   private revision = '';
   private readonly observedFiles = new Map<string, string | undefined>();
   private readonly observedDirectories = new Map<string, string>();
+  private readonly rootAnchor: readonly RootAnchor[];
+  private rootFd: number | undefined;
+  private readonly listings = new Map<string, Buffer[]>();
+  private readonly checkedSegments = new Set<string>();
+  private verifyListings: Map<string, Buffer[]> | undefined;
   constructor(input?: string, options: { initialize?: boolean; recover?: boolean; reclaimPublication?: boolean; dryRun?: boolean; access?: 'read' | 'write'; optimistic?: boolean } = {}) {
     this.root = discoverRoot(input, options.initialize);
+    assertNoSymlink(this.root);
+    const anchors: RootAnchor[] = [];
+    let anchorPath: string = sep;
+    for (const segment of ['', ...this.root.slice(sep.length).split(sep)]) {
+      if (segment !== '') anchorPath = join(anchorPath, segment);
+      const stat = lstatSync(anchorPath, { bigint: true });
+      if (stat.isSymbolicLink() || !stat.isDirectory()) throw new ConcordError('UnsafePath', `Root must consist of real directories: ${anchorPath}`);
+      anchors.push({ path: anchorPath, dev: stat.dev, ino: stat.ino });
+    }
+    this.rootAnchor = anchors;
     this.recovering = options.recover ?? false;
     this.noWrite = options.dryRun ?? false;
     this.access = options.access ?? 'write';
     this.optimistic = !options.recover && (this.access === 'read' || this.noWrite || options.optimistic === true);
     if (options.recover && this.access === 'read') throw new ConcordError('InvalidOption', 'Recovery requires write access');
     if (options.recover && this.noWrite) throw new ConcordError('InvalidOption', 'recover does not accept --dry-run');
-    if (process.platform !== 'linux' && process.platform !== 'darwin') throw new ConcordError('UnsupportedHost', 'Concord supports Linux and Darwin/macOS hosts');
+    assertReadHost();
     if (git(this.root, ['rev-parse', '--show-toplevel']) !== this.root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
     assertCurrentRuntimeFormat(this.root);
     try { this.privateDir = genericPrivateDirectorySync(this.root); }
@@ -233,6 +310,7 @@ export class LocalRepository implements Repository {
     assertNoSymlink(this.privateDir);
     this.coordinationDirectory = tracePrivateDirectorySync(this.root);
     try {
+      this.openRoot();
       this.snapshotDepth = 1;
       const coordinationDir = tracePrivateDirectorySync(this.root);
       // Only a new owner-free, lock-free repository may preview without creating private state.
@@ -282,6 +360,82 @@ export class LocalRepository implements Repository {
     assertNoSymlink(target);
     return target;
   }
+  private changedPath(path: string): never {
+    if (this.verifyListings !== undefined) throw new ObservationChanged(path);
+    throw new ConcordError('UnsafePath', `Path identity or spelling changed: ${path}`);
+  }
+  private checkRoot(): void {
+    try {
+      for (const anchor of this.rootAnchor) {
+        const stat = lstatSync(anchor.path, { bigint: true });
+        if (stat.isSymbolicLink() || !stat.isDirectory()) throw new ConcordError('UnsafePath', `Root must consist of real directories: ${anchor.path}`);
+        if (stat.dev !== anchor.dev || stat.ino !== anchor.ino) this.changedPath('.');
+      }
+      if (this.rootFd !== undefined) {
+        const stat = fstatSync(this.rootFd, { bigint: true });
+        const anchor = this.rootAnchor[this.rootAnchor.length - 1]!;
+        if (!stat.isDirectory() || stat.dev !== anchor.dev || stat.ino !== anchor.ino) this.changedPath('.');
+      }
+    } catch (cause) {
+      if (cause instanceof ConcordError) throw cause;
+      if (errno(cause, 'ELOOP')) throw new ConcordError('UnsafePath', 'Symbolic links are not permitted in the root anchor');
+      this.changedPath('.');
+    }
+  }
+  private openRoot(): void {
+    this.checkRoot();
+    this.rootFd = openSync(this.root, 'r');
+    try { this.checkRoot(); } catch (cause) { closeSync(this.rootFd); this.rootFd = undefined; throw cause; }
+    this.clearPathObservations();
+  }
+  private clearPathObservations(): void { this.listings.clear(); this.checkedSegments.clear(); }
+  private directoryListing(path: string): Buffer[] {
+    const listings = this.verifyListings ?? this.listings;
+    let entries = listings.get(path);
+    if (entries === undefined) { entries = readdirSync(path, { encoding: 'buffer' }); listings.set(path, entries); }
+    return entries;
+  }
+  private checkSpelling(parent: string, segment: string, path: string): void {
+    if (process.platform !== 'darwin') return;
+    const entries = this.directoryListing(parent);
+    const key = darwinPathCollisionKey(segment);
+    const exact = hasExactDarwinEntry(entries, segment);
+    const alias = entries.some(entry => !entry.equals(Buffer.from(segment)) && darwinPathCollisionKey(entry.toString('utf8')) === key);
+    if (alias || !exact && present(join(parent, segment))) this.changedPath(path);
+    // Missing inputs are tracked by file/directory observations, not as existing spellings.
+    if (exact && this.verifyListings === undefined) this.checkedSegments.add(path);
+  }
+  /** Only readCurrent and scanDirectory may use this snapshot-local resolver. */
+  private readablePath(path: string): { target: string; stat: BigIntStats | undefined } {
+    if (this.snapshotDepth === 0) {
+      const target = this.absolute(path);
+      try { return { target, stat: lstatSync(target, { bigint: true }) }; }
+      catch (cause) { if (errno(cause, 'ENOENT')) return { target, stat: undefined }; throw cause; }
+    }
+    return this.inspectComponents(path);
+  }
+  private inspectComponents(path: string): { target: string; stat: BigIntStats | undefined } {
+    canonicalPath(path);
+    this.checkRoot();
+    let parent = this.root;
+    let name = '';
+    let stat: BigIntStats | undefined;
+    try {
+      for (const segment of path.split('/')) {
+        name = name === '' ? segment : `${name}/${segment}`;
+        this.checkSpelling(parent, segment, name);
+        parent = join(parent, segment);
+        try { stat = lstatSync(parent, { bigint: true }); }
+        catch (cause) { if (errno(cause, 'ENOENT')) return { target: join(this.root, path), stat: undefined }; throw cause; }
+        if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${parent}`);
+      }
+    } catch (cause) {
+      if (errno(cause, 'ELOOP')) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
+      if (this.verifyListings !== undefined && !(cause instanceof ConcordError)) throw new ObservationChanged(name);
+      throw cause;
+    }
+    return { target: parent, stat };
+  }
   read(path: string): string | undefined {
     return this.snapshotDepth === 0 ? this.underLease(() => this.readObserved(path)) : this.readObserved(path);
   }
@@ -291,11 +445,8 @@ export class LocalRepository implements Repository {
     return source;
   }
   private readCurrent(path: string): string | undefined {
-    const target = this.absolute(path);
-    if (!present(target)) return undefined;
-    const stat = lstatSync(target);
-    if (!stat.isFile() || stat.size > MAX_BYTES) throw new ConcordError('InvalidFile', `${path} must be a regular file of at most ${MAX_BYTES} bytes`);
-    return readFileSync(target, 'utf8');
+    const { target, stat } = this.readablePath(path);
+    return stat === undefined ? undefined : readCheckedFile(target, path, stat, this.verifyListings !== undefined);
   }
   files(prefix: string): string[] {
     return this.snapshotDepth === 0 ? this.underLease(() => this.filesObserved(prefix)) : this.filesObserved(prefix);
@@ -375,11 +526,8 @@ export class LocalRepository implements Repository {
       const value = read();
       // The candidate owns decoded values now; drift collection needs no cache handle.
       closeRepositoryCache(this);
-      this.assertReady();
-      const files = [...this.observedFiles].filter(([path, source]) => this.readCurrent(path) !== source).map(([path]) => path).sort();
-      const directories = [...this.observedDirectories].filter(([path, source]) => this.directoryObservation(path) !== source).map(([path]) => path).sort();
+      const { files, directories } = this.verifyObservations(true);
       const publicationChanged = publicationRevision(this.coordinationDirectory) !== this.revision;
-      this.assertReady();
       return { value, drift: { files, directories, publicationChanged } };
     } finally { this.endSnapshot(); }
   }
@@ -391,7 +539,6 @@ export class LocalRepository implements Repository {
   verifySnapshot(): void {
     if (!this.optimistic || this.snapshotDepth === 0) return;
     if (publicationRevision(this.coordinationDirectory) !== this.revision) throw new ConcordError('SourceChanged', 'Publication changed during the source snapshot; retry the query');
-    this.assertReady();
     this.validateObservations();
   }
   beginSnapshot(reclaimDead = true): void {
@@ -400,6 +547,7 @@ export class LocalRepository implements Repository {
       const acquire = this.recovering || !reclaimDead ? acquireFileLease : acquireRecoverablePublicationLease;
       if (!this.optimistic) this.traceLease = acquire(this.root, this.coordinationDirectory, PUBLICATION_LEASE, 'exclusive', 'snapshot', !this.previewWithoutState);
       this.revision = publicationRevision(this.coordinationDirectory);
+      this.openRoot();
       this.snapshotDepth = 1;
       this.assertReady();
     } catch (cause) { this.close(); throw storageCoordinationFailure(cause); }
@@ -410,16 +558,20 @@ export class LocalRepository implements Repository {
     if (this.snapshotDepth === 0) {
       try { closeRepositoryCache(this); }
       finally {
-        if (this.traceLease !== undefined) {
-          const lease = this.traceLease;
-          this.traceLease = undefined;
-          releaseTraceLeaseSync(lease, 'snapshot-close');
+        try { if (this.rootFd !== undefined) { const fd = this.rootFd; this.rootFd = undefined; closeSync(fd); } }
+        finally {
+          this.clearPathObservations();
+          if (this.traceLease !== undefined) {
+            const lease = this.traceLease;
+            this.traceLease = undefined;
+            releaseTraceLeaseSync(lease, 'snapshot-close');
+          }
         }
       }
     }
   }
   close(): void {
-    this.snapshotDepth = this.snapshotDepth > 0 || this.traceLease !== undefined ? 1 : 0;
+    this.snapshotDepth = this.snapshotDepth > 0 || this.traceLease !== undefined || this.rootFd !== undefined ? 1 : 0;
     this.endSnapshot();
     closeRepositoryCache(this);
   }
@@ -435,27 +587,66 @@ export class LocalRepository implements Repository {
     return this.scanDirectory(prefix).observation;
   }
   private scanDirectory(prefix: string): { observation: string; files: string[] } {
-    const target = this.absolute(prefix);
-    if (!present(target)) return { observation: 'absent', files: [] };
+    const { stat } = this.readablePath(prefix);
+    if (stat === undefined) return { observation: 'absent', files: [] };
     const entries: string[] = [];
     const files: string[] = [];
-    const visit = (path: string, name: string): void => {
-      assertNoSymlink(path);
-      const stat = lstatSync(path);
-      entries.push(`${name}:${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}:${stat.mode & 0o777}:${stat.isFile() ? stat.size : ''}`);
+    const visit = (name: string, stat: BigIntStats): void => {
+      entries.push(`${name}:${stat.isDirectory() ? 'directory' : stat.isFile() ? 'file' : 'other'}:${stat.mode & 0o777n}:${stat.isFile() ? stat.size : ''}`);
       if (stat.isFile()) files.push(name);
-      else if (!stat.isDirectory()) throw new ConcordError('InvalidFile', `Unsupported file type: ${path}`);
-      if (stat.isDirectory()) for (const child of readdirSync(path).sort()) {
-        if (child === '.git' || child === 'node_modules') continue;
-        visit(join(path, child), `${name}/${child}`);
+      else if (!stat.isDirectory()) throw new ConcordError(this.verifyListings === undefined ? 'InvalidFile' : 'UnsafePath', `Unsupported file type: ${name}`);
+      if (stat.isDirectory()) {
+        const directory = join(this.root, name);
+        const members = readdirSync(directory, { encoding: 'buffer' });
+        // Membership is current on every scan; only spelling checks reuse this list.
+        (this.verifyListings ?? this.listings).set(directory, members);
+        for (const child of members.map(entry => entry.toString('utf8')).sort()) {
+          if (child === '.git' || child === 'node_modules') continue;
+          const childName = `${name}/${child}`;
+          const { stat: childStat } = this.readablePath(childName);
+          if (childStat === undefined) {
+            if (this.verifyListings !== undefined) throw new ObservationChanged(childName);
+            throw new ConcordError('SourceChanged', `${childName} disappeared during scanning; retry the query`);
+          }
+          visit(childName, childStat);
+        }
       }
     };
-    visit(target, prefix);
+    visit(prefix, stat);
     return { observation: canonical(entries), files };
   }
   private validateObservations(): void {
-    for (const [path, source] of this.observedFiles) if (this.readCurrent(path) !== source) throw new ConcordError('PreimageChanged', `${path} changed after planning; take a fresh snapshot`, 'source-observation');
-    for (const [path, source] of this.observedDirectories) if (this.directoryObservation(path) !== source) throw new ConcordError('PreimageChanged', `${path} directory inputs (membership, type, size or permissions) changed after planning; take a fresh snapshot`, 'source-observation');
+    this.verifyObservations(false);
+  }
+  private verifyObservations(collect: boolean): { files: string[]; directories: string[] } {
+    const files = new Set<string>();
+    const directories = new Set<string>();
+    const verify = (path: string, target: Set<string>, read: () => void): void => {
+      try { read(); }
+      catch (cause) {
+        if (errno(cause, 'ELOOP')) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
+        if (cause instanceof ConcordError && cause.code === 'UnsafePath') throw cause;
+        const changed = cause instanceof ObservationChanged ? cause.path : path;
+        if (cause instanceof ConcordError && cause.code !== 'PreimageChanged' && cause.code !== 'SourceChanged') throw cause;
+        if (!collect) throw new ObservationChanged(changed);
+        target.add(changed);
+      }
+    };
+    this.verifyListings = new Map();
+    try {
+      verify('.', files, () => this.checkRoot());
+      // An invalid anchor makes all path-based comparisons unreliable.
+      if (files.has('.')) return { files: ['.'], directories: [] };
+      for (const path of this.checkedSegments) verify(path, files, () => {
+        const { stat } = this.inspectComponents(path);
+        const entries = this.directoryListing(join(this.root, dirname(path)));
+        if (stat === undefined || !hasExactDarwinEntry(entries, path.split('/').at(-1)!)) throw new ObservationChanged(path);
+      });
+      verify('concord.config.ts', files, () => this.assertReady());
+      for (const [path, source] of this.observedFiles) verify(path, files, () => { if (this.readCurrent(path) !== source) throw new ObservationChanged(path); });
+      for (const [path, source] of this.observedDirectories) verify(path, directories, () => { if (this.directoryObservation(path) !== source) throw new ObservationChanged(path); });
+      return { files: [...files].sort(), directories: [...directories].sort() };
+    } finally { this.verifyListings = undefined; }
   }
   // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
@@ -546,8 +737,8 @@ export class LocalRepository implements Repository {
         ? acquireTraceLeaseSync(this.root, 'exclusive', 'publication', true, true) : undefined;
       if (commitLease !== undefined) this.traceLease = commitLease;
       try {
-      this.assertReady();
       this.validateObservations();
+      this.clearPathObservations();
       this.observing = false;
       try {
         const receipt = this.publishUnderLease(journal, dryRun);
@@ -581,13 +772,14 @@ export class LocalRepository implements Repository {
     if (dryRun || this.noWrite) return { operation: journal.operation, dryRun: true, changedPaths };
     if (this.access !== 'write') throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     if (this.traceLease?.mode !== 'exclusive') throw new ConcordError('RepositoryBusy', 'Publication requires an owned exclusive lease');
+    this.clearPathObservations();
     invalidateActiveRun(this.root);
     const journalPath = join(this.privateDir, 'journal.json');
     if (present(journalPath)) throw new ConcordError('RecoveryRequired', 'Run concord recover before another publication');
     atomic(journalPath, `${canonical(journal)}\n`);
     try {
       this.preflight(journal);
-      for (const dir of journal.directories) { const target = this.absolute(dir); mkdirSync(target, { recursive: true }); syncDirectory(dirname(target)); }
+      for (const dir of journal.directories) { const target = this.absolute(dir); mkdirSync(target, { recursive: true }); syncDirectory(dirname(target)); this.clearPathObservations(); }
       for (const change of journal.changes) {
         if (journal.scope.kind === 'source') {
           const current = this.currentSnapshot();
@@ -718,9 +910,11 @@ export class LocalRepository implements Repository {
     }
   }
   private apply(path: string, contents: string | null, mode: number): void {
+    this.clearPathObservations();
     const target = this.absolute(path);
     if (contents === null) { if (present(target)) { rmSync(target); syncDirectory(dirname(target)); } }
     else atomic(target, contents, mode);
+    this.clearPathObservations();
   }
   // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
@@ -728,6 +922,7 @@ export class LocalRepository implements Repository {
     return this.snapshot(() => this.recoverUnderLease());
   }
   private recoverUnderLease(): { operation: string; status: string; changedPaths: readonly string[] } {
+    this.clearPathObservations();
     const path = join(this.privateDir, 'journal.json');
     if (!present(path)) return { operation: 'recover', status: 'clean', changedPaths: [] };
     const journal = currentJournal(path);

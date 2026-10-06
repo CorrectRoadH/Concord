@@ -1,15 +1,114 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { cacheStatus, clearCache, scanAnnotations } from '../dist/annotations.js';
 import { acquireHawdbClearGuard, hawdbIdentity, openHawdb } from '../dist/hawdb-native.js';
 import { getWorkspaceSnapshot } from '../dist/application.js';
 import { deleteInspectedCache, inspectCacheClear } from '../dist/cache-file.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
+import { ensureGenericPrivateDirectorySync } from '../dist/coordination.js';
+
+const CacheReport = Schema.Struct({ status: Schema.String });
+const ScanReport = Schema.Struct({ cache: CacheReport, codeCache: CacheReport });
+
+function freshConsumer(): string {
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-fresh-cache-')));
+  execFileSync('git', ['init', '-q', root]);
+  const repo = new LocalRepository(root, { initialize: true });
+  try { initialize(repo, false, { testRoots: ['test'], sourceRoots: ['src'] }); }
+  finally { repo.close(); }
+  // A fresh clone carries these source owners, but none of init's Git-private state.
+  rmSync(join(root, '.git/concord'), { recursive: true, force: true });
+  mkdirSync(join(root, 'src'));
+  writeFileSync(join(root, 'src/example.ts'), 'export const example = true;\n');
+  assert.equal(existsSync(join(root, '.git/concord')), false);
+  return root;
+}
+
+function cli(root: string, ...args: string[]) {
+  return spawnSync(process.execPath, ['dist/entry.js', '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 30_000 });
+}
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('fresh Git consumers create a private cache on check and hit it on the next command', () => Effect.runPromise(Effect.sync(() => {
+  const root = freshConsumer();
+  try {
+    const cold = cli(root, 'check');
+    const first = Schema.decodeUnknownSync(Schema.fromJsonString(ScanReport))(cold.stdout);
+    assert.equal(first.cache.status, 'miss', cold.stdout + cold.stderr);
+    assert.equal(first.codeCache.status, 'miss');
+    const directory = join(root, '.git/concord');
+    assert.equal(statSync(directory).mode & 0o777, 0o700);
+    assert.equal(existsSync(join(directory, 'cache.hawdb/owner.hawdb.lock')), true);
+    const warm = cli(root, 'check');
+    const second = Schema.decodeUnknownSync(Schema.fromJsonString(ScanReport))(warm.stdout);
+    assert.equal(second.cache.status, 'hit', warm.stdout + warm.stderr);
+    assert.equal(second.codeCache.status, 'hit');
+    assert.equal(warm.status, cold.status, 'cache does not change the check verdict');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('fresh cache rebuild produces ready projections and reports busy rebuilds as named failures', () => Effect.runPromise(Effect.sync(() => {
+  const root = freshConsumer();
+  try {
+    const rebuilt = cli(root, 'cache', 'rebuild');
+    assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
+    const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ cacheStatus: CacheReport })))(rebuilt.stdout);
+    assert.equal(report.cacheStatus.status, 'ready');
+    const status = cli(root, 'cache', 'status');
+    assert.equal(status.status, 0, status.stdout + status.stderr);
+    assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CacheReport))(status.stdout).status, 'ready');
+    const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });
+    try {
+      const busy = cli(root, 'cache', 'rebuild');
+      assert.equal(busy.status, 1, busy.stdout + busy.stderr);
+      const error = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ error: Schema.Literal('CacheRebuildUnavailable') })))(busy.stderr);
+      assert.equal(error.error, 'CacheRebuildUnavailable');
+    } finally { database.close(); }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('fresh status, cache-off checks and dry-run previews leave Git-private state absent', () => Effect.runPromise(Effect.sync(() => {
+  const root = freshConsumer();
+  try {
+    for (const args of [['cache', 'status'], ['--dry-run', 'check'], ['--dry-run', 'cache', 'clear'], ['--dry-run', 'cache', 'rebuild']]) {
+      const result = cli(root, ...args);
+      assert.equal(result.signal, null, result.stdout + result.stderr);
+      if (args[0] === 'cache') { assert.equal(result.status, 0); assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CacheReport))(result.stdout).status, 'empty'); }
+      if (args.at(-1) === 'check') {
+        const report = Schema.decodeUnknownSync(Schema.fromJsonString(ScanReport))(result.stdout);
+        assert.equal(report.cache.status, 'off'); assert.equal(report.codeCache.status, 'off');
+      }
+      if (args.at(-1) === 'clear') assert.equal(result.status, 0, result.stdout + result.stderr);
+      if (args.at(-1) === 'rebuild') { assert.equal(result.status, 1); assert.match(result.stderr, /InvalidOption/u); }
+      assert.equal(existsSync(join(root, '.git/concord')), false, args.join(' '));
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('cache initialization refuses symlinked private directories and directories outside Git', () => Effect.runPromise(Effect.sync(() => {
+  const root = freshConsumer();
+  const outside = mkdtempSync(join(tmpdir(), 'concord-cache-outside-'));
+  try {
+    assert.throws(() => ensureGenericPrivateDirectorySync(root, outside), /inside the selected Git directory/u);
+    const link = join(root, '.git/concord');
+    symlinkSync(outside, link);
+    assert.throws(() => ensureGenericPrivateDirectorySync(root, link), /symbolic links/u);
+    for (const args of [['check'], ['cache', 'rebuild'], ['cache', 'status'], ['--dry-run', 'cache', 'clear']]) {
+      const result = cli(root, ...args);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr, /symlink|symbolic links/u);
+      assert.equal(existsSync(join(outside, 'cache.hawdb')), false);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); rmSync(outside, { recursive: true, force: true }); }
+})));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('cache-enabled workspace recovers an interrupted WAL without clearing committed cache entries', async () => {

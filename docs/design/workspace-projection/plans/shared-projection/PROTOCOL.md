@@ -2,7 +2,7 @@
 
 ## 读取与发布
 
-`LocalRepository.observeProjection(read)` 是仅供工作区展示刷新使用的读取原语。
+`LocalRepository.observeProjection(read)` 是历史投影读取原语，工作区展示刷新与诊断投影刷新各自持有刷新 owner。
 
 它沿用 `snapshot()` 的开始、路径安全、Schema 解码、观察记录与句柄关闭。
 

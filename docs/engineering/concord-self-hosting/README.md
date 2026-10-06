@@ -16,6 +16,7 @@ kind: engineering
 - 本仓库测试由配置的 `node:test` runner 执行，回调通过 Effect。关联由 Concord 标记拥有。
 - sourceFiles 纳入测试支持、TypeScript 配置、包清单与锁文件。
 - smoke 只读检查当前仓库的配置与可扫描注释，不递归运行 `pnpm check`，也不修改当前仓库。
+- 性能测量与 profile 以当前构建测量本仓库 commit 的独立 clone 或合成大仓库，预算从契约 owner 读取，入口为 `pnpm bench` 与 `pnpm bench:profile`。
 
 ## 完成条件
 

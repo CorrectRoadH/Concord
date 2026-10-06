@@ -46,6 +46,8 @@ export interface CodeSnapshot {
   readonly files: readonly { readonly path: string; readonly digest: string }[];
   readonly digest: string;
   readonly cache: CodeCacheStatus;
+  /** Internal scan completeness; never serialized into parser payloads. */
+  readonly relationsUnknown: boolean;
 }
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
@@ -507,7 +509,7 @@ function compileCached(repo: Repository, current: readonly Source[], mode: CodeM
   return { ...mergeParsed(parsed), hits, misses, rows, ...(readFailure === undefined ? {} : { readFailure }) };
 }
 
-function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] }, current: readonly Source[], changed: boolean): Omit<CodeSnapshot, 'cache'> {
+function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] }, current: readonly Source[], changed: boolean): Omit<CodeSnapshot, 'cache' | 'relationsUnknown'> {
   const findings = [...compiled.findings];
   if (changed) addFinding(findings, 'CodeSourceChanged', '.', 'Code source paths or contents changed while they were scanned');
   findings.sort((left, right) => left.path.localeCompare(right.path) || (left.line ?? 0) - (right.line ?? 0) || left.code.localeCompare(right.code));
@@ -516,8 +518,8 @@ function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly
   return decode(CodeSnapshotSchema, value, 'code scan');
 }
 function withCache(body: Omit<CodeSnapshot, 'cache'>, cache: CodeCacheStatus): CodeSnapshot { return { ...body, cache }; }
-function finish(repo: Repository, compiled: CompiledFiles, current: readonly Source[], changed: boolean, mode: CodeMode, cachePath: string): CodeSnapshot {
-  const body = result(compiled, current, changed);
+function finish(repo: Repository, compiled: CompiledFiles, current: readonly Source[], changed: boolean, mode: CodeMode, cachePath: string, relationsUnknown: boolean): CodeSnapshot {
+  const body = { ...result(compiled, current, changed), relationsUnknown };
   if (changed) return withCache(body, { status: 'source-changed', hits: 0, misses: compiled.misses, path: cachePath });
   if (mode === 'off') return withCache(body, { status: 'off', hits: 0, misses: compiled.misses, path: cachePath });
   if (compiled.readFailure !== undefined) return withCache(body, { status: 'unavailable', hits: 0, misses: compiled.misses, path: cachePath, detail: compiled.readFailure });
@@ -546,14 +548,14 @@ function scanCodeUnderSnapshot(repo: Repository, options: { cache?: CodeMode; ti
   const initial = measureScan(options.timing, 'code.cacheAndParse', () => compileCached(repo, before, mode, changed));
   let after: readonly Source[];
   try { after = measureScan(options.timing, 'code.verifySources', () => readSources(repo)); }
-  catch (cause) { if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath); else throw cause; }
-  if (sameSources(before, after)) return finish(repo, initial, before, changed, mode, cachePath);
+  catch (cause) { if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath, true); else throw cause; }
+  if (sameSources(before, after)) return finish(repo, initial, before, changed, mode, cachePath, false);
   const fresh = compileCached(repo, after, mode, true);
   try {
     const stable = readSources(repo);
-    return sameSources(after, stable) ? finish(repo, fresh, after, true, mode, cachePath) : finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, stable, true, mode, cachePath);
+    return sameSources(after, stable) ? finish(repo, fresh, after, true, mode, cachePath, false) : finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, stable, true, mode, cachePath, true);
   } catch (cause) {
-    if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath);
+    if (cause instanceof CodeSourceReadChanged) return finish(repo, { codes: [], findings: [], hits: 0, misses: 0, rows: [] }, [], true, mode, cachePath, true);
     throw cause;
   }
 }

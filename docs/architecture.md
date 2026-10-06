@@ -85,10 +85,14 @@ CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描�
 
 ```mermaid
 flowchart TD
-  CLI[CLI trace / check] --> Scan[公共扫描与关系校验]
-  Web[Web workspace] --> Projection[HawDB 结构投影]
-  Refresh[服务端异步刷新] --> Scan
-  Result --> Projection
+  Check[CLI check / trace check / --fresh] --> Scan[公共扫描与关系校验]
+  Query[CLI trace show / gaps / review render] --> QueryCache[HawDB query_cache 诊断投影]
+  Query -. 请求刷新 .-> QueryRefresh[后台刷新进程，每查询键一个 owner]
+  QueryRefresh -->|内部 query-scan-worker| Scan
+  QueryRefresh -->|一致结果，或无一致代次时标注漂移的结果| QueryCache
+  Web[Web workspace] --> WorkspaceCache[HawDB workspace_projection 结构投影]
+  WorkspaceRefresh[ViewProjectionManager，每 worktree 一个 owner] --> Scan
+  WorkspaceRefresh -->|一致或标注漂移的代次| WorkspaceCache
   Scan --> Sources[当前目录集合与安全文件读取]
   Sources --> Keys[原文摘要与解析器身份]
   Keys --> Cache[有界 HawDB 批量查询]
@@ -98,6 +102,7 @@ flowchart TD
   Decode --> Validate[来源复核与关系校验]
   Parse --> Validate
   Validate --> Result[结果与完整性诊断]
+  Result --> Check
 ```
 
 cache clear 在独占 publication lease 下取得与 HawDB revision 相同的原生文件锁，保留目录与锁 inode。锁错误不授权删除；损坏库通过独立锁 guard 清理。clear 只管理 cache.hawdb，不删除源 owner、证据、journal 和 Memory。
@@ -250,4 +255,4 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具契约](feature/loca
 
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。发行 tgz 携带 Linux x64/glibc 与 macOS arm64 原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一打包，在目标平台安装同一份包验收。
 
-`pnpm check` 构建后检查测试与脚本类型，再执行领域、恢复和 package smoke；公开 CLI 验收使用独立安装后的命令。
+`pnpm check` 构建后检查测试与脚本类型，再执行领域、恢复和 package smoke；公开 CLI 验收使用独立安装后的命令。性能预算由 `pnpm bench` 按[性能验收](engineering/concord-self-hosting/performance.md)的测量路径单独判定，不进入 `pnpm check`。
