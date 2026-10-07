@@ -109,7 +109,9 @@ test('URL navigation saves the latest draft and restores nested drawers without 
       await page.goto(`${origin}/features/navigation?tab=body`);
       await expect(page.locator('[contenteditable="true"]').first()).toContainText('A paragraph');
       const container = page.locator(width === 390 ? '.document-workspace' : '.page');
-      await container.evaluate(element => { element.scrollTop = 400; });
+      // Real input cancels any pending initial route restoration, just as reading does.
+      await container.hover();
+      await page.mouse.wheel(0, 400);
       await expect.poll(() => container.evaluate(element => element.scrollTop)).toBe(400);
       // The tab bar is sticky, so navigation does not first scroll back to its top.
       await page.getByRole('tab', { name: '元数据', exact: true }).click();

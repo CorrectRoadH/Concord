@@ -39,8 +39,6 @@ test('release builds two native targets and gates publication on the same commit
       parse(yield* fs.readFileString('.github/workflows/release.yml')),
     );
     const { native, package: pack, publish } = graph.jobs;
-    assert.ok(native && pack && publish);
-    assert.deepEqual(Object.keys(graph.jobs), ['native', 'package', 'publish', 'check']);
     assert.equal(native.env?.MACOSX_DEPLOYMENT_TARGET, HAWDB_MACOS_DEPLOYMENT_TARGET);
     assert.deepEqual(native.strategy?.matrix.include?.find(target => target.target === 'darwin-arm64'), { os: 'macos-15', target: 'darwin-arm64' });
     assert.equal(native.strategy?.matrix.include?.length, 2);

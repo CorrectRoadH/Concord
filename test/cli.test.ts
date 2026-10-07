@@ -371,9 +371,12 @@ test('packed PR export preserves Git object types and refuses unsafe or incomple
  writeFileSync(join(root,'oversized.txt'),Buffer.alloc(4*1024*1024+1,97));git('add','oversized.txt');git('commit','-qm','large object');
  const large=join(scratch,'large-out');assert.match(invoke(large,head,'HEAD').stderr,/PreviewBudgetExceeded/u);assert.equal(existsSync(large),false);
  rmSync(join(root,'oversized.txt'));git('add','-A');git('commit','-qm','remove large object');const clean=git('rev-parse','HEAD');
- if(process.platform!=='win32'){
+ // Darwin rejects invalid UTF-8 filenames before Git can record them.
+ if(process.platform==='linux'){
   const invalid=Buffer.concat([Buffer.from(root+'/'),Buffer.from([255])]);writeFileSync(invalid,'bytes');git('add','-A');git('commit','-qm','non UTF-8 path');
   assert.match(invoke(join(scratch,'invalid-path-out'),clean,'HEAD').stderr,/GitPathEncodingUnsupported/u);
+ }
+ if(process.platform!=='win32'){
   const shim=join(scratch,'cancel-git');mkdirSync(shim);const temporary=join(scratch,'cancel-tmp');mkdirSync(temporary);const pidFile=join(scratch,'cancel-git.pid');
   const realGit=execFileSync('sh',['-c','command -v git'],{encoding:'utf8'}).trim();
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
