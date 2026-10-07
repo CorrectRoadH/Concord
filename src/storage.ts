@@ -25,6 +25,7 @@ import { defaultWritingSource } from './writing-defaults.js';
 import { readWritingPolicy } from './writing-policy.js';
 import { analyzeCatalogs, catalogDependencies, catalogSources, readConceptCatalog, splitReference } from './concepts.js';
 import { catalogName, policyName, scopeOf } from './writing-scopes.js';
+import { excludedSourceEntry } from './source-discovery.js';
 
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
@@ -278,7 +279,7 @@ export class LocalRepository implements Repository {
   private readonly optimistic: boolean;
   private revision = '';
   private readonly observedFiles = new Map<string, string | undefined>();
-  private readonly observedDirectories = new Map<string, string>();
+  private readonly observedDirectories = new Map<string, { path: string; scope: 'source' | undefined; observation: string }>();
   private readonly rootAnchor: readonly RootAnchor[];
   private rootFd: number | undefined;
   private readonly listings = new Map<string, Buffer[]>();
@@ -448,12 +449,13 @@ export class LocalRepository implements Repository {
     const { target, stat } = this.readablePath(path);
     return stat === undefined ? undefined : readCheckedFile(target, path, stat, this.verifyListings !== undefined);
   }
-  files(prefix: string): string[] {
-    return this.snapshotDepth === 0 ? this.underLease(() => this.filesObserved(prefix)) : this.filesObserved(prefix);
+  files(prefix: string, scope?: 'source'): string[] {
+    return this.snapshotDepth === 0 ? this.underLease(() => this.filesObserved(prefix, scope)) : this.filesObserved(prefix, scope);
   }
-  private filesObserved(prefix: string): string[] {
-    const scanned = this.scanDirectory(prefix);
-    if (this.observing && !this.observedDirectories.has(prefix)) this.observedDirectories.set(prefix, scanned.observation);
+  private filesObserved(prefix: string, scope?: 'source'): string[] {
+    const scanned = this.scanDirectory(prefix, scope);
+    const key = canonical([prefix, scope ?? 'all']);
+    if (this.observing && !this.observedDirectories.has(key)) this.observedDirectories.set(key, { path: prefix, scope, observation: scanned.observation });
     return scanned.files;
   }
   private sourcePath(path: string, roots: readonly string[]): void {
@@ -583,10 +585,7 @@ export class LocalRepository implements Repository {
     if (!this.recovering && present(join(this.privateDir, 'journal.json'))) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
     if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('PreimageChanged', 'Project configuration changed; open a fresh repository snapshot', 'source-observation');
   }
-  private directoryObservation(prefix: string): string {
-    return this.scanDirectory(prefix).observation;
-  }
-  private scanDirectory(prefix: string): { observation: string; files: string[] } {
+  private scanDirectory(prefix: string, scope?: 'source'): { observation: string; files: string[] } {
     const { stat } = this.readablePath(prefix);
     if (stat === undefined) return { observation: 'absent', files: [] };
     const entries: string[] = [];
@@ -602,6 +601,7 @@ export class LocalRepository implements Repository {
         (this.verifyListings ?? this.listings).set(directory, members);
         for (const child of members.map(entry => entry.toString('utf8')).sort()) {
           if (child === '.git' || child === 'node_modules') continue;
+          if (scope === 'source' && excludedSourceEntry(child)) continue;
           const childName = `${name}/${child}`;
           const { stat: childStat } = this.readablePath(childName);
           if (childStat === undefined) {
@@ -644,7 +644,7 @@ export class LocalRepository implements Repository {
       });
       verify('concord.config.ts', files, () => this.assertReady());
       for (const [path, source] of this.observedFiles) verify(path, files, () => { if (this.readCurrent(path) !== source) throw new ObservationChanged(path); });
-      for (const [path, source] of this.observedDirectories) verify(path, directories, () => { if (this.directoryObservation(path) !== source) throw new ObservationChanged(path); });
+      for (const { path, scope, observation } of this.observedDirectories.values()) verify(path, directories, () => { if (this.scanDirectory(path, scope).observation !== observation) throw new ObservationChanged(path); });
       return { files: [...files].sort(), directories: [...directories].sort() };
     } finally { this.verifyListings = undefined; }
   }

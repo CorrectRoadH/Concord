@@ -433,7 +433,7 @@ function sourceRoots(repo: Repository): readonly string[] {
 }
 
 function readSources(repo: Repository): readonly Source[] {
-  const paths = [...new Set(sourceRoots(repo).flatMap(root => repo.files(root)))].filter(path => SOURCE_EXTENSION.test(path)).sort();
+  const paths = [...new Set(sourceRoots(repo).flatMap(root => repo.files(root, 'source')))].filter(path => SOURCE_EXTENSION.test(path)).sort();
   return paths.map(path => {
     const text = repo.read(path);
     if (text === undefined) throw new CodeSourceReadChanged(`Code source changed while reading ${path}`);

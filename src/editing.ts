@@ -115,7 +115,7 @@ function inspectDocumentsUnderSnapshot(repo: Repository): { documents: DocumentR
 export function listSources(repo: LocalRepository): { path: string; digest: string }[] {
   return inRepositorySnapshot(repo, () => {
   const roots = [...new Set([...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])])].sort();
-  const paths = [...new Set(roots.flatMap(root => repo.files(root)))].filter(path => SOURCE_EXTENSION.test(path) && !sourceForbidden(path)).sort();
+  const paths = [...new Set(roots.flatMap(root => repo.files(root, 'source')))].filter(path => SOURCE_EXTENSION.test(path) && !sourceForbidden(path)).sort();
   return paths.flatMap(path => {
     const body = repo.read(path);
     return body === undefined ? [] : [{ path, digest: digest(body) }];

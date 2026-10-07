@@ -69,6 +69,8 @@ supporting Markdown 进入 candidate 摘要，不成为独立 owner 或测试证
 
 扫描不解析宿主测试声明。JS/TS 只用注释范围排除字符串、模板和正则中的伪标记，其它文本按注释前缀认标记。缺值、同块重复契约、只有 `@regression`/`@status`/`@name` 的块产生 finding。不认识的测试写法不是 finding。
 
+源码发现通过 `Repository.files(prefix, 'source')` 在检查子路径前排除 `.env`、`.env.*` 与 `dist` 路径段；默认目录清单保持严格。目录观察以路径和发现范围共同区分，复核重用原范围。代码、测试标记与工作台源码清单采用源码范围；文档与发布清单采用默认范围。显式路径安全校验不受发现排除影响，具体行为见[测试发现](feature/local-sdlc/use-case/discover-annotated-tests.md)。
+
 项目配置保存 testRoots、runner argv、附加 sourceFiles 与 timeout。argv 的 `{file}`、`{name}`、`{pattern}` 只按参数替换，不经过 shell；没有 `@name` 时 `{pattern}` 为 `.*`。运行收据标明 scope: command 和 selectedCaseId，不渲染为 native case passed。
 
 HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对路径集合、内容摘要与解析器和 schema 身份，命中仍严格解码。损坏、schema 不符或写入失败时回源编译，不返回陈旧结果。

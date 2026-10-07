@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { before, after } from 'node:test';
@@ -226,6 +226,38 @@ function refreshInstalled(root: string, query: readonly string[], limitMs?: numb
     child.once('error', reject); child.once('close', status => resolveResult({ status, stderr }));
   });
 }
+
+// @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
+test('packed CLI discovers real sources without reading environment files or following environment links', async () => {
+  const root = packedConsumer(false);
+  try {
+    for (const base of ['src', 'test']) {
+      symlinkSync(join(root, 'missing-secret'), join(root, base, '.env'));
+      writeFileSync(join(root, base, '.env.local'), '// @feature docs/feature/absent/README.md\n');
+      mkdirSync(join(root, base, '.env.production'));
+      symlinkSync(root, join(root, base, '.env.production/cycle'));
+      mkdirSync(join(root, base, 'dist'));
+      writeFileSync(join(root, base, 'dist/bundle.js'), '// @feature docs/feature/generated/README.md\n');
+      symlinkSync(root, join(root, base, 'dist/cycle'));
+    }
+    for (const args of [['trace', 'gaps', '--fresh'], ['trace', 'check'], ['test', 'list'], ['code', 'list']] as const) {
+      const result = installedCall(root, '--json', ...args);
+      assert.equal(result.status, 0, result.stderr + result.stdout);
+      assert.doesNotMatch(result.stdout, /missing-secret|absent\/README|generated\/README|\.env/u);
+    }
+    const refreshed = await refreshInstalled(root, ['trace', 'gaps']);
+    assert.equal(refreshed.status, 0, refreshed.stderr);
+    // Read through the packed public CLI after the background scan has published.
+    const historical = installedCall(root, '--json', 'trace', 'gaps');
+    assert.equal(historical.status, 0, historical.stderr);
+    assert.equal(JSON.parse(historical.stdout).projection.current, false);
+    await waitForRefreshExit(root);
+    symlinkSync(join(root, 'src/000.ts'), join(root, 'src/linked.ts'));
+    const rejected = installedCall(root, '--json', 'trace', 'gaps', '--fresh');
+    assert.equal(rejected.status, 1);
+    assert.match(rejected.stderr, /UnsafePath/u);
+  } finally { await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
+});
 async function editing(root: string, relative: string) {
   // An independent external writer is the only simulated boundary; all scanning and publication use the packed implementation.
   const child = spawn(process.execPath, ['--input-type=module', '-e', String.raw`import { readFileSync, writeFileSync, renameSync } from 'node:fs';

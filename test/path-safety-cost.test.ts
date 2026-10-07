@@ -50,6 +50,53 @@ function onOpen<A>(target: string, mutate: () => void, read: () => A): A {
   try { return read(); } finally { fs.openSync = original; syncBuiltinESMExports(); assert.equal(fired, true); }
 }
 
+// @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
+test('source discovery excludes environment entries before path checks and keeps strict observations independent', t => Effect.runSync(Effect.sync(() => {
+  const { container, root } = fixture(t);
+  const outside = join(container, 'outside');
+  mkdirSync(outside);
+  writeFileSync(join(outside, 'secret.ts'), '// @feature docs/feature/absent/README.md');
+  symlinkSync(outside, join(root, 'src/.env'));
+  symlinkSync(join(container, 'absent'), join(root, 'src/.env.local'));
+  writeFileSync(join(root, 'src/.env.production'), 'secret');
+  mkdirSync(join(root, 'src/.env.example'));
+  symlinkSync(outside, join(root, 'src/.env.example/link'));
+  writeFileSync(join(root, 'src/.environment.ts'), 'valid source');
+  mkdirSync(join(root, 'src/dist'));
+  writeFileSync(join(root, 'src/dist/generated.ts'), 'generated source');
+  const repo = reader(t, root);
+  const expected = ['src/.environment.ts', 'src/a.ts', 'src/b.ts'];
+  assert.deepEqual(repo.files('src/dist', 'source'), ['src/dist/generated.ts']);
+  repo.snapshot(() => {
+    assert.deepEqual(repo.files('src', 'source'), expected);
+    rmSync(join(root, 'src/.env'));
+    writeFileSync(join(root, 'src/.env'), 'changed excluded type');
+    writeFileSync(join(root, 'src/.env.production'), 'changed excluded bytes');
+    symlinkSync(outside, join(root, 'src/.env.new'));
+  });
+  assert.throws(() => repo.files('src'), { code: 'UnsafePath' });
+  assert.throws(() => repo.read('src/.env.local'), { code: 'UnsafePath' });
+  assert.throws(() => repo.files('src/.env.local', 'source'), { code: 'UnsafePath' });
+  assert.throws(() => repo.snapshot(() => {
+    repo.files('src', 'source');
+    symlinkSync(outside, join(root, 'src/linked.ts'));
+  }), { code: 'UnsafePath' });
+  rmSync(join(root, 'src/linked.ts'));
+  assert.throws(() => repo.snapshot(() => {
+    repo.files('src', 'source');
+    writeFileSync(join(root, 'src/new.ts'), 'new source');
+  }), { code: 'PreimageChanged' });
+
+  mkdirSync(join(root, 'mixed'));
+  writeFileSync(join(root, 'mixed/.env'), 'before');
+  for (const scopes of [[undefined, 'source'], ['source', undefined]] as const) {
+    assert.throws(() => repo.snapshot(() => {
+      for (const scope of scopes) repo.files('mixed', scope);
+      fs.appendFileSync(join(root, 'mixed/.env'), 'after');
+    }), { code: 'PreimageChanged' });
+  }
+})));
+
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('standalone repository reads reject symlinks and retain canonical and regular-file guards', t => Effect.runSync(Effect.sync(() => {
   const { container, root } = fixture(t);

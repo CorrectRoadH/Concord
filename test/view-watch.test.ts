@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -75,6 +75,11 @@ const waitForSource = (root: string, path: string, source: string) => waitForPub
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('View publishes external same-length edits and atomic saves without any requests', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* fixture();
+  yield* Effect.sync(() => {
+    symlinkSync(join(root, 'absent-secret'), join(root, 'src/.env'));
+    mkdirSync(join(root, 'src/.env.local'));
+    symlinkSync(root, join(root, 'src/.env.local/cycle'));
+  });
   yield* startServer(root);
   const initial = yield* waitForSource(root, 'src/main.ts', mainSource);
   const editedOwner = yield* Effect.sync(() => {

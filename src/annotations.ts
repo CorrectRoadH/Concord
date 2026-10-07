@@ -115,7 +115,7 @@ function parseSource(input: Source): Parsed {
 }
 
 function sources(repo: Repository): Source[] {
-  const paths = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root)))].sort();
+  const paths = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].sort();
   const selected: Source[] = [];
   for (const path of paths) {
     const absolute = repo.absolute(path);

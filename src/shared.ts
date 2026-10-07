@@ -83,7 +83,7 @@ export interface Repository {
   readonly configSnapshot: ConfigSnapshot;
   snapshot?<A>(read: () => A): A;
   read(path: string): string | undefined;
-  files(prefix: string): string[];
+  files(prefix: string, scope?: 'source'): string[];
   absolute(path: string): string;
   publish(operation: string, changes: readonly Change[], dryRun?: boolean): MutationReceipt;
 }

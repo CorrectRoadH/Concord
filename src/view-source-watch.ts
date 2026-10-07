@@ -6,6 +6,7 @@ import { isAbsolute, join, normalize, relative, sep } from 'node:path';
 import { Effect } from 'effect';
 import { assertLeasePath } from './file-lease.js';
 import { ConcordError, type ProjectConfig } from './shared.js';
+import { excludedSourceEntry } from './source-discovery.js';
 
 interface WatchedDirectory { readonly handle: FSWatcher; readonly identity: string }
 const ignored = new Set(['.git', 'node_modules']);
@@ -16,6 +17,8 @@ const unavailable = (cause: unknown): ConcordError => new ConcordError('Workspac
 export class ViewSourceWatch {
   private readonly directories = new Map<string, WatchedDirectory>();
   private scopes: readonly string[] = [];
+  private sourceScopes: readonly string[] = [];
+  private strictScopes: readonly string[] = [];
   private stopped = false;
   private failure: ConcordError | undefined;
 
@@ -29,9 +32,21 @@ export class ViewSourceWatch {
     return this.scopes.some(scope => scope === '' || path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`));
   }
 
+  private excluded(path: string): boolean {
+    const parts = path.split(sep);
+    if (parts.some(part => ignored.has(part))) return true;
+    const sources = this.sourceScopes.filter(scope => path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`));
+    return sources.length > 0
+      && sources.every(scope => path.startsWith(`${scope}${sep}`) && path.slice(scope.length + 1).split(sep).some(excludedSourceEntry))
+      && !this.strictScopes.some(scope => path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`));
+  }
+
   private async update(project: ProjectConfig | null, sources: readonly { readonly path: string }[]): Promise<boolean> {
     if (this.stopped) return false;
     this.failure = undefined;
+    this.sourceScopes = [...(project?.sourceRoots ?? []), ...(project?.testRoots ?? [])].map(path => normalize(path));
+    this.strictScopes = ['concord.config.ts', 'docs', ...(project?.runner.sourceFiles ?? []),
+      ...(project?.memorySources?.map(source => source.path) ?? ['memory']), ...sources.map(source => source.path)].map(path => normalize(path));
     const scopes = ['concord.config.ts', 'docs', ...(project?.sourceRoots ?? []), ...(project?.testRoots ?? []),
       ...(project?.runner.sourceFiles ?? []), ...(project?.memorySources?.map(source => source.path) ?? ['memory']), ...sources.map(source => source.path)];
     this.scopes = [...new Set(scopes.map(path => {
@@ -47,7 +62,7 @@ export class ViewSourceWatch {
     const visit = async (path: string): Promise<void> => {
       if (this.stopped || desired.has(path)) return;
       const rel = relative(this.root, path);
-      if (rel && (!this.relevant(rel) || rel.split(sep).some(part => ignored.has(part)))) return;
+      if (rel && (!this.relevant(rel) || this.excluded(rel))) return;
       // Never descend through a symbolic link, including a replaced ancestor.
       assertLeasePath(path);
       const stat = await lstat(path).catch((cause: NodeJS.ErrnoException) => {
@@ -67,7 +82,7 @@ export class ViewSourceWatch {
           if (this.stopped) return;
           if (filename === null) { this.changed(); return; }
           const eventPath = relative(this.root, join(path, filename.toString()));
-          if (!eventPath.split(sep).some(part => ignored.has(part)) && this.relevant(eventPath)) this.changed();
+          if (!this.excluded(eventPath) && this.relevant(eventPath)) this.changed();
         });
         handle.on('error', cause => {
           handle.close();
