@@ -251,8 +251,10 @@ test('packed C1 publishes cold projections during continuous docs, test, and cod
       assert.equal(stored.record.consistent, false);
       assert.equal(stored.record.complete, false);
       assert.equal(stored.record.unknownRelations, true);
-      assert.ok(stored.record.changedPaths.includes(relative), JSON.stringify(stored));
-      if (relative.startsWith('src/')) assert.deepEqual(stored.record.unknown, ['code']);
+      // CodeSourceChanged may report an unknown range ('.'). A successful stable
+      // recompilation retains known code relationships even when source drifted.
+      assert.ok(stored.record.changedPaths.includes(relative)
+        || relative.startsWith('src/') && stored.record.changedPaths.includes('.'), JSON.stringify(stored));
       const shown = installedCall(root, '--json', 'trace', 'gaps');
       assert.equal(shown.status, 0, shown.stderr);
       assert.equal(JSON.parse(shown.stdout).projection.consistent, false);

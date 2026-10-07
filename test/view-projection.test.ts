@@ -316,12 +316,19 @@ test('a completed workspace scan survives brief contention at publication', asyn
   let database: ReturnType<typeof openHawdb> | undefined;
   let release: ReturnType<typeof setTimeout> | undefined;
   let scans = 0;
+  let resumeReconciliation!: () => void;
+  const reconciliation = new Promise<void>(resolve => { resumeReconciliation = resolve; });
   // 扫描仍走真实子进程；只在它交付候选时放入真实锁竞争，避免靠扫描耗时碰运气。
   t.mock.method(ViewScanManager.prototype, 'scan', async function(this: ViewScanManager, signal?: AbortSignal) {
+    // Watch setup legitimately requests another scan. Hold that independent scan
+    // so the assertion proves the first candidate itself survives contention.
+    if (scans > 0) await reconciliation;
     const reply = await scan.call(this, signal);
     scans += 1;
-    database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: true });
-    release = setTimeout(() => database?.close(), 100);
+    if (scans === 1) {
+      database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: true });
+      release = setTimeout(() => database?.close(), 100);
+    }
     return reply;
   });
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
@@ -333,6 +340,7 @@ test('a completed workspace scan survives brief contention at publication', asyn
   } finally {
     clearTimeout(release);
     database?.close();
+    resumeReconciliation();
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
