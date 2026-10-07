@@ -12,7 +12,7 @@ import { initialize, LocalRepository } from '../dist/storage.js';
 import { readProjectConfig, writeProjectConfig } from './support.js';
 
 const inline = `let label: import('p5').default.Element;
-p.setup = () => { p.createCanvas(240, 100); label = p.createSpan('0'); label.id('ticks'); p.createButton('重新绘制').class('restart').mousePressed(() => p.redraw()); p.createButton('关闭循环').mousePressed(() => p.noLoop()); };
+p.setup = () => { p.createCanvas(240, 100); label = p.createSpan('0'); label.id('ticks').style('display', 'inline-block').style('width', '5ch'); p.createButton('重新绘制').class('restart').mousePressed(() => p.redraw()); p.createButton('关闭循环').mousePressed(() => p.noLoop()); };
 p.draw = () => { p.background(255, 0, 0); label.html(String(p.frameCount)); };`;
 const external = `import image from './pixel.svg';
 export default function(p) {
