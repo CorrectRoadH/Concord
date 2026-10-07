@@ -76,6 +76,9 @@ const waitForSource = (root: string, path: string, source: string) => waitForPub
 test('View publishes external same-length edits and atomic saves without any requests', () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const root = yield* fixture();
   yield* Effect.sync(() => {
+    writeProjectConfig(root, { ...readProjectConfig(root), sourceIgnore: ['src/vendor'] });
+    mkdirSync(join(root, 'src/vendor'));
+    symlinkSync(root, join(root, 'src/vendor/cycle'));
     symlinkSync(join(root, 'absent-secret'), join(root, 'src/.env'));
     mkdirSync(join(root, 'src/.env.local'));
     symlinkSync(root, join(root, 'src/.env.local/cycle'));
@@ -129,6 +132,14 @@ test('View follows new nested directories, deletion and recreation, and changed 
   const laterSource = nestedSource.replace('1', '4');
   yield* Effect.sync(() => write(root, nestedPath, laterSource));
   yield* waitForSource(root, nestedPath, laterSource);
+
+  yield* Effect.sync(() => writeProjectConfig(root, { ...readProjectConfig(root), sourceIgnore: ['src/new'] }));
+  yield* waitForPublished(root, 'sourceIgnore removes existing sources', value => value.snapshot.project?.sourceIgnore?.includes('src/new') === true
+    && sourceDigest(value, nestedPath) === undefined);
+  yield* Effect.sync(() => writeProjectConfig(root, { ...readProjectConfig(root), sourceIgnore: [] }));
+  yield* waitForSource(root, nestedPath, laterSource);
+  yield* Effect.sync(() => write(root, nestedPath, editedSource));
+  yield* waitForSource(root, nestedPath, editedSource);
 
   const newPath = 'app/deep/current.ts';
   const newSource = 'export const current = 1;\n';

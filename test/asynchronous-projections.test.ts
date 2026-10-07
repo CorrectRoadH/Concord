@@ -231,7 +231,11 @@ function refreshInstalled(root: string, query: readonly string[], limitMs?: numb
 test('packed CLI discovers real sources without reading environment files or following environment links', async () => {
   const root = packedConsumer(false);
   try {
+    writeProjectConfig(root, { ...readProjectConfig(root), sourceIgnore: ['src/vendor', 'test/vendor'] });
     for (const base of ['src', 'test']) {
+      mkdirSync(join(root, base, 'vendor'));
+      writeFileSync(join(root, base, 'vendor/invalid.ts'), '// @feature docs/feature/absent/README.md\n');
+      symlinkSync(root, join(root, base, 'vendor/cycle'));
       symlinkSync(join(root, 'missing-secret'), join(root, base, '.env'));
       writeFileSync(join(root, base, '.env.local'), '// @feature docs/feature/absent/README.md\n');
       mkdirSync(join(root, base, '.env.production'));

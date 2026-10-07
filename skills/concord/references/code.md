@@ -1,5 +1,7 @@
 # Code declarations
 
+
+源码与测试自动发现支持在 `concord.config.ts` 设置 `sourceIgnore: ['src/generated', 'tests/vendor']`。每项是仓库相对文件或目录（含子树），不支持 glob；显式来源根优先，文档、runner.sourceFiles 和直接读写仍严格校验。
 代码声明描述实现与 Feature / Use Case / Engineering 的关联。它既不是测试声明，也不是完成或覆盖证明。真实注释是唯一 owner；无需另写关系 JSON。
 
 先读取 `concord.config.ts`。`sourceRoots` 是可选的仓库相对路径数组，缺省 `[]`；仅扫描其中 JS/TS 文件，包括 `.js/.jsx/.ts/.tsx/.mjs/.cjs/.mts/.cts`。新项目可用 `concord init --source-root src`，该选项可重复并可与 `--docs-only` 组合。已有项目直接维护配置，不重复 init。`testRoots` 与 `sourceRoots` 可重叠，各标签属于自己的扫描器；`doctor` 提示缺失目录。

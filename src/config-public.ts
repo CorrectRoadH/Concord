@@ -24,6 +24,8 @@ export interface ProjectConfig {
   readonly projectId: string;
   readonly testRoots: readonly string[];
   readonly sourceRoots?: readonly string[];
+  /** Repository-relative files or directory subtrees excluded from automatic code/test discovery; no globs. */
+  readonly sourceIgnore?: readonly string[];
   readonly p5?: { readonly libraries: readonly string[] };
   readonly runner: Runner;
   readonly docsWork?: {

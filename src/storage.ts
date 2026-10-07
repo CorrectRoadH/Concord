@@ -25,7 +25,7 @@ import { defaultWritingSource } from './writing-defaults.js';
 import { readWritingPolicy } from './writing-policy.js';
 import { analyzeCatalogs, catalogDependencies, catalogSources, readConceptCatalog, splitReference } from './concepts.js';
 import { catalogName, policyName, scopeOf } from './writing-scopes.js';
-import { excludedSourceEntry } from './source-discovery.js';
+import { excludedSourcePath } from './source-discovery.js';
 
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
@@ -601,8 +601,8 @@ export class LocalRepository implements Repository {
         (this.verifyListings ?? this.listings).set(directory, members);
         for (const child of members.map(entry => entry.toString('utf8')).sort()) {
           if (child === '.git' || child === 'node_modules') continue;
-          if (scope === 'source' && excludedSourceEntry(child)) continue;
           const childName = `${name}/${child}`;
+          if (scope === 'source' && excludedSourcePath(childName, prefix, this.config.sourceIgnore ?? [])) continue;
           const { stat: childStat } = this.readablePath(childName);
           if (childStat === undefined) {
             if (this.verifyListings !== undefined) throw new ObservationChanged(childName);

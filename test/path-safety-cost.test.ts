@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join, sep } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { Effect } from 'effect';
+import { readProjectConfig, writeProjectConfig } from './support.js';
 import { LocalRepository, initialize, readRepositoryFileSync } from '../dist/storage.js';
 
 function fixture(t: TestContext): { container: string; parent: string; root: string } {
@@ -95,6 +96,37 @@ test('source discovery excludes environment entries before path checks and keeps
       fs.appendFileSync(join(root, 'mixed/.env'), 'after');
     }), { code: 'PreimageChanged' });
   }
+})));
+
+// @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
+test('configured discovery exclusions preserve explicit reads, root overrides and snapshot scope', t => Effect.runSync(Effect.sync(() => {
+  const { root, container } = fixture(t);
+  const config = readProjectConfig(root);
+  for (const path of ['', '/src', '../src', 'src/../a', 'src//a', 'src/', 'src/*', 'src/!a', 'C:/src', 'src\\a']) {
+    assert.throws(() => writeProjectConfig(root, { ...config, sourceIgnore: [path] }));
+  }
+  writeProjectConfig(root, { ...config, sourceIgnore: ['src/ignored', 'src/file.ts', 'src/generated'] });
+  symlinkSync(join(container, 'absent'), join(root, 'src/ignored'));
+  writeFileSync(join(root, 'src/file.ts'), 'excluded');
+  mkdirSync(join(root, 'src/generated'));
+  writeFileSync(join(root, 'src/generated/a.ts'), 'explicit root');
+  writeFileSync(join(root, 'src/file.tsx'), 'prefix sibling');
+  const repo = reader(t, root);
+  repo.snapshot(() => {
+    assert.deepEqual(repo.files('src', 'source'), ['src/a.ts', 'src/b.ts', 'src/file.tsx']);
+    writeFileSync(join(root, 'src/file.ts'), 'changed ignored bytes');
+    writeFileSync(join(root, 'src/generated/new.ts'), 'new ignored file');
+  });
+  assert.deepEqual(repo.files('src/generated', 'source'), ['src/generated/a.ts', 'src/generated/new.ts']);
+  assert.equal(repo.read('src/file.ts'), 'changed ignored bytes');
+  assert.throws(() => repo.read('src/ignored'), { code: 'UnsafePath' });
+  assert.throws(() => repo.files('src'), { code: 'UnsafePath' });
+  assert.throws(() => repo.snapshot(() => {
+    repo.files('src', 'source');
+    writeProjectConfig(root, config);
+  }), { code: 'PreimageChanged' });
+  const unfiltered = reader(t, root);
+  assert.throws(() => unfiltered.files('src', 'source'), { code: 'UnsafePath' });
 })));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md

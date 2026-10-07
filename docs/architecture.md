@@ -209,6 +209,8 @@ Memory 其他关闭理由需要非空说明。reopen 追加历史并移除 curre
 
 Code Declaration 是维护者对实现与契约关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或 Problem fixed 证据。查询引用由[自动派生方案](design/derived-code-reference/README.md)定义。
 
+`sourceIgnore` 按[发现契约](feature/local-sdlc/use-case/discover-annotated-tests.md)缩小源码与测试自动发现范围；配置参与快照身份，扫描、复核与监听共用同一匹配规则。
+
 `sourceRoots` 是可选路径数组，默认为 `[]`，沿用安全路径验证。只扫描显式根内的 JS/TS，允许与 testRoots 重叠。代码声明解析按文件缓存在 HawDB 中，键包含 worktree、解析器身份、路径和字节摘要；命中仍严格解码，摘要不符、损坏或写失败时回源。
 
 当前事实门禁的归属、关系和 fixed 判断从当前来源计算。诊断展示可缓存带构建时间的历史关系与缺口，不授权当前裁决。扫描核对前后文件集合及摘要。未改动的配置解析可命中同一库，使后续命令不加载 TypeScript 编译器。

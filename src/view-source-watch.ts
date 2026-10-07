@@ -6,7 +6,7 @@ import { isAbsolute, join, normalize, relative, sep } from 'node:path';
 import { Effect } from 'effect';
 import { assertLeasePath } from './file-lease.js';
 import { ConcordError, type ProjectConfig } from './shared.js';
-import { excludedSourceEntry } from './source-discovery.js';
+import { excludedSourcePath } from './source-discovery.js';
 
 interface WatchedDirectory { readonly handle: FSWatcher; readonly identity: string }
 const ignored = new Set(['.git', 'node_modules']);
@@ -19,6 +19,7 @@ export class ViewSourceWatch {
   private scopes: readonly string[] = [];
   private sourceScopes: readonly string[] = [];
   private strictScopes: readonly string[] = [];
+  private sourceIgnore: readonly string[] = [];
   private stopped = false;
   private failure: ConcordError | undefined;
 
@@ -37,13 +38,14 @@ export class ViewSourceWatch {
     if (parts.some(part => ignored.has(part))) return true;
     const sources = this.sourceScopes.filter(scope => path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`));
     return sources.length > 0
-      && sources.every(scope => path.startsWith(`${scope}${sep}`) && path.slice(scope.length + 1).split(sep).some(excludedSourceEntry))
+      && sources.every(scope => excludedSourcePath(path.split(sep).join('/'), scope.split(sep).join('/'), this.sourceIgnore))
       && !this.strictScopes.some(scope => path === scope || path.startsWith(`${scope}${sep}`) || scope.startsWith(`${path}${sep}`));
   }
 
   private async update(project: ProjectConfig | null, sources: readonly { readonly path: string }[]): Promise<boolean> {
     if (this.stopped) return false;
     this.failure = undefined;
+    this.sourceIgnore = project?.sourceIgnore ?? [];
     this.sourceScopes = [...(project?.sourceRoots ?? []), ...(project?.testRoots ?? [])].map(path => normalize(path));
     this.strictScopes = ['concord.config.ts', 'docs', ...(project?.runner.sourceFiles ?? []),
       ...(project?.memorySources?.map(source => source.path) ?? ['memory']), ...sources.map(source => source.path)].map(path => normalize(path));
