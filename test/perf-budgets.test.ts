@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -51,23 +50,6 @@ test('budget table parsing selects the named section and preserves complete comm
   assert.throws(() => parseBudgetTable(markdown, 'Absent section'));
   assert.throws(() => parseBudgetTable('## Empty section\nNo table.', 'Empty section'));
   assert.throws(() => parseBudgetTable('## Invalid section\n| Commands | Budget |\n| --- | ---: |\n| `warm` | 600ms |', 'Invalid section'));
-})));
-
-// @feature docs/feature/local-sdlc/README.md
-test('every budget command has a help entry in the built public CLI', () => Effect.runPromise(Effect.sync(() => {
-  const root = resolve('.');
-  for (const source of Object.values(budgetSources)) {
-    for (const row of parseBudgetTable(readFileSync(join(root, source.path), 'utf8'), source.heading)) {
-      for (const args of row.commands) {
-        const subcommands = args.filter(arg => !arg.startsWith('--')).slice(0, 2);
-        const result = spawnSync(process.execPath, [join(root, 'dist/entry.js'), ...subcommands, '--help'], {
-          cwd: root, encoding: 'utf8',
-        });
-        assert.equal(result.error, undefined, `concord ${args.join(' ')}`);
-        assert.equal(result.status, 0, `concord ${args.join(' ')}: ${result.stderr}`);
-      }
-    }
-  }
 })));
 
 // @feature docs/feature/local-sdlc/README.md

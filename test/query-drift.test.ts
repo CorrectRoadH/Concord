@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -127,7 +128,7 @@ test('every failure table row retains its meaning, including identity change bef
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('owner and remote bodies are stripped and restored only after safe matching reads', () => Effect.runPromise(Effect.sync(() => {
-  const root = mkdtempSync('/private/tmp/concord-query-bodies-');
+  const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-query-bodies-')));
   const source = renderDocument({ format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample', createdAt: '2026-10-06T00:00:00.000Z' }, '# PRIVATE_OWNER_BODY\n');
   const path = 'sample.md';
   writeFileSync(join(root, path), source);
@@ -169,7 +170,7 @@ test('owner and remote bodies are stripped and restored only after safe matching
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('real code scanner distinguishes unstable recompilation from stable deletion of every file', () => Effect.runPromise(Effect.sync(() => {
   for (const unstable of [false, true]) {
-    const root = mkdtempSync('/private/tmp/concord-code-unknown-');
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-code-unknown-')));
     execFileSync('git', ['init', '-q', root]);
     const initial = new LocalRepository(root, { initialize: true });
     try { initialize(initial, false, { sourceRoots: ['src'], testRoots: [] }); } finally { initial.close(); }

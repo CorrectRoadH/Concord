@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getWorkspaceSnapshot } from '../dist/application.js';
+import { getViewFile, getWorkspaceSnapshot } from '../dist/application.js';
 import { cacheStatus, scanAnnotations, clearCache } from '../dist/annotations.js';
 import { checkDocuments, closeIssue, createDocument, linkFeedbackFeature, loadDocuments, renderDocument, setAuthor, setDocumentMetadata } from '../dist/documents.js';
 import { mergeFeedbackCache, readFeedbackCache } from '../dist/feedback-cache.js';
@@ -63,6 +63,37 @@ function open<A>(root: string, use: (repo: LocalRepository) => A): A {
 function errorCode(error: unknown, code: string): boolean {
   return error instanceof ConcordError && error.code === code;
 }
+
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
+test('directed feedback reads recover from a brief cache writer and keep source bodies when it stays busy', async () => {
+  const root = fixture();
+  const remote: RemoteFeedback = { provider: 'github', instance: 'https://api.github.com', id: '9001', url: 'https://github.com/acme/project/issues/7', title: 'Remote report', body: 'Cached remote body', state: 'open', updatedAt: '2026-09-14T00:00:00Z' };
+  const path = 'docs/issues/remote.md';
+  let writer: ReturnType<typeof openHawdb> | undefined;
+  try {
+    open(root, repo => {
+      createDocument(repo, 'issue', { id: 'remote', title: 'Local', body: 'Local notes' });
+      const document = loadDocuments(repo).find(item => item.path === path)!;
+      assert.ok(document.metadata.kind === 'issue');
+      writeFileSync(join(root, path), renderDocument({ ...document.metadata, source: { ...remote, body: 'First source body', connectionId: 'github-main', importedAt: remote.updatedAt } }, document.body));
+      mergeFeedbackCache(repo, 'github-main', [remote]);
+    });
+    const cache = join(root, '.git/concord/cache.hawdb');
+    writer = openHawdb(cache, { readOnly: false, create: false });
+    const reading = Effect.runPromise(getViewFile(root, path));
+    await Effect.runPromise(Effect.sleep('50 millis'));
+    writer.close(); writer = undefined;
+    const readable = await reading;
+    assert.equal(readable.feedback?.remote?.body, 'Cached remote body');
+
+    writer = openHawdb(cache, { readOnly: false, create: false });
+    const unavailable = await Effect.runPromise(getViewFile(root, path));
+    assert.equal(unavailable.feedback?.remote, null);
+    assert.equal(unavailable.feedback?.document.metadata.source?.body, 'First source body');
+    assert.equal(unavailable.feedback?.document.body, 'Local notes\n');
+    assert.ok(unavailable.feedback?.warnings.some(warning => warning.includes('Feedback cache unavailable')));
+  } finally { writer?.close(); rmSync(root, { recursive: true, force: true }); }
+});
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('feedback workspace stays tolerant and readonly when its cache table or unrelated owners are unavailable', async () => {

@@ -35,6 +35,8 @@ import {
   supersedeMemory,
 } from './documents.js';
 import { checkFeedbackConnection, listFeedback, syncFeedback } from './feedback.js';
+import { readFeedbackCache } from './feedback-cache.js';
+import { HawdbFailure } from './hawdb-native.js';
 import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from './knowledge.js';
 import {
   inspectDocuments,
@@ -317,11 +319,21 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
     return { path, body: config.source, digest: config.configDigest! };
   }
   return yield* withRepository(validatedRoot, (repo) => Effect.gen(function*() {
-    const ordinary = yield* snapshotSync(repo, timing, 'view.readFile', () => repo.snapshot(() => {
+    const cacheDeadline = performance.now() + 500;
+    const readOrdinary = snapshotSync(repo, timing, 'view.readFile', () => repo.snapshot(() => {
       const listed = inspectDocumentFile(repo, path);
-      if (listed !== undefined) return listed.document?.metadata.kind === 'issue'
-        ? { ...listed, feedback: listFeedback(repo, [listed.document])[0] }
-        : listed;
+      if (listed !== undefined) {
+        if (listed.document?.metadata.kind !== 'issue') return listed;
+        // Keep the successful read handle in this snapshot. A brief projection
+        // writer must not permanently turn an existing remote cache into absence.
+        try { if (listed.document.metadata.source !== undefined) readFeedbackCache(repo); }
+        catch (cause) {
+          if (cause instanceof HawdbFailure && cause.code === 'HawdbBusy' && performance.now() < cacheDeadline) throw new ConcordError('HawdbBusy', cause.message);
+          // Persistent or damaged caches remain optional; listFeedback reports
+          // their warning and still returns the local and first-import bodies.
+        }
+        return { ...listed, feedback: listFeedback(repo, [listed.document])[0] };
+      }
       if (isSourcePath(repo, path)) {
         let source: ReturnType<typeof readSource>;
         try { source = readSource(repo, path); }
@@ -336,6 +348,14 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
       }
       return undefined;
     }));
+    let read = yield* Effect.result(readOrdinary);
+    while (Result.isFailure(read) && read.failure.code === 'HawdbBusy') {
+      // snapshotSync releases its handle and observation scope before yielding.
+      yield* Effect.sleep('10 millis');
+      read = yield* Effect.result(readOrdinary);
+    }
+    if (Result.isFailure(read)) return yield* Effect.fail(read.failure);
+    const ordinary = read.success;
     if (ordinary !== undefined) return ordinary;
 
     const projected = yield* Effect.result(readRepositoryTestView(validatedRoot));

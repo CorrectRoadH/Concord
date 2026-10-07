@@ -122,8 +122,6 @@ test('feedback browser separates remote observations from local editing and prot
     await expect.poll(()=>readFileSync(join(root,'docs/issues/remote-observation.md'),'utf8')).toContain('Saved before opening sources.');
     await expect(page.getByText('Original remote body',{exact:true})).toBeVisible();
     // Both snapshots remain independently accessible; the current observation must not replace author prose.
-    const cachedTab=page.getByRole('tab').filter({hasText:/缓存|最近|远端观察/});
-    if(await cachedTab.count()) await cachedTab.first().click();
     await expect(page.getByText('Updated remote body',{exact:true})).toBeVisible();
     await expect(page.getByRole('tab',{name:'来源与关联',exact:true})).toHaveAttribute('data-state','active');
     await page.getByRole('tab',{name:'正文',exact:true}).click();

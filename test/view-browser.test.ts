@@ -423,12 +423,19 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     // The next conflict starts after the preceding save has committed its readback baseline.
     await expect(page.locator('.editor-shell')).toHaveAttribute('data-dirty', 'false');
     await page.unroute('**/api/action');
-    await editor.fill('Unsaved browser draft.');
     const disk=readFileSync(path,'utf8').replace('Browser edited paragraph.','External editor wins.');
-    writeFileSync(path,disk);
+    // Write after the save request is sent, before the real server checks its CAS.
+    // The external editor is the boundary; the actual conflict detection still runs.
+    await page.route('**/api/action', async route => {
+      const action = route.request().postDataJSON() as { action?: string; path?: string };
+      if (action.action === 'document.set' && action.path === 'docs/feature/browser-feature/README.md') writeFileSync(path,disk);
+      await route.continue();
+    });
+    await editor.fill('Unsaved browser draft.');
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByRole('dialog')).toContainText('Unsaved browser draft.');
     assert.equal(readFileSync(path,'utf8'),disk,'conflict must preserve the external edit');
+    await page.unroute('**/api/action');
     await page.getByRole('button',{name:'丢弃草稿并载入',exact:true}).click();
     await expect(page.getByRole('button',{name:'新建 Use Case',exact:true})).toHaveCount(0);
     await page.getByRole('tab',{name:'Use Cases',exact:true}).click();
