@@ -349,6 +349,9 @@ export class LocalRepository implements Repository {
       this.config = this.configSnapshot.config;
       this.validateConfiguredRoots(this.config);
       for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...this.config.runner.sourceFiles]) this.absolute(path);
+      for (const adapter of this.config.testAdapters ?? []) {
+        for (const path of [...adapter.include, ...adapter.inputRoots, ...adapter.implementationFiles, ...adapter.lockFiles]) this.absolute(path);
+      }
       this.validateMemorySources(this.config);
       if (recoveryJournal !== undefined) this.preflight(recoveryJournal, true);
       if (this.optimistic) this.verifySnapshot();

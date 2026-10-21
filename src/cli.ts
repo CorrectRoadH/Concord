@@ -26,6 +26,7 @@ import { listFeedback, syncFeedback } from './feedback.js';
 import { editKnowledge, knowledgeIndex, knowledgeRecall, knowledgeSearch, removeIssue } from './knowledge.js';
 import { FeedbackConnectionSchema } from './feedback-schema.js';
 import { setConfig, showConfig } from './editing.js';
+import { collectNativeTests, readNativeObservations } from './test-adapters.js';
 import { readEvidence, runCase, verifyFixedEvidence } from './evidence.js';
 import { OwnedProcessLive } from './owned-process.js';
 import { initialize, LocalRepository } from './storage.js';
@@ -345,14 +346,15 @@ const feedback = Command.make('feedback').pipe(Command.withDescription('Connect 
 ]));
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
   Command.make('annotate', { contract: text('contract'), regression: many('regression') }, args => withReadRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.regression)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
-  Command.make('list', {}, () => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache};}))),
-  Command.make('show', { id }, args => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);const selected=selectCase(t.annotations.cases,args.id);let codes: ReturnType<typeof scanCode>['codes']=[];try{codes=scanCode(repo,{cache:'off'}).codes;}catch{/* Optional observations do not block test inspection. */}return {operation:'test-show',case:selected,evidenceScope:'command',analysis:analysisView(repo,[selected],codes,t.documents)};}))),
-  Command.make('run', { id }, args => withRepo((repo,s) => Effect.gen(function*(){
+  Command.make('list', {}, () => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache,observations:readNativeObservations(repo)};}))),
+  Command.make('show', { id }, args => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);const selected=selectCase(t.annotations.cases,args.id);let codes: ReturnType<typeof scanCode>['codes']=[];try{codes=scanCode(repo,{cache:'off'}).codes;}catch{/* Optional observations do not block test inspection. */}return {operation:'test-show',case:selected,evidenceScope:'command',analysis:analysisView(repo,[selected],codes,t.documents),observations:readNativeObservations(repo)};}))),
+  Command.make('collect', { files: Argument.string('file').pipe(Argument.variadic()) }, args => withRepo((repo,s) => s.dryRun ? Effect.fail(new ConcordError('InvalidOption','test collect does not accept --dry-run')) : collectNativeTests(repo,args.files), { unlocked:true })),
+  Command.make('run', { id, requireNative: Flag.boolean('require-native').pipe(Flag.withDefault(false)) }, args => withRepo((repo,s) => Effect.gen(function*(){
     if(s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','test run does not accept --dry-run; use test show to inspect the declaration'));
     const t=yield* sync(()=>repo.snapshot(()=>buildTrace(repo,'off',{includeCode:false})));yield* sync(()=>requireValidTrace(t));
     const selected=yield* sync(()=>selectCase(t.annotations.cases,args.id));
-    const evidence=yield* runCase(repo,selected,t.documents);
-    if(evidence.commandOutcome!=='pass') yield* Effect.sync(()=>{process.exitCode=1;});
+    const evidence=yield* runCase(repo,selected,t.documents,{requireNative:args.requireNative});
+    if(evidence.commandOutcome!=='pass' && evidence.commandOutcome!=='green') yield* Effect.sync(()=>{process.exitCode=1;});
     return evidence;
   }), { unlocked: true })),
   Command.make('evidence', { id }, args => withReadRepo(repo => sync(()=>readEvidence(repo,args.id)))),
