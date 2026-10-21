@@ -17,6 +17,7 @@ import { observation } from '../dist/observation.js';
 import { LocalRepository } from '../dist/storage.js';
 import { withPersistentCache } from '../dist/cache-store.js';
 import { observeOwnedProcessGroup } from '../dist/owned-process.js';
+import { TraceShowValue, hydrateQueryValue } from '../dist/query-values.js';
 import { pollUntil, readProjectConfig, writeProjectConfig } from './support.js';
 
 const cli = resolve('dist/entry.js');
@@ -381,6 +382,15 @@ test('analyzed step references retain their level through code test and trace vi
       if (relevance.verdict === 'observed') assert.equal(relevance.level, 'step');
       assert.ok(relevance.gaps.includes('FileScope'));
       assert.ok(relevance.gaps.includes('OpenWorldCalls'));
+    }
+    const traced = call(root, ['trace', 'show', target], TraceShowValue);
+    assert.equal(traced.stepGroups[0]!.observation.result, 'observed');
+    assert.equal(traced.stepGroups[0]!.steps[0]!.relevance[0]!.relevance.verdict, 'observed');
+    const hydrated = hydrateQueryValue(root, traced).value;
+    assert.equal(hydrated.operation, 'trace-show');
+    if ('stepGroups' in hydrated) {
+      assert.equal(hydrated.stepGroups[0]!.observation.result, 'not-observed');
+      assert.deepEqual(hydrated.stepGroups[0]!.steps[0]!.relevance[0]!.relevance.gaps, ['SnapshotNotCurrent']);
     }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

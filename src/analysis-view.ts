@@ -9,10 +9,8 @@ import type { AnnotatedCase, DocumentRecord, Repository } from './shared.js';
 import type { CodeDeclaration } from './code.js';
 import { extractSteps } from './steps.js';
 
-export const AnalysisViewSchema = Schema.Struct({
-  observations: Schema.Array(AnalysisObservationSchema),
-  relevance: Schema.Array(Schema.Struct({ testId: Schema.String, scope: Schema.Literal('file'), relevance: RelevanceSchema, message: Schema.String })),
-});
+export const TestRelevanceSchema = Schema.Struct({ testId: Schema.String, scope: Schema.Literal('file'), relevance: RelevanceSchema, message: Schema.String });
+export const AnalysisViewSchema = Schema.Struct({ observations: Schema.Array(AnalysisObservationSchema), relevance: Schema.Array(TestRelevanceSchema) });
 export type AnalysisView = typeof AnalysisViewSchema.Type;
 
 /** Step owners can supply their already parsed refs after the step parser is integrated. */

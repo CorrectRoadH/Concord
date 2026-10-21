@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
-import { analysisView } from './analysis-view.js';
+import { analysisView, type AnalysisView } from './analysis-view.js';
 import { scanAnnotations } from './annotations.js';
 import { scanCode, type CodeDeclaration } from './code.js';
 import { checkDocuments, diagnoseDocuments, findDocument, type DocumentInventory } from './documents.js';
@@ -128,19 +128,28 @@ export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildT
     const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
     const codeIds = new Set(incoming.filter(e => e.from.startsWith('code:')).map(e => e.from.slice(5)));
     const codeDeclarations = trace.codeDeclarations.filter(c => codeIds.has(c.id)).map(c => ({ ...c, matchedContracts: c.contracts.filter(ref => belongsTo(references, trace, relatedPaths, ref)) }));
-    return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, stepGroups: trace.documents.filter(doc => doc.metadata.kind === 'use-case' && relatedPaths.has(doc.path)).map(doc => stepGroups(repo, trace, doc)), cache: trace.annotations.cache, analysis: analysisView(repo, trace.annotations.cases.filter(c => ids.has(c.id)), trace.codeDeclarations, trace.documents) };
+    const analysis = analysisView(repo, trace.annotations.cases.filter(c => ids.has(c.id)), trace.codeDeclarations, trace.documents);
+    return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, stepGroups: trace.documents.filter(doc => doc.metadata.kind === 'use-case' && relatedPaths.has(doc.path)).map(doc => stepGroups(repo, trace, doc, analysis)), cache: trace.annotations.cache, analysis };
 }
 
-export function stepGroups(repo: Repository, trace: ReturnType<typeof buildTrace>, document: DocumentRecord) {
+export function stepGroups(repo: Repository, trace: ReturnType<typeof buildTrace>, document: DocumentRecord, analysis: AnalysisView = analysisView(repo, trace.annotations.cases, trace.codeDeclarations, trace.documents)) {
   const extracted = extractSteps(document.path, repo.read(document.path)!);
-  const group = (ref: string) => ({ ref, tests: trace.annotations.cases.filter(item => item.status === 'active' && item.contract === ref), codeDeclarations: trace.codeDeclarations.filter(item => item.contracts.includes(ref)) });
+  const group = (ref: string) => {
+    const tests = trace.annotations.cases.filter(item => item.status === 'active' && item.contract === ref);
+    const ids = new Set(tests.map(test => test.id));
+    return { ref, tests, codeDeclarations: trace.codeDeclarations.filter(item => item.contracts.includes(ref)), relevance: analysis.relevance.filter(item => ids.has(item.testId)) };
+  };
   const steps = extracted.steps.map(step => {
     const relationships = group(`${document.path}#${step.id}`);
     return { ...step, ...relationships, testCount: relationships.tests.length, codeCount: relationships.codeDeclarations.length };
   });
   const ids = new Set(steps.map(step => step.ref));
   const other = [...new Set(trace.edges.map(edge => edge.to).filter(ref => ref.startsWith(`${document.path}#`) && !ids.has(ref)))];
-  return { path: document.path, steps, lists: extracted.lists, wholeUseCase: group(document.path), nonStepAnchors: other.map(group), unassociatedSteps: steps.filter(step => step.tests.length === 0 && step.codeDeclarations.length === 0).map(step => step.ref), observation: { result: 'not-observed', gaps: ['NoAnalyzer'] } };
+  const wholeUseCase = group(document.path), nonStepAnchors = other.map(group);
+  const relevance = [...steps, wholeUseCase, ...nonStepAnchors].flatMap(group => group.relevance);
+  const result = relevance.some(item => item.relevance.verdict === 'observed') ? 'observed' as const : 'not-observed' as const;
+  const gaps = [...new Set(relevance.flatMap(item => item.relevance.gaps))].sort();
+  return { path: document.path, steps, lists: extracted.lists, wholeUseCase, nonStepAnchors, unassociatedSteps: steps.filter(step => step.tests.length === 0 && step.codeDeclarations.length === 0).map(step => step.ref), observation: { result, gaps: relevance.length ? gaps : ['NoAnalyzer'] } };
 }
 
 type RelationshipKind = 'code' | 'test';
@@ -257,12 +266,14 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
     for (const c of codes) lines.push(`- **${c.symbol ?? `${c.file}:${c.line}–${c.endLine}`}** — [${c.file}:${c.line}–${c.endLine}](${c.file}#L${c.line}); ${c.scope}`, ...c.contracts.map(ref => `  - Implements: [${ref}](${ref})`));
     lines.push('', '## Test declarations', '');
     for (const c of cases) lines.push(`- **${c.id}** — [${c.file}:${c.line}](${c.file}#L${c.line}); ${c.status}${c.skipped ? ', skipped/todo' : ''}; contract: [${c.contract}](${c.contract})`, ...c.regressions.map(r => `  - Regression: [${r}](${r})`));
+    const analysis = analysisView(repo, cases, trace.codeDeclarations, trace.documents);
     for (const doc of trace.documents.filter(doc => doc.metadata.kind === 'use-case' && (!selector || selectedPaths.has(doc.path) || doc.metadata.kind === 'use-case' && selectedPaths.has(doc.metadata.feature)))) {
-      const groups = stepGroups(repo, trace, doc);
-      lines.push(`## Use Case steps: ${doc.path}`, '', 'Declarations are associations, not execution or coverage. Dependency intersection: not-observed (NoAnalyzer).', '');
+      const groups = stepGroups(repo, trace, doc, analysis);
+      lines.push(`## Use Case steps: ${doc.path}`, '', 'Declarations are associations, not execution or coverage. Dependency observations below describe this review snapshot.', '');
       for (const group of [...groups.steps, groups.wholeUseCase, ...groups.nonStepAnchors]) {
         const label = group.ref === doc.path ? 'Whole Use Case' : groups.nonStepAnchors.includes(group) ? 'Non-step anchor' : 'Step';
         lines.push(`### ${label}: ${group.ref}`, ...group.tests.map(item => `- Test: ${item.id} (${item.file}:${item.line})`), ...group.codeDeclarations.map(item => `- Code: ${item.id} (${item.file}:${item.line})`));
+        for (const item of group.relevance) lines.push(`- Dependency intersection for ${item.testId}: ${item.message}; scope=${item.scope}; gaps=${item.relevance.gaps.join(', ')}`);
         if (!group.tests.length && !group.codeDeclarations.length) lines.push('- No associated declarations.');
         lines.push('');
       }

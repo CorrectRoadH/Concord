@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-import { AnalysisViewSchema, historicalAnalysis } from './analysis-view.js';
+import { AnalysisViewSchema, TestRelevanceSchema, historicalAnalysis } from './analysis-view.js';
 import { Schema } from 'effect';
 import { AnnotatedCaseSchema, ConcordError, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ResearchSchema, RoadmapSchema, UseCaseSchema, digest } from './shared.js';
 import { FeedbackSourceSchema } from './feedback-schema.js';
@@ -20,12 +20,12 @@ const Edge = Schema.Struct({ from: Schema.String, to: Schema.String, relation: S
 const Relationship = Schema.Literals(['code', 'test']);
 const counts = Schema.Struct({ code: Schema.Number, test: Schema.Number });
 const RootOrderedList = Schema.Struct({ ordinal: Schema.Int, line: Schema.Int, endLine: Schema.Int, items: Schema.Int, marked: Schema.Int });
-const StepRelationships = Schema.Struct({ ref: Schema.String, tests: Schema.Array(AnnotatedCaseSchema), codeDeclarations: Schema.Array(CodeDeclarationSchema) });
+const StepRelationships = Schema.Struct({ ref: Schema.String, tests: Schema.Array(AnnotatedCaseSchema), codeDeclarations: Schema.Array(CodeDeclarationSchema), relevance: Schema.Array(TestRelevanceSchema) });
 const StepGroup = Schema.Struct({
   path: Schema.String,
   steps: Schema.Array(Schema.Struct({ id: Schema.String, ordinal: Schema.Int, line: Schema.Int, endLine: Schema.Int, listOrdinal: Schema.Int, ...StepRelationships.fields, testCount: Schema.Int, codeCount: Schema.Int })),
   lists: Schema.Array(RootOrderedList), wholeUseCase: StepRelationships, nonStepAnchors: Schema.Array(StepRelationships), unassociatedSteps: Schema.Array(Schema.String),
-  observation: Schema.Struct({ result: Schema.Literal('not-observed'), gaps: Schema.Array(Schema.Literal('NoAnalyzer')) }),
+  observation: Schema.Struct({ result: Schema.Literals(['observed', 'not-observed']), gaps: Schema.Array(Schema.String) }),
 });
 export const TraceGapsValue = Schema.Struct({
   operation: Schema.Literal('trace-gaps'), semantics: Schema.Literal('missing-explicit-relationships-not-coverage'), limitations: Schema.Array(Schema.String),
@@ -76,7 +76,12 @@ export function hydrateQueryValue(root: string, value: QueryValue, read = readQu
   const output = 'segments' in value ? { operation: 'cached-query', body: value.segments.map(segment => 'text' in segment ? segment.text : body(segment.constitution.path, segment.constitution.digest, true)?.body.trimEnd() ?? '(constitution changed since projection; use --fresh)').join('') }
     : value.operation === 'trace-show' ? (() => {
       const restored = body(value.subject.path, value.subject.digest, false);
-      return { ...value, ...(value.analysis === undefined ? {} : { analysis: historicalAnalysis(value.analysis) }), subject: restored === undefined ? value.subject : { path: value.subject.path, metadata: restored.metadata, body: restored.body, digest: value.subject.digest } };
+      const analysis = value.analysis === undefined ? undefined : historicalAnalysis(value.analysis);
+      const staleGroups = analysis === undefined || value.analysis?.observations.length === 0 ? value.stepGroups : value.stepGroups.map(group => {
+        const historical = <T extends typeof group.wholeUseCase>(item: T): T => ({ ...item, relevance: item.relevance.map(row => analysis.relevance.find(current => current.testId === row.testId) ?? row) });
+        return { ...group, steps: group.steps.map(historical), wholeUseCase: historical(group.wholeUseCase), nonStepAnchors: group.nonStepAnchors.map(historical), observation: { result: 'not-observed' as const, gaps: ['SnapshotNotCurrent'] } };
+      });
+      return { ...value, stepGroups: staleGroups, ...(analysis === undefined ? {} : { analysis }), subject: restored === undefined ? value.subject : { path: value.subject.path, metadata: restored.metadata, body: restored.body, digest: value.subject.digest } };
     })() : value;
   return { value: output, bodyChanged: [...new Set(bodyChanged)].sort(), bodyUnavailable };
 }
