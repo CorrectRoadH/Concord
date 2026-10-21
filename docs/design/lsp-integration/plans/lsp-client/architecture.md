@@ -52,7 +52,9 @@
 
 成员新增、删除、依赖文件、构建配置、server 脚本或原生绑定变化均使整个分析单元失效，不能只比对声明所在文件。显式 `sourceFiles` 只表示已声明输入，不证明真实依赖闭包。未核验的 ignored 文件、系统 SDK、外部环境和 server 私有索引记为 `UnverifiedEnvironment`。
 
-`current` 只表达仓库内输入的一致性：分析单元在仓库内的成员集合与字节、配置、`implementationFiles`、`sourceFiles` 与原生绑定在复核时与当前来源一致，即标 `current: true`。仓库外无法核验的系统 SDK、外部环境与 server 私有索引不进入 `current` 判定，而是加入 `UnverifiedEnvironment` gap，使 `complete: false`。仓库内任一输入变化或在分析期间漂移时标 `current: false`，只作历史展示，禁止当前符号定位与相关性裁决。`current: true` 的观察可以用于符号定位与 `observed` 判定，其 gaps 照常展示。固定可复现环境才比较重建后的观察；server 内部状态未知时不承诺清空缓存前后结果相同。
+`current` 只表达仓库内输入的一致性：分析单元在仓库内的成员集合与字节、配置、`implementationFiles`、`sourceFiles` 与原生绑定在复核时与当前来源一致，即标 `current: true`。仓库外无法核验的系统 SDK、外部环境与 server 私有索引不进入 `current` 判定，而是加入 `UnverifiedEnvironment` gap，使 `complete: false`。仓库内任一输入变化或在分析期间漂移时标 `current: false`，只作历史展示，禁止当前符号定位与相关性裁决。`current: true` 的观察可以用于符号定位与 `observed` 判定，其 gaps 照常展示。
+
+固定可复现环境才比较重建后的观察；server 内部状态未知时不承诺清空缓存前后结果相同。
 
 历史展示附输入摘要、server/profile、时间、`current`、`complete` 与 `gaps`。读取时验证分析单元当前身份；缺失、损坏或摘要不符只产生观察不可用状态。`check` 完全忽略观察；当前代码关系、测试关联与其完整性直接从源码重建。静态关系不会因分析失败或缓存清除而变成不完整。
 

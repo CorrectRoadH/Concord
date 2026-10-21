@@ -16,7 +16,11 @@ history: []
 
 在 master `3ab75f7`（干净 worktree，预编译原生产物）上，完整 `pnpm check` 与单独重跑都失败：
 
-- `browser preserves blocked recovery and labels incomplete workspace relations`：`getByText('InvalidData', { exact: true })` 在严格模式下匹配到 2 个 `<strong>InvalidData</strong>` 元素。
+- `browser preserves blocked recovery and labels incomplete workspace relations`：严格模式下 `getByText('InvalidData', { exact: true })` 匹配到 2 个元素。
 - `browser opens and refreshes a deep link without credentials and retries initial load failures`：`getByRole('alert')` 期望文本"工作区暂时不可用"，元素未出现。
 
-完整 `pnpm check` 中另外三项失败（`packed C1 publishes cold projections…`、`workbench compresses workspace data…`、`ordinary pages suppress drift…`）单独重跑通过，表现为并发或时序相关的不稳定。
+完整 `pnpm check` 中另有三项失败，单独重跑通过，表现为并发或时序相关的不稳定：
+
+- `packed C1 publishes cold projections…`
+- `workbench compresses workspace data…`
+- `ordinary pages suppress drift…`
