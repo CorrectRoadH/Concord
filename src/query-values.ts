@@ -26,10 +26,10 @@ export const TraceGapsValue = Schema.Struct({
   cache: Cache, codeCache: Schema.optional(Cache),
 });
 export const TraceShowValue = Schema.Struct({
-  analysis: Schema.optional(AnalysisViewSchema),
   operation: Schema.Literal('trace-show'), subject: Schema.Struct({ path: Schema.String, metadata: Metadata, digest: Schema.String }),
   relatedPaths: Schema.Array(Schema.String), incoming: Schema.Array(Edge), outgoing: Schema.Array(Edge), tests: Schema.Array(AnnotatedCaseSchema),
   codeDeclarations: Schema.Array(Schema.Struct({ ...CodeDeclarationSchema.fields, matchedContracts: Schema.Array(Schema.String) })), cache: Cache,
+  analysis: Schema.optional(AnalysisViewSchema),
 });
 export const ReviewRenderValue = Schema.Struct({ segments: Schema.Array(Schema.Union([
   Schema.Struct({ text: Schema.String }), Schema.Struct({ constitution: Schema.Struct({ path: Schema.String, digest: Schema.String }) }),
