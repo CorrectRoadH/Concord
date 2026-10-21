@@ -101,7 +101,9 @@ complete=false 必须有非空 gaps；complete=true 不保证调用行为完整�
 
 inputs 绑定项目/root 身份、测试/源码/配置成员集合及其字节、fixture、导入支持文件、构建配置、conftest、lockfile、框架和运行时版本、adapter 真正脚本及传递实现文件、选择能力、算法版本与选中组范围。`node adapter.js` 必须摘要 adapter.js，不能只摘要 node。输入根保守覆盖 sourceRoots/testRoots 与全部受管配置，记录纳入和排除项。
 
-依赖环境、系统库或外部服务不能完整冻结时 complete=false，并列 `ExternalInputUnknown`；这类清单不能授权 native 证明。sourceFiles 不是依赖闭包的证明；未声明或无法核验的实际输入使当前操作失败。
+仓库内输入与仓库外环境分开处理。仓库内输入（输入根下的成员集合与字节、受管配置、adapter 脚本与实现文件、`sourceFiles`）必须全部捕获并在结束后复核，任一变化使当前操作失败。系统库、工具链安装、外部服务与包缓存等仓库外环境不能冻结时，清单加入 `ExternalInputUnknown` gap，`complete` 为 false，并记录可读取的框架与运行时版本。
+
+带 `ExternalInputUnknown` 的清单可以授权 native 选择与原生收据，收据保留该 gap 与版本记录；它不能满足 [repository profile](../../../../repository-profile.md) 的原生可靠性等级。`sourceFiles` 不是依赖闭包的证明；provider 声明的 completeness 只覆盖它自己的收集范围。
 
 在任何 adapter 进程启动前取得与现有 runner 相同的 run lease/失效 epoch，捕获 config、definition、candidate、contract 身份和完整成员快照，关闭来源句柄及快照后再运行外部进程。run 所有权贯穿收集、选择、执行、报告与终结，短发布协调不跨外部调用。
 
