@@ -27,3 +27,11 @@ feature: docs/feature/local-sdlc/README.md
 - 步骤视图与“无关联”列表不产生 finding，不证明执行或覆盖率。
 - `format` 与 `rename-step` 的分配、选择、改写范围与发布恢复规则见[采用设计](../../../design/test-journey-steps/plans/step-anchor/architecture.md#书写与维护工具)。
 - 验收场景见 [CASES](../../../design/test-journey-steps/CASES.md)，以构建打包后的 CLI 在隔离 Git 消费者中验证。
+
+## 步骤分组输出
+
+`trace show --json` 的 `stepGroups` 按 Use Case 分组，包含 `steps`、`wholeUseCase`、`nonStepAnchors` 与 `unassociatedSteps`。每个关联组的 `relevance` 按 `testId` 返回当前观察的 `scope`、判定和缺口；步骤同时保留声明数量。
+
+组级 `observation.result` 在任一测试观察到交集时为 `observed`，否则为 `not-observed`；`gaps` 合并各测试的限制。没有可用分析时返回 `NoAnalyzer`。组级结果不表示所有步骤或测试均已观察到交集，也不证明执行或覆盖。
+
+历史投影中的相关性不授权当前输入。读取历史投影时，已有观察降为非当前，相关性返回 `not-observed` 与 `SnapshotNotCurrent`；当前结果需通过 fresh 读取复核输入。

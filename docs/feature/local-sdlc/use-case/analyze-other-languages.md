@@ -43,3 +43,9 @@ JS/TS 依赖观察跟随已捕获范围内的静态 import 与 re-export。动�
 只有显式 `code analyze` 执行受信 server。分析器拒绝编辑和执行请求，进程组清理不能代替文件或网络沙箱。server 自行改写输入时返回 `AnalysisSourceChanged`；超时、取消或清理不确定时不发布新观察。
 
 `current` 表达仓库内输入一致性；复核通过的 LSP 观察为 `current: true`，可用于符号定位与相关性判定。仓库外 SDK、外部环境与私有索引无法核验时保留 `UnverifiedEnvironment`，`complete` 为 false。仓库内输入变化后，旧观察只作历史展示。
+
+## 原生测试范围
+
+分析可读取已收集且当前的原生 manifest，不触发收集器。绑定得到的全部原生用例都提供范围时，LSP 从这些范围内的可调用符号开始分析。`analysis.relevance[].scope` 此时为 `native-case`；缺失、陈旧、歧义或无范围时保守使用 `file`，并保留具名缺口。
+
+原生范围不由选择器或测试名字猜测。分析身份包含 manifest 内容摘要、输入摘要、版本、绑定及选择范围；任一变化使旧观察失效。`ExternalInputUnknown` 保留在结果中，不阻止当前仓库范围的使用，也不证明原生可靠性。内置 TypeScript import 分析保持文件级范围。
