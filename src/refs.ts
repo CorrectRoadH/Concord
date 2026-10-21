@@ -5,6 +5,8 @@ import { resolveDesignPlanPath } from './document-layout.js';
 import { posix } from 'node:path';
 import { ConcordError, type DocumentKind, type DocumentRecord, type Finding, type Repository } from './shared.js';
 import { decodeDocumentSource } from './document-codec.js';
+import { extractSteps, markdownAnchor } from './steps.js';
+export { markdownAnchor } from './steps.js';
 
 export interface ParsedReference {
   readonly path: string;
@@ -27,15 +29,6 @@ export function parseReference(input: string): ParsedReference {
     throw new ConcordError('InvalidReference', `Expected a canonical Markdown anchor: ${input}`);
   }
   return anchor === undefined ? { path, ref: input } : { path, anchor, ref: input };
-}
-
-export function markdownAnchor(line: string): string | undefined {
-  const heading = /^#{1,6}\s+(.+?)\s*#*\s*$/u.exec(line)?.[1];
-  if (heading === undefined) return undefined;
-  const explicit = /\s+\{#([A-Za-z][A-Za-z0-9_.:-]*)\}\s*$/u.exec(heading)?.[1];
-  if (explicit !== undefined) return explicit;
-  if (heading.includes('{#')) return undefined;
-  return heading.toLocaleLowerCase().replace(/[^\p{Letter}\p{Number}\s-]/gu, '').replace(/\s/gu, '-');
 }
 
 function hasAnchor(source: string, expected: string): boolean {
@@ -100,7 +93,7 @@ export function resolveReference(
   if (allowedKinds !== undefined && !allowedKinds.includes(owner.metadata.kind)) {
     throw new ConcordError('InvalidReferenceTarget', `${input} resolves to ${owner.metadata.kind}; expected ${allowedKinds.join(', ')}`);
   }
-  if (parsed.anchor !== undefined && (source === undefined || !hasAnchor(source, parsed.anchor))) {
+  if (parsed.anchor !== undefined && (source === undefined || (!hasAnchor(source, parsed.anchor) && !(owner.metadata.kind === 'use-case' && owner.path === parsed.path && extractSteps(parsed.path, source).steps.some(step => step.id === parsed.anchor))))) {
     throw new ConcordError('AnchorNotFound', `Anchor ${parsed.anchor} does not exist in ${parsed.path}`);
   }
   return owner;

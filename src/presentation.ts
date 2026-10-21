@@ -112,6 +112,8 @@ export function humanOutput(value: unknown): string {
           if (entry.state) lines.push(`    ${String(entry.memoryKind ?? entry.kind ?? (value.operation === 'issue-index' ? 'issue' : 'memory'))}: ${String(entry.state)}`);
           if (entry.message) lines.push(`    ${String(entry.code ?? 'Finding')}: ${String(entry.message)}`);
           if (entry.evidence) lines.push(indent(humanOutput(entry.evidence), 4));
+          if (Array.isArray(entry.steps)) lines.push(indent(humanOutput({ steps: entry.steps, wholeUseCase: entry.wholeUseCase, nonStepAnchors: entry.nonStepAnchors, unassociatedSteps: entry.unassociatedSteps, observation: entry.observation }), 4));
+          if (Array.isArray(entry.lists)) lines.push(indent(humanOutput({ lists: entry.lists }), 4));
         } else if (Predicate.isObject(entry) && typeof entry.file === 'string' && Array.isArray(entry.contracts)) {
           lines.push(`  ${String(entry.id)} — ${entry.file}:${String(entry.line)}–${String(entry.endLine)} (${String(entry.scope)})`, ...entry.contracts.map(ref => `    Implements: ${String(ref)}`));
         } else if (Predicate.isObject(entry) && typeof entry.file === 'string') {

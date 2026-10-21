@@ -145,6 +145,13 @@ function actualLineComments(source: TypeScript.SourceFile): readonly LineComment
   return comments;
 }
 
+/** Exact lexical parameters, shared by step maintenance and declaration discovery. */
+export function codeReferenceTokens(path: string, text: string): readonly { readonly line: number; readonly reference: string }[] {
+  if (!/\.(?:[cm]?[jt]sx?)$/u.test(path)) return [];
+  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+  return actualLineComments(source).filter(comment => comment.family === 'implements' && comment.argument !== undefined).map(comment => ({ line: comment.line, reference: comment.argument! }));
+}
+
 function startMarkers(comments: readonly LineComment[], path: string, findings: Finding[]): { readonly starts: readonly StartMarker[]; readonly consumedImplements: ReadonlySet<number> } {
   const byLine = new Map(comments.map(comment => [comment.line, comment]));
   const consumed = new Set<number>();

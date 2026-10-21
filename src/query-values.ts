@@ -19,16 +19,25 @@ const Cache = Schema.Struct({ status: Schema.String, hits: Schema.Number, misses
 const Edge = Schema.Struct({ from: Schema.String, to: Schema.String, relation: Schema.String });
 const Relationship = Schema.Literals(['code', 'test']);
 const counts = Schema.Struct({ code: Schema.Number, test: Schema.Number });
+const RootOrderedList = Schema.Struct({ ordinal: Schema.Int, line: Schema.Int, endLine: Schema.Int, items: Schema.Int, marked: Schema.Int });
+const StepRelationships = Schema.Struct({ ref: Schema.String, tests: Schema.Array(AnnotatedCaseSchema), codeDeclarations: Schema.Array(CodeDeclarationSchema) });
+const StepGroup = Schema.Struct({
+  path: Schema.String,
+  steps: Schema.Array(Schema.Struct({ id: Schema.String, ordinal: Schema.Int, line: Schema.Int, endLine: Schema.Int, listOrdinal: Schema.Int, ...StepRelationships.fields, testCount: Schema.Int, codeCount: Schema.Int })),
+  lists: Schema.Array(RootOrderedList), wholeUseCase: StepRelationships, nonStepAnchors: Schema.Array(StepRelationships), unassociatedSteps: Schema.Array(Schema.String),
+  observation: Schema.Struct({ result: Schema.Literal('not-observed'), gaps: Schema.Array(Schema.Literal('NoAnalyzer')) }),
+});
 export const TraceGapsValue = Schema.Struct({
   operation: Schema.Literal('trace-gaps'), semantics: Schema.Literal('missing-explicit-relationships-not-coverage'), limitations: Schema.Array(Schema.String),
   contracts: Schema.Array(Schema.Struct({ path: Schema.String, kind: Schema.Literals(['feature', 'use-case']), title: Schema.String, missing: Schema.Array(Relationship), relationships: counts })),
   cliPages: Schema.Array(Schema.Struct({ path: Schema.String, feature: Schema.String, title: Schema.String, missing: Schema.Array(Relationship), relationships: counts })),
+  unmarkedLists: Schema.Array(Schema.Struct({ path: Schema.String, lists: Schema.Array(RootOrderedList) })),
   cache: Cache, codeCache: Schema.optional(Cache),
 });
 export const TraceShowValue = Schema.Struct({
   operation: Schema.Literal('trace-show'), subject: Schema.Struct({ path: Schema.String, metadata: Metadata, digest: Schema.String }),
   relatedPaths: Schema.Array(Schema.String), incoming: Schema.Array(Edge), outgoing: Schema.Array(Edge), tests: Schema.Array(AnnotatedCaseSchema),
-  codeDeclarations: Schema.Array(Schema.Struct({ ...CodeDeclarationSchema.fields, matchedContracts: Schema.Array(Schema.String) })), cache: Cache,
+  codeDeclarations: Schema.Array(Schema.Struct({ ...CodeDeclarationSchema.fields, matchedContracts: Schema.Array(Schema.String) })), stepGroups: Schema.Array(StepGroup), cache: Cache,
   analysis: Schema.optional(AnalysisViewSchema),
 });
 export const ReviewRenderValue = Schema.Struct({ segments: Schema.Array(Schema.Union([
