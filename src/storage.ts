@@ -26,6 +26,7 @@ import { readWritingPolicy } from './writing-policy.js';
 import { analyzeCatalogs, catalogDependencies, catalogSources, readConceptCatalog, splitReference } from './concepts.js';
 import { catalogName, policyName, scopeOf } from './writing-scopes.js';
 import { excludedSourcePath } from './source-discovery.js';
+import { planStepRename, type StepRename } from './step-rewrite.js';
 
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
@@ -177,6 +178,7 @@ const JournalChangeSchema = Schema.Struct({ path: Text, before: Schema.NullOr(Sc
 const JournalScopeSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('documents'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text }),
   Schema.Struct({ kind: Schema.Literal('source'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text }),
+  Schema.Struct({ kind: Schema.Literal('step-rename'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text, useCase: Text, oldId: Text, newId: Text, inputsDigest: Text, memberships: Schema.Array(Schema.Struct({ path: Text, scope: Schema.optional(Schema.Literal('source')), observation: Schema.String })) }),
 ]);
 const JournalSchema = Schema.Struct({
   format: Schema.Literal('concord.journal'), root: Text, privateDir: Text, projectId: Text, operation: Text,
@@ -730,6 +732,20 @@ export class LocalRepository implements Repository {
     };
     return this.publishJournal(journal, dryRun);
   }
+  publishStepRename(request: StepRename, dryRun = false): MutationReceipt {
+    if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
+    const frozen = this.currentSnapshot();
+    const plan = planStepRename(this, request);
+    const changes = plan.changes.map(change => {
+      this.absolute(change.path);
+      if (change.before === null || change.after === null || this.read(change.path) !== change.before) throw new ConcordError('PreimageChanged', `${change.path} changed before step rename`);
+      const stat = lstatSync(this.absolute(change.path));
+      if (!stat.isFile()) throw new ConcordError('InvalidChange', 'Step rename can only replace existing files');
+      return { ...change, beforeDigest: digest(change.before), afterDigest: digest(change.after), mode: stat.mode & 0o777 };
+    });
+    return this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, projectId: frozen.config.projectId, operation: 'rename-step', phase: 'prepared', directories: [], changes,
+      scope: { kind: 'step-rename', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, useCase: plan.useCase, oldId: plan.oldId, newId: plan.newId, inputsDigest: plan.inputsDigest, memberships: [...this.observedDirectories.values()].map(({ path, scope, observation }) => ({ path, ...(scope === undefined ? {} : { scope }), observation })) } }, dryRun);
+  }
   private publishJournal(journal: Journal, dryRun: boolean): MutationReceipt {
     return this.underLease(() => {
       // Planning is optimistic. Only validation and publication serialize writers.
@@ -781,7 +797,7 @@ export class LocalRepository implements Repository {
       this.preflight(journal);
       for (const dir of journal.directories) { const target = this.absolute(dir); mkdirSync(target, { recursive: true }); syncDirectory(dirname(target)); this.clearPathObservations(); }
       for (const change of journal.changes) {
-        if (journal.scope.kind === 'source') {
+        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename') {
           const current = this.currentSnapshot();
           if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('PreimageChanged', 'Project configuration changed before source replacement');
         }
@@ -789,12 +805,16 @@ export class LocalRepository implements Repository {
         if (change.path === 'concord.repository.json' && change.before === change.after) continue;
         this.apply(change.path, change.after, change.mode);
       }
+      if (journal.scope.kind === 'step-rename') this.preflight(journal, true);
       atomic(journalPath, `${canonical({ ...journal, phase: 'committed' })}\n`);
     } catch (cause) {
       throw new ConcordError('RecoveryRequired', `Publication stopped: ${cause instanceof Error ? cause.message : String(cause)}; run concord recover`);
     }
     try { advancePublicationRevision(this.coordinationDirectory); rmSync(journalPath); syncDirectory(this.privateDir); }
-    catch { return { operation: journal.operation, dryRun: false, changedPaths, recoveryRequired: true }; }
+    catch {
+      if (journal.scope.kind === 'step-rename') throw new ConcordError('RecoveryRequired', 'Step rename committed but cleanup was interrupted; run concord recover');
+      return { operation: journal.operation, dryRun: false, changedPaths, recoveryRequired: true };
+    }
     return { operation: journal.operation, dryRun: false, changedPaths };
   }
   private preflight(journal: Journal, recovering = false): void {
@@ -802,6 +822,7 @@ export class LocalRepository implements Repository {
     if (journal.root !== this.root || journal.privateDir !== this.privateDir) fail('Publication belongs to a different worktree');
     if (new Set(journal.changes.map(change => change.path)).size !== journal.changes.length || journal.changes.length === 0) fail('Journal must contain unique changes');
     if (new Set(journal.directories).size !== journal.directories.length) fail('Journal contains duplicate directories');
+    if (journal.operation === 'rename-step' && journal.scope.kind !== 'step-rename') fail('Step rename requires its dedicated publication scope');
     const policyChanges = journal.changes.filter(change => change.path.endsWith(`/${policyName}`));
     const catalogChanges = journal.changes.filter(change => change.path.endsWith(`/${catalogName}`));
     if (journal.operation === 'set-writing-policy' || policyChanges.length) {
@@ -839,7 +860,36 @@ export class LocalRepository implements Repository {
     }
     if (journal.operation !== 'set-concepts' && journal.catalogDependencies !== undefined) fail('Unexpected catalog dependency guard');
     assertDarwinPublicationPaths([...journal.changes.map((change) => change.path), ...journal.directories]);
-    if (journal.scope.kind === 'source') {
+    if (journal.scope.kind === 'step-rename') {
+      const scope = journal.scope;
+      if (journal.operation !== 'rename-step' || journal.directories.length !== 0 || journal.catalogDependencies !== undefined) fail('Step rename cannot create directories or use another operation');
+      const current = this.currentSnapshot();
+      if (current.path !== scope.configPath || current.source !== scope.configSource || digest(scope.configSource) !== scope.configDigest || current.config.projectId !== journal.projectId) fail('Frozen step rename configuration or project identity changed');
+      const before = new Map(journal.changes.map(change => [change.path, change.before]));
+      const requiredMemberships = new Set<string>();
+      const reader: Repository = { root: this.root, privateDir: this.privateDir, config: current.config, configSnapshot: current,
+        read: path => before.has(path) ? before.get(path) ?? undefined : this.read(path), files: (path, scope) => { requiredMemberships.add(canonical([path, scope ?? 'all'])); return this.files(path, scope); }, absolute: path => this.absolute(path), publish: () => { throw new ConcordError('InvalidChange', 'Recovery recomputation cannot publish'); } };
+      try {
+        const plan = planStepRename(reader, scope);
+        if (plan.inputsDigest !== scope.inputsDigest || canonical(plan.changes) !== canonical(journal.changes.map(({ path, before, after }) => ({ path, before, after })))) fail('Step rename inputs or complete allowed rewrite differ from the journal');
+        const recordedMemberships = new Set(scope.memberships.map(item => canonical([item.path, item.scope ?? 'all'])));
+        if (recordedMemberships.size !== scope.memberships.length || [...requiredMemberships].some(key => !recordedMemberships.has(key))) fail('Step rename requires every observed directory membership');
+        for (const membership of scope.memberships) {
+          const observation = this.scanDirectory(membership.path, membership.scope).observation;
+          const entries = observation === 'absent' ? undefined : decode(Schema.Array(Schema.String), JSON.parse(observation), 'step rename directory membership');
+          const normalized = entries?.map(entry => {
+            const change = journal.changes.find(change => entry.startsWith(`${change.path}:file:`));
+            return change?.before == null ? entry : `${entry.slice(0, entry.lastIndexOf(':') + 1)}${Buffer.byteLength(change.before)}`;
+          });
+          if ((normalized === undefined ? 'absent' : canonical(normalized)) !== membership.observation) fail(`Step rename directory membership changed: ${membership.path}`);
+        }
+        for (const change of journal.changes) {
+          if (change.before === null || change.after === null || change.before === change.after) fail('Step rename requires distinct existing file images');
+          const stat = lstatSync(this.absolute(change.path));
+          if (!stat.isFile() || (stat.mode & 0o777) !== change.mode) fail(`${change.path} type or mode changed`);
+        }
+      } catch (cause) { fail(`Step rename authorization failed: ${cause instanceof Error ? cause.message : String(cause)}`); }
+    } else if (journal.scope.kind === 'source') {
       if (journal.operation !== 'set-source' || journal.changes.length !== 1 || journal.directories.length !== 0) fail('Source publication must replace exactly one existing file without directories');
       if (digest(journal.scope.configSource) !== journal.scope.configDigest) fail('Frozen project configuration digest is invalid');
       const frozenPath = journal.scope.configPath;
@@ -930,7 +980,7 @@ export class LocalRepository implements Repository {
     if (journal.phase === 'prepared') {
       invalidateActiveRun(this.root);
       for (const change of [...journal.changes].reverse()) {
-        if (journal.scope.kind === 'source') {
+        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename') {
           const current = this.currentSnapshot();
           if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('RecoveryConflict', 'Project configuration changed during source recovery');
         }

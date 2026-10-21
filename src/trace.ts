@@ -9,6 +9,7 @@ import { ConcordError, type AnnotatedCase, type DocumentRecord, type Finding, ty
 import { checkConstitution, showConstitution } from './constitution.js';
 import { measureScan, type ScanTiming } from './scan-timing.js';
 import { referenceResolver } from './refs.js';
+import { extractSteps } from './steps.js';
 
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
 // @concord-code
@@ -24,6 +25,10 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
   const constitutionFindings = measureScan(options.timing, 'trace.constitution', () => checkConstitution(repo));
   const advisories = constitutionFindings.filter((finding) => finding.code === 'ConstitutionDraft');
   const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents)), ...annotations.findings, ...constitutionFindings.filter((finding) => finding.code !== 'ConstitutionDraft')];
+  for (const path of repo.files('docs').filter(path => path.endsWith('.md'))) {
+    try { const source = repo.read(path); if (source !== undefined) findings.push(...extractSteps(path, source).findings); }
+    catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidSteps', path, message: cause instanceof Error ? cause.message : String(cause) }); }
+  }
   if (!inventory.complete && inventory.findings.length === 0) findings.push({ code: 'IncompleteInventory', path: '.', message: 'Document inventory is incomplete; no complete-graph conclusion is available' });
   const edges: TraceEdge[] = [];
   const references = referenceResolver(repo, documents);
@@ -122,7 +127,19 @@ export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildT
     const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
     const codeIds = new Set(incoming.filter(e => e.from.startsWith('code:')).map(e => e.from.slice(5)));
     const codeDeclarations = trace.codeDeclarations.filter(c => codeIds.has(c.id)).map(c => ({ ...c, matchedContracts: c.contracts.filter(ref => belongsTo(references, trace, relatedPaths, ref)) }));
-    return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, cache: trace.annotations.cache };
+    return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, stepGroups: trace.documents.filter(doc => doc.metadata.kind === 'use-case' && relatedPaths.has(doc.path)).map(doc => stepGroups(repo, trace, doc)), cache: trace.annotations.cache };
+}
+
+export function stepGroups(repo: Repository, trace: ReturnType<typeof buildTrace>, document: DocumentRecord) {
+  const extracted = extractSteps(document.path, repo.read(document.path)!);
+  const group = (ref: string) => ({ ref, tests: trace.annotations.cases.filter(item => item.status === 'active' && item.contract === ref), codeDeclarations: trace.codeDeclarations.filter(item => item.contracts.includes(ref)) });
+  const steps = extracted.steps.map(step => {
+    const relationships = group(`${document.path}#${step.id}`);
+    return { ...step, ...relationships, testCount: relationships.tests.length, codeCount: relationships.codeDeclarations.length };
+  });
+  const ids = new Set(steps.map(step => step.ref));
+  const other = [...new Set(trace.edges.map(edge => edge.to).filter(ref => ref.startsWith(`${document.path}#`) && !ids.has(ref)))];
+  return { path: document.path, steps, lists: extracted.lists, wholeUseCase: group(document.path), nonStepAnchors: other.map(group), unassociatedSteps: steps.filter(step => step.tests.length === 0 && step.codeDeclarations.length === 0).map(step => step.ref), observation: { result: 'not-observed', gaps: ['NoAnalyzer'] } };
 }
 
 type RelationshipKind = 'code' | 'test';
@@ -173,6 +190,10 @@ export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildT
       limitations: ['Only documented CLI pages are discoverable; undocumented commands require a product-owned inventory.'],
       contracts,
       cliPages,
+      unmarkedLists: trace.documents.filter(doc => doc.metadata.kind === 'use-case').flatMap(doc => {
+        const lists = extractSteps(doc.path, repo.read(doc.path)!).lists.filter(list => list.marked < list.items);
+        return lists.length ? [{ path: doc.path, lists }] : [];
+      }),
       cache: trace.annotations.cache,
       codeCache: trace.codeCache,
     };
@@ -235,6 +256,16 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
     for (const c of codes) lines.push(`- **${c.symbol ?? `${c.file}:${c.line}–${c.endLine}`}** — [${c.file}:${c.line}–${c.endLine}](${c.file}#L${c.line}); ${c.scope}`, ...c.contracts.map(ref => `  - Implements: [${ref}](${ref})`));
     lines.push('', '## Test declarations', '');
     for (const c of cases) lines.push(`- **${c.id}** — [${c.file}:${c.line}](${c.file}#L${c.line}); ${c.status}${c.skipped ? ', skipped/todo' : ''}; contract: [${c.contract}](${c.contract})`, ...c.regressions.map(r => `  - Regression: [${r}](${r})`));
+    for (const doc of trace.documents.filter(doc => doc.metadata.kind === 'use-case' && (!selector || selectedPaths.has(doc.path) || doc.metadata.kind === 'use-case' && selectedPaths.has(doc.metadata.feature)))) {
+      const groups = stepGroups(repo, trace, doc);
+      lines.push(`## Use Case steps: ${doc.path}`, '', 'Declarations are associations, not execution or coverage. Dependency intersection: not-observed (NoAnalyzer).', '');
+      for (const group of [...groups.steps, groups.wholeUseCase, ...groups.nonStepAnchors]) {
+        const label = group.ref === doc.path ? 'Whole Use Case' : groups.nonStepAnchors.includes(group) ? 'Non-step anchor' : 'Step';
+        lines.push(`### ${label}: ${group.ref}`, ...group.tests.map(item => `- Test: ${item.id} (${item.file}:${item.line})`), ...group.codeDeclarations.map(item => `- Code: ${item.id} (${item.file}:${item.line})`));
+        if (!group.tests.length && !group.codeDeclarations.length) lines.push('- No associated declarations.');
+        lines.push('');
+      }
+    }
     lines.push('', '## Engineering memory', '');
     const memoryPaths = new Set(cases.flatMap(c => c.regressions.map(pathOf)));
     for (const d of trace.documents) if (d.metadata.kind === 'memory' && (!selector || selectedPaths.has(d.path) || memoryPaths.has(d.path))) {
