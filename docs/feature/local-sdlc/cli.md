@@ -57,3 +57,13 @@
 ## 中立高级治理
 
 消费仓库通过锁定的 `concord repo` 入口加载自己的 host。`docs test` 的 current 关系写在真实声明上方，native inventory 校验 ID/path；history/tombstone 保存在注释归档。正式 v2 red/takeover 由 host 执行并签发，已有回归使用显式 `regression refresh --reason` 更新陈旧证据。此入口的 formal gate 不接受通用 command receipts。
+
+## 编辑器服务
+
+编辑器以 `concord --root <worktree> lsp` 建立 stdio 会话。服务协商 UTF-16。同步方法包括 initialize/initialized、didOpen/didChange/didSave/didClose 与 publishDiagnostics。导航方法包括 definition、references、completion 与 hover，并支持取消与 shutdown/exit。stdout 只传递 Content-Length framed JSON-RPC。stderr 输出具名诊断。
+
+打开缓冲区覆盖磁盘文本，多个未保存文档共同参与步骤、标记、引用与 writing v3 检查。新文件可只存在于内存；保存全文须与缓冲区相同，关闭清诊断，倒退或非法增量须关闭重开。删除保留未保存文本并标记输入不完整；重命名要求关闭旧 URI 后打开新 URI。客户端可发送 didChangeWatchedFiles、didDeleteFiles 与 didRenameFiles 通知依赖变化。
+
+导航仅使用同版当前输入。过期请求返回 ContentModified（-32801），取消返回 RequestCancelled（-32800）；输入缺失发布 EditorInputsIncomplete。悬停明确说明未提供分析观察，不将缺失观察解释成没有关系。
+
+服务只读，不提供 formatting、codeAction、executeCommand 或 willRenameFiles；未知编辑执行请求返回 EditorMethodNotSupported（-32601）。不启动 language server、collector 或 runner，不监听网络，不持久化 overlay。关闭、EOF 或 SIGINT 终结任务与句柄。预算与完整生命周期见[编辑器 Use Case](use-case/use-editor-service.md)。
