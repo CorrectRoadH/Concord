@@ -2,6 +2,7 @@
 
 从[本仓库 Concord 工作流](concord.md)、[本地 SDLC 闭环](feature/local-sdlc/README.md)和[自举维护](engineering/concord-self-hosting/README.md)开始。[_template](_template/README.md) 只提供写作参考，不表示需求已经完成或测试已经覆盖。
 
+- [为什么需要 Concord：问题与机制](why-concord.md)
 - [项目宪法：规划、实施与审阅的规则](constitution.md)
 - [架构：操作依赖、事实来源与恢复边界](architecture.md)
 - [工作台 UI 设计](../DESIGN.md)
