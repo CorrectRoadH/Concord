@@ -145,8 +145,29 @@ test('packed editor C7/C9 uses simultaneous unsaved steps, test and implementati
   c.open('src/nodes.ts', `// @concord-code\n// @concord-implements ${reference}\nexport function node(): number { return 1; }\n// @concord-begin\n// @concord-implements ${reference}\nconst region = 1;\n// @concord-end\n`);
   const nodeReferences = Schema.decodeUnknownSync(Schema.Array(Location))(await c.result('textDocument/references', c.query(file, 11, 0, { includeDeclaration: false })));
   assert.deepEqual(nodeReferences.filter(item => item.uri === c.uri('src/nodes.ts')).map(item => item.range.start.line), [1, 4]);
+  writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ id: 'python-editor', languageId: 'python', extensions: ['.py'], argv: [process.execPath, '-e', 'process.exit(99)'], cwd: '.', implementationFiles: ['src/flow.ts'], sourceFiles: [], profile: { version: 'fixture-v1', serverVersion: '1', commentPrefixes: ['#'], declarationKinds: [12], symbolShape: 'document-symbol', decorators: 'none', leadingComments: true, readiness: { kind: 'none' }, positionEncodings: ['utf-16'] } }] });
+  c.open('src/flow.py', `# @concord-code\n# @concord-implements ${reference}\ndef flow():\n    return 1\n`, 1, 'python');
+  const foreignReferences = Schema.decodeUnknownSync(Schema.Array(Location))(await c.result('textDocument/references', c.query(file, 11, 0, { includeDeclaration: false })));
+  assert.deepEqual(foreignReferences.filter(item => item.uri === c.uri('src/flow.py')).map(item => item.range.start.line), [1]);
+  assert.deepEqual(Schema.decodeUnknownSync(Schema.Array(Location))(await c.result('textDocument/definition', c.query('src/flow.py', 1, 30))), definition);
   c.close('test/new.ts');
   const closed = await c.wait(() => c.diagnostics.filter(item => item.uri === c.uri('test/new.ts') && item.diagnostics.length === 0).at(-1)); assert.equal(closed.version, 1);
+}));
+
+// @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
+// @name editor-shutdown-pending-navigation
+test('packed editor shutdown cancels pending navigation and clears diagnostics before acknowledging', { timeout: 60000 }, () => run(async c => {
+  c.open(file, source('new-step')); c.open('test/flow.ts', testText(reference));
+  await c.diagnostic('test/flow.ts', 1);
+  const offset = c.diagnostics.length;
+  const pending = c.request('textDocument/hover', c.query('test/flow.ts', 1, 20));
+  assert.equal(await c.result('shutdown'), null);
+  assert.equal((await pending.response).error?.code, -32800);
+  assert.ok(c.diagnostics.slice(offset).some(item => item.uri === c.uri('test/flow.ts') && item.diagnostics.length === 0));
+  const closed = await c.request('textDocument/hover', c.query('test/flow.ts', 1, 20)).response;
+  assert.equal(closed.error?.code, -32002);
+  c.send('exit');
+  assert.equal(await c.closed, 0, c.stderr);
 }));
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md

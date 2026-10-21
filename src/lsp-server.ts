@@ -186,7 +186,12 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
           if (params !== undefined && params !== null) decode(P.Empty, params, method);
           state = 'shutdown'; if (timer !== undefined) clearTimeout(timer);
           for (const task of [...tasks]) stopTask(task, 'RequestCancelled');
-          respond(id, null); return;
+          for (const document of overlays.values()) clear(document);
+          overlays.clear();
+          // A completed shutdown acknowledges that computation resources have
+          // ended; the transport alone remains available for the exit message.
+          void Promise.allSettled([...running].map(task => task.promise)).then(() => respond(id, null));
+          return;
         }
         if (state !== 'ready') { if (id !== undefined) reject(id, -32002, 'ServerNotInitialized'); return; }
         if (['textDocument/definition', 'textDocument/references', 'textDocument/completion', 'textDocument/hover'].includes(method)) {
