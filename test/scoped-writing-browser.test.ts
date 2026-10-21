@@ -24,8 +24,8 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
       initialize(repo, false, { testRoots: [] });
       mkdirSync(join(root, a), { recursive: true });
       mkdirSync(join(root, b), { recursive: true });
-      setWriting(repo, { format: 'concord.writing/v2', bannedTerms: [{ term: 'Old', use: 'Alpha', why: 'scope A' }] }, null, false, `${a}/concord-writing.json`);
-      setWriting(repo, { format: 'concord.writing/v2', bannedTerms: [{ term: 'Old', use: 'Beta', why: 'scope B' }] }, null, false, `${b}/concord-writing.json`);
+      setWriting(repo, { format: 'concord.writing/v3', bannedTerms: [{ term: 'Old', use: 'Alpha', why: 'scope A' }] }, null, false, `${a}/concord-writing.json`);
+      setWriting(repo, { format: 'concord.writing/v3', bannedTerms: [{ term: 'Old', use: 'Beta', why: 'scope B' }] }, null, false, `${b}/concord-writing.json`);
       setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'beta', definition: 'Beta definition', names: { en: { preferred: 'Beta' } } }] }, null, false, `${b}/concepts.json`);
       const global = showConcepts(repo);
       setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'global', definition: 'Global definition', names: { en: { preferred: 'Global' } } }, { id: 'second', definition: 'Second definition', names: { en: { preferred: 'Second' } } }] }, global.digest, false, 'docs/concepts.json');
@@ -162,7 +162,7 @@ test('real browser can check again after editing invalidates a delayed check res
     const repo = new LocalRepository(root, { initialize: true });
     try {
       initialize(repo, false, { testRoots: [] });
-      setWriting(repo, { format: 'concord.writing/v2', bannedTerms: [{ term: 'Old', use: 'New', why: '统一写法' }] }, showWriting(repo).digest);
+      setWriting(repo, { format: 'concord.writing/v3', bannedTerms: [{ term: 'Old', use: 'New', why: '统一写法' }] }, showWriting(repo).digest);
     } finally { repo.close(); }
     writeFileSync(join(root, 'docs/sample.md'), '# Sample\n\nOld.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });

@@ -32,6 +32,7 @@ const ErrorFields = { code: Schema.String, message: Schema.String };
 const Instant = Schema.String.check(Schema.makeFilter(value => Number.isFinite(Date.parse(value))));
 const Diagnostic = Schema.Union([
   Schema.Struct({ operation: Schema.Literal('doctor'), ok: Schema.Boolean, root: Schema.String, node: Schema.String, configuration: ProjectSchema,
+    writing: Schema.optional(Schema.Struct({ complete: Schema.Boolean, ok: Schema.Boolean })),
     missingTestRoots: Schema.Array(Schema.String), missingSourceRoots: Schema.Array(Schema.String), codeDeclarations: Schema.Number,
     documents: Schema.Number, cases: Schema.Number, findings: Schema.Array(Finding), nextSteps: Schema.Array(Schema.String) }),
   Schema.Struct({ ok: Schema.optional(Schema.Boolean), error: Schema.String, message: Schema.String }),
