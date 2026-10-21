@@ -5,7 +5,7 @@
 import { fromMarkdown } from './markdown-parser.js';
 import type { Nodes } from 'mdast';
 import { ConcordError, inRepositorySnapshot, type Repository } from './shared.js';
-import { checkControlled } from './writing-controlled.js';
+import { checkControlled, type ParsedWriting } from './writing-controlled.js';
 import { composeControlled, WRITING_PARSER_VERSION, writingBudget, type PolicySource, type EffectiveControlled } from './writing-controlled-policy.js';
 import { canonicalPath } from './storage.js';
 import { readWritingPolicy, type BannedTerm, type WritingPolicy } from './writing-policy.js';
@@ -62,7 +62,7 @@ function textOf(node: Nodes, inlineCode: boolean): string {
   if ('children' in node) return node.children.map(child => textOf(child, inlineCode)).join('');
   return '';
 }
-function prose(file: string, source: string): Prose[] {
+function prose(file: string, source: string): ParsedWriting & { blocks: Prose[] } {
   const result: Prose[] = [];
   const visit = (node: Nodes): void => {
     if (node.type === 'paragraph' || node.type === 'heading') {
@@ -70,8 +70,9 @@ function prose(file: string, source: string): Prose[] {
       result.push({ line: node.position?.start.line ?? 1, text, readable: textOf(node, true), paragraph: node.type === 'paragraph' && !/^\s*\|/u.test(text) });
     } else if ('children' in node) node.children.forEach(visit);
   };
-  visit(fromMarkdown(authoredSource(file, source)));
-  return result;
+  const authored = authoredSource(file, source), tree = fromMarkdown(authored);
+  visit(tree);
+  return { blocks: result, tree, source: authored };
 }
 const length = (text: string): number => [...text.replace(/\s/gu, '')].length;
 const rootsOf = (owner: PolicyOwner): readonly string[] => owner.policy.roots ?? [owner.scope];
@@ -90,7 +91,7 @@ function bansFor(file: string, owners: readonly PolicyOwner[], concepts: ReturnT
   for (const item of concepts) for (const [language, names] of Object.entries(item.concept.names)) for (const term of names.deprecated ?? []) bans.push({ term, use: names.preferred, why: `${item.reference} (${language})`, source: { path: item.path, ref: item.reference, column: language }, ownerScope: item.scope, conceptRef: item.reference });
   return bans.filter(ban => (!ban.roots || ban.roots.some(root => under(file, root))) && !ban.exempt?.some(root => under(file, root)));
 }
-function checkTerms(file: string, line: number, value: string, bans: readonly Ban[], concepts: ReturnType<typeof effectiveConcepts>, findings: WritingFinding[]): void {
+function activeSpellingsFor(concepts: ReturnType<typeof effectiveConcepts>) {
   const active = new Map<string, { reference: string; source: NonNullable<WritingFinding['source']> }[]>();
   for (const item of concepts) for (const [language, names] of Object.entries(item.concept.names)) for (const spelling of [names.preferred, ...(names.aliases ?? [])]) {
     const key = spellingKey(spelling);
@@ -98,6 +99,9 @@ function checkTerms(file: string, line: number, value: string, bans: readonly Ba
     if (!owners.some(owner => owner.reference === item.reference)) owners.push({ reference: item.reference, source: { path: item.path, ref: item.reference, column: language } });
     active.set(key, owners);
   }
+  return active;
+}
+function checkTerms(file: string, line: number, value: string, bans: readonly Ban[], active: ReturnType<typeof activeSpellingsFor>, findings: WritingFinding[]): void {
   const occurrences = new Map<string, { term: string; offset: number; bans: Ban[]; active: { reference: string; source: NonNullable<WritingFinding['source']> }[] }>();
   let candidates = 0;
   for (const ban of bans) for (const offset of spellingPositions(value, ban.term, ban.allowIn)) {
@@ -175,25 +179,27 @@ export function checkWriting(repo: Repository, selectedPath?: string) {
       if (!members.length) throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
       members.forEach(file => files.add(file));
     }
-    const documents = new Map<string, Prose[]>();
+    const documents = new Map<string, string>();
     for (const file of [...files].sort()) {
       const source = read(file);
-      if (/\.mdx?$/iu.test(file)) documents.set(file, prose(file, withoutStepMarkers(file, source)));
+      if (/\.mdx?$/iu.test(file)) documents.set(file, withoutStepMarkers(file, source));
     }
     const findings: WritingFinding[] = [];
     const effectivePolicies = new Map<string, EffectiveControlled>();
     const used = new Set<string>(), eligible = new Set<string>();
-    for (const [file, blocks] of documents) {
+    for (const [file, source] of documents) {
+      const parsed = prose(file, source);
       const owners = applicablePolicy(file, activePolicies);
       const policyKey = owners.map(owner => owner.path).join('\n');
       let controlled = effectivePolicies.get(policyKey);
       if (!controlled) { controlled = composeControlled(owners); effectivePolicies.set(policyKey, controlled); }
       const concepts = effectiveConcepts(file, catalogs.catalogs);
       const bans = bansFor(file, owners, concepts);
+      const active = activeSpellingsFor(concepts);
       for (const item of concepts) if (inherited(owners, 'unusedConcepts') === true) eligible.add(item.reference);
-      for (const block of blocks) {
-        checkTerms(file, block.line, block.text, bans, concepts, findings);
-        for (const item of concepts) if (Object.values(item.concept.names).some(names => [names.preferred, ...(names.aliases ?? [])].some(spelling => spellingPositions(block.readable, spelling).length))) used.add(item.reference);
+      for (const block of parsed.blocks) {
+        checkTerms(file, block.line, block.text, bans, active, findings);
+        for (const item of concepts) if (!used.has(item.reference) && Object.values(item.concept.names).some(names => [names.preferred, ...(names.aliases ?? [])].some(spelling => spellingPositions(block.readable, spelling).length))) used.add(item.reference);
         if (!block.paragraph) continue;
         const legacySource = (key: 'paragraphLength' | 'sentenceLength'): PolicySource | undefined => { const owner = [...owners].reverse().find(owner => owner.policy[key] !== undefined); return owner ? { path: owner.path, pointer: `/${key}` } : undefined; };
         const paragraphLength = inherited(owners, 'paragraphLength');
@@ -205,7 +211,7 @@ export function checkWriting(repo: Repository, selectedPath?: string) {
         }
       }
       const original = inputs.get(file)!;
-      if (owners.some(owner => owner.policy.controlled != null)) checkControlled(file, authoredSource(file, withoutStepMarkers(file, original), true), original, controlled, findings);
+      if (owners.some(owner => owner.policy.controlled != null)) checkControlled(file, authoredSource(file, source, true), original, controlled, findings, parsed);
       if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
     }
     for (const item of catalogs.catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, record, concept })))) {
