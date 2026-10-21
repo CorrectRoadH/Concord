@@ -16,7 +16,7 @@ import { ConcordError, digest, type Finding, type Repository } from '../src/shar
 import { renderDocument } from '../src/documents.js';
 import type { OwnedProcessResult } from '../src/owned-process.js';
 
-const value = { operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [], contracts: [], cliPages: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } };
+const value = { operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } };
 function candidate(at: number, paths: string[] = [], publicationChanged = false): QueryUpdate {
   return { kind: 'candidate', message: { format: 'concord.query-scan/v1', ok: true, scannedAt: at, finishedAt: at + 10, value, complete: true, unknown: [], drift: { files: paths, directories: [], publicationChanged } } };
 }
@@ -134,7 +134,7 @@ test('owner and remote bodies are stripped and restored only after safe matching
   writeFileSync(join(root, path), source);
   const owner = { path, metadata: { format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample', createdAt: '2026-10-06T00:00:00.000Z' }, body: '# PRIVATE_OWNER_BODY\n', digest: digest(source) };
   try {
-    const stored = stripQueryBodies({ operation: 'trace-show', subject: owner, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], cache: value.cache });
+    const stored = stripQueryBodies({ operation: 'trace-show', subject: owner, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.ok(!JSON.stringify(stored).includes('PRIVATE_OWNER_BODY'));
     const matched = hydrateQueryValue(root, stored);
     assert.equal(matched.bodyChanged.length, 0);
@@ -151,7 +151,7 @@ test('owner and remote bodies are stripped and restored only after safe matching
       memoryRelations: [], adoptions: { current: [], history: [] }, history: [],
       source: { provider: 'github' as const, instance: 'https://api.github.com' as const, id: '123', url: 'https://github.com/example/example/issues/1', title: 'Remote', body: 'PRIVATE_REMOTE_BODY', state: 'open', updatedAt: '2026-10-06T00:00:00.000Z', connectionId: 'github', importedAt: '2026-10-06T00:00:00.000Z' } };
     const remoteSource = renderDocument(metadata, '# PRIVATE_ISSUE_BODY\n');
-    const remote = stripQueryBodies({ operation: 'trace-show', subject: { path, metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], cache: value.cache });
+    const remote = stripQueryBodies({ operation: 'trace-show', subject: { path, metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.doesNotMatch(JSON.stringify(remote), /PRIVATE_(REMOTE|ISSUE)_BODY/u);
     assert.match(JSON.stringify(hydrateQueryValue(root, remote, () => remoteSource).value), /PRIVATE_REMOTE_BODY/u);
     const constitution = '---\nformat: concord.constitution/v1\nstatus: draft\nratifiedAt: null\namendedAt: 2026-10-06\namendments: []\n---\n# PRIVATE_CONSTITUTION_BODY\n';

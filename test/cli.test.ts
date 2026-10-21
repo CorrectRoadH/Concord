@@ -239,6 +239,40 @@ test('installed create selects optional pages, keeps README required, and reject
  assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/README.md')), true);
  assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/cli.md')), false);
 })));
+// @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#link-declarations
+// @name packed-steps-navigation-and-maintenance
+test('packed steps C15 C16 C18 navigate exact steps, preserve examples and rename through one journal', () => Effect.runPromise(Effect.sync(() => {
+ const root = join(scratch, 'steps'); mkdirSync(root); execFileSync('git', ['init', '-q', root]);
+ call(root, ['init', '--source-root', 'src'], Ack);
+ call(root, ['feature', 'create', 'journey', '--title', 'Journey', '--no-pages'], Ack);
+ call(root, ['use-case', 'create', 'flow', '--title', 'Flow', '--feature', 'journey'], Ack);
+ const path = 'docs/feature/journey/use-case/flow.md';
+ const owner = call(root, ['use-case', 'show', path], Schema.Struct({ document: DigestOutput }));
+ call(root, ['author', 'set', path, '--expected-digest', owner.document.digest, '--body', '-'], Ack, '# Flow\n\n## Details\n\n1. Reject {#reject-token}\n2. Report\n\n## Acceptance\n\n1. Leave unmarked\n');
+ write(root, 'test/flow.ts', `// @use-case ${path}#reject-token\n// @name stable\n\n// @use-case ${path}#details\n\n// @use-case ${path}\n\n// pytest.mark.unrelated\nconst fake = '// @use-case ${path}#reject-token';\n`);
+ write(root, 'src/flow.ts', `// @concord-file\n// @concord-implements ${path}#reject-token\nexport const flow = 1;\n`);
+ write(root, 'docs/feature/journey/links.md', `[Flow](use-case/flow.md#reject-token)\n\n\`[Example](use-case/flow.md#reject-token)\`\n`);
+ const steps = Schema.Struct({ steps: Schema.Array(Schema.Struct({ id: Schema.String, testCount: Schema.Int, codeCount: Schema.Int })), lists: Schema.Array(Schema.Struct({ ordinal: Schema.Int, marked: Schema.Int })) });
+ const initial = call(root, ['use-case', 'steps', path], steps);
+ assert.deepEqual(initial.steps, [{ id: 'reject-token', testCount: 1, codeCount: 1 }]);
+ assert.equal(initial.lists[1]?.marked, 0);
+ call(root, ['check'], CheckOutput);
+ call(root, ['use-case', 'format', path], Ack);
+ assert.deepEqual(call(root, ['use-case', 'steps', path], steps).steps.map(step => step.id), ['reject-token', 'step-1']);
+ const result = call(root, ['use-case', 'rename-step', path, 'reject-token', '拒绝令牌'], Schema.Struct({ affectedCases: Schema.Array(Schema.Struct({ before: Schema.String, after: Schema.String, named: Schema.Boolean })) }));
+ assert.equal(result.affectedCases[0]?.before, result.affectedCases[0]?.after);
+ assert.match(readFileSync(join(root, 'docs/feature/journey/links.md'), 'utf8'), /\[Flow\]\(use-case\/flow.md#拒绝令牌\)/u);
+ assert.match(readFileSync(join(root, 'docs/feature/journey/links.md'), 'utf8'), /`\[Example\]\(use-case\/flow.md#reject-token\)`/u);
+ const trace = call(root, ['trace', 'show', path], Schema.Struct({ stepGroups: Schema.Array(Schema.Struct({ nonStepAnchors: Schema.Array(Schema.Struct({ ref: Schema.String })), wholeUseCase: Schema.Struct({ tests: Schema.Array(Schema.Unknown) }) })) }));
+ assert.equal(trace.stepGroups[0]?.nonStepAnchors[0]?.ref, `${path}#details`);
+ assert.equal(trace.stepGroups[0]?.wholeUseCase.tests.length, 1);
+ assert.match(callString(root, ['review', 'render', path]), /Step: .*#拒绝令牌/u);
+ call(root, ['check'], CheckOutput);
+ write(root, 'test/broken.ts', `// @use-case ${path}#missing\n`);
+ const broken = call(root, ['check'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ code: Schema.String })) }), '', 1);
+ assert.equal(broken.ok, false); assert.ok(broken.findings.some(finding => finding.code === 'AnchorNotFound'));
+})));
+
 function call<A>(root: string,args: readonly string[],schema: Schema.ConstraintDecoder<A, never>,input='Contract body.\n',status=0): A {
  const result=spawnSync(process.execPath,[cli,'--root',root,'--json','--fresh',...args],{input,encoding:'utf8',timeout:20000});
  assert.equal(result.status,status,JSON.stringify({args,stdout:result.stdout,stderr:result.stderr,error:result.error}));

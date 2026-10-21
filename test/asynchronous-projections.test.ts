@@ -14,7 +14,7 @@ import { createDocument, setAuthor } from '../dist/documents.js';
 import { ConcordError, digest } from '../dist/shared.js';
 import { queryContext, readQuery, storeQuery } from '../dist/query-cache.js';
 
-const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
+const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
 const candidate = (marker = 'original', scannedAt = Date.now()) => ({ kind: 'candidate' as const, message: { format: 'concord.query-scan/v1' as const, ok: true as const, scannedAt, finishedAt: Date.now(), value: gaps(marker), complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } } });
 function consumer(): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-async-projections-'));
@@ -347,6 +347,9 @@ test('packed C3 internal short deadline preserves timeout details with and witho
 });
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+
+// @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#inspect-associations
+// @name steps-historical-projections
 test('packed C7 persists no owner or remote bodies and hydrates byte-identical current output', async () => {
   const root = packedConsumer(false);
   try {
@@ -356,7 +359,11 @@ test('packed C7 persists no owner or remote bodies and hydrates byte-identical c
     const repo = new LocalRepository(root);
     try {
       createDocument(repo, 'issue', { id: 'remote', title: 'Remote', body: '# PRIVATE_ISSUE_BODY_SENTINEL\n' });
+      createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample', body: '1. First {#first}\n2. Unmarked\n' });
     } finally { repo.close(); }
+    const flow = 'docs/feature/sample/use-case/flow.md';
+    writeFileSync(join(root, 'test/steps.ts'), `// @use-case ${flow}#first\n`);
+    writeFileSync(join(root, 'src/steps.ts'), `// @concord-file\n// @concord-implements ${flow}#first\nexport const flow = 1;\n`);
     const issuePath = join(root, 'docs/issues/remote.md');
     const source = readFileSync(issuePath, 'utf8');
     writeFileSync(issuePath, source.replace('kind: issue', `kind: issue
@@ -385,6 +392,11 @@ source:
       assert.equal(historical.status, 0, historical.stderr);
       assert.doesNotMatch(current.stdout + historical.stdout, /relationsUnknown|codeRelationsUnknown/u);
       const output = JSON.parse(historical.stdout);
+      if (query[0] === 'trace' && query[2] === ownerPath) {
+        assert.equal(output.stepGroups[0].steps[0].id, 'first');
+        assert.equal(output.stepGroups[0].steps[0].testCount, 1);
+        assert.equal(output.stepGroups[0].steps[0].codeCount, 1);
+      }
       if (query[0] === 'review') assert.equal(output.body, JSON.parse(current.stdout));
       else {
         const { projection: _projection, cache: _cache, ...old } = output;
@@ -393,6 +405,11 @@ source:
       }
       await waitForRefreshExit(root);
     }
+    assert.equal((await refreshInstalled(root, ['trace', 'gaps'])).status, 0);
+    const gaps = installedCall(root, '--json', 'trace', 'gaps');
+    assert.equal(gaps.status, 0, gaps.stderr);
+    assert.equal(JSON.parse(gaps.stdout).unmarkedLists[0].path, flow);
+    await waitForRefreshExit(root);
     writeFileSync(join(root, ownerPath), readFileSync(join(root, ownerPath), 'utf8') + '\nchanged\n');
     const changed = installedCall(root, '--json', 'trace', 'show', ownerPath);
     const changedValue = JSON.parse(changed.stdout);

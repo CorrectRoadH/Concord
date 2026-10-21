@@ -52,13 +52,13 @@ test('current checkout configures a version-matched runner whose annotations sca
       const useCases = loadDocuments(repository).filter(document => document.metadata.kind === 'use-case');
       assert.ok(useCases.length > 0, 'self-host contract inventory must contain at least one Use Case');
       for (const useCase of useCases) {
-        assert.ok(scan.cases.some(item => item.contract === useCase.path), `missing a real test relation for ${useCase.path}`);
+        assert.ok(scan.cases.some(item => item.contract.split('#')[0] === useCase.path), `missing a real test relation for ${useCase.path}`);
       }
       const code = scanCode(repository);
       assert.deepEqual(code.findings, []);
       assert.deepEqual(new Set(code.codes.map(item => item.scope)), new Set(['file', 'node', 'region']));
       for (const useCase of useCases) {
-        assert.ok(code.codes.some(item => item.contracts.includes(useCase.path)), `missing an implementation relation for ${useCase.path}`);
+        assert.ok(code.codes.some(item => item.contracts.some(ref => ref.split('#')[0] === useCase.path)), `missing an implementation relation for ${useCase.path}`);
       }
     } finally {
       repository.close();
