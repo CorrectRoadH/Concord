@@ -9,7 +9,7 @@ import type { AnnotatedCase, DocumentRecord, Repository } from './shared.js';
 import type { CodeDeclaration } from './code.js';
 import { extractSteps } from './steps.js';
 
-export const TestRelevanceSchema = Schema.Struct({ testId: Schema.String, scope: Schema.Literal('file'), relevance: RelevanceSchema, message: Schema.String });
+export const TestRelevanceSchema = Schema.Struct({ testId: Schema.String, scope: Schema.Literals(['file', 'native-case']), relevance: RelevanceSchema, message: Schema.String });
 export const AnalysisViewSchema = Schema.Struct({ observations: Schema.Array(AnalysisObservationSchema), relevance: Schema.Array(TestRelevanceSchema) });
 export type AnalysisView = typeof AnalysisViewSchema.Type;
 
@@ -22,7 +22,7 @@ export function relevanceFor(test: AnnotatedCase, codes: readonly CodeDeclaratio
     : ['NoAnalyzer'] };
   const dependencies = current.flatMap(value => value.value.dependencies.filter(dependency => dependency.testId === test.id));
   const ids = new Set(dependencies.flatMap(value => value.declarations));
-  const gaps = [...new Set([...current.flatMap(value => value.gaps), ...dependencies.flatMap(value => value.gaps)])].sort();
+  const gaps = [...new Set([...current.flatMap(value => value.gaps.filter(gap => gap !== 'FileScope' || value.value.dependencies.some(dependency => dependency.testId === test.id && dependency.scope === 'file'))), ...dependencies.flatMap(value => value.gaps)])].sort();
   const testPath = test.contract.split('#')[0]!, testAnchor = test.contract.includes('#');
   const owner = targets?.get(test.contract) ?? documents.find(doc => doc.path === testPath);
   const feature = owner?.metadata.kind === 'use-case' ? owner.metadata.feature : owner?.metadata.kind === 'feature' ? owner.path : undefined;
@@ -52,7 +52,9 @@ export function analysisView(repo: Repository, cases: readonly AnnotatedCase[], 
   }
   return { observations, relevance: cases.map(test => {
     const relevance = relevanceFor(test, codes, observations, documents, stepRefs, targets);
-    return { testId: test.id, scope: 'file' as const, relevance, message: relevance.verdict === 'not-observed' ? '未观察到交集' : `observed (${relevance.level}; FileScope)` };
+    const dependencies = observations.filter(item => item.current).flatMap(item => item.value.dependencies.filter(dependency => dependency.testId === test.id));
+    const scope = dependencies.length > 0 && dependencies.every(item => item.scope === 'native-case') ? 'native-case' as const : 'file' as const;
+    return { testId: test.id, scope, relevance, message: relevance.verdict === 'not-observed' ? '未观察到交集' : `observed (${relevance.level}; ${scope === 'file' ? 'FileScope' : 'native-case'})` };
   }) };
 }
 /** A historical relation projection cannot authorize relevance for current sources. */

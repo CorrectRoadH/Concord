@@ -8,7 +8,7 @@ import { analysisBudgets, type LanguageServer } from './language-server-config.j
 import { LspConnection } from './lsp-protocol.js';
 import { bindSymbol, CallItemSchema, documentSymbols, flattenSymbols, OutgoingSchema, PrepareSchema, sourceUri, uriPath, validRange, type CallItem, type DocumentSymbol, type PositionEncoding, type SymbolLocator } from './lsp-symbols.js';
 import type { CodeDeclaration } from './code.js';
-import type { AnalysisValue, DependencyObservation } from './analysis-values.js';
+import type { AnalysisValue, DependencyObservation, NativeAnalysisScope } from './analysis-values.js';
 import { withinRoots } from './typescript-dependencies.js';
 
 const sync = <A>(run: () => A) => Effect.try({ try: run, catch: cause => cause instanceof ConcordError && cause.code === 'InvalidData' ? new ConcordError('LanguageServerFailed', 'Language server returned an invalid result') : failure(cause) });
@@ -21,7 +21,7 @@ function processFailure(result: OwnedProcessResult): ConcordError {
   return new ConcordError('LanguageServerFailed', 'Language server exited before the protocol completed');
 }
 
-export const analyzeLanguageServer = (repo: Repository, server: LanguageServer, files: ReadonlyMap<string, string>, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[]) => Effect.gen(function* () {
+export const analyzeLanguageServer = (repo: Repository, server: LanguageServer, files: ReadonlyMap<string, string>, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[], native?: { readonly scopes: ReadonlyMap<string, NativeAnalysisScope>; readonly gaps: ReadonlyMap<string, readonly string[]> }) => Effect.gen(function* () {
   const owned = yield* OwnedProcess;
   const budgets = analysisBudgets(server), rpc = new LspConnection(budgets);
   const env: NodeJS.ProcessEnv = {};
@@ -93,7 +93,8 @@ export const analyzeLanguageServer = (repo: Repository, server: LanguageServer, 
     }
     const dependencies: DependencyObservation[] = [];
     for (const test of cases.filter(item => matches(item.file))) {
-      const testGaps = new Set([...gaps, 'FileScope']);
+      const scope = native?.scopes.get(test.id);
+      const testGaps = new Set([...gaps, ...(scope?.gaps ?? ['FileScope', ...(native?.gaps.get(test.id) ?? [])])]);
       const declarations = new Set<string>(), edges: { from: string; to: string }[] = [];
       const queue: { item: CallItem; depth: number }[] = [];
       let requests = 0;
@@ -114,6 +115,7 @@ export const analyzeLanguageServer = (repo: Repository, server: LanguageServer, 
       if (hierarchy && canOpen) for (const { symbol } of flattenSymbols(symbolsByPath.get(test.file) ?? [])) {
         // Methods and nested functions are roots too; classes alone are not callable.
         if (![6, 7, 9, 12, 13].includes(symbol.kind)) continue;
+        if (scope !== undefined && !scope.ranges.some(range => symbol.range.start.line + 1 >= range.startLine && symbol.range.end.line + (symbol.range.end.character > 0 ? 1 : 0) <= range.endLine)) continue;
         if (!available()) break;
         const prepared = yield* rpc.request('textDocument/prepareCallHierarchy', { textDocument: { uri: sourceUri(repo, test.file) }, position: symbol.selectionRange.start }).pipe(Effect.flatMap(value => sync(() => decode(PrepareSchema, value, 'prepareCallHierarchy'))));
         if (prepared === null || prepared.length === 0) testGaps.add('UnknownTarget');
@@ -150,7 +152,7 @@ export const analyzeLanguageServer = (repo: Repository, server: LanguageServer, 
       }
       if (queue.length === 0 && visited.size === 0) testGaps.add('UnknownTarget');
       for (const gap of rpc.gaps) testGaps.add(gap);
-      dependencies.push({ testId: test.id, scope: 'file', file: test.file, declarations: [...declarations].sort(), edges, gaps: [...testGaps].sort() });
+      dependencies.push({ testId: test.id, scope: scope === undefined ? 'file' : 'native-case', file: test.file, declarations: [...declarations].sort(), edges, gaps: [...testGaps].sort(), ...(scope === undefined ? {} : { native: scope }) });
     }
     for (const uri of opened.splice(0)) yield* sync(() => rpc.notify('textDocument/didClose', { textDocument: { uri } }));
     yield* rpc.request('shutdown');

@@ -17,6 +17,7 @@ import { analyzeLanguageServer } from './lsp-client.js';
 import { typescriptDependencies } from './typescript-dependencies.js';
 import { typescriptPackageVersion } from './typescript-host.js';
 import { ANALYSIS_LIMITS } from './language-server-config.js';
+import { captureNativeAnalysis } from './native-analysis.js';
 
 const ALGORITHM = 'concord.analysis/v1';
 const sync = <A>(run: () => A) => Effect.try({ try: run, catch: failure });
@@ -49,9 +50,10 @@ export function captureAnalysisInputs(repo: Repository) {
   requireValidTrace(trace);
   const contractPaths = [...new Set([...trace.documents.map(doc => doc.path), ...repo.files('docs').filter(path => path.endsWith('.md') || path.endsWith('.json'))])].sort();
   const contracts = contractPaths.map(path => ({ path, digest: digest(repo.read(path) ?? '') }));
-  const identity = { algorithm: ALGORITHM, compiler: typescriptPackageVersion(), projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, config: repo.configSnapshot.digest, candidate: candidateDigest(repo, [...trace.documents]), members: identities, contracts, budgets: ANALYSIS_LIMITS };
+  const native = captureNativeAnalysis(repo, trace.annotations.cases);
+  const identity = { algorithm: ALGORITHM, compiler: typescriptPackageVersion(), projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, config: repo.configSnapshot.digest, candidate: candidateDigest(repo, [...trace.documents]), members: identities, contracts, budgets: ANALYSIS_LIMITS, native: { observations: native.identity, bindings: [...native.scopes], gaps: [...native.gaps] } };
   const inputs = objectDigest(identity);
-  return { identity, inputs, files, trace, revision: readPublicationRevisionSync(repo.root) };
+  return { identity, inputs, files, trace, native, revision: readPublicationRevisionSync(repo.root) };
 }
 function readCapture(root: string) {
   const reader = new LocalRepository(root, { access: 'read' });
@@ -99,7 +101,7 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
   });
   const values: AnalysisValue[] = [yield* sync(() => typescriptDependencies(repo, captured.files, captured.trace.annotations.cases, captured.trace.codeDeclarations))];
   for (const server of repo.config.languageServers ?? []) {
-    values.push(yield* analyzeLanguageServer(repo, server, captured.files, captured.trace.annotations.cases, captured.trace.codeDeclarations));
+    values.push(yield* analyzeLanguageServer(repo, server, captured.files, captured.trace.annotations.cases, captured.trace.codeDeclarations, captured.native));
   }
   const idle = (yield* owned.activeCount) === 0;
   const results = yield* owned.cleanupResults;
