@@ -56,6 +56,7 @@ export function analysisView(repo: Repository, cases: readonly AnnotatedCase[], 
 }
 /** A historical relation projection cannot authorize relevance for current sources. */
 export function historicalAnalysis(view: AnalysisView): AnalysisView {
+  if (view.observations.length === 0) return view;
   return {
     observations: view.observations.map(value => ({ ...value, current: false, complete: false, gaps: [...new Set([...value.gaps, 'SnapshotNotCurrent'])] })),
     relevance: view.relevance.map(value => ({ ...value, relevance: { verdict: 'not-observed', gaps: ['SnapshotNotCurrent'] }, message: '未观察到交集' })),

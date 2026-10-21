@@ -10,7 +10,7 @@ import { analysisBudgets, LanguageServersSchema, type LanguageServer } from '../
 import { documentSymbols, positionOffset, bindSymbol } from '../dist/lsp-symbols.js';
 import { LspConnection } from '../dist/lsp-protocol.js';
 import { AnalysisObservationSchema } from '../dist/analysis-values.js';
-import { AnalysisViewSchema, relevanceFor } from '../dist/analysis-view.js';
+import { AnalysisViewSchema, historicalAnalysis, relevanceFor } from '../dist/analysis-view.js';
 import { CodeDeclarationSchema } from '../dist/code.js';
 import { decode, type AnnotatedCase, type DocumentRecord } from '../dist/shared.js';
 import { observation } from '../dist/observation.js';
@@ -205,6 +205,8 @@ test('range encoding, profile policy and relevance levels stay explicit', () => 
   const relevance = relevanceFor(test, [stepCode], [observed], docs, new Set([test.contract]));
   assert.equal(relevance.verdict, 'observed'); if (relevance.verdict === 'observed') assert.equal(relevance.level, 'step');
   assert.equal(relevanceFor(test, [{ ...code, contracts: ['docs/feature/other/README.md'] }], [observed], docs).verdict, 'not-observed');
+  const unavailable = { observations: [], relevance: [{ testId: test.id, scope: 'file' as const, relevance: { verdict: 'not-observed' as const, gaps: ['NoAnalyzer', 'FileScope'] as [string, ...string[]] }, message: '未观察到交集' }] };
+  assert.deepEqual(historicalAnalysis(unavailable), unavailable);
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
