@@ -118,16 +118,20 @@ function parseSource(input: Source): Parsed {
   return { cases, findings };
 }
 
-function sources(repo: Repository): Source[] {
+type SourceMode = 'disk' | 'overlay';
+function sources(repo: Repository, mode: SourceMode): Source[] {
   const paths = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].sort();
   const selected: Source[] = [];
   for (const path of paths) {
     const absolute = repo.absolute(path);
-    let stat;
-    try { stat = lstatSync(absolute); } catch { continue; }
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > TEXT_LIMIT) continue;
+    if (mode === 'disk') {
+      let stat;
+      try { stat = lstatSync(absolute); } catch { continue; }
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > TEXT_LIMIT) continue;
+    }
     const text = repo.read(path);
     if (text === undefined) throw new ConcordError('SourceChanged', `${path} disappeared while it was scanned`);
+    if (Buffer.byteLength(text) > TEXT_LIMIT) continue;
     if (text.includes('\0')) continue;
     selected.push({ path, text, digest: digest(text) });
   }
@@ -149,8 +153,8 @@ function readCache(repo: Repository, key: string): CachedSnapshot | undefined {
 function writeCache(repo: Repository, key: string, value: CachedSnapshot): void {
   withPersistentCache(repo, true, db => db!.put('annotation_cache', [{ key, payload: canonical(value) }]));
 }
-function unchanged(repo: Repository, before: readonly Source[]): boolean {
-  try { const after = sources(repo); return after.length === before.length && after.every((source, index) => source.path === before[index]?.path && source.digest === before[index]?.digest); } catch { return false; }
+function unchanged(repo: Repository, before: readonly Source[], mode: SourceMode): boolean {
+  try { const after = sources(repo, mode); return after.length === before.length && after.every((source, index) => source.path === before[index]?.path && source.digest === before[index]?.digest); } catch { return false; }
 }
 function compile(current: readonly Source[]): CachedSnapshot {
   const parsed = current.map(parseSource);
@@ -169,18 +173,20 @@ function sourceChanged(value: CachedSnapshot, cache: AnnotationSnapshot['cache']
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
-export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off' } = {}): AnnotationSnapshot {
+export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode } = {}): AnnotationSnapshot {
   return repo.snapshot === undefined ? scanUnderSnapshot(repo, options) : repo.snapshot(() => scanUnderSnapshot(repo, options));
 }
-function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off' }): AnnotationSnapshot {
-  const mode = options.cache ?? 'use', path = cachePath(repo); const current = sources(repo); const key = cacheKey(repo, current);
-  if (mode === 'off') { const value = compile(current); return unchanged(repo, current) ? snapshot(value, { status: 'off', hits: 0, misses: 1, path }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
+function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode }): AnnotationSnapshot {
+  const mode = options.cache ?? 'use', sourceMode = options.sourceMode ?? 'disk', path = cachePath(repo);
+  if (sourceMode === 'overlay' && mode !== 'off') throw new ConcordError('InvalidOption', 'Overlay annotation sources require cache: off');
+  const current = sources(repo, sourceMode); const key = cacheKey(repo, current);
+  if (mode === 'off') { const value = compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'off', hits: 0, misses: 1, path }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
   if (mode === 'use') try {
     const cached = readCache(repo, key);
-    if (cached) return unchanged(repo, current) ? snapshot(cached, { status: 'hit', hits: 1, misses: 0, path }) : sourceChanged(compile(current), { status: 'source-changed', hits: 0, misses: 1, path });
-  } catch (cause) { const value = compile(current); return unchanged(repo, current) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cause instanceof Error ? cause.message : String(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
+    if (cached) return unchanged(repo, current, sourceMode) ? snapshot(cached, { status: 'hit', hits: 1, misses: 0, path }) : sourceChanged(compile(current), { status: 'source-changed', hits: 0, misses: 1, path });
+  } catch (cause) { const value = compile(current); return unchanged(repo, current, sourceMode) ? snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cause instanceof Error ? cause.message : String(cause) }) : sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path }); }
   const value = compile(current);
-  if (!unchanged(repo, current)) return sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path });
+  if (!unchanged(repo, current, sourceMode)) return sourceChanged(value, { status: 'source-changed', hits: 0, misses: 1, path });
   try { writeCache(repo, key, value); return snapshot(value, { status: 'miss', hits: 0, misses: 1, path }); }
   catch (cause) { return snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cause instanceof Error ? cause.message : String(cause) }); }
 }

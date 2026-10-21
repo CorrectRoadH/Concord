@@ -84,3 +84,13 @@ code list、trace show --fresh、test show 的 analysis 返回 observations 与 
 文件级依赖始终标 FileScope，不把文件中另一 case 的导入称为当前 case 的调用证明。调用观察始终标 OpenWorldCalls；LSP 无法核验的动态派发、子进程与协议边界分别标 UnknownDynamicDispatch、UnknownSubprocessBoundary 与 UnknownProtocolBoundary。动态 import、未解析模块、外部目标、网络、子进程与预算截断分别记录缺口。没有观察到交集不产生 finding 或失败退出码。current 表达仓库内输入一致性；复核通过的 LSP 观察可用于符号定位与 observed 判定。未核验的外部 SDK、环境与私有索引保留 UnverifiedEnvironment，complete 为 false。
 
 具体语言、server 与 profile 的兼容承诺须有固定版本的真实 fixture。标记关系和协议 fake 不能替代真实 Python、Go、Rust 或 Java server 兼容证据。
+
+## 编辑器服务
+
+编辑器启动 `concord --root <worktree> lsp`，用 Content-Length framed JSON-RPC 连接 stdio，协商 UTF-16。支持文档打开、递增版本修改、保存、关闭，推送带版本的诊断，并提供 definition、references、completion 与 hover。多个未保存缓冲区共同参与步骤、源码标记、引用和写作检查；合法新文件可只存在于内存。
+
+保存不以磁盘覆盖客户端文本，携全文时必须一致。非法增量、版本倒退、重复打开和保存冲突须关闭重开；旧请求返回 ContentModified（-32801），取消返回 RequestCancelled（-32800）。删除保留打开文本并标记不完整；didRenameFiles 不迁移 overlay，须关闭旧 URI 并打开新 URI。文件变化可通过 didChangeWatchedFiles、didDeleteFiles 和 didRenameFiles 通知。
+
+只接受当前 worktree 的安全 file URI，拒绝符号链接、路径逃逸与私有目录。配置授权使用已保存配置，每次计算复核配置、磁盘和缓冲区代次；输入缺失显示 EditorInputsIncomplete，不表示项目全部通过。服务不提供分析观察，不能据此推断没有关系或执行覆盖。
+
+服务不注册编辑、格式化、codeAction、executeCommand 或 willRenameFiles，不启动分析进程、测试 collector 或 runner，不开网络端口，不持久化缓冲区。未知编辑执行请求拒绝；shutdown/exit、EOF 与 SIGINT 释放任务和句柄。具体预算与客户端生命周期见随包 docs/feature/local-sdlc/use-case/use-editor-service.md。
