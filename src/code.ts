@@ -2,6 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
+import type { LanguageServer } from './language-server-config.js';
 import { cacheDatabasePath } from './cache-file.js';
 import { readCodePayloads, writeCodePayloads } from './code-cache.js';
 import { persistNotedConfig } from './config-cache.js';
@@ -76,7 +77,7 @@ interface CompiledFiles {
   readonly readFailure?: string;
 }
 
-interface Source { readonly path: string; readonly text: string; readonly digest: string }
+interface Source { readonly path: string; readonly text: string; readonly digest: string; readonly server?: LanguageServer }
 interface LineComment {
   readonly pos: number;
   readonly end: number;
@@ -433,11 +434,11 @@ function sourceRoots(repo: Repository): readonly string[] {
 }
 
 function readSources(repo: Repository): readonly Source[] {
-  const paths = [...new Set(sourceRoots(repo).flatMap(root => repo.files(root, 'source')))].filter(path => SOURCE_EXTENSION.test(path)).sort();
+  const paths = [...new Set(sourceRoots(repo).flatMap(root => repo.files(root, 'source')))].filter(path => SOURCE_EXTENSION.test(path) || repo.config.languageServers?.some(server => server.extensions.some(extension => path.endsWith(extension)))).sort();
   return paths.map(path => {
     const text = repo.read(path);
     if (text === undefined) throw new CodeSourceReadChanged(`Code source changed while reading ${path}`);
-    return { path, text, digest: digest(text) };
+    return { path, text, digest: digest(text), ...(!SOURCE_EXTENSION.test(path) ? { server: repo.config.languageServers?.find(server => server.extensions.some(extension => path.endsWith(extension))) } : {}) };
   });
 }
 
@@ -471,7 +472,7 @@ function mergeParsed(parsed: readonly ParsedFile[]): { readonly codes: readonly 
   }
   return { codes, findings };
 }
-function compileCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean): CompiledFiles {
+function compileAstCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean): CompiledFiles {
   if (mode === 'off' || skipCache) {
     const inputs = current.map(source => ({ path: source.path, source: source.text }));
     return { ...mergeParsed(codeContentCache.getMany(inputs, input => input.source.includes('@concord-') ? parseSource({ path: input.path, text: input.source, digest: digest(input.source) }) : { codes: [], findings: [] })), hits: 0, misses: current.length, rows: [] };
@@ -507,6 +508,49 @@ function compileCached(repo: Repository, current: readonly Source[], mode: CodeM
     if (readFailure === undefined) rows.push({ key: item.key, payload: encodeParse(fresh) });
   }
   return { ...mergeParsed(parsed), hits, misses, rows, ...(readFailure === undefined ? {} : { readFailure }) };
+}
+
+/** Text markers own foreign-language relations even when no analyzer is available. */
+function parseForeignSource(input: Source): ParsedFile {
+  const findings: Finding[] = [];
+  const comments: LineComment[] = [];
+  const lines = input.text.split(/\r\n|\r|\n/u);
+  let pos = 0;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    const prefix = input.server!.profile.commentPrefixes.find(prefix => line.trimStart().startsWith(prefix));
+    const content = prefix === undefined ? '' : line.trimStart().slice(prefix.length).trim();
+    const match = /^@concord-([^\s]+)(?:\s+(.+?))?\s*$/u.exec(content);
+    if (match !== null) comments.push({ pos, end: pos + line.length + 1, line: index + 1, family: match[1]!, ...(match[2] === undefined ? {} : { argument: match[2]!.trim() }), ownLine: true });
+    pos += line.length + 1;
+  }
+  for (const comment of comments) {
+    if (!CODE_FAMILIES.has(comment.family) && !OTHER_FAMILIES.has(comment.family)) addFinding(findings, 'UnknownConcordAnnotation', input.path, `Unknown annotation family @concord-${comment.family}`, comment.line);
+    if (['file', 'code', 'begin', 'end'].includes(comment.family) && comment.argument !== undefined) addFinding(findings, 'InvalidCodeAnnotation', input.path, 'Scope markers take no argument', comment.line);
+  }
+  const { starts, consumedImplements } = startMarkers(comments, input.path, findings);
+  for (const comment of comments) if (comment.family === 'implements' && !consumedImplements.has(comment.pos)) addFinding(findings, 'OrphanCodeImplements', input.path, '@concord-implements must immediately follow a scope marker', comment.line);
+  const pairs = regionPairs(starts, comments, input.path, findings);
+  const files = starts.filter(start => start.family === 'file');
+  if (files.length > 1) for (const marker of files.slice(1)) addFinding(findings, 'DuplicateFileCode', input.path, 'A file may have only one file declaration', marker.line);
+  const codes: CodeDeclaration[] = [];
+  starts.forEach((marker, ordinal) => {
+    if (!marker.valid) return;
+    const pair = pairs.find(pair => pair.begin.pos === marker.pos);
+    if (marker.family === 'begin' && pair === undefined || marker.family === 'file' && files.length !== 1) return;
+    if (marker.family === 'file' && lines.slice(0, marker.line - 1).some(line => line.trim() !== '' && !input.server!.profile.commentPrefixes.some(prefix => line.trimStart().startsWith(prefix)))) {
+      addFinding(findings, 'OrphanCodeAnnotation', input.path, '@concord-file must precede code', marker.line);
+      return;
+    }
+    codes.push({ id: `code-${createHash('sha256').update(JSON.stringify(['concord.code-marker/v1', input.path, ordinal + 1])).digest('hex').slice(0, 32)}`, file: input.path, line: marker.family === 'file' ? 1 : marker.line, endLine: marker.family === 'file' ? lines.length : pair?.end.line ?? marker.line, scope: marker.family === 'code' ? 'node' : marker.family === 'begin' ? 'region' : 'file', contracts: marker.contracts });
+  });
+  return { codes, findings };
+}
+function compileCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean): CompiledFiles {
+  const ast = compileAstCached(repo, current.filter(source => source.server === undefined), mode, skipCache);
+  const foreign = current.filter(source => source.server !== undefined).map(parseForeignSource);
+  const merged = mergeParsed([ast, ...foreign]);
+  return { ...ast, ...merged };
 }
 
 function result(compiled: { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] }, current: readonly Source[], changed: boolean): Omit<CodeSnapshot, 'cache' | 'relationsUnknown'> {

@@ -2,6 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/README.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
+import { LanguageServersSchema } from './language-server-config.js';
 import { validSourceIgnore } from './source-discovery.js';
 import { DOCUMENT_NAME_PATTERN } from './document-name.js';
 import { FeedbackConnectionsSchema, FeedbackSourceSchema } from './feedback-schema.js';
@@ -55,6 +56,7 @@ export const ProjectSchema = Schema.Struct({
   projectId: Text,
   testRoots: Schema.Array(Text),
   sourceRoots: Schema.optional(Schema.Array(Text)),
+  languageServers: Schema.optional(LanguageServersSchema),
   sourceIgnore: Schema.optional(Schema.Array(Text.check(Schema.makeFilter(validSourceIgnore)))),
   p5: Schema.optional(Schema.Struct({
     libraries: Schema.Array(Text).check(Schema.isMaxLength(16), Schema.makeFilter(values => new Set(values).size === values.length)),

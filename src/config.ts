@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
+import { Predicate } from 'effect';
 import { readCachedProjectConfig } from './config-cache.js';
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type ProjectConfig } from './shared.js';
 import type * as TypeScript from 'typescript';
@@ -54,7 +55,11 @@ export function parseTypeScriptConfig(source: string, path = 'concord.config.ts'
   }
   if (exported === undefined) throw new ConcordError('InvalidConfigSyntax', `${path}: expected one export default static object`);
   const value = literal(exported.expression, path);
-  return decode(ProjectSchema, value, path);
+  try { return decode(ProjectSchema, value, path); }
+  catch (cause) {
+    if (Predicate.isObject(value) && Object.hasOwn(value, 'languageServers') && cause instanceof ConcordError && cause.message.includes('languageServers')) throw new ConcordError('InvalidLanguageServer', cause.message);
+    throw cause;
+  }
 }
 
 export function renderTypeScriptConfig(config: ProjectConfig): string {
