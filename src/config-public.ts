@@ -19,6 +19,22 @@ export type FeedbackConnection =
   | { readonly id: string; readonly provider: 'github'; readonly credentialEnv: string; readonly owner: string; readonly repo: string; readonly repositoryId?: string }
   | { readonly id: string; readonly provider: 'linear'; readonly credentialEnv: string; readonly team: string; readonly organizationId?: string; readonly teamId?: string };
 
+export interface TestAdapter {
+  readonly id: string;
+  readonly include: readonly [string, ...string[]];
+  readonly builtin?: 'node-test' | 'vitest' | 'pytest' | 'go' | 'cargo';
+  readonly argv?: readonly [string, ...string[]];
+  readonly implementationFiles: readonly string[];
+  readonly inputRoots: readonly string[];
+  readonly frameworkVersion: string;
+  readonly lockFiles: readonly string[];
+  readonly envNames: readonly string[];
+  readonly collectTimeoutMs?: number;
+  readonly runTimeoutMs?: number;
+  readonly wallTimeoutMs?: number;
+  readonly budgets?: { readonly responseBytes?: number; readonly outputBytes?: number; readonly cases?: number; readonly invocations?: number; readonly reportFiles?: number; readonly reportFileBytes?: number; readonly reportBytes?: number };
+}
+
 export interface ProjectConfig {
   readonly format: 'concord.project/v1';
   readonly projectId: string;
@@ -28,6 +44,7 @@ export interface ProjectConfig {
   readonly sourceIgnore?: readonly string[];
   readonly p5?: { readonly libraries: readonly string[] };
   readonly runner: Runner;
+  readonly testAdapters?: readonly TestAdapter[];
   readonly docsWork?: {
     readonly checks?: Readonly<Record<string, {
       readonly argv: readonly [string, ...string[]];

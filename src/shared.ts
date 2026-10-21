@@ -2,6 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/README.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
+import { TestAdapterSchema, validAdapters } from './test-adapter-config.js';
 import { validSourceIgnore } from './source-discovery.js';
 import { DOCUMENT_NAME_PATTERN } from './document-name.js';
 import { FeedbackConnectionsSchema, FeedbackSourceSchema } from './feedback-schema.js';
@@ -60,6 +61,7 @@ export const ProjectSchema = Schema.Struct({
     libraries: Schema.Array(Text).check(Schema.isMaxLength(16), Schema.makeFilter(values => new Set(values).size === values.length)),
   })),
   runner: RunnerSchema,
+  testAdapters: Schema.optional(Schema.Array(TestAdapterSchema)),
   docsWork: Schema.optional(Schema.Struct({
     checks: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ argv: Schema.NonEmptyArray(Text), timeoutMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))) }))),
     finalizer: Schema.optional(Schema.Struct({ argv: Schema.NonEmptyArray(Text), timeoutMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))) })),
@@ -70,7 +72,7 @@ export const ProjectSchema = Schema.Struct({
   documentDefaults: Schema.optional(DocumentDefaultsSchema),
   constitution: Schema.optional(Schema.Struct({ path: Schema.Literal('docs/constitution.md') })),
   memorySources: Schema.optional(Schema.NonEmptyArray(MemorySourceSchema)),
-});
+}).check(Schema.makeFilter(validAdapters));
 export type ProjectConfig = typeof ProjectSchema.Type;
 export type MemorySource = typeof MemorySourceSchema.Type;
 export interface ConfigSnapshot { readonly path: 'concord.config.ts'; readonly source: string; readonly digest: string; readonly config: ProjectConfig }
@@ -180,7 +182,7 @@ export const AnnotatedCaseSchema = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(/^neref_[0-9a-f]{32}$/u)), file: Text, line: Schema.Int, name: Text,
   contract: Text, contractKind: Schema.Literals(['feature', 'use-case']), regressions: Strings,
   status: Schema.Literals(['active', 'retired']), framework: Schema.Literals(['node:test', 'vitest', '@playwright/test', 'marker']),
-  skipped: Schema.Boolean, named: Schema.optional(Schema.Boolean),
+  skipped: Schema.Boolean, named: Schema.optional(Schema.Boolean), native: Schema.optional(Text), markerEndLine: Schema.optional(Schema.Int),
 });
 export type AnnotatedCase = typeof AnnotatedCaseSchema.Type;
 export interface AnnotationSnapshot {

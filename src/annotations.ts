@@ -10,7 +10,7 @@ import { caseDiscriminator, deriveTestReference } from './test-reference.js';
 import type * as TypeScript from 'typescript';
 import { lazyTypeScript } from './typescript-host.js';
 
-function parserVersion(): string { return 'concord-annotations-v4-marker'; }
+function parserVersion(): string { return 'concord-annotations-v5-native-selector'; }
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 const TEXT_LIMIT = 1_048_576;
 const COMMENT_LINE = /^[ \t]*(?:\/\/+|#|--)[ \t]?(.*)$/u;
@@ -27,11 +27,11 @@ interface Source { readonly path: string; readonly text: string; readonly digest
 interface Parsed { readonly cases: AnnotatedCase[]; readonly findings: Finding[] }
 
 function finding(findings: Finding[], code: string, path: string, message: string, line?: number): void { findings.push(line === undefined ? { code, path, message } : { code, path, message, line }); }
-function parseAnnotations(values: readonly string[], lines: readonly number[], path: string, findings: Finding[]): { readonly contract?: string; readonly contractKind?: 'feature' | 'use-case'; readonly contractLine?: number; readonly regressions: string[]; readonly status: 'active' | 'retired'; readonly name?: string; readonly recognized: boolean; readonly rejected: boolean } {
-  let contract: string | undefined, contractKind: 'feature' | 'use-case' | undefined, contractLine: number | undefined, status: 'active' | 'retired' = 'active', name: string | undefined, recognized = false, rejected = false;
+function parseAnnotations(values: readonly string[], lines: readonly number[], path: string, findings: Finding[]): { readonly contract?: string; readonly contractKind?: 'feature' | 'use-case'; readonly contractLine?: number; readonly regressions: string[]; readonly status: 'active' | 'retired'; readonly name?: string; readonly native?: string; readonly recognized: boolean; readonly rejected: boolean } {
+  let contract: string | undefined, contractKind: 'feature' | 'use-case' | undefined, contractLine: number | undefined, status: 'active' | 'retired' = 'active', name: string | undefined, native: string | undefined, recognized = false, rejected = false;
   const regressions: string[] = [];
   for (let index = 0; index < values.length; index++) {
-    const match = /^@(feature|use-case|regression|status|name)(?:\s+(.+?))?\s*$/u.exec(values[index] ?? '');
+    const match = /^@(feature|use-case|regression|status|name|native)(?:\s+(.+?))?\s*$/u.exec(values[index] ?? '');
     if (!match) continue;
     recognized = true;
     const kind = match[1], argument = match[2]?.trim(), line = lines[index];
@@ -39,6 +39,9 @@ function parseAnnotations(values: readonly string[], lines: readonly number[], p
     if (kind === 'feature' || kind === 'use-case') {
       if (contract !== undefined) { finding(findings, 'DuplicateContractAnnotation', path, 'A test marker has more than one @feature/@use-case target', line); rejected = true; }
       else { contract = argument; contractKind = kind; contractLine = line; }
+    } else if (kind === 'native') {
+      if (native !== undefined) { finding(findings, 'InvalidAnnotation', path, '@native must appear once', line); rejected = true; }
+      else native = argument;
     } else if (kind === 'regression') regressions.push(argument);
     else if (kind === 'name') {
       if (name !== undefined) { finding(findings, 'InvalidAnnotation', path, '@name must appear once', line); rejected = true; }
@@ -46,7 +49,7 @@ function parseAnnotations(values: readonly string[], lines: readonly number[], p
     } else if (argument === 'retired') status = 'retired';
     else { finding(findings, 'InvalidAnnotation', path, '@status must be retired', line); rejected = true; }
   }
-  return { contract, contractKind, contractLine, regressions, status, name, recognized, rejected };
+  return { contract, contractKind, contractLine, regressions, status, name, native, recognized, rejected };
 }
 function realCommentLines(path: string, text: string): ReadonlySet<number> | undefined {
   if (!SOURCE_EXTENSION.test(path)) return undefined;
@@ -74,7 +77,7 @@ export function parseTestDeclarations(path: string, text: string): { readonly ca
 }
 
 function parseSource(input: Source): Parsed {
-  if (input.text.includes('\0') || !/@(?:feature|use-case|regression|status|name)(?:\s|$)/u.test(input.text)) return { cases: [], findings: [] };
+  if (input.text.includes('\0') || !/@(?:feature|use-case|regression|status|name|native)(?:\s|$)/u.test(input.text)) return { cases: [], findings: [] };
   const comments = realCommentLines(input.path, input.text);
   const lines = input.text.split(/\r?\n/u);
   const findings: Finding[] = [], cases: AnnotatedCase[] = [];
@@ -107,7 +110,8 @@ function parseSource(input: Source): Parsed {
     try {
       cases.push(decode(AnnotatedCaseSchema, {
         id, file: input.path, line: parsed.contractLine, name, contract: parsed.contract, contractKind: parsed.contractKind,
-        regressions: parsed.regressions, status: parsed.status, framework: 'marker', skipped: false, named: parsed.name !== undefined,
+        regressions: parsed.regressions, status: parsed.status, framework: 'marker', skipped: false, named: parsed.name !== undefined, ...(parsed.native === undefined ? {} : { native: parsed.native }),
+        markerEndLine: valueLines.filter((_, index) => /^@(feature|use-case|regression|status|name|native)(?:\s|$)/u.test(values[index] ?? '')).at(-1),
       }, `${input.path}:${parsed.contractLine}`));
     } catch (cause) { finding(findings, 'InvalidAnnotation', input.path, cause instanceof Error ? cause.message : String(cause), parsed.contractLine); }
   }
