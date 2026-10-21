@@ -14,6 +14,12 @@ constitutionRefs:
   - docs/constitution.md#c-009
   - docs/constitution.md#c-010
   - docs/constitution.md#c-014
+decision:
+  selected: policy-rules
+  reason: 内置 v3 规则按目录合成，门禁确定且不依赖外部进程，字符路径与 token 路径分离并覆盖中英文
+  at: 2026-10-21T09:29:59.463Z
+  targets:
+    - docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 ---
 
 # 受控写作规则

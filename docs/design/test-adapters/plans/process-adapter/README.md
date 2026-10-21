@@ -15,9 +15,9 @@
 | [L1](../../LIMITS.md#l1-正向关系由测试源码拥有) | satisfied | 静态标记唯一拥有关系，观察不影响 ID | 架构声明，非运行验证 |
 | [L2](../../LIMITS.md#l2-静态操作不执行项目代码) | satisfied | check 不读取清单；仅显式命令收集 | 架构声明，非运行验证 |
 | [L3](../../LIMITS.md#l3-不把第三方代码加载进-concord-进程) | satisfied | 内置 TS/Effect，外部受信子进程 | 架构声明，非运行验证 |
-| [L4](../../LIMITS.md#l4-子进程资源归-concord-管理) | pending | run 全周期与预算已定义，需真实生命周期验收 | 架构声明，非运行验证 |
-| [L5](../../LIMITS.md#l5-证据只表达实际证明的范围) | pending | 统一集合裁决已定义，需各 codec 原生验证 | 架构声明，非运行验证 |
-| [L6](../../LIMITS.md#l6-既有配置含义不变) | pending | 可选配置及旧证据边界已定义；C-011 修订是采用前提 | 架构声明，非运行验证 |
+| [L4](../../LIMITS.md#l4-子进程资源归-concord-管理) | satisfied | run 全周期、进程组终结、报告预算与清理未知隔离已定义，复用既有 runner 协调 | 设计论证；真实生命周期按 CASES 在实现阶段验收，未运行 |
+| [L5](../../LIMITS.md#l5-证据只表达实际证明的范围) | satisfied | requested/observed 一一核对，缺失、重复、额外与基础设施失败均为 invalid；只有通过固定版本验收的 codec 才签发 native 结论 | 设计论证；codec 映射按 CASES 在实现阶段验收，未运行 |
+| [L6](../../LIMITS.md#l6-既有配置含义不变) | satisfied | `testAdapters` 可选，未覆盖文件沿用 runner；C-011 第 1、3 款已修订 | [宪法 C-011](../../../../constitution.md#c-011) |
 
 ## Goals
 

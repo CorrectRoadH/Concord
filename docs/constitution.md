@@ -2,7 +2,7 @@
 format: concord.constitution/v1
 status: active
 ratifiedAt: 2026-09-14
-amendedAt: 2026-09-30
+amendedAt: 2026-10-21
 amendments:
   - date: 2026-09-14
     reason: 汇总已采用的工程约束，并落实本轮 dogfood 要求
@@ -83,6 +83,12 @@ amendments:
       - docs/design/workspace-projection/README.md
       - docs/feature/feedback/cli-integration.md
     impact: C-014.4 只保留历史投影不授权当前裁决的原则，工作区导航的漂移与不可用语义由 workspace-projection 拥有；新增 C-012.6 凭据边界与 C-015 机器可读输出兼容规则，不声明既有功能已符合
+  - date: 2026-10-21
+    reason: 允许显式 adapter 在执行时绑定并选择原生用例，同时明确静态关联扫描的禁止边界
+    sources:
+      - docs/design/test-adapters/README.md
+      - docs/design/test-journey-steps/共同身份.md
+    impact: 第 1 款限定为静态关联扫描，第 3 款增加 adapter 执行例外；源码标记仍是唯一关联来源，原生观察不创建关联、不影响 check。旧收据保留原件，新执行语义重新取证。适用于 test-adapters 采用后的实现
 ---
 
 # Concord 项目宪法
@@ -177,9 +183,9 @@ amendments:
 <a id="c-011"></a>
 ## C-011 测试关联由源码标记拥有
 
-1. 测试根中的 Concord 标记是测试关联的唯一正向来源，标记存在即关联存在。工具不解析宿主语言的测试声明、框架绑定、回调或 skip/todo。
+1. 测试根中的 Concord 标记是测试关联的唯一正向来源，标记存在即关联存在。静态关联扫描不解析宿主语言的测试声明、框架绑定、回调或 skip/todo。执行时的原生收集、绑定与选择仅按第 3 款进行，其观察结果不创建关联，也不授权静态关系检查成功。
 2. JS/TS 仅用注释范围排除字符串和模板中的伪标记；其它文本文件接受以 `//`、`#` 或 `--` 开头的标记行。
-3. 执行由接入项目的 runner 命令负责。没有显式 `@name` 时运行覆盖标记所在文件，不声称选中了某个原生用例。缺少逐 case 选择能力只限制选择性执行，不使标记关联失效。
+3. 执行由接入项目的 runner 命令或显式配置的 adapter 负责。adapter 可以仅在显式收集或执行前，把源码标记绑定到观察到的原生用例集合，或使用源码标记中的显式原生选择参数。原生选择不参与关联身份，不产生关联，不使静态检查依赖观察。只有能力和当前输入足以证明精确选择时，才声明选中了原生用例；否则执行范围按文件明确展示，要求原生精确选择的操作具名失败。缺少逐用例选择能力不使源码关联失效。
 
 <a id="c-012"></a>
 ## C-012 docs 只写声明，过程进入工具

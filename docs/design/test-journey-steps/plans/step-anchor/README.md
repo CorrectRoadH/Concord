@@ -27,6 +27,7 @@
 | [G3](../../GOALS.md#g3-观察测试依赖与声明的交集) | partial | 只观察正向交集；黑盒边界保留 gaps | 架构声明，非运行验证 |
 | [G4](../../GOALS.md#g4-契约正文保持可读) | satisfied | 连续列表 | 架构声明，非运行验证 |
 | [G5](../../GOALS.md#g5-步骤身份在普通编辑下稳定) | satisfied | 显式 ID 独立于文字与顺序 | 架构声明，非运行验证 |
+| [G6](../../GOALS.md#g6-步骤-id-的书写与维护成本低) | satisfied | Unicode ID、`use-case format` 补齐、`rename-step` 原子改写引用 | 架构声明，非运行验证 |
 
 ## Entry Points
 

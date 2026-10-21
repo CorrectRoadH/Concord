@@ -16,6 +16,13 @@ constitutionRefs:
   - docs/constitution.md#c-010
   - docs/constitution.md#c-012
   - docs/constitution.md#c-013
+decision:
+  selected: lsp-client
+  reason: 显式 code analyze 取得符号定位与正向调用观察，源码标记始终拥有关系，不修订 C-005；编辑器服务只读并与分析进程分离
+  at: 2026-10-21T09:28:47.185Z
+  targets:
+    - docs/feature/local-sdlc/use-case/analyze-other-languages.md
+    - docs/feature/local-sdlc/use-case/use-editor-service.md
 ---
 
 # LSP 集成

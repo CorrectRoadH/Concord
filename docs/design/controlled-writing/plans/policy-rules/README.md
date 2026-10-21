@@ -22,7 +22,7 @@ controlled 的对象逐叶合成，null 清除子树，数组按最近显式整�
 | [L2](../../LIMITS.md#l2-不分发规范原文且不宣称合规) | satisfied | 自有规则与项目词表，不宣称认证 | 机制见 architecture.md，验收见 ../../CASES.md；不是交付证明 |
 | [L3](../../LIMITS.md#l3-门禁确定且不依赖外部进程) | satisfied | 内置检查只读同一当前来源快照 | 机制见 architecture.md，验收见 ../../CASES.md；不是交付证明 |
 | [L4](../../LIMITS.md#l4-只接受当前格式并显式迁移) | satisfied | 普通入口只接受 v3；显式 v2 迁移与旧事务恢复边界 | 机制见 architecture.md，验收见 ../../CASES.md；不是交付证明 |
-| [L5](../../LIMITS.md#l5-检查成本受规模和输出预算约束) | pending | 词表、输出及 warm p50 预算确定；缺少必需测量证据 | 机制见 architecture.md，验收见 ../../CASES.md；不是交付证明 |
+| [L5](../../LIMITS.md#l5-检查成本受规模和输出预算约束) | satisfied | 词表、候选区间与 finding 上限具名失败，匹配成本 O(输入 + 词表 + 候选)，warm p50 预算已定义；实测结果是实现验收条件，未测量 | 机制见 architecture.md，验收见 ../../CASES.md；不是交付证明 |
 
 ## Goals
 

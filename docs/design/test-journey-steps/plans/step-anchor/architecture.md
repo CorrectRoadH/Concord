@@ -6,11 +6,45 @@
 
 ## 步骤与引用
 
-仅从 Markdown AST 正文提取共同契约允许的步骤，不扫描字符串或 fence。验收条目不提供步骤身份。无序、嵌套或其它 owner 中的步骤语法返回 `InvalidStepPosition`。步骤列表与章节语言无关。
+仅从 Markdown AST 正文提取共同契约允许的步骤，不扫描字符串或 fence。验收条目按共同契约不得使用步骤语法；未标记项不进入步骤集合。无序、嵌套或其它 owner 中的步骤语法返回 `InvalidStepPosition`。步骤列表与章节语言无关。
 
 每个步骤提取 `id / ref / ordinal / line`；ordinal 是所有合格项在文档中的展示顺序，从 1 计数，不采用作者所写的原始列表数字。ID 与标题显式 ID、slug 及折叠连字符的可接受别名一并做冲突检查，冲突为 `DuplicateAnchor`。
 
 引用继续接受已存在的任意标题 anchor。视图分别展示步骤、整个 Use Case、非步骤 anchor；删除 ID 后拒绝悬空引用，由作者显式修改标记，不进行猜测重定向。Feature 与 supporting page 保留普通标题解析，不增加列表 anchor 解析路径。
+
+## 书写与维护工具
+
+步骤 ID 的书写、补齐和改名由 Concord 命令完成，作者不需要手工维护全部引用。三个命令都只处理单个 Use Case 的步骤，不处理文件移动或 Feature 改名。
+
+| 命令 | 行为 | 写入 |
+| --- | --- | --- |
+| `concord use-case steps <use-case>` | 列出步骤的 ID、ordinal、行号、测试关联数与代码关联数，并列出根有序列表的 ordinal、行范围与是否含 ID | 只读 |
+| `concord use-case format <use-case> [--seed --list <ordinal>]` | 为已含步骤 ID 的根有序列表补齐缺失 ID；`--seed --list` 为一个显式选择的未标记根有序列表建立步骤身份 | Use Case 正文 |
+| `concord use-case rename-step <use-case> <old-id> <new-id>` | 改写正文中的 `{#old-id}`，以及全部指向 `<use-case>#<old-id>` 的源码标记与 Markdown 链接 | 正文、源码与文档 |
+
+`format` 规则：
+
+- 补齐的 ID 为 `step-N`。N 从当前文件已有 `step-N` 的最大值加 1 起逐项分配；没有时从 1 开始，并跳过标题显式 ID、slug、可接受别名与其它步骤占用的值。不维护已删除序号历史，不承诺序号永久不复用；仍被旧目标引用占用的 ID 不得分配给新步骤，所需引用扫描不完整时拒绝补齐。
+- 已有 ID 不修改、不重排。作者需要可读名称时使用 `rename-step`。
+- 规范化 ID 前的分隔：恰好一个空格，位于第一段末尾。位置错误的语法只报告 `InvalidStepPosition`，不移动文本。
+- 默认只补齐已经包含步骤 ID 的根有序列表。为完全未标记的列表建立步骤身份时，必须同时指定 `--seed` 与 `--list`，显式选择一个根有序列表；列表 ordinal 与范围由 `use-case steps` 展示，并受当前正文前像保护。其它未标记列表保持不变；工具不按章节名称或正文语义猜测主流程。
+
+`rename-step` 规则：
+
+- `new-id` 必须符合步骤 ID 语法，且不与该文件的标题 anchor 或其它步骤冲突。
+- 改写对象是精确引用 token：testRoots 中的 `@use-case` 标记、sourceRoots 中的 `@concord-implements`、`docs/` 中解析后指向旧引用的 Markdown 链接。
+- 测试标记识别严格沿用 C-011 第 2 款：JS/TS 使用真实注释范围排除字符串、模板和正则中的伪标记；其它文本按既有注释前缀词法规则识别，不承诺判断其宿主字符串上下文。改名只替换已识别 Concord 标记的引用参数，不解析测试声明、框架绑定、回调或 skip/todo，也不启动 adapter 或 LSP。Markdown 使用 AST 排除代码示例，仅改写解析确认的链接目标；所需扫描不完整或无法可靠定位 token 时具名拒绝整次操作。
+- Memory、Issue 与 Design metadata 中出现旧引用时拒绝执行，返回 `ManagedReferenceBlocked`，由对应生命周期命令处理。检查通过受管领域读取能力完成，不直接读取 owner 文件。
+- 没有 `@name` 的测试标记，目标改变后测试引用随之改变；带 `@name` 的保持不变。两种情况的旧收据都不能用于新目标，结果中列出受影响的 case。
+
+发布规则遵守 [C-003](../../../../constitution.md#c-003)：
+
+- `format` 使用既有正文编辑的前像与 publication 契约。`rename-step` 在既有唯一 journal 与 publication lease 下增加专用 `step-rename` 授权范围，不串联多次 `source.set` 或文档发布。该范围绑定项目、worktree、冻结配置、Use Case 路径、old-id、new-id，以及完整文件前后像、摘要与 mode。
+- 规划使用同一次乐观快照，记录引用扫描所需的文件、目录成员集合及受管引用检查；所需输入不完整时具名失败。提交取得短期独占 publication lease，复核配置、全部观察与完整变更集，并沿用 runner 失效和隔离检查。源码只允许改写配置范围内已识别标记的引用 token；Markdown 只允许改写目标步骤 ID 与解析确认的链接目标。禁止创建、删除或移动文件，禁止修改受管 metadata、Memory、Issue、配置和证据。
+- 正常发布与恢复共用上述范围校验，并从前像复算允许的改写，拒绝超出授权的后像。沿用 prepared 回滚、committed 保留结果的恢复协议；未知编辑、配置变化或未知格式均保留现场。旧版本 CLI 不得降级处理该范围。
+- 提交前发现冲突时零写入；发布开始后发生冲突或中断时返回 `RecoveryRequired`，保留唯一 journal，阻断普通当前事实读取和后续发布。恢复仅处理仍匹配前像或计划后像的文件，不覆盖未知编辑。`--dry-run` 执行同一规划与校验，不发布文件。
+
+`check` 不要求每个根有序列表项都有 ID。`trace gaps` 列出含未标记根有序列表的 Use Case，作为书写提示，不产生 finding。
 
 ## 观察输入
 

@@ -30,6 +30,7 @@
 | C24 | 使用 writing set、Web action 与 standalone profile 提交相同非法叶子 | 同一 Schema 和具名错误；未知字段、null 清除、空数组行为一致 |
 | C25 | 单表 4097 形式、极端重叠匹配或超过 finding 上限 | `WritingBudgetExceeded`、complete=false、非零退出；不以截断结果宣称完整 |
 | C26 | 执行外部建议后，再以建议缺失、失败、超时重跑 check | 内置 check 的结果不变；建议报告单独标注失败与来源 |
+| C27 | 建议进程后代残留或父进程死亡后，第二个 CLI 尝试发布 | 发布被 runner 隔离状态阻断，直到按既有协议恢复 |
 
 ## 语料验收
 

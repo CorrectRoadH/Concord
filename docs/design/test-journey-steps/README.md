@@ -15,6 +15,12 @@ constitutionRefs:
   - docs/constitution.md#c-011
   - docs/constitution.md#c-012
   - docs/constitution.md#c-013
+decision:
+  selected: step-anchor
+  reason: 显式列表项 anchor 保持主流程连续，身份独立于文字与位置，并提供补齐与原子改名工具；相关性只报告正向观察
+  at: 2026-10-21T09:28:46.414Z
+  targets:
+    - docs/feature/local-sdlc/use-case/link-tests-to-steps.md
 ---
 
 # 测试关联到 Use Case 步骤
@@ -25,7 +31,7 @@ Use Case 的文件级关联不足以导航到具体动作。步骤关联视图�
 
 ## Core Mental Model
 
-步骤、测试关联、代码关联、原生选择与观察结果遵守[共同身份](共同身份.md)。步骤是 Use Case 顶层有序列表中显式标注的项，不依赖章节名称。验收条目不进入步骤集合。
+步骤、测试关联、代码关联、原生选择与观察结果遵守[共同身份](共同身份.md)。步骤是 Use Case 顶层有序列表中显式标注的项，不依赖章节名称。验收条目按共同契约不得使用步骤语法；未标记项不进入步骤集合。
 
 步骤视图从正文和源码标记派生；无测试关联表示未声明关联，不表示没有测试。相关性只使用共同契约的 `observed` 与带 gaps 的 `not-observed`，不输出行为无关结论。
 
