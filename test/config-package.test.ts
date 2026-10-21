@@ -17,7 +17,7 @@ test('packed config has usable type hints and rejects misspelled fields', () => 
     const packed = packConcord(scratch);
     const project = join(scratch, 'consumer'); mkdirSync(project);
     writeFileSync(join(project, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-    installConcord(project, packed, ['typescript@6.0.3', '@types/node@24.13.3']);
+    installConcord(project, packed, ['typescript@7.1.0-beta', '@types/node@24.13.3']);
     const consumer = join(scratch, 'initialized');
     execFileSync('git', ['init', '-q', consumer]);
     const cli = join(project, 'node_modules/concord-sdlc/dist/entry.js');

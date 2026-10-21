@@ -3,19 +3,18 @@
 import { Predicate } from 'effect';
 import { readCachedProjectConfig } from './config-cache.js';
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type ProjectConfig } from './shared.js';
-import type * as TypeScript from 'typescript';
-import { lazyTypeScript, typescriptPackageVersion } from './typescript-host.js';
+import * as ts from 'typescript/ast';
+import { withTypeScriptSource, typescriptPackageVersion } from './typescript-host.js';
 import { ContentCache } from './content-cache.js';
 
-const ts = lazyTypeScript();
 const configContentCache = new ContentCache<ProjectConfig>('document_parse', `typescript-ast/${typescriptPackageVersion()}/concord-config-parse/v1`, ProjectSchema, { maxEntries: 128, maxBytes: 1024 * 1024 });
 
-function unwrap(expression: TypeScript.Expression): TypeScript.Expression {
+function unwrap(expression: ts.Expression): ts.Expression {
   if (ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isParenthesizedExpression(expression)) return unwrap(expression.expression);
   return expression;
 }
 
-function literal(expression: TypeScript.Expression, source: string): unknown {
+function literal(expression: ts.Expression, source: string): unknown {
   const node = unwrap(expression);
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
   if (ts.isNumericLiteral(node)) return Number(node.text);
@@ -44,22 +43,22 @@ function literal(expression: TypeScript.Expression, source: string): unknown {
 }
 
 export function parseTypeScriptConfig(source: string, path = 'concord.config.ts'): ProjectConfig {
-  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const diagnostics = (file as TypeScript.SourceFile & { readonly parseDiagnostics?: readonly TypeScript.Diagnostic[] }).parseDiagnostics ?? [];
-  if (diagnostics.length > 0) throw new ConcordError('InvalidConfigSyntax', `${path}: ${diagnostics.map((item) => ts.flattenDiagnosticMessageText(item.messageText, '\n')).join('; ')}`);
-  let exported: TypeScript.ExportAssignment | undefined;
-  for (const statement of file.statements) {
-    if (ts.isImportDeclaration(statement) && (statement.importClause?.isTypeOnly === true || statement.importClause?.name === undefined && statement.importClause?.namedBindings !== undefined && ts.isNamedImports(statement.importClause.namedBindings) && statement.importClause.namedBindings.elements.length > 0 && statement.importClause.namedBindings.elements.every((element) => element.isTypeOnly))) continue;
-    if (ts.isExportAssignment(statement) && !statement.isExportEquals && exported === undefined) { exported = statement; continue; }
-    throw new ConcordError('InvalidConfigSyntax', `${path}: only type imports and one export default static object are permitted`);
-  }
-  if (exported === undefined) throw new ConcordError('InvalidConfigSyntax', `${path}: expected one export default static object`);
-  const value = literal(exported.expression, path);
-  try { return decode(ProjectSchema, value, path); }
-  catch (cause) {
-    if (Predicate.isObject(value) && Object.hasOwn(value, 'languageServers') && cause instanceof ConcordError && cause.message.includes('languageServers')) throw new ConcordError('InvalidLanguageServer', cause.message);
-    throw cause;
-  }
+  return withTypeScriptSource(path, source, (file, diagnostics) => {
+    if (diagnostics.length > 0) throw new ConcordError('InvalidConfigSyntax', `${path}: ${diagnostics.map(item => item.text).join('; ')}`);
+    let exported: ts.ExportAssignment | undefined;
+    for (const statement of file.statements) {
+      if (ts.isImportDeclaration(statement) && (statement.importClause?.phaseModifier === ts.SyntaxKind.TypeKeyword || statement.importClause?.name === undefined && statement.importClause?.phaseModifier === undefined && statement.importClause?.namedBindings !== undefined && ts.isNamedImports(statement.importClause.namedBindings) && statement.importClause.namedBindings.elements.length > 0 && statement.importClause.namedBindings.elements.every(element => element.isTypeOnly))) continue;
+      if (ts.isExportAssignment(statement) && !statement.isExportEquals && exported === undefined) { exported = statement; continue; }
+      throw new ConcordError('InvalidConfigSyntax', `${path}: only type imports and one export default static object are permitted`);
+    }
+    if (exported === undefined) throw new ConcordError('InvalidConfigSyntax', `${path}: expected one export default static object`);
+    const value = literal(exported.expression, path);
+    try { return decode(ProjectSchema, value, path); }
+    catch (cause) {
+      if (Predicate.isObject(value) && Object.hasOwn(value, 'languageServers') && cause instanceof ConcordError && cause.message.includes('languageServers')) throw new ConcordError('InvalidLanguageServer', cause.message);
+      throw cause;
+    }
+  });
 }
 
 export function renderTypeScriptConfig(config: ProjectConfig): string {

@@ -7,10 +7,10 @@ import { withPersistentCache, closeRepositoryCache } from './cache-store.js';
 import { acquireHawdbClearGuard, hawdbIdentity } from './hawdb-native.js';
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from './shared.js';
 import { caseDiscriminator, deriveTestReference } from './test-reference.js';
-import type * as TypeScript from 'typescript';
-import { lazyTypeScript } from './typescript-host.js';
+import * as ts from 'typescript/ast';
+import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from './typescript-host.js';
 
-function parserVersion(): string { return 'concord-annotations-v5-native-selector'; }
+function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-annotations-v5-native-selector`; }
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 const TEXT_LIMIT = 1_048_576;
 const COMMENT_LINE = /^[ \t]*(?:\/\/+|#|--)[ \t]?(.*)$/u;
@@ -53,31 +53,32 @@ function parseAnnotations(values: readonly string[], lines: readonly number[], p
 }
 function realCommentLines(path: string, text: string): ReadonlySet<number> | undefined {
   if (!SOURCE_EXTENSION.test(path)) return undefined;
-  const ts = lazyTypeScript();
-  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
-  const lines = new Set<number>();
-  const collect = (ranges: readonly TypeScript.CommentRange[] | undefined): void => {
-    for (const range of ranges ?? []) {
-      if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia) lines.add(source.getLineAndCharacterOfPosition(range.pos).line + 1);
-    }
-  };
-  // Comment ranges only. Template, string, and regex text are not markers.
-  // The host test declaration is not interpreted.
-  const visit = (node: TypeScript.Node): void => {
-    const children = node.getChildren(source);
-    if (children.length > 0) { for (const child of children) visit(child); return; }
-    collect(ts.getLeadingCommentRanges(text, node.getFullStart()));
-    collect(ts.getTrailingCommentRanges(text, node.end));
-  };
-  visit(source);
-  return lines;
+  return withTypeScriptSource(path, text, source => {
+    const lines = new Set<number>();
+    const collect = (ranges: readonly ts.CommentRange[] | undefined): void => {
+      for (const range of ranges ?? []) {
+        if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia) lines.add(source.getLineAndCharacterOfPosition(range.pos).line + 1);
+      }
+    };
+    // Comment ranges only. Template, string, and regex text are not markers.
+    // The host test declaration is not interpreted.
+    const visit = (node: ts.Node): void => {
+      const children = node.getChildren(source);
+      if (children.length > 0) { for (const child of children) visit(child); return; }
+      collect(ts.getLeadingCommentRanges(text, node.getFullStart()));
+      collect(ts.getTrailingCommentRanges(text, node.end));
+    };
+    visit(source);
+    return lines;
+  });
 }
+function hasTestMarker(text: string): boolean { return !text.includes('\0') && /@(?:feature|use-case|regression|status|name|native)(?:\s|$)/u.test(text); }
 export function parseTestDeclarations(path: string, text: string): { readonly cases: readonly AnnotatedCase[]; readonly findings: readonly Finding[] } {
   return parseSource({ path, text, digest: digest(text) });
 }
 
 function parseSource(input: Source): Parsed {
-  if (input.text.includes('\0') || !/@(?:feature|use-case|regression|status|name|native)(?:\s|$)/u.test(input.text)) return { cases: [], findings: [] };
+  if (!hasTestMarker(input.text)) return { cases: [], findings: [] };
   const comments = realCommentLines(input.path, input.text);
   const lines = input.text.split(/\r?\n/u);
   const findings: Finding[] = [], cases: AnnotatedCase[] = [];
@@ -157,7 +158,8 @@ function unchanged(repo: Repository, before: readonly Source[], mode: SourceMode
   try { const after = sources(repo, mode); return after.length === before.length && after.every((source, index) => source.path === before[index]?.path && source.digest === before[index]?.digest); } catch { return false; }
 }
 function compile(current: readonly Source[]): CachedSnapshot {
-  const parsed = current.map(parseSource);
+  const parse = () => current.map(parseSource);
+  const parsed = current.some(input => SOURCE_EXTENSION.test(input.path) && hasTestMarker(input.text)) ? withTypeScript(parse) : parse();
   const cases = parsed.flatMap(result => result.cases).sort((a, b) => a.id.localeCompare(b.id) || a.file.localeCompare(b.file) || a.line - b.line);
   const findings = parsed.flatMap(result => result.findings);
   const ids = new Map<string, AnnotatedCase>();

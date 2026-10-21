@@ -4,14 +4,15 @@
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { fromMarkdown } from './markdown-parser.js';
 import type { Nodes } from 'mdast';
-import { ConcordError, inRepositorySnapshot, type Repository } from './shared.js';
+import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from './shared.js';
 import { checkControlled, type ParsedWriting } from './writing-controlled.js';
 import { composeControlled, WRITING_PARSER_VERSION, writingBudget, type PolicySource, type EffectiveControlled } from './writing-controlled-policy.js';
-import { canonicalPath } from './storage.js';
+import { canonicalPath, LocalRepository } from './storage.js';
 import { readWritingPolicy, type BannedTerm, type WritingPolicy } from './writing-policy.js';
-import { analyzeCatalogs, catalogSources, effectiveConcepts, spellingKey, spellingPositions } from './concepts.js';
+import { analyzeCatalogs, effectiveConcepts, spellingKey, spellingPositions } from './concepts.js';
 import { applies, discovered, scopeOf, snapshotDigest, under } from './writing-scopes.js';
 import { extractSteps } from './steps.js';
+import { readWritingFindings, writeWritingFindings } from './writing-cache.js';
 
 export interface WritingFinding {
   file: string; line: number; column?: number; rule: string; message: string; context: string;
@@ -127,7 +128,7 @@ function checkTerms(file: string, line: number, value: string, bans: readonly Ba
   }
 }
 
-export function checkWriting(repo: Repository, selectedPath?: string) {
+export function checkWriting(repo: Repository, selectedPath?: string, persistentCache = repo instanceof LocalRepository) {
   return inRepositorySnapshot(repo, () => {
     const inputs = new Map<string, string>([['concord.config.ts', repo.configSnapshot.source]]);
     const memberships = new Map<string, string[]>();
@@ -137,11 +138,11 @@ export function checkWriting(repo: Repository, selectedPath?: string) {
       inputs.set(path, source);
       return source;
     };
-    const policyPaths = discovered(repo, 'policy');
-    const catalogPaths = discovered(repo, 'catalog');
+    const docsMembers = repo.files('docs');
+    const policyPaths = discovered(repo, 'policy', docsMembers);
+    const catalogPaths = discovered(repo, 'catalog', docsMembers);
     const policySources = new Map(policyPaths.map(path => [path, read(path)]));
-    const sourceCatalogs = catalogSources(repo);
-    for (const [path, source] of sourceCatalogs) inputs.set(path, source);
+    const sourceCatalogs = new Map(catalogPaths.map(path => [path, read(path)]));
     const catalogs = analyzeCatalogs(sourceCatalogs);
     if (catalogs.diagnostics.length) throw new ConcordError(catalogs.diagnostics[0]!.code, catalogs.diagnostics.map(item => item.message).join('; '), catalogs.diagnostics);
     let mode: 'project' | 'managed' | 'standalone' = 'project';
@@ -174,7 +175,7 @@ export function checkWriting(repo: Repository, selectedPath?: string) {
     const selectedRoots = [...new Set(selection)].sort();
     const files = new Set<string>();
     for (const root of selectedRoots) {
-      const members = repo.files(root).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
+      const members = (root === 'docs' ? docsMembers : repo.files(root)).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
       memberships.set(root, members);
       if (!members.length) throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
       members.forEach(file => files.add(file));
@@ -184,48 +185,60 @@ export function checkWriting(repo: Repository, selectedPath?: string) {
       const source = read(file);
       if (/\.mdx?$/iu.test(file)) documents.set(file, withoutStepMarkers(file, source));
     }
-    const findings: WritingFinding[] = [];
+    const inputDigest = snapshotDigest([...inputs, ['@writing-parser-version', WRITING_PARSER_VERSION], ['@writing-policy-membership', JSON.stringify(policyPaths)], ['@concept-catalog-membership', JSON.stringify(catalogPaths)]], [...memberships]);
+    const cacheDigest = objectDigest({ inputDigest, selectedPath: selectedPath ?? null });
     const effectivePolicies = new Map<string, EffectiveControlled>();
-    const used = new Set<string>(), eligible = new Set<string>();
-    for (const [file, source] of documents) {
-      const parsed = prose(file, source);
+    // Validate every applicable composed policy even when text analysis is cached.
+    const contexts = new Map([...documents.keys()].map(file => {
       const owners = applicablePolicy(file, activePolicies);
       const policyKey = owners.map(owner => owner.path).join('\n');
       let controlled = effectivePolicies.get(policyKey);
       if (!controlled) { controlled = composeControlled(owners); effectivePolicies.set(policyKey, controlled); }
-      const concepts = effectiveConcepts(file, catalogs.catalogs);
-      const bans = bansFor(file, owners, concepts);
-      const active = activeSpellingsFor(concepts);
-      for (const item of concepts) if (inherited(owners, 'unusedConcepts') === true) eligible.add(item.reference);
-      for (const block of parsed.blocks) {
-        checkTerms(file, block.line, block.text, bans, active, findings);
-        for (const item of concepts) if (!used.has(item.reference) && Object.values(item.concept.names).some(names => [names.preferred, ...(names.aliases ?? [])].some(spelling => spellingPositions(block.readable, spelling).length))) used.add(item.reference);
-        if (!block.paragraph) continue;
-        const legacySource = (key: 'paragraphLength' | 'sentenceLength'): PolicySource | undefined => { const owner = [...owners].reverse().find(owner => owner.policy[key] !== undefined); return owner ? { path: owner.path, pointer: `/${key}` } : undefined; };
-        const paragraphLength = inherited(owners, 'paragraphLength');
-        if (paragraphLength != null && length(block.readable) > paragraphLength) findings.push({ file, line: block.line, rule: 'paragraphLength', message: `Paragraph has ${length(block.readable)} characters; maximum ${paragraphLength}`, context: block.readable.trim().slice(0, 240), source: legacySource('paragraphLength') });
-        const sentenceLength = inherited(owners, 'sentenceLength');
-        for (const sentence of block.readable.split(/(?<=[。！？!?])|(?<=\.)\s+(?=[A-Z])/u)) {
-          if (sentenceLength != null && length(sentence) > sentenceLength) findings.push({ file, line: block.line, rule: 'sentenceLength', message: `Sentence has ${length(sentence)} characters; maximum ${sentenceLength}`, context: sentence.trim().slice(0, 240), source: legacySource('sentenceLength') });
-          if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
+      return [file, { owners, controlled }] as const;
+    }));
+    const cached = persistentCache ? readWritingFindings(repo, cacheDigest) : undefined;
+    const findings: WritingFinding[] = cached ?? [];
+    if (cached === undefined) {
+      const used = new Set<string>(), eligible = new Set<string>();
+      for (const [file, source] of documents) {
+        const parsed = prose(file, source);
+        const { owners, controlled } = contexts.get(file)!;
+        const concepts = effectiveConcepts(file, catalogs.catalogs);
+        const bans = bansFor(file, owners, concepts);
+        const active = activeSpellingsFor(concepts);
+        for (const item of concepts) if (inherited(owners, 'unusedConcepts') === true) eligible.add(item.reference);
+        for (const block of parsed.blocks) {
+          checkTerms(file, block.line, block.text, bans, active, findings);
+          for (const item of concepts) if (!used.has(item.reference) && Object.values(item.concept.names).some(names => [names.preferred, ...(names.aliases ?? [])].some(spelling => spellingPositions(block.readable, spelling).length))) used.add(item.reference);
+          if (!block.paragraph) continue;
+          const legacySource = (key: 'paragraphLength' | 'sentenceLength'): PolicySource | undefined => { const owner = [...owners].reverse().find(owner => owner.policy[key] !== undefined); return owner ? { path: owner.path, pointer: `/${key}` } : undefined; };
+          const paragraphLength = inherited(owners, 'paragraphLength');
+          if (paragraphLength != null && length(block.readable) > paragraphLength) findings.push({ file, line: block.line, rule: 'paragraphLength', message: `Paragraph has ${length(block.readable)} characters; maximum ${paragraphLength}`, context: block.readable.trim().slice(0, 240), source: legacySource('paragraphLength') });
+          const sentenceLength = inherited(owners, 'sentenceLength');
+          for (const sentence of block.readable.split(/(?<=[。！？!?])|(?<=\.)\s+(?=[A-Z])/u)) {
+            if (sentenceLength != null && length(sentence) > sentenceLength) findings.push({ file, line: block.line, rule: 'sentenceLength', message: `Sentence has ${length(sentence)} characters; maximum ${sentenceLength}`, context: sentence.trim().slice(0, 240), source: legacySource('sentenceLength') });
+            if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
+          }
         }
+        const original = inputs.get(file)!;
+        if (owners.some(owner => owner.policy.controlled != null)) checkControlled(file, authoredSource(file, source, true), original, controlled, findings, parsed);
+        if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
       }
-      const original = inputs.get(file)!;
-      if (owners.some(owner => owner.policy.controlled != null)) checkControlled(file, authoredSource(file, source, true), original, controlled, findings, parsed);
-      if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
-    }
-    for (const item of catalogs.catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, record, concept })))) {
-      if (eligible.has(item.reference) && !used.has(item.reference)) findings.push({ file: item.record.path, line: 1, rule: 'unusedConcept', message: `No selected prose uses ${item.reference}`, context: item.concept.definition.slice(0, 240), source: { path: item.record.path, ref: item.reference } });
-      if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
+      for (const item of catalogs.catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, record, concept })))) {
+        if (eligible.has(item.reference) && !used.has(item.reference)) findings.push({ file: item.record.path, line: 1, rule: 'unusedConcept', message: `No selected prose uses ${item.reference}`, context: item.concept.definition.slice(0, 240), source: { path: item.record.path, ref: item.reference } });
+        if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
+      }
     }
     for (const [path, before] of inputs) if (repo.read(path) !== before) throw new ConcordError('WritingInputsChanged', `${path} changed during writing checks`);
+    const currentDocsMembers = repo.files('docs');
     for (const [root, before] of memberships) {
-      const after = repo.files(root).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
+      const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
       if (JSON.stringify(after) !== JSON.stringify(before)) throw new ConcordError('WritingInputsChanged', `${root} membership changed during writing checks`);
     }
-    if (JSON.stringify(discovered(repo, 'policy')) !== JSON.stringify(policyPaths) || JSON.stringify(discovered(repo, 'catalog')) !== JSON.stringify(catalogPaths)) throw new ConcordError('WritingInputsChanged', 'Writing owner membership changed during checks');
+    if (JSON.stringify(discovered(repo, 'policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered(repo, 'catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('WritingInputsChanged', 'Writing owner membership changed during checks');
     if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
     findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
-    return { operation: 'docs-check', ok: findings.length === 0, complete: true, policy: selectedPath ?? 'project', mode, selectedRoots, files: files.size, findings, inputDigest: snapshotDigest([...inputs, ['@writing-parser-version', WRITING_PARSER_VERSION], ['@writing-policy-membership', JSON.stringify(policyPaths)], ['@concept-catalog-membership', JSON.stringify(catalogPaths)]], [...memberships]) };
+    if (persistentCache && cached === undefined) writeWritingFindings(repo, cacheDigest, findings);
+    return { operation: 'docs-check', ok: findings.length === 0, complete: true, policy: selectedPath ?? 'project', mode, selectedRoots, files: files.size, findings, inputDigest };
   });
 }

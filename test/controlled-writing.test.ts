@@ -160,5 +160,3 @@ controlledTest('C24 C25: strict boundary diagnostics and bounded vocabulary, mat
   assert.throws(() => scan('Text.', { language: 'auto', procedural: { requireVerb: true, verbs: { en: [{ lemma: 'read' }] } } }), { code: 'InvalidWritingPolicy' });
   assert.throws(() => scan('Text.', { passiveVoice: { en: true, participles: [] } }), { code: 'InvalidWritingPolicy' });
 });
-// @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-test('C11: shared step-marker exclusion awaits the steps worker integration', { todo: 'stepMarkerRanges must call extractSteps(path, source).markers after integration' }, () => Effect.runPromise(Effect.sync(() => {})));

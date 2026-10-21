@@ -29,7 +29,7 @@ test('built help avoids unused Effect services and Markdown/compiler initializat
       assert.doesNotMatch(url, /\/(?:effect|@effect\/platform-node)\/dist\/index\.js$/u);
       assert.doesNotMatch(url, /\/effect\/dist\/unstable\/(?:cluster|sql)\//u);
       assert.doesNotMatch(url, /\/mdast-util-from-markdown\//u);
-      assert.doesNotMatch(url, /\/typescript\/lib\/typescript\.js$/u);
+      assert.doesNotMatch(url, /\/typescript\/(?:lib\/typescript\.js|dist\/api\/sync\/api\.js)$/u);
     }
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 })));

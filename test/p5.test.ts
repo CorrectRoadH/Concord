@@ -32,6 +32,11 @@ test('p5 compiler checks captured modules, resources, options and repository bou
     assert.match(complete.javascript, /createCanvas/);
     assert.ok(complete.files.includes('docs/feature/sketch/demo/shape.ts'));
     assert.ok(complete.files.includes('docs/feature/sketch/demo/types.d.ts'));
+    write('demo/exported.d.ts', 'export type { Size } from "./types.js";');
+    const importedType = await compile('type Size = import("./demo/exported.js").Size; const size: Size = { width: 1, height: 2 }; p.setup = () => { p.createCanvas(size.width, size.height); };');
+    assert.ok(importedType.files.includes('docs/feature/sketch/demo/exported.d.ts'));
+    assert.ok(importedType.files.includes('docs/feature/sketch/demo/types.d.ts'));
+    await assert.rejects(compile('type Size = import("./demo/exported.js").Size; const size: Size = { width: "bad", height: 2 };'), /P5TypeError|not assignable/);
     await assert.rejects(compile('import type { Missing } from "./demo/not-found"; p.setup = () => p.noLoop();'), /not found/);
     await assert.rejects(compile('import type { Coordinates } from "./demo/shape"; const point: Coordinates = { x: "bad", y: 5 }; p.setup = () => p.noLoop();'), /P5TypeError|not assignable/);
     await assert.rejects(compile('x'.repeat(256 * 1024 + 1)), /length of at most 262144|P5BudgetExceeded/);

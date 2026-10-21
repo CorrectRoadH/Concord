@@ -152,7 +152,7 @@ test('a warm code and config cache hit does not load the TypeScript compiler', (
         const result = scanCode(repo);
         if (result.cache.status !== 'hit') { console.error(JSON.stringify(result.cache)); process.exit(2); }
       } finally { repo.close(); }
-      const loaded = Object.keys(createRequire(import.meta.url).cache).some(key => key.replaceAll('\\\\', '/').endsWith('/typescript/lib/typescript.js'));
+      const loaded = Object.keys(createRequire(import.meta.url).cache).some(key => key.replaceAll('\\\\', '/').endsWith('/typescript/dist/api/sync/api.js'));
       if (loaded) process.exit(3);
     `;
     const child = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 30_000 });

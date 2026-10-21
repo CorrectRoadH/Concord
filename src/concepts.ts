@@ -7,14 +7,23 @@ import { discovered, globalCatalogPath, scopeOf, under } from './writing-scopes.
 export { ConceptCatalogSchema, type ConceptCatalog, type ConceptDefinition } from './concepts-schema.js';
 
 export const spellingKey = (value: string): string => /^[\x20-\x7e]+$/u.test(value) ? value.toLowerCase() : value;
+const spellingExpressions = new Map<string, RegExp>();
+function spellingExpression(spelling: string, ascii: boolean): RegExp {
+  const flags = ascii ? 'gi' : 'g', key = `${flags}:${spelling}`;
+  let expression = spellingExpressions.get(key);
+  if (expression === undefined) {
+    expression = new RegExp(spelling.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), flags);
+    if (spellingExpressions.size >= 1024) spellingExpressions.delete(spellingExpressions.keys().next().value!);
+    spellingExpressions.set(key, expression);
+  }
+  return expression;
+}
 export function spellingPositions(text: string, spelling: string, allowIn: readonly string[] = []): number[] {
   const ascii = /^[\x20-\x7e]+$/u.test(spelling);
-  const flags = ascii ? 'gi' : 'g';
-  const expression = new RegExp(spelling.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), flags);
+  const expression = spellingExpression(spelling, ascii);
   const allowed: [number, number][] = [];
   for (const word of allowIn) {
-    const escaped = word.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&');
-    for (const match of text.matchAll(new RegExp(escaped, ascii ? 'gi' : 'g'))) allowed.push([match.index, match.index + match[0].length]);
+    for (const match of text.matchAll(spellingExpression(word, ascii))) allowed.push([match.index, match.index + match[0].length]);
   }
   return [...text.matchAll(expression)].filter(match => {
     const start = match.index, end = start + match[0].length;

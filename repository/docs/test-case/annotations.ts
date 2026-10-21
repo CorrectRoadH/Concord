@@ -1,4 +1,5 @@
-import ts from "typescript";
+import * as ts from "typescript/ast";
+import { withTypeScriptSource, withTypeScript } from "#typescript-host";
 import { Result, Schema, SchemaIssue } from "effect";
 import { deriveTestReference } from "concord-sdlc/model";
 
@@ -69,10 +70,10 @@ function runnerBindings(file: ts.SourceFile): Set<string> {
   const shadowed = new Set<string>();
   const visit = (node: ts.Node): void => {
     if (!ts.isImportDeclaration(node)) {
-      if ((ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isParameter(node)) && node.name !== undefined && ts.isIdentifier(node.name) && bindings.has(node.name.text)) shadowed.add(node.name.text);
+      if ((ts.isVariableDeclaration(node) || ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isParameterDeclaration(node)) && node.name !== undefined && ts.isIdentifier(node.name) && bindings.has(node.name.text)) shadowed.add(node.name.text);
       if (ts.isImportEqualsDeclaration(node) && bindings.has(node.name.text)) shadowed.add(node.name.text);
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(file);
   for (const name of shadowed) bindings.delete(name);
@@ -93,12 +94,15 @@ function testCall(node: ts.CallExpression, bindings: ReadonlySet<string>): { rea
         : undefined;
   if (root === undefined || !bindings.has(root)) return undefined;
   const title = node.arguments[0];
-  if (!title || !ts.isStringLiteralLike(title)) return undefined;
+  if (!title || !ts.isStringLiteral(title) && !ts.isNoSubstitutionTemplateLiteral(title)) return undefined;
   return { title: title.text };
 }
 
 export function locateSupportedTestDeclarations(path: string, source: string): readonly SupportedTestDeclaration[] {
-  const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+  return withTypeScriptSource(path, source, file => supportedTestDeclarations(file));
+}
+
+function supportedTestDeclarations(file: ts.SourceFile): readonly SupportedTestDeclaration[] {
   const bindings = runnerBindings(file);
   const declarations: SupportedTestDeclaration[] = [];
   const visit = (node: ts.Node): void => {
@@ -106,7 +110,7 @@ export function locateSupportedTestDeclarations(path: string, source: string): r
       const call = testCall(node, bindings);
       if (call !== undefined) declarations.push({ title: call.title, start: node.getStart(file) });
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(file);
   return declarations;
@@ -139,82 +143,86 @@ function validateContractAnnotation(path: string, contract: string, contractKind
 
 export function decodeCaseDeclarations(path: string, source: string): Result.Result<readonly CaseDeclaration[], CaseRelationsFormatError> {
   try {
-    const file = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, path.endsWith("x") ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
-    const bindings = runnerBindings(file);
-    const cases: CaseDeclaration[] = [];
-    const visit = (node: ts.Node): void => {
-      if (ts.isCallExpression(node)) {
-        const call = testCall(node, bindings);
-        if (call !== undefined) {
-          const comments = attachedLineComments(source, file, node);
-          const managed = comments.flatMap((comment) => {
-            const match = MANAGED.exec(comment.text);
-            return match === null ? [] : [{ ...comment, name: match[1]!, value: match[2]! }];
-          });
-          if (managed.length > 0) {
-            const byName = (name: string) => managed.filter((entry) => entry.name === name);
-            const features = byName("feature"); const useCases = byName("use-case"); const testFiles = byName("test-file");
-            if (features.length + useCases.length !== 1 || testFiles.length > 1) throw new CaseRelationsFormatError({ path, message: "test declaration requires exactly one @feature or @use-case" });
-            const topLevel = node.parent !== undefined && ts.isExpressionStatement(node.parent) && node.parent.parent === file;
-            if (!topLevel) throw new CaseRelationsFormatError({ path, message: "annotated test declarations must be top-level static test/it calls" });
-            const titleCount = locateSupportedTestDeclarations(path, source).filter((entry) => entry.title === call.title).length;
-            const testFile = testFiles.length === 0 ? path : canonicalPath(testFiles[0]!.value, path, "test-file");
-            if (titleCount !== 1) throw new CaseRelationsFormatError({ path, message: `test title is ambiguous: ${call.title}` });
-            const caseId = deriveTestReference(testFile, path, call.title);
-            const contract = canonicalPath((features[0] ?? useCases[0])!.value, path, "contract");
-            const contractKind = features.length === 1 ? "feature" as const : "use-case" as const;
-            validateContractAnnotation(path, contract, contractKind);
-            const regressions = byName("regression").map((entry) => canonicalPath(entry.value, path, "regression"));
-            if (new Set(regressions).size !== regressions.length) throw new CaseRelationsFormatError({ path, message: `regressions for ${caseId} contain duplicates` });
-            const issues = byName("issue").map((entry) => {
-              let input: unknown;
-              try { input = JSON.parse(entry.value) as unknown; } catch (cause) { throw new CaseRelationsFormatError({ path, message: `issue for ${caseId} is not strict JSON: ${String(cause)}` }); }
-              return decode(CaseIssueSchema, input, path, `issue for ${caseId}`);
-            });
-            if (new Set(issues.map((issue) => issue.url)).size !== issues.length) throw new CaseRelationsFormatError({ path, message: `issues for ${caseId} contain duplicate URLs` });
-            const start = Math.min(...managed.map((entry) => entry.start));
-            const end = Math.max(...managed.map((entry) => entry.end));
-            const annotationRanges = managed.map(({ start, end }) => managedLineRange(source, start, end, path));
-            cases.push({ caseId, declarationPath: path, testFile, contract, contractKind, regressions, issues, title: call.title, declarationStart: node.getStart(file), annotationStart: start, annotationEnd: end, annotationRanges });
-          }
-        }
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(file);
-    const seen = new Set<string>();
-    for (const item of cases) {
-
-      if (seen.has(item.caseId)) throw new CaseRelationsFormatError({ path, message: `${item.caseId} is declared more than once in ${path}` });
-      seen.add(item.caseId);
-    }
-    const managedCommentStarts = new Set<number>();
-    const collectComments = (node: ts.Node): void => {
-      const ranges = [
-        ...(ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []),
-        ...(ts.getTrailingCommentRanges(source, node.getEnd()) ?? []),
-      ];
-      for (const range of ranges) {
-        if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia) {
-          const marker = MANAGED.exec(source.slice(range.pos, range.end));
-          if (marker !== null) {
-            if (marker[1] === "feature" || marker[1] === "use-case") validateContractAnnotation(path, marker[2]!, marker[1]);
-            managedCommentStarts.add(range.pos);
-          }
-        }
-      }
-      ts.forEachChild(node, collectComments);
-    };
-    collectComments(file);
-    const managedCommentCount = managedCommentStarts.size;
-    const boundCommentCount = cases.reduce((sum, item) => sum + item.annotationRanges.length, 0);
-    if (managedCommentCount !== boundCommentCount) {
-      throw new CaseRelationsFormatError({ path, message: `found a dangling, ambiguous, duplicated, or pseudo managed annotation that is not bound to one supported literal test/it declaration (managed=${managedCommentCount}, bound=${boundCommentCount})` });
-    }
-    return Result.succeed(cases.sort((a, b) => a.declarationStart - b.declarationStart));
+    return withTypeScript(() => withTypeScriptSource(path, source, file => decodeSourceDeclarations(path, source, file)));
   } catch (cause) {
     return Result.fail(cause instanceof CaseRelationsFormatError ? cause : new CaseRelationsFormatError({ path, message: cause instanceof Error ? cause.message : String(cause) }));
   }
+}
+
+function decodeSourceDeclarations(path: string, source: string, file: ts.SourceFile): Result.Result<readonly CaseDeclaration[], CaseRelationsFormatError> {
+  const bindings = runnerBindings(file);
+  const supported = supportedTestDeclarations(file);
+  const cases: CaseDeclaration[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node)) {
+      const call = testCall(node, bindings);
+      if (call !== undefined) {
+        const comments = attachedLineComments(source, file, node);
+        const managed = comments.flatMap((comment) => {
+          const match = MANAGED.exec(comment.text);
+          return match === null ? [] : [{ ...comment, name: match[1]!, value: match[2]! }];
+        });
+        if (managed.length > 0) {
+          const byName = (name: string) => managed.filter((entry) => entry.name === name);
+          const features = byName("feature"); const useCases = byName("use-case"); const testFiles = byName("test-file");
+          if (features.length + useCases.length !== 1 || testFiles.length > 1) throw new CaseRelationsFormatError({ path, message: "test declaration requires exactly one @feature or @use-case" });
+          const topLevel = node.parent !== undefined && ts.isExpressionStatement(node.parent) && node.parent.parent === file;
+          if (!topLevel) throw new CaseRelationsFormatError({ path, message: "annotated test declarations must be top-level static test/it calls" });
+          const titleCount = supported.filter((entry) => entry.title === call.title).length;
+          const testFile = testFiles.length === 0 ? path : canonicalPath(testFiles[0]!.value, path, "test-file");
+          if (titleCount !== 1) throw new CaseRelationsFormatError({ path, message: `test title is ambiguous: ${call.title}` });
+          const caseId = deriveTestReference(testFile, path, call.title);
+          const contract = canonicalPath((features[0] ?? useCases[0])!.value, path, "contract");
+          const contractKind = features.length === 1 ? "feature" as const : "use-case" as const;
+          validateContractAnnotation(path, contract, contractKind);
+          const regressions = byName("regression").map((entry) => canonicalPath(entry.value, path, "regression"));
+          if (new Set(regressions).size !== regressions.length) throw new CaseRelationsFormatError({ path, message: `regressions for ${caseId} contain duplicates` });
+          const issues = byName("issue").map((entry) => {
+            let input: unknown;
+            try { input = JSON.parse(entry.value) as unknown; } catch (cause) { throw new CaseRelationsFormatError({ path, message: `issue for ${caseId} is not strict JSON: ${String(cause)}` }); }
+            return decode(CaseIssueSchema, input, path, `issue for ${caseId}`);
+          });
+          if (new Set(issues.map((issue) => issue.url)).size !== issues.length) throw new CaseRelationsFormatError({ path, message: `issues for ${caseId} contain duplicate URLs` });
+          const start = Math.min(...managed.map((entry) => entry.start));
+          const end = Math.max(...managed.map((entry) => entry.end));
+          const annotationRanges = managed.map(({ start, end }) => managedLineRange(source, start, end, path));
+          cases.push({ caseId, declarationPath: path, testFile, contract, contractKind, regressions, issues, title: call.title, declarationStart: node.getStart(file), annotationStart: start, annotationEnd: end, annotationRanges });
+        }
+      }
+    }
+    node.forEachChild(visit);
+  };
+  visit(file);
+  const seen = new Set<string>();
+  for (const item of cases) {
+
+    if (seen.has(item.caseId)) throw new CaseRelationsFormatError({ path, message: `${item.caseId} is declared more than once in ${path}` });
+    seen.add(item.caseId);
+  }
+  const managedCommentStarts = new Set<number>();
+  const collectComments = (node: ts.Node): void => {
+    const ranges = [
+      ...(ts.getLeadingCommentRanges(source, node.getFullStart()) ?? []),
+      ...(ts.getTrailingCommentRanges(source, node.getEnd()) ?? []),
+    ];
+    for (const range of ranges) {
+      if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia) {
+        const marker = MANAGED.exec(source.slice(range.pos, range.end));
+        if (marker !== null) {
+          if (marker[1] === "feature" || marker[1] === "use-case") validateContractAnnotation(path, marker[2]!, marker[1]);
+          managedCommentStarts.add(range.pos);
+        }
+      }
+    }
+    node.forEachChild(collectComments);
+  };
+  collectComments(file);
+  const managedCommentCount = managedCommentStarts.size;
+  const boundCommentCount = cases.reduce((sum, item) => sum + item.annotationRanges.length, 0);
+  if (managedCommentCount !== boundCommentCount) {
+    throw new CaseRelationsFormatError({ path, message: `found a dangling, ambiguous, duplicated, or pseudo managed annotation that is not bound to one supported literal test/it declaration (managed=${managedCommentCount}, bound=${boundCommentCount})` });
+  }
+  return Result.succeed(cases.sort((a, b) => a.declarationStart - b.declarationStart));
 }
 
 export function decodeAnnotatedCases(path: string, source: string): Result.Result<readonly AnnotatedCase[], CaseRelationsFormatError> {

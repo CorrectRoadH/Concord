@@ -102,7 +102,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
       }
       for (const item of code.codes) for (const target of item.contracts) checkReference(item.file, item.line, target, ['feature', 'use-case', 'engineering']);
       try {
-        const writing = checkWriting(repo);
+        const writing = checkWriting(repo, undefined, false);
         findings.push(...writing.findings.map(item => ({ code: item.rule, path: item.file, line: item.line, message: item.message })));
       } catch (cause) {
         const error = failure(cause); gaps.add(error.code);

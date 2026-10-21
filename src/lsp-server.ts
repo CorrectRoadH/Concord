@@ -1,6 +1,5 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
-import { Worker } from 'node:worker_threads';
 import { lstatSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
@@ -9,6 +8,8 @@ import { uriPath } from './lsp-symbols.js';
 import { readPublicationRevisionSync } from './coordination.js';
 import { ConcordError, decode, digest, failure } from './shared.js';
 import * as P from './editor-protocol.js';
+import { runEditorJob } from './editor-job.js';
+import { makeOwnedProcessService } from './owned-process.js';
 
 interface Task {
   readonly id?: P.RpcId;
@@ -16,26 +17,6 @@ interface Task {
   readonly controller: AbortController;
   promise: Promise<void>;
 }
-
-const runJob = Effect.fn('editor.runJob')(function*(job: P.Job) {
-  return yield* Effect.acquireUseRelease(
-    Effect.try({ try: () => new Worker(new URL('./editor-worker.js', import.meta.url), { workerData: job, resourceLimits: { maxOldGenerationSizeMb: 256 } }), catch: failure }),
-    worker => Effect.callback<P.Computed, ConcordError>(resume => {
-      const cleanup = () => { clearTimeout(timeout); worker.off('message', result); worker.off('error', error); worker.off('exit', exit); };
-      const result = (value: unknown) => {
-        cleanup();
-        try { const reply = P.workerReply(value); resume(reply.ok ? Effect.succeed(reply.result) : Effect.fail(new ConcordError(reply.code, reply.message))); }
-        catch (cause) { resume(Effect.fail(failure(cause))); }
-      };
-      const error = (cause: Error) => { cleanup(); resume(Effect.fail(new ConcordError('EditorTaskFailed', cause.message))); };
-      const exit = () => { cleanup(); resume(Effect.fail(new ConcordError('EditorTaskFailed', 'Computation ended without a result'))); };
-      const timeout = setTimeout(() => { cleanup(); resume(Effect.fail(new ConcordError('EditorBudgetExceeded', 'Computation timeout'))); }, P.editorLimits.timeout);
-      worker.once('message', result); worker.once('error', error); worker.once('exit', exit);
-      return Effect.sync(cleanup);
-    }),
-    worker => Effect.promise(() => worker.terminate()).pipe(Effect.asVoid),
-  );
-});
 
 /** Final verification deliberately opens a fresh config authorization context. */
 function verify(root: string, result: P.Computed): void {
@@ -54,7 +35,7 @@ function verify(root: string, result: P.Computed): void {
   } finally { repo.close(); }
 }
 
-export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: string) {
+export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: string, createProcessService = makeOwnedProcessService) {
   const root = yield* Effect.try({ try: () => discoverRoot(rootInput), catch: failure });
   // Validate the initial project without retaining a repository handle while waiting for stdin.
   yield* Effect.try({ try: () => { const repo = new LocalRepository(root, { access: 'read' }); repo.close(); }, catch: failure });
@@ -66,6 +47,11 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
     let generation = 0, opened = 0;
     let state: 'new' | 'initializing' | 'ready' | 'shutdown' = 'new';
     let ended = false;
+    let cleanupFailure: ConcordError | undefined;
+    const recordCleanupFailure = (error: ConcordError) => {
+      cleanupFailure ??= error;
+      if (timer !== undefined) clearTimeout(timer);
+    };
     let cleanupPromise: Promise<void> | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = (error?: ConcordError) => {
@@ -101,7 +87,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
     };
     const schedule = () => {
       if (timer !== undefined) clearTimeout(timer);
-      if (ended || state !== 'ready' || overlays.size === 0) return;
+      if (ended || cleanupFailure !== undefined || state !== 'ready' || overlays.size === 0) return;
       timer = setTimeout(() => { timer = undefined; start('diagnostics'); }, 25);
     };
     const invalidate = () => {
@@ -110,6 +96,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
       schedule();
     };
     const start = (method: string, id?: P.RpcId, params?: P.Job['params']) => {
+      if (cleanupFailure !== undefined) { if (id !== undefined) reject(id, -32603, cleanupFailure.code, cleanupFailure.message); return; }
       if (running.size >= P.editorLimits.tasks) { if (id !== undefined) reject(id, -32000, 'EditorBudgetExceeded', 'Concurrent task limit'); else schedule(); return; }
       const duplicate = id === undefined ? undefined : [...tasks].find(task => task.id === id);
       if (duplicate !== undefined && id !== undefined) { tasks.delete(duplicate); duplicate.controller.abort(); reject(id, -32600, 'DuplicateRequest'); return; }
@@ -120,9 +107,10 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
         const config = readRepositoryFileSync(root, 'concord.config.ts');
         if (config === undefined) throw new ConcordError('ProjectNotFound', 'Project configuration is missing');
         return { root, generation, config: digest(config), revision: readPublicationRevisionSync(root), overlays: [...overlays.values()], method, ...(params === undefined ? {} : { params }) };
-      }, catch: failure }).pipe(Effect.flatMap(runJob));
+      }, catch: failure }).pipe(Effect.flatMap(job => runEditorJob(job, recordCleanupFailure, createProcessService())));
       task.promise = Effect.runPromise(work, { signal: task.controller.signal }).then(result => {
         if (!tasks.has(task) || ended) return;
+        if (cleanupFailure !== undefined) { if (id !== undefined) reject(id, -32603, cleanupFailure.code, cleanupFailure.message); return; }
         if (result.generation !== generation || task.generation !== generation) { stopTask(task, 'ContentModified'); return; }
         try { verify(root, result); }
         catch { stopTask(task, 'ContentModified'); schedule(); return; }
@@ -190,7 +178,10 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
           overlays.clear();
           // A completed shutdown acknowledges that computation resources have
           // ended; the transport alone remains available for the exit message.
-          void Promise.allSettled([...running].map(task => task.promise)).then(() => respond(id, null));
+          void Promise.allSettled([...running].map(task => task.promise)).then(() => {
+            if (cleanupFailure !== undefined) reject(id, -32603, cleanupFailure.code, cleanupFailure.message);
+            else respond(id, null);
+          });
           return;
         }
         if (state !== 'ready') { if (id !== undefined) reject(id, -32002, 'ServerNotInitialized'); return; }
@@ -264,6 +255,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
       for (const task of running) task.controller.abort();
       await Promise.allSettled([...running].map(task => task.promise));
       tasks.clear(); running.clear(); overlays.clear(); frames.clear();
+      if (cleanupFailure !== undefined) { process.exitCode = 1; throw cleanupFailure; }
     })(); }
     return Effect.promise(cleanup);
   });

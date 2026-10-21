@@ -54,6 +54,8 @@
 
 只读快照内，读取过的条目被按大小写改名时，当前来源命令在快照结束时报 `PreimageChanged`（details 为 `source-observation`），不再在第二次读取时报 `UnsafePath`。非普通文件在初次读取或扫描时报 `InvalidFile`，核验阶段报 `UnsafePath`；symlink 与越界在任何阶段都报 `UnsafePath`。macOS 低于 11 时以 `UnsupportedHost` 拒绝。规则见[读取路径安全检查的成本边界](../../design/path-safety-cost/plans/anchored-root/architecture.md)。
 
+固定版本的 TypeScript 原生编译器或其平台包不可用时，相关解析返回 `TypeScriptUnavailable`，不伪造解析成功。编译器作用域不得返回异步工作；违反同步生命周期约束时返回 `TypeScriptScopeViolation`。
+
 ## 中立高级治理
 
 消费仓库通过锁定的 `concord repo` 入口加载自己的 host。`docs test` 的 current 关系写在真实声明上方，native inventory 校验 ID/path；history/tombstone 保存在注释归档。正式 v2 red/takeover 由 host 执行并签发，已有回归使用显式 `regression refresh --reason` 更新陈旧证据。此入口的 formal gate 不接受通用 command receipts。

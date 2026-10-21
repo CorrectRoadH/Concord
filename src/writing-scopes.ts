@@ -20,9 +20,9 @@ export function scopeOf(path: string, kind: 'policy' | 'catalog'): string {
 
 export const under = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 export const applies = (path: string, scope: string): boolean => scope === 'docs' || under(path, scope);
-export function discovered(repo: Repository, kind: 'policy' | 'catalog'): string[] {
+export function discovered(repo: Repository, kind: 'policy' | 'catalog', members: readonly string[] = repo.files('docs')): string[] {
   const name = kind === 'policy' ? policyName : catalogName;
-  return repo.files('docs').filter(path => path.endsWith(`/${name}`) && path.split('/').every(part => part !== '_template' && part !== '.git' && part !== 'node_modules')).sort();
+  return members.filter(path => path.endsWith(`/${name}`) && path.split('/').every(part => part !== '_template' && part !== '.git' && part !== 'node_modules')).sort();
 }
 export function indexWritingScopes(repo: Repository) {
   return inRepositorySnapshot(repo, () => {

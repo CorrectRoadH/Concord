@@ -128,7 +128,7 @@ export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildT
     const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
     const codeIds = new Set(incoming.filter(e => e.from.startsWith('code:')).map(e => e.from.slice(5)));
     const codeDeclarations = trace.codeDeclarations.filter(c => codeIds.has(c.id)).map(c => ({ ...c, matchedContracts: c.contracts.filter(ref => belongsTo(references, trace, relatedPaths, ref)) }));
-    const analysis = analysisView(repo, trace.annotations.cases.filter(c => ids.has(c.id)), trace.codeDeclarations, trace.documents);
+    const analysis = analysisView(repo, trace.annotations.cases.filter(c => ids.has(c.id)), trace.codeDeclarations, trace.documents, references);
     return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, stepGroups: trace.documents.filter(doc => doc.metadata.kind === 'use-case' && relatedPaths.has(doc.path)).map(doc => stepGroups(repo, trace, doc, analysis)), cache: trace.annotations.cache, analysis };
 }
 
@@ -266,7 +266,7 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
     for (const c of codes) lines.push(`- **${c.symbol ?? `${c.file}:${c.line}–${c.endLine}`}** — [${c.file}:${c.line}–${c.endLine}](${c.file}#L${c.line}); ${c.scope}`, ...c.contracts.map(ref => `  - Implements: [${ref}](${ref})`));
     lines.push('', '## Test declarations', '');
     for (const c of cases) lines.push(`- **${c.id}** — [${c.file}:${c.line}](${c.file}#L${c.line}); ${c.status}${c.skipped ? ', skipped/todo' : ''}; contract: [${c.contract}](${c.contract})`, ...c.regressions.map(r => `  - Regression: [${r}](${r})`));
-    const analysis = analysisView(repo, cases, trace.codeDeclarations, trace.documents);
+    const analysis = analysisView(repo, cases, trace.codeDeclarations, trace.documents, references);
     for (const doc of trace.documents.filter(doc => doc.metadata.kind === 'use-case' && (!selector || selectedPaths.has(doc.path) || doc.metadata.kind === 'use-case' && selectedPaths.has(doc.metadata.feature)))) {
       const groups = stepGroups(repo, trace, doc, analysis);
       lines.push(`## Use Case steps: ${doc.path}`, '', 'Declarations are associations, not execution or coverage. Dependency observations below describe this review snapshot.', '');

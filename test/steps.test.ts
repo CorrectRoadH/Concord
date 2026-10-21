@@ -125,7 +125,7 @@ test('steps C16 C17 C21 format seeds only an explicit list, skips occupied and d
 test('steps C18 rename updates all real tokens and reports named and unnamed identities', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document('# Flow\n\n1. First {#step-2}\n\n[Self](#step-2)\n'));
   const oldRef = `${path}#step-2`;
-  const testSource = `const str = '// @use-case ${oldRef}';\nconst template = \`// @use-case ${oldRef}\`;\nconst regex = /\/\/ @use-case fake/;\n// @use-case ${oldRef}\n// @name stable\n\n// @use-case ${oldRef}\n`;
+  const testSource = `const str = '// @use-case ${oldRef}';\nconst template = \`// @use-case ${oldRef}\`;\nconst regex = /\/\/ @use-case fake/;\n// @use-case ${oldRef}\n// @name stable\n\n// @use-case ${oldRef}\n\n// @use-case ${path}#拒绝过期令牌\n`;
   write(root, 'test/flow.ts', testSource);
   write(root, 'test/flow.py', `# @use-case ${oldRef}\n`);
   write(root, 'src/flow.ts', `// @concord-file\n// @concord-implements ${oldRef}\nconst text = '// @concord-implements ${oldRef}';\n`);
@@ -133,7 +133,7 @@ test('steps C18 rename updates all real tokens and reports named and unnamed ide
   chmodSync(join(root, 'test/flow.py'), 0o755);
   const preview = renameUseCaseStep(repo, path, 'step-2', '拒绝过期令牌', true);
   assert.equal(repo.read('test/flow.ts'), testSource);
-  assert.equal(preview.affectedCases.length, 3);
+  assert.equal(preview.affectedCases.length, 4);
   assert.equal(preview.affectedCases.find(item => item.named)?.before, preview.affectedCases.find(item => item.named)?.after);
   assert.ok(preview.affectedCases.filter(item => !item.named).every(item => item.before !== item.after));
   renameUseCaseStep(repo, path, 'step-2', '拒绝过期令牌');
@@ -248,7 +248,7 @@ test('steps C20 Memory promotion references block rename with zero writes', () =
   assert.equal(existsSync(join(repo.privateDir, 'journal.json')), false);
 }))));
 
-// @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#declare-steps
+// @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 // @name steps-writing-length
 test('steps writing ignores real terminal IDs in sentence and paragraph length but retains inline examples', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document(`# Flow\n\n1. Short {#${'long'.repeat(30)}}\n`));

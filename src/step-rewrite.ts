@@ -162,7 +162,7 @@ export function planStepRename(repo: Repository, request: StepRename) {
       changes.push({ path: file.path, before: file.source, after });
       if (within(file.path, repo.config.testRoots)) {
         const beforeCases = parseTestDeclarations(file.path, file.source).cases, afterCases = parseTestDeclarations(file.path, after).cases;
-        beforeCases.forEach((item, index) => { if (item.contract === oldRef) affectedCases.push({ before: item.id, after: afterCases[index]!.id, file: item.file, named: item.named === true }); });
+        beforeCases.forEach((item, index) => { if (item.contract === oldRef || item.id !== afterCases[index]!.id) affectedCases.push({ before: item.id, after: afterCases[index]!.id, file: item.file, named: item.named === true }); });
       }
     }
   }

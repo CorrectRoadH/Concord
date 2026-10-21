@@ -42,6 +42,8 @@ URI 只接受当前 worktree 的安全 file 路径，拒绝路径逃逸、符号
 
 每个会话最多打开 64 个文档，单文档最多 2 MiB，全部 overlay 最多 16 MiB。并发计算最多 8 个，每任务限时 30 秒；读取成员最多 10000 项、正文合计最多 64 MiB。每会话最多 100000 条消息。单消息最多 4 MiB，输入缓冲最多 8 MiB，待输出最多 8 MiB；超过预算返回 EditorBudgetExceeded 或终结无法继续的传输。
 
+计算任务与原生编译器由独立 POSIX 进程组拥有。Linux 与 macOS 支持该计算入口；Windows 在启动任务前返回 EditorTaskFailed。清理未知或失败使会话停止新计算，shutdown 返回 EditorTaskFailed，EOF 与 exit 非零退出；取消回复不代表清理已成功。
+
 ## 验收
 
 - 同时修改未保存步骤、测试引用与实现标记时，诊断、跳转、引用、补全与悬停使用一致版本，支持未落盘新文件。

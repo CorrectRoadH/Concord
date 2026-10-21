@@ -1,9 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
-import { isAbsolute, relative, resolve, sep } from 'node:path';
-import type * as TypeScript from 'typescript';
-import { loadTypeScript, typescriptPackageVersion } from './typescript-host.js';
-import type { AnnotatedCase, Repository } from './shared.js';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import * as ts from 'typescript/ast';
+import { createFileSystem } from 'typescript/fs';
+import type { API, RawCompilerOptions } from 'typescript/sync';
+import { nativeTypeScript, typescriptPackageVersion, typescriptRequest, withTypeScriptFiles } from './typescript-host.js';
+import { ConcordError, type AnnotatedCase, type Repository } from './shared.js';
 import type { CodeDeclaration } from './code.js';
 import type { AnalysisValue, DependencyObservation } from './analysis-values.js';
 import { analysisBudgets } from './language-server-config.js';
@@ -13,45 +15,56 @@ export function withinRoots(path: string, roots: readonly string[]): boolean { r
 
 /** Resolves only the captured source set. Module resolution cannot read an ignored SDK or run a project plugin. */
 export function typescriptDependencies(repo: Repository, files: ReadonlyMap<string, string>, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[]): AnalysisValue {
-  const ts = loadTypeScript();
+  const captured = new Map([...files].map(([path, text]) => [resolve(repo.root, path), text]));
+  return withTypeScriptFiles(captured, api => typescriptRequest(() => analyzeCapturedDependencies(repo, files, cases, codes, captured, api)), repo.root);
+}
+
+function analyzeCapturedDependencies(repo: Repository, files: ReadonlyMap<string, string>, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[], captured: ReadonlyMap<string, string>, api: API): AnalysisValue {
+  const { JsxEmit, ModuleKind, ModuleResolutionKind } = nativeTypeScript();
   const limits = analysisBudgets();
   const pathOf = (path: string) => relative(repo.root, isAbsolute(path) ? path : resolve(repo.root, path)).split(sep).join('/');
-  const host: TypeScript.ModuleResolutionHost = {
-    fileExists: path => files.has(pathOf(path)), readFile: path => files.get(pathOf(path)),
-    directoryExists: path => pathOf(path) === '' || [...files.keys()].some(file => file.startsWith(`${pathOf(path)}/`)),
-    getCurrentDirectory: () => repo.root, realpath: path => path,
-  };
   const configPath = files.has('tsconfig.json') ? 'tsconfig.json' : files.has('jsconfig.json') ? 'jsconfig.json' : undefined;
-  let options: TypeScript.CompilerOptions = { allowJs: true, module: ts.ModuleKind.NodeNext, moduleResolution: ts.ModuleResolutionKind.NodeNext };
+  let options: RawCompilerOptions = { allowJs: true, module: ModuleKind.NodeNext, moduleResolution: ModuleResolutionKind.NodeNext };
   const configurationGaps = new Set<string>();
   if (configPath !== undefined) {
-    const read = ts.readConfigFile(configPath, path => files.get(pathOf(path)));
+    const read = api.readConfigFile(resolve(repo.root, configPath));
     if (read.error !== undefined) configurationGaps.add('UnresolvedModuleConfiguration');
     else {
-      const config = ts.parseJsonConfigFileContent(read.config, { useCaseSensitiveFileNames: true, fileExists: host.fileExists, readFile: host.readFile, readDirectory: () => [] }, repo.root);
+      const config = api.parseConfigFile(resolve(repo.root, configPath));
       options = { ...options, ...config.options };
       if (config.errors.some(error => error.code !== 18003)) configurationGaps.add('UnresolvedModuleConfiguration');
     }
   }
+  using resolver = api.createModuleResolver(options);
+  using snapshot = api.createSnapshot({
+    fileSystem: createFileSystem([...captured]),
+    createPrograms: [{
+      rootFiles: [...captured.keys()].filter(path => JS_SOURCE.test(path)),
+      // Parse every captured JS/TS input independently of project inclusion and
+      // module discovery; the resolver below owns dependency traversal and options.
+      compilerOptions: { noLib: true, noResolve: true, allowJs: true, allowNonTsExtensions: true, jsx: JsxEmit.Preserve, target: ts.ScriptTarget.ESNext },
+    }],
+  });
+  const program = snapshot.operation.createdPrograms[0];
   const roots = [...(repo.config.sourceRoots ?? []), ...repo.config.testRoots];
   const parsed = new Map<string, { imports: readonly string[]; gaps: readonly string[] }>();
   const imports = (path: string) => {
     const known = parsed.get(path); if (known !== undefined) return known;
-    const text = files.get(path)!;
-    const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+    const absolute = resolve(repo.root, path);
+    const source = program.getSourceFile(absolute);
+    if (source === undefined) throw new ConcordError('TypeScriptUnavailable', `TypeScript did not parse captured input ${path}`);
     const names = new Set<string>(), gaps = new Set<string>();
-    const visit = (node: TypeScript.Node): void => {
+    const visit = (node: ts.Node): void => {
       if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier !== undefined && ts.isStringLiteral(node.moduleSpecifier)) names.add(node.moduleSpecifier.text);
       if (ts.isCallExpression(node)) {
         if (node.expression.kind === ts.SyntaxKind.ImportKeyword) gaps.add('DynamicImport');
         if (ts.isIdentifier(node.expression) && node.expression.text === 'require') gaps.add('UnresolvedImport');
         if (ts.isIdentifier(node.expression) && ['fetch', 'WebSocket', 'XMLHttpRequest'].includes(node.expression.text)) gaps.add('NetworkBoundary');
       }
-      ts.forEachChild(node, visit);
+      node.forEachChild(visit);
     };
     visit(source);
-    const parseErrors = (source as TypeScript.SourceFile & { readonly parseDiagnostics?: readonly TypeScript.Diagnostic[] }).parseDiagnostics;
-    if (parseErrors?.length) gaps.add('UnresolvedImport');
+    if (program.getSyntacticDiagnostics(absolute).length > 0) gaps.add('UnresolvedImport');
     for (const name of names) {
       if (/^(?:node:)?child_process$/u.test(name)) gaps.add('SubprocessBoundary');
       if (/^(?:node:)?(?:https?|net|tls)$/u.test(name)) gaps.add('NetworkBoundary');
@@ -72,7 +85,7 @@ export function typescriptDependencies(repo: Repository, files: ReadonlyMap<stri
       for (const code of codes) if (code.file === current.path && withinRoots(code.file, repo.config.sourceRoots ?? [])) declarations.add(code.id);
       const found = imports(current.path); for (const gap of found.gaps) gaps.add(gap);
       for (const name of found.imports) {
-        const resolved = ts.resolveModuleName(name, repo.absolute(current.path), options, host).resolvedModule;
+        const resolved = resolver.resolveModuleName(name, dirname(repo.absolute(current.path)), undefined, { snapshot }).resolvedModule;
         if (resolved === undefined) { gaps.add('UnresolvedImport'); continue; }
         const target = pathOf(resolved.resolvedFileName);
         if (!withinRoots(target, roots) || !JS_SOURCE.test(target) || !files.has(target)) { gaps.add('ExternalTarget'); continue; }

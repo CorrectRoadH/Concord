@@ -69,14 +69,14 @@ function invokeCapability<A>(
   name: CapabilityName,
   call: (host: RepositoryHost) => HostEffect<A>,
 ): Effect.Effect<A, RepositoryProfileError | Error> {
-  return loadRepositoryHost().pipe(Effect.flatMap(host => {
+  return loadRepositoryHost().pipe(Effect.flatMap((host): Effect.Effect<A, RepositoryProfileError | Error> => {
     if (!Predicate.isFunction(host[name])) {
       return Effect.fail(new RepositoryProfileError('RepositoryHostCapabilityMissing', `The native host adapter does not provide ${name}.`));
     }
     return Effect.try({
       try: () => call(host),
       catch: cause => profileError('RepositoryHostCapabilityFailed', `${name} failed before returning an Effect`, cause),
-    }).pipe(Effect.flatMap(program => Effect.isEffect(program)
+    }).pipe(Effect.flatMap((program): Effect.Effect<A, RepositoryProfileError | Error> => Effect.isEffect(program)
       ? program
       : Effect.fail(new RepositoryProfileError('RepositoryHostInvalid', `${name} must return an Effect.`))));
   }));

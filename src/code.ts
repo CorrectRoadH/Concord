@@ -10,10 +10,9 @@ import { decode, canonical, digest, objectDigest, Slug, Text, type Finding, type
 import { parseReference } from './refs.js';
 import { ContentCache } from './content-cache.js';
 import { measureScan, type ScanTiming } from './scan-timing.js';
-import type * as TypeScript from 'typescript';
-import { lazyTypeScript, typescriptPackageVersion } from './typescript-host.js';
-
-const ts = lazyTypeScript();
+import * as ts from 'typescript/ast';
+import type { Diagnostic } from 'typescript/sync';
+import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from './typescript-host.js';
 
 export const CodeDeclarationSchema = Schema.Struct({
   id: Slug,
@@ -92,10 +91,10 @@ interface StartMarker extends LineComment {
   readonly contracts: readonly string[];
   readonly blockEnd: number;
 }
-interface StatementContext { readonly node: TypeScript.Node; readonly statements: readonly TypeScript.Statement[]; readonly pos: number; readonly end: number }
+interface StatementContext { readonly node: ts.Node; readonly statements: readonly ts.Statement[]; readonly pos: number; readonly end: number }
 interface Gap { readonly context: StatementContext; readonly index: number }
 interface RegionPair { readonly begin: StartMarker; readonly end: LineComment }
-interface RegionCandidate { readonly pair: RegionPair; readonly context: StatementContext; readonly first: TypeScript.Statement; readonly last: TypeScript.Statement }
+interface RegionCandidate { readonly pair: RegionPair; readonly context: StatementContext; readonly first: ts.Statement; readonly last: ts.Statement }
 type LocatorPart = readonly [kind: string, staticName: string | null, siblingOrdinal: number];
 type Locator = readonly LocatorPart[];
 
@@ -105,7 +104,7 @@ function addFinding(findings: Finding[], code: string, path: string, message: st
   findings.push(line === undefined ? { code, path, message } : { code, path, message, line });
 }
 
-function lineAt(source: TypeScript.SourceFile, position: number): number {
+function lineAt(source: ts.SourceFile, position: number): number {
   return source.getLineAndCharacterOfPosition(Math.max(0, Math.min(position, source.text.length))).line + 1;
 }
 
@@ -117,13 +116,13 @@ function lineBounds(text: string, pos: number, end: number): { readonly ownLine:
 }
 
 /** Only comments reported by TypeScript's comment ranges can own a declaration. */
-function actualLineComments(source: TypeScript.SourceFile): readonly LineComment[] {
-  const ranges = new Map<number, TypeScript.CommentRange>();
+function actualLineComments(source: ts.SourceFile): readonly LineComment[] {
+  const ranges = new Map<number, ts.CommentRange>();
   const tokenSpans: { readonly start: number; readonly end: number }[] = [];
-  const collect = (items: readonly TypeScript.CommentRange[] | undefined): void => {
+  const collect = (items: readonly ts.CommentRange[] | undefined): void => {
     for (const range of items ?? []) if (range.kind === ts.SyntaxKind.SingleLineCommentTrivia) ranges.set(range.pos, range);
   };
-  const visit = (node: TypeScript.Node): void => {
+  const visit = (node: ts.Node): void => {
     const children = node.getChildren(source);
     if (children.length > 0) {
       for (const child of children) visit(child);
@@ -148,7 +147,7 @@ function actualLineComments(source: TypeScript.SourceFile): readonly LineComment
 /** Exact lexical parameters, shared by step maintenance and declaration discovery. */
 export function codeReferenceTokens(path: string, text: string, servers: readonly LanguageServer[] = []): readonly { readonly line: number; readonly reference: string }[] {
   const server = servers.find(server => server.extensions.some(extension => path.endsWith(extension)));
-  const comments = SOURCE_EXTENSION.test(path) ? actualLineComments(ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true))
+  const comments = SOURCE_EXTENSION.test(path) ? withTypeScriptSource(path, text, source => actualLineComments(source))
     : server === undefined ? [] : foreignLineComments(text, server.profile.commentPrefixes);
   return comments.filter(comment => comment.family === 'implements' && comment.argument !== undefined).map(comment => ({ line: comment.line, reference: comment.argument! }));
 }
@@ -194,26 +193,27 @@ function startMarkers(comments: readonly LineComment[], path: string, findings: 
   return { starts, consumedImplements: consumed };
 }
 
-function statementContexts(source: TypeScript.SourceFile): readonly StatementContext[] {
+function statementContexts(source: ts.SourceFile): readonly StatementContext[] {
   const contexts: StatementContext[] = [];
-  const add = (node: TypeScript.Node, statements: TypeScript.NodeArray<TypeScript.Statement>, end: number): void => {
+  const add = (node: ts.Node, statements: ts.NodeArray<ts.Statement>, end: number): void => {
     contexts.push({ node, statements: [...statements], pos: statements.pos, end });
   };
-  const visit = (node: TypeScript.Node): void => {
+  const visit = (node: ts.Node): void => {
     if (ts.isSourceFile(node)) add(node, node.statements, node.end);
     else if (ts.isBlock(node) || ts.isModuleBlock(node)) add(node, node.statements, Math.max(node.statements.pos, node.getEnd() - 1));
     else if (ts.isCaseClause(node) || ts.isDefaultClause(node)) {
       const block = node.parent;
+      if (!ts.isCaseBlock(block)) return;
       const next = block.clauses[block.clauses.indexOf(node) + 1];
       add(node, node.statements, next?.getStart(source) ?? block.getEnd() - 1);
     }
-    ts.forEachChild(node, visit);
+    node.forEachChild(visit);
   };
   visit(source);
   return contexts;
 }
 
-function gapFor(marker: LineComment, source: TypeScript.SourceFile, contexts: readonly StatementContext[]): Gap | undefined {
+function gapFor(marker: LineComment, source: ts.SourceFile, contexts: readonly StatementContext[]): Gap | undefined {
   const matches: Gap[] = [];
   for (const context of contexts) {
     for (let index = 0; index <= context.statements.length; index++) {
@@ -256,17 +256,24 @@ function regionPairs(starts: readonly StartMarker[], comments: readonly LineComm
   return pairs;
 }
 
-function boundaryNodes(source: TypeScript.SourceFile): readonly TypeScript.Node[] {
-  const nodes: TypeScript.Node[] = [];
-  const visit = (node: TypeScript.Node): void => {
-    if (ts.isStatement(node) || ts.isClassElement(node) || ts.isObjectLiteralElementLike(node) || ts.isTypeElement(node)) nodes.push(node);
-    ts.forEachChild(node, visit);
+function boundaryNodes(source: ts.SourceFile): readonly ts.Node[] {
+  const nodes: ts.Node[] = [];
+  const memberKinds = new Set([
+    ts.SyntaxKind.Constructor, ts.SyntaxKind.PropertyDeclaration, ts.SyntaxKind.MethodDeclaration,
+    ts.SyntaxKind.GetAccessor, ts.SyntaxKind.SetAccessor, ts.SyntaxKind.IndexSignature,
+    ts.SyntaxKind.ClassStaticBlockDeclaration, ts.SyntaxKind.SemicolonClassElement,
+    ts.SyntaxKind.ConstructSignature, ts.SyntaxKind.CallSignature, ts.SyntaxKind.PropertySignature,
+    ts.SyntaxKind.MethodSignature, ts.SyntaxKind.NotEmittedTypeElement,
+  ]);
+  const visit = (node: ts.Node): void => {
+    if (ts.isStatement(node) || memberKinds.has(node.kind) || ts.isObjectLiteralElementLike(node)) nodes.push(node);
+    node.forEachChild(visit);
   };
   visit(source);
   return nodes;
 }
 
-function attachedBoundary(marker: StartMarker, source: TypeScript.SourceFile, nodes: readonly TypeScript.Node[]): TypeScript.Node | undefined {
+function attachedBoundary(marker: StartMarker, source: ts.SourceFile, nodes: readonly ts.Node[]): ts.Node | undefined {
   const candidates = nodes.filter(node => {
     const start = node.getStart(source);
     return marker.pos >= node.getFullStart() && marker.blockEnd <= start;
@@ -274,7 +281,7 @@ function attachedBoundary(marker: StartMarker, source: TypeScript.SourceFile, no
   return candidates[0];
 }
 
-function staticName(node: TypeScript.Node): string | null {
+function staticName(node: ts.Node): string | null {
   const name = ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isMethodDeclaration(node)
     ? node.name
     : ts.isVariableDeclaration(node)
@@ -287,7 +294,7 @@ function staticName(node: TypeScript.Node): string | null {
   return null;
 }
 
-function supportedNode(node: TypeScript.Node): { readonly symbol?: string } | undefined {
+function supportedNode(node: ts.Node): { readonly symbol?: string } | undefined {
   if (ts.isFunctionDeclaration(node)) return node.body === undefined ? undefined : (staticName(node) === null ? {} : { symbol: staticName(node)! });
   if (ts.isClassDeclaration(node)) return staticName(node) === null ? {} : { symbol: staticName(node)! };
   if (ts.isMethodDeclaration(node)) return node.body === undefined ? undefined : (staticName(node) === null ? {} : { symbol: staticName(node)! });
@@ -297,14 +304,14 @@ function supportedNode(node: TypeScript.Node): { readonly symbol?: string } | un
   return { symbol: declaration.name.text };
 }
 
-function directChildren(node: TypeScript.Node): readonly TypeScript.Node[] {
-  const children: TypeScript.Node[] = [];
+function directChildren(node: ts.Node): readonly ts.Node[] {
+  const children: ts.Node[] = [];
   // Do not return the recursive result from this callback: TypeScript treats a truthy return as early termination.
-  ts.forEachChild(node, child => { children.push(child); });
+  node.forEachChild(child => { children.push(child); });
   return children;
 }
 
-function locatorPart(node: TypeScript.Node, siblings: readonly TypeScript.Node[], index: number): LocatorPart {
+function locatorPart(node: ts.Node, siblings: readonly ts.Node[], index: number): LocatorPart {
   const kind = ts.SyntaxKind[node.kind] ?? String(node.kind);
   const name = staticName(node);
   const siblingOrdinal = siblings.slice(0, index).filter(candidate => {
@@ -314,8 +321,8 @@ function locatorPart(node: TypeScript.Node, siblings: readonly TypeScript.Node[]
   return [kind, name, siblingOrdinal];
 }
 
-function locatorFor(source: TypeScript.SourceFile, target: TypeScript.Node): Locator {
-  const find = (parent: TypeScript.Node): Locator | undefined => {
+function locatorFor(source: ts.SourceFile, target: ts.Node): Locator {
+  const find = (parent: ts.Node): Locator | undefined => {
     const children = directChildren(parent);
     for (let index = 0; index < children.length; index++) {
       const child = children[index]!;
@@ -334,9 +341,11 @@ function codeId(relativePath: string, scope: CodeDeclaration['scope'], locator: 
   return `code-${createHash('sha256').update(input).digest('hex').slice(0, 32)}`;
 }
 
-function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[]; readonly findings: readonly Finding[] } {
-  const source = ts.createSourceFile(input.path, input.text, ts.ScriptTarget.Latest, true);
-  const parseDiagnostics = (source as TypeScript.SourceFile & { readonly parseDiagnostics: readonly TypeScript.Diagnostic[] }).parseDiagnostics;
+function parseSource(input: Source): ParsedFile {
+  return withTypeScriptSource(input.path, input.text, (source, diagnostics) => parseSourceFile(input, source, diagnostics));
+}
+
+function parseSourceFile(input: Source, source: ts.SourceFile, diagnostics: readonly Diagnostic[]): ParsedFile {
   const findings: Finding[] = [];
   const comments = actualLineComments(source);
   for (const comment of comments) {
@@ -344,8 +353,8 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
     if (['file', 'code', 'begin', 'end'].includes(comment.family) && (comment.argument !== undefined || !comment.ownLine)) addFinding(findings, 'InvalidCodeAnnotation', input.path, `@concord-${comment.family} must be a standalone marker without a parameter`, comment.line);
   }
   const hasCodeMarker = comments.some(comment => CODE_FAMILIES.has(comment.family));
-  if (hasCodeMarker && parseDiagnostics.length > 0) {
-    for (const diagnostic of parseDiagnostics) addFinding(findings, 'CodeParseError', input.path, ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'), diagnostic.start === undefined ? undefined : lineAt(source, diagnostic.start));
+  if (hasCodeMarker && diagnostics.length > 0) {
+    for (const diagnostic of diagnostics) addFinding(findings, 'CodeParseError', input.path, diagnostic.text, diagnostic.pos < 0 ? undefined : lineAt(source, diagnostic.pos));
     return { codes: [], findings };
   }
   const prepared = startMarkers(comments, input.path, findings);
@@ -399,7 +408,7 @@ function parseSource(input: Source): { readonly codes: readonly CodeDeclaration[
   }
 
   const nodes = boundaryNodes(source);
-  const nodeGroups = new Map<TypeScript.Node, StartMarker[]>();
+  const nodeGroups = new Map<ts.Node, StartMarker[]>();
   const validCodeStarts = new Set(prepared.starts.filter(start => start.family === 'code' && start.valid).map(start => start.pos));
   for (const marker of prepared.starts.filter(start => start.family === 'code' && start.valid)) {
     const node = attachedBoundary(marker, source, nodes);
@@ -481,6 +490,9 @@ function mergeParsed(parsed: readonly ParsedFile[]): { readonly codes: readonly 
   return { codes, findings };
 }
 function compileAstCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean): CompiledFiles {
+  return withTypeScript(() => compileAstCachedInScope(repo, current, mode, skipCache));
+}
+function compileAstCachedInScope(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean): CompiledFiles {
   if (mode === 'off' || skipCache) {
     const inputs = current.map(source => ({ path: source.path, source: source.text }));
     return { ...mergeParsed(codeContentCache.getMany(inputs, input => input.source.includes('@concord-') ? parseSource({ path: input.path, text: input.source, digest: digest(input.source) }) : { codes: [], findings: [] })), hits: 0, misses: current.length, rows: [] };

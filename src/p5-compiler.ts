@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, posix, resolve } from 'node:path';
 import { Effect } from 'effect';
 import { build, type Loader } from 'esbuild';
-import ts from 'typescript';
+import * as ts from 'typescript/ast';
+import type { RawCompilerOptions } from 'typescript/sync';
+import { createFileSystem } from 'typescript/fs';
+import { nativeTypeScript, typescriptLibraries, typescriptRequest, withTypeScript, withTypeScriptFiles, withTypeScriptSource } from './typescript-host.js';
 import { LocalRepository } from './storage.js';
 import { getViewFile } from './application.js';
 import { ConcordError, decode, failure } from './shared.js';
@@ -24,54 +27,86 @@ const loaders: Readonly<Record<string, Loader>> = {
 const hooks = ['setup', 'draw', 'mouseMoved', 'mouseDragged', 'mousePressed', 'mouseReleased', 'mouseClicked', 'doubleClicked', 'mouseWheel', 'keyPressed', 'keyReleased', 'keyTyped', 'touchStarted', 'touchMoved', 'touchEnded', 'windowResized', 'deviceMoved', 'deviceTurned', 'deviceShaken'];
 
 function sketchSource(source: string, mode: 'instance' | 'global', inline: boolean): string {
-  const ast = ts.createSourceFile('sketch.ts', source, ts.ScriptTarget.Latest, true);
+  return withTypeScriptSource('sketch.ts', source, ast => {
   if (mode === 'global') {
     const declared = hooks.filter(name => ast.statements.some(statement =>
       ts.isFunctionDeclaration(statement) && statement.name?.text === name ||
       ts.isVariableStatement(statement) && statement.declarationList.declarations.some(d => ts.isIdentifier(d.name) && d.name.text === name)));
     return `${source}\nObject.assign(window, {${declared.join(',')}});\nexport {};`;
   }
-  if (!inline || ast.statements.some(statement => ts.isExportAssignment(statement) || ts.canHaveModifiers(statement) && ts.getModifiers(statement)?.some(m => m.kind === ts.SyntaxKind.DefaultKeyword))) return source;
+  if (!inline || ast.statements.some(statement => ts.isExportAssignment(statement) || 'modifierFlags' in statement && typeof statement.modifierFlags === 'number' && (statement.modifierFlags & ts.ModifierFlags.Default) !== 0)) return source;
   const imports = ast.statements.filter(ts.isImportDeclaration);
   let body = source;
   for (const statement of [...imports].reverse()) body = body.slice(0, statement.pos) + '\n'.repeat(source.slice(statement.pos, statement.end).split('\n').length - 1) + body.slice(statement.end);
   return `${imports.map(statement => statement.getText(ast)).join('\n')}\nexport default function(p: import('p5').default) {\n${body}\n}`;
+  });
 }
 
 /** Type checking reads only the captured graph and trusted compiler/p5 declarations. */
 function checkTypes(sources: Map<string, string>, resolutions: Map<string, string>, global: boolean, captureType: (specifier: string, importer: string) => { path: string; source: string }): void {
-  const p5Types = fileURLToPath(new URL('./p5-types/p5.d.ts', import.meta.url));
-  const globalTypes = join(dirname(p5Types), 'global.d.ts');
-  const libRoot = dirname(ts.getDefaultLibFilePath({}));
+  const { DiagnosticCategory, ModuleKind, ModuleResolutionKind } = nativeTypeScript();
+  const p5Types = fileURLToPath(new URL('./p5-types/p5.d.ts', import.meta.url)).replaceAll('\\', '/');
+  const globalTypes = join(dirname(p5Types), 'global.d.ts').replaceAll('\\', '/');
+  // Freeze the full type closure before handing a total filesystem to the compiler.
+  withTypeScript(() => {
+    const visited = new Set<string>();
+    for (const [path, source] of sources) {
+      if (visited.has(path) || path.endsWith('.json')) continue;
+      visited.add(path);
+      const names = withTypeScriptSource(path, source, ast => {
+        const names = new Set<string>();
+        const visit = (node: ts.Node): void => {
+          if ((ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && ts.isStringLiteral(node.moduleSpecifier)) names.add(node.moduleSpecifier.text);
+          if (ts.isImportTypeNode(node) && ts.isLiteralTypeNode(node.argument) && ts.isStringLiteral(node.argument.literal)) names.add(node.argument.literal.text);
+          if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference) && node.moduleReference.expression && ts.isStringLiteral(node.moduleReference.expression)) names.add(node.moduleReference.expression.text);
+          node.forEachChild(visit);
+        };
+        visit(ast);
+        for (const reference of ast.referencedFiles) {
+          if (reference.fileName.startsWith('/') || /^[a-z]+:/iu.test(reference.fileName)) throw new ConcordError('P5ImportUnsupported', 'Type references must be relative repository paths');
+          names.add(reference.fileName.startsWith('.') ? reference.fileName : `./${reference.fileName}`);
+        }
+        return [...names];
+      });
+      for (const name of names) {
+        if (name === 'p5' || !name.startsWith('./') && !name.startsWith('../')) continue;
+        let target = resolutions.get(`${path}\0${name}`);
+        if (target && sources.has(target)) continue;
+        const captured = captureType(name, path);
+        target = captured.path;
+        resolutions.set(`${path}\0${name}`, target);
+        if (/\.(?:ts|js|mjs|json)$/u.test(target)) sources.set(target, captured.source);
+      }
+    }
+  });
   const ambient = '/__concord_p5_assets.d.ts';
   const virtual = new Map([...sources].map(([path, source]) => [`/${path}`, source]));
   virtual.set(ambient, Object.keys(loaders).filter(extension => !['.ts', '.js', '.mjs', '.json'].includes(extension)).map(extension => `declare module '*${extension}' { const value: string; export default value; }`).join('\n'));
-  const options: ts.CompilerOptions = { strict: true, noEmit: true, skipLibCheck: true, allowJs: true, checkJs: false, allowUmdGlobalAccess: true, target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext, moduleResolution: ts.ModuleResolutionKind.Bundler, allowImportingTsExtensions: true, resolveJsonModule: true, types: [], lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'] };
-  const trusted = (path: string) => dirname(path) === libRoot && /^lib\..*\.d\.ts$/u.test(posix.basename(path)) || path === p5Types || path === globalTypes;
-  const host = ts.createCompilerHost(options);
-  host.fileExists = path => virtual.has(path) || trusted(path) && ts.sys.fileExists(path);
-  host.readFile = path => virtual.get(path) ?? (trusted(path) ? ts.sys.readFile(path) : undefined);
-  host.getSourceFile = (path, languageVersion) => {
-    const source = host.readFile(path);
-    return source === undefined ? undefined : ts.createSourceFile(path, source, languageVersion, true);
-  };
-  host.resolveModuleNames = (names, containing) => names.map(name => {
-    if (name === 'p5' || containing === globalTypes && name === './p5.js') return { resolvedFileName: p5Types, extension: ts.Extension.Dts };
-    let resolved = resolutions.get(`${containing.slice(1)}\0${name}`);
-    if (!resolved && !trusted(containing) && (name.startsWith('./') || name.startsWith('../'))) {
-      const captured = captureType(name, containing.slice(1));
-      resolved = captured.path;
-      virtual.set(`/${resolved}`, captured.source);
-    }
-    if (resolved && /\.(?:ts|js|mjs|json)$/u.test(resolved)) return { resolvedFileName: `/${resolved}`, extension: resolved.endsWith('.d.ts') ? ts.Extension.Dts : extname(resolved) as ts.Extension };
-    return undefined;
+  virtual.set(p5Types, readFileSync(p5Types, 'utf8'));
+  if (global) virtual.set(globalTypes, readFileSync(globalTypes, 'utf8'));
+  for (const [path, source] of typescriptLibraries()) virtual.set(path, source);
+  const options: RawCompilerOptions = { strict: true, noEmit: true, skipLibCheck: true, allowJs: true, checkJs: false, allowUmdGlobalAccess: true, target: ts.ScriptTarget.ES2022, module: ModuleKind.ESNext, moduleResolution: ModuleResolutionKind.Bundler, allowImportingTsExtensions: true, resolveJsonModule: true, types: [], lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'] };
+  // The API resolver receives a containing directory. Equal directory/specifier
+  // pairs must resolve identically under the existing relative-file resolver.
+  const fixed = new Map<string, string>();
+  for (const [key, target] of resolutions) {
+    const [importer, name] = key.split('\0');
+    fixed.set(`${posix.dirname(`/${importer!}`)}\0${name!}`, `/${target}`);
+  }
+  withTypeScriptFiles(virtual, api => {
+    using resolver = typescriptRequest(() => api.createModuleResolver(options, { resolveModuleName: (name, directory) => {
+      if (name === 'p5' || directory === dirname(p5Types) && name === './p5.js') return { resolvedFileName: p5Types };
+      const target = fixed.get(`${directory}\0${name}`);
+      return target && /\.(?:ts|js|mjs|json)$/u.test(target) ? { resolvedFileName: target } : undefined;
+    } }));
+    using snapshot = typescriptRequest(() => api.createSnapshot({ fileSystem: createFileSystem([...virtual]), createPrograms: [{ rootFiles: [...sources.keys()].map(path => `/${path}`).concat(ambient, ...(global ? [globalTypes] : [])), compilerOptions: options, options: { moduleResolver: resolver } }] }));
+    const program = snapshot.operation.createdPrograms[0];
+    const errors = typescriptRequest(() => [...program.getProgramDiagnostics(), ...program.getGlobalDiagnostics(), ...program.getSyntacticDiagnostics(), ...program.getSemanticDiagnostics()]).filter(d => d.category === DiagnosticCategory.Error);
+    if (errors.length) throw new ConcordError('P5TypeError', errors.slice(0, 20).map(d => {
+      const where = d.fileName && d.startPosition ? `${d.fileName.replace(/^\//u, '')}:${d.startPosition.line + 1}: ` : '';
+      return where + d.text;
+    }).join('\n'));
   });
-  const program = ts.createProgram([...virtual.keys(), ...(global ? [globalTypes] : [])], options, host);
-  const errors = ts.getPreEmitDiagnostics(program).filter(d => d.category === ts.DiagnosticCategory.Error);
-  if (errors.length) throw new ConcordError('P5TypeError', errors.slice(0, 20).map(d => {
-    const where = d.file && d.start !== undefined ? `${d.file.fileName.slice(1)}:${d.file.getLineAndCharacterOfPosition(d.start).line + 1}: ` : '';
-    return where + ts.flattenDiagnosticMessageText(d.messageText, '\n');
-  }).join('\n'));
 }
 
 export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, input: unknown) {
