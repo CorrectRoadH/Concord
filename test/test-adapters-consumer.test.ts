@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, cpSync, existsSync, realpathSync, renameSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { dirname, isAbsolute, join, relative } from 'node:path';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { createRequire } from 'node:module';
 import { Effect, Schema } from 'effect';
 import { OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess } from '../dist/owned-process.js';
 import { ProjectSchema } from '../dist/shared.js';
@@ -12,6 +11,7 @@ import { renderTypeScriptConfig, parseTypeScriptConfig } from '../dist/config.js
 import { type TestAdapter } from '../dist/test-adapter-config.js';
 import { LocalRepository } from '../dist/storage.js';
 import { closeRepositoryCache, withPersistentCache } from '../dist/cache-store.js';
+import { installConcord, packConcord } from './installed-package.js';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url));
 const text = (root: string, path: string, value: string) => { mkdirSync(join(root, path, '..'), { recursive: true }); writeFileSync(join(root, path), value); };
@@ -23,51 +23,19 @@ const requireCommand = Effect.fn('adapterTest.command')(function* (argv: readonl
 const parse = (source: string): Record<string, unknown> => Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(JSON.parse(source));
 const CaseList = Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: Schema.String })) });
 const Receipt = Schema.Struct({ id: Schema.String, scope: Schema.String, commandOutcome: Schema.String, definitionDigest: Schema.String, requested: Schema.optional(Schema.Array(Schema.String)), gaps: Schema.optional(Schema.Array(Schema.String)), commandExecutionCount: Schema.optional(Schema.Int), versions: Schema.optional(Schema.Struct({ framework: Schema.String, runtime: Schema.String })) });
-const setup = Effect.fn('adapterTest.pack')(function* (root: string) {
-  const pack = yield* requireCommand(['pnpm', '--config.ignore-scripts=true', 'pack', '--json', '--pack-destination', root], sourceRoot);
-  const packed = Schema.decodeUnknownSync(Schema.Struct({ filename: Schema.String }))(JSON.parse(pack.stdout));
-  const tool = join(root, 'tool'); yield* Effect.sync(() => {
-    mkdirSync(tool); text(tool, 'package.json', JSON.stringify({ private: true, type: 'module', packageManager: 'pnpm@11.18.0' }));
-    copyFileSync(join(sourceRoot, 'pnpm-workspace.yaml'), join(tool, 'pnpm-workspace.yaml'));
-  });
-  // Install the packed public package with an isolated copy of the already installed
-  // dependency closure. This uses no network or writable global pnpm store.
-  yield* requireCommand(['tar', '-xzf', (isAbsolute(packed.filename) ? packed.filename : join(root, packed.filename)), '-C', tool], root);
-  yield* Effect.sync(() => {
-    const modules = join(tool, 'node_modules'); mkdirSync(modules);
-    const installed = join(modules, 'concord-sdlc'); renameSync(join(tool, 'package'), installed);
-    const seen = new Map<string, string>();
-    const metadata = Schema.Struct({ name: Schema.String, dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)), optionalDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)), peerDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)) });
-    const findManifest = (from: string, name: string): string | undefined => {
-      const require = createRequire(from);
-      try { return require.resolve(`${name}/package.json`); } catch { /* Some packages export only their main entry. */ }
-      try {
-        let path = dirname(require.resolve(name));
-        for (;;) { const candidate = join(path, 'package.json'); if (existsSync(candidate) && Schema.decodeUnknownSync(metadata)(JSON.parse(readFileSync(candidate, 'utf8'))).name === name) return candidate; const parent = dirname(path); if (parent === path) break; path = parent; }
-      } catch { /* Missing optional or type-only peers are not runtime dependencies. */ }
-      return undefined;
-    };
-    const copy = (manifest: string): string => {
-      const source = realpathSync(dirname(manifest)); const known = seen.get(source); if (known) return known;
-      const destination = join(tool, 'dependency-store', `package-${seen.size}`); seen.set(source, destination);
-      cpSync(source, destination, { recursive: true, filter: path => !relative(source, path).split('/').includes('node_modules') });
-      const meta = Schema.decodeUnknownSync(metadata)(JSON.parse(readFileSync(manifest, 'utf8')));
-      for (const name of new Set([...Object.keys(meta.dependencies ?? {}), ...Object.keys(meta.optionalDependencies ?? {}), ...Object.keys(meta.peerDependencies ?? {})])) {
-        const dependency = findManifest(manifest, name);
-        if (!dependency) { if (meta.dependencies?.[name]) throw new Error(`Installed runtime dependency is missing: ${name}`); continue; }
-        const target = copy(dependency); const link = join(destination, 'node_modules', name); mkdirSync(dirname(link), { recursive: true }); symlinkSync(target, link, 'dir');
-      }
-      return destination;
-    };
-    const sourceManifest = join(sourceRoot, 'package.json'); const rootMeta = Schema.decodeUnknownSync(metadata)(JSON.parse(readFileSync(sourceManifest, 'utf8')));
-    for (const name of [...Object.keys(rootMeta.dependencies ?? {}), 'vitest']) {
-      const dependency = findManifest(sourceManifest, name); assert.ok(dependency, `Missing installed dependency ${name}`);
-      const target = copy(dependency); const link = join(modules, name); mkdirSync(dirname(link), { recursive: true }); symlinkSync(target, link, 'dir');
+const setup = Effect.fn('adapterTest.pack')(function* (root: string, needsEffect = false) {
+  return yield* Effect.sync(() => {
+    const packed = packConcord(root); const tool = join(root, 'tool');
+    mkdirSync(tool); text(tool, 'package.json', JSON.stringify({ private: true, type: 'module' }));
+    const fixtureDependencies: string[] = [];
+    if (needsEffect) {
+      const { dependencies } = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ dependencies: Schema.Struct({ effect: Schema.String }) })))(readFileSync(join(sourceRoot, 'package.json'), 'utf8'));
+      // Only the external fixture imports Effect; framework consumers use package dependencies.
+      fixtureDependencies.push(`effect@${dependencies.effect}`);
     }
-    // The package resolves its runtime imports through its own dependency owner.
-    symlinkSync(modules, join(installed, 'node_modules'), 'dir');
+    installConcord(tool, packed, ['vitest@4.1.11', ...fixtureDependencies]);
+    return { cli: join(tool, 'node_modules/concord-sdlc/dist/entry.js'), tool };
   });
-  return { cli: join(tool, 'node_modules/concord-sdlc/dist/entry.js'), tool };
 });
 const prepare = Effect.fn('adapterTest.consumer')(function* (scratch: string, name: string, cli: string, tool: string) {
   const root = join(scratch, name); yield* Effect.sync(() => mkdirSync(root));
@@ -165,7 +133,7 @@ test('packed adapters collect and select real Vitest pytest Go Cargo and report 
 // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 // @name packed-external-adapter-boundaries
 test('packed external adapter preserves static relations and rejects dishonest protocol/report outcomes (C1-C5 C7-C16)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-  const root = yield* scratch; const { cli, tool } = yield* setup(root);
+  const root = yield* scratch; const { cli, tool } = yield* setup(root, true);
   const consumer = yield* prepare(root, 'external', cli, tool);
   yield* Effect.sync(() => {
     copyFileSync(join(sourceRoot, 'test/fixtures/process-adapter.ts'), join(consumer, 'adapter.ts'));
