@@ -57,7 +57,43 @@ export function captureAnalysisInputs(repo: Repository) {
 }
 function readCapture(root: string) {
   const reader = new LocalRepository(root, { access: 'read' });
-  try { return reader.snapshot(() => captureAnalysisInputs(reader)); }
+  const reads = new Map<string, string | null>();
+  const listings = new Map<string, { prefix: string; scope?: 'source'; paths: string[] }>();
+  // Freeze primitive source preimages, including reads made by native binding capture.
+  // The publication guard replays only filesystem reads, never domain/cache readers.
+  const source: Repository = {
+    access: 'read', root: reader.root, privateDir: reader.privateDir,
+    config: reader.config, configSnapshot: reader.configSnapshot,
+    absolute: path => reader.absolute(path),
+    snapshot: read => reader.snapshot(read),
+    read: path => {
+      const value = reader.read(path);
+      reads.set(path, value === undefined ? null : digest(readFileSync(reader.absolute(path))));
+      return value;
+    },
+    files: (prefix, scope) => {
+      const paths = reader.files(prefix, scope);
+      listings.set(JSON.stringify([prefix, scope]), { prefix, scope, paths: [...paths] });
+      return paths;
+    },
+    publish: () => { throw new ConcordError('ReadOnlyRepository', 'Analysis capture is read-only'); },
+  };
+  try {
+    const captured = reader.snapshot(() => {
+      try { return captureAnalysisInputs(source); }
+      finally { closeRepositoryCache(source); }
+    });
+    return { ...captured, verifyFiles: () => reader.snapshot(() => {
+      for (const [path, expected] of reads) {
+        const value = reader.read(path);
+        if ((value === undefined ? null : digest(readFileSync(reader.absolute(path)))) !== expected) throw new ConcordError('AnalysisSourceChanged', `Analysis input changed: ${path}`);
+      }
+      for (const { prefix, scope, paths } of listings.values()) {
+        if (objectDigest(reader.files(prefix, scope)) !== objectDigest(paths)) throw new ConcordError('AnalysisSourceChanged', `Analysis membership changed: ${prefix}`);
+      }
+      if (candidateDigest(reader, [...captured.trace.documents]) !== captured.identity.candidate) throw new ConcordError('AnalysisSourceChanged', 'Analysis candidate changed');
+    }) };
+  }
   finally { reader.close(); }
 }
 function publishObservations(repo: Repository, values: readonly AnalysisObservation[]): void {
@@ -70,16 +106,12 @@ function publishObservations(repo: Repository, values: readonly AnalysisObservat
 /** Runner ownership encloses processes; snapshots and publication coordination never enclose waits. */
 export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
   const owned = yield* OwnedProcess;
-  const prepared = yield* Effect.acquireRelease(sync(() => {
+  const run = yield* Effect.acquireRelease(sync(() => {
+    closeRepositoryCache(repo);
     const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'analysis-start')!;
-    let prepared;
-    try {
-      const captured = readCapture(repo.root);
-      prepared = { captured, run: beginRun(repo.root) };
-    } finally { releaseTraceLeaseSync(lease, 'analysis-start'); }
-    // Exclusive acquisition/release themselves advance the revision; capture our released generation.
-    return { ...prepared, captured: { ...prepared.captured, revision: readPublicationRevisionSync(repo.root) } };
-  }), prepared => Effect.gen(function* () {
+    try { return beginRun(repo.root); }
+    finally { releaseTraceLeaseSync(lease, 'analysis-start'); }
+  }), run => Effect.gen(function* () {
     yield* owned.awaitIdle;
     const idle = (yield* owned.activeCount) === 0;
     const results = yield* owned.cleanupResults;
@@ -88,15 +120,19 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
         const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'analysis-finish')!;
         try {
           const cleanupOk = idle && results.every(hasConfirmedOwnedGroupCleanup);
-          finalizeRun(repo.root, prepared.run, cleanupOk);
-          if (cleanupOk) finishRun(repo.root, prepared.run);
+          finalizeRun(repo.root, run, cleanupOk);
+          if (cleanupOk) finishRun(repo.root, run);
         } finally { releaseTraceLeaseSync(lease, 'analysis-finish'); }
-      } catch { quarantineRun(repo.root, prepared.run); }
+      } catch { quarantineRun(repo.root, run); }
     });
   }));
-  const { captured, run } = prepared;
+  // Runner cleanup is registered before capturing, so capture failure releases ownership.
+  const captured = yield* sync(() => readCapture(repo.root));
+  if (captured.identity.config !== repo.configSnapshot.digest) return yield* Effect.fail(new ConcordError('AnalysisSourceChanged', 'Analysis configuration changed before capture'));
   yield* sync(() => {
-    const previous = readStoredAnalysisObservations(repo);
+    let previous;
+    try { previous = readStoredAnalysisObservations(repo); }
+    finally { closeRepositoryCache(repo); }
     if (previous.length > 0) publishObservations(repo, previous.map(value => ({ ...value, current: false, complete: false, gaps: [...new Set([...value.gaps, 'SnapshotNotCurrent'])] })));
   });
   const values: AnalysisValue[] = [yield* sync(() => typescriptDependencies(repo, captured.files, captured.trace.annotations.cases, captured.trace.codeDeclarations))];
@@ -116,13 +152,12 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
     if (readPublicationRevisionSync(repo.root) !== after.revision) throw new ConcordError('AnalysisSourceChanged', 'Publication changed after analysis verification');
     const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'analysis-publish')!;
     try {
-      const ownedRevision = readPublicationRevisionSync(repo.root);
-      // Recheck noncooperating edits as well as coordinated publication generations.
-      let final: ReturnType<typeof readCapture>;
-      try { final = readCapture(repo.root); }
+      // Full native/domain capture has closed. Under ownership, replay only its
+      // frozen filesystem preimages; coordinated source writes invalidate the run.
+      try { after.verifyFiles(); }
       catch { throw new ConcordError('AnalysisSourceChanged', 'Analysis inputs changed at publication'); }
       const invalidated = finalizeRun(repo.root, run, true);
-      if (invalidated || final.inputs !== captured.inputs || final.revision !== ownedRevision) throw new ConcordError('AnalysisSourceChanged', 'Analysis run was invalidated or its inputs changed');
+      if (invalidated) throw new ConcordError('AnalysisSourceChanged', 'Analysis run was invalidated');
       // Currency describes verified repository inputs; external uncertainty stays in gaps.
       const observations = values.map(value => observation(value, captured.inputs, value.gaps, true));
       publishObservations(repo, observations);
