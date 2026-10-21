@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+import { AnalysisViewSchema, historicalAnalysis } from './analysis-view.js';
 import { Schema } from 'effect';
 import { AnnotatedCaseSchema, ConcordError, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ResearchSchema, RoadmapSchema, UseCaseSchema, digest } from './shared.js';
 import { FeedbackSourceSchema } from './feedback-schema.js';
@@ -28,6 +29,7 @@ export const TraceShowValue = Schema.Struct({
   operation: Schema.Literal('trace-show'), subject: Schema.Struct({ path: Schema.String, metadata: Metadata, digest: Schema.String }),
   relatedPaths: Schema.Array(Schema.String), incoming: Schema.Array(Edge), outgoing: Schema.Array(Edge), tests: Schema.Array(AnnotatedCaseSchema),
   codeDeclarations: Schema.Array(Schema.Struct({ ...CodeDeclarationSchema.fields, matchedContracts: Schema.Array(Schema.String) })), cache: Cache,
+  analysis: Schema.optional(AnalysisViewSchema),
 });
 export const ReviewRenderValue = Schema.Struct({ segments: Schema.Array(Schema.Union([
   Schema.Struct({ text: Schema.String }), Schema.Struct({ constitution: Schema.Struct({ path: Schema.String, digest: Schema.String }) }),
@@ -65,7 +67,7 @@ export function hydrateQueryValue(root: string, value: QueryValue, read = readQu
   const output = 'segments' in value ? { operation: 'cached-query', body: value.segments.map(segment => 'text' in segment ? segment.text : body(segment.constitution.path, segment.constitution.digest, true)?.body.trimEnd() ?? '(constitution changed since projection; use --fresh)').join('') }
     : value.operation === 'trace-show' ? (() => {
       const restored = body(value.subject.path, value.subject.digest, false);
-      return { ...value, subject: restored === undefined ? value.subject : { path: value.subject.path, metadata: restored.metadata, body: restored.body, digest: value.subject.digest } };
+      return { ...value, ...(value.analysis === undefined ? {} : { analysis: historicalAnalysis(value.analysis) }), subject: restored === undefined ? value.subject : { path: value.subject.path, metadata: restored.metadata, body: restored.body, digest: value.subject.digest } };
     })() : value;
   return { value: output, bodyChanged: [...new Set(bodyChanged)].sort(), bodyUnavailable };
 }

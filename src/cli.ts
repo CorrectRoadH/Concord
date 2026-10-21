@@ -34,6 +34,8 @@ import { ConcordError, IssueClosureSchema, MEMORY_RELATION_KINDS, MemorySourceSc
 import { listTemplates, templateBody } from './templates.js';
 import { humanOutput } from './presentation.js';
 import { annotationSnippet, doctor } from './onboarding.js';
+import { analyzeCode } from './code-analysis.js';
+import { analysisView } from './analysis-view.js';
 import { scanCode } from './code.js';
 import { codeSnippet, listCode, locateCode } from './code-commands.js';
 import { applyViewDryRun, executeViewAction, getWorkspaceSnapshot, validateViewRoot } from './application.js';
@@ -338,7 +340,7 @@ const feedback = Command.make('feedback').pipe(Command.withDescription('Connect 
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
   Command.make('annotate', { contract: text('contract'), regression: many('regression') }, args => withReadRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.regression)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
   Command.make('list', {}, () => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache};}))),
-  Command.make('show', { id }, args => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-show',case:selectCase(t.annotations.cases,args.id),evidenceScope:'command'};}))),
+  Command.make('show', { id }, args => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);const selected=selectCase(t.annotations.cases,args.id);let codes: ReturnType<typeof scanCode>['codes']=[];try{codes=scanCode(repo,{cache:'off'}).codes;}catch{/* Optional observations do not block test inspection. */}return {operation:'test-show',case:selected,evidenceScope:'command',analysis:analysisView(repo,[selected],codes,t.documents)};}))),
   Command.make('run', { id }, args => withRepo((repo,s) => Effect.gen(function*(){
     if(s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','test run does not accept --dry-run; use test show to inspect the declaration'));
     const t=yield* sync(()=>repo.snapshot(()=>buildTrace(repo,'off',{includeCode:false})));yield* sync(()=>requireValidTrace(t));
@@ -350,6 +352,7 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
   Command.make('evidence', { id }, args => withReadRepo(repo => sync(()=>readEvidence(repo,args.id)))),
 ]));
 const code = Command.make('code').pipe(Command.withDescription('Associate files, functions and statement regions with Feature, Use Case or Engineering contracts. No coverage or completion claim.'), Command.withSubcommands([
+  Command.make('analyze', {}, () => withRepo((repo, settings) => settings.dryRun ? Effect.fail(new ConcordError('InvalidOption', 'code analyze does not accept --dry-run')) : analyzeCode(repo), { unlocked: true })).pipe(Command.withDescription('Explicitly analyze dependencies and run configured language servers; writes disposable observations only.')),
   Command.make('list', {}, () => withReadRepo(repo => sync(() => listCode(repo)))).pipe(Command.withDescription('List current declarations from configured sourceRoots.')),
   Command.make('locate', { file: Argument.string('path'), line: Flag.integer('line').pipe(Flag.withDescription('1-based source line; returns every containing scope.')) }, args => withReadRepo(repo => sync(() => locateCode(repo, args.file, args.line)))).pipe(Command.withDescription('Find all explicit declarations containing a repository-relative source line.')),
   Command.make('annotate', { scope: Flag.choice('scope', ['file', 'node', 'region']), contract: many('contract') }, args => withReadRepo(repo => sync(() => codeSnippet(repo, args.scope, args.contract)))).pipe(Command.withDescription('Print validated source comments; repeat --contract for multiple targets. Does not edit source.')),

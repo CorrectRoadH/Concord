@@ -16,6 +16,34 @@
 
 `code list` 返回当前声明，`code locate <path> --line <n>` 查询全部包含作用域。内部引用自动派生，不要求使用者维护。`trace show` 返回独立 codeDeclarations 和 implements 边；代码声明不代替测试或完成证明。完整语法见 `concord --skill code`。
 
+## 依赖分析
+
+`code analyze` 显式生成可丢弃依赖观察；不接受 `--dry-run`，不签发测试收据。JS/TS 使用内置 TypeScript 模块解析，不启动 server。其它语言根据 `languageServers` 配置启动受管 LSP 进程，具体配置见[多语言分析](use-case/analyze-other-languages.md)。
+
+`code list`、`trace show --fresh` 与 `test show` 展示 `analysis.observations` 和 `analysis.relevance`。`observed` 附层级及范围限制，`not-observed` 显示“未观察到交集”和具名缺口。历史诊断投影中的观察只作历史展示；当前判定须重新读取当前输入。
+
+`budgets` 包含固定上限：
+
+| 字段 | 上限 |
+| --- | --- |
+| totalMs | 120000 |
+| requestMs | 10000 |
+| outputBytes | 8388608 |
+| messageBytes | 1048576 |
+| messages | 20000 |
+| requests | 2000 |
+| concurrency | 8 |
+| files | 1000 |
+| symbols | 20000 |
+| nodes | 2000 |
+| depth | 32 |
+
+配置值为正整数且不能突破上限；默认深度为 3，其它默认值为包级上限。
+
+分析与测试执行共用 runner 所有权。清理不确定时返回 `AnalysisCleanupUnknown` 并阻断后续发布；输入变化时返回 `AnalysisSourceChanged`。server 故障与缓存不可用不改变静态关系或 `check` 的结论。
+
+`current` 表达仓库内输入一致性；复核通过的 LSP 观察为 `current: true`，可用于符号定位与相关性判定。仓库外 SDK、外部环境与私有索引无法核验时保留 `UnverifiedEnvironment`，`complete` 为 false。仓库内输入变化后，旧观察只作历史展示。
+
 ## 测试与证据
 
 `test annotate` 只输出经验证的注释片段，不写源码。`test list/show` 发现当前声明；`test run <case>` 使用配置 argv 且 `shell=false`。`memory resolve --kind fixed` 需要当前 epoch 的 red/green command evidence 和非空原因。

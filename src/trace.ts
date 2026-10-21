@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
+import { analysisView } from './analysis-view.js';
 import { scanAnnotations } from './annotations.js';
 import { scanCode, type CodeDeclaration } from './code.js';
 import { checkDocuments, diagnoseDocuments, findDocument, type DocumentInventory } from './documents.js';
@@ -122,7 +123,7 @@ export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildT
     const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
     const codeIds = new Set(incoming.filter(e => e.from.startsWith('code:')).map(e => e.from.slice(5)));
     const codeDeclarations = trace.codeDeclarations.filter(c => codeIds.has(c.id)).map(c => ({ ...c, matchedContracts: c.contracts.filter(ref => belongsTo(references, trace, relatedPaths, ref)) }));
-    return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, cache: trace.annotations.cache };
+    return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, cache: trace.annotations.cache, analysis: analysisView(repo, trace.annotations.cases.filter(c => ids.has(c.id)), trace.codeDeclarations, trace.documents) };
 }
 
 type RelationshipKind = 'code' | 'test';

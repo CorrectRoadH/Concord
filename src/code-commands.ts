@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
+import { analysisView } from './analysis-view.js';
 import { readDocumentReference } from './documents.js';
 import { buildTrace, requireValidTrace } from './trace.js';
 import { ConcordError, digest, inRepositorySnapshot, type Repository } from './shared.js';
@@ -8,8 +9,10 @@ import { ConcordError, digest, inRepositorySnapshot, type Repository } from './s
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 export function listCode(repo: Repository) {
+  return inRepositorySnapshot(repo, () => {
   const trace = buildTrace(repo, 'use'); requireValidTrace(trace);
-  return { operation: 'code-list', codes: trace.codeDeclarations, sourceRoots: repo.config.sourceRoots ?? [] };
+  return { operation: 'code-list', codes: trace.codeDeclarations, sourceRoots: repo.config.sourceRoots ?? [], analysis: analysisView(repo, trace.annotations.cases, trace.codeDeclarations, trace.documents) };
+  });
 }
 
 export function locateCode(repo: Repository, file: string, line: number) {
