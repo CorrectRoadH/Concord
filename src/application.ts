@@ -4,7 +4,7 @@
 import { checkCurrentProject } from './check-current.js';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect, Result } from 'effect';
+import { Effect, Result, Predicate } from 'effect';
 import { recoverLocalState } from './recovery.js';
 import { waitForPublication } from './publication-wait.js';
 import { allowPersistentCacheRecovery } from './cache-store.js';
@@ -57,6 +57,7 @@ import { snapshot as parseConfigSnapshot } from './config.js';
 import { adoptConstitution, amendConstitution, initializeConstitution } from './constitution.js';
 import { listTemplates, templateBody } from './templates.js';
 import { buildTrace, renderReview, requireValidTrace, traceShow } from './trace.js';
+import { readWritingPolicy } from './writing-policy.js';
 import { ViewActionSchema, type ViewAction, type ViewFile, type WorkspaceSnapshot } from './view-contract.js';
 import { showWriting, setWriting, writingIndex } from './writing-management.js';
 import { checkWriting } from './writing.js';
@@ -80,6 +81,7 @@ export function validateViewRoot(input: string): string {
 }
 
 export function decodeViewAction(input: unknown): ViewAction {
+  if (Predicate.isObject(input) && input.action === 'writing.set') readWritingPolicy(JSON.stringify(input.policy), typeof input.path === 'string' ? input.path : undefined);
   return decode(ViewActionSchema, input, 'view action');
 }
 

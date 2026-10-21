@@ -1,9 +1,11 @@
 // @concord-file
+// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 import { existsSync } from 'node:fs';
 import { readDocumentReference } from './documents.js';
 import { ConcordError, inRepositorySnapshot, type Repository } from './shared.js';
+import { checkWriting } from './writing.js';
 import { buildTrace } from './trace.js';
 import { checkConstitution } from './constitution.js';
 
@@ -13,9 +15,13 @@ export function doctor(repo: Repository, trace = buildTrace(repo, 'off')) {
   const missingTestRoots = repo.config.testRoots.filter(path => !existsSync(repo.absolute(path)));
   const missingSourceRoots = (repo.config.sourceRoots ?? []).filter(path => !existsSync(repo.absolute(path)));
   const constitutionFindings = checkConstitution(repo);
-  const allFindings = [...findings, ...constitutionFindings.filter((finding) => !findings.some((existing) => existing.code === finding.code && existing.path === finding.path))];
+  let writingComplete = true;
+  let writingFindings: { code: string; path: string; line?: number; message: string }[];
+  try { writingFindings = checkWriting(repo).findings.map(finding => ({ code: finding.rule, path: finding.file, line: finding.line, message: finding.message })); }
+  catch (cause) { if (!(cause instanceof ConcordError)) throw cause; writingComplete = false; writingFindings = [{ code: cause.code, path: 'docs', message: cause.message }]; }
+  const allFindings = [...findings, ...writingFindings, ...constitutionFindings.filter((finding) => !findings.some((existing) => existing.code === finding.code && existing.path === finding.path))];
   const constitutionSteps = repo.config.constitution === undefined ? ['Run concord constitution initialize to opt this existing project into constitution governance.'] : constitutionFindings.some((finding) => finding.code === 'ConstitutionDraft') ? ['Adopt real project principles with concord constitution adopt; draft is not compliance.'] : [];
-  return { operation: 'doctor', ok: findings.length === 0, root: repo.root, node: process.version, configuration: repo.config, missingTestRoots, missingSourceRoots, codeDeclarations: codeDeclarations.length, documents: documents.length, cases: annotations.cases.length, findings: allFindings, nextSteps: [...constitutionSteps, ...(repo.config.testRoots.length === 0 ? ['Maintain contracts with concord --skill document.', 'Run concord check to validate document integrity; this does not prove test coverage.', `Add testRoots to ${repo.configSnapshot.path} when real tests exist.`] : annotations.cases.length === 0 ? ['Fill in a Feature and Use Case.', 'Use concord test annotate to connect an existing test.', `Configure your runner in ${repo.configSnapshot.path}; doctor does not execute it.`] : ['Run concord check to validate all relations.', 'Run concord test run <id> to record command evidence.'])] };
+  return { operation: 'doctor', ok: findings.length === 0 && writingComplete && writingFindings.length === 0, writing: { complete: writingComplete, ok: writingComplete && writingFindings.length === 0 }, root: repo.root, node: process.version, configuration: repo.config, missingTestRoots, missingSourceRoots, codeDeclarations: codeDeclarations.length, documents: documents.length, cases: annotations.cases.length, findings: allFindings, nextSteps: [...constitutionSteps, ...(repo.config.testRoots.length === 0 ? ['Maintain contracts with concord --skill document.', 'Run concord check to validate document integrity; this does not prove test coverage.', `Add testRoots to ${repo.configSnapshot.path} when real tests exist.`] : annotations.cases.length === 0 ? ['Fill in a Feature and Use Case.', 'Use concord test annotate to connect an existing test.', `Configure your runner in ${repo.configSnapshot.path}; doctor does not execute it.`] : ['Run concord check to validate all relations.', 'Run concord test run <id> to record command evidence.'])] };
 }
 
 export function annotationSnippet(repo: Repository, contract: string, regressions: readonly string[]) {

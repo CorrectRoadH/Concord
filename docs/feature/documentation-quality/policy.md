@@ -43,7 +43,7 @@ Markdown 适合解释概念关系、场景和例子。结构化定义只在 JSON
 
 ```json
 {
-  "format": "concord.writing/v2",
+  "format": "concord.writing/v3",
   "bannedTerms": [
     {"term": "旧称", "use": "推荐表达", "why": "避免歧义", "exempt": ["docs/feature/payments/history"]}
   ],
@@ -80,7 +80,7 @@ init 只在缺失时创建空的全局 concepts.json，并绑定真实的新配�
 
 ## 从 writing/v1 迁移
 
-普通检查遇到 v1 返回 WritingMigrationRequired，不自动解释旧概念表。先用 show 获取旧政策原文与 digest；作者审核概念定义、别名与弃用名，用 concepts.set 保存 JSON；最后用 writing.set 和旧政策 digest 显式替换为 v2。迁移中间阶段仍明确拒绝旧政策检查。
+普通检查遇到 v1 返回 WritingMigrationRequired，不自动解释旧概念表。先用 show 获取旧政策原文与 digest；作者审核概念定义、别名与弃用名，用 concepts.set 保存 JSON；最后用 writing.set 和旧政策 digest 显式替换为 v3。迁移中间阶段仍明确拒绝旧政策检查。
 
 catalog 编辑不依赖写作政策解析，因此 v1 政策不会阻断迁移。各无效来源可逐项修复，但已知引用不能被破坏。迁移不从名称自动编造 definition，也不把全部 aliases 自动当成 deprecated。
 
@@ -109,3 +109,57 @@ init 在全局政策缺失时创建随包通用预设，并保留既有政策原
 ## 检查的文件类型
 
 写作检查只扫描 Markdown 与 MDX，其它文件不参与文件计数、命中或输入摘要。只含其它文件的扫描根返回 WritingInputNotFound。政策 Schema 严格，未声明的字段被拒绝。
+
+
+## 受控写作规则
+
+`concord.writing/v3` 的 `controlled` 按叶子递归合成。省略和空对象保留祖先叶子，null 清除子树并保留清除来源；更深目录可重新声明。数值阈值独立开启长度检查，布尔开关默认 false；每种语言的词表与豁免数组整表替换，空数组为显式空表。有效叶子包含值、来源路径和 JSON pointer；默认值没有 owner。
+
+```json
+{
+  "format": "concord.writing/v3",
+  "bannedTerms": [],
+  "controlled": {
+    "language": "auto",
+    "sentence": {"zh": {"procedural": 30, "descriptive": 40}, "en": {"procedural": 20, "descriptive": 25}},
+    "paragraphSentences": 6,
+    "procedural": {"singleInstruction": false, "requireVerb": false},
+    "approvedWords": {"enabled": false},
+    "passiveVoice": {"zh": false, "en": false}
+  }
+}
+```
+
+这些数值属于项目参数。Concord 不分发 ASD-STE100 原文或词典，不宣称符合该规范。词表由项目维护，词法启用要求见[采用设计](../../design/controlled-writing/plans/policy-rules/architecture.md#词表与开关)。启用程序性动作词开关时，auto 必须提供 zh/en 两张非空表；显式语言必须提供对应表。英文被动候选必须提供非空 participles，不自动推导词形。
+
+controlled 只取 paragraph 显示文本；最近列表决定程序性或描述性，引用一律为描述性。标题、GFM 表格、图片、代码块、HTML 块和生成区域排除；行内代码为一个不透明 token。分句、缩写、Unicode token、语言比例与局部豁免按[采用设计](../../design/controlled-writing/plans/policy-rules/architecture.md)执行。legacy 字符长度与 controlled token 路径独立参与门禁。
+
+## 从 writing/v2 迁移
+
+普通入口遇到 v1/v2 返回 `WritingMigrationRequired`；show 保留安全读取的原文、digest 与具名诊断。`concord writing migrate --path docs/concord-writing.json --dry-run` 预览合法完整 v2 到 v3 的变更；省略 dry-run 使用完整前像和受管 publication/journal 写入，只更换 format，不添加 controlled。v1 必须先审核并迁移概念定义，不由 migrate 猜测转换。旧事务由匹配的 CLI 恢复，未知现场保留。
+
+## 写作 JSON 结果
+
+`concord docs check --json` 返回 `complete`、`inputDigest` 和 findings。controlled finding 包含 rule、file、原始 line/column、actual、可用时的 limit，以及 language/languagePolicy 和 source/sources。
+
+词法命中还包含原文 text 与 start/end 范围，列和范围采用 UTF-16。source 指向开关或阈值，sources 保留实际语言、词表与豁免来源。
+
+长度规则为 `proceduralSentenceLength`、`descriptiveSentenceLength`、`paragraphSentences`。
+
+词法规则为 `multipleInstructions`、`unapprovedProceduralVerb`、`unapprovedWord`、`passiveVoice`。动作词只陈述词面命中，被动形式只陈述候选，不证明语义或完整语法。
+
+`InvalidWritingPolicy` 表示非法字段或有效政策缺少所需词表。
+
+`WritingBudgetExceeded` 表示资源上限失败且 complete 为 false。`WritingInputsChanged` 拒绝变化中的输入。失败退出 1，完整且没有 finding 时退出 0。
+
+## 受控写作性能预算
+
+按[统一方法](../../engineering/concord-self-hosting/performance.md)测量；参照环境、冻结消费者、规模、交错基线、cold/warm、样本有效性与资源上限见[采用设计](../../design/controlled-writing/plans/policy-rules/architecture.md#性能预算)。
+
+| 基准命令（参数完整） | 场景 | warm p50 预算 |
+| --- | --- | ---: |
+| `concord docs check` | self，两条长度路径与词法规则开启 | 1000ms |
+| `concord check` | self，全量聚合 | 2300ms |
+| `concord docs check` | scale，1000 页、单有效表接近上限 | 5000ms |
+
+父提交与候选产物在等价 v2/v3 消费者上交错测量 legacy，回退不得超过 20%。新规则在有效 v3 消费者上按绝对预算判定；缺少必需样本或对照不能判通过。

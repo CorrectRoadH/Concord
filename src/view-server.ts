@@ -99,7 +99,7 @@ function statusFor(error: ConcordError): number {
 
 function failed(request: IncomingMessage, response: ServerResponse, cause: unknown): void {
   const error = failure(cause);
-  const value: ViewFailure = { ok: false, error: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) };
+  const value: ViewFailure = { ok: false, ...(error.code === 'WritingBudgetExceeded' ? { complete: false as const } : {}), error: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) };
   const status = statusFor(error);
   // Error details are returned to the caller, not copied into request logs.
   // Pending builds and short cache lock collisions are retried by the client; they are not server errors.

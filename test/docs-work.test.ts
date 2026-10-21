@@ -23,7 +23,7 @@ function fixture(docsWork?: unknown, initialConfig = true) {
   writeFileSync(join(root, 'docs/README.md'), '# Documentation\n');
   writeFileSync(join(root, 'docs/input.md'), '# Input\n'); writeFileSync(join(root, 'outside.txt'), 'Outside\n');
   if (initialConfig) writeFileSync(join(root, 'concord.config.ts'), `export default ${JSON.stringify({ format: 'concord.project/v1', projectId: 'docs-work', testRoots: [], sourceRoots: [], runner: { kind: 'command', argv: [process.execPath, '-e', 'process.exit(0)'], sourceFiles: [], timeoutMs: 1000 }, ...(docsWork === undefined ? {} : { docsWork }) })} as const;\n`);
-  writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v2', bannedTerms: [], paragraphLength: 200, sentenceLength: 100 }));
+  writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v3', bannedTerms: [], paragraphLength: 200, sentenceLength: 100 }));
   git(root, 'add', '.'); git(root, 'commit', '-qm', 'fixture');
   return root;
 }
@@ -140,7 +140,7 @@ test('default writing uses main CLI rules on item paths and default finalizer ca
     // `init` creates valid project contract owners for the aggregate finalizer.
     const initialized = spawnSync(process.execPath, [cli, '--root', root, '--json', 'init', '--docs-only', '--yes'], { cwd: root, encoding: 'utf8', timeout: 30000 });
     assert.equal(initialized.status, 0, initialized.stderr);
-    writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v2', roots: ['docs/a', 'docs/b'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'Fixture rule' }] }));
+    writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v3', roots: ['docs/a', 'docs/b'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'Fixture rule' }] }));
     git(root, 'add', '.'); git(root, 'commit', '-qm', 'initialized');
     const run = call(root, ['prepare', '--scope', 'docs/a/', '--run-id', 'builtin']);
     writeFileSync(join(root, 'docs/a/one.md'), '# One\n\nForbidden text.\n');

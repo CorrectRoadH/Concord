@@ -16,7 +16,7 @@ import { defaultWritingSource } from '../dist/writing-defaults.js';
 test('init adopts a complete writing preset, checks it immediately, and preserves existing policy bytes', () => Effect.runPromise(Effect.sync(() => {
   for (const existing of [false, true]) {
     const root = mkdtempSync(join(tmpdir(), 'concord-writing-preset-'));
-    const custom = '{ "format": "concord.writing/v2", "bannedTerms": [], "sentenceLength": 75 }\n';
+    const custom = '{ "format": "concord.writing/v3", "bannedTerms": [], "sentenceLength": 75 }\n';
     try {
       execFileSync('git', ['init', '-q', root]);
       if (existing) {
@@ -58,7 +58,7 @@ test('init adopts a complete writing preset, checks it immediately, and preserve
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('init publication and recovery reject custom or local policies masquerading as the preset', () => Effect.runPromise(Effect.sync(() => {
   for (const [path, after] of [
-    ['docs/concord-writing.json', '{"format":"concord.writing/v2","bannedTerms":[]}\n'],
+    ['docs/concord-writing.json', '{"format":"concord.writing/v3","bannedTerms":[]}\n'],
     ['docs/feature/demo/concord-writing.json', defaultWritingSource],
     ['docs/concord-writing.json', JSON.stringify({ ...JSON.parse(defaultWritingSource), svgTerms: true, svgStyle: null }, null, 2) + '\n'],
   ] as const) {

@@ -65,10 +65,20 @@ concord author set docs/feature/login/README.md --body ./login.md --expected-dig
 
 concepts 使用 concord.concepts/v1：稳定局部 id、definition、多语言 preferred/aliases/deprecated 和可选直接 imports。允许别名不成为禁词，只有明确 deprecated 才派生规则。Markdown 保留解释和案例；全项目术语表只读汇总，不写第二份词库。删除或改名被引用的概念会被拒绝。
 
-政策使用 concord.writing/v2。根集合用于选文件，祖先规则仍按有效范围应用；省略阈值表示继承，null 表示清除，布尔 false 表示关闭。同名概念和规则冲突保留全部来源，不默默覆盖。作用域、语料与恢复的精确定义见随包 docs/feature/documentation-quality/policy.md。
+政策使用 concord.writing/v3。根集合用于选文件，祖先规则仍按有效范围应用；省略阈值表示继承，null 表示清除，布尔 false 表示关闭。同名概念和规则冲突保留全部来源，不默默覆盖。作用域、语料与恢复的精确定义见随包 docs/feature/documentation-quality/policy.md。
 
 `concord docs check --json` 自动发现政策与概念；`--rules <path>` 选择受管政策的扫描根，或使用外部只读 profile。报告说明实际范围与输入快照。发现问题退出 1，逐处核对上下文，不机械全仓替换；这不是测试覆盖率或实现证明。
 
 旧 writing/v1 的普通检查返回 WritingMigrationRequired。先 show 取得原文与摘要，作者审核并用 concepts.set 保存 JSON，再用 writing.set 和旧摘要显式替换为 v2。概念编辑不因仍存在旧政策而被阻断，中间阶段不宣称检查通过。不要从旧表的名字编造定义；有旧 journal 时先用匹配的旧 CLI 恢复，不能绕过新授权边界。
 
 文档 ID 与专题名允许 Unicode 字母、组合标记和数字，可用单连字符分隔；例如 `concord use-case create 扩展NPC动作 --feature npc --title "扩展 NPC 动作"` 和 `concord feature page add npc 认知与执行`。名称保留原样，不翻译或自动更改大小写；禁止路径分隔符、空白和路径穿越。固定入口 README.md、architecture.md 等继续保留。
+
+
+受控规则在 `controlled` 中按叶子合成，null 清除子树，每种语言的词表和 allowIn 整表替换。数值开启长度检查；词法开关默认 false。程序性动作词开关需要有效非空 verbs 表（auto 要求 zh/en）；英文被动候选需要显式 participles。字符长度与受控 token 长度可同时生效。精确抽取、计数、语言与资源上限见随包 docs/design/controlled-writing/plans/policy-rules/architecture.md。
+
+```sh
+concord writing migrate --path docs/concord-writing.json --dry-run
+concord writing migrate --path docs/concord-writing.json
+```
+
+migrate 只接受完整合法 v2，保留字段并只换 format；v1 需先审核概念定义。show 返回原文和 digest，修改仍使用 writing set 的完整 CAS。旧 journal 由匹配 CLI 恢复；未知现场保持阻断。WritingBudgetExceeded 的 complete 为 false，不把截断报告当成功。词法 finding 陈述词面观察，不宣称符合 ASD-STE100，也不分发其原文或词典。

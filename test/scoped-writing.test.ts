@@ -13,7 +13,7 @@ import { checkWriting } from '../dist/writing.js';
 import { setWriting, showWriting, writingIndex } from '../dist/writing-management.js';
 
 const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
-const policy = (extra: Record<string, unknown> = {}) => ({ format: 'concord.writing/v2' as const, bannedTerms: [], ...extra });
+const policy = (extra: Record<string, unknown> = {}) => ({ format: 'concord.writing/v3' as const, bannedTerms: [], ...extra });
 const concept = (id: string, names: Record<string, { preferred: string; aliases?: string[]; deprecated?: string[] }>) => ({ id, definition: `${id} meaning`, names });
 const catalog = (concepts: ReturnType<typeof concept>[], imports?: string[]) => ({ format: 'concord.concepts/v1' as const, concepts, ...(imports ? { imports } : {}) });
 const fixture = () => {

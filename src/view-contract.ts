@@ -143,7 +143,7 @@ export interface ViewJob {
 }
 
 export interface ViewSuccess<T> { readonly ok: true; readonly value: T }
-export interface ViewFailure { readonly ok: false; readonly error: string; readonly message: string; readonly details?: unknown }
+export interface ViewFailure { readonly ok: false; readonly complete?: false; readonly error: string; readonly message: string; readonly details?: unknown }
 export type ViewResponse<T> = ViewSuccess<T> | ViewFailure;
 export type { GitDiff, GitStatus };
 

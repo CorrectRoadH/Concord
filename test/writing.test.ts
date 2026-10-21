@@ -16,7 +16,7 @@ test('writing scan refuses edits to inputs and directory membership during a rea
     const initial = new LocalRepository(root, { initialize: true });
     try { initialize(initial); } finally { initial.close(); }
     for (const kind of ['content', 'policy', 'membership'] as const) {
-      writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v2', roots: ['docs'], bannedTerms: [] }));
+      writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v3', roots: ['docs'], bannedTerms: [] }));
       writeFileSync(join(root, 'docs/race.md'), 'Before.');
       class EditingRepository extends LocalRepository {
         armed = true;
