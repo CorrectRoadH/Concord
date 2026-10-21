@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 // @concord-file
+// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 // @concord-implements docs/feature/local-sdlc/README.md
 // @concord-implements docs/feature/project-onboarding/README.md
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
@@ -8,9 +9,9 @@ import { checkWriting } from './writing.js';
 import { waitForPublication } from './publication-wait.js';
 import { cachedQuery, type Query } from './query-cache.js';
 import { checkCurrentProject } from './check-current.js';
-import { showWriting, setWriting, writingIndex } from './writing-management.js';
+import { showWriting, setWriting, migrateWriting, writingIndex } from './writing-management.js';
 import { indexConcepts, setConcepts, showConcepts } from './concepts.js';
-import { WritingPolicySchema } from './writing-schema.js';
+import { readWritingPolicy } from './writing-policy.js';
 import { ConceptCatalogSchema } from './concepts-schema.js';
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
@@ -386,7 +387,8 @@ const expected = (value: string): string | null => value === 'null' ? null : val
 const writing = Command.make('writing').pipe(Command.withDescription('Discover and manage directory-owned writing policies.'), Command.withSubcommands([
   Command.make('index', {}, () => withRepo(repo => sync(() => writingIndex(repo)), { readonly: true })),
   Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showWriting(repo, Option.getOrUndefined(args.path))), { readonly: true })),
-  Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setWriting(repo, jsonBody(args.body, WritingPolicySchema, 'writing policy'), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a policy with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
+  Command.make('migrate', { path: text('path') }, args => withRepo((repo, settings) => sync(() => migrateWriting(repo, args.path, settings.dryRun)))),
+  Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setWriting(repo, readWritingPolicy(body(args.body), Option.getOrUndefined(args.path)), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a policy with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
   Command.make('check', { path: optional('path') }, args => withRepo(repo => sync(() => { const result = checkWriting(repo, Option.getOrUndefined(args.path)); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true })),
 ]));
 const concepts = Command.make('concepts').pipe(Command.withDescription('Discover and manage directory-owned concept catalogs.'), Command.withSubcommands([
@@ -456,6 +458,6 @@ root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescrip
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))
     : failure(cause);
-  const result = {ok:false,error:error.code,message:error.message,...(error.details===undefined?{}:{details:error.details})};
+  const result = {ok:false,error:error.code,message:error.message,...(error.code === 'WritingBudgetExceeded' ? {complete:false} : {}),...(error.details===undefined?{}:{details:error.details})};
   process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;
 })),Effect.provide(NodeServices.layer),Effect.provide(OwnedProcessLive),NodeRuntime.runMain);

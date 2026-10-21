@@ -4,7 +4,7 @@ import type { WritingPolicy } from './writing-schema.js';
 
 // Curated from NiceEval docs/writing-rules.json; no consumer checkout dependency.
 export const defaultWritingPolicy: WritingPolicy = {
-  "format": "concord.writing/v2",
+  "format": "concord.writing/v3",
   "roots": [
     "docs"
   ],
