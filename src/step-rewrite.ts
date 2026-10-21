@@ -87,7 +87,7 @@ function sourceTokens(repo: Repository, path: string, source: string): readonly 
   const lines = source.split('\n'), tokens: { reference: string; start: number; end: number }[] = [];
   const add = (line: number, reference: string, family: string) => {
     const text = lines[line - 1]!;
-    const match = new RegExp(`^[ \\t]*(?://+|#|--)[ \\t]*@${family}[ \\t]+(\\S+)[ \\t]*\\r?$`, 'u').exec(text);
+    const match = new RegExp(`^[ \\t]*(?://+|#|--|;)[ \\t]*@${family}[ \\t]+(\\S+)[ \\t]*\\r?$`, 'u').exec(text);
     if (match?.[1] !== reference) return incomplete(path);
     const start = lines.slice(0, line - 1).reduce((sum, line) => sum + line.length + 1, 0) + text.indexOf(reference, text.indexOf(`@${family}`) + family.length + 1);
     if (!tokens.some(token => token.start === start)) tokens.push({ reference, start, end: start + reference.length });
@@ -99,7 +99,7 @@ function sourceTokens(repo: Repository, path: string, source: string): readonly 
     if (parsed.findings.length) return incomplete(path);
     for (const item of parsed.cases) if (item.contractKind === 'use-case') add(item.line, item.contract, 'use-case');
   }
-  if (within(path, repo.config.sourceRoots ?? [])) for (const item of codeReferenceTokens(path, source)) add(item.line, item.reference, 'concord-implements');
+  if (within(path, repo.config.sourceRoots ?? [])) for (const item of codeReferenceTokens(path, source, repo.config.languageServers)) add(item.line, item.reference, 'concord-implements');
   return tokens;
 }
 

@@ -392,6 +392,10 @@ test('analyzed step references retain their level through code test and trace vi
       assert.equal(hydrated.stepGroups[0]!.observation.result, 'not-observed');
       assert.deepEqual(hydrated.stepGroups[0]!.steps[0]!.relevance[0]!.relevance.gaps, ['SnapshotNotCurrent']);
     }
+    call(root, ['use-case', 'rename-step', target, 'observe', '检查'], ack);
+    assert.ok(readFileSync(join(root, 'src/sample.py'), 'utf8').includes(`${target}#检查`));
+    assert.ok(readFileSync(join(root, 'test/sample.py'), 'utf8').includes(`${target}#检查`));
+    assert.equal(call(root, ['check'], projectCheck).ok, true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 

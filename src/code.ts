@@ -146,10 +146,11 @@ function actualLineComments(source: TypeScript.SourceFile): readonly LineComment
 }
 
 /** Exact lexical parameters, shared by step maintenance and declaration discovery. */
-export function codeReferenceTokens(path: string, text: string): readonly { readonly line: number; readonly reference: string }[] {
-  if (!/\.(?:[cm]?[jt]sx?)$/u.test(path)) return [];
-  const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
-  return actualLineComments(source).filter(comment => comment.family === 'implements' && comment.argument !== undefined).map(comment => ({ line: comment.line, reference: comment.argument! }));
+export function codeReferenceTokens(path: string, text: string, servers: readonly LanguageServer[] = []): readonly { readonly line: number; readonly reference: string }[] {
+  const server = servers.find(server => server.extensions.some(extension => path.endsWith(extension)));
+  const comments = SOURCE_EXTENSION.test(path) ? actualLineComments(ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true))
+    : server === undefined ? [] : foreignLineComments(text, server.profile.commentPrefixes);
+  return comments.filter(comment => comment.family === 'implements' && comment.argument !== undefined).map(comment => ({ line: comment.line, reference: comment.argument! }));
 }
 
 function startMarkers(comments: readonly LineComment[], path: string, findings: Finding[]): { readonly starts: readonly StartMarker[]; readonly consumedImplements: ReadonlySet<number> } {
@@ -518,19 +519,24 @@ function compileAstCached(repo: Repository, current: readonly Source[], mode: Co
 }
 
 /** Text markers own foreign-language relations even when no analyzer is available. */
-function parseForeignSource(input: Source): ParsedFile {
-  const findings: Finding[] = [];
+function foreignLineComments(text: string, prefixes: readonly string[]): LineComment[] {
   const comments: LineComment[] = [];
-  const lines = input.text.split(/\r\n|\r|\n/u);
+  const lines = text.split(/\r\n|\r|\n/u);
   let pos = 0;
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index]!;
-    const prefix = input.server!.profile.commentPrefixes.find(prefix => line.trimStart().startsWith(prefix));
+    const prefix = prefixes.find(prefix => line.trimStart().startsWith(prefix));
     const content = prefix === undefined ? '' : line.trimStart().slice(prefix.length).trim();
     const match = /^@concord-([^\s]+)(?:\s+(.+?))?\s*$/u.exec(content);
     if (match !== null) comments.push({ pos, end: pos + line.length + 1, line: index + 1, family: match[1]!, ...(match[2] === undefined ? {} : { argument: match[2]!.trim() }), ownLine: true });
     pos += line.length + 1;
   }
+  return comments;
+}
+function parseForeignSource(input: Source): ParsedFile {
+  const findings: Finding[] = [];
+  const lines = input.text.split(/\r\n|\r|\n/u);
+  const comments = foreignLineComments(input.text, input.server!.profile.commentPrefixes);
   for (const comment of comments) {
     if (!CODE_FAMILIES.has(comment.family) && !OTHER_FAMILIES.has(comment.family)) addFinding(findings, 'UnknownConcordAnnotation', input.path, `Unknown annotation family @concord-${comment.family}`, comment.line);
     if (['file', 'code', 'begin', 'end'].includes(comment.family) && comment.argument !== undefined) addFinding(findings, 'InvalidCodeAnnotation', input.path, 'Scope markers take no argument', comment.line);
