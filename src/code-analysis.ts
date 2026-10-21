@@ -92,6 +92,7 @@ function readCapture(root: string) {
         if (objectDigest(reader.files(prefix, scope)) !== objectDigest(paths)) throw new ConcordError('AnalysisSourceChanged', `Analysis membership changed: ${prefix}`);
       }
       if (candidateDigest(reader, [...captured.trace.documents]) !== captured.identity.candidate) throw new ConcordError('AnalysisSourceChanged', 'Analysis candidate changed');
+      captured.native.verifyInputs();
     }) };
   }
   finally { reader.close(); }

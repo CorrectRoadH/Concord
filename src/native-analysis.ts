@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
-import { adapterFor, readNativeObservations } from './test-adapters.js';
+import { adapterFor, adapterInputSnapshot, readNativeObservations } from './test-adapters.js';
 import { bindNative } from './test-adapter-binding.js';
 import { ConcordError, objectDigest, type AnnotatedCase, type Repository } from './shared.js';
 import type { NativeAnalysisScope } from './analysis-values.js';
@@ -40,5 +40,15 @@ export function captureNativeAnalysis(repo: Repository, cases: readonly Annotate
       gaps.set(test.id, [...manifest.completeness.gaps, cause instanceof ConcordError ? cause.code : 'NativeBindingUnavailable']);
     }
   }
-  return { identity, scopes, gaps };
+  // Adapter inputs can include ignored fixture/lock files that the Git candidate
+  // and ordinary source reads do not cover. Recheck them without opening HawDB.
+  const verifyInputs = () => {
+    for (const item of observations.filter(item => item.observation.current)) {
+      const adapter = repo.config.testAdapters?.find(adapter => adapter.id === item.adapterId);
+      if (adapter === undefined || adapterInputSnapshot(repo, adapter).inputs !== item.observation.inputs) {
+        throw new ConcordError('AnalysisSourceChanged', 'Native observation inputs changed before analysis publication');
+      }
+    }
+  };
+  return { identity, scopes, gaps, verifyInputs };
 }

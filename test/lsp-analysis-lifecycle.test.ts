@@ -5,15 +5,17 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { analyzeCode } from '../src/code-analysis.js';
-import { LocalRepository } from '../src/storage.js';
-import { createMemoryHawdb, type HawdbDatabase } from '../src/hawdb-native.js';
-import { ContentCache } from '../src/content-cache.js';
-import { ConcordError } from '../src/shared.js';
-import { OwnedProcess, makeOwnedProcessService } from '../src/owned-process.js';
-import { tracePrivateDirectorySync } from '../src/coordination.js';
-import { inspectRunner } from '../src/run-coordination.js';
-import { withPersistentCache } from '../src/cache-store.js';
+import { buildSync } from 'esbuild';
+import { readProjectConfig, writeProjectConfig } from './support.js';
+import { analyzeCode } from '../dist/code-analysis.js';
+import { LocalRepository } from '../dist/storage.js';
+import { createMemoryHawdb, type HawdbDatabase } from '../dist/hawdb-native.js';
+import { ContentCache } from '../dist/content-cache.js';
+import { ConcordError } from '../dist/shared.js';
+import { OwnedProcess, makeOwnedProcessService } from '../dist/owned-process.js';
+import { tracePrivateDirectorySync } from '../dist/coordination.js';
+import { inspectRunner } from '../dist/run-coordination.js';
+import { withPersistentCache } from '../dist/cache-store.js';
 
 const target = 'docs/feature/sample/use-case/sample.md';
 function consumer(): string {
@@ -120,4 +122,40 @@ test('analysis publication rechecks frozen source preimages after capture closes
     await assert.rejects(analyze(root));
     assert.equal(inspectRunner(root).status, 'absent');
   } finally { t.mock.restoreAll(); rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
+// @name native-analysis-publication-inputs
+test('analysis publication rejects ignored adapter inputs changed after source capture', t => Effect.runPromise(Effect.promise(async () => {
+  const root = consumer();
+  const previousState = process.env.ANALYSIS_ADAPTER_STATE;
+  const state = join(root, 'fixtures', 'state');
+  try {
+    mkdirSync(join(root, 'fixtures'));
+    mkdirSync(join(root, 'test'), { recursive: true });
+    writeFileSync(state, 'first');
+    writeFileSync(join(root, '.gitignore'), 'fixtures/\n');
+    writeFileSync(join(root, 'test/sample.py'), `# @use-case ${target}\n# @name selected\n# @native fixture:selected\ndef selected():\n    return 1\n\n`);
+    buildSync({ entryPoints: ['test/fixtures/analysis-adapter.ts'], bundle: true, platform: 'node', format: 'esm', outfile: join(root, 'analysis-adapter.mjs'), logLevel: 'silent' });
+    writeProjectConfig(root, { ...readProjectConfig(root), testAdapters: [{ id: 'fixture', include: ['test/sample.py'], argv: [process.execPath, 'analysis-adapter.mjs'], implementationFiles: ['analysis-adapter.mjs'], inputRoots: ['fixtures'], lockFiles: [], frameworkVersion: 'fixture/v1', envNames: ['ANALYSIS_ADAPTER_STATE'] }] });
+    process.env.ANALYSIS_ADAPTER_STATE = state;
+    execFileSync(process.execPath, [resolve('dist/entry.js'), '--root', root, '--json', 'test', 'collect', 'test/sample.py'], { stdio: 'pipe' });
+    assert.ok((await analyze(root)).observations.every(value => value.current));
+    const original = LocalRepository.prototype.snapshot;
+    let captures = 0;
+    t.mock.method(LocalRepository.prototype, 'snapshot', function<A>(this: LocalRepository, read: () => A): A {
+      const result = original.call(this, read) as A;
+      if (typeof result === 'object' && result !== null && 'inputs' in result && 'identity' in result && ++captures === 2) writeFileSync(state, 'changed');
+      return result;
+    });
+    await assert.rejects(analyze(root), error => error instanceof ConcordError && error.code === 'AnalysisSourceChanged');
+    assert.equal(captures, 2);
+    assert.equal(inspectRunner(root).status, 'absent');
+    assert.equal(existsSync(join(tracePrivateDirectorySync(root), 'publication.lease')), false);
+  } finally {
+    t.mock.restoreAll();
+    if (previousState === undefined) delete process.env.ANALYSIS_ADAPTER_STATE;
+    else process.env.ANALYSIS_ADAPTER_STATE = previousState;
+    rmSync(root, { recursive: true, force: true });
+  }
 })));
