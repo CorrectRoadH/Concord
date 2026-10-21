@@ -4,7 +4,7 @@ import { Predicate } from 'effect';
 import { ConcordError } from './shared.js';
 import type { Controlled, WritingPolicy } from './writing-schema.js';
 
-export const WRITING_PARSER_VERSION = 'controlled-v3.1/legacy-v2/markdown-v1';
+export const WRITING_PARSER_VERSION = 'controlled-v3.2/legacy-v2/markdown-v1';
 export interface PolicySource { path: string; pointer: string }
 export interface PolicyLeaf { value: unknown; source?: PolicySource }
 export type EffectiveControlled = Map<string, PolicyLeaf>;

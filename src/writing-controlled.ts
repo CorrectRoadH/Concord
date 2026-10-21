@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 import { objectDigest } from './shared.js';
-import type { Nodes } from 'mdast';
+import type { Nodes, Root } from 'mdast';
 import { fromMarkdown } from './markdown-parser.js';
 import type { WritingFinding } from './writing.js';
 import { normalizeWriting, writingBudget, type EffectiveControlled } from './writing-controlled-policy.js';
@@ -60,7 +60,8 @@ function matcher(words: readonly string[]): Matcher {
   if (!value) { value = new Matcher(words); if (compiled.size >= 128) compiled.delete(compiled.keys().next().value!); compiled.set(key, value); }
   return value;
 }
-const graphemes = new Intl.Segmenter('und', { granularity: 'grapheme' });
+let graphemes: Intl.Segmenter | undefined;
+const simpleText = /^[\x20-\x7E\n\t\p{Script=Latin}\p{Script=Han}，。！？；：（）【】《》、“”‘’…—]*$/u;
 function normalized(units: readonly Unit[]): Unit[] {
   const result: Unit[] = [];
   for (let begin = 0; begin < units.length;) {
@@ -68,7 +69,18 @@ function normalized(units: readonly Unit[]): Unit[] {
     let end = begin;
     while (end < units.length && !units[end]!.code) end++;
     const text = units.slice(begin, end).map(unit => unit.char).join('');
+    // NFC Latin/Han without marks has one source unit per grapheme. Keep the
+    // segmenter for combining sequences, emoji, CRLF and normalization changes.
+    if (simpleText.test(text) && !/\p{M}/u.test(text) && text.normalize('NFC') === text) {
+      for (let index = begin; index < end; index++) {
+        const unit = units[index]!, lower = unit.char === '‘' || unit.char === '’' ? "'" : unit.char.toLowerCase();
+        if (lower === unit.char) result.push(unit);
+        else for (const char of lower) result.push({ char, start: unit.start, end: unit.end });
+      }
+      begin = end; continue;
+    }
     let cursor = begin, offset = 0;
+    graphemes ??= new Intl.Segmenter('und', { granularity: 'grapheme' });
     for (const segment of graphemes.segment(text)) {
       const first = units[cursor]!;
       const limit = segment.index + segment.segment.length;
@@ -80,10 +92,13 @@ function normalized(units: readonly Unit[]): Unit[] {
   }
   return result;
 }
-function blocks(source: string, mdx: boolean): Block[] {
+export interface ParsedWriting { tree: Root; source: string }
+function blocks(source: string, mdx: boolean, parsed?: ParsedWriting): Block[] {
   const result: Block[] = [];
+  let deltas: number[] | undefined;
+  const offset = (point: NonNullable<Nodes['position']>['start'] | undefined): number => (point?.offset ?? 0) + (deltas?.[(point?.line ?? 1) - 1] ?? 0);
   function inline(node: Nodes): Unit[] {
-    const start = node.position?.start.offset ?? 0, end = node.position?.end.offset ?? start;
+    const start = offset(node.position?.start), end = node.position ? offset(node.position.end) : start;
     if (node.type === 'inlineCode') return [{ char: '\uFFFC', start, end, code: true }];
     if (node.type === 'text') {
       const units: Unit[] = [];
@@ -100,7 +115,7 @@ function blocks(source: string, mdx: boolean): Block[] {
           }
         }
         const char = String.fromCodePoint(node.value.codePointAt(index)!);
-        const found = source.indexOf(char, cursor);
+        const found = source.startsWith(char, cursor) ? cursor : source.indexOf(char, cursor);
         const at = found >= cursor && found < end ? found : cursor;
         units.push({ char: char === '\n' ? ' ' : char, start: at, end: Math.min(end, at + char.length) }); cursor = Math.min(end, at + char.length); index += char.length;
       }
@@ -125,15 +140,26 @@ function blocks(source: string, mdx: boolean): Block[] {
   // The shared legacy parser intentionally has no GFM extension. Mask table
   // lines with equal-width whitespace before controlled paragraph parsing.
   const lines = source.split('\n');
+  let table = false;
   for (let index = 1; index < lines.length; index++) if (lines[index - 1]!.includes('|') && /^\s*\|?\s*:?-+:?\s*\|(?:\s*:?-+:?\s*\|?)+\s*$/u.test(lines[index]!)) {
+    table = true;
     lines[index - 1] = ' '.repeat(lines[index - 1]!.length);
     lines[index] = ' '.repeat(lines[index]!.length);
     while (index + 1 < lines.length && lines[index + 1]!.includes('|') && lines[index + 1]!.trim()) { index++; lines[index] = ' '.repeat(lines[index]!.length); }
   }
-  visit(fromMarkdown(lines.join('\n')));
+  if (parsed && !table) {
+    // Legacy removes excluded line contents; controlled pads them to preserve
+    // offsets. Their blank-line structure agrees outside the table masking
+    // case, so reuse that ephemeral AST and translate offsets by source line.
+    const legacyLines = parsed.source.split('\n');
+    let delta = 0;
+    deltas = lines.map((line, index) => { const before = delta; delta += line.length - legacyLines[index]!.length; return before; });
+    visit(parsed.tree);
+  } else visit(fromMarkdown(lines.join('\n')));
   return result;
 }
 const tokenPattern = /\p{Script=Han}|\p{Script=Latin}[\p{Script=Latin}\p{M}]*(?:['’-]\p{Script=Latin}[\p{Script=Latin}\p{M}]*)*|\p{Nd}+(?:\.\p{Nd}+)*|(?:(?!\p{Script=Han}|\p{Script=Latin})\p{L})(?:(?!\p{Script=Han}|\p{Script=Latin})[\p{L}\p{M}])*/gu;
+const tokenStart = /\p{Script=Han}|\p{Script=Latin}|\p{Nd}|\p{L}/u;
 function tokens(units: readonly Unit[]): Token[] {
   const result: Token[] = [];
   let text = '', offset = 0;
@@ -153,7 +179,7 @@ function sentences(units: readonly Unit[]): Unit[][] {
   for (const match of text.matchAll(/\b(?:e\.g\.|i\.e\.|Mr\.|Mrs\.|Ms\.|Dr\.|Prof\.|vs\.|etc\.|(?:[A-Za-z]\.){2,})/giu)) for (let i = 0; i < match[0].length; i++) if (match[0][i] === '.') protectedDots.add(match.index + i);
   const result: Unit[][] = [];
   let begin = 0, offset = 0;
-  const push = (end: number): void => { const sentence = units.slice(begin, end); if (tokens(sentence).length) result.push(sentence); begin = end; };
+  const push = (end: number): void => { const sentence = units.slice(begin, end); if (sentence.some(unit => unit.code || tokenStart.test(unit.char))) result.push(sentence); begin = end; };
   for (let index = 0; index < units.length; index++) {
     const unit = units[index]!, at = offset;
     offset += unit.char.length;
@@ -219,7 +245,7 @@ function compilePolicy(policy: EffectiveControlled): CompiledPolicy {
   }
   return compiled;
 }
-export function checkControlled(file: string, authored: string, original: string, policy: EffectiveControlled, findings: WritingFinding[]): void {
+export function checkControlled(file: string, authored: string, original: string, policy: EffectiveControlled, findings: WritingFinding[], parsed?: ParsedWriting): void {
   const get = (key: string) => policy.get(key)?.value;
   const words = (key: string): readonly string[] => Array.isArray(get(key)) ? get(key) as string[] : [];
   const compiled = compilePolicy(policy);
@@ -243,7 +269,7 @@ export function checkControlled(file: string, authored: string, original: string
     }
     return result;
   };
-  for (const block of blocks(authored, /\.mdx$/iu.test(file))) {
+  for (const block of blocks(authored, /\.mdx$/iu.test(file), parsed)) {
     let candidates = 0;
     const candidate = () => { if (++candidates > 100000) writingBudget(`${file}:${block.line}: paragraph exceeds 100000 candidate intervals`); };
     const pieces = sentences(normalized(block.units));
@@ -266,7 +292,7 @@ export function checkControlled(file: string, authored: string, original: string
     const count = get('paragraphSentences');
     if (typeof count === 'number' && pieces.length > count) emit('paragraphSentences', 'paragraphSentences', block.units, `Paragraph has ${pieces.length} sentences; maximum ${count}`, pieces.length, count);
     for (const sentence of pieces) {
-      const language = describe(sentence).language, ts = tokens(sentence);
+      const language = languageOf(sentence, get('language')), ts = tokens(sentence);
       const kind = block.procedural ? 'procedural' : 'descriptive', key = `sentence/${language}/${kind}`, limit = get(key);
       if (typeof limit === 'number' && ts.length > limit) emit(`${kind}SentenceLength`, key, sentence, `Sentence has ${ts.length} tokens; maximum ${limit} (${language})`, ts.length, limit);
       const exemptions = (rule: string): Range[] => {
