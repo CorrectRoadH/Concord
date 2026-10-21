@@ -141,7 +141,7 @@ test('LSP protocol fixtures reject unsafe responses, mutations, edits and execut
     assert.ok(log.some(item => item.id === 'edit' && (item.result as { applied?: boolean } | undefined)?.applied === false));
     assert.ok(log.some(item => item.id === 'execute' && item.error !== undefined));
     assert.equal(readFileSync(join(root, 'src/sample.py'), 'utf8'), source);
-    for (const [mode, expected] of [['timeout', 'AnalysisBudgetExceeded'], ['invalid-message', 'LanguageServerFailed'], ['unsafe-uri', 'LanguageServerFailed'], ['output-limit', 'AnalysisBudgetExceeded']] as const) {
+    for (const [mode, expected] of [['timeout', 'AnalysisBudgetExceeded'], ['invalid-message', 'LanguageServerFailed'], ['invalid-result', 'LanguageServerFailed'], ['unsafe-uri', 'LanguageServerFailed'], ['output-limit', 'AnalysisBudgetExceeded']] as const) {
       const config = server(mode);
       writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...config, budgets: { ...config.budgets, outputBytes: 8192 } }] });
       assert.equal(call(root, ['code', 'analyze'], failure, 1).error, expected);
@@ -150,8 +150,9 @@ test('LSP protocol fixtures reject unsafe responses, mutations, edits and execut
     }
     const residual = server('residual');
     writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...residual, initializationOptions: { mode: 'residual', auditPath } }] });
-    call(root, ['code', 'analyze'], analysis);
-    const closed = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ pid: Schema.Number })), { onExcessProperty: 'ignore' })(JSON.parse(readFileSync(auditPath, 'utf8')));
+    assert.equal(call(root, ['code', 'analyze'], failure, 1).error, 'LanguageServerFailed');
+    const closed = Schema.decodeUnknownSync(Schema.Array(Schema.Struct({ pid: Schema.Number, residualPid: Schema.optional(Schema.Number) })), { onExcessProperty: 'ignore' })(JSON.parse(readFileSync(auditPath, 'utf8')));
+    assert.ok(closed.some(item => item.residualPid !== undefined));
     assert.ok(['gone', 'zombie-only'].includes(observeOwnedProcessGroup(closed[0]!.pid)));
     assert.equal(call(root, ['recover'], Schema.Struct({ status: Schema.String })).status, 'clean');
     const config = server();

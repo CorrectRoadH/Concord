@@ -55,6 +55,7 @@ Effect.runPromise(Effect.gen(function* () {
         options = Schema.decodeUnknownSync(Options, { onExcessProperty: 'error' })(params.initializationOptions);
         if (options.auditPath) writeFileSync(options.auditPath, JSON.stringify(audit));
         if (options.mode === 'timeout') return;
+        if (options.mode === 'invalid-result') { respond(message.id!, null); return; }
         if (options.gatePath) {
           const deadline = Date.now() + 20000;
           while (!existsSync(options.gatePath) && Date.now() < deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 20);
@@ -104,7 +105,11 @@ Effect.runPromise(Effect.gen(function* () {
       }
       case 'shutdown': respond(message.id!, null); break;
       case 'exit':
-        if (options.mode === 'residual') spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: ['ignore', 'inherit', 'inherit'] });
+        if (options.mode === 'residual') {
+          const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
+          audit.push({ pid: process.pid, residualPid: child.pid });
+          if (options.auditPath) writeFileSync(options.auditPath, JSON.stringify(audit));
+        }
         process.exit(0);
     }
   };

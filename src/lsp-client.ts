@@ -11,7 +11,7 @@ import type { CodeDeclaration } from './code.js';
 import type { AnalysisValue, DependencyObservation } from './analysis-values.js';
 import { withinRoots } from './typescript-dependencies.js';
 
-const sync = <A>(run: () => A) => Effect.try({ try: run, catch: failure });
+const sync = <A>(run: () => A) => Effect.try({ try: run, catch: cause => cause instanceof ConcordError && cause.code === 'InvalidData' ? new ConcordError('LanguageServerFailed', 'Language server returned an invalid result') : failure(cause) });
 const InitializeSchema = Schema.Struct({ capabilities: Schema.Record(Schema.String, Schema.Unknown), serverInfo: Schema.optional(Schema.Struct({ name: Schema.String, version: Schema.optional(Schema.String) })), offsetEncoding: Schema.optional(Schema.String) });
 const supported = (value: unknown): boolean => value === true || Predicate.isObject(value);
 function processFailure(result: OwnedProcessResult): ConcordError {
@@ -161,6 +161,7 @@ export const analyzeLanguageServer = (repo: Repository, server: LanguageServer, 
   const result = yield* Fiber.join(fiber).pipe(Effect.timeoutOrElse({ duration: 1000, orElse: () => owned.stop('SIGTERM').pipe(Effect.andThen(Fiber.join(fiber))) }));
   if (!hasConfirmedOwnedGroupCleanup(result)) return yield* Effect.fail(processFailure(result));
   if (result.outputLimitExceeded || result.timedOut || result.error !== undefined || result.exitCode !== 0) return yield* Effect.fail(processFailure(result));
+  if (result.groupCleanup.aliveAfterLeaderClose) return yield* Effect.fail(new ConcordError('LanguageServerFailed', 'Language server left running descendants after exit'));
   yield* sync(() => rpc.assertHealthy());
   return value;
 }).pipe(Effect.scoped, Effect.mapError(failure), Effect.catchDefect(cause => Effect.fail(failure(cause))));
