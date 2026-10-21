@@ -6,6 +6,7 @@
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { checkWriting } from './writing.js';
+import { serveEditor } from './lsp-server.js';
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from './step-commands.js';
 import { waitForPublication } from './publication-wait.js';
 import { cachedQuery, type Query } from './query-cache.js';
@@ -406,6 +407,10 @@ const concepts = Command.make('concepts').pipe(Command.withDescription('Discover
   Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setConcepts(repo, jsonBody(args.body, ConceptCatalogSchema, 'concept catalog'), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a catalog with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
 ]));
 const check = Command.make('check', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* checkCurrentProject(Option.getOrUndefined(settings.root), cached(settings.dryRun)); if (!result.ok) process.exitCode = 1; emit(result, settings.json); })).pipe(Command.withDescription('Validate source ownership, references and writing policy; do not execute tests.'));
+const lsp = Command.make('lsp', {}, () => Effect.gen(function*() {
+  const settings = yield* root;
+  yield* serveEditor(Option.getOrUndefined(settings.root));
+})).pipe(Command.withDescription('Serve read-only Concord editor navigation and diagnostics over framed stdio.'));
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
   Command.make('show',{ref:Argument.string('reference')},args=>withReadRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))), ['trace', 'show', args.ref])),
   Command.make('gaps',{},()=>withReadRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))), ['trace', 'gaps'])).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),
@@ -463,7 +468,7 @@ const view = Command.make('view', {
     yield* Effect.sync(() => emit(result, settings.json));
   })).pipe(Command.withDescription('Export a readonly static comparison from the unique merge-base to head; requires complete local Git history and a new output directory.')),
 ]));
-root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,docs,writing,concepts,check,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
+root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))
     : failure(cause);
