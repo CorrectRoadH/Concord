@@ -11,6 +11,7 @@ import { canonicalPath } from './storage.js';
 import { readWritingPolicy, type BannedTerm, type WritingPolicy } from './writing-policy.js';
 import { analyzeCatalogs, catalogSources, effectiveConcepts, spellingKey, spellingPositions } from './concepts.js';
 import { applies, discovered, scopeOf, snapshotDigest, under } from './writing-scopes.js';
+import { extractSteps } from './steps.js';
 
 export interface WritingFinding {
   file: string; line: number; column?: number; rule: string; message: string; context: string;
@@ -19,11 +20,10 @@ export interface WritingFinding {
   actual?: number; limit?: number; language?: 'zh' | 'en'; languagePolicy?: unknown;
   matches?: readonly { text: string; start: { line: number; column: number }; end: { line: number; column: number } }[];
 }
-// TODO: After merging the steps worker, return extractSteps(path, source).markers.
-function stepMarkerRanges(_path: string, _source: string): readonly { line: number; startColumn: number; endColumn: number }[] { return []; }
 function withoutStepMarkers(path: string, source: string): string {
+  if (!source.includes('{#')) return source;
   const lines = source.split('\n');
-  for (const range of stepMarkerRanges(path, source)) {
+  for (const range of extractSteps(path, source).markers) {
     const line = lines[range.line - 1]!;
     lines[range.line - 1] = line.slice(0, range.startColumn) + ' '.repeat(range.endColumn - range.startColumn) + line.slice(range.endColumn);
   }

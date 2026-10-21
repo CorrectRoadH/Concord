@@ -252,12 +252,14 @@ test('steps C20 Memory promotion references block rename with zero writes', () =
 // @name steps-writing-length
 test('steps writing ignores real terminal IDs in sentence and paragraph length but retains inline examples', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document(`# Flow\n\n1. Short. {#${'long'.repeat(30)}}\n`));
-  write(root, 'steps-policy.json', JSON.stringify({ format: 'concord.writing/v2', roots: [path], bannedTerms: [], sentenceLength: 12, paragraphLength: 12 }));
+  write(root, 'steps-policy.json', JSON.stringify({ format: 'concord.writing/v3', roots: [path], bannedTerms: [], sentenceLength: 12, paragraphLength: 12,
+    controlled: { language: 'en', sentence: { en: { procedural: 1 } } } }));
   assert.deepEqual(checkWriting(repo, 'steps-policy.json').findings, []);
   write(root, path, document(`# Flow\n\n1. Short. \`{#${'long'.repeat(30)}}\`\n`));
   const findings = checkWriting(repo, 'steps-policy.json').findings;
   assert.ok(findings.some(finding => finding.rule === 'sentenceLength'));
   assert.ok(findings.some(finding => finding.rule === 'paragraphLength'));
+  assert.ok(findings.some(finding => finding.rule === 'proceduralSentenceLength'));
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#link-declarations

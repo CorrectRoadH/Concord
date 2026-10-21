@@ -360,3 +360,27 @@ test('decorated classes do not replace nearer same-named methods during binding'
   assert.deepEqual(bindSymbol({ ...declaration, line: 10 }, text, symbols.symbols, server(), 'utf-16')?.range, second.range);
   assert.equal(bindSymbol(declaration, text, symbols.symbols, { ...server(), profile: { ...server().profile, decorators: 'none' } }, 'utf-16'), undefined);
 })));
+
+// @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#inspect-associations
+// @name analyzed-step-relevance
+// Cross-Design acceptance: LSP C3 and journey C6 use the shared step owner through real CLI views.
+test('analyzed step references retain their level through code test and trace views', () => Effect.runPromise(Effect.sync(() => {
+  const root = consumer();
+  try {
+    const contract = readFileSync(join(root, target), 'utf8');
+    write(root, target, `${contract}\n\n1. Observe the implementation. {#observe}\n`);
+    write(root, 'src/sample.py', source.replace(target, `${target}#observe`));
+    write(root, 'test/sample.py', `# @use-case ${target}#observe\n# @name native-sample\ndef test_sample():\n    helper()\n`);
+    assert.equal(call(root, ['check'], projectCheck).ok, true);
+    const observed = call(root, ['code', 'analyze'], analysis).observations;
+    const id = observed.find(item => item.value.analyzer === 'python-fixture')!.value.dependencies[0]!.testId;
+    for (const args of [['code', 'list'], ['test', 'show', id], ['trace', 'show', target]]) {
+      const result = call(root, args, Schema.Struct({ analysis: AnalysisViewSchema }));
+      const relevance = result.analysis.relevance.find(item => item.testId === id)!.relevance;
+      assert.equal(relevance.verdict, 'observed');
+      if (relevance.verdict === 'observed') assert.equal(relevance.level, 'step');
+      assert.ok(relevance.gaps.includes('FileScope'));
+      assert.ok(relevance.gaps.includes('OpenWorldCalls'));
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));

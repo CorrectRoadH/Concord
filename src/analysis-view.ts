@@ -7,6 +7,7 @@ import { readAnalysisObservations } from './code-analysis.js';
 import { RelevanceSchema, type Relevance } from './observation.js';
 import type { AnnotatedCase, DocumentRecord, Repository } from './shared.js';
 import type { CodeDeclaration } from './code.js';
+import { extractSteps } from './steps.js';
 
 export const AnalysisViewSchema = Schema.Struct({
   observations: Schema.Array(AnalysisObservationSchema),
@@ -45,12 +46,14 @@ export function relevanceFor(test: AnnotatedCase, codes: readonly CodeDeclaratio
 }
 export function analysisView(repo: Repository, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[], documents: readonly DocumentRecord[]): AnalysisView {
   const observations = readAnalysisObservations(repo);
+  const stepRefs = new Set(documents.filter(document => document.metadata.kind === 'use-case').flatMap(document =>
+    extractSteps(document.path, repo.read(document.path) ?? '').steps.map(step => `${document.path}#${step.id}`)));
   const references = referenceResolver(repo, documents), targets = new Map<string, DocumentRecord>();
   for (const ref of new Set([...cases.map(test => test.contract), ...codes.flatMap(code => code.contracts)])) {
     try { targets.set(ref, references.resolve(ref)); } catch { /* Static owners report invalid references independently. */ }
   }
   return { observations, relevance: cases.map(test => {
-    const relevance = relevanceFor(test, codes, observations, documents, undefined, targets);
+    const relevance = relevanceFor(test, codes, observations, documents, stepRefs, targets);
     return { testId: test.id, scope: 'file' as const, relevance, message: relevance.verdict === 'not-observed' ? '未观察到交集' : `observed (${relevance.level}; FileScope)` };
   }) };
 }
