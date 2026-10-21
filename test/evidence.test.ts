@@ -53,6 +53,10 @@ test('binds real red-to-green receipts and current fixed proof', () => Effect.ru
     assert.equal(green.commandOutcome, 'pass', JSON.stringify(green));
     assert.equal(green.execution, 'nonzero');
     assert.equal(readEvidence(repo, green.id).implementationDigest, green.implementationDigest);
+    const { integrity: _integrity, ...unsignedGreen } = green;
+    const oversized = { ...unsignedGreen, id: 'ccev_33333333333333333333333333333333', argv: ['x'.repeat(1024 * 1024)] };
+    writeFileSync(join(repo.privateDir, 'evidence', `${oversized.id}.json`), canonical({ ...oversized, integrity: objectDigest(oversized) }));
+    assert.throws(() => readEvidence(repo, oversized.id), { code: 'InvalidEvidence', message: 'Evidence receipt exceeds its size limit' });
     const docs = loadDocuments(repo);
     const problemDocument = docs.find((document) => document.path === 'memory/example-problem.md');
     assert.ok(problemDocument);

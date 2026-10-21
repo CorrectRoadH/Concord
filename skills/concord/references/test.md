@@ -1,4 +1,4 @@
-# 测试注释、原生 adapter 与执行证据
+# 测试注释与命令证据
 
 
 源码与测试自动发现支持在 `concord.config.ts` 设置 `sourceIgnore: ['src/generated', 'tests/vendor']`。每项是仓库相对文件或目录（含子树），不支持 glob；显式来源根优先，文档、runner.sourceFiles 和直接读写仍严格校验。
