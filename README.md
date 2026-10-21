@@ -8,6 +8,26 @@ Concord is a local development workflow tool for developers and coding agents. I
 
 Start with a contract, implement and test it, then trace the relationships when reviewing a change or investigating a bug. The core workflow runs in your Git worktree, without an account, model API, or cloud service.
 
+## The problem Concord solves
+
+In most projects, *what* to build, *how* it was built, and *why* it was built that way live in different places. Requirements sit in chat threads and PR descriptions. Design tradeoffs live in someone's memory. A test claims to protect a feature, but nobody can tell which behavior it actually guards. Coding agents make this worse: every session starts from zero, so an agent may re-decide settled semantics, use different words for the same thing, or declare a bug fixed without evidence.
+
+Concord keeps all three in one Git repository and maintains the relationships between them. Contracts are Markdown. Code and tests point to contracts through source annotations, and the tool derives the reverse links from source. People and agents read and write the same data, and `concord check` verifies that the relationships still hold.
+
+## Why each concept exists
+
+| Concept | Problem it solves |
+| --- | --- |
+| Feature and Use Case | Record the behavior the product must have as a durable contract, written before implementation. A Feature describes a capability. A Use Case describes one user path with its main flow and acceptance criteria, which gives code and tests a target more specific than "the whole feature". |
+| Design | When several approaches are viable, compare candidates against shared goals and limits, then record one choice and its reason. Later readers and agents can see why it was chosen and why the others were not, instead of reopening the question. |
+| Roadmap and Research | Roadmap holds settled directions that are not yet adopted. Research holds dated external facts with sources, kept separate from contracts as decision input. |
+| Glossary | Each concept has one preferred name, and `check` reports deprecated names. Directories scope definitions, so the same word can mean different things in different features. Agents read text literally, so a contract stays unambiguous only when its terms do. |
+| Writing policy | Ban words that hide responsibility, such as "helper" or "resolve", limit sentence and paragraph length, and give a replacement and a reason for each rule. Clear contracts leave less for the implementation to guess. |
+| Source annotations | Code and tests declare in source which contract they relate to, so the relationship appears in the same diff as the code. Reverse lists are derived, with no separate registry to drift. |
+| Command receipts | `test run` records the result of a real execution. Closing a Problem requires two receipts from the same test, one failing and one passing, so "fixed" comes with evidence. |
+| Memory and Issue | Investigation history, root causes, decisions, and lessons go into Memory; observations awaiting investigation go into Issue. `docs/` therefore holds only current declarations, not development logs. |
+| Project constitution | Records long-lived rules that span features. Features and Designs cite the clauses that apply, and amendments keep their reason and impact. |
+
 ## What you can do
 
 - **Define the work.** Describe features and use cases, compare design alternatives, and record an explicit decision before implementation.
