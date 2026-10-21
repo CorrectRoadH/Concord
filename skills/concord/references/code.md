@@ -4,7 +4,7 @@
 源码与测试自动发现支持在 `concord.config.ts` 设置 `sourceIgnore: ['src/generated', 'tests/vendor']`。每项是仓库相对文件或目录（含子树），不支持 glob；显式来源根优先，文档、runner.sourceFiles 和直接读写仍严格校验。
 代码声明描述实现与 Feature / Use Case / Engineering 的关联。它既不是测试声明，也不是完成或覆盖证明。真实注释是唯一 owner；无需另写关系 JSON。
 
-先读取 `concord.config.ts`。`sourceRoots` 是可选的仓库相对路径数组，缺省 `[]`；仅扫描其中 JS/TS 文件，包括 `.js/.jsx/.ts/.tsx/.mjs/.cjs/.mts/.cts`。新项目可用 `concord init --source-root src`，该选项可重复并可与 `--docs-only` 组合。已有项目直接维护配置，不重复 init。`testRoots` 与 `sourceRoots` 可重叠，各标签属于自己的扫描器；`doctor` 提示缺失目录。
+先读取 `concord.config.ts`。`sourceRoots` 是可选的仓库相对路径数组，缺省 `[]`；默认扫描其中 JS/TS 文件；配置 languageServers 后也扫描相应后缀的文本标记。JS/TS 支持，包括 `.js/.jsx/.ts/.tsx/.mjs/.cjs/.mts/.cts`。新项目可用 `concord init --source-root src`，该选项可重复并可与 `--docs-only` 组合。已有项目直接维护配置，不重复 init。`testRoots` 与 `sourceRoots` 可重叠，各标签属于自己的扫描器；`doctor` 提示缺失目录。
 
 ## 声明与查询
 
@@ -61,3 +61,26 @@ export function parseOrder(input: string) {
 引用只服务于当前扫描，不是永久历史身份、CAS token 或授权。自动消费者应重新 list/locate 并核对文件、符号和范围，不能凭旧引用的查询成功认定历史连续。移动或复制实现后重新查询即可，不需要命名新 ID。
 
 合法配置下，代码标注错误不会阻断 `test list/show/run` 或 `memory resolve`；这些命令继续执行原有文档、测试及证据校验。代码声明不能替代测试、red/green 收据或 Problem fixed 证明。
+
+
+## 多语言标记与显式分析
+
+非 JS/TS 声明使用 languageServers profile 的注释前缀，沿用 file、code、begin/end 与紧邻的 implements 标记。身份由 canonical 文件路径与标记块序号派生。文件声明定位到文件，region 定位到配对标记；code 没有当前符号观察时定位到标记行。
+
+`concord code analyze --json` 是唯一显式 LSP 分析入口，不接受 dry-run。JS/TS 测试使用内置 TypeScript 模块解析，静态命令、test run 与编辑器服务均不隐式启动 server。观察存于 HawDB，不能创建关联、签发证据或影响 check。
+
+配置每个 server 的 id、languageId、extensions、argv、cwd、initializationOptions、implementationFiles、sourceFiles、profile 与 budgets。cwd 为仓库内目录，`.` 为根。implementationFiles 必须包含实际入口、脚本、插件与依赖锁；不要只声明 node 等启动器。扩展后缀唯一且不重叠，不接受 JS/TS 扩展。typescript 是内置分析器的保留 ID。
+
+声明式 profile 包含 version、serverVersion、commentPrefixes、declarationKinds、symbolShape、decorators、leadingComments、readiness 与 positionEncodings。commentPrefixes 只选 `#`、`//`、`--`、`;`；symbolShape 为 document-symbol，decorators 为 none 或 at-line。readiness 为 `{ kind: 'none' }` 或 `{ kind: 'progress', token: 'index' }`；positionEncodings 选 utf-16、utf-8、utf-32。
+
+server 必须在 initialize 的 serverInfo.version 确认固定版本。只接受层级 documentSymbol；扁平、null、非法范围和歧义保留 UnsupportedSymbolBinding，不从 selectionRange 假造完整范围。无可验证就绪信号时保留 IndexReadinessUnknown。
+
+budgets 接受 totalMs、requestMs、outputBytes、messageBytes、messages、requests、concurrency、files、symbols、nodes、depth。深度默认 3，其它默认值为包级上限；数值为正整数且不得突破固定上限。请求串行执行，遵守配置的并发上限。
+
+environment 只显式选择 PATH、LANG、LC_ALL、TZ、TMPDIR、SYSTEMROOT，不传递其它环境或凭据。server 是消费者信任的程序；拒绝 applyEdit 和执行请求不能阻止它自行写文件。输入改变返回 AnalysisSourceChanged，清理未知保留 runner 阻断。
+
+code list、trace show --fresh、test show 的 analysis 返回 observations 与 relevance。观察保留 inputs、observedAt、current、complete、gaps、分析器/profile 与可选 locator。没有目标交集时显示“未观察到交集”，历史观察不能用于当前判定。
+
+文件级依赖始终标 FileScope，不把文件中另一 case 的导入称为当前 case 的调用证明。调用观察始终标 OpenWorldCalls；LSP 无法核验的动态派发、子进程与协议边界分别标 UnknownDynamicDispatch、UnknownSubprocessBoundary 与 UnknownProtocolBoundary。动态 import、未解析模块、外部目标、网络、子进程与预算截断分别记录缺口。没有观察到交集不产生 finding 或失败退出码。current 表达仓库内输入一致性；复核通过的 LSP 观察可用于符号定位与 observed 判定。未核验的外部 SDK、环境与私有索引保留 UnverifiedEnvironment，complete 为 false。
+
+具体语言、server 与 profile 的兼容承诺须有固定版本的真实 fixture。标记关系和协议 fake 不能替代真实 Python、Go、Rust 或 Java server 兼容证据。
