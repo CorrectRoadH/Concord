@@ -17,7 +17,8 @@ import { beginRun, finalizeRun, finishRun, quarantineRun } from './run-coordinat
 import { adapterFor, adapterInputSnapshot, executeNativeCase, type NativeExecution } from './test-adapters.js';
 import { AdapterVersionsSchema, CapabilitiesSchema, NativeResultSchema, ProcessStatusSchema, nativeVerdict } from './test-adapter-protocol.js';
 
-const MAX_EVIDENCE_BYTES = 32 * 1024 * 1024;
+const MAX_EVIDENCE_BYTES = 1024 * 1024;
+const MAX_NATIVE_EVIDENCE_BYTES = 32 * 1024 * 1024;
 const OPAQUE_ID = /^ccev_[0-9a-f]{32}$/u;
 const INITIAL_INDEX = new Set(['docs/feature/README.md', 'docs/roadmap/README.md', 'docs/design/README.md', 'docs/research/README.md', 'docs/issues/README.md', 'memory/README.md']);
 const safeEnvironment = (): NodeJS.ProcessEnv => { const env = { ...process.env }; for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key]; return env; };
@@ -101,7 +102,18 @@ function buildDefinition(repo: Repository, selected: AnnotatedCase, config: Proj
 }
 function safeEvidencePath(repo: Repository, id: string): string { if (!OPAQUE_ID.test(id)) fail('InvalidEvidenceId', 'Evidence IDs are opaque Concord IDs'); const directory = resolve(repo.privateDir, 'evidence'); const root = resolve(repo.privateDir); if (!directory.startsWith(`${root}${sep}`)) fail('UnsafePath', 'Evidence directory escaped repository private state'); for (const part of [root, directory]) { if (existsSync(part) && lstatSync(part).isSymbolicLink()) fail('UnsafePath', `Symbolic links are not permitted: ${part}`); } return join(directory, `${id}.json`); }
 function store(repo: Repository, evidence: Evidence): void { const path = safeEvidencePath(repo, evidence.id); const directory = dirname(path); mkdirSync(directory, { recursive: true, mode: 0o700 }); if (lstatSync(directory).isSymbolicLink()) fail('UnsafePath', 'Evidence directory is a symbolic link'); const source = `${canonical(evidence)}\n`; const temporary = `${path}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`; let fd: number | undefined; try { fd = openSync(temporary, 'wx', 0o600); writeFileSync(fd, source); closeSync(fd); fd = undefined; renameSync(temporary, path); } finally { if (fd !== undefined) closeSync(fd); try { unlinkSync(temporary); } catch { /* renamed or absent */ } } }
-export function readEvidence(repo: Repository, id: string): Evidence { const path = safeEvidencePath(repo, id); regular(path); let value: unknown; try { if (lstatSync(path).size > MAX_EVIDENCE_BYTES) fail('InvalidEvidence', 'Evidence receipt exceeds its size limit'); value = JSON.parse(readFileSync(path, 'utf8')); } catch (cause) { if (cause instanceof ConcordError) throw cause; fail('InvalidEvidence', `Cannot decode evidence receipt: ${cause instanceof Error ? cause.message : String(cause)}`); } const evidence = decodeEvidence(value, `evidence ${id}`); if (evidence.id !== id) fail('EvidenceIntegrity', 'Evidence receipt ID does not match its opaque filename'); const { integrity, ...unsigned } = evidence; if (integrity !== objectDigest(unsigned)) fail('EvidenceIntegrity', 'Evidence receipt failed its accidental-corruption integrity check'); return evidence; }
+export function readEvidence(repo: Repository, id: string): Evidence {
+  const path = safeEvidencePath(repo, id); regular(path); let value: unknown;
+  try {
+    if (lstatSync(path).size > MAX_NATIVE_EVIDENCE_BYTES) fail('InvalidEvidence', 'Evidence receipt exceeds its size limit');
+    const source = readFileSync(path);
+    if (source.byteLength > MAX_NATIVE_EVIDENCE_BYTES) fail('InvalidEvidence', 'Evidence receipt exceeds its size limit');
+    value = JSON.parse(source.toString('utf8'));
+    const native = Predicate.isObject(value) && value.format === 'concord.native-evidence/v2';
+    if (!native && source.byteLength > MAX_EVIDENCE_BYTES) fail('InvalidEvidence', 'Evidence receipt exceeds its size limit');
+  } catch (cause) { if (cause instanceof ConcordError) throw cause; fail('InvalidEvidence', `Cannot decode evidence receipt: ${cause instanceof Error ? cause.message : String(cause)}`); }
+  const evidence = decodeEvidence(value, `evidence ${id}`); if (evidence.id !== id) fail('EvidenceIntegrity', 'Evidence receipt ID does not match its opaque filename'); const { integrity, ...unsigned } = evidence; if (integrity !== objectDigest(unsigned)) fail('EvidenceIntegrity', 'Evidence receipt failed its accidental-corruption integrity check'); return evidence;
+}
 function observed(result: OwnedProcessResult, node: boolean): { execution: CommandEvidence['execution']; outcome: CommandEvidence['commandOutcome'] } {
   if (result.outputLimitExceeded || result.timedOut || result.cancelled || result.signal !== null || result.error !== undefined) return { execution: 'unknown', outcome: 'invalid' };
   if (!node) return { execution: 'unknown', outcome: result.exitCode === 0 ? 'pass' : 'fail' };
