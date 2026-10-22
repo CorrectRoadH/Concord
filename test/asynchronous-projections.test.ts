@@ -315,7 +315,10 @@ test('packed C2 retains the consistent generation and annotates the later drifti
     const retained = readQuery(context);
     assert.deepEqual(retained.record, previous);
     assert.equal(retained.lastAttempt?.complete, false);
-    assert.ok(retained.lastAttempt?.changedPaths.includes('docs/feature/sample/README.md'));
+    // Atomic replacement can interrupt a read before a structured candidate
+    // exists; the adopted drift contract then records an unknown range ('.').
+    assert.ok(retained.lastAttempt?.changedPaths.includes('docs/feature/sample/README.md')
+      || retained.lastAttempt?.changedPaths.includes('.'), JSON.stringify(retained.lastAttempt));
     assert.equal(retained.error, undefined);
     const result = installedCall(root, 'trace', 'gaps');
     assert.equal(result.status, 0, result.stderr);
