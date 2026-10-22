@@ -41,7 +41,9 @@ test('browser preserves blocked recovery and labels incomplete workspace relatio
     await page.reload();
     await expect(page.getByRole('alert').filter({ hasText: '工作区扫描不完整' })).toBeVisible();
     await page.getByRole('link', { name: '总览', exact: true }).click();
-    await expect(page.getByText('InvalidData', { exact: true })).toBeVisible();
+    const brokenDiagnostic = page.getByRole('list', { name: '结构诊断' }).getByRole('listitem').filter({ hasText: 'docs/feature/broken/README.md' });
+    // A malformed owner can produce multiple field diagnostics.
+    await expect(brokenDiagnostic.getByText('InvalidData', { exact: true }).first()).toBeVisible();
   } finally {
     await browser?.close();
     await server?.close();

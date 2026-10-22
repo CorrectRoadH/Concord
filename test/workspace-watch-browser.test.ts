@@ -73,7 +73,9 @@ test('ordinary pages suppress drift while health stays unknown and real diagnost
   await page.goto(`${origin}/features/watch`);
   await expect(notice).toContainText('工作区扫描不完整');
   await page.getByRole('link', { name: '总览', exact: true }).click();
-  await expect(health.getByText('InvalidData', { exact: true })).toBeVisible();
+  const brokenDiagnostic = health.getByRole('list', { name: '结构诊断' }).getByRole('listitem').filter({ hasText: 'docs/feature/broken/README.md' });
+  // A malformed owner can produce multiple field diagnostics.
+  await expect(brokenDiagnostic.getByText('InvalidData', { exact: true }).first()).toBeVisible();
   for (const status of ['refresh-failed', 'blocked'] as const) {
     served = { ...actual, projection: { ...actual.projection, status, consistent: false, changedPaths: [changedPath], lastError: { failedAt: actual.projection.builtAt, code: status === 'blocked' ? 'RecoveryRequired' : 'WorkspaceWatchUnavailable', message: 'Refresh cannot finish' } } };
     await page.goto(`${origin}/features/watch`);
