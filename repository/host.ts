@@ -8,6 +8,8 @@ import { repositoryConfiguration, RepositoryProfileError } from './root.js';
 import { repositoryImplementationDigest } from './identity.js';
 import type { RepositoryHost } from './host-contract.js';
 import type { HostEffect } from './host-types/index.js';
+import { repositoryAdapterSnapshot } from './adapter-identity.js';
+import { invokeRepositoryAdapter, repositoryAdapterTakeover } from './process-adapter.js';
 
 type CapabilityName = Exclude<keyof RepositoryHost, 'format' | 'caseIdentity' | 'repositoryRoot'>;
 
@@ -82,24 +84,40 @@ function invokeCapability<A>(
   }));
 }
 
-export const collectRepoCaseInventory = (suiteId: string, checkout: string) => invokeCapability(
+function transport<A>(root: string | undefined, adapter: (root: string) => Effect.Effect<A, RepositoryProfileError>, legacy: () => Effect.Effect<A, RepositoryProfileError | Error>): Effect.Effect<A, RepositoryProfileError | Error> {
+  return Effect.try({ try: () => repositoryConfiguration(root), catch: cause => cause instanceof RepositoryProfileError ? cause : profileError('RepositoryAdapterInvalid', 'Repository configuration is invalid', cause) }).pipe(
+    Effect.flatMap(configuration => 'adapter' in configuration.config && configuration.config.adapter !== undefined ? adapter(configuration.root) : legacy()),
+  );
+}
+
+export const collectRepoCaseInventory = (suiteId: string, checkout: string) => transport(undefined,
+  root => invokeRepositoryAdapter(root, 'collect-repo', { suiteId, checkout }), () => invokeCapability(
   'collectRepoCaseInventory', host => host.collectRepoCaseInventory!(suiteId, checkout),
-);
-export const collectWorkspaceCaseInventory = (checkout: string) => invokeCapability(
+));
+export const collectWorkspaceCaseInventory = (checkout: string) => transport(undefined,
+  root => invokeRepositoryAdapter(root, 'collect-workspace', { checkout }), () => invokeCapability(
   'collectWorkspaceCaseInventory', host => host.collectWorkspaceCaseInventory!(checkout),
-);
-export const managedInventoryImplementationDigest = (root: string) => invokeCapability(
+));
+export const managedInventoryImplementationDigest = (root: string) => transport(root,
+  canonicalRoot => Effect.try({ try: () => {
+    const snapshot = repositoryAdapterSnapshot(canonicalRoot);
+    if (snapshot === undefined) throw new RepositoryProfileError('RepositoryAdapterChanged', 'Repository adapter configuration changed.');
+    return snapshot.digest;
+  }, catch: cause => cause instanceof RepositoryProfileError ? cause : profileError('RepositoryAdapterInvalid', 'Repository adapter identity is invalid', cause) }), () => invokeCapability(
   'managedInventoryImplementationDigest', host => host.managedInventoryImplementationDigest!(root),
-);
-export const readManagedInventoryReceipt = (root: string, inventoryId: string, selector: string) => invokeCapability(
+));
+export const readManagedInventoryReceipt = (root: string, inventoryId: string, selector: string) => transport(root,
+  canonicalRoot => invokeRepositoryAdapter(canonicalRoot, 'read-inventory', { inventoryId, selector }), () => invokeCapability(
   'readManagedInventoryReceipt', host => host.readManagedInventoryReceipt!(root, inventoryId, selector),
-);
-export const readManagedRedEvidence = (root: string, id: string) => invokeCapability(
+));
+export const readManagedRedEvidence = (root: string, id: string) => transport(root,
+  canonicalRoot => invokeRepositoryAdapter(canonicalRoot, 'read-red', { id }), () => invokeCapability(
   'readManagedRedEvidence', host => host.readManagedRedEvidence!(root, id),
-);
-export const readManagedTakeoverEvidence = (root: string, id: string) => invokeCapability(
+));
+export const readManagedTakeoverEvidence = (root: string, id: string) => transport(root,
+  canonicalRoot => invokeRepositoryAdapter(canonicalRoot, 'read-takeover', { id }).pipe(Effect.map(repositoryAdapterTakeover)), () => invokeCapability(
   'readManagedTakeoverEvidence', host => host.readManagedTakeoverEvidence!(root, id),
-);
+));
 
 export type {
   CaseInventoryReceipt,

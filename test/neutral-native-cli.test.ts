@@ -45,7 +45,7 @@ const json = <A>(source: string, schema: Schema.ConstraintDecoder<A, never>): A 
   Schema.decodeUnknownSync(Schema.fromJsonString(schema))(source);
 
 // @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
-test('packed CLI accepts only real neutral Vitest native evidence through the authoritative fixed gate', () => Effect.runPromise(Effect.sync(() => {
+for (const transport of ['module', 'process'] as const) test(`packed CLI accepts only real neutral Vitest native evidence through the authoritative fixed gate (${transport})`, () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-neutral-native-'));
   try {
     const packed = packConcord(scratch);
@@ -61,6 +61,22 @@ test('packed CLI accepts only real neutral Vitest native evidence through the au
     execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord Test']);
     execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
     installConcord(root, packed, ['vitest@4.1.11', 'tsx@4.23.12', 'typescript@7.1.0-beta', '@types/node@24.13.3', 'effect@4.0.0-rc.112', '@effect/platform-node@4.0.0-rc.112']);
+    if (transport === 'process') {
+      const runnerPath = join(root, 'acceptance/native-runner.ts');
+      const runner = readFileSync(runnerPath, 'utf8');
+      const start = runner.indexOf('export function implementationDigest(');
+      const end = runner.indexOf('\nfunction collectCaseInventory', start);
+      writeFileSync(runnerPath, "import { repositoryAdapterSnapshot } from 'concord-sdlc/repository/adapter-identity';\n" + runner.slice(0, start) +
+        "export function implementationDigest(root: string): string { return repositoryAdapterSnapshot(root)!.digest; }\n" + runner.slice(end));
+      cpSync(resolve('test/fixtures/neutral-process-adapter.ts'), join(root, 'process-adapter.ts'));
+      const configPath = join(root, 'concord.repository.json');
+      const configuration = JSON.parse(readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+      delete configuration.host;
+      configuration.adapter = { argv: [process.execPath, '--import', 'tsx', 'process-adapter.ts'],
+        implementationFiles: ['process-adapter.ts', 'acceptance/host.ts', 'acceptance/native-runner.ts', 'acceptance/record-evidence.ts', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json'],
+        implementationRoots: [], envNames: ['PATH', 'HOME', 'TMPDIR'], timeoutMs: 60_000 };
+      writeFileSync(configPath, JSON.stringify(configuration));
+    }
     execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: root, encoding: 'utf8', timeout: 30_000 });
     const cli = join(root, 'node_modules/concord-sdlc/dist/entry.js');
     const commit = (message: string): string => {
@@ -158,6 +174,7 @@ test('packed CLI accepts only real neutral Vitest native evidence through the au
       'docs', 'test', 'regression', 'add', selector,
       '--memory', 'memory/calculator.md', '--red', 'red-current', '--takeover', 'takeover-current', '--inventory', inventory.inventory
     ], Schema.Struct({ committed: Schema.Boolean }));
+    if (transport === 'process') assert.deepEqual(readFileSync(join(root, '.repo-tools/adapter-invocations'), 'utf8').trim().split('\n'), ['collect-repo', 'read-inventory', 'read-red', 'read-takeover']);
     const memoryBeforeFixed = readFileSync(join(root, 'memory/calculator.md'), 'utf8');
     assert.doesNotMatch(memoryBeforeFixed, /state: resolved/u);
 
@@ -182,6 +199,14 @@ test('packed CLI accepts only real neutral Vitest native evidence through the au
     assert.match(fixed, /state: resolved/u);
     assert.match(fixed, /evidenceLevel: repository/u);
     assert.match(fixed, /policy: concord\.native-reliability\/v1/u);
+
+    if (transport === 'process') {
+      repoJson(['memory', 'check'], Schema.Struct({ ok: Schema.Literal(true) }));
+      repoJson(['memory', 'reopen', 'calculator'], Schema.Struct({ operation: Schema.Literal('reopen') }));
+      const stale = call(['repo', 'memory', 'resolve', 'calculator', '--kind', 'fixed', '--reason', 'old process evidence must fail', '--json'], 1);
+      assert.match(stale.stderr, /different Problem or epoch|invocation identities|already used/u);
+      return;
+    }
 
     const memoryCheckSchema = Schema.Struct({
       domain: Schema.Literal('memory'), operation: Schema.Literal('check'),

@@ -53,17 +53,29 @@ export function protocolJson(source: string, limit = 8 * 1024 * 1024): unknown {
   if (Buffer.byteLength(source) > limit) throw new ConcordError('AdapterProtocolInvalid', 'Protocol JSON exceeds its byte budget');
   try {
     const stack: { keys?: Set<string>; key: boolean }[] = [];
-    for (const match of source.matchAll(/"(?:[^"\\]|\\[\s\S])*"|[{}\[\],:]|[^\s{}\[\],:]+/gu)) {
-      const token = match[0]; const frame = stack.at(-1);
-      if (token === '{' || token === '[') { stack.push({ ...(token === '{' ? { keys: new Set<string>() } : {}), key: token === '{' }); if (stack.length > 64) throw new Error('JSON nesting exceeds 64'); }
-      else if (token === '}' || token === ']') stack.pop();
+    // Scan strings iteratively: quantified token regexes exhaust the JS regexp
+    // stack on otherwise valid multi-megabyte string values.
+    for (let offset = 0; offset < source.length;) {
+      const token = source[offset++]!;
+      const frame = stack.at(-1);
+      if (token === '"') {
+        const start = offset - 1;
+        while (offset < source.length) {
+          const character = source[offset++]!;
+          if (character === "\\") offset += 1;
+          else if (character === '"') break;
+        }
+        if (frame?.keys && frame.key) {
+          const key = JSON.parse(source.slice(start, offset)) as string;
+          if (frame.keys.has(key)) throw new Error(`Duplicate JSON key: ${key}`);
+          frame.keys.add(key);
+        }
+      } else if (token === '{' || token === '[') {
+        stack.push({ ...(token === '{' ? { keys: new Set<string>() } : {}), key: token === '{' });
+        if (stack.length > 64) throw new Error('JSON nesting exceeds 64');
+      } else if (token === '}' || token === ']') stack.pop();
       else if (token === ',') { if (frame) frame.key = frame.keys !== undefined; }
       else if (token === ':') { if (frame) frame.key = false; }
-      else if (frame?.keys && frame.key && token.startsWith('"')) {
-        const key = JSON.parse(token) as string;
-        if (frame.keys.has(key)) throw new Error(`Duplicate JSON key: ${key}`);
-        frame.keys.add(key);
-      }
     }
     const value: unknown = JSON.parse(source);
     const finite = (item: unknown): void => {

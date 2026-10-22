@@ -8,6 +8,7 @@ import {
   type GovernanceConfigurationSnapshot,
 } from 'concord-sdlc/governance-config';
 import { decodeAnnotatedCases, stripManagedCaseAnnotations } from './docs/test-case/annotations.js';
+import { repositoryAdapterSnapshot } from './adapter-identity.js';
 
 export const SOURCE_PROJECTION_ALGORITHM = 'concord.repository-source-projection/v3' as const;
 export const SOURCE_IDENTITY_FORMAT = 'concord.repository-source-identity/v4' as const;
@@ -214,7 +215,9 @@ export function buildRepositorySourceIdentity(input: BuildRepositorySourceIdenti
     throw new Error(`SourceIdentityContractMismatch: declaration targets ${declaration.contract}, expected ${input.contractRef}`);
   }
   const contractPath = declaration.contract.split('#', 1)[0]!;
-  const adapterSourceDigest = snapshot.config.host === undefined
+  const adapterSourceDigest = snapshot.config.adapter !== undefined
+    ? repositoryAdapterSnapshot(root)?.sourceDigest ?? null
+    : snapshot.config.host === undefined
     ? null
     : sha256Digest(readFileSync(resolve(root, snapshot.config.host)));
   return {

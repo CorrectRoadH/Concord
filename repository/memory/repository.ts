@@ -1,3 +1,4 @@
+import { repositoryAdapterSnapshot } from '../adapter-identity.js';
 import { existsSync, lstatSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { Effect, Result, Schema } from "effect";
@@ -143,6 +144,11 @@ export class MemoryRepository {
       const suite = governanceSuiteForFile(this.#root, test.path);
       if (config === undefined || suite === undefined) throw new MemoryReferenceConflict({ operation: "resolve", path: test.path, message: "native evidence requires current governance suite configuration" });
       capture(config.path, config.digest);
+      const adapter = repositoryAdapterSnapshot(this.#root);
+      if (adapter !== undefined) {
+        if (adapter.digest !== options.implementationDigest) throw new MemoryReferenceConflict({ operation: "resolve", path: config.path, message: "adapter implementation changed during validation" });
+        for (const file of adapter.files) capture(file.path, file.digest);
+      }
       const currentSource = resolveRepositorySourceIdentity(this.#root, test.selector);
       if (currentSource.binding.configurationDigest !== config.digest) throw new MemoryReferenceConflict({ operation: "resolve", path: config.path, message: "policy configuration changed during validation" });
       capture(currentSource.binding.contractRef.split("#", 1)[0]!, "sha256:" + currentSource.binding.contractSha256);

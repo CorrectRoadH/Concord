@@ -19,6 +19,9 @@ import { readGovernanceConfiguration } from "concord-sdlc/governance-config";
 import { ConcordError, decode } from "concord-sdlc/model";
 import { decodeNativeEvidenceIndex, NativeReliabilityCertificateSchema, validateNativeEvidence, usedMemoryInvocations } from "concord-sdlc/evidence-policy";
 import { MemoryRepository } from "../../memory/repository.js";
+import { repositoryAdapterSnapshot } from "../../adapter-identity.js";
+import { captureRepositoryAdapterGuards, validateRepositoryAdapterGuards } from "../../process-adapter.js";
+import type { CaseInventoryReceipt, ManagedRedEvidence, ManagedTakeoverEvidence } from "../../host-types/index.js";
 
 type Maybe<A> = Option.Option<A> | A | undefined;
 interface InventoryCase { readonly executor: string; readonly repo: string; readonly path: string; readonly project?: string; readonly titlePath: readonly string[]; readonly caseId: string }
@@ -304,12 +307,22 @@ function validateOpenProblem(memory: string) { return compileTrace(REPOSITORY_RO
 function validateOpenProblemUnderLease(memory: string) { return compileTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind !== "problem" || item.state !== "open") fail("RegressionTargetInvalid", `${memory} must be an open structured Problem Memory`); })); }
 function validateRetirableProblem(memory: string) { return compileTrace(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind === "problem" && item.state === "resolved") fail("RegressionRequiresReopen", `${memory} is resolved; reopen it before retiring the regression`); })); }
 function validateRetirableProblemUnderLease(memory: string) { return compileTraceUnderLease(REPOSITORY_ROOT).pipe(Effect.map((snapshot) => { const item = snapshot.memory.find((entry) => entry.path === memory); if (item?.kind === "problem" && item.state === "resolved") fail("RegressionRequiresReopen", `${memory} is resolved; reopen it before retiring the regression`); })); }
-const validateRegressionEvidence = Effect.fn("validateRegressionEvidence")(function*(action: AddRegressionInput) {
+interface CapturedRegressionEvidence {
+  readonly inventory: CaseInventoryReceipt;
+  readonly managedRed: ManagedRedEvidence;
+  readonly managedTakeover: ManagedTakeoverEvidence;
+  readonly implementationDigest: string;
+}
+const readRegressionEvidence = Effect.fn("readRegressionEvidence")(function*(action: AddRegressionInput) {
   const inventory = yield* readManagedInventoryReceipt(REPOSITORY_ROOT, action.inventory, action.selector);
   const managedRed = yield* readManagedRedEvidence(REPOSITORY_ROOT, action.red);
   const managedTakeover = yield* readManagedTakeoverEvidence(REPOSITORY_ROOT, action.takeover);
   const implementationDigest = yield* managedInventoryImplementationDigest(REPOSITORY_ROOT);
-  return yield* Effect.try({ try: () => {
+  return { inventory, managedRed, managedTakeover, implementationDigest } satisfies CapturedRegressionEvidence;
+});
+function validateCapturedRegressionEvidence(action: AddRegressionInput, captured: CapturedRegressionEvidence) {
+  return Effect.try({ try: () => {
+    const { inventory, managedRed, managedTakeover, implementationDigest } = captured;
     const currentSource = resolveRepositorySourceIdentity(REPOSITORY_ROOT, action.selector);
     const memory = new MemoryRepository(REPOSITORY_ROOT).read(action.memory.slice("memory/".length, -3)).metadata;
     return validateNativeEvidence({ inventory, red: managedRed.receipt, certificate: managedTakeover.certificate, receipts: managedTakeover.receipts }, {
@@ -317,7 +330,7 @@ const validateRegressionEvidence = Effect.fn("validateRegressionEvidence")(funct
       decodeSource: decodeRepositorySourceIdentityV4, sameSource: sameRepositorySourceIdentity, usedInvocations: usedMemoryInvocations(memory),
     });
   }, catch: cause => caseFailure("EvidenceMismatch", cause) });
-});
+}
 
 function currentEvidenceStillValid(value: unknown, currentSource: RepositorySourceIdentityV4, memoryPath: string, implementationDigest: string): boolean {
   try {
@@ -368,7 +381,9 @@ function addRegression(action: AddRegressionInput | RefreshRegressionInput, pars
       if (currentEvidenceStillValid(currentCase[action.memory], currentSource, action.memory, implementationDigest)) fail("EvidenceAlreadyCurrent", `current native evidence for ${action.memory} still binds the current source identity`);
     }
     const governance = readGovernanceConfiguration(REPOSITORY_ROOT)!;
-    const verified = yield* validateRegressionEvidence(action);
+    const captured = yield* captureRepositoryAdapterGuards(readRegressionEvidence(action));
+    if (captured.value.implementationDigest !== implementationDigest) fail("PreimageChanged", "Native implementation changed during evidence capture");
+    const verified = yield* validateCapturedRegressionEvidence(action, captured.value);
     const next = relationAlreadyCurrent
       ? before
       : Result.match(
@@ -408,6 +423,11 @@ function addRegression(action: AddRegressionInput | RefreshRegressionInput, pars
     const dependencyDigests = new Map<string, string>(currentSource.projection.files.map(file => [file.path, `sha256:${file.rawSha256}`]));
     dependencyDigests.set(currentSource.binding.contractRef.split("#", 1)[0]!, `sha256:${currentSource.binding.contractSha256}`);
     if (governance.config.host !== undefined && currentSource.binding.adapterSourceDigest !== null) dependencyDigests.set(governance.config.host, currentSource.binding.adapterSourceDigest);
+    const adapter = repositoryAdapterSnapshot(REPOSITORY_ROOT);
+    if (adapter !== undefined) {
+      if (adapter.digest !== implementationDigest) fail("PreimageChanged", "Adapter implementation changed during evidence validation");
+      for (const file of adapter.files) dependencyDigests.set(file.path, file.digest);
+    }
     const relationChanges = annotationProjectionChanges([{ before, next }]);
     const dependencyGuards = [...dependencyDigests].map(([path, expectedDigest]) => {
       const bytes = new MemoryRepository(REPOSITORY_ROOT).targetSource(path).source;
@@ -429,7 +449,12 @@ function addRegression(action: AddRegressionInput | RefreshRegressionInput, pars
           if (currentEvidenceStillValid(latestCurrent, latestSource, action.memory, implementationDigest)) fail("EvidenceAlreadyCurrent", `current native evidence for ${action.memory} still binds the current source identity`);
         }
         if (readGovernanceConfiguration(REPOSITORY_ROOT)?.digest !== governance.digest) fail("PreimageChanged", "Repository policy configuration changed before publication");
-        yield* validateRegressionEvidence(action);
+        if (governance.config.adapter !== undefined) {
+          yield* Effect.try({ try: () => validateRepositoryAdapterGuards(REPOSITORY_ROOT, captured.guards), catch: cause => caseFailure("PreimageChanged", cause) });
+          yield* validateCapturedRegressionEvidence(action, captured.value);
+        } else {
+          yield* readRegressionEvidence(action).pipe(Effect.flatMap(value => validateCapturedRegressionEvidence(action, value)));
+        }
       })),
       Effect.as({ changes: [
       // Evidence-only repair still depends on the current relation/owner. Keep

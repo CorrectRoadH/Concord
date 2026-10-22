@@ -6,6 +6,7 @@ import { designCommandContribution, featureCommandContribution, makeDocsCommand,
 import { feedbackCliContribution, NodeFeedbackStoreLive } from "./feedback/index.js";
 import { memoryCliContribution, NodeMemoryStoreLive } from "./memory/index.js";
 import { deliverTerminal, runComposedCli } from "./cli-support.js";
+import { makeEngineCommand } from "./engine-command.js";
 const ROOT = repositoryRoot();
 const docs = makeDocsCommand([
   featureCommandContribution, useCaseCommandContribution, testCommandContribution,
@@ -14,7 +15,7 @@ const docs = makeDocsCommand([
 
 const root = Command.make("concord-repo").pipe(
   Command.withDescription("Manage declared test suites, native evidence and repository governance."),
-  Command.withSubcommands([feedbackCliContribution.makeCommand(deliverTerminal), memoryCliContribution.makeCommand(deliverTerminal), docs]),
+  Command.withSubcommands([feedbackCliContribution.makeCommand(deliverTerminal), memoryCliContribution.makeCommand(deliverTerminal), docs, makeEngineCommand(ROOT)]),
 );
 const live = Layer.mergeAll(NodeServices.layer, NodeFeedbackStoreLive(ROOT), NodeMemoryStoreLive(ROOT));
 runComposedCli(root, { version: "2" }).pipe(

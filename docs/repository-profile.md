@@ -24,6 +24,10 @@
 
 host 是可选的可信本地模块，当前契约为 `concord.repository-host/v2`，声明 repositoryRoot 和 `caseIdentity: "concord.case-contracts/v1"`。仅请求原生能力时加载，并核对 worktree 与锁定安装 engine 身份；静态列表、trace、help 与 Web 不加载 host。
 
+新接入可以使用与 host 互斥的 `adapter` 配置，通过 `concord.repository-adapter/v1` 交换严格 JSON，消费者无需安装 Concord 库。配置的 argv、实现文件与递归目录、依赖锁、执行文件和 loader 共同绑定实现身份。声明、来源、完整性与 Preview 查询使用纯 `concord repo engine --json`，不会加载 host 或发布证据。完整字段、预算、消费映射与验收由[进程接入裁决](design/repository-process-adapter/README.md)拥有。
+
+进程模式由外层 Concord 拥有唯一 detached 进程组，嵌套能力继承该组；终结无法确认时拒绝成功。关系发布在锁外捕获响应和文件 guard，锁内只运行本地重验与既有唯一证据 validator。签名表示完整性，不表示执行成功；历史证据格式、可靠性下限和 invocation 防复用保持原样。
+
 inventory 和证据读取能力分别接入，缺失能力具名拒绝对应操作。host 不提供产品 QUERY_PROTOCOL 或产品进程 Layer；执行方自己拥有 Scope、取消和清理，Concord 只接受完整清理的有效观察。
 
 ## 证据要求

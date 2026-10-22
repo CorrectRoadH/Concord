@@ -146,6 +146,14 @@
       "types": "./dist/repository/*.d.ts",
       "default": "./dist/repository/*.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./owned-process": {
+      "types": "./dist/owned-process.d.ts",
+      "default": "./dist/owned-process.js"
+    },
+    "./test-adapter-protocol": {
+      "types": "./dist/test-adapter-protocol.d.ts",
+      "default": "./dist/test-adapter-protocol.js"
+    }
   }
 }

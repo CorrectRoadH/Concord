@@ -15,12 +15,21 @@ const CanonicalPath = Schema.String.check(Schema.makeFilter(
 ));
 const SuiteId = Schema.String.check(Schema.isPattern(/^[a-z0-9]+(?:[-_.][a-z0-9]+)*$/u));
 const GovernanceSuiteSchema = Schema.Struct({ id: SuiteId, root: CanonicalPath });
+export const RepositoryAdapterSchema = Schema.Struct({
+  argv: Schema.NonEmptyArray(Schema.String.check(Schema.isMinLength(1))),
+  implementationFiles: Schema.NonEmptyArray(CanonicalPath),
+  implementationRoots: Schema.Array(CanonicalPath),
+  envNames: Schema.Array(Schema.String.check(Schema.isPattern(/^[A-Za-z_][A-Za-z0-9_]*$/u))),
+  timeoutMs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3_600_000 }))),
+  responseBytes: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 32 * 1024 * 1024 }))),
+});
 export const GovernanceConfigurationSchema = Schema.Struct({
   format: Schema.Literal('concord.repository/v2'),
   suites: Schema.NonEmptyArray(GovernanceSuiteSchema),
   historyPath: CanonicalPath,
   policy: Schema.Literal(NATIVE_RELIABILITY_POLICY),
   host: Schema.optional(CanonicalPath),
+  adapter: Schema.optional(RepositoryAdapterSchema),
 });
 
 export type GovernanceSuite = typeof GovernanceSuiteSchema.Type;
@@ -73,6 +82,27 @@ function assertNoSymlink(root: string, path: string, subject: string): string {
 }
 
 function assertConfigurationPaths(root: string, config: GovernanceConfiguration): void {
+  if (config.host !== undefined && config.adapter !== undefined) {
+    throw new GovernanceConfigurationError('GovernanceAdapterConflict', 'Configure either host or adapter, not both.');
+  }
+  if (config.adapter !== undefined) {
+    const adapter = config.adapter;
+    if (adapter.envNames.some(name => name.startsWith('GIT_') || name === 'NODE_TEST_CONTEXT' || name === 'NODE_OPTIONS')) {
+      throw new GovernanceConfigurationError('GovernanceAdapterEnvironmentInvalid', 'Adapter environment cannot override Git, test context or Node startup.');
+    }
+    for (const path of adapter.implementationFiles) {
+      const target = assertNoSymlink(root, path, 'Adapter implementation');
+      let status;
+      try { status = lstatSync(target); } catch { throw new GovernanceConfigurationError('GovernanceAdapterPathInvalid', `Missing implementation file: ${path}`); }
+      if (!status.isFile()) throw new GovernanceConfigurationError('GovernanceAdapterPathInvalid', `Expected implementation file: ${path}`);
+    }
+    for (const path of adapter.implementationRoots) {
+      const target = assertNoSymlink(root, path, 'Adapter implementation root');
+      let status;
+      try { status = lstatSync(target); } catch { throw new GovernanceConfigurationError('GovernanceAdapterPathInvalid', `Missing implementation directory: ${path}`); }
+      if (!status.isDirectory()) throw new GovernanceConfigurationError('GovernanceAdapterPathInvalid', `Expected implementation directory: ${path}`);
+    }
+  }
   const ids = new Set<string>();
   const roots = new Set<string>();
   for (const suite of config.suites) {
