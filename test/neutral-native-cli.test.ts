@@ -183,6 +183,46 @@ test('packed CLI accepts only real neutral Vitest native evidence through the au
     assert.match(fixed, /evidenceLevel: repository/u);
     assert.match(fixed, /policy: concord\.native-reliability\/v1/u);
 
+    const memoryCheckSchema = Schema.Struct({
+      domain: Schema.Literal('memory'), operation: Schema.Literal('check'),
+      complete: Schema.Boolean, ok: Schema.Boolean, violations: Schema.Array(Schema.String),
+      incomplete: Schema.Array(Schema.Struct({ path: Schema.String })),
+      receipt: Schema.Struct({ ok: Schema.Boolean, checked: Schema.Int, findings: Schema.Array(Schema.String) })
+    });
+    repoJson(['memory', 'check'], memoryCheckSchema);
+    coreJson(['memory', 'add', 'unrelated-note', '--title', 'Unrelated note', '--kind', 'note'], Schema.Struct({ operation: Schema.String }));
+    const unrelatedTest = join(root, 'acceptance/missing-memory.test.ts');
+    writeFileSync(unrelatedTest, '// @use-case docs/feature/calculator/use-case/add-two-numbers.md\n// @regression memory/missing.md\n');
+    const checkUnavailable = (entry: string, expected: RegExp) => {
+      const result = spawnSync(process.execPath, [entry, 'repo', 'memory', 'check', '--json'], { cwd: root, encoding: 'utf8', timeout: 60_000 });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      const checked = json(result.stdout, memoryCheckSchema);
+      assert.equal(checked.ok, false);
+      assert.equal(checked.receipt.ok, false);
+      assert.equal(checked.receipt.checked, 2);
+      assert.deepEqual(checked.violations, checked.receipt.findings);
+      assert.equal(checked.complete, false);
+      assert.ok(checked.incomplete.some(finding => finding.path === 'acceptance/missing-memory.test.ts'), JSON.stringify(checked));
+      const unavailable = checked.violations.find(finding => finding.startsWith('calculator: unavailable:'));
+      assert.ok(unavailable, JSON.stringify(checked));
+      assert.match(unavailable, expected);
+      assert.equal(readFileSync(join(root, 'memory/calculator.md'), 'utf8'), fixed, 'diagnostics must preserve the historical evidence');
+    };
+    const installedIdentity = join(root, 'node_modules/concord-sdlc/dist/evidence-policy.js');
+    const originalIdentity = readFileSync(installedIdentity, 'utf8');
+    try {
+      writeFileSync(installedIdentity, originalIdentity + '\n// different locked engine\n');
+      checkUnavailable(resolve('dist/entry.js'), /RepositoryEngineMismatch: This executable differs from the worktree locked Concord engine/u);
+    } finally { writeFileSync(installedIdentity, originalIdentity); }
+    const hostPath = join(root, 'acceptance/host.ts');
+    const hostSource = readFileSync(hostPath, 'utf8');
+    try {
+      writeFileSync(hostPath, hostSource.replace('managedInventoryImplementationDigest:', 'unavailableImplementationDigest:'));
+      checkUnavailable(cli, /RepositoryHostCapabilityMissing: The native host adapter does not provide managedInventoryImplementationDigest/u);
+    } finally { writeFileSync(hostPath, hostSource); }
+    rmSync(unrelatedTest);
+    repoJson(['memory', 'check'], memoryCheckSchema);
+
     repoJson(['memory', 'reopen', 'calculator'], Schema.Struct({ operation: Schema.Literal('reopen'), memory: Schema.Struct({ state: Schema.Literal('open'), epoch: Schema.Literal(1) }) }));
     const reopened = readFileSync(join(root, 'memory/calculator.md'), 'utf8');
     assert.match(reopened, /state: open/u);

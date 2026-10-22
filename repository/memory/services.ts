@@ -1,7 +1,7 @@
 import { compileTraceReport, compileTraceReportUnderLease } from "../docs/trace/compiler.js";
 import { managedInventoryImplementationDigest } from "../host.js";
 import { readGovernanceConfiguration } from "concord-sdlc/governance-config";
-import { Context, Effect, FileSystem, Layer } from "effect";
+import { Context, Effect, FileSystem, Layer, Result } from "effect";
 
 import { compileTrace, requireCompleteTraceUnderLease } from "../docs/trace/compiler.js";
 import type { TraceError } from "../docs/trace/errors.js";
@@ -239,8 +239,10 @@ export const NodeMemoryStoreLive = (root: string) => Layer.succeed(MemoryStore, 
       Effect.flatMap(snapshot => Effect.gen(function*() {
         const memories = yield* memoryEffect("check", () => repository.list());
         const hasNative = memories.some(memory => memory.metadata.resolution?.evidenceLevel === "repository");
-        const implementation = hasNative ? yield* managedInventoryImplementationDigest(root).pipe(Effect.catch(() => Effect.succeed(undefined))) : undefined;
-        return yield* memoryEffect("check", () => repository.check(snapshot, implementation));
+        const implementation = hasNative ? yield* Effect.result(managedInventoryImplementationDigest(root)) : undefined;
+        const digest = implementation !== undefined && Result.isSuccess(implementation) ? implementation.success : undefined;
+        const failure = implementation !== undefined && Result.isFailure(implementation) ? implementation.failure : undefined;
+        return yield* memoryEffect("check", () => repository.check(snapshot, digest, failure));
       })),
     )),
   } satisfies MemoryStoreService;

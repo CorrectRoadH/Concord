@@ -176,7 +176,7 @@ export class MemoryRepository {
     return { selectors: related.map((test) => test.selector).sort(), preimagePaths: [...preimages].sort(), preimageDigests, evidence };
   }
   search(pattern: string): readonly MemoryDocument[] { const needle = pattern.toLocaleLowerCase(); return this.list().filter((item) => (item.metadata.id + "\n" + item.metadata.title + "\n" + item.body).toLocaleLowerCase().includes(needle)); }
-  check(snapshot: TraceSnapshot, implementationDigest?: string): MemoryCheckReceipt {
+  check(snapshot: TraceSnapshot, implementationDigest?: string, implementationFailure?: Error): MemoryCheckReceipt {
     const findings: string[] = []; const documents = leafOwners(this.#root, 'memory'); const byRef = new Map(documents.flatMap(item => item.metadata.kind === 'memory' ? [[item.path, item.metadata] as const] : []));
     for (const item of documents) {
       if (item.metadata.kind !== 'memory') continue;
@@ -202,6 +202,7 @@ export class MemoryRepository {
       if (m.resolution?.kind === "fixed" && m.resolution.evidenceLevel === "repository") {
         try {
           if (m.resolution.repositoryEvidence.epoch !== m.epoch || m.resolution.repositoryEvidence.memory !== item.path) throw new Error("repository evidence is not bound to the current Memory epoch/path");
+          if (implementationDigest === undefined && implementationFailure !== undefined) throw new MemoryReferenceConflict({ operation: "check", path: item.path, message: `current native implementation digest is unavailable; request the host capability: ${implementationFailure.name}: ${implementationFailure.message}` });
           const current = this.validateFixedEvidence(snapshot, item.path, { requireOpen: false, ...(implementationDigest === undefined ? {} : { implementationDigest }) }).evidence;
           const { validatedAt: _storedAt, ...storedFacts } = m.resolution.repositoryEvidence;
           const { validatedAt: _currentAt, ...currentFacts } = current;
