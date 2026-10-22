@@ -388,8 +388,8 @@ const docs = Command.make('docs').pipe(Command.withDescription('Check authored p
     (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.sync(() => { process.stdout.write(delivery.stdout); process.stderr.write(delivery.stderr); if (delivery.exitCode !== 0) process.exitCode = delivery.exitCode; }),
     root.pipe(Effect.map(settings => ({ root: Option.getOrUndefined(settings.root), json: settings.json, dryRun: settings.dryRun }))),
   ),
-  Command.make('check', { rules: optional('rules') }, args => withRepo(repo => sync(() => {
-    const report = checkWriting(repo, Option.getOrUndefined(args.rules));
+  Command.make('check', { rules: optional('rules') }, args => withRepo((repo, settings) => sync(() => {
+    const report = checkWriting(repo, Option.getOrUndefined(args.rules), !settings.dryRun);
     if (!report.ok) process.exitCode = 1;
     return report;
   }), { readonly: true })),
@@ -401,7 +401,7 @@ const writing = Command.make('writing').pipe(Command.withDescription('Discover a
   Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showWriting(repo, Option.getOrUndefined(args.path))), { readonly: true })),
   Command.make('migrate', { path: text('path') }, args => withRepo((repo, settings) => sync(() => migrateWriting(repo, args.path, settings.dryRun)))),
   Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setWriting(repo, readWritingPolicy(body(args.body), Option.getOrUndefined(args.path)), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a policy with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
-  Command.make('check', { path: optional('path') }, args => withRepo(repo => sync(() => { const result = checkWriting(repo, Option.getOrUndefined(args.path)); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true })),
+  Command.make('check', { path: optional('path') }, args => withRepo((repo, settings) => sync(() => { const result = checkWriting(repo, Option.getOrUndefined(args.path), !settings.dryRun); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true })),
 ]));
 const concepts = Command.make('concepts').pipe(Command.withDescription('Discover and manage directory-owned concept catalogs.'), Command.withSubcommands([
   Command.make('index', {}, () => withRepo(repo => sync(() => indexConcepts(repo)), { readonly: true })),

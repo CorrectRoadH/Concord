@@ -12,7 +12,7 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
   let writingFindings: { category: 'writing'; code: string; path: string; line?: number; message: string }[] = [];
   let writingComplete = true;
   try {
-    const writing = checkWriting(repo);
+    const writing = checkWriting(repo, undefined, cache !== 'off');
     writingFindings = writing.findings.map(finding => ({
       category: 'writing', code: finding.rule, path: finding.file, line: finding.line, message: finding.message,
     }));

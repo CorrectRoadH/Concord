@@ -77,11 +77,11 @@ test('fresh cache rebuild produces ready projections and reports busy rebuilds a
 test('fresh status, cache-off checks and dry-run previews leave Git-private state absent', () => Effect.runPromise(Effect.sync(() => {
   const root = freshConsumer();
   try {
-    for (const args of [['cache', 'status'], ['--dry-run', 'check'], ['--dry-run', 'cache', 'clear'], ['--dry-run', 'cache', 'rebuild']]) {
+    for (const args of [['cache', 'status'], ['--dry-run', 'check'], ['--dry-run', 'docs', 'check'], ['--dry-run', 'writing', 'check'], ['--dry-run', 'cache', 'clear'], ['--dry-run', 'cache', 'rebuild']]) {
       const result = cli(root, ...args);
       assert.equal(result.signal, null, result.stdout + result.stderr);
       if (args[0] === 'cache') { assert.equal(result.status, 0); assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CacheReport))(result.stdout).status, 'empty'); }
-      if (args.at(-1) === 'check') {
+      if (args.length === 2 && args.at(-1) === 'check') {
         const report = Schema.decodeUnknownSync(Schema.fromJsonString(ScanReport))(result.stdout);
         assert.equal(report.cache.status, 'off'); assert.equal(report.codeCache.status, 'off');
       }

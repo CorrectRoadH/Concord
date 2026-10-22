@@ -26,6 +26,15 @@ jobs:
           node-version: '24.19.0'
           cache: pnpm
       - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.26.7'
+          cache: false
+      - uses: astral-sh/setup-uv@v7
+        with:
+          version: '0.12.5'
+      - name: Prepare the pinned offline pytest adapter
+        run: uv run --no-project --with pytest==9.1.1 pytest --version
       - uses: ./.github/actions/setup-native
         with:
           platform: ubuntu-24.04-linux-x64-glibc

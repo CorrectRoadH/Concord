@@ -247,7 +247,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       codeFiles = trace.codeFiles;
       edges = trace.edges;
       findings = [...trace.findings];
-      diagnostics = doctor(repo, trace);
+      diagnostics = doctor(repo, trace, cache);
     } catch (cause) {
       if (observe !== undefined && cause instanceof ConcordError && ['UnsafePath', 'RecoveryRequired', 'InvalidFile'].includes(cause.code)) throw cause;
       cases = scanAnnotations(repo, { cache });

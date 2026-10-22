@@ -10,14 +10,14 @@ import { buildTrace } from './trace.js';
 import { checkConstitution } from './constitution.js';
 
 
-export function doctor(repo: Repository, trace = buildTrace(repo, 'off')) {
+export function doctor(repo: Repository, trace = buildTrace(repo, 'off'), cache: 'use' | 'off' = 'off') {
   const { documents, annotations, codeDeclarations, findings } = trace;
   const missingTestRoots = repo.config.testRoots.filter(path => !existsSync(repo.absolute(path)));
   const missingSourceRoots = (repo.config.sourceRoots ?? []).filter(path => !existsSync(repo.absolute(path)));
   const constitutionFindings = checkConstitution(repo);
   let writingComplete = true;
   let writingFindings: { code: string; path: string; line?: number; message: string }[];
-  try { writingFindings = checkWriting(repo).findings.map(finding => ({ code: finding.rule, path: finding.file, line: finding.line, message: finding.message })); }
+  try { writingFindings = checkWriting(repo, undefined, cache === 'use').findings.map(finding => ({ code: finding.rule, path: finding.file, line: finding.line, message: finding.message })); }
   catch (cause) { if (!(cause instanceof ConcordError)) throw cause; writingComplete = false; writingFindings = [{ code: cause.code, path: 'docs', message: cause.message }]; }
   const allFindings = [...findings, ...writingFindings, ...constitutionFindings.filter((finding) => !findings.some((existing) => existing.code === finding.code && existing.path === finding.path))];
   const constitutionSteps = repo.config.constitution === undefined ? ['Run concord constitution initialize to opt this existing project into constitution governance.'] : constitutionFindings.some((finding) => finding.code === 'ConstitutionDraft') ? ['Adopt real project principles with concord constitution adopt; draft is not compliance.'] : [];
