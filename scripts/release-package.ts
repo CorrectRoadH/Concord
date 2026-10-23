@@ -6,7 +6,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
 
-const PackageArtifact = Schema.Struct({
+export const PackageArtifact = Schema.Struct({
   name: Schema.String, version: Schema.String, filename: Schema.String,
   files: Schema.Array(Schema.Struct({ path: Schema.String })),
 });

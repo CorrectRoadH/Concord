@@ -19,6 +19,7 @@ import { withPersistentCache } from '../dist/cache-store.js';
 import { observeOwnedProcessGroup } from '../dist/owned-process.js';
 import { TraceShowValue, hydrateQueryValue } from '../dist/query-values.js';
 import { pollUntil, readProjectConfig, writeProjectConfig } from './support.js';
+import { packConcord } from './installed-package.js';
 
 const cli = resolve('dist/entry.js');
 const target = 'docs/feature/sample/use-case/sample.md';
@@ -239,7 +240,7 @@ test('packed public CLI analyzes an isolated offline consumer without a source c
     return stdout;
   };
   try {
-    const packed = Schema.decodeUnknownSync(Schema.Struct({ filename: Schema.String }), { onExcessProperty: 'ignore' })(JSON.parse(run('pnpm', ['--config.ignore-scripts=true', 'pack', '--skip-manifest-obfuscation', '--json', '--pack-destination', scratch], process.cwd())));
+    const packed = packConcord(scratch);
     const install = join(scratch, 'install'); mkdirSync(install);
     run('tar', ['-xzf', resolve(scratch, packed.filename), '-C', install], scratch);
     const unpacked = join(install, 'package');

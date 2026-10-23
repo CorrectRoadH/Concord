@@ -29,7 +29,7 @@
     "concord": "node dist/entry.js",
     "bench": "pnpm build && tsx scripts/bench.ts",
     "bench:profile": "pnpm build && tsx scripts/profile.ts",
-    "test:built": "node --import tsx --test --test-concurrency=1 test/*.test.ts"
+    "test:built": "node --import tsx scripts/test-built.ts"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.112",
