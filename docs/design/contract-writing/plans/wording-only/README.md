@@ -27,9 +27,10 @@
 | Goal | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
 | [G1](../../GOALS.md#g1-不看代码也能判断行为) | satisfied | 指南与样板给出相同写法，读者同样能写出 C1 的断言 | 样板页与 behavior-anchored 共用 |
-| [G2](../../GOALS.md#g2-重构不改行为页和测试标记) | partial | 指南要求实现写在 architecture 页，但宪法定义接入项目必须采用的范式（C-010.1）。现行 C-012 不区分行为页与实现页，审阅时没有范式层面的条款可引用 | 现行 C-012.1 只区分声明与过程 |
+| [G2](../../GOALS.md#g2-重构不改行为页和指向行为的测试关联) | satisfied | 指南给出相同的行为页与 architecture 页分工，C3 的结果与 behavior-anchored 相同 | 设计论证；C3 尚未实际执行 |
 | [G3](../../GOALS.md#g3-关联能回答哪段代码实现了哪一步) | partial | 与 behavior-anchored 共享缺口：现有步骤与列表提示辅助审阅，没有语义判定；关联范围规则只在指南中 | 两案使用同一套步骤查询，见 behavior-anchored 的 G3 依据 |
 | [G4](../../GOALS.md#g4-规则对人和-agent-同样可执行) | satisfied | Agent 读 skill 即可照做 | 指南进入随包 skill |
+| [G5](../../GOALS.md#g5-规则约束所有接入项目) | not-satisfied | 指南不是 C-010.1 规定的范式；审阅对 C2、C7 的违反只能引用指南，接入项目可以不采用 | 现行 C-012 不区分行为页与实现页，C-011 不规定关联范围 |
 
 ## Entry Points
 

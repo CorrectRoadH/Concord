@@ -14,10 +14,10 @@ C-012 拥有契约写法：行为页写可观察行为与公开接口，architec
 >
 > 1. 测试根中的 Concord 标记是测试关联的唯一正向来源，标记存在即关联存在。静态关联扫描不解析宿主语言的测试声明、框架绑定、回调或 skip/todo。执行时的原生收集、绑定与选择仅按第 6 款进行，其观察结果不创建关联，也不授权静态关系检查成功。
 > 2. 实现关联的唯一正向来源是通过语法、作用域、位置与目标校验的显式代码声明。未通过校验的标记产生 finding，不建立关联。反向关系从测试标记与代码声明派生。
-> 3. 测试与实现指向能完整、准确描述该测试断言或该声明职责的最小既有契约范围：Use Case 步骤、行为页的标题 anchor、整个 Use Case、Feature README、Engineering owner，或 architecture 与 lifecycle 页的 anchor。对使用者可观察的保证先写进行为页再关联；只服务内部不变量或仓库维护机制的代码与测试，指向 architecture、lifecycle 或 Engineering。跨步骤的完整断言指向整个 Use Case，一个声明服务多项行为时使用多个 implements。
+> 3. 测试与实现指向能完整、准确描述该测试断言或该声明职责的最小既有契约范围。测试可以指向 Feature 或 Use Case owner、Use Case 步骤，以及它们的附页或标题 anchor；实现还可以指向 Engineering owner 及其附页。对使用者可观察的保证先写进行为页再关联。只服务内部不变量的代码与测试，指向所属 Feature 的 architecture 或 lifecycle 页的 anchor；仓库维护机制的代码指向 Engineering。跨步骤的完整断言指向整个 Use Case，一个声明服务多项行为时使用多个 implements。没有合法目标的测试不建立关联，不为此伪造产品步骤。
 > 4. 代码侧选择完整且受支持的语义范围。整个文件服务同一职责且没有更精确的适用目标时，使用文件级声明。不为追求更窄而拆分实现、复制测试或机械改名步骤。缺少逐步骤关联不说明缺少执行或覆盖。
 > 5. JS/TS 仅用注释范围排除字符串和模板中的伪标记；其它文本文件接受以 `//`、`#` 或 `--` 开头的标记行。
-> 6. 执行由接入项目的 runner 命令或显式配置的 adapter 负责。（现行第 3 款全文保留。）
+> 6. 执行由接入项目的 runner 命令或显式配置的 adapter 负责。adapter 可以仅在显式收集或执行前，把源码标记绑定到观察到的原生用例集合，或使用源码标记中的显式原生选择参数。原生选择不参与关联身份，不产生关联，不使静态检查依赖观察。只有能力和当前输入足以证明精确选择时，才声明选中了原生用例；否则执行范围按文件明确展示，要求原生精确选择的操作具名失败。缺少逐用例选择能力不使源码关联失效。
 
 ### C-012 修订正文
 
@@ -51,7 +51,7 @@ C-012 拥有契约写法：行为页写可观察行为与公开接口，architec
   - 在 metadata 中引用 c-012 的 owner，按内容补引用：Memory/Issue 工具维护补 c-001，本地 Issue 补 c-002，凭据补 c-007。仍有写作或过程约束的保留 c-012。至少核对 feedback、project-onboarding、local-sdlc、web-workbench 与 repository-workflows。
   - 核对 C-001、C-002、C-007 的既有反向引用在新增款后仍然成立。
 - 同步修改随包 skill（主入口与 `document`、`code`、`test` 主题）、`docs/concord.md`、init 生成的指引与 Use Case 模板，使 Agent 读到同一套规则。
-- 不改变 CLI 行为、标记语法、身份派生算法或 JSON 字段。
+- 不改变 CLI 行为、标记语法、身份派生算法、JSON 字段或测试标记的合法目标集合。
 
 ## Limits
 
@@ -67,9 +67,10 @@ C-012 拥有契约写法：行为页写可观察行为与公开接口，architec
 | Goal | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
 | [G1](../../GOALS.md#g1-不看代码也能判断行为) | satisfied | C-012 第 1、2 款要求公开接口、错误与示例写在行为页，且规范性陈述可断言 | 样板 `resolve-with-command-evidence.md` 可写出 C1 的断言 |
-| [G2](../../GOALS.md#g2-重构不改行为页和测试标记) | satisfied | C-012 第 1、3 款把内部实现限定在 architecture 页，C-011 第 3 款让测试指向行为；内部不变量测试指向 architecture 页，重构时随实现调整 | 设计论证；C3 尚未实际执行 |
-| [G3](../../GOALS.md#g3-关联能回答哪段代码实现了哪一步) | partial | C-011 第 3、4 款规定最小完整范围。`use-case steps`、`trace show` 与 `review render` 已区分步骤、整个 Use Case 与非步骤关联，`trace gaps` 提示未标记列表；尚无判定声明范围过粗的语义检查，由作者与审阅执行 | `concord --skill test` 的步骤查询说明；C4 由三步骤样例人工验证 |
+| [G2](../../GOALS.md#g2-重构不改行为页和指向行为的测试关联) | satisfied | C-012 第 1、3 款把内部实现限定在 architecture 页，C-011 第 3 款让测试指向行为；内部不变量测试指向 architecture 页，重构时随实现调整 | 设计论证；C3 尚未实际执行 |
+| [G3](../../GOALS.md#g3-关联能回答哪段代码实现了哪一步) | partial | C-011 第 3、4 款规定最小完整范围。`use-case steps`、`trace show` 与 `review render` 已区分步骤、整个 Use Case 与非步骤关联，`trace gaps` 提示未标记列表；尚无判定声明范围过粗的语义检查，由作者与审阅执行 | `concord --skill test` 的步骤查询说明；验收方法：按 C4 在一个三步骤 Use Case 上运行 `use-case steps` 与 `trace show` 人工核对，结果记入 Memory |
 | [G4](../../GOALS.md#g4-规则对人和-agent-同样可执行) | satisfied | 每款可逐条检查，同步进随包 skill 与模板 | 本页 Scope |
+| [G5](../../GOALS.md#g5-规则约束所有接入项目) | satisfied | 规则写进 C-011 与 C-012，C-010.1 使接入项目采用 | C-010.1 |
 
 ## Entry Points
 
