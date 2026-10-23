@@ -6,3 +6,4 @@ coverage/
 .agents/friction-log/
 native/hawdb/target/
 native-artifacts/
+.vitest/

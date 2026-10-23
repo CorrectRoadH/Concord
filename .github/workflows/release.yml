@@ -93,7 +93,7 @@ jobs:
       - name: Pack once
         run: |
           mkdir release
-          node --import tsx scripts/pack-release.ts release
+          node --import tsx scripts/release-package.ts release
           test "$(find release -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
           sha256sum release/concord-sdlc-*.tgz > release/SHA256SUMS
       - name: Verify frozen production installation from the final archive

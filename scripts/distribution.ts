@@ -1,4 +1,4 @@
-import { NodeRuntime, NodeServices } from '@effect/platform-node';
+import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -98,7 +98,7 @@ const narrowGeneratedImports = Effect.fn('build.narrowGeneratedImports')(functio
   }, catch: cause => cause instanceof BuildOutputFailed ? cause : new BuildOutputFailed({ file: 'dist', message: cause instanceof Error ? cause.message : String(cause) }) });
 });
 
-const build = Effect.gen(function*() {
+const prepare = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   yield* fs.remove('dist', { recursive: true, force: true });
@@ -113,10 +113,14 @@ const build = Effect.gen(function*() {
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
   }
   yield* narrowGeneratedImports();
-  const webExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/vite/bin/vite.js', 'build'], { stdout: 'inherit', stderr: 'inherit' }));
-  if (webExit !== 0) return yield* new BuildFailed({ project: 'web', exitCode: webExit });
-  const previewExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.preview.config.ts'], { stdout: 'inherit', stderr: 'inherit' }));
-  if (previewExit !== 0) return yield* new BuildFailed({ project: 'preview', exitCode: previewExit });
+});
+
+const finish = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  yield* Effect.tryPromise(async () => {
+    const { build } = await import('vite-plus');
+    await build({ configFile: 'vite.preview.config.ts' });
+  });
   yield* Effect.tryPromise(() => bundle({ entryPoints: ['web/p5/runtime.ts'], outfile: 'dist/web/p5-runtime.js', bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'linked', define: { IS_MINIFIED: 'true' } }));
   yield* fs.copyFile('node_modules/p5/license.txt', 'dist/web/P5-LICENSE.txt');
   yield* fs.copy('node_modules/p5/types', 'dist/p5-types');
@@ -134,4 +138,5 @@ const build = Effect.gen(function*() {
   yield* fs.chmod('dist/cli.js', 0o755);
 });
 
-build.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
+export const prepareDistribution = () => Effect.runPromise(prepare.pipe(Effect.provide(NodeServices.layer)));
+export const finishDistribution = () => Effect.runPromise(finish.pipe(Effect.provide(NodeServices.layer)));

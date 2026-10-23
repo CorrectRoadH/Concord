@@ -45,6 +45,6 @@ jobs:
           node --import tsx --test test/hawdb-native.test.ts
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm typecheck
+      - run: pnpm exec vp build && pnpm exec vp run typecheck:built
       - name: Run the complete suite across isolated serial shards
-        run: pnpm exec node --import tsx --test --test-concurrency=1 --test-shard=${{ matrix.shard }}/4 test/*.test.ts
+        run: CONCORD_TEST_CONCURRENCY=1 pnpm exec vp run test:built --test-shard=${{ matrix.shard }}/4

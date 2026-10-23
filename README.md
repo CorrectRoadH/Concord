@@ -149,13 +149,18 @@ Source builds require Node.js 24.15+, pnpm 11.18.0, Git, Rust 1.97.1, and a nati
 ```sh
 git clone https://github.com/CorrectRoadH/Concord.git
 cd Concord
-pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile # bootstrap the pinned local vp
 rustup toolchain install 1.97.1 --profile minimal
-pnpm build
-pnpm concord --help
-pnpm check
+pnpm exec vp build
+pnpm exec vp run concord --help
+pnpm exec vp run check
 ```
 
-`pnpm check` builds the CLI and web workspace, type-checks implementation, tests, and scripts, and runs tests including packed CLI installation in isolated Git consumers. To inspect Concord's own relationships, run `pnpm concord check` or `pnpm concord trace show local-sdlc`.
+`vp run check` (also available as `pnpm check`) builds the CLI and web workspace, type-checks implementation, tests, and scripts, and runs tests including packed CLI installation in isolated Git consumers. To inspect Concord's own relationships, run `pnpm concord check` or `pnpm concord trace show local-sdlc`.
+
+
+Use `pnpm exec vp` when Vite+ is not installed globally. `vp install` manages dependencies through the pinned pnpm version. `vp run check:fast` checks CLI and Web source types without building or running tests. After `vp build`, `vp run typecheck:built` checks repository, test, and script types; `vp run test:built test/writing-cache.test.ts` runs a selected file without rebuilding. Pass `--test-name-pattern=...` to select cases or `--test-shard=1/4` to split the complete suite. Rebuild after source changes before using either `:built` task.
+
+`vp run check` is the full delivery gate. The `vp build` production hooks prepare the complete distribution. Vite+'s built-in `vp check` and `vp test` do not invoke the project's scripts. Tests use Node's runner, share one packed artifact per invocation, and install isolated consumers. Task caching is disabled; partial checks do not replace full acceptance.
 
 Read the [development rules](AGENTS.md) and [constitution](docs/constitution.md) before contributing. Concord originated in NiceEval's repository workflows and runs independently; the [provenance document](docs/provenance.md) describes the extraction boundaries.

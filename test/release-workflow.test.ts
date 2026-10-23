@@ -51,7 +51,7 @@ test('release builds two native targets and gates publication on the same commit
     assert.ok(pack.steps.findIndex(step => step.run === 'node --import tsx scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === build));
     const commands = pack.steps.map(step => step.run ?? '').join('\n');
     assert.match(commands, /sha256sum release\/concord-sdlc-\*\.tgz > release\/SHA256SUMS/);
-    assert.equal((commands.match(/scripts\/pack-release.ts release/gu) ?? []).length, 1);
+    assert.equal((commands.match(/scripts\/release-package.ts release/gu) ?? []).length, 1);
     assert.ok(publish.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
     assert.match(commands, /pnpm install --prod --frozen-lockfile --ignore-scripts/);
     assert.match(commands, /verify-installed-native.ts/);
@@ -60,7 +60,7 @@ test('release builds two native targets and gates publication on the same commit
     );
     assert.deepEqual(Object.keys(check.on), ['workflow_dispatch', 'workflow_call']);
     assert.deepEqual(check.jobs.check.strategy?.matrix.shard, [1, 2, 3, 4]);
-    assert.ok(check.jobs.check.steps.some(step => step.run?.includes('--test-concurrency=1 --test-shard=${{ matrix.shard }}/4')));
+    assert.ok(check.jobs.check.steps.some(step => step.run?.includes('CONCORD_TEST_CONCURRENCY=1 pnpm exec vp run test:built --test-shard=${{ matrix.shard }}/4')));
   }).pipe(Effect.provide(NodeServices.layer)));
 });
 

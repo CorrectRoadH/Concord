@@ -149,13 +149,18 @@ concord --skill memory
 ```sh
 git clone https://github.com/CorrectRoadH/Concord.git
 cd Concord
-pnpm install --frozen-lockfile
+pnpm install --frozen-lockfile # bootstrap the pinned local vp
 rustup toolchain install 1.97.1 --profile minimal
-pnpm build
-pnpm concord --help
-pnpm check
+pnpm exec vp build
+pnpm exec vp run concord --help
+pnpm exec vp run check
 ```
 
-`pnpm check` 构建 CLI 与 Web 工作台，对实现、测试和脚本做类型检查，并执行包括隔离 Git 消费者中打包安装 CLI 在内的测试。查看 Concord 自己的关联，可以运行 `pnpm concord check` 或 `pnpm concord trace show local-sdlc`。
+`vp run check`（也可通过 `pnpm check` 调用）构建 CLI 与 Web 工作台，对实现、测试和脚本做类型检查，并执行包括隔离 Git 消费者中打包安装 CLI 在内的测试。查看 Concord 自己的关联，可以运行 `pnpm concord check` 或 `pnpm concord trace show local-sdlc`。
+
+
+没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。`vp run check:fast` 只检查 CLI 与 Web 源码类型，无需构建或运行测试。执行 `vp build` 后，`vp run typecheck:built` 检查 repository、测试和脚本类型；`vp run test:built test/writing-cache.test.ts` 无需重复构建即可运行指定文件。用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。源码变化后，先重新构建再运行 `:built` 任务。
+
+`vp run check` 是完整交付门禁。`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。测试使用 Node runner，每次调用共享一份打包产物，消费者独立安装。任务缓存关闭；局部检查不替代完整验收。
 
 参与开发前请阅读[开发规则](AGENTS.md)与[项目宪法](docs/constitution.md)。Concord 源自 NiceEval 的仓库工作流，运行时保持独立；抽取范围见[来源说明](docs/provenance.md)。

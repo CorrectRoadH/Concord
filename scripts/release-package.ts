@@ -3,7 +3,7 @@ import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
 
 export const PackageArtifact = Schema.Struct({
@@ -39,5 +39,13 @@ export function packConcord(destination: string): PackedConcord {
         .filter(path => !path.endsWith('/')).map(path => ({ path: path.replace(/^package\//u, '') }));
       return { ...artifact, filename, files };
     } finally { rmSync(scratch, { recursive: true, force: true }); }
+  }));
+}
+
+// Importers reuse the same packaging implementation without executing the CLI.
+if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+  Effect.runSync(Effect.sync(() => {
+    const { name, version, filename } = packConcord(process.argv[2] ?? 'release');
+    process.stdout.write(`${JSON.stringify({ name, version, filename })}\n`);
   }));
 }

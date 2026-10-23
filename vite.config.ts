@@ -1,12 +1,21 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite-plus';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { unplugin as stylex } from '@stylexjs/unplugin';
 import { fileURLToPath } from 'node:url';
 
+// Only production builds prepare the complete CLI distribution. Dev stays Web-only.
+const distribution: Plugin = {
+  name: 'concord-distribution',
+  apply: 'build',
+  async buildStart() { await (await import('./scripts/distribution.js')).prepareDistribution(); },
+  async writeBundle() { await (await import('./scripts/distribution.js')).finishDistribution(); },
+};
+
 export default defineConfig(({ command }) => ({
+  run: { cache: false },
   root: 'web',
-  plugins: [stylex.vite({ dev: command === 'serve', runtimeInjection: false }), react(), tailwindcss()],
+  plugins: [distribution, stylex.vite({ dev: command === 'serve', runtimeInjection: false }), react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./web', import.meta.url)) } },
   build: {
     outDir: '../dist/web',
