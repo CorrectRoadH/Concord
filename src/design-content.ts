@@ -121,9 +121,10 @@ export function validateDesignContent(base: string, alternatives: readonly strin
           if (file === 'LIMITS' && status === 'partial') throw new Error('Limits cannot be partial');
           result[item.id] = status;
         } catch { report(path, 'DesignStatusInvalid', `${item.id}: invalid ${file} status ${row[1]}`); }
-        for (const cell of row.slice(2)) {
+        for (const [index, column] of ['Mechanism or gap', 'Evidence'].entries()) {
+          const cell = row[index + 2]!;
           const paragraph = fromMarkdown(cell).children[0];
-          if (paragraph?.type !== 'paragraph' || !authored(text(paragraph)) || paragraph.children.some(node => node.type === 'html' || node.type === 'linkReference')) report(path, 'DesignResponseIncomplete', `${item.id} requires authored mechanism/gap and evidence`);
+          if (paragraph?.type !== 'paragraph' || !authored(text(paragraph)) || paragraph.children.some(node => node.type === 'html' || node.type === 'linkReference')) report(path, 'DesignResponseIncomplete', `${item.id} requires authored ${column}`);
         }
       }
       for (const item of items) if (!seen.has(item.id)) report(path, 'DesignResponseMissing', `${names[0]} must respond to ${item.id}`);

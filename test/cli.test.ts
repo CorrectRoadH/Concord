@@ -115,9 +115,12 @@ test('packed Design commands require complete responses and preserve formatting 
  call(root, ['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'local', '--alternative', 'remote'], Ack);
  const base = join(root, 'docs/design/storage');
  assert.match(readFileSync(join(base, 'plans/local/README.md'), 'utf8'), /## Limits/u);
- const incomplete = call(root, ['design', 'check', 'storage'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ code: Schema.String })) }), '', 1);
+ const incomplete = call(root, ['design', 'check', 'storage'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String, code: Schema.String, message: Schema.String })) }), '', 1);
  assert.equal(incomplete.ok, false);
  assert(incomplete.findings.some(item => item.code === 'DesignSelectionInvalid'));
+ assert.deepEqual(incomplete.findings.filter(item => item.code === 'DesignResponseIncomplete'), ['local', 'remote'].flatMap(plan => ['L1', 'G1'].flatMap(id => ['Mechanism or gap', 'Evidence'].map(column => ({
+  path: `docs/design/storage/plans/${plan}/README.md`, code: 'DesignResponseIncomplete', message: `${id} requires authored ${column}`,
+ })))));
  assert.equal(call(root, ['design', 'decide', 'storage', '--selected', 'local', '--reason', 'Local'], ErrorOutput, '', 1).error, 'DesignDecisionIncomplete');
  authorDesignFixture(root, 'storage', ['local', 'remote'], 'local');
  call(root, ['design', 'check', 'storage'], CheckOutput);
