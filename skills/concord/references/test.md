@@ -18,6 +18,8 @@ test('rejects expired tokens', () => {})
 
 指向整个 Feature 时改用 `// @feature docs/feature/login/README.md`，每个测试只选择一个契约目标。
 
+测试标记指向能完整描述其断言的最小行为范围：一个 Use Case 步骤、行为页的标题 anchor，或整个 Use Case。跨多个步骤的端到端测试指向整个 Use Case，不拆成逐步骤标记。只验证内部不变量的测试可以指向 architecture 页的 anchor；使用者能观察到的保证，先写进行为页，再让测试指向那里。
+
 Use Case 的根有序列表项可以在第一段末尾用 ` {#reject-token}` 声明步骤。ID 遵守文档名规则，保留 Unicode 拼写；它与本文件标题的显式 ID、slug 和连字符别名共用命名空间。代码、行内代码与 HTML 中的示例不声明步骤；无序或嵌套列表、其它文档 owner 不允许步骤标记。
 
 测试使用 `// @use-case docs/feature/login/use-case/expired-token.md#reject-token` 关联该步骤，实现使用同一目标的 `@concord-implements`。整个 Use Case 和已有标题 anchor 的关联继续有效。查询和维护命令为：

@@ -36,6 +36,15 @@ export function parseOrder(input: string) {
 }
 ```
 
+## 选择作用域与目标
+
+关联要回答“这段代码实现了哪条行为”。选择能完整、准确描述这段代码职责的最小既有契约范围：
+
+- 代码侧优先 `node` 或 `region`。只有整个文件服务同一份契约时才用 `file`，例如只服务一个 Feature 的共享基础设施。
+- 契约侧优先 Use Case 的步骤（`#<step-id>`）或行为页的标题 anchor。只有代码服务整份契约时才指向 README。
+- 一个声明服务多项行为时，写多条 `@concord-implements`。只服务内部不变量或仓库维护机制的代码，指向 architecture、lifecycle 页的 anchor 或 Engineering owner。
+- 不为追求更窄而拆分实现或机械改名步骤。许多文件都指向同一份 README 或同一个 Use Case，通常说明关联太粗。`trace show` 和 `trace gaps` 无法据此回答哪一步由哪段代码实现。
+
 ## 作用域与边界
 
 - `file`：在首个语句之前，允许前置 BOM、shebang 和许可证注释。每文件最多一份，范围为整个文件。

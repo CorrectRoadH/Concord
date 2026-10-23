@@ -20,7 +20,25 @@ concord engineering create ci --title "持续集成"
 
 Research 使用目录 README，默认只有标题，不预设章节、日期、来源或附页。`--observed-at` 和 `--source` 可选；附页接受安全相对路径（含中文和子目录），不会套用其它类型的模板。输入必须符合当前目录与 metadata 规则；发现过程不转换文件。
 
-页面按读者分工。README 写问题、概念和范围；Use Case 写一条用户路径，从起始状态走到可观察结果；cli 页直接写命令、参数、人读输出、`--json` 字段、退出码和错误，并给出最小可复制示例；library 页写公开 API 的签名与结果。architecture 页写这个 Feature 的实现：实体归属、数据流、不变量与失败阶段。行为页不写模块名或调用链，architecture 页不重新定义行为。只改实现时只更新 architecture 页；行为改变时先更新行为页。
+## 写作指南
+
+先问读者要回答什么，再决定写在哪一页：
+
+| 读者的问题 | 写在 | 写法 |
+| --- | --- | --- |
+| 功能对使用者做什么 | Feature README | 问题、概念、范围与非目标 |
+| 一个目标怎样完成 | Use Case | 用户目标、起始状态、带 `{#id}` 的完整路径、结果、契约来源 |
+| 命令或 API 怎样调用、返回什么 | cli、library | 完整调用、人读输出、`--json` 输出、退出码、具名错误、最小示例 |
+| 它是怎么实现的 | architecture、lifecycle | 实体归属、数据流、不变量、失败阶段、资源生命周期 |
+| 为什么这样选 | Design | 目标、约束、候选与裁决 |
+| 排障经过、根因、经验 | Memory | `concord memory add` |
+| 待调查的观察 | Issue | `concord issue create` |
+
+行为页的规范性陈述要能被测试断言。已实现的命令在临时仓库实际运行，复制输出，把每次运行都会变化的摘要和时间戳写成省略号或说明；尚未实现时标为预期输出，交付验收再核对实际运行，运行记录写进 Memory。错误写成表格，列出错误码和触发条件。`--json` 字段、错误码和退出码是公开契约；人读输出帮助理解，不保证逐字稳定。同一输出或错误只在一个页面定义，其它页面链接过去。
+
+行为页不写内部模块、内部数据结构、调用链、缓存或存储引擎；公开的输入输出结构、协议和可观察的恢复保证留在行为页。出现这些词时，把那段移到 architecture 页，行为页只保留使用者能观察到的保证，例如“删除缓存后结论不变”。architecture 页不重新定义行为；只改实现时只改 architecture 页。
+
+正文写现行规则，不写“目前”“已实现”“这次改了什么”，不点名已删除的接口。Use Case 主流程的步骤加 `{#id}`，测试和实现可以指向具体步骤。
 
 Feature、Roadmap 和 Design candidate 只要求 README。可选页为 library（公开 API）、cli（命令）、architecture（内部边界）、lifecycle（资源与状态）、use-case（用户目标索引）。`--pages` 支持逗号分隔或重复传入，省略时采用初始化时冻结的项目默认；`--no-pages` 明确覆盖为空，仅建 README。全套用 `--pages library,cli,architecture,lifecycle,use-case`。同次 Design 创建对所有候选使用相同选择，外层 README、GOALS、LIMITS、CASES、DECISION 始终生成。Use Case 索引不创建叶子用例。
 
