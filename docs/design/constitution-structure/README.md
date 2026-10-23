@@ -26,7 +26,7 @@ constitutionRefs:
 | --- | --- | --- |
 | 条款身份 | 单独一行 HTML `<a id="c-003"></a>` | 全仓库只有宪法用 HTML anchor，其它位置使用标题 `{#id}` 或步骤 `{#id}`，宪法需要专用解析 |
 | 款的身份 | 只有序号 | 正文用“C-011 第 3 款”引用，共 36 处；重新编号后只能人工查找 |
-| 依据关系 | Feature 与 Design 的 `constitutionRefs` 元数据，共 36 个 owner、248 条 | 同时存在 27 个文件、100 处正文链接，`check` 不校验；链接到不存在的 `#c-099` 仍然通过 |
+| 依据关系 | Feature 与 Design 的 `constitutionRefs` 元数据，共 36 个 owner、248 条 | 只能表达到 owner；另有 27 个文件、100 处正文链接，其中 22 个是附页，`check` 不校验，指向不存在的 `#c-099` 仍然通过 |
 | 写法 | 总则只定义用语强度 | C-001.4、C-005.3 至 .4、C-013 写入引擎、桥接与协议细节，随实现变化 |
 
 ## Core Mental Model
@@ -49,14 +49,23 @@ constitutionRefs:
 
 ## 自举
 
-这次修改本身按 Concord 的流程完成，验收即自举：
+这次修改本身按 Concord 的流程完成。收据要求 red 与 green 由同一份 Concord 实现签发，所以签发工具与被测候选分开：
+
+| 角色 | 位置 | 说明 |
+| --- | --- | --- |
+| 签发工具 | `/tmp/concord-signer`：开工前把当前 HEAD `pnpm pack` 后安装到这里 | 只用于 `test run` 与 `memory resolve`；全程不更新 |
+| 被测候选 | 本仓库 `src/` 与重新构建的 `dist/` | 回归测试在隔离消费者中运行构建后的 CLI，runner 用 tsx 运行测试文件 |
+| 仓库格式 | 本仓库 `docs/` | Problem 关闭前保持 v1，签发工具可以读取 |
+
+执行顺序：
 
 1. Design 经独立审查后定案。
-2. 先改契约：`project-onboarding` 的 Use Case 写出步骤与预期输出。
-3. 把“正文中断开的宪法链接通过 check”记为 Problem，回归测试以 `@regression` 指向它，`concord test run` 取得 red 收据。
-4. 实现后取得 green 收据，`memory resolve --kind fixed` 关闭 Problem。
-5. 用构建后的 CLI 对本仓库执行 `concord constitution migrate`，再按写作规则改写宪法正文，通过 `constitution amend` 采用。
-6. `concord check` 通过；`constitution show --json` 的依据关系集合与迁移前的元数据关系集合一致。
+2. 修改 `project-onboarding` 的 Use Case 与 CLI 契约，写出新输出与错误（预期输出）。
+3. Problem `constitution-body-links-unchecked` 已记录。回归测试用 `@regression` 指向它，在临时消费者中写入断开的宪法链接并断言 `check` 退出 1。用签发工具运行 `test run`，取得 red。
+4. 实现并重新构建 `dist/`。测试定义与契约不变，用签发工具再次 `test run` 取得 green，然后 `memory resolve --kind fixed`。仓库仍是 v1，签发工具可以完成全部核验。
+5. 用新构建的 CLI 运行 `concord --dry-run constitution migrate`，再执行迁移。迁移之后签发工具无法读取本仓库，已关闭的 Problem 不受影响。
+6. 按条款写法改写宪法，把 36 处“第 N 款”文字逐处核对当前语义后改为链接，通过 `constitution amend` 采用。
+7. `concord check` 通过；迁移验收按 link-owned 的“迁移验收”判定。
 
 ## 验收边界
 
