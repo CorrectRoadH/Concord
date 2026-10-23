@@ -12,7 +12,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 场景
 
-作为功能负责人，我希望 Feature、Use Case、Roadmap、Design 与 Engineering 各自拥有清晰正文和 supporting pages，并能把已定稿 Roadmap 安全采用为当前 Feature。
+作为功能负责人，我希望 Feature、Use Case、Roadmap、Design 与 Engineering 各自拥有清晰正文和 supporting pages，并能把 Roadmap 安全采用为当前 Feature。
 
 ## 主流程
 

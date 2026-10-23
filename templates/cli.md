@@ -1,5 +1,7 @@
 # {{title}}
 
+State observable behavior directly: commands, output, exit codes, and errors. Keep implementation in the architecture page.
+
 ## Command
 
 Define the command, positional inputs, flags, defaults, and invalid combinations.

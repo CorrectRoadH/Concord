@@ -28,7 +28,7 @@ Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只
 - `template list/show`：在任意 cwd 查看随包写作模板，无需初始化。
 - `doctor`：检查配置、缺失测试目录和当前关联，给出接入步骤，不执行 runner。
 - `design create/check/format/decide/correct-reason/list/show`：候选比较、逐项检查、有限格式化、唯一裁决、受管理由更正及关联目标。
-- `roadmap create/adopt/list/show`：定稿方向与显式采用。采用创建 Feature，Roadmap 标记 adopted；当前契约只在 Feature。
+- `roadmap create/adopt/list/show`：与 Feature 同体裁的待采用方向与显式采用。采用创建 Feature，Roadmap 标记 adopted；当前契约只在 Feature。
 - `test list/show/run`：从测试源码标记派生执行引用，发现目标契约与 regression Memory；项目配置拥有 argv、附加 sourceFiles 和 timeout。
 - `test annotate`：验证指定 canonical reference、归属链、类型与 anchor 后输出注释片段，regression 还验证 Problem。使用乐观 snapshot，不改源文件，不加载全局 Trace。
 - `cache status/rebuild/clear`：维护可删除重建的 HawDB 缓存。

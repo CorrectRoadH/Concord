@@ -41,6 +41,30 @@ Feature 描述一项能力，Use Case 描述一条用户路径的主流程与验
 
 先写契约，实现者就不需要猜测语义。agent 在会话开始时运行 `concord feature list` 和 `trace show`，读到的是当前约定，而不是上一次对话的残留印象。
 
+### 用 Feature 与 Use Case 书写
+
+Feature 和 Use Case 用使用者的语言描述能力：谁要达成什么目标，从什么状态出发，经过哪些输入，看到什么结果。人审阅时按这条路径判断需求是否正确，agent 按同一条路径实现和写测试，两者读的是同一份文字。
+
+模块名、类名和调用链只有读过代码的人才懂，也会随重构改变。用户目标和可观察结果不依赖这些知识，所以它们适合作为人和 agent 的共同语言，也适合作为测试标记指向的目标。
+
+### 行为页写结果，architecture 页写实现
+
+Feature 包按读者分页。README、Use Case、cli 与 library 页声明外部能看到的行为；architecture 页说明这个 Feature 内部怎么实现。
+
+cli 页直接写命令和输出：参数、人读输出、`--json` 字段、退出码和错误。读者不必推断"成功"是什么样子，测试可以逐项断言，agent 实现时也有明确的完成标准。
+
+architecture 页写实体归属、数据流、不变量和失败阶段。功能演进时，实现方式经常调整：换存储、拆模块、改缓存。行为不变的重构只改 architecture 页，行为页和指向它们的测试标记保持稳定。行为确实改变时，先改行为页，再按需要调整 architecture 页。
+
+跨 Feature 的系统边界写在项目根 `docs/architecture.md`。多种实现方式需要比较时，先写 Design，裁决后再把选中的方案落到 architecture 页。
+
+### Roadmap 与 Engineering
+
+Roadmap 和 Feature 使用同一种体裁，区别只在于是否已采用为当前契约。方向进入 Roadmap 有两种原因：设计还不完整，或者已经设计好但暂不安排实现。测试和实现不指向 Roadmap。准备实现时，`roadmap adopt` 把整个 package 复制为新 Feature，Roadmap 保留采用历史。
+
+这样做的好处是，未来方向可以提前用同样的语言写清楚，又不会被误读为已经承诺的行为。采用时不需要改写体裁。
+
+Engineering 描述仓库自己的测试与维护机制，例如自举检查、持续集成和性能验收。它的读者是维护者，产品使用者看不到这些行为，所以不写进 Feature。Engineering README 按目标、机制、使用和验收组织，专题较大时再拆页。
+
 ### 选择有记录
 
 有多个可行方案时，Design 在共同的目标与约束下比较候选。每个候选逐项回应 Goals 与 Limits，状态如实标为满足、部分满足、不满足或待验证。

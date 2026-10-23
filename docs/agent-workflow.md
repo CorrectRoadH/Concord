@@ -9,7 +9,7 @@
 用 `concord doctor --json` 查看配置和接入缺口。`test annotate --contract <ref>` 只输出经过引用检查的标记；把它放进测试文件再运行 `check`。模板和注释均不证明测试执行或功能覆盖。Agent 与脚本使用 `--json`，不要解析人读输出。
 
 1. 用 `feature list`、`trace show <canonical-path>`、`memory recall <query>` 与 `issue recall <query>` 找当前契约、工程知识和待调查观察。`check` 校验当前关系，不执行测试。
-2. 已采用的用户目标进入 Feature / Use Case；尚未采用的定稿方向进入 Roadmap，多方案比较进入 Design，带日期的事实进入 Research。创建命令读取 `--body <file>` 或 `--body -`，写入前可以 `--dry-run`。
+2. 已采用的用户目标进入 Feature / Use Case；设计未完成或暂不实现的方向进入 Roadmap，多方案比较进入 Design，带日期的事实进入 Research。创建命令读取 `--body <file>` 或 `--body -`，写入前可以 `--dry-run`。
 3. 新问题进入 `memory add --kind problem`。在测试文件中放置 `@feature` 或 `@use-case` 标记，保护 Problem 时附 `@regression`；标记存在即关联，case ID 由文件和标记派生。关系随测试源码参与 Git diff，不手写运行收据或第二份测试关系 JSON。
 4. `test run <id> --json` 返回 command 收据。修复时先取得正常失败的 red，保持测试定义及契约不变，修改产品实现，再取得 green。`memory resolve --kind fixed` 传两份 ID 和实际修复理由。超时、零执行、已知全跳过或陈旧候选不能作为修复证据。
 5. 问题再现使用 `memory reopen`；旧轮次收据不能关闭新轮次。作者裁决使用对应的非 fixed 理由，不用普通命令结果冒充原生用例覆盖证明。

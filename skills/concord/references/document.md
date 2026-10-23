@@ -1,6 +1,6 @@
 # 契约与文档
 
-已采用的当前目标写入 Feature，叶子用户路径写入 Use Case；尚未采用的定稿方向写入 Roadmap，多方案比较写入 Design，自由研究与决策输入写入 Research，仓库测试与维护机制写入 Engineering。
+已采用的当前目标写入 Feature，叶子用户路径写入 Use Case；设计未完成或暂不实现的方向写入 Roadmap（与 Feature 同体裁），多方案比较写入 Design，自由研究与决策输入写入 Research，仓库测试与维护机制写入 Engineering。
 
 契约正文采用声明式表达：写产品必须具备的行为、边界与验收，不写“这轮做了什么”、开发流水账、实施进度或临时计划。用户操作流程、状态迁移和验收步骤可以保留。排障经过与交付经验使用 `concord memory add` 保存；待调查观察使用 `concord issue create`。Research 的来源事实和工具维护的历史不因这条规则被删除或伪装成目标契约。
 
@@ -19,6 +19,8 @@ concord engineering create ci --title "持续集成"
 图示按表达需要选择：Mermaid 描述结构与流程，`p5` 代码块解释动画、连续变化和交互。图示旁保留结论与关键条件，未运行时也能理解契约。p5 使用完整实例函数或简写 `p.setup` / `p.draw`，外部入口相对所在 Markdown；扩展库统一配置在项目 `p5.libraries`，不要在代码块声明库或插入 CDN script。可复制示例与沙箱边界见 `concord --skill view`。
 
 Research 使用目录 README，默认只有标题，不预设章节、日期、来源或附页。`--observed-at` 和 `--source` 可选；附页接受安全相对路径（含中文和子目录），不会套用其它类型的模板。输入必须符合当前目录与 metadata 规则；发现过程不转换文件。
+
+页面按读者分工。README 写问题、概念和范围；Use Case 写一条用户路径，从起始状态走到可观察结果；cli 页直接写命令、参数、人读输出、`--json` 字段、退出码和错误，并给出最小可复制示例；library 页写公开 API 的签名与结果。architecture 页写这个 Feature 的实现：实体归属、数据流、不变量与失败阶段。行为页不写模块名或调用链，architecture 页不重新定义行为。只改实现时只更新 architecture 页；行为改变时先更新行为页。
 
 Feature、Roadmap 和 Design candidate 只要求 README。可选页为 library（公开 API）、cli（命令）、architecture（内部边界）、lifecycle（资源与状态）、use-case（用户目标索引）。`--pages` 支持逗号分隔或重复传入，省略时采用初始化时冻结的项目默认；`--no-pages` 明确覆盖为空，仅建 README。全套用 `--pages library,cli,architecture,lifecycle,use-case`。同次 Design 创建对所有候选使用相同选择，外层 README、GOALS、LIMITS、CASES、DECISION 始终生成。Use Case 索引不创建叶子用例。
 

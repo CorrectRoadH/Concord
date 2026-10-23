@@ -38,7 +38,7 @@ concord review render local-sdlc
 ## 选择拥有意图的文档
 
 - [Feature](feature/README.md)：已采用的产品契约，实现可以尚在追赶。
-- [Roadmap](roadmap/README.md)：待采用的定稿方向。
+- [Roadmap](roadmap/README.md)：与 Feature 同体裁、尚未采用的产品方向。
 - [Design](design/README.md)：目标、约束、自包含候选与裁决理由。
 - [Engineering](engineering/README.md)：本仓库的测试与维护机制。
 - [Research](research/README.md)：决策所需的外部事实与来源。

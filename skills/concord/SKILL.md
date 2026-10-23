@@ -23,6 +23,18 @@ Concord 把 Markdown 契约、测试源码里的 Concord 标记和工程 Memory 
 - `concord repo` 与通用模式差异：运行 `concord --skill repository`。
 - 只有确实需要完整离线资料时才运行 `concord --skill all`。
 
+## 为什么这样设计
+
+- Feature 与 Use Case 用使用者目标和可观察结果描述能力。人和 agent 读同一份文字就能判断需求、实现和测试是否一致，不需要先懂内部代码。
+- 行为与实现分页。Feature 的 README、Use Case、cli、library 页写外部可见行为；cli 页直接写命令、人读输出、`--json` 字段、退出码和错误。architecture 页写这个 Feature 怎么实现。
+- 实现会随功能演进而调整，行为契约应保持稳定。只改实现的重构只改 architecture 页；行为改变时先改行为页。测试标记指向行为契约，因此不随重构失效。
+- Roadmap 与 Feature 同体裁，只是尚未采用：设计还不完整，或设计好但暂不实现。实现与测试不指向 Roadmap，准备实现时用 `roadmap adopt` 变成 Feature。Engineering 写仓库自己的测试与维护机制，读者是维护者，不写进 Feature。
+- 每项事实只有一个 owner，关系从源码标记推导。没有第二份登记表，关系就不会和代码脱节。
+- 过程写入 Memory 与 Issue，`docs/` 只保留当前声明。下一次会话读到的是现行约定，而不是旧的讨论。
+- 修复要有同一测试的 red 与 green 收据，"已修复"因此可以核验。
+
+完整说明见随包 `docs/why-concord.md`。
+
 ## 工作原则
 
 先读取现有 owner 与关系，再决定应修改契约、测试源码还是 Memory。路径是 canonical identity；不要另建反向登记表或测试关系 JSON。文档变更先用 `--dry-run` 检查时，仍须以实际非 dry-run 结果作为完成依据。任何冲突、恢复要求或证据陈旧都应保留现场并处理具名错误，不得绕过 guard。

@@ -1,5 +1,7 @@
 # Your title
 
+Describe how this feature is implemented. Behavior belongs in the README, Use Case, CLI, and library pages; refactors that keep behavior change only this page.
+
 ## Entity Ownership
 
 Define which entities contain or reference each other, how they are identified, and which owner creates and destroys them. Give exact shapes for public configuration and results.
