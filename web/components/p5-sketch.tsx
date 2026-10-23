@@ -1,5 +1,6 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/embed-p5-sketch.md
+// @concord-implements docs/feature/web-workbench/use-case/embed-p5-sketch.md#执行与生命周期
+// @concord-implements docs/feature/web-workbench/use-case/embed-p5-sketch.md#内联与文件引用
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Effect, Schema } from 'effect';
 import { CodeMirrorEditor, useCodeBlockEditorContext, type CodeBlockEditorProps } from '@mdxeditor/editor';

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 import {
   MDXEditor,
   CodeMirrorEditor,

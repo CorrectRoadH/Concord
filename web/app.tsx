@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import {
   Activity, BookOpen, Boxes, Brain, ClipboardCheck, Code2, FlaskConical,
   GitBranch, Home, Layers3, Map, Menu, MessageSquareText, PanelTop, Search, Settings, Shapes, SpellCheck, X,
@@ -66,6 +64,8 @@ const shellStyles = stylex.create({
   },
 });
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md
 function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(value: boolean): void }) {
   const { snapshot, projection } = useWorkspace(); const conclusive = projectionIsConclusive(projection); const navigate = useNavigate(); const [query, setQuery] = useState('');
   const results = useMemo(() => {
@@ -86,6 +86,8 @@ function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(valu
   return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="search-dialog"><DialogHeader><DialogTitle>全局搜索</DialogTitle><DialogDescription>搜索项目文档、契约、Feature 内的 Use Case、测试与实现声明。</DialogDescription></DialogHeader><div className="search-box"><Search size={18} /><Input aria-label="搜索工作区" autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="名称、ID 或路径…" /></div><div className="search-results">{query && results.length === 0 && <p className="muted">{conclusive ? '没有匹配内容。' : '当前代次未显示匹配项；投影可能不完整。'}</p>}{results.map(item => <button key={item.key} onClick={() => go(item.href)}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div></DialogContent></Dialog>;
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#web-组件组合
 function Shell() {
   useNavigationScroll();
   const { snapshot, git, dirty, notices, clearNotice, flushAutoSave, discardAutoSave } = useWorkspace();
@@ -108,6 +110,8 @@ function Shell() {
   return <SidebarProvider><Sidebar collapsible="icon"><SidebarHeader><div className="sidebar-brand"><div className="brand-mark brand-mark--small">C</div><div><strong>Concord</strong><span>{snapshot.root.split('/').filter(Boolean).at(-1) ?? '项目工作区'}</span></div></div></SidebarHeader><SidebarContent><SidebarGroup><SidebarGroupLabel>工作区</SidebarGroupLabel><SidebarMenu>{nav.map(item => { const Icon = item.icon; const active = item.href === '/' ? location.pathname === '/' : location.pathname.startsWith(item.href); return <SidebarMenuItem key={item.href}><SidebarMenuButton asChild isActive={active} tooltip={item.label}><CloseMobileOnNavigate href={item.href}><Icon /><span>{item.label}</span></CloseMobileOnNavigate></SidebarMenuButton>{item.href === '/git' && gitCount > 0 && <SidebarMenuBadge>{gitCount}</SidebarMenuBadge>}</SidebarMenuItem>; })}</SidebarMenu></SidebarGroup></SidebarContent><SidebarFooter><SidebarMenu><SidebarMenuItem><SidebarMenuButton asChild isActive={location.pathname.startsWith('/tools')} tooltip="诊断与工具"><CloseMobileOnNavigate href="/tools"><PanelTop /><span>诊断与工具</span></CloseMobileOnNavigate></SidebarMenuButton></SidebarMenuItem><SidebarMenuItem><SidebarMenuButton asChild isActive={location.pathname.startsWith('/settings')} tooltip="项目设置"><CloseMobileOnNavigate href="/settings"><Settings /><span>项目设置</span></CloseMobileOnNavigate></SidebarMenuButton></SidebarMenuItem></SidebarMenu></SidebarFooter><SidebarRail /></Sidebar><SidebarInset><header className="topbar"><SidebarTrigger><Menu /></SidebarTrigger><div className="breadcrumb">{breadcrumb(location.pathname, location.search)}</div><Button variant="outline" className="search-trigger" onClick={() => setSearchOpen(true)}><Search /><span>搜索工作区</span><kbd>⌘ K</kbd></Button><ProjectionStatus />{dirty && <Badge variant="outline" className="dirty-badge">有未保存更改</Badge>}</header><div className="document-workspace"><DocumentNavigation />{(location.pathname === "/feedback" || location.pathname.startsWith("/feedback/")) && <Suspense fallback={null}><FeedbackNavigation /></Suspense>}<div id="content-navigation" /><div className={`page ${stylex.props(shellStyles.page).className ?? ''}`}><WorkspaceHealthNotice /><Suspense fallback={<p role="status">正在载入页面…</p>}><Routes><Route path="/" element={<Navigate to="/git" replace />} /><Route path="/overview" element={<OverviewPage />} /><Route path="/features" element={<DocumentsListPage kind="feature" />} /><Route path="/features/:id" element={<FeatureDetailPage />}><Route path="use-cases/:useCaseId" element={<UseCaseDrawer />} /></Route><Route path="/engineering" element={<DocumentsListPage kind="engineering" />} /><Route path="/engineering/:id" element={<DocumentDetailPage kind="engineering" />} /><Route path="/roadmap" element={<DocumentsListPage kind="roadmap" />} /><Route path="/roadmap/:id" element={<DocumentDetailPage kind="roadmap" />} /><Route path="/design" element={<DocumentsListPage kind="design" />} /><Route path="/design/:id" element={<DocumentDetailPage kind="design" />} /><Route path="/research" element={<DocumentsListPage kind="research" />} /><Route path="/research/:id" element={<DocumentDetailPage kind="research" />} /><Route path="/memory" element={<DocumentsListPage kind="memory" />} /><Route path="/memory/:id" element={<DocumentDetailPage kind="memory" />} /><Route path="/feedback" element={<FeedbackPage />} /><Route path="/feedback/:id" element={<FeedbackDetailPage />} /><Route path="/evidence" element={<EvidencePage />} /><Route path="/docs" element={<ProjectDocsPage />} /><Route element={<WritingPage />}><Route path="/writing" /><Route path="/terms" /></Route><Route path="/git" element={<GitPage />} /><Route path="/tools" element={<ToolsPage />} /><Route path="/settings" element={<SettingsPage />} /><Route path="*" element={<Navigate to="/" replace />} /></Routes></Suspense></div></div></SidebarInset><SearchDialog open={searchOpen} onOpenChange={setSearchOpen} /><div className="notices" aria-live="polite">{notices.map(notice => <button key={notice.id} className={`notice notice--${notice.tone}`} onClick={() => clearNotice(notice.id)}><span>{notice.text}</span><X size={16} /></button>)}</div><Dialog open={blocker.state === 'blocked' && saveBlocked}><DialogContent showCloseButton={false}><DialogHeader><DialogTitle>离开并丢弃未保存内容？</DialogTitle><DialogDescription>{(location.pathname === '/writing' || location.pathname === '/terms') ? '写作规则与术语在点击保存后写入。留在此页可继续编辑或处理冲突。' : location.pathname === '/docs' && new URLSearchParams(location.search).get('file') === 'docs/constitution.md' ? '宪法修订尚未显式保存。留在此页可继续编辑或处理冲突。' : '自动保存未完成或失败。留在此页可处理冲突或重试。'}</DialogDescription></DialogHeader><DialogFooter><Button variant="outline" onClick={() => blocker.reset?.()}>留在此页</Button><Button variant="destructive" onClick={() => { void discardAutoSave().then(() => blocker.proceed?.()); }}>丢弃并离开</Button></DialogFooter></DialogContent></Dialog></SidebarProvider>;
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md#url-与导航状态
 function breadcrumb(pathname: string, search = ''): string {
   if (pathname === '/overview') return '项目总览';
   if (pathname === '/git') return '未提交变更';
@@ -121,6 +125,8 @@ function breadcrumb(pathname: string, search = ''): string {
 }
 
 /** Keep the workbench mounted while hiding an unreadable or identity-mismatched generation. */
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 function WorkspaceGate({ children }: { readonly children: ReactNode }) {
   const { workspaceIssue, refreshIssue, requestRefresh, act } = useWorkspace();
   const [working, setWorking] = useState(false);
@@ -159,6 +165,8 @@ function WorkspaceGate({ children }: { readonly children: ReactNode }) {
   </>;
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 function failureDetails(details: unknown): { readonly hint?: string; readonly reason?: string } {
   if (typeof details !== 'object' || details === null) return {};
   const record = details as Record<string, unknown>;
@@ -168,6 +176,8 @@ function failureDetails(details: unknown): { readonly hint?: string; readonly re
   };
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md#url-与导航状态
 export function App() {
   const [api] = useState(() => new ConcordApi());
   const [data, setData] = useState<WorkspaceProjection | null>(null);

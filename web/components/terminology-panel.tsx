@@ -1,5 +1,4 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 import type { WorkspacePage, WorkspaceProjectionSnapshot } from '../../src/view-contract';
 import { DOCUMENT_ROOTS } from '../../src/document-layout';
 

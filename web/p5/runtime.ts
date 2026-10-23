@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/embed-p5-sketch.md
+// @concord-implements docs/feature/web-workbench/use-case/embed-p5-sketch.md#执行与生命周期
 import P5 from 'p5';
 import { Effect, Schema } from 'effect';
 import { P5ControlSchema } from '../../src/p5-contract';

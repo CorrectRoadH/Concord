@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { PathContextMenu } from '../components/path-context-menu'
 import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
 import { matchingOwners } from '../../src/document-layout'
@@ -193,6 +191,8 @@ const documentStyles = stylex.create({
   skeletonLineShort: { width: "66%" },
 })
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 export function relativeMarkdownTarget(currentPath: string, href: string): { path: string; hash: string } | undefined {
   if (!href || href.startsWith("#") || href.startsWith("/") || /^[a-z][a-z\d+.-]*:/iu.test(href)) return undefined
   try {
@@ -208,6 +208,8 @@ export function relativeMarkdownTarget(currentPath: string, href: string): { pat
   }
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
 function featureMatches(reference: string, feature: Pick<WorkspaceDocument, "path" | "metadata">): boolean {
   return (
     reference === feature.path ||
@@ -219,6 +221,9 @@ function fire(task: Promise<unknown>): void {
   void task.catch(() => undefined)
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
+// @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
 export function CreateDocument({
   kind,
   feature,
@@ -394,6 +399,8 @@ export function CreateDocument({
   )
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#web-组件组合
 export function DocumentsListPage({
   kind,
 }: {
@@ -457,6 +464,8 @@ export function DocumentsListPage({
   )
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#web-组件组合
 function DocumentSummary({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   if (metadata.kind === "roadmap") {
@@ -488,6 +497,8 @@ function DocumentSummary({ document }: { document: WorkspaceDocument }) {
   return null
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
 export function FeatureDetailPage() {
   const navigation = useUrlNavigation()
   const { id = "", useCaseId } = useParams()
@@ -540,6 +551,8 @@ export function FeatureDetailPage() {
   </>
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md#url-与导航状态
 export function UseCaseDrawer() {
   const navigation = useUrlNavigation()
   const { id, useCaseId } = useParams()
@@ -559,6 +572,8 @@ export function UseCaseDrawer() {
   </DetailDrawer>
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 export function DocumentDetailPage({ kind, relatedContent }: { kind: DocumentKind; relatedContent?: React.ReactNode }) {
   const params = useParams()
   const id = kind === "use-case" ? params.useCaseId : params.id
@@ -592,6 +607,8 @@ export function DocumentDetailPage({ kind, relatedContent }: { kind: DocumentKin
   return <>{back}<DocumentLayout key={layoutKey} document={document} relatedContent={relatedContent} /></>
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 function DocumentLayout({
   document,
   extra,
@@ -656,6 +673,9 @@ function DocumentLayout({
   )
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
+// @concord-implements docs/feature/web-workbench/README.md#自动保存
 function DocumentFiles({
   document,
   pages,
@@ -871,6 +891,8 @@ interface FileTreeNode {
   readonly children: readonly FileTreeNode[]
 }
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 function buildFileTree(files: readonly { path: string }[], ownerDirectory: string): readonly FileTreeNode[] {
   type MutableNode = { name: string; relativePath: string; path?: string; directory: boolean; children: MutableNode[] }
   const root: MutableNode = { name: "", relativePath: "", directory: true, children: [] }
@@ -944,7 +966,10 @@ function FileTree({ nodes, ownerDirectory, expanded, selectedPath, onToggle, onS
     </React.Fragment>
   })}</div>
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#自动保存
 function MetadataForm({ document }: { document: WorkspaceDocument }) {
   const { api } = useWorkspace()
   const [loaded, setLoaded] = React.useState<DocumentRecord | null>(null)
@@ -970,6 +995,8 @@ function MetadataForm({ document }: { document: WorkspaceDocument }) {
   return <MetadataEditor key={document.path} initial={loaded} />
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#自动保存
 function MetadataEditor({ initial }: { initial: DocumentRecord }) {
   const { api, requestRefresh } = useWorkspace()
   const [baseline, setBaseline] = React.useState(initial)
@@ -1045,6 +1072,8 @@ function MetadataEditor({ initial }: { initial: DocumentRecord }) {
   )
 }
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 function Lifecycle({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   const history = metadata.kind === "memory" || metadata.kind === "issue" ? metadata.history : []
@@ -1118,3 +1147,4 @@ function LifecycleActions({ document }: { document: WorkspaceDocument }) {
     </ContentSection>
   )
 }
+// @concord-end

@@ -1,6 +1,5 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/manage-writing.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { BookOpen, Folder, Trash2 } from 'lucide-react';
 import { createPortal, flushSync } from 'react-dom';

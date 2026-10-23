@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
 import { useEffect, useState } from 'react';
 import type { ViewFile } from '../../src/view-contract';
 import { useWorkspace } from '../workspace';

@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
 import { ExternalLink, GitPullRequestArrow, Link2, Plus, RefreshCw, Trash2 } from "lucide-react"
 import * as React from "react"
@@ -46,6 +43,8 @@ function matchesProjectedFeedback(item: WorkspaceFeedback, filter: { readonly qu
   const query = filter.query.trim().toLocaleLowerCase()
   return query.length === 0 || searchText(item).includes(query)
 }
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 function CreateLocalFeedback() {
   const { act, busy } = useWorkspace()
   const [open, setOpen] = React.useState(false)
@@ -63,6 +62,8 @@ function CreateLocalFeedback() {
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button variant="outline"><Plus /> 新建本地反馈</Button></DialogTrigger><DialogContent><form onSubmit={(event) => fire(submit(event))}><DialogHeader><DialogTitle>新建本地反馈</DialogTitle><DialogDescription>创建不依赖远端来源的 Issue 草稿；之后可关联 Feature、Memory 并正常关闭。</DialogDescription></DialogHeader><div className="form-grid"><Field label="ID" hint="中文等 Unicode 字母、数字，可用单连字符分隔"><Input aria-label="本地反馈 ID" value={id} onChange={(event) => setId(event.target.value)} pattern={DOCUMENT_NAME_PATTERN.source} required /></Field><Field label="标题"><Input aria-label="本地反馈标题" value={title} onChange={(event) => setTitle(event.target.value)} required /></Field><Field label="初始正文" hint="本地正文可继续自由编辑"><Textarea aria-label="本地反馈正文" value={body} onChange={(event) => setBody(event.target.value)} /></Field>{error && <div className="form-error" role="alert">{error}</div>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="submit" disabled={busy}>{busy ? "创建中…" : "创建"}</Button></DialogFooter></form></DialogContent></Dialog>
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#主流程
 function ImportFeedback({ connections, onReceipt }: { connections: readonly FeedbackConnection[]; onReceipt(warnings: readonly string[]): void }) {
   const { act, busy } = useWorkspace()
   const [open, setOpen] = React.useState(false)
@@ -78,6 +79,8 @@ function ImportFeedback({ connections, onReceipt }: { connections: readonly Feed
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button disabled={connections.length === 0}><GitPullRequestArrow /> 从 URL 导入</Button></DialogTrigger><DialogContent><form onSubmit={(event) => fire(submit(event))}><DialogHeader><DialogTitle>从远端 URL 导入</DialogTitle><DialogDescription>URL 必须属于所选连接支持的 GitHub 或 Linear 主机。导入只在提交后发起网络请求。</DialogDescription></DialogHeader><div className="form-grid"><Field label="连接"><Select value={connection} onValueChange={setConnection}><SelectTrigger aria-label="导入连接"><SelectValue placeholder="选择连接" /></SelectTrigger><SelectContent>{connections.map((item) => <SelectItem key={item.id} value={item.id}>{item.id} · {connectionSummary(item)}</SelectItem>)}</SelectContent></Select></Field><Field label="远端 Issue URL"><Input aria-label="远端 Issue URL" type="url" value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://github.com/owner/repo/issues/123" required /></Field>{error && <div className="form-error" role="alert">{error}</div>}</div><DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="submit" disabled={busy || !connection}>{busy ? "导入中…" : "导入"}</Button></DialogFooter></form></DialogContent></Dialog>
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 function FeedbackSources({ connections, onReceipt }: { connections: readonly FeedbackConnection[]; onReceipt(warnings: readonly string[]): void }) {
   const { act, busy } = useWorkspace()
   const [active, setActive] = React.useState<string | null>(null)
@@ -92,6 +95,8 @@ function FeedbackSources({ connections, onReceipt }: { connections: readonly Fee
   return <div className="feedback-source-status"><span>{connections.length === 0 ? "尚未配置远端来源" : `${connections.length} 个远端来源`}</span>{connections.map((connection) => <span className="feedback-source-status__connection" key={connection.id}><Badge variant="outline">{feedbackProviderLabel(connection.provider)}</Badge><span>{connectionSummary(connection)}</span><Button size="sm" variant="outline" disabled={busy} onClick={() => fire(sync(connection))}><RefreshCw /> {active === connection.id ? "同步中…" : "同步"}</Button>{errors[connection.id] && <span className="feedback-source-status__error" role="alert">{errors[connection.id]}</span>}</span>)}<Link to="/settings?tab=feedback">管理反馈来源</Link></div>
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function FeedbackNavigation() {
   const { snapshot, projection } = useWorkspace()
   const conclusive = projectionIsConclusive(projection)
@@ -117,6 +122,8 @@ export function FeedbackNavigation() {
   }} />
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function FeedbackPage() {
   const { snapshot, projection } = useWorkspace()
   const conclusive = projectionIsConclusive(projection)
@@ -135,6 +142,8 @@ export function FeedbackPage() {
 }
 
 /** Full source body always comes from the targeted current read, never the projection. */
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 function SourcePanel({ item }: { item: WorkspaceFeedback }) {
   const { api } = useWorkspace()
   const [full, setFull] = React.useState<FeedbackItem | null>(null)
@@ -161,12 +170,16 @@ function SourcePanel({ item }: { item: WorkspaceFeedback }) {
   return <><SourceFacts item={full} />{warningCallout}</>
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 function SourceFacts({ item }: { item: FeedbackItem }) {
   const source = item.document.metadata.kind === "issue" ? item.document.metadata.source : undefined; const remote = item.remote
   if (!source) return <Card className="feedback-source-card"><CardHeader><CardTitle>来源</CardTitle><CardDescription>这是本地创建的反馈，没有远端来源快照。</CardDescription></CardHeader></Card>
   return <Card className="feedback-source-card"><CardHeader><div className="card-title-row"><div><CardTitle>远端来源（只读）</CardTitle><CardDescription>“上次观察缓存”来自最近一次成功同步，不代表远端实时最新；页面只展示已保存的信息。</CardDescription></div><Button asChild size="sm" variant="outline"><a href={source.url} target="_blank" rel="noreferrer"><ExternalLink /> 打开远端</a></Button></div></CardHeader><CardContent><div className="feedback-source-facts"><Definition label="来源">{feedbackProviderLabel(source.provider)}</Definition><Definition label="连接"><code>{source.connectionId}</code></Definition><Definition label="远端 ID"><code>{source.id}</code></Definition><Definition label="本地状态"><Badge variant="outline">{item.document.metadata.state}</Badge></Definition><Definition label="可用性">{availabilityLabel(item.availability)}</Definition></div><div className="feedback-source-snapshots"><section><div className="feedback-snapshot-heading"><div><strong>首次导入快照</strong><small>永久保留，不被刷新替换</small></div><span>{dateTime(source.updatedAt)}</span></div><Badge variant="outline">远端状态：{source.state}</Badge><article className="feedback-source-markdown"><h3>{source.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{source.body}</ReactMarkdown></article><small>导入于 {dateTime(source.importedAt)}</small></section><section><div className="feedback-snapshot-heading"><div><strong>上次观察缓存</strong><small>非实时；只表示最近成功观察</small></div><span>{remote ? dateTime(remote.updatedAt) : "不可用"}</span></div>{remote ? <><Badge variant="secondary">远端状态：{remote.state}</Badge><article className="feedback-source-markdown"><h3>{remote.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{remote.body}</ReactMarkdown></article></> : <p className="muted">当前没有可读的远端缓存；首次导入快照仍可用。</p>}</section></div></CardContent></Card>
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 function RemoveLocalDraft({ item }: { item: WorkspaceFeedback }) {
   const { snapshot, projection, act, busy } = useWorkspace()
   const navigate = useNavigate()
@@ -187,6 +200,8 @@ function RemoveLocalDraft({ item }: { item: WorkspaceFeedback }) {
   return <Dialog open={open} onOpenChange={setOpen}><DialogTrigger asChild><Button size="sm" variant="outline"><Trash2 /> 删除本地草稿</Button></DialogTrigger><DialogContent><DialogHeader><DialogTitle>删除本地草稿</DialogTitle><DialogDescription>将删除 {metadata.title} 的本地 Issue 文件。已有来源、关系或历史的记录不能删除。</DialogDescription></DialogHeader>{error && <div className="form-error" role="alert">{error}</div>}<DialogFooter><Button type="button" variant="outline" onClick={() => setOpen(false)}>取消</Button><Button type="button" variant="destructive" disabled={busy} onClick={() => fire(remove())}>删除</Button></DialogFooter></DialogContent></Dialog>
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#主流程
 function FeatureLinker({ item }: { item: WorkspaceFeedback }) {
   const { snapshot, projection, act, busy } = useWorkspace()
   const conclusive = projectionIsConclusive(projection)
@@ -204,6 +219,9 @@ function FeatureLinker({ item }: { item: WorkspaceFeedback }) {
   return <Card className="feedback-feature-card"><CardHeader><CardTitle>Feature 关联</CardTitle><CardDescription>关联后处理状态会变为“已关联”；Memory 关系和关闭操作在生命周期页签中维护。</CardDescription></CardHeader><CardContent>{linked.length > 0 && <div className="tag-list">{linked.map((reference) => <code key={reference}>{reference}</code>)}</div>}{available.length > 0 ? <><div className="feedback-link-row"><Select value={feature} onValueChange={setFeature}><SelectTrigger aria-label="关联 Feature"><SelectValue placeholder="选择 Feature" /></SelectTrigger><SelectContent>{available.map((candidate) => <SelectItem key={candidate.path} value={candidate.path}>{candidate.metadata.title} · {candidate.metadata.id}</SelectItem>)}</SelectContent></Select><Button variant="outline" disabled={!conclusive || busy || !feature} onClick={() => fire(linkFeature())}><Link2 /> 关联 Feature</Button></div>{!conclusive && <p className="muted">当前投影不完整或关系未知，暂不能确认可关联的 Feature。</p>}</> : <p className="muted">{!conclusive ? "当前代次无法确认 Feature 列表或关联状态。" : features.length === 0 ? "项目中还没有 Feature。" : "已关联所有可用 Feature。"}</p>}{error && <div className="form-error" role="alert">{error}</div>}</CardContent></Card>
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 export function FeedbackDetailPage() {
   const { id = "" } = useParams(); const { snapshot, projection } = useWorkspace()
   const item = snapshot.feedback.find((candidate) => candidate.document.metadata.id === id)

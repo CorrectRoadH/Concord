@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { AlertTriangle, RefreshCw } from "lucide-react"
 import * as React from "react"
 import { flushSync } from "react-dom"
@@ -28,6 +26,8 @@ function values(value: string): string[] { return value.split("\n").map((item) =
 
 const CONFIG_PATH = "concord.config.ts"
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md#url-与导航状态
 export function SettingsPage() {
   const { snapshot } = useWorkspace()
   if (!snapshot.project) {
@@ -39,6 +39,8 @@ export function SettingsPage() {
 }
 
 /** The editable configuration baseline is the current target read, not a historical generation. */
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 function ConfigurationLoader() {
   const { api } = useWorkspace()
   const [loaded, setLoaded] = React.useState<{ readonly config: ProjectConfig; readonly digest: string } | null>(null)
@@ -62,6 +64,9 @@ function ConfigurationLoader() {
   return <ConfigurationEditor key={loaded.config.projectId} initial={loaded.config} digest={loaded.digest} />
 }
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
+// @concord-implements docs/feature/web-workbench/README.md#自动保存
 function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; digest: string }) {
   const { api, requestRefresh, notify } = useWorkspace()
   const [baseline, setBaseline] = React.useState({ config: initial, digest })
@@ -287,6 +292,8 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   )
 }
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 function InvalidConfiguration() {
   const { api, snapshot, requestRefresh, notify } = useWorkspace()
   const [source, setSource] = React.useState<string | null>(null)
@@ -307,6 +314,8 @@ function InvalidConfiguration() {
   return <><PageHeader title="项目配置无法读取" actions={<Button variant="outline" onClick={reload}><RefreshCw />重新载入</Button>} /><div className="callout callout--warning"><AlertTriangle /><div><strong>请检查 concord.config.ts 和下方诊断</strong><p>请在本地修复配置；需要迁移时遵循诊断指引。此页不修改原文件。</p></div></div><ContentSection title="诊断"><pre>{json(snapshot.diagnostics)}</pre></ContentSection><ContentSection title="原始配置">{source !== null ? <Textarea className="json-editor" aria-label="无效配置原文" value={source} readOnly /> : error ? <Empty title="无法安全读取配置原文">{error}</Empty> : <p role="status">正在读取配置原文…</p>}</ContentSection></>
 }
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/initialize-project.md
 function InitializeProject() {
   const { act } = useWorkspace()
   const [testRoots, setTestRoots] = React.useState("test")

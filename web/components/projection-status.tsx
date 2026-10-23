@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/architecture.md
 import { RefreshCw, Wrench } from 'lucide-react';
 import { useState } from 'react';
 import { useWorkspace } from '../workspace';

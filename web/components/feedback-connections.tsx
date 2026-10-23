@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 import { Plus, Trash2 } from "lucide-react"
 import * as React from "react"
 import { Schema } from "effect"

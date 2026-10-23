@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { PathContextMenu } from '../components/path-context-menu';
 import { copyText } from '../lib/clipboard';
 import { Activity, AlertTriangle, Braces, CheckCircle2, Clipboard, Code2, Database, Play, RefreshCw, Square, Stethoscope, Wrench } from 'lucide-react';
@@ -27,6 +25,8 @@ import { relatedRepositoryTests, RepositoryTestCards, ScanNotice, scanFindings }
 function settle(task: Promise<unknown>): void { void task.catch(() => undefined); }
 
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md
 export function OverviewPage() {
   const location = useLocation();
   useEffect(() => {
@@ -67,6 +67,8 @@ export function OverviewPage() {
 
 function Metric({ label, value, icon, href }: { label: string; value: number; icon: React.ReactNode; href: string }) { return <Link to={href} className="metric"><div>{icon}</div><strong>{value}</strong><span>{label}</span></Link>; }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
 export function contractIdentities(snapshot: WorkspaceProjectionSnapshot, document: WorkspaceDocument): Set<string> {
   const owners = new Set([document.path]);
   if (document.metadata.kind === 'feature') {
@@ -77,6 +79,8 @@ export function contractIdentities(snapshot: WorkspaceProjectionSnapshot, docume
 
 import { useSourceNavigation } from '../hooks/use-url-navigation';
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 export function TestingPanel({ document }: { document: WorkspaceDocument }) {
   const { snapshot, projection, jobs, runCase, cancelJob, busy, act } = useWorkspace(); const [result, setResult] = useState<unknown>(null); const sourceNavigation = useSourceNavigation(); const [annotate, setAnnotate] = useState(false); const [contract, setContract] = useState(document.path); const [regressions, setRegressions] = useState('');
   const conclusive = projectionIsConclusive(projection);
@@ -89,6 +93,8 @@ export function TestingPanel({ document }: { document: WorkspaceDocument }) {
 
 
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 export function EvidencePage() { const { snapshot, projection, act } = useWorkspace(); const conclusive = projectionIsConclusive(projection); const [result, setResult] = useState<unknown>(null); return <><PageHeader title="证据" description="证据是本工作树内的私有命令收据；历史可读不等于当前验证。" /><RecordList>{snapshot.evidenceIds.map(id => <RecordItem key={id}><div className="card-title-row"><code>{id}</code><Button variant="outline" onClick={() => settle(act({ action: 'evidence.show', id }, '证据已读取。').then(setResult))}>查看收据</Button></div></RecordItem>)}</RecordList>{snapshot.evidenceIds.length === 0 && (conclusive ? <Empty title="尚无证据" /> : <Empty title="当前代次未显示证据">投影尚未完整且一致，暂时无法确认是否已有证据。</Empty>)}{result !== null && <ResultCard title="证据收据" value={result} />}</>; }
 
 const tools: readonly { title: string; description: string; action: ViewAction; icon: React.ReactNode }[] = [
@@ -101,4 +107,6 @@ const tools: readonly { title: string; description: string; action: ViewAction; 
   { title: '清理 Cache', description: '清除可重建缓存，不删除证据或文档。', action: { action: 'cache.clear' }, icon: <Database /> },
 ];
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 export function ToolsPage() { const { snapshot, act } = useWorkspace(); const [result, setResult] = useState<unknown>(null); const [reference, setReference] = useState(''); const [template, setTemplate] = useState(snapshot.templates[0]?.name ?? ''); const [title, setTitle] = useState(''); const invoke = (action: ViewAction) => settle(act(action).then(setResult)); return <><PageHeader title="诊断与工具" description="在一个页面运行检查、诊断、审阅与模板工具。" actions={<Button asChild variant="outline"><Link to="/evidence">查看执行收据</Link></Button>} /><RecordList>{tools.map(tool => <RecordItem key={tool.title}><div className="card-title-row"><div><div className="inline-badges">{tool.icon}<strong>{tool.title}</strong></div><p className="muted mb-0">{tool.description}</p></div><Button variant="outline" aria-label={`运行${tool.title}`} onClick={() => invoke(tool.action)}>运行</Button></div></RecordItem>)}</RecordList><div className="dashboard-grid"><Card><CardHeader><CardTitle>定向 Trace / Review</CardTitle></CardHeader><CardContent><div className="form-grid"><Field label="引用（Review 可留空）"><Input aria-label="定向引用" value={reference} onChange={event => setReference(event.target.value)} /></Field><div className="button-row"><Button variant="outline" disabled={!reference} onClick={() => invoke({ action: 'trace.show', reference })}>查看 Trace</Button><Button variant="outline" onClick={() => invoke({ action: 'review.render', ...(reference ? { reference } : {}) })}>渲染 Review</Button></div></div></CardContent></Card><Card><CardHeader><CardTitle>模板</CardTitle></CardHeader><CardContent><div className="form-grid"><Field label="模板"><Select value={template} onValueChange={setTemplate}><SelectTrigger aria-label="模板"><SelectValue placeholder="选择模板" /></SelectTrigger><SelectContent>{snapshot.templates.map(item => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}</SelectContent></Select></Field><Field label="标题（可选）"><Input aria-label="模板标题" value={title} onChange={event => setTitle(event.target.value)} /></Field><Button variant="outline" disabled={!template} onClick={() => invoke({ action: 'template.show', name: template, ...(title ? { title } : {}) })}>查看模板</Button></div></CardContent></Card></div>{result !== null && <ResultCard title="运行结果" value={result} />}</>; }
