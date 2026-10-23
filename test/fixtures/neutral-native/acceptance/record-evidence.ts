@@ -1,5 +1,6 @@
 import { NodeRuntime } from '@effect/platform-node';
-import { Effect, Schema } from 'effect';
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
 import { recordRed, recordTakeover, repositoryRoot } from './native-runner.js';
 
 class EvidenceInputError extends Schema.TaggedError<EvidenceInputError>()('EvidenceInputError', {

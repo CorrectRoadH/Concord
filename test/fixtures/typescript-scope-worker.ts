@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import * as Effect from 'effect/Effect';
 import { withTypeScriptSource } from '../../dist/typescript-host.js';
 
 Effect.runSync(Effect.sync(() => withTypeScriptSource('worker.ts', 'export const value = 1;', source => {

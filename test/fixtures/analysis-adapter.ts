@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect, Schema } from 'effect';
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
 
 const Request = Schema.Struct({
   format: Schema.Literal('concord.test-adapter/v1'), op: Schema.String, requestId: Schema.String,

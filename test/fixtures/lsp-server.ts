@@ -3,7 +3,9 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readSync, writeFileSync, writeSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { Effect, Predicate, Schema } from 'effect';
+import * as Effect from 'effect/Effect';
+import * as Predicate from 'effect/Predicate';
+import * as Schema from 'effect/Schema';
 
 const Options = Schema.Struct({
   mode: Schema.optional(Schema.String), encoding: Schema.optional(Schema.Literals(['utf-16', 'utf-8', 'utf-32'])),

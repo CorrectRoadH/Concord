@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import * as Effect from 'effect/Effect';
 import { serveEditor } from '../../dist/lsp-server.js';
 import { makeOwnedProcessService, type OwnedProcessService } from '../../dist/owned-process.js';
 

@@ -1,7 +1,8 @@
 import { readFileSync, writeFileSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
-import { Effect, Schema } from 'effect';
+import * as Effect from 'effect/Effect';
+import * as Schema from 'effect/Schema';
 
 const Hash = (value: string) => `sha256:${createHash('sha256').update(value).digest('hex')}`;
 const Request = Schema.Struct({ format: Schema.Literal('concord.test-adapter/v1'), op: Schema.String, requestId: Schema.String, context: Schema.Struct({ root: Schema.String, runId: Schema.String, planId: Schema.String, inputs: Schema.String, reportDirectory: Schema.String }), payload: Schema.Record(Schema.String, Schema.Unknown) });

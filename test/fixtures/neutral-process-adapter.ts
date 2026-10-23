@@ -4,7 +4,7 @@ import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
-import { Effect } from 'effect';
+import * as Effect from 'effect/Effect';
 
 type Request = { format: string; requestId: string; root: string; op: string; engine: { implementationDigest: string }; payload: { suiteId: string; inventoryId: string; selector: string; id: string; checkout: string } };
 const request = JSON.parse(readFileSync(0, 'utf8')) as Request;

@@ -11,7 +11,7 @@ import {
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Schema } from 'effect';
+import * as Schema from 'effect/Schema';
 import {
   NativeCaseReceiptSchema,
   NativeReliabilityCertificateSchema,
