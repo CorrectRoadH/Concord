@@ -10,7 +10,7 @@ import { combineProfiles, CpuProfile, hotSpots } from './perf/cpu-profile.js';
 import { io, PerfError, timedRun } from './perf/process.js';
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.js';
 
-const usage = 'Usage: pnpm bench:profile refresh [trace gaps|trace show <ref>|review render [ref]] [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>] [--out <dir>] [--warm] [--keep]\n       pnpm bench:profile cli [options] -- <concord arguments>';
+const usage = 'Usage: vp run bench:profile refresh [trace gaps|trace show <ref>|review render [ref]] [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>] [--out <dir>] [--warm] [--keep]\n       vp run bench:profile cli [options] -- <concord arguments>';
 const NonNegative = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));
 const CounterRecord = Schema.Struct({
   pid: Schema.Int, ppid: Schema.Int, argv: Schema.Array(Schema.String), exitCode: Schema.Int, wallMs: NonNegative,

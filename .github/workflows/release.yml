@@ -86,7 +86,7 @@ jobs:
           path: native-artifacts
           merge-multiple: true
       - name: Build and typecheck maintained build scripts
-        run: pnpm build && pnpm exec tsc -p tsconfig.scripts.json
+        run: pnpm exec vp build && pnpm exec vp exec tsc -p tsconfig.scripts.json
         env:
           CONCORD_NATIVE_ARTIFACTS: native-artifacts
           CONCORD_REQUIRE_PORTABLE_NATIVE: '1'

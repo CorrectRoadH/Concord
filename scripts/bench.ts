@@ -11,7 +11,7 @@ import { io, PerfError, timedRun } from './perf/process.js';
 import { judge, measurementPass, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.js';
 import { parseScale, prepareConsumer, workDirectory } from './perf/workspace.js';
 
-const usage = 'Usage: pnpm bench <cli|query|view> [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>] [--baseline <built-checkout>] [--samples 7] [--reference] [--out <file.json>] [--keep]';
+const usage = 'Usage: vp run bench <cli|query|view> [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>] [--baseline <built-checkout>] [--samples 7] [--reference] [--out <file.json>] [--keep]';
 const Samples = Schema.NumberFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 100 }));
 const Path = Schema.Literals(['cli', 'query', 'view']);
 interface Context {

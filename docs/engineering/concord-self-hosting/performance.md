@@ -35,13 +35,13 @@
 
 ## 测量路径
 
-测量与 profile 都在本仓库自举：默认消费者是当前仓库某个 commit 的独立 clone，产物是当前 checkout 的 `dist/entry.js`。两个入口先执行 `pnpm build`。profile 入口命名为 `bench:profile`，因为 `pnpm profile` 会被 pnpm 自带的同名命令截获，测量结果以 JSON 输出到 stdout，可用 `--out` 另存。
+测量与 profile 都在本仓库自举：默认消费者是当前仓库某个 commit 的独立 clone，产物是当前 checkout 的 `dist/entry.js`。两个入口先执行 `vp build`。测量入口为 `vp run bench`，profile 入口为 `vp run bench:profile`；结果以 JSON 输出到 stdout，可用 `--out` 另存。
 
 ```text
-pnpm bench <cli|query|view> [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>]
+vp run bench <cli|query|view> [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>]
                             [--baseline <built-checkout>] [--samples 7] [--reference] [--out <file.json>] [--keep]
-pnpm bench:profile refresh [trace gaps | trace show <ref> | review render [ref]] [--consumer ...] [--warm] [--out <dir>] [--keep]
-pnpm bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <concord 参数>
+vp run bench:profile refresh [trace gaps | trace show <ref> | review render [ref]] [--consumer ...] [--warm] [--out <dir>] [--keep]
+vp run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <concord 参数>
 ```
 
 - `bench cli`：测量本地 SDLC 预算表中的命令。每条命令先在 `concord cache clear` 后记录一次 cold，再按测量契约采集 warm。表中属于异步投影的读取命令（`trace show`、`trace gaps`、`review render`）在采样前与 `bench query` 一样等待投影发布。
@@ -70,7 +70,7 @@ profile 通过 `NODE_OPTIONS` 注入 `--cpu-prof` 与计数模块，因此 Conco
 git worktree add ../concord-baseline HEAD^
 pnpm --dir ../concord-baseline install --frozen-lockfile
 pnpm --dir ../concord-baseline build
-pnpm bench cli --baseline ../concord-baseline
+vp run bench cli --baseline ../concord-baseline
 ```
 
 省略时只测候选产物，判定只包含样本有效性、刷新上限，以及声明 `--reference` 时的绝对预算。
@@ -82,7 +82,7 @@ flowchart LR
   Parent[父提交 worktree dist] --> Baseline[基线产物]
   Commit[本仓库 commit] --> Self[self clone]
   CLI[候选产物公开 CLI] --> Scale[scale 合成仓库]
-  Budgets --> Bench[pnpm bench]
+  Budgets --> Bench[vp run bench]
   Candidate --> Bench
   Baseline --> Bench
   Self --> Bench
@@ -90,7 +90,7 @@ flowchart LR
   Bench --> Samples[交错新进程采样]
   Samples --> Verdict[p50、最大值、回退判定]
   Verdict --> Record[concord.bench/v1 记录]
-  Candidate --> Profile[pnpm bench:profile]
+  Candidate --> Profile[vp run bench:profile]
   Self --> Profile
   Scale --> Profile
   Profile --> CPU[各进程 cpuprofile]
@@ -157,4 +157,4 @@ flowchart LR
 
 超出预算或上限、回退超过 20%、样本无效或缺少必需测量证据，都不能判为通过。命令的输出、退出码与失败边界必须与优化前一致，不能以跳过校验换取时间。
 
-测量结果、阶段分解与 profile 结论保存在 Memory；本页只声明方法与路径。`test/cli-startup.test.ts` 保护只读命令的模块加载范围，预算表解析与统计规则由测试覆盖；Node 测试不断言绝对耗时，`pnpm check` 不运行测量路径。
+测量结果、阶段分解与 profile 结论保存在 Memory；本页只声明方法与路径。`test/cli-startup.test.ts` 保护只读命令的模块加载范围，预算表解析与统计规则由测试覆盖；Node 测试不断言绝对耗时，`vp run check` 不运行测量路径。

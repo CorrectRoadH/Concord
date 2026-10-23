@@ -55,7 +55,7 @@ concord --help
 
 运行需要 Node.js 24.15+ 和 Git，Repository 工具还使用 `ripgrep`。发行包自带原生缓存引擎，安装使用不需要 Rust 或数据库服务。
 
-发行包的原生目标为 Linux x64/glibc 与 macOS arm64，macOS 最低部署目标为 15。自动发布只构建并核验包身份，不运行测试或安装检查；允许在 macOS 27 安装，但尚未由 CI 实测。Windows 执行与网络多机协调不在兼容声明内。详见[发行契约](docs/feature/cross-platform-release/README.md)。
+发行包的原生目标为 Linux x64/glibc 与 macOS arm64，macOS 最低部署目标为 15。源码发布必须通过完整测试集和最终归档的冻结生产安装检查；Homebrew 与 Nix 渠道更新另需通过各自的安装检查。允许在 macOS 27 安装，但尚未由 CI 实测。Windows 执行与网络多机协调不在兼容声明内。详见[发行契约](docs/feature/cross-platform-release/README.md)。
 
 ## 快速上手
 
@@ -149,15 +149,14 @@ concord --skill memory
 ```sh
 git clone https://github.com/CorrectRoadH/Concord.git
 cd Concord
-pnpm install --frozen-lockfile # bootstrap the pinned local vp
+pnpm install --frozen-lockfile # 安装项目固定版本的 vp
 rustup toolchain install 1.97.1 --profile minimal
 pnpm exec vp build
 pnpm exec vp run concord --help
 pnpm exec vp run check
 ```
 
-`vp run check`（也可通过 `pnpm check` 调用）构建 CLI 与 Web 工作台，对实现、测试和脚本做类型检查，并执行包括隔离 Git 消费者中打包安装 CLI 在内的测试。查看 Concord 自己的关联，可以运行 `pnpm concord check` 或 `pnpm concord trace show local-sdlc`。
-
+`vp run check`（也可通过 `pnpm check` 调用）构建 CLI 与 Web 工作台，对实现、测试和脚本做类型检查，并执行包括隔离 Git 消费者中打包安装 CLI 在内的测试。查看 Concord 自己的关联，可以运行 `vp run concord check` 或 `vp run concord trace show local-sdlc`。
 
 没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。`vp run check:fast` 只检查 CLI 与 Web 源码类型，无需构建或运行测试。执行 `vp build` 后，`vp run typecheck:built` 检查 repository、测试和脚本类型；`vp run test:built test/writing-cache.test.ts` 无需重复构建即可运行指定文件。用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。源码变化后，先重新构建再运行 `:built` 任务。
 

@@ -46,7 +46,7 @@ test('release builds two native targets and gates publication on the same commit
     assert.deepEqual(publish.needs, ['package', 'check']);
     assert.equal(graph.jobs.check.uses, './.github/workflows/check.yml');
     assert.match(graph.jobs.check.with.ref, /inputs.tag/);
-    const build = 'pnpm build && pnpm exec tsc -p tsconfig.scripts.json';
+    const build = 'pnpm exec vp build && pnpm exec vp exec tsc -p tsconfig.scripts.json';
     assert.ok(pack.steps.some(step => step.run === build));
     assert.ok(pack.steps.findIndex(step => step.run === 'node --import tsx scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === build));
     const commands = pack.steps.map(step => step.run ?? '').join('\n');

@@ -6,7 +6,7 @@
 
 ## 测量脚本
 
-`scripts/bench.ts`、`scripts/profile.ts` 与 `scripts/perf/*.ts` 是严格 TypeScript，经 `tsconfig.scripts.json` 纳入 typecheck，由 `tsx` 执行，副作用通过 Effect 管理。不新增 JavaScript 脚本或测量依赖。`package.json` 提供 `bench` 与 `bench:profile` 两个入口，均先执行 `pnpm build`。
+`scripts/bench.ts`、`scripts/profile.ts` 与 `scripts/perf/*.ts` 是严格 TypeScript，经 `tsconfig.scripts.json` 纳入 typecheck，由 `tsx` 执行，副作用通过 Effect 管理。不新增 JavaScript 脚本或测量依赖。`package.json` 提供 `bench` 与 `bench:profile` 两个入口，均先执行 `vp build`。
 
 消费者准备与 cli/view 路径走公开 CLI；刷新测量调用构建产物中的内部 query-scan-worker，并以 `src/query-scan-protocol` 的 Schema 解码其消息。fs 计数模块与 CPU profiler 只在 profile 路径注入，bench 样本不带任何注入。
 

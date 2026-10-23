@@ -27,7 +27,7 @@ function digestDist(dir: string): string {
 export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string) {
   const dir = yield* io('Resolve artifact', () => realpathSync(resolve(path)));
   const entry = join(dir, 'dist/entry.js');
-  if (!(yield* io('Find artifact', () => existsSync(entry)))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run pnpm build there first` });
+  if (!(yield* io('Find artifact', () => existsSync(entry)))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
   const git = (...args: string[]) => execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();
   return yield* io('Identify artifact', () => ({ label, dir, entry, commit: git('rev-parse', 'HEAD'), dirty: git('status', '--porcelain') !== '', digest: digestDist(dir) } satisfies Artifact));
 });

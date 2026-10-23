@@ -17,7 +17,7 @@ Maintain implementation, tests, and build scripts in strict TypeScript with Effe
 
 The sole native exception is `native/hawdb`: Rust N-API engine bindings, required linker glue, byte conversion, resource budgets, and the revision-bound HawDB directory ownership guard. Keep domain decisions, Schema validation, publication authority, tests, and build orchestration in TypeScript/Effect. Pin the engine revision, Rust toolchain and bridge dependencies. Persistent handles end with the source snapshot, before any owned publication lease; in-memory cache handles belong to the process. Pack target-native artifacts so consumers need no Rust compiler or HawDB service. Engine upgrades must revalidate ownership and clear against the pinned lock protocol.
 
-Use the project-pinned Vite+ toolchain. Bootstrap with `pnpm install --frozen-lockfile`; use `vp install` thereafter, or `pnpm exec vp` when no global CLI is installed. Keep the pinned pnpm package manager and lockfile.
+Use the project-pinned Vite+ toolchain. Bootstrap with `pnpm install --frozen-lockfile`; use `vp install` thereafter. When no global CLI is installed, prefix Vite+ commands with `pnpm exec`, for example `pnpm exec vp build`. Keep the pinned pnpm package manager and lockfile.
 
 - `vp build` produces the complete distribution through production build hooks, including native bindings, CLI, Web, Preview, and packaged resources. `vp dev` starts only the Web development server.
 - `vp run check:fast` checks CLI and Web source types without building or running tests.
