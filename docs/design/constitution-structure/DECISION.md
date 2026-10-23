@@ -2,9 +2,7 @@
 
 ## Decision
 
-Undecided.
-
-作者推荐 link-owned，等待独立审查。
+Selected: [link-owned](plans/link-owned/README.md)
 
 ## Rationale
 

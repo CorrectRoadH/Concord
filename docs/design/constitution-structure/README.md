@@ -14,6 +14,12 @@ constitutionRefs:
   - docs/constitution.md#c-008
   - docs/constitution.md#c-009
   - docs/constitution.md#c-015
+decision:
+  selected: link-owned
+  reason: 依据关系定位到句子，附页同样可以声明；条款与款用统一的 {#id}；独立审查两轮后采纳全部修正
+  at: 2026-10-23T04:44:36.897Z
+  targets:
+    - docs/feature/project-onboarding/README.md
 ---
 
 # 宪法的结构、关联与写法
@@ -27,7 +33,7 @@ constitutionRefs:
 | 条款身份 | 单独一行 HTML `<a id="c-003"></a>` | 全仓库只有宪法用 HTML anchor，其它位置使用标题 `{#id}` 或步骤 `{#id}`，宪法需要专用解析 |
 | 款的身份 | 只有序号 | 正文用“C-011 第 3 款”引用，共 36 处；重新编号后只能人工查找 |
 | 依据关系 | Feature 与 Design 的 `constitutionRefs` 元数据，共 36 个 owner、248 条 | 只能表达到 owner；另有 27 个文件、100 处正文链接，其中 22 个是附页，`check` 不校验，指向不存在的 `#c-099` 仍然通过 |
-| 写法 | 总则只定义用语强度 | C-001.4、C-005.3 至 .4、C-013 写入引擎、桥接与协议细节，随实现变化 |
+| 写法 | 总则只定义用语强度 | C-001.4、C-005.3 至 .4、C-013 中技术约束与实现说明混写，读者分不清哪些是采用的约束，哪些随实现变化 |
 
 ## Core Mental Model
 

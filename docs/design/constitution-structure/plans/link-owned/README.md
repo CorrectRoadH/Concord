@@ -25,6 +25,7 @@
 - 来源：`docs/` 下所有 Markdown 页面的正文，排除 `docs/_template/` 与 `docs/constitution.md` 本身。Issue 与 Research 页面也计入，它们可以通过 `issue edit` 与 `author set` 修改。`docs/` 外的 Memory 不计入。
 - 只取 Markdown 语法树中的行内 `link` 节点。图片、引用式链接、HTML 中的链接，以及 frontmatter、代码与注释中的文本都不计入。
 - 目标解析顺序：没有 scheme、不以 `/` 开头的 URL 才参与；百分号解码后相对所在文件解析，规范化 `.` 与 `..`；结果等于 `docs/constitution.md` 才是宪法链接。越出仓库或指向其它文件的链接不是宪法链接。不读取网络，不跟随 symlink。
+- 路径部分的百分号编码无法解码时，无法确定是否指向宪法，返回 `ConstitutionLinkInvalid`。指向宪法、但 fragment 无法解码时同样返回 `ConstitutionLinkInvalid`。这两种情况都使 `constitution show` 的 `complete` 为 false，`amend` 与 `adopt` 拒绝执行，不当作未发现引用。
 - 宪法链接带 query 时返回 `ConstitutionLinkInvalid`。不带 fragment 时不建立关系，也不产生 finding。fragment 不是条款、款或总则 ID 时，返回 `AnchorNotFound`。两者类别都是 `relation`，带路径与行号，`check` 退出 1。
 - 指向款的引用同时归属其条款。Feature 不要求链接任何条款。
 - 任何纳入范围的文件缺失、不可读或在读取期间改变时，`check` 返回 `complete: false`；`constitution show` 返回 `complete: false`；`amend` 与 `adopt` 拒绝执行。
@@ -65,7 +66,7 @@
 | `document.metadata` action 的 `constitutionRefs` | 严格解码拒绝，返回 `InvalidInput` |
 | 模板、init 指引与随包 skill 中要求记录 `constitutionRefs` 的文字 | 改为“在依据规则的句子旁链接条款” |
 
-文档格式保持 `concord.document/v1`：迁移后的 owner 只是少了一个可选字段，不需要新格式号。宪法格式改为 `concord.constitution/v2`。旧版 CLI 读到 v2 宪法即拒绝，不会在已迁移仓库中按旧语义运行；回退需使用迁移前的文件。
+文档格式保持 `concord.document/v1`：迁移后的 owner 只是少了一个可选字段，不需要新格式号。宪法格式改为 `concord.constitution/v2`。迁移后的仓库只支持新版 CLI。旧版中读取宪法的入口会拒绝 v2，其它入口可能仍可运行，但不提供新的依据关系，这种组合不受支持。回退使用迁移前的文件与现场。
 
 ### 迁移
 
@@ -117,7 +118,7 @@
 | [L1](../../LIMITS.md#l1-运行时只接受当前格式) | satisfied | 旧宪法与旧元数据返回 `ConstitutionMigrationRequired`；只有 `constitution migrate` 使用专用 v1 读取器，普通运行时不读取旧格式 | 本页“迁移”与“取消的接口” |
 | [L2](../../LIMITS.md#l2-条款身份与修订历史保持) | satisfied | `<a id>` 的值原样成为标题 ID；ID 不改名、不复用；修订记录不改动 | 本页“条款与款的 ID”“迁移”第 1 项 |
 | [L3](../../LIMITS.md#l3-迁移遵守写入契约) | satisfied | 预检失败零写入；发布中断保留 journal，由新版 `recover` 按前后像处理 | 本页“迁移”第 3、4 项，CASES C14 |
-| [L4](../../LIMITS.md#l4-破坏性变更经独立审查) | pending | 取消三处接口并改变 `constitution show` 输出；以对照表列出，定案前由独立 reviewer 审查 | 审查进行中 |
+| [L4](../../LIMITS.md#l4-破坏性变更经独立审查) | satisfied | 取消三处接口并改变 `constitution show` 输出，以对照表列出；独立 reviewer 两轮审查，第二轮结论 approve-with-changes，三项修正已采纳 | 独立审查第二轮结论与 CASES C8、C21 |
 | [L5](../../LIMITS.md#l5-不改变测试与代码关联) | satisfied | 只改变宪法与 Feature、Design 元数据；宪法列表 ID 不成为步骤 | CASES C20 |
 
 ## Goals
@@ -125,7 +126,7 @@
 | Goal | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
 | [G1](../../GOALS.md#g1-引用精确到款且稳定) | satisfied | 款 ID 与序号无关，不改名、不复用 | CASES C1 |
-| [G2](../../GOALS.md#g2-断开的引用被-check-发现) | satisfied | 纳入范围的行内宪法链接都校验；amend 按候选正文拒绝删除仍被引用的 ID | CASES C2、C7、C13 |
+| [G2](../../GOALS.md#g2-断开的引用被-check-发现) | satisfied | 纳入范围的行内宪法链接都校验；amend 按候选正文拒绝删除仍被引用的 ID | CASES C2、C7、C13、C21 |
 | [G3](../../GOALS.md#g3-依据关系定位到句子且只声明一次) | satisfied | 引用位置带页面与行，附页同样适用；元数据字段取消，链接是唯一来源 | CASES C3、C12 |
 | [G4](../../GOALS.md#g4-宪法只写规则) | partial | 条款写法可以逐条审阅，但“一款一项规则”和“约束与机制的区别”是语义判断，词面检查不能证明；宪法中明确采用的技术约束会出现引擎与库名，禁用这些词会误报 | CASES C8 由审阅判定 |
 | [G5](../../GOALS.md#g5-用-concord-自己完成迁移与验收) | satisfied | 固定签发工具在迁移前签发 red 与 green；迁移由新 CLI 完成 | Design README“自举” |

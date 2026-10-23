@@ -9,7 +9,7 @@
 | C5 | 宪法仍使用 `<a id>` 行 | 普通命令返回 `ConstitutionMigrationRequired`；`constitution migrate` 转换后通过 |
 | C6 | Feature 元数据仍有 `constitutionRefs` | 返回 `ConstitutionMigrationRequired`；迁移把每条引用写成正文链接并删除该字段 |
 | C7 | `constitution amend` 删除一款，而该款仍被链接 | 拒绝修订，返回 `ConstitutionClauseReferenced` 并列出引用位置 |
-| C8 | 拟修订正文中一款写入存储引擎名与桥接细节 | 写作规则指明该内容属于 architecture 页；审阅可引用总则的条款写法 |
+| C8 | 拟修订正文有两段：一段规定唯一原生例外的边界与依赖固定；另一段描述桥接的调用顺序与内部结构 | 前者是已采用的技术约束，保留在宪法；后者是实现说明，移到 architecture 页。由语义审阅区分，结构工具不判定 |
 | C9 | 对本仓库执行迁移并改写宪法 | `check` 通过；每条旧元数据关系都投射为同一 owner 的正文链接；Problem 以同一签发工具的 red 与 green 收据关闭 |
 | C10 | 代码块或行内代码中出现 `{#c-020}` 或宪法链接 | 不产生 ID，不建立依据关系，不校验 |
 | C11 | 正文写“C-011 第 3 款”而不是链接 | 不建立依据关系；写作规则要求改为链接 |
@@ -22,3 +22,4 @@
 | C18 | `constitution amend` 同时删除一款与宪法内指向它的链接 | 按候选正文校验，接受修订 |
 | C19 | Issue 正文链接一款，作者要删除该款 | amend 拒绝并列出 Issue 位置；作者用 `issue edit` 改链接后再删除 |
 | C20 | 宪法列表项带 `{#c-011-1}` | 不成为 Use Case 步骤，不产生 `InvalidStepPosition`，不进入 `trace gaps` |
+| C21 | 链接 `../constitution.md#c-%ZZ`，或路径部分含无法解码的百分号编码 | 返回 `ConstitutionLinkInvalid`，带路径与行号，`check` 退出 1；`constitution show` 的 `complete` 为 false；amend 与 adopt 拒绝执行 |

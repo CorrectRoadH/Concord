@@ -20,7 +20,7 @@ ID 语法、条款写法与宪法格式迁移与 link-owned 相同。`constituti
 | [L1](../../LIMITS.md#l1-运行时只接受当前格式) | satisfied | 宪法格式同样显式迁移 | 同 link-owned |
 | [L2](../../LIMITS.md#l2-条款身份与修订历史保持) | satisfied | 同 link-owned | 同 link-owned |
 | [L3](../../LIMITS.md#l3-迁移遵守写入契约) | satisfied | 同 link-owned，迁移范围只有宪法 | 同 link-owned |
-| [L4](../../LIMITS.md#l4-破坏性变更经独立审查) | pending | 只改变 `constitution show` 输出，破坏面较小；仍需审查 | 审查进行中 |
+| [L4](../../LIMITS.md#l4-破坏性变更经独立审查) | satisfied | 只改变 `constitution show` 输出，同一轮独立审查覆盖 | 独立审查第二轮结论 |
 | [L5](../../LIMITS.md#l5-不改变测试与代码关联) | satisfied | 同 link-owned | 同 link-owned |
 
 ## Goals
