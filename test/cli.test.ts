@@ -576,7 +576,11 @@ test('packed templates work outside a project and fail clearly when their invent
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
 test('installed onboarding creates editable packages and connects supporting-page tests to their Feature', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('onboarding');
- assert.match(readFileSync(join(root, 'docs/concord.md'), 'utf8'), /concord test list/);
+ const guide = readFileSync(join(root, 'docs/concord.md'), 'utf8');
+ assert.match(guide, /concord test list/);
+ assert.match(guide, /a product direction in the same genre as Feature that has not been adopted yet\. Its design is incomplete, or it is designed but not scheduled/u);
+ assert.match(guide, /Behavior pages \(Feature README, Use Case, cli, library\) state commands, real human and JSON output, exit codes, and named errors\./u);
+ assert.match(guide, /The architecture page states how the Feature is implemented\. Run `concord --skill document` for the full rules\./u);
  for (const path of ['docs/README.md', 'docs/_template/feature-design/lifecycle.md', 'docs/_template/roadmap/use-case/README.md', 'docs/_template/design-decision/CASES.md', 'docs/_template/design-decision/plans/plan-2/library.md', 'docs/_template/engineering/README.md', 'docs/concepts.md', 'docs/architecture.md', 'docs/_template/research/README.md', 'docs/_template/memory/problem.md']) assert.equal(existsSync(join(root, path)), true, path);
  assert.match(readFileSync(join(root, 'AGENTS.md'), 'utf8'), /BEGIN CONCORD AGENT INSTRUCTIONS[\s\S]*concord trace gaps --json/u);
  call(root, ['feature', 'create', 'accounts', '--title', 'Accounts', '--pages', 'library,cli,architecture,lifecycle,use-case'], Ack);

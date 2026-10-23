@@ -15,7 +15,7 @@ Code declarations describe implementation associations, not completion or test c
 ## Choose the document that owns your intent
 
 - [Feature](feature/README.md): the adopted product contract, even when implementation is still catching up.
-- [Roadmap](roadmap/README.md): a settled direction awaiting adoption.
+- [Roadmap](roadmap/README.md): a product direction in the same genre as Feature that has not been adopted yet. Its design is incomplete, or it is designed but not scheduled.
 - [Design](design/README.md): goals, constraints, self-contained alternatives, and the reason for a decision.
 - [Engineering](engineering/README.md): how this repository is tested and maintained.
 - [Research](research/README.md): freeform research topics and supporting materials.
@@ -23,6 +23,8 @@ Code declarations describe implementation associations, not completion or test c
 - [Issues](issues/README.md): local observations awaiting investigation.
 
 Write contracts as declarations of intended behavior, constraints, and acceptance. Product workflows and lifecycle rules belong in contracts. Development logs, investigation history, and implementation progress belong in Memory. Observations awaiting investigation belong in Issues.
+
+Behavior pages (Feature README, Use Case, cli, library) state commands, real human and JSON output, exit codes, and named errors. The architecture page states how the Feature is implemented. Run \`concord --skill document\` for the full rules.
 
 Templates provide writing prompts, not completed requirements or evidence.
 Read docs/constitution.md before creating or revising Feature and Design owners, and record applicable real clause anchors through constitutionRefs.
