@@ -7,32 +7,96 @@ kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
-
 # 发现测试并重建缓存
 
-## 场景
+## 用户目标
 
-作为测试维护者，我希望在任意语言的测试文件里用 `@feature` 或 `@use-case` 标记关联契约，可选 `@regression` 与 `@name`，并让查询在缓存损坏时仍以源码为准。
+测试维护者在任意语言的测试文件里写一行注释，把测试关联到 Feature 或 Use Case。Concord 从这些注释发现测试，不解析测试框架的语法。缓存损坏或被删除时，结果仍以源码为准。
 
-## 主流程
+## 起始状态
 
-1. 用 `test annotate` 验证契约目标和 Problem 引用，把输出片段放进测试文件。`//`、`#` 和 `--` 都是标记。
-2. `test list/show` 或 `check` 扫描配置的 testRoots。标记存在即是 case，不解析宿主测试语法。
-3. HawDB 以项目、路径集合、文件摘要、runner 配置和解析器版本作为身份；有效缓存命中才复用投影。
-4. 文件修改、重命名、删除、配置变化或缓存损坏时从权威源码重建。
+- `concord.config.ts` 的 `testRoots` 指向测试目录，例如 `["test"]`。
+- 要关联的 Feature 或 Use Case 已存在。
 
-## 验收
+## 完整路径
 
-- `concord.config.ts` 的可选 `sourceIgnore: readonly string[]` 默认 `[]`。每项是区分大小写的仓库相对文件或目录路径，目录包含其子树；不接受绝对路径、空段、`.`、`..`、反斜杠、控制字符或 glob（`*?[]{}!`）。配置严格解码，不读取被忽略路径来验证其存在性。
-- 例如 `sourceIgnore: ['games/ljkx/generated', 'tests/fixtures/vendor']` 同时约束 sourceRoots 与 testRoots 的自动发现。忽略在访问条目之前执行，断链也可排除。显式来源根优先：根自身和包含该根的忽略项不排除该根内的发现；根内更具体的忽略项仍生效。
-- 扫描、目录观察复核与工作台监听使用相同路径匹配；配置改变使旧快照失效，并重新计算监听范围。文档、Memory、runner.sourceFiles 与显式读写不受 sourceIgnore 影响，配置不是诊断错误过滤器。
+1. 生成标记。 {#annotate}
 
-- 源码自动发现按路径段排除 `.env`、`.env.*` 与 `dist`，不读取、解析或跟随环境文件及生成产物；规则独立于 Git ignore。普通文件、符号链接和断链采用相同的排除规则。显式指定的来源根不受子目录发现规则排除，其自身仍须通过安全校验。
-- 代码、测试与工作台源码清单共用此规则；目录快照复核保留同一发现范围。被排除条目的变化不影响源码快照，候选源码的新增、删除与类型变化仍须复核。
-- 排除只作用于源码自动发现。文档清单、显式引用、指定来源根和读写路径继续执行既有路径安全校验；候选源码中的符号链接仍具名拒绝。
+   ```sh
+   concord test annotate --contract docs/feature/cart/use-case/add-item.md
+   ```
 
-- JS/TS 字符串或模板中的伪注释不注册 case。其它语言里单独成行、且以注释前缀开头的标记会注册。
-- 缺值、重复契约目标、以及缺少契约的标记产生明确 finding。不认识的测试写法不产生 finding。
-- `@status retired` 不能用于 fixed 证据。工具不从测试语法推断 skip 或待办状态。
+   ```text
+   // @use-case docs/feature/cart/use-case/add-item.md
+   ```
 
-每个标记只选择一个契约目标；多个标记可关联同一 Feature 或 Use Case。工具从文件和标记派生执行引用，不需要人工维护 ID。
+   `--regression memory/<id>.md` 追加 `@regression` 行。需要可读名称时，在标记块里手写 `@name <text>`。契约或 Problem 不存在时返回 `ReferenceNotFound`。
+
+2. 把标记放在测试声明上方。注释前缀可以是 `//`、`#` 或 `--`。 {#place}
+
+   ```js
+   // @use-case docs/feature/cart/use-case/add-item.md
+   test('adding the same sku twice sums the quantity', () => { ... });
+   ```
+
+3. 列出测试。 {#list}
+
+   ```sh
+   concord --json test list
+   ```
+
+   ```json
+   {"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"name":"docs/feature/cart/use-case/add-item.md#0","contract":"docs/feature/cart/use-case/add-item.md","contractKind":"use-case","regressions":[],"status":"active","framework":"marker","skipped":false,"named":false,"markerEndLine":5}],"observations":[]}
+   ```
+
+   每个标记块是一个 case。`id` 由文件与标记位置派生，不需要手写。`concord --json test show <id>` 返回单个 case，附 `evidenceScope` 与 `analysis`。
+
+4. 删除缓存后再次列出。 {#rebuild}
+
+   ```sh
+   concord cache clear
+   concord --json test list
+   ```
+
+   结果与第 3 步相同。`concord --json cache status` 在缓存可用时返回 `{"status":"ready",...}`。
+
+## 结果
+
+`test list`、`test show` 与 `check` 返回当前源码里的全部标记。修改、改名或删除测试文件后，下一次查询立即反映变化。
+
+标记写错时，`check` 退出 1 并给出带文件和行号的 finding：
+
+| 情况 | 结果 |
+| --- | --- |
+| 标记缺少契约路径，或一个标记块有两个契约 | finding，指向标记所在行 |
+| 契约文件不存在 | `ReferenceNotFound` |
+| JS/TS 字符串或模板里出现的标记文本 | 不注册 case |
+| Concord 不认识的测试写法 | 不产生 finding |
+
+## 标记规则
+
+- 每个标记块只选一个契约。多个标记块可以关联同一个 Feature 或 Use Case。
+- `@status retired` 表示测试已退役，不能用于关闭 Problem。
+- 工具不从测试语法推断跳过或待办状态。
+
+## 忽略路径
+
+`concord.config.ts` 的可选 `sourceIgnore` 排除不需要扫描的路径，默认 `[]`。
+
+```ts
+sourceIgnore: ['games/ljkx/generated', 'tests/fixtures/vendor']
+```
+
+- 每项是区分大小写的仓库相对文件或目录路径，目录包含其子树。
+- 不接受绝对路径、空段、`.`、`..`、反斜杠、控制字符和 glob 字符（`*?[]{}!`）。配置严格解码，不检查被忽略的路径是否存在。
+- 同时作用于 `sourceRoots` 与 `testRoots` 的自动发现。断链也能被排除。
+- 显式配置的来源根优先：根自身和包含该根的忽略项不排除根内发现，根内更具体的忽略项仍然生效。
+- 扫描、目录复核与工作台监听使用同一套匹配。配置改变后旧结果失效，监听范围重新计算。
+- 文档、Memory、`runner.sourceFiles` 和显式读写不受 `sourceIgnore` 影响。它不是诊断过滤器。
+
+不论是否配置，自动发现都按路径段排除 `.env`、`.env.*` 与 `dist`，不读取、不解析、不跟随这些路径，规则与 Git ignore 无关。普通文件、symlink 与断链按同一规则排除。显式指定的来源根不受这条排除规则影响，但仍要通过路径安全校验。这条规则只作用于源码自动发现。候选源码中的 symlink 仍然具名拒绝。
+
+## 契约来源
+
+- 命令与输出：[CLI](../cli.md#测试与证据)
+- 缓存身份与重建：[架构](../architecture.md#编译管线)

@@ -11,24 +11,51 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 用户目标
 
-维护者和 coding agent 在修改功能前，需要一次看到哪些 Feature、Use Case 和已建档 CLI 页面还没有 Concord 可观察的实现或测试关系，从而先补齐契约，再规划实现与验收。
+维护者和 Agent 在修改功能前，要一次看到哪些 Feature、Use Case 和 CLI 页面还没有实现或测试关联，先补契约，再规划实现与验收。
+
+## 起始状态
+
+- 项目已有 Feature 与 Use Case，部分源码与测试带有 Concord 标记。
 
 ## 完整路径
 
-1. 运行 `concord trace gaps --json`，从当前文档 owner、源码声明和测试注释重新派生关系。
-2. 查看 Feature 与 Use Case 中缺少 `implements` 或 active test contract 关系的项目。
-3. 查看 `docs/feature/*/cli.md` 中没有直接实现或测试关系的页面；按页面或 anchor 建立精确关系。
-4. 先修改 Feature、Use Case、CLI 页面或必要 Design，再修改功能代码与测试。
-5. 重新运行 gaps、check 和项目自己的质量门。
+1. 列出缺口。 {#list-gaps}
 
-## 可观察验收
+   ```sh
+   concord --fresh --json trace gaps
+   ```
 
-- 输出稳定区分契约缺口与 CLI 页面缺口，并分别列出缺少 code、test 的关系类型。
-- Feature 汇总自身、supporting pages 与其 Use Case 的关系；Use Case 只报告自身关系。CLI 页面要求关系直接指向该页面或其 anchor，不能由泛化 Feature 关系冒充。
-- retired 测试不满足 active test 关系；无效 owner 或声明先由现有 trace finding 阻断。
-- 结果只表示 Concord 当前没有观察到显式关系，不称为代码覆盖率、命令覆盖率、功能缺失或测试执行证明。
-- CLI 只能审计已经存在的 CLI 页面；未建档命令不在本命令的发现能力内，必须通过产品自身 inventory 或评审补充。
+   ```json
+   {
+     "operation": "trace-gaps",
+     "semantics": "missing-explicit-relationships-not-coverage",
+     "limitations": ["Only documented CLI pages are discoverable; undocumented commands require a product-owned inventory."],
+     "contracts": [{"path": "docs/feature/cart/use-case/add-item.md", "kind": "use-case", "title": "加入商品", "missing": ["code"], "relationships": {"code": 0, "test": 1}}],
+     "cliPages": [{"path": "docs/feature/cart/cli.md", "feature": "docs/feature/cart/README.md", "title": "购物车", "missing": ["code", "test"], "relationships": {"code": 0, "test": 0}}],
+     "unmarkedLists": []
+   }
+   ```
+
+   不加 `--fresh` 且尚无快照时返回 `QueryPending`。
+
+2. 对 `contracts` 中的条目，补实现标记（`missing` 含 `code`）或测试标记（`missing` 含 `test`）。 {#fill-contracts}
+
+3. 对 `cliPages` 中的条目，让实现或测试直接指向该页面或页面内的 anchor，例如 `// @concord-implements docs/feature/cart/cli.md#<标题 anchor>`。 {#fill-cli}
+
+4. 先改 Feature、Use Case、CLI 页面或必要的 Design，再改代码与测试，然后重新运行 `trace gaps`、`check` 和项目自己的质量检查。 {#recheck}
+
+## 结果
+
+- `contracts` 与 `cliPages` 分开列出，每项用 `missing` 说明缺少的是 `code` 还是 `test`，用 `relationships` 给出现有数量。
+- Feature 的计数包含自身、附页与所属 Use Case。Use Case 只计自身。CLI 页面只计直接指向该页面或其 anchor 的关系，指向 Feature 的关系不算。
+- 退役（`@status retired`）的测试不算测试关系。无效的 owner 或标记先由 `check` 的 finding 报告。
+- `unmarkedLists` 列出 Use Case 中含未标记步骤的有序列表。
+
+## 边界
+
+- 结果只表示 Concord 没有观察到显式关系。它不是代码覆盖率或命令覆盖率，也不说明功能缺失或测试未执行。`semantics` 字段固定说明这一点。
+- 只能审计已有的 CLI 页面。没有页面的命令不会出现，需要由产品自己的命令清单或评审补上，`limitations` 字段说明这一点。
 
 ## 契约来源
 
-[本地 SDLC 闭环](../README.md)。实现与测试在各自 owner 中建立当前关系；本页不维护反向登记表。
+[本地 SDLC 闭环](../README.md)。关系由实现与测试源码中的标记拥有，本页不维护反向登记表。

@@ -7,31 +7,130 @@ kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
-
 # 从源码追踪实现归属
 
-## 场景
+## 用户目标
 
-维护者希望直接在整文件、函数或完整代码段旁声明其关联的 Feature / Use Case / Engineering，并从契约反查实现、从文件位置查询关联，不必另外命名声明 ID。声明表达维护者的实现意图，不证明完成或测试覆盖。
+维护者在整个文件、一个函数或一段代码旁写注释，声明它实现哪份 Feature、Use Case 或 Engineering。之后可以从契约查到实现，也可以从源码的某一行查到契约。声明不需要 ID。
 
-## 主流程
+声明表达维护者的实现意图，不证明功能完成或测试覆盖。
 
-1. 在 concord.config.ts 配置 sourceRoots，或新项目用 init --source-root src；未配置时不扫描实现源码。
-2. code annotate --scope file|node|region --contract <canonical-ref> 生成无 ID 注释，多目标重复 --contract；维护者把片段放到实际源码。file/code/begin/end 标记均无参数，implements 保留显式引用。annotate 与 test annotate 在共享 snapshot 中验证每个指定 canonical reference、归属链、类型和 anchor；显式 regression 还验证 Problem。失败范围限于这些指定依赖，不加载全局 Trace。
-3. code list 返回当前声明；code locate <path> --line <n> 返回该行所有包含作用域。生成片段无需身份，使用者按符号与源码位置查看实现。
-4. trace show <feature-or-use-case-or-engineering> 汇总代码 implements 边；review render 分别列出代码和测试。二者返回所展示关系图的 findings，并传播 inventory 的 `complete`。`complete: false` 或 findings 非空时，需要完整图的结论拒绝输入。Web 以符号、文件位置和关联契约展示，不要求输入或显示声明 ID。
-5. 修改、移动、删除源码后按当前字节重新核对。未改文件的声明解析可以来自可丢弃投影；查询不维护第二份关系 JSON，关系仍从当前 Markdown 派生。
+## 起始状态
 
-## 验收
+- `concord.config.ts` 的 `sourceRoots` 指向实现源码，例如 `["src"]`。新项目可用 `concord init --source-root src`。没有配置时不扫描实现源码。`sourceRoots` 遵守仓库内的路径安全规则。
 
-- 文件头、支持的完整函数/声明、同一语句列表内的非空连续代码段均可标注；一个作用域最多一份声明，多契约重复 implements。当前引用由 canonical 路径、scope 与 AST 结构位置派生，无登记表或写回步骤，重复引用仍产生 finding。
-- 在定位路径和同描述前序兄弟不变时，空白、行号、普通函数体和 implements 修改不改变 node 引用。同内容新进程/clone 结果一致；同名、匿名、未标注兄弟与嵌套作用域按完整 AST 区分。固定元组、名称和版本规则见[采用设计](../../../design/derived-code-reference/plans/derived/architecture.md)。
-- 引用是当前定位而非永久历史身份；文件移动、改名、作用域或顺序改变可能使引用失效或复用。删除同列表 region A 的标记后，后续 B 可以复用 A 的旧引用。自动消费者重新 list/locate 并核对文件、符号和范围，不能把成功查询视为历史连续性证明。
-- 源码中的字符串、模板、正则和 JSX 文本不产生伪声明；未知标签、重复作用域、缺失目标、错误边界和标注文件的语法错误均产生 finding。
-- 范围标记不接受参数，按当前语法校验，无兼容分支或迁移专用诊断。无效 begin 也参与边界配对，不允许跳过后让 end 消耗外层 begin。普通扫描不改写源码。
-- 不提供按声明 ID 查询的命令、身份输入或复制 ID 界面；图关系使用内部派生引用。
-- 引用支持 Feature / Use Case / Engineering owner、Feature 或 Engineering supporting page 与有效 anchor，保留 exactRef。Feature 反查包含其 Use Case，Engineering 不拥有 Use Case 子树，按自动查询引用去重。
-- 文件、函数与代码段可完整包含；region 不可嵌套，跨函数/半表达式/空 region 被拒绝。查询返回所有包含的显式作用域，不推断继承、优先级或完成度。
-- sourceRoots 可选且遵循既有安全路径边界。代码标注错误阻断代码及全图命令，但不新增测试执行或 Problem fixed 的前置条件；既有真实测试、候选摘要和 red/green 证据校验继续生效。
-- 全局 check 逐文件保留 owner 解析错误，累计为 findings，返回 `ok: false`，并传播 `complete: false`。单独的 documents 数组不表示集合完整。关闭 Problem、删除 Issue 和关系迁移同时检查 `complete` 与 findings。精确引用规则见[本地 SDLC 架构](../architecture.md)。
-- JS/TS 仅支持明确的 AST 节点，见 concord --skill code；不对其他语言宣称支持。
+## 完整路径
+
+1. 生成声明。 {#annotate}
+
+   ```sh
+   concord code annotate --scope file --contract docs/feature/cart/README.md
+   concord code annotate --scope node --contract docs/feature/cart/use-case/add-item.md
+   concord code annotate --scope region --contract docs/feature/cart/README.md
+   ```
+
+   ```text
+   // @concord-file
+   // @concord-implements docs/feature/cart/README.md
+
+   // @concord-code
+   // @concord-implements docs/feature/cart/use-case/add-item.md
+
+   // @concord-begin
+   // @concord-implements docs/feature/cart/README.md
+   // Place complete statements here.
+   // @concord-end
+   ```
+
+   重复 `--contract` 生成多行 `@concord-implements`。命令只检查指定的契约（以及 `--regression` 给出的 Problem），不读取全项目关系，失败只涉及这些引用。
+
+2. 把声明放进源码。 {#place}
+
+   ```js
+   // @concord-code
+   // @concord-implements docs/feature/cart/use-case/add-item.md
+   export function total(cart) {
+     return Object.values(cart).reduce((sum, qty) => sum + qty, 0);
+   }
+
+   // @concord-begin
+   // @concord-implements docs/feature/cart/README.md
+   const EMPTY = {};
+   export const empty = () => ({ ...EMPTY });
+   // @concord-end
+   ```
+
+   - `file`：放在文件头，声明整个文件。
+   - `node`（`@concord-code`）：紧贴一个函数、类、方法，或一个初始值为函数的单变量语句。
+   - `region`（`@concord-begin` / `@concord-end`）：包住同一语句列表中连续、非空的完整语句。
+
+3. 列出声明。 {#list}
+
+   ```sh
+   concord --json code list
+   ```
+
+   ```json
+   {"operation":"code-list","codes":[
+     {"id":"code-62419761eb6ed845430c217d274514ad","file":"src/total.js","line":9,"endLine":10,"scope":"region","contracts":["docs/feature/cart/README.md"]},
+     {"id":"code-68054071298e32ca5ef1a72ca3a117d2","file":"src/cart.js","line":1,"endLine":6,"scope":"file","contracts":["docs/feature/cart/README.md"]},
+     {"id":"code-a7e4a2ae733e9e2c1e2b3c6da5d636f2","file":"src/total.js","line":3,"endLine":5,"scope":"node","symbol":"total","contracts":["docs/feature/cart/use-case/add-item.md"]}],
+    "sourceRoots":["src"]}
+   ```
+
+   `line` 与 `endLine` 是代码本身的首行与末行，不含标记行。`id` 由工具派生，不用写进源码。
+
+4. 从源码行查契约。 {#locate}
+
+   ```sh
+   concord --json code locate src/total.js --line 10
+   ```
+
+   ```json
+   {"operation":"code-locate","file":"src/total.js","line":10,"codes":[{"id":"code-62419761eb6ed845430c217d274514ad","file":"src/total.js","line":9,"endLine":10,"scope":"region","contracts":["docs/feature/cart/README.md"]}]}
+   ```
+
+   行号从 1 开始。结果包含所有覆盖这一行的声明。
+
+5. 从契约查实现。 {#trace}
+
+   ```sh
+   concord --fresh trace show docs/feature/cart/README.md
+   ```
+
+   `codeDeclarations` 列出声明，`incoming` 中 `relation` 为 `implements` 的边指向这份契约。Feature 的结果包含其 Use Case 的声明。`review render` 分别列出代码与测试。
+
+## 结果
+
+修改、移动或删除源码后，下一次查询按当前文件内容重新计算。Web 按符号、文件位置和关联契约展示声明，不显示 ID。
+
+`check` 对以下情况给出 finding 并退出 1：
+
+- 未知标签、同一作用域两份声明、契约不存在、`begin` 与 `end` 不配对。
+- region 嵌套、跨越函数边界、截断表达式或为空。
+- 带声明的文件有语法错误。
+
+字符串、模板、正则和 JSX 文本中的标记文本不算声明。`trace show` 与 `review render` 返回所展示关系的 findings 与 `complete`。`complete` 为 false 或 findings 非空时，依赖完整关系的操作拒绝执行。代码声明错误不影响测试执行，也不改变关闭 Problem 的证据要求。
+
+全局 `check` 逐个文件保留 owner 的解析错误，把它们累计为 findings，返回 `ok: false` 与 `complete: false`。`documents` 数组本身不说明集合是否完整。关闭 Problem、删除 Issue 和迁移关系时同时检查 `complete` 与 findings。
+
+## 声明规则
+
+- 每个作用域最多一份声明，多个契约用多行 `@concord-implements`。
+- file、node、region 可以互相包含。查询返回全部包含的声明，不推断继承、优先级或完成度。
+- 标记行（file、code、begin、end）不带参数。无效的 `begin` 也参与配对，后面的 `end` 不会去配外层的 `begin`。
+- 契约可以是 Feature、Use Case、Engineering，Feature 或 Engineering 的附页，或它们的有效 anchor。
+- JS/TS 只支持上面列出的节点，其它语言见 [多语言分析](analyze-other-languages.md)。
+- 没有按声明 ID 查询的命令，也不接受 ID 作为输入。
+
+## 引用的稳定性
+
+文件路径不变、前面同类兄弟不变时，空白、行号、函数体和 `@concord-implements` 的修改不改变 node 的引用。同一份内容在新进程或新 clone 中得到相同引用。
+
+引用表示当前位置，不是永久身份。移动、改名、改变作用域或改变同类兄弟的顺序，都可能让引用失效，或者让旧引用指到另一个声明。例如删除前一个 region 的标记后，后一个 region 会接续它的序号。自动化工具每次都要重新 `list` 或 `locate`，核对文件、符号与范围，不能把一次查询成功当作历史连续。引用的派生规则见[采用设计](../../../design/derived-code-reference/plans/derived/architecture.md)。
+
+## 契约来源
+
+- 命令总览：[CLI](../cli.md#关联源码)
+- 完整语法：`concord --skill code`
+- 精确引用与全局检查：[架构](../architecture.md)
