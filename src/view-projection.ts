@@ -3,7 +3,8 @@
 import { join } from 'node:path';
 import { lstatSync } from 'node:fs';
 import { Effect } from 'effect';
-import { acquireFileLease, assertLeasePath, CoordinationError, readLeaseOwner, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
+import { acquireFileLease, assertLeasePath, CoordinationError, ownerIsAlive, readLeaseOwner, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
+import { PUBLICATION_LEASE } from './coordination.js';
 import { HawdbFailure, hawdbIdentity } from './hawdb-native.js';
 import { ConcordError, failure } from './shared.js';
 import { assertCurrentRuntimeFormat } from './storage.js';
@@ -145,6 +146,17 @@ export class ViewProjectionManager {
     }
   }
 
+  private shouldRetryPublication(context: WorkspaceProjectionContext): boolean {
+    try { this.ready(context); return true; }
+    catch (cause) {
+      if (!(cause instanceof ConcordError) || cause.code !== 'RecoveryRequired') throw cause;
+    }
+    try {
+      const owner = readLeaseOwner(join(context.privateDir, 'trace', PUBLICATION_LEASE), 'workspace-publication');
+      return owner !== undefined && owner.root === context.root && ownerIsAlive(owner);
+    } catch { return false; }
+  }
+
   private async persist(context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionRecord, error?: ConcordError): Promise<void> {
     const deadline = performance.now() + 3000;
     while (!this.stopping) {
@@ -181,6 +193,13 @@ export class ViewProjectionManager {
       this.lastFailure = undefined;
     } catch (cause) {
       const error = projectionFailure(cause);
+      if (error.code === 'RecoveryRequired' && this.shouldRetryPublication(context)) {
+        // A live writer's journal, or one already removed, is not an interrupted publication.
+        // Discard this attempt and retry; every candidate still passes ready() before publication.
+        this.lastFailure = undefined;
+        this.invalidate(100);
+        return;
+      }
       if (error.code === 'WorkspaceProjectionIdentityChanged') {
         // The new identity has no generation yet; build it now instead of reporting a failure.
         this.lastFailure = undefined;

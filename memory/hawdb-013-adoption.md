@@ -1104,3 +1104,11 @@ CLI 14组与query 6组均为 acceptance=true；每组7次全新进程，基线�
   "acceptance": true
 }
 ```
+
+## v0.14.0 门禁发现的工作区刷新竞态
+
+19584a9 的 v0.14.0 tag 已推送，首个发行流程 39928250005 的 Linux/macOS 原生验收与统一打包通过；第2测试分片中 knowledge-browser 在 fixture 写入后收到缓存的 RecoveryRequired。问题随后本地复现，未通过重跑掩盖。该发行流程被取消，v0.14.0 未发布资产；保留 tag，不改写远端历史，修复后改发 v0.14.1。
+
+根因是 ViewProjectionManager 把观察到的任意 journal 立即当作中断，即使源发布 owner 仍存活，或扫描失败回传时 journal 已完成删除。修复仅调整后台投影失败分类：重新检查 journal；已移除或归本工作区存活 owner 的现场丢弃候选并重新调度，不持久化 RecoveryRequired。无存活 owner 或无法确认所有权时仍阻断，所有候选发布前仍确认没有 journal。来源读写权限、恢复授权和 publication lease 机制不变。
+
+新增真实 publication lease 与 journal 现场的 HTTP 回归：写者活跃时首次代次保持202，写者完成后得到ready且无lastError；旧构建稳定返回503（red）。修复构建的 view-projection、knowledge-browser、feedback-browser、feedback-gh-ui、selfhost 合计24项通过，0失败0跳过（green）；已有 orphan journal 首次与暖代次阻断用例均通过。源码及built类型检查通过。日志 /tmp/concord-hawdb013-publication-red.log、/tmp/concord-hawdb013-publication-green.log。此处记录实际测试观察，不冒充Concord签发的red/green证据收据。

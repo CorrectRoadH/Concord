@@ -115,6 +115,8 @@ ETag 是该响应的 digest。
 
 最近刷新因 RecoveryRequired 阻断时，无代次返回 HTTP 503/RecoveryRequired，有代次返回 status:blocked 并附 lastError.code:RecoveryRequired。
 
+观察到 journal 后，刷新器重新检查现场。journal 已移除或其本工作区发布 owner 仍存活时，丢弃本次扫描并重新调度，不记录中断故障。没有存活 owner 或无法确认所有权的 journal 仍阻断刷新；每个候选发布前仍须确认 journal 不存在。
+
 两者都显示恢复入口。
 
 缓存或原生模块无法安全读取时 HTTP 503，`WorkspaceProjectionUnavailable` 加具体原因码和操作提示。

@@ -7,7 +7,7 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { getWorkspaceSnapshot } from '../dist/application.js';
 import { cacheDatabasePath } from '../dist/cache-file.js';
-import { genericPrivateDirectorySync } from '../dist/coordination.js';
+import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from '../dist/coordination.js';
 import { createDocument } from '../dist/documents.js';
 import { openHawdb } from '../dist/hawdb-native.js';
 import { digest } from '../dist/shared.js';
@@ -224,6 +224,37 @@ test('a corrupt workspace row is reported unavailable without falling back to a 
   assert.equal(show.status, 0, show.stderr);
   assert.ok((JSON.parse(show.stdout) as { readonly documents: unknown[] }).documents.length > 0);
   rmSync(root, { recursive: true, force: true });
+});
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+test('a live publication keeps the first workspace generation pending and refreshes after completion', async () => {
+  const root = fixture();
+  interruptPublication(root);
+  const lease = acquireTraceLeaseSync(root, 'exclusive', 'projection-test-publication');
+  assert.ok(lease);
+  let released = false;
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const base = baseOf(server);
+  try {
+    const until = Date.now() + 1500;
+    do {
+      const response = await fetch(`${base}/api/workspace`);
+      const body = await response.text();
+      assert.equal(response.status, 202, body);
+      assert.equal(parseWorkspaceHttpResponse(response.status, body), undefined);
+      await Effect.runPromise(Effect.sleep('50 millis'));
+    } while (Date.now() < until);
+    rmSync(join(genericPrivateDirectorySync(root), 'journal.json'));
+    releaseTraceLeaseSync(lease, 'projection-test-publication-complete');
+    released = true;
+    const value = await waitForWorkspaceProjection(base);
+    assert.equal(value.projection.status, 'ready');
+    assert.equal(value.projection.lastError, undefined);
+  } finally {
+    await server.close();
+    if (!released) releaseTraceLeaseSync(lease, 'projection-test-publication-cleanup');
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
