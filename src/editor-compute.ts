@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
+// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md#导航与诊断
 import { pathToFileURL } from 'node:url';
 import { lstatSync } from 'node:fs';
 import { Effect } from 'effect';

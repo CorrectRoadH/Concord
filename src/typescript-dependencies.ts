@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#验收
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import * as ts from 'typescript/ast';
 import { createFileSystem } from 'typescript/fs';

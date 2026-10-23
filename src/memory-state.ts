@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
-// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { ConcordError, type HistoryEntry, type MemoryMeta, type Resolution } from './shared.js';
 import { adoptMemoryEvidenceRequirement, assertMemoryResolutionPolicy } from './evidence-policy.js';
 
@@ -14,6 +11,8 @@ const history = (action: string, reason: string, at: string, ref?: string, resol
 });
 
 /** Pure lifecycle transitions derived from NiceEval's memory/state.ts. */
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#resolve-fixed
 export function resolvedMemory(memory: MemoryMeta, resolution: Resolution): MemoryMeta {
   memory = adoptMemoryEvidenceRequirement(memory);
   assertMemoryResolutionPolicy(memory, resolution);
@@ -23,6 +22,8 @@ export function resolvedMemory(memory: MemoryMeta, resolution: Resolution): Memo
   return adoptMemoryEvidenceRequirement({ ...memory, state: 'resolved', resolution, history: [...memory.history, history('resolve', resolution.reason, resolution.at, undefined, resolution)] });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function reopenedMemory(memory: MemoryMeta, reason: string, at: string): MemoryMeta {
   memory = adoptMemoryEvidenceRequirement(memory);
   if (memory.memoryKind !== 'problem') throw new ConcordError('InvalidMemoryState', 'Only Problem Memory can be reopened');
@@ -32,6 +33,8 @@ export function reopenedMemory(memory: MemoryMeta, reason: string, at: string): 
   return { ...withoutResolution, state: 'open', epoch: memory.epoch + 1, history: [...memory.history, history('reopen', reason, at, undefined, previous)] };
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function promotedMemory(memory: MemoryMeta, target: string): MemoryMeta {
   if (memory.state === 'captured') throw new ConcordError('InvalidMemoryState', 'Captured Memory cannot be promoted');
   if (memory.memoryKind === 'note') throw new ConcordError('InvalidMemoryState', 'A note cannot be promoted');
@@ -40,6 +43,8 @@ export function promotedMemory(memory: MemoryMeta, target: string): MemoryMeta {
   return { ...memory, promotions: [...memory.promotions, target] };
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function retiredPromotion(memory: MemoryMeta, target: string, reason: string, at: string): MemoryMeta {
   if (!memory.promotions.includes(target)) throw new ConcordError('PromotionNotFound', `Promotion is not current: ${target}`);
   return {
@@ -49,6 +54,8 @@ export function retiredPromotion(memory: MemoryMeta, target: string, reason: str
   };
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function supersededMemory(memory: MemoryMeta, replacement: MemoryMeta, replacementRef: string, reason: string, at: string): MemoryMeta {
   if (memory.id === replacement.id) throw new ConcordError('InvalidMemoryState', 'Memory cannot supersede itself');
   if (replacement.memoryKind !== memory.memoryKind) {
@@ -69,6 +76,8 @@ export function supersededMemory(memory: MemoryMeta, replacement: MemoryMeta, re
   };
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/lifecycle.md#memory
 export function lifecycleHistory(action: string, reason: string, at: string, ref?: string): HistoryEntry {
   return history(action, reason, at, ref);
 }

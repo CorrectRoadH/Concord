@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
+// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md#文件与资源边界
 import { fileURLToPath } from 'node:url';
 import { Effect } from 'effect';
 import { OwnedProcess, makeOwnedProcessService, type OwnedProcessService } from './owned-process.js';

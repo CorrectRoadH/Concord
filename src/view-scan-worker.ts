@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/architecture.md
 import { NodeRuntime } from '@effect/platform-node';
 import { Effect, Queue, Schema } from 'effect';
 import { observeWorkspaceProjection } from './application.js';

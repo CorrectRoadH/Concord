@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
 import { constants, closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, readlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { ConcordError, digest } from './shared.js';

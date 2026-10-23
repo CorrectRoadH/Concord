@@ -1,11 +1,10 @@
-// @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
 import { ConcordError, type Repository } from './shared.js';
 import { buildTrace } from './trace.js';
 import { checkWriting } from './writing.js';
 
 // @concord-code
-// @concord-implements docs/engineering/concord-self-hosting/README.md
+// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的聚合检查
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
   const trace = buildTrace(repo, cache);
   const relationFindings = trace.findings.map(finding => ({ ...finding, category: 'relation' as const }));

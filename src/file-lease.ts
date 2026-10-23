@@ -1,5 +1,6 @@
 // @concord-file
-// @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @concord-implements docs/feature/portable-coordination/architecture.md#identity-and-reuse
+// @concord-implements docs/feature/portable-coordination/architecture.md#data-flow
 import { randomUUID } from 'node:crypto';
 import { closeSync, fsyncSync, linkSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { hostname } from 'node:os';

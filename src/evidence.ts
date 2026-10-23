@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
@@ -24,6 +22,8 @@ const INITIAL_INDEX = new Set(['docs/feature/README.md', 'docs/roadmap/README.md
 const safeEnvironment = (): NodeJS.ProcessEnv => { const env = { ...process.env }; for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key]; return env; };
 const iso = () => new Date().toISOString();
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
 export const CommandEvidenceSchema = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(OPAQUE_ID)), format: Schema.Literal('concord.command-evidence/v1'), scope: Schema.Literal('command'),
   selectedCaseId: Text, projectId: Text, root: Text, implementationDigest: Text, definitionDigest: Text, contractDigest: Text, candidateDigest: Text,
@@ -56,7 +56,10 @@ const decodeEvidence = (value: unknown, source: string): Evidence => {
   if (evidence.format === 'concord.native-evidence/v2' && evidence.definitionDigest !== nativeDefinitionDigest(evidence.bindingDigest, evidence.inputs, evidence.requested, evidence.planDigest, evidence.versions)) fail('EvidenceIntegrity', 'Native receipt definition does not match its recorded input and plan identities');
   return evidence;
 };
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
 function fail(code: string, message: string): never { throw new ConcordError(code, message); }
 function regular(path: string): void { try { const stat = lstatSync(path); if (!stat.isFile()) fail('UnsafePath', `Expected a regular file: ${path}`); } catch (cause) { if (cause instanceof ConcordError) throw cause; fail('InvalidFile', `Required file does not exist: ${path}`); } }
 function implementationDigest(): string {
@@ -124,8 +127,10 @@ function observed(result: OwnedProcessResult, node: boolean): { execution: Comma
   const execution: Evidence['execution'] = tests === 0 ? 'zero' : pass + failed > 0 ? 'nonzero' : skipped + todo === tests ? 'skipped' : 'unknown';
   return { execution, outcome: execution === 'zero' || execution === 'skipped' || execution === 'unknown' ? 'invalid' : result.exitCode === 0 ? 'pass' : 'fail' };
 }
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#run-red
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#run-green
 export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[]): Effect.Effect<CommandEvidence, ConcordError, OwnedProcess> => Effect.gen(function*() {
   const process = yield* OwnedProcess;
   const prepared = yield* Effect.acquireRelease(
@@ -163,6 +168,9 @@ export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, d
     const state = observed(result, beforeConfig.runner.kind === 'node-test'); const outcome = stable && !invalidated && cleanupOk ? state.outcome : 'invalid'; const unsigned = { id: `ccev_${randomBytes(16).toString('hex')}`, format: 'concord.command-evidence/v1' as const, scope: 'command' as const, selectedCaseId: annotation.id, projectId: beforeConfig.projectId, root: repo.root, implementationDigest: implementation, definitionDigest: definition.digest, contractDigest, candidateDigest: candidate, configPath: repo.configSnapshot.path, configDigest: repo.configSnapshot.digest, problemEpochs: epochs, argv: [...definition.argv], startedAt, finishedAt: iso(), commandOutcome: outcome, execution: state.execution, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk, stdoutDigest: digest(result.stdout), stderrDigest: digest(result.stderr) }; const evidence = decode(CommandEvidenceSchema, { ...unsigned, integrity: objectDigest(unsigned) }, 'issued evidence'); store(repo, evidence); return evidence;
   }), catch: failure });
 }).pipe(Effect.scoped, Effect.mapError(failure), Effect.catchDefect(cause => Effect.fail(failure(cause))));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
 function nativeBindingDigest(repo: Repository, selected: AnnotatedCase): string {
   const adapter = adapterFor(repo, selected.file);
   if (!adapter) fail('EvidenceStale', 'The selected test no longer has its adapter');
@@ -171,8 +179,11 @@ function nativeBindingDigest(repo: Repository, selected: AnnotatedCase): string 
 function nativeDefinitionDigest(bindingDigest: string, inputs: string, requested: readonly string[], plan: string, versions: NativeExecution['versions']): string {
   return objectDigest({ bindingDigest, inputs, requested, plan, versions, protocol: 'concord.test-adapter/v1', codec: 'concord.native-evidence/v2' });
 }
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#run-red
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#run-green
 export const runCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[], options: { requireNative?: boolean } = {}): Effect.Effect<Evidence, ConcordError, OwnedProcess> => Effect.gen(function* () {
   if (!adapterFor(repo, selected.file)) {
     if (options.requireNative) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'No adapter covers this source marker'));
@@ -215,7 +226,10 @@ export const runCase = (repo: LocalRepository, selected: AnnotatedCase, document
   if (issued) return issued;
   return yield* runCommandCase(repo, selected, documents);
 }).pipe(Effect.mapError(failure), Effect.catchDefect(cause => Effect.fail(failure(cause))));
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
 function verifyNativeFixed(repo: Repository, cases: readonly AnnotatedCase[], problem: DocumentRecord, red: Evidence, green: Evidence): FixedProof {
   if (red.format !== 'concord.native-evidence/v2' || green.format !== 'concord.native-evidence/v2') fail('EvidenceMismatch', 'Fixed proof cannot mix command and native receipt formats');
   const documents = loadDocuments(repo); const currentProblem = documents.find(document => document.path === problem.path);
@@ -241,10 +255,12 @@ function verifyNativeFixed(repo: Repository, cases: readonly AnnotatedCase[], pr
 }
 
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#resolve-fixed
 export function verifyFixedEvidence(repo: Repository, documents: readonly DocumentRecord[], cases: readonly AnnotatedCase[], problem: DocumentRecord, redId: string, greenId: string): FixedProof {
   const currentDocuments = loadDocuments(repo); const currentProblem = currentDocuments.find((document) => document.path === problem.path); if (currentProblem === undefined) fail('ProblemNotOpen', 'Problem disappeared while verifying fixed evidence'); const meta = decode(MemorySchema, currentProblem.metadata, currentProblem.path); if (meta.memoryKind !== 'problem' || meta.state !== 'open') fail('ProblemNotOpen', 'Fixed evidence requires an open Problem'); const config = currentConfig(repo); const red = readEvidence(repo, redId); const green = readEvidence(repo, greenId); if (red.format === 'concord.native-evidence/v2' || green.format === 'concord.native-evidence/v2') return verifyNativeFixed(repo, cases, problem, red, green); if (red.selectedCaseId !== green.selectedCaseId || red.projectId !== config.projectId || green.projectId !== config.projectId || red.root !== repo.root || green.root !== repo.root || red.implementationDigest !== implementationDigest() || green.implementationDigest !== implementationDigest()) fail('EvidenceMismatch', 'Evidence receipts do not share this current worktree and Concord implementation'); const selected = cases.find((item) => item.id === red.selectedCaseId); if (selected === undefined || selected.status !== 'active' || !selected.regressions.includes(currentProblem.path)) fail('EvidenceMismatch', 'The current active annotation must regress this Problem by canonical path'); const definition = buildDefinition(repo, selected, config, currentDocuments); const contract = documentFor(repo, currentDocuments, selected.contract, ['feature', 'use-case']); const expectedEpoch = meta.epoch; for (const evidence of [red, green]) if (evidence.configPath !== repo.configSnapshot.path || evidence.configDigest !== repo.configSnapshot.digest || evidence.definitionDigest !== definition.digest || evidence.contractDigest !== documentDigest(repo, contract, selected.contract) || evidence.problemEpochs[currentProblem.path] !== expectedEpoch) fail('EvidenceStale', 'Evidence configuration, definition, contract, or Problem epoch is no longer current'); if (red.commandOutcome !== 'fail' || red.execution === 'zero' || red.execution === 'skipped' || red.exitCode === 0 || red.timedOut || red.cancelled || red.signal !== null || !red.cleanupOk) fail('InvalidRedEvidence', 'Red evidence must be a normal nonzero command result with confirmed cleanup'); if (green.commandOutcome !== 'pass' || green.execution === 'zero' || green.execution === 'skipped' || green.exitCode !== 0 || green.timedOut || green.cancelled || green.signal !== null || !green.cleanupOk) fail('InvalidGreenEvidence', 'Green evidence must be a normal successful command result with confirmed cleanup'); if (Date.parse(red.finishedAt) > Date.parse(green.startedAt) || Number.isNaN(Date.parse(red.finishedAt)) || Number.isNaN(Date.parse(green.startedAt))) fail('EvidenceOrder', 'Red evidence must not follow green evidence'); const current = currentCandidate(repo, currentDocuments); if (green.candidateDigest !== current) fail('EvidenceStale', 'Green evidence does not match the current implementation candidate'); return { red: red.id, green: green.id, selectedCaseId: selected.id, epoch: expectedEpoch };
 }
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 export function inspectResolutionEvidence(repo: Repository, resolution: Resolution): object {
   if (resolution.kind !== 'fixed' || resolution.evidenceLevel !== 'command') {
     return { availability: 'unavailable', evidenceLevel: resolution.evidenceLevel, note: resolution.evidenceLevel === 'attested' ? 'Historical attestation is an unverified fact, not current verification.' : resolution.evidenceLevel === 'repository' ? 'Repository evidence is unavailable as current-worktree verification.' : 'No command evidence is attached.' };

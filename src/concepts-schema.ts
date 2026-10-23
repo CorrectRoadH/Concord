@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
 import { Schema } from 'effect';
 import { Slug } from './shared.js';
 

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
 import { ConcordError, digest, objectDigest, type AnnotatedCase, type Repository } from './shared.js';
 import type { NativeCase, NativeManifest } from './test-adapter-protocol.js';
 

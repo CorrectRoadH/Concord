@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md#contention
 import { Clock, Effect, Result } from 'effect';
 import { ConcordError } from './shared.js';
 

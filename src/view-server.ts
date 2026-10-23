@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { isIP } from 'node:net';
 import { dirname, extname, join, resolve, sep } from 'node:path';
@@ -52,11 +50,15 @@ export interface ViewServerHandle {
   close(): Promise<void>;
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/cli.md
 export function formatViewAddress(host: string, port: number): string {
   const displayHost = host === '0.0.0.0' || host === '::' ? 'localhost' : host;
   return `http://${displayHost.includes(':') ? `[${displayHost}]` : displayHost}:${port}/`;
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md
 function securityHeaders(response: ServerResponse): void {
   response.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'");
   response.setHeader('Referrer-Policy', 'no-referrer');
@@ -65,6 +67,8 @@ function securityHeaders(response: ServerResponse): void {
   response.setHeader('Cache-Control', 'no-store');
 }
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 function acceptsGzip(request: IncomingMessage): boolean {
   return /(?:^|,)\s*gzip(?:\s*;\s*q=(?!0(?:\.0*)?(?:,|$))[^,]*)?(?:,|$)/iu.test(request.headers['accept-encoding'] ?? '');
 }
@@ -77,7 +81,10 @@ function sendCompressible(request: IncomingMessage, response: ServerResponse, bo
   response.setHeader('Content-Length', output.byteLength);
   response.end(output);
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/architecture.md
 function json(response: ServerResponse, status: number, value: ViewResponse<unknown>): void {
   securityHeaders(response);
   response.statusCode = status;
@@ -107,12 +114,15 @@ function failed(request: IncomingMessage, response: ServerResponse, cause: unkno
   if (!transient) process.stderr.write(`Concord view error ${JSON.stringify({ status, code: error.code })}\n`);
   if (!response.destroyed) json(response, status, value);
 }
+// @concord-end
 
 interface Authority {
   readonly hostname: string;
   readonly port?: number;
 }
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/architecture.md
 function forbiddenAuthority(message: string): never {
   throw new ConcordError('ForbiddenAuthority', message);
 }
@@ -203,7 +213,10 @@ function parseRequestTarget(request: IncomingMessage, hostAuthority: string): UR
     throw new ConcordError('InvalidUrl', 'Request target must contain a valid origin-form URL');
   }
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/architecture.md
 function mutationJson(request: IncomingMessage): void {
   const contentType = request.headers['content-type'];
   if (typeof contentType !== 'string' || !/^application\/json(?:\s*;|$)/iu.test(contentType)) throw new ConcordError('InvalidContentType', 'Mutation requests require application/json');
@@ -229,7 +242,10 @@ function exactQuery(url: URL, names: readonly string[]): void {
   for (const name of url.searchParams.keys()) if (!expected.has(name) || url.searchParams.getAll(name).length !== 1) throw new ConcordError('InvalidQuery', 'Unexpected or repeated query parameter');
   for (const name of names) if (!url.searchParams.has(name)) throw new ConcordError('InvalidQuery', `Missing query parameter: ${name}`);
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 function serveStatic(request: IncomingMessage, response: ServerResponse, pathname: string, webRoot: string): void {
   const index = join(webRoot, 'index.html');
   let target = index;
@@ -252,6 +268,8 @@ function serveStatic(request: IncomingMessage, response: ServerResponse, pathnam
   else { response.setHeader('Content-Length', body.byteLength); response.end(body); }
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
 function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoot: string): void {
   const target = join(webRoot, 'p5-runtime.js');
   const stat = lstatSync(target, { throwIfNoEntry: false });
@@ -265,6 +283,8 @@ function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoo
   sendCompressible(request, response, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:white;color:#171717}body{margin:8px;font-family:system-ui;min-height:84px}canvas{display:block;max-width:100%;height:auto}</style></head><body><script>${runtime}</script></body></html>`);
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, scans: ViewProjectionManager, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming): Promise<void> {
   const method = request.method ?? 'GET';
   const respond = (value: unknown, status = 200) => timing.sync('http.response', () => success(response, value, status));
@@ -346,6 +366,9 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   throw new ConcordError('ApiNotFound', 'Unknown API endpoint');
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
+// @concord-implements docs/feature/web-workbench/architecture.md
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
   const root = validateViewRoot(options.root);
   const host = options.host ?? '127.0.0.1';
@@ -430,6 +453,8 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   return handle;
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md
 export const serveViewServer = (options: ViewServerOptions, ready: (server: ViewServerHandle) => void): Effect.Effect<never, ConcordError> => Effect.acquireRelease(
   Effect.tryPromise({ try: () => startViewServer(options), catch: failure }),
   (server) => Effect.tryPromise({ try: () => server.close(), catch: failure }).pipe(Effect.orDie),

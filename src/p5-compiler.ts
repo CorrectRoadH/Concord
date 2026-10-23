@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/embed-p5-sketch.md
+// @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
 import { lstatSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, extname, join, posix, resolve } from 'node:path';

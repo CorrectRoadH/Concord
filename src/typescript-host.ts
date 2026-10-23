@@ -1,5 +1,6 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/README.md
+// @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
+// @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
 import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';

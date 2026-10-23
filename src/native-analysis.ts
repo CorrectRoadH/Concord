@@ -1,6 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#原生测试范围
 import { adapterFor, adapterInputSnapshot, readNativeObservations } from './test-adapters.js';
 import { bindNative } from './test-adapter-binding.js';
 import { ConcordError, objectDigest, type AnnotatedCase, type Repository } from './shared.js';

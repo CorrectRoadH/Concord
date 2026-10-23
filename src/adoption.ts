@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#adopt
 import { posix } from 'node:path';
 import { ConcordError } from './shared.js';
 

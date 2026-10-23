@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 import { randomUUID } from 'node:crypto';
 import { constants, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, readlinkSync, rmSync } from 'node:fs';
 import { delimiter, dirname, join, resolve } from 'node:path';
@@ -18,6 +16,8 @@ import { builtinCollectParse, builtinCollectPlan, builtinReportParse, builtinSel
 import { ADAPTER_FORMAT, AdapterVersionsSchema, ManifestSchema, PayloadSchemas, PlanSchema, ReportSchema, RequestSchema, protocolDecode, protocolJson, type AdapterContext, type AdapterOp, type AdapterPlan, type AdapterReport, type AdapterVersions, type Captured, type NativeManifest, type ProcessStatus } from './test-adapter-protocol.js';
 import { readReports, reportPath, type ReportBudget } from './test-adapter-reports.js';
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
 export const adapterFor = (repo: Repository, file: string): TestAdapter | undefined => repo.config.testAdapters?.find(adapter => adapter.include.some(root => inPath(file, root)));
 export function adapterImplementation(): string {
   const root = dirname(fileURLToPath(import.meta.url)); const entries: { path: string; digest: string }[] = [];
@@ -200,6 +200,7 @@ function validateManifest(repo: Repository, adapter: TestAdapter, files: readonl
     }
   }
 }
+// @concord-end
 const collectOne = Effect.fn('testAdapter.collect')(function* (repo: LocalRepository, adapter: TestAdapter, files: readonly string[], session: Session) {
   const before = yield* sync(() => repo.snapshot(() => adapterInputSnapshot(repo, adapter)));
   const reportDirectory = join(session.directory, adapter.id);
@@ -226,6 +227,8 @@ const collectOne = Effect.fn('testAdapter.collect')(function* (repo: LocalReposi
   yield* sync(() => repo.snapshot(() => { validateManifest(repo, adapter, files, manifest); if (adapterInputSnapshot(repo, adapter).inputs !== before.inputs) throw new ConcordError('InputChanged', 'Adapter collection inputs or member set changed'); }));
   return { adapter, manifest, context, before, providerComplete: collected.completeness.complete, versions };
 });
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
 export function readNativeObservations(repo: Repository): readonly { adapterId: string; observation: Observation<NativeManifest>; inputScope?: typeof InputScopeSchema.Type }[] {
   const results: { adapterId: string; observation: Observation<NativeManifest>; inputScope?: typeof InputScopeSchema.Type }[] = [];
   for (const adapter of repo.config.testAdapters ?? []) {
@@ -254,6 +257,9 @@ function publishObservations(repo: LocalRepository, results: readonly { adapter:
     return values;
   });
 }
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
 export const collectNativeTests = Effect.fn('collectNativeTests')(function* (repo: LocalRepository, requestedFiles: readonly string[] = []) {
   const adapters = repo.config.testAdapters ?? [];
   const files = yield* sync(() => repo.snapshot(() => requestedFiles.length ? [...new Set(requestedFiles)] : [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].filter(file => adapterFor(repo, file) !== undefined && /(?:\.(?:[cm]?[jt]sx?|py|go|rs))$/u.test(file))));
@@ -263,7 +269,11 @@ export const collectNativeTests = Effect.fn('collectNativeTests')(function* (rep
   }), results => { publishObservations(repo, results); });
   return { operation: 'test-collect', observations: results.map(item => ({ adapterId: item.adapter.id, observation: { ...observation(item.manifest, item.before.inputs, item.manifest.completeness.gaps, true), complete: item.manifest.completeness.complete }, inputScope: { ...item.before, versions: item.versions } })) };
 });
+// @concord-end
 export interface NativeExecution { readonly adapter: TestAdapter; readonly inputs: string; readonly manifest: NativeManifest; readonly requested: readonly string[]; readonly report: AdapterReport; readonly statuses: readonly ProcessStatus[]; readonly plan: AdapterPlan; readonly planId: string; readonly versions: AdapterVersions; readonly inputScope: ReturnType<typeof adapterInputSnapshot>; }
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
 export const executeNativeCase = Effect.fn('executeNativeCase')(function* (repo: LocalRepository, marker: AnnotatedCase, requireNative = false, publish?: (execution: NativeExecution) => void) {
   const adapter = adapterFor(repo, marker.file);
   if (!adapter) {
@@ -300,3 +310,4 @@ export const executeNativeCase = Effect.fn('executeNativeCase')(function* (repo:
     }
   });
 });
+// @concord-end

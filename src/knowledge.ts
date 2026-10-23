@@ -1,13 +1,11 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
-// @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
 import { findDocument, loadDocuments, readDocumentSelector, setAuthor } from './documents.js';
 import { buildTrace, requireValidTrace } from './trace.js';
 import { ConcordError, digest, inRepositorySnapshot, type DocumentKind, type DocumentRecord, type MutationReceipt, type Repository } from './shared.js';
 
 type KnowledgeKind = Extract<DocumentKind, 'memory' | 'issue'>;
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 function ownerRecords(repo: Repository, kind: KnowledgeKind): readonly DocumentRecord[] {
   return loadDocuments(repo, [kind]).sort((left, right) => left.path.localeCompare(right.path));
 }
@@ -17,11 +15,17 @@ function summary(record: DocumentRecord) {
     ...(record.metadata.kind === 'memory' ? { memoryKind: record.metadata.memoryKind, state: record.metadata.state } :
       record.metadata.kind === 'issue' ? { state: record.metadata.state, provider: record.metadata.source?.provider ?? 'local' as const } : {}) };
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#index
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
   return inRepositorySnapshot(repo, () => ({ operation: `${kind}-index`, documents: ownerRecords(repo, kind).map(summary) }));
 }
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
 function queryTerms(query: string): readonly string[] {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean);
   if (terms.length === 0) throw new ConcordError('InvalidInput', 'recall/search query must be non-empty');
@@ -34,7 +38,11 @@ function matchingRecords(records: readonly DocumentRecord[], terms: readonly str
     return terms.every(term => text.includes(term));
   });
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function knowledgeRecall(repo: Repository, kind: KnowledgeKind, query: string) {
   return inRepositorySnapshot(repo, () => {
     const terms = queryTerms(query);
@@ -43,6 +51,8 @@ export function knowledgeRecall(repo: Repository, kind: KnowledgeKind, query: st
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
 export function knowledgeSearch(repo: Repository, query: string) {
   return inRepositorySnapshot(repo, () => {
     const terms = queryTerms(query);
@@ -50,6 +60,9 @@ export function knowledgeSearch(repo: Repository, query: string) {
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#edit
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const record = readDocumentSelector(repo, selector, kind);
@@ -57,6 +70,8 @@ export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: s
   });
 }
 
+// @concord-begin
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 function isUnlinkedDraft(record: DocumentRecord): boolean {
   if (record.metadata.kind !== 'issue') return false;
   const issue = record.metadata;
@@ -81,3 +96,4 @@ export function removeIssue(repo: Repository, selector: string, expectedDigest: 
     return repo.publish('remove-issue', [{ path: record.path, before, after: null }], dryRun);
   });
 }
+// @concord-end

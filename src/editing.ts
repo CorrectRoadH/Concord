@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
 import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
 import { documentRoots, inspectDocumentRecords, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
@@ -13,6 +11,8 @@ const sourceForbidden = (path: string): boolean => path.split('/').some(part => 
 const claimsConcordOwner = (source: string): boolean => /(?:^|\n)\s*format\s*:[^\n]*concord\.document\//u.test(source.slice(0, 64 * 1024));
 const underRoot = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 function isLooseProjectDoc(path: string, roots: readonly string[]): boolean {
   return path.startsWith('docs/') && path.endsWith('.md') && !sourceForbidden(path) && !roots.some(root => underRoot(path, root));
 }
@@ -111,7 +111,10 @@ function inspectDocumentsUnderSnapshot(repo: Repository): { documents: DocumentR
   const value = inspected(repo);
   return { documents: [...value.documents], findings: [...value.findings], pages: [...value.pages] };
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 export function listSources(repo: LocalRepository): { path: string; digest: string }[] {
   return inRepositorySnapshot(repo, () => {
   const roots = [...new Set([...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])])].sort();
@@ -145,13 +148,18 @@ export function setSource(repo: LocalRepository, path: string, body: string, exp
   return repo.publishSource(path, source.body, body, dryRun);
   });
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function showConfig(repo: LocalRepository): { operation: string; config: ProjectConfig; digest: string } {
   return inRepositorySnapshot(repo, () => {
   return { operation: 'show-config', config: repo.configSnapshot.config, digest: repo.configSnapshot.digest };
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function setConfig(repo: LocalRepository, config: ProjectConfig, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const current = showConfig(repo);
@@ -165,12 +173,16 @@ export function setConfig(repo: LocalRepository, config: ProjectConfig, expected
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#自动保存
 export function setMetadata(repo: LocalRepository, reference: string, fields: { title?: string; observedAt?: string | null; sources?: readonly string[]; constitutionRefs?: readonly string[] }, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   return setDocumentMetadata(repo, reference, fields, expectedDigest, dryRun);
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const page = inspectDocumentFile(repo, path);

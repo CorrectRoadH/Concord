@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 import { spawn } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +11,8 @@ import { makeOwnedProcessService, hasConfirmedOwnedGroupCleanup, type OwnedProce
 import { decodeQueryScanMessage, type QueryScanMessage } from './query-scan-protocol.js';
 import { ConcordError, failure } from './shared.js';
 
+// @concord-code
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#刷新上限
 export function classifyQueryScan(result: OwnedProcessResult, scannedAt: number, elapsedMs: number, limitMs: number): QueryUpdate {
   const failed = (code: string, message: string, timing = false): QueryUpdate => ({ kind: 'failure', error: {
     failedAt: new Date().toISOString(), scannedAt, code, message: message.slice(0, 4096), ...(timing ? { elapsedMs, limitMs } : {}) } });
@@ -30,10 +30,14 @@ export function classifyQueryScan(result: OwnedProcessResult, scannedAt: number,
   return { kind: 'failure', error: { failedAt: new Date().toISOString(), scannedAt: message.scannedAt, code: message.code, message: message.message.slice(0, 4096) } };
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export function classifyQueryRefresh(before: string, after: string, result: OwnedProcessResult, scannedAt: number, elapsedMs: number, limitMs: number) {
   return before === after ? classifyQueryScan(result, scannedAt, elapsedMs, limitMs) : { kind: 'identity-changed' as const };
 }
 
+// @concord-begin
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 const requestNewIdentity = Effect.fn('requestNewQueryIdentity')(function*(context: QueryContext) {
   yield* Effect.tryPromise({ try: () => new Promise<void>((resolve, reject) => {
     const child = spawn(process.execPath, [fileURLToPath(import.meta.url), context.root, JSON.stringify(context.query), String(Date.now())], { detached: true, stdio: 'ignore', cwd: context.root });
@@ -51,6 +55,9 @@ const persist = Effect.fn('persistQuery')(function*(context: QueryContext, updat
     yield* Effect.sleep('25 millis');
   }
 });
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#刷新上限
 export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | undefined, query: Query, requestedAt: number, limitMs = 120_000) {
   const started = Date.now(), deadline = started + limitMs;
   const context = yield* Effect.try({ try: () => queryContext(input, query), catch: failure });
@@ -88,6 +95,7 @@ export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | 
   if (update.kind === 'identity-changed') { yield* requestNewIdentity(after); return; }
   yield* persist(context, update);
 });
+// @concord-end
 
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   NodeRuntime.runMain(Effect.gen(function*() {

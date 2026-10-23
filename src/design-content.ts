@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/compare-design-plans.md
+// @concord-implements docs/feature/local-sdlc/use-case/compare-design-plans.md#候选内容布局
 import { posix } from 'node:path';
 import { designPlanCandidates, resolveDesignPlanPath } from './document-layout.js';
 import { fromMarkdown } from './markdown-parser.js';

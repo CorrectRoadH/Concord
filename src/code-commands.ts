@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { analysisView } from './analysis-view.js';
 import { readDocumentReference } from './documents.js';
 import { buildTrace, requireValidTrace } from './trace.js';
@@ -7,7 +5,7 @@ import { ConcordError, digest, inRepositorySnapshot, type Repository } from './s
 
 // Code Declaration: an author's explicit implementation association, not evidence.
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#list
 export function listCode(repo: Repository) {
   return inRepositorySnapshot(repo, () => {
   const trace = buildTrace(repo, 'use'); requireValidTrace(trace);
@@ -15,6 +13,8 @@ export function listCode(repo: Repository) {
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#locate
 export function locateCode(repo: Repository, file: string, line: number) {
   repo.absolute(file);
   if (!Number.isSafeInteger(line) || line < 1) throw new ConcordError('InvalidCodeLine', '--line must be a positive integer');
@@ -27,16 +27,15 @@ export function locateCode(repo: Repository, file: string, line: number) {
   return { operation: 'code-locate', file, line, codes: trace.codeDeclarations.filter(item => item.file === file && item.line <= line && line <= item.endLine) };
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#annotate
 export function codeSnippet(repo: Repository, scope: 'file' | 'node' | 'region', contracts: readonly string[]) {
   return inRepositorySnapshot(repo, () => {
   if (!contracts.length) throw new ConcordError('MissingCodeContract', 'Repeat --contract for one or more Feature, Use Case, or Engineering references');
   if (new Set(contracts).size !== contracts.length) throw new ConcordError('DuplicateCodeContract', 'Each exact contract reference must appear once');
   for (const ref of contracts) readDocumentReference(repo, ref, ['feature', 'use-case', 'engineering']);
-  // @concord-begin
-  // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
   const tag = scope === 'node' ? 'code' : scope === 'region' ? 'begin' : 'file';
   const snippet = [`// @concord-${tag}`, ...contracts.map(ref => `// @concord-implements ${ref}`), ...(scope === 'region' ? ['// Place complete statements here.', '// @concord-end'] : [])].join('\n') + '\n';
-  // @concord-end
   return { operation: 'code-annotate', scope, snippet };
   });
 }

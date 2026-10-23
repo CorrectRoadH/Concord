@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
 export const onboardingGuide = `# Developing with Concord
 
 Concord drives development by connecting current product contracts, implementation declarations, real test declarations, and engineering memory. Before changing behavior, update or confirm the owning Feature, leaf Use Case, documented CLI page, and any required Design.

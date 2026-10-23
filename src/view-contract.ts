@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { Schema } from 'effect';
 import { FeedbackFilterFields } from './feedback-filter.js';
 import { TEMPLATE_PAGES } from './template-pages.js';
@@ -22,6 +19,8 @@ import { FeedbackConnectionsSchema, type FeedbackAvailability, type FeedbackItem
 import { WritingPolicySchema } from './writing-schema.js';
 import { ConceptCatalogSchema } from './concepts-schema.js';
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/architecture.md
 export interface ViewFile {
   readonly path: string;
   readonly body: string;
@@ -109,6 +108,7 @@ export interface WorkspaceProjectionSnapshot {
   readonly cache: unknown;
   readonly diagnostics: unknown;
 }
+// @concord-end
 export interface WorkspaceProjectionRefreshError { readonly failedAt: string; readonly code: string; readonly message: string }
 export interface WorkspaceProjectionAttempt { readonly at: string; readonly complete: boolean; readonly changedPaths: readonly string[] }
 /** `consistent` marks a drift-free build; `complete` keeps the scan/finding semantics. Never current facts. */
@@ -162,6 +162,8 @@ const RunnerInputSchema = Schema.Union([
     timeoutMs: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3_600_000 })),
   }),
 ]);
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 export const ProjectInputSchema = ProjectSchema;
 const DryRun = { dryRun: Schema.optional(Schema.Boolean) } as const;
 
@@ -242,6 +244,7 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('template.show'), name: Text, title: Schema.optional(Text) }),
   Schema.Struct({ action: Schema.Literal('doctor') }),
 ]);
+// @concord-end
 
 export type ViewAction = typeof ViewActionSchema.Type;
 

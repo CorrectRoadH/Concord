@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 import { Effect } from 'effect';
 import { readFeedbackCache, mergeFeedbackCache } from './feedback-cache.js';
 import {
@@ -42,6 +39,8 @@ const attempt = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordEr
   catch: failure,
 }).pipe(Effect.withSpan(name));
 
+// @concord-begin
+// @concord-implements docs/feature/feedback/architecture.md
 function withRepository<A>(
   root: string,
   use: (repo: LocalRepository) => Effect.Effect<A, ConcordError>,
@@ -105,7 +104,11 @@ function comparableRemote(remote: RemoteFeedback): string {
 function importedId(remote: RemoteFeedback): string {
   return `feedback-${remote.provider}-${remote.id}`;
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 function issueRecord(record: DocumentRecord): FeedbackItem['document'] {
   if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', `${record.path} is not feedback`);
   return record as FeedbackItem['document'];
@@ -140,7 +143,10 @@ export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonl
     return { document: issueRecord(document), provider: source?.provider ?? 'local', triage, remote, availability, warnings };
   }).filter(item => matchesFeedback(item, selected));
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#主流程
 export const syncFeedback = Effect.fn('feedback.sync')(function*(
   root: string,
   connectionId: string,
@@ -213,9 +219,13 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
     return { ...receipt, connection: bound, fetched: fetched.items.length, imported: changes.filter((change) => change.path.startsWith('docs/issues/')).length, warnings };
   }), dryRun);
 });
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 export const checkFeedbackConnection = Effect.fn('feedback.check')(function*(root: string, connectionId: string): Effect.fn.Return<{ readonly connectionId: string; readonly provider: 'github'; readonly transport: 'gh'; readonly target: string; readonly checkedAt: string }, ConcordError> {
   const observed = yield* withRepository(root, (repo) => attempt('feedback.checkSnapshot', () => configSnapshot(repo, connectionId)), true);
   if (observed.connection.provider !== 'github' || observed.connection.transport !== 'gh') return yield* Effect.fail(new ConcordError('FeedbackCheckUnsupported', 'Connection checks are available only for GitHub CLI connections'));
   return yield* checkGhConnection(root, observed.connection);
 });
+// @concord-end

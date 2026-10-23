@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/architecture.md
 import { watch, type FSWatcher } from 'node:fs';
 import { lstat, readdir } from 'node:fs/promises';
 import { isAbsolute, join, normalize, relative, sep } from 'node:path';

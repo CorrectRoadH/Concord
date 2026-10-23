@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
 import { lstatSync } from 'node:fs';
 import { join } from 'node:path';
 import { Effect } from 'effect';

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/README.md
+// @concord-implements docs/feature/web-workbench/use-case/review-local-changes.md
 import { execFile } from 'node:child_process';
 import { lstatSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
 // Scope-owned, detached process groups for repository commands.
 import { spawn, type ChildProcess } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';

@@ -1,11 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
-// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
-// @concord-implements docs/feature/project-onboarding/use-case/initialize-project.md
-// @concord-implements docs/feature/project-onboarding/use-case/configure-memory-sources.md
-// @concord-implements docs/feature/project-onboarding/use-case/inherit-template-defaults.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, readlinkSync, realpathSync, renameSync, rmSync, rmdirSync, writeFileSync, type BigIntStats } from 'node:fs';
@@ -28,6 +20,8 @@ import { catalogName, policyName, scopeOf } from './writing-scopes.js';
 import { excludedSourcePath } from './source-discovery.js';
 import { planStepRename, type StepRename } from './step-rewrite.js';
 
+// @concord-begin
+// @concord-implements docs/feature/portable-coordination/architecture.md#invariants
 const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
 type RootAnchor = { readonly path: string; readonly dev: bigint; readonly ino: bigint };
@@ -43,12 +37,17 @@ function storageCoordinationFailure(cause: unknown): ConcordError {
   if (error.message.includes('busy')) return new ConcordError('RepositoryBusy', error.message, { operation: error.operation, path: error.path });
   return new ConcordError('CoordinationFailed', error.message, { operation: error.operation, phase: error.phase, path: error.path });
 }
+// @concord-end
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 export function git(root: string, args: readonly string[]): string {
   const env = { ...process.env };
   for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
   try { return execFileSync('git', ['-C', root, ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: MAX_BYTES, timeout: 10000 }).trimEnd(); }
   catch { throw new ConcordError('GitFailed', `Git could not ${args[0] ?? 'inspect'} the selected repository`); }
 }
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 function present(path: string): boolean { try { lstatSync(path); return true; } catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; } }
 
 /** Conservative APFS collision key: over-rejection is safer than a partial publication. */
@@ -124,8 +123,6 @@ function readCheckedFile(target: string, path: string, stat: BigIntStats, verify
 }
 
 /** Standalone reads keep the full path guard and never reuse snapshot listings. */
-// @concord-code
-// @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 export function readRepositoryFileSync(root: string, path: string): string | undefined {
   assertReadHost();
   canonicalPath(path);
@@ -138,7 +135,10 @@ export function readRepositoryFileSync(root: string, path: string): string | und
   catch (cause) { if (errno(cause, 'ENOENT')) return undefined; throw cause; }
   return readCheckedFile(target, path, stat);
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
 export function assertDarwinPublicationPaths(paths: readonly string[], platform: NodeJS.Platform = process.platform): void {
   if (platform !== 'darwin') return;
   const seen = new Map<string, string>();
@@ -198,8 +198,11 @@ function currentJournal(path: string): Journal {
   }
   return decode(JournalSchema, value, path);
 }
+// @concord-end
 
 /** Refusal only: callers must still acquire a lease and repeat this check before ordinary work. */
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function assertCurrentRuntimeFormat(root: string, privateDir = genericPrivateDirectorySync(root)): void {
   const journal = join(privateDir, 'journal.json');
   const governanceMigration = join(privateDir, 'neutral-governance-migration-journal.json');
@@ -208,6 +211,8 @@ export function assertCurrentRuntimeFormat(root: string, privateDir = genericPri
   if (present(join(root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'concord.json is not a runtime configuration. No format conversion is provided; preserve original files, interrupted journals, and locks for handling with the matching tool version.');
 }
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
 const forbiddenSourcePart = (path: string): boolean => path.split('/').some(part => part === '.git' || part === 'node_modules');
 
@@ -222,6 +227,10 @@ export function discoverRoot(input?: string, initialize = false): string {
     cursor = parent;
   }
 }
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
 function defaultConfig(): ProjectConfig {
   return {
     format: 'concord.project/v1', projectId: randomUUID(), testRoots: ['test', 'tests'], sourceRoots: [],
@@ -264,6 +273,7 @@ function withAgentInstructions(source: string): string {
   if (source.trim() === '') return `${block}\n`;
   return `${source.replace(/\n*$/u, '')}\n\n${block}\n`;
 }
+// @concord-end
 
 export class LocalRepository implements Repository {
   readonly access: 'read' | 'write';
@@ -359,6 +369,8 @@ export class LocalRepository implements Repository {
     } catch (cause) { this.close(); throw cause; }
     finally { this.close(); }
   }
+  // @concord-code
+  // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
   absolute(path: string): string {
     canonicalPath(path);
     const target = resolve(this.root, path);
@@ -442,6 +454,8 @@ export class LocalRepository implements Repository {
     }
     return { target: parent, stat };
   }
+  // @concord-code
+  // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
   read(path: string): string | undefined {
     return this.snapshotDepth === 0 ? this.underLease(() => this.readObserved(path)) : this.readObserved(path);
   }
@@ -454,6 +468,8 @@ export class LocalRepository implements Repository {
     const { target, stat } = this.readablePath(path);
     return stat === undefined ? undefined : readCheckedFile(target, path, stat, this.verifyListings !== undefined);
   }
+  // @concord-code
+  // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
   files(prefix: string, scope?: 'source'): string[] {
     return this.snapshotDepth === 0 ? this.underLease(() => this.filesObserved(prefix, scope)) : this.filesObserved(prefix, scope);
   }
@@ -476,9 +492,13 @@ export class LocalRepository implements Repository {
     for (const root of unique) this.validateConfiguredRoot(root);
     return unique;
   }
+  // @concord-code
+  // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md#完整路径
   private validateConfiguredRoots(config: ProjectConfig): void {
     for (const root of [...config.testRoots, ...(config.sourceRoots ?? [])]) this.validateConfiguredRoot(root);
   }
+  // @concord-code
+  // @concord-implements docs/feature/project-onboarding/use-case/configure-memory-sources.md#完整路径
   private validateMemorySources(config: ProjectConfig): void {
     const sources = config.memorySources ?? [{ name: 'project', provider: 'local-files' as const, path: 'memory', access: 'read-write' as const, defaultWrite: true }];
     if (new Set(sources.map((source) => source.name)).size !== sources.length) throw new ConcordError('InvalidMemorySources', 'Memory source names must be unique');
@@ -520,11 +540,15 @@ export class LocalRepository implements Repository {
       this.absolute(root);
   }
   /** An explicit coherent source-read section; never include network or runner waits. */
+  // @concord-code
+  // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   snapshot<A>(read: () => A): A {
     if (this.snapshotDepth === 0) { this.observedFiles.clear(); this.observedDirectories.clear(); }
     return this.underLease(read);
   }
   /** Historical navigation only. Current queries and publications still verify strictly. */
+  // @concord-code
+  // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
   observeProjection<A>(read: () => A): { value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } } {
     if (this.snapshotDepth !== 0 || !this.optimistic) throw new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot');
     this.observedFiles.clear(); this.observedDirectories.clear();
@@ -543,11 +567,15 @@ export class LocalRepository implements Repository {
     try { const value = read(); if (this.snapshotDepth === 1) this.verifySnapshot(); return value; } finally { this.endSnapshot(); }
   }
   /** Optimistic reads never hold up a publisher; changed inputs reject the result. */
+  // @concord-code
+  // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   verifySnapshot(): void {
     if (!this.optimistic || this.snapshotDepth === 0) return;
     if (publicationRevision(this.coordinationDirectory) !== this.revision) throw new ConcordError('SourceChanged', 'Publication changed during the source snapshot; retry the query');
     this.validateObservations();
   }
+  // @concord-code
+  // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   beginSnapshot(reclaimDead = true): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
     try {
@@ -559,6 +587,8 @@ export class LocalRepository implements Repository {
       this.assertReady();
     } catch (cause) { this.close(); throw storageCoordinationFailure(cause); }
   }
+  // @concord-code
+  // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   endSnapshot(): void {
     if (this.snapshotDepth === 0) return;
     this.snapshotDepth--;
@@ -577,6 +607,8 @@ export class LocalRepository implements Repository {
       }
     }
   }
+  // @concord-code
+  // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   close(): void {
     this.snapshotDepth = this.snapshotDepth > 0 || this.traceLease !== undefined || this.rootFd !== undefined ? 1 : 0;
     this.endSnapshot();
@@ -590,6 +622,8 @@ export class LocalRepository implements Repository {
     if (!this.recovering && present(join(this.privateDir, 'journal.json'))) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
     if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('PreimageChanged', 'Project configuration changed; open a fresh repository snapshot', 'source-observation');
   }
+  // @concord-code
+  // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#忽略路径
   private scanDirectory(prefix: string, scope?: 'source'): { observation: string; files: string[] } {
     const { stat } = this.readablePath(prefix);
     if (stat === undefined) return { observation: 'absent', files: [] };
@@ -623,6 +657,8 @@ export class LocalRepository implements Repository {
   private validateObservations(): void {
     this.verifyObservations(false);
   }
+  // @concord-code
+  // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   private verifyObservations(collect: boolean): { files: string[]; directories: string[] } {
     const files = new Set<string>();
     const directories = new Set<string>();
@@ -654,7 +690,7 @@ export class LocalRepository implements Repository {
     } finally { this.verifyListings = undefined; }
   }
   // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
+  // @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
   publish(operation: string, changes: readonly Change[], dryRun = false, catalogGuard?: readonly { path: string; digest: string }[]): MutationReceipt {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const managedJson = (path: string) => path.startsWith('docs/') && (path.endsWith(`/${policyName}`) || path.endsWith(`/${catalogName}`));
@@ -713,6 +749,8 @@ export class LocalRepository implements Repository {
     return receipt;
   }
   /** Publishes one existing configured JS/TS file using the unified source-set journal. */
+  // @concord-code
+  // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
   publishSource(path: string, before: string, after: string, dryRun = false): MutationReceipt {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const frozen = this.currentSnapshot();
@@ -735,6 +773,8 @@ export class LocalRepository implements Repository {
     };
     return this.publishJournal(journal, dryRun);
   }
+  // @concord-code
+  // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
   publishStepRename(request: StepRename, dryRun = false): MutationReceipt {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const frozen = this.currentSnapshot();
@@ -749,6 +789,8 @@ export class LocalRepository implements Repository {
     return this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, projectId: frozen.config.projectId, operation: 'rename-step', phase: 'prepared', directories: [], changes,
       scope: { kind: 'step-rename', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, useCase: plan.useCase, oldId: plan.oldId, newId: plan.newId, inputsDigest: plan.inputsDigest, memberships: [...this.observedDirectories.values()].map(({ path, scope, observation }) => ({ path, ...(scope === undefined ? {} : { scope }), observation })) } }, dryRun);
   }
+  // @concord-code
+  // @concord-implements docs/feature/portable-coordination/architecture.md#data-flow
   private publishJournal(journal: Journal, dryRun: boolean): MutationReceipt {
     return this.underLease(() => {
       // Planning is optimistic. Only validation and publication serialize writers.
@@ -783,6 +825,8 @@ export class LocalRepository implements Repository {
       }
     });
   }
+  // @concord-code
+  // @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
   private publishUnderLease(journal: Journal, dryRun: boolean): MutationReceipt {
     if (Buffer.byteLength(canonical(journal)) > MAX_TRANSACTION_BYTES) throw new ConcordError('InvalidChange', 'Publication exceeds the transaction size limit');
     const changedPaths = journal.changes.filter(change => change.path !== 'concord.repository.json' || change.before !== change.after).map(change => change.path);
@@ -820,6 +864,8 @@ export class LocalRepository implements Repository {
     }
     return { operation: journal.operation, dryRun: false, changedPaths };
   }
+  // @concord-code
+  // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#写入保护
   private preflight(journal: Journal, recovering = false): void {
     const fail = (message: string): never => { throw new ConcordError(recovering ? 'RecoveryConflict' : 'PreimageChanged', message); };
     if (journal.root !== this.root || journal.privateDir !== this.privateDir) fail('Publication belongs to a different worktree');
@@ -970,10 +1016,12 @@ export class LocalRepository implements Repository {
     this.clearPathObservations();
   }
   // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
+  // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#完整路径
   recover(): { operation: string; status: string; changedPaths: readonly string[] } {
     return this.snapshot(() => this.recoverUnderLease());
   }
+  // @concord-code
+  // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#写入保护
   private recoverUnderLease(): { operation: string; status: string; changedPaths: readonly string[] } {
     this.clearPathObservations();
     const path = join(this.privateDir, 'journal.json');
@@ -1006,7 +1054,7 @@ export class LocalRepository implements Repository {
 export interface InitializeOptions { readonly projectId?: string; readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner']; readonly projectTypes?: readonly ('library' | 'cli')[]; readonly pages?: readonly ('library' | 'cli' | 'architecture' | 'lifecycle' | 'use-case')[]; readonly design?: boolean; readonly constitutionBody?: string; readonly adoptConstitution?: boolean; readonly constitutionReason?: string; readonly constitutionImpact?: string; readonly constitutionSources?: readonly string[]; readonly memorySources?: ProjectConfig['memorySources'] }
 export interface InitializationReceipt extends MutationReceipt { readonly config: ProjectConfig; readonly createdPaths: readonly string[]; readonly preservedPaths: readonly string[] }
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
 export function initialize(repo: Repository, dryRun = false, options: InitializeOptions = {}): InitializationReceipt {
   const projectTypes = [...(options.projectTypes ?? [])];
   const inferredPages = options.pages ?? [...new Set(projectTypes.flatMap((type) => type === 'library' ? ['library', 'architecture'] as const : ['cli', 'architecture'] as const))];

@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/README.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
 import { LanguageServersSchema } from './language-server-config.js';
@@ -10,6 +8,8 @@ import { FeedbackConnectionsSchema, FeedbackSourceSchema } from './feedback-sche
 export * from './feedback-schema.js';
 export { TEST_REFERENCE_VERSION, deriveTestReference } from './test-reference.js';
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 export class ConcordError extends Error {
   readonly name = 'ConcordError';
   constructor(readonly code: string, message: string, readonly details?: unknown) { super(message); }
@@ -34,6 +34,9 @@ export const DocumentName = Schema.String.check(Schema.isPattern(DOCUMENT_NAME_P
 export function slug(value: string): string { return decode(Slug, value, 'identifier'); }
 export const Nat = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export const Strings = Schema.Array(Text);
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export const RunnerSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('node-test'), sourceFiles: Strings, timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
   Schema.Struct({ kind: Schema.Literal('command'), argv: Schema.NonEmptyArray(Text), sourceFiles: Strings, timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
@@ -78,7 +81,10 @@ export const ProjectSchema = Schema.Struct({
 export type ProjectConfig = typeof ProjectSchema.Type;
 export type MemorySource = typeof MemorySourceSchema.Type;
 export interface ConfigSnapshot { readonly path: 'concord.config.ts'; readonly source: string; readonly digest: string; readonly config: ProjectConfig }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 export interface Change { readonly path: string; readonly before: string | null; readonly after: string | null }
 export interface MutationReceipt { readonly operation: string; readonly dryRun: boolean; readonly changedPaths: readonly string[]; readonly recoveryRequired?: boolean }
 export interface Repository {
@@ -98,7 +104,10 @@ export interface Repository {
 export function inRepositorySnapshot<A>(repo: Repository, operation: () => A): A {
   return repo.snapshot === undefined ? operation() : repo.snapshot(operation);
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
 export const Sha256 = Schema.String.check(Schema.isPattern(/^sha256:[0-9a-f]{64}$/));
 export const ContentHash = Schema.String.check(Schema.isPattern(/^(?:sha256:)?[0-9a-f]{64}$/));
 export const GitCommit = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
@@ -135,6 +144,9 @@ export const ResolutionSchema = Schema.Union([
 export type Resolution = typeof ResolutionSchema.Type;
 export const HistorySchema = Schema.Struct({ at: Text, action: Text, reason: Text, ref: Schema.optional(Text), resolution: Schema.optional(ResolutionSchema), commit: Schema.optional(GitCommit), source: Schema.optional(SourceRecordSchema), eventAt: Schema.optional(Text) });
 export type HistoryEntry = typeof HistorySchema.Type;
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/library.md#owner
 const base = { format: Schema.Literal('concord.document/v1'), id: DocumentName, title: Text, createdAt: Text,
   createdAtSource: Schema.optional(Schema.Struct({ kind: Schema.Literal('first-recorded'), path: Text, commit: GitCommit })),
   description: Schema.optional(Text),
@@ -178,7 +190,10 @@ export const DocumentSchema = Schema.Union([FeatureSchema, UseCaseSchema, Resear
 export type DocumentMeta = typeof DocumentSchema.Type;
 export type DocumentKind = DocumentMeta['kind'];
 export interface DocumentRecord { readonly path: string; readonly metadata: DocumentMeta; readonly body: string; readonly digest: string }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#标记规则
 export interface Finding { readonly code: string; readonly path: string; readonly message: string; readonly line?: number }
 export const AnnotatedCaseSchema = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(/^neref_[0-9a-f]{32}$/u)), file: Text, line: Schema.Int, name: Text,
@@ -194,4 +209,8 @@ export interface AnnotationSnapshot {
   readonly digest: string;
   readonly cache: { readonly status: string; readonly hits: number; readonly misses: number; readonly path: string; readonly detail?: string };
 }
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#resolve-fixed
 export interface FixedProof { readonly red: string; readonly green: string; readonly selectedCaseId: string; readonly epoch: number }
+// @concord-end

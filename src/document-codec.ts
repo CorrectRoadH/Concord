@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/document-packages/use-case/migrate-document-discovery.md
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 import { Predicate } from 'effect';
 import { parseDocument } from 'yaml';
 import { ConcordError, DocumentSchema, decode, digest, type DocumentRecord } from './shared.js';

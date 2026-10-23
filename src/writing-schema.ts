@@ -1,7 +1,6 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-writing.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+// @concord-implements docs/feature/documentation-quality/policy.md#写作政策
+// @concord-implements docs/feature/documentation-quality/policy.md#受控写作规则
 import { Schema } from 'effect';
 
 const Text = Schema.String.check(Schema.isPattern(/\S/u));

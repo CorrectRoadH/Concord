@@ -1,7 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { fromMarkdown } from './markdown-parser.js';
 import type { Nodes } from 'mdast';
 import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from './shared.js';
@@ -21,6 +17,8 @@ export interface WritingFinding {
   actual?: number; limit?: number; language?: 'zh' | 'en'; languagePolicy?: unknown;
   matches?: readonly { text: string; start: { line: number; column: number }; end: { line: number; column: number } }[];
 }
+// @concord-begin
+// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
 function withoutStepMarkers(path: string, source: string): string {
   if (!source.includes('{#')) return source;
   const lines = source.split('\n');
@@ -75,8 +73,12 @@ function prose(file: string, source: string): ParsedWriting & { blocks: Prose[] 
   visit(tree);
   return { blocks: result, tree, source: authored };
 }
+// @concord-end
 const length = (text: string): number => [...text.replace(/\s/gu, '')].length;
 const rootsOf = (owner: PolicyOwner): readonly string[] => owner.policy.roots ?? [owner.scope];
+// @concord-begin
+// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
+// @concord-implements docs/feature/documentation-quality/policy.md#写作政策
 function applicablePolicy(file: string, policies: readonly PolicyOwner[]): PolicyOwner[] {
   return policies.filter(owner => applies(file, owner.scope)).sort((a, b) => a.scope.length - b.scope.length || a.path.localeCompare(b.path));
 }
@@ -102,6 +104,9 @@ function activeSpellingsFor(concepts: ReturnType<typeof effectiveConcepts>) {
   }
   return active;
 }
+// @concord-end
+// @concord-code
+// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
 function checkTerms(file: string, line: number, value: string, bans: readonly Ban[], active: ReturnType<typeof activeSpellingsFor>, findings: WritingFinding[]): void {
   const occurrences = new Map<string, { term: string; offset: number; bans: Ban[]; active: { reference: string; source: NonNullable<WritingFinding['source']> }[] }>();
   let candidates = 0;
@@ -128,6 +133,9 @@ function checkTerms(file: string, line: number, value: string, bans: readonly Ba
   }
 }
 
+// @concord-code
+// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
+// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 export function checkWriting(repo: Repository, selectedPath?: string, persistentCache = repo instanceof LocalRepository) {
   return inRepositorySnapshot(repo, () => {
     const inputs = new Map<string, string>([['concord.config.ts', repo.configSnapshot.source]]);

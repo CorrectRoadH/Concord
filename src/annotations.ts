@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 import { lstatSync } from 'node:fs';
 import { Schema } from 'effect';
 import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache } from './cache-file.js';
@@ -10,6 +8,8 @@ import { caseDiscriminator, deriveTestReference } from './test-reference.js';
 import * as ts from 'typescript/ast';
 import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from './typescript-host.js';
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#标记规则
 function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-annotations-v5-native-selector`; }
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 const TEXT_LIMIT = 1_048_576;
@@ -118,8 +118,11 @@ function parseSource(input: Source): Parsed {
   }
   return { cases, findings };
 }
+// @concord-end
 
 type SourceMode = 'disk' | 'overlay';
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#list
 function sources(repo: Repository, mode: SourceMode): Source[] {
   const paths = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].sort();
   const selected: Source[] = [];
@@ -173,8 +176,6 @@ function sourceChanged(value: CachedSnapshot, cache: AnnotationSnapshot['cache']
   return snapshot({ ...value, findings: [...value.findings, { code: 'SourceChanged', path: '.', message: 'Source files changed while annotations were scanned' }] }, cache);
 }
 
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 export function scanAnnotations(repo: Repository, options: { cache?: 'use' | 'rebuild' | 'off'; sourceMode?: SourceMode } = {}): AnnotationSnapshot {
   return repo.snapshot === undefined ? scanUnderSnapshot(repo, options) : repo.snapshot(() => scanUnderSnapshot(repo, options));
 }
@@ -192,7 +193,10 @@ function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild
   try { writeCache(repo, key, value); return snapshot(value, { status: 'miss', hits: 0, misses: 1, path }); }
   catch (cause) { return snapshot(value, { status: 'unavailable', hits: 0, misses: 1, path, detail: cause instanceof Error ? cause.message : String(cause) }); }
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#rebuild
 export function clearCache(repo: Repository): { readonly status: string; readonly path: string } {
   return repo.snapshot === undefined ? clearUnderSnapshot(repo) : repo.snapshot(() => clearUnderSnapshot(repo));
 }
@@ -236,3 +240,4 @@ function statusUnderSnapshot(repo: Repository): { readonly status: string; reado
     });
   } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; }
 }
+// @concord-end

@@ -1,6 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
-// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 import { resolveDesignPlanPath } from './document-layout.js';
 import { posix } from 'node:path';
 import { ConcordError, type DocumentKind, type DocumentRecord, type Finding, type Repository } from './shared.js';

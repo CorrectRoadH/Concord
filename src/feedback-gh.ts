@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { accessSync, constants, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -23,6 +20,8 @@ const error = (code: string, message: string): ConcordError => new ConcordError(
 const within = (path: string, root: string): boolean => path === root || (!relative(root, path).startsWith(`..${sep}`) && relative(root, path) !== '..' && !isAbsolute(relative(root, path)));
 const packagePath = (path: string): boolean => path.split(sep).includes('node_modules');
 
+// @concord-begin
+// @concord-implements docs/feature/feedback/architecture.md
 function trustedExecutable(root: string): { readonly executable: string; readonly path: string } {
   const repository = realpathSync(root);
   const candidates = (START_ENV.PATH ?? '').split(delimiter).filter((part) => part.length > 0 && isAbsolute(part) && !packagePath(part) && !within(part, repository));
@@ -176,13 +175,18 @@ function transportFor(run: (args: readonly string[]) => Effect.Effect<{ readonly
     return response;
   });
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#主流程
 export function fetchGhFeedback(root: string, connection: GhConnection, url?: string): Effect.Effect<FeedbackFetch, ConcordError> {
   return ghTraversal(root, (run) => fetchFeedback(connection, { transport: transportFor(run), ...(url === undefined ? {} : { url }) })).pipe(
     Effect.timeoutOrElse({ duration: '30 seconds', orElse: () => Effect.fail(error('GhTimeout', 'GitHub CLI feedback read timed out')) }),
   );
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 export function checkGhConnection(root: string, connection: GhConnection): Effect.Effect<{ readonly connectionId: string; readonly provider: 'github'; readonly transport: 'gh'; readonly target: string; readonly checkedAt: string }, ConcordError> {
   return ghTraversal(root, (run) => Effect.gen(function* () {
     const endpoint = `https://api.github.com/repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}`;
@@ -197,6 +201,8 @@ export function checkGhConnection(root: string, connection: GhConnection): Effec
 }
 
 /** Issue-only traversal: writes are available solely to execute callers. */
+// @concord-begin
+// @concord-implements docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 export function withGhIssueTransport<A, E>(root: string, connection: GhConnection, execute: boolean, use: (request: (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, payload?: unknown) => Effect.Effect<{ readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: unknown }, ConcordError>) => Effect.Effect<A, E>): Effect.Effect<A, E | ConcordError> {
   return ghTraversal(root, run => {
     const prefix = `repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}`;
@@ -234,3 +240,4 @@ function allowedIssueWrite(method: string, path: string, prefix: string, body: u
   }
   return method === 'POST' && /^\/issues\/[1-9][0-9]*\/labels$/u.test(suffix) && keys === 'labels' || method === 'POST' && /^\/issues\/[1-9][0-9]*\/comments$/u.test(suffix) && keys === 'body' || method === 'DELETE' && /^\/issues\/[1-9][0-9]*\/labels\/[^/]+$/u.test(suffix) && keys === '';
 }
+// @concord-end

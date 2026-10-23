@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
 import { readFileSync, readdirSync, type Dirent } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Schema } from 'effect';

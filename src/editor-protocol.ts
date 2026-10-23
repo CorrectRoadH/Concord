@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
+// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md#文件与资源边界
 import { Schema } from 'effect';
 import { ConcordError, Nat, Text, decode } from './shared.js';
 import { PositionSchema, RangeSchema, positionOffset, validRange } from './lsp-symbols.js';

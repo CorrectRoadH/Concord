@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/manage-writing.md
+// @concord-implements docs/feature/documentation-quality/policy.md#写作政策
 import type { WritingPolicy } from './writing-schema.js';
 
 // Curated from NiceEval docs/writing-rules.json; no consumer checkout dependency.

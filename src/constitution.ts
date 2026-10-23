@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 import { Predicate } from 'effect';
 import { parseDocument, stringify } from 'yaml';
 import { ConcordError, ProjectSchema, Slug, Text, decode, digest, type Finding, type MutationReceipt, type Repository } from './shared.js';
@@ -10,6 +8,8 @@ export { ConstitutionSchema } from './constitution-schema.js';
 export type { ConstitutionMeta } from './constitution-schema.js';
 export interface ConstitutionRecord { readonly path: 'docs/constitution.md'; readonly source: string; readonly metadata: ConstitutionMeta; readonly body: string; readonly digest: string; readonly anchors: readonly string[] }
 
+// @concord-begin
+// @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 export function constitutionAnchors(body: string): string[] {
   const anchors: string[] = [];
   let fence: { readonly marker: '`' | '~'; readonly length: number } | undefined;
@@ -104,13 +104,18 @@ export function initialConstitutionSource(options: InitialConstitutionOptions): 
   parseConstitution(source);
   return source;
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 export function showConstitution(repo: Repository): ConstitutionRecord {
   const source = repo.read('docs/constitution.md');
   if (source === undefined) throw new ConcordError('ConstitutionMissing', 'docs/constitution.md is missing; run concord constitution initialize for an existing project');
   return parseConstitution(source);
 }
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 export function checkConstitution(repo: Repository): Finding[] {
   if (repo.config.constitution === undefined) return [];
   try {
@@ -121,6 +126,8 @@ export function checkConstitution(repo: Repository): Finding[] {
   }
 }
 
+// @concord-begin
+// @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 function required(value: string, field: string): string {
   if (value.trim() !== value || value.length === 0) throw new ConcordError('InvalidInput', `${field} must be non-empty without surrounding whitespace`);
   return decode(Text, value, field);
@@ -157,3 +164,4 @@ export function initializeConstitution(repo: Repository, dryRun = false): Mutati
     { path: 'docs/constitution.md', before: null, after: initialConstitutionSource({ body: '# Project constitution\n\nNo project principles have been adopted. This constitution is a draft.\n' }) },
   ], dryRun);
 }
+// @concord-end

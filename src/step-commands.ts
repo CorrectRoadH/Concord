@@ -1,11 +1,11 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md
 import { readDocumentSelector } from './documents.js';
 import { buildTrace, stepGroups } from './trace.js';
 import { formatStepSource, planStepRename } from './step-rewrite.js';
 import { ConcordError, inRepositorySnapshot, type Repository } from './shared.js';
 import type { LocalRepository } from './storage.js';
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#步骤分组输出
 export function useCaseSteps(repo: Repository, selector: string) {
   return inRepositorySnapshot(repo, () => {
     const document = readDocumentSelector(repo, selector, 'use-case');
@@ -14,6 +14,8 @@ export function useCaseSteps(repo: Repository, selector: string) {
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
 export function formatUseCase(repo: Repository, selector: string, seed = false, list?: number, dryRun = false) {
   return inRepositorySnapshot(repo, () => {
     const document = readDocumentSelector(repo, selector, 'use-case');
@@ -23,6 +25,8 @@ export function formatUseCase(repo: Repository, selector: string, seed = false, 
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
 export function renameUseCaseStep(repo: LocalRepository, selector: string, oldId: string, newId: string, dryRun = false) {
   return inRepositorySnapshot(repo, () => {
     const document = readDocumentSelector(repo, selector, 'use-case');

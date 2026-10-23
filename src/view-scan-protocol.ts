@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/architecture.md
 import { Schema } from 'effect';
 
 export const MAX_SCAN_REPLY_BYTES = 128 * 1024 * 1024;

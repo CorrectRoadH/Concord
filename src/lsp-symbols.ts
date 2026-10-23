@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#验收
 import { relative, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Schema } from 'effect';

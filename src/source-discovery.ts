@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md
+// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#忽略路径
 
 /** Environment inputs and generated distributions are not discovery candidates. */
 export const excludedSourceEntry = (name: string): boolean => name === 'dist' || name === '.env' || name.startsWith('.env.');

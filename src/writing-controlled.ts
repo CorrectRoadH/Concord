@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
+// @concord-implements docs/feature/documentation-quality/policy.md#受控写作规则
 import { objectDigest } from './shared.js';
 import type { Nodes, Root } from 'mdast';
 import { fromMarkdown } from './markdown-parser.js';

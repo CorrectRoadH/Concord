@@ -1,10 +1,4 @@
 #!/usr/bin/env node
-// @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-// @concord-implements docs/feature/local-sdlc/README.md
-// @concord-implements docs/feature/project-onboarding/README.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-// @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { checkWriting } from './writing.js';
 import { serveEditor } from './lsp-server.js';
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from './step-commands.js';
@@ -49,6 +43,8 @@ import { viewAddresses } from './view-addresses.js';
 import { exportChangePreview } from './change-preview-export.js';
 import { adoptConstitution, amendConstitution, initializeConstitution, showConstitution } from './constitution.js';
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
   root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise discover concord.config.ts from cwd; unsupported configuration is refused without conversion.')),
   json: Flag.boolean('json').pipe(Flag.withDefault(false)),
@@ -59,6 +55,9 @@ const text = (name: string) => Flag.string(name);
 const optional = (name: string) => text(name).pipe(Flag.optional);
 const many = (name: string) => text(name).pipe(Flag.atLeast(0));
 const id = Argument.string('id');
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 function body(path: string): string {
   let source: string;
   try { source = path === '-' ? readFileSync(0, 'utf8') : readFileSync(path, 'utf8'); }
@@ -84,6 +83,9 @@ function emit(value: unknown, json: boolean): void {
   }
   process.stdout.write(output.endsWith('\n') ? output : `${output}\n`);
 }
+// @concord-end
+// @concord-code
+// @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, options: { initialize?: boolean; recover?: boolean; readonly?: boolean; unlocked?: boolean } = {}) {
   return Effect.gen(function*() {
     const settings = yield* root;
@@ -95,6 +97,8 @@ function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: 
     return yield* operation(repo, settings).pipe(Effect.tap(() => sync(() => repo.verifySnapshot())), Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
   }).pipe(Effect.scoped);
 }
+// @concord-code
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, query?: Query) {
   return Effect.gen(function*() {
     const settings = yield* root;
@@ -108,6 +112,8 @@ function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { js
 }
 const sync = <A>(fn: () => A) => Effect.try({ try: fn, catch: failure });
 const cached = (dry: boolean) => dry ? 'off' as const : 'use' as const;
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
 const init = Command.make('init', {
   testRoot: many('test-root'), sourceRoot: many('source-root'), docsOnly: Flag.boolean('docs-only').pipe(Flag.withDefault(false)), runnerConfig: optional('runner-config'),
   projectType: Flag.choice('project-type', ['library', 'cli']).pipe(Flag.atLeast(0)), pages: many('pages'), noDefaultPages: Flag.boolean('no-default-pages').pipe(Flag.withDefault(false)),
@@ -167,6 +173,9 @@ const init = Command.make('init', {
     return initialize(writer, false, options);
   }));
 }), { initialize: true, readonly: true, unlocked: true })).pipe(Command.withDescription('Progressively initialize static TypeScript configuration, constitution, templates and optional DESIGN.md. Non-TTY uses deterministic defaults; --dry-run previews and an interactive rejection writes nothing.'));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md
 const recover = Command.make('recover', {}, () => Effect.gen(function*() {
   const settings = yield* root;
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'recover does not accept --dry-run'));
@@ -174,7 +183,11 @@ const recover = Command.make('recover', {}, () => Effect.gen(function*() {
   if (receipt.status === 'blocked') process.exitCode = 1;
   yield* Effect.sync(() => emit(receipt, settings.json));
 })).pipe(Command.withDescription('Recover the current document or Trace publication; preserve conflicting external edits.'));
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page
 function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
   const create = Command.make('create', { id, title: text('title'), body: optional('body'), feature: optional('feature'), observedAt: optional('observed-at'), source: many('source'), alternative: many('alternative'), pages: many('pages'), noPages: Flag.boolean('no-pages').pipe(Flag.withDefault(false)), constitutionRef: many('constitution-ref') }, args => withRepo((repo, s) => sync(() => {
     if (args.noPages && args.pages.length) throw new ConcordError('ConflictingOptions', '--no-pages cannot be combined with --pages');
@@ -201,13 +214,30 @@ function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
   const commands = kind === 'roadmap' ? [create, list, show, page, adopt] : kind === 'design' ? [create, list, show, page, decide, correctReason, designCheck, designFormat] : kind === 'feature' || kind === 'engineering' || kind === 'research' ? [create, list, show, page] : kind === 'use-case' ? [create, list, show, ...stepCommands] : [create, list, show];
   return Command.make(kind).pipe(Command.withDescription(`Maintain ${kind} contracts.`), Command.withSubcommands(commands));
 }
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#edit
 const author = Command.make('author').pipe(Command.withDescription('Edit author prose while retaining managed metadata and history.'), Command.withSubcommands([
   Command.make('set', { ref: Argument.string('reference'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo,s) => sync(() => setAuthor(repo, args.ref, body(args.body), args.expectedDigest, s.dryRun)))),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#add
 const memoryAdd = Command.make('add', { id, title: text('title'), kind: Flag.choice('kind', ['problem','decision','insight','note']), body: optional('body'), source: optional('source') }, args => withRepo((repo,s) => sync(() => createDocument(repo, 'memory', { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, memoryKind: args.kind, memorySource: Option.getOrUndefined(args.source), dryRun: s.dryRun }))));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#index
 const memoryList = Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'memory-list', memories: loadDocuments(repo, ['memory']).map(d => ({path:d.path,...d.metadata})) }))));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 const memoryShow = Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => documentShow(repo, args.id, 'memory', cached(settings.dryRun)))));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
 const memorySearch = Command.make('search', { query: Argument.string('query') }, args => withReadRepo(repo => sync(() => knowledgeSearch(repo, args.query))));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#resolve-fixed
 const memoryResolve = Command.make('resolve', { id, kind: Flag.choice('kind', ['fixed','not-a-bug','wont-fix','external-fixed']), reason: text('reason'), red: optional('red'), green: optional('green') }, args => withRepo((repo,s) => sync(() => {
   const trace = buildTrace(repo, 'off', { includeCode: false }); requireValidTrace(trace);
   const problem = findDocument(trace.documents, args.id, 'memory');
@@ -217,6 +247,9 @@ const memoryResolve = Command.make('resolve', { id, kind: Flag.choice('kind', ['
   const proof = args.kind === 'fixed' ? verifyFixedEvidence(repo, trace.documents, trace.annotations.cases, problem, red!, green!) : undefined;
   return resolveMemory(repo,args.id,args.kind,args.reason,proof,s.dryRun);
 })));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 const memory = Command.make('memory').pipe(Command.withDescription('Maintain Problem, Decision, and Insight lifecycles.'), Command.withSubcommands([
   memoryAdd, memoryList, memoryShow, memorySearch, memoryResolve,
   Command.make('index', {}, () => withRepo(repo => sync(() => knowledgeIndex(repo, 'memory')), { readonly: true })),
@@ -228,6 +261,9 @@ const memory = Command.make('memory').pipe(Command.withDescription('Maintain Pro
   Command.make('promote', { id, target: text('target') }, args => withRepo((repo,s) => sync(() => promoteMemory(repo,args.id,args.target,s.dryRun)))),
   Command.make('retire', { id, target: text('target'), reason: text('reason') }, args => withRepo((repo,s) => sync(() => retirePromotion(repo,args.id,args.target,args.reason,s.dryRun)))),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 const feedbackFilters = {
   state: Flag.choice('state', ['draft', 'closed']).pipe(Flag.optional),
   provider: Flag.choice('provider', ['local', 'github', 'linear']).pipe(Flag.optional),
@@ -241,6 +277,7 @@ const closureFlags = { kind: Flag.choice('kind', ['fixed', 'delivered', 'duplica
 const retiredFeedback = (name: string, replacement: string) => Command.make(name, {}, () => sync(() => { throw new ConcordError('CommandRetired', `Use ${replacement}`, { command: `concord feedback ${name}`, replacement }); })).pipe(Command.withDescription(`Use ${replacement} to maintain an Issue.`));
 // Retired commands ignore their former operands and flags before CLI parsing.
 const retiredFeedbackIndex = process.argv.indexOf('feedback');
+// @concord-end
 if (retiredFeedbackIndex >= 2 && ['create', 'link', 'close'].includes(process.argv[retiredFeedbackIndex + 1] ?? '')) {
   const json = process.argv.includes('--json'); process.argv.splice(retiredFeedbackIndex + 2); if (json) process.argv.push('--json');
 }
@@ -262,6 +299,8 @@ const issueRemoteCommands = issueRemoteContribution.makeIssueRemoteSubcommands(
   true,
 );
 // @concord-end
+// @concord-begin
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 const issue = Command.make('issue').pipe(Command.withDescription('Maintain local Issue owners; remote GitHub writes only through plan and execute.'), Command.withSubcommands([
   ...issueRemoteCommands,
   Command.make('draft', { id, title: text('title'), body: optional('body') }, args => withRepo((repo,s) => sync(() => createDocument(repo,'issue',{id:args.id,title:args.title,body:Option.isSome(args.body) ? body(args.body.value) : undefined,dryRun:s.dryRun})))).pipe(Command.withDescription('Create a local Issue draft.')),
@@ -281,6 +320,9 @@ const issue = Command.make('issue').pipe(Command.withDescription('Maintain local
     return closeIssue(repo,args.id,decode(IssueClosureSchema,closure,'Issue closure'),s.dryRun);
   }))).pipe(Command.withDescription('Close an Issue with a validated conclusion.')),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 const feedbackConnection = Command.make('connection').pipe(Command.withDescription('Configure feedback providers; GitHub CLI mode reuses the server machine login.'), Command.withSubcommands([
   Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] })))),
   Command.make('add', {
@@ -345,6 +387,10 @@ const feedback = Command.make('feedback').pipe(Command.withDescription('Connect 
   feedbackImport,
   feedbackConnection,
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/cli.md#测试与证据
+// @concord-implements docs/feature/local-sdlc/cli.md#原生测试-adapter
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
   Command.make('annotate', { contract: text('contract'), regression: many('regression') }, args => withReadRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.regression)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
   Command.make('list', {}, () => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache,observations:readNativeObservations(repo)};}))),
@@ -360,12 +406,19 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
   }), { unlocked: true })),
   Command.make('evidence', { id }, args => withReadRepo(repo => sync(()=>readEvidence(repo,args.id)))),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/cli.md#关联源码
+// @concord-implements docs/feature/local-sdlc/cli.md#依赖分析
 const code = Command.make('code').pipe(Command.withDescription('Associate files, functions and statement regions with Feature, Use Case or Engineering contracts. No coverage or completion claim.'), Command.withSubcommands([
   Command.make('analyze', {}, () => withRepo((repo, settings) => settings.dryRun ? Effect.fail(new ConcordError('InvalidOption', 'code analyze does not accept --dry-run')) : analyzeCode(repo), { unlocked: true })).pipe(Command.withDescription('Explicitly analyze dependencies and run configured language servers; writes disposable observations only.')),
   Command.make('list', {}, () => withReadRepo(repo => sync(() => listCode(repo)))).pipe(Command.withDescription('List current declarations from configured sourceRoots.')),
   Command.make('locate', { file: Argument.string('path'), line: Flag.integer('line').pipe(Flag.withDescription('1-based source line; returns every containing scope.')) }, args => withReadRepo(repo => sync(() => locateCode(repo, args.file, args.line)))).pipe(Command.withDescription('Find all explicit declarations containing a repository-relative source line.')),
   Command.make('annotate', { scope: Flag.choice('scope', ['file', 'node', 'region']), contract: many('contract') }, args => withReadRepo(repo => sync(() => codeSnippet(repo, args.scope, args.contract)))).pipe(Command.withDescription('Print validated source comments; repeat --contract for multiple targets. Does not edit source.')),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear, or rebuild disposable HawDB projections.'),Command.withSubcommands([
   Command.make('status',{},()=>withReadRepo(repo=>sync(()=>cacheStatus(repo)))),
   Command.make('clear',{},()=>withRepo((repo,s)=>sync(()=>s.dryRun ? previewCacheClear(repo) : clearCache(repo)))),
@@ -380,6 +433,7 @@ const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear
     return {...annotations,codeCache:code.cache,cacheStatus:status};
   }))),
 ]));
+// @concord-end
 // @concord-begin
 // @concord-implements docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 const docsWorkContributionPath = new URL(import.meta.url).pathname.endsWith('.ts') ? '../repository/docs/work/index.ts' : './repository/docs/work/index.js';
@@ -396,6 +450,8 @@ const docs = Command.make('docs').pipe(Command.withDescription('Check authored p
 ]));
 // @concord-end
 const expected = (value: string): string | null => value === 'null' ? null : value;
+// @concord-begin
+// @concord-implements docs/feature/documentation-quality/use-case/manage-writing.md
 const writing = Command.make('writing').pipe(Command.withDescription('Discover and manage directory-owned writing policies.'), Command.withSubcommands([
   Command.make('index', {}, () => withRepo(repo => sync(() => writingIndex(repo)), { readonly: true })),
   Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showWriting(repo, Option.getOrUndefined(args.path))), { readonly: true })),
@@ -403,40 +459,72 @@ const writing = Command.make('writing').pipe(Command.withDescription('Discover a
   Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setWriting(repo, readWritingPolicy(body(args.body), Option.getOrUndefined(args.path)), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a policy with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
   Command.make('check', { path: optional('path') }, args => withRepo((repo, settings) => sync(() => { const result = checkWriting(repo, Option.getOrUndefined(args.path), !settings.dryRun); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true })),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 const concepts = Command.make('concepts').pipe(Command.withDescription('Discover and manage directory-owned concept catalogs.'), Command.withSubcommands([
   Command.make('index', {}, () => withRepo(repo => sync(() => indexConcepts(repo)), { readonly: true })),
   Command.make('show', { path: optional('path') }, args => withRepo(repo => sync(() => showConcepts(repo, Option.getOrUndefined(args.path))), { readonly: true })),
   Command.make('set', { path: optional('path'), body: text('body'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setConcepts(repo, jsonBody(args.body, ConceptCatalogSchema, 'concept catalog'), expected(args.expectedDigest), settings.dryRun, Option.getOrUndefined(args.path))))).pipe(Command.withDescription('Replace a catalog with CAS. Use --expected-digest null only when creating a missing owner; --body accepts a JSON file or -.')),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的聚合检查
 const check = Command.make('check', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* checkCurrentProject(Option.getOrUndefined(settings.root), cached(settings.dryRun)); if (!result.ok) process.exitCode = 1; emit(result, settings.json); })).pipe(Command.withDescription('Validate source ownership, references and writing policy; do not execute tests.'));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
 const lsp = Command.make('lsp', {}, () => Effect.gen(function*() {
   const settings = yield* root;
   yield* serveEditor(Option.getOrUndefined(settings.root));
 })).pipe(Command.withDescription('Serve read-only Concord editor navigation and diagnostics over framed stdio.'));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
+// @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md#list-gaps
 const trace = Command.make('trace').pipe(Command.withDescription('Derive forward and reverse relationships from current owners.'),Command.withSubcommands([
   Command.make('show',{ref:Argument.string('reference')},args=>withReadRepo((repo,s)=>sync(()=>traceShow(repo,args.ref,cached(s.dryRun))), ['trace', 'show', args.ref])),
   Command.make('gaps',{},()=>withReadRepo((repo,s)=>sync(()=>traceGaps(repo,cached(s.dryRun))), ['trace', 'gaps'])).pipe(Command.withDescription('List contracts and documented CLI pages missing explicit code or active test relationships; this is not coverage.')),
   Command.make('check',{},()=>withReadRepo((repo,s)=>sync(()=>{const t=buildTrace(repo,cached(s.dryRun));if(t.findings.length)process.exitCode=1;return {operation:'trace-check',ok:t.complete,complete:t.complete,findings:t.findings,edges:t.edges};}))),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
 const review = Command.make('review').pipe(Command.withDescription('Generate local review material from current contracts and history.'),Command.withSubcommands([
   Command.make('render',{ref:Argument.string('reference').pipe(Argument.optional)},args=>withReadRepo((repo,s)=>sync(()=>renderReview(repo,Option.getOrUndefined(args.ref),cached(s.dryRun))), Option.isSome(args.ref) ? ['review', 'render', args.ref.value] : ['review', 'render'])),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
 const templates = Command.make('template').pipe(Command.withDescription('Inspect built-in writing templates without a project.'), Command.withSubcommands([
   Command.make('list', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* sync(() => ({ operation: 'template-list', templates: listTemplates() })); yield* Effect.sync(() => emit(result, settings.json)); })),
   Command.make('show', { name: Argument.string('name'), title: optional('title') }, args => Effect.gen(function*() { const settings = yield* root; const result = yield* sync(() => ({ operation: 'template-show', name: args.name, body: templateBody(args.name, Option.getOrElse(args.title, () => 'Your title')) })); yield* Effect.sync(() => emit(result, settings.json)); })),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 const config = Command.make('config').pipe(Command.withDescription('Inspect or replace the normalized project configuration with whole-file CAS.'), Command.withSubcommands([
   Command.make('show', {}, () => withReadRepo(repo => sync(() => ({ ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source })))),
   Command.make('set', { input: text('input'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => setConfig(repo, decode(ProjectSchema, JSON.parse(body(args.input)), 'configuration input'), args.expectedDigest, settings.dryRun)))),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 const constitution = Command.make('constitution').pipe(Command.withDescription('Inspect, initialize, adopt, and amend the single project constitution with CAS.'), Command.withSubcommands([
   Command.make('show', {}, () => withReadRepo(repo => sync(() => ({ operation: 'constitution-show', constitution: showConstitution(repo), affected: loadDocuments(repo).filter((document) => (document.metadata.kind === 'feature' || document.metadata.kind === 'design') && (document.metadata.constitutionRefs?.length ?? 0) > 0).map((document) => ({ path: document.path, refs: document.metadata.kind === 'feature' || document.metadata.kind === 'design' ? document.metadata.constitutionRefs ?? [] : [] })) })))),
   Command.make('initialize', {}, () => withRepo((repo, settings) => sync(() => initializeConstitution(repo, settings.dryRun)))),
   Command.make('adopt', { body: text('body'), reason: text('reason'), impact: text('impact'), source: many('source'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => adoptConstitution(repo, body(args.body), args.reason, args.impact, args.source, args.expectedDigest, settings.dryRun)))),
   Command.make('amend', { body: text('body'), reason: text('reason'), impact: text('impact'), source: many('source'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => amendConstitution(repo, body(args.body), args.reason, args.impact, args.source, args.expectedDigest, settings.dryRun)))),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#结果
 const diagnose = Command.make('doctor', {}, () => withReadRepo(repo => sync(() => { const result = doctor(repo); if (!result.ok) process.exitCode = 1; return result; }))).pipe(Command.withDescription('Inspect project configuration and onboarding gaps without running tests.'));
+// @concord-end
 const viewRoot = (settings: { readonly root: Option.Option<string> }): string => Option.getOrUndefined(settings.root) ?? process.cwd();
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 const action = Command.make('action', { input: text('input') }, args => Effect.gen(function*() {
   const settings = yield* root;
   const input = yield* sync(() => { try { return applyViewDryRun(JSON.parse(body(args.input)) as unknown, settings.dryRun); } catch (cause) { throw cause instanceof ConcordError ? cause : new ConcordError('InvalidJson', `Action input is not valid JSON: ${cause instanceof Error ? cause.message : String(cause)}`); } });
@@ -444,14 +532,23 @@ const action = Command.make('action', { input: text('input') }, args => Effect.g
   if (input.action === 'recover' && typeof result === 'object' && result !== null && 'status' in result && result.status === 'blocked') process.exitCode = 1;
   yield* Effect.sync(() => emit(result, settings.json));
 })).pipe(Command.withDescription('Execute one strict shared ViewAction from --input <file|->.'));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/architecture.md
 const workspace = Command.make('workspace').pipe(Command.withDescription('Inspect the shared human/agent workspace projection.'), Command.withSubcommands([
   Command.make('show', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* getWorkspaceSnapshot(viewRoot(settings), settings.dryRun ? 'off' : 'use'); yield* Effect.sync(() => emit(result, settings.json)); })),
   Command.make('projection', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* sync(() => readWorkspaceProjection(workspaceProjectionContext(validateViewRoot(viewRoot(settings))))); yield* Effect.sync(() => emit({ operation: 'workspace-projection', ...result }, settings.json)); })),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/review-local-changes.md
 const gitView = Command.make('git').pipe(Command.withDescription('Inspect readonly working-tree status and diffs.'), Command.withSubcommands([
   Command.make('status', {}, () => Effect.gen(function*() { const settings = yield* root; const result = yield* getGitStatus(viewRoot(settings)); yield* Effect.sync(() => emit(result, settings.json)); })),
   Command.make('diff', { path: Argument.string('path'), area: Flag.choice('area', ['staged', 'unstaged', 'untracked']) }, args => Effect.gen(function*() { const settings = yield* root; const result = yield* getGitDiff(viewRoot(settings), args.path, args.area); yield* Effect.sync(() => emit(result, settings.json)); })),
 ]));
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/cli.md
 const view = Command.make('view', {
   host: Flag.string('host').pipe(Flag.withDefault('127.0.0.1')),
   port: Flag.integer('port').pipe(Flag.withDefault(4317)),
@@ -470,6 +567,7 @@ const view = Command.make('view', {
     yield* Effect.sync(() => emit(result, settings.json));
   })).pipe(Command.withDescription('Export a readonly static comparison from the unique merge-base to head; requires complete local Git history and a new output directory.')),
 ]));
+// @concord-end
 root.pipe(Command.withSubcommands([Command.make('repo').pipe(Command.withDescription('Manage declared test suites, native evidence and repository governance.')),init,recover,config,constitution,...(['feature','use-case','research','design','roadmap','engineering'] as const).map(docsGroup),author,memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view]),Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))

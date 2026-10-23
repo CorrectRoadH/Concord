@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
 import { readFileSync } from 'node:fs';
 import { Effect } from 'effect';
 import { buildTrace, requireValidTrace } from './trace.js';
@@ -24,6 +22,8 @@ const sync = <A>(run: () => A) => Effect.try({ try: run, catch: failure });
 const unitKey = (repo: Repository, analyzer: string): string => objectDigest({ kind: ALGORITHM, projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, analyzer });
 
 /** Entire analysis unit, including membership and declared ignored implementation inputs. */
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 export function captureAnalysisInputs(repo: Repository) {
   const paths = [...new Set([...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])].flatMap(root => repo.files(root, 'source')))];
   if (paths.length > ANALYSIS_LIMITS.files) throw new ConcordError('AnalysisBudgetExceeded', 'FileLimit');
@@ -103,8 +103,11 @@ function publishObservations(repo: Repository, values: readonly AnalysisObservat
   } catch { throw new ConcordError('LanguageServerFailed', 'Could not publish the analysis observation cache'); }
   finally { closeRepositoryCache(repo); }
 }
+// @concord-end
 
 /** Runner ownership encloses processes; snapshots and publication coordination never enclose waits. */
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#主流程
 export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
   const owned = yield* OwnedProcess;
   const run = yield* Effect.acquireRelease(sync(() => {
@@ -166,7 +169,10 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
     } finally { releaseTraceLeaseSync(lease, 'analysis-publish'); }
   });
 }).pipe(Effect.scoped, Effect.mapError(failure), Effect.catchDefect(cause => Effect.fail(failure(cause))));
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 function readStoredAnalysisObservations(repo: Repository): readonly AnalysisObservation[] {
   const analyzers = ['typescript', ...(repo.config.languageServers ?? []).map(server => server.id)];
   let stored: ReadonlyMap<string, string>;
@@ -192,3 +198,4 @@ export function readAnalysisObservations(repo: Repository): readonly AnalysisObs
   try { inputs = captureAnalysisInputs(repo).inputs; } catch { /* History remains explicitly non-current. */ }
   return observations.map(value => ({ ...value, current: value.current && value.inputs === inputs, complete: value.complete && value.inputs === inputs, gaps: value.inputs === inputs ? value.gaps : [...new Set([...value.gaps, 'SnapshotNotCurrent'])] }));
 }
+// @concord-end

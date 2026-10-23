@@ -1,11 +1,11 @@
-// @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { ConcordError, decode, digest, inRepositorySnapshot, objectDigest, type Repository } from './shared.js';
 import type { LocalRepository } from './storage.js';
 import { ConceptCatalogSchema, type ConceptCatalog, type ConceptDefinition } from './concepts-schema.js';
 import { discovered, globalCatalogPath, scopeOf, under } from './writing-scopes.js';
 export { ConceptCatalogSchema, type ConceptCatalog, type ConceptDefinition } from './concepts-schema.js';
 
+// @concord-begin
+// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
 export const spellingKey = (value: string): string => /^[\x20-\x7e]+$/u.test(value) ? value.toLowerCase() : value;
 const spellingExpressions = new Map<string, RegExp>();
 function spellingExpression(spelling: string, ascii: boolean): RegExp {
@@ -135,6 +135,9 @@ function ambiguityDiagnostics(catalogs: readonly CatalogRecord[]): ConceptDiagno
   }
   return diagnostics;
 }
+// @concord-end
+// @concord-code
+// @concord-implements docs/feature/documentation-quality/policy.md#使用统计与输入快照
 export function indexConcepts(repo: Repository) {
   return inRepositorySnapshot(repo, () => {
     const sources = catalogSources(repo);
@@ -142,6 +145,8 @@ export function indexConcepts(repo: Repository) {
     return { operation: 'concepts-index', catalogs, concepts: catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, path: record.path, scope: record.scope, concept }))), diagnostics: [...diagnostics, ...ambiguityDiagnostics(catalogs)], inputDigest: objectDigest({ config: repo.configSnapshot.source, sources: [...sources], membership: [...sources.keys()] }) };
   });
 }
+// @concord-code
+// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
 export function showConcepts(repo: Repository, path = globalCatalogPath) {
   return inRepositorySnapshot(repo, () => {
     const scope = scopeOf(path, 'catalog');
@@ -153,6 +158,8 @@ export function showConcepts(repo: Repository, path = globalCatalogPath) {
     catch (cause) { return { operation: 'concepts-show', state: 'invalid' as const, path, scope, digest: digest(source), source, catalog: null, diagnostic: cause instanceof Error ? cause.message : String(cause), ...projection }; }
   });
 }
+// @concord-code
+// @concord-implements docs/feature/documentation-quality/policy.md#工具管理与恢复
 export function setConcepts(repo: LocalRepository, catalog: ConceptCatalog, expectedDigest: string | null, dryRun = false, path = globalCatalogPath) {
   return inRepositorySnapshot(repo, () => {
     const scope = scopeOf(path, 'catalog');

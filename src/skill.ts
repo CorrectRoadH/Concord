@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { fileURLToPath } from 'node:url';

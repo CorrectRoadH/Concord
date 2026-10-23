@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
+// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
 import { Schema } from 'effect';
 
 const text = Schema.String.check(Schema.isMinLength(1));

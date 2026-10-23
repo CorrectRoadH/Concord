@@ -1,6 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-// @concord-implements docs/feature/cross-platform-release/use-case/release-from-tag.md
+// @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, lstatSync, mkdirSync } from 'node:fs';
 import { resolve, join, sep } from 'node:path';

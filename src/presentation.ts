@@ -1,6 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/README.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+// @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 import { Predicate } from 'effect';
 
 const label = (key: string): string => key.replaceAll('-', ' ');

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
 import type { IncomingMessage, ServerResponse } from 'node:http';
 
 type Observation = 'incomplete-scan' | 'source-changed' | 'orphan-annotation' | 'cache-unavailable' | 'native-artifact-mismatch';

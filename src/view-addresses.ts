@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/cli.md
 import { isIP } from 'node:net';
 import { networkInterfaces, type NetworkInterfaceInfo } from 'node:os';
 

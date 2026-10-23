@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/architecture.md
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
 import { makeOwnedProcessService } from './owned-process.js';

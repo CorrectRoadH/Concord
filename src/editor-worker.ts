@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md
+// @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md#文件与资源边界
 import { Effect } from 'effect';
 import { Job, editorLimits } from './editor-protocol.js';
 import { computeEditor } from './editor-compute.js';

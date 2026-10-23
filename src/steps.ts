@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md
 import type { Nodes, ListItem, Paragraph } from 'mdast';
 import { fromMarkdown } from './markdown-parser.js';
 import { decodeDocumentSource } from './document-codec.js';
@@ -11,6 +9,8 @@ export interface RootOrderedList { readonly ordinal: number; readonly line: numb
 export interface StepMarkerRange { readonly line: number; readonly startColumn: number; readonly endColumn: number }
 
 /** Mask metadata without moving any body offsets or line numbers. */
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 export function markdownBody(source: string): string {
   return source.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, value => value.replace(/[^\r\n]/gu, ' '));
 }
@@ -41,9 +41,12 @@ export function headingAnchors(source: string): ReadonlySet<string> {
   visit(fromMarkdown(markdownBody(source)));
   return anchors;
 }
+// @concord-end
 
 export interface StepItem { readonly item: ListItem; readonly paragraph: Paragraph; readonly listOrdinal: number; readonly marker?: { readonly id: string; readonly start: number; readonly end: number; readonly range: StepMarkerRange } }
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
 export function inspectSteps(path: string, source: string) {
   let owner: ReturnType<typeof decodeDocumentSource>;
   try { owner = decodeDocumentSource(path, source); }
@@ -103,3 +106,4 @@ export function extractSteps(path: string, source: string): { readonly steps: re
   const { steps, lists, markers, findings } = inspectSteps(path, source);
   return { steps, lists, markers, findings };
 }
+// @concord-end

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
+// @concord-implements docs/feature/documentation-quality/policy.md#使用统计与输入快照
 import { Schema } from 'effect';
 import { withPersistentCache } from './cache-store.js';
 import { readCachePayloads, writeCachePayloads } from './cache-query.js';

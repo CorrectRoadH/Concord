@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 import { Predicate } from 'effect';
 import { readCachedProjectConfig } from './config-cache.js';
 import { ConcordError, ProjectSchema, decode, digest, type ConfigSnapshot, type ProjectConfig } from './shared.js';
@@ -9,6 +7,8 @@ import { ContentCache } from './content-cache.js';
 
 const configContentCache = new ContentCache<ProjectConfig>('document_parse', `typescript-ast/${typescriptPackageVersion()}/concord-config-parse/v1`, ProjectSchema, { maxEntries: 128, maxBytes: 1024 * 1024 });
 
+// @concord-begin
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 function unwrap(expression: ts.Expression): ts.Expression {
   if (ts.isAsExpression(expression) || ts.isSatisfiesExpression(expression) || ts.isParenthesizedExpression(expression)) return unwrap(expression.expression);
   return expression;
@@ -60,12 +60,17 @@ export function parseTypeScriptConfig(source: string, path = 'concord.config.ts'
     }
   });
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function renderTypeScriptConfig(config: ProjectConfig): string {
   const valid = decode(ProjectSchema, config, 'configuration');
   return `import type { ProjectConfig } from 'concord-sdlc/config';\n\nexport default ${JSON.stringify(valid, null, 2)} as const satisfies ProjectConfig;\n`;
 }
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string): ConfigSnapshot {
   if (path !== 'concord.config.ts') throw new ConcordError('ProjectMigrationRequired', 'Runtime configuration must be concord.config.ts; migrate old configuration explicitly offline');
   const sourceDigest = digest(source);

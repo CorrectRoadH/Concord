@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 import { pathToFileURL } from 'node:url';
 import { Effect, Fiber, Predicate, Schema } from 'effect';
 import { ConcordError, decode, failure, objectDigest, type AnnotatedCase, type Repository } from './shared.js';

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
+// @concord-implements docs/feature/feedback/architecture.md
 import { DateTime, Effect, Predicate, Schema } from 'effect';
 import { RemoteFeedbackSchema, type FeedbackConnection, type RemoteFeedback } from './feedback-schema.js';
 import { ConcordError, canonical } from './shared.js';

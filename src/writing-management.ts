@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { ConcordError, digest, inRepositorySnapshot, type Repository } from './shared.js';
 import type { LocalRepository } from './storage.js';
 import { readWritingPolicy, type WritingPolicy } from './writing-policy.js';
@@ -9,8 +6,13 @@ import { applies, discovered, indexWritingScopes, globalPolicyPath, scopeOf } fr
 import { effectiveConcepts, indexConcepts, spellingKey } from './concepts.js';
 
 export const WRITING_POLICY_PATH = globalPolicyPath;
+// @concord-begin
+// @concord-implements docs/feature/documentation-quality/policy.md#使用统计与输入快照
 export const writingIndex = indexWritingScopes;
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/documentation-quality/policy.md#工具管理与恢复
 export function showWriting(repo: Repository, path = globalPolicyPath) {
   return inRepositorySnapshot(repo, () => {
     const scope = scopeOf(path, 'policy');
@@ -34,6 +36,8 @@ export function showWriting(repo: Repository, path = globalPolicyPath) {
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/documentation-quality/policy.md#工具管理与恢复
 export function setWriting(repo: LocalRepository, policy: WritingPolicy, expectedDigest: string | null, dryRun = false, path = globalPolicyPath) {
   return inRepositorySnapshot(repo, () => {
     const scope = scopeOf(path, 'policy');
@@ -46,6 +50,9 @@ export function setWriting(repo: LocalRepository, policy: WritingPolicy, expecte
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/documentation-quality/policy.md#从-writingv1-迁移
+// @concord-implements docs/feature/documentation-quality/policy.md#从-writingv2-迁移
 export function migrateWriting(repo: LocalRepository, path: string, dryRun = false) {
   return inRepositorySnapshot(repo, () => {
     const shown = showWriting(repo, path);

@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
+// @concord-implements docs/feature/feedback/architecture.md
 import { Schema } from 'effect';
 import type { DocumentMeta, DocumentRecord } from './shared.js';
 

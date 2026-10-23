@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 import { spawn } from 'node:child_process';
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -14,6 +12,8 @@ import { TraceGapsValue, TraceShowValue, ReviewRenderValue, hydrateQueryValue, q
 import type { QueryScanMessage } from './query-scan-protocol.js';
 import { ConcordError, digest, failure } from './shared.js';
 
+// @concord-begin
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export const Query = Schema.Union([
   Schema.Tuple([Schema.Literal('trace'), Schema.Literal('gaps')]),
   Schema.Tuple([Schema.Literal('trace'), Schema.Literal('show'), Schema.String]),
@@ -36,11 +36,14 @@ export const QueryCacheEnvelope = Schema.Struct({
   record: Schema.optional(QueryRecord), lastAttempt: Schema.optional(Attempt), error: Schema.optional(RefreshFailure),
 });
 export type QueryCacheEnvelope = typeof QueryCacheEnvelope.Type;
+// @concord-end
 export type QueryUpdate = { readonly kind: 'candidate'; readonly message: Extract<QueryScanMessage, { ok: true }> }
   | { readonly kind: 'drift'; readonly scannedAt: number; readonly at: string; readonly changedPaths: readonly string[] }
   | { readonly kind: 'failure'; readonly error: typeof RefreshFailure.Type };
 const decodeEnvelope = Schema.decodeUnknownSync(QueryCacheEnvelope, { onExcessProperty: 'error' });
 /** One atomic envelope owns the result, most recent structural attempt, and failure. */
+// @concord-code
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export function replaceQueryEnvelope(key: string, prior: QueryCacheEnvelope | undefined, update: QueryUpdate, publishedAt = new Date().toISOString()): QueryCacheEnvelope {
   const previous = prior?.key === key ? prior : undefined;
   if (update.kind === 'failure') return decodeEnvelope({ format: 'concord.query-cache/v3', key,
@@ -57,10 +60,14 @@ export function replaceQueryEnvelope(key: string, prior: QueryCacheEnvelope | un
     record: !consistent && previous?.record?.consistent ? previous.record : candidate,
     lastAttempt: { scannedAt: message.scannedAt, at: candidate.builtUntil, complete, changedPaths } });
 }
+// @concord-code
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export function queryRequestSatisfied(prior: Pick<QueryCacheEnvelope, 'record' | 'lastAttempt' | 'error'>, requestedAt: number): boolean {
   return Math.max(prior.record?.scannedAt ?? 0, prior.lastAttempt?.scannedAt ?? 0, prior.error?.scannedAt ?? 0) >= requestedAt;
 }
 export interface QueryContext { readonly root: string; readonly privateDir: string; readonly key: string; readonly query: Query }
+// @concord-begin
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export function queryContext(input: string | undefined, query: Query): QueryContext {
   const root = discoverRoot(input);
   const privateDir = genericPrivateDirectorySync(root);
@@ -113,7 +120,10 @@ export function storeQuery(context: QueryContext, update: QueryUpdate): void {
     database.put('query_cache', [{ key: context.key, payload: serialized }]);
   } finally { database.close(); }
 }
+// @concord-end
 /** The detached supervisor owns the bounded scan, never a source publication. */
+// @concord-begin
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | undefined, query: Query) {
   const context = yield* Effect.try({ try: () => queryContext(input, query), catch: failure });
   let observed = yield* Effect.sync(() => readQuery(context));
@@ -142,3 +152,4 @@ export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | un
     bodyChanged: hydrated.bodyChanged, ...(hydrated.bodyUnavailable.length ? { bodyUnavailable: hydrated.bodyUnavailable } : {}) };
   return { ...hydrated.value, projection };
 });
+// @concord-end

@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { createHash } from 'node:crypto';
 import { Schema } from 'effect';
 import type { LanguageServer } from './language-server-config.js';
@@ -14,6 +12,8 @@ import * as ts from 'typescript/ast';
 import type { Diagnostic } from 'typescript/sync';
 import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from './typescript-host.js';
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#声明规则
 export const CodeDeclarationSchema = Schema.Struct({
   id: Slug,
   file: Text,
@@ -23,6 +23,7 @@ export const CodeDeclarationSchema = Schema.Struct({
   symbol: Schema.optional(Text),
   contracts: Schema.Array(Text),
 });
+// @concord-end
 export type CodeDeclaration = {
   readonly id: string;
   readonly file: string;
@@ -50,6 +51,8 @@ export interface CodeSnapshot {
   readonly relationsUnknown: boolean;
 }
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#声明规则
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
 const CODE_FAMILIES = new Set(['file', 'code', 'begin', 'end', 'implements']);
 const OTHER_FAMILIES = new Set(['case', 'contract', 'regression', 'status', 'owner', 'test-file', 'issue', 'history', 'tombstone']);
@@ -280,6 +283,9 @@ function attachedBoundary(marker: StartMarker, source: ts.SourceFile, nodes: rea
   }).sort((left, right) => left.getStart(source) - right.getStart(source) || (left.end - left.pos) - (right.end - right.pos));
   return candidates[0];
 }
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#引用的稳定性
 
 function staticName(node: ts.Node): string | null {
   const name = ts.isFunctionDeclaration(node) || ts.isClassDeclaration(node) || ts.isMethodDeclaration(node)
@@ -340,6 +346,9 @@ function codeId(relativePath: string, scope: CodeDeclaration['scope'], locator: 
   const input = JSON.stringify(['concord.code-reference/v1', relativePath, scope, locator]);
   return `code-${createHash('sha256').update(input).digest('hex').slice(0, 32)}`;
 }
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#声明规则
 
 function parseSource(input: Source): ParsedFile {
   return withTypeScriptSource(input.path, input.text, (source, diagnostics) => parseSourceFile(input, source, diagnostics));
@@ -444,6 +453,9 @@ function parseSourceFile(input: Source, source: ts.SourceFile, diagnostics: read
   }
   return { codes: declarations, findings };
 }
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 
 function sourceRoots(repo: Repository): readonly string[] {
   const config: Repository['config'] & { readonly sourceRoots?: readonly string[] } = repo.config;
@@ -463,6 +475,9 @@ function sameSources(left: readonly Source[], right: readonly Source[]): boolean
   return left.length === right.length && left.every((source, index) => source.path === right[index]?.path && source.digest === right[index]?.digest);
 }
 
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-code-parse/v2`; }
 const codeContentCache = new ContentCache<ParsedFile>('code_parse', parserVersion(), Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), findings: Schema.Array(FindingSchema) }));
 function fileKey(repo: Repository, source: Source): string {
@@ -531,6 +546,9 @@ function compileAstCachedInScope(repo: Repository, current: readonly Source[], m
 }
 
 /** Text markers own foreign-language relations even when no analyzer is available. */
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 function foreignLineComments(text: string, prefixes: readonly string[]): LineComment[] {
   const comments: LineComment[] = [];
   const lines = text.split(/\r\n|\r|\n/u);
@@ -571,6 +589,9 @@ function parseForeignSource(input: Source): ParsedFile {
   });
   return { codes, findings };
 }
+// @concord-end
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 function compileCached(repo: Repository, current: readonly Source[], mode: CodeMode, skipCache: boolean): CompiledFiles {
   const ast = compileAstCached(repo, current.filter(source => source.server === undefined), mode, skipCache);
   const foreign = current.filter(source => source.server !== undefined).map(parseForeignSource);
@@ -602,11 +623,14 @@ function finish(repo: Repository, compiled: CompiledFiles, current: readonly Sou
   return withCache(body, { status, hits: compiled.hits, misses: compiled.misses, path: cachePath });
 }
 
+// @concord-end
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
+// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#list
 export function scanCode(repo: Repository, options: { cache?: CodeMode; timing?: ScanTiming } = {}): CodeSnapshot {
   return repo.snapshot === undefined ? scanCodeUnderSnapshot(repo, options) : repo.snapshot(() => scanCodeUnderSnapshot(repo, options));
 }
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 function scanCodeUnderSnapshot(repo: Repository, options: { cache?: CodeMode; timing?: ScanTiming }): CodeSnapshot {
   const mode = options.cache ?? 'use';
   const cachePath = cacheDatabasePath(repo.privateDir);

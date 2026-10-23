@@ -1,7 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-// @concord-implements docs/feature/documentation-quality/README.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+// @concord-implements docs/feature/documentation-quality/policy.md#写作政策
 import { Predicate } from 'effect';
 import { validateControlled } from './writing-controlled-policy.js';
 import { ConcordError, decode } from './shared.js';

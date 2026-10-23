@@ -1,10 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/document-packages/use-case/migrate-document-discovery.md
-// @concord-implements docs/feature/local-sdlc/README.md
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
-// @concord-implements docs/feature/project-onboarding/use-case/configure-memory-sources.md
-// @concord-implements docs/feature/project-onboarding/use-case/inherit-template-defaults.md
-// @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 import { readDesignPlanPaths } from './document-layout.js';
 import { posix } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -54,12 +47,16 @@ import { git } from './storage.js';
 import { DOCUMENT_ROOTS, defaultDocumentPath, documentDisposition, documentPlacementError, matchingOwners } from './document-layout.js';
 
 export { DOCUMENT_ROOTS } from './document-layout.js';
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/configure-memory-sources.md
 export function documentRoots(repo: Repository): readonly string[] {
   return inRepositorySnapshot(repo, () => { return [...DOCUMENT_ROOTS, ...(repo.config.memorySources ?? [{ path: 'memory' }]).map((source) => source.path)];   });
 }
 const CONTRACT_KINDS: readonly DocumentKind[] = ['feature', 'use-case', 'roadmap', 'engineering'];
 const now = (): string => new Date().toISOString();
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 function required(value: string | undefined, field: string): string {
   if (value === undefined || value.length === 0 || value.trim() !== value) throw new ConcordError('InvalidInput', `${field} must be non-empty and have no surrounding whitespace`);
   return decode(Text, value, field);
@@ -87,7 +84,10 @@ export function renderDocument(metadata: DocumentMeta, body: string): string {
   const valid = decode(DocumentSchema, metadata, `${metadata.kind}:${metadata.id}`);
   return `---\n${stringify(valid, { lineWidth: 0, aliasDuplicateObjects: false }).trimEnd()}\n---\n\n${authorBody(body)}`;
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
 function changed(repo: Repository, operation: string, record: DocumentRecord, metadata: DocumentMeta, body = record.body, dryRun = false): MutationReceipt {
   return repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, body) }], dryRun);
 }
@@ -111,7 +111,10 @@ function memory(record: DocumentRecord): MemoryMeta {
   if (record.metadata.kind !== 'memory') throw new ConcordError('InvalidDocumentKind', `${record.path} is not Memory`);
   return record.metadata;
 }
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 export function loadDocuments(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
   return inRepositorySnapshot(repo, () => loadDocumentsUnderSnapshot(repo, kinds));
 }
@@ -147,6 +150,7 @@ function loadDocumentsUnderSnapshot(repo: Repository, kinds?: readonly DocumentK
   return documentContentCache.getMany(documentInputs(repo, kinds), input => parseDocumentSource(input.path, input.source))
     .filter((record): record is DocumentRecord => currentDocument(repo, record) && (kinds === undefined || kinds.includes(record.metadata.kind)));
 }
+// @concord-end
 
 export interface DocumentInventory {
   readonly documents: readonly DocumentRecord[];
@@ -155,6 +159,8 @@ export interface DocumentInventory {
 }
 
 /** Diagnostic records and completeness travel together across projection boundaries. */
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
 export function diagnoseDocuments(repo: Repository): DocumentInventory {
   return inRepositorySnapshot(repo, () => {
     const documents: DocumentRecord[] = [], findings: Finding[] = [];
@@ -176,6 +182,8 @@ export function diagnoseDocuments(repo: Repository): DocumentInventory {
 }
 
 /** Read only a canonical target and its physical owner boundary, never an unrelated inventory. */
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 export function readDocumentReference(repo: Repository, reference: string, kinds?: readonly DocumentKind[]): DocumentRecord {
   return inRepositorySnapshot(repo, () => {
     const parsed = parseReference(reference);
@@ -233,9 +241,12 @@ export function findDocument(documents: readonly DocumentRecord[], selector: str
   if (byId.length > 1) throw new ConcordError('AmbiguousDocument', `Document id ${selector} is ambiguous; use its canonical path`);
   return byId[0]!;
 }
+// @concord-end
 
 export { resolveReference } from './refs.js';
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 function finding(findings: Finding[], code: string, path: string, message: string): void {
   findings.push({ code, path, message });
 }
@@ -416,6 +427,7 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
   return findings.sort((left, right) => left.path.localeCompare(right.path) || left.code.localeCompare(right.code));
   });
 }
+// @concord-end
 
 export interface CreateDocumentInput {
   readonly id: string;
@@ -433,7 +445,10 @@ export interface CreateDocumentInput {
 }
 
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#roadmap
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#add
+// @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const governance = kind === 'memory' && input.memoryKind === 'problem' ? problemPolicy(repo) : undefined;
@@ -518,6 +533,9 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
 
 export { addPage, setPage, showPage } from './document-pages.js';
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#edit
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 export function setAuthor(repo: Repository, ref: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const record = readDocumentReference(repo, ref);
@@ -528,6 +546,8 @@ export function setAuthor(repo: Repository, ref: string, body: string, expectedD
 }
 
 /** Updates only explicit author-owned metadata; lifecycle and identity remain domain operations. */
+// @concord-code
+// @concord-implements docs/feature/web-workbench/README.md#自动保存
 export function setDocumentMetadata(
   repo: Repository,
   reference: string,
@@ -556,6 +576,8 @@ export function setDocumentMetadata(
   });
 }
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/compare-design-plans.md
 export function decideDesign(repo: Repository, selector: string, selected: string, targets: readonly string[], reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'design');
@@ -661,9 +683,10 @@ export function formatDesign(repo: Repository, selector: string, dryRun = false)
   return repo.publish('format-design', changes, dryRun);
   });
 }
+// @concord-end
 
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#adopt
 export function adoptRoadmap(repo: Repository, selector: string, featureId: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const roadmap = findDocument(documents, selector, 'roadmap');
@@ -729,7 +752,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
 }
 
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#resolve-fixed
 export function resolveMemory(repo: Repository, selector: string, kind: Resolution['kind'], reason: string, proof?: FixedProof, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const governance = problemPolicy(repo);
@@ -748,6 +771,8 @@ export function resolveMemory(repo: Repository, selector: string, kind: Resoluti
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function activateMemory(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const governance = problemPolicy(repo);
@@ -761,6 +786,8 @@ export function activateMemory(repo: Repository, selector: string, reason: strin
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function reopenMemory(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const governance = problemPolicy(repo);
@@ -769,6 +796,8 @@ export function reopenMemory(repo: Repository, selector: string, reason: string,
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function supersedeMemory(repo: Repository, selector: string, replacement: string, reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'memory'); const next = findDocument(documents, replacement, 'memory');
@@ -781,6 +810,8 @@ export function supersedeMemory(repo: Repository, selector: string, replacement:
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function promoteMemory(repo: Repository, selector: string, target: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'memory');
@@ -792,6 +823,8 @@ export function promoteMemory(repo: Repository, selector: string, target: string
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function retirePromotion(repo: Repository, selector: string, target: string, reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const record = findDocument(loadDocuments(repo), selector, 'memory'); const canonical = parseReference(target).ref;
@@ -799,6 +832,8 @@ export function retirePromotion(repo: Repository, selector: string, target: stri
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false, kind: IssueMemoryRelation['kind'] = 'investigation'): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
@@ -820,6 +855,8 @@ export function linkFeedbackFeature(repo: Repository, selector: string, featureR
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function closeIssue(repo: Repository, selector: string, closureInput: string | IssueClosure, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
@@ -841,7 +878,7 @@ export function closeIssue(repo: Repository, selector: string, closureInput: str
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function adoptIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
@@ -855,6 +892,8 @@ export function adoptIssue(repo: Repository, selector: string, reference: string
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function retireIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const record = findDocument(loadDocuments(repo), selector, 'issue');
@@ -868,6 +907,8 @@ export function retireIssue(repo: Repository, selector: string, reference: strin
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
 export function reopenIssue(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const record = findDocument(loadDocuments(repo), selector, 'issue');

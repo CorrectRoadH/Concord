@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 import { checkCurrentProject } from './check-current.js';
 import { existsSync, lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -72,6 +69,8 @@ const sync = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError
 const measuredSync = (timing?: RequestTiming) => <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> =>
   sync(name, () => timing === undefined ? evaluate() : timing.sync(name, evaluate));
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md
 export function validateViewRoot(input: string): string {
   const root = discoverRoot(input, true);
   if (git(root, ['rev-parse', '--show-toplevel']) !== root) {
@@ -80,11 +79,15 @@ export function validateViewRoot(input: string): string {
   return root;
 }
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/architecture.md
 export function decodeViewAction(input: unknown): ViewAction {
   if (Predicate.isObject(input) && input.action === 'writing.set') readWritingPolicy(JSON.stringify(input.policy), typeof input.path === 'string' ? input.path : undefined);
   return decode(ViewActionSchema, input, 'view action');
 }
 
+// @concord-code
+// @concord-implements docs/feature/portable-coordination/architecture.md#invariants
 export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
   const action = decodeViewAction(input);
   if (!enabled) return action;
@@ -131,6 +134,8 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
   }
 }
 
+// @concord-code
+// @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 function withRepository<A>(
   root: string,
   operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError>,
@@ -143,6 +148,8 @@ function withRepository<A>(
   ).pipe(Effect.flatMap(operation), Effect.scoped);
 }
 
+// @concord-code
+// @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefined, name: string, evaluate: () => A): Effect.Effect<A, ConcordError> {
   return Effect.acquireUseRelease(
     waitForPublication(reclaimDead => sync(`${name}.acquire`, () => repo.beginSnapshot(reclaimDead))),
@@ -151,6 +158,8 @@ function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefine
   );
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 function evidenceIds(repo: Repository): readonly string[] {
   const directory = join(repo.privateDir, 'evidence');
   if (!existsSync(directory)) return [];
@@ -168,6 +177,8 @@ function evidenceIds(repo: Repository): readonly string[] {
     .sort();
 }
 
+// @concord-code
+// @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 function directConfig(root: string): {
   readonly project: WorkspaceSnapshot['project'];
   readonly configDigest: string | null;
@@ -203,6 +214,8 @@ function directConfig(root: string): {
 }
 
 /** Missing or malformed project configuration remains inspectable without manufacturing identity. */
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/architecture.md
 const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
@@ -302,8 +315,11 @@ export const observeWorkspaceProjection = Effect.fn('view.observeWorkspaceProjec
   const snapshot = yield* compileWorkspace(root, 'off', timing, value => { drift = value; });
   return { snapshot, drift };
 });
+// @concord-end
 
 /** Git needs current configuration, not the document, code, or evidence projections. */
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/review-local-changes.md
 export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(rootInput: string, baselineCache?: GitBaselineCache) {
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const config = directConfig(root);
@@ -311,7 +327,10 @@ export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(roo
     repo => Effect.succeed(repo.config.testRoots), { access: 'read' });
   return yield* getGitStatus(root, true, baselineCache, testRoots);
 });
+// @concord-end
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string, timing?: RequestTiming): Effect.fn.Return<ViewFile, ConcordError> {
   const sync = measuredSync(timing);
   const validatedRoot = yield* sync('view.validateRoot', () => validateViewRoot(root));
@@ -371,7 +390,10 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
     return yield* Effect.fail(new ConcordError('FileNotFound', 'The requested path is not in the Concord document, configured source, or explicitly associated project test inventory'));
   }), { access: 'read' }, timing);
 });
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>): unknown {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
@@ -450,6 +472,8 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
 }
 
 /** Shared by HTTP and CLI action; unknown future actions conservatively require write access. */
+// @concord-code
+// @concord-implements docs/feature/portable-coordination/architecture.md#invariants
 function actionAccess(action: ViewAction['action']): 'read' | 'write' {
   switch (action) {
     case 'design.check': case 'memory.index': case 'memory.recall': case 'issue.index': case 'issue.recall': case 'issue.list': case 'feedback.list':
@@ -461,6 +485,8 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
   }
 }
 
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
@@ -491,3 +517,4 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   return yield* withRepository(root, (repo) => snapshotSync(repo, timing, `view.action.${action.action}`, () => repo.snapshot(() => executeWithRepo(repo, action))), { access: actionAccess(action.action), dryRun }, timing);
 });
+// @concord-end

@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
-// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 import { posix } from 'node:path';
 import { ConcordError, digest, decode, DocumentName, inRepositorySnapshot, type DocumentKind, type MutationReceipt, type Repository } from './shared.js';
 import { documentPlacementError, isDocumentName, readDesignPlanPaths } from './document-layout.js';
@@ -10,6 +7,8 @@ import { canonicalPath } from './storage.js';
 
 export type DocumentPage = string;
 
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page
 function checkedPage(value: string): DocumentPage {
   if (value === 'README') return value;
   try { return decode(DocumentName, value, 'page'); }
@@ -92,7 +91,10 @@ function template(page: DocumentPage): string | undefined {
   if (page === 'decision') return 'decision-record';
   return ['library', 'cli', 'architecture', 'lifecycle', 'goals', 'limits', 'cases'].includes(page) ? page : undefined;
 }
+// @concord-end
 
+// @concord-code
+// @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
 export function addPage(repo: Repository, kind: DocumentKind, selector: string, page: string, dryRun = false, plan?: string): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan, true);
@@ -104,6 +106,8 @@ export function addPage(repo: Repository, kind: DocumentKind, selector: string, 
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page
 export function showPage(repo: Repository, kind: DocumentKind, selector: string, page: string, plan?: string): { operation: string; path: string; body: string; digest: string } {
   return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan); const source = repo.read(target.path);
@@ -116,6 +120,8 @@ export function showPage(repo: Repository, kind: DocumentKind, selector: string,
   });
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page
 export function setPage(repo: Repository, kind: DocumentKind, selector: string, page: string, next: string, expectedDigest: string, dryRun = false, plan?: string): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan); const source = repo.read(target.path);

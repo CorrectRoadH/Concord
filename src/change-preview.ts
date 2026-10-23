@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/review-pull-request.md
+// @concord-implements docs/feature/web-workbench/change-preview.md
 import { Schema } from 'effect';
 
 export const PREVIEW_DATA_LIMIT = 8 * 1024 * 1024;

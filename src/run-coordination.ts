@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+// @concord-implements docs/feature/local-sdlc/lifecycle.md#从声明到证据
 import { randomUUID } from 'node:crypto';
 import { closeSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

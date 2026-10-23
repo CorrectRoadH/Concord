@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 import { Schema } from 'effect';
 
 const text = Schema.String.check(Schema.isMinLength(1));

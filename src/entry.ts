@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
-// @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md
 // Keep ordinary help independent of consumer host code.
 try {
   if (process.argv.includes('--skill')) {
+    // @concord-begin
+    // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
     const { runSkillMain } = await import('./skill.js');
     await runSkillMain(process.argv.slice(2));
+    // @concord-end
   } else if (process.argv[2] === 'repo') {
     // @concord-begin
     // @concord-implements docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
@@ -16,7 +16,10 @@ try {
     await import(entry);
     // @concord-end
   } else {
+    // @concord-begin
+    // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
     await import('./cli.js');
+    // @concord-end
   }
 } catch (cause) {
   const error = cause as { code?: string; message?: string };

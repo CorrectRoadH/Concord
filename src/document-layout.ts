@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#路径与身份
 import { DOCUMENT_NAME_PATTERN } from './document-name.js';
 import { ConcordError, type DocumentKind } from './shared.js';
 import { lstatSync, readdirSync } from 'node:fs';

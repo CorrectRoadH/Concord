@@ -1,5 +1,6 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+// @concord-implements docs/feature/documentation-quality/policy.md#写作政策
+// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
 import { dirname } from 'node:path';
 import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from './shared.js';
 import { canonicalPath } from './storage.js';

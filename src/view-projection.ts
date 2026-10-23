@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md
+// @concord-implements docs/feature/web-workbench/architecture.md
 import { join } from 'node:path';
 import { lstatSync } from 'node:fs';
 import { Effect } from 'effect';

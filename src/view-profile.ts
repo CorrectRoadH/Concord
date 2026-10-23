@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
+// @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
 import { Effect, Schema } from 'effect';
 import { ConcordError, decode } from './shared.js';
 

@@ -1,6 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
-// @concord-implements docs/feature/local-sdlc/use-case/compare-design-plans.md
+// @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 import { createRequire } from 'node:module';
 import type * as Markdown from 'mdast-util-from-markdown';
 

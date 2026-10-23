@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#配置与结果
 import { Effect, Predicate, Schema } from 'effect';
 import { ConcordError, decode } from './shared.js';
 import type { AnalysisBudgets } from './language-server-config.js';

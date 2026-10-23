@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
-// @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md
 import { analysisView, type AnalysisView } from './analysis-view.js';
 import { scanAnnotations } from './annotations.js';
 import { scanCode, type CodeDeclaration } from './code.js';
@@ -14,11 +11,14 @@ import { extractSteps } from './steps.js';
 
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming } = {}) {
   const read = () => buildUnderSnapshot(repo, cache, options).trace;
   return repo.snapshot === undefined ? read() : repo.snapshot(read);
 }
+// @concord-begin
+// @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
+// @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
 function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming }) {
   const inventory = options.inventory ?? diagnoseDocuments(repo);
   const documents = inventory.documents;
@@ -100,7 +100,10 @@ function deriveTrace<A>(repo: Repository, cache: 'use' | 'off', strict: boolean,
 export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
   if (!trace.complete || trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);
 }
+// @concord-end
 const pathOf = (ref: string) => ref.split('#')[0]!;
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 function belongsTo(references: ReturnType<typeof referenceResolver>, trace: ReturnType<typeof buildTrace>, selectedPaths: ReadonlySet<string>, ref: string): boolean {
   try {
     const owner = references.resolve(ref);
@@ -113,11 +116,13 @@ function belongsTo(references: ReturnType<typeof referenceResolver>, trace: Retu
   }
 }
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 export function traceShow(repo: Repository, selector: string, cache: 'use' | 'off' = 'use') {
   return deriveTrace(repo, cache, true, (trace, references) => traceShowValue(repo, trace, references, selector));
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>, selector: string) {
     const document = findDocument(trace.documents, selector);
     const relatedPaths = new Set([document.path]);
@@ -132,6 +137,8 @@ export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildT
     return { operation: 'trace-show', subject: document, relatedPaths: [...relatedPaths], incoming, outgoing, tests: trace.annotations.cases.filter(c => ids.has(c.id)), codeDeclarations, stepGroups: trace.documents.filter(doc => doc.metadata.kind === 'use-case' && relatedPaths.has(doc.path)).map(doc => stepGroups(repo, trace, doc, analysis)), cache: trace.annotations.cache, analysis };
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#步骤分组输出
 export function stepGroups(repo: Repository, trace: ReturnType<typeof buildTrace>, document: DocumentRecord, analysis: AnalysisView = analysisView(repo, trace.annotations.cases, trace.codeDeclarations, trace.documents)) {
   const extracted = extractSteps(document.path, repo.read(document.path)!);
   const group = (ref: string) => {
@@ -155,11 +162,13 @@ export function stepGroups(repo: Repository, trace: ReturnType<typeof buildTrace
 type RelationshipKind = 'code' | 'test';
 
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md
+// @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md#list-gaps
 export function traceGaps(repo: Repository, cache: 'use' | 'off' = 'use') {
   return deriveTrace(repo, cache, true, (trace, references) => traceGapsValue(repo, trace, references));
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md#list-gaps
 export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>) {
     const ownerCounts = new Map<string, { code: number; test: number }>();
     const pageCounts = new Map<string, { code: number; test: number }>();
@@ -209,6 +218,8 @@ export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildT
     };
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 export function documentShow(repo: Repository, selector: string, kind: DocumentRecord['metadata']['kind'], cache: 'use' | 'off' = 'use') {
   const { trace, document, useCases, relatedPaths, incoming, testIds, codeIds } = deriveTrace(repo, cache, false, (trace, references) => {
     const document = findDocument(trace.documents, selector, kind);
@@ -231,17 +242,21 @@ export function documentShow(repo: Repository, selector: string, kind: DocumentR
     findings: trace.findings,
   };
 }
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#list
 export function selectCase(cases: readonly AnnotatedCase[], id: string): AnnotatedCase {
   const matches = cases.filter(c => c.id === id);
   if (matches.length !== 1) throw new ConcordError(matches.length ? 'CaseAmbiguous' : 'CaseNotFound', `Expected one case for ${id}, found ${matches.length}`);
   return matches[0]!;
 }
 // @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
 export function renderReview(repo: Repository, selector: string | undefined, cache: 'use' | 'off' = 'use'): string {
   return deriveTrace(repo, cache, true, (trace, references) => renderReviewValue(repo, trace, references, selector).segments.map(segment => 'text' in segment ? segment.text : showConstitution(repo).body.trimEnd()).join(''));
 }
 
+// @concord-code
+// @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
 export function renderReviewValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>, selector: string | undefined) {
     const docs: readonly DocumentRecord[] = selector ? [findDocument(trace.documents, selector)] : trace.documents;
     const selectedPaths = new Set(docs.map(d => d.path));
@@ -292,6 +307,8 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
 }
 
 /** Separates edit drift from diagnostics that still invalidate the query. */
+// @concord-begin
+// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export function siftQueryDrift(trace: ReturnType<typeof buildTrace>) {
   const drift = trace.findings.filter(finding => finding.code === 'SourceChanged' || finding.code === 'CodeSourceChanged');
   const unknown: 'code'[] = trace.codeRelationsUnknown ? ['code'] : [];
@@ -313,3 +330,4 @@ export function scanQueryValue(repo: Repository, query: readonly string[]) {
   requireValidTrace(trace);
   return { value, complete: trace.complete, files: [...initial.files, ...final.files], unknown: [...new Set([...initial.unknown, ...final.unknown])] };
 }
+// @concord-end

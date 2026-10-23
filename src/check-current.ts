@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
+// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的聚合检查
 import { Effect, Result } from 'effect';
 import { ConcordError, failure } from './shared.js';
 import { LocalRepository } from './storage.js';
