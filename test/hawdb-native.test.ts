@@ -32,6 +32,16 @@ if (childRole) {
   function code(operation: () => unknown, expected: HawdbFailureCode): void {
     assert.throws(operation, (error: unknown) => error instanceof Error && 'code' in error && error.code === expected);
   }
+  function diskSnapshot(path: string): readonly unknown[] {
+    return readdirSync(path, { recursive: true }).map(String).sort().map(name => {
+      const entry = join(path, name);
+      const stat = statSync(entry, { bigint: true });
+      return {
+        name, inode: stat.ino, modified: stat.mtimeNs,
+        digest: stat.isFile() ? createHash('sha256').update(readFileSync(entry)).digest('hex') : null,
+      };
+    });
+  }
   async function child(role: 'guard' | 'database', path: string): Promise<ChildProcess> {
     const proc = spawn(process.execPath, ['--import', 'tsx', fileURLToPath(import.meta.url)], {
       cwd: process.cwd(), env: { ...process.env, CONCORD_HAWDB_CHILD_ROLE: role, CONCORD_HAWDB_CHILD_PATH: path }, stdio: ['ignore', 'pipe', 'pipe'],
@@ -103,14 +113,12 @@ if (childRole) {
       assert.equal(existsSync(f.db), false);
       const db = openHawdb(f.db, { readOnly: false, create: true });
       db.put('config_cache', [{ key: 'k', payload: 'v' }]); db.close();
-      const before = readdirSync(f.db).sort();
-      const hashes = before.filter(name => statSync(join(f.db, name)).isFile()).map(name => [name, createHash('sha256').update(readFileSync(join(f.db, name))).digest('hex')]);
+      const before = diskSnapshot(f.db);
       const ro = openHawdb(f.db, { readOnly: true, create: false });
       code(() => ro.put('config_cache', [{ key: 'x', payload: 'y' }]), 'HawdbIncompatible');
       assert.deepEqual(ro.scan('config_cache'), [{ key: 'k', payload: 'v' }]);
       ro.close();
-      assert.deepEqual(readdirSync(f.db).sort(), before);
-      assert.deepEqual(before.filter(name => statSync(join(f.db, name)).isFile()).map(name => [name, createHash('sha256').update(readFileSync(join(f.db, name))).digest('hex')]), hashes);
+      assert.deepEqual(diskSnapshot(f.db), before);
       rmSync(join(f.db, 'owner.hawdb.lock'));
       code(() => openHawdb(f.db, { readOnly: true, create: false }), 'HawdbUnavailable');
       assert.equal(existsSync(join(f.db, 'owner.hawdb.lock')), false);
