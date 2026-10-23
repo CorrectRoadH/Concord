@@ -58,10 +58,11 @@ function sendRaw(server: ViewServerHandle, requestText: string): Promise<Respons
 
 const parsed = (response: ResponseResult): { readonly ok: boolean; readonly value?: unknown; readonly error?: string } => JSON.parse(response.body) as { readonly ok: boolean; readonly value?: unknown; readonly error?: string };
 const jsonHeaders = { 'content-type': 'application/json' };
-const waitForWorkspace = (server: ViewServerHandle, timeoutMs = 65_000): Promise<WorkspaceProjection> => pollUntil(async () => {
+const waitForWorkspace = (server: ViewServerHandle, timeoutMs = 65_000, accepts: (value: WorkspaceProjection) => boolean = () => true): Promise<WorkspaceProjection> => pollUntil(async () => {
   const response = await send(server, '/api/workspace');
   if (response.status !== 200) return undefined;
-  return parseWorkspaceProjection(response.body);
+  const value = parseWorkspaceProjection(response.body);
+  return value !== undefined && accepts(value) ? value : undefined;
 }, { description: 'workspace projection', timeoutMs });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -199,7 +200,7 @@ test('view server keeps the application shell data-free and allows unauthenticat
       assert.equal(invalid.status, 400, invalid.body);
       assert.equal(existsSync(join(root, `docs/${kind}/${id}`)), false);
     }
-    const workspace = await waitForWorkspace(server);
+    const workspace = await waitForWorkspace(server, 65_000, value => value.snapshot.documents.some(document => document.path === 'docs/feature/web/README.md'));
     assert.equal(workspace.snapshot.documents.length, 1);
     const file = await send(server, '/api/file?path=docs%2Ffeature%2Fweb%2FREADME.md');
     assert.equal(file.status, 200, file.body);
