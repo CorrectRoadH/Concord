@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
 import { chromium, expect, type Browser } from '@playwright/test';
 import { authorDesignFixture } from './design-fixture.js';
-import { readProjectConfig, waitForWorkspaceProjection } from './support.js';
+import { pollUntil, readProjectConfig, waitForWorkspaceProjection } from './support.js';
 import { ProjectSchema, digest } from '../dist/shared.js';
 import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
 import { parseDocumentRecord, renderDocument } from '../dist/documents.js';
@@ -60,12 +60,13 @@ test('packed diagnostic CLI refreshes after exit and marks cached output as hist
  const first = query();
  assert.equal(first.status, 1, first.stdout + first.stderr);
  assert.match(first.stderr, /QueryPending/);
- const deadline = Date.now() + 30000;
- let result = first;
- while (result.status !== 0 && Date.now() < deadline) {
-  await Effect.runPromise(Effect.sleep('1 second'));
-  result = query();
- }
+ const result = await pollUntil(async () => {
+  const result = query();
+  if (result.status === 0) return result;
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /QueryPending/);
+  return undefined;
+ }, { timeoutMs: 30000, description: 'packed diagnostic projection' });
  assert.equal(result.status, 0, result.stdout + result.stderr);
  const value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ projection: Schema.Struct({ current: Schema.Literal(false), builtAt: Schema.String, refresh: Schema.String }) })))(result.stdout);
  assert.equal(value.projection.refresh, 'requested');

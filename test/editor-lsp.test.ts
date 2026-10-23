@@ -58,7 +58,7 @@ class Client {
   constructor(readonly root: string, argv = [entry, '--root', root, 'lsp']) {
     this.child = spawn(process.execPath, argv, { cwd: root, stdio: 'pipe' });
     this.closed = new Promise(resolve => this.child.once('close', code => { resolve(code); this.changed(); }));
-    this.child.stderr.on('data', (chunk: Buffer) => { this.stderr += chunk.toString(); });
+    this.child.stderr.on('data', (chunk: Buffer) => { this.stderr += chunk.toString(); this.changed(); });
     this.child.stdout.on('data', (chunk: Buffer) => {
       this.buffer = Buffer.concat([this.buffer, chunk]);
       for (;;) {
@@ -314,9 +314,8 @@ test('editor retains cleanup failure after cancellation and rejects shutdown and
     await c.initialize();
     c.open('test/flow.ts', testText(reference));
     const request = c.request('textDocument/definition', c.query('test/flow.ts', 1, 20));
-    // Let the real process start before cancellation, then verify the failure
-    // discovered during Scope release survives the normal cancellation reply.
-    await Effect.runPromise(Effect.sleep('150 millis'));
+    // Observe the real spawn before cancellation; elapsed time cannot prove it.
+    await c.wait(() => c.stderr.includes('test-editor-job-started') ? true : undefined);
     c.send('$/cancelRequest', { id: request.id });
     const reply = await request.response;
     assert.ok(reply.error !== undefined);
@@ -371,7 +370,7 @@ test('editor EOF retains a cleanup failure first observed after the transport en
   try {
     await c.initialize();
     c.open('src/flow.ts', codeText(reference) + 'const value = 1;\n'.repeat(80000));
-    await Effect.runPromise(Effect.sleep('150 millis'));
+    await c.wait(() => c.stderr.includes('test-editor-job-started') ? true : undefined);
     c.child.stdin.end();
     assert.notEqual(await c.closed, 0);
     assert.match(c.stderr, /cleanup could not be confirmed/u);
