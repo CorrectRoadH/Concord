@@ -58,4 +58,4 @@ TAP 与 JUnit XML 只是候选报告 codec；没有固定 provider/版本的一�
 
 ## Identity and Reuse
 
-native 选择变更保持源码 v1 ID，但改变定义摘要；命名测试改契约由 annotation/contract 摘要使旧收据失效。缓存有无不改变 case 集合、check finding、退出码与 complete。采用新选择语义前须完成 Design README 的 C-011 第 1、3 款修订。
+native 选择变更保持源码 v1 ID，但改变定义摘要；命名测试改契约由 annotation/contract 摘要使旧收据失效。缓存有无不改变 case 集合、check finding、退出码与 complete。采用新选择语义前须完成 Design README 的 C-011 第 1、6 款修订。

@@ -2,9 +2,7 @@
 
 ## Decision
 
-Undecided.
-
-作者推荐 behavior-anchored，待复审后定案。
+Selected: [behavior-anchored](plans/behavior-anchored/README.md)
 
 ## Rationale
 

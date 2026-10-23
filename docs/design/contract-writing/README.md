@@ -11,6 +11,12 @@ constitutionRefs:
   - docs/constitution.md#c-011
   - docs/constitution.md#c-012
   - docs/constitution.md#c-008
+decision:
+  selected: behavior-anchored
+  reason: 行为页与实现页的分工、关联范围的选择是接入项目必须采用的跨项目规则，写入宪法 C-011 与 C-012；独立审查三轮后批准
+  at: 2026-10-23T04:17:57.141Z
+  targets:
+    - docs/feature/documentation-quality/README.md
 ---
 
 # 契约写法与源码关联

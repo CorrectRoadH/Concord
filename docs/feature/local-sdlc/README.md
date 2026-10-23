@@ -16,6 +16,7 @@ constitutionRefs:
   - docs/constitution.md#c-012
   - docs/constitution.md#c-013
   - docs/constitution.md#c-014
+  - docs/constitution.md#c-002
 ---
 
 # 本地 SDLC 闭环

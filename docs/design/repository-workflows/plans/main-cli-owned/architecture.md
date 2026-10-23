@@ -236,7 +236,7 @@ export interface RepositoryCommandContribution<Name extends string = string, R =
 - 解析错误同样只输出一条具名错误，代码为 `InvalidInput`。
 - `--help` 以及只输入命令组名、未给子命令时，向 stdout 打印该组 help 并退出 0。
 - 参数中有 `--json` 时，任何失败都向 stderr 输出一行 `{ "ok": false, "error": <code>, "message": <text>, "details"?: <object> }`，退出 1，与基础 CLI 的错误形状相同。未知子命令的 `details` 为 `{ name, parent }`。
-- 领域错误的 `error` 取其 `_tag`。未声明的异常使用 `RepositoryToolError`，消息不含凭据与环境变量值（[C-012](../../../../constitution.md#c-012)）。
+- 领域错误的 `error` 取其 `_tag`。未声明的异常使用 `RepositoryToolError`，消息不含凭据与环境变量值（[C-007](../../../../constitution.md#c-007)）。
 
 `concord repo` 本身用这些贡献与 `runComposedCli` 组合，消费者宿主组合同一份对象，不复制命令定义。
 

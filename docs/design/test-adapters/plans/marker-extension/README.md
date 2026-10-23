@@ -17,7 +17,7 @@
 | [L3](../../LIMITS.md#l3-不把第三方代码加载进-concord-进程) | satisfied | codec 是外部受信程序，内置维护保持 TS/Effect | 架构声明，非运行验证 |
 | [L4](../../LIMITS.md#l4-子进程资源归-concord-管理) | pending | 全 run 协调及报告预算已定义，需真实终结验证 | 架构声明，非运行验证 |
 | [L5](../../LIMITS.md#l5-证据只表达实际证明的范围) | pending | 统一裁决已定义；codec 映射尚需验收 | 架构声明，非运行验证 |
-| [L6](../../LIMITS.md#l6-既有配置含义不变) | satisfied | 可选配置保持旧 runner；C-011 第 1、3 款已修订 | [宪法 C-011](../../../../constitution.md#c-011) |
+| [L6](../../LIMITS.md#l6-既有配置含义不变) | satisfied | 可选配置保持旧 runner；C-011 第 1、6 款已修订 | [宪法 C-011](../../../../constitution.md#c-011) |
 
 ## Goals
 

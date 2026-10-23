@@ -33,7 +33,7 @@
 
 - `new-id` 必须符合步骤 ID 语法，且不与该文件的标题 anchor 或其它步骤冲突。
 - 改写对象是精确引用 token：testRoots 中的 `@use-case` 标记、sourceRoots 中的 `@concord-implements`、`docs/` 中解析后指向旧引用的 Markdown 链接。
-- 测试标记识别严格沿用 C-011 第 2 款：JS/TS 使用真实注释范围排除字符串、模板和正则中的伪标记；其它文本按既有注释前缀词法规则识别，不承诺判断其宿主字符串上下文。改名只替换已识别 Concord 标记的引用参数，不解析测试声明、框架绑定、回调或 skip/todo，也不启动 adapter 或 LSP。Markdown 使用 AST 排除代码示例，仅改写解析确认的链接目标；所需扫描不完整或无法可靠定位 token 时具名拒绝整次操作。
+- 测试标记识别严格沿用 C-011 第 5 款：JS/TS 使用真实注释范围排除字符串、模板和正则中的伪标记；其它文本按既有注释前缀词法规则识别，不承诺判断其宿主字符串上下文。改名只替换已识别 Concord 标记的引用参数，不解析测试声明、框架绑定、回调或 skip/todo，也不启动 adapter 或 LSP。Markdown 使用 AST 排除代码示例，仅改写解析确认的链接目标；所需扫描不完整或无法可靠定位 token 时具名拒绝整次操作。
 - Memory、Issue 与 Design metadata 中出现旧引用时拒绝执行，返回 `ManagedReferenceBlocked`，由对应生命周期命令处理。检查通过受管领域读取能力完成，不直接读取 owner 文件。
 - 没有 `@name` 的测试标记，目标改变后测试引用随之改变；带 `@name` 的保持不变。两种情况的旧收据都不能用于新目标，结果中列出受影响的 case。
 

@@ -18,7 +18,7 @@ Concord 维护代码采用严格 TypeScript 与 Effect，原生例外只有 `nat
 
 ## L5: 编辑器服务只读且不开网络端口
 
-编辑器服务只通过 stdio 通信，不写 owner，不提供编辑、格式化或执行命令能力。外部 server 发起的编辑与命令执行请求也明确拒绝，不读取或输出凭据（[C-003](../../constitution.md#c-003)、[C-012](../../constitution.md#c-012)）。
+编辑器服务只通过 stdio 通信，不写 owner，不提供编辑、格式化或执行命令能力。外部 server 发起的编辑与命令执行请求也明确拒绝，不读取或输出凭据（[C-003](../../constitution.md#c-003)、[C-007](../../constitution.md#c-007)）。
 
 ## L6: TypeScript 代码声明保持现有规则
 

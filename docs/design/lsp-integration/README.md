@@ -16,6 +16,7 @@ constitutionRefs:
   - docs/constitution.md#c-010
   - docs/constitution.md#c-012
   - docs/constitution.md#c-013
+  - docs/constitution.md#c-007
 decision:
   selected: lsp-client
   reason: 显式 code analyze 取得符号定位与正向调用观察，源码标记始终拥有关系，不修订 C-005；编辑器服务只读并与分析进程分离
@@ -50,7 +51,7 @@ decision:
 
 步骤格式、测试 v1 关联身份、原生选择、原生标签与收据规则只引用[共同契约](../test-journey-steps/共同身份.md)。LSP 不改变测试 ID，不签发收据，不以符号或原生标签新增关系。
 
-`check` 的退出码、finding 与 `complete` 不读取观察结果。`trace`、`review` 与工作台可附带明确标识的历史观察，但关系完整性独立从源码确定。C-011 第 3 款的拟议条文由 [test-adapters](../test-adapters/README.md) 拥有；本设计不执行宪法修订。
+`check` 的退出码、finding 与 `complete` 不读取观察结果。`trace`、`review` 与工作台可附带明确标识的历史观察，但关系完整性独立从源码确定。C-011 第 6 款的拟议条文由 [test-adapters](../test-adapters/README.md) 拥有；本设计不执行宪法修订。
 
 ## Entry Points
 
