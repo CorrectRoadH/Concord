@@ -1112,3 +1112,11 @@ CLI 14组与query 6组均为 acceptance=true；每组7次全新进程，基线�
 根因是 ViewProjectionManager 把观察到的任意 journal 立即当作中断，即使源发布 owner 仍存活，或扫描失败回传时 journal 已完成删除。修复仅调整后台投影失败分类：重新检查 journal；已移除或归本工作区存活 owner 的现场丢弃候选并重新调度，不持久化 RecoveryRequired。无存活 owner 或无法确认所有权时仍阻断，所有候选发布前仍确认没有 journal。来源读写权限、恢复授权和 publication lease 机制不变。
 
 新增真实 publication lease 与 journal 现场的 HTTP 回归：写者活跃时首次代次保持202，写者完成后得到ready且无lastError；旧构建稳定返回503（red）。修复构建的 view-projection、knowledge-browser、feedback-browser、feedback-gh-ui、selfhost 合计24项通过，0失败0跳过（green）；已有 orphan journal 首次与暖代次阻断用例均通过。源码及built类型检查通过。日志 /tmp/concord-hawdb013-publication-red.log、/tmp/concord-hawdb013-publication-green.log。此处记录实际测试观察，不冒充Concord签发的red/green证据收据。
+
+## v0.14.1 发行与渠道验收
+
+源码发行工作流 https://github.com/CorrectRoadH/Concord/actions/runs/39931838607 的四个 check 分片、Linux/macOS 原生生命周期、统一包和发布全部通过。第二次 attempt 仅重跑因 Azure APT 下载停滞而取消的 shard 1 及下游发布，没有放宽测试或更换源码。v0.14.1 于 2026-10-23T09:54:02Z 正式发布，源码 805e43daaa16bb54e47694acfd182a59ba8da120。包 concord-sdlc-0.14.1.tgz SHA-256 为 818ac89e9026a4e545783301cb0da63bed97fd565a1c3759b072504e3386fdb4；下载包摘要、SHA256SUMS 和 GitHub asset digest 一致。两个目标原生模块均为采用的 0.13 revision、portable=true、testHooks=false，binarySha256 与实际字节匹配。发布说明保留原有平台与渠道说明，并补充锁适配和工作区刷新修复。
+
+Homebrew/Nix 渠道首轮中，macOS Homebrew 与 Linux Nix 通过，Linux Homebrew 冷读返回 unavailable。为 Formula/template 的冷暖读断言增加实际 JSON 错误信息后，定位为 HawdbUnavailable: storage error: Permission denied (os error 13)，不是原生模块加载或摘要错误。HawDB writable admission 的 sync_directory_tree_with_context(root, context, None) 会同步祖先直到挂载点，而 Homebrew Linux Landlock 的 deny_read_home 实现通过 root children 授权读取，不授权根目录本身。本地对正式发布的原生模块施加 READ_DIR 与 REFER Landlock 规则，允许根的子树但拒绝读取根：/tmp 上 open 失败 EACCES；/dev/shm 独立挂载点上 open/close 成功。渠道测试夹具改在 Linux /dev/shm 中创建并自动清理临时仓库，macOS 仍用 testpath；保持 init/check/cache clear/冷 miss/暖 hit 全部断言，不修改发布包、不放宽沙箱或引擎协议。CI 系统调用追踪进一步确认 openat(AT_FDCWD, "/", O_RDONLY|O_CLOEXEC) 返回 EACCES。
+
+最终渠道工作流 https://github.com/CorrectRoadH/homebrew-tap/actions/runs/39937525999 全部成功：Linux Homebrew、macOS Homebrew、Linux Nix、metadata update。tap 修复提交17f442a，配方自动发布提交817a1ac；Formula与Nix均为0.14.1并映射同一818ac89e…包摘要。渠道收据于2026-10-23T10:21:08Z发布：https://github.com/CorrectRoadH/homebrew-tap/releases/tag/v0.14.1 。源码和渠道交付均完成。保留诊断JSON断言，已移除临时strace工作流改动。
