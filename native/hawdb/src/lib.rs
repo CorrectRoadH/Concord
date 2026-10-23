@@ -1,15 +1,16 @@
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io;
+use std::num::NonZeroUsize;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
 use std::sync::Mutex;
 
-use hawdb::{Database, DatabaseConfig, value::{Value, ValueRef}};
+use hawdb::{Database, DatabaseConfig, HawDBError, value::{Value, ValueRef}};
 use napi::{Error, Status};
 use napi_derive::napi;
 
-const REVISION: &str = "1e9f76428be6649a18a6f99d75b0ccfef16bf545";
+const REVISION: &str = "91aec4960ed27516962cf1dc918307f57faef15d";
 const ABI: &str = "concord-hawdb-1";
 const LOCK: &str = "owner.hawdb.lock";
 const CREATE_ENTRIES: &str = "CREATE TABLE concord_cache_entries (namespace TEXT NOT NULL, cache_key TEXT NOT NULL, payload BYTEA NOT NULL, sequence BIGINT NOT NULL, PRIMARY KEY (namespace, cache_key))";
@@ -29,9 +30,12 @@ fn err(code: &'static str, reason: impl std::fmt::Display) -> Error {
 fn unavailable(reason: impl std::fmt::Display) -> Error { err("HawdbUnavailable", reason) }
 fn limit(reason: impl std::fmt::Display) -> Error { err("HawdbLimit", reason) }
 fn unsafe_path(reason: impl std::fmt::Display) -> Error { err("UnsafePath", reason) }
-fn engine_open_error(error: impl std::fmt::Display) -> Error {
+fn engine_busy(error: &HawDBError) -> bool {
+    matches!(error, HawDBError::BranchBusy { .. }) || error.to_string().contains("database directory is already open")
+}
+fn engine_open_error(error: HawDBError) -> Error {
     let message = error.to_string();
-    if message.contains("database directory is already open") { err("HawdbBusy", message) }
+    if engine_busy(&error) { err("HawdbBusy", message) }
     else { unavailable(message) }
 }
 
@@ -83,6 +87,8 @@ fn config(read_only: bool) -> DatabaseConfig {
         segment_cache_capacity_bytes: (16*MIB) as u64,
         max_graph_manifest_open_bytes: (8*MIB) as u64,
         max_out_of_core_delta_bytes: Some((16*MIB) as u64),
+        max_relational_index_read_bytes: NonZeroUsize::new(16*MIB).unwrap(),
+        max_relational_hydration_bytes: NonZeroUsize::new(64*MIB).unwrap(),
         ..DatabaseConfig::default()
     }
 }
@@ -109,27 +115,42 @@ fn inspect_path(path: &Path, create: bool) -> napi::Result<bool> {
             _ => return Err(unsafe_path("noncanonical path component")),
         }
     }
-    inspect_tree(path)?;
     Ok(false)
 }
-fn inspect_tree(path: &Path) -> napi::Result<()> {
+fn is_lock(path: &Path) -> bool {
+    path.file_name().is_some_and(|name| name.to_string_lossy().ends_with(".lock"))
+}
+fn inspect_tree(path: &Path, require_owners: bool) -> napi::Result<Vec<PathBuf>> {
     let mut pending = vec![path.to_owned()];
+    let mut inodes: BTreeMap<(u64, u64), (u64, u64)> = BTreeMap::new();
+    let mut locks = Vec::new();
     while let Some(dir) = pending.pop() {
-        for entry in fs::read_dir(dir).map_err(unsafe_path)? {
+        for entry in fs::read_dir(&dir).map_err(unsafe_path)? {
             let entry = entry.map_err(unsafe_path)?;
             let metadata = fs::symlink_metadata(entry.path()).map_err(unsafe_path)?;
             if metadata.file_type().is_symlink() { return Err(unsafe_path("symlink in database directory")); }
             if metadata.is_dir() { pending.push(entry.path()); }
             else if metadata.is_file() {
-                if metadata.nlink() != 1 { return Err(unsafe_path("hard link in database directory")); }
+                let group = inodes.entry((metadata.dev(), metadata.ino())).or_insert((metadata.nlink(), 0));
+                if group.0 != metadata.nlink() { return Err(unsafe_path("hard link count changed during inspection")); }
+                group.1 += 1;
+                if is_lock(&entry.path()) {
+                    if metadata.nlink() != 1 { return Err(unsafe_path("ownership lock must have one link")); }
+                    locks.push(entry.path());
+                }
+                if require_owners && entry.file_name() == "branch.head" { inspect_lock(&dir, false)?; }
             } else { return Err(unsafe_path("special file in database directory")); }
         }
     }
-    Ok(())
+    if inodes.values().any(|(links, paths)| links != paths) { return Err(unsafe_path("hard link outside database directory")); }
+    locks.sort();
+    Ok(locks)
 }
 fn inspect_lock(path: &Path, create: bool) -> napi::Result<Option<File>> {
-    let lock_path = path.join(LOCK);
-    match fs::symlink_metadata(&lock_path) {
+    open_lock_file(&path.join(LOCK), create).map(Some)
+}
+fn open_lock_file(lock_path: &Path, create: bool) -> napi::Result<File> {
+    match fs::symlink_metadata(lock_path) {
         Ok(metadata) if !metadata.is_file() || metadata.nlink() != 1 => return Err(unsafe_path("ownership lock must be a regular unique inode")),
         Ok(_) => (),
         Err(error) if error.kind() == io::ErrorKind::NotFound && !create => return Err(unavailable("ownership lock is absent")),
@@ -137,16 +158,47 @@ fn inspect_lock(path: &Path, create: bool) -> napi::Result<Option<File>> {
         Err(error) => return Err(unsafe_path(error)),
     }
     let file = OpenOptions::new().read(true).write(create).create(create).truncate(false)
-        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC).open(&lock_path).map_err(unsafe_path)?;
+        .mode(0o600).custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC).open(lock_path).map_err(unsafe_path)?;
+    verify_lock_file(&file, lock_path)?;
+    Ok(file)
+}
+fn verify_lock_file(file: &File, lock_path: &Path) -> napi::Result<()> {
     let opened = file.metadata().map_err(unsafe_path)?;
-    let linked = fs::symlink_metadata(&lock_path).map_err(unsafe_path)?;
-    if !opened.is_file() || opened.nlink() != 1 || opened.dev() != linked.dev() || opened.ino() != linked.ino() {
+    let linked = fs::symlink_metadata(lock_path).map_err(unsafe_path)?;
+    if !opened.is_file() || !linked.is_file() || linked.file_type().is_symlink() || opened.nlink() != 1 || linked.nlink() != 1 || opened.dev() != linked.dev() || opened.ino() != linked.ino() {
         return Err(unsafe_path("ownership lock inode changed"));
     }
-    Ok(Some(file))
+    Ok(())
+}
+fn lock_file(file: &File) -> napi::Result<()> {
+    match file.try_lock() {
+        Ok(()) => Ok(()),
+        Err(std::fs::TryLockError::WouldBlock) => Err(err("HawdbBusy", "database directory is owned by another handle")),
+        Err(std::fs::TryLockError::Error(error)) => Err(unavailable(error)),
+    }
+}
+struct ConcordLease { file: File, path: PathBuf, root: PathBuf, identity: (u64, u64) }
+impl ConcordLease {
+    fn acquire(root: &Path) -> napi::Result<Self> {
+        let mut name = root.as_os_str().to_owned();
+        name.push(".concord.lock");
+        let path = PathBuf::from(name);
+        let file = open_lock_file(&path, true)?;
+        lock_file(&file)?;
+        let stat = fs::symlink_metadata(root).map_err(unsafe_path)?;
+        let lease = Self { file, path, root: root.to_owned(), identity: (stat.dev(), stat.ino()) };
+        lease.verify()?;
+        Ok(lease)
+    }
+    fn verify(&self) -> napi::Result<()> {
+        inspect_path(&self.root, false)?;
+        let root = fs::symlink_metadata(&self.root).map_err(unsafe_path)?;
+        if (root.dev(), root.ino()) != self.identity { return Err(unsafe_path("database root inode changed")); }
+        verify_lock_file(&self.file, &self.path)
+    }
 }
 fn read_rows(db: &Database, namespace: &str) -> napi::Result<Vec<Row>> {
-    let output = db.begin_read_transaction().query_sql_with_params_bounded(
+    let output = db.begin_read_transaction().map_err(engine_open_error)?.query_sql_with_params_bounded(
         SELECT_NS, &[Value::String(namespace.into())], Some(20_001)).map_err(unavailable)?;
     if output.rows.len() > 20_000 { return Err(limit("query row budget exceeded")); }
     let mut result = Vec::with_capacity(output.rows.len());
@@ -171,8 +223,8 @@ fn all_rows(db: &Database, memory: bool) -> napi::Result<Vec<Row>> {
     Ok(rows)
 }
 fn schema(db: &Database) -> napi::Result<()> {
-    let output = db.begin_read_transaction().query_sql_with_params_bounded(SELECT_SCHEMA, &[], Some(2))
-        .map_err(|error| err("HawdbIncompatible", error))?;
+    let output = db.begin_read_transaction().map_err(engine_open_error)?.query_sql_with_params_bounded(SELECT_SCHEMA, &[], Some(2))
+        .map_err(|error| if engine_busy(&error) { engine_open_error(error) } else { err("HawdbIncompatible", error) })?;
     if output.rows.len() != 1 { return Err(err("HawdbIncompatible", "cache schema version missing")); }
     match output.rows.get(0, "version") {
         Some(ValueRef::String("1")) => (),
@@ -189,7 +241,7 @@ fn initialize(db: &mut Database) -> napi::Result<()> {
     Ok(())
 }
 
-struct Handle { db: Option<Database>, path: Option<PathBuf>, memory: bool, read_only: bool, writes: usize, churn: usize, poisoned: bool }
+struct Handle { db: Option<Database>, lease: Option<ConcordLease>, path: Option<PathBuf>, memory: bool, read_only: bool, writes: usize, churn: usize, poisoned: bool }
 #[napi]
 pub struct CacheBridge { handle: Mutex<Handle> }
 #[napi]
@@ -199,6 +251,8 @@ impl CacheBridge {
         if read_only && create { return Err(err("HawdbIncompatible", "read-only create is invalid")); }
         let path = Path::new(&path);
         let new_dir = inspect_path(path, create)?;
+        let lease = ConcordLease::acquire(path)?;
+        inspect_tree(path, read_only)?;
         let manifest_exists = path.join("manifest.hawdb").is_file();
         let lock_exists = path.join(LOCK).exists();
         if !manifest_exists && (read_only || !create || !new_dir && !is_owner_only(path)?) {
@@ -209,13 +263,14 @@ impl CacheBridge {
         let mut db = Database::open_with_config(path, config(read_only)).map_err(engine_open_error)?;
         if manifest_exists { schema(&db)?; }
         else { initialize(&mut db)?; }
-        Ok(Self { handle: Mutex::new(Handle { db: Some(db), path: Some(path.to_owned()), memory: false, read_only, writes: 0, churn: 0, poisoned: false }) })
+        lease.verify()?;
+        Ok(Self { handle: Mutex::new(Handle { db: Some(db), lease: Some(lease), path: Some(path.to_owned()), memory: false, read_only, writes: 0, churn: 0, poisoned: false }) })
     }
     #[napi(factory)]
     pub fn memory() -> napi::Result<Self> {
         let mut db = Database::new_with_config(config(false));
         initialize(&mut db)?;
-        Ok(Self { handle: Mutex::new(Handle { db: Some(db), path: None, memory: true, read_only: false, writes: 0, churn: 0, poisoned: false }) })
+        Ok(Self { handle: Mutex::new(Handle { db: Some(db), lease: None, path: None, memory: true, read_only: false, writes: 0, churn: 0, poisoned: false }) })
     }
     #[napi]
     pub fn get(&self, namespace: String, keys: Vec<String>) -> napi::Result<Vec<CacheEntry>> {
@@ -227,7 +282,7 @@ impl CacheBridge {
         let mut bytes = 0_usize;
         for key in keys {
             if key.is_empty() || key.len() > 8*MIB { return Err(limit("invalid key length")); }
-            let output = db.begin_read_transaction().query_sql_with_params_bounded(SELECT_ONE,
+            let output = db.begin_read_transaction().map_err(engine_open_error)?.query_sql_with_params_bounded(SELECT_ONE,
                 &[Value::String(namespace.clone()), Value::String(key.clone())], Some(1)).map_err(unavailable)?;
             if let Some(value) = output.rows.get(0, "payload") {
                 let payload = match value { ValueRef::Binary(value) => String::from_utf8(value.to_vec()).map_err(|_| err("HawdbIncompatible", "invalid UTF-8 payload"))?, _ => return Err(err("HawdbIncompatible", "invalid payload column")) };
@@ -292,7 +347,7 @@ impl CacheBridge {
         projected.retain(|row| row.namespace != namespace);
         let total: usize = projected.iter().map(Row::bytes).sum::<usize>() + bytes;
         if total > if memory { 36*MIB } else { 96*MIB } { return Err(limit("database logical budget exceeded")); }
-        let mut tx = db.begin_transaction();
+        let mut tx = db.begin_transaction().map_err(engine_open_error)?;
         for key in deletes {
             tx.query_sql_with_params(DELETE_ONE, &[Value::String(namespace.clone()), Value::String(key)]).map_err(unavailable)?;
         }
@@ -332,14 +387,29 @@ impl CacheBridge {
     pub fn close(&self) -> napi::Result<()> {
         let mut handle = self.handle.lock().map_err(unavailable)?;
         let mut db = handle.db.take();
-        let checkpoint = if !handle.memory && !handle.read_only && !handle.poisoned {
+        let safe = handle.lease.as_ref().map(ConcordLease::verify).transpose();
+        let checkpoint = if safe.is_ok() && !handle.memory && !handle.read_only && !handle.poisoned {
             db.as_mut().map(|db| db.checkpoint()).transpose().map(|_| ()).map_err(unavailable)
         } else { Ok(()) };
         drop(db);
-        if checkpoint.is_ok() {
-            if let Some(path) = &handle.path { inspect_tree(path)?; }
-        }
-        checkpoint
+        let inspected = if safe.is_ok() && checkpoint.is_ok() {
+            handle.path.as_ref().map(|path| inspect_tree(path, false)).transpose().map(|_| ())
+        } else { Ok(()) };
+        handle.lease = None;
+        safe.map(|_| ()).and(checkpoint).and(inspected)
+    }
+}
+#[cfg(feature = "test-hooks")]
+#[napi]
+impl CacheBridge {
+    #[napi(factory)]
+    pub fn uncoordinated_for_test(path: String, read_only: bool, admit: bool) -> napi::Result<Self> {
+        let path = Path::new(&path);
+        inspect_path(path, false)?;
+        inspect_tree(path, true)?;
+        let db = Database::open_with_config(path, config(read_only)).map_err(engine_open_error)?;
+        if admit { schema(&db)?; }
+        Ok(Self { handle: Mutex::new(Handle { db: Some(db), lease: None, path: Some(path.to_owned()), memory: false, read_only, writes: 0, churn: 0, poisoned: false }) })
     }
 }
 fn active(handle: &Handle) -> napi::Result<&Database> {
@@ -358,7 +428,7 @@ fn maintain(handle: &mut Handle, bytes: usize, count: usize) -> napi::Result<()>
             let rows = all_rows(active(handle)?, true)?;
             let mut rebuilt = Database::new_with_config(config(false));
             initialize(&mut rebuilt)?;
-            let mut tx = rebuilt.begin_transaction();
+            let mut tx = rebuilt.begin_transaction().map_err(engine_open_error)?;
             for row in rows {
                 tx.query_sql_with_params(INSERT_ONE, &[Value::String(row.namespace), Value::String(row.key), Value::Binary(row.payload.into_bytes()), Value::Int(row.sequence)]).map_err(unavailable)?;
             }
@@ -384,38 +454,40 @@ fn is_owner_only(path: &Path) -> napi::Result<bool> {
 }
 
 #[napi]
-pub struct OwnerGuard { file: Option<File>, path: PathBuf }
+pub struct OwnerGuard { file: Option<File>, path: PathBuf, lease: Option<ConcordLease>, engine_locks: Vec<(PathBuf, File)> }
 #[napi]
 impl OwnerGuard {
     #[napi(constructor)]
     pub fn new(path: String) -> napi::Result<Self> {
         let path = Path::new(&path);
         inspect_path(path, true)?;
+        let lease = ConcordLease::acquire(path)?;
+        let mut locks = inspect_tree(path, false)?;
         let file = inspect_lock(path, true)?.ok_or_else(|| unavailable("ownership lock unavailable"))?;
-        match file.try_lock() {
-            Ok(()) => {
-                let guard = Self { file: Some(file), path: path.to_owned() };
-                guard.verify()?;
-                Ok(guard)
-            },
-            Err(std::fs::TryLockError::WouldBlock) => Err(err("HawdbBusy", "database directory is owned by another handle")),
-            Err(std::fs::TryLockError::Error(error)) => Err(unavailable(error)),
+        lock_file(&file)?;
+        let root_lock = path.join(LOCK);
+        if !locks.contains(&root_lock) { locks.push(root_lock.clone()); locks.sort(); }
+        let mut engine_locks = Vec::new();
+        for lock in &locks {
+            if lock == &root_lock { continue; }
+            let file = open_lock_file(lock, false)?;
+            lock_file(&file)?;
+            engine_locks.push((lock.clone(), file));
         }
+        if inspect_tree(path, false)? != locks { return Err(unsafe_path("engine lock membership changed during clear admission")); }
+        for (lock, file) in &engine_locks { verify_lock_file(file, lock)?; }
+        let guard = Self { file: Some(file), path: path.to_owned(), lease: Some(lease), engine_locks };
+        guard.verify()?;
+        Ok(guard)
     }
     #[napi]
     pub fn verify(&self) -> napi::Result<()> {
         let file = self.file.as_ref().ok_or_else(|| err("HawdbClosed", "ownership guard is closed"))?;
-        let root = fs::symlink_metadata(&self.path).map_err(unsafe_path)?;
-        if !root.is_dir() || root.file_type().is_symlink() { return Err(unsafe_path("database root changed during clear")); }
-        let opened = file.metadata().map_err(unsafe_path)?;
-        let linked = fs::symlink_metadata(self.path.join(LOCK)).map_err(unsafe_path)?;
-        if !linked.is_file() || linked.file_type().is_symlink() || linked.nlink() != 1 || opened.nlink() != 1 || opened.dev() != linked.dev() || opened.ino() != linked.ino() {
-            return Err(unsafe_path("ownership lock inode changed during clear"));
-        }
-        Ok(())
+        self.lease.as_ref().ok_or_else(|| err("HawdbClosed", "ownership guard is closed"))?.verify()?;
+        verify_lock_file(file, &self.path.join(LOCK))
     }
     #[napi]
-    pub fn close(&mut self) { self.file = None; }
+    pub fn close(&mut self) { self.engine_locks.clear(); self.file = None; self.lease = None; }
 }
 
 #[cfg(feature = "test-hooks")]

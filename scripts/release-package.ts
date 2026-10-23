@@ -1,3 +1,5 @@
+// @concord-file
+// @concord-implements docs/feature/cross-platform-release/use-case/release-from-tag.md
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';

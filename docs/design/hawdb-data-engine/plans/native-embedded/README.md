@@ -43,11 +43,15 @@ HawDB 统一引擎会增加原生包体、构建矩阵、查询与序列化成�
 
 ## Open modes and ownership
 
-构造配置读取、feedback 观察和 status 仅 existing-only/read-only 打开；缺目录、格式标记、ownership 文件或表时不补写，回源或报告 empty/unavailable。dry-run 不创建持久引擎文件。来源读取不取得 publication lease，数据库目录仍由引擎所有权协议保护。
+构造配置读取、feedback 观察和 status 仅 existing-only/read-only 打开。只读不修改来源或逻辑缓存行，允许已有库的内部派生文件重建和同级协调锁创建。缺目录、格式标记、结构性 ownership 文件或表时不初始化，回源或报告 empty/unavailable。
+
+dry-run 与 cache-off 不打开持久数据库。来源读取不取得 publication lease。固定版本、完整句柄协调、分支锁与删除阶段由[分支项目引擎接入](engine-upgrade.md)规定。
 
 最外层 snapshot 拥有按需句柄，嵌套调用只复用。只读句柄需要写入时，关闭后重新以写模式打开，并重新竞争引擎所有权；没有跨调用逃逸的 native transaction。持久句柄在来源快照结束时释放；存在独占提交时，数据库先于提交 owner 释放。纯解析的无磁盘内存句柄属于进程，关闭或失效后允许重建。
 
-clear 先关闭本进程受管持久句柄，通过 native guard 对固定 revision 的 owner.hawdb.lock 执行非截断 File::try_lock。只在取得锁后删缓存数据，保留目录和同一个锁 inode。WouldBlock、权限、I/O 或未知错误均拒绝删除；损坏 manifest 不影响独立取锁。owner-only 目录视为空。缺锁文件只在明确写入/clear 且路径已验证时创建，读取与 dry-run 不补建。非目录缓存根、symlink、硬链接锁、特殊文件或前后 inode 不符均拒绝。
+clear 先关闭本进程受管持久句柄，再取得同级 Concord 协调锁及根、分支等已有引擎锁。锁采用非截断 File::try_lock。先删数据，再删嵌套锁，最后删空目录；根目录、根锁和同级协调锁 inode 保留。
+
+WouldBlock、权限、I/O 或未知错误均拒绝删除；损坏 manifest 不影响独立取锁。owner-only 目录视为空。显式 clear 可以补建缺失根锁。非目录缓存根、symlink、硬链接锁、特殊文件或身份变化均拒绝；普通文件只允许根内完整计数的内部硬链接。
 
 该锁适配是对固定 revision 协议的显式窄依赖，不是 HawDBError 字符串推断，也不绕过公开数据 API。互斥保证覆盖遵守 Concord 协调协议和已持有 HawDB 文件锁的进程；不宣称抵抗任意外部路径替换。
 

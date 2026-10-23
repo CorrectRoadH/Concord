@@ -191,7 +191,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const documents = new Map<string, string>();
     for (const file of [...files].sort()) {
       const source = read(file);
-      if (/\.mdx?$/iu.test(file)) documents.set(file, withoutStepMarkers(file, source));
+      if (/\.mdx?$/iu.test(file)) documents.set(file, source);
     }
     const inputDigest = snapshotDigest([...inputs, ['@writing-parser-version', WRITING_PARSER_VERSION], ['@writing-policy-membership', JSON.stringify(policyPaths)], ['@concept-catalog-membership', JSON.stringify(catalogPaths)]], [...memberships]);
     const cacheDigest = objectDigest({ inputDigest, selectedPath: selectedPath ?? null });
@@ -208,7 +208,8 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const findings: WritingFinding[] = cached ?? [];
     if (cached === undefined) {
       const used = new Set<string>(), eligible = new Set<string>();
-      for (const [file, source] of documents) {
+      for (const [file, authored] of documents) {
+        const source = withoutStepMarkers(file, authored);
         const parsed = prose(file, source);
         const { owners, controlled } = contexts.get(file)!;
         const concepts = effectiveConcepts(file, catalogs.catalogs);

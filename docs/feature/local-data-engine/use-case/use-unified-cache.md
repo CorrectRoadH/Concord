@@ -23,7 +23,13 @@ feature: docs/feature/local-data-engine/README.md
 
 连续命令可以命中缓存；编辑、新增或删除来源立即使对应键失效。数据库缺失、损坏、被其他进程占用或 payload 不合 Schema 时，源码解析回源并报告缓存状态；远端快照失败不触发网络请求，不覆盖已捕获的本地 Issue。一次完整远端 fetch 的合并具备事务原子性、单调时间戳及同版本冲突保护。
 
-clear 只管理 Git-private 的 cache.hawdb，拒绝 symlink、越界和活动句柄；重建后来源内容和证据摘要不变。目录与 owner.hawdb.lock 的 inode 保留，其余缓存内容可清理。该目录之外的文件不参与缓存状态判定或清理。
+clear 只删除 Git-private 的 cache.hawdb 内的缓存内容，拒绝 symlink、越界、外部硬链接和活动句柄。完整计数的内部硬链接允许清理。目录、根 owner.hawdb.lock 及同级 cache.hawdb.concord.lock 的 inode 保留；重建后来源内容和证据摘要不变。
+
+普通只读查询不修改来源和逻辑缓存行，允许已有缓存内部派生文件重建及协调锁创建。读取可能需要可写缓存目录。dry-run 与 cache-off 不访问持久数据库；feedback 继续使用本地 Issue 已捕获的来源信息，不触发远端请求。
+
+dry-run cache status 只检查路径和原生产物。缓存缺失或 owner-only 时返回 empty；其它情况返回 unavailable，detail 说明持久访问关闭，不以未执行的读取声称 ready。普通 cache status 仍核验实际投影。
+
+升级保留有效旧缓存中的逻辑行。升级和降级期间须停止缓存使用者，不混用不同引擎版本的 Concord 进程。降级前先用采用 HawDB 0.13.0 的 CLI 显式清理缓存，再运行旧版；远端观察需要显式刷新，本地已捕获 Issue 保留。
 
 clear 的 dry-run 展示引擎、缓存路径、存在性、待删除的顶层条目、保留路径和原生产物可用性。预览不取得原生清理锁、不创建缓存；实际执行重新检查路径和所有权，预览成功不授权删除。CLI 和长期运行的 Web 之间不持有命令全程数据库锁，不让空闲 Web 独占缓存。
 

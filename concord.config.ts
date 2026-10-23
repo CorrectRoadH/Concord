@@ -8,7 +8,8 @@ export default {
   ],
   "sourceRoots": [
     "src",
-    "web"
+    "web",
+    "scripts"
   ],
   "runner": {
     "kind": "command",

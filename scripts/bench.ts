@@ -11,18 +11,20 @@ import { io, PerfError, timedRun } from './perf/process.js';
 import { judge, measurementPass, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.js';
 import { parseScale, prepareConsumer, workDirectory } from './perf/workspace.js';
 
-const usage = 'Usage: vp run bench <cli|query|view> [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>] [--baseline <built-checkout>] [--samples 7] [--reference] [--out <file.json>] [--keep]';
+const usage = 'Usage: vp run bench <cli|query|view> [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>] [--baseline <built-checkout>] [--isolated-caches] [--samples 7] [--reference] [--out <file.json>] [--keep]';
 const Samples = Schema.NumberFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 100 }));
 const Path = Schema.Literals(['cli', 'query', 'view']);
 interface Context {
   readonly consumer: Consumer; readonly artifacts: readonly Artifact[]; readonly samples: number;
+  readonly consumers?: Readonly<Record<string, Consumer>>;
   readonly reference: boolean; readonly outputDir: string;
 }
 interface Snapshot { readonly command: string; readonly artifact: string; readonly readyAfterMs?: number; readonly lastError?: string }
 const budgets = (source: keyof typeof budgetSources) => io('Read budget owner', () =>
   parseBudgetTable(readFileSync(resolve(budgetSources[source].path), 'utf8'), budgetSources[source].heading));
+const consumerFor = (context: Context, artifact: Artifact) => context.consumers?.[artifact.label] ?? context.consumer;
 const run = (context: Context, artifact: Artifact, args: readonly string[], timeoutMs?: number) =>
-  timedRun([process.execPath, artifact.entry, ...args], { cwd: context.consumer.root, outputDir: context.outputDir, ...(timeoutMs === undefined ? {} : { timeoutMs }) });
+  timedRun([process.execPath, artifact.entry, ...args], { cwd: consumerFor(context, artifact).root, outputDir: context.outputDir, ...(timeoutMs === undefined ? {} : { timeoutMs }) });
 const label = (args: readonly string[]) => `concord ${args.join(' ')}`;
 const skip = (context: Context, args: readonly string[]) => io('Check command owners', () => {
   const reason = missingOwner(args, p => existsSync(join(context.consumer.root, p)));
@@ -34,7 +36,7 @@ const failure = (args: readonly string[], reason: string): GroupVerdict => ({ co
 /** Warm each artifact independently, then interleave fresh processes; retry one noisy group. */
 const measureGroup = Effect.fn('bench.measureGroup')(function*(context: Context, args: readonly string[], timeoutMs?: number, scan = false) {
   const measure = (artifact: Artifact) => scan
-    ? timedRun([process.execPath, join(dirname(artifact.entry), 'query-scan-worker.js'), context.consumer.root, JSON.stringify(args.filter(arg => !['--json', '--fresh', '--dry-run'].includes(arg)))], { cwd: context.consumer.root, outputDir: context.outputDir, ...(timeoutMs === undefined ? {} : { timeoutMs }) })
+    ? timedRun([process.execPath, join(dirname(artifact.entry), 'query-scan-worker.js'), consumerFor(context, artifact).root, JSON.stringify(args.filter(arg => !['--json', '--fresh', '--dry-run'].includes(arg)))], { cwd: consumerFor(context, artifact).root, outputDir: context.outputDir, ...(timeoutMs === undefined ? {} : { timeoutMs }) })
     : run(context, artifact, args, timeoutMs);
   const reasons: string[] = [];
   for (const artifact of context.artifacts) {
@@ -160,6 +162,7 @@ const main = Effect.gen(function*() {
   const { values, positionals } = yield* io('Parse bench arguments', () => parseArgs({ allowPositionals: true, options: {
     consumer: { type: 'string', default: 'self' }, commit: { type: 'string', default: 'HEAD' }, scale: { type: 'string' },
     baseline: { type: 'string' }, samples: { type: 'string', default: '7' }, reference: { type: 'boolean', default: false },
+    'isolated-caches': { type: 'boolean', default: false },
     out: { type: 'string' }, keep: { type: 'boolean', default: false },
   } }));
   const path = yield* Schema.decodeUnknownEffect(Path)(positionals[0]).pipe(Effect.mapError(() => new PerfError({ message: usage })));
@@ -168,11 +171,18 @@ const main = Effect.gen(function*() {
   const scale = yield* io('Parse scale', () => parseScale(values.scale));
   const candidate = yield* loadArtifact('candidate', '.');
   const artifacts = values.baseline === undefined ? [candidate] : [candidate, yield* loadArtifact('baseline', values.baseline)];
+  if (values['isolated-caches'] && (values.consumer !== 'self' || path === 'view')) return yield* new PerfError({ message: '--isolated-caches requires the self consumer and cli or query path' });
   const workDir = yield* workDirectory('concord-bench-', values.keep), outputDir = join(workDir, 'runs');
   yield* io('Create run directory', () => mkdirSync(outputDir));
   const consumer = path === 'view' ? { kind: 'scale', root: join(outputDir, 'view-consumer'), commit: 'fixture' } satisfies Consumer
     : yield* prepareConsumer(values.consumer, { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
-  const context: Context = { consumer, artifacts, samples, reference: values.reference, outputDir };
+  const consumers: Record<string, Consumer> = { candidate: consumer };
+  if (values['isolated-caches']) for (const artifact of artifacts.filter(item => item.label !== 'candidate')) {
+    const artifactWork = join(workDir, artifact.label);
+    yield* io('Create isolated artifact consumer directory', () => mkdirSync(artifactWork));
+    consumers[artifact.label] = yield* prepareConsumer('self', { repository: candidate.dir, commit: consumer.commit, entry: artifact.entry, scale, workDir: artifactWork });
+  }
+  const context: Context = { consumer, artifacts, samples, reference: values.reference, outputDir, ...(values['isolated-caches'] ? { consumers } : {}) };
   const result = path === 'cli' ? yield* cliPath(context) : path === 'query' ? yield* queryPath(context) : yield* viewPath(context);
   const pass = measurementPass(result.verdicts, consumer.kind);
   const measured = result.verdicts.filter(verdict => !verdict.skipped);
@@ -184,7 +194,7 @@ const main = Effect.gen(function*() {
   ];
   const record = {
     format: 'concord.bench/v1', path, measuredAt: new Date().toISOString(), environment: environment(), reference: values.reference, samples,
-    consumer, artifacts, ...result, pass, acceptance: acceptanceGaps.length === 0,
+    consumer, artifacts, ...(values['isolated-caches'] ? { consumers } : {}), ...result, pass, acceptance: acceptanceGaps.length === 0,
     ...(acceptanceGaps.length > 0 ? { acceptanceGaps } : {}),
   };
   yield* io('Write bench record', () => {

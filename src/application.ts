@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { Effect, Result, Predicate } from 'effect';
 import { recoverLocalState } from './recovery.js';
 import { waitForPublication } from './publication-wait.js';
-import { allowPersistentCacheRecovery } from './cache-store.js';
 import { readRepositoryTestView, type RepositoryTestView } from './view-profile.js';
 import { getGitStatus, type GitBaselineCache } from './git-view.js';
 import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from './annotations.js';
@@ -139,7 +138,7 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
 function withRepository<A>(
   root: string,
   operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError>,
-  options: { readonly initialize?: boolean; readonly recover?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write' } = {},
+  options: { readonly initialize?: boolean; readonly recover?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off' } = {},
   timing?: RequestTiming,
 ): Effect.Effect<A, ConcordError> {
   return Effect.acquireRelease(
@@ -242,7 +241,6 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
   }
   return yield* withRepository(root, (repo) => Effect.gen(function*() {
     const compile = () => repo.snapshot(() => {
-    if (cache === 'use') allowPersistentCacheRecovery(repo);
     const currentConfigSource = repo.configSnapshot.source;
     const inspected = timing === undefined ? inspectDocuments(repo) : timing.sync('view.inspectDocuments', () => inspectDocuments(repo));
     let cases: ReturnType<typeof scanAnnotations>;
@@ -306,7 +304,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       }
     }
     return { ...snapshot, complete: snapshot.complete && repositoryTests.status !== 'failed', repositoryTests };
-  }), { access: 'read' }, timing);
+  }), { access: 'read', persistentCache: cache }, timing);
 });
 
 export const getWorkspaceSnapshot = (root: string, cache: 'use' | 'off' = 'off', timing?: RequestTiming) => compileWorkspace(root, cache, timing);

@@ -115,6 +115,7 @@ function memory(record: DocumentRecord): MemoryMeta {
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
+// @concord-implements docs/feature/document-packages/use-case/migrate-document-discovery.md
 export function loadDocuments(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
   return inRepositorySnapshot(repo, () => loadDocumentsUnderSnapshot(repo, kinds));
 }
@@ -161,6 +162,7 @@ export interface DocumentInventory {
 /** Diagnostic records and completeness travel together across projection boundaries. */
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
+// @concord-implements docs/feature/document-packages/use-case/migrate-document-discovery.md
 export function diagnoseDocuments(repo: Repository): DocumentInventory {
   return inRepositorySnapshot(repo, () => {
     const documents: DocumentRecord[] = [], findings: Finding[] = [];
@@ -449,6 +451,7 @@ export interface CreateDocumentInput {
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#roadmap
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#add
 // @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
+// @concord-implements docs/feature/project-onboarding/use-case/inherit-template-defaults.md
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const governance = kind === 'memory' && input.memoryKind === 'problem' ? problemPolicy(repo) : undefined;

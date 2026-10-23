@@ -1,6 +1,6 @@
 import { Schema } from 'effect';
 
-export const HAWDB_REVISION = '1e9f76428be6649a18a6f99d75b0ccfef16bf545';
+export const HAWDB_REVISION = '91aec4960ed27516962cf1dc918307f57faef15d';
 export const HAWDB_ABI = 'concord-hawdb-1';
 export const HAWDB_MACOS_DEPLOYMENT_TARGET = '15.0';
 export const HAWDB_TARGETS = ['linux-x64-glibc', 'darwin-arm64'] as const;

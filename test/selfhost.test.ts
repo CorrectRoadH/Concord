@@ -20,7 +20,7 @@ test('current checkout configures a version-matched runner whose annotations sca
   const project = readProjectConfig(root);
   assert.equal(project.format, 'concord.project/v1');
   assert.deepEqual(project.testRoots, ['test']);
-  assert.deepEqual(project.sourceRoots, ['src', 'web']);
+  assert.deepEqual(project.sourceRoots, ['src', 'web', 'scripts']);
   assert.equal(project.runner.kind, 'command');
   if (project.runner.kind !== 'command') assert.fail('self-host runner must use explicit command argv');
   assert.deepEqual(project.runner.argv, ['node', '--import', 'tsx', '--test', '--test-name-pattern', '{pattern}', '{file}']);
@@ -41,6 +41,7 @@ test('current checkout configures a version-matched runner whose annotations sca
     cpSync(join(root, 'test'), join(consumer, 'test'), { recursive: true });
     cpSync(join(root, 'src'), join(consumer, 'src'), { recursive: true });
     cpSync(join(root, 'web'), join(consumer, 'web'), { recursive: true });
+    cpSync(join(root, 'scripts'), join(consumer, 'scripts'), { recursive: true });
     cpSync(join(root, 'docs'), join(consumer, 'docs'), { recursive: true });
     for (const sourceFile of ['tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']) {
       cpSync(join(root, sourceFile), join(consumer, sourceFile));
@@ -57,9 +58,8 @@ test('current checkout configures a version-matched runner whose annotations sca
       const code = scanCode(repository);
       assert.deepEqual(code.findings, []);
       assert.deepEqual(new Set(code.codes.map(item => item.scope)), new Set(['file', 'node', 'region']));
-      for (const useCase of useCases) {
-        assert.ok(code.codes.some(item => item.contracts.some(ref => ref.split('#')[0] === useCase.path)), `missing an implementation relation for ${useCase.path}`);
-      }
+      const missingImplementations = useCases.filter(useCase => !code.codes.some(item => item.contracts.some(ref => ref.split('#')[0] === useCase.path))).map(useCase => useCase.path);
+      assert.deepEqual(missingImplementations, [], 'every Use Case needs an actual implementation relation');
     } finally {
       repository.close();
     }

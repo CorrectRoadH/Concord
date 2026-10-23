@@ -187,6 +187,8 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 `cache status/clear/rebuild` 只管理可删除的缓存。`cache rebuild` 在缓存目录缺失时创建它，重建后仍不可读时返回 `CacheRebuildUnavailable`，成功的 JSON 结果附 `cacheStatus`。缓存不可用时，命令从源文件重新计算，结论不变。
 
+`cache status --dry-run --json` 不打开数据库：缺失或空存储返回 `status: "empty"`，已有内容返回 `status: "unavailable"` 并附 `detail: "Persistent cache access is disabled"`。命令成功退出 0；该结果不表示数据库损坏。缓存读取、锁保留和降级行为见[统一缓存](../local-data-engine/use-case/use-unified-cache.md)。
+
 `recover` 完成或回退中断的写入。现场内容与计划不符时拒绝覆盖，保留文件。
 
 ## 读取错误

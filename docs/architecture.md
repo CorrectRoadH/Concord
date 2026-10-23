@@ -77,7 +77,7 @@ HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对
 
 缓存只保存解析结果和投影，不缓存授权或 Problem fixed 判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有。
 
-HawDB 的[引擎边界与预算](design/hawdb-data-engine/plans/native-embedded/README.md)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 只读打开完整库，缺少 ownership 文件或命名空间不补建。持久句柄与事务先于 publication lease 释放。
+HawDB 的[引擎边界与预算](design/hawdb-data-engine/plans/native-embedded/README.md)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 逻辑只读打开完整库，允许内部派生文件重建；缺少结构性 ownership 文件或命名空间不初始化。dry-run 与 cache-off 不打开持久库。持久句柄与事务先于 publication lease 释放。
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
@@ -107,7 +107,7 @@ flowchart TD
   Result --> Check
 ```
 
-cache clear 在独占 publication lease 下取得与 HawDB revision 相同的原生文件锁，保留目录与锁 inode。锁错误不授权删除；损坏库通过独立锁 guard 清理。clear 只管理 cache.hawdb，不删除源 owner、证据、journal 和 Memory。
+cache clear 在独占 publication lease 下取得 Concord 完整句柄锁与固定 HawDB revision 的根、分支文件锁。清理保留根目录、根锁及同级协调锁 inode。锁错误不授权删除；损坏库通过独立 guard 清理。clear 只删除 cache.hawdb 内的缓存数据，不删除源 owner、证据、journal 和 Memory。
 
 Memory 保存 current promotion 与追加的生命周期 history。Problem 使用递增 epoch，reopen 增加 epoch，red 与 green 都必须绑定当前 epoch。
 

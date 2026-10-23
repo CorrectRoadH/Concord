@@ -209,7 +209,7 @@ export function previewCacheClear(repo: Repository) {
     return {
       operation: 'cache-clear' as const, dryRun: true as const, engine: 'hawdb' as const,
       path: inventory.path, existing: inventory.existing, remove: inventory.entries,
-      preserve: [inventory.path, `${inventory.path}/owner.hawdb.lock`], native,
+      preserve: [inventory.path, `${inventory.path}/owner.hawdb.lock`, `${inventory.path}.concord.lock`], native,
       ownership: 'checked-on-execution' as const,
     };
   };
@@ -233,6 +233,7 @@ function statusUnderSnapshot(repo: Repository): { readonly status: string; reado
     const inventory = inspectCacheClear(repo.privateDir);
     hawdbIdentity();
     if (!inventory.existing || inventory.empty) return { status: 'empty', path };
+    if (repo.persistentCache === 'off') return { status: 'unavailable', path, detail: 'Persistent cache access is disabled' };
     return withPersistentCache(repo, false, db => {
       const projections = db!.namespaces().filter(name => name.endsWith('_cache') || name === 'workspace_projection');
       for (const namespace of projections) db!.scan(namespace);

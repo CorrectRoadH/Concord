@@ -27,7 +27,7 @@ export const prepareConsumer = Effect.fn('perf.prepareConsumer')(function*(kind:
   const root = kind === 'self' || kind === 'scale' ? join(options.workDir, kind) : yield* io('Resolve consumer path', () => realpathSync(kind));
   const preexisting = yield* refreshPids(root);
   yield* Effect.addFinalizer(() => settleRefreshes(root, preexisting).pipe(Effect.orDie));
-  const consumer = yield* (kind === 'self' ? selfConsumer(options.repository, options.commit, options.workDir)
+  const consumer = yield* (kind === 'self' ? selfConsumer(options.repository, options.commit, options.workDir, options.entry)
     : kind === 'scale' ? scaleConsumer(options.entry, options.scale, options.workDir)
       : pathConsumer(kind, options.workDir));
   existingRefreshes.set(consumer, preexisting);

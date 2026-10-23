@@ -13,7 +13,7 @@ export const checkCurrentProject = Effect.fn('checkCurrentProject')(function*(ro
   for (let attempt = 1; attempt <= 3; attempt++) {
     const result = yield* Effect.result(Effect.gen(function*() {
       const repo = yield* Effect.acquireRelease(
-        waitForPublication(reclaimPublication => sync(() => new LocalRepository(root, { access: 'read', reclaimPublication }))),
+        waitForPublication(reclaimPublication => sync(() => new LocalRepository(root, { access: 'read', persistentCache: cache, reclaimPublication }))),
         repo => Effect.sync(() => repo.close()),
       );
       yield* Effect.acquireRelease(

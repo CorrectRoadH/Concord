@@ -9,7 +9,7 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-hawdb = { git = "https://github.com/nowledge-co/hawdb.git", rev = "1e9f76428be6649a18a6f99d75b0ccfef16bf545", version = "=0.3.0", default-features = false }
+hawdb = { git = "https://github.com/nowledge-co/hawdb.git", rev = "91aec4960ed27516962cf1dc918307f57faef15d", version = "=0.13.0", default-features = false }
 napi = { version = "=3.13.0", default-features = false, features = ["napi4"] }
 napi-derive = "=3.6.9"
 libc = "=0.2.175"

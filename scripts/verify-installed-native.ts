@@ -96,7 +96,7 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
       const preview = call(['cache', 'clear', '--dry-run'], CachePreview);
       assert.equal(preview.native.status, 'ready');
       assert.deepEqual(preview.remove, beforePreview.filter(name => name !== 'owner.hawdb.lock').map(name => join(cachePath, name)));
-      assert.deepEqual(preview.preserve, [cachePath, join(cachePath, 'owner.hawdb.lock')]);
+      assert.deepEqual(preview.preserve, [cachePath, join(cachePath, 'owner.hawdb.lock'), `${cachePath}.concord.lock`]);
       assert.equal(call(['test', 'list'], CacheResult).cache.status, 'hit', 'preview must preserve cached projections');
       assert.equal(statSync(join(cachePath, 'owner.hawdb.lock')).ino, lockInode);
 

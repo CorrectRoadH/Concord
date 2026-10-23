@@ -17,6 +17,7 @@ import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.j
 import { parseDocumentRecord, renderDocument } from '../dist/documents.js';
 import { HAWDB_REVISION, openHawdb } from '../dist/hawdb-native.js';
 import { verifyInstalledNative } from '../scripts/verify-installed-native.js';
+import { settleRefreshes } from '../scripts/perf/process.js';
 const Ack = Schema.Struct({});
 const ErrorOutput = Schema.Struct({ error: Schema.String });
 const DigestOutput = Schema.Struct({ digest: Schema.String });
@@ -50,7 +51,10 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  cli=join(install,'node_modules/concord-sdlc/dist/entry.js');
  assert.equal(execFileSync(process.execPath,[cli,'--version'],{encoding:'utf8'}).trim(),`concord v${published.version}`);
 })));
-after(() => Effect.runPromise(Effect.sync(()=>rmSync(scratch,{recursive:true,force:true}))));
+after(() => Effect.runPromise(Effect.gen(function*() {
+ yield* settleRefreshes(join(scratch, 'async-query'));
+ yield* Effect.sync(() => rmSync(scratch, { recursive: true, force: true }));
+})));
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('packed diagnostic CLI refreshes after exit and marks cached output as historical', async () => {
@@ -64,7 +68,8 @@ test('packed diagnostic CLI refreshes after exit and marks cached output as hist
   const result = query();
   if (result.status === 0) return result;
   assert.equal(result.status, 1, result.stdout + result.stderr);
-  assert.match(result.stderr, /QueryPending/);
+  const error = Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(result.stderr);
+  assert.ok(['QueryPending', 'HawdbBusy'].includes(error.error), result.stderr);
   return undefined;
  }, { timeoutMs: 30000, description: 'packed diagnostic projection' });
  assert.equal(result.status, 0, result.stdout + result.stderr);

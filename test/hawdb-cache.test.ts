@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync } from 'node:fs';
+import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -32,6 +33,83 @@ function freshConsumer(): string {
 function cli(root: string, ...args: string[]) {
   return spawnSync(process.execPath, ['dist/entry.js', '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 30_000 });
 }
+
+function cacheDiskSnapshot(path: string) {
+  const files = [path, ...readdirSync(path, { recursive: true }).map(name => join(path, String(name))), `${path}.concord.lock`];
+  return files.sort().map(file => {
+    const stat = statSync(file, { bigint: true });
+    return { file, ino: stat.ino, modified: stat.mtimeNs, hash: stat.isFile() ? createHash('sha256').update(readFileSync(file)).digest('hex') : null };
+  });
+}
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('fresh dry-run and cache-off processes never touch an existing complete cache', () => Effect.runPromise(Effect.sync(() => {
+  const root = freshConsumer();
+  try {
+    const rebuilt = cli(root, 'cache', 'rebuild');
+    assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
+    const shown = cli(root, 'config', 'show');
+    assert.equal(shown.status, 0, shown.stderr);
+    const config = JSON.parse(shown.stdout) as { config: { runner: { timeoutMs: number } }; digest: string };
+    const input = join(root, 'config-preview.json');
+    writeFileSync(input, JSON.stringify({ ...config.config, runner: { ...config.config.runner, timeoutMs: config.config.runner.timeoutMs + 1 } }));
+    const path = join(root, '.git/concord/cache.hawdb');
+    const before = cacheDiskSnapshot(path);
+    for (const args of [['check'], ['docs', 'check'], ['writing', 'check'], ['cache', 'status'], ['cache', 'clear'], ['feedback', 'list'], ['config', 'set', '--input', input, '--expected-digest', config.digest]]) {
+      const result = cli(root, '--dry-run', ...args);
+      assert.equal(result.signal, null, result.stdout + result.stderr);
+      assert.ok(result.status === 0 || result.status === 1, result.stdout + result.stderr);
+      assert.doesNotThrow(() => JSON.parse(result.stdout), result.stdout + result.stderr);
+      if (args[0] === 'cache' && args[1] === 'status') {
+        assert.equal(JSON.parse(result.stdout).status, 'unavailable');
+        assert.match(JSON.parse(result.stdout).detail, /access is disabled/u);
+      }
+      assert.deepEqual(cacheDiskSnapshot(path), before, args.join(' '));
+    }
+    for (const mode of ['workspace', 'config-preview', 'feedback']) {
+      const result = spawnSync(process.execPath, ['--import', 'tsx', 'test/cache-off-probe.ts', root, mode], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.deepEqual(cacheDiskSnapshot(path), before, mode);
+    }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('clear unlinks internal aliases before native locks and can retry after detected mutations', () => {
+  for (const mutation of ['none', 'external-link', 'replace', 'new-member']) {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-clear-links-')));
+    const path = join(root, 'cache.hawdb');
+    mkdirSync(join(path, 'left'), { recursive: true }); mkdirSync(join(path, 'right'));
+    const data = join(path, 'left/data'); const alias = join(path, 'right/alias');
+    const nestedLock = join(path, 'right/owner.hawdb.lock'); const outside = join(root, 'outside');
+    writeFileSync(data, 'retained bytes'); linkSync(data, alias); writeFileSync(nestedLock, '');
+    const guard = acquireHawdbClearGuard(path);
+    const rootInode = statSync(path).ino; const lockInode = statSync(join(path, 'owner.hawdb.lock')).ino;
+    const siblingInode = statSync(`${path}.concord.lock`).ino;
+    try {
+      let verifications = 0;
+      const run = () => deleteInspectedCache(inspectCacheClear(root), () => {
+        guard.verify();
+        if (++verifications === 2) {
+          if (mutation === 'external-link') linkSync(data, outside);
+          if (mutation === 'replace') { renameSync(data, outside); writeFileSync(data, 'replacement'); }
+          if (mutation === 'new-member') writeFileSync(join(path, 'introduced'), 'new content');
+        }
+        if (!existsSync(nestedLock)) assert.ok(!existsSync(data) && !existsSync(alias), 'non-lock data must be deleted before any native lock');
+      });
+      if (mutation === 'none') run();
+      else {
+        assert.throws(run, { code: 'UnsafePath' });
+        if (existsSync(outside)) { assert.equal(readFileSync(outside, 'utf8'), 'retained bytes'); rmSync(outside); }
+        deleteInspectedCache(inspectCacheClear(root), guard.verify);
+      }
+      assert.deepEqual(readdirSync(path), ['owner.hawdb.lock']);
+      assert.equal(statSync(path).ino, rootInode);
+      assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, lockInode);
+      assert.equal(statSync(`${path}.concord.lock`).ino, siblingInode);
+    } finally { guard.close(); rmSync(root, { recursive: true, force: true }); }
+  }
+});
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('fresh Git consumers create a private cache on check and hit it on the next command', () => Effect.runPromise(Effect.sync(() => {
@@ -120,9 +198,12 @@ test('cache-enabled workspace recovers an interrupted WAL without clearing commi
     try { initialize(repo, false, { testRoots: [] }); scanAnnotations(repo); } finally { repo.close(); }
     const child = spawnSync(process.execPath, ['--input-type=module', '-e', "import { openHawdb } from './dist/hawdb-native.js'; const db = openHawdb(process.argv[1], {readOnly:false,create:false}); db.put('config_cache', [{key:'interrupted',payload:'committed'}]); process.kill(process.pid, 'SIGKILL');", path], { encoding: 'utf8', timeout: 15000 });
     assert.equal(child.signal, 'SIGKILL', child.stderr);
-    assert.throws(() => openHawdb(path, { readOnly: true, create: false }), /read-only recovery requires an exact published row delta/u);
+    const interrupted = cacheDiskSnapshot(path);
     await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));
-    assert.throws(() => openHawdb(path, { readOnly: true, create: false }), /read-only recovery requires an exact published row delta/u, 'cache-off must not repair the database');
+    assert.deepEqual(cacheDiskSnapshot(path), interrupted, 'cache-off must not touch the interrupted database');
+    const readOnly = openHawdb(path, { readOnly: true, create: false });
+    try { assert.deepEqual(readOnly.get('config_cache', ['interrupted']), [{ key: 'interrupted', payload: 'committed' }]); }
+    finally { readOnly.close(); }
     const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
     assert.equal(snapshot.complete, true);
     const recovered = openHawdb(path, { readOnly: true, create: false });

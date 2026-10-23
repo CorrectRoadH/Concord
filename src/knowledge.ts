@@ -20,6 +20,7 @@ function summary(record: DocumentRecord) {
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#index
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
 export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
   return inRepositorySnapshot(repo, () => ({ operation: `${kind}-index`, documents: ownerRecords(repo, kind).map(summary) }));
 }
@@ -43,6 +44,7 @@ function matchingRecords(records: readonly DocumentRecord[], terms: readonly str
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
 export function knowledgeRecall(repo: Repository, kind: KnowledgeKind, query: string) {
   return inRepositorySnapshot(repo, () => {
     const terms = queryTerms(query);

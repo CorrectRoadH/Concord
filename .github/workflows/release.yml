@@ -49,6 +49,10 @@ jobs:
         with:
           platform: ${{ matrix.os }}-${{ matrix.target }}
           deployment-target: ${{ matrix.target == 'darwin-arm64' && '15.0' || 'none' }}
+      - name: Verify native ownership, clear and recovery on the target host
+        run: |
+          node --import tsx scripts/build-native.ts --output dist/native --test-hooks
+          node --import tsx --test test/hawdb-native.test.ts
       - name: Build the pinned host engine
         run: node --import tsx scripts/build-native.ts --output native-artifacts
       - uses: actions/upload-artifact@v4

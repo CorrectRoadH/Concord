@@ -277,6 +277,7 @@ function withAgentInstructions(source: string): string {
 
 export class LocalRepository implements Repository {
   readonly access: 'read' | 'write';
+  readonly persistentCache: 'use' | 'off';
   readonly root: string;
   readonly privateDir: string;
   config: ProjectConfig;
@@ -297,7 +298,7 @@ export class LocalRepository implements Repository {
   private readonly listings = new Map<string, Buffer[]>();
   private readonly checkedSegments = new Set<string>();
   private verifyListings: Map<string, Buffer[]> | undefined;
-  constructor(input?: string, options: { initialize?: boolean; recover?: boolean; reclaimPublication?: boolean; dryRun?: boolean; access?: 'read' | 'write'; optimistic?: boolean } = {}) {
+  constructor(input?: string, options: { initialize?: boolean; recover?: boolean; reclaimPublication?: boolean; dryRun?: boolean; access?: 'read' | 'write'; persistentCache?: 'use' | 'off'; optimistic?: boolean } = {}) {
     this.root = discoverRoot(input, options.initialize);
     assertNoSymlink(this.root);
     const anchors: RootAnchor[] = [];
@@ -311,6 +312,7 @@ export class LocalRepository implements Repository {
     this.rootAnchor = anchors;
     this.recovering = options.recover ?? false;
     this.noWrite = options.dryRun ?? false;
+    this.persistentCache = this.noWrite ? 'off' : options.persistentCache ?? 'use';
     this.access = options.access ?? 'write';
     this.optimistic = !options.recover && (this.access === 'read' || this.noWrite || options.optimistic === true);
     if (options.recover && this.access === 'read') throw new ConcordError('InvalidOption', 'Recovery requires write access');
@@ -355,7 +357,7 @@ export class LocalRepository implements Repository {
       if (options.recover && marker === undefined && (recoveryJournal?.operation !== 'init' || recoveryJournal.phase !== 'prepared')) throw new ConcordError('RecoveryConflict', 'Missing TS configuration may only be recovered from a current prepared init journal');
       if (options.initialize && marker !== undefined) throw new ConcordError('ProjectExists', `${markerPath} already exists`);
       if (!options.initialize && marker === undefined && !options.recover) throw new ConcordError('ProjectNotFound', 'The selected worktree has no Concord project configuration; run concord init');
-      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: defaultConfig() } : snapshot(markerPath, marker, this.privateDir);
+      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: defaultConfig() } : snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir);
       this.config = this.configSnapshot.config;
       this.validateConfiguredRoots(this.config);
       for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...this.config.runner.sourceFiles]) this.absolute(path);
@@ -723,7 +725,7 @@ export class LocalRepository implements Repository {
     if (plannedConfigChange?.after === null) throw new ConcordError('InvalidChange', 'The runtime configuration cannot be deleted or renamed');
     if (operation === 'set-config' && changes.length !== 1) throw new ConcordError('InvalidChange', 'config.set must publish exactly one configuration');
     if (operation === 'init' && plannedConfigChange === undefined) throw new ConcordError('InvalidChange', 'Init must publish exactly one project configuration');
-    const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir).config;
+    const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, dryRun || this.persistentCache === 'off' ? undefined : this.privateDir).config;
     if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) this.validateProjectConfig(authorizationConfig);
     const governanceGuard = (change: Change): boolean => change.path === 'concord.repository.json' && change.before === change.after;
     if (!changes.some(change => !governanceGuard(change))) throw new ConcordError('InvalidChange', 'A governance preimage guard cannot be published without an actual owner change');
@@ -743,7 +745,7 @@ export class LocalRepository implements Repository {
     const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, projectId: authorizationConfig.projectId, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest }, ...(catalogGuard === undefined ? {} : { catalogDependencies: [...catalogGuard] }) };
     const receipt = this.publishJournal(journal, dryRun);
     if (!receipt.dryRun && plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
-      this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir);
+      this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir);
       this.config = this.configSnapshot.config;
     }
     return receipt;
@@ -807,7 +809,7 @@ export class LocalRepository implements Repository {
           this.observedFiles.clear(); this.observedDirectories.clear();
           const config = journal.changes.find(change => change.path === 'concord.config.ts');
           if (config?.after !== undefined && config.after !== null) {
-            this.configSnapshot = snapshot('concord.config.ts', config.after, this.privateDir);
+            this.configSnapshot = snapshot('concord.config.ts', config.after, this.persistentCache === 'off' ? undefined : this.privateDir);
             this.config = this.configSnapshot.config;
           }
         }

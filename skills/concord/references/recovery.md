@@ -10,9 +10,13 @@ concord cache rebuild
 
 缓存损坏、schema 不符或写失败时，查询应回退权威源码而非返回陈旧声明或关系。`cache clear` 不删除 evidence、journal 或 Memory。`cache rebuild` 不接受 `--dry-run`。
 
-`cache clear` 通过与固定 HawDB revision 相同的所有权锁清理数据，保留目录和锁 inode；不要手工删除 owner.hawdb.lock 来抢占。只读观察、status 和 dry-run 不补建引擎或锁文件。clear 可能因占用、路径异常或 I/O 失败而拒绝或部分完成；保留现场，处理原因后重试，不把打开失败当作可删证明。
+`cache clear` 取得同级 Concord 协调锁及固定 HawDB revision 的根、分支锁。先删数据，再删嵌套锁，最后删空目录，保留根目录、根 owner.hawdb.lock 和 cache.hawdb.concord.lock 的 inode。不要删锁抢占。clear 因占用、路径异常或 I/O 失败而拒绝或部分完成时保留现场，处理原因后重试。
 
-缓存只管理 cache.hawdb，目录外文件不参与状态判定或清理。clear --dry-run 展示清理条目、保留路径与原生产物可用性；真实执行重新验证所有权。native binary digest differs 表示安装产物与包内摘要不符，应修复安装，清缓存不能修复该错误。远端快照消失后需显式 fetch 才能刷新，本地已捕获 Issue 与 Memory 保留。短期解析及 Git baseline 使用进程内 HawDB；清理当前进程不表示其它进程的短期缓存也已清空，它们仍须核对当前来源。
+普通只读观察和 status 不修改来源或逻辑缓存行，允许已有库的内部派生文件重建及同级协调锁创建。缺失数据库不初始化。dry-run 与 cache-off 不打开持久库；dry-run status 对已有内容报告 unavailable，并说明持久访问关闭。
+
+clear 只删除 cache.hawdb 内的数据，不删除同级协调锁。clear --dry-run 展示条目、保留路径与原生产物可用性；实际执行重新验证所有权。native binary digest differs 是安装故障，清缓存不能修复。远端快照消失后需显式 fetch，本地 Issue 与 Memory 保留。
+
+升级保留有效旧缓存行，不混用不同引擎版本的 Concord 进程。降级前停止缓存使用者，用新版 CLI 显式 clear，再运行旧版。短期解析及 Git baseline 使用进程内 HawDB；清理本进程不表示其它进程的短期缓存已清空，它们仍须核对当前来源。
 
 文档、配置、Memory 与源码写入使用短 publication lease、preimage journal 和逐文件原子 rename。查询声明 `access: read`，使用乐观 snapshot，并拒绝真正发布。普通写入仅在提交阶段取得独占所有权；外部执行、恢复、cache rebuild 与 cache clear 保留各自的独占边界。dry-run 预览使用乐观 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
 

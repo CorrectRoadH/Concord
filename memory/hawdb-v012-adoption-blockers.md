@@ -5,10 +5,15 @@ title: HawDB v0.12 的分支所有权与只读契约阻塞升级
 createdAt: 2026-10-23T06:59:52.560Z
 kind: memory
 memoryKind: insight
-state: current
+state: superseded
 epoch: 0
 promotions: []
-history: []
+history:
+  - at: 2026-10-23T08:25:05.885Z
+    action: supersede
+    reason: 授权架构适配后采用完整句柄协调锁、嵌套锁清理及逻辑只读边界；保留初次阻塞调查作为历史，不表示原问题在旧契约下自行消失
+    ref: memory/hawdb-013-adoption.md
+supersededBy: memory/hawdb-013-adoption.md
 ---
 
 # HawDB v0.12 adoption blockers
