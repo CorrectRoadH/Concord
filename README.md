@@ -156,7 +156,7 @@ pnpm exec vp run concord --help
 pnpm exec vp run check
 ```
 
-`vp run check` (also available as `pnpm check`) builds the CLI and web workspace, type-checks implementation, tests, and scripts, and runs tests including packed CLI installation in isolated Git consumers. To inspect Concord's own relationships, run `vp run concord check` or `vp run concord trace show local-sdlc`.
+`vp run check` (also available as `pnpm check`) builds the CLI and web workspace, type-checks implementation, tests, and scripts, checks the current checkout's contracts, and runs tests including packed CLI installation in isolated Git consumers. After building, run `vp run check:selfhost` for the contract check alone, or `vp run concord trace show local-sdlc` to inspect relationships.
 
 Use `pnpm exec vp` when Vite+ is not installed globally. `vp install` manages dependencies through the pinned pnpm version. `vp run check:fast` checks CLI and Web source types without building or running tests. After `vp build`, `vp run typecheck:built` checks repository, test, and script types; `vp run test:built test/writing-cache.test.ts` runs a selected file without rebuilding. Pass `--test-name-pattern=...` to select cases or `--test-shard=1/4` to split the complete suite. Rebuild after source changes before using either `:built` task.
 

@@ -46,5 +46,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec vp exec playwright install --with-deps chromium
       - run: pnpm exec vp build && pnpm exec vp run typecheck:built
+      - name: Check the current checkout contracts
+        if: matrix.shard == 1
+        run: pnpm exec vp run check:selfhost
       - name: Run the complete suite across isolated serial shards
         run: CONCORD_TEST_CONCURRENCY=1 pnpm exec vp run test:built --test-shard=${{ matrix.shard }}/4

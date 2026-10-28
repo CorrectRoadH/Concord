@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { scanAnnotations } from '../dist/annotations.js';
@@ -20,7 +20,7 @@ test('current checkout configures a version-matched runner whose annotations sca
   const project = readProjectConfig(root);
   assert.equal(project.format, 'concord.project/v1');
   assert.deepEqual(project.testRoots, ['test']);
-  assert.deepEqual(project.sourceRoots, ['src', 'web', 'scripts']);
+  assert.deepEqual(project.sourceRoots, ['src', 'repository', 'web', 'scripts']);
   assert.equal(project.runner.kind, 'command');
   if (project.runner.kind !== 'command') assert.fail('self-host runner must use explicit command argv');
   assert.deepEqual(project.runner.argv, ['node', '--import', 'tsx', '--test', '--test-name-pattern', '{pattern}', '{file}']);
@@ -31,20 +31,16 @@ test('current checkout configures a version-matched runner whose annotations sca
   assert.equal(version.status, 0, version.stderr);
   assert.equal(version.stdout.trim(), `concord v${packageVersion}`);
 
-  const consumer = mkdtempSync(join(tmpdir(), 'concord-selfhost-smoke-'));
+  const consumer = realpathSync(mkdtempSync(join(tmpdir(), 'concord-selfhost-smoke-')));
   try {
     execFileSync('git', ['init', '-q', consumer]);
     const configPath = projectConfigPath(root);
     cpSync(join(root, configPath), join(consumer, configPath));
-    for (const source of project.memorySources ?? []) cpSync(join(root, source.path), join(consumer, source.path), { recursive: true });
-    mkdirSync(join(consumer, 'test'));
-    cpSync(join(root, 'test'), join(consumer, 'test'), { recursive: true });
-    cpSync(join(root, 'src'), join(consumer, 'src'), { recursive: true });
-    cpSync(join(root, 'web'), join(consumer, 'web'), { recursive: true });
-    cpSync(join(root, 'scripts'), join(consumer, 'scripts'), { recursive: true });
-    cpSync(join(root, 'docs'), join(consumer, 'docs'), { recursive: true });
-    for (const sourceFile of ['tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']) {
-      cpSync(join(root, sourceFile), join(consumer, sourceFile));
+    const sources = new Set(['docs', ...project.testRoots, ...(project.sourceRoots ?? []),
+      ...(project.memorySources ?? []).map(source => source.path), ...project.runner.sourceFiles]);
+    for (const source of sources) {
+      mkdirSync(dirname(join(consumer, source)), { recursive: true });
+      cpSync(join(root, source), join(consumer, source), { recursive: true });
     }
     const repository = new LocalRepository(consumer);
     try {
@@ -57,6 +53,7 @@ test('current checkout configures a version-matched runner whose annotations sca
       }
       const code = scanCode(repository);
       assert.deepEqual(code.findings, []);
+      assert.ok(code.codes.some(item => item.file === 'repository/engine.ts'), 'repository implementation must enter the self-host scan');
       assert.deepEqual(new Set(code.codes.map(item => item.scope)), new Set(['file', 'node', 'region']));
       const missingImplementations = useCases.filter(useCase => !code.codes.some(item => item.contracts.some(ref => ref.split('#')[0] === useCase.path))).map(useCase => useCase.path);
       assert.deepEqual(missingImplementations, [], 'every Use Case needs an actual implementation relation');
@@ -69,6 +66,15 @@ test('current checkout configures a version-matched runner whose annotations sca
     const traced = spawnSync(process.execPath, [join(root, 'dist/entry.js'), '--root', consumer, '--json', 'trace', 'check'], { cwd: consumer, encoding: 'utf8' });
     assert.equal(traced.status, 0, traced.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(traced.stdout).ok, true);
+    const engine = join(consumer, 'repository/engine.ts');
+    const source = readFileSync(engine, 'utf8');
+    const invalid = source.replace('docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md', 'docs/feature/missing-selfhost/README.md');
+    assert.notEqual(invalid, source);
+    writeFileSync(engine, invalid);
+    const rejected = spawnSync(process.execPath, [join(root, 'dist/entry.js'), '--root', consumer, '--json', 'check'], { cwd: consumer, encoding: 'utf8' });
+    assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
+    assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(rejected.stdout).ok, false);
+    assert.match(rejected.stdout, /repository\/engine\.ts/u);
   } finally {
     rmSync(consumer, { recursive: true, force: true });
   }

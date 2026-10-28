@@ -156,7 +156,7 @@ pnpm exec vp run concord --help
 pnpm exec vp run check
 ```
 
-`vp run check`（也可通过 `pnpm check` 调用）构建 CLI 与 Web 工作台，对实现、测试和脚本做类型检查，并执行包括隔离 Git 消费者中打包安装 CLI 在内的测试。查看 Concord 自己的关联，可以运行 `vp run concord check` 或 `vp run concord trace show local-sdlc`。
+`vp run check`（也可通过 `pnpm check` 调用）构建 CLI 与 Web 工作台，对实现、测试和脚本做类型检查，检查当前 checkout 的契约，并执行包括隔离 Git 消费者中打包安装 CLI 在内的测试。构建后可运行 `vp run check:selfhost` 单独检查自身契约，或运行 `vp run concord trace show local-sdlc` 查看关联。
 
 没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。`vp run check:fast` 只检查 CLI 与 Web 源码类型，无需构建或运行测试。执行 `vp build` 后，`vp run typecheck:built` 检查 repository、测试和脚本类型；`vp run test:built test/writing-cache.test.ts` 无需重复构建即可运行指定文件。用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。源码变化后，先重新构建再运行 `:built` 任务。
 

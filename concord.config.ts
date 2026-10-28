@@ -8,6 +8,7 @@ export default {
   ],
   "sourceRoots": [
     "src",
+    "repository",
     "web",
     "scripts"
   ],
