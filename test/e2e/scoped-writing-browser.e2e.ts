@@ -10,6 +10,7 @@ import type { ViewServerHandle } from '../../dist/view-server.js';
 import { startViewServer } from './server.js';
 import { showWriting, setWriting } from '../../dist/writing-management.js';
 import { showConcepts, setConcepts } from '../../dist/concepts.js';
+import { waitForWorkspaceProjection } from '../support.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('real browser isolates scope responses and drafts, keeps partial save conflicts, and notices inherited concept changes', async ({ page }) => {
@@ -27,45 +28,47 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
       mkdirSync(join(root, b), { recursive: true });
       setWriting(repo, { format: 'concord.writing/v3', bannedTerms: [{ term: 'Old', use: 'Alpha', why: 'scope A' }] }, null, false, `${a}/concord-writing.json`);
       setWriting(repo, { format: 'concord.writing/v3', bannedTerms: [{ term: 'Old', use: 'Beta', why: 'scope B' }] }, null, false, `${b}/concord-writing.json`);
-      setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'beta', definition: 'Beta definition', names: { en: { preferred: 'Beta' } } }] }, null, false, `${b}/concepts.json`);
+      setConcepts(repo, "# Terms\n\n## Beta {#beta}\n\nBeta definition\n", null, false, `${b}/concepts.md`);
       const global = showConcepts(repo);
-      setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'global', definition: 'Global definition', names: { en: { preferred: 'Global' } } }, { id: 'second', definition: 'Second definition', names: { en: { preferred: 'Second' } } }] }, global.digest, false, 'docs/concepts.json');
+      setConcepts(repo, "# Terms\n\n```markdown\n## Example {#global}\n\nAn example only.\n```\n\n## Global {#global}\n\nGlobal definition\n\n## Second {#second}\n\nSecond definition\n", global.digest, false, 'docs/concepts.md');
     } finally { repo.close(); }
     writeFileSync(join(root, a, 'sample.md'), '# Alpha writing\n\nOld expression in Alpha.\n');
     writeFileSync(join(root, b, 'sample.md'), '# Old in Beta\n\nOld. Global.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({ width: 1440, height: 950 });
     await page.goto(`http://127.0.0.1:${server.port}/terms`);
     await expect(page.getByRole('complementary', { name: '术语 侧栏' })).toBeVisible();
     const terms = page.getByRole('list', { name: '术语列表' });
-    const detail = page.getByRole('region', { name: '术语详情' });
+    const source = page.getByLabel('源码原文', { exact: true });
     await expect(page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true })).toBeVisible();
     await expect(page.getByLabel('新适用范围')).toBeVisible();
     await expect(page.getByRole('button', { name: '管理术语', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: '编辑术语', exact: true })).toHaveCount(0);
-    await expect(page.getByLabel('术语定义 1')).toBeVisible();
+    await expect(page.getByRole('textbox', { name: '源码原文' })).toBeVisible();
     await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
-    await expect(detail.getByLabel('术语定义 1')).toHaveValue('Beta definition');
+    await expect(source).toContainText('Beta definition');
     await page.getByLabel('筛选术语').fill('Global');
     await expect(terms.getByRole('button')).toHaveCount(1);
     await terms.getByRole('button', { name: /Global/ }).click();
-    await expect(detail.getByLabel('术语定义 1')).toHaveValue('Global definition');
+    await expect(source).toContainText('Global definition');
+    await expect(page.locator('.terminology-editor .cm-activeLine')).toHaveText('## Global {#global}');
     await page.getByLabel('筛选术语').fill('');
 
-    await detail.getByLabel('术语定义 1').fill('Unsaved global');
+    await source.fill(readFileSync(join(root, 'docs/concepts.md'), 'utf8').replace('Global definition', 'Unsaved global'));
     await terms.getByRole('button', { name: /Second/ }).click();
-    await expect(detail.getByLabel('术语定义 2')).toHaveValue('Second definition');
+    await expect(source).toContainText('Second definition');
     await terms.getByRole('button', { name: /Global/ }).click();
-    await expect(detail.getByLabel('术语定义 1')).toHaveValue('Unsaved global');
-    assert.equal(JSON.parse(readFileSync(join(root, 'docs/concepts.json'), 'utf8')).concepts[0].definition, 'Global definition');
+    await expect(source).toContainText('Unsaved global');
+    assert.match(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), /Global definition/u);
     await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
     await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
     await page.getByRole('button', { name: '丢弃并切换' }).click();
-    await expect(detail.getByLabel('术语定义 1')).toHaveValue('Beta definition');
+    await expect(source).toContainText('Beta definition');
     await page.getByLabel('筛选术语').fill('Second');
     await terms.getByRole('button', { name: /Second/ }).click();
-    await expect(detail.getByLabel('术语定义 2')).toHaveValue('Second definition');
+    await expect(source).toContainText('Second definition');
     await page.getByLabel('筛选术语').fill('');
 
     let releaseA!: () => void;
@@ -96,30 +99,30 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByLabel('替换建议 1').fill('Beta saved');
     await page.getByRole('link', { name: '术语', exact: true }).click();
-    await page.getByLabel('术语定义 1').fill('Beta draft');
+    await source.fill(readFileSync(join(root, b, 'concepts.md'), 'utf8').replace('Beta definition', 'Beta draft'));
     await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/alpha', exact: true }).click();
     await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
     await page.getByRole('button', { name: '留在当前范围' }).click();
     await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta saved');
-    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
+    await expect(source).toContainText('Beta draft');
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByRole('button', { name: '保存规则' }).click();
     await expect.poll(() => JSON.parse(readFileSync(join(root, b, 'concord-writing.json'), 'utf8')).bannedTerms[0]?.use).toBe('Beta saved');
     assert.equal(JSON.parse(readFileSync(join(root, b, 'concord-writing.json'), 'utf8')).roots, undefined);
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await expect(page.getByText('写作规则已保存。')).toBeVisible();
-    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
+    await expect(source).toContainText('Beta draft');
 
     const external = new LocalRepository(root);
     try {
-      const current = showConcepts(external, `${b}/concepts.json`);
+      const current = showConcepts(external, `${b}/concepts.md`);
       if (current.state !== 'valid') throw new Error('Expected scoped catalog');
-      setConcepts(external, { ...current.catalog, concepts: [{ ...current.catalog.concepts[0]!, definition: 'External definition' }] }, current.digest, false, `${b}/concepts.json`);
+      setConcepts(external, current.source.replace('Beta definition', 'External definition'), current.digest, false, `${b}/concepts.md`);
     } finally { external.close(); }
     await page.getByRole('link', { name: '术语', exact: true }).click();
     await page.getByRole('button', { name: '保存术语' }).click();
     await expect(page.getByRole('region', { name: '术语表编辑' }).getByRole('alert')).toContainText(/changed|变化|前像|Preimage/u);
-    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
+    await expect(source).toContainText('Beta draft');
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await expect(page.getByText('写作规则已保存。')).toBeVisible();
 
@@ -128,15 +131,15 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     await expect(page.getByText(/某次快照的检查结果/)).toBeVisible();
     const changedGlobal = new LocalRepository(root);
     try {
-      const current = showConcepts(changedGlobal, 'docs/concepts.json');
+      const current = showConcepts(changedGlobal, 'docs/concepts.md');
       if (current.state !== 'valid') throw new Error('Expected global catalog');
-      setConcepts(changedGlobal, { ...current.catalog, concepts: [{ ...current.catalog.concepts[0]!, definition: 'Changed inherited definition' }] }, current.digest, false, 'docs/concepts.json');
+      setConcepts(changedGlobal, current.source.replace('Global definition', 'Changed inherited definition'), current.digest, false, 'docs/concepts.md');
     } finally { changedGlobal.close(); }
     await page.getByRole('link', { name: '术语', exact: true }).click();
     await page.getByRole('button', { name: '刷新列表' }).click();
     await expect(page.getByText(/术语来源已变化/)).toBeVisible();
     await expect(page.getByText(/某次快照的检查结果/)).toHaveCount(0);
-    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
+    await expect(source).toContainText('Beta draft');
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole('button', { name: '内容导航', exact: true }).click();
     const mobileNavigation = page.getByRole('dialog', { name: '术语 导航' });
@@ -145,7 +148,7 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     await expect(mobileNavigation).not.toBeVisible();
     await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
     await page.getByRole('button', { name: '留在当前范围' }).click();
-    await expect(page.getByLabel('术语定义 1')).toHaveValue('Beta draft');
+    await expect(source).toContainText('Beta draft');
     const unchanged = new LocalRepository(root);
     try { assert.equal(showWriting(unchanged, `${b}/concord-writing.json`).policy?.bannedTerms[0]?.use, 'Beta saved'); }
     finally { unchanged.close(); }
@@ -166,6 +169,7 @@ test('real browser can check again after editing invalidates a delayed check res
     } finally { repo.close(); }
     writeFileSync(join(root, 'docs/sample.md'), '# Sample\n\nOld.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
 
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
@@ -208,7 +212,7 @@ test('real browser can check again after editing invalidates a delayed check res
 });
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('real browser creates local policy and structured multilingual concept catalog without global scan roots', async ({ page }) => {
+test('real browser creates a local Markdown catalog, diagnoses structure and saves exact source without global scan roots', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-local-concept-browser-'));
 
   let server: ViewServerHandle | undefined;
@@ -220,33 +224,25 @@ test('real browser creates local policy and structured multilingual concept cata
       initialize(repo, false, { testRoots: [] });
       mkdirSync(join(root, scope), { recursive: true });
       const global = showConcepts(repo);
-      setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'global', definition: 'Shared concept', names: { en: { preferred: 'Shared' } } }] }, global.digest, false, 'docs/concepts.json');
+      setConcepts(repo, "# Terms\n\n## Shared {#global}\n\nShared concept\n", global.digest, false, 'docs/concepts.md');
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({ width: 1440, height: 950 });
     await page.goto(`http://127.0.0.1:${server.port}/terms`);
     await page.getByLabel('新适用范围').fill(scope);
     await page.getByRole('button', { name: '打开范围' }).click();
-    await page.getByRole('button', { name: '新增术语' }).click();
-    await page.getByLabel('显式导入引用').fill('docs/concepts.json#global');
-    await page.getByLabel('术语 ID 1').fill('local');
-    await page.getByRole('link', { name: '术语', exact: true }).click();
-    await page.getByLabel('术语定义 1').fill('Local definition');
-    await page.getByLabel('术语 1 en 首选名称').fill('Local');
-    await page.getByLabel('术语 1 en 允许别名').fill('Nearby');
-    await page.getByLabel('术语 1 en 弃用名称').fill('Legacy');
-    await page.getByLabel('术语 1 新语言代码').fill('zh');
-    await page.getByRole('button', { name: '添加语言' }).click();
-    await page.getByLabel('术语 1 zh 首选名称').fill('本地');
-    await page.getByRole('link', { name: '术语', exact: true }).click();
+    await page.getByRole('button', { name: '创建本目录术语表' }).click();
+    const source = page.getByRole('textbox', { name: '源码原文' });
+    const markdown = '---\nimports: [docs/concepts.md#global]\ndeprecated:\n  local: [Legacy]\n---\n\n# Local terms\n\n## 本地 {#local}\n\nLocal definition\n\n### Explanation\n\nUse `Legacy` only in code.\n';
+    await source.fill('# Local terms\n\n## Missing ID\n');
+    await expect(page.getByRole('alert')).toContainText('InvalidConceptCatalog');
+    await expect(page.getByRole('button', { name: '保存术语' })).toBeDisabled();
+    await source.fill(markdown);
     await page.getByRole('button', { name: '保存术语' }).click();
     await expect(page.getByRole('region', { name: '术语表编辑' }).getByRole('status')).toHaveText('术语已保存。');
-    await expect.poll(() => JSON.parse(readFileSync(join(root, scope, 'concepts.json'), 'utf8')).concepts[0]?.names.zh?.preferred).toBe('本地');
-    const catalog = JSON.parse(readFileSync(join(root, scope, 'concepts.json'), 'utf8')) as { imports: string[]; concepts: { names: { en: { aliases: string[]; deprecated: string[] } } }[] };
-    assert.deepEqual(catalog.imports, ['docs/concepts.json#global']);
-    assert.deepEqual(catalog.concepts[0]?.names.en.aliases, ['Nearby']);
-    assert.deepEqual(catalog.concepts[0]?.names.en.deprecated, ['Legacy']);
+    await expect.poll(() => readFileSync(join(root, scope, 'concepts.md'), 'utf8')).toBe(markdown);
     await expect(page.getByRole('list', { name: '术语列表' }).getByRole('button', { name: /本地/ })).toBeVisible();
 
     await page.getByRole('link', { name: '写作', exact: true }).click();

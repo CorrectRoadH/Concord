@@ -9,7 +9,9 @@ import type { ViewAction } from '../../src/view-contract';
 import { Schema } from 'effect';
 import { ControlledSchema } from '../../src/writing-schema';
 import type { BannedTerm, WritingPolicy } from '../../src/writing-policy';
-import type { ConceptCatalog, ConceptDefinition } from '../../src/concepts-schema';
+import { EMPTY_CONCEPT_CATALOG, parseConceptCatalog, type ConceptCatalog, type ConceptDefinition } from '../../src/concepts-schema';
+import { fromMarkdown } from 'mdast-util-from-markdown';
+import { SourceEditor } from '../components/source-editor';
 import type { checkWriting } from '../../src/writing';
 import { useWorkspace } from '../workspace';
 import { ContentSidebar } from '../components/content-sidebar';
@@ -18,7 +20,6 @@ import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { ContentSection, PanelHeader, PanelEmpty, RecordList, RecordItem, RecordDetails, Surface } from '../components/content-layout';
 
-type ConceptName = ConceptDefinition['names'][string];
 type Concept = ConceptDefinition;
 type Catalog = ConceptCatalog;
 type Scope = { scope: string; policyPath: string; catalogPath: string; hasPolicy: boolean; hasCatalog: boolean };
@@ -27,9 +28,10 @@ type Show<T> = { state: 'missing' | 'invalid' | 'valid'; path: string; scope: st
 type Receipt<T> = { path: string; scope: string; digest: string; source: string; policy?: T; catalog?: T };
 type Report = ReturnType<typeof checkWriting>;
 const policyPath = (scope: string) => `${scope}/concord-writing.json`;
-const catalogPath = (scope: string) => `${scope}/concepts.json`;
+const catalogPath = (scope: string) => `${scope}/concepts.md`;
 const emptyPolicy = (): WritingPolicy => ({ format: 'concord.writing/v3', bannedTerms: [] });
-const emptyCatalog = (): Catalog => ({ format: 'concord.concepts/v1', concepts: [] });
+const emptyCatalog = () => EMPTY_CONCEPT_CATALOG;
+const sourceExtensions: readonly import('@codemirror/state').Extension[] = [];
 const lines = (text: string) => text.split(/\r?\n/u).map(value => value.trim()).filter(Boolean);
 const listed = (values?: readonly string[]) => (values ?? []).join('\n');
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -69,10 +71,10 @@ function useOwner<T>(kind: 'policy' | 'catalog', scope: string, api: ReturnType<
       }
       setRemote(value);
       if (expected === undefined) {
-        const item = kind === 'policy' ? value.policy : value.catalog;
-        setDraft(value.state === 'valid' ? item ?? null : null);
-        setBaseline(value.state === 'valid' ? item ?? null : null);
-        setOpen(value.state === 'valid');
+        const item = kind === 'policy' ? (value.state === 'valid' ? value.policy : null) : value.source as T | null;
+        setDraft(item ?? null);
+        setBaseline(item ?? null);
+        setOpen(item !== null && item !== undefined);
       }
       setError('');
     } catch (cause) { if (generation.current === ticket && currentPath.current === requestedPath) setError(errorText(cause)); }
@@ -93,9 +95,9 @@ function useOwner<T>(kind: 'policy' | 'catalog', scope: string, api: ReturnType<
       try {
         const result = await api.action(action(kind === 'policy'
           ? { action: 'writing.set', path: requestedPath, policy: submitted, expectedDigest }
-          : { action: 'concepts.set', path: requestedPath, catalog: submitted, expectedDigest })) as Receipt<T>;
+          : { action: 'concepts.set', path: requestedPath, source: submitted, expectedDigest })) as Receipt<T>;
         if (generation.current !== ticket || currentPath.current !== requestedPath || result.path !== requestedPath) return;
-        const committed = kind === 'policy' ? result.policy : result.catalog;
+        const committed = kind === 'policy' ? result.policy : result.source as T;
         if (!committed) throw new Error('保存响应缺少已提交 owner。');
         setRemote({ state: 'valid', path: result.path, scope: result.scope, digest: result.digest, source: result.source });
         setBaseline(committed);
@@ -137,7 +139,6 @@ export function WritingPage() {
   const [sourceWarning, setSourceWarning] = useState('');
   const [aggregateQuery, setAggregateQuery] = useState('');
   const [banQuery, setBanQuery] = useState('');
-  const [newLanguages, setNewLanguages] = useState<Record<number, string>>({});
   const [report, setReport] = useState<Report | null>(null);
   const [checkError, setCheckError] = useState('');
   const [checking, setChecking] = useState(false);
@@ -149,7 +150,13 @@ export function WritingPage() {
   const [controlledText, setControlledText] = useState<string | null>(null);
   const clearControlled = useCallback(() => { setControlledError(''); setControlledText(null); }, []);
   useEffect(clearControlled, [scope, clearControlled]);
-  const catalog = useOwner<Catalog>('catalog', scope, api, clearReport);
+  const catalog = useOwner<string>('catalog', scope, api, clearReport);
+  const structure = useMemo(() => {
+    const headings = new Map<string, number>();
+    if (catalog.draft === null) return { catalog: null, headings, error: '' };
+    try { return { catalog: parseConceptCatalog(catalog.draft, fromMarkdown, (id, line) => headings.set(id, line)), headings, error: '' }; }
+    catch (cause) { return { catalog: null, headings, error: `InvalidConceptCatalog: ${errorText(cause)}` }; }
+  }, [catalog.draft]);
   const dirty = policy.dirty || catalog.dirty || !!controlledError;
   const latest = useRef({ policy, catalog, dirty });
   latest.current = { policy, catalog, dirty };
@@ -205,7 +212,7 @@ export function WritingPage() {
     if (next === scope) { setRequestedId(catalog.loading ? id ?? null : null); setEditingIndex(index); return; }
     if (latest.current.dirty || latest.current.policy.inFlight.current || latest.current.catalog.inFlight.current) { setPendingScope({ scope: next, index, id }); return; }
     policy.invalidate(); catalog.invalidate(); aggregateGeneration.current++; clearReport();
-    setSourceWarning(''); setAggregateError(''); setScope(next); setBanQuery(''); setEditingIndex(index); setRequestedId(id ?? null); setNewLanguages({});
+    setSourceWarning(''); setAggregateError(''); setScope(next); setBanQuery(''); setEditingIndex(index); setRequestedId(id ?? null);
   };
   const discardAndSwitch = () => {
     const next = pendingScope;
@@ -217,11 +224,11 @@ export function WritingPage() {
   useEffect(() => {
     if (view !== 'terms' || selectionInitialized.current || !aggregate || catalog.loading) return;
     selectionInitialized.current = true;
-    if (catalog.remote?.state !== 'invalid' && !catalog.draft?.concepts.length && aggregate.concepts[0]) switchScope(aggregate.concepts[0].scope, 0, aggregate.concepts[0].concept.id);
+    if (catalog.remote?.state !== 'invalid' && !structure.catalog?.concepts.length && aggregate.concepts[0]) switchScope(aggregate.concepts[0].scope, 0, aggregate.concepts[0].concept.id);
   }, [aggregate, catalog.loading, view]);
   useEffect(() => {
-    if (requestedId === null || catalog.loading || !catalog.draft) return;
-    setEditingIndex(catalog.draft.concepts.findIndex(item => item.id === requestedId));
+    if (requestedId === null || catalog.loading || !structure.catalog) return;
+    setEditingIndex(structure.catalog!.concepts.findIndex(item => item.id === requestedId));
     setRequestedId(null);
   }, [requestedId, catalog.loading, catalog.draft]);
   const addConcept = () => {
@@ -229,15 +236,17 @@ export function WritingPage() {
     selectionInitialized.current = true;
     setRequestedId(null);
     const current = catalog.draft ?? emptyCatalog();
-    setEditingIndex(current.concepts.length);
-    const next = { ...current, concepts: [...current.concepts, { id: '', definition: '', names: { en: { preferred: '' } } }] };
-    if (catalog.draft) catalog.edit(next); else catalog.initialize(next);
+    const count = structure.catalog?.concepts.length ?? 0;
+    let id = `concept-${count + 1}`;
+    while (structure.catalog?.concepts.some(item => item.id === id)) id += '-new';
+    const next = `${current}\n## New term ${count + 1} {#${id}}\n\nWrite the definition here.\n`;
+    setEditingIndex(count);
+    if (catalog.draft !== null) catalog.edit(next); else catalog.initialize(next);
   };
+
   const reload = () => { if (latest.current.dirty) return; setReloadVersion(value => value + 1); clearControlled(); clearReport(); void policy.load(); void catalog.load(); void loadIndex(); void loadAggregate(); };
   const policyField = <K extends keyof WritingPolicy>(key: K, value: WritingPolicy[K]) => { if (policy.draft) policy.edit({ ...policy.draft, [key]: value }); };
   const banField = (index: number, key: keyof BannedTerm, value: string | readonly string[] | undefined) => { if (policy.draft) policy.edit({ ...policy.draft, bannedTerms: policy.draft.bannedTerms.map((item, at) => at === index ? { ...item, [key]: value } : item) }); };
-  const updateConcept = (index: number, update: (item: Concept) => Concept) => { if (catalog.draft) catalog.edit({ ...catalog.draft, concepts: catalog.draft.concepts.map((item, at) => at === index ? update(item) : item) }); };
-  const updateName = (index: number, language: string, update: (name: ConceptName) => ConceptName) => updateConcept(index, item => ({ ...item, names: { ...item.names, [language]: update(item.names[language]!) } }));
   const check = async () => {
     const ticket = ++reportGeneration.current;
     setChecking(true); setReport(null); setCheckError('');
@@ -246,22 +255,28 @@ export function WritingPage() {
     finally { if (reportGeneration.current === ticket) setChecking(false); }
   };
   const shownBans = policy.draft?.bannedTerms.map((ban, index) => ({ ban, index })).filter(({ ban }) => `${ban.term} ${ban.use} ${ban.why}`.toLocaleLowerCase().includes(banQuery.toLocaleLowerCase())) ?? [];
-  const catalogEntries = [...(aggregate?.catalogs.filter(item => item.scope !== scope) ?? []), ...(catalog.draft ? [{ scope, path: catalog.path, catalog: catalog.draft }] : aggregate?.catalogs.filter(item => item.scope === scope) ?? [])];
+  const catalogEntries = [...(aggregate?.catalogs.filter(item => item.scope !== scope) ?? []), ...(structure.catalog ? [{ scope, path: catalog.path, catalog: structure.catalog }] : aggregate?.catalogs.filter(item => item.scope === scope) ?? [])];
   const shownConcepts = catalogEntries.sort((a, b) => a.path.localeCompare(b.path)).flatMap(item => item.catalog.concepts.map((concept, index) => ({ scope: item.scope, path: item.path, concept, index }))).filter(item => aggregateQuery.trim() !== '' || item.scope === scope);
-  const selectedIndex = requestedId === null ? Math.min(editingIndex, (catalog.draft?.concepts.length ?? 0) - 1) : catalog.draft?.concepts.findIndex(item => item.id === requestedId) ?? -1;
-  const conceptTitle = (concept: Concept) => concept.names.zh?.preferred ?? concept.names['zh-CN']?.preferred ?? concept.names.en?.preferred ?? concept.id;
+  const selectedIndex = requestedId === null ? Math.min(editingIndex, (structure.catalog?.concepts.length ?? 0) - 1) : structure.catalog?.concepts.findIndex(item => item.id === requestedId) ?? -1;
+  const conceptTitle = (concept: Concept) => concept.term;
+  const selectedId = structure.catalog?.concepts[selectedIndex]?.id;
+  // Reposition on navigation or completed loads; live syntax edits keep the caret.
+  const sourceLocation = useMemo(() => {
+    const line = selectedId ? structure.headings.get(selectedId) ?? 1 : 1;
+    return { line: Math.max(1, line), endLine: Math.max(1, line) };
+  }, [editingIndex, requestedId, catalog.path, catalog.loading]);
   const reloadButton = <Button variant="outline" disabled={dirty || policy.saving || catalog.saving} onClick={reload}>重新载入</Button>;
   const navigationHost = document.getElementById('content-navigation');
   return <div className="writing-page">
     {navigationHost && createPortal(<ContentSidebar model={{
       label: view === 'terms' ? '术语' : '写作', title: view === 'terms' ? '术语' : '写作',
-      filter: view === 'terms' ? { label: '筛选术语', placeholder: '搜索名称、别名或定义…', value: aggregateQuery, onChange: setAggregateQuery } : { label: '筛选适用范围', placeholder: '按适用范围筛选…' },
+      filter: view === 'terms' ? { label: '筛选术语', placeholder: '搜索名称、定义或目录…', value: aggregateQuery, onChange: setAggregateQuery } : { label: '筛选适用范围', placeholder: '按适用范围筛选…' },
       groups: [{ id: 'scopes', label: '适用范围列表', heading: '适用范围', filterable: view !== 'terms',
         items: [...new Set(['docs', ...scopes.map(item => item.scope), scope])].map(path => ({ id: path, path, title: path === 'docs' ? '整个项目' : path.replace(/^docs\//u, ''), active: scope === path, icon: <Folder size={16} />, onSelect: () => switchScope(path) })),
         footer: (close: () => void) => <form className="writing-directory-add" onSubmit={event => { event.preventDefault(); close(); switchScope(scopeInput.trim()); }}><Input aria-label="新适用范围" value={scopeInput} onChange={event => setScopeInput(event.target.value)} placeholder="其他目录，如 docs/feature/example" /><Button type="submit" variant="outline" disabled={!scopeInput.trim()}>打开范围</Button></form>,
       }, ...(view === 'terms' ? [{ id: 'terms', label: '术语列表', heading: '术语',
-        actions: (close: () => void) => <div className="terminology-actions"><Button variant="outline" disabled={catalog.loading || catalog.saving || catalog.remote?.state === 'invalid'} onClick={() => { addConcept(); close(); }}>新增术语</Button><Button variant="ghost" onClick={() => void loadAggregate()}>刷新列表</Button></div>,
-        items: shownConcepts.map(item => ({ id: `${item.path}:${item.index}`, path: item.path, title: conceptTitle(item.concept) || '新术语', searchText: `${item.concept.id} ${item.concept.definition} ${Object.values(item.concept.names).flatMap(name => [name.preferred, ...(name.aliases ?? []), ...(name.deprecated ?? [])]).join(' ')}`, active: scope === item.scope && selectedIndex === item.index, icon: <BookOpen size={16} />, onSelect: () => switchScope(item.scope, item.index, item.concept.id) })),
+        actions: (close: () => void) => <div className="terminology-actions"><Button variant="outline" disabled={catalog.loading || catalog.saving || catalog.remote?.state === 'invalid' || !!structure.error} onClick={() => { addConcept(); close(); }}>新增术语</Button><Button variant="ghost" onClick={() => void loadAggregate()}>刷新列表</Button></div>,
+        items: shownConcepts.map(item => ({ id: `${item.path}:${item.index}`, path: item.path, title: conceptTitle(item.concept) || '新术语', searchText: `${item.concept.id} ${item.concept.definition} ${item.scope} ${item.concept.term}`, active: scope === item.scope && selectedIndex === item.index, icon: <BookOpen size={16} />, onSelect: () => switchScope(item.scope, item.index, item.concept.id) })),
         emptyMessage: aggregate ? '暂无匹配术语' : '正在载入术语…',
         footer: <>{aggregateError && <p role="alert">{aggregateError}<Button onClick={() => void loadAggregate()}>重试</Button></p>}{!!aggregate?.diagnostics.length && <div role="alert">{aggregate.diagnostics.map((item, index) => <p key={index}>{item.message}（{item.sources.join('、')}）</p>)}</div>}</>,
       }] : [])],
@@ -270,13 +285,13 @@ export function WritingPage() {
     {sourceWarning && <p role="alert" className="form-error">{sourceWarning}</p>}
     <div hidden={view !== 'terms'}>
       <section aria-label="术语详情" className="terminology-detail">
-    <section aria-label="术语表编辑" className="terminology-editor"><div role="toolbar" aria-label="术语操作" className="button-row justify-end mb-3">{reloadButton}{catalog.draft && <Button variant="outline" disabled={!catalog.dirty || catalog.saving} onClick={() => void catalog.save().then(() => { void loadIndex(); void loadAggregate(); })}>{catalog.saving ? '正在保存…' : '保存术语'}</Button>}</div>
+    <section aria-label="术语表编辑" className="terminology-editor"><div role="toolbar" aria-label="术语操作" className="button-row justify-end mb-3">{reloadButton}{catalog.draft && <Button variant="outline" disabled={!catalog.dirty || catalog.saving || !!structure.error} onClick={() => void catalog.save().then(() => { void loadIndex(); void loadAggregate(); })}>{catalog.saving ? '正在保存…' : '保存术语'}</Button>}</div>
       {catalog.loading && !catalog.remote && <p role="status">正在载入术语…</p>}{catalog.error && <p role="alert" className="form-error">{catalog.error}</p>}
-      {catalog.remote?.state === 'invalid' && <div><h3>术语表格式错误</h3><p role="alert">{catalog.remote.diagnostic}</p><p>原文摘要：<code>{catalog.remote.digest}</code></p><pre>{catalog.remote.source}</pre>{!catalog.open && <Button variant="outline" onClick={() => catalog.initialize(emptyCatalog())}>修复术语表</Button>}</div>}
-      {catalog.draft && catalog.open && <><RecordList className="terminology-fields">{catalog.draft.concepts.map((concept, index) => <RecordItem hidden={index !== selectedIndex} key={index}><fieldset className="writing-fields"><legend className="sr-only">术语 {index + 1}</legend><label>定义<Textarea aria-label={`术语定义 ${index + 1}`} value={concept.definition} onChange={event => updateConcept(index, item => ({ ...item, definition: event.target.value }))} placeholder="这个术语指什么？" /></label>{Object.entries(concept.names).map(([language, name]) => <ContentSection key={language} title={({ zh: '中文', 'zh-CN': '简体中文', en: 'English' } as Record<string, string>)[language] ?? language} summary={<Button variant="ghost" size="icon" aria-label={`删除语言 ${language}`} title={`删除语言 ${language}`} onClick={() => updateConcept(index, item => { const names = { ...item.names }; delete names[language]; return { ...item, names }; })}><Trash2 size={14} /></Button>}><div className="writing-options"><label>首选名称<Input aria-label={`术语 ${index + 1} ${language} 首选名称`} value={name.preferred} onChange={event => updateName(index, language, item => ({ ...item, preferred: event.target.value }))} /></label><label>允许别名（每行一项）<Textarea aria-label={`术语 ${index + 1} ${language} 允许别名`} value={listed(name.aliases)} onChange={event => updateName(index, language, item => ({ ...item, aliases: lines(event.target.value) }))} /></label><label>弃用名称（每行一项）<Textarea aria-label={`术语 ${index + 1} ${language} 弃用名称`} value={listed(name.deprecated)} onChange={event => updateName(index, language, item => ({ ...item, deprecated: lines(event.target.value) }))} /></label></div></ContentSection>)}<div className="button-row"><Input className="w-40" aria-label={`术语 ${index + 1} 新语言代码`} value={newLanguages[index] ?? ''} onChange={event => setNewLanguages(previous => ({ ...previous, [index]: event.target.value }))} placeholder="zh-CN" /><Button variant="outline" disabled={!newLanguages[index]?.trim() || newLanguages[index]?.trim() in concept.names} onClick={() => { const language = newLanguages[index]!.trim(); updateConcept(index, item => ({ ...item, names: { ...item.names, [language]: { preferred: '' } } })); setNewLanguages(previous => ({ ...previous, [index]: '' })); }}>添加语言</Button><Button variant="outline" onClick={() => catalog.edit({ ...catalog.draft!, concepts: catalog.draft!.concepts.filter((_, at) => at !== index) })}>删除术语 {index + 1}</Button></div><div className="terminology-advanced"><label>标识 ID<Input aria-label={`术语 ID ${index + 1}`} value={concept.id} onChange={event => updateConcept(index, item => ({ ...item, id: event.target.value }))} /></label><code>{catalog.path}#{concept.id}</code></div></fieldset></RecordItem>)}</RecordList><p role="status">{catalog.dirty ? '术语有未保存修改。' : '术语已保存。'}</p></>}
-      {catalog.draft && <label className="terminology-imports">本目录引用的术语<Textarea rows={1} aria-label="显式导入引用" value={listed(catalog.draft.imports)} placeholder="每行一个术语引用，如 docs/concepts.json#contract" onChange={event => { const values = lines(event.target.value); catalog.edit({ ...catalog.draft!, imports: values.length ? values : undefined }); }} /><span className="field__hint">用于复用其他目录的定义，与本目录术语一起保存。</span></label>}
-      {catalog.draft && selectedIndex < 0 && catalog.draft.concepts.length > 0 && <PanelEmpty title="所选术语已被移除，请刷新列表重新选择。" />}
-      {((catalog.draft && !catalog.draft.concepts.length) || (catalog.remote?.state === 'missing' && !catalog.draft)) && <PanelEmpty title="此目录暂无术语">点击新增术语即可开始填写。</PanelEmpty>}
+      {catalog.remote?.state === 'invalid' && <p role="alert">磁盘上的术语表结构无效：{catalog.remote.diagnostic}</p>}
+      {structure.error && <p role="alert">{structure.error}</p>}
+      {catalog.draft !== null && catalog.open && <><p className="path-text"><code>{catalog.path}</code>{selectedId ? `#${selectedId}` : ''}</p><SourceEditor value={catalog.draft} path={catalog.path} readOnly={catalog.saving} extensions={sourceExtensions} location={sourceLocation} onChange={catalog.edit} /><p role="status">{catalog.dirty ? '术语有未保存修改。' : '术语已保存。'}</p></>}
+      {catalog.remote?.state === 'missing' && catalog.draft === null && <PanelEmpty title="此目录暂无术语"><Button variant="outline" onClick={() => catalog.initialize(emptyCatalog())}>创建本目录术语表</Button></PanelEmpty>}
+
     </section>
       </section>
     </div>

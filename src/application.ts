@@ -440,7 +440,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'writing.check': return checkWriting(repo, action.path);
     case 'concepts.index': return indexConcepts(repo);
     case 'concepts.show': return showConcepts(repo, action.path);
-    case 'concepts.set': return setConcepts(repo, action.catalog, action.expectedDigest, dryRun, action.path);
+    case 'concepts.set': return setConcepts(repo, action.source, action.expectedDigest, dryRun, action.path);
     case 'config.set': return setConfig(repo, action.config, action.expectedDigest, dryRun);
     case 'constitution.initialize': return initializeConstitution(repo, dryRun);
     case 'constitution.adopt': return adoptConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);

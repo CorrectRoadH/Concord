@@ -130,7 +130,7 @@ type LinkTarget = { readonly kind: 'invalid'; readonly message: string } | { rea
 // @concord-begin
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md#link-clause
 /** Only scheme-less, non-absolute URLs that normalize to the constitution are constitution links. */
-export function constitutionLinkTarget(from: string, url: string): LinkTarget | undefined {
+export function relativeMarkdownLinkTarget(from: string, url: string, owner: string): LinkTarget | undefined {
   if (/^[a-z][a-z0-9+.-]*:/iu.test(url) || url.startsWith('/')) return undefined;
   const hash = url.indexOf('#');
   const location = hash < 0 ? url : url.slice(0, hash);
@@ -141,11 +141,15 @@ export function constitutionLinkTarget(from: string, url: string): LinkTarget | 
   try { decoded = decodeURIComponent(rawPath); }
   catch { return { kind: 'invalid', message: `Link path ${rawPath} has invalid percent-encoding` }; }
   const target = decoded === '' ? from : posix.normalize(posix.join(posix.dirname(from), decoded));
-  if (target !== CONSTITUTION_PATH) return undefined;
-  if (query >= 0) return { kind: 'invalid', message: 'Constitution links must not contain a query' };
+  if (target !== owner) return undefined;
+  if (query >= 0) return { kind: 'invalid', message: `${owner} links must not contain a query` };
   if (fragment === undefined || fragment === '') return { kind: 'whole' };
   try { return { kind: 'fragment', id: decodeURIComponent(fragment) }; }
-  catch { return { kind: 'invalid', message: `Constitution link fragment ${fragment} has invalid percent-encoding` }; }
+  catch { return { kind: 'invalid', message: `Link fragment ${fragment} has invalid percent-encoding` }; }
+}
+
+export function constitutionLinkTarget(from: string, url: string): LinkTarget | undefined {
+  return relativeMarkdownLinkTarget(from, url, CONSTITUTION_PATH);
 }
 
 /** Inline link nodes only: images, reference links, HTML and code never contribute. */

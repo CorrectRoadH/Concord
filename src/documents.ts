@@ -1,3 +1,4 @@
+import { assertGenericConceptWrite } from './writing-scopes.js';
 import { readDesignPlanPaths } from './document-layout.js';
 import { posix } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -513,6 +514,7 @@ export { addPage, setPage, showPage } from './document-pages.js';
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 export function setAuthor(repo: Repository, ref: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
+  assertGenericConceptWrite(parseReference(ref).path);
   const record = readDocumentReference(repo, ref);
   if (record.path !== parseReference(ref).path) throw new ConcordError('InvalidReferenceTarget', 'Author body belongs to an exact Concord owner, not supporting Markdown');
   if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);

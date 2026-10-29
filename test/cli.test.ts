@@ -782,7 +782,7 @@ test('packed writing checks consumer policy, readable prose and safe input bound
  mkdirSync(join(root, 'guide'));
  writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify(policy));
  writeFileSync(join(root, 'guide/style.css'), '.label { fill: black; }\n');
- writeFileSync(join(root, 'docs/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'new-word', definition: 'Preferred wording', names: { zh: { preferred: '新词', deprecated: ['旧称'] }, en: { preferred: 'Good' } } }] }));
+ writeFileSync(join(root, 'docs/concepts.md'), "---\ndeprecated:\n  new-word:\n    - 旧称\n---\n\n# Terms\n\n## 新词 {#new-word}\n\nPreferred wording\n");
  writeFileSync(join(root, 'guide/page.md'), [
   '---', 'title: bad', '---', '# Guide', '', '新词 good 旧词典.', '',
   '```ts', 'bad', '```', '', '~~~', 'bad', '~~~', '',
@@ -833,29 +833,54 @@ test('packed writing checks consumer policy, readable prose and safe input bound
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('packed scoped owner commands use path, JSON body, null creation CAS, and standalone rules', () => Effect.runPromise(Effect.sync(() => {
+test('packed scoped owner commands use path, Markdown catalog body, null creation CAS, and standalone rules', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('scoped-owner-cli');
  write(root, 'docs/feature/sample/page.md', 'Feedback.\n');
  write(root, 'policy.json', JSON.stringify({ format: 'concord.writing/v3', bannedTerms: [] }));
- write(root, 'catalog.json', JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'feedback', definition: 'A response', names: { en: { preferred: 'Feedback' }, api: { preferred: 'Feedback' } } }] }));
+ write(root, 'catalog.md', "# Terms\n\n## Feedback {#feedback}\n\nA response\n");
  const ownerPath = 'docs/feature/sample/concord-writing.json';
- const catalogPath = 'docs/feature/sample/concepts.json';
+ const catalogPath = 'docs/feature/sample/concepts.md';
  assert.equal(call(root, ['writing', 'show', '--path', ownerPath], Schema.Struct({ state: Schema.String })).state, 'missing');
  assert.equal(call(root, ['--dry-run', 'writing', 'set', '--path', ownerPath, '--body', join(root, 'policy.json'), '--expected-digest', 'null'], DryRunOutput).dryRun, true);
  assert.equal(existsSync(join(root, ownerPath)), false);
  call(root, ['writing', 'set', '--path', ownerPath, '--body', join(root, 'policy.json'), '--expected-digest', 'null'], DigestOutput);
- call(root, ['concepts', 'set', '--path', catalogPath, '--body', join(root, 'catalog.json'), '--expected-digest', 'null'], DigestOutput);
+ call(root, ['concepts', 'set', '--path', catalogPath, '--body', join(root, 'catalog.md'), '--expected-digest', 'null'], DigestOutput);
  assert.equal(call(root, ['concepts', 'show', '--path', catalogPath], Schema.Struct({ state: Schema.String })).state, 'valid');
  assert(call(root, ['writing', 'index'], Schema.Struct({ scopes: Schema.Array(Schema.Struct({ scope: Schema.String })) })).scopes.some(item => item.scope === 'docs/feature/sample'));
  assert(call(root, ['concepts', 'index'], Schema.Struct({ concepts: Schema.Array(Schema.Struct({ reference: Schema.String })) })).concepts.some(item => item.reference === catalogPath + '#feedback'));
  assert.equal(call(root, ['writing', 'check', '--path', ownerPath], CheckOutput).ok, true);
  const external = consumer('standalone-owner-cli');
- rmSync(join(external, 'docs/concepts.json'));
+ rmSync(join(external, 'docs/concepts.md'));
  write(external, 'guide/page.md', 'Standalone prose.\n');
  write(external, 'rules.json', JSON.stringify({ format: 'concord.writing/v3', roots: ['guide'], bannedTerms: [] }));
  assert.equal(call(external, ['docs', 'check', '--rules', 'rules.json'], CheckOutput).ok, true);
  write(external, 'docs/concord-writing.json', JSON.stringify({ format: 'concord.writing/v1', roots: ['docs'], bannedTerms: [] }));
  assert.equal(call(external, ['docs', 'check', '--rules', 'rules.json'], CheckOutput).ok, true);
+})));
+
+// @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+test('packed concepts actions save Markdown stdin verbatim and protect every generic catalog writer', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('markdown-catalog-cli');
+ call(root, ['feature', 'create', 'catalog', '--title', 'Catalog', '--no-pages'], Ack);
+ const path = 'docs/feature/catalog/concepts.md';
+ const source = '# Terms\r\n\r\n## Memory {#memory}\r\n\r\nA durable finding.\r\n\r\n<!-- Author spacing -->\r\n';
+ const receiptSchema = Schema.Struct({ source: Schema.String, digest: Schema.String });
+ const created = call(root, ['concepts', 'set', '--path', path, '--body', '-', '--expected-digest', 'null'], receiptSchema, source);
+ assert.equal(created.source, source);
+ assert.equal(readFileSync(join(root, path), 'utf8'), source);
+ const updated = source + '\r\n';
+ const saved = call(root, ['action', '--input', '-'], receiptSchema, JSON.stringify({ action: 'concepts.set', path, source: updated, expectedDigest: created.digest }));
+ assert.equal(saved.source, updated);
+ assert.equal(call(root, ['concepts', 'set', '--path', path, '--body', '-', '--expected-digest', created.digest], ErrorOutput, source, 1).error, 'PreimageChanged');
+ for (const args of [['author', 'set', path], ['feature', 'page', 'set', 'catalog', 'concepts']]) {
+  assert.equal(call(root, [...args, '--body', '-', '--expected-digest', saved.digest], ErrorOutput, '# Changed\n', 1).error, 'ManagedConceptCatalog');
+ }
+ assert.equal(call(root, ['feature', 'page', 'add', 'catalog', 'concepts'], ErrorOutput, '', 1).error, 'ManagedConceptCatalog');
+ assert.equal(readFileSync(join(root, path), 'utf8'), updated);
+ write(root, 'docs/ignored/concepts.json', 'not parsed or reported');
+ const index = call(root, ['concepts', 'index'], Schema.Struct({ catalogs: Schema.Array(Schema.Struct({ path: Schema.String })), diagnostics: Schema.Array(Schema.Unknown) }));
+ assert(index.catalogs.every(item => item.path.endsWith('/concepts.md')));
+ assert.equal(index.diagnostics.length, 0);
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md

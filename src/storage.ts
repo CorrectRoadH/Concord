@@ -15,6 +15,7 @@ import { onboardingGuide } from './onboarding-guide.js';
 import { projectTemplateFiles, templateBody } from './templates.js';
 import { defaultWritingSource } from './writing-defaults.js';
 import { readWritingPolicy } from './writing-policy.js';
+import { EMPTY_CONCEPT_CATALOG } from './concepts-schema.js';
 import { analyzeCatalogs, catalogDependencies, catalogSources, readConceptCatalog, splitReference } from './concepts.js';
 import { catalogName, policyName, scopeOf } from './writing-scopes.js';
 import { excludedSourcePath } from './source-discovery.js';
@@ -258,7 +259,7 @@ Before planning, implementing, or reviewing governed work:
 - Use Concord commands for all Memory and Issue indexing, recall, reading, creation, editing, relations, and lifecycle changes. Start with \`concord memory index\` / \`concord memory recall\` or \`concord issue index\` / \`concord issue recall\`. Do not directly read or edit their owner files or maintain a manual INDEX.
 - For remote Issue writes, run plan, obtain explicit user agreement to its authorization string (or its action, target, and payload), then execute with \`--authorize\`; never infer authorization from plan success, tool availability, or permissive access.
 - Local issues work without GitHub, Linear, credentials, or connections. Use \`concord issue create\` for local observations; local operations never authorize remote mutations.
-- Use \`concord concepts\` and \`concord writing\` tools for JSON terminology and policy owners. Their directories under docs define scope; project indexes are derived. Keep structured definitions in concepts.json and explanations in Markdown; only deprecated names become terminology bans. Do not duplicate a local definition into a global registry or bypass digest-protected edits.
+- Use \`concord concepts\` and \`concord writing\` tools for Markdown terminology and JSON policy owners. Their directories under docs define scope; project indexes are derived. Keep definitions and explanations together in concepts.md; each concept has one term and only deprecated names become terminology bans. Do not duplicate a local definition into a global registry or bypass digest-protected edits.
 
 Follow the returned instructions and the repository's current \`docs/constitution.md\`. A gap result means an explicit Concord relationship is absent; it is not code coverage, and undocumented CLI commands require the product's own inventory. Do not infer completion or test coverage from document structure or command receipts alone.`;
 
@@ -695,8 +696,8 @@ export class LocalRepository implements Repository {
   // @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
   publish(operation: string, changes: readonly Change[], dryRun = false, catalogGuard?: readonly { path: string; digest: string }[]): MutationReceipt {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
-    const managedJson = (path: string) => path.startsWith('docs/') && (path.endsWith(`/${policyName}`) || path.endsWith(`/${catalogName}`));
-    if (operation === 'set-writing-policy' || changes.some(change => managedJson(change.path) && change.path.endsWith(`/${policyName}`))) {
+    const managedWritingOwner = (path: string) => path.startsWith('docs/') && !path.split('/').some(part => part === '_template' || part === '.git' || part === 'node_modules') && (path.endsWith(`/${policyName}`) || path.endsWith(`/${catalogName}`));
+    if (operation === 'set-writing-policy' || changes.some(change => managedWritingOwner(change.path) && change.path.endsWith(`/${policyName}`))) {
       if (operation === 'init') {
         const policies = changes.filter(change => change.path.endsWith(`/${policyName}`));
         if (policies.length !== 1 || policies[0]?.path !== 'docs/concord-writing.json' || policies[0].before !== null || policies[0].after !== defaultWritingSource) throw new ConcordError('InvalidChange', 'Init may only create the exact global writing preset');
@@ -706,9 +707,11 @@ export class LocalRepository implements Repository {
         readWritingPolicy(changes[0]!.after!, changes[0]!.path);
       }
     }
-    if (operation === 'set-concepts' || changes.some(change => managedJson(change.path) && change.path.endsWith(`/${catalogName}`))) {
+    if (operation === 'set-concepts' || changes.some(change => managedWritingOwner(change.path) && change.path.endsWith(`/${catalogName}`))) {
       const change = changes[0];
-      const initException = operation === 'init' && changes.filter(item => item.path === 'docs/concepts.json').length === 1 && change !== undefined;
+      const catalogChanges = changes.filter(item => managedWritingOwner(item.path) && item.path.endsWith(`/${catalogName}`));
+      const initException = operation === 'init' && catalogChanges.length === 1 && catalogChanges[0]?.path === 'docs/concepts.md' && catalogChanges[0].before === null && catalogChanges[0].after === EMPTY_CONCEPT_CATALOG;
+      if (operation !== 'set-concepts' && !initException) throw new ConcordError('ManagedConceptCatalog', 'Catalog paths are managed by concepts set');
       if (!initException) {
         if (operation !== 'set-concepts' || changes.length !== 1 || change?.after === null) throw new ConcordError('InvalidChange', 'Concept publication requires one non-null managed owner');
         scopeOf(change!.path, 'catalog');
@@ -732,7 +735,7 @@ export class LocalRepository implements Repository {
     const entries = changes.map(c => {
       this.absolute(c.path);
       const guard = governanceGuard(c);
-      if (!guard && !this.allowedOwner(c.path, authorizationConfig) && !(operation === 'set-concepts' && managedJson(c.path)) && !(operation === 'set-writing-policy' && managedJson(c.path)) && !(operation === 'init' && c.path === 'docs/concepts.json')) throw new ConcordError('InvalidChange', `Not a Concord document owner: ${c.path}`);
+      if (!guard && !this.allowedOwner(c.path, authorizationConfig) && !(operation === 'set-concepts' && managedWritingOwner(c.path)) && !(operation === 'set-writing-policy' && managedWritingOwner(c.path)) && !(operation === 'init' && c.path === 'docs/concepts.md')) throw new ConcordError('InvalidChange', `Not a Concord document owner: ${c.path}`);
       if (!guard) this.assertWritable(c.path, authorizationConfig);
       const current = this.read(c.path) ?? null;
       if (current !== c.before) throw new ConcordError('PreimageChanged', `${c.path} changed; read its current digest and retry`);
@@ -875,7 +878,7 @@ export class LocalRepository implements Repository {
     if (new Set(journal.directories).size !== journal.directories.length) fail('Journal contains duplicate directories');
     if (journal.operation === 'rename-step' && journal.scope.kind !== 'step-rename') fail('Step rename requires its dedicated publication scope');
     const policyChanges = journal.changes.filter(change => change.path.endsWith(`/${policyName}`));
-    const catalogChanges = journal.changes.filter(change => change.path.endsWith(`/${catalogName}`));
+    const catalogChanges = journal.changes.filter(change => change.path.endsWith(`/${catalogName}`) && !change.path.split('/').some(part => part === '_template' || part === '.git' || part === 'node_modules'));
     if (journal.operation === 'set-writing-policy' || policyChanges.length) {
       if (journal.operation === 'init') {
         if (policyChanges.length !== 1 || policyChanges[0]?.path !== 'docs/concord-writing.json' || policyChanges[0].before !== null || policyChanges[0].after !== defaultWritingSource) fail('Init may only create the exact global writing preset. Preserve the journal; recover an older init with the version that created it before upgrading.');
@@ -887,7 +890,7 @@ export class LocalRepository implements Repository {
     }
     if (journal.operation === 'set-concepts' || catalogChanges.length) {
       if (journal.operation === 'init') {
-        if (catalogChanges.length !== 1 || catalogChanges[0]?.path !== 'docs/concepts.json' || catalogChanges[0].before !== null || catalogChanges[0].after !== '{\n  "format": "concord.concepts/v1",\n  "concepts": []\n}\n') fail('Init may only create the exact empty global catalog');
+        if (catalogChanges.length !== 1 || catalogChanges[0]?.path !== 'docs/concepts.md' || catalogChanges[0].before !== null || catalogChanges[0].after !== EMPTY_CONCEPT_CATALOG) fail('Init may only create the exact empty global catalog');
       } else {
         const change = journal.changes[0];
         if (journal.scope.kind !== 'documents' || journal.operation !== 'set-concepts' || journal.changes.length !== 1 || change?.after == null || journal.catalogDependencies === undefined) fail('Concept journal has an unauthorized operation, path, deletion, or missing guard');
@@ -988,7 +991,7 @@ export class LocalRepository implements Repository {
       if (authorizationConfig === undefined) fail('Missing current TS authorization');
       for (const change of journal.changes) {
         const governanceGuard = change.path === 'concord.repository.json' && change.before === change.after;
-        const scoped = journal.operation === 'set-concepts' && change.path.endsWith(`/${catalogName}`) || journal.operation === 'set-writing-policy' && change.path.endsWith(`/${policyName}`) || journal.operation === 'init' && change.path === 'docs/concepts.json';
+        const scoped = journal.operation === 'set-concepts' && change.path.endsWith(`/${catalogName}`) || journal.operation === 'set-writing-policy' && change.path.endsWith(`/${policyName}`) || journal.operation === 'init' && change.path === 'docs/concepts.md';
         if (!governanceGuard && !this.allowedOwner(change.path, authorizationConfig) && !scoped) fail(`Not a Concord document owner: ${change.path}`);
       }
       for (const dir of journal.directories) {
@@ -1074,11 +1077,9 @@ export function initialize(repo: Repository, dryRun = false, options: Initialize
   if (options.design === true) paths['DESIGN.md'] = templateBody('project-design', 'Project');
   const preservedPaths: string[] = [];
   for (const [path, name] of [['docs/README.md', 'project-index'], ['docs/concepts.md', 'concepts'], ['docs/architecture.md', 'project-architecture']] as const) {
-    if (repo.read(path) === undefined) paths[path] = templateBody(name, 'Project');
+    if (repo.read(path) === undefined) paths[path] = name === 'concepts' ? EMPTY_CONCEPT_CATALOG : templateBody(name, 'Project');
     else preservedPaths.push(path);
   }
-  if (repo.read('docs/concepts.json') === undefined) paths['docs/concepts.json'] = '{\n  "format": "concord.concepts/v1",\n  "concepts": []\n}\n';
-  else preservedPaths.push('docs/concepts.json');
   if (repo.read('docs/concord-writing.json') === undefined) paths['docs/concord-writing.json'] = defaultWritingSource;
   else preservedPaths.push('docs/concord-writing.json');
   const sections: Record<string, [string, string, string]> = {

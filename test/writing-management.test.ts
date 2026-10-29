@@ -43,7 +43,7 @@ test('writing show preserves invalid and v1 bytes for explicit CAS repair', () =
     assert.throws(() => withRepo(root, repo => setWriting(repo, { ...policy, bannedTerms: [...policy.bannedTerms, { term: 'resolve', use: '修', why: '重复' }] }, saved.digest)), { code: 'InvalidWritingPolicy' });
     assert.throws(() => withRepo(root, repo => setWriting(repo, { ...policy, roots: ['../escape'] }, saved.digest)), { code: 'InvalidWritingPolicy' });
     rmSync(join(root, policyPath));
-    symlinkSync('concepts.json', join(root, policyPath));
+    symlinkSync('concepts.md', join(root, policyPath));
     assert.throws(() => withRepo(root, showWriting), { code: 'UnsafePath' });
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
@@ -98,7 +98,7 @@ test('public CLI writing action validates strict v3 and creation CAS', () => Eff
     const conflict = spawnSync(process.execPath, [cli, '--root', root, '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 15_000 });
     assert.notEqual(conflict.status, 0);
     assert.match(`${conflict.stdout}${conflict.stderr}`, /PreimageChanged/);
-    assert.equal(existsSync(join(root, 'docs/concepts.json')), true);
+    assert.equal(existsSync(join(root, 'docs/concepts.md')), true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 

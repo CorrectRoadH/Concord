@@ -43,4 +43,4 @@ Concord 把 Markdown 契约、测试源码里的 Concord 标记和工程 Memory 
 
 Memory 与 Issue 必须通过 Concord 工具索引、检索、读取和修改。使用 `memory index/recall`、`issue index/recall` 发现当前内容，使用具名作者与生命周期命令更新；不要直接读写 owner 文件代替工具，不手工维护 INDEX.md、metadata、history 或反向关系。工具缺口先报告或补齐，不能手写文件绕过。
 
-领域术语通过 `concepts index/show/set` 管理，写作政策通过 `writing index/show/set/check` 管理。docs 下 `concepts.json` 与 `concord-writing.json` 的所在目录决定 scope；全项目视图只汇总来源，不复制局部定义到全局。Markdown 写解释和案例，JSON 拥有结构化定义。编辑使用工具与摘要，先读 `concord --skill document` 了解格式和迁移。
+领域术语通过 `concepts index/show/set` 管理，写作政策通过 `writing index/show/set/check` 管理。docs 下 `concepts.md` 与 `concord-writing.json` 的所在目录决定 scope；全项目视图只汇总来源，不复制局部定义到全局。concepts.md 在同一概念标题下拥有唯一写法、定义和解释；仅弃用名派生禁词。编辑使用工具与摘要，先读 `concord --skill document` 了解格式和迁移。

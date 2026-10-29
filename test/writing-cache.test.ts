@@ -88,3 +88,17 @@ test('a new public CLI process reuses validated writing findings without loading
   assert.ok(warm.every(path => !path.includes('/mdast-util-from-markdown/')));
   assert.deepEqual(scan(false), scan(), 'cache-disabled overlay analysis has identical findings');
 }))));
+
+// @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
+test('catalog bytes invalidate writing findings and changed Markdown is strictly reparsed', () => Effect.runPromise(Effect.sync(() => fixture((root, scan) => {
+  const original = scan();
+  assert.deepEqual(scan(), original);
+  const path = join(root, 'docs/concepts.md');
+  writeFileSync(path, '# Terms\n\n## Issue {#issue}\n\nA durable observation.\n');
+  const changed = scan();
+  assert.notEqual(changed.inputDigest, original.inputDigest);
+  assert.deepEqual(scan(), changed);
+  assert.deepEqual(scan(false), changed);
+  writeFileSync(path, '# Terms\n\n## Missing ID\n\nDefinition.\n');
+  assert.throws(() => scan(), { code: 'InvalidConceptCatalog' });
+}))));

@@ -1,12 +1,13 @@
-import { ConcordError, decode, digest, inRepositorySnapshot, objectDigest, type Repository } from './shared.js';
+import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from './shared.js';
 import type { LocalRepository } from './storage.js';
-import { ConceptCatalogSchema, type ConceptCatalog, type ConceptDefinition } from './concepts-schema.js';
+import { fromMarkdown } from './markdown-parser.js';
+import { parseConceptCatalog, conceptSpellingKey, type ConceptCatalog, type ConceptDefinition } from './concepts-schema.js';
 import { discovered, globalCatalogPath, scopeOf, under } from './writing-scopes.js';
 export { ConceptCatalogSchema, type ConceptCatalog, type ConceptDefinition } from './concepts-schema.js';
 
 // @concord-begin
 // @concord-implements docs/feature/documentation-quality/policy.md#概念定义
-export const spellingKey = (value: string): string => /^[\x20-\x7e]+$/u.test(value) ? value.toLowerCase() : value;
+export const spellingKey = conceptSpellingKey;
 const spellingExpressions = new Map<string, RegExp>();
 function spellingExpression(spelling: string, ascii: boolean): RegExp {
   const flags = ascii ? 'gi' : 'g', key = `${flags}:${spelling}`;
@@ -40,39 +41,8 @@ export function splitReference(reference: string): { path: string; id: string } 
   return { path, id };
 }
 export function readConceptCatalog(source: string): ConceptCatalog {
-  try {
-    const catalog = decode(ConceptCatalogSchema, JSON.parse(source), 'concept catalog');
-    const ids = new Set<string>();
-    for (const concept of catalog.concepts) {
-      if (ids.has(concept.id)) throw new Error(`Duplicate concept ID: ${concept.id}`);
-      ids.add(concept.id);
-      if (Object.keys(concept.names).length === 0) throw new Error(`${concept.id} needs at least one language`);
-      const roles = new Map<string, { role: 'active' | 'deprecated'; preferred: string }>();
-      for (const [language, entry] of Object.entries(concept.names)) {
-        if (!language.trim() || !entry.preferred.trim()) throw new Error(`${concept.id} has an empty language or preferred name`);
-        const local = new Set<string>();
-        const spellings: readonly (readonly [string, 'active' | 'deprecated'])[] = [
-          [entry.preferred, 'active'], ...(entry.aliases ?? []).map((value): readonly [string, 'active'] => [value, 'active']), ...(entry.deprecated ?? []).map((value): readonly [string, 'deprecated'] => [value, 'deprecated']),
-        ];
-        for (const [spelling, role] of spellings) {
-          if (spelling.trim() !== spelling) throw new Error(`${concept.id} has padded spelling`);
-          const key = spellingKey(spelling);
-          if (local.has(key)) throw new Error(`${concept.id}/${language} repeats spelling: ${spelling}`);
-          local.add(key);
-          const earlier = roles.get(key);
-          if (earlier && (earlier.role !== role || role === 'deprecated' && spellingKey(earlier.preferred) !== spellingKey(entry.preferred))) throw new Error(`${concept.id} has conflicting cross-language spelling: ${spelling}`);
-          roles.set(key, { role, preferred: entry.preferred });
-        }
-      }
-    }
-    const imports = new Set<string>();
-    for (const reference of catalog.imports ?? []) {
-      splitReference(reference);
-      if (imports.has(reference)) throw new Error(`Duplicate import: ${reference}`);
-      imports.add(reference);
-    }
-    return catalog;
-  } catch (cause) { throw new ConcordError('InvalidConceptCatalog', cause instanceof Error ? cause.message : String(cause)); }
+  try { return parseConceptCatalog(source, fromMarkdown); }
+  catch (cause) { throw new ConcordError('InvalidConceptCatalog', cause instanceof Error ? cause.message : String(cause)); }
 }
 export interface CatalogRecord { path: string; scope: string; digest: string; catalog: ConceptCatalog }
 export interface ConceptDiagnostic { code: string; message: string; sources: readonly string[]; scope?: string }
@@ -120,7 +90,8 @@ function ambiguityDiagnostics(catalogs: readonly CatalogRecord[]): ConceptDiagno
   const overlapSeen = new Set<string>();
   for (const scope of [...new Set(catalogs.map(record => record.scope))].sort((a, b) => a.length - b.length || a.localeCompare(b))) {
     const names = new Map<string, { reference: string; path: string }[]>();
-    for (const item of effectiveConcepts(`${scope}/_scope.md`, catalogs)) for (const entry of Object.values(item.concept.names)) for (const spelling of [entry.preferred, ...(entry.aliases ?? [])]) {
+    for (const item of effectiveConcepts(`${scope}/_scope.md`, catalogs)) {
+      const spelling = item.concept.term;
       const key = spellingKey(spelling);
       const owners = names.get(key) ?? [];
       if (!owners.some(owner => owner.reference === item.reference)) owners.push({ reference: item.reference, path: item.path });
@@ -160,19 +131,19 @@ export function showConcepts(repo: Repository, path = globalCatalogPath) {
 }
 // @concord-code
 // @concord-implements docs/feature/documentation-quality/policy.md#工具管理与恢复
-export function setConcepts(repo: LocalRepository, catalog: ConceptCatalog, expectedDigest: string | null, dryRun = false, path = globalCatalogPath) {
+export function setConcepts(repo: LocalRepository, source: string, expectedDigest: string | null, dryRun = false, path = globalCatalogPath) {
   return inRepositorySnapshot(repo, () => {
     const scope = scopeOf(path, 'catalog');
     const before = repo.read(path) ?? null;
     if ((before === null ? null : digest(before)) !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; retain the draft and reload`);
-    const after = `${JSON.stringify(catalog, null, 2)}\n`;
+    const after = source;
     const validated = readConceptCatalog(after);
     const sources = catalogSources(repo);
     const old = analyzeCatalogs(sources);
     sources.set(path, after);
     const next = analyzeCatalogs(sources);
     const ownIssues = next.diagnostics.filter(item => item.sources[0] === path);
-    if (ownIssues.length) throw new ConcordError('InvalidConceptCatalog', ownIssues.map(item => item.message).join('; '));
+    if (ownIssues.length) throw new ConcordError(ownIssues[0]!.code, ownIssues.map(item => item.message).join('; '));
     const oldIds = new Set(old.byPath.get(path)?.catalog.concepts.map(item => item.id) ?? []);
     const newIds = new Set(validated.concepts.map(item => item.id));
     if ([...oldIds].some(id => !newIds.has(id)) && old.diagnostics.some(item => item.code === 'InvalidConceptCatalog' && item.sources[0] !== path)) throw new ConcordError('ConceptReferencesUnknown', 'Cannot remove a definition while another catalog is malformed');

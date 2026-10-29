@@ -29,7 +29,7 @@ export function showWriting(repo: Repository, path = globalPolicyPath) {
     const effectiveControlled = Object.fromEntries(composeControlled(owners, false));
     const aggregate = indexConcepts(repo);
     const concepts = effectiveConcepts(`${scope}/_scope.md`, aggregate.catalogs);
-    const allDerived = concepts.flatMap(item => Object.entries(item.concept.names).flatMap(([language, name]) => (name.deprecated ?? []).map(term => ({ term, use: name.preferred, why: `${item.reference} (${language})`, path: item.path, ref: item.reference, scope: item.scope, language }))));
+    const allDerived = concepts.flatMap(item => item.concept.deprecated.map(term => ({ term, use: item.concept.term, why: item.reference, path: item.path, ref: item.reference, scope: item.scope })));
     const derived = [...new Map(allDerived.map(item => [`${item.ref}:${spellingKey(item.term)}:${spellingKey(item.use)}`, item])).values()];
     const conflicts = aggregate.diagnostics.filter(item => item.scope === undefined || applies(`${scope}/_scope.md`, item.scope));
     return { operation: 'writing-show', state: 'valid' as const, path, scope, digest: sourceDigest, source, policy, effectiveControlled, effectiveControlledDiagnostics, concepts, derived, conflicts };

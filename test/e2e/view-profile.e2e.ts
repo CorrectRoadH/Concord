@@ -54,7 +54,7 @@ it('SDK adapter flow', () => { throw new Error('DO NOT EXECUTE'); });
     const testRecord = page.locator('.content-record').first();
     await expect(testRecord.locator('details')).not.toHaveAttribute('open', '');
     await testRecord.locator('summary').click();
-    await expect(testRecord.getByText('契约', { exact: true })).toBeVisible();
+    await expect(testRecord.getByText('Spec', { exact: true })).toBeVisible();
     await expect(testRecord.getByText('执行器', { exact: true })).toHaveCount(0);
     await expect(testRecord.getByText('运行通道', { exact: true })).toHaveCount(0);
     assert.equal('executor' in snapshot.repositoryTests!.tests[0]!, false);
@@ -121,7 +121,7 @@ export function sendAdapter() { return 'ok'; }
     await page.getByRole('button', { name: '添加关联', exact: true }).click();
     await page.getByRole('combobox', { name: '实现关联目标', exact: true }).click();
     await page.getByRole('option', { name: 'Flow', exact: true }).click();
-    await expect(page.getByRole('textbox', { name: '实现契约引用', exact: true })).toHaveValue('docs/feature/adapters/use-case/flow.md');
+    await expect(page.getByRole('textbox', { name: '实现 Spec 引用', exact: true })).toHaveValue('docs/feature/adapters/use-case/flow.md');
     await page.getByRole('button', { name: '取消', exact: true }).click();
     await useCaseGroup.evaluate(element => element.setAttribute('data-browser-instance', 'preserved'));
     await useCaseGroup.getByRole('button', { name: 'src/adapters.ts · 第 504–504 行', exact: true }).click();
@@ -141,7 +141,7 @@ export function sendAdapter() { return 'ok'; }
     await page.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(useCaseGroup).toHaveAttribute('data-browser-instance', 'preserved');
     await page.goto(`http://127.0.0.1:${server.port}/features/unrelated?tab=testing`);
-    await expect(page.getByText('未发现当前契约的关联测试', { exact: true })).toBeVisible();
+    await expect(page.getByText('未发现当前 Spec 的关联测试', { exact: true })).toBeVisible();
     await page.goto('about:blank');
     await expect.poll(() => {
       try { const available = new LocalRepository(root); available.close(); return true; }
@@ -196,6 +196,6 @@ it('invalid target', () => {});
     await failurePage.goto(`http://127.0.0.1:${server.port}/features/adapters?tab=testing`);
     await expect(failurePage.getByRole('alert').filter({ hasText: '项目测试接入失败' })).toBeVisible();
     await expect(failurePage.getByRole('alert').filter({ hasText: '工作区扫描不完整' })).toBeVisible();
-    await expect(failurePage.getByText('未发现当前契约的关联测试', { exact: true })).toHaveCount(0);
+    await expect(failurePage.getByText('未发现当前 Spec 的关联测试', { exact: true })).toHaveCount(0);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });

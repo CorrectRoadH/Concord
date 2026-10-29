@@ -11,7 +11,7 @@ import { PanelEmpty, PanelHeader, RecordList, RecordItem } from './content-layou
 type ConceptShow = ReturnType<typeof showConcepts>;
 
 function catalogPath(documentPath: string): string {
-  return `${documentPath.slice(0, documentPath.lastIndexOf('/'))}/concepts.json`;
+  return `${documentPath.slice(0, documentPath.lastIndexOf('/'))}/concepts.md`;
 }
 
 export function TerminologyPanel({ document }: { readonly document: WorkspaceDocument }) {
@@ -47,11 +47,10 @@ export function TerminologyPanel({ document }: { readonly document: WorkspaceDoc
         {current.diagnostics.length > 0 && <div role="alert" className="form-error"><strong>术语诊断</strong><ul>{current.diagnostics.map((item, index) => <li key={`${item.code}:${index}`}>{item.code}：{item.message}（{item.sources.join('、')}）</li>)}</ul></div>}
         {current.effectiveConcepts.length === 0 ? <PanelEmpty title="此范围暂无有效术语">在术语页面管理当前范围或上级范围的术语。</PanelEmpty>
           : <RecordList>{current.effectiveConcepts.map(item => <RecordItem key={item.reference}>
-            <strong>{item.concept.names.zh?.preferred ?? item.concept.names['zh-CN']?.preferred ?? item.concept.names.en?.preferred ?? item.concept.id}</strong>
-            {item.concept.names.en && (item.concept.names.zh?.preferred ?? item.concept.names['zh-CN']?.preferred ?? item.concept.names.en.preferred) !== item.concept.names.en.preferred && <span className="ml-2 text-sm text-muted-foreground">{item.concept.names.en.preferred}</span>}
+            <strong>{item.concept.term}</strong>
             <p className="mb-0 mt-2">{item.concept.definition}</p>
             <code className="text-xs text-muted-foreground">{item.reference}</code>
-            <dl>{Object.entries(item.concept.names).map(([language, name]) => <div key={language} className="mt-2"><dt className="font-medium">{language} · 首选：{name.preferred}</dt><dd className="ml-0 text-sm text-muted-foreground">{name.aliases?.length ? `允许名称：${name.aliases.join('、')}` : '允许名称：无'}；{name.deprecated?.length ? `弃用名称：${name.deprecated.join('、')}` : '弃用名称：无'}</dd></div>)}</dl>
+            {item.concept.deprecated.length > 0 && <p>弃用名称：{item.concept.deprecated.join('、')}</p>}
           </RecordItem>)}</RecordList>}
       </>}
   </>;

@@ -18,7 +18,7 @@ export function RepositoryTestCards({ snapshot, document, onOpenSource }: { snap
   return <>{tests.map(test => <RecordItem key={test.selector}>
     <div className="card-title-row"><strong>{test.name}</strong><Button asChild variant="ghost" size="sm"><Link to={`/git?path=${encodeURIComponent(test.file)}&tab=tests`}>查看文件变更</Link></Button></div><div><PathContextMenu path={test.file}><Button className="h-auto max-w-full justify-start whitespace-normal p-0 text-left" variant="link" onClick={() => onOpenSource(test.file)}>{test.file}</Button></PathContextMenu></div>
     <RecordDetails><dl>
-      <Definition label="契约"><code>{test.contract}</code></Definition>
+      <Definition label="Spec"><code>{test.contract}</code></Definition>
     </dl></RecordDetails>
   </RecordItem>)}</>;
 }

@@ -1,3 +1,5 @@
+import { stringify } from 'yaml';
+import { EMPTY_CONCEPT_CATALOG } from '../dist/concepts-schema.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -12,10 +14,14 @@ import { catalogDependencies, indexConcepts, readConceptCatalog, setConcepts, sh
 import { checkWriting } from '../dist/writing.js';
 import { setWriting, showWriting, writingIndex } from '../dist/writing-management.js';
 
-const json = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
+const json = (value: unknown): string => typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`;
 const policy = (extra: Record<string, unknown> = {}) => ({ format: 'concord.writing/v3' as const, bannedTerms: [], ...extra });
-const concept = (id: string, names: Record<string, { preferred: string; aliases?: string[]; deprecated?: string[] }>) => ({ id, definition: `${id} meaning`, names });
-const catalog = (concepts: ReturnType<typeof concept>[], imports?: string[]) => ({ format: 'concord.concepts/v1' as const, concepts, ...(imports ? { imports } : {}) });
+const concept = (id: string, term: string, deprecated: string[] = []) => ({ id, term, definition: `${id} meaning`, deprecated });
+const catalog = (concepts: ReturnType<typeof concept>[], imports: string[] = []) => {
+  const deprecated = Object.fromEntries(concepts.filter(item => item.deprecated.length).map(item => [item.id, item.deprecated]));
+  const metadata = imports.length || Object.keys(deprecated).length ? `---\n${stringify({ ...(imports.length ? { imports } : {}), ...(Object.keys(deprecated).length ? { deprecated } : {}) })}---\n\n` : '';
+  return `${metadata}# Terms\n${concepts.map(item => `\n## ${item.term} {#${item.id}}\n\n${item.definition}\n`).join('')}`;
+};
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-scoped-writing-'));
   execFileSync('git', ['init', '-q', root]);
@@ -34,13 +40,13 @@ const write = (root: string, path: string, source: string) => { mkdirSync(join(r
 test('project selection composes ancestor rules while explicit managed selection stays narrow', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   try {
-    write(root, 'docs/feature/a/page.md', 'bad old Comment.\n');
-    write(root, 'docs/feature/b/page.md', 'bad OldFeedback Comment.\n');
+    write(root, 'docs/feature/a/page.md', 'bad old Feedback.\n');
+    write(root, 'docs/feature/b/page.md', 'bad OldFeedback Feedback.\n');
     withRepo(root, repo => setWriting(repo, { ...policy(), roots: ['docs/feature/a'], bannedTerms: [{ term: 'bad', use: 'good', why: 'global' }], unusedConcepts: true }, null));
     withRepo(root, repo => setWriting(repo, { ...policy(), bannedTerms: [{ term: 'old', use: 'new', why: 'local' }] }, null, false, 'docs/feature/a/concord-writing.json'));
-    const b = catalog([concept('feedback', { en: { preferred: 'Feedback', aliases: ['Comment'], deprecated: ['OldFeedback'] }, api: { preferred: 'Feedback' } })]);
-    withRepo(root, repo => setConcepts(repo, b, null, false, 'docs/feature/b/concepts.json'));
-    withRepo(root, repo => setConcepts(repo, catalog([], ['docs/feature/b/concepts.json#feedback']), null, false, 'docs/feature/a/concepts.json'));
+    const b = catalog([concept('feedback', 'Feedback', ['OldFeedback'])]);
+    withRepo(root, repo => setConcepts(repo, b, null, false, 'docs/feature/b/concepts.md'));
+    withRepo(root, repo => setConcepts(repo, catalog([], ['docs/feature/b/concepts.md#feedback']), null, false, 'docs/feature/a/concepts.md'));
     const scopes = withRepo(root, writingIndex).scopes;
     assert(scopes.some(item => item.scope === 'docs/feature/b' && item.hasCatalog && !item.hasPolicy));
     const project = withRepo(root, checkWriting);
@@ -53,7 +59,7 @@ test('project selection composes ancestor rules while explicit managed selection
     assert.equal(narrow.mode, 'managed');
     assert.deepEqual(narrow.selectedRoots, ['docs/feature/a']);
     assert(!narrow.findings.some(item => item.file === 'docs/feature/b/page.md'));
-    assert.deepEqual(withRepo(root, indexConcepts).concepts.map(item => item.reference), ['docs/feature/b/concepts.json#feedback']);
+    assert.deepEqual(withRepo(root, indexConcepts).concepts.map(item => item.reference), ['docs/feature/b/concepts.md#feedback']);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
@@ -67,10 +73,10 @@ test('writing snapshots exclude SVG and CSS content and membership', () => Effec
     write(root, 'docs/feature/a/figure.svg', '<svg><text class="label">乙词</text></svg>');
     write(root, 'docs/feature/b/page.md', '乙词说明。\n');
     withRepo(root, repo => setWriting(repo, { ...policy(), roots: ['apps/docs-site/zh', 'docs/feature/a', 'docs/feature/b'] }, null));
-    withRepo(root, repo => setConcepts(repo, catalog([]), null, false, 'docs/feature/a/concepts.json'));
-    withRepo(root, repo => setConcepts(repo, catalog([]), null, false, 'docs/feature/b/concepts.json'));
+    withRepo(root, repo => setConcepts(repo, catalog([]), null, false, 'docs/feature/a/concepts.md'));
+    withRepo(root, repo => setConcepts(repo, catalog([]), null, false, 'docs/feature/b/concepts.md'));
     const report = withRepo(root, checkWriting);
-    assert.equal(report.files, 3);
+    assert.equal(report.files, 5);
     assert.equal(report.findings.length, 0);
     write(root, 'docs/feature/a/figure.svg', '<svg>changed</svg>');
     write(root, 'docs/feature/a/another.svg', '<svg/>');
@@ -86,7 +92,7 @@ test('writing snapshots exclude SVG and CSS content and membership', () => Effec
 test('standalone explicit profile works without managed owners and ignores unrelated v1 policy semantics', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   try {
-    rmSync(join(root, 'docs/concepts.json'));
+    rmSync(join(root, 'docs/concepts.md'));
     write(root, 'guide/page.md', 'bad.\n');
     write(root, 'standalone.json', json({ ...policy(), roots: ['guide'], bannedTerms: [{ term: 'bad', use: 'good', why: 'standalone' }] }));
     assert.throws(() => withRepo(root, checkWriting), { code: 'WritingPolicyNotFound' });
@@ -103,33 +109,30 @@ test('standalone explicit profile works without managed owners and ignores unrel
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('same-concept cross-language active spelling is accepted; active/deprecated overlap is rejected', () => Effect.runPromise(Effect.sync(() => {
-  const valid = catalog([concept('feedback', { en: { preferred: 'Feedback', aliases: ['Comment'] }, api: { preferred: 'Feedback' } })]);
-  assert.equal(readConceptCatalog(json(valid)).concepts.length, 1);
-  assert.throws(() => readConceptCatalog(json(catalog([concept('feedback', { en: { preferred: 'Feedback' }, api: { preferred: 'API', deprecated: ['Feedback'] } })]))), { code: 'InvalidConceptCatalog' });
-  assert.throws(() => readConceptCatalog(json(catalog([concept('feedback', { en: { preferred: 'Feedback', aliases: ['feedback'] } })]))), { code: 'InvalidConceptCatalog' });
-  assert.throws(() => readConceptCatalog(json(catalog([concept('feedback', { en: { preferred: 'Feedback', deprecated: ['Old'] }, api: { preferred: 'API', deprecated: ['Old'] } })]))), { code: 'InvalidConceptCatalog' });
+test('single spelling and deprecated uniqueness use the same normalization', () => Effect.runPromise(Effect.sync(() => {
+  assert.equal(readConceptCatalog(catalog([concept('feedback', 'Feedback')])).concepts.length, 1);
+  for (const source of [catalog([concept('feedback', 'Feedback', ['feedback'])]), catalog([concept('a', 'Feedback'), concept('b', 'feedback')]), catalog([concept('a', 'Alpha', ['Old']), concept('b', 'Beta', ['old'])])]) assert.throws(() => readConceptCatalog(source), { code: 'InvalidConceptCatalog' });
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('missing and invalid local catalog show inherited and direct-import projections without blocking repair', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), path = 'docs/feature/a/nested/concepts.json';
+  const root = fixture(), path = 'docs/feature/a/nested/concepts.md';
   try {
     const globalShow = withRepo(root, showConcepts);
-    withRepo(root, repo => setConcepts(repo, catalog([concept('global', { en: { preferred: 'Global' } })]), globalShow.digest));
-    withRepo(root, repo => setConcepts(repo, catalog([concept('shared', { en: { preferred: 'Shared' } })]), null, false, 'docs/feature/b/concepts.json'));
-    withRepo(root, repo => setConcepts(repo, catalog([concept('local', { en: { preferred: 'Local' } })], ['docs/feature/b/concepts.json#shared']), null, false, 'docs/feature/a/concepts.json'));
+    withRepo(root, repo => setConcepts(repo, catalog([concept('global', 'Global')]), globalShow.digest));
+    withRepo(root, repo => setConcepts(repo, catalog([concept('shared', 'Shared')]), null, false, 'docs/feature/b/concepts.md'));
+    withRepo(root, repo => setConcepts(repo, catalog([concept('local', 'Local')], ['docs/feature/b/concepts.md#shared']), null, false, 'docs/feature/a/concepts.md'));
     const missing = withRepo(root, repo => showConcepts(repo, path));
     assert.equal(missing.state, 'missing');
-    assert.deepEqual(missing.effectiveConcepts.map(item => item.reference).sort(), ['docs/concepts.json#global', 'docs/feature/a/concepts.json#local', 'docs/feature/b/concepts.json#shared'].sort());
+    assert.deepEqual(missing.effectiveConcepts.map(item => item.reference).sort(), ['docs/concepts.md#global', 'docs/feature/a/concepts.md#local', 'docs/feature/b/concepts.md#shared'].sort());
     write(root, path, '{ broken');
-    write(root, 'docs/feature/other/concepts.json', '{ unrelated broken');
+    write(root, 'docs/feature/other/concepts.md', '{ unrelated broken');
     const invalid = withRepo(root, repo => showConcepts(repo, path));
     assert.equal(invalid.state, 'invalid');
     assert.equal(invalid.source, '{ broken');
     assert.equal(invalid.effectiveConcepts.length, 3);
     assert(invalid.diagnostics.some(item => item.sources.includes(path)));
-    assert(invalid.diagnostics.some(item => item.sources.includes('docs/feature/other/concepts.json')));
+    assert(invalid.diagnostics.some(item => item.sources.includes('docs/feature/other/concepts.md')));
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
@@ -140,11 +143,11 @@ test('overlapping effective concepts expose ambiguity and actual term conflicts 
     write(root, 'docs/feature/a/page.md', 'Label appears.\n');
     write(root, 'docs/feature/b/page.md', 'Label appears.\n');
     withRepo(root, repo => setWriting(repo, { ...policy(), roots: ['docs/feature/a', 'docs/feature/b'] }, null));
-    const global = catalog([concept('global-label', { en: { preferred: 'Label' } })]);
-    const local = catalog([concept('local-label', { en: { preferred: 'Label' } })]);
+    const global = catalog([concept('global-label', 'Label')]);
+    const local = catalog([concept('local-label', 'Label')]);
     const globalShow = withRepo(root, showConcepts);
     withRepo(root, repo => setConcepts(repo, global, globalShow.digest));
-    withRepo(root, repo => setConcepts(repo, local, null, false, 'docs/feature/a/concepts.json'));
+    withRepo(root, repo => setConcepts(repo, local, null, false, 'docs/feature/a/concepts.md'));
     const index = withRepo(root, indexConcepts);
     const ambiguity = index.diagnostics.find(item => item.code === 'AmbiguousConceptName');
     assert.equal(ambiguity?.scope, 'docs/feature/a');
@@ -158,13 +161,13 @@ test('overlapping effective concepts expose ambiguity and actual term conflicts 
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('catalog publication protects imports, malformed dependency uncertainty, CAS and dry-run', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), target = 'docs/feature/a/concepts.json', importer = 'docs/feature/b/concepts.json';
+  const root = fixture(), target = 'docs/feature/a/concepts.md', importer = 'docs/feature/b/concepts.md';
   try {
-    const original = catalog([concept('item', { en: { preferred: 'Item' } })]);
+    const original = catalog([concept('item', 'Item')]);
     const created = withRepo(root, repo => setConcepts(repo, original, null, false, target));
     write(root, importer, '{ broken');
     assert.throws(() => withRepo(root, repo => setConcepts(repo, catalog([]), created.digest, false, target)), { code: 'ConceptReferencesUnknown' });
-    const additive = withRepo(root, repo => setConcepts(repo, catalog([...original.concepts, concept('extra', { en: { preferred: 'Extra' } })]), created.digest, true, target));
+    const additive = withRepo(root, repo => setConcepts(repo, catalog([concept('item', 'Item'), concept('extra', 'Extra')]), created.digest, true, target));
     assert.equal(additive.dryRun, true);
     assert.equal(readFileSync(join(root, target), 'utf8'), created.source);
     write(root, importer, json(catalog([], [`${target}#item`])));
@@ -181,20 +184,20 @@ test('catalog publication protects imports, malformed dependency uncertainty, CA
 test('init creates only the exact empty global catalog and preserves a pre-existing invalid owner', () => Effect.runPromise(Effect.sync(() => {
   const fresh = fixture();
   try {
-    assert.equal(readFileSync(join(fresh, 'docs/concepts.json'), 'utf8'), '{\n  "format": "concord.concepts/v1",\n  "concepts": []\n}\n');
-    assert.throws(() => withRepo(fresh, repo => repo.publish('set-markdown', [{ path: 'docs/concepts.json', before: repo.read('docs/concepts.json')!, after: json(catalog([])) }])), { code: 'InvalidChange' });
+    assert.equal(readFileSync(join(fresh, 'docs/concepts.md'), 'utf8'), EMPTY_CONCEPT_CATALOG);
+    assert.throws(() => withRepo(fresh, repo => repo.publish('set-markdown', [{ path: 'docs/concepts.md', before: repo.read('docs/concepts.md')!, after: json(catalog([])) }])), { code: 'ManagedConceptCatalog' });
   } finally { rmSync(fresh, { recursive: true, force: true }); }
   const root = mkdtempSync(join(tmpdir(), 'concord-init-existing-catalog-'));
   try {
     execFileSync('git', ['init', '-q', root]);
-    write(root, 'docs/concepts.json', '{ broken');
+    write(root, 'docs/concepts.md', '{ broken');
     const repo = new LocalRepository(root, { initialize: true });
     try {
       const receipt = initialize(repo, false, { testRoots: [] });
-      assert(receipt.preservedPaths.includes('docs/concepts.json'));
-      assert(!receipt.createdPaths.includes('docs/concepts.json'));
+      assert(receipt.preservedPaths.includes('docs/concepts.md'));
+      assert(!receipt.createdPaths.includes('docs/concepts.md'));
     } finally { repo.close(); }
-    assert.equal(readFileSync(join(root, 'docs/concepts.json'), 'utf8'), '{ broken');
+    assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), '{ broken');
   } finally { rmSync(root, { recursive: true, force: true }); }
   const forgedRoot = mkdtempSync(join(tmpdir(), 'concord-init-forged-catalog-'));
   try {
@@ -202,25 +205,25 @@ test('init creates only the exact empty global catalog and preserves a pre-exist
     const initial = new LocalRepository(forgedRoot, { initialize: true, dryRun: true });
     const preview = (() => { try { return initialize(initial, true, { testRoots: [] }); } finally { initial.close(); } })();
     const configSource = renderTypeScriptConfig(preview.config);
-    const after = json(catalog([concept('forged', { en: { preferred: 'Forged' } })]));
+    const after = json(catalog([concept('forged', 'Forged')]));
     const journalPath = join(forgedRoot, '.git/concord/journal.json');
     mkdirSync(join(forgedRoot, '.git/concord'), { recursive: true });
     writeFileSync(journalPath, json({ format: 'concord.journal', root: forgedRoot, privateDir: join(forgedRoot, '.git/concord'), projectId: preview.config.projectId, operation: 'init', phase: 'prepared', directories: ['docs'], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') }, changes: [
       { path: 'concord.config.ts', before: null, after: configSource, beforeDigest: null, afterDigest: digest(configSource), mode: 0o644 },
-      { path: 'docs/concepts.json', before: null, after, beforeDigest: null, afterDigest: digest(after), mode: 0o644 },
+      { path: 'docs/concepts.md', before: null, after, beforeDigest: null, afterDigest: digest(after), mode: 0o644 },
     ] }));
     assert.throws(() => new LocalRepository(forgedRoot, { recover: true }), { code: 'RecoveryConflict' });
     assert.equal(existsSync(journalPath), true);
-    assert.equal(existsSync(join(forgedRoot, 'docs/concepts.json')), false);
+    assert.equal(existsSync(join(forgedRoot, 'docs/concepts.md')), false);
   } finally { rmSync(forgedRoot, { recursive: true, force: true }); }
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('persisted catalog dependency guard rejects forged membership and changed importers during recovery', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), target = 'docs/feature/a/concepts.json', importer = 'docs/feature/b/concepts.json';
+  const root = fixture(), target = 'docs/feature/a/concepts.md', importer = 'docs/feature/b/concepts.md';
   const journalPath = join(root, '.git/concord/journal.json');
   try {
-    const before = '{ broken', after = json(catalog([concept('item', { en: { preferred: 'Item' } })]));
+    const before = '{ broken', after = json(catalog([concept('item', 'Item')]));
     write(root, target, before);
     write(root, importer, json(catalog([], [`${target}#item`])));
     const config = readFileSync(join(root, 'concord.config.ts'), 'utf8');
@@ -236,10 +239,10 @@ test('persisted catalog dependency guard rejects forged membership and changed i
     rmSync(journalPath);
     write(root, importer, json(catalog([], [`${target}#item`])));
     writeFileSync(journalPath, json(base));
-    write(root, 'docs/feature/c/concepts.json', json(catalog([])));
+    write(root, 'docs/feature/c/concepts.md', json(catalog([])));
     assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
     rmSync(journalPath);
-    rmSync(join(root, 'docs/feature/c/concepts.json'));
+    rmSync(join(root, 'docs/feature/c/concepts.md'));
     writeFileSync(journalPath, json(base));
     rmSync(join(root, importer));
     assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
@@ -257,7 +260,7 @@ test('persisted catalog dependency guard rejects forged membership and changed i
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('explicit v1 migration uses public CLI catalog then policy CAS; old prose remains unchanged', () => Effect.runPromise(Effect.sync(() => {
+test('explicit v1 migration uses public CLI Markdown catalog then policy CAS', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture(), cli = join(process.cwd(), 'dist/entry.js');
   try {
     const old = json({ format: 'concord.writing/v1', roots: ['docs'], bannedTerms: [], concepts: 'docs/concepts.md' });
@@ -269,14 +272,14 @@ test('explicit v1 migration uses public CLI catalog then policy CAS; old prose r
     assert.equal(oldShow.state, 'invalid');
     assert.equal(oldShow.source, old);
     assert.match(call('docs', 'check').stderr, /WritingMigrationRequired/u);
-    const catalogBody = join(root, 'catalog.json'), policyBody = join(root, 'policy.json');
-    writeFileSync(catalogBody, json(catalog([concept('term', { en: { preferred: 'Term' } })])));
+    const catalogBody = join(root, 'catalog.md'), policyBody = join(root, 'policy.json');
+    writeFileSync(catalogBody, json(catalog([concept('term', 'Term')])));
     writeFileSync(policyBody, json(policy()));
     const catalogShow = JSON.parse(call('concepts', 'show').stdout) as { digest: string };
     assert.equal(call('concepts', 'set', '--body', catalogBody, '--expected-digest', catalogShow.digest).status, 0);
     assert.equal(call('writing', 'set', '--body', policyBody, '--expected-digest', oldShow.digest).status, 0);
     assert.equal(call('docs', 'check').status, 0);
-    assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), prose);
-    assert.equal(existsSync(join(root, 'docs/concepts.json')), true);
+    assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), catalog([concept('term', 'Term')]));
+    assert.equal(existsSync(join(root, 'docs/concepts.json')), false);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

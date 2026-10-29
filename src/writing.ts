@@ -91,15 +91,16 @@ const sourceLine = (text: string, offset: number): number => text.slice(0, offse
 const contextLine = (text: string, offset: number): string => text.split('\n')[sourceLine(text, offset)]?.trim().slice(0, 240) ?? '';
 function bansFor(file: string, owners: readonly PolicyOwner[], concepts: ReturnType<typeof effectiveConcepts>): Ban[] {
   const bans: Ban[] = owners.flatMap(owner => owner.policy.bannedTerms.map((ban: BannedTerm, index) => ({ ...ban, source: { path: owner.path, entry: index + 1 }, ownerScope: owner.scope })));
-  for (const item of concepts) for (const [language, names] of Object.entries(item.concept.names)) for (const term of names.deprecated ?? []) bans.push({ term, use: names.preferred, why: `${item.reference} (${language})`, source: { path: item.path, ref: item.reference, column: language }, ownerScope: item.scope, conceptRef: item.reference });
+  for (const item of concepts) for (const term of item.concept.deprecated) bans.push({ term, use: item.concept.term, why: item.reference, source: { path: item.path, ref: item.reference }, ownerScope: item.scope, conceptRef: item.reference });
   return bans.filter(ban => (!ban.roots || ban.roots.some(root => under(file, root))) && !ban.exempt?.some(root => under(file, root)));
 }
 function activeSpellingsFor(concepts: ReturnType<typeof effectiveConcepts>) {
   const active = new Map<string, { reference: string; source: NonNullable<WritingFinding['source']> }[]>();
-  for (const item of concepts) for (const [language, names] of Object.entries(item.concept.names)) for (const spelling of [names.preferred, ...(names.aliases ?? [])]) {
+  for (const item of concepts) {
+    const spelling = item.concept.term;
     const key = spellingKey(spelling);
     const owners = active.get(key) ?? [];
-    if (!owners.some(owner => owner.reference === item.reference)) owners.push({ reference: item.reference, source: { path: item.path, ref: item.reference, column: language } });
+    if (!owners.some(owner => owner.reference === item.reference)) owners.push({ reference: item.reference, source: { path: item.path, ref: item.reference } });
     active.set(key, owners);
   }
   return active;
@@ -151,8 +152,6 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const catalogPaths = discovered(repo, 'catalog', docsMembers);
     const policySources = new Map(policyPaths.map(path => [path, read(path)]));
     const sourceCatalogs = new Map(catalogPaths.map(path => [path, read(path)]));
-    const catalogs = analyzeCatalogs(sourceCatalogs);
-    if (catalogs.diagnostics.length) throw new ConcordError(catalogs.diagnostics[0]!.code, catalogs.diagnostics.map(item => item.message).join('; '), catalogs.diagnostics);
     let mode: 'project' | 'managed' | 'standalone' = 'project';
     let selection: readonly string[];
     let activePolicies: PolicyOwner[] = [];
@@ -172,7 +171,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
         activePolicies.push({ path, scope: scopeOf(path, 'policy'), policy });
       }
       if (activePolicies.length === 0 && catalogPaths.length === 0) throw new ConcordError('WritingPolicyNotFound', 'No writing policy or concept catalog was found');
-      if (selectedPath === undefined) selection = [...activePolicies.flatMap(rootsOf), ...catalogPaths.filter(path => !policyPaths.includes(path.replace(/concepts\.json$/u, 'concord-writing.json'))).map(path => scopeOf(path, 'catalog'))];
+      if (selectedPath === undefined) selection = [...activePolicies.flatMap(rootsOf), ...catalogPaths.filter(path => !policyPaths.includes(path.replace(/concepts\.md$/u, 'concord-writing.json'))).map(path => scopeOf(path, 'catalog'))];
       else {
       canonicalPath(selectedPath); repo.absolute(selectedPath);
       const managed = activePolicies.find(owner => owner.path === selectedPath);
@@ -207,6 +206,10 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const cached = persistentCache ? readWritingFindings(repo, cacheDigest) : undefined;
     const findings: WritingFinding[] = cached ?? [];
     if (cached === undefined) {
+      // The cache key binds every catalog byte and the parser revision. Reparse
+      // changed or uncached sources; exact validated hits need no Markdown parser.
+      const catalogs = analyzeCatalogs(sourceCatalogs);
+      if (catalogs.diagnostics.length) throw new ConcordError(catalogs.diagnostics[0]!.code, catalogs.diagnostics.map(item => item.message).join('; '), catalogs.diagnostics);
       const used = new Set<string>(), eligible = new Set<string>();
       for (const [file, authored] of documents) {
         const source = withoutStepMarkers(file, authored);
@@ -218,7 +221,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
         for (const item of concepts) if (inherited(owners, 'unusedConcepts') === true) eligible.add(item.reference);
         for (const block of parsed.blocks) {
           checkTerms(file, block.line, block.text, bans, active, findings);
-          for (const item of concepts) if (!used.has(item.reference) && Object.values(item.concept.names).some(names => [names.preferred, ...(names.aliases ?? [])].some(spelling => spellingPositions(block.readable, spelling).length))) used.add(item.reference);
+          for (const item of concepts) if (!used.has(item.reference) && !sourceCatalogs.has(file) && spellingPositions(block.readable, item.concept.term).length > 0) used.add(item.reference);
           if (!block.paragraph) continue;
           const legacySource = (key: 'paragraphLength' | 'sentenceLength'): PolicySource | undefined => { const owner = [...owners].reverse().find(owner => owner.policy[key] !== undefined); return owner ? { path: owner.path, pointer: `/${key}` } : undefined; };
           const paragraphLength = inherited(owners, 'paragraphLength');

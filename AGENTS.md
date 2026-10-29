@@ -9,7 +9,7 @@ Keep contracts, executable test definitions, and engineering memories in their o
 
 Contract prose declares intended behavior, constraints, and acceptance; product workflows belong in contracts. Keep development logs, investigation history, and delivery progress in Memory. Use Concord tools for Memory and Issue indexing, recall, reading, creation, author updates, relations, and lifecycle changes; do not directly read or edit their owner files or maintain a manual INDEX. Read `concord --skill memory` or `concord --skill feedback` for the current workflow.
 
-Structured terminology and writing policy are owned by directory-scoped `concepts.json` and `concord-writing.json` under docs. Use Concord tools to maintain these JSON owners; derive the project glossary and references instead of duplicating definitions in Markdown or a second index. Markdown explains concepts and examples. Only deprecated names generate terminology bans; permitted aliases do not.
+Structured terminology and writing policy are owned by directory-scoped `concepts.md` and `concord-writing.json` under docs. Use Concord tools to maintain these owners; derive the project glossary and references instead of duplicating definitions in Markdown or a second index. Each concept has one term, with its definition and explanation together in concepts.md. Only deprecated names generate terminology bans.
 
 Effect dependencies stay on the exact pinned revision. Read the installed `effect/AGENTS.md` before using its APIs. Use strict Schema decoding at untrusted boundaries and named failures.
 

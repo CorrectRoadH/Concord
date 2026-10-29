@@ -83,7 +83,7 @@ function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(valu
     return [...projectDocs, ...documents, ...feedback, ...cases, ...codes].slice(0, 30);
   }, [query, snapshot]);
   const go = (href: string) => { onOpenChange(false); setQuery(''); navigate(href); };
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="search-dialog"><DialogHeader><DialogTitle>全局搜索</DialogTitle><DialogDescription>搜索项目文档、契约、Feature 内的 Use Case、测试与实现声明。</DialogDescription></DialogHeader><div className="search-box"><Search size={18} /><Input aria-label="搜索工作区" autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="名称、ID 或路径…" /></div><div className="search-results">{query && results.length === 0 && <p className="muted">{conclusive ? '没有匹配内容。' : '当前代次未显示匹配项；投影可能不完整。'}</p>}{results.map(item => <button key={item.key} onClick={() => go(item.href)}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="search-dialog"><DialogHeader><DialogTitle>全局搜索</DialogTitle><DialogDescription>搜索项目文档、Spec、Feature 内的 Use Case、测试与实现声明。</DialogDescription></DialogHeader><div className="search-box"><Search size={18} /><Input aria-label="搜索工作区" autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="名称、ID 或路径…" /></div><div className="search-results">{query && results.length === 0 && <p className="muted">{conclusive ? '没有匹配内容。' : '当前代次未显示匹配项；投影可能不完整。'}</p>}{results.map(item => <button key={item.key} onClick={() => go(item.href)}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div></DialogContent></Dialog>;
 }
 
 // @concord-code

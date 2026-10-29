@@ -39,18 +39,18 @@ Local issues require no external account or connection. GitHub and Linear are op
 
 ## Scoped concepts and writing
 
-Use \`concord concepts index --json\` for a derived project glossary. The global catalog is docs/concepts.json; each Feature, Engineering, or other docs subdirectory may own its own concepts.json and concord-writing.json. The containing directory defines local scope.
+Use \`concord concepts index --json\` for a derived project glossary. The global catalog is docs/concepts.md; each Feature, Engineering, or other docs subdirectory may own its own concepts.md and concord-writing.json. The containing directory defines local scope.
 
-Keep definitions, stable IDs, preferred names, permitted aliases, and deprecated names in JSON; use Markdown for explanation and examples. Only deprecated names generate terminology bans.
+Keep each stable ID, its single term, definition paragraph and explanation together in concepts.md. Use optional imports and deprecated YAML frontmatter. Only deprecated names generate terminology bans.
 
-Use concepts and writing show/set commands or the Web workbench to maintain each owner with its current digest. Do not duplicate definitions into a global aggregate or edit managed JSON around these guards.
+Use concepts and writing show/set commands or the Web workbench to maintain each owner with its current digest. Do not duplicate definitions into a global aggregate or edit managed owners around these guards.
 
-Writing v2 composes ancestor policy within scope. Check saved inputs with \`concord docs check --json\`. Migrate writing/v1 only after author review. Never convert permitted aliases into banned names.
+Writing v3 composes ancestor policy within scope. Check saved inputs with \`concord docs check --json\`. Migrate writing/v1 only after author review. Only explicitly deprecated names are banned.
 
 ## Complete setup
 
 Init installs every category, the documentation entry point, and the complete [template reference set](_template/README.md).
-Init supplies missing concepts.md and architecture.md outlines, an empty global concepts.json, and the global writing preset. Existing root documents, catalogs, and policies retain their bytes.
+Init supplies the missing architecture.md outline, an empty global concepts.md catalog, and the global writing preset. Existing root documents, catalogs, and policies retain their bytes.
 
 The preset limits sentences to 140 characters and paragraphs to 320. It checks vague wording and unused concepts in Markdown and MDX.
 

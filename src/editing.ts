@@ -1,3 +1,4 @@
+import { assertGenericConceptWrite } from './writing-scopes.js';
 import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
 import { documentRoots, inspectDocumentRecords, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
@@ -185,6 +186,7 @@ export function setMetadata(repo: LocalRepository, reference: string, fields: { 
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
+  assertGenericConceptWrite(path);
   const page = inspectDocumentFile(repo, path);
   if (page === undefined) throw new ConcordError('FileNotFound', 'Markdown editing is limited to the Concord document and supporting-page inventory');
   if (page.documentPath === path) return setAuthor(repo, path, body, expectedDigest, dryRun);

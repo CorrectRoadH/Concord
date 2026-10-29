@@ -69,7 +69,7 @@ import { contractIdentities, ImplementationPanel, TestingPanel } from './operati
 
 const descriptions: Record<string, string> = {
   feature: "当前交付目标；Use Case 只在所属 Feature 内维护。",
-  engineering: "测试、构建与维护机制的工程契约。",
+  engineering: "测试、构建与维护机制的工程 Spec。",
   roadmap: "尚未采用的方向与演进计划。",
   design: "备选方案、约束和已作出的技术裁决。",
   research: "按主题目录自由组织研究正文与资料。",
@@ -836,7 +836,7 @@ function DocumentFiles({
             <DialogHeader>
               <DialogTitle>添加支持页面</DialogTitle>
               <DialogDescription>
-                页面属于当前文档，不会创建新的顶级契约。
+                页面属于当前文档，不会创建新的顶级 Spec。
               </DialogDescription>
             </DialogHeader>
             <div className="form-grid">
@@ -1136,7 +1136,7 @@ function LifecycleActions({ document }: { document: WorkspaceDocument }) {
               <><Field label="重开理由"><Textarea aria-label="Memory 重开理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "memory.reopen", id: document.path, reason }, "Memory 已重开。")}>重新打开</Button></>
             )}
             <Field label="目标或替代 Memory"><Input aria-label="Memory 目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field>
-            <div className="button-row"><Button variant="outline" onClick={() => invoke({ action: "memory.promote", id: document.path, target }, "Memory 已提升。")}>提升到契约</Button><Button variant="outline" onClick={() => invoke({ action: "memory.supersede", id: document.path, replacement: target, reason }, "Memory 已被替代。")}>标记替代</Button><Button variant="outline" onClick={() => invoke({ action: "memory.retire", id: document.path, target, reason }, "关联已退役。")}>退役关联</Button></div>
+            <div className="button-row"><Button variant="outline" onClick={() => invoke({ action: "memory.promote", id: document.path, target }, "Memory 已提升。")}>提升到 Spec</Button><Button variant="outline" onClick={() => invoke({ action: "memory.supersede", id: document.path, replacement: target, reason }, "Memory 已被替代。")}>标记替代</Button><Button variant="outline" onClick={() => invoke({ action: "memory.retire", id: document.path, target, reason }, "关联已退役。")}>退役关联</Button></div>
             <datalist id="evidence-ids">{snapshot.evidenceIds.map((id) => <option key={id} value={id} />)}</datalist>
           </>
         )}

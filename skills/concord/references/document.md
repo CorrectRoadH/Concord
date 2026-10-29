@@ -83,15 +83,19 @@ concord author set docs/feature/login/README.md --body ./login.md --expected-dig
 
 ## 术语与写作政策
 
-用 `concepts index/show/set` 和 `writing index/show/set/check` 发现、读取和管理 JSON owner，编辑先取得最新 digest。全局定义在 docs/concepts.json；Feature、Engineering 或其它 docs 子目录可分别放 concepts.json 和 concord-writing.json。精确文件名与目录决定 scope，docs/_template 排除，局部 roots 不得越界。
+用 `concepts index/show/set` 和 `writing index/show/set/check` 发现、读取和管理术语与写作 owner，编辑先取得最新 digest。全局定义在 docs/concepts.md；Feature、Engineering 或其它 docs 子目录可分别放 concepts.md 和 concord-writing.json。精确文件名与目录决定 scope，docs/_template 排除，局部 roots 不得越界。
 
-concepts 使用 concord.concepts/v1：稳定局部 id、definition、多语言 preferred/aliases/deprecated 和可选直接 imports。允许别名不成为禁词，只有明确 deprecated 才派生规则。Markdown 保留解释和案例；全项目术语表只读汇总，不写第二份词库。删除或改名被引用的概念会被拒绝。
+concepts.md 不设版本字段。正文恰好一个一级标题，位于所有概念之前；每个二级标题为 `term {#id}`，term 是唯一纯文本写法，后面的第一个段落是定义，其余是解释。可选 YAML frontmatter 严格只接受直接 imports 和按本文件 ID 分组的 deprecated；只有弃用名派生禁词并建议改为 term。catalog 整份不计为使用，但仍参与写作检查；解释中提及弃用名时放在行内代码里。全项目术语表只读汇总，不写第二份词库。
+
+`concepts show` 返回 source、digest、解析结果及诊断，区分 missing/valid/invalid；`concepts set --path docs/feature/example/concepts.md --body /tmp/concepts.md --expected-digest <digest>` 按提交的完整 Markdown 字节保存，`--body -` 读取 stdin；新建时摘要为 null。action `concepts.set` 接受 `{ path, source, expectedDigest }`。结构错误为 InvalidConceptCatalog，消息带行号；导入悬空为 DanglingConceptImport，有效范围同名为 AmbiguousConceptName。
+
+被其它 catalog imports 引用的定义不能删除或改名。正文可以链接到 concepts.md#id；缺失 ID 由 check 报告 relation 类 AnchorNotFound，正文链接不阻止写入。author set、page set、page add 与 Web 通用保存遇到 catalog 路径返回 ManagedConceptCatalog，改用 concepts set。Concord 只识别 concepts.md；concepts.json 不读取、不检测、不提示、不提供迁移，作者手动按当前结构改写。
 
 政策使用 concord.writing/v3。根集合用于选文件，祖先规则仍按有效范围应用；省略阈值表示继承，null 表示清除，布尔 false 表示关闭。同名概念和规则冲突保留全部来源，不默默覆盖。作用域、语料与恢复的精确定义见随包 docs/feature/documentation-quality/policy.md。
 
 `concord docs check --json` 自动发现政策与概念；`--rules <path>` 选择受管政策的扫描根，或使用外部只读 profile。报告说明实际范围与输入快照。发现问题退出 1，逐处核对上下文，不机械全仓替换；这不是测试覆盖率或实现证明。
 
-旧 writing/v1 的普通检查返回 WritingMigrationRequired。先 show 取得原文与摘要，作者审核并用 concepts.set 保存 JSON，再用 writing.set 和旧摘要显式替换为 v2。概念编辑不因仍存在旧政策而被阻断，中间阶段不宣称检查通过。不要从旧表的名字编造定义；有旧 journal 时先用匹配的旧 CLI 恢复，不能绕过新授权边界。
+旧 writing/v1 的普通检查返回 WritingMigrationRequired。先 show 取得原文与摘要，作者审核并用 concepts.set 保存 concepts.md，再用 writing.set 和旧摘要显式替换为 v3。概念编辑不因仍存在旧政策而被阻断，中间阶段不宣称检查通过。不要从旧表的名字编造定义；有旧 journal 时先用匹配的旧 CLI 恢复，不能绕过新授权边界。
 
 文档 ID 与专题名允许 Unicode 字母、组合标记和数字，可用单连字符分隔；例如 `concord use-case create 扩展NPC动作 --feature npc --title "扩展 NPC 动作"` 和 `concord feature page add npc 认知与执行`。名称保留原样，不翻译或自动更改大小写；禁止路径分隔符、空白和路径穿越。固定入口 README.md、architecture.md 等继续保留。
 

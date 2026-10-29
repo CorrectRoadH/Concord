@@ -75,7 +75,7 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
     try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
-    writeFileSync(join(root, 'docs/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'resolve', definition: '处理问题', names: { en: { preferred: 'Resolve', aliases: ['Solve'], deprecated: ['Fix'] } } }] }));
+    writeFileSync(join(root, 'docs/concepts.md'), "---\ndeprecated:\n  resolve:\n    - Fix\n---\n\n# Terms\n\n## Resolve {#resolve}\n\n处理问题\n");
     writeFileSync(join(root, 'docs/sample.md'), '# Old writing\n\nOld word.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
 
@@ -96,8 +96,8 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
     await expect.poll(() => JSON.parse(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')).bannedTerms.at(-1)?.term).toBe('Old');
     await expect(first.getByText('写作规则已保存。')).toBeVisible();
     await first.getByRole('link', { name: '术语', exact: true }).click();
-    await expect(first.getByLabel('术语定义 1')).toHaveValue('处理问题');
-    await expect(first.getByLabel('术语 1 en 弃用名称')).toHaveValue('Fix');
+    await expect(first.getByRole('textbox', { name: '源码原文' })).toContainText('处理问题');
+    await expect(first.getByRole('textbox', { name: '源码原文' })).toContainText('Fix');
     await first.getByRole('link', { name: '写作', exact: true }).click();
     await first.getByRole('button', { name: '检查已保存文档' }).click();
     await expect(first.getByText(/某次快照的检查结果/)).toBeVisible();

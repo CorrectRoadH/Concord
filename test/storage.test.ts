@@ -28,7 +28,7 @@ test('project outlines preview without writes and recover using exact document p
   assert.throws(() => repo!.publish('out-of-scope', [{ path: 'arbitrary.md', before: null, after: '# No\n' }]), { code: 'InvalidChange' });
   const projectId = repo.config.projectId;
   const frozen = { kind: 'documents', configPath: repo.configSnapshot.path, configSource: repo.configSnapshot.source, configDigest: repo.configSnapshot.digest };
-  const changes = ['docs/concepts.md', 'docs/architecture.md'].map(path => {
+  const changes = ['docs/concord.md', 'docs/architecture.md'].map(path => {
    const before = repo!.read(path)!; const after = '# Interrupted outline\n';
    return { path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 420 };
   });

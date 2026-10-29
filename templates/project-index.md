@@ -3,7 +3,7 @@
 Start with [Concepts](concepts.md) for shared language and
 [Architecture](architecture.md) for the system's boundaries and main flow.
 
-Structured global terminology lives in `docs/concepts.json`; local definitions
+Structured global terminology lives in `docs/concepts.md`; local definitions
 and writing policies live in their own documentation directories. Use Concord's
 concepts index or Web glossary for an automatically aggregated view with sources.
 

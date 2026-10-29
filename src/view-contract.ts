@@ -17,7 +17,6 @@ import { MEMORY_RELATION_KINDS, MemorySourceSchema, ProjectSchema } from './shar
 import type { TraceEdge } from './trace.js';
 import { FeedbackConnectionsSchema, type FeedbackAvailability, type FeedbackItem, type FeedbackTriage, type RemoteFeedback } from './feedback-schema.js';
 import { WritingPolicySchema } from './writing-schema.js';
-import { ConceptCatalogSchema } from './concepts-schema.js';
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/architecture.md
@@ -224,7 +223,7 @@ export const ViewActionSchema = Schema.Union([
   Schema.Struct({ action: Schema.Literal('writing.check'), path: Schema.optional(Text) }),
   Schema.Struct({ action: Schema.Literal('concepts.index') }),
   Schema.Struct({ action: Schema.Literal('concepts.show'), path: Schema.optional(Text) }),
-  Schema.Struct({ action: Schema.Literal('concepts.set'), path: Schema.optional(Text), catalog: ConceptCatalogSchema, expectedDigest: Schema.NullOr(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('concepts.set'), path: Schema.optional(Text), source: Schema.String, expectedDigest: Schema.NullOr(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('config.set'), config: ProjectInputSchema, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('constitution.initialize'), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('constitution.adopt'), body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
