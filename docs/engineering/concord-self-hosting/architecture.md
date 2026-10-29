@@ -74,7 +74,7 @@ flowchart TD
 `scripts/perf/` 中的模块按职责划分：
 
 - `scenario.ts` 定义场景的严格类型、`defineBenchmarks` 与场景执行器；执行器只通过公开 CLI、HTTP 与文件系统操作消费者。
-- `budgets.ts` 扫描 `docs/` 下的 Feature 与 Use Case owner，解析 `性能预算` 与 `刷新上限` 标题下的预算表，返回 owner、标题、场景 ID 与阈值；解析函数不访问文件系统，便于测试直接喂入 owner 正文。
+- `budgets.ts` 扫描 `docs/feature/` 下的页面，解析 `性能预算` 与 `刷新上限` 标题下的预算表，返回 owner、标题、场景 ID 与阈值；解析函数不访问文件系统，便于测试直接喂入 owner 正文。
 - `selection.ts` 把场景 ID、feature-id 与 `--changed` 的改动文件映射为场景集合；文件到 Feature 的映射读取当前构建 CLI 的代码归属声明输出，不自行解析注释。
 - `baseline.ts` 准备、校验、复用与淘汰基线产物，失败使用具名 `PerfError`。
 - `stats.ts` 只做 p50、有效性、回退和上限判定，是纯函数。
