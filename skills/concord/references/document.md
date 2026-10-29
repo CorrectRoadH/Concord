@@ -30,7 +30,7 @@ Research 使用目录 README，默认只有标题，不预设章节、日期、�
 | 一个目标怎样完成 | Use Case | 用户目标、起始状态、带 `{#id}` 的完整路径、结果、Spec 来源 |
 | 命令或 API 怎样调用、返回什么 | cli、library | 完整调用、人读输出、`--json` 输出、退出码、具名错误、最小示例 |
 | 它是怎么实现的 | architecture、lifecycle | 实体归属、数据流、不变量、失败阶段、资源生命周期 |
-| 为什么这样选 | Design | 目标、约束、候选与裁决 |
+| 为什么这样选 | Design | 目标、约束、候选与裁决；裁决后只作记录 |
 | 排障经过、根因、经验 | Memory | `concord memory add` |
 | 待调查的观察 | Issue | `concord issue create` |
 
@@ -56,6 +56,8 @@ concord feature page set login cli --body ./login-cli.md --expected-digest 'sha2
 concord feature page add login migration
 concord design page show session-store architecture --plan sqlite
 ```
+
+了解现行行为只读 Feature、Use Case、cli、library、architecture 与 engineering 页；Design 只在重新审视某项决策时读取。`design decide` 之后，把选中候选中仍适用的规则写入这些页面，Spec 只把 Design 的 README 或 DECISION 链接为依据；链接到候选页、CASES、GOALS 或 LIMITS 时 `concord check` 报告 `SpecDependsOnDesignRecord`。
 
 `page set` 必须使用 `page show --json` 返回的最新整文件 digest；Design candidate 用 `--plan <alternative>`。正式裁决与采用分别由具名命令完成：
 
@@ -104,7 +106,7 @@ action `concepts.set` 接受 `{ path, source, expectedDigest }`。结构错误�
 文档 ID 与专题名允许 Unicode 字母、组合标记和数字，可用单连字符分隔；例如 `concord use-case create 扩展NPC动作 --feature npc --title "扩展 NPC 动作"` 和 `concord feature page add npc 认知与执行`。名称保留原样，不翻译或自动更改大小写；禁止路径分隔符、空白和路径穿越。固定入口 README.md、architecture.md 等继续保留。
 
 
-受控规则在 `controlled` 中按叶子合成，null 清除子树，每种语言的词表和 allowIn 整表替换。数值开启长度检查；词法开关默认 false。程序性动作词开关需要有效非空 verbs 表（auto 要求 zh/en）；英文被动候选需要显式 participles。字符长度与受控 token 长度可同时生效。精确抽取、计数、语言与资源上限见随包 docs/design/controlled-writing/plans/policy-rules/architecture.md。
+受控规则在 `controlled` 中按叶子合成，null 清除子树，每种语言的词表和 allowIn 整表替换。数值开启长度检查；词法开关默认 false。程序性动作词开关需要有效非空 verbs 表（auto 要求 zh/en）；英文被动候选需要显式 participles。字符长度与受控 token 长度可同时生效。精确抽取、计数、语言与资源上限见随包 docs/feature/documentation-quality/policy.md 的「受控写作规则」与「写作 JSON 结果」。
 
 ```sh
 concord writing migrate --path docs/concord-writing.json --dry-run

@@ -41,6 +41,8 @@ kind: engineering
 
 资源归属、并发、安装共享与失败诊断见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。
 
+构建用固定版本的原生 tsc 做完整类型检查，并输出声明与 sourcemap，构建与运行时使用同一编译器版本。为保持启动性能，构建只改写生成的 JS：把 Effect namespace import 改为窄化导入，每处替换保持原换行数。sourcemap 先解码为绝对坐标，删除被改写行的映射后重新编码，保留其余映射。不改写源文件，不跳过声明检查（[决策依据](../../design/typescript-native/DECISION.md)）。
+
 ### 原生绑定复用
 
 `vp build` 每次清空 `dist`，原生产物按以下顺序取得，第一项命中即停止。每一项都经 `--prebuilt` 的身份校验：target、ABI、HawDB revision、源码摘要、锁文件摘要、二进制与许可证摘要全部一致才使用。

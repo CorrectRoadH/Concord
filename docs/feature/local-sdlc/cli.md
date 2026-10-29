@@ -206,7 +206,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 - macOS 低于 11 时返回 `UnsupportedHost`。
 - 固定版本的 TypeScript 原生编译器不可用时，相关解析返回 `TypeScriptUnavailable`。编译器作用域违反同步生命周期约束时返回 `TypeScriptScopeViolation`。
 
-路径检查的规则见[读取路径安全检查的成本边界](../../design/path-safety-cost/plans/anchored-root/architecture.md)。
+路径检查的实现见[路径安全](architecture.md#路径安全)。
 
 ## 依赖分析
 

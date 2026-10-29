@@ -34,6 +34,12 @@ Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal
 
 各 Use Case 均有带 `@use-case` 标记的测试。`concord check` 与 `trace check` 必须验证引用完整性；定向 `trace show` 与 `review render` 必须能从当前 owner 分别反查代码声明和测试。代码声明表示实现关联，不证明 Spec 完成。
 
+局部命令只依赖自己的输入（[决策依据](../../design/operation-boundaries/DECISION.md)）：
+
+- 一个 Feature 的 metadata 损坏时，Memory 的 list、index、recall、add 与 edit 照常工作，为另一 Feature 生成注释照常工作，全局 check 报告该损坏。
+- 目标 owner、其归属链或显式 regression 损坏时，局部命令失败，不退回祖先 owner。
+- Memory 来源含无法解析的记录时，该来源的集合查询与短 ID 查询失败；另一 canonical path 的精确读取按必要依赖验证。
+
 - [通过工具检索与维护工程知识](use-case/recall-and-maintain-memory.md)
 
 ## 性能预算

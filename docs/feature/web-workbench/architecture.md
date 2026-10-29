@@ -42,7 +42,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 刷新开始与写入前都重算身份，不一致时丢弃候选并立即以新身份刷新，不记为失败。安装身份在进程内首次计算后不变，配置字节每次重读。
 
-一次刷新最多 60 秒，漂移时不重扫，首次即可发布 `consistent:false` 代次。`complete = consistent && 扫描完整`，`unknownRelations = !complete`。`buildTrace` 异常仍能形成安全结构与具名 finding 时发布不完整代次，无结构时不发布。已有一致代次不被不一致候选替换，只更新 `lastAttempt`，不算失败；新的一致代次即使含 finding 也替换旧代次；没有一致代次时，较新的不一致代次替换较旧的。
+一次刷新最多 60 秒，漂移时不重扫，首次即可发布 `consistent:false` 代次。`complete = consistent && 扫描完整`，`unknownRelations = !complete`。`buildTrace` 异常仍能形成安全结构与具名 finding 时发布不完整代次，无结构时不发布。代次替换遵守[替换规则](../local-data-engine/architecture.md#替换规则)：新的一致代次即使含 finding 也替换旧代次，不一致候选不替换已有一致代次，只更新 `lastAttempt`。
 
 ### 持久记录
 

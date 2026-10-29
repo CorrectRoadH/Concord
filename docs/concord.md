@@ -45,7 +45,9 @@ concord review render local-sdlc
 - [Memory](../memory/README.md)：Problem、Decision 与可复用经验及其历史。
 - [Issue](issues/README.md)：待调查的本地观察。
 
-`docs/` 只写声明：目标、行为、约束、使用方法与验收条件，产品流程属于 Spec。开发日志、排障经过与实施进度归 Memory，待调查观察归 Issue。模板提供写作提示，不代表需求完成或证据。
+`docs/` 只写声明：目标、行为、约束、使用方法与验收条件，产品流程属于 Spec。开发日志、排障经过与实施进度归 Memory，待调查观察归 Issue。模板提供写作提示，不代表需求完成或证据。行为页与实现页的分工、关联范围的选择写在宪法 [C-011](constitution.md#c-011) 与 [C-012](constitution.md#c-012)，接入项目统一遵守（[决策依据](design/contract-writing/DECISION.md)）。
+
+现行行为只读 Feature、Use Case、architecture 与 engineering 页。已裁决的 Design 是决策记录：裁决时把仍适用的规则写入这些页面，此后只在这里维护；Design 只在重新审视某项决策时读取（[C-012-7](constitution.md#c-012-7)）。
 
 ## 完整初始化
 

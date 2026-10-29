@@ -8,9 +8,9 @@ Concord 把 Spec、测试归属、Memory 与审阅闭环做成可安装到任意
 
 ## 初始化与项目治理
 
-新项目生成静态 `concord.config.ts`。存在 `concord.json` 或双配置时返回 `ProjectMigrationRequired`，不执行 TS 模块，不提供格式转换入口。配置快照拥有原文前像、路径与摘要，写入、恢复与证据使用同一协议。运行时格式边界见 [TS-only 方案](design/ts-only-runtime/plans/ts-only/README.md)。
+新项目生成静态 `concord.config.ts`。存在 `concord.json` 或双配置时返回 `ProjectMigrationRequired`，不执行 TS 模块，不提供格式转换入口。配置快照拥有原文前像、路径与摘要，写入、恢复与证据使用同一协议。运行时格式识别、journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)，旧格式错误见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#旧格式)。
 
-Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只读权限在 publication 统一执行。
+Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只读权限在 publication 统一执行；规则与错误见[配置 Memory 来源](feature/project-onboarding/use-case/configure-memory-sources.md#规则)。
 
 `docs/constitution.md` 必需，可以是 draft，作者显式采用 active。docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `constitution show` 派生。宪法不充当测试 Spec 或自动合规证据。根 `DESIGN.md` 可选。
 
@@ -55,7 +55,7 @@ Design 外层包含 GOALS、LIMITS、DECISION 和 CASES，候选采用 `plans/<a
 
 `page add/show/set` 维护已存在 package 的页面，也支持安全 Unicode 名称的专题页，使用整文件 CAS。
 
-Design 支持嵌套 Markdown 路径，候选页通过 `--plan` 选择，单文件候选只拥有自身正文。完整边界见 [Plan 内容布局](design/plan-content/architecture.md)。set 必须提供最新 digest，README 写入保留 metadata。
+Design 支持嵌套 Markdown 路径，候选页通过 `--plan` 选择，单文件候选只拥有自身正文。入口解析与定案一致性见[文档目录架构](feature/document-packages/architecture.md#plan-入口)。set 必须提供最新 digest，README 写入保留 metadata。
 
 supporting Markdown 进入 candidate 摘要，不成为独立 owner 或测试证据。测试 contract 限于 Feature 与 Use Case；Engineering owner 可作为 Design 裁决和 Memory promotion 的目标。
 
@@ -77,7 +77,7 @@ HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对
 
 缓存只保存解析结果和投影，不缓存授权或 Problem fixed 判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有。
 
-HawDB 的[引擎边界与预算](design/hawdb-data-engine/plans/native-embedded/README.md)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 逻辑只读打开完整库，允许内部派生文件重建；缺少结构性 ownership 文件或命名空间不初始化。dry-run 与 cache-off 不打开持久库。持久句柄与事务先于 publication lease 释放。
+HawDB 的[引擎边界与预算](feature/local-data-engine/architecture.md#句柄与打开模式)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 逻辑只读打开完整库，允许内部派生文件重建；缺少结构性 ownership 文件或命名空间不初始化。dry-run 与 cache-off 不打开持久库。持久句柄与事务先于 publication lease 释放。
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。每篇文档每个进程最多解析一次，元数据、标题锚点、steps 与链接事实取自同一棵语法树。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
@@ -123,7 +123,7 @@ Trace 与定向 Review 按 owner 汇总 Feature supporting page 与 Use Case 的
 
 ## 发布协调
 
-Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。发布协调只使用 Node 文件 API，见[可移植发布协调](design/portable-publication/README.md)。
+Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 projectId、root 与 privateDir。发布协调只使用 Node 文件 API，见[可移植协调架构](feature/portable-coordination/architecture.md)（[决策依据](design/portable-publication/DECISION.md)）。
 
 支持同主机、同 PID 命名空间内的 Linux 与 macOS 本地工作树，不保证网络多机协调与 Windows 执行。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
 
@@ -147,7 +147,7 @@ run 结束时在新快照中核对起止 candidate、配置、定义、Spec、ep
 
 ## 操作依赖与资源边界
 
-操作依赖范围由[已采用方案](design/operation-boundaries/plans/scoped/architecture.md)定义，跨功能规则见 [C-013](constitution.md#c-013)。
+操作依赖矩阵见 [local SDLC 架构](feature/local-sdlc/architecture.md#操作依赖)，访问模式见[可移植协调架构](feature/portable-coordination/architecture.md#access-modes)，跨功能规则见 [C-013](constitution.md#c-013)。
 
 局部查询按命令依赖读取 owner，使用乐观 snapshot。memory 与 issue 的列表、索引和检索读取相应来源的全部候选。精确路径编辑只取指定 owner 与当前摘要，短 ID 编辑读取该类别全部候选并要求唯一匹配。create 校验目标路径和写来源权限；Issue 还校验同类 ID，Problem 还校验证据政策。
 
@@ -207,7 +207,7 @@ Memory 其他关闭理由需要非空说明。reopen 追加历史并移除 curre
 
 ## 代码归属声明
 
-Code Declaration 是维护者对实现与 Spec 关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或 Problem fixed 证据。查询引用由[自动派生方案](design/derived-code-reference/README.md)定义。
+Code Declaration 是维护者对实现与 Spec 关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或 Problem fixed 证据。查询引用的派生规则见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)（[决策依据](design/derived-code-reference/DECISION.md)）。
 
 `sourceIgnore` 按[发现 Spec](feature/local-sdlc/use-case/discover-annotated-tests.md)缩小源码与测试自动发现范围；配置参与快照身份，扫描、复核与监听共用同一匹配规则。
 
@@ -223,7 +223,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 目标支持 Feature、Use Case 与 Engineering，沿用 owner、supporting page 与 anchor 解析，只拒绝重复 exactRef。Feature 反查汇总自身与 Use Case；Engineering 汇总自身与支持页面。反查按自动引用去重，保留匹配的 exactRefs。
 
-引用由 canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用。文件移动、改名、作用域和顺序变化可能使引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list 或 locate。规则见[采用架构](design/derived-code-reference/plans/derived/architecture.md)。
+引用由 canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用。文件移动、改名、作用域和顺序变化可能使引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list 或 locate。派生算法见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)。
 
 `code annotate` 与对应 action 不接收或返回 ID，在乐观 snapshot 中验证指定 canonical reference、归属链、类型和 anchor。`code list` 与 `code locate` 提供声明查询。Web 以符号、位置和显式关联呈现实现。无效 begin 仍参与边界检查，普通扫描不写源码。
 
