@@ -18,7 +18,7 @@ kind: feature
 - [作用域设计](../../design/scoped-terminology/README.md)
 - [术语格式设计](../../design/markdown-terminology/README.md)
 
-写作规则使用 concord.writing/v3，术语使用 concord.concepts/v2。祖先规则按范围合成，局部来源不能扩大目录或静默覆盖定义。同名不同义按作用域区分；弃用名称派生禁词并建议改为该概念的写法。正文可以链接到 `concepts.md#id`，断开的链接由检查报告。
+写作规则使用 concord.writing/v3；术语使用 concepts.md 的标题结构，不设版本字段。祖先规则按范围合成，局部来源不能扩大目录或静默覆盖定义。同名不同义按作用域区分；弃用名称派生禁词并建议改为该概念的写法。正文可以链接到 `concepts.md#id`，断开的链接由检查报告。
 
 工具读写使用严格 Schema、整文件 CAS 与可恢复事务。show 支持无效来源显式修复。Web 草稿和异步请求绑定具体 owner，保存一份来源不能把另一份草稿标成已保存。
 

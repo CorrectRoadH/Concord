@@ -18,7 +18,6 @@ Concord 识别 docs 下精确命名的 concepts.md 与 concord-writing.json，�
 
 ```markdown
 ---
-format: concord.concepts/v2
 imports:
   - docs/concepts.md#memory
 deprecated:
@@ -38,7 +37,7 @@ deprecated:
 
 每个二级标题是一个概念：去掉 `{#id}` 后的标题文字是该概念唯一的写法（term），id 在本文件内唯一，完整身份为 canonical catalog path#id。标题后的第一个段落是定义，定义之后、下一个二级标题以前的内容是解释。一级标题恰好一个，位于所有概念之前；两者之间是页面引言。没有二级标题的文件是空 catalog。
 
-frontmatter 严格解码：format 必填；imports 可选；deprecated 可选，键为本文件的概念 ID，值为弃用名列表。term 只能是纯文本。同一文件内 term 互不重复，弃用名互不重复且不等于任何 term。ASCII 写法按忽略大小写和单词边界匹配，其它写法按字面匹配。结构不合规返回 `InvalidConceptCatalog`，消息带行号与原因。
+frontmatter 可选，存在时严格解码，只接受 imports 与 deprecated：imports 是 path#id 列表；deprecated 的键为本文件的概念 ID，值为弃用名列表。catalog 不设版本字段，文件名区分新旧格式。term 只能是纯文本。同一文件内 term 互不重复，弃用名互不重复且不等于任何 term。ASCII 写法按忽略大小写和单词边界匹配，其它写法按字面匹配。结构不合规返回 `InvalidConceptCatalog`，消息带行号与原因。
 
 全局和祖先目录的定义自动适用；imports 可显式引用其它目录的直接定义，例如 docs/feature/payments/concepts.md#payment。引用不递归导入另一文件的 imports，也不复制定义。移除或改名被导入的 ID 会被拒绝。不同兄弟目录的同名概念可以并存；有效范围相交的歧义携带双方来源，不静默覆盖。
 
@@ -93,11 +92,11 @@ catalog 编辑不依赖写作政策解析，因此 v1 政策不会阻断迁移�
 
 升级前若存在 v1 journal，先用匹配的旧 CLI 完成恢复；新运行时不暗中恢复旧事务或改写其证据。详细合成、修复及恢复条件见[采用方案](../../design/scoped-terminology/plans/directory-owned/README.md)。
 
-## 从 concepts/v1 迁移
+## 从 concepts.json 迁移
 
-docs 下存在任何 concepts.json 时，`concepts index/show`、`docs check` 与 `concord check` 返回 `ConceptMigrationRequired`，complete 为 false，并列出全部 v1 路径。运行时不解析 v1 内容。
+docs 下存在任何 concepts.json 时，`concepts index/show`、`docs check` 与 `concord check` 返回 `ConceptMigrationRequired`，complete 为 false，并列出全部 concepts.json 路径。运行时不解析 JSON catalog 的内容。
 
-路径变化会同时改变全部 imports，因此迁移是一次覆盖全部 v1 catalog 的事务：
+路径变化会同时改变全部 imports，因此迁移是一次覆盖全部 JSON catalog 的事务：
 
 ```sh
 concord concepts migrate --draft --language zh > /tmp/concepts-migration.json
@@ -107,9 +106,9 @@ concord concepts migrate --input /tmp/concepts-migration.json
 
 `--draft` 只读：用指定语言的 preferred 作为 term，复制定义与该语言的 deprecated，把 imports 改指 concepts.md；其它语言名称与 aliases 列在 `unplaced` 中由作者处理。`--language` 必填。
 
-输入的每项包含 legacyPath、legacyDigest、path、expectedDigest 与 body。输入必须恰好覆盖全部 v1 catalog，摘要都是当前值，path 为同目录的 concepts.md，body 为合法 v2，迁移后的 catalog 集合没有无效来源或悬空导入。已有的同名解释页按 expectedDigest 显式替换。
+输入的每项包含 legacyPath、legacyDigest、path、expectedDigest 与 body。输入必须恰好覆盖全部 JSON catalog，摘要都是当前值，path 为同目录的 concepts.md，body 为合法的 concepts.md，迁移后的 catalog 集合没有无效来源或悬空导入。已有的同名解释页按 expectedDigest 显式替换。
 
-事务操作名为 `migrate-concepts`，写入每个 concepts.md 并删除对应 concepts.json；它是唯一能删除 catalog 的操作。收据的 `droppedConcepts` 列出相对 v1 删除的概念 ID。中断后由 `concord recover` 按前后像完成或回退，v1 成员或前像变化时返回 `RecoveryConflict`。v1 的 set-concepts journal 先用匹配的旧 CLI 恢复。
+事务操作名为 `migrate-concepts`，写入每个 concepts.md 并删除对应 concepts.json；它是唯一能删除 catalog 的操作。收据的 `droppedConcepts` 列出相对 JSON catalog 删除的概念 ID。中断后由 `concord recover` 按前后像完成或回退，concepts.json 成员或前像变化时返回 `RecoveryConflict`。旧 CLI 写入 concepts.json 的 set-concepts journal 先用匹配的旧 CLI 恢复。
 
 ## CLI 示例
 

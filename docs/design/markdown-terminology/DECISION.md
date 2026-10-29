@@ -8,7 +8,7 @@ Selected: [markdown-owned](plans/markdown-owned/README.md)
 
 两案都让每个概念只有一个写法，G1、G3 相同。差别在 G2：markdown-owned 把定义与解释放进同一个 `concepts.md`，正文可以链接到 `concepts.md#id`，断开的链接由 `check` 报告；json-single-term 仍需要第二份解释页，定义也不能含链接。
 
-markdown-owned 的代价是需要 Markdown 结构解析器、改为源码编辑的 Web 术语页，以及一次删除旧文件的迁移事务。解析沿用宪法的 `{#id}` 标题语法与链接扫描规则，额外复杂度集中在 catalog 的结构校验上。
+markdown-owned 的代价是需要 Markdown 结构解析器、改为源码编辑的 Web 术语页，以及一次删除旧文件的迁移事务。解析沿用宪法的 `{#id}` 标题语法与链接扫描规则，额外复杂度集中在 catalog 的结构校验上。文件名区分新旧格式，catalog 不设版本字段。
 
 ## Rejected Options
 

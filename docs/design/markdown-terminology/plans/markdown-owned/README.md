@@ -18,7 +18,7 @@
 | --- | --- | --- | --- |
 | [L1](../../LIMITS.md#l1-scope-and-identity) | satisfied | 精确文件名 `concepts.md` 与目录决定作用域；身份为 `path#id` | 沿用目录归属方案 |
 | [L2](../../LIMITS.md#l2-publication-and-recovery) | satisfied | `set-concepts` 与 `migrate-concepts` 双向校验路径、操作、解析结果和依赖摘要 | 方案分析 |
-| [L3](../../LIMITS.md#l3-explicit-transition) | satisfied | 修订 C-001；`concepts migrate` 一次替换全部 v1 来源 | 方案分析 |
+| [L3](../../LIMITS.md#l3-explicit-transition) | satisfied | 修订 C-001；`concepts migrate` 一次替换全部 JSON catalog | 方案分析 |
 | [L4](../../LIMITS.md#l4-strict-structure) | satisfied | 结构规则逐项给出 `InvalidConceptCatalog` 与行号 | 方案分析 |
 
 ## 来源与作用域
@@ -33,7 +33,6 @@ catalog 路径只能由 concepts 工具写入。`author set`、`page set`、`pag
 
 ```markdown
 ---
-format: concord.concepts/v2
 imports:
   - docs/concepts.md#memory
 deprecated:
@@ -57,15 +56,16 @@ deprecated:
 
 ### frontmatter
 
-frontmatter 必须位于文件开头，是 YAML 映射，严格解码，未知字段被拒绝。
+frontmatter 可选；存在时位于文件开头，是 YAML 映射，严格解码，未知字段被拒绝。没有导入和弃用名的 catalog 不写 frontmatter。
 
 | 字段 | 要求 |
 | --- | --- |
-| `format` | 必填，字面量 `concord.concepts/v2` |
 | `imports` | 可选，`path#id` 列表；path 必须是 catalog 路径，id 为 slug；列表内不重复 |
 | `deprecated` | 可选，键为本文件的概念 ID，值为非空的弃用名列表 |
 
 弃用名放在 frontmatter，因为写作检查不扫描 frontmatter。概念正文因此可以只写现行写法。
+
+catalog 不设版本字段。文件名已经区分 `concepts.json` 与 `concepts.md`，迁移检测只看 `concepts.json` 是否存在。格式以后发生不兼容变化时，结构校验返回具名错误，再由显式迁移处理，不预留版本号。
 
 ### 正文
 
@@ -90,7 +90,7 @@ frontmatter 必须位于文件开头，是 YAML 映射，严格解码，未知�
 | 错误 | 条件 |
 | --- | --- |
 | `InvalidConceptCatalog` | frontmatter 缺失或非法、标题或定义结构不合规、唯一性被破坏；消息带行号与原因 |
-| `ConceptMigrationRequired` | docs 下存在任何 v1 `concepts.json` |
+| `ConceptMigrationRequired` | docs 下存在任何 `concepts.json` |
 | `DanglingConceptImport` | `imports` 指向不存在的 catalog 或 ID |
 | `AmbiguousConceptName` | 两个在同一范围生效的概念有相同的规范化 `term` |
 | `ManagedConceptCatalog` | 非 concepts 工具的写入目标是 catalog 路径 |
@@ -128,7 +128,7 @@ concord concepts set --path docs/feature/feedback/concepts.md \
 ```
 
 - `index` 返回全部 catalog、概念与诊断。每个概念为 `{ reference, path, scope, concept: { id, term, definition, deprecated } }`，没有弃用名时 `deprecated` 为空数组。
-- `show` 的 `state` 为 `missing`、`valid`、`invalid`，返回 `source`、`digest` 与解析后的 `catalog`（`format`、`title`、`imports`、`concepts`），以及当前目录的有效概念与诊断。
+- `show` 的 `state` 为 `missing`、`valid`、`invalid`，返回 `source`、`digest` 与解析后的 `catalog`（`title`、`imports`、`deprecated`、`concepts`），以及当前目录的有效概念与诊断。
 - `set` 的 `--body` 是完整 Markdown 文件或 `-`。工具按提交的字节保存，不重新序列化；先严格解析，再执行导入依赖守卫。新建时 `--expected-digest null`，其余使用 `show` 返回的 digest。
 - 结构化 action `concepts.set` 的输入为 `{ path, source, expectedDigest }`。
 
@@ -141,10 +141,6 @@ concord concepts set --path docs/feature/feedback/concepts.md \
 ### 随包空 catalog
 
 ```markdown
----
-format: concord.concepts/v2
----
-
 # Project concepts
 
 Each second-level heading defines one concept: its text is the only accepted spelling, `{#id}` is its stable identity, and the first paragraph is its definition.
@@ -158,11 +154,11 @@ Each second-level heading defines one concept: its text is the only accepted spe
 
 `migrate-concepts` 是唯一可以删除 catalog 文件的操作，见下节。init 的例外只允许 `docs/concepts.md` 从 null 写成随包空 catalog 的精确字节。其它操作写入 catalog 路径、写入任意 Markdown 或删除 catalog，都在写入前被拒绝。
 
-v1 的 `set-concepts` journal 由匹配的旧 CLI 恢复；新运行时返回 `ConceptMigrationRequired`，不改写 journal。
+旧 CLI 留下的、写入 `concepts.json` 的 `set-concepts` journal 由匹配的旧 CLI 恢复；新运行时返回 `ConceptMigrationRequired`，不改写 journal。
 
-## 从 v1 迁移
+## 从 concepts.json 迁移
 
-docs 下存在任何 `concepts.json` 时，`concepts index/show`、`docs check` 与 `concord check` 返回 `ConceptMigrationRequired`，`complete` 为 false，并列出全部 v1 路径。运行时不解析 v1 内容。
+docs 下存在任何 `concepts.json` 时，`concepts index/show`、`docs check` 与 `concord check` 返回 `ConceptMigrationRequired`，`complete` 为 false，并列出全部 `concepts.json` 路径。运行时不解析 JSON catalog 的内容。
 
 迁移由一次显式事务完成，因为路径从 `concepts.json` 变为 `concepts.md` 会同时改变全部 `imports` 引用：
 
@@ -175,7 +171,7 @@ concord concepts migrate --input /tmp/concepts-migration.json
 
 ### 草稿
 
-`--draft --language <lang>` 只读，不写文件。对每个 v1 catalog，用指定语言的 `preferred` 作为 `term`，复制定义，复制该语言的 `deprecated`，把 `imports` 中的 `concepts.json` 改为 `concepts.md`。
+`--draft --language <lang>` 只读，不写文件。对每个 JSON catalog，用指定语言的 `preferred` 作为 `term`，复制定义，复制该语言的 `deprecated`，把 `imports` 中的 `concepts.json` 改为 `concepts.md`。
 
 其它语言的名称和所有 `aliases` 不写入正文，逐条列在 `unplaced` 中供作者决定。某个概念缺少指定语言时，草稿中该概念的 `term` 为空，输入无法通过校验，直到作者填写。`--language` 必填，不推断。
 
@@ -189,22 +185,22 @@ concord concepts migrate --input /tmp/concepts-migration.json
       "legacyDigest": "sha256:...",
       "path": "docs/feature/feedback/concepts.md",
       "expectedDigest": null,
-      "body": "---\nformat: concord.concepts/v2\n..."
+      "body": "# 反馈术语\n\n## Issue {#issue}\n..."
     }
   ]
 }
 ```
 
-- `catalogs` 必须恰好覆盖全部已发现的 v1 `concepts.json`，每项的 `legacyDigest` 等于当前字节摘要。
+- `catalogs` 必须恰好覆盖全部已发现的 `concepts.json`，每项的 `legacyDigest` 等于当前字节摘要。
 - `path` 必须是同目录的 `concepts.md`。`expectedDigest` 为该路径当前摘要；不存在时为 null。已有的解释页因此被显式替换，例如 init 旧版生成的 `docs/concepts.md`。
-- 每个 `body` 必须是合法 v2。迁移后的完整 catalog 集合不得有 `InvalidConceptCatalog` 或 `DanglingConceptImport`。
-- 收据列出每个 catalog 相对 v1 删除的概念 ID（`droppedConcepts`），供作者核对；删除本身不阻止迁移。
+- 每个 `body` 必须是合法的 `concepts.md`。迁移后的完整 catalog 集合不得有 `InvalidConceptCatalog` 或 `DanglingConceptImport`。
+- 收据列出每个 catalog 相对 JSON catalog 删除的概念 ID（`droppedConcepts`），供作者核对；删除本身不阻止迁移。
 
 ### 事务
 
-操作名为 `migrate-concepts`。每个 catalog 产生两项变更：`concepts.md` 写入（before 为当前字节或 null），`concepts.json` 删除（after 为 null）。journal 记录全部 v1 路径与摘要。
+操作名为 `migrate-concepts`。每个 catalog 产生两项变更：`concepts.md` 写入（before 为当前字节或 null），`concepts.json` 删除（after 为 null）。journal 记录全部 `concepts.json` 路径与摘要。
 
-prepared 恢复校验每对变更与 v1 成员不变后恢复精确前像；committed 恢复保留已提交内容。成员或任一前像变化时返回 `RecoveryConflict` 并保留现场。已迁移的仓库再次执行返回空的 `changedPaths`，不写文件。
+prepared 恢复校验每对变更与 `concepts.json` 成员不变后恢复精确前像；committed 恢复保留已提交内容。成员或任一前像变化时返回 `RecoveryConflict` 并保留现场。已迁移的仓库再次执行返回空的 `changedPaths`，不写文件。
 
 迁移不从名称推断定义，不把 aliases 自动当作弃用名，不选择语言。
 
@@ -221,7 +217,7 @@ prepared 恢复校验每对变更与 v1 成员不变后恢复精确前像；comm
 
 | 位置 | 变化 |
 | --- | --- |
-| `docs/feature/documentation-quality/` | README、policy 与相关 Use Case 改为 v2 格式、单一写法与迁移 |
+| `docs/feature/documentation-quality/` | README、policy 与相关 Use Case 改为 `concepts.md` 格式、单一写法与迁移 |
 | `docs/feature/local-sdlc/` | init 产物与 cli 示例改为 `docs/concepts.md` |
 | `docs/feature/web-workbench/architecture.md` | 术语页改为源码编辑；`docs/concepts.md` 不再是通用支持页面 |
 | `docs/architecture.md` | init 产物列表 |

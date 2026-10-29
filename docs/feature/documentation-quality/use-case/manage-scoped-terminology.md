@@ -15,9 +15,9 @@ feature: docs/feature/documentation-quality/README.md
 
 Concord CLI 与 Web 提供发现、读取、显式创建、摘要保护的修改和条目删除；导入与正文链接都指向原定义。弃用名称只在有效作用域派生检查，建议改为该概念的写法。局部写作规则不能扩大路径范围，不能静默覆盖全局定义；同名不同义在不同范围可并存，汇总保留出处。
 
-规则发现、解析、有效作用域与检查共用实现；结构不合规、路径不安全、悬空引用、断开的正文链接及同作用域冲突不被静默忽略。写入和中断恢复遵守同一授权。定义与解释写在同一 concepts.md，其它 Markdown 链接到定义；v1 JSON 与旧写作规则须显式迁移，不能后台推断写法、定义或重写历史。
+规则发现、解析、有效作用域与检查共用实现；结构不合规、路径不安全、悬空引用、断开的正文链接及同作用域冲突不被静默忽略。写入和中断恢复遵守同一授权。定义与解释写在同一 concepts.md，其它 Markdown 链接到定义；concepts.json 与旧写作规则须显式迁移，不能后台推断写法、定义或重写历史。
 
-验收涵盖全局/Feature/Engineering/嵌套目录、兄弟隔离、导入及删除保护、正文链接校验、结构错误、冲突、CAS 与原文字节保存、dry-run、伪造 journal 与恢复、v1 迁移事务、打包 CLI 和真实 Web 的源码编辑/脏草稿保护。
+验收涵盖全局/Feature/Engineering/嵌套目录、兄弟隔离、导入及删除保护、正文链接校验、结构错误、冲突、CAS 与原文字节保存、dry-run、伪造 journal 与恢复、concepts.json 迁移事务、打包 CLI 和真实 Web 的源码编辑/脏草稿保护。
 
 作用域合成见 docs/design/scoped-terminology/README.md，来源格式与迁移见 docs/design/markdown-terminology/README.md。
 
