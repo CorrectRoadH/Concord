@@ -9,6 +9,7 @@ import { scanAnnotations } from '../dist/annotations.js';
 import { scanCode } from '../dist/code.js';
 import { loadDocuments } from '../dist/documents.js';
 import { LocalRepository } from '../dist/storage.js';
+import { readWritingPolicy } from '../dist/writing-policy.js';
 import { projectConfigPath, readProjectConfig } from './support.js';
 
 const PackageVersion = Schema.Struct({ version: Schema.String });
@@ -38,8 +39,10 @@ test('current checkout configures a version-matched runner whose annotations sca
     execFileSync('git', ['init', '-q', consumer]);
     const configPath = projectConfigPath(root);
     cpSync(join(root, configPath), join(consumer, configPath));
+    // The global writing policy may select prose outside docs (READMEs, skills, templates).
+    const writingRoots = readWritingPolicy(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')).roots ?? [];
     const sources = new Set(['docs', ...project.testRoots, ...(project.sourceRoots ?? []),
-      ...(project.memorySources ?? []).map(source => source.path), ...project.runner.sourceFiles]);
+      ...(project.memorySources ?? []).map(source => source.path), ...project.runner.sourceFiles, ...writingRoots]);
     for (const source of sources) {
       mkdirSync(dirname(join(consumer, source)), { recursive: true });
       cpSync(join(root, source), join(consumer, source), { recursive: true });
