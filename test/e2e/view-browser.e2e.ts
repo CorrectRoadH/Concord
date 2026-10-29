@@ -11,7 +11,7 @@ import { addPage, createDocument } from '../../dist/documents.js';
 import { initialize, LocalRepository } from '../../dist/storage.js';
 import type { ViewServerHandle } from '../../dist/view-server.js';
 import { startViewServer } from './server.js';
-import { pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
+import { parseWorkspaceProjection, pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser opens and refreshes a deep link without credentials and retries initial load failures', async ({ page }) => {
@@ -61,7 +61,15 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await expect(page.getByRole('alert')).toHaveText('工作区暂时不可用');
     await expect(page.getByLabel('访问密钥', { exact: true })).toHaveCount(0);
     await page.unroute('**/api/workspace');
+    const retriedWorkspace = page.waitForResponse(response => response.request().method() === 'GET' &&
+      new URL(response.url()).pathname === '/api/workspace' && response.status() === 200);
+    const retriedDocument = page.waitForResponse(response => new URL(response.url()).pathname === '/api/file' &&
+      new URL(response.url()).searchParams.get('path') === 'docs/feature/web/README.md');
     await page.getByRole('button', { name: '重试', exact: true }).click();
+    assert.equal(await (await retriedWorkspace).finished(), null);
+    const documentResponse = await retriedDocument;
+    assert.equal(documentResponse.status(), 200);
+    assert.equal(await documentResponse.finished(), null);
     await expect(page.getByRole('heading', { name: 'Direct access fixture', exact: true })).toBeVisible();
     await expect(page).toHaveURL(url);
     await page.getByRole('link', { name: '总览', exact: true }).click();
@@ -163,7 +171,14 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await page.goto(`http://127.0.0.1:${server.port}/roadmap/planned?tab=actions`);
     await expect(page.getByRole('tab', { name: '生命周期', exact: true })).toHaveAttribute('data-state', 'active');
     await page.getByLabel('采用为 Feature ID', { exact: true }).fill('adopted-direction');
+    const adoptedProjection = page.waitForResponse(async response => {
+      if (response.request().method() !== 'GET' || new URL(response.url()).pathname !== '/api/workspace' || response.status() !== 200) return false;
+      const projection = parseWorkspaceProjection(await response.text());
+      return projection?.snapshot.documents.some(document => document.metadata.kind === 'roadmap' &&
+        document.metadata.id === 'planned' && document.metadata.state === 'adopted') ?? false;
+    });
     await page.getByRole('button', { name: '采用 Roadmap', exact: true }).click();
+    assert.equal(await (await adoptedProjection).finished(), null);
     await expect(page.getByText('adopted', { exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: '可用操作', exact: true })).toHaveCount(0);
     await expect(page.getByText('Unexpected Application Error!', { exact: true })).toHaveCount(0);

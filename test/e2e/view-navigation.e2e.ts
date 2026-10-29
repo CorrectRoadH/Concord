@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
+import { Schema } from 'effect';
 import { createDocument } from '../../dist/documents.js';
 import { initialize, LocalRepository } from '../../dist/storage.js';
 import { startViewServer } from './server.js';
-import { readProjectConfig, writeProjectConfig } from '../support.js';
+import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('URL navigation saves the latest draft and restores nested drawers without local selection state', async ({ page }) => {
@@ -29,6 +30,7 @@ test('URL navigation saves the latest draft and restores nested drawers without 
 
   let release = () => {};
   try {
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await page.setViewportSize({ width: 1440, height: 900 });
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -47,8 +49,21 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await page.getByRole('tab', { name: '正文', exact: true }).click();
     await expect.poll(() => intercepted).toBe(true);
     await page.getByLabel('文档标题', { exact: true }).fill('Latest revision');
+    const latestSave = page.waitForResponse(response => {
+      if (new URL(response.url()).pathname !== '/api/action') return false;
+      return Schema.is(Schema.Struct({ action: Schema.Literal('document.metadata'), title: Schema.Literal('Latest revision') }))(response.request().postDataJSON());
+    });
+    const latestReadback = page.waitForResponse(async response => {
+      const url = new URL(response.url());
+      if (url.pathname !== '/api/file' || url.searchParams.get('path') !== 'docs/feature/中文导航/README.md' || response.status() !== 200) return false;
+      return Schema.is(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Struct({
+        document: Schema.Struct({ metadata: Schema.Struct({ title: Schema.Literal('Latest revision') }) }),
+      }) }))(await response.json());
+    });
     await page.getByRole('tab', { name: '实现', exact: true }).click();
     release();
+    assert.equal((await latestSave).status(), 200);
+    assert.equal(await (await latestReadback).finished(), null);
     await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active', { timeout: 15000 }).catch(async cause => {
       throw new Error(`Navigation failed at ${page.url()}: ${await page.locator('.form-error').allTextContents()}; ${errors}; ${await page.getByLabel('文档标题', { exact: true }).inputValue()}; ${readFileSync(join(root, 'docs/feature/中文导航/README.md'), 'utf8')}`, { cause });
     });

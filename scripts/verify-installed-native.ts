@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -19,6 +19,16 @@ const CachePreview = Schema.Struct({
 const Memory = Schema.Struct({ document: Schema.Struct({ digest: Schema.String }) });
 const Recall = Schema.Struct({ documents: Schema.Array(Schema.Struct({ path: Schema.String, body: Schema.String })) });
 const Identity = Schema.Struct({ engine: Schema.Literal('hawdb'), revision: Schema.String, abi: Schema.String, target: Schema.String });
+
+/** Preserve the inode of any native image already mapped by a fixture process. */
+export const replaceInstalledNativeBinary = (binary: string, bytes: Uint8Array): void => {
+  const staging = mkdtempSync(join(dirname(binary), '.native-fixture-'));
+  try {
+    const next = join(staging, 'hawdb.node');
+    writeFileSync(next, bytes);
+    renameSync(next, binary);
+  } finally { rmSync(staging, { recursive: true, force: true }); }
+};
 
 /** Exercise only the installed package, with no Rust compiler or database helper on PATH. */
 export const verifyInstalledNative = (packageRoot: string) => Effect.try({
@@ -105,7 +115,7 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
       const binaryBytes = readFileSync(nativeBinary);
       try {
         // Mutate this isolated installed consumer, never the packed candidate.
-        writeFileSync(nativeBinary, Buffer.concat([binaryBytes, Buffer.from('digest mismatch')]));
+        replaceInstalledNativeBinary(nativeBinary, Buffer.concat([binaryBytes, Buffer.from('digest mismatch')]));
         const unavailable = call(['cache', 'status'], CacheStatus);
         assert.equal(unavailable.status, 'unavailable');
         assert.match(unavailable.detail!, /native binary digest differs:.*expected .*actual .*Reinstall/u);
@@ -146,13 +156,14 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
             }
           }
           const failedReads = reads;
-          fs.writeFileSync(binary, read(original));
+          fs.writeFileSync(binary + '.repair', read(original));
+          fs.renameSync(binary + '.repair', binary);
           await delay(1100);
           const identity = hawdbIdentity();
           console.log(JSON.stringify({ failedReads, failures, engine: identity.engine }));
         `, pathToFileURL(join(installed, 'dist/hawdb-native.js')).href, nativeBinary, originalPath]);
         assert.deepEqual(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ failedReads: Schema.Number, failures: Schema.Number, engine: Schema.String })))(retry), { failedReads: 1, failures: 100, engine: 'hawdb' });
-      } finally { writeFileSync(nativeBinary, binaryBytes); }
+      } finally { replaceInstalledNativeBinary(nativeBinary, binaryBytes); }
       assert.equal(call(['test', 'list'], CacheResult).cache.status, 'hit');
       return { ...identity, compilerOnPath: false, helperOnPath: false, persistentHit: true, currentRecall: true, rebuilt: true };
     } finally { rmSync(scratch, { recursive: true, force: true }); }

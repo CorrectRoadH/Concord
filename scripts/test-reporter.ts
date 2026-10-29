@@ -16,8 +16,9 @@ export default async function* reporter(events: AsyncIterable<TestEvent>): Async
     for await (const event of events) {
       if (event.type === 'test:fail') {
         Effect.runSync(Effect.sync(() => {
+          const error = inspect(event.data.details.error, { depth: 8 });
           if (process.env.CONCORD_TEST_FAILURES !== undefined) appendFileSync(process.env.CONCORD_TEST_FAILURES,
-            `${JSON.stringify({ ...event.data, error: inspect(event.data.details.error, { depth: 8 }) })}\n`);
+            `${JSON.stringify({ ...event.data, details: { ...event.data.details, error }, error })}\n`);
         }));
       }
       if (event.type === 'test:summary') {

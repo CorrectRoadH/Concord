@@ -7,6 +7,7 @@ import { connect } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { Effect } from 'effect';
 import { createDocument } from '../dist/documents.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { ViewJobManager } from '../dist/view-jobs.js';
@@ -27,7 +28,9 @@ const fixture = () => {
 interface ResponseResult { readonly status: number; readonly type: string | undefined; readonly body: string }
 function send(server: ViewServerHandle, path: string, options: { readonly method?: string; readonly headers?: Readonly<Record<string, string>>; readonly body?: string } = {}): Promise<ResponseResult> {
   return new Promise((resolve, reject) => {
-    const call = request({ host: '127.0.0.1', port: server.port, path, method: options.method ?? 'GET', headers: options.headers }, (response) => {
+    // Each probe owns its connection. A pooled idle socket can expire while a
+    // synchronous fixture stalls the shared client/server event loop.
+    const call = request({ host: '127.0.0.1', port: server.port, path, agent: false, method: options.method ?? 'GET', headers: options.headers }, (response) => {
       const chunks: Buffer[] = [];
       response.on('data', (chunk: Buffer) => chunks.push(chunk));
       response.once('end', () => resolve({ status: response.statusCode ?? 0, type: response.headers['content-type'], body: Buffer.concat(chunks).toString('utf8') }));
@@ -64,6 +67,18 @@ const waitForWorkspace = (server: ViewServerHandle, timeoutMs = 65_000, accepts:
   const value = parseWorkspaceProjection(response.body);
   return value !== undefined && accepts(value) ? value : undefined;
 }, { description: 'workspace projection', timeoutMs });
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('test HTTP requests remain independent after an event-loop stall exceeds server keep-alive', () => Effect.runPromise(Effect.tryPromise(async () => {
+  const f = fixture();
+  const server = await startViewServer({ ...f, host: '127.0.0.1', port: 0 });
+  try {
+    assert.equal((await send(server, '/assets/app.js')).status, 200);
+    // Reproduce a busy shared loop while an idle socket reaches its deadline.
+    Effect.runSync(Effect.sync(() => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 6_500)));
+    assert.equal((await send(server, '/assets/app.js')).status, 200);
+  } finally { await server.close(); rmSync(f.root, { recursive: true, force: true }); }
+})));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-scan-keeps-http-responsive
