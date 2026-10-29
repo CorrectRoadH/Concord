@@ -27,6 +27,10 @@ Use the project-pinned Vite+ toolchain. Bootstrap with `pnpm install --frozen-lo
 
 Keep task-result caching disabled for acceptance. Do not rebuild the same `dist` while tests or measurements are running; use a separate checkout when concurrent builds are necessary. Preserve one packed artifact per test invocation; consumers share one read-only install per dependency set, and tests that modify installed files request a private copy. See [build and check entrypoints](docs/engineering/concord-self-hosting/README.md#构建与检查入口) for the maintained workflow. Report failed or skipped checks explicitly.
 
+Develop on master. Commit small, scoped hunks and keep no long-lived branches; when a task needs isolation from others' uncommitted work, use a detached worktree based on master, then rebase and fast-forward. Run at most one full `pnpm check` per machine at a time, and re-run timeout or connection-reset failures on an idle machine before attributing them. Follow the shared-resource rules in [testing](docs/engineering/concord-self-hosting/testing.md#共享资源与同步): replace possibly mapped files by rename, give destructive tests private installs, use a new HTTP connection per test request, and wait on real product state rather than elapsed time.
+
+Benchmarks are part of the feature: a budget row in a Feature page and its scenario in `bench/<feature-id>.bench.ts` change together. Before delivering a change that `vp run bench --changed` selects, run `vp run bench --changed --compare` and keep every verdict passing; see [performance](docs/engineering/concord-self-hosting/performance.md#开发与交付流程).
+
 No paid model calls, external mutations, production operations, publishing, or pushing without explicit user authorization.
 
 Workers are not alone in this repository. Preserve other changes, stay within assigned paths, and do not commit unless assigned. Do not use built-in subagents. Herdr delegation follows the user's global guide.
