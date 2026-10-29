@@ -30,7 +30,9 @@ feature: docs/feature/project-onboarding/README.md
    4. 凭据只从环境变量或外部工具登录态读取，不写入 docs、配置、缓存、证据、HTTP 响应或诊断。 {#c-007-4}
    ```
 
-   ID 一经采用不改名、不复用。插入或重排款不改变已有 ID。
+   条款 ID 为 `c-` 加 001 至 999 的三位数，标题以对应的大写标签开头；款 ID 为条款 ID 加连字符与一段小写字母、数字和单连字符。总则写 `## 总则 {#general}`，其款写 `{#general-<name>}`。active 宪法中每个条款与款都有 ID，全文唯一，并与标题 slug 共用命名空间；没有显式 ID 的标题 slug 不能作为引用目标。frontmatter、代码、HTML 与注释中的 `{#...}` 不产生 ID。
+
+   ID 一经采用不改名、不复用。插入或重排款不改变已有 ID，新款取未使用的 ID。
 
 2. 在依据规则的句子旁链接它。 {#link-clause}
 
@@ -38,7 +40,9 @@ feature: docs/feature/project-onboarding/README.md
    错误消息不含凭据与环境变量值（[C-007](../../constitution.md#c-007-4)）。
    ```
 
-   `docs/` 下除 `docs/_template/` 与宪法本身外的所有 Markdown 正文都可以链接，包括附页、Issue 与 Research。只计入行内链接；图片、引用式链接、代码与注释中的链接不计入。
+   `docs/` 下除 `docs/_template/` 与宪法本身外的所有 Markdown 正文都可以链接，包括附页、Issue 与 Research；Memory 不计入。只计入行内链接；图片、引用式链接、HTML、代码与注释中的链接不计入。“第 N 款”这类文字不建立关系。
+
+   没有 scheme、不以 `/` 开头的链接才参与解析：百分号解码后相对所在文件解析并规范化，结果为 `docs/constitution.md` 才是宪法链接。不读取网络，不跟随 symlink。不带 fragment 的宪法链接不建立关系，也不产生 finding。指向款的引用同时归属其条款。页面不必链接任何条款。
 
 3. 检查引用。 {#check-links}
 
@@ -69,7 +73,7 @@ feature: docs/feature/project-onboarding/README.md
    }
    ```
 
-   `references` 每次出现一项，按 `path`、`line` 排序。指向条款而非款时 `paragraph` 为 `null`，指向总则时 `clause` 为 `general`。
+   `source`、`metadata`、`body` 与 `digest` 随结果返回；`clauses` 按正文顺序列出，总则的 `id` 为 `general`。`references` 每次出现一项，按 `path`、`line` 排序。指向条款而非款时 `paragraph` 为 `null`，指向总则时 `clause` 为 `general`。`trace` 的 `constitution` 边从页面指向 `docs/constitution.md#<id>`；`review render` 按条款列出引用位置。
 
 5. 修订宪法。 {#amend}
 
@@ -78,6 +82,20 @@ feature: docs/feature/project-onboarding/README.md
    ```
 
    修订记录追加日期、理由、来源与影响，不覆盖既有历史。正文只维护当前规则。
+
+## 格式与状态
+
+宪法的 frontmatter 为 `format: concord.constitution/v2`、`status`（draft 或 active）、`ratifiedAt`（draft 为 null，active 为首次采用日期）、`amendedAt` 与 `amendments`。每条修订记录含 `date`、`reason`、`sources`（仓库相对引用数组）与非空 `impact`。这些字段只在 frontmatter 维护，不设语义版本号；整文件 digest 是并发前像。
+
+init 默认生成 draft：`amendments: []`，正文说明尚未采用项目原则，非 TTY 同样如此。提供正文不会自动变为 active。
+
+| 命令 | 前提 | 结果 |
+| --- | --- | --- |
+| `constitution initialize` | 既有项目尚无宪法 | 在配置中声明宪法并创建 draft；已存在时返回 `ConstitutionExists` |
+| `constitution adopt` | draft，正文至少一个带 ID 的条款，理由与影响非空 | 变为 active，设置 `ratifiedAt` 并追加第一条记录；已 active 返回 `ConstitutionAlreadyActive` |
+| `constitution amend` | active | 追加记录并更新 `amendedAt`；draft 返回 `ConstitutionNotActive` |
+
+adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 `PreimageChanged`。普通正文编辑不能改变状态或历史。宪法未配置时 `doctor` 提示 `constitution initialize`；宪法缺失或状态无效不阻碍 `recover`。结构合法不等于治理通过。
 
 ## 结果
 
@@ -107,9 +125,10 @@ concord --json constitution migrate
 ```
 
 - 宪法：`<a id="c-NNN"></a>` 并入下一行标题，写成 `{#c-NNN}`；第 K 款补 `{#c-NNN-K}`；`## 总则` 补 `{#general}`。修订记录原样保留。
-- owner：删除 `constitutionRefs`，在正文唯一的 `## Constitution` 节末尾为每个条款追加一行链接，已有同目标链接时不重复。
-- 有未完成写入、待改文件无法解码、多个 `## Constitution` 节或 ID 冲突时，返回具名错误（`RecoveryRequired`、原解码错误或 `ConstitutionMigrationConflict`），不写任何文件。
-- 中断时保留恢复现场，`concord recover` 按前后像完成或回退。已迁移的仓库再次运行时 `changedPaths` 为空。
+- owner：删除 Feature 与 Design 元数据中的 `constitutionRefs`（含空数组），在正文唯一的 `## Constitution` 节末尾为每个条款追加一行 `- [C-NNN](<相对路径>#c-NNN)`，没有该节时在正文末尾新建，已有同目标链接时不重复。
+- 有未完成写入、待改文件无法解码、多个 `## Constitution` 节或该标题 slug 与已有 ID 冲突时，返回具名错误（`RecoveryRequired`、原解码错误或 `ConstitutionMigrationConflict`），不写任何文件；`--dry-run` 执行同样的预检与规划。
+- 中断时保留恢复现场，普通命令返回 `RecoveryRequired`，`concord recover` 按前后像完成或回退。已迁移的仓库再次运行时 `changedPaths` 为空；宪法已是 v2 而仍有 owner 带 `constitutionRefs` 时只迁移这些 owner。
+- 迁移只转换格式，不是修订；作者之后把 `## Constitution` 节中的链接移到依据它的句子旁。
 - 迁移后的仓库只支持提供 `constitution migrate` 的 CLI 版本。
 
 ## Web 修订
@@ -118,7 +137,16 @@ Web 文档页可以进入宪法正文编辑，通过 `constitution.adopt` 与 `c
 
 CLI、Web 与 action 使用同一宪法 Schema，严格拒绝额外字段。读取不重写文件。
 
+## 可观察验收
+
+- 在一款前插入新款并修订后，指向原款的链接仍有效；新款取未使用的 ID。
+- Use Case 与附页各链接 `#c-007-4`，`constitution show` 列出两处的路径、行号、条款与款。
+- 路径或 fragment 的百分号编码无法解码时，`check` 退出 1 并带路径与行号，`constitution show` 的 `complete` 为 false，amend 与 adopt 拒绝执行。
+- 删除仍被 Issue 链接的款时 amend 拒绝并列出位置；用 `issue edit` 改链接后可以删除。
+- 迁移在第一个文件替换后中断，保留 journal 与已替换文件，`recover` 完成或回退。
+
 ## Spec 来源
 
 - 条款写法：`docs/constitution.md` 的总则
-- 采用方案：[宪法的结构、关联与写法](../../../design/constitution-structure/plans/link-owned/README.md)
+- 依据关系写在依据它的句子旁，附页同样可以声明（[决策依据](../../../design/constitution-structure/DECISION.md)）
+- 实现边界：[架构](../architecture.md#宪法)

@@ -15,14 +15,14 @@ feature: docs/feature/project-onboarding/README.md
 
 ## 完整路径
 
-1. 项目配置保存默认页面选择。
-2. 创建 Feature、Roadmap 或 Design 候选时，省略页面输入采用项目默认值。
-3. 显式页面输入覆盖默认值；能明确表达仅 README。
+1. 项目配置的 `documentDefaults` 分别保存 `featurePages`、`roadmapPages` 与 `designPages`，取值为 library、cli、architecture、lifecycle、use-case。
+2. 创建 Feature、Roadmap 或 Design 候选时，省略页面输入采用项目默认值；没有该配置时只建 README。
+3. 显式页面输入覆盖默认值；空数组（CLI 为 `--no-pages`）表示仅 README，CLI 与结构化入口一致。
 4. 修改默认值后新建文档采用新值，已有文档不被批量重写。
 
 ## 可观察验收
 
-README 必需；仅生成选定页面，入口链接与文件一致。Library 与 CLI 可以共存。无配置的既有消费者保留原有行为。参考模板和可执行模板配置的边界必须明确，不把 docs/_template 的普通编辑悄悄解释为生效配置。
+README 必需；仅生成选定页面，入口链接与文件一致。Library 与 CLI 可以共存。无配置的既有消费者保留原有行为。`docs/_template` 是参考副本，编辑它不改变生成的页面或正文。
 
 ## Spec 来源
 
