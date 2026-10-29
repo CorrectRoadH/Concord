@@ -34,7 +34,8 @@ test('CLI top-level command definitions have scenarios or documented exemptions'
   for (const group of groups) assert.ok(covered.includes(group) || exemptions.includes(group), `Uncovered CLI command group: ${group}`);
 }).pipe(Effect.scoped)));
 // @feature docs/feature/local-sdlc/README.md
-test('all benchmark scenarios execute on minimal frozen consumers without timing verdicts', { timeout: 30000 }, t => Effect.runPromise(Effect.gen(function*() {
+// The 30 s smoke target is observed in gate timing records; this limit only detects hangs.
+test('all benchmark scenarios execute on minimal frozen consumers without timing verdicts', { timeout: 180_000 }, t => Effect.runPromise(Effect.gen(function*() {
   const started = performance.now();
   const trace = (label: string, since: number) => io('Trace smoke execution', () => { if (process.env.CONCORD_BENCH_SMOKE_TRACE === '1') process.stderr.write(`# smoke ${label}: ${(performance.now() - since).toFixed(0)}ms\n`); });
   const work = yield* workDirectory('concord-bench-smoke-', false), outputDir = join(work, 'runs');
