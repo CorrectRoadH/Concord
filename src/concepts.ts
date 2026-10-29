@@ -1,6 +1,7 @@
 import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from './shared.js';
 import type { LocalRepository } from './storage.js';
 import { fromMarkdown } from './markdown-parser.js';
+import { documentMarkdown } from './document-projection.js';
 import { parseConceptCatalog, conceptSpellingKey, type ConceptCatalog, type ConceptDefinition } from './concepts-schema.js';
 import { discovered, globalCatalogPath, scopeOf, under } from './writing-scopes.js';
 export { ConceptCatalogSchema, type ConceptCatalog, type ConceptDefinition } from './concepts-schema.js';
@@ -40,8 +41,8 @@ export function splitReference(reference: string): { path: string; id: string } 
   if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id)) throw new ConcordError('InvalidConceptCatalog', `Invalid concept reference: ${reference}`);
   return { path, id };
 }
-export function readConceptCatalog(source: string): ConceptCatalog {
-  try { return parseConceptCatalog(source, fromMarkdown); }
+export function readConceptCatalog(source: string, path?: string): ConceptCatalog {
+  try { return parseConceptCatalog(source, path === undefined ? fromMarkdown : () => documentMarkdown(path, source)); }
   catch (cause) { throw new ConcordError('InvalidConceptCatalog', cause instanceof Error ? cause.message : String(cause)); }
 }
 export interface CatalogRecord { path: string; scope: string; digest: string; catalog: ConceptCatalog }
@@ -57,7 +58,7 @@ export function analyzeCatalogs(sources: Map<string, string>) {
   const catalogs: CatalogRecord[] = [];
   const diagnostics: ConceptDiagnostic[] = [];
   for (const [path, source] of sources) {
-    try { catalogs.push({ path, scope: scopeOf(path, 'catalog'), digest: digest(source), catalog: readConceptCatalog(source) }); }
+    try { catalogs.push({ path, scope: scopeOf(path, 'catalog'), digest: digest(source), catalog: readConceptCatalog(source, path) }); }
     catch (cause) { diagnostics.push({ code: 'InvalidConceptCatalog', message: cause instanceof Error ? cause.message : String(cause), sources: [path], scope: scopeOf(path, 'catalog') }); }
   }
   const byPath = new Map(catalogs.map(record => [record.path, record]));
@@ -125,7 +126,7 @@ export function showConcepts(repo: Repository, path = globalCatalogPath) {
     const analyzed = analyzeCatalogs(catalogSources(repo));
     const projection = { effectiveConcepts: effectiveConcepts(`${scope}/_scope.md`, analyzed.catalogs), diagnostics: [...analyzed.diagnostics, ...ambiguityDiagnostics(analyzed.catalogs)] };
     if (source === undefined) return { operation: 'concepts-show', state: 'missing' as const, path, scope, digest: null, source: null, catalog: null, ...projection };
-    try { return { operation: 'concepts-show', state: 'valid' as const, path, scope, digest: digest(source), source, catalog: readConceptCatalog(source), ...projection }; }
+    try { return { operation: 'concepts-show', state: 'valid' as const, path, scope, digest: digest(source), source, catalog: readConceptCatalog(source, path), ...projection }; }
     catch (cause) { return { operation: 'concepts-show', state: 'invalid' as const, path, scope, digest: digest(source), source, catalog: null, diagnostic: cause instanceof Error ? cause.message : String(cause), ...projection }; }
   });
 }
@@ -137,7 +138,7 @@ export function setConcepts(repo: LocalRepository, source: string, expectedDiges
     const before = repo.read(path) ?? null;
     if ((before === null ? null : digest(before)) !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; retain the draft and reload`);
     const after = source;
-    const validated = readConceptCatalog(after);
+    const validated = readConceptCatalog(after, path);
     const sources = catalogSources(repo);
     const old = analyzeCatalogs(sources);
     sources.set(path, after);

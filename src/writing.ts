@@ -9,6 +9,7 @@ import { analyzeCatalogs, effectiveConcepts, spellingKey, spellingPositions } fr
 import { applies, discovered, scopeOf, snapshotDigest, under } from './writing-scopes.js';
 import { extractSteps } from './steps.js';
 import { readWritingFindings, writeWritingFindings } from './writing-cache.js';
+import { withParseCachePolicy } from './cache-context.js';
 
 export interface WritingFinding {
   file: string; line: number; column?: number; rule: string; message: string; context: string;
@@ -143,7 +144,7 @@ function checkTerms(file: string, line: number, value: string, bans: readonly Ba
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
 // @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 export function checkWriting(repo: Repository, selectedPath?: string, persistentCache = repo instanceof LocalRepository) {
-  return inRepositorySnapshot(repo, () => {
+  return withParseCachePolicy(persistentCache, () => inRepositorySnapshot(repo, () => {
     const inputs = new Map<string, string>([['concord.config.ts', repo.configSnapshot.source]]);
     const memberships = new Map<string, string[]>();
     const read = (path: string): string => {
@@ -257,5 +258,5 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
     if (persistentCache && cached === undefined) writeWritingFindings(repo, cacheDigest, findings);
     return { operation: 'docs-check', ok: findings.length === 0, complete: true, policy: selectedPath ?? 'project', mode, selectedRoots, files: files.size, findings, inputDigest };
-  });
+  }));
 }

@@ -32,7 +32,7 @@ export function cacheRootOwnerOnly(path: string): boolean {
 
 export interface CacheClearInventory { readonly path: string; readonly existing: boolean; readonly empty: boolean; readonly entries: readonly string[] }
 
-interface CacheTreeEntry { readonly dev: bigint; readonly ino: bigint; readonly links: bigint; readonly directory: boolean }
+interface CacheTreeEntry { readonly dev: bigint; readonly ino: bigint; readonly links: bigint; readonly directory: boolean; readonly bytes: bigint }
 const inodeKey = (entry: CacheTreeEntry): string => `${entry.dev}:${entry.ino}`;
 const lockPath = (path: string): boolean => basename(path).endsWith('.lock');
 
@@ -45,7 +45,7 @@ function inspectTree(path: string): Map<string, CacheTreeEntry> {
     const target = pending.pop()!;
     const stat = lstatSync(target, { bigint: true });
     if (stat.isSymbolicLink() || (!stat.isFile() && !stat.isDirectory())) throw new ConcordError('UnsafePath', `Unsupported cache entry: ${target}`);
-    const entry = { dev: stat.dev, ino: stat.ino, links: stat.nlink, directory: stat.isDirectory() };
+    const entry = { dev: stat.dev, ino: stat.ino, links: stat.nlink, directory: stat.isDirectory(), bytes: stat.size };
     entries.set(target, entry);
     if (entry.directory) {
       for (const name of readdirSync(target)) pending.push(join(target, name));
@@ -60,6 +60,21 @@ function inspectTree(path: string): Map<string, CacheTreeEntry> {
   }
   if ([...links.values()].some(group => group.reported !== group.found)) throw new ConcordError('UnsafePath', 'Cache has a hard link outside its directory');
   return entries;
+}
+
+/** Regular-file lengths, counted once per (device, inode); no inventory size cap. */
+export function cachePhysicalBytes(privateDir: string): number {
+  const path = cacheDatabasePath(privateDir);
+  if (!assertCacheDatabaseSafe(path)) return 0;
+  const seen = new Set<string>();
+  let bytes = 0n;
+  for (const entry of inspectTree(path).values()) {
+    const key = inodeKey(entry);
+    if (entry.directory || seen.has(key)) continue;
+    seen.add(key); bytes += entry.bytes;
+  }
+  if (bytes > BigInt(Number.MAX_SAFE_INTEGER)) throw new ConcordError('HawdbLimit', 'Cache physical size exceeds the safe integer range');
+  return Number(bytes);
 }
 
 /** Preflight the complete deletion set before any cache handle is closed or file is removed. */

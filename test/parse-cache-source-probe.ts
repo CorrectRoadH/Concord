@@ -1,0 +1,21 @@
+import { Effect } from 'effect';
+import { LocalRepository } from '../dist/storage.js';
+import { loadDocuments } from '../dist/documents.js';
+import { decodeDocumentSource } from '../dist/document-codec.js';
+import { headingAnchors, inspectSteps } from '../dist/steps.js';
+
+Effect.runSync(Effect.sync(() => {
+  const root = process.argv[2];
+  const repo = new LocalRepository(root, { access: 'read', dryRun: process.argv[3] === 'off' });
+  try {
+    const value = repo.snapshot(() => {
+      const documents = loadDocuments(repo);
+      return Array.from({ length: 3 }, () => documents.map(record => {
+        const source = repo.read(record.path)!;
+        const steps = inspectSteps(record.path, source);
+        return { record: decodeDocumentSource(record.path, source), steps: steps.steps, anchors: [...headingAnchors(source, record.path)], items: steps.items.map(item => ({ line: item.item.position?.start.line, listOrdinal: item.listOrdinal })) };
+      }));
+    });
+    console.log(JSON.stringify(value));
+  } finally { repo.close(); }
+}));

@@ -39,7 +39,7 @@ import {
 import { parseReference, resolveReference } from './refs.js';
 import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { rebaseAdoptedMarkdown } from './adoption.js';
-import { ContentCache } from './content-cache.js';
+import { inspectDocumentProjections, projectionRecord } from './document-projection.js';
 import { readGovernanceConfiguration } from './governance-config.js';
 import { adoptMemoryEvidenceRequirement, memoryEvidenceRequirement } from './evidence-policy.js';
 import { designContentPaths, formatDesignMarkdown, validateDesignContent } from './design-content.js';
@@ -69,15 +69,17 @@ function authorBody(value: string): string {
   return body.endsWith('\n') ? body : `${body}\n`;
 }
 
-const DocumentRecordCacheSchema = Schema.Struct({ path: Schema.String, metadata: DocumentSchema, body: Schema.String, digest: Schema.String });
-const documentContentCache = new ContentCache<DocumentRecord | undefined>('document_parse', 'concord-document-parse/v1', Schema.Union([DocumentRecordCacheSchema, Schema.Undefined]), { maxEntries: 9872, maxBytes: 15 * 1024 * 1024 });
-
 export function parseDocumentRecord(path: string, source: string): DocumentRecord | undefined {
-  return documentContentCache.get(path, source, () => parseDocumentSource(path, source));
+  return parseDocumentSource(path, source);
 }
 
 export function inspectDocumentRecords(inputs: readonly { readonly path: string; readonly source: string }[]) {
-  return documentContentCache.getManyResults(inputs, input => parseDocumentSource(input.path, input.source));
+  return inspectDocumentProjections(inputs).map((result, index) => {
+    if (!result.ok) return result;
+    // Always apply location rules, including on a durable projection hit.
+    try { return { ok: true as const, value: projectionRecord(inputs[index]!.path, result.value) }; }
+    catch (cause) { return { ok: false as const, cause }; }
+  });
 }
 
 export function renderDocument(metadata: DocumentMeta, body: string): string {
@@ -148,7 +150,7 @@ function currentDocument(repo: Repository, record: DocumentRecord | undefined): 
 }
 
 function loadDocumentsUnderSnapshot(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
-  return documentContentCache.getMany(documentInputs(repo, kinds), input => parseDocumentSource(input.path, input.source))
+  return inspectDocumentRecords(documentInputs(repo, kinds)).map(result => { if (!result.ok) throw result.cause; return result.value; })
     .filter((record): record is DocumentRecord => currentDocument(repo, record) && (kinds === undefined || kinds.includes(record.metadata.kind)));
 }
 // @concord-end

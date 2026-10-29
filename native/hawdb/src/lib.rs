@@ -45,6 +45,12 @@ pub struct CacheEntry { pub key: String, pub payload: String }
 pub struct Quota { pub max_entries: u32, pub max_bytes: u32 }
 #[napi(object)]
 pub struct NativeIdentity { pub revision: String, pub abi: String }
+#[napi(object)]
+pub struct ReclamationReport {
+    pub reclaimed_objects: f64,
+    pub reclaimed_bytes: f64,
+    pub deferred_for_active_leases: bool,
+}
 #[napi]
 pub fn native_identity() -> NativeIdentity {
     NativeIdentity { revision: REVISION.into(), abi: ABI.into() }
@@ -65,12 +71,13 @@ fn namespace_quota(namespace: &str, memory: bool) -> napi::Result<(usize, usize)
         (false, "feedback_cache") => Ok((10_000, 32*MIB)),
         (false, "query_cache") => Ok((64, 16*MIB)),
         (false, "workspace_projection") => Ok((1, 8*MIB)),
+        (false, "document_parse_cache") => Ok((10_000, 24*MIB)),
         _ => Err(err("HawdbIncompatible", "namespace is unavailable in this database mode")),
     }
 }
 fn namespaces(memory: bool) -> &'static [&'static str] {
     if memory { &["document_parse", "code_parse", "git_baseline"] }
-    else { &["annotation_cache", "code_cache", "config_cache", "feedback_cache", "query_cache", "workspace_projection"] }
+    else { &["annotation_cache", "code_cache", "config_cache", "feedback_cache", "query_cache", "workspace_projection", "document_parse_cache"] }
 }
 fn config(read_only: bool) -> DatabaseConfig {
     DatabaseConfig {
@@ -382,6 +389,20 @@ impl CacheBridge {
             if !read_rows(db, name)?.is_empty() { result.push((*name).into()); }
         }
         Ok(result)
+    }
+    #[napi]
+    pub fn reclaim(&self) -> napi::Result<ReclamationReport> {
+        let mut handle = self.handle.lock().map_err(unavailable)?;
+        if handle.memory || handle.read_only { return Err(err("HawdbIncompatible", "reclamation requires a writable persistent handle")); }
+        handle.lease.as_ref().map(ConcordLease::verify).transpose()?;
+        let db = active_mut(&mut handle)?;
+        db.checkpoint().map_err(unavailable)?;
+        let report = db.reclaim_branch_storage(hawdb::BranchReclamationLimits::default()).map_err(unavailable)?;
+        Ok(ReclamationReport {
+            reclaimed_objects: report.reclaimed_objects as f64,
+            reclaimed_bytes: report.reclaimed_bytes as f64,
+            deferred_for_active_leases: report.deferred_for_active_leases,
+        })
     }
     #[napi]
     pub fn close(&self) -> napi::Result<()> {

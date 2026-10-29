@@ -3,11 +3,15 @@ import { buildTrace } from './trace.js';
 import { indexConcepts } from './concepts.js';
 import { inlineLinks, relativeMarkdownLinkTarget } from './constitution.js';
 import { checkWriting } from './writing.js';
+import { withParseCachePolicy } from './cache-context.js';
 
 // @concord-code
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的聚合检查
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
+  return withParseCachePolicy(cache !== 'off', () => checkProjectWithPolicy(repo, cache));
+}
+function checkProjectWithPolicy(repo: Repository, cache: 'use' | 'off' | 'rebuild') {
   const trace = buildTrace(repo, cache);
   const conceptLinks: { code: string; path: string; line: number; message: string; category: 'relation' }[] = [];
   let conceptLinksComplete = true;
@@ -17,7 +21,7 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
     const source = repo.read(path);
     if (source === undefined) { conceptLinksComplete = false; conceptLinks.push({ category: 'relation', code: 'SourceChanged', path, line: 1, message: 'File disappeared while terminology links were read' }); continue; }
     if (!catalogPaths.has(path) && !/concepts|[%&]/iu.test(source)) continue;
-    for (const link of inlineLinks(source)) for (const catalog of catalogs) {
+    for (const link of inlineLinks(source, path)) for (const catalog of catalogs) {
       const target = relativeMarkdownLinkTarget(path, link.url, catalog.path);
       if (target === undefined || target.kind === 'whole') continue;
       if (target.kind === 'invalid') { conceptLinksComplete = false; conceptLinks.push({ category: 'relation', code: 'ConceptLinkInvalid', path, line: link.line, message: target.message }); break; }

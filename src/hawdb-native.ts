@@ -7,15 +7,17 @@ import { Effect, Schema } from 'effect';
 import { HAWDB_ABI, HAWDB_REVISION, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget } from './hawdb-native-contract.js';
 
 export { HAWDB_ABI, HAWDB_REVISION };
-export type HawdbNamespace = 'document_parse' | 'code_parse' | 'git_baseline' | 'annotation_cache' | 'code_cache' | 'config_cache' | 'feedback_cache' | 'query_cache' | 'workspace_projection';
+export type HawdbNamespace = 'document_parse' | 'document_parse_cache' | 'code_parse' | 'git_baseline' | 'annotation_cache' | 'code_cache' | 'config_cache' | 'feedback_cache' | 'query_cache' | 'workspace_projection';
 export interface HawdbEntry { readonly key: string; readonly payload: string; }
 export interface HawdbLimits { readonly maxEntries: number; readonly maxBytes: number; }
+export interface HawdbReclamation { readonly reclaimedObjects: number; readonly reclaimedBytes: number; readonly deferredForActiveLeases: boolean }
 export interface HawdbDatabase {
   get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[];
   scan(namespace: HawdbNamespace): readonly HawdbEntry[];
   put(namespace: HawdbNamespace, entries: readonly HawdbEntry[], limits?: HawdbLimits): void;
   clearNamespace(namespace: HawdbNamespace): void;
   namespaces(): readonly HawdbNamespace[];
+  reclaim(): HawdbReclamation;
   close(): void;
 }
 export type HawdbFailureCode = 'HawdbBusy' | 'HawdbUnavailable' | 'HawdbIncompatible' | 'HawdbLimit' | 'HawdbClosed' | 'UnsafePath';
@@ -25,7 +27,7 @@ export class HawdbFailure extends Error {
   }
 }
 const EntrySchema = Schema.Struct({ key: Schema.String, payload: Schema.String });
-const NamespaceSchema = Schema.Literals(['document_parse', 'code_parse', 'git_baseline', 'annotation_cache', 'code_cache', 'config_cache', 'feedback_cache', 'query_cache', 'workspace_projection']);
+const NamespaceSchema = Schema.Literals(['document_parse', 'document_parse_cache', 'code_parse', 'git_baseline', 'annotation_cache', 'code_cache', 'config_cache', 'feedback_cache', 'query_cache', 'workspace_projection']);
 const OptionsSchema = Schema.Struct({ readOnly: Schema.Boolean, create: Schema.Boolean });
 const KeysSchema = Schema.Array(Schema.String);
 const decodeNamespace = Schema.decodeUnknownSync(NamespaceSchema, { errors: 'all' });
@@ -56,6 +58,7 @@ interface NativeBridge {
   put(namespace: string, entries: HawdbEntry[], quota?: { maxEntries: number; maxBytes: number }): void;
   clearNamespace(namespace: string): void;
   namespaces(): unknown;
+  reclaim(): unknown;
   close(): void;
 }
 interface NativeModule {
@@ -117,6 +120,9 @@ class Database implements HawdbDatabase {
   }
   clearNamespace(namespace: HawdbNamespace): void { boundary(() => this.native.clearNamespace(decodeNamespace(namespace))); }
   namespaces(): readonly HawdbNamespace[] { return boundary(() => readNamespaces(this.native.namespaces())); }
+  reclaim(): HawdbReclamation {
+    return boundary(() => Schema.decodeUnknownSync(Schema.Struct({ reclaimedObjects: Schema.Int, reclaimedBytes: Schema.Int, deferredForActiveLeases: Schema.Boolean }), { onExcessProperty: 'error' })(this.native.reclaim()));
+  }
   close(): void { boundary(() => this.native.close()); }
 }
 export function openHawdb(path: string, options: { readonly readOnly: boolean; readonly create: boolean }): HawdbDatabase {

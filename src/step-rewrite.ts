@@ -4,6 +4,7 @@ import { posix } from 'node:path';
 import type { Nodes } from 'mdast';
 import { fromMarkdown } from './markdown-parser.js';
 import { markdownBody, inspectSteps, headingAnchors } from './steps.js';
+import { documentMarkdown } from './document-projection.js';
 import { parseTestDeclarations } from './annotations.js';
 import { codeReferenceTokens } from './code.js';
 import { loadDocuments, readDocumentSelector } from './documents.js';
@@ -78,7 +79,7 @@ export function markdownReferenceTokens(path: string, source: string): readonly 
     }
     if ('children' in node) node.children.forEach(visit);
   };
-  visit(fromMarkdown(markdownBody(source)));
+  visit(documentMarkdown(path, source));
   return tokens;
 }
 
@@ -135,7 +136,7 @@ export function planStepRename(repo: Repository, request: StepRename) {
   if (extracted.findings.length) throw new ConcordError(extracted.findings[0]!.code, 'Fix invalid or ambiguous steps before renaming', extracted.findings);
   const old = extracted.items.find(item => item.marker?.id === oldId)?.marker;
   if (old === undefined) throw new ConcordError('AnchorNotFound', `Step ${oldId} does not exist in ${useCase}`);
-  if (headingAnchors(source).has(newId) || extracted.steps.some(step => step.id === newId)) throw new ConcordError('DuplicateAnchor', `Anchor ${newId} is already occupied`);
+  if (headingAnchors(source, useCase).has(newId) || extracted.steps.some(step => step.id === newId)) throw new ConcordError('DuplicateAnchor', `Anchor ${newId} is already occupied`);
   const oldRef = `${useCase}#${oldId}`, newRef = `${useCase}#${newId}`;
   const scan = scanStepReferences(repo);
   for (const record of scan.documents) {
@@ -176,7 +177,7 @@ export function formatStepSource(repo: Repository, path: string, source: string,
   const selected = new Set(extracted.lists.filter(item => item.marked > 0 || item.ordinal === list).map(item => item.ordinal));
   if (!selected.size) return source;
   if (extracted.lists.some(list => selected.has(list.ordinal) && extracted.items.filter(item => item.listOrdinal === list.ordinal).length !== list.items)) throw new ConcordError('InvalidStepPosition', 'Every selected item must start with a paragraph');
-  const scan = scanStepReferences(repo), occupied = new Set([...headingAnchors(source), ...extracted.steps.map(step => step.id)]);
+  const scan = scanStepReferences(repo), occupied = new Set([...headingAnchors(source, path), ...extracted.steps.map(step => step.id)]);
   for (const file of scan.files) for (const ref of [...file.tokens.map(token => token.reference), ...file.markdown.map(token => token.target)]) if (ref.startsWith(`${path}#`)) occupied.add(ref.slice(path.length + 1));
   for (const record of scan.documents) {
     const collect = (value: unknown): void => {

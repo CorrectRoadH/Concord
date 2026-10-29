@@ -8,13 +8,14 @@ import { CONSTITUTION_PATH, inspectConstitution, showConstitution } from './cons
 import { measureScan, type ScanTiming } from './scan-timing.js';
 import { referenceResolver } from './refs.js';
 import { extractSteps } from './steps.js';
+import { withParseCachePolicy } from './cache-context.js';
 
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming } = {}) {
   const read = () => buildUnderSnapshot(repo, cache, options).trace;
-  return repo.snapshot === undefined ? read() : repo.snapshot(read);
+  return withParseCachePolicy(cache !== 'off', () => repo.snapshot === undefined ? read() : repo.snapshot(read));
 }
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
@@ -111,7 +112,7 @@ function deriveTrace<A>(repo: Repository, cache: 'use' | 'off', strict: boolean,
     if (strict) requireValidTrace(trace);
     return result;
   };
-  return repo.snapshot === undefined ? read() : repo.snapshot(read);
+  return withParseCachePolicy(cache !== 'off', () => repo.snapshot === undefined ? read() : repo.snapshot(read));
 }
 export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
   if (!trace.complete || trace.findings.length) throw new ConcordError('TraceInvalid', 'Fix the reported source or contract findings before continuing', trace.findings);

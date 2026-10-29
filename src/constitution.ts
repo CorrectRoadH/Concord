@@ -7,6 +7,7 @@ import { renderTypeScriptConfig } from './config.js';
 import { ConstitutionSchema, type ConstitutionMeta } from './constitution-schema.js';
 import { fromMarkdown } from './markdown-parser.js';
 import { markdownAnchor, markdownBody } from './steps.js';
+import { documentMarkdown, documentProjection } from './document-projection.js';
 
 export { ConstitutionSchema } from './constitution-schema.js';
 export type { ConstitutionMeta } from './constitution-schema.js';
@@ -47,7 +48,7 @@ export function constitutionClauses(source: string): ConstitutionClause[] {
     declared.set(id, line ?? 1);
   };
   let current: { id: string; title: string; paragraphs: string[] } | undefined;
-  for (const node of fromMarkdown(masked).children) {
+  for (const node of documentMarkdown(CONSTITUTION_PATH, source).children) {
     const line = node.position?.start.line;
     if (node.type === 'heading') {
       if (node.depth <= 2) current = undefined;
@@ -153,7 +154,8 @@ export function constitutionLinkTarget(from: string, url: string): LinkTarget | 
 }
 
 /** Inline link nodes only: images, reference links, HTML and code never contribute. */
-export function inlineLinks(source: string): { readonly url: string; readonly line: number }[] {
+export function inlineLinks(source: string, path?: string): { readonly url: string; readonly line: number }[] {
+  if (path !== undefined) return [...documentProjection(path, source).links];
   const links: { url: string; line: number }[] = [];
   const visit = (node: Nodes): void => {
     if (node.type === 'link') links.push({ url: node.url, line: node.position?.start.line ?? 1 });
@@ -183,7 +185,7 @@ export function scanConstitutionLinks(repo: Repository, index: ReadonlyMap<strin
     if (source === undefined) { complete = false; findings.push({ code: 'SourceChanged', path, message: 'File disappeared while constitution references were read' }); continue; }
     // Any constitution link spells the path, percent-encodes it, or uses a character reference.
     if (!/constitution|[%&]/iu.test(source)) continue;
-    for (const link of inlineLinks(source)) {
+    for (const link of inlineLinks(source, path)) {
       const target = constitutionLinkTarget(path, link.url);
       if (target === undefined || target.kind === 'whole') continue;
       if (target.kind === 'invalid') { complete = false; findings.push({ code: 'ConstitutionLinkInvalid', path, line: link.line, message: target.message }); continue; }
@@ -254,7 +256,7 @@ function guardReferences(repo: Repository, current: ConstitutionRecord, candidat
   if (invalidLink !== undefined) throw new ConcordError('ConstitutionLinkInvalid', `${invalidLink.path}:${invalidLink.line}: ${invalidLink.message}`, [invalidLink]);
   if (!scan.complete) throw new ConcordError('SourceChanged', 'Constitution references could not be read completely; retry after the sources settle', scan.findings);
   const internal: { path: string; line: number; id: string }[] = [];
-  for (const link of inlineLinks(candidateSource)) {
+  for (const link of inlineLinks(candidateSource, CONSTITUTION_PATH)) {
     const target = constitutionLinkTarget(CONSTITUTION_PATH, link.url);
     if (target?.kind === 'invalid') throw new ConcordError('ConstitutionLinkInvalid', `${CONSTITUTION_PATH}:${link.line}: ${target.message}`);
     if (target?.kind === 'fragment' && !candidate.has(target.id)) internal.push({ path: CONSTITUTION_PATH, line: link.line, id: target.id });

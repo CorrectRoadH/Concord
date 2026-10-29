@@ -12,7 +12,7 @@ const distribution = sourceInstallation ? join(directory, '../dist') : directory
 export const nativeArtifactRoot = join(distribution, 'native');
 
 /** Resolve the loader at the installation, independently of a consumer's cwd. */
-export function workerEntryArgv(name: 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker', nodeOptions: readonly string[] = []): string[] {
+export function workerEntryArgv(name: 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'cache-maintenance-worker', nodeOptions: readonly string[] = []): string[] {
   return [...nodeOptions, ...(sourceInstallation ? ['--import', import.meta.resolve('tsx')] : []), join(directory, `${name}.${sourceInstallation ? 'ts' : 'js'}`)];
 }
 

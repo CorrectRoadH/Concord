@@ -4,12 +4,16 @@ import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from '
 import { HawdbFailure, openHawdb, type HawdbDatabase } from './hawdb-native.js';
 import type { Repository } from './shared.js';
 import { ensureGenericPrivateDirectorySync } from './coordination.js';
+import { requestCacheMaintenance } from './cache-maintenance.js';
 
 const scopes = new WeakMap<Repository, { database: HawdbDatabase; writable: boolean }>();
 export function closeRepositoryCache(repo: Repository): void {
   const scope = scopes.get(repo);
   scopes.delete(repo);
-  scope?.database.close();
+  if (scope !== undefined) {
+    scope.database.close();
+    if (scope.writable) requestCacheMaintenance(repo);
+  }
 }
 
 /** The outer LocalRepository snapshot closes the handle before its lease. Fake repositories get a short handle. */

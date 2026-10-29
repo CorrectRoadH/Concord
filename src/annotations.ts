@@ -1,6 +1,7 @@
 import { lstatSync } from 'node:fs';
 import { Schema } from 'effect';
-import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache } from './cache-file.js';
+import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from './cache-file.js';
+import { CACHE_PHYSICAL_LIMIT_BYTES } from './hawdb-native-contract.js';
 import { withPersistentCache, closeRepositoryCache } from './cache-store.js';
 import { acquireHawdbClearGuard, hawdbIdentity } from './hawdb-native.js';
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from './shared.js';
@@ -197,8 +198,8 @@ function scanUnderSnapshot(repo: Repository, options: { cache?: 'use' | 'rebuild
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#rebuild
-export function clearCache(repo: Repository): { readonly status: string; readonly path: string } {
-  return repo.snapshot === undefined ? clearUnderSnapshot(repo) : repo.snapshot(() => clearUnderSnapshot(repo));
+export function clearCache(repo: Repository, onlyAboveBytes?: number): { readonly status: string; readonly path: string } {
+  return repo.snapshot === undefined ? clearUnderSnapshot(repo, onlyAboveBytes) : repo.snapshot(() => clearUnderSnapshot(repo, onlyAboveBytes));
 }
 export function previewCacheClear(repo: Repository) {
   const preview = () => {
@@ -215,21 +216,27 @@ export function previewCacheClear(repo: Repository) {
   };
   return repo.snapshot === undefined ? preview() : repo.snapshot(preview);
 }
-function clearUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string } {
+function clearUnderSnapshot(repo: Repository, onlyAboveBytes?: number): { readonly status: string; readonly path: string } {
   if (repo.access === 'read') throw new ConcordError('ReadOnlyRepository', 'Cache clear requires write access');
   const inventory = inspectCacheClear(repo.privateDir);
   if (!inventory.existing) return { status: 'empty', path: inventory.path };
   closeRepositoryCache(repo);
   const guard = acquireHawdbClearGuard(inventory.path);
-  try { deleteInspectedCache(inspectCacheClear(repo.privateDir), () => guard.verify()); }
+  try {
+    guard.verify();
+    if (onlyAboveBytes !== undefined && cachePhysicalBytes(repo.privateDir) <= onlyAboveBytes) return { status: 'below-limit', path: inventory.path };
+    deleteInspectedCache(inspectCacheClear(repo.privateDir), () => guard.verify());
+  }
   finally { guard.close(); }
   return { status: inventory.empty ? 'empty' : 'cleared', path: inventory.path };
 }
-export function cacheStatus(repo: Repository): { readonly status: string; readonly path: string; readonly detail?: string } {
+interface CacheStatus { readonly status: string; readonly path: string; readonly detail?: string; readonly physicalBytes: number | null; readonly physicalLimitBytes: number }
+export function cacheStatus(repo: Repository): CacheStatus {
   return repo.snapshot === undefined ? statusUnderSnapshot(repo) : repo.snapshot(() => statusUnderSnapshot(repo));
 }
-function statusUnderSnapshot(repo: Repository): { readonly status: string; readonly path: string; readonly detail?: string } {
-  const path = cachePath(repo); try {
+function statusUnderSnapshot(repo: Repository): CacheStatus {
+  const path = cachePath(repo);
+  const status = (): { readonly status: string; readonly path: string; readonly detail?: string } => { try {
     const inventory = inspectCacheClear(repo.privateDir);
     hawdbIdentity();
     if (!inventory.existing || inventory.empty) return { status: 'empty', path };
@@ -239,6 +246,12 @@ function statusUnderSnapshot(repo: Repository): { readonly status: string; reado
       for (const namespace of projections) db!.scan(namespace);
       return { status: projections.length === 0 ? 'empty' : 'ready', path, detail: `projections: ${projections.join(', ')}` };
     });
-  } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; }
+  } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; } };
+  let report: ReturnType<typeof status>;
+  try { report = status(); }
+  finally { closeRepositoryCache(repo); }
+  // Runtime files and ownership records can change on open and close.
+  try { return { ...report, physicalBytes: cachePhysicalBytes(repo.privateDir), physicalLimitBytes: CACHE_PHYSICAL_LIMIT_BYTES }; }
+  catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause), physicalBytes: null, physicalLimitBytes: CACHE_PHYSICAL_LIMIT_BYTES }; }
 }
 // @concord-end

@@ -2,6 +2,10 @@ import { Schema } from 'effect';
 
 export const HAWDB_REVISION = '91aec4960ed27516962cf1dc918307f57faef15d';
 export const HAWDB_ABI = 'concord-hawdb-1';
+// Mirrors the native persistent logical admission budget; namespaces share it.
+export const PERSISTENT_CACHE_MAX_BYTES = 96 * 1024 * 1024;
+export const CACHE_MAINTENANCE_THRESHOLD_BYTES = 48 * 1024 * 1024;
+export const CACHE_PHYSICAL_LIMIT_BYTES = PERSISTENT_CACHE_MAX_BYTES * 2 + 32 * 1024 * 1024;
 export const HAWDB_MACOS_DEPLOYMENT_TARGET = '15.0';
 export const HAWDB_TARGETS = ['linux-x64-glibc', 'darwin-arm64'] as const;
 export type HawdbTarget = typeof HAWDB_TARGETS[number];

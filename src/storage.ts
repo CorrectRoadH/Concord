@@ -8,6 +8,7 @@ import { acquireTraceLeaseSync, assertLegacyTraceStateMigratedSync, Coordination
 import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Change, type ConfigSnapshot, type MemorySource, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig, snapshot } from './config.js';
 import { closeRepositoryCache } from './cache-store.js';
+import { withCacheRepository } from './cache-context.js';
 import { invalidateActiveRun } from './run-coordination.js';
 import { acquireFileLease, acquireRecoverablePublicationLease, advancePublicationRevision, publicationRevision } from './file-lease.js';
 import { initialConstitutionSource } from './constitution.js';
@@ -557,7 +558,7 @@ export class LocalRepository implements Repository {
     this.observedFiles.clear(); this.observedDirectories.clear();
     this.beginSnapshot();
     try {
-      const value = read();
+      const value = withCacheRepository(this, read);
       // The candidate owns decoded values now; drift collection needs no cache handle.
       closeRepositoryCache(this);
       const { files, directories } = this.verifyObservations(true);
@@ -567,7 +568,7 @@ export class LocalRepository implements Repository {
   }
   private underLease<A>(read: () => A): A {
     this.beginSnapshot();
-    try { const value = read(); if (this.snapshotDepth === 1) this.verifySnapshot(); return value; } finally { this.endSnapshot(); }
+    try { const value = withCacheRepository(this, read); if (this.snapshotDepth === 1) this.verifySnapshot(); return value; } finally { this.endSnapshot(); }
   }
   /** Optimistic reads never hold up a publisher; changed inputs reject the result. */
   // @concord-code

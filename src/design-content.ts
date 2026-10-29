@@ -3,6 +3,7 @@
 import { posix } from 'node:path';
 import { designPlanCandidates, resolveDesignPlanPath } from './document-layout.js';
 import { fromMarkdown } from './markdown-parser.js';
+import { documentMarkdown } from './document-projection.js';
 import type { RootContent, Nodes } from 'mdast';
 import { Schema } from 'effect';
 import { markdownAnchor } from './refs.js';
@@ -62,7 +63,7 @@ export function validateDesignContent(base: string, alternatives: readonly strin
   const nodesFor = (path: string): RootContent[] => {
     const source = sources.get(path);
     if (source === undefined) { report(path, 'DesignPageMissing', 'Required Design page is missing'); return []; }
-    const nodes = fromMarkdown(source).children;
+    const nodes = documentMarkdown(path, source).children;
     if (nodes.filter(node => node.type === 'heading' && node.depth === 1).length !== 1) report(path, 'DesignHeadingInvalid', 'Expected exactly one H1 document title');
     return nodes;
   };
