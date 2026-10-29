@@ -41,7 +41,8 @@ import { getGitDiff, getGitStatus } from './git-view.js';
 import { serveViewServer } from './view-server.js';
 import { viewAddresses } from './view-addresses.js';
 import { exportChangePreview } from './change-preview-export.js';
-import { adoptConstitution, amendConstitution, initializeConstitution, showConstitution } from './constitution.js';
+import { adoptConstitution, amendConstitution, constitutionShow, initializeConstitution } from './constitution.js';
+import { migrateConstitution } from './constitution-migrate.js';
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
@@ -189,10 +190,10 @@ const recover = Command.make('recover', {}, () => Effect.gen(function*() {
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page
 function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
-  const create = Command.make('create', { id, title: text('title'), body: optional('body'), feature: optional('feature'), observedAt: optional('observed-at'), source: many('source'), alternative: many('alternative'), pages: many('pages'), noPages: Flag.boolean('no-pages').pipe(Flag.withDefault(false)), constitutionRef: many('constitution-ref') }, args => withRepo((repo, s) => sync(() => {
+  const create = Command.make('create', { id, title: text('title'), body: optional('body'), feature: optional('feature'), observedAt: optional('observed-at'), source: many('source'), alternative: many('alternative'), pages: many('pages'), noPages: Flag.boolean('no-pages').pipe(Flag.withDefault(false)) }, args => withRepo((repo, s) => sync(() => {
     if (args.noPages && args.pages.length) throw new ConcordError('ConflictingOptions', '--no-pages cannot be combined with --pages');
-    return createDocument(repo, kind, { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, feature: Option.getOrUndefined(args.feature), observedAt: Option.getOrUndefined(args.observedAt), sources: args.source, alternatives: args.alternative, pages: args.noPages ? [] : args.pages.length ? args.pages.flatMap(value => value.split(',').map(page => page.trim())) : undefined, constitutionRefs: args.constitutionRef.length ? args.constitutionRef : undefined, dryRun: s.dryRun });
-  }))).pipe(Command.withDescription('Create a writing scaffold. Feature/Roadmap/Design omitted pages use project defaults; --no-pages explicitly creates README only. Feature/Design accept repeated --constitution-ref.'));
+    return createDocument(repo, kind, { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, feature: Option.getOrUndefined(args.feature), observedAt: Option.getOrUndefined(args.observedAt), sources: args.source, alternatives: args.alternative, pages: args.noPages ? [] : args.pages.length ? args.pages.flatMap(value => value.split(',').map(page => page.trim())) : undefined, dryRun: s.dryRun });
+  }))).pipe(Command.withDescription('Create a writing scaffold. Feature/Roadmap/Design omitted pages use project defaults; --no-pages explicitly creates README only. Link applicable constitution clauses from the body.'));
   const list = Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: `${kind}-list`, documents: loadDocuments(repo).filter(d => d.metadata.kind === kind).map(d => ({ path: d.path, ...d.metadata })) }))));
   const show = Command.make('show', { id }, ({ id }) => withReadRepo((repo, settings) => sync(() => documentShow(repo, id, kind, cached(settings.dryRun)))));
   const adopt = Command.make('adopt', { id, feature: text('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, args.feature, s.dryRun))));
@@ -512,10 +513,11 @@ const config = Command.make('config').pipe(Command.withDescription('Inspect or r
 // @concord-begin
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 const constitution = Command.make('constitution').pipe(Command.withDescription('Inspect, initialize, adopt, and amend the single project constitution with CAS.'), Command.withSubcommands([
-  Command.make('show', {}, () => withReadRepo(repo => sync(() => ({ operation: 'constitution-show', constitution: showConstitution(repo), affected: loadDocuments(repo).filter((document) => (document.metadata.kind === 'feature' || document.metadata.kind === 'design') && (document.metadata.constitutionRefs?.length ?? 0) > 0).map((document) => ({ path: document.path, refs: document.metadata.kind === 'feature' || document.metadata.kind === 'design' ? document.metadata.constitutionRefs ?? [] : [] })) })))),
+  Command.make('show', {}, () => withReadRepo(repo => sync(() => constitutionShow(repo)))).pipe(Command.withDescription('Show clauses, paragraphs and every in-scope link that references them; complete is false when references cannot be read or decoded.')),
   Command.make('initialize', {}, () => withRepo((repo, settings) => sync(() => initializeConstitution(repo, settings.dryRun)))),
   Command.make('adopt', { body: text('body'), reason: text('reason'), impact: text('impact'), source: many('source'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => adoptConstitution(repo, body(args.body), args.reason, args.impact, args.source, args.expectedDigest, settings.dryRun)))),
   Command.make('amend', { body: text('body'), reason: text('reason'), impact: text('impact'), source: many('source'), expectedDigest: text('expected-digest') }, args => withRepo((repo, settings) => sync(() => amendConstitution(repo, body(args.body), args.reason, args.impact, args.source, args.expectedDigest, settings.dryRun)))),
+  Command.make('migrate', {}, () => withRepo((repo, settings) => sync(() => migrateConstitution(repo, settings.dryRun)))).pipe(Command.withDescription('Convert a v1 constitution and Feature/Design constitutionRefs metadata into heading IDs and body links in one recoverable publication.')),
 ]));
 // @concord-end
 // @concord-begin

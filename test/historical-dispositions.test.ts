@@ -29,11 +29,10 @@ test('cancelled Roadmap cannot be adopted and a new decision replaces historical
   const design = findDocument(loadDocuments(repo), 'deferred', 'design');
   if (design.metadata.kind !== 'design') throw new Error('fixture');
   writeFileSync(join(root, design.path), renderDocument({ ...design.metadata, deferral: disposition }, design.body));
-  const profile = decodeDesignReadme(design.path, renderDocument({ ...design.metadata, deferral: disposition, constitutionRefs: [] }, design.body));
+  const profile = decodeDesignReadme(design.path, renderDocument({ ...design.metadata, deferral: disposition }, design.body));
   assert.equal(profile.state._tag, 'deferred');
   const encoded = encodeDecidedDesignReadme(profile, Schema.decodeUnknownSync(RepoRefSchema)('docs/design/deferred/plans/one/README.md'), design.body);
   assert.doesNotMatch(encoded, /deferral:/);
-  assert.match(encoded, /constitutionRefs: \[\]/);
   assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
   authorDesignFixture(root, 'deferred', ['one', 'two'], 'one');
   decideDesign(repo, 'deferred', 'one', [], 'Evidence is now available');

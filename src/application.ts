@@ -397,7 +397,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
   switch (action.action) {
     case 'document.create': return createDocument(repo, action.kind, { ...action, dryRun });
     case 'document.set': return setMarkdown(repo, action.path, action.body, action.expectedDigest, dryRun);
-    case 'document.metadata': return setMetadata(repo, action.reference, { title: action.title, observedAt: action.observedAt, sources: action.sources, constitutionRefs: action.constitutionRefs }, action.expectedDigest, dryRun);
+    case 'document.metadata': return setMetadata(repo, action.reference, { title: action.title, observedAt: action.observedAt, sources: action.sources }, action.expectedDigest, dryRun);
     case 'page.add': return addPage(repo, action.kind, action.id, action.page, dryRun, action.plan);
     case 'roadmap.adopt': return adoptRoadmap(repo, action.id, action.feature, dryRun);
     case 'design.decide': return decideDesign(repo, action.id, action.selected, action.targets, action.reason, dryRun);

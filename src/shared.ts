@@ -152,11 +152,11 @@ const base = { format: Schema.Literal('concord.document/v1'), id: DocumentName, 
   createdAtSource: Schema.optional(Schema.Struct({ kind: Schema.Literal('first-recorded'), path: Text, commit: GitCommit })),
   description: Schema.optional(Text),
 };
-export const FeatureSchema = Schema.Struct({ ...base, kind: Schema.Literal('feature'), origin: Schema.optional(Text), constitutionRefs: Schema.optional(Strings) });
+export const FeatureSchema = Schema.Struct({ ...base, kind: Schema.Literal('feature'), origin: Schema.optional(Text) });
 export const UseCaseSchema = Schema.Struct({ ...base, kind: Schema.Literal('use-case'), feature: Text });
 export const ResearchSchema = Schema.Struct({ ...base, kind: Schema.Literal('research'), observedAt: Schema.optional(Text), sources: Strings });
 export const HistoricalDispositionSchema = Schema.Struct({ reason: Text, source: SourceRecordSchema, eventAt: Schema.optional(Text) });
-export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.NonEmptyArray(DocumentName), constitutionRefs: Schema.optional(Strings), decision: Schema.optional(Schema.Struct({ selected: DocumentName, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
+export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.NonEmptyArray(DocumentName), decision: Schema.optional(Schema.Struct({ selected: DocumentName, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
 export const RoadmapSchema = Schema.Struct({ ...base, kind: Schema.Literal('roadmap'), state: Schema.Literals(['planned', 'adopted', 'cancelled']), adoptedAs: Schema.optional(Text), cancellation: Schema.optional(HistoricalDispositionSchema) });
 export const EngineeringSchema = Schema.Struct({ ...base, kind: Schema.Literal('engineering') });
 export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), memoryKind: Schema.Literals(['problem', 'decision', 'insight', 'note']), state: Schema.Literals(['captured', 'open', 'resolved', 'current', 'superseded']), epoch: Nat, evidenceRequirement: Schema.optional(Schema.Literals(['command', 'concord.native-reliability/v1'])), promotions: Strings, history: Schema.Array(HistorySchema), resolution: Schema.optional(ResolutionSchema), supersededBy: Schema.optional(Text), supersession: Schema.optional(Schema.Struct({ statement: Text, source: SourceRecordSchema })) });

@@ -38,7 +38,6 @@ import {
 import { parseReference, resolveReference } from './refs.js';
 import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { rebaseAdoptedMarkdown } from './adoption.js';
-import { showConstitution } from './constitution.js';
 import { ContentCache } from './content-cache.js';
 import { readGovernanceConfiguration } from './governance-config.js';
 import { adoptMemoryEvidenceRequirement, memoryEvidenceRequirement } from './evidence-policy.js';
@@ -175,7 +174,7 @@ export function diagnoseDocuments(repo: Repository): DocumentInventory {
         const record = result.value;
         if (currentDocument(repo, record)) documents.push(record);
       } catch (cause) {
-        if (!(cause instanceof ConcordError) || !['InvalidData', 'ResearchMigrationRequired'].includes(cause.code)) throw cause;
+        if (!(cause instanceof ConcordError) || !['InvalidData', 'ResearchMigrationRequired', 'ConstitutionMigrationRequired'].includes(cause.code)) throw cause;
         findings.push({ code: cause.code, path: input.path, message: cause.message });
       }
     }
@@ -261,17 +260,6 @@ function checkRef(
   catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidReference', owner.path, `${label}: ${cause instanceof Error ? cause.message : String(cause)}`); return undefined; }
 }
 
-function validateConstitutionRefs(repo: Repository, refs: readonly string[]): void {
-  if (new Set(refs).size !== refs.length) throw new ConcordError('DuplicateConstitutionRef', 'constitutionRefs must be unique');
-  if (refs.length === 0) return;
-  const anchors = showConstitution(repo).anchors;
-  for (const reference of refs) {
-    const parsed = parseReference(reference);
-    if (parsed.path !== 'docs/constitution.md' || parsed.anchor === undefined) throw new ConcordError('InvalidConstitutionRef', 'Expected docs/constitution.md#<clause>');
-    if (!anchors.includes(parsed.anchor)) throw new ConcordError('AnchorNotFound', `Constitution clause ${parsed.anchor} does not exist`);
-  }
-}
-
 function checkIssueClosure(repo: Repository, documents: readonly DocumentRecord[], document: DocumentRecord): Finding[] {
   const findings: Finding[] = []; const metadata = document.metadata;
   if (metadata.kind !== 'issue') return findings;
@@ -320,17 +308,6 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       const origin = checkRef(findings, repo, documents, document, metadata.origin, ['roadmap'], 'origin');
       if (origin?.metadata.kind === 'roadmap' && (origin.metadata.state !== 'adopted' || origin.metadata.adoptedAs !== document.path)) {
         finding(findings, 'InvalidState', document.path, 'Feature origin does not identify a Roadmap adopted as this Feature');
-      }
-    }
-    if (metadata.kind === 'feature' || metadata.kind === 'design') {
-      if (new Set(metadata.constitutionRefs ?? []).size !== (metadata.constitutionRefs ?? []).length) finding(findings, 'DuplicateConstitutionRef', document.path, 'constitutionRefs must be unique');
-      for (const reference of metadata.constitutionRefs ?? []) {
-        try {
-          const parsed = parseReference(reference);
-          if (parsed.path !== 'docs/constitution.md' || parsed.anchor === undefined) throw new ConcordError('InvalidConstitutionRef', 'Expected docs/constitution.md#<clause>');
-          const anchors = showConstitution(repo).anchors;
-          if (!anchors.includes(parsed.anchor)) throw new ConcordError('AnchorNotFound', `Constitution clause ${parsed.anchor} does not exist`);
-        } catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidConstitutionRef', document.path, cause instanceof Error ? cause.message : String(cause)); }
       }
     }
     if (metadata.kind === 'design') {
@@ -440,7 +417,6 @@ export interface CreateDocumentInput {
   readonly sources?: readonly string[];
   readonly alternatives?: readonly string[];
   readonly pages?: readonly string[];
-  readonly constitutionRefs?: readonly string[];
   readonly memorySource?: string;
   readonly memoryKind?: 'problem' | 'decision' | 'insight' | 'note';
   readonly dryRun?: boolean;
@@ -462,10 +438,6 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   if ((input.alternatives?.length ?? 0) > 0 && kind !== 'design') throw new ConcordError('InvalidInput', 'alternatives are only valid for design');
   if (input.memoryKind !== undefined && kind !== 'memory') throw new ConcordError('InvalidInput', 'memoryKind is only valid for memory');
   if (input.pages !== undefined && !['feature', 'roadmap', 'design'].includes(kind)) throw new ConcordError('InvalidInput', 'pages is only valid for feature, roadmap, and design');
-  if (input.constitutionRefs !== undefined) {
-    if (kind !== 'feature' && kind !== 'design') throw new ConcordError('InvalidInput', 'constitutionRefs is only valid for Feature and Design');
-    validateConstitutionRefs(repo, input.constitutionRefs);
-  }
   const defaults = kind === 'feature' ? repo.config.documentDefaults?.featurePages : kind === 'roadmap' ? repo.config.documentDefaults?.roadmapPages : kind === 'design' ? repo.config.documentDefaults?.designPages : [];
   const selected = decode(Schema.Array(Schema.Literals(TEMPLATE_PAGES)), input.pages ?? defaults ?? [], 'pages');
   if (new Set(selected).size !== selected.length) throw new ConcordError('InvalidInput', 'pages must be unique');
@@ -480,7 +452,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   let metadata: DocumentMeta;
   let template: string = kind;
   switch (kind) {
-    case 'feature': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, ...(input.constitutionRefs === undefined ? {} : { constitutionRefs: [...input.constitutionRefs] }) }; break;
+    case 'feature': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind }; break;
     case 'use-case': {
       const feature = findDocument(documents, required(input.feature, 'feature'), 'feature');
       const placement = documentPlacementError('feature', feature.path);
@@ -493,7 +465,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     case 'design': {
       const alternatives = input.alternatives?.map(value => decode(DocumentName, value, 'alternative')) ?? [];
       if (alternatives.length === 0 || alternatives.some(name => name.toLowerCase() === 'readme') || new Set(alternatives).size !== alternatives.length) throw new ConcordError('InvalidInput', 'Design requires unique non-empty alternatives');
-      path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]], ...(input.constitutionRefs === undefined ? {} : { constitutionRefs: [...input.constitutionRefs] }) };
+      path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]] };
       break;
     }
     case 'engineering': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind }; break;
@@ -554,24 +526,20 @@ export function setAuthor(repo: Repository, ref: string, body: string, expectedD
 export function setDocumentMetadata(
   repo: Repository,
   reference: string,
-  fields: { readonly title?: string; readonly observedAt?: string | null; readonly sources?: readonly string[]; readonly constitutionRefs?: readonly string[] },
+  fields: { readonly title?: string; readonly observedAt?: string | null; readonly sources?: readonly string[] },
   expectedDigest: string,
   dryRun = false,
 ): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  if (fields.title === undefined && fields.observedAt === undefined && fields.sources === undefined && fields.constitutionRefs === undefined) throw new ConcordError('InvalidInput', 'Provide at least one author metadata field');
+  if (fields.title === undefined && fields.observedAt === undefined && fields.sources === undefined) throw new ConcordError('InvalidInput', 'Provide at least one author metadata field');
   const record = resolveReference(repo, loadDocuments(repo), reference);
   if (record.path !== parseReference(reference).path) throw new ConcordError('InvalidReferenceTarget', 'Metadata belongs to an exact Concord owner, not supporting Markdown');
   if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);
   if ((fields.observedAt !== undefined || fields.sources !== undefined) && record.metadata.kind !== 'research') {
     throw new ConcordError('InvalidDocumentKind', 'observedAt and sources are only author fields on Research documents');
   }
-  if (fields.constitutionRefs !== undefined) {
-    if (record.metadata.kind !== 'feature' && record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', 'constitutionRefs is only an author field on Feature and Design');
-    validateConstitutionRefs(repo, fields.constitutionRefs);
-  }
   const title = fields.title === undefined ? record.metadata.title : required(fields.title, 'title');
-  if (record.metadata.kind !== 'research') return changed(repo, 'set-metadata', record, { ...record.metadata, title, ...(fields.constitutionRefs === undefined ? {} : { constitutionRefs: [...fields.constitutionRefs] }) }, record.body, dryRun);
+  if (record.metadata.kind !== 'research') return changed(repo, 'set-metadata', record, { ...record.metadata, title }, record.body, dryRun);
   const observedAt = fields.observedAt === undefined ? record.metadata.observedAt : fields.observedAt === null ? undefined : required(fields.observedAt, 'observedAt');
   const sources = fields.sources === undefined ? record.metadata.sources : fields.sources.map((source, index) => required(source, `sources[${index}]`));
   const { observedAt: _previousObservation, ...metadata } = record.metadata;

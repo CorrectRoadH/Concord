@@ -5,11 +5,32 @@ title: 正文中断开的宪法链接通过 check
 createdAt: 2026-10-23T04:29:14.033Z
 kind: memory
 memoryKind: problem
-state: open
+state: resolved
 epoch: 0
 evidenceRequirement: command
 promotions: []
-history: []
+history:
+  - at: 2026-10-29T02:32:31.363Z
+    action: resolve
+    reason: check 校验 docs 下全部行内宪法链接：指向不存在 ID 的链接报告带路径与行号的 AnchorNotFound 并退出 1
+    resolution:
+      reason: check 校验 docs 下全部行内宪法链接：指向不存在 ID 的链接报告带路径与行号的 AnchorNotFound 并退出 1
+      at: 2026-10-29T02:32:31.363Z
+      epoch: 0
+      kind: fixed
+      evidenceLevel: command
+      red: ccev_07fd688c51d2bb3076bc6682c7483d52
+      green: ccev_33d2918629469279722867274d865bd4
+      selectedCaseId: neref_7b56d124f14ea8922a96156d1b397990
+resolution:
+  reason: check 校验 docs 下全部行内宪法链接：指向不存在 ID 的链接报告带路径与行号的 AnchorNotFound 并退出 1
+  at: 2026-10-29T02:32:31.363Z
+  epoch: 0
+  kind: fixed
+  evidenceLevel: command
+  red: ccev_07fd688c51d2bb3076bc6682c7483d52
+  green: ccev_33d2918629469279722867274d865bd4
+  selectedCaseId: neref_7b56d124f14ea8922a96156d1b397990
 ---
 
 # 正文中断开的宪法链接通过 check

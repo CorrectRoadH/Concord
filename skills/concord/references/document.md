@@ -42,7 +42,9 @@ Research 使用目录 README，默认只有标题，不预设章节、日期、�
 
 Feature、Roadmap 和 Design candidate 只要求 README。可选页为 library（公开 API）、cli（命令）、architecture（内部边界）、lifecycle（资源与状态）、use-case（用户目标索引）。`--pages` 支持逗号分隔或重复传入，省略时采用初始化时冻结的项目默认；`--no-pages` 明确覆盖为空，仅建 README。全套用 `--pages library,cli,architecture,lifecycle,use-case`。同次 Design 创建对所有候选使用相同选择，外层 README、GOALS、LIMITS、CASES、DECISION 始终生成。Use Case 索引不创建叶子用例。
 
-Feature 与 Design 可重复传 `--constitution-ref docs/constitution.md#c-001` 声明适用条款。条款必须是当前 `docs/constitution.md` 中唯一、真实的行级 anchor；Concord 派生反向影响，但不声称语义合规。
+依据宪法的句子旁写指向条款或款 ID 的行内链接，例如 `错误消息不含凭据（[C-007](../../constitution.md#c-007-4)）`，不用“第 N 款”这类序号文字。docs/ 下除 `docs/_template/` 与宪法本身外的所有 Markdown 都可以链接，附页、Issue 与 Research 同样计入；图片、引用式链接、代码与注释中的链接不计入。`concord check` 对指向不存在 ID 的链接报告 `AnchorNotFound`，对带 query 或无法解码的宪法链接报告 `ConstitutionLinkInvalid`；`concord constitution show` 从这些链接派生反向视图，不声称语义合规。
+
+宪法条款写成 `## C-001 规则本身 {#c-001}`，款是条款下根有序列表项，第一段末尾写 ` {#c-001-1}`；总则用 `## 总则 {#general}`，其款用 `{#general-<name>}`。ID 一经采用不改名、不复用。条款写法：每条款一项跨功能规则，标题就是规则；每款一项可审阅的义务、禁止或许可；条款写约束，不写达成约束的机制；用现行句式；依据规则的句子旁链接 ID。v1 宪法或带 `constitutionRefs` 的元数据返回 `ConstitutionMigrationRequired`，用 `concord constitution migrate` 一次转换。
 
 Engineering 默认 README 包含目标、机制、使用和验收，按内容用 `engineering page add` 扩展，不接受创建时的 `--pages`。已有包不迁移或删除页面；依赖旧全量默认的脚本应显式选择全套。`page add` 不修改作者 README，新增页后维护其入口链接。页面维护命令为：
 

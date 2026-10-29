@@ -175,7 +175,7 @@ export function setConfig(repo: LocalRepository, config: ProjectConfig, expected
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/README.md#自动保存
-export function setMetadata(repo: LocalRepository, reference: string, fields: { title?: string; observedAt?: string | null; sources?: readonly string[]; constitutionRefs?: readonly string[] }, expectedDigest: string, dryRun = false): MutationReceipt {
+export function setMetadata(repo: LocalRepository, reference: string, fields: { title?: string; observedAt?: string | null; sources?: readonly string[] }, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   return setDocumentMetadata(repo, reference, fields, expectedDigest, dryRun);
   });

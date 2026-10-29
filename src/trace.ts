@@ -4,7 +4,7 @@ import { scanCode, type CodeDeclaration } from './code.js';
 import { checkDocuments, diagnoseDocuments, findDocument, type DocumentInventory } from './documents.js';
 import { inspectResolutionEvidence } from './evidence.js';
 import { ConcordError, type AnnotatedCase, type DocumentRecord, type Finding, type Repository } from './shared.js';
-import { checkConstitution, showConstitution } from './constitution.js';
+import { CONSTITUTION_PATH, inspectConstitution, showConstitution } from './constitution.js';
 import { measureScan, type ScanTiming } from './scan-timing.js';
 import { referenceResolver } from './refs.js';
 import { extractSteps } from './steps.js';
@@ -23,11 +23,21 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
   const inventory = options.inventory ?? diagnoseDocuments(repo);
   const documents = inventory.documents;
   const annotations = measureScan(options.timing, 'trace.annotations', () => scanAnnotations(repo, { cache }));
-  const constitutionFindings = measureScan(options.timing, 'trace.constitution', () => checkConstitution(repo));
+  // Steps and constitution links share one read of each docs page.
+  const pages = new Map<string, { readonly source?: string; readonly cause?: unknown }>();
+  const readPage = (path: string): string | undefined => {
+    if (!pages.has(path)) { try { pages.set(path, { source: repo.read(path) }); } catch (cause) { pages.set(path, { cause }); } }
+    const page = pages.get(path)!;
+    if (page.cause !== undefined) throw page.cause;
+    return page.source;
+  };
+  const constitution = measureScan(options.timing, 'trace.constitution', () => inspectConstitution(repo, readPage));
+  const constitutionFindings = constitution.findings;
   const advisories = constitutionFindings.filter((finding) => finding.code === 'ConstitutionDraft');
   const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents)), ...annotations.findings, ...constitutionFindings.filter((finding) => finding.code !== 'ConstitutionDraft')];
-  for (const path of repo.files('docs').filter(path => path.endsWith('.md'))) {
-    try { const source = repo.read(path); if (source !== undefined) findings.push(...extractSteps(path, source).findings); }
+  // Constitution list IDs are paragraphs, not Use Case steps.
+  for (const path of repo.files('docs').filter(path => path.endsWith('.md') && path !== CONSTITUTION_PATH)) {
+    try { const source = readPage(path); if (source !== undefined) findings.push(...extractSteps(path, source).findings); }
     catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidSteps', path, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
   if (!inventory.complete && inventory.findings.length === 0) findings.push({ code: 'IncompleteInventory', path: '.', message: 'Document inventory is incomplete; no complete-graph conclusion is available' });
@@ -52,7 +62,13 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
         break;
       }
     }
-    if (m.kind === 'feature' || m.kind === 'design') for (const ref of m.constitutionRefs ?? []) add(ref, 'constitution');
+  }
+  const constitutionEdges = new Set<string>();
+  for (const reference of constitution.references) {
+    const to = `${CONSTITUTION_PATH}#${reference.target}`;
+    if (constitutionEdges.has(`${reference.path}\0${to}`)) continue;
+    constitutionEdges.add(`${reference.path}\0${to}`);
+    edges.push({ from: reference.path, to, relation: 'constitution' });
   }
   for (const item of annotations.cases) {
     const source = `case:${item.id}`;
@@ -80,7 +96,7 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
   const memories = documents.flatMap(doc => doc.metadata.kind === 'memory' && doc.metadata.resolution !== undefined
     ? [{ path: doc.path, evidenceLevel: doc.metadata.resolution.evidenceLevel, evidence: inspectResolutionEvidence(repo, doc.metadata.resolution) }]
     : []);
-  const trace = { documents, annotations, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, inventoryComplete: inventory.complete, advisories, memories, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
+  const trace = { documents, annotations, constitutionReferences: constitution.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, inventoryComplete: inventory.complete, advisories, memories, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
   return { trace, references };
 }
 /** Derivation and its temporary resolver share the graph's source snapshot. */
@@ -102,6 +118,19 @@ export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {
 }
 // @concord-end
 const pathOf = (ref: string) => ref.split('#')[0]!;
+/** An owner skipped by the inventory reports why, instead of looking absent. */
+function findTraced(trace: ReturnType<typeof buildTrace>, selector: string, kind?: DocumentRecord['metadata']['kind']): DocumentRecord {
+  try { return findDocument(trace.documents, selector, kind); }
+  catch (cause) {
+    const skipped = cause instanceof ConcordError && cause.code === 'DocumentNotFound' ? trace.findings.find(finding => finding.path === selector && ['ConstitutionMigrationRequired', 'ResearchMigrationRequired', 'InvalidData'].includes(finding.code)) : undefined;
+    if (skipped !== undefined) throw new ConcordError(skipped.code, skipped.message);
+    throw cause;
+  }
+}
+/** Pages outside every package, such as docs/architecture.md, have no owner. */
+function pageOwner(references: ReturnType<typeof referenceResolver>, page: string): string | undefined {
+  try { return references.resolve(page).path; } catch { return undefined; }
+}
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 function belongsTo(references: ReturnType<typeof referenceResolver>, trace: ReturnType<typeof buildTrace>, selectedPaths: ReadonlySet<string>, ref: string): boolean {
@@ -111,7 +140,7 @@ function belongsTo(references: ReturnType<typeof referenceResolver>, trace: Retu
   } catch (cause) {
     // Findings retain missing/malformed endpoints. Partial displays must not
     // turn one unresolved edge into a failure to inspect a healthy subject.
-    if (!trace.complete && cause instanceof ConcordError && ['ReferenceNotFound', 'InvalidReferenceTarget', 'AnchorNotFound', 'InvalidReference', 'InvalidData', 'ResearchMigrationRequired'].includes(cause.code)) return false;
+    if (!trace.complete && cause instanceof ConcordError && ['ReferenceNotFound', 'InvalidReferenceTarget', 'AnchorNotFound', 'InvalidReference', 'InvalidData', 'ResearchMigrationRequired', 'ConstitutionMigrationRequired'].includes(cause.code)) return false;
     throw cause;
   }
 }
@@ -124,12 +153,12 @@ export function traceShow(repo: Repository, selector: string, cache: 'use' | 'of
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>, selector: string) {
-    const document = findDocument(trace.documents, selector);
+    const document = findTraced(trace, selector);
     const relatedPaths = new Set([document.path]);
     if (document.metadata.kind === 'feature') for (const doc of trace.documents) if (doc.metadata.kind === 'use-case' && pathOf(doc.metadata.feature) === document.path) relatedPaths.add(doc.path);
     const incoming = trace.edges.filter(e => e.relation !== 'constitution' && belongsTo(references, trace, relatedPaths, e.to));
     for (const edge of incoming) relatedPaths.add(pathOf(edge.to));
-    const outgoing = trace.edges.filter(e => relatedPaths.has(e.from));
+    const outgoing = trace.edges.filter(e => relatedPaths.has(e.from) || (e.relation === 'constitution' && relatedPaths.has(pageOwner(references, e.from) ?? '')));
     const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
     const codeIds = new Set(incoming.filter(e => e.from.startsWith('code:')).map(e => e.from.slice(5)));
     const codeDeclarations = trace.codeDeclarations.filter(c => codeIds.has(c.id)).map(c => ({ ...c, matchedContracts: c.contracts.filter(ref => belongsTo(references, trace, relatedPaths, ref)) }));
@@ -221,21 +250,22 @@ export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildT
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 export function documentShow(repo: Repository, selector: string, kind: DocumentRecord['metadata']['kind'], cache: 'use' | 'off' = 'use') {
-  const { trace, document, useCases, relatedPaths, incoming, testIds, codeIds } = deriveTrace(repo, cache, false, (trace, references) => {
-    const document = findDocument(trace.documents, selector, kind);
+  const { trace, document, useCases, incoming, outgoing, testIds, codeIds } = deriveTrace(repo, cache, false, (trace, references) => {
+    const document = findTraced(trace, selector, kind);
     const useCases = kind === 'feature' ? trace.documents.filter(candidate => candidate.metadata.kind === 'use-case' && pathOf(candidate.metadata.feature) === document.path) : [];
     const relatedPaths = new Set([document.path, ...useCases.map(candidate => candidate.path)]);
     const incoming = trace.edges.filter(edge => edge.relation !== 'constitution' && belongsTo(references, trace, relatedPaths, edge.to));
     const testIds = new Set(incoming.filter(edge => edge.from.startsWith('case:')).map(edge => edge.from.slice(5)));
     const codeIds = new Set(incoming.filter(edge => edge.from.startsWith('code:')).map(edge => edge.from.slice(5)));
-    return { trace, document, useCases, relatedPaths, incoming, testIds, codeIds };
+    const outgoing = trace.edges.filter(edge => relatedPaths.has(edge.from) || (edge.relation === 'constitution' && relatedPaths.has(pageOwner(references, edge.from) ?? '')));
+    return { trace, document, useCases, incoming, outgoing, testIds, codeIds };
   });
   return {
     operation: `${kind}-show`,
     document: { path: document.path, metadata: document.metadata, digest: document.digest },
     ...(kind === 'feature' ? { useCases: useCases.map(candidate => ({ path: candidate.path, metadata: candidate.metadata, digest: candidate.digest })) } : {}),
     incoming,
-    outgoing: trace.edges.filter(edge => relatedPaths.has(edge.from)),
+    outgoing,
     tests: trace.annotations.cases.filter(testCase => testIds.has(testCase.id)),
     codeDeclarations: trace.codeDeclarations.filter(declaration => codeIds.has(declaration.id)),
     complete: trace.complete,
@@ -258,7 +288,7 @@ export function renderReview(repo: Repository, selector: string | undefined, cac
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
 export function renderReviewValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>, selector: string | undefined) {
-    const docs: readonly DocumentRecord[] = selector ? [findDocument(trace.documents, selector)] : trace.documents;
+    const docs: readonly DocumentRecord[] = selector ? [findTraced(trace, selector)] : trace.documents;
     const selectedPaths = new Set(docs.map(d => d.path));
     const cases = selector ? trace.annotations.cases.filter(c => belongsTo(references, trace, selectedPaths, c.contract) || c.regressions.some(r => belongsTo(references, trace, selectedPaths, r))) : trace.annotations.cases;
     const codes = selector ? trace.codeDeclarations.filter(c => c.contracts.some(ref => belongsTo(references, trace, selectedPaths, ref))) : trace.codeDeclarations;
@@ -271,8 +301,11 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
       segments.push({ text: `${lines.join('\n')}\n` }, { constitution: { path: constitution.path, digest: constitution.digest } });
       lines.length = 0;
       lines.push('');
-      for (const document of docs) if (document.metadata.kind === 'feature' || document.metadata.kind === 'design') {
-        for (const reference of document.metadata.constitutionRefs ?? []) lines.push(`- Applicable to [${document.metadata.title}](${document.path}): [${reference}](${reference})`);
+      const clauses = new Map(constitution.clauses.map(clause => [clause.id, clause.title]));
+      const selected = trace.constitutionReferences.filter(reference => !selector || selectedPaths.has(reference.path) || selectedPaths.has(pageOwner(references, reference.path) ?? ''));
+      for (const clause of [...new Set(selected.map(reference => reference.clause))]) {
+        lines.push(`- ${clause === 'general' ? clauses.get(clause) ?? 'general' : clause.toUpperCase()} ${clause === 'general' ? '' : clauses.get(clause) ?? ''}`.trimEnd());
+        for (const reference of selected.filter(item => item.clause === clause)) lines.push(`  - [${reference.path}:${reference.line}](${reference.path}#L${reference.line}) → [${reference.paragraph ?? reference.clause}](${CONSTITUTION_PATH}#${reference.paragraph ?? reference.clause})`);
       }
     }
     lines.push('', '## Contracts and decisions', '');

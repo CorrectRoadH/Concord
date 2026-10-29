@@ -29,6 +29,7 @@ export function decodeDocumentSource(path: string, source: string): DocumentReco
     return undefined;
   }
   if (!value.format.startsWith('concord.document/')) return undefined;
+  if ((value.kind === 'feature' || value.kind === 'design') && Object.hasOwn(value, 'constitutionRefs')) throw new ConcordError('ConstitutionMigrationRequired', `${path}: constitutionRefs is retired; run concord constitution migrate to move clause references into the body`);
   const metadata = decode(DocumentSchema, value, path);
   if (metadata.kind === 'research' && !path.endsWith('/README.md')) throw new ConcordError('ResearchMigrationRequired', `${path}: Research owners must use a topic directory with README.md; run the offline document package migration`);
   return { path, metadata, body: match[2]!.replace(/^\r?\n/u, ''), digest: digest(source) };

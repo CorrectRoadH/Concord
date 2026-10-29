@@ -1,6 +1,6 @@
 # {{title}}
 
-Before comparing plans, read `docs/constitution.md` and record every applicable real clause anchor in this Design's `constitutionRefs` metadata.
+Before comparing plans, read `docs/constitution.md` and link each applicable clause or paragraph ID next to the sentence that relies on it.
 
 ## Problem
 

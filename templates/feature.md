@@ -1,6 +1,6 @@
 # {{title}}
 
-Before writing, read `docs/constitution.md` and record every applicable real clause anchor in this Feature's `constitutionRefs` metadata.
+Before writing, read `docs/constitution.md` and link each applicable clause or paragraph ID next to the sentence that relies on it.
 
 Declare intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Concord Memory; product workflows belong in the contract.
 

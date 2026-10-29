@@ -27,7 +27,7 @@ Write contracts as declarations of intended behavior, constraints, and acceptanc
 Behavior pages (Feature README, Use Case, cli, library) state commands, real human and JSON output, exit codes, and named errors. The architecture page states how the Feature is implemented. Run \`concord --skill document\` for the full rules.
 
 Templates provide writing prompts, not completed requirements or evidence.
-Read docs/constitution.md before creating or revising Feature and Design owners, and record applicable real clause anchors through constitutionRefs.
+Read docs/constitution.md before creating or revising Feature and Design owners. Link each applicable clause or paragraph ID next to the sentence that relies on it. The check command validates every constitution link under docs. Use \`concord constitution show\` to list where each rule is referenced.
 
 ## Recall and maintain local knowledge
 

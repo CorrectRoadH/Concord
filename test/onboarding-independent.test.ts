@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -134,55 +134,70 @@ test('public configuration rejects executable TypeScript and stale edits without
   assert.equal(existsSync(join(root, 'concord.json')), true);
 }))));
 
-// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md
-test('public constitution adoption ignores example anchors and diagnoses references removed by amendment', () => Effect.runPromise(Effect.sync(() => withConsumer('constitution', root => {
+// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#amend
+test('public constitution adoption requires clause IDs and amendment protects referenced IDs', () => Effect.runPromise(Effect.sync(() => withConsumer('constitution', root => {
   run(root, ['init', '--docs-only']);
   const path = 'docs/constitution.md';
   const draft = readFileSync(join(root, path), 'utf8');
   const adoption = { action: 'constitution.adopt', reason: 'Adopt project rules', impact: 'Applies to new features', sources: [], expectedDigest: fileDigest(root, path) };
   for (const example of [
-    '```html\n<a id="c-example"></a>\n```',
-    '<!--\n<a id="c-example"></a>\n-->',
-    '`<a id="c-example"></a>`',
-    '    <a id="c-example"></a>',
-    '````markdown\n```html\n<a id="c-example"></a>\n```\n````',
-    '```html\n<a id="c-example"></a>',
-    '<!--\n<a id="c-example"></a>',
-    '`\n<a id="c-example"></a>\n`',
-  ]) action(root, { ...adoption, body: `# Examples only\n\n${example}\n` }, 1);
-  action(root, { ...adoption, body: '# Duplicate clauses\n\n<a id="c-one"></a>\nFirst\n\n<a id="c-one"></a>\nSecond\n' }, 1);
+    '```markdown\n## C-001 Example {#c-001}\n```',
+    '<!--\n## C-001 Example {#c-001}\n-->',
+    '`## C-001 Example {#c-001}`',
+    '    ## C-001 Example {#c-001}',
+  ]) assert.match(action(root, { ...adoption, body: `# Examples only\n\n${example}\n` }, 1), /InvalidConstitution/);
+  for (const invalid of [
+    '## C-001 Missing ID\n',
+    '## C-001 Wrong label {#c-002}\n',
+    '## C-1 Short {#c-1}\n',
+    '## C-001 Rule {#c-001}\n\n1. Paragraph without ID.\n',
+    '## C-001 Rule {#c-001}\n\n1. Foreign paragraph. {#c-002-1}\n',
+    '## C-001 Rule {#c-001}\n\n1. First. {#c-001-a}\n2. Second. {#c-001-a}\n',
+    '## C-001 Rule {#c-001}\n\n### c-001\n',
+  ]) assert.match(action(root, { ...adoption, body: `# Constitution\n\n${invalid}` }, 1), /ConstitutionClauseInvalid/);
   assert.equal(readFileSync(join(root, path), 'utf8'), draft);
-  action(root, { ...adoption, body: '# Constitution\n\n<a id="c-one"></a>\n## Preserve user data\n\nWrites must preserve unknown changes.\n' });
-  assert.match(readFileSync(join(root, path), 'utf8'), /status: active/);
+  const body = (paragraphs: string) => `# Constitution\n\n## C-001 Preserve user data {#c-001}\n\n${paragraphs}`;
+  action(root, { ...adoption, body: body('1. Writes preserve unknown changes. {#c-001-1}\n2. Writes check preimages. {#c-001-2}\n') });
   const activeSource = readFileSync(join(root, path), 'utf8');
+  assert.match(activeSource, /status: active/);
+  assert.match(activeSource, /format: concord\.constitution\/v2/);
   assert.doesNotMatch(activeSource, /^version:|^\s+- version:/mu);
-  const legacySource = activeSource.replace('status: active\n', 'status: active\nversion: 1.0.0\n').replace('  - date:', '  - version: 1.0.0\n    date:');
-  assert.notEqual(legacySource, activeSource);
+  const legacySource = activeSource.replace('status: active\n', 'status: active\nversion: 1.0.0\n');
   writeFileSync(join(root, path), legacySource);
   assert.match(run(root, ['constitution', 'show'], '', 1), /version/);
-  assert.equal(readFileSync(join(root, path), 'utf8'), legacySource);
   assert.match(action(root, { action: 'constitution.amend', version: '2.0.0', body: activeSource, reason: 'Old call', impact: 'None', sources: [], expectedDigest: fileDigest(root, path) }, 1), /error|invalid|version/i);
   assert.equal(readFileSync(join(root, path), 'utf8'), legacySource);
-  writeFileSync(join(root, path), activeSource.replace('<a id="c-one"></a>', ''));
-  run(root, ['check'], '', 1);
   writeFileSync(join(root, path), activeSource);
-  action(root, { action: 'document.create', kind: 'feature', id: 'governed', title: 'Governed', constitutionRefs: ['docs/constitution.md#c-one'] });
+  const retiredFlag = spawnSync(process.execPath, [cli, '--root', root, '--json', 'feature', 'create', 'governed', '--title', 'Governed', '--constitution-ref', 'docs/constitution.md#c-001'], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(retiredFlag.status, 1);
+  assert.match(retiredFlag.stderr, /"error":"InvalidInput".*--constitution-ref/u);
+  assert.match(action(root, { action: 'document.create', kind: 'feature', id: 'governed', title: 'Governed', constitutionRefs: ['docs/constitution.md#c-001'] }, 1), /excess property[\s\S]*constitutionRefs/u);
+  run(root, ['feature', 'create', 'governed', '--title', 'Governed']);
+  const feature = 'docs/feature/governed/README.md';
+  appendFileSync(join(root, feature), '\nWrites keep unknown edits ([C-001](../../constitution.md#c-001-1)).\n');
+  const line = readFileSync(join(root, feature), 'utf8').split('\n').findIndex(text => text.includes('#c-001-1')) + 1;
   run(root, ['check']);
-  assert.match(run(root, ['review', 'render', 'docs/feature/governed/README.md']), /Writes must preserve unknown changes/);
-  assert.match(run(root, ['trace', 'show', 'docs/feature/governed/README.md']), /docs\/constitution.md#c-one/);
-  action(root, { action: 'constitution.amend', body: '# Constitution\n\n<a id="c-two"></a>\n## Replacement\n\nNew rule.\n', reason: 'Replace rule', impact: 'Governed feature needs reassessment', sources: ['docs/feature/governed/README.md'], expectedDigest: fileDigest(root, path) });
-  const amendedSource = readFileSync(join(root, path), 'utf8');
-  assert.doesNotMatch(amendedSource, /^version:|^\s+- version:/mu);
-  assert.match(amendedSource, /Adopt project rules/);
-  assert.match(amendedSource, /Replace rule/);
-  action(root, { action: 'constitution.amend', body: '# Constitution\n\n<a id="c-two"></a>\n## Replacement\n\nNew rule, clarified.\n', reason: 'Clarify rule', impact: 'No new owners', sources: [], expectedDigest: fileDigest(root, path) });
-  assert.match(readFileSync(join(root, path), 'utf8'), /Adopt project rules[\s\S]*Replace rule[\s\S]*Clarify rule/);
-  const findings = run(root, ['check'], '', 1);
-  assert.match(findings, /c-one|constitution/i);
-  assert.match(run(root, ['review', 'render', 'docs/feature/governed/README.md'], '', 1), /c-one/);
-  action(root, { action: 'document.metadata', reference: 'docs/feature/governed/README.md', expectedDigest: fileDigest(root, 'docs/feature/governed/README.md'), constitutionRefs: ['docs/constitution.md#c-two'] });
+  const shown = JSON.parse(run(root, ['constitution', 'show'])) as { constitution: Record<string, unknown>; references: unknown; complete: boolean };
+  assert.deepEqual(shown.constitution.clauses, [{ id: 'c-001', title: 'Preserve user data', paragraphs: ['c-001-1', 'c-001-2'] }]);
+  assert.equal('anchors' in shown.constitution || 'affected' in shown, false);
+  assert.deepEqual(shown.references, [{ path: feature, line, clause: 'c-001', paragraph: 'c-001-1' }]);
+  assert.equal(shown.complete, true);
+  assert.match(run(root, ['trace', 'show', feature]), /docs\/constitution\.md#c-001-1/);
+  assert.match(run(root, ['review', 'render', feature]), /C-001 Preserve user data[\s\S]*c-001-1/);
+  assert.match(action(root, { action: 'document.metadata', reference: feature, expectedDigest: fileDigest(root, feature), constitutionRefs: ['docs/constitution.md#c-001'] }, 1), /excess property[\s\S]*constitutionRefs/u);
+  const amend = (next: string, status = 0) => action(root, { action: 'constitution.amend', body: next, reason: 'Revise rules', impact: 'Linked pages keep their IDs', sources: [], expectedDigest: fileDigest(root, path) }, status);
+  amend(body('1. Writes are scoped. {#c-001-scope}\n2. Writes preserve unknown changes. {#c-001-1}\n3. Writes check preimages. {#c-001-2}\n'));
   run(root, ['check']);
-  assert.match(run(root, ['review', 'render', 'docs/feature/governed/README.md']), /New rule/);
+  const before = readFileSync(join(root, path), 'utf8');
+  const referenced = amend(body('1. Writes are scoped. {#c-001-scope}\n2. Writes check preimages. {#c-001-2}\n'), 1);
+  assert.match(referenced, /ConstitutionClauseReferenced/);
+  assert.match(referenced, /docs\/feature\/governed\/README\.md/);
+  assert.equal(readFileSync(join(root, path), 'utf8'), before);
+  amend(body('1. Writes are scoped; see [preimages](#c-001-2). {#c-001-scope}\n2. Writes preserve unknown changes. {#c-001-1}\n3. Writes check preimages. {#c-001-2}\n'));
+  assert.match(amend(body('1. Writes are scoped; see [preimages](#c-001-2). {#c-001-scope}\n2. Writes preserve unknown changes. {#c-001-1}\n'), 1), /ConstitutionClauseReferenced/);
+  amend(body('1. Writes are scoped. {#c-001-scope}\n2. Writes preserve unknown changes. {#c-001-1}\n'));
+  assert.match(readFileSync(join(root, path), 'utf8'), /Adopt project rules[\s\S]*Revise rules/);
+  run(root, ['check']);
 }))));
 
 // @use-case docs/feature/project-onboarding/use-case/configure-memory-sources.md
