@@ -34,18 +34,26 @@ export interface PollOptions {
   readonly description?: string;
 }
 
-const sleep = (ms: number) => new Promise<void>((resolve) => { setTimeout(resolve, ms); });
+class PollTimeout extends Schema.TaggedError<PollTimeout>()('PollTimeout', {
+  message: Schema.String,
+  timeoutMs: Schema.Number,
+}) {}
 
-export const pollUntil = async <T>(attempt: () => Promise<T | undefined>, options: PollOptions = {}): Promise<T> => {
+export const pollUntil = <T>(attempt: (signal: AbortSignal) => Promise<T | undefined>, options: PollOptions = {}): Promise<T> => {
   const timeoutMs = options.timeoutMs ?? 65_000;
   const intervalMs = options.intervalMs ?? 50;
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const value = await attempt();
-    if (value !== undefined) return value;
-    if (Date.now() >= deadline) throw new Error(`${options.description ?? 'condition'} did not become ready within ${timeoutMs}ms`);
-    await sleep(intervalMs);
-  }
+  return Effect.runPromise(Effect.gen(function* () {
+    for (;;) {
+      const value = yield* Effect.tryPromise({ try: attempt, catch: cause => cause });
+      if (value !== undefined) return value;
+      yield* Effect.sleep(intervalMs);
+    }
+  }).pipe(Effect.timeoutOrElse({
+    duration: timeoutMs,
+    orElse: () => Effect.fail(new PollTimeout({
+      message: `${options.description ?? 'condition'} did not become ready within ${timeoutMs}ms`, timeoutMs,
+    })),
+  })));
 };
 
 const WorkspaceProjectionStatusSchema = Schema.Struct({
@@ -111,12 +119,12 @@ const readWorkspaceProjectionResponse = async (response: Response): Promise<Work
 
 /** Polls a real View server until a readable generation exists, never weakening the first-build 202. */
 export const waitForWorkspaceProjection = (base: string, options: PollOptions = {}): Promise<WorkspaceProjection> =>
-  pollUntil(async () => {
-    return readWorkspaceProjectionResponse(await fetch(`${base}/api/workspace`));
+  pollUntil(async signal => {
+    return readWorkspaceProjectionResponse(await fetch(`${base}/api/workspace`, { signal }));
   }, { description: 'workspace projection', ...options });
 
 export const fetchWorkspaceProjection = async (base: string): Promise<WorkspaceProjection> => {
-  const value = await readWorkspaceProjectionResponse(await fetch(`${base}/api/workspace`));
+  const value = await readWorkspaceProjectionResponse(await fetch(`${base}/api/workspace`, { signal: AbortSignal.timeout(10_000) }));
   if (value === undefined) throw new Error('Workspace projection is pending');
   return value;
 };
@@ -128,14 +136,13 @@ export const fetchWorkspaceProjection = async (base: string): Promise<WorkspaceP
  */
 export const waitForWorkspaceNotModified = async (base: string, options: PollOptions = {}): Promise<string> => {
   let etag: string | undefined;
-  await pollUntil(async () => {
-    const response = await fetch(`${base}/api/workspace`);
-    if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
+  await pollUntil(async signal => {
+    const response = await fetch(`${base}/api/workspace`, { signal });
     const candidate = response.headers.get('etag');
-    await response.arrayBuffer();
-    if (candidate === null) return undefined;
-    const cached = await fetch(`${base}/api/workspace`, { headers: { 'If-None-Match': candidate } });
-    if (cached.status !== 304) { await cached.arrayBuffer(); return undefined; }
+    const value = await readWorkspaceProjectionResponse(response);
+    if (value === undefined || candidate === null) return undefined;
+    const cached = await fetch(`${base}/api/workspace`, { headers: { 'If-None-Match': candidate }, signal });
+    if (cached.status !== 304) { await readWorkspaceProjectionResponse(cached); return undefined; }
     await cached.arrayBuffer();
     etag = candidate;
     return true;

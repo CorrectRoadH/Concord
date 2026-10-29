@@ -118,7 +118,7 @@ Web 文档页可以进入宪法正文编辑，通过 `constitution.adopt` 与 `c
 
 CLI、Web 与 action 使用同一宪法 Schema，严格拒绝额外字段。读取不重写文件。
 
-## 契约来源
+## Spec 来源
 
 - 条款写法：`docs/constitution.md` 的总则
 - 采用方案：[宪法的结构、关联与写法](../../../design/constitution-structure/plans/link-owned/README.md)

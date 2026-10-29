@@ -1,8 +1,8 @@
-# Concord 架构与行为契约
+# Concord 架构与行为 Spec
 
 ## 目标与原则
 
-Concord 把契约、测试归属、工程记忆与审阅闭环做成可安装到任意 Git 仓库的本地 CLI。契约先于实现，每项事实只有一个 owner，反向关系动态派生。Problem 关闭需要真实运行证据，历史不被覆盖，机器输入严格校验。
+Concord 把 Spec、测试归属、Memory 与审阅闭环做成可安装到任意 Git 仓库的本地 CLI。Spec 先于实现，每项事实只有一个 owner，反向关系动态派生。Problem 关闭需要真实运行证据，历史不被覆盖，机器输入严格校验。
 
 源码注释与 Markdown 拥有协作事实，HawDB 只保存可重建缓存。运行证据和事务恢复材料与缓存分开存储。跨功能规则见[宪法](constitution.md)，Web 界面设计见根目录 `DESIGN.md`。
 
@@ -12,7 +12,7 @@ Concord 把契约、测试归属、工程记忆与审阅闭环做成可安装到
 
 Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只读权限在 publication 统一执行。
 
-`docs/constitution.md` 必需，可以是 draft，作者显式采用 active。docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `constitution show` 派生。宪法不充当测试契约或自动合规证据。根 `DESIGN.md` 可选。
+`docs/constitution.md` 必需，可以是 draft，作者显式采用 active。docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `constitution show` 派生。宪法不充当测试 Spec 或自动合规证据。根 `DESIGN.md` 可选。
 
 ## 领域与 CLI
 
@@ -28,22 +28,22 @@ Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只
 - `template list/show`：在任意 cwd 查看随包写作模板，无需初始化。
 - `doctor`：检查配置、缺失测试目录和当前关联，给出接入步骤，不执行 runner。
 - `design create/check/format/decide/correct-reason/list/show`：候选比较、逐项检查、有限格式化、唯一裁决、受管理由更正及关联目标。
-- `roadmap create/adopt/list/show`：与 Feature 同体裁的待采用方向与显式采用。采用创建 Feature，Roadmap 标记 adopted；当前契约只在 Feature。
-- `test list/show/run`：从测试源码标记派生执行引用，发现目标契约与 regression Memory；项目配置拥有 argv、附加 sourceFiles 和 timeout。
+- `roadmap create/adopt/list/show`：与 Feature 同体裁的待采用方向与显式采用。采用创建 Feature，Roadmap 标记 adopted；当前 Spec 只在 Feature。
+- `test list/show/run`：从测试源码标记派生执行引用，发现目标 Spec 与 regression Memory；项目配置拥有 argv、附加 sourceFiles 和 timeout。
 - `test annotate`：验证指定 canonical reference、归属链、类型与 anchor 后输出注释片段，regression 还验证 Problem。使用乐观 snapshot，不改源文件，不加载全局 Trace。
 - `cache status/rebuild/clear`：维护可删除重建的 HawDB 缓存。
 - `memory`：`add`、`index`、`list`、`show`、`recall`、`search`、`edit`、`activate`、`resolve`、`reopen`、`supersede`、`promote`、`retire`。captured 表示尚未确认当前生命周期。
-- `issue`：draft、create、index、list、recall、show、edit、link、adopt、retire、close、reopen、remove、plan、execute。`feedback` 提供 connection、sync、import、list、show，接入外部来源并导入本地 Issue。见 [Feedback 契约](feature/feedback/architecture.md)。
+- `issue`：draft、create、index、list、recall、show、edit、link、adopt、retire、close、reopen、remove、plan、execute。`feedback` 提供 connection、sync、import、list、show，接入外部来源并导入本地 Issue。见 [Feedback Spec](feature/feedback/architecture.md)。
 - `author set`：用完整 owner 前像 digest 更换正文，保留工具拥有的 metadata 与历史。
 - `trace show/check`：构建全局关系图。show 在图不完整时拒绝，check 返回 findings 与 `complete`。不输出虚构覆盖率。
-- `review render`：从契约、测试、证据和 Memory 生成本地 Markdown 审阅材料，不写 GitHub；需要完整图的结论拒绝不完整输入。
+- `review render`：从 Spec、测试、证据和 Memory 生成本地 Markdown 审阅材料，不写 GitHub；需要完整图的结论拒绝不完整输入。
 - `check`：汇总关系、生命周期和项目写作政策的 findings，不执行测试。结果与退出码由[聚合门禁](feature/documentation-quality/README.md#聚合门禁)拥有。
-- `trace gaps`：派生契约与 CLI 页面的实现/测试关系缺口，见[对应 Use Case](feature/local-sdlc/use-case/inspect-relationship-gaps.md)。
+- `trace gaps`：派生 Spec 与 CLI 页面的实现/测试关系缺口，见[对应 Use Case](feature/local-sdlc/use-case/inspect-relationship-gaps.md)。
 - `code`、`docs`、`writing`、`concepts`、`constitution`、`page`、`config`、`repo`、`view`、`workspace`、`git`、`action`：分别由下文对应章节及链接的 Feature 拥有行为；参数以 `--help` 为准。
 - `recover`：回收已死 publication token，在独占保护下恢复唯一 journal，再以短独占快照核验 journal 与 runner。runner `blocked` 使 CLI 失败退出。
 - `docs work`：规划互斥文档写集，运行声明的检查并重新验证收据，由 finalizer 收尾；不分派 Agent。见[并行切分文档工作](feature/neutral-project-governance/use-case/coordinate-docs-work.md)。
 
-## 存储契约
+## 存储 Spec
 
 消费仓库使用 Markdown 加严格 YAML frontmatter。Feature、Use Case、Design、Roadmap、Engineering、Research、Memory 各有 schema 与具名操作，不公开通用 CRUD。
 
@@ -61,13 +61,13 @@ supporting Markdown 进入 candidate 摘要，不成为独立 owner 或测试证
 
 模板随工具包安装，由严格 manifest 校验名称、路径、库存和文件类型，不依赖消费仓库。init 生成完整分类目录、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md`（随包空 catalog）和 `docs/architecture.md`。
 
-根 `AGENTS.md` 由 init 保留既有正文，并追加或刷新一个带边界的 Concord 托管区块，指向 `concord --skill`。标记残缺时拒绝写入。参考模板不成为契约 owner，也不被解释为自定义配置。
+根 `AGENTS.md` 由 init 保留既有正文，并追加或刷新一个带边界的 Concord 托管区块，指向 `concord --skill`。标记残缺时拒绝写入。参考模板不成为 Spec owner，也不被解释为自定义配置。
 
 路径是文档 canonical identity。测试关联是测试根里的 Concord 标记：`//`、`#` 或 `--` 开头的 `@feature <path>` 或 `@use-case <path>`，可附 `@regression`、`@status retired` 和 `@name`。标记存在即测试存在。
 
-测试身份由文件和标记派生为 `neref_...`：有 `@name` 时用该名称，否则用契约路径加同文件序号。无需人工 ID 或 attach 步骤。反向列表由当前源码派生，不写回契约，不保存 JSON 副本。
+测试身份由文件和标记派生为 `neref_...`：有 `@name` 时用该名称，否则用 Spec 路径加同文件序号。无需人工 ID 或 attach 步骤。反向列表由当前源码派生，不写回 Spec，不保存 JSON 副本。
 
-扫描不解析宿主测试声明。JS/TS 只用注释范围排除字符串、模板和正则中的伪标记，其它文本按注释前缀认标记。缺值、同块重复契约、只有 `@regression`/`@status`/`@name` 的块产生 finding。不认识的测试写法不是 finding。
+扫描不解析宿主测试声明。JS/TS 只用注释范围排除字符串、模板和正则中的伪标记，其它文本按注释前缀认标记。缺值、同块重复 Spec、只有 `@regression`/`@status`/`@name` 的块产生 finding。不认识的测试写法不是 finding。
 
 源码发现通过 `Repository.files(prefix, 'source')` 在检查子路径前排除 `.env`、`.env.*` 与 `dist` 路径段；默认目录清单保持严格。目录观察以路径和发现范围共同区分，复核重用原范围。代码、测试标记与工作台源码清单采用源码范围；文档与发布清单采用默认范围。显式路径安全校验不受发现排除影响，具体行为见[测试发现](feature/local-sdlc/use-case/discover-annotated-tests.md)。
 
@@ -113,7 +113,7 @@ Memory 保存 current promotion 与追加的生命周期 history。Problem 使�
 
 init 作用于 Git worktree 顶层，子目录项目与 bare repo 明确拒绝。`concord.config.ts` 是 concord.project/v1 项目标记，采用固定的 docs/feature、docs/roadmap、docs/design、docs/engineering、docs/research 约定及配置声明的 Memory 来源。
 
-Roadmap adoption 递归复制 Markdown 页面并保留目录结构，Roadmap 保存 adopted 历史，新 Feature 拥有当前契约。内部链接指向新副本，集合外相对链接保持原目标。不能安全处理的链接、非 Markdown 附件、嵌套 owner、symlink 与目标冲突具名拒绝。
+Roadmap adoption 递归复制 Markdown 页面并保留目录结构，Roadmap 保存 adopted 历史，新 Feature 拥有当前 Spec。内部链接指向新副本，集合外相对链接保持原目标。不能安全处理的链接、非 Markdown 附件、嵌套 owner、symlink 与目标冲突具名拒绝。
 
 adoption 规划复查源集合与摘要，supporting source 的同内容 guard 纳入 publication，按协议原子重写并列入 changedPaths。观察到来源变化时阻止发布。
 
@@ -133,7 +133,7 @@ Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 work
 
 publication owner 通过临时目录 fsync 与 rename 公布，正常释放与死亡恢复只删除准确 token，不按年龄抢占，不递归删除 lease 目录。持久缓存句柄在来源快照结束前关闭，其所有权由 HawDB 保证。不同协调协议的程序不得同时访问同一 worktree。
 
-trace show、trace gaps 与 review render 默认读取 HawDB 中已完成的诊断投影，并请求后台刷新。输出明确标记历史性、构建时间及刷新错误；首次无缓存返回 QueryPending。--fresh 等待当前来源结果。完整契约见[异步诊断投影](feature/local-data-engine/use-case/query-asynchronous-projections.md)。check、trace check、当前来源检索及证据裁决不使用历史投影授权成功。
+trace show、trace gaps 与 review render 默认读取 HawDB 中已完成的诊断投影，并请求后台刷新。输出明确标记历史性、构建时间及刷新错误；首次无缓存返回 QueryPending。--fresh 等待当前来源结果。完整 Spec 见[异步诊断投影](feature/local-data-engine/use-case/query-asynchronous-projections.md)。check、trace check、当前来源检索及证据裁决不使用历史投影授权成功。
 
 `concord recover` 先回收已死 token，再在独占保护下选择唯一的普通或 Trace journal。多 journal 冲突先于 runner 具名拒绝并保留现场。恢复入口获锁后重查类型和现场，只在内容符合 preimage 或 planned digest 时恢复。
 
@@ -143,7 +143,7 @@ runner 为 blocked 时 CLI 失败退出，初次检查已 blocked 时不开始 j
 
 CLI 与 Web 测试共用独立 `runner.lease`，长执行不占文档 lease。run 状态区分 running、finalizing、quarantined；只有同主机活进程的 running 允许发布，且发布前持久标记该 run 失效，A→B→A 与回滚不撤销失效标记。
 
-run 结束时在新快照中核对起止 candidate、配置、定义、契约、epoch、失效与清理结果，再写证据。父进程死亡不授权回收 runner，清理未知时保持阻断。最终快照无法取得时留下只收紧权限的 token-bound quarantine 标记。此协议不观察不合作编辑器的每次瞬时修改。
+run 结束时在新快照中核对起止 candidate、配置、定义、Spec、epoch、失效与清理结果，再写证据。父进程死亡不授权回收 runner，清理未知时保持阻断。最终快照无法取得时留下只收紧权限的 token-bound quarantine 标记。此协议不观察不合作编辑器的每次瞬时修改。
 
 ## 操作依赖与资源边界
 
@@ -185,17 +185,17 @@ run 在消费者 cwd 下执行配置中的 argv，shell=false，设置 timeout�
 
 definition digest 覆盖标注、完整测试文件、runner 配置与声明 sourceFiles 的字节。候选摘要覆盖全部 Git tracked 与 nonignored untracked 文件，只排除精确识别的 Concord owner 文件；owner 不能作为测试 sourceFiles。完整性摘要用于检测意外损坏，不抵抗有本地写权限的恶意用户。
 
-`memory resolve --kind fixed --red <id> --green <id>` 要求 active 标注的 regression 指向该 Problem，测试定义和目标契约相同。red 为普通非零退出，不是超时、信号或启动失败；green 成功且清理成功；red 先于 green；green 候选摘要匹配当前内容。
+`memory resolve --kind fixed --red <id> --green <id>` 要求 active 标注的 regression 指向该 Problem，测试定义和目标 Spec 相同。red 为普通非零退出，不是超时、信号或启动失败；green 成功且清理成功；red 先于 green；green 候选摘要匹配当前内容。
 
 sourceFiles 是作者声明的测试、启动脚本与断言配置，工具只校验字节不变，不证明依赖闭包、断言完整性或根因。fixed 要求非空 `--reason`，resolution 持久化 evidenceLevel: command，show、check、review 与 JSON 一致显示。red 与 green 都由 CLI 签发，不导入手写 JSON。
 
 run 前后必须校验 candidate、definition 与 contract 摘要相同，运行期间发生变化的证据不能用于关闭。摘要不证明 ignored dependencies、外部服务或执行环境。新 clone 缺少私有证据时，resolution 仍可读，check 与 review 显示 unavailable，不当作当前验证。
 
-Memory 其他关闭理由需要非空说明。reopen 追加历史并移除 current resolution；supersede 只允许相同 kind 且不形成循环；promotion 只指向有效当前契约，不复制正文。
+Memory 其他关闭理由需要非空说明。reopen 追加历史并移除 current resolution；supersede 只允许相同 kind 且不形成循环；promotion 只指向有效当前 Spec，不复制正文。
 
 ## 测试标记与缓存身份
 
-测试标记 current 身份只保证当前扫描集合唯一。测试演进由 Git 保存，工具不提供跨删库、删源码的永久身份登记。证据绑定完整测试文件、路径、声明、runner 配置、契约和 Problem epoch，不能单凭同名 ID 重用。测试文件即使含标记，也完整进入 candidate 与 definition 摘要。
+测试标记 current 身份只保证当前扫描集合唯一。测试演进由 Git 保存，工具不提供跨删库、删源码的永久身份登记。证据绑定完整测试文件、路径、声明、runner 配置、Spec 和 Problem epoch，不能单凭同名 ID 重用。测试文件即使含标记，也完整进入 candidate 与 definition 摘要。
 
 开发者可以直接编辑标记并以 Git 审阅，也可通过共享 `source.set` 操作替换配置范围内的 JS/TS 文件；该操作使用完整文件摘要保护和受限恢复日志。scan 与 check 不改写源文件。
 
@@ -207,9 +207,9 @@ Memory 其他关闭理由需要非空说明。reopen 追加历史并移除 curre
 
 ## 代码归属声明
 
-Code Declaration 是维护者对实现与契约关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或 Problem fixed 证据。查询引用由[自动派生方案](design/derived-code-reference/README.md)定义。
+Code Declaration 是维护者对实现与 Spec 关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或 Problem fixed 证据。查询引用由[自动派生方案](design/derived-code-reference/README.md)定义。
 
-`sourceIgnore` 按[发现契约](feature/local-sdlc/use-case/discover-annotated-tests.md)缩小源码与测试自动发现范围；配置参与快照身份，扫描、复核与监听共用同一匹配规则。
+`sourceIgnore` 按[发现 Spec](feature/local-sdlc/use-case/discover-annotated-tests.md)缩小源码与测试自动发现范围；配置参与快照身份，扫描、复核与监听共用同一匹配规则。
 
 `sourceRoots` 是可选路径数组，默认为 `[]`，沿用安全路径验证。只扫描显式根内的 JS/TS，允许与 testRoots 重叠。代码声明解析按文件缓存在 HawDB 中，键包含 worktree、解析器身份、路径和字节摘要；命中仍严格解码，摘要不符、损坏或写失败时回源。
 
@@ -231,31 +231,31 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 ## 中立高级治理
 
-`concord repo` 是中立的高级治理入口，方案见[中立治理](design/neutral-project-governance/plans/generalize-profile/architecture.md)。Concord 拥有声明身份、契约关系、Memory 生命周期、证据要求和权威 validator。消费者拥有 runner、原生副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。
+`concord repo` 是中立的高级治理入口，方案见[中立治理](design/neutral-project-governance/plans/generalize-profile/architecture.md)。Concord 拥有声明身份、Spec 关系、Memory 生命周期、证据要求和权威 validator。消费者拥有 runner、原生副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。
 
 显式 suite roots 不依赖 Nx 或 e2e 布局；静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
 
-可靠原生要求与 command 证据严格分离。Problem 已采用的下限持久化并在所有 fixed 入口执行。新证据绑定配置、policy、adapter 实现、当前测试与契约和 epoch。red 可以绑定实际缺陷候选，green 与可靠性观察必须绑定同一修复候选。
+可靠原生要求与 command 证据严格分离。Problem 已采用的下限持久化并在所有 fixed 入口执行。新证据绑定配置、policy、adapter 实现、当前测试与 Spec 和 epoch。red 可以绑定实际缺陷候选，green 与可靠性观察必须绑定同一修复候选。
 
 Research、Memory、Issue 共用 `concord.document/v1` 模型。协调路径为 Git-private `concord/trace`。细节见[高级测试治理](repository-profile.md)。
 
 ## Web 工作台
 
-`concord view` 提供随包分发的 React 工作台。Web API 与 CLI 结构化 action 共用完整应用校验，fixed 的 red/green 验证不因入口不同而省略；历史、身份和证据不能通过任意 JSON 覆盖。行为、信任边界与工作区导航投影见 [Web 工作台契约](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见根目录 `DESIGN.md`。
+`concord view` 提供随包分发的 React 工作台。Web API 与 CLI 结构化 action 共用完整应用校验，fixed 的 red/green 验证不因入口不同而省略；历史、身份和证据不能通过任意 JSON 覆盖。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见根目录 `DESIGN.md`。
 
 ## 文档写作检查
 
-写作政策、术语作用域与聚合门禁由[文档写作契约](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/policy.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
+写作政策、术语作用域与聚合门禁由[文档写作 Spec](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/policy.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
 
 ## 工程知识与本地观察
 
-Memory 与 Issue 的索引、检索与更新由[记忆工具契约](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察契约](feature/feedback/use-case/manage-local-observations.md)拥有，读取范围见上文“操作依赖与资源边界”。
+Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local-sdlc/use-case/recall-and-maintain-memory.md)与[本地观察 Spec](feature/feedback/use-case/manage-local-observations.md)拥有，读取范围见上文“操作依赖与资源边界”。
 
 ## 验收
 
 独立安装包不含 `workspace:*`、外部仓库路径或运行时 import。构建产物是带 shebang 的 Node CLI，pack 为 tarball，在仓库外临时消费者安装后使用其 bin。
 
-真实闭环：init → feature → use-case → problem → 给 Node 测试添加契约与回归注释并配置 runner → 缺陷 red → 修复 fixture → green → `memory resolve` → trace 与 review。另覆盖错误引用、无证据关闭、伪造或陈旧证据、测试源码变化、重开、退役、缓存删除与损坏、注释变化后的缓存失效、悬空与重复标注、跨 cwd 与 root、路径穿越、写冲突、并发写、journal 恢复、超时清理和独立安装。
+真实闭环：init → feature → use-case → problem → 给 Node 测试添加 Spec 与回归注释并配置 runner → 缺陷 red → 修复 fixture → green → `memory resolve` → trace 与 review。另覆盖错误引用、无证据关闭、伪造或陈旧证据、测试源码变化、重开、退役、缓存删除与损坏、注释变化后的缓存失效、悬空与重复标注、跨 cwd 与 root、路径穿越、写冲突、并发写、journal 恢复、超时清理和独立安装。
 
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。发行 tgz 携带 Linux x64/glibc 与 macOS arm64 原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一打包，在目标平台安装同一份包验收。
 

@@ -10,7 +10,7 @@
 - [文档模型与格式边界](document-model.md)
 - [高级测试治理](repository-profile.md)
 - [来源与抽取边界](provenance.md)
-- [Feature：当前产品契约](feature/README.md)
+- [Feature：当前产品 Spec](feature/README.md)
 - [Roadmap：待采用方向](roadmap/README.md)
 - [Design：候选与裁决](design/README.md)
 - [Engineering：测试与维护机制](engineering/README.md)

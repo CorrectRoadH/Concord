@@ -20,4 +20,4 @@ G3: transport 与 capability 错误保留具名原因；C2 验证错误、预算
 
 ## Residual Risks
 
-依赖安装完整性仍信任 frozen lock 与包管理器；adapter 的源码闭包与 guard 声明属于受信任接入契约，不构成恶意代码沙箱。POSIX 进程组不可观察的平台拒绝新 transport。执行结果超出 envelope 预算时拒绝，不能裁剪证据。实现身份改变使旧 managed 结果不再 current，但其历史和证据下限必须保留。
+依赖安装完整性仍信任 frozen lock 与包管理器；adapter 的源码闭包与 guard 声明属于受信任接入 Spec，不构成恶意代码沙箱。POSIX 进程组不可观察的平台拒绝新 transport。执行结果超出 envelope 预算时拒绝，不能裁剪证据。实现身份改变使旧 managed 结果不再 current，但其历史和证据下限必须保留。

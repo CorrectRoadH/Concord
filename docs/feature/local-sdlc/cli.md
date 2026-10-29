@@ -4,7 +4,7 @@
 
 ## 通用约定
 
-- 每个命令都接受 `--json`。Agent 与脚本读取 JSON，不解析人读输出。JSON 字段是公开契约。
+- 每个命令都接受 `--json`。Agent 与脚本读取 JSON，不解析人读输出。JSON 字段是公开 Spec。
 - 退出码 0 表示成功。退出码 1 表示命令拒绝执行、检查发现问题或测试失败。
 - 命令拒绝执行时，错误对象写到 stderr，形如 `{"ok":false,"error":"<错误码>","message":"...","details":{...}}`。`details` 可省略。人读输出以 `ok: false`、`error:`、`message:` 三行开头。`check` 这类检查命令发现问题时，结果仍写到 stdout，`ok` 为 false。
 - `--root <worktree>` 指定消费仓库。省略时从 cwd 向上查找 `concord.config.ts`。
@@ -49,7 +49,7 @@ Inspect configuration: concord doctor
 
 `concord template list/show` 在未初始化的目录也能读取随包模板。
 
-## 创建契约
+## 创建 Spec
 
 `feature`、`use-case`、`roadmap`、`design`、`engineering` 与 `research` 各有 `create`、`list`、`show`。省略 `--body` 时使用模板正文，`--body <file>` 或 `--body -` 提交完整正文。
 
@@ -80,7 +80,7 @@ ID 已存在时返回 `DocumentExists`，退出 1，不改文件。
 
 ## 关联源码
 
-`code annotate` 与 `test annotate` 只把校验过的标记写到 stdout，不改源码。引用的契约不存在时返回 `ReferenceNotFound`。
+`code annotate` 与 `test annotate` 只把校验过的标记写到 stdout，不改源码。引用的 Spec 不存在时返回 `ReferenceNotFound`。
 
 ```sh
 concord code annotate --scope file --contract docs/feature/cart/README.md
@@ -102,7 +102,7 @@ concord test annotate --contract docs/feature/cart/use-case/add-item.md --regres
 // @regression memory/duplicate-sku.md
 ```
 
-`--json` 返回 `{"operation":"test-annotate","snippet":"..."}`。`code list` 返回当前代码声明，`code locate <path> --line <n>` 返回包含该行的全部声明。代码声明只表示实现关联，不代替测试，也不证明契约已完成。完整语法见 `concord --skill code`。
+`--json` 返回 `{"operation":"test-annotate","snippet":"..."}`。`code list` 返回当前代码声明，`code locate <path> --line <n>` 返回包含该行的全部声明。代码声明只表示实现关联，不代替测试，也不证明 Spec 已完成。完整语法见 `concord --skill code`。
 
 ## 检查关系
 
@@ -144,7 +144,7 @@ codeDeclarations: 1
 
 ## 追踪关系
 
-`concord trace show --fresh <path>` 返回一份契约的正文、关系、测试与代码声明。不加 `--fresh` 且尚无快照时返回 `QueryPending`。`--json` 的顶层字段为 `operation`、`subject`、`relatedPaths`、`incoming`、`outgoing`、`tests`、`codeDeclarations`、`stepGroups`、`cache` 与 `analysis`：
+`concord trace show --fresh <path>` 返回一份 Spec 的正文、关系、测试与代码声明。不加 `--fresh` 且尚无快照时返回 `QueryPending`。`--json` 的顶层字段为 `operation`、`subject`、`relatedPaths`、`incoming`、`outgoing`、`tests`、`codeDeclarations`、`stepGroups`、`cache` 与 `analysis`：
 
 ```json
 {
@@ -158,7 +158,7 @@ codeDeclarations: 1
 }
 ```
 
-`codeDeclarations` 为空表示没有代码直接声明实现这个 Use Case。示例中的代码声明指向 Feature README，在 Feature 的 `trace show` 中列出。`trace gaps --json` 列出缺少实现或测试关联的契约。`trace check` 只做关系检查。`review render` 生成审阅材料。这些命令都不运行测试。
+`codeDeclarations` 为空表示没有代码直接声明实现这个 Use Case。示例中的代码声明指向 Feature README，在 Feature 的 `trace show` 中列出。`trace gaps --json` 列出缺少实现或测试关联的 Spec。`trace check` 只做关系检查。`review render` 生成审阅材料。这些命令都不运行测试。
 
 ## 测试与证据
 

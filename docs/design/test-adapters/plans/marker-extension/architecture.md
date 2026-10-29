@@ -46,7 +46,7 @@ Concord 捕获每个 invocation 的 exitCode、signal、timedOut、cancelled、o
 
 ## 收据与能力边界
 
-收据遵守共同契约的 requested/observed 与 green/red/invalid 规则；仅非空集合全部恰好一次 passed、退出 0、完整且清理完成才能 green。全部恰好一次且含 failed、退出非零、清理完成才可能 red；基础设施错误、skip、缺失、重复、额外、重试合并、截断一律 invalid。
+收据遵守共同 Spec 的 requested/observed 与 green/red/invalid 规则；仅非空集合全部恰好一次 passed、退出 0、完整且清理完成才能 green。全部恰好一次且含 failed、退出非零、清理完成才可能 red；基础设施错误、skip、缺失、重复、额外、重试合并、截断一律 invalid。
 
 外层 `commandOutcome` 表达结论，不把 invalid 加入现有 execution enum。收据采用新格式版本，旧收据保留原件、不重算摘要，需要重新取证；逐项结果不自动满足 repository profile。
 
@@ -58,4 +58,4 @@ TAP 与 JUnit XML 只是候选报告 codec；没有固定 provider/版本的一�
 
 ## Identity and Reuse
 
-native 选择变更保持源码 v1 ID，但改变定义摘要；命名测试改契约由 annotation/contract 摘要使旧收据失效。缓存有无不改变 case 集合、check finding、退出码与 complete。采用新选择语义前须完成 Design README 中 [C-011](../../../../constitution.md#c-011-1) 与 [C-011](../../../../constitution.md#c-011-6) 的修订。
+native 选择变更保持源码 v1 ID，但改变定义摘要；命名测试改 Spec 由 annotation/contract 摘要使旧收据失效。缓存有无不改变 case 集合、check finding、退出码与 complete。采用新选择语义前须完成 Design README 中 [C-011](../../../../constitution.md#c-011-1) 与 [C-011](../../../../constitution.md#c-011-6) 的修订。

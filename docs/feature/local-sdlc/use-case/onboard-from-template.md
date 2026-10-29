@@ -11,7 +11,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 用户目标
 
-第一次接入 Concord 的维护者要在一个 Git 仓库里得到项目配置、文档目录和写作模板，然后开始写契约。整个过程不需要外部 checkout、服务或凭据。
+第一次接入 Concord 的维护者要在一个 Git 仓库里得到项目配置、文档目录和写作模板，然后开始写 Spec。整个过程不需要外部 checkout、服务或凭据。
 
 ## 起始状态
 
@@ -78,7 +78,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 结果
 
-仓库得到一套可编辑的文档结构。下一步用 `concord feature create` 写第一份契约。
+仓库得到一套可编辑的文档结构。下一步用 `concord feature create` 写第一份 Spec。
 
 `init` 拒绝时退出 1，不写任何文件：
 
@@ -121,7 +121,7 @@ Feature 只要求 README。`--pages` 从 `library`、`cli`、`architecture`、`l
 
 项目 README 提供从空 Git 仓库到第一次 `test run` 的完整命令：创建 Feature 与 Use Case、三种代码声明和一个真实 Node 测试。打包验收直接执行安装包内 README 的 quick start，核对 3 条实现声明、1 条测试、一次 `Command pass` 和按行定位结果。
 
-## 契约来源
+## Spec 来源
 
 - 命令与输出：[CLI](../cli.md#接入)
 - 项目配置格式：[项目接入](../../project-onboarding/README.md)

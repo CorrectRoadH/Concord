@@ -29,7 +29,7 @@ feature: docs/feature/local-sdlc/README.md
 - `inputScope` 展示纳入的仓库内成员摘要、排除项和版本记录。输入根内的文件、受管配置、adapter 实现与 `sourceFiles` 在结束后全部复核；排除项不得隐去实际依赖。系统库、工具链安装、外部服务与包缓存无法冻结时保留 `ExternalInputUnknown`。收据中的 `complete` 表示逐项报告完整，不能表示环境已冻结；带该 gap 的收据不能满足 repository profile 的原生可靠性等级。
 - Cargo 多模块源码归属不能核实时返回 `CargoFileMembershipUnknown`。受管报告目录当前仅在 Linux 通过目录句柄安全读取，其它平台返回 `ReportUnsafe`。
 - Node test 不具备已核实的独立原生收集能力时，观察显示 `NodeCollectionUnsupported`，不据此声明原生精确选择。Node runner 的既有 command 证据路径继续适用。
-- `memory resolve --kind fixed` 仅接受当前输入、源码绑定、契约、实现和 Problem epoch 均符合要求的 red/green 收据。不同收据格式不混用，原生逐项结果不自动满足 repository profile 的原生可靠性要求。历史收据保留原件。
+- `memory resolve --kind fixed` 仅接受当前输入、源码绑定、Spec、实现和 Problem epoch 均符合要求的 red/green 收据。不同收据格式不混用，原生逐项结果不自动满足 repository profile 的原生可靠性要求。历史收据保留原件。
 - 收集、选择、执行、解析及终结由同一个 runner 所有权覆盖。输入或成员变化、失效 epoch、非零收集退出、截断与清理未知均不授权当前清单或有效原生证明。清理未知时保留阻断现场。
 
 ## 验收

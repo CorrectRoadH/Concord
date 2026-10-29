@@ -27,6 +27,6 @@ feature: docs/feature/project-onboarding/README.md
 
 双配置、非法运行时表达式、重复键与不安全路径明确拒绝且不执行消费者代码。CAS 使用同一次读取的 source，拒绝覆盖外部编辑；普通工具编辑可规范化 TS 全文件，但恢复必须逐字节还原。配置仅改变注释也会改变新证据绑定摘要，不改写历史证据。畸形配置和宪法缺失不应导致恢复覆盖未知内容。
 
-## 契约来源
+## Spec 来源
 
 [采用方案](../../../design/onboarding-contracts/plans/compatible/README.md) 和 [治理格式与组合验收](../../../design/onboarding-contracts/plans/compatible/governance.md)。实现与验收状态见 Feature；测试关系从真实声明派生。

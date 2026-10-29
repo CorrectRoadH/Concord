@@ -30,7 +30,7 @@ feature: docs/feature/local-sdlc/README.md
    // @use-case docs/feature/cart/use-case/add-item.md
    ```
 
-   `--regression memory/<id>.md` 追加 `@regression` 行。需要可读名称时，在标记块里手写 `@name <text>`。契约或 Problem 不存在时返回 `ReferenceNotFound`。
+   `--regression memory/<id>.md` 追加 `@regression` 行。需要可读名称时，在标记块里手写 `@name <text>`。Spec 或 Problem 不存在时返回 `ReferenceNotFound`。
 
 2. 把标记放在测试声明上方。注释前缀可以是 `//`、`#` 或 `--`。 {#place}
 
@@ -68,14 +68,14 @@ feature: docs/feature/local-sdlc/README.md
 
 | 情况 | 结果 |
 | --- | --- |
-| 标记缺少契约路径，或一个标记块有两个契约 | finding，指向标记所在行 |
-| 契约文件不存在 | `ReferenceNotFound` |
+| 标记缺少 Spec 路径，或一个标记块有两个 Spec | finding，指向标记所在行 |
+| Spec 文件不存在 | `ReferenceNotFound` |
 | JS/TS 字符串或模板里出现的标记文本 | 不注册 case |
 | Concord 不认识的测试写法 | 不产生 finding |
 
 ## 标记规则
 
-- 每个标记块只选一个契约。多个标记块可以关联同一个 Feature 或 Use Case。
+- 每个标记块只选一个 Spec。多个标记块可以关联同一个 Feature 或 Use Case。
 - `@status retired` 表示测试已退役，不能用于关闭 Problem。
 - 工具不从测试语法推断跳过或待办状态。
 
@@ -96,7 +96,7 @@ sourceIgnore: ['games/ljkx/generated', 'tests/fixtures/vendor']
 
 不论是否配置，自动发现都按路径段排除 `.env`、`.env.*` 与 `dist`，不读取、不解析、不跟随这些路径，规则与 Git ignore 无关。普通文件、symlink 与断链按同一规则排除。显式指定的来源根不受这条排除规则影响，但仍要通过路径安全校验。这条规则只作用于源码自动发现。候选源码中的 symlink 仍然具名拒绝。
 
-## 契约来源
+## Spec 来源
 
 - 命令与输出：[CLI](../cli.md#测试与证据)
 - 缓存身份与重建：[架构](../architecture.md#编译管线)

@@ -73,7 +73,7 @@ WouldBlock、权限、I/O 或未知错误均拒绝删除；损坏 manifest 不�
 
 文档解析分配 9872 条、15 MiB；静态配置解析分配 128 条、1 MiB。二者使用各自进程期内存句柄和解析器身份，合计保持文档解析预算。配置命中只复用严格解码的值，每次操作仍读取配置原文并执行仓库安全与协调检查。
 
-桥接单条输入最多 8 MiB，每次批量最多 1000 条且总输入最多 16 MiB。native 查询最多 20000 行、64 MiB payload；大于该预算的完整 namespace 读取须分批且仍受 namespace 总预算约束。持久目录的总字节数和条目数量不构成打开、状态检查或清理的拒绝条件。目录检查逐项校验路径、文件类型和链接；清理在完整检查与原生所有权守卫内执行，保留锁 inode。物理文件增长不使缓存失去清理入口。
+桥接单条输入最多 8 MiB，每次批量最多 1000 条且总输入最多 16 MiB。native 查询最多 20000 行、64 MiB payload；大于该预算的完整 namespace 读取须分批且仍受 namespace 总预算约束。持久目录的总字节数和条目数量不构成打开、状态检查或清理的拒绝条件。目录检查逐项校验路径、文件类型和链接；清理在完整检查与原生 Ownership guard 内执行，保留锁 inode。物理文件增长不使缓存失去清理入口。
 
 HawDB 的 WAL 上限：max_wal_replay_entries=100000、max_wal_replay_bytes=128 MiB、max_wal_record_bytes=64 MiB、max_wal_batch_operations=50000。checkpoint 的 encoded 上限为 256 MiB，decoded 上限为 512 MiB。
 
@@ -89,7 +89,7 @@ segment cache 为 16 MiB，graph manifest 为 8 MiB，out-of-core delta 不超�
 
 ## Adoption conditions
 
-所有权 guard、打开模式、资源预算、窄原生边界和发行身份分别由本页的 Open modes and ownership、Resource budgets、Release identity，以及宪法 C-001/C-005 和架构契约约束。
+所有权 guard、打开模式、资源预算、窄原生边界和发行身份分别由本页的 Open modes and ownership、Resource budgets、Release identity，以及宪法 C-001/C-005 和架构 Spec 约束。
 
 同进程与跨进程互斥、损坏 manifest 的受锁清理、同一锁 inode 保留和空库重开都属于验收范围。预算字段须匹配固定 revision 的公开 DatabaseConfig，不采用 TiB 级默认值。生产路径守卫、崩溃恢复、缓存语义、请求延迟及打包消费者也须验收。
 

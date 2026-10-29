@@ -25,6 +25,6 @@ feature: docs/feature/project-onboarding/README.md
 
 配置必须驱动真实读取与写入，不能仅存储无效选项。不存在的 provider 明确拒绝。聚合读取不隐含多处同步写入。来源身份、路径范围、失败策略与 fixed 证据适用范围必须经设计裁决；外部来源不得自动借用当前项目证据关闭 Problem。
 
-## 契约来源
+## Spec 来源
 
 [目标与范围](../README.md)。实现与验收状态见 Feature；测试关系从真实声明派生。

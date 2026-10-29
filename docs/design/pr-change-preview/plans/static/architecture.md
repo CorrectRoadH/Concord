@@ -8,7 +8,7 @@
 
 公开托管本地服务会暴露仓库写入和执行权限，故不采用。为所有工作台操作维护一套离线 API 会扩大导出范围和校验负担，故静态预览只包含变更审阅。PR 产物不需要 Concord 项目配置有效，不运行消费者源码或配置，不建立持久缓存。
 
-## 比较契约
+## 比较 Spec
 
 `view export --base <ref> --head <ref> --base-label <label> --out <new-directory>` 必须给出 base，head 默认 HEAD；base-label 默认输入 base，只作展示。参数作为独立 Git argv 传递，先用 `rev-parse --verify --end-of-options <ref>^{commit}` 解析为完整 commit ID，再使用 ID 运算。拒绝 shallow 仓库。执行 `merge-base --all`，要求恰好一个最佳共同祖先。比较该祖先与 head，保留原始 base 身份。
 

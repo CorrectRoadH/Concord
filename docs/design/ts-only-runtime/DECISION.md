@@ -6,7 +6,7 @@ Selected: [ts-only](plans/ts-only/README.md)
 
 ## Rationale
 
-用户禁止 legacy；独立只读挑战最终 PASS。错误优先级、拒绝识别及 prepared-init 例外条件已落实为契约与验收定义，旧兼容设计被本裁决替代。
+用户禁止 legacy；独立只读挑战最终 PASS。错误优先级、拒绝识别及 prepared-init 例外条件已落实为 Spec 与验收定义，旧兼容设计被本裁决替代。
 
 采用 ts-only，metadata 中的 design decision 为唯一裁决来源。用户禁止 legacy；原 onboarding-contracts 的兼容性部分已被本设计替代。
 

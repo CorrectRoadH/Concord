@@ -1,23 +1,26 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import { test } from './fixtures.js';
+import { act } from './journey.js';
 import { Effect, Schema } from 'effect';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { pollUntil, waitForWorkspaceProjection } from './support.js';
+import { expect } from '@playwright/test';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
+import { pollUntil, waitForWorkspaceProjection } from '../support.js';
 
 const ApiResult = Schema.Struct({ ok: Schema.Boolean, value: Schema.optional(Schema.Unknown), error: Schema.optional(Schema.String) });
 
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md
-test('HTTP and browser show Local beside remote filters and delete only safe local drafts', () => Effect.runPromise(Effect.tryPromise({
+test('HTTP and browser show Local beside remote filters and delete only safe local drafts', { tags: ['journey'] }, fixtures => Effect.runPromise(Effect.tryPromise({
   try: async () => {
+    const { page } = fixtures;
     const root = mkdtempSync(join(tmpdir(), 'concord-knowledge-browser-'));
     let server: ViewServerHandle | undefined;
-    let browser: Browser | undefined;
+
     try {
       execFileSync('git', ['init', '-q', root]);
       const repo = new LocalRepository(root, { initialize: true });
@@ -35,9 +38,7 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
       const recall = await action({ action: 'issue.recall', query: 'Local content' });
       assert.equal(JSON.stringify(recall.value).includes('Local content.'), true);
 
-      const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-      browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-      const page = await browser.newPage();
+
       assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'first-memory', title: 'First memory', body: 'First memory content.', memoryKind: 'note' })).ok, true);
       assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'second-memory', title: 'Second memory', body: 'Second memory content.', memoryKind: 'note' })).ok, true);
       await pollUntil(async () => {
@@ -47,27 +48,30 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
       await page.goto(`${base}/memory`);
       const memoryNavigation = page.getByRole('navigation', { name: '内容导航', exact: true });
       await expect(memoryNavigation.getByRole('link', { name: 'First memory', exact: true })).toBeVisible();
-      await memoryNavigation.getByRole('link', { name: 'Second memory', exact: true }).click();
+      await act(fixtures, '在记忆导航中打开 Second memory。', () => memoryNavigation.getByRole('link', { name: 'Second memory', exact: true }).click());
       await expect(page.getByTestId('document-file-preview')).toContainText('Second memory content.');
       await expect(memoryNavigation.getByRole('link', { name: 'First memory', exact: true })).toBeVisible();
       await page.reload();
       await expect(memoryNavigation.getByRole('link', { name: 'Second memory', exact: true })).toHaveAttribute('aria-current', 'page');
       await page.setViewportSize({ width: 390, height: 844 });
-      await page.getByRole('button', { name: '内容导航', exact: true }).click();
-      await page.getByRole('dialog').getByRole('link', { name: 'First memory', exact: true }).click();
+      await act(fixtures, '通过移动端内容导航切换到 First memory。', async () => {
+        await page.getByRole('button', { name: '内容导航', exact: true }).click();
+        await page.getByRole('dialog').getByRole('link', { name: 'First memory', exact: true }).click();
+      });
       await expect(page.getByTestId('document-file-preview')).toContainText('First memory content.');
       await page.setViewportSize({ width: 1440, height: 950 });
       await page.goto(`${base}/feedback`);
       await expect(page.getByRole('link', { name: 'Browser draft' })).toBeVisible();
-      await page.getByRole('link', { name: 'Browser draft' }).click();
-      await page.getByRole('tab', { name: '来源与关联' }).click();
-      await page.getByRole('button', { name: '删除本地草稿' }).click();
-      await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
+      await act(fixtures, '打开本地反馈 Browser draft，在来源与关联中删除这条本地草稿，并确认删除。', async () => {
+        await page.getByRole('link', { name: 'Browser draft' }).click();
+        await page.getByRole('tab', { name: '来源与关联' }).click();
+        await page.getByRole('button', { name: '删除本地草稿' }).click();
+        await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
+      });
       await expect(page.getByRole('link', { name: 'Browser draft' })).toHaveCount(0, { timeout: 15_000 });
       assert.equal((await action({ action: 'issue.recall', query: 'Local content' })).ok, true);
       assert.equal(JSON.stringify((await action({ action: 'issue.index' })).value).includes('browser-draft'), false);
     } finally {
-      await browser?.close();
       await server?.close();
       rmSync(root, { recursive: true, force: true });
     }

@@ -22,7 +22,7 @@
 
 ## 按需原生能力
 
-host 是可选的可信本地模块，当前契约为 `concord.repository-host/v2`，声明 repositoryRoot 和 `caseIdentity: "concord.case-contracts/v1"`。仅请求原生能力时加载，并核对 worktree 与锁定安装 engine 身份；静态列表、trace、help 与 Web 不加载 host。
+host 是可选的可信本地模块，当前 Spec 为 `concord.repository-host/v2`，声明 repositoryRoot 和 `caseIdentity: "concord.case-contracts/v1"`。仅请求原生能力时加载，并核对 worktree 与锁定安装 engine 身份；静态列表、trace、help 与 Web 不加载 host。
 
 新接入可以使用与 host 互斥的 `adapter` 配置，通过 `concord.repository-adapter/v1` 交换严格 JSON，消费者无需安装 Concord 库。配置的 argv、实现文件与递归目录、依赖锁、执行文件和 loader 共同绑定实现身份。声明、来源、完整性与 Preview 查询使用纯 `concord repo engine --json`，不会加载 host 或发布证据。完整字段、预算、消费映射与验收由[进程接入裁决](design/repository-process-adapter/README.md)拥有。
 
@@ -34,7 +34,7 @@ inventory 和证据读取能力分别接入，缺失能力具名拒绝对应操�
 
 `concord.native-reliability/v1` 要求原生唯一绑定、目标回归 red、单项 green、三份隔离副本、同副本连续两次、默认并行和完整 cleanup。实际执行副本身份、观察计数和 invocation 证明这些条件，不能用收据数量替代。禁止 retry、零执行、skip、启动失败、超时或信号形成有效通过证明。
 
-red 使用真实缺陷候选；green 与六次可靠性观察使用同一修复候选。测试定义、契约、policy、配置和 adapter 实现绑定必须一致。regression add/refresh 与 fixed 由同一权威 validator 核验。
+red 使用真实缺陷候选；green 与六次可靠性观察使用同一修复候选。测试定义、Spec、policy、配置和 adapter 实现绑定必须一致。regression add/refresh 与 fixed 由同一权威 validator 核验。
 
 项目要求是下限，Problem 持久化已采用的最低要求。command 级 red/green 无法从 CLI、Web 或 action 绕过可靠原生证据门槛。reopen 增加 epoch，历史 invocation 不得再用于关闭。基础 `concord test run` 仍只记录 command 证据，不声称原生覆盖或可靠性。
 

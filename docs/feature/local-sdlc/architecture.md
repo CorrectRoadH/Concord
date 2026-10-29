@@ -4,7 +4,7 @@
 
 Concord 从 Markdown owner、TypeScript AST 可识别的代码声明，以及测试根里的 Concord 标记读取事实。工具解析 canonical path 与 anchor，验证目标类型、重复关系和循环，再生成 trace、review 与检查结果。测试标记不解析宿主测试语法。
 
-sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析可按文件命中可删除 HawDB 投影，键含 worktree、解析器版本、路径和字节摘要。当前事实门禁从当前 Markdown 重算；诊断历史投影按异步查询契约保存。测试投影按整次扫描缓存，身份包含项目、路径集合、各文件摘要、runner 配置与解析器版本；任何一项变化、文件改名删除或缓存损坏时，从源码重建。命中都严格解码。
+sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析可按文件命中可删除 HawDB 投影，键含 worktree、解析器版本、路径和字节摘要。当前事实门禁从当前 Markdown 重算；诊断历史投影按异步查询 Spec 保存。测试投影按整次扫描缓存，身份包含项目、路径集合、各文件摘要、runner 配置与解析器版本；任何一项变化、文件改名删除或缓存损坏时，从源码重建。命中都严格解码。
 
 ## 自举
 

@@ -1,19 +1,20 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import { test } from './fixtures.js';
 import { Effect } from 'effect';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { createDocument } from '../dist/documents.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { expect } from '@playwright/test';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import { createDocument } from '../../dist/documents.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('file context menus copy repository paths without navigating or changing files', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('file context menus copy repository paths without navigating or changing files', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-path menu-'));
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -25,9 +26,8 @@ test('file context menus copy repository paths without navigating or changing fi
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const origin = `http://127.0.0.1:${server.port}`;
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
     page.setDefaultTimeout(15_000);
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write'], { origin });
     const errors: string[] = [];
@@ -70,5 +70,5 @@ test('file context menus copy repository paths without navigating or changing fi
     await expect(page.getByText('无法复制路径，请检查浏览器剪贴板权限。')).toBeVisible();
     assert.equal(readFileSync(join(root, path), 'utf8'), before);
     assert.deepEqual(errors, []);
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 })));

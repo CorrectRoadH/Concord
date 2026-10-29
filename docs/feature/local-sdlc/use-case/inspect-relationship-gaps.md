@@ -1,17 +1,17 @@
 ---
 format: concord.document/v1
 id: inspect-relationship-gaps
-title: 检查契约与 CLI 页面的实现和测试关系缺口
+title: 检查 Spec 与 CLI 页面的实现和测试关系缺口
 createdAt: 2026-09-21T00:00:00.000Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
-# 检查契约与 CLI 页面的实现和测试关系缺口
+# 检查 Spec 与 CLI 页面的实现和测试关系缺口
 
 ## 用户目标
 
-维护者和 Agent 在修改功能前，要一次看到哪些 Feature、Use Case 和 CLI 页面还没有实现或测试关联，先补契约，再规划实现与验收。
+维护者和 Agent 在修改功能前，要一次看到哪些 Feature、Use Case 和 CLI 页面还没有实现或测试关联，先补 Spec，再规划实现与验收。
 
 ## 起始状态
 
@@ -56,6 +56,6 @@ feature: docs/feature/local-sdlc/README.md
 - 结果只表示 Concord 没有观察到显式关系。它不是代码覆盖率或命令覆盖率，也不说明功能缺失或测试未执行。`semantics` 字段固定说明这一点。
 - 只能审计已有的 CLI 页面。没有页面的命令不会出现，需要由产品自己的命令清单或评审补上，`limitations` 字段说明这一点。
 
-## 契约来源
+## Spec 来源
 
 [本地 SDLC 闭环](../README.md)。关系由实现与测试源码中的标记拥有，本页不维护反向登记表。

@@ -25,4 +25,4 @@ sources:
 
 宪法位于 docs/constitution.md 且必需，DESIGN.md 可选。功能发现的通用规则经过明确修订进入宪法，功能专属细节保留在 Feature。来源与影响可追溯；当前正文只维护一份。
 
-参见 [需求 Feature](../../feature/project-onboarding/README.md) 和 [待裁决 Design](../../design/onboarding-contracts/README.md)。本调研不构成已采用的存储或安全契约。
+参见 [需求 Feature](../../feature/project-onboarding/README.md) 和 [待裁决 Design](../../design/onboarding-contracts/README.md)。本调研不构成已采用的存储或安全 Spec。

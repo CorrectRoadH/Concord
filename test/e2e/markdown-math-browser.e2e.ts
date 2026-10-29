@@ -1,14 +1,15 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser, type Locator } from '@playwright/test';
+import { test } from './fixtures.js';
+import { expect, type Locator } from '@playwright/test';
 import { Effect } from 'effect';
-import { createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { createDocument } from '../../dist/documents.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
 
 const example = String.raw`P(\Phi_h(S))=P(S)`;
 const inline = String.raw`\frac{a}{b} + x^2`;
@@ -55,10 +56,10 @@ async function assertMath(preview: Locator): Promise<void> {
 }
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('real workbench math previews render locally, sanitize HTML and preserve Markdown bytes', { timeout: 120000 }, () => Effect.runPromise(Effect.tryPromise(async () => {
+test('real workbench math previews render locally, sanitize HTML and preserve Markdown bytes', { timeout: 120000 }, ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-math-browser-'));
   let server: ViewServerHandle | undefined;
-  let browser: Browser | undefined;
+
   try {
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
@@ -76,9 +77,8 @@ test('real workbench math previews render locally, sanitize HTML and preserve Ma
     const projectBefore = readFileSync(projectPath);
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const address = `http://127.0.0.1:${server.port}`;
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
     const errors: string[] = [];
     const externalRequests: string[] = [];
     const fonts: { url: string; status: number }[] = [];
@@ -134,7 +134,6 @@ test('real workbench math previews render locally, sanitize HTML and preserve Ma
     assert.deepEqual(errors, []);
     assert.deepEqual(externalRequests, []);
   } finally {
-    await browser?.close();
     await server?.close();
     rmSync(root, { recursive: true, force: true });
   }

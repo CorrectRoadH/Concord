@@ -30,7 +30,7 @@ feature: docs/feature/neutral-project-governance/README.md
 - verified 只说明声明范围内的内容通过了声明的检查。任何 item 都未声明的路径上的改动不被报告，由父 Agent 的 diff 验收负责。
 - Docs Work 不启动、等待或关闭 Agent，也不合并 diff。
 
-## 契约来源
+## Spec 来源
 
 - [Docs Work](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#docs-work)
-- [公开输出契约](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#公开输出契约)
+- [公开输出 Spec](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#公开输出-spec)

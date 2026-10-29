@@ -20,7 +20,7 @@
 | [L2](../../LIMITS.md#l2-unknown-stays-unknown) | satisfied | 不一致投影携带 `unknownRelations: true`，人类输出加提示；一致投影不被不一致投影替换 | [架构](architecture.md#替换规则) |
 | [L3](../../LIMITS.md#l3-strict-decoding-and-identity) | satisfied | 每个查询的值 Schema；身份变化丢弃候选；恢复与配置失败不发布 | [架构](architecture.md#投影记录) |
 | [L4](../../LIMITS.md#l4-owner-bytes-stay-out-of-the-cache) | satisfied | 持久值去掉正文，只存路径与摘要；服务时定向读取 | [架构](architecture.md#正文边界) |
-| [L5](../../LIMITS.md#l5-compatible-machine-output) | satisfied | 只新增 projection 字段与错误码，保留 scannedAt；`lastError.code` 声明为开放集合；不一致投影退出码 0 的含义在契约中声明 | [CLI](cli.md) |
+| [L5](../../LIMITS.md#l5-compatible-machine-output) | satisfied | 只新增 projection 字段与错误码，保留 scannedAt；`lastError.code` 声明为开放集合；不一致投影退出码 0 的含义在 Spec 中声明 | [CLI](cli.md) |
 | [L6](../../LIMITS.md#l6-bounded-refresh) | satisfied | 沿用刷新上限、输出上限、单 owner 与发布重试；record、lastAttempt、error 都保留 scannedAt，同键合并可判定请求已满足 | [架构](architecture.md#刷新扫描) |
 
 ## Goals

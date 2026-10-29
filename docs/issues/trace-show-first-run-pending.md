@@ -42,13 +42,13 @@ concord --json trace gaps
 
 `--fresh` 绕过 `cachedQuery`，通过当前来源的 `withRepo` 读取并等待扫描，执行原有来源一致性与完整性校验；这个入口不写入异步完整查询投影，因而不能保证后续普通查询立即命中。`--dry-run` 同样绕过后台刷新。
 
-## 与现行契约的关系
+## 与现行 Spec 的关系
 
-[异步诊断投影](../feature/local-data-engine/use-case/query-asynchronous-projections.md) 明确声明：三类命令立即读取最近完成的投影并请求后台刷新；首次无缓存返回 QueryPending、退出码 1；`--fresh` 等待当前来源；普通查询进程不执行全量扫描。冷缓存只报告构建状态，600ms warm 预算针对已有可读投影。当前观察符合这些声明，不能仅凭首次非零认定实现违反契约。
+[异步诊断投影](../feature/local-data-engine/use-case/query-asynchronous-projections.md) 明确声明：三类命令立即读取最近完成的投影并请求后台刷新；首次无缓存返回 QueryPending、退出码 1；`--fresh` 等待当前来源；普通查询进程不执行全量扫描。冷缓存只报告构建状态，600ms warm 预算针对已有可读投影。当前观察符合这些声明，不能仅凭首次非零认定实现违反 Spec。
 
 ## 待判断的选项
 
 1. **无快照时等待当前来源。** 可让首次查询直接返回诊断结果，减少 agent 的错误处理与重试。需要明确是等待后台同键刷新还是采用当前来源扫描；前者需定义等待上限、刷新失败与超时输出，后者改变普通查询进程不扫描的职责边界。还需决定首个结果是带历史性标记的投影还是当前来源结果，并同步修订首次 QueryPending/退出码、冷缓存性能与打包 CLI 验收约定。已有快照仍可保持立即读取与后台刷新。不能只删除 QueryPending 分支而保留未定义的首次等待语义。
-2. **保留现有行为并文档化 `--fresh`。** 保持异步查询职责、首次 QueryPending/退出码 1、历史投影标记与现有性能边界。skill 与 local-sdlc CLI 的首次调用示例可以明确使用 `--fresh`，并说明普通调用须处理 QueryPending、后台完成后重试；`--fresh` 成功不等于已预热该查询键。此选项不改变 async projection 契约，但需要使入门示例准确表达首次调用成本和错误处理。
+2. **保留现有行为并文档化 `--fresh`。** 保持异步查询职责、首次 QueryPending/退出码 1、历史投影标记与现有性能边界。skill 与 local-sdlc CLI 的首次调用示例可以明确使用 `--fresh`，并说明普通调用须处理 QueryPending、后台完成后重试；`--fresh` 成功不等于已预热该查询键。此选项不改变 async projection Spec，但需要使入门示例准确表达首次调用成本和错误处理。
 
-两种选项均未采用。本次仅调查并记录，不修改命令行为、Feature/Design 契约或 skill。
+两种选项均未采用。本次仅调查并记录，不修改命令行为、Feature/Design Spec 或 skill。

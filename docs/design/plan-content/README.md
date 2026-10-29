@@ -28,7 +28,7 @@ decision:
 
 ## Contract
 
-具体结构、边界与验收见[方案契约](architecture.md)。本 Design 未定案时，该契约是待审候选。
+具体结构、边界与验收见[方案 Spec](architecture.md)。本 Design 未定案时，该 Spec 是待审候选。
 
 ## Constitution
 

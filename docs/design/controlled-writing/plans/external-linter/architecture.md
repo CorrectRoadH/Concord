@@ -35,7 +35,7 @@ argv 元素非空，shell=false；files 必须是安全仓库相对的已有 Mar
 
 建议报告与写作 finding 分开。报告 schema 为 `concord.writing-suggestions/v1`，包含 `suggestions`、`inputs`、`observedAt`、`current`、`complete`、`gaps`、`cleanup`。历史、不完整或清理未知均明确标记，不能解释为 check 通过。
 
-输出具有观察性质，沿用[共同观察结构](../../../test-journey-steps/共同身份.md#观察结果)的摘要、时间、当前性与缺口语义；不伪装为原生清单、LSP 分析或相关性结论。它不写入共享 Observation 缓存，不扩大共同契约规定的观察生产命令集合。
+输出具有观察性质，沿用[共同观察结构](../../../test-journey-steps/共同身份.md#观察结果)的摘要、时间、当前性与缺口语义；不伪装为原生清单、LSP 分析或相关性结论。它不写入共享 Observation 缓存，不扩大共同 Spec 规定的观察生产命令集合。
 
 建议失败、缺失、配置变化、缓存删除均不改变内置门禁结果。建议进程不持文档 publication lease，不改写文件、不创建独立生命周期 owner。清理完成后，在新的受校验快照中核验输入与 run 失效状态，再完成并释放本 run。清理未知、父进程死亡或终结协调失败时，按既有 runner 协议保留 token 绑定的隔离状态，阻断后续发布。本次命令非零退出；建议结果不改变内置门禁的领域结论。
 

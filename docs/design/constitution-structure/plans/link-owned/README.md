@@ -107,7 +107,7 @@
 
 ## Scope
 
-- 实现以上语法、引用解析、校验、输出、保护与迁移；删除取消的接口；先更新 `project-onboarding` 契约。
+- 实现以上语法、引用解析、校验、输出、保护与迁移；删除取消的接口；先更新 `project-onboarding` Spec。
 - 自举：按 Design README 的执行顺序关闭 Problem、迁移本仓库，再把 36 处“第 N 款”文字逐处核对后改为链接。宪法中的技术约束保留；只有作者明确撤销某项约束时才作为修订列出原义务与影响。
 - 不改变测试标记、代码声明、Memory 与 Issue 的格式。
 
@@ -117,7 +117,7 @@
 | --- | --- | --- | --- |
 | [L1](../../LIMITS.md#l1-运行时只接受当前格式) | satisfied | 旧宪法与旧元数据返回 `ConstitutionMigrationRequired`；只有 `constitution migrate` 使用专用 v1 读取器，普通运行时不读取旧格式 | 本页“迁移”与“取消的接口” |
 | [L2](../../LIMITS.md#l2-条款身份与修订历史保持) | satisfied | `<a id>` 的值原样成为标题 ID；ID 不改名、不复用；修订记录不改动 | 本页“条款与款的 ID”“迁移”第 1 项 |
-| [L3](../../LIMITS.md#l3-迁移遵守写入契约) | satisfied | 预检失败零写入；发布中断保留 journal，由新版 `recover` 按前后像处理 | 本页“迁移”第 3、4 项，CASES C14 |
+| [L3](../../LIMITS.md#l3-迁移遵守写入-spec) | satisfied | 预检失败零写入；发布中断保留 journal，由新版 `recover` 按前后像处理 | 本页“迁移”第 3、4 项，CASES C14 |
 | [L4](../../LIMITS.md#l4-破坏性变更经独立审查) | satisfied | 取消三处接口并改变 `constitution show` 输出，以对照表列出；独立 reviewer 两轮审查，第二轮结论 approve-with-changes，三项修正已采纳 | 独立审查第二轮结论与 CASES C8、C21 |
 | [L5](../../LIMITS.md#l5-不改变测试与代码关联) | satisfied | 只改变宪法与 Feature、Design 元数据；宪法列表 ID 不成为步骤 | CASES C20 |
 

@@ -19,7 +19,7 @@ function summary(record: DocumentRecord) {
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#index
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 // @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
 export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
   return inRepositorySnapshot(repo, () => ({ operation: `${kind}-index`, documents: ownerRecords(repo, kind).map(summary) }));
@@ -43,7 +43,7 @@ function matchingRecords(records: readonly DocumentRecord[], terms: readonly str
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 // @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
 export function knowledgeRecall(repo: Repository, kind: KnowledgeKind, query: string) {
   return inRepositorySnapshot(repo, () => {
@@ -64,7 +64,7 @@ export function knowledgeSearch(repo: Repository, query: string) {
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#edit
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const record = readDocumentSelector(repo, selector, kind);
@@ -73,7 +73,7 @@ export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: s
 }
 
 // @concord-begin
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 function isUnlinkedDraft(record: DocumentRecord): boolean {
   if (record.metadata.kind !== 'issue') return false;
   const issue = record.metadata;

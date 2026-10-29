@@ -107,7 +107,7 @@ function importedId(remote: RemoteFeedback): string {
 // @concord-end
 
 // @concord-begin
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 function issueRecord(record: DocumentRecord): FeedbackItem['document'] {
   if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', `${record.path} is not feedback`);

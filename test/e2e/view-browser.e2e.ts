@@ -4,18 +4,20 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { addPage, createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from './support.js';
+import { test } from './fixtures.js';
+import { act } from './journey.js';
+import { expect } from '@playwright/test';
+import { addPage, createDocument } from '../../dist/documents.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
+import { pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('browser opens and refreshes a deep link without credentials and retries initial load failures', async () => {
+test('browser opens and refreshes a deep link without credentials and retries initial load failures', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-browser-open-'));
   let server: ViewServerHandle | undefined;
-  let browser: Browser | undefined;
+
   try {
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
@@ -45,9 +47,8 @@ test('browser opens and refreshes a deep link without credentials and retries in
     writeFileSync(join(root, 'test/child.test.ts'), '// @use-case docs/feature/child-test/use-case/tested.md\n');
     writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'], testRoots: ['test'] });
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage();
+
+
     const authorizations: (string | undefined)[] = [];
     const errors: string[] = [];
     page.on('request', request => {
@@ -186,17 +187,16 @@ test('browser opens and refreshes a deep link without credentials and retries in
     assert.ok(authorizations.every(value => value === undefined));
     assert.deepEqual(errors, []);
   } finally {
-    await browser?.close();
     await server?.close();
     rmSync(root, { recursive: true, force: true });
   }
 });
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('terminology tab discards a previous document response and shows scoped JSON diagnostics', async () => {
+test('terminology tab discards a previous document response and shows scoped JSON diagnostics', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-terminology-browser-'));
   let server: ViewServerHandle | undefined;
-  let browser: Browser | undefined;
+
   try {
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
@@ -209,9 +209,8 @@ test('terminology tab discards a previous document response and shows scoped JSO
     writeFileSync(join(root, 'docs/feature/alpha/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'alpha', definition: 'Alpha definition', names: { en: { preferred: 'Alpha' } } }] }));
     writeFileSync(join(root, 'docs/feature/beta/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'beta', definition: 'Beta definition', names: { en: { preferred: 'Beta' } } }], imports: ['docs/concepts.json#missing'] }));
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage();
+
+
     let legacyReads = 0;
     page.on('request', request => { if (request.url().includes('/api/file') && request.url().includes('concepts.md')) legacyReads++; });
     let releaseAlpha!: () => void;
@@ -240,14 +239,14 @@ test('terminology tab discards a previous document response and shows scoped JSO
     await expect(page.getByText('docs/feature/alpha/concepts.json#alpha', { exact: true })).toHaveCount(0);
     await expect(page.getByText('docs/feature/beta/concepts.json#beta', { exact: true })).toBeVisible();
     assert.equal(legacyReads, 0);
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('real browser creates a Feature, edits Markdown, preserves conflicts and opens Git changes', async () => {
+test('real browser creates a Feature, edits Markdown, preserves conflicts and opens Git changes', async ({ page }) => {
   const root=mkdtempSync(join(tmpdir(),'concord-browser-'));
   let server: ViewServerHandle|undefined;
-  let browser: Browser|undefined;
+
   try {
     execFileSync('git',['init','-q',root]);
     const repo=new LocalRepository(root,{initialize:true});
@@ -265,9 +264,8 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     mkdirSync(join(root,'src'));
     writeFileSync(join(root,'src/demo.ts'),'// @concord-code\n// @concord-implements docs/engineering/build/architecture.md#source\nexport function demo() { return 1; }\n');
     server=await startViewServer({root,host:'127.0.0.1',port:0});
-    const executablePath=process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium')?'/run/current-system/sw/bin/chromium':undefined);
-    browser=await chromium.launch({headless:true,...(executablePath?{executablePath}:{}),args:['--no-sandbox']});
-    const page=await browser.newPage({viewport:{width:1440,height:1000}});
+
+    await page.setViewportSize({width:1440,height:1000});
     const errors:string[]=[];
     page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.port}/features`);
@@ -659,37 +657,41 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByLabel('Feature ID',{exact:true})).toBeVisible();
     await page.getByRole('button',{name:'取消',exact:true}).click();
     assert.deepEqual(errors,[]);
-  } finally {await browser?.close();await server?.close();rmSync(root,{recursive:true,force:true});}
+  } finally {await server?.close();rmSync(root,{recursive:true,force:true});}
 });
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
-test('browser creates Unicode Feature and Use Case names and restores their encoded routes', async () => {
+test('browser creates Unicode Feature and Use Case names and restores their encoded routes', { tags: ['journey'] }, async fixtures => {
+  const { page } = fixtures;
   const root = mkdtempSync(join(tmpdir(), 'concord-unicode-browser-'));
   let server: ViewServerHandle | undefined;
-  let browser: Browser | undefined;
+
   try {
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
     try { initialize(repo); } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto(`http://127.0.0.1:${server.port}/features`);
-    await page.getByRole('button', { name: '新建 Feature', exact: true }).click();
-    await page.getByLabel('Feature ID', { exact: true }).fill('角色NPC');
-    await page.getByLabel('Feature 标题', { exact: true }).fill('角色');
-    await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
-    await page.getByRole('tab', { name: 'Use Cases', exact: true }).click();
-    await page.getByRole('button', { name: '新建 Use Case', exact: true }).click();
-    await page.getByLabel('Use Case ID', { exact: true }).fill('扩展NPC动作');
-    await page.getByLabel('Use Case 标题', { exact: true }).fill('扩展 NPC 动作');
-    await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
-    await page.getByRole('link', { name: /扩展 NPC 动作/u }).click();
+    await act(fixtures, '新建一个 Feature，ID 完整填写“角色NPC”，标题填写“角色”，确认创建。', async () => {
+      await page.getByRole('button', { name: '新建 Feature', exact: true }).click();
+      await page.getByLabel('Feature ID', { exact: true }).fill('角色NPC');
+      await page.getByLabel('Feature 标题', { exact: true }).fill('角色');
+      await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+    });
+    await act(fixtures, '在当前 Feature 中创建 Use Case，ID 完整填写“扩展NPC动作”，标题填写“扩展 NPC 动作”。创建后打开它的详情。', async () => {
+      await page.getByRole('tab', { name: 'Use Cases', exact: true }).click();
+      await page.getByRole('button', { name: '新建 Use Case', exact: true }).click();
+      await page.getByLabel('Use Case ID', { exact: true }).fill('扩展NPC动作');
+      await page.getByLabel('Use Case 标题', { exact: true }).fill('扩展 NPC 动作');
+      await page.getByRole('dialog').getByRole('button', { name: '创建', exact: true }).click();
+      await page.getByRole('link', { name: /扩展 NPC 动作/u }).click();
+    });
     await expect(page.getByRole('dialog')).toContainText('扩展 NPC 动作');
     assert.match(decodeURIComponent(new URL(page.url()).pathname), /角色NPC\/use-cases\/扩展NPC动作$/u);
     await page.reload();
     await expect(page.getByRole('dialog')).toContainText('扩展 NPC 动作');
     assert.match(readFileSync(join(root, 'docs/feature/角色NPC/use-case/扩展NPC动作.md'), 'utf8'), /id: 扩展NPC动作/u);
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });

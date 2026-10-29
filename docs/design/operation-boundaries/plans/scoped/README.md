@@ -32,4 +32,4 @@ publication 与 runner 是不同资源。publication 的死 token 由 recover �
 
 recover 输出保持 operation 和 changedPaths，增加协调回收事实及 runner 诊断。无 journal 但 runner 阻塞返回 blocked；journal 已恢复且 runner 阻塞也不得报全局 clean。活 publication owner 与冲突 journal 仍具名失败。结果描述检查时状态，不承诺后续没有新并发者。
 
-来源读取返回前核验观察集合与发布代次，不持 publication owner。普通写入的规划采用乐观快照，提交独占；runner 与恢复的状态转换保留显式写快照。当前协调契约见[功能架构](../../../feature/portable-coordination/architecture.md)。
+来源读取返回前核验观察集合与发布代次，不持 publication owner。普通写入的规划采用乐观快照，提交独占；runner 与恢复的状态转换保留显式写快照。当前协调 Spec 见[功能架构](../../../feature/portable-coordination/architecture.md)。

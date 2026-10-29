@@ -24,6 +24,6 @@ feature: docs/feature/project-onboarding/README.md
 
 README 必需；仅生成选定页面，入口链接与文件一致。Library 与 CLI 可以共存。无配置的既有消费者保留原有行为。参考模板和可执行模板配置的边界必须明确，不把 docs/_template 的普通编辑悄悄解释为生效配置。
 
-## 契约来源
+## Spec 来源
 
 [目标与范围](../README.md)。实现与验收状态见 Feature；测试关系从真实声明派生。

@@ -23,8 +23,10 @@ test('current checkout configures a version-matched runner whose annotations sca
   assert.deepEqual(project.sourceRoots, ['src', 'repository', 'web', 'scripts']);
   assert.equal(project.runner.kind, 'command');
   if (project.runner.kind !== 'command') assert.fail('self-host runner must use explicit command argv');
-  assert.deepEqual(project.runner.argv, ['node', '--import', 'tsx', '--test', '--test-name-pattern', '{pattern}', '{file}']);
-  assert.deepEqual(project.runner.sourceFiles, ['test/support.ts', 'tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']);
+  assert.deepEqual(project.runner.argv, ['node', '--import', 'tsx', 'scripts/test-built.ts', '--test-name-pattern', '{pattern}', '{file}']);
+  assert.deepEqual(project.runner.sourceFiles, ['test/support.ts', 'test/e2e/fixtures.ts', 'test/e2e/engine.ts',
+    'test/e2e/local-browser.ts', 'test/e2e/server.ts', 'test/e2e/journey.ts', 'e2e.config.ts',
+    'scripts/test-built.ts', 'scripts/test-reporter.ts', 'tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']);
 
   const packageVersion = Schema.decodeUnknownSync(Schema.fromJsonString(PackageVersion))(readFileSync(join(root, 'package.json'), 'utf8')).version;
   const version = spawnSync(process.execPath, [join(root, 'dist/entry.js'), '--version'], { cwd: root, encoding: 'utf8' });

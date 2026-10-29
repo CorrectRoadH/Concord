@@ -1,6 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { tap } from 'node:test/reporters';
 import { Effect } from 'effect';
+import { inspect } from 'node:util';
 
 type TestEvent = Parameters<typeof tap>[0] extends AsyncIterable<infer Event> ? Event : never;
 
@@ -8,6 +9,12 @@ type TestEvent = Parameters<typeof tap>[0] extends AsyncIterable<infer Event> ? 
 export default async function* reporter(events: AsyncIterable<TestEvent>): AsyncGenerator<string, void> {
   async function* measured(): AsyncGenerator<TestEvent, void> {
     for await (const event of events) {
+      if (event.type === 'test:fail') {
+        Effect.runSync(Effect.sync(() => {
+          if (process.env.CONCORD_TEST_FAILURES !== undefined) appendFileSync(process.env.CONCORD_TEST_FAILURES,
+            `${JSON.stringify({ ...event.data, error: inspect(event.data.details.error, { depth: 8 }) })}\n`);
+        }));
+      }
       if (event.type === 'test:summary') {
         const timing = { ...event.data, scope: event.data.file === undefined ? 'run' : 'file' };
         Effect.runSync(Effect.sync(() => {

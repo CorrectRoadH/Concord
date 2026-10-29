@@ -81,7 +81,7 @@ feature: docs/feature/local-sdlc/README.md
    }
    ```
 
-4. 修改产品代码，不改测试和契约，再运行同一个 case，取得 green 收据。 {#run-green}
+4. 修改产品代码，不改测试和 Spec，再运行同一个 case，取得 green 收据。 {#run-green}
 
    ```sh
    concord --json test run neref_854212737ecad7effc4666629752cb98
@@ -134,7 +134,7 @@ feature: docs/feature/local-sdlc/README.md
 | `InvalidRedEvidence` | red 收据不是普通失败：超时、被信号终止、清理未确认、零执行或全部跳过，或者传入了通过的收据 |
 | `InvalidGreenEvidence` | green 收据不是普通成功，或者同样属于超时、清理未确认、零执行、全部跳过 |
 | `EvidenceOrder` | red 收据的执行晚于 green 收据 |
-| `EvidenceStale` | 两次执行之间测试定义、runner 配置、契约或 Problem epoch 改变了，或者 green 不对应当前实现 |
+| `EvidenceStale` | 两次执行之间测试定义、runner 配置、Spec 或 Problem epoch 改变了，或者 green 不对应当前实现 |
 | `EvidenceMismatch` | 两份收据不属于同一个 case 或同一个 worktree，签发收据的 Concord 版本与当前版本不同，或者当前测试标记不再用 `@regression` 指向这个 Problem |
 | `ProblemNotOpen` | Problem 不存在或不是 open 状态 |
 
@@ -153,7 +153,7 @@ message: Red evidence must be a normal nonzero command result with confirmed cle
 - 收据标为 `scope: command`，只证明这条命令那次的退出结果。它不证明原生 runner 的逐用例覆盖，也不证明正式 E2E 可靠性。
 - 不修复缺陷的处理（`not-a-bug`、`wont-fix`、`external-fixed`）用 `--kind` 选择，只需要 `--reason`，记录为 `evidenceLevel: author`。
 
-## 契约来源
+## Spec 来源
 
 - 命令参数与输出总览：[CLI](../cli.md#测试与证据)
 - 收据、摘要与 stale 判定的实现：[架构](../architecture.md#执行管线)

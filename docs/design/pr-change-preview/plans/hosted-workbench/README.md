@@ -26,5 +26,5 @@
 | Goal | Status | Mechanism or gap | Evidence |
 |---|---|---|---|
 | [G1](../../GOALS.md#g1-正确识别-pr-的改动) | pending | 当前服务比较工作树，需新增冻结基线 | C1、C2 |
-| [G2](../../GOALS.md#g2-直接阅读文件和文档) | satisfied | 复用已有文档导航与差异组件 | [工作台契约](../../../../feature/web-workbench/README.md) |
+| [G2](../../GOALS.md#g2-直接阅读文件和文档) | satisfied | 复用已有文档导航与差异组件 | [工作台 Spec](../../../../feature/web-workbench/README.md) |
 | [G3](../../GOALS.md#g3-消费者接入简洁) | not-satisfied | 静态托管不足以运行带执行能力的服务 | 服务信任与资源边界 |

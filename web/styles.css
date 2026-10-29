@@ -485,6 +485,10 @@ kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28
 .document-navigation__section h2 { margin: 0 .55rem .5rem; font-size: .75rem; color: var(--muted-foreground); }
 .document-navigation__content p { padding: .5rem; font-size: .8rem; }
 .document-navigation-sheet { overflow-y: auto; }
+.document-navigation:has(.git-file-navigation) { flex-basis: 280px; min-width: 0; }
+.git-category-count { font-size: .7rem; font-variant-numeric: tabular-nums; opacity: .75; }
+.git-file-navigation > p { margin-block: .5rem; color: var(--muted-foreground); }
+.git-file-navigation ul { gap: 0; min-width: 0; }
 .document-navigation-mobile { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
 @media (max-width: 767px) {
   .document-workspace { flex-direction: column; align-items: stretch; overflow-y: auto; }

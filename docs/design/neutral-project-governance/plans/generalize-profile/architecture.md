@@ -2,9 +2,9 @@
 
 ## 所有权
 
-Concord 拥有 canonical 契约、声明注释与测试支持文件映射、稳定身份派生、trace、回归关系与历史、Memory 生命周期、证据 schema、证据要求和最终 fixed 判定。CLI 与 Web 共用权威投影；入口和存储适配可以不同，生命周期及证据不变量只能有一个解释。
+Concord 拥有 canonical Spec、声明注释与测试支持文件映射、稳定身份派生、trace、回归关系与历史、Memory 生命周期、证据 schema、证据要求和最终 fixed 判定。CLI 与 Web 共用权威投影；入口和存储适配可以不同，生命周期及证据不变量只能有一个解释。
 
-消费者拥有 native collection、执行副本、候选产品构建安装、原生 runner 结果观察与进程 Scope。NiceEval 的 Preview、下游链接、示例同步、仓库 setup、Mint 文档站、产品 reference/diff/generators、具体术语和 work 检查、PR 编辑格式移回 NiceEval。Concord 的本地 `review render` 保留契约、测试、Memory 和证据的审阅能力。
+消费者拥有 native collection、执行副本、候选产品构建安装、原生 runner 结果观察与进程 Scope。NiceEval 的 Preview、下游链接、示例同步、仓库 setup、Mint 文档站、产品 reference/diff/generators、具体术语和 work 检查、PR 编辑格式移回 NiceEval。Concord 的本地 `review render` 保留 Spec、测试、Memory 和证据的审阅能力。
 
 ## 中立配置与发现
 
@@ -17,7 +17,7 @@ Concord 拥有 canonical 契约、声明注释与测试支持文件映射、稳�
 
 同一配置供静态 discovery、source projection、regression/fixed、trace 和 Web 使用。不读取 Nx、固定 `e2e/` 或 `targets.e2e.metadata.niceeval`。源码注释唯一拥有 current 测试关系，配置不重复登记 case。通用投影不要求 executor/lanes/host/provider。
 
-基础项目采用 command evidence；高级项目显式采用可靠原生证据要求。软件项目尚未接某项执行能力时仍能查询契约和关联，缺少能力时只对请求该能力的命令返回具名失败。help、静态查询及 Web 不执行 host。
+基础项目采用 command evidence；高级项目显式采用可靠原生证据要求。软件项目尚未接某项执行能力时仍能查询 Spec 和关联，缺少能力时只对请求该能力的命令返回具名失败。help、静态查询及 Web 不执行 host。
 
 ## 能力与信任
 

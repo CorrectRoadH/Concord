@@ -57,7 +57,7 @@ type WritingPolicyV3 = {
 };
 ```
 
-`roots`、Ban 的路径与作用域、累加禁词及概念规则沿用[政策契约](../../../../feature/documentation-quality/policy.md)。两种长度路径可同时生效，没有“开启 controlled 自动关闭 legacy”的行为。两类阈值独立，不要求描述性数值大于程序性。
+`roots`、Ban 的路径与作用域、累加禁词及概念规则沿用[政策 Spec](../../../../feature/documentation-quality/policy.md)。两种长度路径可同时生效，没有“开启 controlled 自动关闭 legacy”的行为。两类阈值独立，不要求描述性数值大于程序性。
 
 ## 目录合成表
 
@@ -97,7 +97,7 @@ legacy 沿用 `writing.ts` 的 authoredSource 与 prose 抽取：paragraph 和 h
 
 行内强调与链接只保留显示文本；链接目标、图片及其 alt、HTML 标签和 MDX 表达式均排除。软换行视为空格，硬换行也是空格，不另起句。行内代码形成不透明 token，保持其位置，每个计 1，内容既不分句也不参与词表与语言比例计算。
 
-两条路径共享步骤标记识别，不为写作另建 anchor parser。验收条目按共同契约不得使用步骤语法；无标记的有序列表仍可被 controlled 分类为程序性文本，两种分类用途独立。
+两条路径共享步骤标记识别，不为写作另建 anchor parser。验收条目按共同 Spec 不得使用步骤语法；无标记的有序列表仍可被 controlled 分类为程序性文本，两种分类用途独立。
 
 ## controlled 分句与 token
 
@@ -164,7 +164,7 @@ lemma 和 forms 中显式列出 `write/writes/writing/wrote/written` 或 `remove
 
 ## 受影响入口
 
-| 入口或产物 | 格式与行为契约 |
+| 入口或产物 | 格式与行为 Spec |
 | --- | --- |
 | init 预设、随包模板与 skill 示例 | 统一生成 v3；新开关 false，示例词表属于项目参数 |
 | writing show/set、结构化 actions | show 返回原文及摘要；set 严格 v3 和完整 CAS；standalone 同样解码 |

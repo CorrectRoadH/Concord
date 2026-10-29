@@ -1,19 +1,20 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { addPage, createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
+import { addPage, createDocument } from '../../dist/documents.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('long documents remain reachable and code blocks follow theme without changing Markdown', async () => {
+test('long documents remain reachable and code blocks follow theme without changing Markdown', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-editor-'));
   let server: ViewServerHandle | undefined;
-  let browser: Browser | undefined;
+
   try {
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
@@ -36,9 +37,8 @@ test('long documents remain reachable and code blocks follow theme without chang
     const file = join(root, 'docs/feature/long/README.md');
     const before = readFileSync(file, 'utf8');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`http://127.0.0.1:${server.port}/features/long`);
     await expect(page.getByText('已切换为原文编辑', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('img', { name: 'Architecture diagram', exact: true })).toHaveAttribute('title', 'System architecture');
@@ -120,7 +120,6 @@ test('long documents remain reachable and code blocks follow theme without chang
     await outerPage.evaluate(element => { element.scrollTop = element.scrollHeight; });
     await expect(page.getByText('ENGINEERING END', { exact: true })).toBeInViewport();
   } finally {
-    await browser?.close();
     await server?.close();
     rmSync(root, { recursive: true, force: true });
   }

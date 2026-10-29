@@ -20,7 +20,7 @@ feature: docs/feature/local-sdlc/README.md
 1. 显式声明 `concord.repository/v2`：suite ID/root、historyPath、版本化 policy 及可选 host。
 2. 静态 list/trace/Web 从 suite 源码注释派生关系；不读取 Nx 或产品分类，不加载 host。
 3. 只有请求 inventory 或原生证据能力时加载当前 v2 host，验证 root、caseIdentity、实际 engine 和所需能力。
-4. 原生结果必须唯一绑定真实声明、契约、候选与配置；Concord 统一核验可靠性事实和当前 Problem epoch。
+4. 原生结果必须唯一绑定真实声明、Spec、候选与配置；Concord 统一核验可靠性事实和当前 Problem epoch。
 5. 已采用原生证明要求的 Problem 不接受 command 降级。证据必须符合当前 Schema，原件与历史保留，不能补摘要变成当前证明。
 
 ## 验收
@@ -29,9 +29,9 @@ feature: docs/feature/local-sdlc/README.md
 - host 缺少当前协议、所需能力或配置损坏时返回具体诊断。
 - 加载即失败的 host 不妨碍 help、静态关系与 Web。
 - 非 Nx、非 e2e 目录且没有 executor/lanes 字段的软件项目能够接入。
-- 测试支持文件、声明名称、源码集合、契约、配置或 adapter 身份变化使旧 proof 失效。
+- 测试支持文件、声明名称、源码集合、Spec、配置或 adapter 身份变化使旧 proof 失效。
 - command 收据不能绕过原生可靠性下限；真实原生验收须单独执行，不能以 help/fake-host 测试代替。
 
-## 权威契约
+## 权威 Spec
 
 [高级测试治理](../../../repository-profile.md)拥有当前配置、证据和迁移边界；[中立治理设计](../../../design/neutral-project-governance/README.md)记录裁决。

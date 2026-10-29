@@ -34,7 +34,7 @@ export function GitPage() {
   const { git, tab, tree, path, entry, area, view, line, readingKey, visibleDiff } = state;
   const navigationHost = document.getElementById('content-navigation');
   const count = tab === 'docs' ? state.docs.length : tab === 'tests' ? state.tests.length : state.all.length;
-  const navigation = (close: () => void) => <nav aria-label="Git 文件树">
+  const navigation = (close: () => void) => <nav aria-label="Git 文件树" className="git-file-navigation">
     <p>变更文件 · {count}</p>
     <FileTree node={tree} selected={path} cases={state.addedCases} select={(file, line) => { state.select(file, firstArea(file), line); close(); }} />
     {!git ? !state.gitIssue && <p role="status">正在读取 Git 变更…</p> : !count && <p {...stylex.props(styles.note)}>{tab === 'docs' ? '没有 docs 文档变更' : tab === 'tests' ? '没有测试文件变更' : '没有未提交变更'}</p>}
@@ -43,10 +43,10 @@ export function GitPage() {
   return <>
     <div role="toolbar" aria-label="Git 操作" className="button-row justify-end mb-3"><span className="text-sm text-muted-foreground">{git?.branch ?? 'Git'} · 未提交变更</span><Button variant="outline" onClick={state.refreshGit}><RefreshCw />刷新</Button></div>
     {state.gitIssue && <div role="alert" {...stylex.props(styles.notice)}><AlertTriangle /><div><strong>无法读取 Git 变更</strong><p>{state.gitIssue.message}</p><p>{state.gitIssue.code} · 可点击刷新重试</p></div></div>}
-    {navigationHost && createPortal(<ContentSidebar model={{ label: 'Git 变更', title: 'Git 变更', groups: [{ id: 'files', label: '变更文件', items: [], actions: <Tabs value={tab} onValueChange={state.changeCategory}><TabsList aria-label="变更分类" className="w-full">
-      <TabsTrigger value="all">全部 <Badge variant="secondary">{state.all.length}</Badge></TabsTrigger>
-      <TabsTrigger value="docs">文档 <Badge variant="secondary">{state.docs.length}</Badge></TabsTrigger>
-      <TabsTrigger value="tests">测试用例 <Badge variant="secondary">{state.tests.length}</Badge></TabsTrigger>
+    {navigationHost && createPortal(<ContentSidebar model={{ label: 'Git 变更', title: 'Git 变更', groups: [{ id: 'files', label: '变更文件', items: [], actions: <Tabs value={tab} onValueChange={state.changeCategory} className="min-w-0 overflow-x-auto"><TabsList aria-label="变更分类" className="w-full min-w-max">
+      <TabsTrigger value="all" className="gap-1 px-1">全部 <span className="git-category-count">{state.all.length}</span></TabsTrigger>
+      <TabsTrigger value="docs" className="gap-1 px-1">文档 <span className="git-category-count">{state.docs.length}</span></TabsTrigger>
+      <TabsTrigger value="tests" className="gap-1 px-1">测试用例 <span className="git-category-count">{state.tests.length}</span></TabsTrigger>
     </TabsList></Tabs>, content: navigation }] }} />, navigationHost)}
     <div {...stylex.props(styles.review)} data-testid="git-review">
       <section {...stylex.props(styles.panel)} data-git-diff aria-label="Git diff">

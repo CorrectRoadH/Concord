@@ -61,7 +61,7 @@
 
 ## 对外可见变化
 
-快照内同一条目先以一种拼写读取、随后被大小写改名再读取：现状在第二次读取时报 `UnsafePath`，本方案在快照结束时报 `PreimageChanged`（当前查询）或标为漂移（历史投影）。其它错误码与退出码不变。该变化已在[异步查询契约](../../../../feature/local-data-engine/use-case/query-asynchronous-projections.md)声明；本地 SDLC 的 CLI 页声明属于实现交付项。
+快照内同一条目先以一种拼写读取、随后被大小写改名再读取：现状在第二次读取时报 `UnsafePath`，本方案在快照结束时报 `PreimageChanged`（当前查询）或标为漂移（历史投影）。其它错误码与退出码不变。该变化已在[异步查询 Spec](../../../../feature/local-data-engine/use-case/query-asynchronous-projections.md)声明；本地 SDLC 的 CLI 页声明属于实现交付项。
 
 ## 验收
 

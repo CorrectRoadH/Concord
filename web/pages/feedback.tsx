@@ -44,7 +44,7 @@ function matchesProjectedFeedback(item: WorkspaceFeedback, filter: { readonly qu
   return query.length === 0 || searchText(item).includes(query)
 }
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 function CreateLocalFeedback() {
   const { act, busy } = useWorkspace()
   const [open, setOpen] = React.useState(false)
@@ -96,7 +96,7 @@ function FeedbackSources({ connections, onReceipt }: { connections: readonly Fee
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 export function FeedbackNavigation() {
   const { snapshot, projection } = useWorkspace()
   const conclusive = projectionIsConclusive(projection)
@@ -123,7 +123,7 @@ export function FeedbackNavigation() {
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 export function FeedbackPage() {
   const { snapshot, projection } = useWorkspace()
   const conclusive = projectionIsConclusive(projection)
@@ -179,7 +179,7 @@ function SourceFacts({ item }: { item: FeedbackItem }) {
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 function RemoveLocalDraft({ item }: { item: WorkspaceFeedback }) {
   const { snapshot, projection, act, busy } = useWorkspace()
   const navigate = useNavigate()
@@ -220,7 +220,7 @@ function FeatureLinker({ item }: { item: WorkspaceFeedback }) {
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 export function FeedbackDetailPage() {
   const { id = "" } = useParams(); const { snapshot, projection } = useWorkspace()

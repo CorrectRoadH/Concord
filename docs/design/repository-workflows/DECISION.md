@@ -6,7 +6,7 @@ Selected: [main-cli-owned](plans/main-cli-owned/README.md)
 
 ## Rationale
 
-本地 Issue 的 CRUD 已被 Web、action 与无 profile 的消费者使用，[本地观察契约](../../feature/feedback/use-case/manage-local-observations.md)要求不依赖外部服务与高级治理配置。把 Issue 写入口收进 `concord repo` 会让基础流程依赖 `concord.repository.json`，违反 L4 与 C-002。把七种闭合类型、adopt/retire 和 reopen 补进基础 `concord issue`，再退役 Feedback 一侧的写命令，可以只保留一个写入口，且不改变持久格式。
+本地 Issue 的 CRUD 已被 Web、action 与无 profile 的消费者使用，[本地观察 Spec](../../feature/feedback/use-case/manage-local-observations.md)要求不依赖外部服务与高级治理配置。把 Issue 写入口收进 `concord repo` 会让基础流程依赖 `concord.repository.json`，违反 L4 与 C-002。把七种闭合类型、adopt/retire 和 reopen 补进基础 `concord issue`，再退役 Feedback 一侧的写命令，可以只保留一个写入口，且不改变持久格式。
 
 远端写入复用已有 plan store、CAS 与 gh 受管进程，只在 execute 路径开放固定的写请求。Docs Work 放在基础 `docs` 组，纯文档仓库也能使用。命令贡献让 `concord repo` 与消费者宿主组合同一份定义。
 

@@ -1,15 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { createDocument } from '../dist/documents.js';
-import { tracePrivateDirectorySync } from '../dist/coordination.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
+import { createDocument } from '../../dist/documents.js';
+import { tracePrivateDirectorySync } from '../../dist/coordination.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
 
 async function hold(root: string): Promise<ChildProcess> {
   // A real independent process owns the portable lease until stdin closes.
@@ -24,10 +25,10 @@ async function release(child: ChildProcess): Promise<void> {
 }
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('file reads and navigation remain available with live or dead publication owners', async () => {
+test('file reads and navigation remain available with live or dead publication owners', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-read-contention-'));
   let server: ViewServerHandle | undefined;
-  let browser: Browser | undefined;
+
   let holder: ChildProcess | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -37,9 +38,8 @@ test('file reads and navigation remain available with live or dead publication o
       createDocument(repo, 'design', { id: 'lease', title: 'Lease', alternatives: ['first'], pages: ['architecture'], body: '# Lease content' });
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`http://127.0.0.1:${server.port}/design/lease`);
     const tree = page.getByTestId('document-file-tree');
     await expect(tree).toBeVisible();
@@ -87,7 +87,6 @@ test('file reads and navigation remain available with live or dead publication o
     await expect(recover).toHaveCount(0);
   } finally {
     if (holder) await release(holder);
-    await browser?.close();
     await server?.close();
     rmSync(root, { recursive: true, force: true });
   }

@@ -1,6 +1,6 @@
 # 为什么需要 Concord
 
-本页说明 Concord 面向的问题、每个问题对应的机制，以及这些机制刻意不承担的责任。具体行为契约见[架构](architecture.md)，跨功能规则见[宪法](constitution.md)。
+本页说明 Concord 面向的问题、每个问题对应的机制，以及这些机制刻意不承担的责任。具体行为 Spec 见[架构](architecture.md)，跨功能规则见[宪法](constitution.md)。
 
 ## 问题
 
@@ -25,7 +25,7 @@ Concord 不新增服务，也不替代项目的语言、构建与测试工具。
 
 ```mermaid
 flowchart LR
-  C[契约 docs/] -->|被指向| A[源码标记]
+  C[Spec docs/] -->|被指向| A[源码标记]
   A --> I[实现代码]
   A --> T[测试代码]
   T -->|test run| R[命令收据]
@@ -35,11 +35,11 @@ flowchart LR
   G[术语与写作政策] -->|check| C
 ```
 
-### 契约先于实现
+### Spec 先于实现
 
 Feature 描述一项能力，Use Case 描述一条用户路径的主流程与验收。它们写在 `docs/feature/` 下，只声明目标、行为、约束与验收，不记录开发过程。
 
-先写契约，实现者就不需要猜测语义。agent 在会话开始时运行 `concord feature list` 和 `trace show`，读到的是当前约定，而不是上一次对话的残留印象。
+先写 Spec，实现者就不需要猜测语义。agent 在会话开始时运行 `concord feature list` 和 `trace show`，读到的是当前约定，而不是上一次对话的残留印象。
 
 ### 用 Feature 与 Use Case 书写
 
@@ -59,7 +59,7 @@ architecture 页写实体归属、数据流、不变量和失败阶段。功能�
 
 ### Roadmap 与 Engineering
 
-Roadmap 和 Feature 使用同一种体裁，区别只在于是否已采用为当前契约。方向进入 Roadmap 有两种原因：设计还不完整，或者已经设计好但暂不安排实现。测试和实现不指向 Roadmap。准备实现时，`roadmap adopt` 把整个 package 复制为新 Feature，Roadmap 保留采用历史。
+Roadmap 和 Feature 使用同一种体裁，区别只在于是否已采用为当前 Spec。方向进入 Roadmap 有两种原因：设计还不完整，或者已经设计好但暂不安排实现。测试和实现不指向 Roadmap。准备实现时，`roadmap adopt` 把整个 package 复制为新 Feature，Roadmap 保留采用历史。
 
 这样做的好处是，未来方向可以提前用同样的语言写清楚，又不会被误读为已经承诺的行为。采用时不需要改写体裁。
 
@@ -79,19 +79,19 @@ Engineering 描述仓库自己的测试与维护机制，例如自举检查、�
 
 ### 写作可检查
 
-`concord-writing.json` 声明禁用词、替代写法与理由，并限制句长与段长。禁用词针对 `helper`、`resolve` 这类不说明职责的词，以及 `目前`、`已实现` 这类把进度写进契约的词。
+`concord-writing.json` 声明禁用词、替代写法与理由，并限制句长与段长。禁用词针对 `helper`、`resolve` 这类不说明职责的词，以及 `目前`、`已实现` 这类把进度写进 Spec 的词。
 
-写作检查是 `concord check` 的一部分。契约不清楚时门禁失败，问题在实现之前暴露。
+写作检查是 `concord check` 的一部分。Spec 不清楚时门禁失败，问题在实现之前暴露。
 
 ### 关系由源码拥有
 
-实现代码用 `@concord-implements` 指向契约，测试用 `@feature` 或 `@use-case` 指向契约。标记写在源码里，和代码出现在同一个 diff 中。
+实现代码用 `@concord-implements` 指向 Spec，测试用 `@feature` 或 `@use-case` 指向 Spec。标记写在源码里，和代码出现在同一个 diff 中。
 
-反向关系由工具推导：从契约查到实现和测试，从代码行查到契约。仓库里没有第二份登记表，所以关系不会和代码脱节。
+反向关系由工具推导：从 Spec 查到实现和测试，从代码行查到 Spec。仓库里没有第二份登记表，所以关系不会和代码脱节。
 
 ### 修复要有证据
 
-`concord test run` 执行一个测试声明并保存命令收据。关闭一个 Problem 需要同一测试的两份收据：修改产品代码之前失败，修改之后通过，两次之间测试定义与契约不变。
+`concord test run` 执行一个测试声明并保存命令收据。关闭一个 Problem 需要同一测试的两份收据：修改产品代码之前失败，修改之后通过，两次之间测试定义与 Spec 不变。
 
 超时、零执行和全部跳过都不能作为证据。问题复现时 `memory reopen` 开始新一轮，旧收据不能关闭新一轮。
 
@@ -99,7 +99,7 @@ Engineering 描述仓库自己的测试与维护机制，例如自举检查、�
 
 调查经过、根因、决策与经验写入 Memory，待调查的观察写入 Issue。`docs/` 只保留当前有效的声明。
 
-Memory 与 Issue 只能通过 Concord 命令维护，修改时携带最新摘要。成熟的 Memory 可以用 `memory promote` 升级为契约。
+Memory 与 Issue 只能通过 Concord 命令维护，修改时携带最新摘要。成熟的 Memory 可以用 `memory promote` 升级为 Spec。
 
 ### 写入可恢复
 
@@ -115,7 +115,7 @@ Memory 与 Issue 只能通过 Concord 命令维护，修改时携带最新摘要
 4. 实现代码并加 `@concord-implements`，测试加 `@use-case`。
 5. `concord check` 检查关系、生命周期与写作政策。
 6. 修复 Problem 时，用 `test run` 取得 red 与 green，再 `memory resolve`。
-7. `review render` 或 `concord view` 生成审阅材料，reviewer 从契约出发核对代码与证据。
+7. `review render` 或 `concord view` 生成审阅材料，reviewer 从 Spec 出发核对代码与证据。
 
 ## 不承担的责任
 

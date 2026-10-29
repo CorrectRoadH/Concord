@@ -80,7 +80,7 @@ plan 的行为：
 - `--origin-key` 选择 machine-origin：正文必须带 `payload-sha256:` 标记，并按现有 `requireUnseenMachineOrigin` 判定。不带 origin key 的是 manual create。
 - receipt 写入 Git-private `concord/issue-plan/v1/planned/<receipt-id>.json`（mode 0600），有效期 5 分钟。
 
-plan 的 JSON 字段见[公开输出契约](#公开输出契约)，`expiresAt` 为 ISO 8601 UTC 字符串。`authorize` 是执行时必须原样提供的目标串，绑定动作、目标与 payload：
+plan 的 JSON 字段见[公开输出 Spec](#公开输出-spec)，`expiresAt` 为 ISO 8601 UTC 字符串。`authorize` 是执行时必须原样提供的目标串，绑定动作、目标与 payload：
 
 - 编号目标：`<operation>:<owner>/<repo>#<number>@<payload>`，例如 `close:example/product#12@3f9a1c2b7d4e`。
 - create：`create:<owner>/<repo>@<payload>`。
@@ -137,7 +137,7 @@ execute 在消费后把结果写入 `concord/issue-plan/v1/consumed/<receipt-id>
 - receipt 记录 connection ID 与 repositoryId；execute 的 `--connection` 必须是同一连接。
 - 写请求返回确定的 4xx 或 5xx 状态时返回 `IssueRemoteRejected`（`details.status`），receipt 保持已消费，不自动重试。
 
-远端写入不改本地 Issue owner。需要在本地记录远端编号时，使用既有 `origin` 或后续独立契约。
+远端写入不改本地 Issue owner。需要在本地记录远端编号时，使用既有 `origin` 或后续独立 Spec。
 
 领域实现位于 `repository/issue/`，以 `issueRemoteCommandContribution` 导出，基础 CLI 挂载为 `concord issue plan|execute`。宿主可以挂载同一贡献。
 
@@ -203,7 +203,7 @@ help 文案：
 
 action `feedback.link` 返回同一错误。Issue 文件格式、`IssueClosureSchema` 与 history 条目不变。`runFeedbackCommand` 的 link/adopt/retire/close/reopen operation 返回同一具名错误；只读与信封 operation 保留。
 
-退役随 Concord 版本发布，没有双写过渡期。采用本方案时同步修订以下声明这些命令的契约与随包指引：
+退役随 Concord 版本发布，没有双写过渡期。采用本方案时同步修订以下声明这些命令的 Spec 与随包指引：
 
 - [Feedback CLI](../../../../feature/feedback/cli.md)
 - [本地观察](../../../../feature/feedback/use-case/manage-local-observations.md)
@@ -230,7 +230,7 @@ export interface RepositoryCommandContribution<Name extends string = string, R =
 - `repository/cli-support.ts`：`readText`、`readJson`、`emit`、`jsonOption`、`dryRunOption`、`renderUnhandledError`。
 - `runComposedCli(command, { version })`：统一错误渲染。
 
-`runComposedCli` 的输出契约：
+`runComposedCli` 的输出 Spec：
 
 - 未知子命令只向 stderr 输出 `UnknownSubcommand: "<name>" for "<parent>"; run <parent> --help`，退出 1，不打印 help 与内部 `ShowHelp` 行。
 - 解析错误同样只输出一条具名错误，代码为 `InvalidInput`。
@@ -376,9 +376,9 @@ finalize 不合并 diff，不修改 docs。
 
 实现位于 `repository/docs/work/`，使用 Effect `FileSystem`、`Clock` 与 `ChildProcessSpawner`。以 `docsWorkCommandContribution` 导出，基础 CLI 挂载为 `concord docs work`。
 
-## 公开输出契约
+## 公开输出 Spec
 
-以下 JSON 字段、错误码与退出码是公开契约（[C-015](../../../../constitution.md#c-015)），采用后由对应 Use Case 与 CLI 页面声明。
+以下 JSON 字段、错误码与退出码是公开 Spec（[C-015](../../../../constitution.md#c-015)），采用后由对应 Use Case 与 CLI 页面声明。
 
 退出码：0 表示成功，或报告模式的 list/show 返回了带 `complete: false` 的结果。1 表示任何具名失败、check 有违规或不完整、Docs Work 检查失败、finalize 为 `blocked` 或 `failed`。
 

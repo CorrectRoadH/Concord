@@ -19,7 +19,7 @@
 
 新增 CLI 模式应是明确的配置分支，与当前环境变量 API 模式并列；不静默改写已有连接，不自动把已安装的同名程序视为支持的适配器。项目不得配置任意 executable、shell 或 argv。
 
-GitHub 的读取入口是 `gh api`，要求 gh 2.98.0 或更新版本及 POSIX 进程组能力。查询显式指定公共主机和仓库，继续使用 REST 仓库／issue ID、全部状态及 PR 排除规则。Linear 的候选实现明确为社区项目 `schpet/linear-cli`，不是所有名为 `linear` 的工具；需固定可验收的版本和原生 `api` 命令契约，显式指定 workspace/team，保留组织、team 与 issue UUID。
+GitHub 的读取入口是 `gh api`，要求 gh 2.98.0 或更新版本及 POSIX 进程组能力。查询显式指定公共主机和仓库，继续使用 REST 仓库／issue ID、全部状态及 PR 排除规则。Linear 的候选实现明确为社区项目 `schpet/linear-cli`，不是所有名为 `linear` 的工具；需固定可验收的版本和原生 `api` 命令 Spec，显式指定 workspace/team，保留组织、team 与 issue UUID。
 
 ## 不变的来源与发布语义
 
@@ -27,7 +27,7 @@ GitHub 的读取入口是 `gh api`，要求 gh 2.98.0 或更新版本及 POSIX �
 
 CLI 模式只生成固定的只读请求，不执行远端写入、安装、登录或 token 导出命令。正常刷新不发起远端访问；同步与连接检测必须显式触发。状态应区分工具缺失、未登录、无目标权限、协议不兼容和读取失败，不把这些状态当成空反馈集合。
 
-## 接入与信任契约
+## 接入与信任 Spec
 
 1. **模式和授权。**省略 transport 或 `transport: 'api'` 继续要求 `credentialEnv`。Concord 拒绝 HTTP 重定向并限制网络响应读取。GitHub 的 `transport: 'gh'` 禁止 `credentialEnv`，将认证、HTTP/TLS、内部重定向和网络缓冲委托给受信 gh。Concord 只保证固定初始只读请求与下面的输出、生命周期、身份和发布约束。两者不自动回退。工作台是受信操作入口：能访问并操作工作台的人可以触发服务器账号对配置范围的读取。选择 CLI 不构成浏览器用户身份认证。界面明确账号来自运行 Concord 的机器。
 2. **可执行文件和配置。**从服务的受信启动环境解析 gh，排除空、相对、node_modules 及消费者仓库内的 PATH 条目；真实路径与 symlink 目标同样检查。整轮使用核验后的同一绝对可执行文件，无 shell、自动安装、下载 shim 或项目覆盖。独立临时 cwd 不位于仓库内；HOME、GH_CONFIG_DIR、XDG_CONFIG_HOME 仅来自启动环境，先解析绝对路径，不能随临时 cwd 改变含义。

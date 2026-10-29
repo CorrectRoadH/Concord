@@ -56,7 +56,7 @@ feature: docs/feature/local-sdlc/README.md
 - 路径穿越、绝对路径、symlink 逃逸和并发写入都被拒绝。
 - `--dry-run` 执行同样的规划与校验，不写文档、恢复记录或缓存。
 
-## 契约来源
+## Spec 来源
 
 - 恢复记录、发布与所有权：[协调架构](../../portable-coordination/architecture.md)
 - 写入管线：[架构](../architecture.md#写入管线)

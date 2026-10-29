@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect } from '@playwright/test';
-import { createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer } from '../dist/view-server.js';
-import { readProjectConfig, writeProjectConfig } from './support.js';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
+import { createDocument } from '../../dist/documents.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import { startViewServer } from './server.js';
+import { readProjectConfig, writeProjectConfig } from '../support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('URL navigation saves the latest draft and restores nested drawers without local selection state', async () => {
+test('URL navigation saves the latest draft and restores nested drawers without local selection state', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-url-navigation-'));
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
@@ -26,11 +26,10 @@ test('URL navigation saves the latest draft and restores nested drawers without 
   writeFileSync(join(root, 'src/navigation.ts'), '// @concord-file\n// @concord-implements docs/feature/中文导航/use-case/history.md\nexport const navigation = true;\n');
   writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'] });
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-  const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
+
   let release = () => {};
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+    await page.setViewportSize({ width: 1440, height: 900 });
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     const origin = `http://127.0.0.1:${server.port}`;
@@ -123,7 +122,6 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     assert.deepEqual(errors, []);
   } finally {
     release();
-    await browser.close();
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }

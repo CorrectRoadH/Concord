@@ -1,6 +1,6 @@
 > 历史方案记录：运行时兼容部分已被 [TS-only 裁决](../ts-only-runtime/README.md) 替代，不代表当前支持。
 
-# 初始化配置与项目治理契约
+# 初始化配置与项目治理 Spec
 
 ## Decision
 

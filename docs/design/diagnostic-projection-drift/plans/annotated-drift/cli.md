@@ -23,7 +23,7 @@
 
 `lastError.code` 是开放集合；消费者以 `lastError` 是否存在判断最近一次刷新是否失败。
 
-`consistent: false` 时退出码仍为 0，但 `contracts`、`cliPages` 等 gap 列表可能偏大，零 gap 不表示没有缺口；`unknown` 非空时对应关系类别整体未知。只读取列表而不检查 `projection.consistent` 的消费者会误读结果，这一点在异步查询契约中声明。
+`consistent: false` 时退出码仍为 0，但 `contracts`、`cliPages` 等 gap 列表可能偏大，零 gap 不表示没有缺口；`unknown` 非空时对应关系类别整体未知。只读取列表而不检查 `projection.consistent` 的消费者会误读结果，这一点在异步查询 Spec 中声明。
 
 无投影时 QueryPending 不变（退出码 1），`details.refresh` 为已有的 RefreshFailure 对象；尚无失败记录时为字符串 `"requested"`。
 

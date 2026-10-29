@@ -11,7 +11,7 @@ Concord 的领域规则来源于 NiceEval revision `e1c66d31115208ceaae2f5bd4d73
 | `packages/repo-tools/src/docs/trace/relation-mutation.ts` | preimage、journal、原子写入与恢复模型；owner 存储不依赖来源目录或协议 |
 | Feature、Use Case、Design、Research 领域 | Concord 拥有的通用文档模型、模板与具名命令 |
 | 测试关系与 planner | 当前唯一身份、来源归属和显式退役；源码标记拥有 current 关系，Git 保存测试演进，命令证据拥有独立 scope |
-| PR editor | 本地审阅中关联契约、测试与 Memory；使用 Concord 审阅格式 |
+| PR editor | 本地审阅中关联 Spec、测试与 Memory；使用 Concord 审阅格式 |
 | Issue 领域 | 本地 Observation 与 Memory 关联，不表示远端工作项状态 |
 | `lint/docs/writing.ts` | Markdown 与 MDX 写作检查；术语由 `concord.concepts/v1` 定义，政策使用 `concord.writing/v2` |
 | `docs/writing-rules.json` | init 写作预设中的通用可读性规则：句长 140、段长 320，以及含糊表达的替换建议和理由 |

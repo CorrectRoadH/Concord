@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect } from '@playwright/test';
-import { addPage, createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer } from '../dist/view-server.js';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
+import { addPage, createDocument } from '../../dist/documents.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import { startViewServer } from './server.js';
 
 // @use-case docs/feature/document-packages/use-case/organize-freeform-research.md
-test('Research sidebar groups physical topics and file tree opens nested owners with their identity', async () => {
+test('Research sidebar groups physical topics and file tree opens nested owners with their identity', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-research-browser-'));
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
@@ -27,11 +27,10 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
   renameSync(join(root, 'docs/research/second'), join(root, 'docs/research/adapters/second'));
   writeFileSync(join(root, 'docs/research/adapters/README.md'), '# Adapters navigation\n');
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-  const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
+
   try {
     for (const viewport of [{ width: 1280, height: 720 }, { width: 1920, height: 900 }]) {
-      const page = await browser.newPage({ viewport });
+      await page.setViewportSize(viewport);
       await page.goto(`http://127.0.0.1:${server.port}/research/first`);
       const navigation = page.getByRole('navigation', { name: '内容导航', exact: true });
       await expect(navigation.getByRole('link', { name: 'adapters', exact: true })).toHaveCount(1);
@@ -110,7 +109,7 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
       await page.reload();
       await expect(page.getByRole('heading', { name: 'Second independent study', exact: true })).toBeVisible();
       assert.match(readFileSync(join(root, 'docs/research/adapters/second/README.md'), 'utf8'), /id: second/);
-      await page.close();
+      await page.goto('about:blank');
     }
-  } finally { await browser.close(); await server.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });

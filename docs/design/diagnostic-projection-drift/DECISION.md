@@ -14,4 +14,4 @@ strict-reject 让首份投影依赖扫描窗口内没有任何编辑，持续编
 
 ## Residual Risks
 
-扫描本身超过刷新上限的仓库仍没有投影，需要扫描性能工作解决（rpg-game 实测 178s，见 Memory `refresh-timeout-query-pending`）。不一致投影可能高估 gap，代码来源不稳定时 `unknown` 含 `code`，gap 会显著偏大；只读列表而不检查 `projection.consistent` 的消费者会误读，契约须显式声明。持续编辑下一致投影可能长期停留在旧代次，只由 `lastAttempt` 与人类提示暴露，不自动淘汰。`builtAt` 为兼容 v2 保留发布时间含义，与工作区投影的 `builtAt` 不同。
+扫描本身超过刷新上限的仓库仍没有投影，需要扫描性能工作解决（rpg-game 实测 178s，见 Memory `refresh-timeout-query-pending`）。不一致投影可能高估 gap，代码来源不稳定时 `unknown` 含 `code`，gap 会显著偏大；只读列表而不检查 `projection.consistent` 的消费者会误读，Spec 须显式声明。持续编辑下一致投影可能长期停留在旧代次，只由 `lastAttempt` 与人类提示暴露，不自动淘汰。`builtAt` 为兼容 v2 保留发布时间含义，与工作区投影的 `builtAt` 不同。

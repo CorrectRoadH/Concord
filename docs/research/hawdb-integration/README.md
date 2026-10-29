@@ -22,7 +22,7 @@ SQLite 当前拥有 annotation_cache、code_cache、config_cache 与 feedback_ca
 
 LocalRepository 以短快照 lease 保护来源读取与提交，构造后不保留全命令锁。迁移引擎必须保留此生命周期。现有 ContentCache 是按当前源字节校验且有容量上限的进程内纯解析 memoization；用户要求这一类缓存也使用 HawDB。该要求覆盖文档和代码解析，仍须保持容量与当前来源校验。
 
-现行发行契约要求同一个 tgz 通过 Linux 和 Apple Silicon macOS 安装验收。Rust 桥接引入平台产物与 c-005 的窄例外；是否采用必须以真实构建及独立设计挑战为依据，不能由本研究事实自动推出。
+现行发行 Spec 要求同一个 tgz 通过 Linux 和 Apple Silicon macOS 安装验收。Rust 桥接引入平台产物与 c-005 的窄例外；是否采用必须以真实构建及独立设计挑战为依据，不能由本研究事实自动推出。
 
 ## 原生可行性证据
 

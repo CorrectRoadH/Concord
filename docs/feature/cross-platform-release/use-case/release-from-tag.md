@@ -15,7 +15,7 @@ feature: docs/feature/cross-platform-release/README.md
 
 ## 完整路径
 
-1. 在已推送的 commit 上完成 Concord 驱动的契约、实现与测试工作；源码依赖声明与 pnpm 锁的根 importer 一致。
+1. 在已推送的 commit 上完成 Concord 驱动的 Spec、实现与测试工作；源码依赖声明与 pnpm 锁的根 importer 一致。
 2. 创建并推送 `v<version>`。
 3. 目标任务先构建固定版本的 linux-x64-glibc 与 darwin-arm64 引擎。打包任务从标签派生发布版本，并在其 runner 中更新包元数据。
 4. 一台 Ubuntu 24.04 runner 构建、类型检查、只打包一次并核验摘要，产物包含两个目标原生引擎，并对同一标签 commit 执行完整检查。
@@ -27,7 +27,7 @@ feature: docs/feature/cross-platform-release/README.md
 
 各渠道得到相同的包字节与 `concord --version`。矩阵、身份、摘要、运行时清理、Formula 或 Nix 失败都可见，并停止所在的发布阶段。该工作流不声称支持网络多机协调或 Windows 执行。
 
-## 契约来源
+## Spec 来源
 
 - [CLI](../cli.md)
 - [架构](../architecture.md)

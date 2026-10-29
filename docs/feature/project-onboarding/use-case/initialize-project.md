@@ -36,6 +36,6 @@ feature: docs/feature/project-onboarding/README.md
 - 非 TTY 不等待交互，结果确定；重跑不覆盖既有项目配置。
 - 旧配置格式或双配置返回具名迁移诊断，保留原文件，不在运行时转换，也不执行配置模块。
 
-## 契约来源
+## Spec 来源
 
-[目标与范围](../README.md)。实现与验收状态见 Feature；本文描述用户契约，不替代执行证据。
+[目标与范围](../README.md)。实现与验收状态见 Feature；本文描述用户 Spec，不替代执行证据。

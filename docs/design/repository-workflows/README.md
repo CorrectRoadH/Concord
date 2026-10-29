@@ -23,7 +23,7 @@ decision:
 接入项目在共享工作树上并行运行多个 Agent，并通过宿主 CLI 组合 Concord 的仓库治理能力。当前存在五个缺口：
 
 1. 一个测试源码文件的标记格式错误会让所有依赖 Trace 的只读查询整体失败，错误文案也没有说明真实约束。
-2. 远端 Issue 写入的领域实现（plan receipt、CAS、单次消费）已存在，但没有受管入口，契约要求的 plan-then-execute 无法执行。
+2. 远端 Issue 写入的领域实现（plan receipt、CAS、单次消费）已存在，但没有受管入口，Spec 要求的 plan-then-execute 无法执行。
 3. 文档并行切分（Docs Work）是中立能力，却只在消费者本地实现，并要求整仓干净，无法在共享 main 上使用。
 4. 同一批 `docs/issues/*.md` 有两个写入口：`concord issue` 与 `concord repo feedback`，闭合模型和命名都不同。
 5. Feedback / Memory 的命令树由宿主手写；宿主组合的未知子命令只打印根 help。

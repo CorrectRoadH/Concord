@@ -1,19 +1,20 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { showWriting, setWriting } from '../dist/writing-management.js';
-import { showConcepts, setConcepts } from '../dist/concepts.js';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
+import { showWriting, setWriting } from '../../dist/writing-management.js';
+import { showConcepts, setConcepts } from '../../dist/concepts.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('real browser isolates scope responses and drafts, keeps partial save conflicts, and notices inherited concept changes', async () => {
+test('real browser isolates scope responses and drafts, keeps partial save conflicts, and notices inherited concept changes', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-scoped-writing-browser-'));
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   const a = 'docs/feature/alpha';
   const b = 'docs/feature/beta';
@@ -33,9 +34,8 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     writeFileSync(join(root, a, 'sample.md'), '# Alpha writing\n\nOld expression in Alpha.\n');
     writeFileSync(join(root, b, 'sample.md'), '# Old in Beta\n\nOld. Global.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+
+    await page.setViewportSize({ width: 1440, height: 950 });
     await page.goto(`http://127.0.0.1:${server.port}/terms`);
     await expect(page.getByRole('complementary', { name: '术语 侧栏' })).toBeVisible();
     const terms = page.getByRole('list', { name: '术语列表' });
@@ -149,13 +149,13 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     const unchanged = new LocalRepository(root);
     try { assert.equal(showWriting(unchanged, `${b}/concord-writing.json`).policy?.bannedTerms[0]?.use, 'Beta saved'); }
     finally { unchanged.close(); }
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('real browser can check again after editing invalidates a delayed check response', async () => {
+test('real browser can check again after editing invalidates a delayed check response', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-check-race-'));
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -166,9 +166,8 @@ test('real browser can check again after editing invalidates a delayed check res
     } finally { repo.close(); }
     writeFileSync(join(root, 'docs/sample.md'), '# Sample\n\nOld.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage();
+
+
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
     await expect(page.getByLabel('替换建议 1')).toHaveValue('New');
 
@@ -205,13 +204,13 @@ test('real browser can check again after editing invalidates a delayed check res
     await page.getByRole('button', { name: '检查已保存文档' }).click();
     await expect(page.getByText(/某次快照的检查结果/)).toBeVisible();
     await expect(page.getByText('Old.', { exact: true }).first()).toBeVisible();
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('real browser creates local policy and structured multilingual concept catalog without global scan roots', async () => {
+test('real browser creates local policy and structured multilingual concept catalog without global scan roots', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-local-concept-browser-'));
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   const scope = 'docs/feature/demo';
   try {
@@ -224,9 +223,8 @@ test('real browser creates local policy and structured multilingual concept cata
       setConcepts(repo, { format: 'concord.concepts/v1', concepts: [{ id: 'global', definition: 'Shared concept', names: { en: { preferred: 'Shared' } } }] }, global.digest, false, 'docs/concepts.json');
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+
+    await page.setViewportSize({ width: 1440, height: 950 });
     await page.goto(`http://127.0.0.1:${server.port}/terms`);
     await page.getByLabel('新适用范围').fill(scope);
     await page.getByRole('button', { name: '打开范围' }).click();
@@ -265,5 +263,5 @@ test('real browser creates local policy and structured multilingual concept cata
     const policy = JSON.parse(readFileSync(join(root, scope, 'concord-writing.json'), 'utf8')) as { roots?: string[]; svgStyle?: null };
     assert.equal(policy.roots, undefined);
     assert.equal(policy.svgStyle, undefined);
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });

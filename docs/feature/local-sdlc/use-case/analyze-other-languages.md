@@ -11,7 +11,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 场景
 
-作为多语言项目的维护者，我希望 Python、Go、Rust 等语言的实现代码也能声明契约关联，并看到测试依赖中是否观察到声明同一契约的实现。
+作为多语言项目的维护者，我希望 Python、Go、Rust 等语言的实现代码也能声明 Spec 关联，并看到测试依赖中是否观察到声明同一 Spec 的实现。
 
 ## 主流程
 

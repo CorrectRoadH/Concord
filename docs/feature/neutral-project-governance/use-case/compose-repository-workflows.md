@@ -28,9 +28,9 @@ feature: docs/feature/neutral-project-governance/README.md
 - Markdown owner、Memory、Issue 自身的格式错误仍使编译失败。
 - 宿主不维护 Feedback、Memory 的 option 定义。
 
-## 契约来源
+## Spec 来源
 
 - [仓库工作流架构](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#trace-容错编译)
 - [命令贡献与组合](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#命令贡献与组合)
-- [公开输出契约](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#公开输出契约)
+- [公开输出 Spec](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#公开输出-spec)
 - [高级测试治理](../../../repository-profile.md)

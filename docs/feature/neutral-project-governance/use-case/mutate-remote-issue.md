@@ -28,9 +28,9 @@ feature: docs/feature/neutral-project-governance/README.md
 - 远端写入只通过 CLI 与宿主组合的同一贡献提供，Web 与 action 不提供。
 - 本地 `docs/issues` 不因远端写入改变。
 
-## 契约来源
+## Spec 来源
 
 - [远端 Issue 写入](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#远端-issue-写入)
-- [公开输出契约](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#公开输出契约)
+- [公开输出 Spec](../../../design/repository-workflows/plans/main-cli-owned/architecture.md#公开输出-spec)
 - [Feedback CLI 接入设计](../../feedback/cli-integration.md)
 - [宪法 C-007](../../../constitution.md#c-007)

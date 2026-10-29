@@ -29,7 +29,7 @@ MDX content mapper 是外部代码执行能力，不自动接入静态 check 或
 | Limit | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
 | [L1](../../LIMITS.md#l1-bounded-authority) | satisfied | 完整虚拟输入、禁止 mapper、同步作用域 finally | 上述生命周期设计；C1–C5 为实现验收 |
-| [L2](../../LIMITS.md#l2-public-delivery) | satisfied | 单一 TS 依赖、真实诊断、原输出映射 | 构建与 C6 契约 |
+| [L2](../../LIMITS.md#l2-public-delivery) | satisfied | 单一 TS 依赖、真实诊断、原输出映射 | 构建与 C6 Spec |
 
 ## Goals
 

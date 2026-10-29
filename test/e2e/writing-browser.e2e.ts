@@ -1,21 +1,22 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import { test } from './fixtures.js';
 import { Effect } from 'effect';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { defaultWritingPolicy } from '../dist/writing-defaults.js';
-import { showWriting, setWriting } from '../dist/writing-management.js';
-import { waitForWorkspaceProjection } from './support.js';
+import { expect } from '@playwright/test';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
+import { defaultWritingPolicy } from '../../dist/writing-defaults.js';
+import { showWriting, setWriting } from '../../dist/writing-management.js';
+import { waitForWorkspaceProjection } from '../support.js';
 
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-test('C24: browser preserves invalid controlled drafts across an in-flight save and checks the saved policy', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('C24: browser preserves invalid controlled drafts across an in-flight save and checks the saved policy', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-controlled-browser-'));
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   let release: (() => void) | undefined;
   try {
@@ -25,9 +26,8 @@ test('C24: browser preserves invalid controlled drafts across an in-flight save 
     writeFileSync(join(root, 'docs/sample.md'), 'Read this sentence.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+
+    await page.setViewportSize({ width: 1440, height: 950 });
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
     await page.getByRole('link', { name: '写作', exact: true }).click();
     const input = page.getByLabel('受控规则 JSON');
@@ -62,14 +62,14 @@ test('C24: browser preserves invalid controlled drafts across an in-flight save 
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await expect(input).toHaveValue(/paragraphSentences/);
     assert.deepEqual(JSON.parse(await input.inputValue()), { ...controlled, paragraphSentences: 2 });
-  } finally { release?.(); await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { release?.(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
-test('real browser authors writing policy, keeps conflict drafts, and displays saved snapshot findings', async () => {
+test('real browser authors writing policy, keeps conflict drafts, and displays saved snapshot findings', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-browser-'));
   const rule = defaultWritingPolicy.bannedTerms.length + 1;
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -78,9 +78,9 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
     writeFileSync(join(root, 'docs/concepts.json'), JSON.stringify({ format: 'concord.concepts/v1', concepts: [{ id: 'resolve', definition: '处理问题', names: { en: { preferred: 'Resolve', aliases: ['Solve'], deprecated: ['Fix'] } } }] }));
     writeFileSync(join(root, 'docs/sample.md'), '# Old writing\n\nOld word.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const first = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+
+    const first = page;
+    await first.setViewportSize({ width: 1440, height: 950 });
     const url = `http://127.0.0.1:${server.port}/writing`;
     await first.goto(url);
     await first.getByRole('link', { name: '写作', exact: true }).click();
@@ -110,7 +110,8 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
     await first.getByRole('link', { name: '写作', exact: true }).click();
     await expect(first.getByLabel(`替换建议 ${rule}`)).toHaveValue('Newer');
 
-    const second = await browser.newPage({ viewport: { width: 1440, height: 950 } });
+    const second = await page.context().newPage();
+    await second.setViewportSize({ width: 1440, height: 950 });
     await second.goto(url);
     await second.getByRole('link', { name: '写作', exact: true }).click();
     await expect(second.getByLabel(`替换建议 ${rule}`)).toHaveValue('Newer');
@@ -156,13 +157,13 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
     await first.reload();
     await first.getByRole('link', { name: '写作', exact: true }).click();
     await expect(first.getByLabel(`禁用写法 ${rule}`)).toHaveCount(0);
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
-test('real browser displays invalid policy bytes and requires an explicit repair save', async () => {
+test('real browser displays invalid policy bytes and requires an explicit repair save', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-repair-browser-'));
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -171,9 +172,8 @@ test('real browser displays invalid policy bytes and requires an explicit repair
     const obsolete = JSON.stringify({ format: 'concord.writing/v3', bannedTerms: [{ term: 'old', use: 'custom', why: 'keep' }], svgTerms: false, svgStyle: null });
     writeFileSync(join(root, 'docs/concord-writing.json'), obsolete);
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage();
+
+
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await expect(page.getByRole('alert')).toContainText('SVG writing checks were removed');
@@ -189,13 +189,13 @@ test('real browser displays invalid policy bytes and requires an explicit repair
     await page.getByRole('button', { name: '保存规则' }).click();
     await expect.poll(() => JSON.parse(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')).format).toBe('concord.writing/v3');
     await expect(page.getByText('{ broken policy')).toHaveCount(0);
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
-test('post-save derived refresh cannot adopt an unseen writer digest as the draft CAS baseline', async () => {
+test('post-save derived refresh cannot adopt an unseen writer digest as the draft CAS baseline', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-refresh-race-'));
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -205,9 +205,8 @@ test('post-save derived refresh cannot adopt an unseen writer digest as the draf
       setWriting(repo, { format: 'concord.writing/v3', roots: ['docs'], bannedTerms: [{ term: 'Old', use: 'Seed', why: '初始规则' }] }, showWriting(repo).digest);
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage();
+
+
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await expect(page.getByLabel('替换建议 1')).toHaveValue('Seed');
@@ -238,5 +237,5 @@ test('post-save derived refresh cannot adopt an unseen writer digest as the draf
     await page.getByRole('button', { name: '保存规则' }).click();
     await expect(page.locator('.form-error')).toContainText('Writing policy changed');
     assert.equal(JSON.parse(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')).bannedTerms[0]?.use, 'External');
-  } finally { await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });

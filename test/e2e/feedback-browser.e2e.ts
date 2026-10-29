@@ -1,22 +1,23 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { createDocument, loadDocuments, renderDocument } from '../dist/documents.js';
-import { mergeFeedbackCache } from '../dist/feedback-cache.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import type { FeedbackSource } from '../dist/feedback-schema.js';
-import { projectConfigPath, readProjectConfig, writeProjectConfig } from './support.js';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import { createDocument, loadDocuments, renderDocument } from '../../dist/documents.js';
+import { mergeFeedbackCache } from '../../dist/feedback-cache.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
+import type { FeedbackSource } from '../../dist/feedback-schema.js';
+import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support.js';
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
-test('feedback browser separates remote observations from local editing and protects connection drafts', async () => {
+test('feedback browser separates remote observations from local editing and protects connection drafts', async ({ page }) => {
   const root=mkdtempSync(join(tmpdir(),'concord-feedback-browser-'));
   let server:ViewServerHandle|undefined;
-  let browser:Browser|undefined;
+
   const previousCredential=process.env.CONCORD_BROWSER_MISSING_TOKEN;
   process.env.CONCORD_BROWSER_MISSING_TOKEN='';
   try {
@@ -34,9 +35,8 @@ test('feedback browser separates remote observations from local editing and prot
       mergeFeedbackCache(repo,'fixture',[{...remote,title:'Updated remote title',body:'Updated remote body',state:'closed',updatedAt:'2026-09-14T00:00:00.000Z'}]);
     } finally {repo.close();}
     server=await startViewServer({root,host:'127.0.0.1',port:0,...(process.env.CONCORD_TEST_WEB_ROOT?{webRoot:process.env.CONCORD_TEST_WEB_ROOT}:{})});
-    const executablePath=process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium')?'/run/current-system/sw/bin/chromium':undefined);
-    browser=await chromium.launch({headless:true,...(executablePath?{executablePath}:{}),args:['--no-sandbox']});
-    const page=await browser.newPage({viewport:{width:1440,height:1000}});
+
+    await page.setViewportSize({width:1440,height:1000});
     const errors:string[]=[];
     page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);
@@ -134,27 +134,26 @@ test('feedback browser separates remote observations from local editing and prot
     await expect(page.getByRole('link').filter({hasText:'Local title retained'})).toBeVisible();
     await expect(page.getByText('尚未配置远端来源')).toBeVisible();
     assert.deepEqual(errors,[]);
-  } finally {await browser?.close();await server?.close();rmSync(root,{recursive:true,force:true});if(previousCredential===undefined)delete process.env.CONCORD_BROWSER_MISSING_TOKEN;else process.env.CONCORD_BROWSER_MISSING_TOKEN=previousCredential;}
+  } finally {await server?.close();rmSync(root,{recursive:true,force:true});if(previousCredential===undefined)delete process.env.CONCORD_BROWSER_MISSING_TOKEN;else process.env.CONCORD_BROWSER_MISSING_TOKEN=previousCredential;}
 });
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
-test('empty feedback keeps creation and settings visible without filters', async () => {
+test('empty feedback keeps creation and settings visible without filters', async ({ page }) => {
   const root=mkdtempSync(join(tmpdir(),'concord-empty-feedback-browser-'));
   let server:ViewServerHandle|undefined;
-  let browser:Browser|undefined;
+
   try {
     execFileSync('git',['init','-q',root]);
     const repo=new LocalRepository(root,{initialize:true});
     try { initialize(repo,false,{testRoots:[]}); } finally { repo.close(); }
     server=await startViewServer({root,host:'127.0.0.1',port:0,...(process.env.CONCORD_TEST_WEB_ROOT?{webRoot:process.env.CONCORD_TEST_WEB_ROOT}:{})});
-    const executablePath=process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium')?'/run/current-system/sw/bin/chromium':undefined);
-    browser=await chromium.launch({headless:true,...(executablePath?{executablePath}:{}),args:['--no-sandbox']});
-    const page=await browser.newPage();
+
+
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);
     await expect(page.getByRole('button',{name:'新建本地反馈'})).toBeVisible();
     await expect(page.getByRole('link',{name:'管理反馈来源'})).toBeVisible();
     await expect(page.getByRole('textbox',{name:'搜索反馈'})).toHaveCount(0);
     await expect(page.getByRole('combobox',{name:'按来源筛选'})).toHaveCount(0);
     await expect(page.getByText('还没有反馈')).toBeVisible();
-  } finally { await browser?.close(); await server?.close(); rmSync(root,{recursive:true,force:true}); }
+  } finally { await server?.close(); rmSync(root,{recursive:true,force:true}); }
 });

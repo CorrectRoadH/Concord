@@ -1,12 +1,12 @@
 # 使用 Concord 开发
 
-Concord 连接当前产品契约、真实测试声明与工程记忆。
+Concord 连接当前产品 Spec、真实测试声明与 Memory。
 
 先运行 `concord --skill` 读取短入口，再按任务运行 `concord --skill <topic>`；完整离线资料使用 `concord --skill all`。
 
 ## 本仓库的自举用法
 
-Concord 用当前 checkout 构建并 link 的公开 CLI 维护自身契约，入口报告的版本与 `package.json` 一致。项目 runner 为：
+Concord 用当前 checkout 构建并 link 的公开 CLI 维护自身 Spec，入口报告的版本与 `package.json` 一致。项目 runner 为：
 
 ```text
 node --import tsx --test --test-name-pattern {pattern} {file}
@@ -29,15 +29,15 @@ concord review render local-sdlc
 
 `concord check` 汇总关系、生命周期和写作检查，均不执行 runner；只有显式 `concord test run <case-id>` 产生 command evidence。仓库质量门是 `pnpm check`。command evidence 不是正式 E2E，也不是逐测试覆盖证明；repository profile 的规则见[对应 Use Case](feature/local-sdlc/use-case/load-compatible-repository-profile.md)。
 
-## 关联实现与契约
+## 关联实现与 Spec
 
 在 `concord.config.ts` 配置 sourceRoots，或用 `--source-root src` 初始化，选项可重复。运行 `concord --skill code` 查看文件、函数和语句区域声明。
 
-`code annotate` 生成注释，`code locate <path> --line <n>` 查看全部包含范围，`trace show` 反查契约。代码声明描述实现关联，不表示完成或测试覆盖。
+`code annotate` 生成注释，`code locate <path> --line <n>` 查看全部包含范围，`trace show` 反查 Spec。代码声明描述实现关联，不表示完成或测试覆盖。
 
 ## 选择拥有意图的文档
 
-- [Feature](feature/README.md)：已采用的产品契约，实现可以尚在追赶。
+- [Feature](feature/README.md)：已采用的产品 Spec，实现可以尚在追赶。
 - [Roadmap](roadmap/README.md)：与 Feature 同体裁、尚未采用的产品方向。
 - [Design](design/README.md)：目标、约束、自包含候选与裁决理由。
 - [Engineering](engineering/README.md)：本仓库的测试与维护机制。
@@ -45,7 +45,7 @@ concord review render local-sdlc
 - [Memory](../memory/README.md)：Problem、Decision 与可复用经验及其历史。
 - [Issue](issues/README.md)：待调查的本地观察。
 
-`docs/` 只写声明：目标、行为、约束、使用方法与验收条件，产品流程属于契约。开发日志、排障经过与实施进度归 Memory，待调查观察归 Issue。模板提供写作提示，不代表需求完成或证据。
+`docs/` 只写声明：目标、行为、约束、使用方法与验收条件，产品流程属于 Spec。开发日志、排障经过与实施进度归 Memory，待调查观察归 Issue。模板提供写作提示，不代表需求完成或证据。
 
 ## 完整初始化
 
@@ -92,7 +92,7 @@ concord use-case create expired-token --feature login --title "Reject expired to
 
 只有 `concord test run <id>` 执行 runner，check、trace、template 与 doctor 都不运行测试。运行结果是 command evidence，不证明某个原生用例已执行或功能已覆盖。
 
-修复 Problem 时先取得正常失败的 red，修改产品实现，再取得 green；两次运行之间保持测试定义和契约不变。用两份收据 ID 和明确理由关闭，见 `concord memory resolve --help`。`concord review render` 生成本地审阅材料。
+修复 Problem 时先取得正常失败的 red，修改产品实现，再取得 green；两次运行之间保持测试定义和 Spec 不变。用两份收据 ID 和明确理由关闭，见 `concord memory resolve --help`。`concord review render` 生成本地审阅材料。
 
 ## 安全操作
 

@@ -13,7 +13,7 @@ feature: docs/feature/local-sdlc/README.md
 
 Agent 和维护者在开始工作前，要找到以前的排障经过、根因、决策和经验，并在工作中更新它们。工程知识只通过 Concord 命令读写。手工维护的索引会和真实记录脱节，直接改文件会绕过摘要保护和生命周期检查。
 
-Memory 保存排障经过、调查结论与可复用经验，Issue 保存待调查的观察，契约声明目标、行为与约束。三者不复制同一事实。
+Memory 保存排障经过、调查结论与可复用经验，Issue 保存待调查的观察，Spec 声明目标、行为与约束。三者不复制同一事实。
 
 ## 起始状态
 
@@ -91,7 +91,7 @@ Memory 保存排障经过、调查结论与可复用经验，Issue 保存待调�
 
 `init` 生成的 `AGENTS.md` 区块、`docs/concord.md` 与随包 skill 都把 Agent 引到这些命令。
 
-## 契约来源
+## Spec 来源
 
 - 读取范围与失败边界：[架构](../architecture.md)
 - Memory 状态与证据：[文档模型](../../../document-model.md)

@@ -1,15 +1,15 @@
-import { packConcord, installConcord } from './installed-package.js';
+import { packConcord, installConcord } from '../installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser } from '@playwright/test';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
 import { Effect, Schema } from 'effect';
-import { createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { readProjectConfig, writeProjectConfig } from './support.js';
+import { createDocument } from '../../dist/documents.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import { readProjectConfig, writeProjectConfig } from '../support.js';
 
 const inline = `let label: import('p5').default.Element;
 p.setup = () => { p.createCanvas(240, 100); label = p.createSpan('0'); label.id('ticks').style('display', 'inline-block').style('width', '5ch'); p.createButton('重新绘制').class('restart').mousePressed(() => p.redraw()); p.createButton('关闭循环').mousePressed(() => p.noLoop()); };
@@ -34,10 +34,10 @@ export default function(p) {
 }`;
 
 // @use-case docs/feature/web-workbench/use-case/embed-p5-sketch.md
-test('packed CLI runs isolated p5 sketches with project libraries, resources, CSS and project Markdown', { timeout: 180000 }, () => Effect.runPromise(Effect.tryPromise(async () => {
+test('packed CLI runs isolated p5 sketches with project libraries, resources, CSS and project Markdown', { timeout: 180000 }, ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-p5-browser-'));
   let server: ChildProcess | undefined;
-  let browser: Browser | undefined;
+
   let exited: Promise<void> | undefined;
   try {
     const pack = packConcord(scratch);
@@ -73,9 +73,8 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     server.stderr!.on('data', chunk => { errors += String(chunk); });
     await expect.poll(() => /"port"\s*:\s*(\d+)/u.exec(output)?.[1], { timeout: 20000, message: 'packed CLI starts view server' }).toBeTruthy();
     const address = `http://127.0.0.1:${/"port"\s*:\s*(\d+)/u.exec(output)![1]}`;
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox', '--enable-unsafe-swiftshader'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
+
+    await page.setViewportSize({ width: 1440, height: 1000 });
     const pageErrors: string[] = [];
     const consoleErrors: string[] = [];
     page.on('pageerror', error => pageErrors.push(error.message));
@@ -156,7 +155,6 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     await expect.poll(() => readProjectConfig(root).p5?.libraries).toEqual(['p5.sound']);
     assert.deepEqual(pageErrors, []);
   } finally {
-    await browser?.close();
     if (server && server.exitCode === null) {
       server.kill('SIGTERM');
       const kill = setTimeout(() => { server?.kill('SIGKILL'); }, 5000);

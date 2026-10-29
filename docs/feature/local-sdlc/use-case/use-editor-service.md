@@ -11,7 +11,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 场景
 
-作为在编辑器中写测试、代码与契约的开发者，我希望直接查看未保存标记的诊断，从标记跳到当前契约步骤，从步骤反查测试与实现，并补全契约路径与步骤 ID。
+作为在编辑器中写测试、代码与 Spec 的开发者，我希望直接查看未保存标记的诊断，从标记跳到当前 Spec 步骤，从步骤反查测试与实现，并补全 Spec 路径与步骤 ID。
 
 ## 主流程
 
@@ -24,7 +24,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 导航与诊断
 
-定义返回当前契约、标题或步骤位置；引用返回当前显式测试与实现标记。references 的 includeDeclaration 决定是否包含目标位置。补全返回 canonical 契约路径与步骤引用，最多 2000 项；截断或输入不完整时 isIncomplete 为 true。
+定义返回当前 Spec、标题或步骤位置；引用返回当前显式测试与实现标记。references 的 includeDeclaration 决定是否包含目标位置。补全返回 canonical Spec 路径与步骤引用，最多 2000 项；截断或输入不完整时 isIncomplete 为 true。
 
 悬停显示当前正文或步骤，正文最多 32000 字符，并说明观察与执行证明的限制。服务不提供分析观察；这不表示没有关系，也不能证明测试执行或覆盖。
 

@@ -8,12 +8,12 @@
 
 用 `concord doctor --json` 查看配置和接入缺口。`test annotate --contract <ref>` 只输出经过引用检查的标记；把它放进测试文件再运行 `check`。模板和注释均不证明测试执行或功能覆盖。Agent 与脚本使用 `--json`，不要解析人读输出。
 
-1. 用 `feature list`、`trace show <canonical-path>`、`memory recall <query>` 与 `issue recall <query>` 找当前契约、工程知识和待调查观察。`check` 校验当前关系，不执行测试。
+1. 用 `feature list`、`trace show <canonical-path>`、`memory recall <query>` 与 `issue recall <query>` 找当前 Spec、工程知识和待调查观察。`check` 校验当前关系，不执行测试。
 2. 已采用的用户目标进入 Feature / Use Case；设计未完成或暂不实现的方向进入 Roadmap，多方案比较进入 Design，带日期的事实进入 Research。创建命令读取 `--body <file>` 或 `--body -`，写入前可以 `--dry-run`。
 3. 新问题进入 `memory add --kind problem`。在测试文件中放置 `@feature` 或 `@use-case` 标记，保护 Problem 时附 `@regression`；标记存在即关联，case ID 由文件和标记派生。关系随测试源码参与 Git diff，不手写运行收据或第二份测试关系 JSON。
-4. `test run <id> --json` 返回 command 收据。修复时先取得正常失败的 red，保持测试定义及契约不变，修改产品实现，再取得 green。`memory resolve --kind fixed` 传两份 ID 和实际修复理由。超时、零执行、已知全跳过或陈旧候选不能作为修复证据。
+4. `test run <id> --json` 返回 command 收据。修复时先取得正常失败的 red，保持测试定义及 Spec 不变，修改产品实现，再取得 green。`memory resolve --kind fixed` 传两份 ID 和实际修复理由。超时、零执行、已知全跳过或陈旧候选不能作为修复证据。
 5. 问题再现使用 `memory reopen`；旧轮次收据不能关闭新轮次。作者裁决使用对应的非 fixed 理由，不用普通命令结果冒充原生用例覆盖证明。
-6. 晋升 Memory 到有效契约用 `memory promote`；采用 Roadmap 用 `roadmap adopt`，由工具一起迁移当前 promotion。修改契约正文用 `author set`，修改 Memory 与 Issue 正文用 `memory edit` 与 `issue edit`，均携带最新 owner digest。
+6. 晋升 Memory 到有效 Spec 用 `memory promote`；采用 Roadmap 用 `roadmap adopt`，由工具一起迁移当前 promotion。修改 Spec 正文用 `author set`，修改 Memory 与 Issue 正文用 `memory edit` 与 `issue edit`，均携带最新 owner digest。
 7. 用 `check`、`trace show`、`review render` 交接。私有证据缺失要保留“不可用”的事实，不能把已有结论当当前运行结果。实施过程与排障经过写入 Memory，不写入 `docs/`。
 
 HawDB 缓存损坏时源码查询会回源。`cache clear` / `cache rebuild` 只处理缓存；写事务中断使用 `recover`。恢复遇到未知修改时先保留现场，查明冲突，不删除 journal 强行绕过。

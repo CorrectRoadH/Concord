@@ -7,7 +7,7 @@
 | 启动工作台 | `view --host <host> --port <port>` | 直接打开与项目导航 |
 | 当前项目完整快照 | `workspace show --json` | 定向当前读取提供编辑前像 |
 | 工作区历史结构投影 | `workspace projection --json` | 概览、列表、搜索 |
-| 创建契约 | 各类型 `create` | 对应入口的创建表单 |
+| 创建 Spec | 各类型 `create` | 对应入口的创建表单 |
 | Use Case | `use-case create --feature <ref>` | 所属 Feature 内创建 |
 | 正文与页面 | `author set`、各包 `page add/show/set` | 富文本与源码编辑 |
 | 作者字段、源码、配置 | `action --input <file|->` | 详情、源码、设置表单 |

@@ -8,9 +8,9 @@ kind: feature
 
 # 本地 SDLC 闭环
 
-Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品契约、可执行验收和工程记忆。它面向离线、可移植的开发流程：文档与源码是事实来源。缓存可以随时删除，删除后结论不变。命令证据和中断写入的恢复记录必须保留。
+Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品 Spec、可执行验收和 Memory。它面向离线、可移植的开发流程：文档与源码是事实来源。缓存可以随时删除，删除后结论不变。命令证据和中断写入的恢复记录必须保留。
 
-开发由 Concord 契约驱动：修改功能前先读取或更新 Feature、叶子 Use Case、CLI supporting page 与必要 Design，再进入实现和测试。`concord trace gaps --json` 派生当前显式实现/测试关系缺口，帮助发现尚未建立关系的契约和已建档 CLI 页面；它不等于代码覆盖率，也不能发现从未建档的命令。
+开发由 Concord Spec 驱动：修改功能前先读取或更新 Feature、叶子 Use Case、CLI supporting page 与必要 Design，再进入实现和测试。`concord trace gaps --json` 派生当前显式实现/测试关系缺口，帮助发现尚未建立关系的 Spec 和已建档 CLI 页面；它不等于代码覆盖率，也不能发现从未建档的命令。
 
 ## 用户价值
 
@@ -32,7 +32,7 @@ Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal
 
 ## 验收
 
-各 Use Case 均有带 `@use-case` 标记的测试。`concord check` 与 `trace check` 必须验证引用完整性；定向 `trace show` 与 `review render` 必须能从当前 owner 分别反查代码声明和测试。代码声明表示实现关联，不证明契约完成。
+各 Use Case 均有带 `@use-case` 标记的测试。`concord check` 与 `trace check` 必须验证引用完整性；定向 `trace show` 与 `review render` 必须能从当前 owner 分别反查代码声明和测试。代码声明表示实现关联，不证明 Spec 完成。
 
 - [通过工具检索与维护工程知识](use-case/recall-and-maintain-memory.md)
 

@@ -1,13 +1,13 @@
 ---
 format: concord.document/v1
 id: plan-and-adopt-contracts
-title: 规划并采用文档契约
+title: 规划并采用文档 Spec
 createdAt: 2026-09-13T11:00:34.175Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
-# 规划并采用文档契约
+# 规划并采用文档 Spec
 
 ## 用户目标
 
@@ -59,7 +59,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 结果
 
-采用复制 Roadmap 的全部 Markdown 页面，集合内的相对链接改为指向新副本，集合外的链接保持原目标，当前的 promotion 一起迁移。新 Feature 成为当前契约。原 Roadmap 保留，`roadmap show` 的 metadata 变为 `"state":"adopted"`、`"adoptedAs":"docs/feature/checkout/README.md"`。
+采用复制 Roadmap 的全部 Markdown 页面，集合内的相对链接改为指向新副本，集合外的链接保持原目标，当前的 promotion 一起迁移。新 Feature 成为当前 Spec。原 Roadmap 保留，`roadmap show` 的 metadata 变为 `"state":"adopted"`、`"adoptedAs":"docs/feature/checkout/README.md"`。
 
 以下情况拒绝，不留下部分写入：同类 ID 重复、嵌套 owner、非 Markdown 附件、symlink、目标路径冲突、无法安全改写的链接，以及采用过程中源文件被修改。Design 只允许一次裁决，裁决方式见[逐项比较方案并明确裁决](compare-design-plans.md)。
 
@@ -84,9 +84,9 @@ concord feature page add npc 认知与执行
 
 ## Memory 来源中的其它文档
 
-Memory 来源中能严格解码的其它类别文档是只读历史材料。它们不进入现行契约关系，也不会被改写成 Memory。Web 保留原文与原目录，现行关系指向这些材料时仍然拒绝。格式错误和放错位置的 owner 继续报告诊断。
+Memory 来源中能严格解码的其它类别文档是只读历史材料。它们不进入现行 Spec 关系，也不会被改写成 Memory。Web 保留原文与原目录，现行关系指向这些材料时仍然拒绝。格式错误和放错位置的 owner 继续报告诊断。
 
-## 契约来源
+## Spec 来源
 
 - 页面写法：`concord --skill document`
-- 命令总览：[CLI](../cli.md#创建契约)
+- 命令总览：[CLI](../cli.md#创建-spec)

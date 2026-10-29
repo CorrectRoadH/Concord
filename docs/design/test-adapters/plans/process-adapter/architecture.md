@@ -2,7 +2,7 @@
 
 ## Entity Ownership
 
-配置拥有 adapter 定义；源码标记拥有测试关联；清单、范围绑定和标签为共同契约的 `Observation<T>`；evidence 拥有不可伪造升级的执行收据。身份与结果结构引用[共同身份](../../../test-journey-steps/共同身份.md)。
+配置拥有 adapter 定义；源码标记拥有测试关联；清单、范围绑定和标签为共同 Spec 的 `Observation<T>`；evidence 拥有不可伪造升级的执行收据。身份与结果结构引用[共同身份](../../../test-journey-steps/共同身份.md)。
 
 配置项包含 `id`、testRoots 内按路径段匹配的 `include`、内置名称或外部 `argv`、实现文件集合、输入根、精确框架版本与锁文件、环境变量名白名单、collect/run 超时和预算。根路径必须在仓库内。禁止不同配置 include 范围重叠，含父子范围；`test/a` 不匹配 `test/ab`。未匹配文件使用原 runner。
 
@@ -95,7 +95,7 @@ complete=false 必须有非空 gaps；complete=true 不保证调用行为完整�
 
 同块可写一个 `@native <opaque-id>`，可以与 `@name` 共存；它只作显式选择后备，不进入关联派生。自动绑定缺失时使用它；二者均可验证且不一致时 `NativeSelectorConflict`，不得静默覆盖。多个原生项用真实参数组绑定；未收集参数组不得用模式冒充完整集合。
 
-多标记可以指向同一 leaf 或不同契约，同目标关系按现有规则展示且保留来源；执行集按 native ID 去重，一次结果可投射到多个关联。原生标签不参与绑定和关系。执行歧义属于执行前失败，不是 check finding。没有精确绑定时明确文件级；明确要求 native 的操作失败，不静默扩大。
+多标记可以指向同一 leaf 或不同 Spec，同目标关系按现有规则展示且保留来源；执行集按 native ID 去重，一次结果可投射到多个关联。原生标签不参与绑定和关系。执行歧义属于执行前失败，不是 check finding。没有精确绑定时明确文件级；明确要求 native 的操作失败，不静默扩大。
 
 ## collect 输入身份与 run 协调
 
@@ -113,7 +113,7 @@ inputs 绑定项目/root 身份、测试/源码/配置成员集合及其字节�
 
 requested、observed 及各 Invocation 状态进入有新版本的原生收据。外层字段 `commandOutcome` 表达 green/red/invalid，命令级执行数量另存，不扩展既有 execution enum 混用语义。
 
-共同契约拥有 green/red/invalid 的规则。裁决还要求输入未漂移、协议/报告完整、计划与结果一一绑定、全部调用均有终结状态；基础设施错误 invalid。重试不得合并多个事件伪装一次 passed，当前协议拒绝重复终态，可靠性重跑由独立执行与收据表达。任何额外 ID（包括非 requested 的 leaf）均 invalid。
+共同 Spec 拥有 green/red/invalid 的规则。裁决还要求输入未漂移、协议/报告完整、计划与结果一一绑定、全部调用均有终结状态；基础设施错误 invalid。重试不得合并多个事件伪装一次 passed，当前协议拒绝重复终态，可靠性重跑由独立执行与收据表达。任何额外 ID（包括非 requested 的 leaf）均 invalid。
 
 ## Errors
 

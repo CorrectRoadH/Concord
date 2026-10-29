@@ -1,6 +1,6 @@
 # 维护生命周期
 
-1. 修改契约前用 `show` 或 `page show` 获取当前 owner 和 digest。
+1. 修改 Spec 前用 `show` 或 `page show` 获取当前 owner 和 digest。
 2. 用具名命令更新正文，保留 metadata 与历史。
 3. 新增或调整真实测试时，在声明正上方维护唯一 case 与 contract 注释；Problem 回归关系按需追加。
 4. 运行 TypeScript 类型检查和目标测试，再运行 Concord 的 doctor/check/trace/review。

@@ -1,21 +1,21 @@
-import { packConcord, installConcord } from './installed-package.js';
+import { packConcord, installConcord } from '../installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
-import test from 'node:test';
+import { test } from './fixtures.js';
 import { Effect, Schema } from 'effect';
-import { chromium, expect } from '@playwright/test';
-import { getViewFile, getWorkspaceSnapshot } from '../dist/application.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { createDocument } from '../dist/documents.js';
-import { pollUntil, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from './support.js';
-import { startViewServer } from '../dist/view-server.js';
-import { deriveTestReference } from '../dist/test-reference.js';
+import { expect } from '@playwright/test';
+import { getViewFile, getWorkspaceSnapshot } from '../../dist/application.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import { createDocument } from '../../dist/documents.js';
+import { pollUntil, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
+import { startViewServer } from './server.js';
+import { deriveTestReference } from '../../dist/test-reference.js';
 
 // @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
-test('Web derives repository tests from Feature and Use Case paths without importing hosts or changing runner authorization', async () => {
+test('Web derives repository tests from Feature and Use Case paths without importing hosts or changing runner authorization', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-profile-'));
   const write = (path: string, body: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), body); };
   execFileSync('git', ['init', '-q', root]);
@@ -34,8 +34,7 @@ it('SDK adapter flow', () => { throw new Error('DO NOT EXECUTE'); });
 `);
   const nativePath = 'acceptance/adapter/test/adapter.test.ts';
   const directId = deriveTestReference(nativePath, nativePath, 'SDK adapter flow');
-  const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-  const browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
+
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
     const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root));
@@ -46,7 +45,7 @@ it('SDK adapter flow', () => { throw new Error('DO NOT EXECUTE'); });
     const projectedTestFile = await Effect.runPromise(getViewFile(root, nativePath));
     assert.match(projectedTestFile.body, /SDK adapter flow/);
     await assert.rejects(() => Effect.runPromise(getViewFile(root, 'host.ts')), (cause: unknown) => cause instanceof Error && 'code' in cause && cause.code === 'FileNotFound');
-    const page = await browser.newPage();
+
     await page.goto(`http://127.0.0.1:${server.port}/features/adapters?tab=testing`);
     await expect(page.getByText('SDK adapter flow', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: '运行声明命令', exact: true })).toHaveCount(0);
@@ -143,7 +142,7 @@ export function sendAdapter() { return 'ok'; }
     await expect(useCaseGroup).toHaveAttribute('data-browser-instance', 'preserved');
     await page.goto(`http://127.0.0.1:${server.port}/features/unrelated?tab=testing`);
     await expect(page.getByText('未发现当前契约的关联测试', { exact: true })).toBeVisible();
-    await page.close();
+    await page.goto('about:blank');
     await expect.poll(() => {
       try { const available = new LocalRepository(root); available.close(); return true; }
       catch (cause) { if (cause instanceof Error && 'code' in cause && cause.code === 'RepositoryBusy') return false; throw cause; }
@@ -193,10 +192,10 @@ it('invalid target', () => {});
     assert.equal((await fetch(`${base}/api/workspace`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' })).status, 202);
     await pollUntil(async () => (await waitForWorkspaceProjection(base)).snapshot.repositoryTests?.status === 'failed' ? true : undefined,
       { description: 'failed repository profile generation' });
-    const failurePage = await browser.newPage();
+    const failurePage = page;
     await failurePage.goto(`http://127.0.0.1:${server.port}/features/adapters?tab=testing`);
     await expect(failurePage.getByRole('alert').filter({ hasText: '项目测试接入失败' })).toBeVisible();
     await expect(failurePage.getByRole('alert').filter({ hasText: '工作区扫描不完整' })).toBeVisible();
     await expect(failurePage.getByText('未发现当前契约的关联测试', { exact: true })).toHaveCount(0);
-  } finally { await browser.close(); await server.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });

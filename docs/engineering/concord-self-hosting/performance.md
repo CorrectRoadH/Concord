@@ -2,7 +2,7 @@
 
 本页统一规定 Concord 命令性能的测量方法、测量路径与失败判据，适用于 [C-014](../../constitution.md#c-014)。命令预算由拥有该命令的 Feature 或 Use Case 声明，当前预算见[本地 SDLC 闭环](../../feature/local-sdlc/README.md#性能预算)与[读取异步刷新的诊断投影](../../feature/local-data-engine/use-case/query-asynchronous-projections.md#性能预算)。
 
-## 测量契约
+## 测量 Spec
 
 - 参照消费者：预算表声明的本仓库 commit 的独立 Git clone，冻结后测量。每组预算绑定该 commit、完整命令参数与参照环境。
 - 参照环境：预算表声明的机器与 Node 精确版本，使用构建后的 `dist/entry.js`。绝对预算只在参照环境判定；其它机器只做同机交错对照，判定回退比例。
@@ -12,13 +12,13 @@
 - 冷暖状态：warm 表示参照消费者已执行一次同一命令、HawDB 缓存有效；cold 表示执行 `concord cache clear` 后的首次运行。预算按 warm 判定，cold 只记录。
 - 计时边界：从启动 `node dist/entry.js` 进程到进程退出的 wall time，stdout 与 stderr 重定向到文件。
 - 采样：先预热一次，再对每条命令运行至少 7 次全新进程，取中位数（p50）。对照测量时新旧产物交错运行。
-- 统计与阈值：p50 不超过所属契约的预算，并且同机交错对照中 p50 相比基线的回退不超过 20%。
+- 统计与阈值：p50 不超过所属 Spec 的预算，并且同机交错对照中 p50 相比基线的回退不超过 20%。
 - 波动：同一命令的最大值超过 p50 的 2 倍时，该组样本无效，须重新测量；连续两组无效视为失败。
-- 进程上限：契约声明为上限的命令（例如后台刷新扫描）按最大值判定，在任何机器上超出都判失败，因为超时进程的结果不会被发布。
+- 进程上限：Spec 声明为上限的命令（例如后台刷新扫描）按最大值判定，在任何机器上超出都判失败，因为超时进程的结果不会被发布。
 
 ## 预算表格式
 
-预算只在契约 owner 中声明，测量路径读取 owner 正文，不另存预算清单。预算表是指定标题下的第一张 Markdown 表：首列以行内代码列出完整命令，每条以 `concord` 开头；末列为 `<整数>ms`。首列中不以 `concord` 开头的行内代码只作说明，不进入测量。命令参数引用的 owner 不存在于所测消费者时（以 `docs/` 开头的参数按路径检查；`trace show`、`review render` 的非路径参数按 Feature id 检查 `docs/feature/<id>/README.md`），该命令在记录中标为 `skipped` 并写明原因，不参与通过判定。`self` 消费者上出现 `skipped` 视为预算表失效，判失败。
+预算只在 Spec owner 中声明，测量路径读取 owner 正文，不另存预算清单。预算表是指定标题下的第一张 Markdown 表：首列以行内代码列出完整命令，每条以 `concord` 开头；末列为 `<整数>ms`。首列中不以 `concord` 开头的行内代码只作说明，不进入测量。命令参数引用的 owner 不存在于所测消费者时（以 `docs/` 开头的参数按路径检查；`trace show`、`review render` 的非路径参数按 Feature id 检查 `docs/feature/<id>/README.md`），该命令在记录中标为 `skipped` 并写明原因，不参与通过判定。`self` 消费者上出现 `skipped` 视为预算表失效，判失败。
 
 ```markdown
 ## 性能预算
@@ -28,7 +28,7 @@
 | `concord trace gaps`、`concord review render local-sdlc` | 600ms |
 ```
 
-| 测量路径 | 契约 owner | 标题 | 判定 |
+| 测量路径 | Spec owner | 标题 | 判定 |
 | --- | --- | --- | --- |
 | `cli` | `docs/feature/local-sdlc/README.md` | 性能预算 | warm p50 |
 | `query` 读取 | `docs/feature/local-data-engine/use-case/query-asynchronous-projections.md` | 性能预算 | warm p50 |
@@ -45,7 +45,7 @@ vp run bench:profile refresh [trace gaps | trace show <ref> | review render [ref
 vp run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <concord 参数>
 ```
 
-- `bench cli`：测量本地 SDLC 预算表中的命令。每条命令先在 `concord cache clear` 后记录一次 cold，再按测量契约采集 warm。表中属于异步投影的读取命令（`trace show`、`trace gaps`、`review render`）在采样前与 `bench query` 一样等待投影发布。
+- `bench cli`：测量本地 SDLC 预算表中的命令。每条命令先在 `concord cache clear` 后记录一次 cold，再按测量 Spec 采集 warm。表中属于异步投影的读取命令（`trace show`、`trace gaps`、`review render`）在采样前与 `bench query` 一样等待投影发布。
 - `bench query`：先在前台测量刷新上限表中每条查询的内部扫描入口 `dist/query-scan-worker.js <root> <query-json>`，即后台刷新进程实际执行的扫描，按最大值对照上限。再逐条运行读取命令，直到返回已发布投影，等待不超过刷新上限加 30 秒，之后按 warm p50 采样。等不到投影时测量失败，记录最后一次输出的 `QueryPending` 及 `refresh` 详情。读取采样期间每次调用都会照常请求后台刷新，结果包含这一竞争。
 - `bench view`：调用 `scripts/measure-view-requests.ts`，在其冻结 Fixture 上测量 workspace、jobs、file 与 document.set 请求，按路由分组套用相同的统计规则。
 - `profile refresh`：用 V8 CPU profiler 和 fs 调用计数运行公开 CLI 的 `--fresh --dry-run` 扫描。它与 bench query 的内部 query-scan-worker 入口不同，用于定位热点，不作为刷新上限证据。
@@ -78,7 +78,7 @@ vp run bench cli --baseline ../concord-baseline
 
 ```mermaid
 flowchart LR
-  Owners[契约 owner 预算表] --> Budgets[预算表解析]
+  Owners[Spec owner 预算表] --> Budgets[预算表解析]
   Checkout[当前 checkout dist] --> Candidate[候选产物]
   Parent[父提交 worktree dist] --> Baseline[基线产物]
   Commit[本仓库 commit] --> Self[self clone]

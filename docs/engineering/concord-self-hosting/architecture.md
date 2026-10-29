@@ -6,13 +6,13 @@
 
 `check:selfhost` 通过当前构建的 `dist/entry.js --json --dry-run check` 检查当前 checkout，保留 CLI 的退出码。该入口不发布 owner 或证据，不打开持久缓存；来源协调可创建 Git-private 目录。它与隔离 smoke 一同进入完整门禁。
 
-隔离 smoke 必须观察到 `repository/engine.ts` 的实现声明，并验证副本中失效的 repository 契约引用使公开 CLI 检查失败。临时消费者结束后删除；复制来源集合由项目配置派生。
+隔离 smoke 必须观察到 `repository/engine.ts` 的实现声明，并验证副本中失效的 repository Spec 引用使公开 CLI 检查失败。临时消费者结束后删除；复制来源集合由项目配置派生。
 
 Git-private cache/evidence/journal 不提交。删除 cache 后仍可从 Markdown 与源码恢复关系；因此自举验收必须同时覆盖冷/热扫描边界和当前 owner 完整性。
 
 ## 性能测量
 
-[性能验收](performance.md)的测量路径同样在本仓库自举：被测产物是当前 checkout 的构建，默认消费者是本仓库某个 commit 的独立 clone，预算从契约 owner 正文读取。写入范围按对象区分：入口先在当前 checkout 执行 `vp build`，替换 `dist/`，原生构建可能写入 `native/hawdb/target` 本地构建缓存；`self` 与 `scale` 消费者及进程输出位于临时工作目录，结束后删除（`--keep` 除外）。
+[性能验收](performance.md)的测量路径同样在本仓库自举：被测产物是当前 checkout 的构建，默认消费者是本仓库某个 commit 的独立 clone，预算从 Spec owner 正文读取。写入范围按对象区分：入口先在当前 checkout 执行 `vp build`，替换 `dist/`，原生构建可能写入 `native/hawdb/target` 本地构建缓存；`self` 与 `scale` 消费者及进程输出位于临时工作目录，结束后删除（`--keep` 除外）。
 
 路径消费者原地测量，只改动其 Git-private 目录中的可丢弃 HawDB 缓存；`--out` 指定测量或 profile 输出位置。profile 未指定 `--out` 时，在系统临时目录创建输出目录并保留。测量不修改源 owner、不写 Memory，测量者审阅记录后用 Concord 的 Memory 命令保存结论。
 
@@ -20,7 +20,7 @@ Git-private cache/evidence/journal 不提交。删除 cache 后仍可从 Markdow
 flowchart TD
   subgraph Repo[当前仓库]
     Dist[dist/entry.js]
-    Docs[契约 owner 预算表]
+    Docs[Spec owner 预算表]
     Git[Git 历史]
   end
   subgraph Scripts[scripts]

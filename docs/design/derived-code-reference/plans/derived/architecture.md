@@ -20,7 +20,7 @@ region 的定位键为 `[statementListLocator, validRegionOrdinal]`：所在 sta
 
 ## 当前入口
 
-`code annotate --scope ... --contract ...` 和 `code.annotate` action 不接收 ID，仅返回 scope/snippet。查询使用 `code list` 与 `code locate`，删除按 ID 查询的 CLI 及其专用处理逻辑。Web 删除 ID 输入和身份详情展示，以符号、文件、范围与关联契约呈现；保留 Engineering 与当前响应式布局。review 用符号及文件位置显示实现，图与 JSON 仍可使用内部自动引用。
+`code annotate --scope ... --contract ...` 和 `code.annotate` action 不接收 ID，仅返回 scope/snippet。查询使用 `code list` 与 `code locate`，删除按 ID 查询的 CLI 及其专用处理逻辑。Web 删除 ID 输入和身份详情展示，以符号、文件、范围与关联 Spec 呈现；保留 Engineering 与当前响应式布局。review 用符号及文件位置显示实现，图与 JSON 仍可使用内部自动引用。
 
 范围标记不接受参数，按当前语法报告普通无效注释。无效 begin 仍参与边界配对，不能跳过它并让 end 消耗外层 begin。
 

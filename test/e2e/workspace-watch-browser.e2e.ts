@@ -1,20 +1,21 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
+import { test } from './fixtures.js';
 import { Effect } from 'effect';
-import { chromium, expect, type Browser, type Page } from '@playwright/test';
-import { createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import type { WorkspaceProjection } from '../src/view-contract.js';
-import { waitForWorkspaceProjection } from './support.js';
+import { expect, type Page } from '@playwright/test';
+import { createDocument } from '../../dist/documents.js';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
+import type { WorkspaceProjection } from '../../src/view-contract.js';
+import { waitForWorkspaceProjection } from '../support.js';
 
-const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((incomplete: boolean, run: (page: Page, origin: string, value: WorkspaceProjection) => Promise<void>) => Effect.tryPromise(async () => {
+const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((page: Page, incomplete: boolean, run: (page: Page, origin: string, value: WorkspaceProjection) => Promise<void>) => Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-workspace-watch-'));
-  let browser: Browser | undefined;
+
   let server: ViewServerHandle | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
@@ -30,16 +31,14 @@ const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((incomplete: bool
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const origin = `http://127.0.0.1:${server.port}`;
     const value = await waitForWorkspaceProjection(origin);
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
     page.setDefaultTimeout(15_000);
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     await run(page, origin, value);
     assert.deepEqual(errors, []);
   } finally {
-    await browser?.close();
     await server?.close();
     rmSync(root, { recursive: true, force: true });
   }
@@ -47,7 +46,7 @@ const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((incomplete: bool
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-watch-drift-and-failures
-test('ordinary pages suppress drift while health stays unknown and real diagnostics remain visible', () => Effect.runPromise(withWorkspaceBrowser(true, async (page, origin, actual) => {
+test('ordinary pages suppress drift while health stays unknown and real diagnostics remain visible', ({ page }) => Effect.runPromise(withWorkspaceBrowser(page, true, async (page, origin, actual) => {
   assert.equal(actual.projection.consistent, true);
   assert.equal(actual.projection.complete, false);
   assert.ok(actual.snapshot.findings.some(finding => finding.code === 'InvalidData'));
@@ -87,7 +86,7 @@ test('ordinary pages suppress drift while health stays unknown and real diagnost
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-watch-polling
-test('cached workspace polls every four seconds with independent Git cadence and serialized pending retries', () => Effect.runPromise(withWorkspaceBrowser(false, async (page, origin, actual) => {
+test('cached workspace polls every four seconds with independent Git cadence and serialized pending retries', ({ page }) => Effect.runPromise(withWorkspaceBrowser(page, false, async (page, origin, actual) => {
   const now = new Date();
   await page.clock.install({ time: new Date(now.getTime() - 1000) });
   await page.clock.pauseAt(now);
@@ -167,7 +166,7 @@ test('cached workspace polls every four seconds with independent Git cadence and
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-watch-preserves-draft
-test('navigation polling preserves drafts and a completed write reads after an older poll', () => Effect.runPromise(withWorkspaceBrowser(false, async (page, origin, actual) => {
+test('navigation polling preserves drafts and a completed write reads after an older poll', ({ page }) => Effect.runPromise(withWorkspaceBrowser(page, false, async (page, origin, actual) => {
   const now = new Date();
   await page.clock.install({ time: new Date(now.getTime() - 1000) });
   await page.clock.pauseAt(now);

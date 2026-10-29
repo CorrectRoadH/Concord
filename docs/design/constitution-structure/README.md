@@ -59,9 +59,9 @@ decision:
 执行顺序：
 
 1. Design 经独立审查后定案。
-2. 修改 `project-onboarding` 的 Use Case 与 CLI 契约，写出新输出与错误（预期输出）。
+2. 修改 `project-onboarding` 的 Use Case 与 CLI Spec，写出新输出与错误（预期输出）。
 3. Problem `constitution-body-links-unchecked` 已记录。回归测试用 `@regression` 指向它，在临时消费者中写入断开的宪法链接并断言 `check` 退出 1。用签发工具运行 `test run`，取得 red。
-4. 实现并重新构建 `dist/`。测试定义与契约不变，用签发工具再次 `test run` 取得 green，然后 `memory resolve --kind fixed`。仓库仍是 v1，签发工具可以完成全部核验。
+4. 实现并重新构建 `dist/`。测试定义与 Spec 不变，用签发工具再次 `test run` 取得 green，然后 `memory resolve --kind fixed`。仓库仍是 v1，签发工具可以完成全部核验。
 5. 用新构建的 CLI 运行 `concord --dry-run constitution migrate`，再执行迁移。迁移之后签发工具无法读取本仓库，已关闭的 Problem 不受影响。
 6. 按条款写法改写宪法，把 36 处“第 N 款”文字逐处核对当前语义后改为链接，通过 `constitution amend` 采用。
 7. `concord check` 通过；迁移验收按 link-owned 的“迁移验收”判定。

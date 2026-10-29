@@ -10,11 +10,11 @@ Selected: [annotations](plans/annotations/README.md)
 
 G1: annotations 明确保留自然语言测试名称；原文支持该目标。
 
-G2: annotations 直接以 `@feature` 或 `@use-case` 指向 canonical 契约；原文支持该目标。
+G2: annotations 直接以 `@feature` 或 `@use-case` 指向 canonical Spec；原文支持该目标。
 
 G3: annotations 由 native 文件、声明文件及名称派生执行引用，无需作者维护 ID；原文支持该目标。
 
-独立设计挑战已审阅直接契约绑定、原生唯一对应和证据归属边界。实现依照用户后续指示删除旧格式支持，不添加旧格式拒绝测试；验证覆盖现行行为。该设计记录保留原有事实，不把命令收据扩大为正式执行证明。
+独立设计挑战已审阅直接 Spec 绑定、原生唯一对应和证据归属边界。实现依照用户后续指示删除旧格式支持，不添加旧格式拒绝测试；验证覆盖现行行为。该设计记录保留原有事实，不把命令收据扩大为正式执行证明。
 
 ## Rejected Options
 

@@ -17,7 +17,7 @@ Resolution 的解决事实与证据核验分开表达：
 
 Repository 证据保存原文件字节摘要、owner／contract／source 摘要、候选和八个 invocation 身份。六条 reliability 收据必须独立。epoch 表示 profile 在该 epoch 核验并绑定证据，不声称原 runner 在该 epoch 签发。candidate 仅表示 green 与 reliability 一致的候选，不据此宣称当前工作区已验证。reopen 增加 epoch 并保留完整旧 resolution；历史 invocation 不能被换路径后重复用于新解决。
 
-Issue 在 `docs/issues/<id>.md`。`memoryRelations` 保存调查、根因、裁决和交付角色；`adoptions.current/history` 保存契约采用与退役；`closure` 保存明确处理理由和引用。远端 `source` 与本地 `origin` 分开，dev／dogfood 记录不伪造成 GitHub 来源。历史 fixed closure 保留原声明，但不会因此产生新执行证据。
+Issue 在 `docs/issues/<id>.md`。`memoryRelations` 保存调查、根因、裁决和交付角色；`adoptions.current/history` 保存 Spec 采用与退役；`closure` 保存明确处理理由和引用。远端 `source` 与本地 `origin` 分开，dev／dogfood 记录不伪造成 GitHub 来源。历史 fixed closure 保留原声明，但不会因此产生新执行证据。
 
 发布与恢复使用 Git-private 的短 publication lease 和当前 journal 协议。读取使用乐观快照，实际提交使用短期独占保护；dry-run 不发布文件，实际执行仍须重新校验。未知格式或不完整事务保留现场并具名拒绝，恢复使用与现场匹配的工具版本。
 

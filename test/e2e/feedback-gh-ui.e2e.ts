@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from './support.js';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
+import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
 
 function savedTransport(root: string, index: number): string | undefined {
   const connection = readProjectConfig(root).feedbackConnections?.[index];
@@ -15,10 +16,10 @@ function savedTransport(root: string, index: number): string | undefined {
 }
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
-test('GitHub settings keep API defaults and binding while gh detection follows saved drafts', async () => {
+test('GitHub settings keep API defaults and binding while gh detection follows saved drafts', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-gh-ui-'));
   let server: ViewServerHandle | undefined;
-  let browser: Browser | undefined;
+
   const checks: string[] = [];
   const savedAtCheck: string[] = [];
   let delayCheck = false;
@@ -31,9 +32,8 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     const initial = readProjectConfig(root);
     writeProjectConfig(root, { ...initial, feedbackConnections: [{ id: 'existing', provider: 'github', credentialEnv: 'GITHUB_TOKEN', owner: 'acme', repo: 'demo', repositoryId: '321' }] });
     server = await startViewServer({ root, host: '127.0.0.1', port: 0, ...(process.env.CONCORD_TEST_WEB_ROOT ? { webRoot: process.env.CONCORD_TEST_WEB_ROOT } : {}) });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+
+    await page.setViewportSize({ width: 390, height: 844 });
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.route('**/api/action', async (route) => {
@@ -139,5 +139,5 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     assert.deepEqual(checks, ['existing', 'existing', 'new-gh', 'new-gh']);
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     assert.deepEqual(pageErrors, []);
-  } finally { releasePendingCheck(); await browser?.close(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
+  } finally { releasePendingCheck(); await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });

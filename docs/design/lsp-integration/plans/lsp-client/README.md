@@ -6,7 +6,7 @@
 
 ## Core Mental Model
 
-源码扫描拥有代码关联，`code analyze` 提供符号定位与正向调用观察，`concord lsp` 提供版本一致的编辑器视图。三者遵守[共同契约](../../../test-journey-steps/共同身份.md)，观察缺失不删除关系。
+源码扫描拥有代码关联，`code analyze` 提供符号定位与正向调用观察，`concord lsp` 提供版本一致的编辑器视图。三者遵守[共同 Spec](../../../test-journey-steps/共同身份.md)，观察缺失不删除关系。
 
 ## Scope
 

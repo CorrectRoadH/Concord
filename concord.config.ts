@@ -18,18 +18,26 @@ export default {
       "node",
       "--import",
       "tsx",
-      "--test",
+      "scripts/test-built.ts",
       "--test-name-pattern",
       "{pattern}",
       "{file}"
     ],
     "sourceFiles": [
       "test/support.ts",
+      "test/e2e/fixtures.ts",
+      "test/e2e/engine.ts",
+      "test/e2e/local-browser.ts",
+      "test/e2e/server.ts",
+      "test/e2e/journey.ts",
+      "e2e.config.ts",
+      "scripts/test-built.ts",
+      "scripts/test-reporter.ts",
       "tsconfig.test.json",
       "package.json",
       "pnpm-lock.yaml"
     ],
-    "timeoutMs": 120000
+    "timeoutMs": 300000
   },
   "constitution": {
     "path": "docs/constitution.md"

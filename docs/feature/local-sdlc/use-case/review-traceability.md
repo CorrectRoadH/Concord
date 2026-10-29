@@ -1,21 +1,21 @@
 ---
 format: concord.document/v1
 id: review-traceability
-title: 追踪契约并生成审阅材料
+title: 追踪 Spec 并生成审阅材料
 createdAt: 2026-09-13T11:00:37.386Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
-# 追踪契约并生成审阅材料
+# 追踪 Spec 并生成审阅材料
 
 ## 用户目标
 
-Reviewer 要从一份 Feature 或整个项目出发，看到契约、附页、Use Case、测试、代码声明、Memory 与证据之间的关系，判断这次变更有没有可审阅的验收依据。
+Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use Case、测试、代码声明、Memory 与证据之间的关系，判断这次变更有没有可审阅的验收依据。
 
 ## 起始状态
 
-- 项目已有契约，源码与测试带有 Concord 标记。
+- 项目已有 Spec，源码与测试带有 Concord 标记。
 
 ## 完整路径
 
@@ -35,7 +35,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到契约、附页、Us
 
    `trace check` 校验引用目标存在、类型正确、没有重复与循环。有问题时 `ok` 为 false，退出 1。
 
-2. 查看一份契约的关系。 {#show}
+2. 查看一份 Spec 的关系。 {#show}
 
    ```sh
    concord --fresh trace show docs/feature/cart/README.md
@@ -76,7 +76,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到契约、附页、Us
 
    `review render <feature>` 只生成一份 Feature 的材料。完整输出还包含宪法状态、Use Case 步骤分组与本地反馈。
 
-4. Reviewer 从材料中的链接回到契约与源码，核对正文。 {#read-sources}
+4. Reviewer 从材料中的链接回到 Spec 与源码，核对正文。 {#read-sources}
 
 ## 结果
 
@@ -85,6 +85,6 @@ Reviewer 要从一份 Feature 或整个项目出发，看到契约、附页、Us
 - 证据缺失、`unknown` 执行结果和命令证据的边界在材料中明确写出，不当作覆盖率。
 - 这些命令都不运行测试，不发送到 GitHub，也不修改远端。
 
-## 契约来源
+## Spec 来源
 
 - 命令与输出：[CLI](../cli.md#追踪关系)

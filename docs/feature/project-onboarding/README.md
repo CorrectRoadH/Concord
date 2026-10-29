@@ -18,7 +18,7 @@ kind: feature
 - 项目特点允许组合，例如 Library 与 CLI；这些选择给出可覆盖的模板页面默认值。
 - `docs/constitution.md` 必需；根目录 `DESIGN.md` 是独立可选项。
 - 初始化提供渐进交互与等价的非交互输入，预览完整变更，取消不写入，保留已有文件。
-- 初始化指引要求契约声明目标，开发过程归 Memory；Memory/Issue 的索引、检索和修改全部通过 Concord 工具。
+- 初始化指引要求 Spec 声明目标，开发过程归 Memory；Memory/Issue 的索引、检索和修改全部通过 Concord 工具。
 - 初始化在根 `AGENTS.md` 中维护有边界标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
 - 新 init 采用静态 `concord.config.ts`；旧 `concord.json` 返回具名迁移错误，双配置拒绝，不执行配置模块。
 - Memory 支持多个来源，provider 为本地文件。canonical 路径拥有身份，默认写入目标唯一，只读来源的间接修改也必须拒绝。
@@ -30,7 +30,7 @@ kind: feature
 
 ## 验收方式
 
-使用打包后的公开 CLI 在隔离 Git 消费仓库中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `pnpm check`，并使用 Concord 的 check、trace 与 review 检查自身契约关联。
+使用打包后的公开 CLI 在隔离 Git 消费仓库中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `pnpm check`，并使用 Concord 的 check、trace 与 review 检查自身 Spec 关联。
 
 ## Constitution
 

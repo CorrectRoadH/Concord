@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 import { Schema } from 'effect';
 import type { FeedbackItem } from './feedback-schema.js';
 

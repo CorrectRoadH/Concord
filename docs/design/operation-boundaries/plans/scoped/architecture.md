@@ -1,6 +1,6 @@
 # 操作依赖与资源边界
 
-本页定义已采用方案的精确契约；采用事实由 Design owner 的 decision metadata 记录。
+本页定义已采用方案的精确 Spec；采用事实由 Design owner 的 decision metadata 记录。
 
 ## 操作矩阵
 
@@ -52,6 +52,6 @@ recover 不删除 runner.lease、run state、证据或未知文件。父 PID 死
 
 ## 当前文档的替代范围
 
-采用后更新 docs/architecture.md、portable-coordination 功能契约、local-sdlc 架构及随包 recovery 指引。portable-publication 的历史裁决保留，并明确共享读取与操作范围已由本方案替代；不改写其历史选择或伪造 review 结果。
+采用后更新 docs/architecture.md、portable-coordination 功能 Spec、local-sdlc 架构及随包 recovery 指引。portable-publication 的历史裁决保留，并明确共享读取与操作范围已由本方案替代；不改写其历史选择或伪造 review 结果。
 
 宪法 C-013 定义跨功能规则：操作按必要依赖验证，明确局部失败范围；全局诊断不得伪装完整性；存储、进程和信任边界的不确定性仍按实际共享资源阻断。开发状态允许局部不完整；新增及修改入口都须遵守。

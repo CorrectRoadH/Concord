@@ -11,7 +11,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 用户目标
 
-维护者在整个文件、一个函数或一段代码旁写注释，声明它实现哪份 Feature、Use Case 或 Engineering。之后可以从契约查到实现，也可以从源码的某一行查到契约。声明不需要 ID。
+维护者在整个文件、一个函数或一段代码旁写注释，声明它实现哪份 Feature、Use Case 或 Engineering。之后可以从 Spec 查到实现，也可以从源码的某一行查到 Spec。声明不需要 ID。
 
 声明表达维护者的实现意图，不证明功能完成或测试覆盖。
 
@@ -42,7 +42,7 @@ feature: docs/feature/local-sdlc/README.md
    // @concord-end
    ```
 
-   重复 `--contract` 生成多行 `@concord-implements`。命令只检查指定的契约（以及 `--regression` 给出的 Problem），不读取全项目关系，失败只涉及这些引用。
+   重复 `--contract` 生成多行 `@concord-implements`。命令只检查指定的 Spec（以及 `--regression` 给出的 Problem），不读取全项目关系，失败只涉及这些引用。
 
 2. 把声明放进源码。 {#place}
 
@@ -80,7 +80,7 @@ feature: docs/feature/local-sdlc/README.md
 
    `line` 与 `endLine` 是代码本身的首行与末行，不含标记行。`id` 由工具派生，不用写进源码。
 
-4. 从源码行查契约。 {#locate}
+4. 从源码行查 Spec。 {#locate}
 
    ```sh
    concord --json code locate src/total.js --line 10
@@ -92,21 +92,21 @@ feature: docs/feature/local-sdlc/README.md
 
    行号从 1 开始。结果包含所有覆盖这一行的声明。
 
-5. 从契约查实现。 {#trace}
+5. 从 Spec 查实现。 {#trace}
 
    ```sh
    concord --fresh trace show docs/feature/cart/README.md
    ```
 
-   `codeDeclarations` 列出声明，`incoming` 中 `relation` 为 `implements` 的边指向这份契约。Feature 的结果包含其 Use Case 的声明。`review render` 分别列出代码与测试。
+   `codeDeclarations` 列出声明，`incoming` 中 `relation` 为 `implements` 的边指向这份 Spec。Feature 的结果包含其 Use Case 的声明。`review render` 分别列出代码与测试。
 
 ## 结果
 
-修改、移动或删除源码后，下一次查询按当前文件内容重新计算。Web 按符号、文件位置和关联契约展示声明，不显示 ID。
+修改、移动或删除源码后，下一次查询按当前文件内容重新计算。Web 按符号、文件位置和关联 Spec 展示声明，不显示 ID。
 
 `check` 对以下情况给出 finding 并退出 1：
 
-- 未知标签、同一作用域两份声明、契约不存在、`begin` 与 `end` 不配对。
+- 未知标签、同一作用域两份声明、Spec 不存在、`begin` 与 `end` 不配对。
 - region 嵌套、跨越函数边界、截断表达式或为空。
 - 带声明的文件有语法错误。
 
@@ -116,10 +116,10 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 声明规则
 
-- 每个作用域最多一份声明，多个契约用多行 `@concord-implements`。
+- 每个作用域最多一份声明，多个 Spec 用多行 `@concord-implements`。
 - file、node、region 可以互相包含。查询返回全部包含的声明，不推断继承、优先级或完成度。
 - 标记行（file、code、begin、end）不带参数。无效的 `begin` 也参与配对，后面的 `end` 不会去配外层的 `begin`。
-- 契约可以是 Feature、Use Case、Engineering，Feature 或 Engineering 的附页，或它们的有效 anchor。
+- Spec 可以是 Feature、Use Case、Engineering，Feature 或 Engineering 的附页，或它们的有效 anchor。
 - JS/TS 只支持上面列出的节点，其它语言见 [多语言分析](analyze-other-languages.md)。
 - 没有按声明 ID 查询的命令，也不接受 ID 作为输入。
 
@@ -129,7 +129,7 @@ feature: docs/feature/local-sdlc/README.md
 
 引用表示当前位置，不是永久身份。移动、改名、改变作用域或改变同类兄弟的顺序，都可能让引用失效，或者让旧引用指到另一个声明。例如删除前一个 region 的标记后，后一个 region 会接续它的序号。自动化工具每次都要重新 `list` 或 `locate`，核对文件、符号与范围，不能把一次查询成功当作历史连续。引用的派生规则见[采用设计](../../../design/derived-code-reference/plans/derived/architecture.md)。
 
-## 契约来源
+## Spec 来源
 
 - 命令总览：[CLI](../cli.md#关联源码)
 - 完整语法：`concord --skill code`

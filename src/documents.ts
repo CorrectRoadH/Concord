@@ -804,7 +804,7 @@ export function retirePromotion(repo: Repository, selector: string, target: stri
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false, kind: IssueMemoryRelation['kind'] = 'investigation'): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
@@ -827,7 +827,7 @@ export function linkFeedbackFeature(repo: Repository, selector: string, featureR
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 export function closeIssue(repo: Repository, selector: string, closureInput: string | IssueClosure, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
@@ -849,7 +849,7 @@ export function closeIssue(repo: Repository, selector: string, closureInput: str
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 export function adoptIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
@@ -864,7 +864,7 @@ export function adoptIssue(repo: Repository, selector: string, reference: string
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 export function retireIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const record = findDocument(loadDocuments(repo), selector, 'issue');
@@ -879,7 +879,7 @@ export function retireIssue(repo: Repository, selector: string, reference: strin
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作契约
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
 export function reopenIssue(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const record = findDocument(loadDocuments(repo), selector, 'issue');

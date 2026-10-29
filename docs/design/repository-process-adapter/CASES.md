@@ -12,7 +12,7 @@
 
 ## C3: 证据完整性
 
-分别改变源码、契约、adapter 实现、候选包、epoch、副本身份与 cleanup。
+分别改变源码、Spec、adapter 实现、候选包、epoch、副本身份与 cleanup。
 同副本不连续、隔离副本相同、retry、skip 和零执行必须被拒绝。历史原件字节不变。
 
 ## C4: 消费者接入

@@ -106,7 +106,7 @@ candidatePath 必须经过当前已有受管证据字节与路径核验；仅拥
 | receipt | `{action:'sign'|'validate',value}` | 严格 NativeCaseReceipt；sign 输入不含 receiptSha256 |
 | certificate | `{action:'sign'|'validate',value}` | 严格 NativeReliabilityCertificate；sign 输入不含 certificateSha256 |
 
-source 和 suite 只读当前配置和契约。declarations 只解析传入文件字节，不声称原生执行；caseId 由 Concord 派生。
+source 和 suite 只读当前配置和 Spec。declarations 只解析传入文件字节，不声称原生执行；caseId 由 Concord 派生。
 
 projection 允许消费者显式提供自己拥有的执行副本绝对路径，沿用普通目录及 symlink 检查；该命令不是沙箱授权。
 
@@ -150,7 +150,7 @@ Concord 在 publication lease 内只重新计算本地身份，不运行外部�
 
 普通模块 host 保持原有 capability 路径；进程模式不得借其回调在持锁期间执行。
 
-source identity 的 adapterSourceDigest 绑定同一配置和实现文件集合；adapter 文件漏报属于不满足接入契约，入口脚本未声明则拒绝。
+source identity 的 adapterSourceDigest 绑定同一配置和实现文件集合；adapter 文件漏报属于不满足接入 Spec，入口脚本未声明则拒绝。
 
 ## 验证数据与观察的区别
 
@@ -186,7 +186,7 @@ CI 静态接入检查拒绝 runner 源码/所导入 workspace 实现或配置不
 
 Concord 立即读取并核对每个 guard 的 SHA-256；read-red/read-takeover 的 candidatePath 必须在 guards 中，其内容摘要与 receipt 的 candidate.sha256 相同。
 
-collect 响应 guards 可为空；read 响应不得为空。adapter 是受信任接入代码，完整 guards 声明属于其契约，不能将任意恶意代码视作沙箱。
+collect 响应 guards 可为空；read 响应不得为空。adapter 是受信任接入代码，完整 guards 声明属于其 Spec，不能将任意恶意代码视作沙箱。
 
 锁外将严格解码的三个结果、候选摘要、guards 和本地 implementationDigest 组成只读 CapturedRegressionEvidence，并运行唯一 validateNativeEvidence。
 

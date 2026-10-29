@@ -1,7 +1,7 @@
 ---
 format: concord.document/v1
 id: onboarding-contracts
-title: 初始化配置与项目治理契约
+title: 初始化配置与项目治理 Spec
 createdAt: 2026-09-14T13:53:56.667Z
 kind: design
 alternatives:
@@ -18,7 +18,7 @@ decision:
 
 > 历史裁决：其中旧配置、journal 和收据的运行时兼容规则已被 [TS-only 裁决](../ts-only-runtime/README.md) 替代；以下保留原设计记录。
 
-# 初始化配置与项目治理契约
+# 初始化配置与项目治理 Spec
 
 ## 目标
 

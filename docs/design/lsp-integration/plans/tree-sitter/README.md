@@ -6,13 +6,13 @@
 
 ## Core Mental Model
 
-Concord 发行包固定 runtime、Python/Go/Rust/Java grammar 与查询；TypeScript/Effect 组织解析和预算，不加载消费者提供的 WASM 或查询程序。符号范围只是定位，关系身份仍引用[共同契约](../../../test-journey-steps/共同身份.md)。
+Concord 发行包固定 runtime、Python/Go/Rust/Java grammar 与查询；TypeScript/Effect 组织解析和预算，不加载消费者提供的 WASM 或查询程序。符号范围只是定位，关系身份仍引用[共同 Spec](../../../test-journey-steps/共同身份.md)。
 
 ## Scope
 
 本候选需 C-005 修订，保留为未选候选；本设计不采用该修订。第三方预编译 WASM、Concord 维护 grammar 与消费者上传程序具有不同责任，不能凭 WASM 文件类型直接推断宪法许可。
 
-仅覆盖随包版本与查询验证过的语言。文件级 import 观察不等同测试调用；编辑器服务共用 [LSP client](../lsp-client/architecture.md#编辑器服务) 的版本契约。
+仅覆盖随包版本与查询验证过的语言。文件级 import 观察不等同测试调用；编辑器服务共用 [LSP client](../lsp-client/architecture.md#编辑器服务) 的版本 Spec。
 
 ## Limits
 

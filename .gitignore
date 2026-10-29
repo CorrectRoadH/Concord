@@ -7,3 +7,5 @@ coverage/
 native/hawdb/target/
 native-artifacts/
 .vitest/
+.test-results/
+.e2e/

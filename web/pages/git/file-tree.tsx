@@ -8,7 +8,7 @@ import type { CaseLink, TreeNode } from './model';
 
 const styles = stylex.create({
   list: { margin: 0, padding: 0, listStyleType: 'none' },
-  nested: { marginLeft: 10, paddingLeft: 7, borderLeftWidth: 1, borderLeftStyle: 'solid', borderLeftColor: 'var(--border)' },
+  nested: { marginLeft: 6, paddingLeft: 5, borderLeftWidth: 1, borderLeftStyle: 'solid', borderLeftColor: 'var(--border)' },
   icon: { width: 14, height: 14, flexShrink: 0 },
   expanded: { transform: 'rotate(90deg)' },
   name: { flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' },
@@ -24,7 +24,7 @@ interface TreeProps {
 function Directory({ node, selected, cases, select }: TreeProps) {
   const [open, setOpen] = useState(true);
   return <>
-    <PathContextMenu path={node.path}><button type="button" className="document-navigation__folder" aria-expanded={open} aria-label={node.path + ' 目录'} onClick={() => setOpen(value => !value)}>
+    <PathContextMenu path={node.path}><button type="button" className="document-navigation__folder" title={node.path} aria-expanded={open} aria-label={node.path + ' 目录'} onClick={() => setOpen(value => !value)}>
       <ChevronRight {...stylex.props(styles.icon, open && styles.expanded)} /><Folder {...stylex.props(styles.icon)} /><span {...stylex.props(styles.name)}>{node.name}</span>
     </button></PathContextMenu>
     {open && <div {...stylex.props(styles.nested)}><FileTree node={node} selected={selected} cases={cases} select={select} /></div>}
@@ -33,7 +33,7 @@ function Directory({ node, selected, cases, select }: TreeProps) {
 
 export function FileTree({ node, selected, cases, select }: TreeProps) {
   const nodes = [...node.children.values()].sort((a, b) => Number(!a.children.size) - Number(!b.children.size) || a.name.localeCompare(b.name));
-  return <ul {...stylex.props(styles.list)}>{nodes.map(child => <li key={child.path}>
+  return <ul {...stylex.props(styles.list)}>{nodes.map(child => <li key={child.path} className="document-navigation__tree-item">
     {child.entry && <>
       <SidebarItem item={{ id: child.path, path: child.path, title: child.name, ariaLabel: child.path, active: selected === child.path,
         icon: <FileDiff {...stylex.props(styles.icon)} />,

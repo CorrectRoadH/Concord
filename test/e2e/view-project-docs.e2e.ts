@@ -1,18 +1,19 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import test from 'node:test';
-import { chromium, expect, type Browser } from '@playwright/test';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
+import { test } from './fixtures.js';
+import { expect } from '@playwright/test';
+import { initialize, LocalRepository } from '../../dist/storage.js';
+import type { ViewServerHandle } from '../../dist/view-server.js';
+import { startViewServer } from './server.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('project Markdown deep links edit and persist custom paths, frontmatter and constitution source', async () => {
+test('project Markdown deep links edit and persist custom paths, frontmatter and constitution source', async ({ page }) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-project-docs-'));
   let server: ViewServerHandle | undefined;
-  let browser: Browser | undefined;
+
   try {
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
@@ -22,9 +23,8 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
     writeFileSync(join(root, paths[0]!), '# 作者边界\n\n原始正文。\n');
     writeFileSync(join(root, paths[1]!), '---\ntitle: 嵌套文档\n---\n# 嵌套文档\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    const executablePath = process.env.CONCORD_BROWSER_PATH ?? (existsSync('/run/current-system/sw/bin/chromium') ? '/run/current-system/sw/bin/chromium' : undefined);
-    browser = await chromium.launch({ headless: true, ...(executablePath ? { executablePath } : {}), args: ['--no-sandbox'] });
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+
+    await page.setViewportSize({ width: 1440, height: 900 });
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     for (const path of paths) {
@@ -56,7 +56,6 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
     }
     assert.deepEqual(errors, []);
   } finally {
-    await browser?.close();
     await server?.close();
     rmSync(root, { recursive: true, force: true });
   }
