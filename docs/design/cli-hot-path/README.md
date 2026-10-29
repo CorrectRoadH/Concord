@@ -53,7 +53,7 @@ Concord 的现行设计与之相反：
 
 取舍：不以文件系统指纹代替读取原文。读取与摘要的全部成本约 14 ms，而按 stat 判定未变需要修订 [C-014-3](../../constitution.md#c-014-3)，且独立审查给出了粗粒度时间戳下返回陈旧摘要的反例。来源核验因此保持现行语义。
 
-两个候选共有的改动不依赖本次裁决，已写入 Spec：持久解析投影与缓存物理体积上限见[架构 · 存储 Spec](../../architecture.md#存储-spec)与[统一缓存](../../feature/local-data-engine/use-case/use-unified-cache.md)，静态版本与帮助及按命令加载见 [local-sdlc 架构](../../feature/local-sdlc/architecture.md#入口与命令加载)。本设计只比较 HawDB 由谁持有、命令在哪里执行。
+两个候选共有的改动不依赖本次裁决，已写入 Spec：单次解析见[架构 · 存储 Spec](../../architecture.md#存储-spec)，缓存物理体积上限见[统一缓存](../../feature/local-data-engine/use-case/use-unified-cache.md)，静态版本与帮助及按命令加载见 [local-sdlc 架构](../../feature/local-sdlc/architecture.md#入口与命令加载)。持久解析投影只在长期持有数据库时可能有收益，归入 hawdb-owner-service。本设计只比较 HawDB 由谁持有、命令在哪里执行。
 
 ## 宪法修订提案
 
