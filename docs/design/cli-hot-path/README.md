@@ -51,7 +51,17 @@ Concord 的现行设计与之相反：
 
 不在范围：测试运行器的文件内并发、CI 原生产物缓存与并行门禁快照，它们属于[自举维护](../../engineering/concord-self-hosting/README.md)的工程机制。
 
-取舍：不以文件系统指纹代替读取原文。读取与摘要的全部成本约 14 ms，而按 stat 判定未变需要修订 [C-014-3](../../constitution.md#c-014-3)，且独立审查给出了粗粒度时间戳下返回陈旧摘要的反例。来源核验因此保持现行语义，本设计不修订宪法。
+取舍：不以文件系统指纹代替读取原文。读取与摘要的全部成本约 14 ms，而按 stat 判定未变需要修订 [C-014-3](../../constitution.md#c-014-3)，且独立审查给出了粗粒度时间戳下返回陈旧摘要的反例。来源核验因此保持现行语义。
+
+两个候选共有的改动不依赖本次裁决，已写入 Spec：持久解析投影与缓存物理体积上限见[架构 · 存储 Spec](../../architecture.md#存储-spec)与[统一缓存](../../feature/local-data-engine/use-case/use-unified-cache.md)，静态版本与帮助及按命令加载见 [local-sdlc 架构](../../feature/local-sdlc/architecture.md#入口与命令加载)。本设计只比较 HawDB 由谁持有、命令在哪里执行。
+
+## 宪法修订提案
+
+选择 hawdb-owner-service 时修订 [C-005-4](../../constitution.md#c-005)，它现在规定持久句柄受来源快照生命周期管理：
+
+> 持久句柄由明确的唯一所有者管理，来源快照不拥有跨请求句柄；客户端的逻辑会话、事务、快照与清理的生命周期分别声明。缓存不参与来源发布或证据裁决。
+
+修订由 `concord constitution amend` 记录（[C-008](../../constitution.md#c-008-2)），同步维护 architecture、AGENTS.md 与引擎 Spec。
 
 ## 随之修订的架构规则
 
