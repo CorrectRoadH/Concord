@@ -22,7 +22,7 @@ Engineering 详情同样提供实现列表、添加关联与源码跳转，汇�
 
 `concord view` 默认进入 Git 变更，提供全部、文档与测试三个筛选。文件树、区域切换、统一或分栏 diff 以及 URL 选择的行为由[本地未提交变更](use-case/review-local-changes.md)拥有。
 
-`concord view export` 将指定 PR base/head 的差异导出为静态只读页面，消费者负责取得 Git 历史与托管。比较基线、阅读边界和验收由[PR 预览](use-case/review-pull-request.md)拥有，结构与资源生命周期见[变更预览方案](change-preview.md)。
+`concord view export` 将指定 PR base/head 的差异导出为静态只读页面，消费者负责取得 Git 历史与托管。用户路径见[PR 预览](use-case/review-pull-request.md)，比较、产物与生命周期见[变更审阅](change-preview.md)。
 
 测试筛选列出相对 HEAD 的新增声明及源码位置；声明不等于测试执行。工作台的每个筛选分别记住选中文件和阅读位置，移动端使用内容导航抽屉。项目侧栏与总览使用目录名展示，projectId 保留在配置与诊断中。
 
@@ -61,6 +61,8 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 ## 请求性能预算
 
 独立客户端与服务进程在冻结的 1112 个源码文件、110 个支持页面消费者上测量 workspace 与并发 jobs、file、document.set。原生产物正常与摘要不匹配回源分别采样；预热一次，同机交错运行至少七对，记录请求全程 p50、最大值及服务阶段。相对指定测前基线，各路由 p50 回退不得超过 20%，最大值超过本组 p50 两倍时重测，连续两组无效判失败。基线、机器、Node、消费者 commit 与产物摘要随测量记录进入 Memory；诊断阈值不是 HTTP 响应 SLA。测量脚本为 `scripts/measure-view-requests.ts`，document.set 使用相同正文与真实前像摘要，结束后消费者内容保持不变。
+
+已有可读代次时，按[性能验收](../../engineering/concord-self-hosting/performance.md)以打包 CLI 与独立 HTTP 客户端连续测量七次：`GET /api/workspace` warm p50 不超过 250ms、p95 不超过 600ms，新进程 `workspace projection --json` warm p50 不超过 600ms。就绪请求不含全量扫描；首次构建另报时长与状态，不计入 warm。
 
 ## Constitution
 
