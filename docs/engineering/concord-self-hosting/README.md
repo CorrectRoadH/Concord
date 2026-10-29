@@ -43,3 +43,16 @@ kind: engineering
 资源归属、失败诊断与自然语言适用范围见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。自然语言用例单独执行，不要求日常本地门禁拥有模型凭据。
 
 源码变化后必须重新构建，才能运行依赖产物的检查。任务结果不缓存，定向结果不能替代完整验收。Vite+ 的内置 `check` 与 `test` 不代表本项目同名脚本；项目验收使用 `vp run check`。`vp build` 先准备原生绑定、CLI 与 repository，再构建 Web 并补齐 Preview、P5 与许可证。开发服务器不运行发行准备。Node 原生测试 runner、外部消费者 adapter 及包身份校验保持各自职责。
+
+## 从源码运行
+
+开发时用 `pnpm concord <参数>` 直接运行当前 checkout 的源码 CLI，等价于 `node --import tsx src/entry.ts`。它不需要 `vp build`，也不需要全局安装的 Concord；依赖由 `vp install` 准备。源码 CLI 用于日常操作与调试，交付门禁仍是基于构建产物的 `vp run check`。
+
+| 方面 | 规则 |
+| --- | --- |
+| 原生绑定 | 源码与构建产物都加载 `dist/native/<target>/`，校验规则相同。只有 `native/hawdb` 或其锁文件变化时才需要重建，命令为 `pnpm exec vp run build:native`；缺失时返回 `HawdbUnavailable` 并提示该命令 |
+| 子进程 | 运行模式由一个模块统一判断。源码模式下，查询、扫描与编辑器子进程使用同一 loader 启动对应的 `.ts` 入口；构建模式不变 |
+| 安装身份 | 源码模式的安装身份是 `src/` 下 TypeScript 源码与原生产物的摘要，构建模式沿用产物摘要。两种模式的缓存身份不同，互不复用 |
+| 构建资源 | Web 工作台、PR 预览导出等依赖构建资源的命令，在源码模式下返回 `BuildRequired` 并提示 `vp build`；Web 开发使用 `vp dev` |
+
+验收：没有全局 Concord、没有 `dist/*.js`，只有原生产物时，`pnpm concord --json --dry-run check`、`pnpm concord docs check --json` 与 `pnpm concord trace show <path> --json` 在本仓库正常运行。
