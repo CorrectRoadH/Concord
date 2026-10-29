@@ -35,9 +35,9 @@ export function judge(input: {
 }
 
 /** Skipped commands do not participate, except on self where a missing owner invalidates the table. */
-export function skippedVerdict(command: string, kind: 'self' | 'scale' | 'path', reason: string): GroupVerdict {
+export function skippedVerdict(command: string, kind: 'self' | 'scale' | 'path' | 'fixture', reason: string): GroupVerdict {
   return { command, candidate: { samples: [], p50: 0, max: 0, valid: false }, skipped: reason, pass: kind !== 'self', reasons: [reason] };
 }
-export function measurementPass(verdicts: readonly GroupVerdict[], kind: 'self' | 'scale' | 'path'): boolean {
+export function measurementPass(verdicts: readonly GroupVerdict[], kind: 'self' | 'scale' | 'path' | 'fixture'): boolean {
   return verdicts.every(verdict => verdict.skipped ? kind !== 'self' : verdict.pass);
 }

@@ -8,19 +8,26 @@ export interface ScaleSpec { readonly sources: number; readonly tests: number; r
 export const defaultScale: ScaleSpec = { sources: 3600, tests: 600, pages: 1000 };
 
 export interface Consumer {
-  readonly kind: 'self' | 'scale' | 'path';
+  readonly kind: 'self' | 'scale' | 'path' | 'fixture';
   readonly root: string;
+  readonly fixture?: string;
+  readonly sourceCommit?: string;
+  readonly fixtureStats?: Readonly<Record<string, number>>;
   readonly commit: string;
   readonly scale?: ScaleSpec;
   readonly cache?: 'ready';
 }
 
 const CacheStatus = Schema.Struct({ status: Schema.Literal('ready') });
-const prepareCache = Effect.fn('perf.prepareCache')(function*(entry: string, root: string, outputDir: string) {
+const prepareCache = Effect.fn('perf.prepareCache')(function*(entry: string, root: string, outputDir: string, smoke = false) {
   const concord = (...args: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', 'cache', ...args], { cwd: root, outputDir });
-  yield* concord('rebuild');
-  const status = yield* concord('status');
-  yield* io('Verify consumer cache is ready', () => Schema.decodeUnknownSync(Schema.fromJsonString(CacheStatus))(status.stdout));
+  const rebuilt = yield* concord('rebuild');
+  if (smoke) {
+    yield* io('Verify rebuilt smoke cache', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ cacheStatus: CacheStatus })), { onExcessProperty: 'ignore' })(rebuilt.stdout));
+  } else {
+    const status = yield* concord('status');
+    yield* io('Verify consumer cache is ready', () => Schema.decodeUnknownSync(Schema.fromJsonString(CacheStatus))(status.stdout));
+  }
   return 'ready' as const;
 });
 
@@ -34,11 +41,11 @@ const headOf = Effect.fn('perf.headOf')(function*(root: string, outputDir: strin
 });
 
 /** Self-hosting consumer: an independent clone of this repository frozen at one commit; uncommitted edits are excluded by design. */
-export const selfConsumer = Effect.fn('perf.selfConsumer')(function*(repository: string, commit: string, workDir: string, entry = join(repository, 'dist/entry.js')) {
+export const selfConsumer = Effect.fn('perf.selfConsumer')(function*(repository: string, commit: string, workDir: string, entry = join(repository, 'dist/entry.js'), smoke = false) {
   const root = join(workDir, 'self');
   yield* mustRun(['git', 'clone', '-q', '--no-hardlinks', '--no-checkout', repository, root], { cwd: workDir, outputDir: workDir });
   yield* git(root, workDir, 'checkout', '-q', '--detach', commit);
-  const cache = yield* prepareCache(entry, root, workDir);
+  const cache = yield* prepareCache(entry, root, workDir, smoke);
   return { kind: 'self', root, commit: yield* headOf(root, workDir), cache } satisfies Consumer;
 });
 
@@ -50,6 +57,7 @@ export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: st
   const concord = (...args: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', ...args], { cwd: root, outputDir: workDir });
   yield* concord('init', '--test-root', 'test', '--source-root', 'src', '--yes');
   yield* concord('feature', 'create', 'scale', '--title', 'Scale', '--no-pages');
+  yield* concord('feature', 'create', 'local-sdlc', '--title', 'Local SDLC query target', '--no-pages');
   yield* concord('use-case', 'create', 'scale-read', '--title', 'Scale read', '--feature', 'docs/feature/scale/README.md');
   yield* io('Generate scale sources', () => {
     for (const folder of ['src', 'test', 'docs/feature/scale/pages']) mkdirSync(join(root, folder), { recursive: true });

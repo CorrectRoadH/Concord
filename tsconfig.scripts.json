@@ -4,5 +4,5 @@
     "rootDir": ".",
     "noEmit": true
   },
-  "include": ["scripts/**/*.ts", "vite.config.ts", "vite.preview.config.ts", "e2e*.config.ts"]
+  "include": ["scripts/**/*.ts", "bench/**/*.ts", "vite.config.ts", "vite.preview.config.ts", "e2e*.config.ts"]
 }
