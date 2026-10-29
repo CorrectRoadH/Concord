@@ -34,6 +34,11 @@ kind: feature
 - 结果：JSON 的 `ok` 在全部检查无 finding 且输入完整时为 true。`complete` 为 false 表示关系图或写作输入不完整，包括政策缺失、无效、需要迁移和读取失败。每条 finding 带 `category`（`relation` 或 `writing`）与具名 code。`checks.relations` 与 `checks.writing` 分别给出 `ok` 与 `complete`。
 - 退出码：`ok` 为 true 时退出 0，否则退出 1。输入不完整与违规通过 `complete` 和 finding code 区分。
 - 入口一致：CLI `check`、结构化 action 与 Web 的项目检查使用同一聚合结果。
+- Design 记录边界：Spec 页面链接到 Design 包内除 README 与 DECISION 以外的页面时，报告 relation 类 finding `SpecDependsOnDesignRecord`，带来源路径、原始行号与链接目标（[C-012-10](../../constitution.md#c-012-10)）。
+
+Spec 页面指 Feature 包、项目 `architecture.md`、宪法、engineering 页与 docs 顶层页面。`docs/design/`、`docs/research/`、`docs/roadmap/`、`docs/issues/`、`docs/_template/` 与 Memory 来源不受此限。
+
+该检查覆盖行内与引用式链接，目标解码并规范化后比较，锚点不改变结果；图片、代码、HTML 注释、frontmatter 与 MDX 非正文源码不计。来源无法读取或解析时 `complete` 为 false。它只约束链接目标，不判断正文是否仍把规则委托给 Design。
 
 聚合门禁失败不阻断局部读取、`docs check`、`writing` 与 `concepts` 工具、author 与 page 编辑，以及修复所需的其它命令。
 

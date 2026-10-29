@@ -140,6 +140,14 @@ codeDeclarations: 1
 }
 ```
 
+Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支持页时，`check` 退出 1，finding 为：
+
+```json
+{"code": "SpecDependsOnDesignRecord", "path": "docs/feature/cart/README.md", "line": 12, "message": "Spec links to a Design record page: docs/design/cart-storage/plans/files/README.md", "category": "relation"}
+```
+
+适用范围与规则见[聚合门禁](../documentation-quality/README.md#聚合门禁)。
+
 `ok` 为 false 表示发现违规。`complete` 为 false 表示有必需输入没能读取，结论不完整。`advisories` 是提示，不影响退出码。已关闭 Problem 的收据列在 `memoryEvidence`，附 `"note":"Historical command evidence; not current verification."`。
 
 ## 追踪关系
