@@ -1,0 +1,23 @@
+---
+format: concord.document/v1
+id: parallel-check-gates
+title: 多个 agent 在同一 checkout 并行运行完整门禁
+createdAt: 2026-10-29T13:39:05.626Z
+kind: issue
+state: draft
+memoryRelations: []
+adoptions:
+  current: []
+  history: []
+history: []
+---
+
+# 多个 agent 在同一 checkout 并行运行完整门禁
+
+目标：多个 agent 在同一 checkout 的 master 上开发，并能同时运行 `pnpm check` 而互不删除产物、互不制造负载失败。2026-10-29 两个完整门禁同时运行时 load 达 16，出现成批的超时与连接重置，空闲重跑全部通过。
+
+已起草的方案：每次调用复制一份私有源码快照（`git ls-files -co --exclude-standard`，共享只读 `node_modules`），在快照中构建与测试；源码模式的原生产物改由共享缓存加载；整台机器共享测试并发槽位。
+
+独立审查结论为需要修订，主要问题：逐文件复制没有调用开始时的原子冻结，外部 symlink 会继续读取活动源码；文件槽位的陈旧回收有竞态；逐浏览器 worker 调度缺少现有接入点；单提交 Git 仓库、`node_modules` realpath 与 distribution 写回边界需要逐项验证。
+
+搁置原因：交付门禁的耗时主要来自单次 CLI 调用成本，先由 [CLI 热路径设计](../design/cli-hot-path/README.md) 解决；其共享后台会改变测试的资源模型。该设计裁决后再按上述审查意见重写本方案。在此之前，同一台机器同时只运行一次完整门禁（[测试规则](../engineering/concord-self-hosting/testing.md#共享资源与同步)）。
