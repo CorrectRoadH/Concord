@@ -1,6 +1,11 @@
-import { appendFileSync } from 'node:fs';
+import { appendFileSync, writeFileSync } from 'node:fs';
 import { tap } from 'node:test/reporters';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
+const Count = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+export const TestCounts = Schema.Struct({
+  tests: Count, passed: Count, failed: Count, cancelled: Count,
+  skipped: Count, todo: Count, topLevel: Count, suites: Count,
+});
 import { inspect } from 'node:util';
 
 type TestEvent = Parameters<typeof tap>[0] extends AsyncIterable<infer Event> ? Event : never;
@@ -16,8 +21,15 @@ export default async function* reporter(events: AsyncIterable<TestEvent>): Async
         }));
       }
       if (event.type === 'test:summary') {
-        const timing = { ...event.data, scope: event.data.file === undefined ? 'run' : 'file' };
+        const file = process.env.CONCORD_TEST_FILE;
+        // A file runner owns one OS process group. Keep one summary per file.
+        if (file !== undefined && event.data.file !== undefined) { yield event; continue; }
+        const timing = { ...event.data, ...(file === undefined ? {} : { file }), scope: file !== undefined || event.data.file !== undefined ? 'file' : 'run' };
         Effect.runSync(Effect.sync(() => {
+          if (file !== undefined && process.env.CONCORD_TEST_SUMMARY !== undefined) {
+            const counts = Schema.decodeUnknownSync(TestCounts, { onExcessProperty: 'error' })(event.data.counts);
+            writeFileSync(process.env.CONCORD_TEST_SUMMARY, JSON.stringify(counts));
+          }
           if (process.env.CONCORD_TEST_TIMINGS !== undefined) appendFileSync(process.env.CONCORD_TEST_TIMINGS, `${JSON.stringify(timing)}\n`);
         }));
         yield { type: 'test:diagnostic', data: { nesting: 0, level: 'info', message: `timing ${JSON.stringify(timing)}` } };

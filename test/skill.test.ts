@@ -22,7 +22,7 @@ before(() => Effect.runPromise(Effect.sync(() => {
   const install = join(scratch, 'tool');
   mkdirSync(install);
   writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  installConcord(install, packed);
+  installConcord(install, packed, [], { private: true });
   cli = join(install, 'node_modules/concord-sdlc/dist/entry.js');
 })));
 

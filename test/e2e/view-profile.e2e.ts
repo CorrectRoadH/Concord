@@ -37,6 +37,7 @@ it('SDK adapter flow', () => { throw new Error('DO NOT EXECUTE'); });
 
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root));
     assert.equal(snapshot.repositoryTests?.status, 'ready', JSON.stringify(snapshot.repositoryTests));
     assert.equal(snapshot.repositoryTests?.tests[0]?.contract, 'docs/feature/adapters/use-case/flow.md');

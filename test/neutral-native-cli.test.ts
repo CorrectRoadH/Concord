@@ -60,7 +60,7 @@ for (const transport of ['module', 'process'] as const) test(`packed CLI accepts
     execFileSync('git', ['init', '-q', root]);
     execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord Test']);
     execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
-    installConcord(root, packed, ['vitest@4.1.11', 'tsx@4.23.12', 'typescript@7.1.0-beta', '@types/node@24.13.3', 'effect@4.0.0-rc.112', '@effect/platform-node@4.0.0-rc.112']);
+    installConcord(root, packed, ['vitest@4.1.11', 'tsx@4.23.12', 'typescript@7.1.0-beta', '@types/node@24.13.3', 'effect@4.0.0-rc.112', '@effect/platform-node@4.0.0-rc.112'], { private: true });
     if (transport === 'process') {
       const runnerPath = join(root, 'acceptance/native-runner.ts');
       const runner = readFileSync(runnerPath, 'utf8');

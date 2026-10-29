@@ -267,7 +267,11 @@ test('explicit v1 migration uses public CLI Markdown catalog then policy CAS', (
     write(root, 'docs/concord-writing.json', old);
     const prose = '# Existing explanation\n\nThe old table is historical prose.\n';
     write(root, 'docs/concepts.md', prose);
-    const call = (...args: string[]) => spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 15_000 });
+    const call = (...args: string[]) => {
+      const result = spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 15_000 });
+      assert.notEqual(result.status, null, JSON.stringify({ args, signal: result.signal, error: result.error, stdout: result.stdout, stderr: result.stderr }));
+      return result;
+    };
     const oldShow = JSON.parse(call('writing', 'show').stdout) as { state: string; digest: string; source: string };
     assert.equal(oldShow.state, 'invalid');
     assert.equal(oldShow.source, old);

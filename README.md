@@ -156,9 +156,9 @@ pnpm exec vp run concord --help
 pnpm exec vp run check
 ```
 
-`vp run check` (also available as `pnpm check`) builds the CLI and web workspace, type-checks implementation, tests, and scripts, checks the current checkout's contracts, and runs tests including packed CLI installation in isolated Git consumers. After building, run `vp run check:selfhost` for the contract check alone, or `vp run concord trace show local-sdlc` to inspect relationships.
+`pnpm check` (also available as `vp run check`) is the only check entry. It builds the CLI and web workspace, reusing validated native artifacts, then type-checks repository, test, and script sources and checks the current checkout's contracts in parallel, and finally runs the packed CLI's Node and browser suites concurrently in isolated Git consumers. Run `pnpm concord trace show local-sdlc` to inspect relationships from source.
 
-Use `pnpm exec vp` when Vite+ is not installed globally. `vp install` manages dependencies through the pinned pnpm version. `vp run check:fast` checks CLI and Web source types without building or running tests. After `vp build`, `vp run typecheck:built` checks repository, test, and script types; `vp run test:built test/writing-cache.test.ts` runs a selected file without rebuilding. Pass `--test-name-pattern=...` to select cases or `--test-shard=1/4` to split the complete suite. Rebuild after source changes before using either `:built` task.
+Use `pnpm exec vp` when Vite+ is not installed globally. `vp install` manages dependencies through the pinned pnpm version. `pnpm check test/writing-cache.test.ts` runs selected files after the complete build and static checks; pass `--test-name-pattern=...` to select cases or `--test-shard=1/4` to split the complete suite. Selected tests never replace the full gate.
 
 `vp run check` is the full delivery gate. The `vp build` production hooks prepare the complete distribution. Vite+'s built-in `vp check` and `vp test` do not invoke the project's scripts. Tests use Node's runner, share one packed artifact per invocation, and install isolated consumers. Task caching is disabled; partial checks do not replace full acceptance.
 

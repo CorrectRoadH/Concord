@@ -9,6 +9,7 @@ import { initialize, LocalRepository } from '../../dist/storage.js';
 import { beginRun, finalizeRun } from '../../dist/run-coordination.js';
 import type { ViewServerHandle } from '../../dist/view-server.js';
 import { startViewServer } from './server.js';
+import { waitForWorkspaceProjection } from '../support.js';
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name browser-recovery-and-incomplete-inventory
@@ -26,6 +27,7 @@ test('browser preserves blocked recovery and labels incomplete workspace relatio
     mkdirSync(join(root, 'docs/feature/broken'), { recursive: true });
     writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
 
     // Simulate only the initial HTTP read failure. Recovery and subsequent

@@ -25,7 +25,7 @@ test('packed CLI manages documentation without test roots and can later discover
     execFileSync('git', ['init', '-q', root]);
     function call<A>(args: readonly string[], schema: Schema.ConstraintDecoder<A, never>, status = 0): A {
       const result = spawnSync(process.execPath, [cli, '--root', root, '--json', '--fresh', ...args], { encoding: 'utf8', timeout: 20000 });
-      assert.equal(result.status, status, result.stdout + result.stderr);
+      assert.equal(result.status, status, JSON.stringify({ args, status: result.status, signal: result.signal, error: result.error, stdout: result.stdout, stderr: result.stderr }));
       const output = result.stdout || result.stderr;
       try { return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(output); }
       catch (cause) { throw new Error(`Could not decode ${args.join(' ')} output ${JSON.stringify(output)}`, { cause }); }

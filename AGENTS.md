@@ -20,12 +20,12 @@ The sole native exception is `native/hawdb`: Rust N-API engine bindings, require
 Use the project-pinned Vite+ toolchain. Bootstrap with `pnpm install --frozen-lockfile`; use `vp install` thereafter. When no global CLI is installed, prefix Vite+ commands with `pnpm exec`, for example `pnpm exec vp build`. Keep the pinned pnpm package manager and lockfile. Run the current source CLI with `pnpm concord`; delivery uses `pnpm check`.
 
 - `vp build` produces the complete distribution through production build hooks, including native bindings, CLI, Web, Preview, and packaged resources. `vp dev` starts only the Web development server.
-- `vp run check:fast` checks CLI and Web source types without building or running tests.
-- After rebuilding changed sources, use `vp run typecheck:built` and `vp run test:built [files...]` for checks against the current artifacts. The test entry supports `--test-name-pattern=...` and `--test-shard=1/4`.
-- `vp run check:selfhost` checks the current checkout's contracts with the current built CLI, without running tests or opening persistent caches.
-- `vp run check` (equivalent to `pnpm check`) is the full delivery gate: build, type checks, `check:selfhost`, and tests of the packed public CLI in isolated Git consumers. Partial checks do not replace it. Vite+'s built-in `vp check` and `vp test` do not run this project's check script or Node test suite.
+- `pnpm check` (equivalent to `vp run check`) is the sole check entry: build, parallel type/selfhost checks, then the packed Node and browser suites. Vite+'s built-in `vp check` and `vp test` do not run this project's gate.
+- `pnpm check [files...]` accepts `--test-name-pattern=...` and `--test-shard=1/4`. Build and static checks remain complete; selected tests do not replace full acceptance.
+- `vp run build:native` reuses validated shared native artifacts, then downloads the matching digest release, then falls back to Cargo. `CONCORD_NATIVE_OFFLINE=1` skips downloads. Release workflows compile from source.
+- Test file concurrency defaults to half the available CPUs (maximum eight); browser workers default to at most four. `CONCORD_TEST_CONCURRENCY` and `CONCORD_E2E_WORKERS` explicitly override these values.
 
-Keep task-result caching disabled for acceptance. Do not rebuild the same `dist` while tests or measurements are running; use a separate checkout when concurrent builds are necessary. Preserve one packed artifact per test invocation and independently installed consumers. See [build and check entrypoints](docs/engineering/concord-self-hosting/README.md#构建与检查入口) for the maintained workflow. Report failed or skipped checks explicitly.
+Keep task-result caching disabled for acceptance. Do not rebuild the same `dist` while tests or measurements are running; use a separate checkout when concurrent builds are necessary. Preserve one packed artifact per test invocation; consumers share one read-only install per dependency set, and tests that modify installed files request a private copy. See [build and check entrypoints](docs/engineering/concord-self-hosting/README.md#构建与检查入口) for the maintained workflow. Report failed or skipped checks explicitly.
 
 No paid model calls, external mutations, production operations, publishing, or pushing without explicit user authorization.
 

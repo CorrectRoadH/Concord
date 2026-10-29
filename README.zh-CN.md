@@ -156,9 +156,9 @@ pnpm exec vp run concord --help
 pnpm exec vp run check
 ```
 
-`vp run check`（也可通过 `pnpm check` 调用）构建 CLI 与 Web 工作台，对实现、测试和脚本做类型检查，检查当前 checkout 的契约，并执行包括隔离 Git 消费者中打包安装 CLI 在内的测试。构建后可运行 `vp run check:selfhost` 单独检查自身契约，或运行 `vp run concord trace show local-sdlc` 查看关联。
+`pnpm check`（也可通过 `vp run check` 调用）是唯一的检查入口：先构建 CLI 与 Web 工作台并复用已校验的原生产物，再并行做 repository、测试和脚本的类型检查以及当前 checkout 的契约检查，最后在隔离 Git 消费者中并发运行打包 CLI 的 Node 与浏览器测试。运行 `pnpm concord trace show local-sdlc` 可从源码查看关联。
 
-没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。`vp run check:fast` 只检查 CLI 与 Web 源码类型，无需构建或运行测试。执行 `vp build` 后，`vp run typecheck:built` 检查 repository、测试和脚本类型；`vp run test:built test/writing-cache.test.ts` 无需重复构建即可运行指定文件。用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。源码变化后，先重新构建再运行 `:built` 任务。
+没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。`pnpm check test/writing-cache.test.ts` 在完整构建和静态检查之后只运行指定文件；用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。只跑部分测试不能代替完整门禁。
 
 `vp run check` 是完整交付门禁。`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。测试使用 Node runner，每次调用共享一份打包产物，消费者独立安装。任务缓存关闭；局部检查不替代完整验收。
 

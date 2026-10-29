@@ -284,7 +284,7 @@ test('packed steps C15 C16 C18 navigate exact steps, preserve examples and renam
 
 function call<A>(root: string,args: readonly string[],schema: Schema.ConstraintDecoder<A, never>,input='Contract body.\n',status=0): A {
  const result=spawnSync(process.execPath,[cli,'--root',root,'--json','--fresh',...args],{input,encoding:'utf8',timeout:20000});
- assert.equal(result.status,status,JSON.stringify({args,stdout:result.stdout,stderr:result.stderr,error:result.error}));
+ assert.equal(result.status,status,JSON.stringify({args,signal:result.signal,stdout:result.stdout,stderr:result.stderr,error:result.error}));
  return Schema.decodeUnknownSync(Schema.fromJsonString(schema), { onExcessProperty: 'ignore', errors: 'all' })(status===0||result.stdout.trim()?result.stdout:result.stderr);
 }
 function callString(root: string,args: readonly string[],input='Contract body.\n',status=0): string {
@@ -563,6 +563,10 @@ test('packed workspace projection reads the shared generation and holds warm bud
 });
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('packed templates work outside a project and fail clearly when their inventory is damaged', () => Effect.runPromise(Effect.sync(() => {
+ const installation = mkdtempSync(join(scratch, 'private-templates-'));
+ writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
+ installConcord(installation, packConcord(scratch), [], { private: true });
+ const cli = join(installation, 'node_modules/concord-sdlc/dist/entry.js');
  const result = spawnSync(process.execPath, [cli, 'template', 'list', '--json'], { cwd: scratch, encoding: 'utf8' });
  assert.equal(result.status, 0, result.stderr);
  const templates = Schema.decodeUnknownSync(Schema.fromJsonString(TemplatesOutput))(result.stdout);

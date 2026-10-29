@@ -11,6 +11,7 @@ import { tracePrivateDirectorySync } from '../../dist/coordination.js';
 import { initialize, LocalRepository } from '../../dist/storage.js';
 import type { ViewServerHandle } from '../../dist/view-server.js';
 import { startViewServer } from './server.js';
+import { waitForWorkspaceProjection } from '../support.js';
 
 async function hold(root: string): Promise<ChildProcess> {
   // A real independent process owns the portable lease until stdin closes.
@@ -38,6 +39,7 @@ test('file reads and navigation remain available with live or dead publication o
       createDocument(repo, 'design', { id: 'lease', title: 'Lease', alternatives: ['first'], pages: ['architecture'], body: '# Lease content' });
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(`http://127.0.0.1:${server.port}/design/lease`);

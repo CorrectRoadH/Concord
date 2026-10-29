@@ -102,16 +102,23 @@ const prepare = Effect.gen(function*() {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   yield* fs.remove('dist', { recursive: true, force: true });
-  const nativeArgs = ['--import', 'tsx', 'scripts/build-native.ts', '--output', 'dist/native'];
+  const nativeArgs = ['--import', 'tsx', 'scripts/build-native.ts', '--output', 'dist/native', '--reuse'];
   const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
   if (prebuilt !== undefined) nativeArgs.push('--prebuilt', prebuilt);
   if (process.env.CONCORD_REQUIRE_PORTABLE_NATIVE === '1') nativeArgs.push('--require-portable');
   const nativeExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, nativeArgs, { stdout: 'inherit', stderr: 'inherit' }));
   if (nativeExit !== 0) return yield* new BuildFailed({ project: 'hawdb-native', exitCode: nativeExit });
-  for (const project of ['tsconfig.json', 'tsconfig.repository.json', 'tsconfig.web.json']) {
-    const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError'], { stdout: 'inherit', stderr: 'inherit' }));
+  // Repository self-imports resolve the package's dist declarations. Generate
+  // fresh, strictly checked inputs before the three complete projects run. Keep
+  // them immutable while repository reads them; the parallel CLI pass emits JS.
+  const declarations = yield* spawner.exitCode(ChildProcess.make(process.execPath,
+    ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json', '--emitDeclarationOnly', '--noEmitOnError'],
+    { stdout: 'inherit', stderr: 'inherit' }));
+  if (declarations !== 0) return yield* new BuildFailed({ project: 'public declarations', exitCode: declarations });
+  yield* Effect.all(['tsconfig.json', 'tsconfig.repository.json', 'tsconfig.web.json'].map(project => Effect.gen(function*() {
+    const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError', ...(project === 'tsconfig.json' ? ['--declaration', 'false'] : [])], { stdout: 'inherit', stderr: 'inherit' }));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
-  }
+  })), { concurrency: 'unbounded' });
   yield* narrowGeneratedImports();
 });
 

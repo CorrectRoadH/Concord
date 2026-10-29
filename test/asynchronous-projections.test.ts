@@ -263,11 +263,9 @@ test('packed CLI discovers real sources without reading environment files or fol
   } finally { await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
 });
 async function editing(root: string, relative: string) {
-  // An independent external writer is the only simulated boundary; all scanning and publication use the packed implementation.
-  const child = spawn(process.execPath, ['--input-type=module', '-e', String.raw`import { readFileSync, writeFileSync, renameSync } from 'node:fs';
-const path = process.argv[1], temporary = process.argv[2], source = readFileSync(path, 'utf8'); let counter = 0;
-const edit = () => { writeFileSync(temporary, source + (path.endsWith('.md') ? '\n<!-- edit ' : '\n// edit ') + (++counter) + (path.endsWith('.md') ? ' -->\n' : '\n')); renameSync(temporary, path); };
-edit(); process.stdout.write('ready'); setInterval(edit, 2);`, join(root, relative), join(root, '.git/drift-writer.tmp')], { stdio: ['ignore', 'pipe', 'pipe'] });
+  // Keep inode and size stable so C1/C2 exercise decoded-content drift. Opening
+  // an atomically replaced file can correctly abort before a candidate exists.
+  const child = spawn(process.execPath, ['--import', 'tsx', resolve('test/fixtures/projection-drift-writer.ts'), join(root, relative)], { stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise<void>((resolveReady, reject) => { child.stdout.once('data', () => resolveReady()); child.once('error', reject); child.once('exit', code => reject(new Error(`Writer exited before ready: ${code}`))); });
   return async () => { const exited = new Promise<void>(resolveExit => child.once('close', () => resolveExit())); child.kill('SIGTERM'); await exited; };
 }

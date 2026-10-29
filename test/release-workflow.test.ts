@@ -60,7 +60,7 @@ test('release builds two native targets and gates publication on the same commit
     );
     assert.deepEqual(Object.keys(check.on), ['workflow_dispatch', 'workflow_call']);
     assert.deepEqual(check.jobs.check.strategy?.matrix.shard, [1, 2, 3, 4]);
-    assert.ok(check.jobs.check.steps.some(step => step.run?.includes('CONCORD_TEST_CONCURRENCY=1 pnpm exec vp run test:built --test-shard=${{ matrix.shard }}/4')));
+    assert.ok(check.jobs.check.steps.some(step => step.run?.includes('pnpm check --test-shard=${{ matrix.shard }}/4')));
   }).pipe(Effect.provide(NodeServices.layer)));
 });
 
@@ -163,3 +163,24 @@ test('channel notification fails visibly without credentials and resumes from an
   }
  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
 });
+
+// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
+test('digest-native publication is manual and both release workflows compile native sources', () => Effect.runPromise(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const native = yield* Schema.decodeUnknownEffect(Schema.Struct({
+    on: Schema.Record(Schema.String, Schema.Unknown), jobs: Schema.Struct({ native: Job, publish: Job }),
+  }))(parse(yield* fs.readFileString('.github/workflows/native.yml')));
+  assert.deepEqual(Object.keys(native.on), ['workflow_dispatch']);
+  assert.equal(native.jobs.native.strategy?.matrix.include?.length, 2);
+  assert.ok(native.jobs.native.steps.some(step => step.run === 'node --import tsx scripts/build-native.ts --output native-artifacts --require-portable'));
+  assert.ok(native.jobs.native.steps.every(step => !step.run?.includes('--reuse')));
+  assert.equal(native.jobs.publish.needs, 'native');
+  const publication = native.jobs.publish.steps.map(step => step.run ?? '').join('\n');
+  assert.match(publication, /native-\$\{digest:0:16\}/u);
+  assert.match(publication, /gh release create/u);
+  assert.match(publication, /--prerelease --latest=false/u);
+  assert.doesNotMatch(publication, /--clobber|gh release delete/u);
+  const release = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job }) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
+  assert.ok(release.jobs.native.steps.some(step => step.run === 'node --import tsx scripts/build-native.ts --output native-artifacts'));
+  assert.ok(release.jobs.native.steps.every(step => !step.run?.includes('--reuse')));
+}).pipe(Effect.provide(NodeServices.layer))));

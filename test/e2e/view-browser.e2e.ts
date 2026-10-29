@@ -47,7 +47,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
     writeFileSync(join(root, 'test/child.test.ts'), '// @use-case docs/feature/child-test/use-case/tested.md\n');
     writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['src'], testRoots: ['test'] });
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     const authorizations: (string | undefined)[] = [];
     const errors: string[] = [];
@@ -263,6 +263,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     mkdirSync(join(root,'src'));
     writeFileSync(join(root,'src/demo.ts'),'// @concord-code\n// @concord-implements docs/engineering/build/architecture.md#source\nexport function demo() { return 1; }\n');
     server=await startViewServer({root,host:'127.0.0.1',port:0});
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({width:1440,height:1000});
     const errors:string[]=[];
@@ -531,22 +532,32 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByRole('link',{name:'项目设置',exact:true}).click();
     await expect(page.getByLabel('Project ID',{exact:true})).not.toBeEditable();
+    const timeoutSave = page.waitForResponse(response => response.url().endsWith('/api/action') &&
+      (response.request().postDataJSON() as { action?: string; config?: { runner?: { timeoutMs?: number } } }).action === 'config.set' &&
+      (response.request().postDataJSON() as { config?: { runner?: { timeoutMs?: number } } }).config?.runner?.timeoutMs === 11111);
     await page.getByLabel('运行超时',{exact:true}).fill('11111');
+    assert.equal((await timeoutSave).status(), 200);
     await expect.poll(()=>readProjectConfig(root).runner.timeoutMs).toBe(11111);
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await expect(page.getByRole('status')).toContainText('已自动保存');
     // 暂缓真实保存请求，分别观察草稿与回读，避免把自动保存速度当作断言条件。
     const configSaveGate = await Effect.runPromise(Deferred.make<void>());
+    const configSaveEntered = await Effect.runPromise(Deferred.make<void>());
+    const configSaved = page.waitForResponse(response => response.url().endsWith('/api/action') &&
+      (response.request().postDataJSON() as { action?: string }).action === 'config.set');
     await page.route('**/api/action', async route => {
+      await Effect.runPromise(Deferred.succeed(configSaveEntered, undefined));
       await Effect.runPromise(Deferred.await(configSaveGate));
       await route.continue();
     });
     try {
       await page.getByLabel('源码目录',{exact:true}).fill('src\n');
       await expect(page.getByLabel('源码目录',{exact:true})).toHaveValue('src\n');
+      await Effect.runPromise(Deferred.await(configSaveEntered));
     } finally {
       await Effect.runPromise(Deferred.succeed(configSaveGate, undefined));
     }
+    assert.equal((await configSaved).status(), 200);
     await page.unroute('**/api/action');
     // Wait for the preceding save/readback to finish before introducing an external edit.
     await expect(page.getByLabel('源码目录',{exact:true})).toHaveValue('src');

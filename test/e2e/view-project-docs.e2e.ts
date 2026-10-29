@@ -8,6 +8,7 @@ import { expect } from '@playwright/test';
 import { initialize, LocalRepository } from '../../dist/storage.js';
 import type { ViewServerHandle } from '../../dist/view-server.js';
 import { startViewServer } from './server.js';
+import { waitForWorkspaceProjection } from '../support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('project Markdown deep links edit and persist custom paths, frontmatter and constitution source', async ({ page }) => {
@@ -23,6 +24,7 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
     writeFileSync(join(root, paths[0]!), '# 作者边界\n\n原始正文。\n');
     writeFileSync(join(root, paths[1]!), '---\ntitle: 嵌套文档\n---\n# 嵌套文档\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({ width: 1440, height: 900 });
     const errors: string[] = [];

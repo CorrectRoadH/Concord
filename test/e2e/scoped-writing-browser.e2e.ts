@@ -171,7 +171,6 @@ test('real browser can check again after editing invalidates a delayed check res
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
-
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
     await expect(page.getByLabel('替换建议 1')).toHaveValue('New');
 
