@@ -24,6 +24,14 @@ Web 以常驻反馈导航和右侧详情组织处理流程，导航提供搜索�
 - [无外部服务时管理本地观察](use-case/manage-local-observations.md)
 - [来源与工程知识术语](concepts.md)
 
+## 性能预算
+
+按[性能验收](../../engineering/concord-self-hosting/performance.md)的参照环境与七次采样判定，阈值为参照实测 p50 加约 20% 余量取整。
+
+| 场景 | 测量内容 | p50 预算 |
+| --- | --- | ---: |
+| `feedback/list` | 本地反馈列表 | 620ms |
+
 ## Constitution
 
 - [C-012](../../constitution.md#c-012)

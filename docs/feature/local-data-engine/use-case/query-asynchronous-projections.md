@@ -69,16 +69,17 @@ consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap
 
 按[性能验收](../../../engineering/concord-self-hosting/performance.md)的参照消费者、环境及七次新进程采样，已有可读投影的读取命令满足以下 warm p50 预算。冷缓存报告构建状态，不把后台扫描耗时计为前台成功结果。当前来源模式另外执行原有命令预算和同机交错对照。
 
-| 基准命令（参数完整） | p50 预算 |
-| --- | ---: |
-| `concord trace gaps`、`concord trace show docs/feature/local-sdlc/README.md`、`concord review render local-sdlc` | 600ms |
+| 场景 | 测量内容 | p50 预算 |
+| --- | --- | ---: |
+| `local-data-engine/trace-gaps-warm`、`local-data-engine/trace-show-warm`、`local-data-engine/review-render-warm` | 已有诊断投影的历史读取 | 600ms |
+| `local-data-engine/cache-status` | 缓存状态 | 670ms |
 
 ## 刷新上限
 
-后台刷新进程通过内部扫描入口执行下表查询的当前来源扫描，三类查询各有一行；测量对象是该内部入口，表中命令标识被测查询。从刷新进程开始等待同键刷新到扫描子进程退出的总时间不得超过上限；超出即终止扫描，结果不发布，此时没有上一代投影的仓库持续返回 QueryPending。上限按最大值在任何机器判定，测量规模包括[性能验收](../../../engineering/concord-self-hosting/performance.md#消费者)的 `scale` 消费者。
+后台刷新进程通过内部扫描入口执行下表场景的当前来源扫描，三类查询各有一行；测量对象是该内部入口。从刷新进程开始等待同键刷新到扫描子进程退出的总时间不得超过上限；超出即终止扫描，结果不发布，此时没有上一代投影的仓库持续返回 QueryPending。上限按最大值在任何机器判定，测量规模包括[性能验收](../../../engineering/concord-self-hosting/performance.md#消费者)的 `scale` 消费者。
 
-| 刷新扫描命令（参数完整） | 上限 |
-| --- | ---: |
-| `concord --json --fresh --dry-run trace gaps` | 120000ms |
-| `concord --json --fresh --dry-run trace show docs/feature/local-sdlc/README.md` | 120000ms |
-| `concord --json --fresh --dry-run review render local-sdlc` | 120000ms |
+| 场景 | 测量内容 | 上限 |
+| --- | --- | ---: |
+| `local-data-engine/trace-gaps-refresh` | 关系缺口来源扫描 | 120000ms |
+| `local-data-engine/trace-show-refresh` | 单个 Feature 关系扫描 | 120000ms |
+| `local-data-engine/review-render-refresh` | 审阅材料来源扫描 | 120000ms |

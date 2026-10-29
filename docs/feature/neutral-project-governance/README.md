@@ -36,6 +36,14 @@ NiceEval 是实践来源与接入消费者。公开入口验收、原生测试�
 - [计划并执行一次远端 Issue 写入](use-case/mutate-remote-issue.md)
 - [并行切分文档工作](use-case/coordinate-docs-work.md)
 
+## 性能预算
+
+按[性能验收](../../engineering/concord-self-hosting/performance.md)的参照环境与七次采样判定，阈值为参照实测 p50 加约 20% 余量取整。
+
+| 场景 | 测量内容 | p50 预算 |
+| --- | --- | ---: |
+| `neutral-project-governance/repo-features` | 冻结治理 fixture 的 Feature 列表 | 580ms |
+
 ## Constitution
 
 - [C-001](../../constitution.md#c-001)
