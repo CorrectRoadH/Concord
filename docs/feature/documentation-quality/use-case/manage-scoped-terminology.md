@@ -19,7 +19,23 @@ Concord CLI 与 Web 提供发现、读取、显式创建、摘要保护的修改
 
 验收涵盖全局/Feature/Engineering/嵌套目录、兄弟隔离、导入及删除保护、正文链接校验、结构错误、冲突、CAS 与原文字节保存、dry-run、伪造 journal 与恢复、打包 CLI 和真实 Web 的源码编辑/脏草稿保护。
 
-作用域合成见 docs/design/scoped-terminology/README.md，来源格式与迁移见 docs/design/markdown-terminology/README.md。
+作用域合成、来源格式与迁移见[文件格式与作用域](../policy.md)。
+
+## 验收
+
+- `docs/concepts.md` 定义 `## Issue {#issue}` 并弃用 `观察`：正文写「观察」时 `docs check` 报告禁词，建议 `Issue`，来源为 `docs/concepts.md#issue`；只写 `Issue` 计为使用，不报告 `unusedConcept`。
+- 正文 `[Memory](../../concepts.md#memory)` 无 finding；fragment 改为 `#memo` 后 `check` 报告带路径与行号的 `AnchorNotFound`。删除仅被正文链接的概念可以写入，之后 `check` 报告断开的链接。
+- 定义后的解释含链接与三级标题时结构合法，解释不计为使用，`show` 的 `definition` 只含定义段落；catalog 解释中写在行内代码里的弃用名不命中禁词。
+- 没有 frontmatter、只有一级标题和两个概念的文件合法，`imports` 与 `deprecated` 为空。
+- 以下输入各返回带行号与原因的 `InvalidConceptCatalog`：
+  - 二级标题缺少 `{#id}`、标题含行内代码、标题后紧跟列表。
+  - `deprecated` 指向不存在的 ID，或弃用名等于本文件 term。
+  - frontmatter 含 `format` 或其它字段，以及旧版无 `{#id}` 的 `## Shared language`。
+- `concepts set` 保存的字节与提交内容相同；两个写者基于同一 digest 先后 set，后者得到 `PreimageChanged`，Web 保留草稿。
+- 删除仍被其它 catalog 导入的概念返回 `ConceptInUse` 并列出引用者；`author set` 或 `feature page set` 改写 concepts.md 返回 `ManagedConceptCatalog`，不写入。
+- 两个兄弟目录各定义 term 为 `Job` 的概念时无诊断；一方导入另一方后报告 `AmbiguousConceptName`。全局与某个 Feature 的局部概念共存，局部政策越出所在目录被拒绝。
+- 仓库只有 `docs/concepts.json` 时不读取也不报告它，其中的概念不生效。新仓库 `concord init` 只创建随包空 `docs/concepts.md`。
+- 保存后另一写者修改政策时保留草稿；prepared 或 committed 现场混入未知字节时拒绝恢复并保留现场。
 
 Web 默认以左侧术语列表和右侧定义呈现全项目术语，支持按写法、定义及目录筛选，保留来源范围。选中术语后在右侧打开所属 concepts.md 源码并定位到该概念，实时显示结构诊断，保留显式保存；目录选择常驻左侧，省去重复的设置标题与下拉框；跨目录引用在编辑区维护。独立的「写作」入口承载规则配置和已保存文档检查。切换视图保留未保存草稿，切换范围及离开页面继续遵守草稿保护。
 

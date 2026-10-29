@@ -15,8 +15,7 @@ kind: feature
 - [在 Web 管理写作与术语](use-case/manage-writing.md)
 - [按目录管理结构化术语与写作规则](use-case/manage-scoped-terminology.md)
 - [文件格式与作用域](policy.md)
-- [作用域设计](../../design/scoped-terminology/README.md)
-- [术语格式设计](../../design/markdown-terminology/README.md)
+- [实现](architecture.md)
 
 写作规则使用 concord.writing/v3；术语使用 concepts.md 的标题结构，不设版本字段。祖先规则按范围合成，局部来源不能扩大目录或静默覆盖定义。同名不同义按作用域区分；弃用名称派生禁词并建议改为该概念的写法。正文可以链接到 `concepts.md#id`，断开的链接由检查报告。
 

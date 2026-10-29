@@ -32,7 +32,7 @@ feature: docs/feature/documentation-quality/README.md
 - `docs check --rules` 使用独立 profile 通过时，`concord check` 仍按默认范围判定。CLI、结构化 action 与 Web 的项目检查结果一致。
 - 聚合门禁失败时，`docs check`、`writing`、`concepts`、`author set`、`page set` 与局部读取命令照常工作。
 
-扫描集合、祖先合成、显式 --rules 模式、冲突去重和输入摘要采用[目录方案](../../../design/scoped-terminology/plans/directory-owned/README.md)。writing/v1 返回迁移诊断。
+扫描集合、祖先合成、显式 --rules 模式与冲突去重见[写作政策](../policy.md#写作政策)，输入摘要见[使用统计与输入快照](../policy.md#使用统计与输入快照)。writing/v1 返回迁移诊断。
 
 ## 编辑期间的聚合检查
 
