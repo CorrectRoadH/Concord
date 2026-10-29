@@ -17,7 +17,7 @@ Cache namespace 区分各类投影及资源预算。Ownership guard 覆盖缓存
 
 CLI 与 Web 使用同一入口和生命周期约束。安装包在支持的 Linux 与 macOS 上携带所需运行产物，消费者无需 Rust 编译器、HawDB checkout、全局程序或额外数据库服务。目标平台缺少产物须明确诊断，不以另一个数据库冒充 HawDB。
 
-原生边界、锁与跨平台打包由[HawDB 数据引擎设计](../../design/hawdb-data-engine/README.md)拥有。
+原生边界、句柄与清理所有权、资源预算及诊断投影的刷新协议见[架构](architecture.md)，发行产物见[跨平台发布架构](../cross-platform-release/architecture.md#身份与复用)（[决策依据](../../design/hawdb-data-engine/DECISION.md)）。
 
 ## 验收入口
 

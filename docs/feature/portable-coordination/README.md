@@ -30,7 +30,7 @@ Git remains required for repository identity. Network and multi-host coordinatio
 
 ## Contract
 
-[Coordinate local publications](use-case/coordinate-local-publications.md) defines the entry, failure and recovery behavior. [Portable publication design](../../design/portable-publication/README.md) compares the mechanisms.
+[Coordinate local publications](use-case/coordinate-local-publications.md) defines the entry, failure and recovery behavior. Node file leases replace external lock programs so the packed CLI stays portable ([decision rationale](../../design/portable-publication/DECISION.md)).
 
 ## Constitution
 

@@ -47,7 +47,11 @@ Synchronous APIs report contention immediately. Explicit recovery retains its to
 - After journal handling, the final exclusive check can be Busy. Busy does not turn the earlier journal result into a completed recovery. If the runner becomes blocked after that handling, `journalStatus` keeps the journal result and status is blocked.
 - Multiple journals are a named conflict, reported before the runner result. recover does not delete `runner.lease`, run state, evidence, or unknown files.
 - Test execution does not block unrelated document publication, and changed inputs or uncertain cleanup cannot produce green evidence.
-- Cache deletion affects only disposable cache state.
+- A failed claim or release, unknown owner metadata or uncertain PID presence fails closed and keeps the scene.
+- A process killed during publication leaves a recoverable journal; recover preserves an unknown external edit.
+- After a lease holder is SIGKILLed without a journal, recover reclaims its exact token and reports it; later Memory list and annotate succeed. A live or unknown owner is never reclaimed, and a prepared journal still makes ordinary reads return RecoveryRequired.
+- With a quarantined runner, Memory reads work, writes fail, and recover reports runner blocked without deleting the runner scene.
+- Cache deletion affects only disposable cache state. Unsafe paths are rejected per [path safety](../../local-sdlc/architecture.md#路径安全), and linked worktrees do not share coordination.
 
 ## Compatibility
 

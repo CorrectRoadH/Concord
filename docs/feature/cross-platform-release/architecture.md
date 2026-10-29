@@ -4,7 +4,7 @@
 
 源码标签与包元数据由 CorrectRoadH/Concord 拥有，其 GitHub Release 拥有 tgz。CorrectRoadH/homebrew-tap 拥有 Formula、Nix 表达式与 recipe 标签。
 
-运行时协调遵循[可移植发布协调](../../design/portable-publication/README.md)：短快照与提交使用同一 Node 文件租约。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时协调。
+运行时协调遵循[可移植协调架构](../portable-coordination/architecture.md)：来源读取不取得租约，提交与恢复使用同一 Node 文件租约。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时协调。
 
 ## 数据流
 
@@ -28,7 +28,7 @@ tap 定期或经通知发现更新的公开发布，核验标签、包与资产�
 
 版本、源码标签 commit、包元数据、tgz SHA-256 与 recipe commit 构成发布映射。只有这些身份完全一致时，重跑才能继续中断的阶段。
 
-原生引擎在各自目标系统上先于打包构建。打包任务先清理 dist，再收集完整且经核验的原生产物集合，只打包一次。后续验证解压该产物，不重新构建，也不删除其它目标。手动可移植检查必须断言真实的 HawDB 缓存未命中后命中，只回源不算通过。
+原生产物集合固定为 linux-x64-glibc 与 darwin-arm64；后者 deployment target 为 macOS 15.0，构建基线为 Ubuntu 24.04 与 Apple Silicon macOS 15。native manifest 绑定同一桥接源码、Cargo lock、ABI、HawDB revision 与二进制摘要；本机 Nix 构建的产物不进入通用发行物（[决策依据](../../design/hawdb-data-engine/DECISION.md)）。原生引擎在各自目标系统上先于打包构建。打包任务先清理 dist，再收集完整且经核验的原生产物集合，只打包一次。后续验证解压该产物，不重新构建，也不删除其它目标。手动可移植检查必须断言真实的 HawDB 缓存未命中后命中，只回源不算通过。
 
 ## pnpm 包与渠道 Spec
 

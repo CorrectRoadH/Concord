@@ -1,6 +1,8 @@
 # Short publication leases
 
-Concord coordinates one worktree with Node file leases. HawDB remains a disposable cache. This page owns optimistic source access, exclusive commit, and recovery results. The user path is [Coordinate local publications](use-case/coordinate-local-publications.md). Document dependency scope is in the [local SDLC architecture](../local-sdlc/architecture.md). The precise operation matrix is the [scoped operation-boundary contract](../../design/operation-boundaries/plans/scoped/architecture.md).
+Concord coordinates one worktree with Node file leases. HawDB remains a disposable cache. This page owns optimistic source access, exclusive commit, and recovery results. The user path is [Coordinate local publications](use-case/coordinate-local-publications.md).
+
+The per-operation dependency matrix is in the [local SDLC architecture](../local-sdlc/architecture.md#操作依赖). Runner leases and evidence finalization are in the [project architecture](../../architecture.md#发布协调). Rationale: [operation boundaries](../../design/operation-boundaries/DECISION.md).
 
 ## Entity ownership
 
@@ -14,9 +16,23 @@ Historical diagnostic projections live in HawDB and refresh asynchronously. Thei
 
 Runner state and database directory ownership retain their own boundaries. Persistent handles close before the source snapshot ends. Cache access never requires publication ownership.
 
+## Access modes
+
+LocalRepository takes an explicit `access: 'read' | 'write'`. Read uses optimistic source snapshots and rejects real publication. Ordinary write plans optimistically and takes the exclusive lease only to commit.
+
+Dry-run decides whether a plan is published; it is independent of access, reuses optimistic snapshots and never authorizes publication. Existing `dryRun` callers keep preview semantics.
+
+Every ordinary CLI query declares read, and CLI actions and Web share one action classification. Only external execution, recovery, cache rebuild/clear and document writes use write.
+
+Constructing a repository does not retain a lease. Synchronous planning and reading run in short snapshots; interaction, network requests and test execution do not. Fixed-evidence validation and its Memory write share one snapshot. Cache updates during a read never justify taking the exclusive lease; when the cache cannot be used safely, the read falls back to sources.
+
 ## Data flow
 
-A publication owner is published by temporary directory, fsync and atomic rename. Release deletes only its exact token. Ordinary write admission can reclaim an entirely dead observed set and retry once, without processing journals or runner ownership. Unknown hosts, live or reused PIDs, EPERM and unknown records preserve the scene.
+A claim writes a complete owner file with a new token into a unique temporary directory beside the lease and fsyncs it. It renames the directory onto the lease path and fsyncs the parent before protected work. An occupied lease cannot be replaced. Unknown metadata, symlinks, extra files, failed durability or uncertain identity fail closed.
+
+Release and dead-owner recovery unlink only the observed token file. Only a successful unlink may attempt a nonrecursive rmdir; ENOTEMPTY preserves a new owner.
+
+The lease directory is never removed recursively or stolen by age. Close is idempotent. Ordinary write admission can reclaim an entirely dead observed set and retry once, without processing journals or runner ownership. Unknown hosts, live or reused PIDs, EPERM and unknown records preserve the scene.
 
 Source queries do not reclaim live or dead publication tokens. Writers and recovery serialize changes; source readers detect drift. A historical cache hit remains readable during source publication when the cache engine is available.
 
