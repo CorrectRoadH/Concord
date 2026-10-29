@@ -17,19 +17,22 @@ node --import tsx scripts/test-built.ts --test-name-pattern {pattern} {file}
 测量路径与 profile 的完整参数和记录格式见[性能验收](performance.md#测量路径)。常用组合：
 
 ```sh
-# 本仓库 HEAD 的 clone 上测量 CLI 预算，与父提交基线交错对照
-vp run bench cli --baseline ../concord-baseline
+# 本仓库 HEAD 的 clone 上测量 local-sdlc 的预算，与 merge-base 基线交错对照
+vp run bench local-sdlc --compare
 
 # 大仓库规模下的刷新扫描是否在后台刷新上限内，以及缓存读取预算
-vp run bench query --consumer scale
+vp run bench local-data-engine --consumer scale
 
 # 复现某个外部仓库的刷新超时：先克隆成干净副本再原地测量
 git clone ~/Downloads/rpg-game /tmp/rpg-game-frozen
-vp run bench query --consumer /tmp/rpg-game-frozen --samples 3
+vp run bench local-data-engine --consumer /tmp/rpg-game-frozen --samples 3
 
 # 定位刷新扫描耗时：CPU 热点、system 时间与 fs 调用次数
-vp run bench:profile refresh --consumer scale
+vp run bench:profile local-data-engine/trace-gaps-refresh --consumer scale
 vp run bench:profile cli --consumer self --warm -- check
+
+# 只测本次改动影响的 Feature，交付前与基线对照
+vp run bench --changed --compare
 ```
 
 `--samples` 低于 7 的记录只用于定位，不作为预算验收证据。

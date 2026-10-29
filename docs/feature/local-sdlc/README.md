@@ -44,17 +44,24 @@ Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal
 - 参照环境：AMD Ryzen 7 5800X，Linux x64，Node v24.19.0。
 - 阈值规则：每组阈值为参照实测 p50 加约 20% 余量取整，同组命令共用阈值；交付验收按完整采样实测确认。测量记录归 Memory。
 
-| 基准命令（参数完整） | p50 预算 |
-| --- | ---: |
-| `concord --help`、`concord --skill` | 350ms |
-| `concord memory index`、`concord memory list`、`concord memory recall HawDB`、`concord memory search HawDB` | 550ms |
-| `concord issue index`、`concord issue list`、`concord issue recall HawDB` | 500ms |
-| `concord feature list` 与其它文档类别的 `list` | 600ms |
-| `concord docs check` | 1000ms |
-| `concord --fresh trace show docs/feature/local-sdlc/README.md`、`concord trace check` | 1300ms |
-| `concord check` | 2300ms |
+| 场景 | 测量内容 | p50 预算 |
+| --- | --- | ---: |
+| `local-sdlc/help` | 由静态数据输出的 CLI 帮助 | 50ms |
+| `local-sdlc/skill` | Agent 指引 | 350ms |
+| `local-sdlc/memory-index`、`local-sdlc/memory-list`、`local-sdlc/memory-recall`、`local-sdlc/memory-search` | Memory 索引、列表与检索 | 550ms |
+| `local-sdlc/issue-index`、`local-sdlc/issue-list`、`local-sdlc/issue-recall` | Issue 索引、列表与检索 | 500ms |
+| `local-sdlc/feature-list`、`local-sdlc/use-case-list`、`local-sdlc/research-list`、`local-sdlc/design-list`、`local-sdlc/roadmap-list`、`local-sdlc/engineering-list` | 文档类别列表 | 600ms |
+| `local-sdlc/docs-check` | 写作检查 | 1000ms |
+| `local-sdlc/trace-show-fresh`、`local-sdlc/trace-check` | 当前关系读取与检查 | 1300ms |
+| `local-sdlc/check` | 聚合检查 | 2300ms |
+| `local-sdlc/code-list` | 代码声明列表 | 2460ms |
+| `local-sdlc/test-list` | 测试声明列表 | 1910ms |
+| `local-sdlc/template-list` | 随包模板列表 | 430ms |
+| `local-sdlc/author-preimage` | 作者正文的真实前像核验与 dry-run | 580ms |
 
-异步投影的历史读取预算与后台刷新上限由[读取异步刷新的诊断投影](../local-data-engine/use-case/query-asynchronous-projections.md#性能预算)拥有，本表不重复声明。规模增长导致超出预算时，先按性能验收方法定位瓶颈，再调整实现或经修订调整预算，不跳过校验。`pnpm bench cli` 直接读取本表测量，表格保持[预算表格式](../../engineering/concord-self-hosting/performance.md#预算表格式)。
+帮助预算按静态输出的实测确定（禁用编译缓存时 p50 约 47 ms）；代码、测试、模板与作者正文四行的参照消费者为本仓库 `d267e06` 的独立 clone。
+
+异步投影的历史读取预算与后台刷新上限由[读取异步刷新的诊断投影](../local-data-engine/use-case/query-asynchronous-projections.md#性能预算)拥有，本表不重复声明。规模增长导致超出预算时，先按性能验收方法定位瓶颈，再调整实现或经修订调整预算，不跳过校验。`vp run bench local-sdlc` 通过场景 ID 读取本表测量，表格保持[预算表格式](../../engineering/concord-self-hosting/performance.md#预算表格式)。
 
 ## Constitution
 

@@ -1,13 +1,13 @@
 # 性能验收
 
-本页统一规定 Concord 命令性能的测量方法、测量路径与失败判据，适用于 [C-014](../../constitution.md#c-014)。命令预算由拥有该命令的 Feature 或 Use Case 声明，当前预算见[本地 SDLC 闭环](../../feature/local-sdlc/README.md#性能预算)与[读取异步刷新的诊断投影](../../feature/local-data-engine/use-case/query-asynchronous-projections.md#性能预算)。
+本页统一规定 Concord 命令性能的测量方法、测量路径与失败判据，适用于 [C-014](../../constitution.md#c-014)。命令预算由拥有该命令的 Feature 包页面声明，测量工具从 `docs/feature/` 的[预算表](#预算表格式)派生，不维护第二份 owner 清单。
 
 ## 测量 Spec
 
 - 参照消费者：预算表声明的本仓库 commit 的独立 Git clone，冻结后测量。每组预算绑定该 commit、完整命令参数与参照环境。
 - 参照环境：预算表声明的机器与 Node 精确版本，使用构建后的 `dist/entry.js`。绝对预算只在参照环境判定；其它机器只做同机交错对照，判定回退比例。
 - 测量记录：消费者 commit、纳入测量的来源及规模、基线与候选产物身份、Node 精确版本及硬件信息。
-- 基线：对照时的基线是候选改动的 Git 父提交构建产物，测量前确定，不在测后挑选。两套产物在同一冻结消费者上分别预热。
+- 基线：对照时的基线是 `--compare` 指定提交（默认 `origin/master` 与 HEAD 的 merge-base）的构建产物，测量前确定，不在测后挑选。两套产物在同一冻结消费者上分别预热。
 - 引擎版本不能共用缓存时，`self` 消费者上的 `--compare` 测量使用 `--isolated-caches`。两套产物读取同一冻结提交的独立 clone，各自初始化缓存并交错采样；记录包含各消费者的路径、提交和缓存状态。
 - 冷暖状态：warm 表示参照消费者已执行一次同一命令、HawDB 缓存有效；cold 表示执行 `concord cache clear` 后的首次运行。预算按 warm 判定，cold 只记录。
 - 计时边界：从启动 `node dist/entry.js` 进程到进程退出的 wall time，stdout 与 stderr 重定向到文件。
@@ -48,7 +48,7 @@
 
 ### 覆盖规则
 
-`pnpm check` 的 Node 测试包含两项不计时的检查，保证预算与场景同步，场景不会失效：
+`pnpm check` 的 Node 测试包含三项不计时的检查，保证预算与场景同步，场景不会失效：
 
 1. 一致性：每个预算行引用的场景都存在；每个场景恰好被一个预算行引用，且场景 ID 的 Feature 与该行 owner 的 Feature 一致；场景文件名与其 `featureId` 一致。
 2. 命令覆盖：CLI 定义中的每个顶层命令组至少出现在一个场景的 `run` 中，或列在下方豁免表中。新增命令组必须在同一改动中补充场景与预算行，或补充豁免理由。
@@ -61,6 +61,7 @@
 | `feedback sync`、`feedback import` | 耗时由远端决定；本地部分由 `feedback list` 场景覆盖 |
 | `test run`、`docs work` | 耗时由被执行的 runner 与检查决定 |
 | `view` | 长期运行的服务，请求耗时由 `web-workbench` 场景测量 |
+| `lsp` | 长期运行的编辑器服务 |
 
 ## 测量路径
 
