@@ -1,25 +1,90 @@
 #!/usr/bin/env node
-// Keep ordinary help independent of consumer host code.
+// @concord-file
+// @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
+import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, realpathSync } from 'node:fs';
+import { enableCompileCache } from 'node:module';
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+import type { StartupData } from './cli-startup-types.js';
+
+// Enable before any dynamic application import. Node treats disabled or
+// unwritable caches as an optimization failure, without changing CLI results.
+enableCompileCache(process.env.NODE_COMPILE_CACHE ?? join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'node-compile-cache'));
+
+const source = import.meta.url.endsWith('.ts');
+const digest = (url: URL): string => createHash('sha256').update(readFileSync(url)).digest('hex');
+const args = process.argv.slice(2);
+
+function repositoryHelpAvailable(): boolean {
+  // repositoryRoot validates cwd before its CLI renders even help. This only
+  // gates the shortcut; failures still go through that original authority.
+  try {
+    const cwd = realpathSync(process.cwd());
+    const env = { ...process.env };
+    for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
+    const top = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
+      encoding: 'utf8', env, timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'],
+    }).trim();
+    return realpathSync(top) === cwd;
+  } catch { return false; }
+}
+
+async function startupData(): Promise<StartupData | undefined> {
+  try {
+    const location = source ? '../dist/startup-data.js' : './startup-data.js';
+    // This is generated executable package code, not consumer-authored JSON.
+    // The build strictly decodes every recorded process result before emission.
+    const data = (await import(new URL(location, import.meta.url).href) as { default: StartupData }).default;
+    if (data.format !== 'concord.startup/v1' || digest(new URL('../package.json', import.meta.url)) !== data.packageDigest) return;
+    for (const [file, expected] of Object.entries(source ? data.sourceFiles : data.files)) {
+      if (digest(new URL(file, import.meta.url)) !== expected) return;
+    }
+    return data;
+  } catch { return; }
+}
+
+function selectedGroup(data: StartupData): string | undefined {
+  // Let Effect own parsing. This conservative scan only chooses a module graph;
+  // values, aliases, built-ins, unknown flags and -- still use the original parser.
+  if (args.some(arg => /^(?:--(?:help|version|completions|wizard)(?:=|$)|-[hv])/u.test(arg))) return;
+  let index = 0;
+  while (index < args.length) {
+    const arg = args[index]!;
+    if (['--json', '--fresh', '--dry-run'].includes(arg) || /^(?:--json|--fresh|--dry-run)=(?:true|false)$/u.test(arg)) { index++; continue; }
+    if (arg.startsWith('--root=')) { index++; continue; }
+    if (arg === '--root' && args[index + 1] !== undefined && !args[index + 1]!.startsWith('-')) { index += 2; continue; }
+    return data.groups.find(item => item.name === arg && item.name !== 'repo')?.name;
+  }
+}
+
 try {
-  if (process.argv.includes('--skill')) {
-    // @concord-begin
-    // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
-    const { runSkillMain } = await import('./skill.js');
-    await runSkillMain(process.argv.slice(2));
-    // @concord-end
-  } else if (process.argv[2] === 'repo') {
-    // @concord-begin
-    // @concord-implements docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
-    // @concord-implements docs/feature/neutral-project-governance/use-case/compose-repository-workflows.md
-    process.argv.splice(2, 1);
-    const entry = './repository/cli.js';
-    await import(entry);
-    // @concord-end
+  if (args.includes('--skill')) {
+    await import('./entry-full.js');
   } else {
-    // @concord-begin
-    // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
-    await import('./cli.js');
-    // @concord-end
+    const data = await startupData();
+    // Effect's pinned formatter uses no colors for non-TTY output. Restrict the
+    // shortcut to the exact environment used to generate and verify receipts.
+    const plain = process.env.NO_COLOR === '1' && process.env.TERM === 'dumb'
+      && !process.stdin.isTTY && !process.stdout.isTTY && !process.stderr.isTTY
+      && process.env.FORCE_COLOR === undefined;
+    const captured = plain ? data?.receipts[JSON.stringify(args)] : undefined;
+    const receipt = captured !== undefined && (args[0] !== 'repo' || repositoryHelpAvailable()) ? captured : undefined;
+    if (receipt !== undefined) {
+      process.stdout.write(receipt.stdout);
+      process.stderr.write(receipt.stderr);
+      process.exitCode = receipt.status;
+    } else {
+      const group = data === undefined ? undefined : selectedGroup(data);
+      let run: (() => void) | undefined;
+      if (group !== undefined && data !== undefined) {
+        try { run = await (await import('./cli.js')).loadCommand(group, data); }
+        catch { /* Missing or mismatched command code uses the complete bundle. */ }
+      }
+      if (run === undefined) await import('./entry-full.js');
+      else run();
+    }
   }
 } catch (cause) {
   const error = cause as { code?: string; message?: string };

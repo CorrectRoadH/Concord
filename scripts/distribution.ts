@@ -7,6 +7,7 @@ import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
 import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { build as bundle } from 'esbuild';
+import { buildStartup } from './startup-build.js';
 import { P5_LIBRARIES } from '../src/p5-contract.js';
 
 class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
@@ -120,6 +121,7 @@ const prepare = Effect.gen(function*() {
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
   })), { concurrency: 'unbounded' });
   yield* narrowGeneratedImports();
+  yield* buildStartup();
 });
 
 const finish = Effect.gen(function*() {
