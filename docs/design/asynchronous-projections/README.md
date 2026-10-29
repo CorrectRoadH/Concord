@@ -7,13 +7,6 @@ kind: design
 alternatives:
   - snapshots
   - shared-leases
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-013
-  - docs/constitution.md#c-014
 decision:
   selected: snapshots
   reason: 采用历史诊断投影、乐观来源读取与短提交；当前事实门禁和资源所有权保持独立。
@@ -43,3 +36,12 @@ decision:
 - [场景](CASES.md)
 - [裁决](DECISION.md)
 - [异步投影架构](plans/snapshots/architecture.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-013](../../constitution.md#c-013)
+- [C-014](../../constitution.md#c-014)

@@ -24,7 +24,7 @@ C-012 拥有契约写法：行为页写可观察行为与公开接口，architec
 > ## C-012 契约写可观察行为，实现与过程各归其位
 >
 > 1. 行为页（Feature README、Use Case、cli、library）用使用者的语言声明输入、可观察结果、错误与约束。公开的输入输出结构、协议、机器可读字段、具名错误码、退出码，以及使用者可观察的持久化与恢复保证，属于行为页。行为页不写内部模块、内部数据结构、调用链和引擎选型。
-> 2. 规范性陈述应能被测试断言。命令页给出完整调用、机器可读输出、退出码、具名错误与最小示例；API 页给出签名、返回值与失败。人读输出示例用于理解，可以规范化动态值，不保证逐字稳定（C-015.3）。实现之前的示例标为预期输出；交付验收核对实际运行，运行记录进入 Memory，示例不作为运行证据。同一输出或错误定义只在一个行为页维护，其它页面链接引用。
+> 2. 规范性陈述应能被测试断言。命令页给出完整调用、机器可读输出、退出码、具名错误与最小示例；API 页给出签名、返回值与失败。人读输出示例用于理解，可以规范化动态值，不保证逐字稳定（[C-015](../../../../constitution.md#c-015-3)）。实现之前的示例标为预期输出；交付验收核对实际运行，运行记录进入 Memory，示例不作为运行证据。同一输出或错误定义只在一个行为页维护，其它页面链接引用。
 > 3. architecture 与 lifecycle 页声明该 Feature 的内部实现：实体归属、数据流、不变量、失败阶段与资源生命周期。它们随实现修改，不重新定义行为。跨 Feature 的系统边界写在项目 `docs/architecture.md`。只改内部实现的修改不改行为页。
 > 4. Roadmap 与 Feature 同体裁，表示尚未采用的方向，其示例均为预期输出。实现与测试不指向 Roadmap。
 > 5. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。
@@ -36,9 +36,9 @@ C-012 拥有契约写法：行为页写可观察行为与公开接口，architec
 
 | 现行条款 | 新位置 | 搬迁正文 |
 | --- | --- | --- |
-| C-012.4 | C-001 第 5 款 | Agent 对 Memory 与 Issue 的索引、检索、读取、创建、编辑、关联和生命周期操作必须通过 Concord CLI 或受管 API，不直接编辑 owner 文件、metadata 或 history，不维护人工 INDEX。工具缺口必须补齐或明确报告，不用手写文件绕过。 |
-| C-012.5 | C-002 第 3 款 | 本地 Issue 不依赖外部服务。远端写入需单独授权，本地操作不自动投射为远端变更。 |
-| C-012.6 | C-007 第 4 款 | 凭据只从环境变量或外部工具登录态读取，不写入 docs、配置、缓存、证据、HTTP 响应或诊断。 |
+| C-012.4 | [C-001](../../../../constitution.md#c-001-5) | Agent 对 Memory 与 Issue 的索引、检索、读取、创建、编辑、关联和生命周期操作必须通过 Concord CLI 或受管 API，不直接编辑 owner 文件、metadata 或 history，不维护人工 INDEX。工具缺口必须补齐或明确报告，不用手写文件绕过。 |
+| C-012.5 | [C-002](../../../../constitution.md#c-002-3) | 本地 Issue 不依赖外部服务。远端写入需单独授权，本地操作不自动投射为远端变更。 |
+| C-012.6 | [C-007](../../../../constitution.md#c-007-4) | 凭据只从环境变量或外部工具登录态读取，不写入 docs、配置、缓存、证据、HTTP 响应或诊断。 |
 
 ## Scope
 
@@ -57,20 +57,20 @@ C-012 拥有契约写法：行为页写可观察行为与公开接口，architec
 
 | Limit | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
-| [L1](../../LIMITS.md#l1-不改变关联语法与身份算法) | satisfied | 修订只约束目标与范围的选择，不改变语法、派生算法或格式；采用本身不重写任何标记或收据 | C-011 修订正文第 2 款保留既有声明校验，第 3、4 款只规定选择 |
-| [L2](../../LIMITS.md#l2-事实仍只有一个-owner) | satisfied | 关联仍写在源码中，反向关系派生；同一输出定义只在一个行为页维护 | C-011 第 1、2 款，C-012 第 2 款末句 |
+| [L1](../../LIMITS.md#l1-不改变关联语法与身份算法) | satisfied | 修订只约束目标与范围的选择，不改变语法、派生算法或格式；采用本身不重写任何标记或收据 | [C-011](../../../../constitution.md#c-011-2) 保留既有声明校验，[C-011](../../../../constitution.md#c-011-3) 与 [C-011](../../../../constitution.md#c-011-4) 只规定选择 |
+| [L2](../../LIMITS.md#l2-事实仍只有一个-owner) | satisfied | 关联仍写在源码中，反向关系派生；同一输出定义只在一个行为页维护 | [C-011](../../../../constitution.md#c-011-1)、[C-011](../../../../constitution.md#c-011-2)，[C-012](../../../../constitution.md#c-012-2) 末句 |
 | [L3](../../LIMITS.md#l3-修订遵守宪法修订程序) | satisfied | 保留全部 anchor，逐字搬迁三款，按语义修正引用，通过 `constitution amend` 采用 | 本页 Scope |
-| [L4](../../LIMITS.md#l4-不把规则写成合规证明) | satisfied | 修订正文只写规则；C-011 第 4 款明确缺少逐步骤关联不说明缺少执行或覆盖 | 修订正文中没有现状描述 |
+| [L4](../../LIMITS.md#l4-不把规则写成合规证明) | satisfied | 修订正文只写规则；[C-011](../../../../constitution.md#c-011-4) 明确缺少逐步骤关联不说明缺少执行或覆盖 | 修订正文中没有现状描述 |
 
 ## Goals
 
 | Goal | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
-| [G1](../../GOALS.md#g1-不看代码也能判断行为) | satisfied | C-012 第 1、2 款要求公开接口、错误与示例写在行为页，且规范性陈述可断言 | 样板 `resolve-with-command-evidence.md` 可写出 C1 的断言 |
-| [G2](../../GOALS.md#g2-重构不改行为页和指向行为的测试关联) | satisfied | C-012 第 1、3 款把内部实现限定在 architecture 页，C-011 第 3 款让测试指向行为；内部不变量测试指向 architecture 页，重构时随实现调整 | 设计论证；C3 尚未实际执行 |
-| [G3](../../GOALS.md#g3-关联能回答哪段代码实现了哪一步) | partial | C-011 第 3、4 款规定最小完整范围。`use-case steps`、`trace show` 与 `review render` 已区分步骤、整个 Use Case 与非步骤关联，`trace gaps` 提示未标记列表；尚无判定声明范围过粗的语义检查，由作者与审阅执行 | `concord --skill test` 的步骤查询说明；验收方法：按 C4 在一个三步骤 Use Case 上运行 `use-case steps` 与 `trace show` 人工核对，结果记入 Memory |
+| [G1](../../GOALS.md#g1-不看代码也能判断行为) | satisfied | [C-012](../../../../constitution.md#c-012-1) 与 [C-012](../../../../constitution.md#c-012-2) 要求公开接口、错误与示例写在行为页，且规范性陈述可断言 | 样板 `resolve-with-command-evidence.md` 可写出 C1 的断言 |
+| [G2](../../GOALS.md#g2-重构不改行为页和指向行为的测试关联) | satisfied | [C-012](../../../../constitution.md#c-012-1) 与 [C-012](../../../../constitution.md#c-012-3) 把内部实现限定在 architecture 页，[C-011](../../../../constitution.md#c-011-3) 让测试指向行为；内部不变量测试指向 architecture 页，重构时随实现调整 | 设计论证；C3 尚未实际执行 |
+| [G3](../../GOALS.md#g3-关联能回答哪段代码实现了哪一步) | partial | [C-011](../../../../constitution.md#c-011-3) 与 [C-011](../../../../constitution.md#c-011-4) 规定最小完整范围。`use-case steps`、`trace show` 与 `review render` 已区分步骤、整个 Use Case 与非步骤关联，`trace gaps` 提示未标记列表；尚无判定声明范围过粗的语义检查，由作者与审阅执行 | `concord --skill test` 的步骤查询说明；验收方法：按 C4 在一个三步骤 Use Case 上运行 `use-case steps` 与 `trace show` 人工核对，结果记入 Memory |
 | [G4](../../GOALS.md#g4-规则对人和-agent-同样可执行) | satisfied | 每款可逐条检查，同步进随包 skill 与模板 | 本页 Scope |
-| [G5](../../GOALS.md#g5-规则约束所有接入项目) | satisfied | 规则写进 C-011 与 C-012，C-010.1 使接入项目采用 | C-010.1 |
+| [G5](../../GOALS.md#g5-规则约束所有接入项目) | satisfied | 规则写进 [C-011](../../../../constitution.md#c-011) 与 [C-012](../../../../constitution.md#c-012)，[C-010](../../../../constitution.md#c-010-1) 使接入项目采用 | [C-010](../../../../constitution.md#c-010-1) |
 
 ## Entry Points
 

@@ -7,9 +7,6 @@ kind: design
 alternatives:
   - anchored-root
   - realpath-compare
-constitutionRefs:
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-014
 decision:
   selected: anchored-root
   reason: 祖先以 bigint inode 与快照内根 fd 锚定，读取与写入解析分离，文件以不跟随 symlink 方式打开并 fstat 核对，Darwin 拼写只复核查过条目；独立 Opus 5.5 审查三轮 PASS。
@@ -39,3 +36,8 @@ decision:
 - [约束](LIMITS.md)
 - [场景](CASES.md)
 - [裁决](DECISION.md)
+
+## Constitution
+
+- [C-003](../../constitution.md#c-003)
+- [C-014](../../constitution.md#c-014)

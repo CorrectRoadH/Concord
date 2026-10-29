@@ -4,12 +4,18 @@ id: design-constitution-refs-edit
 title: Design 创建后无法追加 constitutionRefs
 createdAt: 2026-10-21T09:25:34.618Z
 kind: issue
-state: draft
+state: closed
 memoryRelations: []
 adoptions:
   current: []
   history: []
-history: []
+closure:
+  kind: closed
+  reason: 依据关系改由正文链接拥有，constitutionRefs 已取消；用 author set、page set 或 issue edit 修改链接即可增删引用
+history:
+  - at: 2026-10-29T02:34:40.967Z
+    action: close
+    reason: 依据关系改由正文链接拥有，constitutionRefs 已取消；用 author set、page set 或 issue edit 修改链接即可增删引用
 ---
 
 # Design 创建后无法追加 constitutionRefs

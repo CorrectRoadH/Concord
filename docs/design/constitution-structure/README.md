@@ -7,13 +7,6 @@ kind: design
 alternatives:
   - link-owned
   - metadata-owned
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-008
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-015
 decision:
   selected: link-owned
   reason: 依据关系定位到句子，附页同样可以声明；条款与款用统一的 {#id}；独立审查两轮后采纳全部修正
@@ -77,3 +70,12 @@ decision:
 
 - 迁移不丢失任何依据关系，修订历史原样保留。
 - 宪法不声称现有 owner 已经符合新写法。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-007](../../constitution.md#c-007)
+- [C-008](../../constitution.md#c-008)
+- [C-009](../../constitution.md#c-009)
+- [C-015](../../constitution.md#c-015)

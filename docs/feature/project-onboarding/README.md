@@ -4,16 +4,6 @@ id: project-onboarding
 title: 渐进式项目初始化与宪法治理
 createdAt: 2026-09-14T13:52:46.538Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-008
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-002
 ---
 
 
@@ -41,3 +31,15 @@ constitutionRefs:
 ## 验收方式
 
 使用打包后的公开 CLI 在隔离 Git 消费仓库中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `pnpm check`，并使用 Concord 的 check、trace 与 review 检查自身契约关联。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-008](../../constitution.md#c-008)
+- [C-009](../../constitution.md#c-009)
+- [C-012](../../constitution.md#c-012)
+- [C-002](../../constitution.md#c-002)

@@ -7,14 +7,6 @@ kind: design
 alternatives:
   - derived
   - explicit
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-009
 decision:
   selected: derived
   reason: 采用由 canonical 源路径、scope 与完整 AST 结构位置派生的引用；保留 implements 关系，删除手写声明 ID，并明确失效与复用边界。
@@ -39,3 +31,13 @@ decision:
 - [Decision](DECISION.md): explanatory evidence.
 Each candidate in plans/ is a self-contained feature design package.
 The decision is recorded only by `concord design decide`; writing prose does not select a candidate.
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-009](../../constitution.md#c-009)

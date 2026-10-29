@@ -4,18 +4,6 @@ id: documentation-quality
 title: 文档写作与一致性检查
 createdAt: 2026-09-23T01:42:51.054Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-010
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-008
-  - docs/constitution.md#c-009
 ---
 
 # 文档写作与领域术语
@@ -47,3 +35,16 @@ constitutionRefs:
 - 入口一致：CLI `check`、结构化 action 与 Web 的项目检查使用同一聚合结果。
 
 聚合门禁失败不阻断局部读取、`docs check`、`writing` 与 `concepts` 工具、author 与 page 编辑，以及修复所需的其它命令。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-002](../../constitution.md#c-002)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-012](../../constitution.md#c-012)
+- [C-003](../../constitution.md#c-003)
+- [C-008](../../constitution.md#c-008)
+- [C-009](../../constitution.md#c-009)

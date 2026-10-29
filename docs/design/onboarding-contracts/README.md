@@ -7,13 +7,6 @@ kind: design
 alternatives:
   - compatible
   - replacement
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-008
 decision:
   selected: compatible
   reason: 采用兼容演进，明确治理格式、条款 anchor 解析、恢复授权与组合验收的边界。
@@ -48,3 +41,12 @@ decision:
 采用 compatible。静态 TS 不支持任意运行时模块。多来源保留现有 memory/<id>.md canonical 引用及 red/green 证据边界。既有项目缺少宪法时明确待接入，不隐式覆盖，也不阻断 recovery。
 
 格式与状态、锚点解析、恢复授权和组合验收的约束见 [governance](plans/compatible/governance.md)。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-008](../../constitution.md#c-008)

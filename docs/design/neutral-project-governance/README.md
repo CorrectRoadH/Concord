@@ -7,15 +7,6 @@ kind: design
 alternatives:
   - consolidate
   - generalize-profile
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-008
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-010
 decision:
   selected: generalize-profile
   reason: 采用中立高级治理入口，保留项目工具所有权，统一最低证据要求与 formal 校验，原生执行编排由消费者承担。
@@ -45,3 +36,14 @@ repository profile 将治理规则与具体产品工具组合在一起，host �
 - [Decision](DECISION.md): explanatory evidence.
 Each candidate in plans/ is a self-contained feature design package.
 The decision is recorded only by `concord design decide`; writing prose does not select a candidate.
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-007](../../constitution.md#c-007)
+- [C-008](../../constitution.md#c-008)
+- [C-009](../../constitution.md#c-009)
+- [C-010](../../constitution.md#c-010)

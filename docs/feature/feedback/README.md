@@ -4,16 +4,6 @@ id: feedback
 title: 多来源反馈与本地处理
 createdAt: 2026-09-14T00:00:00.000Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-010
 ---
 
 # 多来源反馈与本地处理
@@ -33,3 +23,15 @@ Web 以常驻反馈导航和右侧详情组织处理流程，导航提供搜索�
 
 - [无外部服务时管理本地观察](use-case/manage-local-observations.md)
 - [来源与工程知识术语](terminology.md)
+
+## Constitution
+
+- [C-012](../../constitution.md#c-012)
+- [C-001](../../constitution.md#c-001)
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-010](../../constitution.md#c-010)

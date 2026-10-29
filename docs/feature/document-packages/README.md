@@ -4,12 +4,6 @@ id: document-packages
 title: 文档目录与完整发现
 createdAt: 2026-09-15T00:23:49.206Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-009
 ---
 
 # 文档目录与完整发现
@@ -29,3 +23,11 @@ constitutionRefs:
 CLI 和 Web 使用同一文档发现规则。验收核对主题数量、原文保存、CLI 查询、Web 文件树、嵌套 owner 边界及无效输入诊断。发现不转换文件，不补写身份或状态，历史证据和审计记录不改写为新证明。
 
 Research 主题是决策输入，不因创建或结构检查而成为已采用契约或执行证据。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-006](../../constitution.md#c-006)
+- [C-009](../../constitution.md#c-009)

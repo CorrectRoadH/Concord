@@ -7,14 +7,6 @@ kind: design
 alternatives:
   - ts-only
   - runtime-compatibility
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-008
-  - docs/constitution.md#c-009
 decision:
   selected: ts-only
   reason: 仅接受 TypeScript 配置运行时；旧格式离线迁移，错误优先级、拒绝识别与 prepared-init 的例外由契约约束。
@@ -33,3 +25,13 @@ decision:
 一次性旧数据迁移由 scripts 拥有，不引入运行时 registry 或新增迁移 CLI。缺少当前配置绑定的旧证据不伪装为当前证明，重新取证；宪法、多来源 Memory、Note、Research observedAt 省略与 null 语义及共享 lease/journal 继续有效。
 
 候选 ts-only 满足上述边界；runtime-compatibility 保留多个运行时授权模型，因此不采用。实现必须通过完整 gate 后交付。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-008](../../constitution.md#c-008)
+- [C-009](../../constitution.md#c-009)

@@ -7,13 +7,6 @@ kind: design
 alternatives:
   - scoped
   - global
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-013
 decision:
   selected: scoped
   reason: 按操作依赖划分读取与发布边界，同时保留完整性、证据与恢复门禁。
@@ -25,7 +18,7 @@ decision:
 
 # 按操作依赖划分读取、发布与恢复边界
 
-本设计定义局部操作的依赖、故障影响与恢复结果。适用宪法条款由 constitutionRefs 声明。
+本设计定义局部操作的依赖、故障影响与恢复结果。适用宪法条款见本页 Constitution 一节。
 
 ## Problem
 
@@ -46,3 +39,12 @@ decision:
 - [Cases](CASES.md): neutral scenarios for the comparison.
 - [Decision](DECISION.md): explanatory evidence.
 候选的 [架构明细](plans/scoped/architecture.md) 定义操作矩阵、读取依赖和恢复结果。候选中的 satisfied 表示设计论证，运行时验收仍须独立完成；采用状态仅由工具裁决 metadata 表达。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-007](../../constitution.md#c-007)
+- [C-012](../../constitution.md#c-012)
+- [C-013](../../constitution.md#c-013)

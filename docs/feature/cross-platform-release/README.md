@@ -4,14 +4,6 @@ id: cross-platform-release
 title: Cross-platform tagged releases
 createdAt: 2026-09-21T09:55:08.120Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-010
 ---
 
 # 跨平台标签发布
@@ -47,3 +39,13 @@ macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安
 包内含同一固定源码与 Cargo lock 构建的 linux-x64-glibc 与 darwin-arm64 HawDB N-API 引擎，macOS 部署目标为 15.0。原生目标任务先于唯一的打包任务；ABI、源码身份、上游 revision 或摘要缺失或不一致都会阻止发布。
 
 消费者以 `--ignore-scripts` 安装，不需要 Rust 或 HawDB 服务。仅在本机构建的 Nix 产物只用于本地验证。
+
+## Constitution
+
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-010](../../constitution.md#c-010)

@@ -2,7 +2,7 @@
 
 Concord is a standalone local SDLC CLI extracted from NiceEval's repository workflows.
 Read `docs/architecture.md` for the adopted contract and `docs/provenance.md` for extraction boundaries.
-Read `docs/constitution.md` before planning, implementing, or reviewing a feature. Feature and Design owners cite applicable clause anchors through `constitutionRefs`; propose explicit constitution amendments when a feature changes a project-wide rule, recording its reason, sources, and impact.
+Read `docs/constitution.md` before planning, implementing, or reviewing a feature. Pages that rely on a rule link its clause or paragraph ID next to the relying sentence; propose explicit constitution amendments when a feature changes a project-wide rule, recording its reason, sources, and impact.
 Do not depend on a NiceEval checkout, workspace package, provider credential, deployment service, or global installation.
 
 Keep contracts, executable test definitions, and engineering memories in their own owners. Derive reverse relations; do not store a second registry. Do not claim command receipts prove native test coverage or NiceEval formal E2E reliability.

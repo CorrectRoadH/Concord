@@ -4,15 +4,6 @@ id: portable-coordination
 title: Portable coordination with short publication leases
 createdAt: 2026-09-22T00:05:16.786Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-013
 ---
 
 
@@ -40,3 +31,14 @@ Git remains required for repository identity. Network and multi-host coordinatio
 ## Contract
 
 [Coordinate local publications](use-case/coordinate-local-publications.md) defines the entry, failure and recovery behavior. [Portable publication design](../../design/portable-publication/README.md) compares the mechanisms.
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-013](../../constitution.md#c-013)

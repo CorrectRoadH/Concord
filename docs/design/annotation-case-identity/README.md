@@ -7,14 +7,6 @@ kind: design
 alternatives:
   - annotations
   - title-token
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-009
 decision:
   selected: annotations
   reason: 用户要求测试声明直接关联 canonical Feature/Use Case；每个测试的文件与名称自动派生执行 reference，不设人工 ID 或前置 attach 流程。
@@ -35,3 +27,13 @@ Concord 拥有 AST 解析、派生 reference 和契约关系校验；消费仓�
 - [约束](LIMITS.md)
 - [验收场景](CASES.md)
 - [裁决依据](DECISION.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-009](../../constitution.md#c-009)

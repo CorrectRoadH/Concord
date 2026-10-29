@@ -7,13 +7,6 @@ kind: design
 alternatives:
   - policy-rules
   - external-linter
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-010
-  - docs/constitution.md#c-014
 decision:
   selected: policy-rules
   reason: 内置 v3 规则按目录合成，门禁确定且不依赖外部进程，字符路径与 token 路径分离并覆盖中英文
@@ -55,3 +48,12 @@ decision:
 - [Decision](DECISION.md)
 - [政策规则](plans/policy-rules/README.md)
 - [内置门禁与显式外部建议](plans/external-linter/README.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-004](../../constitution.md#c-004)
+- [C-007](../../constitution.md#c-007)
+- [C-009](../../constitution.md#c-009)
+- [C-010](../../constitution.md#c-010)
+- [C-014](../../constitution.md#c-014)

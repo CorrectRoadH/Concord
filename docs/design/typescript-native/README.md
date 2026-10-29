@@ -7,12 +7,6 @@ kind: design
 alternatives:
   - native-scopes
   - legacy-api
-constitutionRefs:
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-014
 decision:
   selected: native-scopes
   reason: 采用固定输入与同步作用域的单一原生编译器；独立挑战无剩余阻断，实际行为与性能仍按C1–C6验收。
@@ -35,3 +29,11 @@ TypeScript 7.1 的编译器 API 通过包内原生子进程提供解析、诊断
 - [Decision](DECISION.md)
 - [受限作用域](plans/native-scopes/README.md)
 - [保留旧编译器 API](plans/legacy-api/README.md)
+
+## Constitution
+
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-005](../../constitution.md#c-005)
+- [C-007](../../constitution.md#c-007)
+- [C-014](../../constitution.md#c-014)

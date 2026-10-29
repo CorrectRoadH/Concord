@@ -4,17 +4,6 @@ id: web-workbench
 title: 面向人的项目工作台
 createdAt: 2026-09-14T00:00:00.000Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-013
-  - docs/constitution.md#c-014
 ---
 
 # 面向人的项目工作台
@@ -72,3 +61,16 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 ## 请求性能预算
 
 独立客户端与服务进程在冻结的 1112 个源码文件、110 个支持页面消费者上测量 workspace 与并发 jobs、file、document.set。原生产物正常与摘要不匹配回源分别采样；预热一次，同机交错运行至少七对，记录请求全程 p50、最大值及服务阶段。相对指定测前基线，各路由 p50 回退不得超过 20%，最大值超过本组 p50 两倍时重测，连续两组无效判失败。基线、机器、Node、消费者 commit 与产物摘要随测量记录进入 Memory；诊断阈值不是 HTTP 响应 SLA。测量脚本为 `scripts/measure-view-requests.ts`，document.set 使用相同正文与真实前像摘要，结束后消费者内容保持不变。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-012](../../constitution.md#c-012)
+- [C-013](../../constitution.md#c-013)
+- [C-014](../../constitution.md#c-014)

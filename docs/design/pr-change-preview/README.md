@@ -7,11 +7,6 @@ kind: design
 alternatives:
   - static
   - hosted-workbench
-constitutionRefs:
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-014
 decision:
   selected: static
   reason: 静态阅读隔离本地写入与执行能力；固定 Git 对象、严格共享格式及消费者 PR 身份核验满足比较与发布边界。
@@ -43,3 +38,10 @@ Concord 拥有 Git 比较与阅读产物。消费者取得并校验 PR 身份、
 - [托管工作台](plans/hosted-workbench/README.md)
 - [本地审阅用例](../../feature/web-workbench/use-case/review-local-changes.md)
 - [PR 审阅用例](../../feature/web-workbench/use-case/review-pull-request.md)
+
+## Constitution
+
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-007](../../constitution.md#c-007)
+- [C-014](../../constitution.md#c-014)

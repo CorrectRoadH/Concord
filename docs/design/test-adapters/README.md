@@ -7,16 +7,6 @@ kind: design
 alternatives:
   - process-adapter
   - marker-extension
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-010
-  - docs/constitution.md#c-011
-  - docs/constitution.md#c-013
 decision:
   selected: process-adapter
   reason: 源码标记保持唯一关联来源，adapter 只在显式收集与执行时提供原生观察，保留 @native 后备；C-011 第 1、3 款已修订
@@ -65,3 +55,14 @@ decision:
 - [Decision](DECISION.md)
 - [进程 adapter](plans/process-adapter/README.md)
 - [显式 selector](plans/marker-extension/README.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-005](../../constitution.md#c-005)
+- [C-007](../../constitution.md#c-007)
+- [C-009](../../constitution.md#c-009)
+- [C-010](../../constitution.md#c-010)
+- [C-011](../../constitution.md#c-011)
+- [C-013](../../constitution.md#c-013)

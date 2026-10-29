@@ -7,11 +7,6 @@ kind: design
 alternatives:
   - single-lock
   - retain-flock
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-007
 decision:
   selected: single-lock
   reason: 以 Node 文件租约和短快照协调发布，保留缓存可重建、journal 恢复与持久 runner 清理状态。
@@ -43,3 +38,10 @@ publication owner 保护短快照与文件事务；journal 保存已准备的完
 - [Cases](CASES.md): neutral scenarios for the comparison.
 - [Decision](DECISION.md): explanatory evidence.
 候选中的设计论证不替代构建、打包及真实进程验收。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-007](../../constitution.md#c-007)

@@ -7,10 +7,6 @@ kind: design
 alternatives:
   - behavior-anchored
   - wording-only
-constitutionRefs:
-  - docs/constitution.md#c-011
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-008
 decision:
   selected: behavior-anchored
   reason: 行为页与实现页的分工、关联范围的选择是接入项目必须采用的跨项目规则，写入宪法 C-011 与 C-012；独立审查三轮后批准
@@ -54,3 +50,9 @@ decision:
 - 修订后的宪法通过 `concord constitution amend` 采用，元数据记录理由、来源与影响。
 - 引用 c-011、c-012 的 Feature 与 Design 逐一核对，确认引用仍然成立。
 - 宪法不声称现有文档或代码已经符合新规则；不符合的页面与声明按新规则逐步改写。
+
+## Constitution
+
+- [C-011](../../constitution.md#c-011)
+- [C-012](../../constitution.md#c-012)
+- [C-008](../../constitution.md#c-008)

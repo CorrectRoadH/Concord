@@ -7,14 +7,6 @@ kind: design
 alternatives:
   - step-anchor
   - step-heading
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-010
-  - docs/constitution.md#c-011
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-013
 decision:
   selected: step-anchor
   reason: 显式列表项 anchor 保持主流程连续，身份独立于文字与位置，并提供补齐与原子改名工具；相关性只报告正向观察
@@ -54,3 +46,13 @@ Use Case 的文件级关联不足以导航到具体动作。步骤关联视图�
 - [共同身份](共同身份.md)
 - [列表项 anchor](plans/step-anchor/README.md)
 - [步骤标题导航](plans/step-heading/README.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-004](../../constitution.md#c-004)
+- [C-009](../../constitution.md#c-009)
+- [C-010](../../constitution.md#c-010)
+- [C-011](../../constitution.md#c-011)
+- [C-012](../../constitution.md#c-012)
+- [C-013](../../constitution.md#c-013)

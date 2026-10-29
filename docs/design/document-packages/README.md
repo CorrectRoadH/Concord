@@ -8,11 +8,6 @@ alternatives:
   - preserve-identities
   - keep-single-files
   - merge-topics
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-009
 decision:
   selected: preserve-identities
   reason: 保留现有身份、历史来源与当前引用；Research 以目录归属并允许自由正文。
@@ -33,3 +28,10 @@ NiceEval 已有的工程文档与规划因缺少当前 metadata 而未完整出�
 - [仅改变新建默认值](plans/keep-single-files/README.md)
 - [合并为顶层主题](plans/merge-topics/README.md)
 - [裁决与依据](DECISION.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-009](../../constitution.md#c-009)

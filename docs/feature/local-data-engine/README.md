@@ -4,19 +4,6 @@ id: local-data-engine
 title: 统一的本地缓存与检索引擎
 createdAt: 2026-09-23T04:17:20.388Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-008
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-014
-  - docs/constitution.md#c-013
 ---
 
 
@@ -38,3 +25,18 @@ CLI 与 Web 使用同一入口和生命周期约束。安装包在支持的 Linu
 - [管理当前来源的检索投影](use-case/query-current-projections.md)
 
 - [读取异步诊断投影](use-case/query-asynchronous-projections.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-008](../../constitution.md#c-008)
+- [C-009](../../constitution.md#c-009)
+- [C-012](../../constitution.md#c-012)
+- [C-014](../../constitution.md#c-014)
+- [C-013](../../constitution.md#c-013)

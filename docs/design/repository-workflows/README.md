@@ -7,14 +7,6 @@ kind: design
 alternatives:
   - profile-owned
   - main-cli-owned
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-013
-  - docs/constitution.md#c-015
-  - docs/constitution.md#c-002
 decision:
   selected: main-cli-owned
   reason: 本地 Issue 写入留在基础 concord issue 以满足无 profile 的本地 CRUD；远端写入以绑定 payload 的授权串、CAS 与固定 gh 写请求执行一次；Trace 只读查询隔离单文件测试源码错误，完整图裁决仍拒绝不完整输入；Docs Work 采用 scoped-clean 与配置声明的检查。独立审查 8 项阻断已修订。
@@ -65,3 +57,11 @@ decision:
 
 Each candidate in plans/ is a self-contained feature design package.
 The decision is recorded only by `concord design decide`; writing prose does not select a candidate.
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-012](../../constitution.md#c-012)
+- [C-015](../../constitution.md#c-015)
+- [C-002](../../constitution.md#c-002)

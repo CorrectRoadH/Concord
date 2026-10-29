@@ -22,7 +22,7 @@ function candidate(at: number, paths: string[] = [], publicationChanged = false)
 }
 const fail = (at: number): QueryUpdate => ({ kind: 'failure', error: { failedAt: new Date(at).toISOString(), scannedAt: at, code: 'InvalidConfig', message: 'invalid' } });
 function trace(findings: Finding[]): ReturnType<typeof buildTrace> {
-  return { documents: [], annotations: { cases: [], findings: [], files: [], digest: '', cache: value.cache }, codeDeclarations: [], codeFiles: [], edges: [], findings, complete: findings.length === 0, inventoryComplete: true, advisories: [], memories: [], codeCache: undefined, codeRelationsUnknown: findings.some(f => f.code === 'CodeSourceChanged') };
+  return { documents: [], constitutionReferences: [], annotations: { cases: [], findings: [], files: [], digest: '', cache: value.cache }, codeDeclarations: [], codeFiles: [], edges: [], findings, complete: findings.length === 0, inventoryComplete: true, advisories: [], memories: [], codeCache: undefined, codeRelationsUnknown: findings.some(f => f.code === 'CodeSourceChanged') };
 }
 const success = decodeQueryScanMessage({ format: 'concord.query-scan/v1', ok: true, scannedAt: 100, finishedAt: 110, value, complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } });
 function processResult(message: unknown = success, fields: Partial<OwnedProcessResult> = {}): OwnedProcessResult {

@@ -7,12 +7,6 @@ kind: design
 alternatives:
   - annotated-drift
   - strict-reject
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-013
-  - docs/constitution.md#c-014
-  - docs/constitution.md#c-015
 decision:
   selected: annotated-drift
   reason: 诊断投影与工作区导航采用同一 observeProjection 原语、漂移分拣与替换规则；漂移结果诚实标注后可作为首份投影，失败具名并保留 scannedAt。独立 Opus 5.5 审查两轮，阻断项已修订。
@@ -48,3 +42,11 @@ decision:
 - [约束](LIMITS.md)
 - [场景](CASES.md)
 - [裁决](DECISION.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-004](../../constitution.md#c-004)
+- [C-013](../../constitution.md#c-013)
+- [C-014](../../constitution.md#c-014)
+- [C-015](../../constitution.md#c-015)

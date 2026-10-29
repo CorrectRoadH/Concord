@@ -4,16 +4,6 @@ id: neutral-project-governance
 title: 统一项目治理与中立测试接入
 createdAt: 2026-09-20T07:01:06.119Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-002
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-008
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-010
 ---
 
 
@@ -42,3 +32,15 @@ NiceEval 是实践来源与接入消费者。公开入口验收、原生测试�
 ## 用户路径
 
 - [按 Concord 规范接入软件项目](use-case/adopt-neutral-governance.md)
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-002](../../constitution.md#c-002)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-008](../../constitution.md#c-008)
+- [C-009](../../constitution.md#c-009)
+- [C-010](../../constitution.md#c-010)

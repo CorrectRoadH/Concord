@@ -12,7 +12,7 @@ Concord 把契约、测试归属、工程记忆与审阅闭环做成可安装到
 
 Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只读权限在 publication 统一执行。
 
-`docs/constitution.md` 必需，可以是 draft，作者显式采用 active。Feature 与 Design 通过 constitutionRefs 声明条款，反向影响派生。宪法不充当测试契约或自动合规证据。根 `DESIGN.md` 可选。
+`docs/constitution.md` 必需，可以是 draft，作者显式采用 active。docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `constitution show` 派生。宪法不充当测试契约或自动合规证据。根 `DESIGN.md` 可选。
 
 ## 领域与 CLI
 

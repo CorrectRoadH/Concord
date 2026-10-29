@@ -4,19 +4,6 @@ id: local-sdlc
 title: 本地 SDLC 闭环
 createdAt: 2026-09-13T11:00:32.576Z
 kind: feature
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-004
-  - docs/constitution.md#c-005
-  - docs/constitution.md#c-006
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-011
-  - docs/constitution.md#c-012
-  - docs/constitution.md#c-013
-  - docs/constitution.md#c-014
-  - docs/constitution.md#c-002
 ---
 
 # 本地 SDLC 闭环
@@ -68,3 +55,18 @@ Concord 不把命令收据描述成原生 runner 的逐 case 覆盖率或 formal
 | `concord check` | 2300ms |
 
 异步投影的历史读取预算与后台刷新上限由[读取异步刷新的诊断投影](../local-data-engine/use-case/query-asynchronous-projections.md#性能预算)拥有，本表不重复声明。规模增长导致超出预算时，先按性能验收方法定位瓶颈，再调整实现或经修订调整预算，不跳过校验。`pnpm bench cli` 直接读取本表测量，表格保持[预算表格式](../../engineering/concord-self-hosting/performance.md#预算表格式)。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-004](../../constitution.md#c-004)
+- [C-005](../../constitution.md#c-005)
+- [C-006](../../constitution.md#c-006)
+- [C-007](../../constitution.md#c-007)
+- [C-009](../../constitution.md#c-009)
+- [C-011](../../constitution.md#c-011)
+- [C-012](../../constitution.md#c-012)
+- [C-013](../../constitution.md#c-013)
+- [C-014](../../constitution.md#c-014)
+- [C-002](../../constitution.md#c-002)

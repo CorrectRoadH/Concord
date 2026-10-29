@@ -7,14 +7,6 @@ kind: design
 alternatives:
   - derived-entry
   - directory-only
-constitutionRefs:
-  - docs/constitution.md#c-001
-  - docs/constitution.md#c-003
-  - docs/constitution.md#c-007
-  - docs/constitution.md#c-010
-  - docs/constitution.md#c-013
-  - docs/constitution.md#c-014
-  - docs/constitution.md#c-015
 decision:
   selected: derived-entry
   reason: 候选名保持唯一身份，文件或目录入口精确派生；当前检查仅在来源漂移时有界重试
@@ -37,3 +29,13 @@ decision:
 ## Contract
 
 具体结构、边界与验收见[方案契约](architecture.md)。本 Design 未定案时，该契约是待审候选。
+
+## Constitution
+
+- [C-001](../../constitution.md#c-001)
+- [C-003](../../constitution.md#c-003)
+- [C-007](../../constitution.md#c-007)
+- [C-010](../../constitution.md#c-010)
+- [C-013](../../constitution.md#c-013)
+- [C-014](../../constitution.md#c-014)
+- [C-015](../../constitution.md#c-015)

@@ -2,11 +2,11 @@
 
 ## L1: No read through an unsafe path
 
-任何读取在读取字节之前，已确认路径上每个仓库内组件都不是 symlink，且仓库根及其祖先仍是打开仓库时验证过的目录；打开文件时不跟随 symlink。不允许先读取、在快照结束时才拒绝。指向仓库外的硬链接与覆盖仓库内目录的挂载不在本约束内，与现状相同。依据 [C-003](../../constitution.md#c-003) 第 1 款与[架构](../../architecture.md)“读写路径拒绝绝对路径、traversal、symlink 组件和超出仓库的 realpath”。
+任何读取在读取字节之前，已确认路径上每个仓库内组件都不是 symlink，且仓库根及其祖先仍是打开仓库时验证过的目录；打开文件时不跟随 symlink。不允许先读取、在快照结束时才拒绝。指向仓库外的硬链接与覆盖仓库内目录的挂载不在本约束内，与现状相同。依据 [C-003](../../constitution.md#c-003-1) 与[架构](../../architecture.md)“读写路径拒绝绝对路径、traversal、symlink 组件和超出仓库的 realpath”。
 
 ## L2: No time-based trust
 
-不以时间或进程寿命缓存“路径安全通过”。任何复用的目录信息只属于一次快照，并在该快照结束核验中重新比对。依据 [C-014](../../constitution.md#c-014) 第 3 款。
+不以时间或进程寿命缓存“路径安全通过”。任何复用的目录信息只属于一次快照，并在该快照结束核验中重新比对。依据 [C-014](../../constitution.md#c-014-3)。
 
 ## L3: Darwin spelling stays exact
 
