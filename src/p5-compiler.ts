@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
 import { lstatSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { builtAssetRoot, requireBuiltAssets } from './installation.js';
 import { dirname, extname, join, posix, resolve } from 'node:path';
 import { Effect } from 'effect';
 import { build, type Loader } from 'esbuild';
@@ -45,7 +45,7 @@ function sketchSource(source: string, mode: 'instance' | 'global', inline: boole
 /** Type checking reads only the captured graph and trusted compiler/p5 declarations. */
 function checkTypes(sources: Map<string, string>, resolutions: Map<string, string>, global: boolean, captureType: (specifier: string, importer: string) => { path: string; source: string }): void {
   const { DiagnosticCategory, ModuleKind, ModuleResolutionKind } = nativeTypeScript();
-  const p5Types = fileURLToPath(new URL('./p5-types/p5.d.ts', import.meta.url)).replaceAll('\\', '/');
+  const p5Types = join(builtAssetRoot('p5-types'), 'p5.d.ts').replaceAll('\\', '/');
   const globalTypes = join(dirname(p5Types), 'global.d.ts').replaceAll('\\', '/');
   // Freeze the full type closure before handing a total filesystem to the compiler.
   withTypeScript(() => {
@@ -110,6 +110,7 @@ function checkTypes(sources: Map<string, string>, resolutions: Map<string, strin
 }
 
 export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, input: unknown) {
+  yield* Effect.try({ try: requireBuiltAssets, catch: failure });
   const request = yield* Effect.try({ try: () => decode(P5RequestSchema, input, 'p5 request'), catch: failure });
   if (Buffer.byteLength(request.code) > 256 * 1024) return yield* Effect.fail(new ConcordError('P5BudgetExceeded', 'Inline sketch exceeds 256 KiB'));
   const document = yield* getViewFile(root, request.document);
@@ -156,7 +157,7 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
     return names.map(name => {
       if (Object.hasOwn(P5_LIBRARIES, name)) {
         const library = P5_LIBRARIES[name as keyof typeof P5_LIBRARIES];
-        return { name: `${name}@${library.version}`, source: readFileSync(fileURLToPath(new URL(`./web/p5-libraries/${library.file}`, import.meta.url)), 'utf8') };
+        return { name: `${name}@${library.version}`, source: readFileSync(join(builtAssetRoot('web'), 'p5-libraries', library.file), 'utf8') };
       }
       if (name.startsWith('./') || name.startsWith('../')) {
         const path = resolveImport(name, 'concord.config.ts');

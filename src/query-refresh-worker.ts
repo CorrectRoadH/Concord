@@ -10,6 +10,7 @@ import { Query, queryContext, queryRequestSatisfied, readQuery, storeQuery, type
 import { makeOwnedProcessService, hasConfirmedOwnedGroupCleanup, type OwnedProcessResult } from './owned-process.js';
 import { decodeQueryScanMessage, type QueryScanMessage } from './query-scan-protocol.js';
 import { ConcordError, failure } from './shared.js';
+import { workerEntryArgv } from './installation.js';
 
 // @concord-code
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#刷新上限
@@ -40,7 +41,7 @@ export function classifyQueryRefresh(before: string, after: string, result: Owne
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 const requestNewIdentity = Effect.fn('requestNewQueryIdentity')(function*(context: QueryContext) {
   yield* Effect.tryPromise({ try: () => new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, [fileURLToPath(import.meta.url), context.root, JSON.stringify(context.query), String(Date.now())], { detached: true, stdio: 'ignore', cwd: context.root });
+    const child = spawn(process.execPath, [...workerEntryArgv('query-refresh-worker'), context.root, JSON.stringify(context.query), String(Date.now())], { detached: true, stdio: 'ignore', cwd: context.root });
     child.once('error', reject); child.once('spawn', () => { child.unref(); resolve(); });
   }), catch: failure });
 });
@@ -87,7 +88,7 @@ export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | 
   if (queryRequestSatisfied(previous, requestedAt)) return;
   const scannedAt = Date.now();
   const service = makeOwnedProcessService();
-  const outcome = yield* Effect.result(service.run([process.execPath, fileURLToPath(new URL('./query-scan-worker.js', import.meta.url)), context.root, JSON.stringify(query)],
+  const outcome = yield* Effect.result(service.run([process.execPath, ...workerEntryArgv('query-scan-worker'), context.root, JSON.stringify(query)],
     { cwd: context.root, timeoutMs: Math.max(1, deadline - Date.now()), outputLimitBytes: 4 * 1024 * 1024 }));
   const after = yield* Effect.try({ try: () => queryContext(context.root, query), catch: failure });
   const update = Result.isSuccess(outcome) ? classifyQueryRefresh(context.key, after.key, outcome.success, scannedAt, Date.now() - started, limitMs)

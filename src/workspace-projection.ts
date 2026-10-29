@@ -1,15 +1,14 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md
-import { lstatSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { lstatSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Schema } from 'effect';
 import { discoverRoot } from './storage.js';
 import { genericPrivateDirectorySync } from './coordination.js';
 import { assertLeasePath, ownerIsAlive, readLeaseOwner } from './file-lease.js';
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from './cache-file.js';
 import { HawdbFailure, hawdbIdentity, openHawdb } from './hawdb-native.js';
-import { hawdbTarget } from './hawdb-native-contract.js';
+import { workspaceInstallationIdentity } from './installation.js';
 import { AnnotatedCaseSchema, ConcordError, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, ResearchSchema, RoadmapSchema, UseCaseSchema, digest, failure } from './shared.js';
 import { GitHubRemoteFeedbackSchema, LinearRemoteFeedbackSchema, FeedbackSourceSchema } from './feedback-schema.js';
 import { CodeDeclarationSchema } from './code.js';
@@ -88,30 +87,7 @@ function identifyWorkspaceProjection(input: string): WorkspaceProjectionContext 
   const stat = lstatSync(configPath, { throwIfNoEntry: false });
   if (stat && (!stat.isFile() || stat.size > 4 * 1024 * 1024)) throw new ConcordError('InvalidConfig', 'Configuration must be a regular file within 4 MiB');
   const config = stat === undefined ? 'absent' : digest(readFileSync(configPath));
-  return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config, 'workspace', installationIdentity()])) };
-}
-
-let installation: string | undefined;
-/** The running executable is fixed at process start; later edits to the install directory do not change it. */
-function installationIdentity(): string {
-  if (installation !== undefined) return installation;
-  const directory = dirname(fileURLToPath(import.meta.url));
-  const files: string[][] = [];
-  const visit = (path: string, relative: string): void => {
-    for (const name of readdirSync(path).sort()) {
-      const target = join(path, name), rel = relative ? `${relative}/${name}` : name;
-      const entry = lstatSync(target);
-      if (entry.isSymbolicLink()) throw new ConcordError('UnsafePath', 'Installation contains a symbolic link');
-      if (entry.isDirectory()) visit(target, rel);
-      else if (entry.isFile() && (name.endsWith('.js') || rel.startsWith('native/'))) files.push([rel, digest(readFileSync(target))]);
-    }
-  };
-  visit(directory, '');
-  for (const name of ['artifact.json', 'hawdb.node', 'THIRD-PARTY-NOTICES.txt']) {
-    if (!files.some(([path]) => path === `native/${hawdbTarget()}/${name}`)) throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; repair the installation and restart View');
-  }
-  installation = digest(JSON.stringify(files));
-  return installation;
+  return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config, 'workspace', workspaceInstallationIdentity()])) };
 }
 
 /** Explicit construction, followed by strict decoding, keeps source bodies out of persistent storage. */

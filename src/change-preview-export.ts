@@ -3,7 +3,7 @@
 import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, parse, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { builtAssetRoot, requireBuiltAssets } from './installation.js';
 import { Effect, Schema } from 'effect';
 import { ConcordError, failure } from './shared.js';
 import { decodeChangePreview, PREVIEW_DATA_LIMIT, PREVIEW_ENTRY_LIMIT, type ChangePreviewEntry, type PreviewSide } from './change-preview.js';
@@ -62,7 +62,7 @@ function verifyDirectories(chain: readonly DirectoryIdentity[]): void {
   for(const item of chain){const stat=lstatSync(item.path);if(stat.isSymbolicLink()||!stat.isDirectory()||stat.dev!==item.dev||stat.ino!==item.ino) throw new ConcordError('PreviewOutputChanged',`Output directory changed: ${item.path}`);}
 }
 function staticFiles(): Map<string, Buffer> {
-  const root=fileURLToPath(new URL('./preview/',import.meta.url)); const files=new Map<string,Buffer>(); let total=0;
+  const root=builtAssetRoot('preview'); const files=new Map<string,Buffer>(); let total=0;
   function visit(relative: string): void {
     for(const name of readdirSync(join(root,relative))){const path=join(relative,name), absolute=join(root,path), stat=lstatSync(absolute);
       if(stat.isSymbolicLink()) throw new ConcordError('PreviewAssetsInvalid','Static assets cannot be symbolic links.');
@@ -97,6 +97,7 @@ function publish(out: string, data: string, chain: DirectoryIdentity[]): void {
 }
 export interface ChangePreviewOptions { root: string; base: string; head?: string; baseLabel?: string; out: string; }
 export const exportChangePreview = Effect.fn('preview.export')(function*(options: ChangePreviewOptions) {
+  yield* checked(requireBuiltAssets);
   return yield* Effect.scoped(Effect.gen(function*(){
     const environment=previewGitEnvironment(); const cwd=resolve(options.root);
     const sourceText = (args: readonly string[]) => previewGit(cwd,args,environment,MiB).pipe(Effect.map(bytes=>bytes.toString('utf8').replace(/\r?\n$/u,'')));

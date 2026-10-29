@@ -23,11 +23,12 @@
   "packageManager": "pnpm@11.18.0",
   "scripts": {
     "build": "vp build",
+    "build:native": "node --import tsx scripts/build-native.ts --output dist/native",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.web.json",
     "test": "vp build && vp run test:built",
     "check": "vp build && vp run typecheck:built && vp run check:selfhost && vp run test:built",
     "check:selfhost": "node dist/entry.js --json --dry-run check",
-    "concord": "node dist/entry.js",
+    "concord": "node --import tsx src/entry.ts",
     "bench": "vp build && tsx scripts/bench.ts",
     "bench:profile": "vp build && tsx scripts/profile.ts",
     "test:built": "node --import tsx scripts/test-built.ts",

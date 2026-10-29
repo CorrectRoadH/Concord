@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md
-import { fileURLToPath } from 'node:url';
+import { workerEntryArgv } from './installation.js';
 import { Effect, Schema } from 'effect';
 import { makeOwnedProcessService } from './owned-process.js';
 import { ConcordError } from './shared.js';
@@ -65,7 +65,7 @@ export class ViewScanManager {
     this.worker = worker;
     const root = this.root;
     let failure: unknown = new ConcordError('WorkspaceScanFailed', 'Workspace scan process exited');
-    const task = service.run([process.execPath, fileURLToPath(new URL('./view-scan-worker.js', import.meta.url)), root], {
+    const task = service.run([process.execPath, ...workerEntryArgv('view-scan-worker'), root], {
       cwd: root,
       ipc: {
         ready,

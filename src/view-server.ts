@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { isIP } from 'node:net';
-import { dirname, extname, join, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { extname, join, resolve, sep } from 'node:path';
+import { builtAssetRoot, requireBuiltAssets } from './installation.js';
 import { existsSync, lstatSync, readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 import { Effect, Schema } from 'effect';
@@ -370,11 +370,12 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 // @concord-implements docs/feature/web-workbench/architecture.md
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
+  requireBuiltAssets();
   const root = validateViewRoot(options.root);
   const host = options.host ?? '127.0.0.1';
   const requestedPort = options.port ?? 4317;
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
-  const webRoot = options.webRoot ?? join(dirname(fileURLToPath(import.meta.url)), 'web');
+  const webRoot = options.webRoot ?? builtAssetRoot('web');
   const scans = new ViewProjectionManager(root);
   const jobs = new ViewJobManager(root, () => scans.request(true));
   const baselineCache: GitBaselineCache = {};

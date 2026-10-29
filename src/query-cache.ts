@@ -1,7 +1,6 @@
 import { spawn } from 'node:child_process';
-import { lstatSync, readFileSync, readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { lstatSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { Effect, Result, Schema } from 'effect';
 import { discoverRoot } from './storage.js';
 import { genericPrivateDirectorySync } from './coordination.js';
@@ -11,6 +10,7 @@ import { HawdbFailure, openHawdb } from './hawdb-native.js';
 import { TraceGapsValue, TraceShowValue, ReviewRenderValue, hydrateQueryValue, queryValueSchema } from './query-values.js';
 import type { QueryScanMessage } from './query-scan-protocol.js';
 import { ConcordError, digest, failure } from './shared.js';
+import { queryInstallationIdentity, workerEntryArgv } from './installation.js';
 
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
@@ -75,11 +75,7 @@ export function queryContext(input: string | undefined, query: Query): QueryCont
   assertLeasePath(config);
   if (lstatSync(config).size > 4 * 1024 * 1024) throw new ConcordError('InvalidConfig', 'Configuration exceeds 4 MiB');
   // The installed build binds projections independently of the consumer cache.
-  const directory = dirname(fileURLToPath(import.meta.url));
-  const installation = readdirSync(directory).filter(name => name.endsWith('.js')).sort().map(name => [name, digest(readFileSync(join(directory, name)))]);
-  for (const target of readdirSync(join(directory, 'native')).sort()) {
-    for (const name of ['artifact.json', 'hawdb.node']) installation.push([`native/${target}/${name}`, digest(readFileSync(join(directory, 'native', target, name)))]);
-  }
+  const installation = queryInstallationIdentity();
   const key = digest(JSON.stringify([root, privateDir, query, digest(readFileSync(config)), installation]));
   return { root, privateDir, key, query };
 }
@@ -136,7 +132,7 @@ export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | un
   }
   const refresh = yield* Effect.result(Effect.tryPromise({
     try: () => new Promise<void>((resolve, reject) => {
-      const child = spawn(process.execPath, [fileURLToPath(new URL('./query-refresh-worker.js', import.meta.url)), context.root, JSON.stringify(query), String(Date.now())], { detached: true, stdio: 'ignore', cwd: context.root });
+      const child = spawn(process.execPath, [...workerEntryArgv('query-refresh-worker'), context.root, JSON.stringify(query), String(Date.now())], { detached: true, stdio: 'ignore', cwd: context.root });
       child.once('error', reject);
       child.once('spawn', () => { child.unref(); resolve(); });
     }), catch: failure,

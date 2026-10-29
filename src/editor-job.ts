@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md#文件与资源边界
-import { fileURLToPath } from 'node:url';
+import { workerEntryArgv } from './installation.js';
 import { Effect } from 'effect';
 import { OwnedProcess, makeOwnedProcessService, type OwnedProcessService } from './owned-process.js';
 import { ConcordError, failure } from './shared.js';
@@ -15,7 +15,7 @@ export const runEditorJob = Effect.fn('editor.runJob')(function*(job: P.Job, cle
   const work = Effect.gen(function*() {
     const owner = yield* OwnedProcess;
     attempted = true;
-    const result = yield* owner.run([process.execPath, '--max-old-space-size=256', fileURLToPath(new URL('./editor-worker.js', import.meta.url))], {
+    const result = yield* owner.run([process.execPath, ...workerEntryArgv('editor-worker', ['--max-old-space-size=256'])], {
       cwd: job.root, stdin: input, timeoutMs: P.editorLimits.timeout, outputLimitBytes: P.editorLimits.output,
     }).pipe(Effect.mapError(error => new ConcordError('EditorTaskFailed', error.detail)));
     if (result.timedOut || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('EditorBudgetExceeded', result.timedOut ? 'Computation timeout' : 'Computation output limit'));

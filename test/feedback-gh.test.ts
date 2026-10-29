@@ -8,15 +8,15 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { setConfig, showConfig } from '../src/editing.js';
-import { ConcordError } from '../src/shared.js';
-import { initialize, LocalRepository } from '../src/storage.js';
+import { setConfig, showConfig } from '../dist/editing.js';
+import { ConcordError } from '../dist/shared.js';
+import { initialize, LocalRepository } from '../dist/storage.js';
 
 if (process.platform === 'win32') {
   // @use-case docs/feature/feedback/use-case/triage-feedback.md
   test('Windows reports gh capability missing while API feedback remains available', async () => {
-    const { checkGhConnection } = await import('../src/feedback-gh.js');
-    const { fetchFeedback } = await import('../src/feedback-providers.js');
+    const { checkGhConnection } = await import('../dist/feedback-gh.js');
+    const { fetchFeedback } = await import('../dist/feedback-providers.js');
     const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
     await assert.rejects(Effect.runPromise(checkGhConnection(process.cwd(), connection)), (cause) => cause instanceof ConcordError && cause.code === 'GhPlatformUnsupported');
     const api = await Effect.runPromise(fetchFeedback({ id: 'github-api', provider: 'github', credentialEnv: 'TEST_TOKEN', owner: 'acme', repo: 'widgets' }, {
@@ -67,9 +67,9 @@ process.env.GH_TOKEN = 'fixture-token';
 process.env.GH_DEBUG = 'api';
 process.env.GH_REPO = 'attacker/elsewhere';
 
-const { checkGhConnection, fetchGhFeedback } = await import('../src/feedback-gh.js');
-const { syncFeedback } = await import('../src/feedback.js');
-const { startViewServer } = await import('../src/view-server.js');
+const { checkGhConnection, fetchGhFeedback } = await import('../dist/feedback-gh.js');
+const { syncFeedback } = await import('../dist/feedback.js');
+const { startViewServer } = await import('../dist/view-server.js');
 const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
 
 function configure(): void {
@@ -135,7 +135,7 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     writeFileSync(scenario, JSON.stringify({ auth: true }));
     await assert.rejects(Effect.runPromise(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhNotAuthenticated') && !String(cause).includes('SECRET-DO-NOT-PRINT'));
     writeFileSync(scenario, '{}');
-    const entry = fileURLToPath(new URL('../src/entry.ts', import.meta.url));
+    const entry = fileURLToPath(new URL('../dist/entry.js', import.meta.url));
     const cli = (...args: readonly string[]): unknown => JSON.parse(execFileSync(process.execPath, ['--import', 'tsx', entry, '--root', consumer, '--json', ...args], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 })) as unknown;
     const added = cli('feedback', 'connection', 'add', '--id', 'gh-cli', '--provider', 'github', '--transport', 'gh', '--owner', 'acme', '--repo', 'widgets');
     assert.ok(added);
