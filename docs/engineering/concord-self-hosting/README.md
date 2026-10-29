@@ -8,7 +8,7 @@ kind: engineering
 
 # Concord 自举维护
 
-本工程主题规定 Concord 如何用已构建的项目本地 CLI（`vp run concord`）维护本仓库 Spec。仓库中的 Markdown owner 与真实测试注释共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是包含构建、类型检查、自身 Spec 检查与打包消费者测试的 `vp run check`。
+本工程主题规定 Concord 如何用当前 checkout 的 CLI（`pnpm concord`）维护本仓库 Spec。仓库中的 Markdown owner 与真实测试注释共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是包含构建、类型检查、自身 Spec 检查与打包消费者测试的 `pnpm check`。
 
 ## 目标
 
@@ -25,28 +25,37 @@ kind: engineering
 
 ## 构建与检查入口
 
-项目使用固定版本的 Vite+ 管理任务，依赖安装由 `vp install` 委托固定版本的 pnpm。未全局安装时以 `pnpm exec vp` 调用。`vp run check` 与 `pnpm check` 执行相同的完整门禁，满足 [C-006](../../constitution.md#c-006)。
+项目使用固定版本的 Vite+ 管理任务，依赖安装由 `vp install` 委托固定版本的 pnpm。未全局安装时以 `pnpm exec vp` 调用。
 
-| 入口 | 检查范围与前提 |
+`pnpm check`（等价于 `vp run check`）是唯一的检查入口，满足 [C-006](../../constitution.md#c-006)。默认运行完整门禁，日常开发和 CI 使用同一条命令，不提供只做部分检查的入口。
+
+| 阶段 | 内容 |
 | --- | --- |
-| `vp run check:fast` | CLI 与 Web 源码类型，无需构建产物 |
-| `vp build` | 原生引擎、CLI、repository 与 Web 的完整构建 |
-| `vp run typecheck:built` | 当前构建上的 repository、测试与脚本类型检查 |
-| `vp run check:selfhost` | 当前构建检查当前 checkout 的关系、生命周期与写作政策，不运行测试 |
-| `vp run test:built [files...]` | 当前构建上的全部或指定文件测试，每次只打包一次 |
-| `vp run test:e2e [files...]` | 当前构建上的确定性浏览器测试，无模型调用 |
-| `vp run test:e2e:agent [files...]` | 显式授权后的自然语言用户流程，使用环境中的模型配置 |
-| `vp run check` | 完整构建、其余类型检查、自身 Spec 检查和全部测试 |
+| 构建 | 原生绑定按下文规则复用；CLI、repository 与 Web 构建，三个 TypeScript 项目并行编译 |
+| 静态检查 | 构建产物上的 repository、测试与脚本类型检查与 `check:selfhost` 并行执行 |
+| 测试 | 打包一次，Node 测试与 e2e 浏览器测试按下文并发执行 |
 
-测试入口接受 `--test-name-pattern=表达式` 和 `--test-shard=序号/总数`。未指定文件时自动发现 `test/*.test.ts` 与 `test/e2e/*.e2e.ts`，分别交给 Node 与 e2e。两类测试默认串行，`CONCORD_TEST_CONCURRENCY` 可显式覆盖并发。CI 的分片集合须覆盖完整测试集，每片使用一份归档及独立安装的消费者。新增测试文件自动纳入完整门禁。CI 在第一分片构建后执行 `check:selfhost`，任一检查失败均阻止门禁通过。
+`pnpm check` 接受 `--test-name-pattern=表达式`、`--test-shard=序号/总数` 与测试文件路径。给出文件或过滤条件时，构建与静态检查仍完整执行，只运行选中的测试；结果不能替代完整门禁。未指定文件时自动发现 `test/*.test.ts` 与 `test/e2e/*.e2e.ts`。CI 每个分片运行 `pnpm check --test-shard=序号/4`，分片并集覆盖完整测试集。
 
-资源归属、失败诊断与自然语言适用范围见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。自然语言用例单独执行，不要求日常本地门禁拥有模型凭据。
+其它入口不是检查：`vp build` 只构建，`vp dev` 只启动 Web 开发服务器，`pnpm concord` 运行源码 CLI。`vp run test:e2e:agent` 运行自然语言用例，使用环境中的模型配置，需要显式授权，不属于日常门禁。
 
-源码变化后必须重新构建，才能运行依赖产物的检查。任务结果不缓存，定向结果不能替代完整验收。Vite+ 的内置 `check` 与 `test` 不代表本项目同名脚本；项目验收使用 `vp run check`。`vp build` 先准备原生绑定、CLI 与 repository，再构建 Web 并补齐 Preview、P5 与许可证。开发服务器不运行发行准备。Node 原生测试 runner、外部消费者 adapter 及包身份校验保持各自职责。
+资源归属、并发、安装共享与失败诊断见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。
+
+### 原生绑定复用
+
+`vp build` 每次清空 `dist`，原生产物按以下顺序取得，第一项命中即停止。每一项都经 `--prebuilt` 的身份校验：target、ABI、HawDB revision、源码摘要、锁文件摘要、二进制与许可证摘要全部一致才使用。
+
+1. 本机共享缓存 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<源码摘要>-<锁文件摘要>/<target>/`，同一台机器的所有 checkout 与 worktree 共用。
+2. 本仓库 GitHub Release `native-<源码摘要前 16 位>` 中的 `concord-native-<target>.tar.gz`。下载后校验，写入共享缓存。设置 `CONCORD_NATIVE_OFFLINE=1` 时跳过下载。
+3. 用固定 Rust 工具链编译，结果写入共享缓存。
+
+下载失败、产物缺失或校验不一致时进入下一项，并输出原因，不中断构建。发布流程不使用前两项，始终从源码编译要发布的原生产物。按摘要的 Release 由手动触发的 `native` workflow 为每个 target 编译并发布；本地构建与 CI 只读取它。
+
+源码变化后必须重新构建，才能运行依赖产物的检查。任务结果不缓存，定向结果不能替代完整验收。Vite+ 的内置 `check` 与 `test` 不代表本项目同名脚本。开发服务器不运行发行准备。
 
 ## 从源码运行
 
-开发时用 `pnpm concord <参数>` 直接运行当前 checkout 的源码 CLI，等价于 `node --import tsx src/entry.ts`。它不需要 `vp build`，也不需要全局安装的 Concord；依赖由 `vp install` 准备。源码 CLI 用于日常操作与调试，交付门禁仍是基于构建产物的 `vp run check`。
+开发时用 `pnpm concord <参数>` 直接运行当前 checkout 的源码 CLI，等价于 `node --import tsx src/entry.ts`。它不需要 `vp build`，也不需要全局安装的 Concord；依赖由 `vp install` 准备。源码 CLI 用于日常操作与调试，交付门禁仍是基于构建产物的 `pnpm check`。
 
 | 方面 | 规则 |
 | --- | --- |
