@@ -29,11 +29,16 @@ Local、GitHub、Linear 在同一反馈列表中作为三个来源呈现。Local
 - `issue link <id> --memory <ref> [--kind investigation|root-cause|decision|delivery]` 默认 investigation，按 kind 与 Memory 去重，只接受 draft。
 - `issue adopt <id> --to <ref>` 只接受 draft，目标是 Roadmap、Feature、Use Case 或 Engineering 的 exact owner ref；anchor 使用 check 的同一校验。基础加载不读取 concord.repository.json，也不要求 Trace 完整。
 - `issue retire <id> --from <ref>` 移除当前采用，并把执行时 HEAD 写入历史；无提交返回 IssueRetireRequiresCommit，零写入。
-- `issue close <id> --kind fixed|delivered|duplicate|declined|invalid|external-fixed|closed` 参数遵守 IssueClosureSchema。省略 kind 等同 closed，要求 reason；全部 kind 在存在 captured 或 open Problem 时返回 OpenProblem。fixed 要求 fixed Problem，declined 要求 current Decision，duplicate 要求无环 canonical Issue；duplicate、declined、invalid 要求先退役全部当前采用。写入与 concord check 共用闭合校验。
+- `issue close <id> --kind fixed|delivered|duplicate|declined|invalid|external-fixed|closed` 参数遵守 IssueClosureSchema。
+  - fixed 使用 memory 与至少一个 proof；delivered 另需 target，且属于当前或历史采用；duplicate 使用 canonical。
+  - declined 使用 memory；invalid 使用至少一个 evidence；external-fixed 使用 dependency、version 与至少一个 proof；proof 与 evidence 可以重复。
+  - 省略 kind 等同 closed，要求 reason；全部 kind 在存在 captured 或 open Problem 时返回 OpenProblem。fixed 要求 fixed Problem，declined 要求 current Decision，duplicate 要求无环 canonical Issue；duplicate、declined、invalid 要求先退役全部当前采用。写入与 concord check 共用闭合校验。
 - `issue reopen <id> --reason <text>` 移除 closure 并追加历史；closed Issue 先重开再关联或采用。
-- 本地写入使用单文件发布 journal 与 concord recover；错误返回具名 JSON、退出 1，失败零写入。
+- 本地写入使用单文件发布 journal 与 concord recover；错误返回具名 JSON、退出 1，失败零写入。Issue 文件格式、`IssueClosureSchema`、`adoptions`、`memoryRelations` 与 history 条目的含义不变，已有 Issue 无需迁移。
 - Feature、Memory 关联使用 issue 命令；不把来源接入实现成要求本地用户配置的虚假远端 connection。
 
 ## 验收
 
-打包公开 CLI 在无任何 provider 配置的 Git 消费者中完成创建、动态索引、recall、摘要更新、关联及安全删除。关联、历史、远端来源、陈旧摘要分别拒绝删除；dry-run 不改文件。删除的 prepared 与 committed 恢复分别保留前像与已提交结果，未知编辑拒绝。HTTP 与真实浏览器验证本地来源和删除反馈；GitHub/Linear 保持只读接入。
+打包公开 CLI 在无任何 provider 配置的 Git 消费者中完成创建、动态索引、recall、摘要更新、关联及安全删除。关联、历史、远端来源、陈旧摘要分别拒绝删除；dry-run 不改文件。删除的 prepared 与 committed 恢复分别保留前像与已提交结果，未知编辑拒绝。
+
+在无 `concord.repository.json` 的消费者中，`concord issue` 完成 link、adopt、retire、全部 close kind 与 reopen。关联 open Problem 时任何 kind 的 close 返回 `OpenProblem`；带旧参数的[退役命令](../cli.md#命令分工)返回 `CommandRetired` 且零写入。既有 Issue 在 `concord check` 与 `concord repo feedback check` 中的判定不变。HTTP 与真实浏览器验证本地来源和删除反馈；GitHub/Linear 保持只读接入。

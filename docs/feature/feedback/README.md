@@ -19,7 +19,7 @@ Web 以常驻反馈导航和右侧详情组织处理流程，导航提供搜索�
 - [适配器接口](library.md)
 - [CLI 登录态复用设计](cli-integration.md)
 
-支持 GitHub 公共 API 实例与 Linear 公共 API，默认使用环境变量提供读取凭据。GitHub 还可在项目设置中显式选择 gh，复用运行 Concord 的机器上的 GitHub CLI 登录态，无需在项目中配置凭据；要求 gh 2.98.0 或更新版本及 POSIX 进程组能力。连接检测与同步需明确触发；不轮询远端、不发布或修改远端 issue，也不实现 webhook 接收和 OAuth 授权流程。两种模式的保证见[CLI 接入设计](cli-integration.md)。
+支持 GitHub 公共 API 实例与 Linear 公共 API，默认使用环境变量提供读取凭据。GitHub 还可在项目设置中显式选择 gh，复用运行 Concord 的机器上的 GitHub CLI 登录态，无需在项目中配置凭据；要求 gh 2.98.0 或更新版本及 POSIX 进程组能力。连接检测与同步需明确触发；不轮询远端，Feedback 读取不修改远端 issue（远端写入只经 [`concord issue plan` 与 `execute`](../neutral-project-governance/use-case/mutate-remote-issue.md)），也不实现 webhook 接收和 OAuth 授权流程。两种模式的保证见[CLI 接入设计](cli-integration.md)。
 
 - [无外部服务时管理本地观察](use-case/manage-local-observations.md)
 - [来源与工程知识术语](concepts.md)

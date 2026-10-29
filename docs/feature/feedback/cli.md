@@ -32,7 +32,7 @@ Web 从侧栏「反馈」进入：按来源或本地处理状态筛选，创建�
 
 GitHub 连接的读取方式可在项目设置中明确切换；切换保留仓库绑定和已导入对象身份。gh 模式不显示凭据变量输入，API 模式要求变量名。「检测连接」先保存当前设置，保存冲突时保留草稿并停止检测；检测结果只属于本次运行，不写回配置。普通刷新和保存设置不会检测账号或访问远端。
 
-gh 模式使用服务端登录态，工作台操作者可触发该账号对配置仓库的读取。认证与网络处理交给 gh，Concord 控制初始只读请求、进程回收、输出预算及返回身份；API 模式仍由 Concord 拒绝重定向并限制网络响应。详情见[接入设计](cli-integration.md)。
+gh 模式使用服务端登录态，工作台操作者可触发该账号对配置仓库的读取；两种模式的保证见[接入设计](cli-integration.md#接入与信任-spec)。
 
 缓存不可用时查看首次来源摘录，显式同步重新观察。远端状态和本地结论分别显示；同步不会替你关闭问题，也不会修改 GitHub 或 Linear。
 
@@ -49,20 +49,21 @@ concord issue link output-confusion --memory memory/output-investigation.md
 
 摘要取自工具返回的当前记录。没有来源、关系或历史的本地草稿可用 `issue remove <id> --expected-digest <digest>` 删除；关联后通过 close 等生命周期处理，不能删除来绕过调查与证明。本地 CRUD 从不自动写入 GitHub 或 Linear。
 
-## 本地 Issue 生命周期
+## 命令分工
 
-`concord issue` 是本地 Issue 写入口；这些命令不读取 concord.repository.json，也不要求 Trace 完整。link 和 adopt 要求 draft；closed Issue 通过 reopen 继续调查。
+`concord issue` 是本地 Issue 的唯一写入口，命令与前置条件见[本地观察](use-case/manage-local-observations.md#操作-spec)；远端写入只经 [plan 与 execute](../neutral-project-governance/use-case/mutate-remote-issue.md)。`concord feedback` 只负责外部来源：`connection`、`sync`、`import <url>`、`list`、`show`。`concord repo feedback` 只保留信封 `import`、`export`、`list`、`show` 与 `check`。help 描述本地 owner 时统一使用 Issue 一词。action 使用 `issue.adopt`、`issue.retire`、`issue.reopen`，`issue.close` 与 `issue.link` 接受 kind；`issue.close` 省略 kind 等同 `closed`。
 
-```sh
-concord issue link observation --memory memory/investigation.md --kind root-cause
-concord issue adopt observation --to docs/feature/example/README.md
-concord issue retire observation --from docs/feature/example/README.md
-concord issue close observation --kind closed --reason "调查结论"
-concord issue reopen observation --reason "新增观察"
-```
+退役命令留在命令树中，接受并忽略任意参数与选项，返回 `CommandRetired`，退出 1 且零写入；`details` 为 `{ command, replacement }`。action `feedback.link` 返回同一错误。
 
-link 的 kind 为 investigation、root-cause、decision、delivery，默认 investigation，同一 kind 与 Memory 不重复。retire 使用当前 HEAD，无提交返回 IssueRetireRequiresCommit。
+| 退役命令 | 替代命令 |
+| --- | --- |
+| `concord feedback create` | `concord issue create` |
+| `concord feedback link --feature` | `concord issue adopt --to` |
+| `concord feedback close` | `concord issue close` |
+| `concord repo feedback link` | `concord issue link --kind` |
+| `concord repo feedback adopt` | `concord issue adopt` |
+| `concord repo feedback retire` | `concord issue retire` |
+| `concord repo feedback close` | `concord issue close --kind` |
+| `concord repo feedback reopen` | `concord issue reopen --reason` |
 
-close 参数按结论选择：fixed 使用 memory 与至少一个 proof；delivered 另需 target，目标属于当前或历史采用。duplicate 使用 canonical；declined 使用 memory；invalid 使用至少一个 evidence；external-fixed 使用 dependency、version 与至少一个 proof。closed 使用 reason。proof 与 evidence 可以重复传入。省略 kind 等同 closed。
-
-全部 close kind 检查关联 Problem，captured 或 open 返回 OpenProblem。fixed 要求已记录 fixed 结论的 Problem，declined 要求 current Decision，duplicate 不得形成环。duplicate、declined、invalid 要求先 retire 全部当前采用。闭合与引用检查复用 concord check 的规则，失败退出 1 且零写入。
+本地 Issue 只保留一个写入口，不改变持久格式（[决策依据](../../design/repository-workflows/DECISION.md)）。

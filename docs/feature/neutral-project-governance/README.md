@@ -27,11 +27,14 @@ NiceEval 是实践来源与接入消费者。公开入口验收、原生测试�
 
 项目拥有测试框架、执行环境、运行通道、构建产物和部署方式。Concord 不把 host/provider、固定通道、特定产品包名或 Nx 布局当作通用治理字段。
 
-本功能面向软件项目，不以纯文档项目作为方案成立或能力拆分的理由。具体中立能力与消费者迁移边界由 [Design](../../design/neutral-project-governance/README.md) 定案；Spec 声明不等于验收通过。
+本功能面向软件项目，不以纯文档项目作为方案成立或能力拆分的理由，不要求消费者采用 Concord 自身的开发栈。Concord 与消费者的所有权划分见[治理边界](architecture.md)，配置与证据要求见[高级测试治理](../../repository-profile.md)；Spec 声明不等于验收通过。产品工具归消费者、治理规则归 Concord（[决策依据](../../design/neutral-project-governance/DECISION.md)）。
 
 ## 用户路径
 
 - [按 Concord 规范接入软件项目](use-case/adopt-neutral-governance.md)
+- [组合仓库工作流命令](use-case/compose-repository-workflows.md)
+- [计划并执行一次远端 Issue 写入](use-case/mutate-remote-issue.md)
+- [并行切分文档工作](use-case/coordinate-docs-work.md)
 
 ## Constitution
 

@@ -14,7 +14,9 @@ API 适配器只访问固定 HTTPS API，重定向拒绝，外部 URL 只用于�
 
 可选 GitHub CLI 模式的[接入设计](cli-integration.md)采用不同的信任边界：认证与 HTTP 网络处理委托给受信 gh，Concord 控制初始请求、进程、输出预算、身份与发布，不声称能限制 CLI 内部重定向或网络缓冲。API 保持默认且不自动切换；项目配置显式选择 `transport: 'gh'`，要求 gh 2.98.0 或更新版本及 POSIX 进程组能力。工作台操作者可触发服务端账号对配置范围的读取，不能把选择 CLI 当成浏览器认证。Linear CLI 仍为候选。
 
-设计经过独立只读挑战后定案。将来新增 provider 可实现同一读取与规范化 Spec；远端写入、webhook 和 OAuth 回调需要另行定义权限、重试和资源归属。
+将来新增 provider 可实现同一读取与规范化 Spec；webhook 和 OAuth 回调需要另行定义权限、重试和资源归属。远端 Issue 写入不属于 Feedback 读取，见[远端 Issue 写入](../neutral-project-governance/use-case/mutate-remote-issue.md)。
+
+本地 Issue 写入使用基础 CLI 的单文件发布 journal（`concord recover` 恢复）；`concord repo feedback import` 创建 Issue 时使用 Trace 多文件发布（`concord repo docs trace recover` 恢复）。两条路径争用同一 `publication.lease`，不会并发发布。
 
 
 ## 来源并列与能力边界
