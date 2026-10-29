@@ -11,8 +11,8 @@ Describe the user problem and why the product needs a current contract for it.
 ## Core Mental Model
 
 Define the concepts users must understand and identify who owns each declaration.
-Reference shared JSON concepts, or define local terms in this directory's
-`concepts.json` through Concord tools. Use prose here to explain their relationships.
+Link to shared terms in `concepts.md#id`, or define local terms in this directory's
+`concepts.md` through Concord tools. Explain each term under its own heading there.
 
 ## Scope
 

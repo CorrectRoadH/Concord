@@ -10,7 +10,7 @@
 
 ## L3: Explicit transition
 
-改变术语 owner 必须修订宪法；`concepts.json` 由作者审阅后的显式迁移替换，运行时不读取旧格式，不自动选择写法或编造定义（[C-008](../../constitution.md#c-008)、[C-009](../../constitution.md#c-009)）。
+改变术语 owner 必须修订宪法；运行时只识别 `concepts.md`，不读取、检测或转换旧格式，旧来源由接入项目手动改写（[C-008](../../constitution.md#c-008)、[C-009](../../constitution.md#c-009)）。
 
 ## L4: Strict structure
 

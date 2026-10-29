@@ -92,23 +92,9 @@ catalog 编辑不依赖写作政策解析，因此 v1 政策不会阻断迁移�
 
 升级前若存在 v1 journal，先用匹配的旧 CLI 完成恢复；新运行时不暗中恢复旧事务或改写其证据。详细合成、修复及恢复条件见[采用方案](../../design/scoped-terminology/plans/directory-owned/README.md)。
 
-## 从 concepts.json 迁移
+## 旧格式
 
-docs 下存在任何 concepts.json 时，`concepts index/show`、`docs check` 与 `concord check` 返回 `ConceptMigrationRequired`，complete 为 false，并列出全部 concepts.json 路径。运行时不解析 JSON catalog 的内容。
-
-路径变化会同时改变全部 imports，因此迁移是一次覆盖全部 JSON catalog 的事务：
-
-```sh
-concord concepts migrate --draft --language zh > /tmp/concepts-migration.json
-concord --dry-run concepts migrate --input /tmp/concepts-migration.json
-concord concepts migrate --input /tmp/concepts-migration.json
-```
-
-`--draft` 只读：用指定语言的 preferred 作为 term，复制定义与该语言的 deprecated，把 imports 改指 concepts.md；其它语言名称与 aliases 列在 `unplaced` 中由作者处理。`--language` 必填。
-
-输入的每项包含 legacyPath、legacyDigest、path、expectedDigest 与 body。输入必须恰好覆盖全部 JSON catalog，摘要都是当前值，path 为同目录的 concepts.md，body 为合法的 concepts.md，迁移后的 catalog 集合没有无效来源或悬空导入。已有的同名解释页按 expectedDigest 显式替换。
-
-事务操作名为 `migrate-concepts`，写入每个 concepts.md 并删除对应 concepts.json；它是唯一能删除 catalog 的操作。收据的 `droppedConcepts` 列出相对 JSON catalog 删除的概念 ID。中断后由 `concord recover` 按前后像完成或回退，concepts.json 成员或前像变化时返回 `RecoveryConflict`。旧 CLI 写入 concepts.json 的 set-concepts journal 先用匹配的旧 CLI 恢复。
+Concord 只识别 concepts.md。concepts.json 不是 Concord 文件：不读取、不检测、不提示，也不提供迁移命令；接入项目按上文结构手动改写术语并删除旧文件。以后的格式变化同样不向前兼容。
 
 ## CLI 示例
 

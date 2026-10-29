@@ -13,14 +13,10 @@
 | C9 | 一个 catalog `imports` 了 `docs/feature/a/concepts.md#job`，作者 set 时删除该概念 | 返回 `ConceptInUse` 并列出引用者 |
 | C10 | 正文链接指向的概念被删除，无 catalog 导入它 | 写入成功；`check` 报告 `AnchorNotFound` |
 | C11 | 用 `author set` 或 `feature page set` 改写某个 `concepts.md` | 返回 `ManagedConceptCatalog`，不写入 |
-| C12 | 仓库仍有 `docs/concepts.json` | `concepts index`、`docs check`、`check` 返回 `ConceptMigrationRequired`，`complete` 为 false |
-| C13 | `concepts migrate --draft --language zh` | 不写文件；输出覆盖全部 JSON catalog，`unplaced` 列出 en 名称与 aliases |
-| C14 | 迁移输入漏掉一个 JSON catalog，或某个 `legacyDigest` 过期 | 拒绝迁移，不写任何文件 |
-| C15 | 迁移在写完第一个 `concepts.md` 后中断 | 普通命令返回 `RecoveryRequired`；`concord recover` 按前后像完成或回退；`concepts.json` 成员被外部修改时返回 `RecoveryConflict` |
-| C16 | 迁移完成后再次执行同一输入 | `concepts.json` 成员为空，输入覆盖校验失败；空输入返回空 `changedPaths` |
-| C17 | 新仓库运行 `concord init` | 只创建 `docs/concepts.md` 随包空 catalog，不创建 `concepts.json` |
-| C18 | 两个兄弟目录各定义 `term` 为 `Job` 的概念 | 不产生诊断；任一目录导入另一方后报告 `AmbiguousConceptName` |
-| C19 | catalog 解释段落用行内代码写弃用名 `工单` | 不命中禁词 |
-| C20 | `concepts.md` 没有 frontmatter，只有一级标题和两个概念 | 合法 catalog，`imports` 与 `deprecated` 均为空 |
-| C21 | 旧版 init 生成的 `docs/concepts.md` 含 `## Shared language`，没有 `{#id}` | 返回 `InvalidConceptCatalog`，由迁移输入按其摘要显式替换 |
-| C22 | frontmatter 含 `format` 或其它未声明字段 | 返回 `InvalidConceptCatalog` |
+| C12 | 仓库仍有 `docs/concepts.json`，没有 `docs/concepts.md` | 不读取也不报告该文件，其中的概念不生效；作者手动改写后术语检查才生效 |
+| C13 | 新仓库运行 `concord init` | 只创建 `docs/concepts.md` 随包空 catalog，不创建 `concepts.json` |
+| C14 | 两个兄弟目录各定义 `term` 为 `Job` 的概念 | 不产生诊断；任一目录导入另一方后报告 `AmbiguousConceptName` |
+| C15 | catalog 解释段落用行内代码写弃用名 `工单` | 不命中禁词 |
+| C16 | `concepts.md` 没有 frontmatter，只有一级标题和两个概念 | 合法 catalog，`imports` 与 `deprecated` 均为空 |
+| C17 | 旧版 init 生成的 `docs/concepts.md` 含 `## Shared language`，没有 `{#id}` | 返回 `InvalidConceptCatalog`；作者手动改写为 catalog 结构 |
+| C18 | frontmatter 含 `format` 或其它未声明字段 | 返回 `InvalidConceptCatalog` |
