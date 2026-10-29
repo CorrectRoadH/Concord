@@ -5,7 +5,7 @@ import { parseDocument, stringify } from 'yaml';
 import { ConcordError, ProjectSchema, Text, decode, digest, type Finding, type MutationReceipt, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
 import { ConstitutionSchema, type ConstitutionMeta } from './constitution-schema.js';
-import { fromMarkdown } from './markdown-parser.js';
+import { fromMarkdown, mdxProse } from './markdown-parser.js';
 import { markdownAnchor, markdownBody } from './steps.js';
 import { documentMarkdown, documentMarkdownProjection } from './document-projection.js';
 
@@ -127,11 +127,12 @@ function render(metadata: ConstitutionMeta, body: string): string {
 // @concord-end
 
 type LinkTarget = { readonly kind: 'invalid'; readonly message: string } | { readonly kind: 'whole' } | { readonly kind: 'fragment'; readonly id: string };
+type RelativeLink = { readonly kind: 'relative'; readonly path: string; readonly fragment?: string; readonly query: boolean } | { readonly kind: 'invalid'; readonly message: string };
 
 // @concord-begin
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md#link-clause
 /** Only scheme-less, non-absolute URLs that normalize to the constitution are constitution links. */
-export function relativeMarkdownLinkTarget(from: string, url: string, owner: string): LinkTarget | undefined {
+export function relativeMarkdownLink(from: string, url: string): RelativeLink | undefined {
   if (/^[a-z][a-z0-9+.-]*:/iu.test(url) || url.startsWith('/')) return undefined;
   const hash = url.indexOf('#');
   const location = hash < 0 ? url : url.slice(0, hash);
@@ -142,11 +143,17 @@ export function relativeMarkdownLinkTarget(from: string, url: string, owner: str
   try { decoded = decodeURIComponent(rawPath); }
   catch { return { kind: 'invalid', message: `Link path ${rawPath} has invalid percent-encoding` }; }
   const target = decoded === '' ? from : posix.normalize(posix.join(posix.dirname(from), decoded));
-  if (target !== owner) return undefined;
-  if (query >= 0) return { kind: 'invalid', message: `${owner} links must not contain a query` };
-  if (fragment === undefined || fragment === '') return { kind: 'whole' };
-  try { return { kind: 'fragment', id: decodeURIComponent(fragment) }; }
-  catch { return { kind: 'invalid', message: `Link fragment ${fragment} has invalid percent-encoding` }; }
+  return { kind: 'relative', path: target, fragment, query: query >= 0 };
+}
+
+export function relativeMarkdownLinkTarget(from: string, url: string, owner: string): LinkTarget | undefined {
+  const target = relativeMarkdownLink(from, url);
+  if (target === undefined || target.kind === 'invalid') return target;
+  if (target.path !== owner) return undefined;
+  if (target.query) return { kind: 'invalid', message: `${owner} links must not contain a query` };
+  if (target.fragment === undefined || target.fragment === '') return { kind: 'whole' };
+  try { return { kind: 'fragment', id: decodeURIComponent(target.fragment) }; }
+  catch { return { kind: 'invalid', message: `Link fragment ${target.fragment} has invalid percent-encoding` }; }
 }
 
 export function constitutionLinkTarget(from: string, url: string): LinkTarget | undefined {
@@ -156,12 +163,29 @@ export function constitutionLinkTarget(from: string, url: string): LinkTarget | 
 /** Inline link nodes only: images, reference links, HTML and code never contribute. */
 export function inlineLinks(source: string, path?: string): { readonly url: string; readonly line: number }[] {
   if (path !== undefined) return [...documentMarkdownProjection(path, source).links];
+  return markdownLinks(source);
+}
+
+/** Reference occurrences use the occurrence's line, rather than the definition's. */
+export function markdownLinks(source: string, options: { readonly references?: boolean; readonly mdx?: boolean } = {}): { readonly url: string; readonly line: number }[] {
   const links: { url: string; line: number }[] = [];
+  const body = markdownBody(source);
+  const tree = fromMarkdown(options.mdx ? mdxProse(body) : body);
+  const definitions = new Map<string, string>();
+  const index = (node: Nodes): void => {
+    if (node.type === 'definition' && !definitions.has(node.identifier)) definitions.set(node.identifier, node.url);
+    if ('children' in node) node.children.forEach(index);
+  };
+  if (options.references) index(tree);
   const visit = (node: Nodes): void => {
     if (node.type === 'link') links.push({ url: node.url, line: node.position?.start.line ?? 1 });
+    if (options.references && node.type === 'linkReference') {
+      const url = definitions.get(node.identifier);
+      if (url !== undefined) links.push({ url, line: node.position?.start.line ?? 1 });
+    }
     if ('children' in node) node.children.forEach(visit);
   };
-  visit(fromMarkdown(markdownBody(source)));
+  visit(tree);
   return links;
 }
 
