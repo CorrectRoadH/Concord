@@ -59,7 +59,7 @@ Design 支持嵌套 Markdown 路径，候选页通过 `--plan` 选择，单文�
 
 supporting Markdown 进入 candidate 摘要，不成为独立 owner 或测试证据。测试 contract 限于 Feature 与 Use Case；Engineering owner 可作为 Design 裁决和 Memory promotion 的目标。
 
-模板随工具包安装，由严格 manifest 校验名称、路径、库存和文件类型，不依赖消费仓库。init 生成完整分类目录、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md`、空 `docs/concepts.json` 和 `docs/architecture.md`。
+模板随工具包安装，由严格 manifest 校验名称、路径、库存和文件类型，不依赖消费仓库。init 生成完整分类目录、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md`（随包空 catalog）和 `docs/architecture.md`。
 
 根 `AGENTS.md` 由 init 保留既有正文，并追加或刷新一个带边界的 Concord 托管区块，指向 `concord --skill`。标记残缺时拒绝写入。参考模板不成为契约 owner，也不被解释为自定义配置。
 

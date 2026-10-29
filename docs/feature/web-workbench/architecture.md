@@ -6,11 +6,11 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node �
 
 反馈列表使用 `/feedback`，详情使用 `/feedback/:id`。页面链接直接使用当前路由，不维护版本兼容别名。
 
-结构化术语由 `docs/**/concepts.json` 拥有，目录决定作用域；文档术语页通过 concepts 工具读取当前文档目录的有效定义、直接导入与来源诊断，不解析 Markdown 表格或自行实现第二套合成规则。`docs/concepts.md` 保留为可编辑的解释页面。全项目汇总与写作页共享同一后端 JSON 来源，不建立术语注册表。
+术语由 `docs/**/concepts.md` 拥有，目录决定作用域；文档术语页通过 concepts 工具读取当前文档目录的有效定义、直接导入与来源诊断，不在前端解析 catalog 或自行实现第二套合成规则。术语编辑打开 catalog 源码，保存调用 `concepts.set`。全项目汇总与写作页共享同一后端来源，不建立术语注册表。
 
 `docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering、Issue 或 Memory 来源的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 提供专用正文编辑入口，草稿采用与正式修订分别调用 constitution adopt 与 amend；普通 document.set 仍不能覆写宪法元数据与历史。阅读不是合规证据。
 
-`docs/README.md`、`docs/architecture.md`、`docs/concepts.md`、`docs/concord.md` 和 `docs/_template/` 下无 frontmatter 的参考模板沿用支持页面的摘要保护写入。其余未授权路径只读。单文件读取仍不枚举全仓库。
+`docs/README.md`、`docs/architecture.md`、`docs/concord.md` 和 `docs/_template/` 下无 frontmatter 的参考模板沿用支持页面的摘要保护写入；`concepts.md` 只经 `concepts.set` 写入。其余未授权路径只读。单文件读取仍不枚举全仓库。
 
 只读 Markdown 按 [MDXEditor 官方建议](https://mdxeditor.dev/editor/docs/overview) 使用独立阅读渲染器。复用 react-markdown，通过 remark-frontmatter 识别元数据；rehype-raw 后接 rehype-sanitize，不使用未经净化的 HTML。保留净化器的 DOM clobbering 前缀，由阅读导航映射源锚点，不能为保留锚点关闭净化。正文和原文／元数据详情来自同一读取结果；预览不产生写入或自动归一化。可编辑正文继续使用 MDXEditor 及原文回退，错误不得清空草稿。
 

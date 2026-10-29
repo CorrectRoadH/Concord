@@ -99,6 +99,11 @@ amendments:
     sources:
       - docs/design/constitution-structure/README.md
     impact: 取消 Feature 与 Design 的 constitutionRefs，依据关系改由 docs 下的正文链接表达并由 check 校验；C-008 第 4 款改为按 ID 维护身份；迁移不改变既有规则含义，不声称现有页面符合条款写法
+  - date: 2026-10-29
+    reason: 文档只有一个主语言，每个概念只需要一个写法；领域术语改由按目录归属的 concepts.md 拥有，定义与解释同处一页，正文可以链接到定义
+    sources:
+      - docs/design/markdown-terminology/README.md
+    impact: C-001 第 1、2 款的术语 owner 由 concepts.json 改为 concepts.md；多语言名称与允许别名取消；v1 JSON 由 concepts migrate 显式迁移，运行时不读取旧格式；款 ID 不变
 ---
 
 # Concord 项目宪法
@@ -123,8 +128,8 @@ amendments:
 
 ## C-001 事实只由自己的来源维护 {#c-001}
 
-1. 每项事实只有一个 owner。契约正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.json` 拥有，写作政策由同目录的 `concord-writing.json` 拥有；测试定义与正向关系由测试源码拥有；工程 Memory 拥有自己的正文与生命周期历史。 {#c-001-1}
-2. 目录确定术语与政策的局部作用域，docs 根拥有全局定义。Markdown 解释关系与案例，不重复维护结构化定义。 {#c-001-2}
+1. 每项事实只有一个 owner。契约正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作政策由同目录的 `concord-writing.json` 拥有；测试定义与正向关系由测试源码拥有；工程 Memory 拥有自己的正文与生命周期历史。 {#c-001-1}
+2. 目录确定术语与政策的局部作用域，docs 根拥有全局定义。术语的定义与解释写在同一 `concepts.md`；其它 Markdown 链接到定义，不重复维护。 {#c-001-2}
 3. 反向关系、聚合索引与引用反查从来源派生，不维护第二份登记表。 {#c-001-3}
 4. HawDB 只保存可重建投影与可丢弃缓存，短期解析使用同一引擎的内存实例。文件 owner、证据与发布日志不进入缓存。 {#c-001-4}
 5. Agent 对 Memory 与 Issue 的索引、检索、读取、创建、编辑、关联和生命周期操作必须通过 Concord CLI 或受管 API，不直接编辑 owner 文件、metadata 或 history，不维护人工 INDEX。工具缺口必须补齐或明确报告，不用手写文件绕过。 {#c-001-5}

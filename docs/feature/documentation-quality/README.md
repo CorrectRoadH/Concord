@@ -8,16 +8,17 @@ kind: feature
 
 # 文档写作与领域术语
 
-维护者通过 Concord CLI 与 Web 在全局、Feature、Engineering 及其它 docs 子目录定义领域术语和写作规则。术语由 concepts.json 拥有结构化定义、稳定 ID、多语言名称、允许别名与弃用名称；写作规则由 concord-writing.json 拥有禁词和检查选项。所在目录决定局部作用域，全项目视图自动汇总并保留来源，不复制定义。
+维护者通过 Concord CLI 与 Web 在全局、Feature、Engineering 及其它 docs 子目录定义领域术语和写作规则。术语由 concepts.md 拥有：每个概念有稳定 ID、唯一写法、定义段落与解释，旧写法列为弃用名；写作规则由 concord-writing.json 拥有禁词和检查选项。所在目录决定局部作用域，全项目视图自动汇总并保留来源，不复制定义。
 
 - [应用受控写作规则](use-case/apply-controlled-writing.md)
 - [检查正文与术语](use-case/inspect-writing.md)
 - [在 Web 管理写作与术语](use-case/manage-writing.md)
 - [按目录管理结构化术语与写作规则](use-case/manage-scoped-terminology.md)
 - [文件格式与作用域](policy.md)
-- [采用设计](../../design/scoped-terminology/README.md)
+- [作用域设计](../../design/scoped-terminology/README.md)
+- [术语格式设计](../../design/markdown-terminology/README.md)
 
-写作规则使用 concord.writing/v3，术语使用 concord.concepts/v1。祖先规则按范围合成，局部来源不能扩大目录或静默覆盖定义。同名不同义按作用域区分；只对弃用名称派生禁词，允许别名不自动成为错误。
+写作规则使用 concord.writing/v3，术语使用 concord.concepts/v2。祖先规则按范围合成，局部来源不能扩大目录或静默覆盖定义。同名不同义按作用域区分；弃用名称派生禁词并建议改为该概念的写法。正文可以链接到 `concepts.md#id`，断开的链接由检查报告。
 
 工具读写使用严格 Schema、整文件 CAS 与可恢复事务。show 支持无效来源显式修复。Web 草稿和异步请求绑定具体 owner，保存一份来源不能把另一份草稿标成已保存。
 

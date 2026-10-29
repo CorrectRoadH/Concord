@@ -2,42 +2,49 @@
 
 ```text
 docs/
-  concepts.json                    # 全局概念定义
+  concepts.md                      # 全局概念定义
   concord-writing.json             # 全局写作政策，init 创建预设
   feature/payments/
-    concepts.json                  # payments 的局部概念
+    concepts.md                    # payments 的局部概念
     concord-writing.json           # payments 的局部规则
     examples/concord-writing.json  # 更小的目录范围
   engineering/build/
-    concepts.json                  # build 的局部概念
+    concepts.md                    # build 的局部概念
 ```
 
-Concord 识别 docs 下精确命名的 concepts.json 与 concord-writing.json，排除 docs/_template、.git 和 node_modules。目录决定作用域，不在 JSON 重复保存 scope。其它 JSON 不获得写入授权；聚合从来源派生，不回写全局文件。全局概念与局部概念均有来源路径，局部定义不会自动升级为全局。
+Concord 识别 docs 下精确命名的 concepts.md 与 concord-writing.json，排除 docs/_template、.git 和 node_modules。目录决定作用域，不在来源中重复保存 scope。其它文件不获得这两类写入授权；聚合从来源派生，不回写全局文件。全局概念与局部概念均有来源路径，局部定义不会自动升级为全局。
 
 ## 概念定义
 
-```json
-{
-  "format": "concord.concepts/v1",
-  "concepts": [
-    {
-      "id": "feedback",
-      "definition": "等待调查的产品或工程观察。",
-      "names": {
-        "zh": {"preferred": "反馈", "aliases": ["反馈项"], "deprecated": ["工单"]},
-        "en": {"preferred": "Feedback"}
-      }
-    }
-  ],
-  "imports": []
-}
+```markdown
+---
+format: concord.concepts/v2
+imports:
+  - docs/concepts.md#memory
+deprecated:
+  feedback: [工单]
+---
+
+# 支付术语
+
+本页定义支付流程中的术语。
+
+## 反馈 {#feedback}
+
+等待调查的产品或工程观察。
+
+反馈关闭后，关联的 [Memory](../../concepts.md#memory) 仍保留调查结论。旧称 `工单` 只在行内代码中出现。
 ```
 
-id 在本文件内唯一，完整身份为 canonical catalog path#id。定义至少有一种语言；preferred 是首选名，aliases 是允许的名称，deprecated 才派生禁词。同一概念内部的这些名称不得互相冲突。ASCII 名称按忽略大小写和单词边界匹配，其它名称按字面匹配。
+每个二级标题是一个概念：去掉 `{#id}` 后的标题文字是该概念唯一的写法（term），id 在本文件内唯一，完整身份为 canonical catalog path#id。标题后的第一个段落是定义，定义之后、下一个二级标题以前的内容是解释。一级标题恰好一个，位于所有概念之前；两者之间是页面引言。没有二级标题的文件是空 catalog。
 
-全局和祖先目录的定义自动适用；imports 可显式引用其它目录的直接定义，例如 docs/feature/payments/concepts.json#payment。引用不递归导入另一文件的 imports，也不复制定义。移除或改名被引用的 ID 会被拒绝。不同兄弟目录的同名概念可以并存；有效范围相交的歧义携带双方来源，不静默覆盖。
+frontmatter 严格解码：format 必填；imports 可选；deprecated 可选，键为本文件的概念 ID，值为弃用名列表。term 只能是纯文本。同一文件内 term 互不重复，弃用名互不重复且不等于任何 term。ASCII 写法按忽略大小写和单词边界匹配，其它写法按字面匹配。结构不合规返回 `InvalidConceptCatalog`，消息带行号与原因。
 
-Markdown 适合解释概念关系、场景和例子。结构化定义只在 JSON 维护，Markdown 不是运行时术语来源。
+全局和祖先目录的定义自动适用；imports 可显式引用其它目录的直接定义，例如 docs/feature/payments/concepts.md#payment。引用不递归导入另一文件的 imports，也不复制定义。移除或改名被导入的 ID 会被拒绝。不同兄弟目录的同名概念可以并存；有效范围相交的歧义携带双方来源，不静默覆盖。
+
+正文可以链接到定义，例如 `[反馈](../payments/concepts.md#feedback)`。fragment 不是该 catalog 的概念 ID 时，`concord check` 报告 `AnchorNotFound`，类别为 relation。链接的筛选与解码规则与宪法链接相同。正文链接不阻止删除定义；断开的链接由检查报告。
+
+catalog 只能由 concepts 工具写入；author set、page set、page add 与 Web 通用保存遇到 catalog 路径返回 `ManagedConceptCatalog`。格式与取舍见[术语格式设计](../../design/markdown-terminology/plans/markdown-owned/README.md)。
 
 ## 写作政策
 
@@ -61,42 +68,60 @@ roots 可省略：全局默认为 docs，局部默认为所在目录。全局 ro
 
 `--rules` 指向受管政策时，仅用该政策的 roots 选文件，仍合成这些文件的祖先与后代政策。指向非受管路径时是独立只读 profile，仅用显式政策与有效概念，不合成其它写作政策。报告说明实际模式和选择范围。
 
-冲突按实际适用的文件与表达位置判断，互不相交的 roots/豁免不构成冲突。相同命中可去重，但必须保留全部适用来源；冲突命中不任意挑选一条替换建议。允许别名与其它有效概念的弃用/禁词相撞也须报告。
+冲突按实际适用的文件与表达位置判断，互不相交的 roots/豁免不构成冲突。相同命中可去重，但必须保留全部适用来源；冲突命中不任意挑选一条替换建议。一个概念的弃用名等于另一个有效概念的 term，或禁词禁止了有效概念的 term，也须报告。
 
 ## 使用统计与输入快照
 
-概念使用按完整概念身份统计，只读取该概念实际适用的所选正文。允许名称算使用，弃用名称不证明正确使用；显式 import 是原概念的有效使用。定义和生成汇总不算使用。同一概念最多产生一条 unusedConcept 诊断，不用兄弟目录的同名概念替它证明使用。
+概念使用按完整概念身份统计，只读取该概念实际适用的所选正文。只有 term 算使用，弃用名称不证明正确使用；显式 import 是原概念的有效使用。catalog 文件整份不算使用，生成汇总也不算。catalog 仍参与禁词与长度检查，解释中提到弃用名时写在行内代码中。同一概念最多产生一条 unusedConcept 诊断，不用兄弟目录的同名概念替它证明使用。
 
 
 报告绑定政策、概念、文件集合、配置、正文和 CSS 的输入摘要；读取期间变化则拒绝结果。Web 只展示某次已保存输入的历史快照，不称为当前通过。
 
 ## 工具管理与恢复
 
-通过 writing 与 concepts 工具及 Web 编辑来源，使用完整 owner 摘要保护修改。show 区分 missing/valid/invalid，安全读取的无效原文可以显式修复；危险路径和读取失败不会伪装为空态。正文输入可来自临时文件或 stdin，不直接绕过工具改受管 JSON。
+通过 writing 与 concepts 工具及 Web 编辑来源，使用完整 owner 摘要保护修改。show 区分 missing/valid/invalid，安全读取的无效原文可以显式修复；危险路径和读取失败不会伪装为空态。正文输入可来自临时文件或 stdin，不直接绕过工具改受管来源。concepts set 按提交的字节保存 Markdown，不重新序列化。
 
-publication 与 recovery 双向校验精确路径、具名操作、唯一有效 after 和配置绑定。concepts 写入还保存其它 catalog 的完整集合与原文摘要；事务中断后新增、删除或修改 importer 会拒绝恢复并保留现场。prepared 恢复精确 before（包括原来的无效 bytes），committed 保留已提交内容，不要求 before 已经符合当前 Schema。
+publication 与 recovery 双向校验精确路径、具名操作、唯一有效 after 和配置绑定。concepts 写入还保存其它 catalog 的完整集合与原文摘要（操作名 `set-concepts`）；事务中断后新增、删除或修改 importer 会拒绝恢复并保留现场。prepared 恢复精确 before（包括原来的无效 bytes），committed 保留已提交内容，不要求 before 已经符合当前 Schema。
 
-init 只在缺失时创建空的全局 concepts.json，并绑定真实的新配置初始化；保留已有概念文件的全部字节。这个例外不允许局部 catalog、非空目录定义或任意 JSON 混入 init。
+init 只在缺失时把 docs/concepts.md 创建为随包空 catalog，并绑定真实的新配置初始化；保留已有 docs/concepts.md 的全部字节，即使它不是合法 catalog。这个例外不允许局部 catalog、非空定义或任意 Markdown 混入 init，init 不创建 concepts.json。
 
 ## 从 writing/v1 迁移
 
-普通检查遇到 v1 返回 WritingMigrationRequired，不自动解释旧概念表。先用 show 获取旧政策原文与 digest；作者审核概念定义、别名与弃用名，用 concepts.set 保存 JSON；最后用 writing.set 和旧政策 digest 显式替换为 v3。迁移中间阶段仍明确拒绝旧政策检查。
+普通检查遇到 v1 返回 WritingMigrationRequired，不自动解释旧概念表。先用 show 获取旧政策原文与 digest；作者审核概念定义与弃用名，为每个概念选定唯一写法，用 concepts.set 保存 concepts.md；最后用 writing.set 和旧政策 digest 显式替换为 v3。迁移中间阶段仍明确拒绝旧政策检查。
 
-catalog 编辑不依赖写作政策解析，因此 v1 政策不会阻断迁移。各无效来源可逐项修复，但已知引用不能被破坏。迁移不从名称自动编造 definition，也不把全部 aliases 自动当成 deprecated。
+catalog 编辑不依赖写作政策解析，因此 v1 政策不会阻断迁移。各无效来源可逐项修复，但已知引用不能被破坏。迁移不从名称自动编造 definition，也不把旧表的其它名称自动当成 deprecated。
 
 升级前若存在 v1 journal，先用匹配的旧 CLI 完成恢复；新运行时不暗中恢复旧事务或改写其证据。详细合成、修复及恢复条件见[采用方案](../../design/scoped-terminology/plans/directory-owned/README.md)。
+
+## 从 concepts/v1 迁移
+
+docs 下存在任何 concepts.json 时，`concepts index/show`、`docs check` 与 `concord check` 返回 `ConceptMigrationRequired`，complete 为 false，并列出全部 v1 路径。运行时不解析 v1 内容。
+
+路径变化会同时改变全部 imports，因此迁移是一次覆盖全部 v1 catalog 的事务：
+
+```sh
+concord concepts migrate --draft --language zh > /tmp/concepts-migration.json
+concord --dry-run concepts migrate --input /tmp/concepts-migration.json
+concord concepts migrate --input /tmp/concepts-migration.json
+```
+
+`--draft` 只读：用指定语言的 preferred 作为 term，复制定义与该语言的 deprecated，把 imports 改指 concepts.md；其它语言名称与 aliases 列在 `unplaced` 中由作者处理。`--language` 必填。
+
+输入的每项包含 legacyPath、legacyDigest、path、expectedDigest 与 body。输入必须恰好覆盖全部 v1 catalog，摘要都是当前值，path 为同目录的 concepts.md，body 为合法 v2，迁移后的 catalog 集合没有无效来源或悬空导入。已有的同名解释页按 expectedDigest 显式替换。
+
+事务操作名为 `migrate-concepts`，写入每个 concepts.md 并删除对应 concepts.json；它是唯一能删除 catalog 的操作。收据的 `droppedConcepts` 列出相对 v1 删除的概念 ID。中断后由 `concord recover` 按前后像完成或回退，v1 成员或前像变化时返回 `RecoveryConflict`。v1 的 set-concepts journal 先用匹配的旧 CLI 恢复。
 
 ## CLI 示例
 
 ```sh
 concord writing index --json
 concord concepts index --json
-concord concepts show --path docs/feature/payments/concepts.json --json
+concord concepts show --path docs/feature/payments/concepts.md --json
 concord writing show --path docs/feature/payments/concord-writing.json --json
 
 # 仅在目标缺失时使用 null；已有来源必须使用 show 返回的 digest。
-concord concepts set --path docs/feature/payments/concepts.json \
-  --body /tmp/reviewed-concepts.json --expected-digest null
+concord concepts set --path docs/feature/payments/concepts.md \
+  --body /tmp/reviewed-concepts.md --expected-digest null
 concord writing set --path docs/feature/payments/concord-writing.json \
   --body /tmp/reviewed-policy.json --expected-digest null
 concord docs check --rules docs/feature/payments/concord-writing.json --json

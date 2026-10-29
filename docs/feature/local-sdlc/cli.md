@@ -19,7 +19,7 @@
 
 ```text
   docs/README.md
-  docs/concepts.json
+  docs/concepts.md
   docs/concord-writing.json
   ...
   memory/README.md

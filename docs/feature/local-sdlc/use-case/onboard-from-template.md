@@ -54,8 +54,8 @@ feature: docs/feature/local-sdlc/README.md
    创建的内容：
 
    - 配置与宪法：`concord.config.ts`、`docs/constitution.md`（draft）。
-   - 入口与说明：`docs/concord.md`、`docs/README.md`、`docs/concepts.md`、`docs/architecture.md`。
-   - 术语与写作政策：空的 `docs/concepts.json`、预设的 `docs/concord-writing.json`。
+   - 入口与说明：`docs/concord.md`、`docs/README.md`、`docs/architecture.md`。
+   - 术语与写作政策：随包空 catalog `docs/concepts.md`、预设的 `docs/concord-writing.json`。
    - 模板与目录：`docs/_template/`、各分类目录的 README。
    - `AGENTS.md` 中的 Concord 区块。
 
@@ -95,7 +95,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 已有文件
 
-- 已有的 `docs/README.md`、`docs/concepts.md`、`docs/architecture.md`、`docs/concepts.json` 与写作政策原样保留，不算冲突。
+- 已有的 `docs/README.md`、`docs/concepts.md`、`docs/architecture.md` 与写作政策原样保留，不算冲突；不合法的 `docs/concepts.md` 由之后的检查报告。
 - `AGENTS.md` 只创建或刷新带边界标记的 Concord 区块，区块外的内容保留。
 - Concord 区块和 `docs/concord.md` 把 Agent 引到当前安装版本的 `concord --skill`。
 
