@@ -53,4 +53,6 @@ URI 只接受当前 worktree 的安全 file 路径，拒绝路径逃逸、符号
 - 服务不开网络端口，不启动 language server、测试收集器或 runner。stdout 只包含 framed JSON-RPC，stderr 用于具名诊断。
 - shutdown、exit、EOF 与 SIGINT 取消任务并释放会话资源，不持 publication lease 等待客户端。
 
-详细生命周期见[编辑器服务](../../../design/lsp-integration/plans/lsp-client/architecture.md#编辑器服务)。
+- 同时未保存地修改步骤 ID 与测试引用时，引用新 ID 有效，不从旧磁盘图发出 `StepNotFound`；新版本确有缺失步骤而旧任务迟到时，旧结果被淘汰。
+
+任务版本核对与计算进程见[编辑器计算](../architecture.md#编辑器计算)。

@@ -68,7 +68,7 @@ feature: docs/feature/local-sdlc/README.md
 - 实际路径是文档的身份。`metadata.id` 与文件名分开维护，创建时默认用 ID 命名。
 - Feature、Roadmap、Design 与 Engineering 位于各自分类下的单层目录，入口是 `README.md`。Use Case 位于所属 Feature 的 `use-case/` 目录。Issue 是 `docs/issues/` 下的 `.md` 文件。Research 可以嵌套主题，Memory 的路径在其来源内确定。
 - 短 ID 只用于唯一查询。同一类别（Memory 除外）的 ID 不能重复，Memory 重名时用完整路径。
-- 创建子文档、采用、保存页面、关系与证据都使用实际路径，发布和恢复不会按 ID 重新猜路径。移动文件后，绑定原路径的证据不会自动对新路径有效。
+- 创建子文档、采用、保存页面、关系与证据都使用实际路径，发布和恢复不会按 ID 重新猜路径（[文档身份](../architecture.md#文档身份)）。移动文件后，绑定原路径的证据不会自动对新路径有效。
 - 附页可以按精确路径或 anchor 归到所属 Feature，相邻 package 不会因目录名前缀相似而混入。
 
 ## 名称

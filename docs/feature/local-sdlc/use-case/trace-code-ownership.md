@@ -127,7 +127,7 @@ feature: docs/feature/local-sdlc/README.md
 
 文件路径不变、前面同类兄弟不变时，空白、行号、函数体和 `@concord-implements` 的修改不改变 node 的引用。同一份内容在新进程或新 clone 中得到相同引用。
 
-引用表示当前位置，不是永久身份。移动、改名、改变作用域或改变同类兄弟的顺序，都可能让引用失效，或者让旧引用指到另一个声明。例如删除前一个 region 的标记后，后一个 region 会接续它的序号。自动化工具每次都要重新 `list` 或 `locate`，核对文件、符号与范围，不能把一次查询成功当作历史连续。引用的派生规则见[采用设计](../../../design/derived-code-reference/plans/derived/architecture.md)。
+引用表示当前位置，不是永久身份。移动、改名、改变作用域或改变同类兄弟的顺序，都可能让引用失效，或者让旧引用指到另一个声明。例如删除前一个 region 的标记后，后一个 region 会接续它的序号。自动化工具每次都要重新 `list` 或 `locate`，核对文件、符号与范围，不能把一次查询成功当作历史连续。引用的派生规则见[代码声明引用](../architecture.md#代码声明引用)。
 
 ## Spec 来源
 

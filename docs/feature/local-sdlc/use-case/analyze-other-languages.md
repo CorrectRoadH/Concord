@@ -21,10 +21,28 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 验收
 
-- 关系身份、观察结构与相关性判定遵守[共同身份](../../../design/test-journey-steps/共同身份.md)。`check` 不读取任何观察。
-- 配置、符号绑定、调用观察、信任边界与分析生命周期见[采用设计](../../../design/lsp-integration/plans/lsp-client/architecture.md)。
-- 输出中不出现"无关"结论；`not-observed` 的文字为"未观察到交集"并列出原因。
-- 验收场景见 [CASES](../../../design/lsp-integration/CASES.md)。
+关系身份、观察结构与相关性判定见[关联身份与观察](../library.md#关联身份与观察)，绑定、调用观察与分析生命周期见[多语言分析](../architecture.md#多语言分析)。
+
+以构建打包后的 CLI 在隔离 Git 消费者中验证；可控 LSP 进程只模拟协议边界与异常。声明某语言受支持前，须对该 server 的固定版本运行真实语言 fixture，并按语言、server 版本与 profile 版本分别给出源码关系、符号定位与调用观察的证据；证据不足时只承诺标记关系与具名缺口。
+
+- 函数、类内方法、装饰器与同名声明定位到最近正确节点；不能验证时定位标记行并带 `UnsupportedSymbolBinding`，关系仍存在。扁平符号、`null`、越界范围与错误嵌套不构造层级，非 BMP 位置按协商编码换算。
+- 冷、热、损坏与清空缓存时，`check` 的退出码、finding、`complete`、当前关系与关联 ID 相同，只有 locator 与观察状态变化。
+- 经 testRoots 中转调函数调用同一步骤实现时为 `observed`、level 为 `step` 并保留 `OpenWorldCalls`；只观察到其它 Feature 实现时为 `not-observed`。超出默认深度 3、能力缺失、动态调用、框架回调与子进程边界带对应缺口。
+- server 启动失败、超时、取消、超输出或主进程退出后子进程存活时具名失败，并核验整个进程组与管道清理；清理未知保留 runner 阻断。分析期间修改转调文件、fixture、配置、成员集合或 server 实际脚本时整个分析单元拒绝发布。
+- 原生清单的范围、绑定或选中集合变化时观察输入身份变化；无范围时使用文件级并带 `FileScope`，测试关联 ID 与 `check` 关系不变。
+- server 发出编辑或执行请求时拒绝；server 自行修改项目文件由输入复核检出。任何静态入口、`test run` 与编辑器服务都不启动 language server。
+- 固定源码、profile、server 与可复现环境时，清空后重新分析的关系与身份相同；环境或索引无法核验时标明缺口，不承诺无条件相同。
+
+## 具名结果
+
+| code | 结果 |
+| --- | --- |
+| `InvalidLanguageServer` | 配置、扩展名、路径或预算无效，启动前拒绝 |
+| `UnsupportedSymbolBinding`、`CapabilityMissing` | 保留标记关系与标记行，记为观察缺口 |
+| `IndexReadinessUnknown`、`PartialResult` | 不声称符号或调用集合完整 |
+| `LanguageServerFailed`、`AnalysisBudgetExceeded`、`AnalysisCancelled` | 清理进程组，不发布新观察 |
+| `AnalysisSourceChanged`、`AnalysisInputUnverified` | 拒绝当前观察，旧结果只作历史 |
+| `AnalysisCleanupUnknown` | 保留 runner 阻断，不发布 |
 
 ## 配置与结果
 
