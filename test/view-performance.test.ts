@@ -12,7 +12,7 @@ import { createDocument } from '../dist/documents.js';
 import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from '../dist/editing.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { startViewServer } from '../dist/view-server.js';
-import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection } from './support.js';
+import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from './support.js';
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-performance-'));
@@ -34,9 +34,9 @@ test('HTTP projection retains orphan annotation incompleteness and observes its 
   const base = `http://127.0.0.1:${server.port}`;
   const path = join(root, 'src/main.ts');
   const original = readFileSync(path, 'utf8');
-  const requestRefresh = () => fetch(`${base}/api/workspace`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  const requestRefresh = () => fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
   const waitForFinding = (code: string) => pollUntil(async () => {
-    const response = await fetch(`${base}/api/workspace`);
+    const response = await fetchFresh(`${base}/api/workspace`);
     if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
     const value = parseWorkspaceProjection(await response.text());
     if (value === undefined) return undefined;
@@ -52,7 +52,7 @@ test('HTTP projection retains orphan annotation incompleteness and observes its 
     writeFileSync(path, original);
     await requestRefresh();
     const healthy = await pollUntil(async () => {
-      const response = await fetch(`${base}/api/workspace`);
+      const response = await fetchFresh(`${base}/api/workspace`);
       if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
       const value = parseWorkspaceProjection(await response.text());
       return value !== undefined && value.snapshot.complete === true && value.projection.builtAt !== orphaned.projection.builtAt ? value : undefined;
@@ -143,11 +143,11 @@ test('unchanged projections return 304 and published external edits invalidate t
     const etag = await waitForWorkspaceNotModified(base);
     writeFileSync(join(root, 'docs/feature/cached/architecture.md'), '# External edit\n');
     // Source watching may publish before the explicit refresh or the next GET.
-    const requested = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+    const requested = await fetchFresh(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
     assert.equal(requested.status, 202);
     await requested.arrayBuffer();
     const refreshed = await pollUntil(async () => {
-      const response = await fetch(url, { headers: { 'If-None-Match': etag } });
+      const response = await fetchFresh(url, { headers: { 'If-None-Match': etag } });
       if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
       const value = parseWorkspaceProjection(await response.text());
       return value?.snapshot.pages.some(page => page.derivedTitle === 'External edit') ? response : undefined;
@@ -164,21 +164,21 @@ test('workbench compresses workspace data and caches fingerprinted assets only',
   try {
     const base = `http://127.0.0.1:${server.port}`;
     await waitForWorkspaceProjection(base);
-    const workspace = await fetch(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip' } });
+    const workspace = await fetchFresh(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip' } });
     assert.equal(workspace.status, 200);
     assert.equal(workspace.headers.get('content-encoding'), 'gzip');
     assert.equal(workspace.headers.get('vary'), 'Accept-Encoding');
     assert.equal(workspace.headers.get('cache-control'), 'no-store');
     assert.equal((await workspace.json() as { ok: boolean }).ok, true);
-    const uncompressed = await fetch(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip;q=0' } });
+    const uncompressed = await fetchFresh(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip;q=0' } });
     assert.equal(uncompressed.headers.get('content-encoding'), null);
     const asset = readdirSync('dist/web/assets').find(name => /^index-.+\.js$/u.test(name));
     assert.ok(asset);
-    const script = await fetch(`${base}/assets/${asset}`, { headers: { 'Accept-Encoding': 'gzip' } });
+    const script = await fetchFresh(`${base}/assets/${asset}`, { headers: { 'Accept-Encoding': 'gzip' } });
     assert.equal(script.status, 200);
     assert.equal(script.headers.get('content-encoding'), 'gzip');
     assert.equal(script.headers.get('cache-control'), 'public, max-age=31536000, immutable');
-    const index = await fetch(base);
+    const index = await fetchFresh(base);
     assert.equal(index.headers.get('cache-control'), 'no-store');
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
@@ -190,10 +190,10 @@ test('independent readers share a lease while publication still requires exclusi
   const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './dist/coordination.js'; const lease=acquireTraceLeaseSync(process.argv[1], 'shared', 'read-test'); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'read-test'));", root], { stdio: ['pipe', 'pipe', 'pipe'] });
   try {
     await once(child.stdout!, 'data');
-    const file = await fetch(`http://127.0.0.1:${server.port}/api/file?path=docs%2Ffeature%2Fcached%2FREADME.md`);
+    const file = await fetchFresh(`http://127.0.0.1:${server.port}/api/file?path=docs%2Ffeature%2Fcached%2FREADME.md`);
     assert.equal(file.status, 200);
     assert.match(await file.text(), /Cached/);
-    const workspace = await fetch(`http://127.0.0.1:${server.port}/api/workspace`);
+    const workspace = await fetchFresh(`http://127.0.0.1:${server.port}/api/workspace`);
     assert.ok([200, 202].includes(workspace.status), await workspace.text());
     assert.throws(() => new LocalRepository(root), { code: 'RepositoryBusy' });
   } finally {
@@ -255,7 +255,7 @@ test('HTTP Git status does not scan workspace documents or source declarations',
   let walks = 0;
   LocalRepository.prototype.files = function(path) { walks += 1; return files.call(this, path); };
   try {
-    const response = await fetch(`http://127.0.0.1:${server.port}/api/git`);
+    const response = await fetchFresh(`http://127.0.0.1:${server.port}/api/git`);
     assert.equal(response.status, 200);
     assert.match(await response.text(), /src\/main.ts/);
     assert.equal(walks, 0, 'Git refresh must not compile the entire workspace');

@@ -4,6 +4,7 @@ import { once } from 'node:events';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { ViewRequestLog } from '../dist/view-request-log.js';
+import { fetchFresh } from './support.js';
 
 const Record = Schema.Struct({
   method: Schema.String, route: Schema.String, status: Schema.Number, completed: Schema.Boolean,
@@ -31,7 +32,7 @@ test('real HTTP slow logs redact inputs, distinguish incomplete 200 responses, a
     const address = server.address(); assert.ok(address && typeof address !== 'string');
     const url = `http://127.0.0.1:${address.port}/api/action?token=secret-query`;
     const request = async (target = url) => {
-      const response = await fetch(target, { method: 'POST', body: 'secret-body', headers: { authorization: 'secret-header' } });
+      const response = await fetchFresh(target, { method: 'POST', body: 'secret-body', headers: { authorization: 'secret-header' } });
       assert.equal(response.status, 200); assert.equal(await response.text(), 'ok');
     };
     for (let index = 0; index < 25; index++) await request();

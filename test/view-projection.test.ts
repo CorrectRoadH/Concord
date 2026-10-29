@@ -16,7 +16,7 @@ import type { WorkspaceProjection } from '../dist/view-contract.js';
 import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from '../dist/workspace-projection.js';
 import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
 import { ViewScanManager } from '../dist/view-scan.js';
-import { parseWorkspaceHttpResponse, parseWorkspaceProjection, parseWorkspaceProjectionOutput, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection } from './support.js';
+import { parseWorkspaceHttpResponse, parseWorkspaceProjection, parseWorkspaceProjectionOutput, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from './support.js';
 
 const cli = join(resolve('.'), 'dist/entry.js');
 
@@ -55,7 +55,7 @@ test('GET /api/workspace serves a body-free projection and reports pending befor
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
-    const first = await fetch(`${base}/api/workspace`);
+    const first = await fetchFresh(`${base}/api/workspace`);
     const firstBody = await first.text();
     const initial = parseWorkspaceHttpResponse(first.status, firstBody);
     if (first.status === 200) assert.ok(initial, 'a ready response contains the complete projection envelope');
@@ -74,7 +74,7 @@ test('GET /api/workspace serves a body-free projection and reports pending befor
     // Owner bodies never enter the durable projection; detail reads are directed.
     for (const document of value.snapshot.documents) assert.equal('body' in document, false);
     for (const page of value.snapshot.pages) assert.equal('body' in page, false);
-    const response = await fetch(`${base}/api/workspace`);
+    const response = await fetchFresh(`${base}/api/workspace`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get('cache-control'), 'no-store');
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
@@ -87,20 +87,20 @@ test('POST /api/workspace requests one merged refresh without waiting for the sc
   const base = baseOf(server);
   try {
     await waitForWorkspaceProjection(base);
-    const requested = await fetch(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
+    const requested = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
     const requestedBody = await requested.text();
     assert.equal(requested.status, 202, requestedBody);
     assert.deepEqual(JSON.parse(requestedBody), { ok: true, value: { status: 'requested' } });
     // Host/Origin and strict JSON keep applying to the retry route.
-    const excess = await fetch(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ extra: true }) });
+    const excess = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ extra: true }) });
     assert.equal(excess.status, 400);
     assert.equal((await excess.json() as { readonly error: string }).error, 'InvalidData');
-    const missingType = await fetch(`${base}/api/workspace`, { method: 'POST', body: '{}' });
+    const missingType = await fetchFresh(`${base}/api/workspace`, { method: 'POST', body: '{}' });
     assert.equal(missingType.status, 400);
-    const malformed = await fetch(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: 'not json' });
+    const malformed = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: 'not json' });
     assert.equal(malformed.status, 400);
     // A plain GET still reads the cached generation immediately.
-    const immediate = await fetch(`${base}/api/workspace`);
+    const immediate = await fetchFresh(`${base}/api/workspace`);
     const immediateBody = await immediate.text();
     assert.equal(immediate.status, 200, immediateBody);
     assert.ok(parseWorkspaceProjection(immediateBody));
@@ -130,18 +130,18 @@ test('/api/file resolves directed current owners without a workspace-wide scan',
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
-    const document = await fetch(`${base}/api/file?path=${encodeURIComponent('docs/feature/projected/README.md')}`);
+    const document = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('docs/feature/projected/README.md')}`);
     assert.equal(document.status, 200, await document.clone().text());
     const documentValue = await document.json() as { readonly value: { readonly body: string; readonly digest: string; readonly document?: { readonly metadata: { readonly id: string } } } };
     assert.equal(documentValue.value.document?.metadata.id, 'projected');
     assert.match(documentValue.value.body, /Projected feature/u);
 
-    const config = await fetch(`${base}/api/file?path=${encodeURIComponent('concord.config.ts')}`);
+    const config = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('concord.config.ts')}`);
     assert.equal(config.status, 200, await config.clone().text());
     const configValue = await config.json() as { readonly value: { readonly project?: { readonly projectId: string }; readonly digest: string } };
     assert.ok(configValue.value.project, 'a valid config target exposes its parsed project preimage');
 
-    const issue = await fetch(`${base}/api/file?path=${encodeURIComponent('docs/issues/sample-issue.md')}`);
+    const issue = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('docs/issues/sample-issue.md')}`);
     assert.equal(issue.status, 200, await issue.clone().text());
     const issueValue = await issue.json() as { readonly value: { readonly feedback?: { readonly document: { readonly metadata: { readonly kind: string; readonly id: string } }; readonly remote: unknown } } };
     assert.equal(issueValue.value.feedback?.document.metadata.kind, 'issue');
@@ -238,7 +238,7 @@ test('a live publication keeps the first workspace generation pending and refres
   try {
     const until = Date.now() + 1500;
     do {
-      const response = await fetch(`${base}/api/workspace`);
+      const response = await fetchFresh(`${base}/api/workspace`);
       const body = await response.text();
       assert.equal(response.status, 202, body);
       assert.equal(parseWorkspaceHttpResponse(response.status, body), undefined);
@@ -265,7 +265,7 @@ test('an interrupted publication blocks the first workspace generation with a na
   const base = baseOf(server);
   try {
     const blocked = await pollUntil(async () => {
-      const response = await fetch(`${base}/api/workspace`);
+      const response = await fetchFresh(`${base}/api/workspace`);
       const body = await response.text();
       return response.status === 503 && body.includes('RecoveryRequired') ? body : undefined;
     }, { description: 'RecoveryRequired workspace response', timeoutMs: 45_000 });
@@ -281,7 +281,7 @@ test('an interrupted publication retains a prior generation with blocked status'
   try {
     const previous = await waitForWorkspaceProjection(base);
     interruptPublication(root);
-    const response = await fetch(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
+    const response = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
     assert.equal(response.status, 202);
     const blocked = await pollUntil(async () => {
       const value = await waitForWorkspaceProjection(base);
@@ -302,7 +302,7 @@ test('a busy native cache is explicitly unavailable and recovers after its handl
     const previous = await waitForWorkspaceProjection(base);
     const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false });
     try {
-      const response = await fetch(`${base}/api/workspace`);
+      const response = await fetchFresh(`${base}/api/workspace`);
       assert.equal(response.status, 503);
       const body = await response.json() as { error: string; details: { reason: string }; value?: unknown };
       assert.equal(body.error, 'WorkspaceProjectionUnavailable');
@@ -326,7 +326,7 @@ test('a briefly busy workspace cache recovers within the same HTTP request', asy
     const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false });
     const release = setTimeout(() => database.close(), 100);
     try {
-      const response = await fetch(`${base}/api/workspace`);
+      const response = await fetchFresh(`${base}/api/workspace`);
       const body = await response.text();
       assert.equal(response.status, 200, body);
       const recovered = parseWorkspaceProjection(body);
@@ -406,10 +406,10 @@ test('a first generation built during source drift publishes incomplete navigati
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
-    const first = await fetch(`${base}/api/workspace`);
+    const first = await fetchFresh(`${base}/api/workspace`);
     await first.arrayBuffer();
     const value = await pollUntil(async () => {
-      const response = await fetch(`${base}/api/workspace`);
+      const response = await fetchFresh(`${base}/api/workspace`);
       if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
       const parsed = parseWorkspaceProjection(await response.text());
       return parsed?.projection.consistent === false ? parsed : undefined;
@@ -438,10 +438,10 @@ test('a new consistent generation with findings replaces the previous healthy ge
     const broken = 'docs/feature/broken/README.md';
     mkdirSync(join(root, 'docs/feature/broken'), { recursive: true });
     writeFileSync(join(root, broken), '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken owner\n');
-    const requested = await fetch(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
+    const requested = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
     assert.equal(requested.status, 202, await requested.text());
     const replaced = await pollUntil(async () => {
-      const response = await fetch(`${base}/api/workspace`);
+      const response = await fetchFresh(`${base}/api/workspace`);
       if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
       const parsed = parseWorkspaceProjection(await response.text());
       if (parsed === undefined || parsed.snapshot.findings.length === 0) return undefined;

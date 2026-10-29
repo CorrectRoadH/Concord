@@ -11,6 +11,7 @@ import { Effect } from 'effect';
 import { setConfig, showConfig } from '../dist/editing.js';
 import { ConcordError } from '../dist/shared.js';
 import { initialize, LocalRepository } from '../dist/storage.js';
+import { fetchFresh } from './support.js';
 
 if (process.platform === 'win32') {
   // @use-case docs/feature/feedback/use-case/triage-feedback.md
@@ -160,7 +161,7 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     assert.equal((await Effect.runPromise(checkGhConnection(consumer, connection))).target, 'acme/widgets', 'slot must be reusable after confirmed cancellation');
     const server = await startViewServer({ root: consumer, host: '127.0.0.1', port: 0 });
     const endpoint = `http://127.0.0.1:${server.port}/api/action`;
-    const post = (signal?: AbortSignal) => fetch(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'feedback.check', connection: connection.id }), signal });
+    const post = (signal?: AbortSignal) => fetchFresh(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'feedback.check', connection: connection.id }), signal });
     try {
       const normal = await post();
       assert.equal(normal.status, 200, 'normal request body completion must not cancel the check');

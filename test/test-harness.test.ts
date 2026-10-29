@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { initialize, LocalRepository } from '../dist/storage.js';
-import { pollUntil, waitForWorkspaceNotModified } from './support.js';
+import { pollUntil, waitForWorkspaceNotModified, fetchFresh } from './support.js';
 import { startViewServer } from './e2e/server.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -30,7 +30,7 @@ test('poll deadline aborts an in-flight HTTP request and preserves unexpected HT
   const base = `http://127.0.0.1:${address.port}`;
   try {
     const pending = pollUntil(async signal => {
-      await fetch(base, { signal });
+      await fetchFresh(base, { signal });
       return undefined;
     }, { description: 'blocked HTTP probe', timeoutMs: 1000 });
     const rejected = assert.rejects(pending, { _tag: 'PollTimeout', message: /blocked HTTP probe/ });

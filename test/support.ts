@@ -1,13 +1,54 @@
 import { after as nodeAfter, before as nodeBefore } from 'node:test';
 import { Effect, Schema } from 'effect';
 import { readFileSync, writeFileSync } from 'node:fs';
+import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
+import type { Transform } from 'node:stream';
+import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
 import { parseTypeScriptConfig, renderTypeScriptConfig } from '../dist/config.js';
 import { ProjectSchema, decode, type ProjectConfig } from '../dist/shared.js';
 import type { WorkspaceProjection } from '../dist/view-contract.js';
 import { WorkspaceProjectionSnapshotSchema } from '../dist/workspace-projection.js';
 
 type TestEffect = Effect.Effect<void, unknown, never>;
+
+const decoders: Readonly<Record<string, () => Transform>> = { gzip: createGunzip, 'x-gzip': createGunzip, deflate: createInflate, br: createBrotliDecompress };
+const bodylessStatus = new Set([101, 204, 205, 304]);
+
+/**
+ * fetch-compatible request on a fresh connection. A stalled test event loop can
+ * outlive the server's keep-alive window, so reused sockets reset mid-request.
+ */
+export const fetchFresh = (input: string | URL, init: RequestInit = {}): Promise<Response> => new Promise((resolveResponse, reject) => {
+  const signal = init.signal ?? undefined;
+  if (signal?.aborted) { reject(signal.reason); return; }
+  const url = new URL(input);
+  const headers = new Headers(init.headers);
+  if (init.body != null && typeof init.body !== 'string') { reject(new TypeError('fetchFresh accepts string bodies only')); return; }
+  const body = typeof init.body === 'string' ? Buffer.from(init.body) : undefined;
+  if (body !== undefined && !headers.has('content-length')) headers.set('content-length', String(body.byteLength));
+  const call = httpRequest(url, { method: init.method ?? 'GET', headers: Object.fromEntries(headers), agent: false }, (response) => {
+    const chunks: Buffer[] = [];
+    const encoding = String(response.headers['content-encoding'] ?? '').trim().toLowerCase();
+    const stream = decoders[encoding] === undefined ? response : response.pipe(decoders[encoding]());
+    stream.on('data', (chunk: Buffer) => chunks.push(chunk));
+    stream.once('error', cause => reject(new TypeError('fetch failed', { cause })));
+    stream.once('end', () => {
+      const status = response.statusCode ?? 0;
+      const responseHeaders = new Headers();
+      for (const [name, value] of Object.entries(response.headers)) {
+        for (const item of Array.isArray(value) ? value : value === undefined ? [] : [value]) responseHeaders.append(name, item);
+      }
+      const content = bodylessStatus.has(status) || (init.method ?? 'GET') === 'HEAD' ? null : Buffer.concat(chunks);
+      resolveResponse(new Response(content, { status, statusText: response.statusMessage ?? '', headers: responseHeaders }));
+    });
+  });
+  const abort = () => { call.destroy(); reject(signal!.reason); };
+  signal?.addEventListener('abort', abort, { once: true });
+  call.once('close', () => signal?.removeEventListener('abort', abort));
+  call.once('error', cause => { if (!signal?.aborted) reject(new TypeError('fetch failed', { cause })); });
+  call.end(body);
+});
 
 export const effectBefore = (program: TestEffect): void => {
   nodeBefore(() => Effect.runPromise(program));
@@ -120,11 +161,11 @@ const readWorkspaceProjectionResponse = async (response: Response): Promise<Work
 /** Polls a real View server until a readable generation exists, never weakening the first-build 202. */
 export const waitForWorkspaceProjection = (base: string, options: PollOptions = {}): Promise<WorkspaceProjection> =>
   pollUntil(async signal => {
-    return readWorkspaceProjectionResponse(await fetch(`${base}/api/workspace`, { signal }));
+    return readWorkspaceProjectionResponse(await fetchFresh(`${base}/api/workspace`, { signal }));
   }, { description: 'workspace projection', ...options });
 
 export const fetchWorkspaceProjection = async (base: string): Promise<WorkspaceProjection> => {
-  const value = await readWorkspaceProjectionResponse(await fetch(`${base}/api/workspace`, { signal: AbortSignal.timeout(10_000) }));
+  const value = await readWorkspaceProjectionResponse(await fetchFresh(`${base}/api/workspace`, { signal: AbortSignal.timeout(10_000) }));
   if (value === undefined) throw new Error('Workspace projection is pending');
   return value;
 };
@@ -137,11 +178,11 @@ export const fetchWorkspaceProjection = async (base: string): Promise<WorkspaceP
 export const waitForWorkspaceNotModified = async (base: string, options: PollOptions = {}): Promise<string> => {
   let etag: string | undefined;
   await pollUntil(async signal => {
-    const response = await fetch(`${base}/api/workspace`, { signal });
+    const response = await fetchFresh(`${base}/api/workspace`, { signal });
     const candidate = response.headers.get('etag');
     const value = await readWorkspaceProjectionResponse(response);
     if (value === undefined || candidate === null) return undefined;
-    const cached = await fetch(`${base}/api/workspace`, { headers: { 'If-None-Match': candidate }, signal });
+    const cached = await fetchFresh(`${base}/api/workspace`, { headers: { 'If-None-Match': candidate }, signal });
     if (cached.status !== 304) { await readWorkspaceProjectionResponse(cached); return undefined; }
     await cached.arrayBuffer();
     etag = candidate;
