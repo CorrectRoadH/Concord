@@ -6,6 +6,12 @@ Concord 从 Markdown owner、TypeScript AST 可识别的代码声明，以及测
 
 sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析可按文件命中可删除 HawDB 投影，键含 worktree、解析器版本、路径和字节摘要。当前事实门禁从当前 Markdown 重算；诊断历史投影按异步查询 Spec 保存。测试投影按整次扫描缓存，身份包含项目、路径集合、各文件摘要、runner 配置与解析器版本；任何一项变化、文件改名删除或缓存损坏时，从源码重建。命中都严格解码。
 
+## 入口与命令加载
+
+`concord --version`、各层 `--help` 与无参数调用由构建时生成的静态数据直接输出，不加载 Effect、命令模块或原生产物。静态数据从实际命令定义生成：构建时以原 CLI 执行每条帮助路径，记录 stdout、stderr 与退出码。运行时只在 NO_COLOR、TERM=dumb、非 TTY 等与生成时相同的渲染条件下使用它，其余情况交给完整 CLI，输出逐字节一致。
+
+其它调用按顶层命令组加载：入口只导入被调用命令组的模块图，不静态导入全部命令。静态数据或命令模块缺失、与安装身份不符时，入口回退到完整 CLI，结果与回退前相同。源码运行（`pnpm concord`）使用同一入口逻辑。
+
 ## 自举
 
 本项目的实现文件与关键函数直接声明各自的 Feature / Use Case。共享基础模块关联 Feature，具体行为关联八条 Use Case；repository profile 路由和注释渲染使用显式 region。selfhost 验收要求每条 Use Case 都存在真实实现和测试关联，源码旁的声明仍是唯一 owner，不另存模块到功能的映射表。
