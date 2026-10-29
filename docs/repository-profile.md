@@ -39,7 +39,7 @@ interface RepositoryAdapter {
 }
 ```
 
-实现文件与目录是仓库相对路径，拒绝逃逸与 symlink；argv 中的入口脚本与 loader 必须在实现集合内，否则拒绝。adapter 只收到 `envNames` 白名单中的环境变量，不接受 `GIT_*`、`NODE_TEST_CONTEXT` 或 `NODE_OPTIONS`；秘密值不进入请求或诊断。stderr 最多 1 MiB，只作诊断。没有可观察 POSIX 进程组的平台拒绝进程 transport。
+实现文件与目录是仓库相对路径，拒绝逃逸与 symlink；argv 中的入口脚本与 loader 必须在实现集合内，否则拒绝。adapter 只收到 `envNames` 白名单中的环境变量，不接受 `GIT_*`、`NODE_TEST_CONTEXT` 或 `NODE_OPTIONS`；秘密值不进入请求或诊断。stderr 最多 1 MiB，只作诊断。没有可观察 POSIX 进程组的平台拒绝进程 transport，返回具名错误 `RepositoryAdapterUnsupportedPlatform`，不启动 adapter。
 
 每次请求启动一个进程，shell=false，cwd 为消费者 Git 根；stdin 与 stdout 各一个 `concord.repository-adapter/v1` JSON：
 

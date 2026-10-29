@@ -231,7 +231,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 ## 中立高级治理
 
-`concord repo` 是中立的高级治理入口，方案见[中立治理](design/neutral-project-governance/plans/generalize-profile/architecture.md)。Concord 拥有声明身份、Spec 关系、Memory 生命周期、证据要求和权威 validator。消费者拥有 runner、原生副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。
+`concord repo` 是中立的高级治理入口，所有权与证据核验见[治理边界](feature/neutral-project-governance/architecture.md)，配置与 adapter 协议见[高级测试治理](repository-profile.md)（[决策依据](design/neutral-project-governance/DECISION.md)）。Concord 拥有声明身份、Spec 关系、Memory 生命周期、证据要求和权威 validator。消费者拥有 runner、原生副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。
 
 显式 suite roots 不依赖 Nx 或 e2e 布局；静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
 
