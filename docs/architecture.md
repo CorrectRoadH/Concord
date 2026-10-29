@@ -77,7 +77,7 @@ HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对
 
 缓存只保存解析结果和投影，不缓存授权或 Problem fixed 判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有。
 
-HawDB 的[引擎边界与预算](feature/local-data-engine/architecture.md#句柄与打开模式)区分短快照持久句柄和进程期内存句柄。配置、feedback 观察与 status 逻辑只读打开完整库，允许内部派生文件重建；缺少结构性 ownership 文件或命名空间不初始化。dry-run 与 cache-off 不打开持久库。持久句柄与事务先于 publication lease 释放。
+HawDB 句柄的所有权、只读与可写打开、dry-run 与 cache-off 的行为见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。每篇文档每个进程最多解析一次，元数据、标题锚点、steps 与链接事实取自同一棵语法树。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
@@ -107,7 +107,7 @@ flowchart TD
   Result --> Check
 ```
 
-cache clear 在独占 publication lease 下取得 Concord 完整句柄锁与固定 HawDB revision 的根、分支文件锁。清理保留根目录、根锁及同级协调锁 inode。锁错误不授权删除；损坏库通过独立 guard 清理。clear 只删除 cache.hawdb 内的缓存数据，不删除源 owner、证据、journal 和 Memory。
+cache clear 在独占 publication lease 下执行，锁、删除阶段与保留规则见[数据引擎架构](feature/local-data-engine/architecture.md#清理)。clear 只删除 cache.hawdb 内的缓存数据，不删除源 owner、证据、journal 和 Memory。
 
 Memory 保存 current promotion 与追加的生命周期 history。Problem 使用递增 epoch，reopen 增加 epoch，red 与 green 都必须绑定当前 epoch。
 
@@ -147,15 +147,7 @@ run 结束时在新快照中核对起止 candidate、配置、定义、Spec、ep
 
 ## 操作依赖与资源边界
 
-操作依赖矩阵见 [local SDLC 架构](feature/local-sdlc/architecture.md#操作依赖)，访问模式见[可移植协调架构](feature/portable-coordination/architecture.md#access-modes)，跨功能规则见 [C-013](constitution.md#c-013)。
-
-局部查询按命令依赖读取 owner，使用乐观 snapshot。memory 与 issue 的列表、索引和检索读取相应来源的全部候选。精确路径编辑只取指定 owner 与当前摘要，短 ID 编辑读取该类别全部候选并要求唯一匹配。create 校验目标路径和写来源权限；Issue 还校验同类 ID，Problem 还校验证据政策。
-
-`code annotate` 与 `test annotate` 只验证指定引用及其归属链、类型和 anchor。文档 show、trace、review 构建全局关系图；文档 show 可返回标明不完整的关系，trace show 与 review 要求图完整。
-
-全局诊断的 inventory 携带 documents、findings 与 complete。逐文件保留解码错误的路径和具名代码，并传播 `complete: false`；单独的 documents 数组不表示集合完整。关系 show 与 Web workspace 返回 complete 及全部相关诊断。
-
-需要完整图的结论拒绝不完整输入，requireValidTrace 同时检查 complete 和 findings。部分图不能关闭 Problem、删除 Issue 或批准关系迁移。
+各命令的读取范围、完整性诊断与需要完整图的结论见 [local SDLC 架构](feature/local-sdlc/architecture.md#操作依赖)，访问模式见[可移植协调架构](feature/portable-coordination/architecture.md#access-modes)，跨功能规则见 [C-013](constitution.md#c-013)。
 
 来源读者不创建 publication token。返回当前结果前核验观察集合与发布代次；写者在 journal 删除前推进代次，完整发布即使发生于同一个独占区间内也能被读者检测。普通提交只删除自身 owner。
 
