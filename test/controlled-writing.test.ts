@@ -139,6 +139,11 @@ controlledTest('C10: migration preserves fields and legacy character observation
       ['sentenceLength', 3, 'Sentence has 21 characters; maximum 10', 'Abc inline content link .'],
       ['sentenceLength', 3, 'Sentence has 13 characters; maximum 10', 'Next Sentence!'],
     ]);
+    // A sentence that opens with inline code, a digit or a CJK clause still
+    // ends the previous one; a lowercase word after an abbreviation does not.
+    writeFileSync(join(root, 'docs/corpus.md'), '# Header\n\nRun it. `vp install` next. 2 more. 然后。e.g. this\n');
+    const split = checkWriting(repo).findings.filter(f => f.rule === 'sentenceLength').map(f => f.context);
+    assert.deepEqual(split, ['vp install next.']);
   } finally { repo.close(); }
 });
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md

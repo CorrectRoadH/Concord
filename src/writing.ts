@@ -28,7 +28,7 @@ function withoutStepMarkers(path: string, source: string): string {
   }
   return lines.join('\n');
 }
-interface Prose { line: number; text: string; readable: string; paragraph: boolean }
+interface Prose { line: number; text: string; readable: string; sentences: readonly string[]; paragraph: boolean }
 interface PolicyOwner { path: string; scope: string; policy: WritingPolicy }
 interface Ban { term: string; use: string; why: string; source: NonNullable<WritingFinding['source']>; roots?: readonly string[]; exempt?: readonly string[]; allowIn?: readonly string[]; ownerScope: string; conceptRef?: string }
 
@@ -53,12 +53,16 @@ function authoredSource(file: string, source: string, positions = false): string
     return raw;
   }).map((line, index) => positions && line === '' ? ' '.repeat(originalLines[index]!.length) : line).join('\n');
 }
-function textOf(node: Nodes, inlineCode: boolean): string {
+// Marks where inline code starts so sentence splitting sees the boundary the
+// rendered text loses; it never reaches lengths, contexts or term checks.
+const CODE_START = '\uE000';
+const SENTENCE_BREAK = /(?<=[。！？!?])|(?<=[.!?])\s+(?=[\uE000A-Z0-9"'“‘(\[\p{Script=Han}])/u;
+function textOf(node: Nodes, inlineCode: boolean, markCode = false): string {
   if (node.type === 'text') return node.value;
-  if (node.type === 'inlineCode') return inlineCode ? node.value : ' ';
+  if (node.type === 'inlineCode') return inlineCode ? `${markCode ? CODE_START : ''}${node.value}` : ' ';
   if (node.type === 'image' || node.type === 'imageReference') return inlineCode ? '' : node.alt ?? '';
   if (node.type === 'break') return '\n';
-  if ('children' in node) return node.children.map(child => textOf(child, inlineCode)).join('');
+  if ('children' in node) return node.children.map(child => textOf(child, inlineCode, markCode)).join('');
   return '';
 }
 function prose(file: string, source: string): ParsedWriting & { blocks: Prose[] } {
@@ -66,7 +70,8 @@ function prose(file: string, source: string): ParsedWriting & { blocks: Prose[] 
   const visit = (node: Nodes): void => {
     if (node.type === 'paragraph' || node.type === 'heading') {
       const text = textOf(node, false);
-      result.push({ line: node.position?.start.line ?? 1, text, readable: textOf(node, true), paragraph: node.type === 'paragraph' && !/^\s*\|/u.test(text) });
+      const sentences = textOf(node, true, true).split(SENTENCE_BREAK).map(sentence => sentence.replaceAll(CODE_START, ''));
+      result.push({ line: node.position?.start.line ?? 1, text, readable: textOf(node, true), sentences, paragraph: node.type === 'paragraph' && !/^\s*\|/u.test(text) });
     } else if ('children' in node) node.children.forEach(visit);
   };
   const authored = authoredSource(file, source), tree = fromMarkdown(authored);
@@ -227,7 +232,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
           const paragraphLength = inherited(owners, 'paragraphLength');
           if (paragraphLength != null && length(block.readable) > paragraphLength) findings.push({ file, line: block.line, rule: 'paragraphLength', message: `Paragraph has ${length(block.readable)} characters; maximum ${paragraphLength}`, context: block.readable.trim().slice(0, 240), source: legacySource('paragraphLength') });
           const sentenceLength = inherited(owners, 'sentenceLength');
-          for (const sentence of block.readable.split(/(?<=[。！？!?])|(?<=\.)\s+(?=[A-Z])/u)) {
+          for (const sentence of block.sentences) {
             if (sentenceLength != null && length(sentence) > sentenceLength) findings.push({ file, line: block.line, rule: 'sentenceLength', message: `Sentence has ${length(sentence)} characters; maximum ${sentenceLength}`, context: sentence.trim().slice(0, 240), source: legacySource('sentenceLength') });
             if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
           }
