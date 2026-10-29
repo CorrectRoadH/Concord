@@ -8,14 +8,11 @@ import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { renderDocument } from '../dist/documents.js';
-import { DOCUMENT_PARSER_VERSION } from '../dist/document-projection.js';
 import { openHawdb } from '../dist/hawdb-native.js';
-import { objectDigest } from '../dist/shared.js';
 import { writeProjectConfig, readProjectConfig } from './support.js';
 
 const useCasePath = 'docs/feature/sample/use-case/inspect.md';
 const researchPath = 'docs/research/sample/README.md';
-const key = (path: string) => objectDigest({ path, parser: DOCUMENT_PARSER_VERSION });
 function fixture() {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-document-parse-')));
   execFileSync('git', ['init', '-q', root]);
@@ -40,7 +37,7 @@ function parity(root: string) {
 }
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('persistent document projections preserve current CLI facts across edits, paths and policy inputs', () => Effect.runPromise(Effect.sync(() => {
+test('volatile document projections preserve current CLI facts across edits, paths and policy inputs', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   try {
     parity(root); parity(root);
@@ -64,21 +61,16 @@ test('persistent document projections preserve current CLI facts across edits, p
     parity(root);
     assert.match(JSON.stringify(cli(root, false)), /undesirable/u);
     const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false });
-    try {
-      const rows = database.scan('document_parse_cache');
-      assert.equal(rows.filter(row => row.key === key(useCasePath)).length, 1, 'editing replaces the stable path/parser key');
-      const row = rows.find(row => row.key === key(researchPath));
-      assert.ok(row);
-    } finally { database.close(); }
+    try { assert.equal(new Set<string>(database.namespaces()).has('document_parse_cache'), false); }
+    finally { database.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('one source tree serves repeated metadata, steps and anchors and survives a new process without parsing', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
-  const counts = join(root, 'parse-counts.jsonl');
-  const probe = (off = false) => {
-    const child = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), '--import', fileURLToPath(new URL('./parse-count-probe.ts', import.meta.url)), fileURLToPath(new URL('./parse-cache-source-probe.ts', import.meta.url)), root, ...(off ? ['off'] : [])], {
+test('metadata stays lazy and one tree serves repeated and duplicate requests without persistent document state', () => Effect.runPromise(Effect.sync(() => {
+  const root = fixture(), counts = join(root, 'parse-counts.jsonl');
+  const probe = (mode?: 'off' | 'metadata') => {
+    const child = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), '--import', fileURLToPath(new URL('./parse-count-probe.ts', import.meta.url)), fileURLToPath(new URL('./parse-cache-source-probe.ts', import.meta.url)), root, ...(mode === undefined ? [] : [mode])], {
       encoding: 'utf8', timeout: 60_000, env: { ...process.env, CONCORD_TEST_PARSE_COUNTS: counts },
     });
     assert.equal(child.status, 0, child.stdout + child.stderr);
@@ -86,98 +78,39 @@ test('one source tree serves repeated metadata, steps and anchors and survives a
   };
   const calls = () => existsSync(counts) ? readFileSync(counts, 'utf8').trim().split('\n').map(line => Schema.decodeUnknownSync(Schema.String)(JSON.parse(line))) : [];
   try {
-    const cold = probe();
+    probe('metadata');
+    assert.equal(calls().length, 0, 'metadata-only commands never parse Markdown');
+    const first = probe();
+    assert.equal(calls().filter(source => source.includes('parser-sentinel')).length, 1, 'duplicate batch inputs and repeated steps/anchors share one parse');
+    const firstCalls = calls().length;
+    assert.ok(firstCalls > 0);
+    rmSync(counts);
+    assert.equal(probe(), first);
+    assert.equal(calls().length, firstCalls, 'a fresh process reconstructs its own bounded memory cache');
+    rmSync(counts);
+    assert.equal(probe('off'), first);
     assert.equal(calls().filter(source => source.includes('parser-sentinel')).length, 1);
-    const coldCalls = calls().length;
-    assert.ok(coldCalls > 0);
-    rmSync(counts);
-    assert.equal(probe(), cold);
-    assert.equal(calls().length, 0, 'the entire second process uses strictly decoded durable trees');
-    assert.equal(probe(true), cold);
-    assert.equal(calls().filter(source => source.includes('parser-sentinel')).length, 1, 'cache-off parses once in its own process');
-    rmSync(counts);
-    const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });
-    try {
-      const row = database.get('document_parse_cache', [key(useCasePath)])[0]!;
-      const envelope = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(JSON.parse(row.payload));
-      const value = { ...Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(envelope.value), tree: 'damaged compressed tree' };
-      database.put('document_parse_cache', [{ key: row.key, payload: JSON.stringify({ ...envelope, value, valueDigest: objectDigest(value) }) }]);
-    } finally { database.close(); }
-    assert.equal(probe(), cold);
-    assert.equal(calls().filter(source => source.includes('parser-sentinel')).length, 1, 'invalid syntax trees are strictly decoded, reparsed and repaired');
-    rmSync(counts);
-    assert.equal(probe(), cold);
-    assert.equal(calls().length, 0);
-    const publicCheck = () => {
-      const child = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), '--import', fileURLToPath(new URL('./parse-count-probe.ts', import.meta.url)), 'dist/entry.js', '--root', root, '--json', 'check'], {
-        encoding: 'utf8', timeout: 60_000, env: { ...process.env, CONCORD_TEST_PARSE_COUNTS: counts },
-      });
-      assert.ok(child.status === 0 || child.status === 1, child.stdout + child.stderr);
-      return Object.fromEntries(Object.entries(Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(JSON.parse(child.stdout))).filter(([name]) => !['cache', 'codeCache'].includes(name)));
-    };
-    const firstCheck = publicCheck();
-    assert.ok(calls().length > 0, 'cold writing and constitution inputs exercise the actual CLI parser');
-    rmSync(counts);
-    assert.deepEqual(publicCheck(), firstCheck);
-    assert.equal(calls().length, 0, 'the second public check process makes no Markdown parser calls');
+    assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false, 'document parsing never creates a persistent database');
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('damaged envelopes and trees are misses, and copied projections cannot override location rules', () => Effect.runPromise(Effect.sync(() => {
+test('damaged persistent auxiliary caches do not change authoritative document facts', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   try {
     const expected = cli(root, false);
-    const path = join(root, '.git/concord/cache.hawdb');
-    const edit = (change: (envelope: Record<string, unknown>) => string) => {
-      const db = openHawdb(path, { readOnly: false, create: false });
-      try {
-        const row = db.get('document_parse_cache', [key(useCasePath)])[0]!;
-        const envelope = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(JSON.parse(row.payload));
-        db.put('document_parse_cache', [{ key: row.key, payload: change({ ...envelope }) }]);
-      } finally { db.close(); }
-      assert.deepEqual(cli(root, false), expected);
-      parity(root);
-    };
-    edit(() => '{bad json');
-    edit(envelope => JSON.stringify({ ...envelope, path: researchPath }));
-    edit(envelope => JSON.stringify({ ...envelope, parser: 'old parser' }));
-    edit(envelope => JSON.stringify({ ...envelope, sourceDigest: 'old bytes' }));
-    edit(envelope => {
-      const value = { tree: { type: 'root', children: [], unexpected: true } };
-      return JSON.stringify({ ...envelope, value, valueDigest: objectDigest(value) });
-    });
-    edit(envelope => JSON.stringify({ ...envelope, value: { tree: { type: 'root', children: [] } } }));
-    const target = 'docs/feature/sample/copied.md';
-    writeFileSync(join(root, target), readFileSync(join(root, researchPath)));
-    const db = openHawdb(path, { readOnly: false, create: false });
+    const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });
+    let damaged = 0;
     try {
-      const row = db.get('document_parse_cache', [key(researchPath)])[0]!;
-      db.put('document_parse_cache', [{ key: key(target), payload: row.payload }]);
+      for (const namespace of ['annotation_cache', 'query_cache', 'config_cache'] as const) {
+        const rows = db.scan(namespace);
+        if (rows.length === 0) continue;
+        db.put(namespace, rows.map(row => ({ key: row.key, payload: '{invalid json' })));
+        damaged += rows.length;
+      }
     } finally { db.close(); }
+    assert.ok(damaged > 0);
+    assert.deepEqual(cli(root, false), expected);
     parity(root);
-    assert.match(JSON.stringify(cli(root, false)), /ResearchMigrationRequired/u);
   } finally { rmSync(root, { recursive: true, force: true }); }
-})));
-
-// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('the persistent parse namespace enforces native entry and UTF-8 byte quotas', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
-  const path = join(root, '.git/concord/cache.hawdb');
-  let db = openHawdb(path, { readOnly: false, create: true });
-  try {
-    for (let batch = 0; batch < 11; batch++) {
-      db.put('document_parse_cache', Array.from({ length: 1000 }, (_, index) => ({ key: `entry-${batch * 1000 + index}`, payload: 'x' })), { maxEntries: 20_000, maxBytes: 32 * 1024 * 1024 });
-      // Exercise durable generations rather than exhausting transient SQL overlays.
-      db.close(); db = openHawdb(path, { readOnly: false, create: false });
-    }
-    assert.equal(db.scan('document_parse_cache').length, 10_000);
-    assert.equal(db.get('document_parse_cache', ['entry-0']).length, 0);
-    db.close(); db = openHawdb(join(root, 'byte-cache'), { readOnly: false, create: true });
-    const payload = '界'.repeat(1024 * 1024); // 3 MiB UTF-8, despite its shorter JS length.
-    for (let index = 0; index < 8; index++) db.put('document_parse_cache', [{ key: String(index), payload }], { maxEntries: 20_000, maxBytes: 32 * 1024 * 1024 });
-    const rows = db.scan('document_parse_cache');
-    assert.equal(rows.length, 7, '24 MiB includes namespace and key bytes');
-    assert.ok(rows.reduce((bytes, row) => bytes + Buffer.byteLength('document_parse_cache') + Buffer.byteLength(row.key) + Buffer.byteLength(row.payload), 0) <= 24 * 1024 * 1024);
-  } finally { db.close(); rmSync(root, { recursive: true, force: true }); }
 })));

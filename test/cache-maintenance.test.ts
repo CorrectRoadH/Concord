@@ -101,10 +101,10 @@ test('the maintenance worker reclaims below the hard cap, and discards only a st
     assert.deepEqual(readdirSync(f.path), ['owner.hawdb.lock']);
     assert.equal(statSync(join(f.path, 'owner.hawdb.lock')).ino, owner);
     assert.equal(statSync(`${f.path}.concord.lock`).ino, external);
-    const rebuilt = spawnSync(process.execPath, ['dist/entry.js', '--root', f.root, '--json', 'memory', 'index'], { encoding: 'utf8', timeout: 30_000 });
+    const rebuilt = spawnSync(process.execPath, ['dist/entry.js', '--root', f.root, '--json', 'cache', 'rebuild'], { encoding: 'utf8', timeout: 30_000 });
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     const db = openHawdb(f.path, { readOnly: true, create: false });
-    try { assert.ok(db.scan('document_parse_cache').length > 0, 'cold command reconstructs projections'); } finally { db.close(); }
+    try { assert.ok(db.scan('annotation_cache').length > 0, 'cold command reconstructs projections'); } finally { db.close(); }
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 })));
 
@@ -183,12 +183,14 @@ test('a packed public command launches detached maintenance and the next process
     installConcord(install, packConcord(f.root));
     const entry = join(install, 'node_modules/concord-sdlc/dist/entry.js');
     pad(f.padding, CACHE_PHYSICAL_LIMIT_BYTES + 1);
-    const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'memory', 'index'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
+    const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
+    const launched = execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n').some(line => line.includes('cache-maintenance-worker.js') && line.includes(f.root));
+    assert.ok(launched || !existsSync(f.padding), 'the worker starts before the public command exits');
     await pollUntil(async () => existsSync(f.padding) ? undefined : true, { description: 'oversized cache to be discarded' });
     await settle(f.root);
     assert.deepEqual(readdirSync(f.path), ['owner.hawdb.lock']);
-    const rebuilt = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'memory', 'index'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
+    const rebuilt = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     assert.deepEqual(JSON.parse(rebuilt.stdout), JSON.parse(result.stdout));
     assert.ok(readdirSync(f.path).length > 1);

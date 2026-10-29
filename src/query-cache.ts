@@ -11,6 +11,7 @@ import { TraceGapsValue, TraceShowValue, ReviewRenderValue, hydrateQueryValue, q
 import type { QueryScanMessage } from './query-scan-protocol.js';
 import { ConcordError, digest, failure } from './shared.js';
 import { queryInstallationIdentity, workerEntryArgv } from './installation.js';
+import { requestCacheMaintenance } from './cache-maintenance.js';
 
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
@@ -114,7 +115,7 @@ export function storeQuery(context: QueryContext, update: QueryUpdate): void {
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) > 4 * 1024 * 1024) throw new ConcordError('QueryRefreshOutputLimit', 'Query envelope exceeds 4 MiB');
     database.put('query_cache', [{ key: context.key, payload: serialized }]);
-  } finally { database.close(); }
+  } finally { database.close(); requestCacheMaintenance(context); }
 }
 // @concord-end
 /** The detached supervisor owns the bounded scan, never a source publication. */

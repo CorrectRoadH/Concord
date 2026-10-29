@@ -21,7 +21,7 @@ const referenceTokens: (path: string, text: string, languageServers?: Repository
 /** One disposable thread owns domain parser caches and exactly one optimistic source snapshot. */
 export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
   return yield* Effect.acquireUseRelease(
-    Effect.try({ try: () => new LocalRepository(job.root, { access: 'read', optimistic: true }), catch: failure }),
+    Effect.try({ try: () => new LocalRepository(job.root, { access: 'read', optimistic: true, persistentCache: 'off' }), catch: failure }),
     local => Effect.try({ try: (): Computed => local.snapshot(() => {
       const revision = readPublicationRevisionSync(local.root);
       if (local.configSnapshot.digest !== job.config || revision !== job.revision) throw new ConcordError('ContentModified', 'Configuration or publication changed before computation');
@@ -43,7 +43,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
       };
       disk('concord.config.ts');
       const repo: Repository = {
-        root: local.root, privateDir: local.privateDir, access: 'read', config: local.config, configSnapshot: local.configSnapshot,
+        root: local.root, privateDir: local.privateDir, access: 'read', persistentCache: 'off', config: local.config, configSnapshot: local.configSnapshot,
         absolute: path => local.absolute(path),
         read: path => {
           const source = disk(path);

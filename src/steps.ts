@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
-import { documentMarkdown, documentProjection, projectionRecord } from './document-projection.js';
+import { documentMarkdown, documentMarkdownProjection, projectionRecord } from './document-projection.js';
 import { inspectTreeSteps } from './markdown-facts.js';
 import { ConcordError, type Finding } from './shared.js';
 import type { UseCaseStep, RootOrderedList, StepMarkerRange } from './markdown-facts.js';
@@ -9,12 +9,12 @@ export { markdownAnchor } from './markdown-facts.js';
 export type { UseCaseStep, RootOrderedList, StepMarkerRange, StepItem } from './markdown-facts.js';
 
 export function headingAnchors(source: string, path = 'document.md'): ReadonlySet<string> {
-  return new Set(documentProjection(path, source).anchors);
+  return new Set(documentMarkdownProjection(path, source).anchors);
 }
 
 export function inspectSteps(path: string, source: string) {
   try {
-    const projection = documentProjection(path, source);
+    const projection = documentMarkdownProjection(path, source);
     const owner = projectionRecord(path, projection);
     return { ...projection.steps, get items() {
       return inspectTreeSteps(path, source, owner?.metadata.kind === 'use-case', documentMarkdown(path, source)).items;

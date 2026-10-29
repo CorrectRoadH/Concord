@@ -6,13 +6,19 @@ import { CACHE_MAINTENANCE_THRESHOLD_BYTES } from './hawdb-native-contract.js';
 import { workerEntryArgv } from './installation.js';
 import type { Repository } from './shared.js';
 
-/** Called only after the command's writable native handle has fully closed. */
-export function requestCacheMaintenance(repo: Repository): void {
-  if (repo.persistentCache === 'off') return;
-  try {
-    if (cachePhysicalBytes(repo.privateDir) <= CACHE_MAINTENANCE_THRESHOLD_BYTES) return;
-    const child = spawn(process.execPath, [...workerEntryArgv('cache-maintenance-worker'), repo.root], { detached: true, stdio: 'ignore', cwd: repo.root });
-    child.once('error', () => { /* a later writable command retries */ });
-    child.unref();
-  } catch { /* cache maintenance cannot change a command result */ }
+const pending = new Set<string>();
+/** Coalesce synchronous writes; the referenced immediate runs before CLI exit. */
+export function requestCacheMaintenance(repo: Pick<Repository, 'root' | 'privateDir' | 'persistentCache'>): void {
+  if (repo.persistentCache === 'off' || pending.has(repo.privateDir)) return;
+  const { root, privateDir } = repo;
+  pending.add(privateDir);
+  setImmediate(() => {
+    pending.delete(privateDir);
+    try {
+      if (cachePhysicalBytes(privateDir) <= CACHE_MAINTENANCE_THRESHOLD_BYTES) return;
+      const child = spawn(process.execPath, [...workerEntryArgv('cache-maintenance-worker'), root], { detached: true, stdio: 'ignore', cwd: root });
+      child.once('error', () => { /* a later writable command retries */ });
+      child.unref();
+    } catch { /* cache maintenance cannot change a command result */ }
+  });
 }

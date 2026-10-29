@@ -20,7 +20,7 @@ interface Task {
 
 /** Final verification deliberately opens a fresh config authorization context. */
 function verify(root: string, result: P.Computed): void {
-  const repo = new LocalRepository(root, { access: 'read', optimistic: true });
+  const repo = new LocalRepository(root, { access: 'read', optimistic: true, persistentCache: 'off' });
   try {
     repo.snapshot(() => {
       if (repo.configSnapshot.digest !== result.config || readPublicationRevisionSync(root) !== result.revision) throw new ConcordError('ContentModified', 'Configuration or publication changed');
@@ -38,7 +38,7 @@ function verify(root: string, result: P.Computed): void {
 export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: string, createProcessService = makeOwnedProcessService) {
   const root = yield* Effect.try({ try: () => discoverRoot(rootInput), catch: failure });
   // Validate the initial project without retaining a repository handle while waiting for stdin.
-  yield* Effect.try({ try: () => { const repo = new LocalRepository(root, { access: 'read' }); repo.close(); }, catch: failure });
+  yield* Effect.try({ try: () => { const repo = new LocalRepository(root, { access: 'read', persistentCache: 'off' }); repo.close(); }, catch: failure });
   yield* Effect.callback<void, ConcordError>(resume => {
     const frames = new P.EditorFrames();
     const overlays = new Map<string, P.Overlay>();
@@ -72,7 +72,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
     const log = (cause: unknown) => { const error = failure(cause); process.stderr.write(`${error.code}: ${error.message.slice(0, 2000)}\n`); };
     const clear = (document: P.Overlay) => send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri: document.uri, version: document.version, diagnostics: [] } });
     const resolveUri = (uri: string) => {
-      const repo = new LocalRepository(root, { access: 'read' });
+      const repo = new LocalRepository(root, { access: 'read', persistentCache: 'off' });
       try {
         const path = uriPath(repo, uri);
         if (path.split('/').some(part => part === '.git' || part === 'node_modules')) throw new ConcordError('UnsafeEditorUri', 'Private and dependency paths are excluded');

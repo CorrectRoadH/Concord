@@ -73,10 +73,10 @@ export function parseDocumentRecord(path: string, source: string): DocumentRecor
   return parseDocumentSource(path, source);
 }
 
-export function inspectDocumentRecords(inputs: readonly { readonly path: string; readonly source: string }[]) {
-  return inspectDocumentProjections(inputs).map((result, index) => {
+export function inspectDocumentRecords(inputs: readonly { readonly path: string; readonly source: string }[], markdown = false) {
+  return inspectDocumentProjections(inputs, markdown).map((result, index) => {
     if (!result.ok) return result;
-    // Always apply location rules, including on a durable projection hit.
+    // Always apply location rules, including on an in-memory projection hit.
     try { return { ok: true as const, value: projectionRecord(inputs[index]!.path, result.value) }; }
     catch (cause) { return { ok: false as const, cause }; }
   });
@@ -169,7 +169,7 @@ export function diagnoseDocuments(repo: Repository): DocumentInventory {
   return inRepositorySnapshot(repo, () => {
     const documents: DocumentRecord[] = [], findings: Finding[] = [];
     const inputs = documentInputs(repo, undefined, findings);
-    const results = inspectDocumentRecords(inputs);
+    const results = inspectDocumentRecords(inputs, true);
     for (const [index, input] of inputs.entries()) {
       try {
         const result = results[index]!;

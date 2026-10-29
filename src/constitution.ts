@@ -7,7 +7,7 @@ import { renderTypeScriptConfig } from './config.js';
 import { ConstitutionSchema, type ConstitutionMeta } from './constitution-schema.js';
 import { fromMarkdown } from './markdown-parser.js';
 import { markdownAnchor, markdownBody } from './steps.js';
-import { documentMarkdown, documentProjection } from './document-projection.js';
+import { documentMarkdown, documentMarkdownProjection } from './document-projection.js';
 
 export { ConstitutionSchema } from './constitution-schema.js';
 export type { ConstitutionMeta } from './constitution-schema.js';
@@ -155,7 +155,7 @@ export function constitutionLinkTarget(from: string, url: string): LinkTarget | 
 
 /** Inline link nodes only: images, reference links, HTML and code never contribute. */
 export function inlineLinks(source: string, path?: string): { readonly url: string; readonly line: number }[] {
-  if (path !== undefined) return [...documentProjection(path, source).links];
+  if (path !== undefined) return [...documentMarkdownProjection(path, source).links];
   const links: { url: string; line: number }[] = [];
   const visit = (node: Nodes): void => {
     if (node.type === 'link') links.push({ url: node.url, line: node.position?.start.line ?? 1 });

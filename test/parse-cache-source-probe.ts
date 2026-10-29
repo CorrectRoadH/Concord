@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import { LocalRepository } from '../dist/storage.js';
-import { loadDocuments } from '../dist/documents.js';
+import { loadDocuments, inspectDocumentRecords } from '../dist/documents.js';
 import { decodeDocumentSource } from '../dist/document-codec.js';
 import { headingAnchors, inspectSteps } from '../dist/steps.js';
 
@@ -10,6 +10,9 @@ Effect.runSync(Effect.sync(() => {
   try {
     const value = repo.snapshot(() => {
       const documents = loadDocuments(repo);
+      if (process.argv[3] === 'metadata') return documents;
+      const inputs = documents.map(record => ({ path: record.path, source: repo.read(record.path)! }));
+      inspectDocumentRecords(inputs.flatMap(input => [input, input]), true);
       return Array.from({ length: 3 }, () => documents.map(record => {
         const source = repo.read(record.path)!;
         const steps = inspectSteps(record.path, source);

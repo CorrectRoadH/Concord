@@ -9,6 +9,7 @@ import { assertLeasePath, ownerIsAlive, readLeaseOwner } from './file-lease.js';
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from './cache-file.js';
 import { HawdbFailure, hawdbIdentity, openHawdb } from './hawdb-native.js';
 import { workspaceInstallationIdentity } from './installation.js';
+import { requestCacheMaintenance } from './cache-maintenance.js';
 import { AnnotatedCaseSchema, ConcordError, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, ResearchSchema, RoadmapSchema, UseCaseSchema, digest, failure } from './shared.js';
 import { GitHubRemoteFeedbackSchema, LinearRemoteFeedbackSchema, FeedbackSourceSchema } from './feedback-schema.js';
 import { CodeDeclarationSchema } from './code.js';
@@ -173,5 +174,5 @@ export function storeWorkspaceProjection(context: WorkspaceProjectionContext, ca
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) + Buffer.byteLength(key) + Buffer.byteLength('workspace_projection') > WORKSPACE_PROJECTION_LIMIT) throw new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds its 8 MiB budget');
     database.put('workspace_projection', [{ key, payload: serialized }]);
-  } finally { database.close(); }
+  } finally { database.close(); requestCacheMaintenance(context); }
 }
