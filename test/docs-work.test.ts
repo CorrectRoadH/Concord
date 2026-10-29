@@ -95,6 +95,21 @@ test('C5 prepare aggregates dirty paths, overlaps, duplicate IDs, dependencies, 
   } finally { rmSync(path, { force: true }); rmSync(root, { recursive: true, force: true }); }
 })));
 
+test('default shared paths protect the global concepts.md catalog and writing policy', () => Effect.runPromise(Effect.sync(() => {
+  const root = fixture(custom);
+  try {
+    writeFileSync(join(root, 'docs/concepts.md'), '# Project concepts\n');
+    git(root, 'add', 'docs/concepts.md'); git(root, 'commit', '-qm', 'catalog');
+    const path = join(tmpdir(), `docs-work-shared-${process.pid}.json`);
+    writeFileSync(path, JSON.stringify({ format: 'concord.docs-work-plan/v1', items: [item('terms', ['docs/concepts.md']), item('policy', ['docs/concord-writing.json'])] }));
+    try {
+      const result = call(root, ['prepare', '--plan', path, '--run-id', 'shared'], 1);
+      const shared = result.details!.problems!.filter(problem => problem.code === 'SharedPathWrite').map(problem => problem.path).sort();
+      assert.deepEqual(shared, ['docs/concepts.md', 'docs/concord-writing.json']);
+    } finally { rmSync(path, { force: true }); }
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
 test('C5/C6 failed reports persist; read and configuration drift reject without running checks', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture(custom);
   try {

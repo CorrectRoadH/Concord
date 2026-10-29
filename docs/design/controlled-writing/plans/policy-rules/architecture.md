@@ -2,7 +2,7 @@
 
 ## Entity Ownership
 
-唯一政策 owner 为目录中的 `concord-writing.json`；领域术语仍由 `concepts.json` 拥有。下列类型穷尽 v3 字段，所有对象严格拒绝未知字段，JSON 不接受 undefined。问号表示可省略，`Clear<T>` 表示 T 或 null。
+唯一政策 owner 为目录中的 `concord-writing.json`；领域术语由同目录的 `concepts.md` 拥有。下列类型穷尽 v3 字段，所有对象严格拒绝未知字段，JSON 不接受 undefined。问号表示可省略，`Clear<T>` 表示 T 或 null。
 
 ```ts
 type Clear<T> = T | null;

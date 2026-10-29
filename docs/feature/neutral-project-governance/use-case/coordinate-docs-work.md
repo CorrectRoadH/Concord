@@ -15,7 +15,7 @@ feature: docs/feature/neutral-project-governance/README.md
 
 ## 完整路径
 
-1. 项目可在 `concord.config.ts` 的 `docsWork` 中声明检查命令、finalizer 与共享路径；省略时使用写作检查与 `concord check`。run 期间修改该配置会使后续 check 与 finalize 拒绝。
+1. 项目可在 `concord.config.ts` 的 `docsWork` 中声明检查命令、finalizer 与共享路径；省略时使用写作检查与 `concord check`。默认共享路径为 `docs/README.md` 及存在的全局 `docs/concepts.md` 与 `docs/concord-writing.json`。run 期间修改该配置会使后续 check 与 finalize 拒绝。
 2. 父 Agent 编写 `concord.docs-work-plan/v1`：每个 item 声明 goal、write（文件、目录或 glob）、read、blockedBy 与检查 ID。然后运行 `concord docs work prepare --plan plan.json --json`。只需单目录时可用 `--scope <path>`。
 3. prepare 只要求声明的 read、write 与共享路径干净；声明范围外他人的未提交改动不影响结果。
 4. 父 Agent 把 item 交给 Agent。Agent 完成后运行 `check <run> <item> --report`。

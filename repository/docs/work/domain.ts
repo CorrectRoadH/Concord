@@ -107,7 +107,7 @@ export const prepareDocsWork = Effect.fn('DocsWork.prepare')(function*(input: { 
     if (ancestor._tag === 'Failure') problems.push({ code: 'BaseNotAncestor', message: 'Base must be an ancestor commit of HEAD' });
   }
   const fs = yield* FileSystem.FileSystem;
-  const sharedPaths = [...new Set([...(ctx.config.docsWork?.sharedPaths ?? ['docs/README.md', ...(yield* Effect.filter(['docs/concepts.json', 'docs/concord-writing.json'], path => fs.exists(join(ctx.root, path))))]), 'concord.config.ts'])];
+  const sharedPaths = [...new Set([...(ctx.config.docsWork?.sharedPaths ?? ['docs/README.md', ...(yield* Effect.filter(['docs/concepts.md', 'docs/concord-writing.json'], path => fs.exists(join(ctx.root, path))))]), 'concord.config.ts'])];
   for (const path of sharedPaths) {
     const result = yield* safePath(ctx.root, path).pipe(Effect.result);
     if (result._tag === 'Failure') problems.push({ code: 'UnsafePath', path, message: 'Unsafe shared path' });

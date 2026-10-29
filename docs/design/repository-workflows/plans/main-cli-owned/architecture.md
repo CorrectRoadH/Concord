@@ -271,7 +271,7 @@ prepare 记录项目配置文件与 `docsWork` 解析结果的 `configDigest`。
 - 内建检查 `writing`：对 write 路径运行 `concord docs check` 默认规则。
 - 内建 finalizer：进程内 `concord check`。
 
-`sharedPaths` 默认为 `docs/README.md` 以及仓库中存在的 `docs/concepts.json`、`docs/concord-writing.json`。项目配置文件始终视为共享路径。
+`sharedPaths` 默认为 `docs/README.md` 以及仓库中存在的 `docs/concepts.md`、`docs/concord-writing.json`。项目配置文件始终视为共享路径。
 
 ### 计划输入
 
