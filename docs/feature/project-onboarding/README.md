@@ -32,6 +32,16 @@ kind: feature
 
 使用打包后的公开 CLI 在隔离 Git 消费仓库中验证完整用户路径；真实测试声明关联本 Feature 的 Use Case。运行 `pnpm check`，并使用 Concord 的 check、trace 与 review 检查自身 Spec 关联。
 
+## 性能预算
+
+按[性能验收](../../engineering/concord-self-hosting/performance.md)的参照环境与七次采样判定，阈值为参照实测 p50 加约 20% 余量取整。
+
+| 场景 | 测量内容 | p50 预算 |
+| --- | --- | ---: |
+| `project-onboarding/config` | 读取配置 | 670ms |
+| `project-onboarding/constitution` | 读取宪法及引用 | 880ms |
+| `project-onboarding/doctor` | 接入诊断 | 5250ms |
+
 ## Constitution
 
 - [C-001](../../constitution.md#c-001)

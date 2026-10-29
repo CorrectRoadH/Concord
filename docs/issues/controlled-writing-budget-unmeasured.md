@@ -4,12 +4,18 @@ id: controlled-writing-budget-unmeasured
 title: 受控写作性能预算没有接入测量
 createdAt: 2026-10-29T16:17:49.312Z
 kind: issue
-state: draft
+state: closed
 memoryRelations: []
 adoptions:
   current: []
   history: []
-history: []
+closure:
+  kind: closed
+  reason: budgets.ts 已改为扫描 docs/feature/ 的预算表，documentation-quality 的五个场景由 bench/documentation-quality.bench.ts 拥有，policy.md 的「性能预算」改为场景格式并接入测量；pnpm check 的覆盖测试保证预算行与场景一一对应。
+history:
+  - at: 2026-10-29T16:21:19.987Z
+    action: close
+    reason: budgets.ts 已改为扫描 docs/feature/ 的预算表，documentation-quality 的五个场景由 bench/documentation-quality.bench.ts 拥有，policy.md 的「性能预算」改为场景格式并接入测量；pnpm check 的覆盖测试保证预算行与场景一一对应。
 ---
 
 # 受控写作性能预算没有接入测量

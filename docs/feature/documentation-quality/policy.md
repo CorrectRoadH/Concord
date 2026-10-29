@@ -223,14 +223,18 @@ token 从左到右最长匹配：每个汉字一个；拉丁字母连同结合�
 
 失败退出 1，完整且没有 finding 时退出 0；截断结果不宣称完整。
 
-## 受控写作性能预算
+## 性能预算
 
 按[统一方法](../../engineering/concord-self-hosting/performance.md)测量：参照环境为 AMD Ryzen 7 5800X、Linux x64、Node v24.19.0。参照消费者为本仓库 commit `36250cef0394d04eee75d88315bb133bae72d773` 的独立 clone，经公开 CLI 加入 v3 政策后提交冻结，记录派生 commit、产物摘要与实际文档及 token 数。self 开启 zh/en 长度与词法规则；scale 含 1000 个支持页，每页 10 KiB prose 与 1000 个 token，10% 混排，每段 2 个代码 token。
 
-| 基准命令（参数完整） | 场景 | warm p50 预算 |
+| 场景 | 测量内容 | p50 预算 |
 | --- | --- | ---: |
-| `concord docs check` | self，两条长度路径与词法规则开启 | 1000ms |
-| `concord check` | self，全量聚合 | 2300ms |
-| `concord docs check` | scale，1000 页、单有效表接近上限 | 5000ms |
+| `documentation-quality/docs-check` | self 冻结副本，两条长度路径与词法规则开启 | 1000ms |
+| `documentation-quality/check` | 同一 self 冻结副本的全量聚合 | 2300ms |
+| `documentation-quality/docs-check-scale` | 1000 页、每页约 10KiB 与 1000 token、4096 项词表 | 5000ms |
+| `documentation-quality/writing-index` | 目录政策索引 | 610ms |
+| `documentation-quality/concepts-index` | 目录术语索引 | 650ms |
+
+场景准备由 `bench/documentation-quality.bench.ts` 与 `bench/fixtures/` 拥有。
 
 父提交与候选产物在等价 v2/v3 消费者上交错测量 legacy，回退不得超过 20%。新规则在有效 v3 消费者上按绝对预算判定，基线拒绝 v3 的耗时不是有效对照；缺少必需样本或对照不能判通过。极端重叠词表须以 `WritingBudgetExceeded` 失败而非耗尽资源。

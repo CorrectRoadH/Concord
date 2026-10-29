@@ -53,4 +53,4 @@ Schema、目录合成、抽取、分句、计数、词表匹配与错误见[受�
 | C24 | writing set、Web action 与 standalone profile 提交相同非法叶子 | 同一 Schema 与具名错误；未知字段、null 与空数组行为一致 |
 | C25 | 单表 4097 个形式、极端重叠匹配或超过 finding 上限 | `WritingBudgetExceeded`，complete 为 false，非零退出 |
 
-性能按[受控写作性能预算](../policy.md#受控写作性能预算)测量，结果记入 Memory。
+性能按[性能预算](../policy.md#性能预算)测量，结果记入 Memory。
