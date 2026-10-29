@@ -58,11 +58,21 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 
 正文、源码、作者字段和项目设置共用 `useAutoSave`：停止输入 800ms 后保存，同一编辑器的请求串行执行；请求期间的新输入留给下一次保存。切换预览、页签、文件或关闭详情抽屉前主动 flush。写入继续使用后端整文件摘要保护，冲突保留草稿并展示差异，不覆盖外部编辑。创建、运行测试和生命周期裁决仍是显式操作。自动保存写入 Git 工作树，不执行暂存、提交或 push。
 
-## 请求性能预算
+## 性能预算
 
-独立客户端与服务进程在冻结的 1112 个源码文件、110 个支持页面消费者上测量 workspace 与并发 jobs、file、document.set。原生产物正常与摘要不匹配回源分别采样；预热一次，同机交错运行至少七对，记录请求全程 p50、最大值及服务阶段。相对指定测前基线，各路由 p50 回退不得超过 20%，最大值超过本组 p50 两倍时重测，连续两组无效判失败。基线、机器、Node、消费者 commit 与产物摘要随测量记录进入 Memory；诊断阈值不是 HTTP 响应 SLA。测量脚本为 `scripts/measure-view-requests.ts`，document.set 使用相同正文与真实前像摘要，结束后消费者内容保持不变。
+测量场景为 `bench/web-workbench.bench.ts`。四路 HTTP 场景使用独立客户端与服务进程，在冻结的 1112 个源码文件、110 个支持页面消费者上测量：workspace 请求先发出，10ms 后并发 jobs、file 与 document.set，每次样本的服务准备与关闭不计入请求耗时。document.set 使用相同正文与真实前像摘要，结束后消费者内容与提交保持不变。原生产物正常与摘要不匹配回源分别采样。
 
-已有可读代次时，按[性能验收](../../engineering/concord-self-hosting/performance.md)以打包 CLI 与独立 HTTP 客户端连续测量七次：`GET /api/workspace` warm p50 不超过 250ms、p95 不超过 600ms，新进程 `workspace projection --json` warm p50 不超过 600ms。就绪请求不含全量扫描；首次构建另报时长与状态，不计入 warm。
+| 场景 | 测量内容 | p50 预算 |
+| --- | --- | ---: |
+| `web-workbench/workspace` | 已有可读代次时的 `GET /api/workspace` | 250ms |
+| `web-workbench/jobs` | 并发任务请求 | 211ms |
+| `web-workbench/file` | 并发文件请求 | 280ms |
+| `web-workbench/document-set` | 并发 document.set 请求 | 550ms |
+| `web-workbench/action` | CLI 共享文档动作 | 860ms |
+| `web-workbench/git-status` | CLI Git 状态 | 460ms |
+| `web-workbench/workspace-projection` | 新进程 `workspace projection --json` | 600ms |
+
+`GET /api/workspace` 的 warm p95 另不超过 600ms。就绪请求不含全量扫描；首次构建另报时长与状态，不计入 warm。jobs、file、document.set、action 与 git-status 的阈值为参照实测 p50 加约 20% 余量取整。
 
 ## Constitution
 
