@@ -1,6 +1,6 @@
 # 工程 Memory
 
-Memory 保存 Problem、Decision、Insight 与未分类 Note，不复制契约正文或测试关系。唯一当前格式是 `concord.document/v1`，输入严格校验，不提供格式转换入口。
+Memory 保存 Problem、Decision、Insight 与未分类 Note，不复制 Spec 正文或测试关系。唯一当前格式是 `concord.document/v1`，输入严格校验，不提供格式转换入口。
 
 索引、检索和正文读取使用 `concord memory index --json`、`concord memory recall "查询词" --json`。recall 返回匹配的实际正文与摘要，是本地文本检索，不调用模型。不要直接读取或编辑 Memory 文件，不维护人工 INDEX。需要查看状态与关系仍可使用 show；index/list 与 recall/search 都从当前 owner 派生。
 
@@ -18,7 +18,7 @@ concord memory show expired-token-accepted --json
 
 配置可声明多个 worktree 内 `local-files` 来源。短 ID 在跨来源重复时拒绝并要求 canonical path；省略 `--source` 写唯一 `defaultWrite` 来源，显式写入用 `--source <name>`。read-only 权限在统一发布入口执行，包括 Roadmap adoption 的间接 promotion 改写。
 
-fixed 必须绑定同一 active regression、当前 Problem epoch、相同测试定义与目标契约的 red/green command evidence，并提供实际修复理由：
+fixed 必须绑定同一 active regression、当前 Problem epoch、相同测试定义与目标 Spec 的 red/green command evidence，并提供实际修复理由：
 
 ```sh
 concord memory resolve expired-token-accepted --kind fixed \
@@ -29,7 +29,7 @@ concord memory resolve expired-token-accepted --kind fixed \
 作者裁决不用 command evidence：
 
 ```sh
-concord memory resolve expired-token-accepted --kind not-a-bug --reason "行为符合当前契约"
+concord memory resolve expired-token-accepted --kind not-a-bug --reason "行为符合当前 Spec"
 concord memory resolve expired-token-accepted --kind wont-fix --reason "风险已接受"
 concord memory resolve expired-token-accepted --kind external-fixed --reason "上游版本已修复"
 ```
@@ -41,7 +41,7 @@ concord memory reopen expired-token-accepted --reason "问题再次出现"
 concord memory supersede token-format --replacement token-format-v2 --reason "采用新格式"
 ```
 
-promotion 只指向有效当前契约；退役保留历史：
+promotion 只指向有效的当前 Spec；退役保留历史：
 
 ```sh
 concord memory promote token-format-v2 --target docs/feature/login/README.md

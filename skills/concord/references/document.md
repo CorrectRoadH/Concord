@@ -1,8 +1,8 @@
-# 契约与文档
+# Spec 与文档
 
 已采用的当前目标写入 Feature，叶子用户路径写入 Use Case；设计未完成或暂不实现的方向写入 Roadmap（与 Feature 同体裁），多方案比较写入 Design，自由研究与决策输入写入 Research，仓库测试与维护机制写入 Engineering。
 
-契约正文采用声明式表达：写产品必须具备的行为、边界与验收，不写“这轮做了什么”、开发流水账、实施进度或临时计划。用户操作流程、状态迁移和验收步骤可以保留。排障经过与交付经验使用 `concord memory add` 保存；待调查观察使用 `concord issue create`。Research 的来源事实和工具维护的历史不因这条规则被删除或伪装成目标契约。
+Spec 正文采用声明式表达：写产品必须具备的行为、边界与验收，不写“这轮做了什么”、开发流水账、实施进度或临时计划。用户操作流程、状态迁移和验收步骤可以保留。排障经过与交付经验使用 `concord memory add` 保存；待调查观察使用 `concord issue create`。Research 的来源事实和工具维护的历史不因这条规则被删除或伪装成目标 Spec。
 
 ```sh
 concord feature create login --title "登录" --pages cli,use-case
@@ -16,7 +16,7 @@ concord engineering create ci --title "持续集成"
 
 创建时省略 `--body` 会使用模板；`--body <file>` 或 `--body -` 提交完整正文。结构写入可在根命令加 `--dry-run`。用 `list` 发现 owner，用 `show <id>` 读取 metadata 与派生关系；正文直接读取返回的路径，或用 `page show` 查看附页。
 
-图示按表达需要选择：Mermaid 描述结构与流程，`p5` 代码块解释动画、连续变化和交互。图示旁保留结论与关键条件，未运行时也能理解契约。p5 使用完整实例函数或简写 `p.setup` / `p.draw`，外部入口相对所在 Markdown；扩展库统一配置在项目 `p5.libraries`，不要在代码块声明库或插入 CDN script。可复制示例与沙箱边界见 `concord --skill view`。
+图示按表达需要选择：Mermaid 描述结构与流程，`p5` 代码块解释动画、连续变化和交互。图示旁保留结论与关键条件，未运行时也能理解 Spec。p5 使用完整实例函数或简写 `p.setup` / `p.draw`，外部入口相对所在 Markdown；扩展库统一配置在项目 `p5.libraries`，不要在代码块声明库或插入 CDN script。可复制示例与沙箱边界见 `concord --skill view`。
 
 Research 使用目录 README，默认只有标题，不预设章节、日期、来源或附页。`--observed-at` 和 `--source` 可选；附页接受安全相对路径（含中文和子目录），不会套用其它类型的模板。输入必须符合当前目录与 metadata 规则；发现过程不转换文件。
 
@@ -27,14 +27,14 @@ Research 使用目录 README，默认只有标题，不预设章节、日期、�
 | 读者的问题 | 写在 | 写法 |
 | --- | --- | --- |
 | 功能对使用者做什么 | Feature README | 问题、概念、范围与非目标 |
-| 一个目标怎样完成 | Use Case | 用户目标、起始状态、带 `{#id}` 的完整路径、结果、契约来源 |
+| 一个目标怎样完成 | Use Case | 用户目标、起始状态、带 `{#id}` 的完整路径、结果、Spec 来源 |
 | 命令或 API 怎样调用、返回什么 | cli、library | 完整调用、人读输出、`--json` 输出、退出码、具名错误、最小示例 |
 | 它是怎么实现的 | architecture、lifecycle | 实体归属、数据流、不变量、失败阶段、资源生命周期 |
 | 为什么这样选 | Design | 目标、约束、候选与裁决 |
 | 排障经过、根因、经验 | Memory | `concord memory add` |
 | 待调查的观察 | Issue | `concord issue create` |
 
-行为页的规范性陈述要能被测试断言。已实现的命令在临时仓库实际运行，复制输出，把每次运行都会变化的摘要和时间戳写成省略号或说明；尚未实现时标为预期输出，交付验收再核对实际运行，运行记录写进 Memory。错误写成表格，列出错误码和触发条件。`--json` 字段、错误码和退出码是公开契约；人读输出帮助理解，不保证逐字稳定。同一输出或错误只在一个页面定义，其它页面链接过去。
+行为页的规范性陈述要能被测试断言。已实现的命令在临时仓库实际运行，复制输出，把每次运行都会变化的摘要和时间戳写成省略号或说明；尚未实现时标为预期输出，交付验收再核对实际运行，运行记录写进 Memory。错误写成表格，列出错误码和触发条件。`--json` 字段、错误码和退出码属于公开 Spec；人读输出帮助理解，不保证逐字稳定。同一输出或错误只在一个页面定义，其它页面链接过去。
 
 行为页不写内部模块、内部数据结构、调用链、缓存或存储引擎；公开的输入输出结构、协议和可观察的恢复保证留在行为页。出现这些词时，把那段移到 architecture 页，行为页只保留使用者能观察到的保证，例如“删除缓存后结论不变”。architecture 页不重新定义行为；只改实现时只改 architecture 页。
 
@@ -70,7 +70,9 @@ concord roadmap adopt sessions --feature sessions
 
 定案前，GOALS/LIMITS 用 `## G1: 标题`、`## L1: 标题` 定义稳定条目；每个候选 README 的 `## Goals`、`## Limits` 各用四列表格逐项写出要求链接、状态、机制/缺口和依据。状态支持 satisfied/not-satisfied/pending（满足/不满足/待验证），Goal 另支持 partial（部分满足）。链接例如 `[L1](../../LIMITS.md#l1-offline)`，必须指向实际标题。代码块、HTML 和引用式链接不作为要求回应。
 
-DECISION 的 `## Decision` 只放 `Selected: [sqlite](plans/sqlite/README.md)` 或 `选择 [sqlite](plans/sqlite/README.md)。`；`## Rationale`、`## Rejected Options`、`## Residual Risks` 写真实论证。每个非 satisfied 的已选 Goal 需在 Rationale 单独写 `G1: 接受缺口的理由`。全部候选必须完整回应，所选候选的所有 Limit 必须 satisfied。`design check` 检查当前正文，结构通过不代表真实验证；`design format` 只整理已识别的 H2 和四列表格空白，不能生成选择或证据。定案收据中的 changedPaths 包括保护已校验输入的同内容 guards。
+DECISION 的 `## Decision` 只放 `Selected: [sqlite](plans/sqlite/README.md)` 或 `选择 [sqlite](plans/sqlite/README.md)。`；`## Rationale`、`## Rejected Options`、`## Residual Risks` 写真实论证。每个非 satisfied 的已选 Goal 需在 Rationale 单独写 `G1: 接受缺口的理由`。全部候选必须完整回应，所选候选的所有 Limit 必须 satisfied。
+
+`design check` 检查当前正文，结构通过不代表真实验证；`design format` 只整理已识别的 H2 和四列表格空白，不能生成选择或证据。定案收据中的 changedPaths 包括保护已校验输入的同内容 guards。
 已有裁决的理由更正要求 Design 与指定 Memory 的最新摘要，且 Design 当前字节与 Git HEAD 一致。命令只更正理由，在 Memory 留存原文的 Git 来源与更正说明；选择、目标、定案时间及来源保持不变。
 
 普通 supporting page 不成为第二个 metadata 真源。Roadmap adopt 会创建新 Feature、保留 Roadmap 历史，并迁移当前 promotion。修改 owner 正文时读取最新 digest，再执行：
@@ -87,7 +89,9 @@ concord author set docs/feature/login/README.md --body ./login.md --expected-dig
 
 concepts.md 不设版本字段。正文恰好一个一级标题，位于所有概念之前；每个二级标题为 `term {#id}`，term 是唯一纯文本写法，后面的第一个段落是定义，其余是解释。可选 YAML frontmatter 严格只接受直接 imports 和按本文件 ID 分组的 deprecated；只有弃用名派生禁词并建议改为 term。catalog 整份不计为使用，但仍参与写作检查；解释中提及弃用名时放在行内代码里。全项目术语表只读汇总，不写第二份词库。
 
-`concepts show` 返回 source、digest、解析结果及诊断，区分 missing/valid/invalid；`concepts set --path docs/feature/example/concepts.md --body /tmp/concepts.md --expected-digest <digest>` 按提交的完整 Markdown 字节保存，`--body -` 读取 stdin；新建时摘要为 null。action `concepts.set` 接受 `{ path, source, expectedDigest }`。结构错误为 InvalidConceptCatalog，消息带行号；导入悬空为 DanglingConceptImport，有效范围同名为 AmbiguousConceptName。
+`concepts show` 返回 source、digest、解析结果及诊断，区分 missing/valid/invalid。`concepts set --path docs/feature/example/concepts.md --body /tmp/concepts.md --expected-digest <digest>` 按提交的完整 Markdown 字节保存。正文使用 `--body -` 时从 stdin 读取；新建时摘要为 null。
+
+action `concepts.set` 接受 `{ path, source, expectedDigest }`。结构错误为 InvalidConceptCatalog，消息带行号；导入悬空为 DanglingConceptImport，有效范围同名为 AmbiguousConceptName。
 
 被其它 catalog imports 引用的定义不能删除或改名。正文可以链接到 concepts.md#id；缺失 ID 由 check 报告 relation 类 AnchorNotFound，正文链接不阻止写入。author set、page set、page add 与 Web 通用保存遇到 catalog 路径返回 ManagedConceptCatalog，改用 concepts set。Concord 只识别 concepts.md；concepts.json 不读取、不检测、不提示、不提供迁移，作者手动按当前结构改写。
 

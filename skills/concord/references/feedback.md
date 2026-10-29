@@ -4,7 +4,7 @@
 
 Local、GitHub、Linear 是并列来源。Local 无需账号、连接或同步：用 `concord issue create <id> --title <title>` 创建，`issue index --json` 获取派生索引，`issue recall "查询词" --json` 读取实际正文和摘要。issue draft、list/show 同样维护本地 Issue。不要直接读写 Issue owner 或维护人工索引。
 
-正文修改使用 `issue edit <id> --body <file> --expected-digest <digest>`；Memory 关联使用 issue link --kind；契约采用使用 issue adopt --to，退役使用 issue retire --from，重开使用 issue reopen --reason。删除使用 `issue remove <id> --expected-digest <digest>`，仅允许无来源、无关系、无历史的本地 draft。已进入调查、关闭或导入的记录保留生命周期，不能通过删除绕过证据；本地命令不删除 GitHub/Linear 对象。
+正文修改使用 `issue edit <id> --body <file> --expected-digest <digest>`；Memory 关联使用 issue link --kind。采用为 Spec 使用 issue adopt --to，退役使用 issue retire --from，重开使用 issue reopen --reason。删除使用 `issue remove <id> --expected-digest <digest>`，仅允许无来源、无关系、无历史的本地 draft。已进入调查、关闭或导入的记录保留生命周期，不能通过删除绕过证据；本地命令不删除 GitHub/Linear 对象。
 
 ## 建立连接并读取
 

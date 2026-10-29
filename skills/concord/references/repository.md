@@ -16,9 +16,9 @@ concord repo docs test audit --json
 
 ## 声明与执行
 
-真实顶层测试旁使用 `@feature` 或 `@use-case` canonical 契约引用，helper 使用 `@test-file tests/acceptance/entry.test.ts`。身份从 native 文件、声明文件和静态名称派生，不手填 ID。current 关系只由源码拥有，反向列表派生；历史归档只保存历史与退役事实。
+真实顶层测试旁使用 `@feature` 或 `@use-case` canonical Spec 引用；测试支持文件使用 `@test-file tests/acceptance/entry.test.ts` 关联 native 文件。身份从 native 文件、声明文件和静态名称派生，不手填 ID。current 关系只由源码拥有，反向列表派生；历史归档只保存历史与退役事实。
 
-原生 inventory 必须唯一绑定当前声明。AST、关系或命令成功均不代表 native case 通过。adapter 负责真实执行及资源终结；Concord 核验当前源码、契约、配置、policy、实现身份、候选和 invocation。
+原生 inventory 必须唯一绑定当前声明。AST、关系或命令成功均不代表 native case 通过。adapter 负责真实执行及资源终结；Concord 核验当前源码、Spec、配置、policy、实现身份、候选和 invocation。
 
 ## 回归与可靠性
 

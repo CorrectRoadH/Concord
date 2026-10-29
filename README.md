@@ -4,26 +4,28 @@
 
 English · [简体中文](README.zh-CN.md)
 
-Concord is a local development workflow tool for developers and coding agents. It keeps product contracts in Markdown, links implementations and tests through source annotations, and preserves engineering knowledge in Memory. A CLI and a bundled web workspace work with the same repository data.
+Concord is a local development workflow tool for developers and coding agents. It keeps product specs in Markdown, links implementations and tests through source annotations, and preserves engineering knowledge in Memory. A CLI and a bundled web workspace work with the same repository data.
 
-Start with a contract, implement and test it, then trace the relationships when reviewing a change or investigating a bug. The core workflow runs in your Git worktree, without an account, model API, or cloud service.
+Start with a spec, implement and test it, then trace the relationships when reviewing a change or investigating a bug. The core workflow runs in your Git worktree, without an account, model API, or cloud service.
 
 ## The problem Concord solves
 
-In most projects, *what* to build, *how* it was built, and *why* it was built that way live in different places. Requirements sit in chat threads and PR descriptions. Design tradeoffs live in someone's memory. A test claims to protect a feature, but nobody can tell which behavior it actually guards. Coding agents make this worse: every session starts from zero, so an agent may re-decide settled semantics, use different words for the same thing, or declare a bug fixed without evidence.
+In most projects, *what* to build, *how* it was built, and *why* it was built that way live in different places. Requirements sit in chat threads and PR descriptions. Design tradeoffs live in someone's memory. A test claims to protect a feature, but nobody can tell which behavior it actually guards.
 
-Concord keeps all three in one Git repository and maintains the relationships between them. Contracts are Markdown. Code and tests point to contracts through source annotations, and the tool derives the reverse links from source. People and agents read and write the same data, and `concord check` verifies that the relationships still hold.
+Coding agents make this worse because every session starts from zero. An agent may re-decide settled semantics, use different words for the same thing, or declare a bug fixed without evidence.
+
+Concord keeps all three in one Git repository and maintains the relationships between them. Specs are Markdown. Code and tests point to specs through source annotations, and the tool derives the reverse links from source. People and agents read and write the same data, and `concord check` verifies that the relationships still hold.
 
 ## Why each concept exists
 
 | Concept | Problem it solves |
 | --- | --- |
-| Feature and Use Case | Record the behavior the product must have as a durable contract, written before implementation. A Feature describes a capability. A Use Case describes one user path with its main flow and acceptance criteria, which gives code and tests a target more specific than "the whole feature". |
+| Feature and Use Case | Record the behavior the product must have as a durable spec, written before implementation. A Feature describes a capability. A Use Case describes one user path with its main flow and acceptance criteria, which gives code and tests a target more specific than "the whole feature". |
 | Design | When several approaches are viable, compare candidates against shared goals and limits, then record one choice and its reason. Later readers and agents can see why it was chosen and why the others were not, instead of reopening the question. |
-| Roadmap and Research | Roadmap holds settled directions that are not yet adopted. Research holds dated external facts with sources, kept separate from contracts as decision input. |
-| Glossary | Each concept has one preferred name, and `check` reports deprecated names. Directories scope definitions, so the same word can mean different things in different features. Agents read text literally, so a contract stays unambiguous only when its terms do. |
-| Writing policy | Ban words that hide responsibility, such as "helper" or "resolve", limit sentence and paragraph length, and give a replacement and a reason for each rule. Clear contracts leave less for the implementation to guess. |
-| Source annotations | Code and tests declare in source which contract they relate to, so the relationship appears in the same diff as the code. Reverse lists are derived, with no separate registry to drift. |
+| Roadmap and Research | Roadmap holds settled directions that are not yet adopted. Research holds dated external facts with sources, kept separate from specs as decision input. |
+| Glossary | Each concept has one preferred name, and `check` reports deprecated names. Directories scope definitions, so the same word can mean different things in different features. Agents read text literally, so a spec stays unambiguous only when its terms do. |
+| Writing policy | Ban words that hide responsibility, such as `helper` or `resolve`, limit sentence and paragraph length, and give a replacement and a reason for each rule. Clear specs leave less for the implementation to guess. |
+| Source annotations | Code and tests declare in source which spec they relate to, so the relationship appears in the same diff as the code. Reverse lists are derived, with no separate registry to drift. |
 | Command receipts | `test run` records the result of a real execution. Closing a Problem requires two receipts from the same test, one failing and one passing, so "fixed" comes with evidence. |
 | Memory and Issue | Investigation history, root causes, decisions, and lessons go into Memory; observations awaiting investigation go into Issue. `docs/` therefore holds only current declarations, not development logs. |
 | Project constitution | Records long-lived rules that span features. Features and Designs cite the clauses that apply, and amendments keep their reason and impact. |
@@ -31,11 +33,11 @@ Concord keeps all three in one Git repository and maintains the relationships be
 ## What you can do
 
 - **Define the work.** Describe features and use cases, compare design alternatives, and record an explicit decision before implementation.
-- **Find the implementation.** Follow a contract to its annotated files, functions, code regions, and tests. Reverse links are derived from source.
+- **Find the implementation.** Follow a spec to its annotated files, functions, code regions, and tests. Reverse links are derived from source.
 - **Keep useful history.** Capture problems, decisions, and insights in Memory. Close a problem as fixed with matching red and green execution evidence.
-- **Review in context.** Inspect contracts, source, test evidence, feedback, and Git changes in the web workspace, or generate local review material from the CLI.
+- **Review in context.** Inspect specs, source, test evidence, feedback, and Git changes in the web workspace, or generate local review material from the CLI.
 
-Concord adopts a contract-first workflow while leaving your language, package manager, and test runner to your project. An annotation declares a relationship; a command receipt records an execution result. Neither is a claim of complete test coverage.
+Concord adopts a spec-first workflow while leaving your language, package manager, and test runner to your project. An annotation declares a relationship; a command receipt records an execution result. Neither is a claim of complete test coverage.
 
 ## Install
 
@@ -55,7 +57,11 @@ concord --help
 
 The runtime requires Node.js 24.15+ and Git; repository tools also use `ripgrep`. Release packages include the native cache engine, so consumers do not need Rust or a database service.
 
-Packaged native targets are Linux x64/glibc and macOS arm64, with macOS 15 as the minimum deployment target. Source releases require the complete test suite and a frozen production installation check of the final archive. Homebrew and Nix channel updates require their own installation checks. macOS 27 is permitted but has not been verified in CI. Windows execution and coordination across multiple networked machines are outside the compatibility contract. See the [release contract](docs/feature/cross-platform-release/README.md) for details.
+Packaged native targets are Linux x64/glibc and macOS arm64, with macOS 15 as the minimum deployment target.
+
+Source releases require the complete test suite and a frozen production installation check of the final archive. Homebrew and Nix channel updates require their own installation checks.
+
+macOS 27 is permitted but has not been verified in CI. Windows execution and coordination across multiple networked machines are outside the compatibility statement. See the [release spec](docs/feature/cross-platform-release/README.md) for details.
 
 ## Quick start
 
@@ -86,7 +92,7 @@ export function greet(name: string): string {
 }
 ```
 
-Add the matching contract annotation to a test file under your configured test root:
+Add the matching annotation to a test file under your configured test root:
 
 ```ts
 // @use-case docs/feature/greeting/use-case/greet-name.md
@@ -135,12 +141,12 @@ Use `concord <command> --help` for exact arguments, `--json` for structured resu
 | Understand the workflow and data ownership | [Architecture](docs/architecture.md) · [Agent workflow](docs/agent-workflow.md) |
 | Annotate files, functions, and code regions | [Code guide](skills/concord/references/code.md) |
 | Run tests and inspect evidence | [Test guide](skills/concord/references/test.md) |
-| Capture and resolve engineering problems | [Memory guide](skills/concord/references/memory.md) |
+| Capture and close engineering problems | [Memory guide](skills/concord/references/memory.md) |
 | Read GitHub and Linear feedback alongside local observations | [Feedback commands](docs/feature/feedback/cli.md) |
 | Adopt native test inventory and reliability policies | [Advanced test governance](docs/repository-profile.md) |
-| Explore the product contracts | [Documentation](docs/README.md) |
+| Explore the product specs | [Documentation](docs/README.md) |
 
-The linked guides and contracts are primarily in Chinese. These two README files cover the same introduction and getting-started workflow.
+The linked guides and specs are primarily in Chinese. These two README files cover the same introduction and getting-started workflow.
 
 ## Develop Concord
 
@@ -156,9 +162,13 @@ pnpm exec vp run concord --help
 pnpm exec vp run check
 ```
 
-`pnpm check` (also available as `vp run check`) is the only check entry. It builds the CLI and web workspace, reusing validated native artifacts, then type-checks repository, test, and script sources and checks the current checkout's contracts in parallel, and finally runs the packed CLI's Node and browser suites concurrently in isolated Git consumers. Run `pnpm concord trace show local-sdlc` to inspect relationships from source.
+`pnpm check` (also available as `vp run check`) is the only check entry. It first builds the CLI and web workspace, reusing validated native artifacts. It then type-checks repository, test, and script sources and checks the current checkout's specs in parallel. Finally, it runs the packed CLI's Node and browser suites concurrently in isolated Git consumers.
 
-Use `pnpm exec vp` when Vite+ is not installed globally. `vp install` manages dependencies through the pinned pnpm version. `pnpm check test/writing-cache.test.ts` runs selected files after the complete build and static checks; pass `--test-name-pattern=...` to select cases or `--test-shard=1/4` to split the complete suite. Selected tests never replace the full gate.
+Run `pnpm concord trace show local-sdlc` to inspect relationships from source.
+
+When Vite+ is not installed globally, use `pnpm exec vp`. The `vp install` command manages dependencies through the pinned pnpm version.
+
+The command `pnpm check test/writing-cache.test.ts` runs selected files after the complete build and static checks. Pass `--test-name-pattern=...` to select cases or `--test-shard=1/4` to split the complete suite. Selected tests never replace the full gate.
 
 `vp run check` is the full delivery gate. The `vp build` production hooks prepare the complete distribution. Vite+'s built-in `vp check` and `vp test` do not invoke the project's scripts. Tests use Node's runner, share one packed artifact per invocation, and install isolated consumers. Task caching is disabled; partial checks do not replace full acceptance.
 

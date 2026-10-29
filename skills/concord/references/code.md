@@ -4,7 +4,7 @@
 源码与测试自动发现支持在 `concord.config.ts` 设置 `sourceIgnore: ['src/generated', 'tests/vendor']`。每项是仓库相对文件或目录（含子树），不支持 glob；显式来源根优先，文档、runner.sourceFiles 和直接读写仍严格校验。
 代码声明描述实现与 Feature / Use Case / Engineering 的关联。它既不是测试声明，也不是完成或覆盖证明。真实注释是唯一 owner；无需另写关系 JSON。
 
-先读取 `concord.config.ts`。`sourceRoots` 是可选的仓库相对路径数组，缺省 `[]`；默认扫描其中 JS/TS 文件；配置 languageServers 后也扫描相应后缀的文本标记。JS/TS 支持，包括 `.js/.jsx/.ts/.tsx/.mjs/.cjs/.mts/.cts`。新项目可用 `concord init --source-root src`，该选项可重复并可与 `--docs-only` 组合。已有项目直接维护配置，不重复 init。`testRoots` 与 `sourceRoots` 可重叠，各标签属于自己的扫描器；`doctor` 提示缺失目录。
+先读取 `concord.config.ts`。`sourceRoots` 是可选的仓库相对路径数组，省略时为 `[]`；默认扫描其中 JS/TS 文件；配置 languageServers 后也扫描相应后缀的文本标记。JS/TS 支持，包括 `.js/.jsx/.ts/.tsx/.mjs/.cjs/.mts/.cts`。新项目可用 `concord init --source-root src`，该选项可重复并可与 `--docs-only` 组合。已有项目直接维护配置，不重复 init。`testRoots` 与 `sourceRoots` 可重叠，各标签属于自己的扫描器；`doctor` 提示缺失目录。
 
 ## 声明与查询
 
@@ -18,7 +18,7 @@ concord review render orders
 concord check
 ```
 
-`annotate` 只生成经验证的片段，不编辑源文件，不接收或返回声明 ID。范围标记不带参数，`@concord-implements` 保留显式契约关联。多契约重复 `--contract`，或添加多条相邻 implements；重复 exactRef 拒绝。目标使用 canonical Feature / Use Case / Engineering 路径，也支持 Feature 或 Engineering supporting page 与有效 `#anchor`。不同 anchor 保留独立关联。
+`annotate` 只生成经验证的片段，不编辑源文件，不接收或返回声明 ID。范围标记不带参数，`@concord-implements` 保留显式 Spec 关联。关联多个 Spec 时重复 `--contract`，或添加多条相邻 implements；重复 exactRef 拒绝。目标使用 canonical Feature / Use Case / Engineering 路径，也支持 Feature 或 Engineering supporting page 与有效 `#anchor`。不同 anchor 保留独立关联。
 
 ```ts
 // @concord-file
@@ -38,10 +38,10 @@ export function parseOrder(input: string) {
 
 ## 选择作用域与目标
 
-关联要回答“这段代码实现了哪条行为”。选择能完整、准确描述这段代码职责的最小既有契约范围：
+关联要回答“这段代码实现了哪条行为”。选择能完整、准确描述这段代码职责的最小既有 Spec 范围：
 
-- 代码侧优先 `node` 或 `region`。只有整个文件服务同一份契约时才用 `file`，例如只服务一个 Feature 的共享基础设施。
-- 契约侧优先 Use Case 的步骤（`#<step-id>`）或行为页的标题 anchor。只有代码服务整份契约时才指向 README。
+- 代码侧优先 `node` 或 `region`。只有整个文件服务同一份 Spec 时才用 `file`，例如只服务一个 Feature 的共享基础设施。
+- Spec 侧优先 Use Case 的步骤（`#<step-id>`）或行为页的标题 anchor。只有代码服务整份 Spec 时才指向 README。
 - 一个声明服务多项行为时，写多条 `@concord-implements`。只服务内部不变量或仓库维护机制的代码，指向 architecture、lifecycle 页的 anchor 或 Engineering owner。
 - 不为追求更窄而拆分实现或机械改名步骤。许多文件都指向同一份 README 或同一个 Use Case，通常说明关联太粗。`trace show` 和 `trace gaps` 无法据此回答哪一步由哪段代码实现。
 
@@ -63,7 +63,7 @@ export function parseOrder(input: string) {
 
 ## 自动查询引用
 
-`list` 和图中的 `id` 是工具内部使用的 `code-…` 自动引用，来自版本、仓库相对源路径、scope 和 AST 结构位置；不写入源码或第二份登记表。按文件与行号使用 `locate` 查询声明；Web 直接显示符号、文件位置和关联契约。
+`list` 和图中的 `id` 是工具内部使用的 `code-…` 自动引用，来自版本、仓库相对源路径、scope 和 AST 结构位置；不写入源码或第二份登记表。按文件与行号使用 `locate` 查询声明；Web 直接显示符号、文件位置和关联 Spec。
 
 定位路径及同描述前序兄弟不变时，空白、行号、普通函数体与 implements 修改不改变 node 引用。同内容新进程或 clone 可重新得到相同引用。文件移动、改名、改变作用域，以及同描述兄弟或 region 次序变化可能改变引用；旧引用也可能成功指向另一声明，例如删除前方 region 标记后后方 region 接续其序号。
 
@@ -90,7 +90,9 @@ environment 只显式选择 PATH、LANG、LC_ALL、TZ、TMPDIR、SYSTEMROOT，�
 
 code list、trace show --fresh、test show 的 analysis 返回 observations 与 relevance。观察保留 inputs、observedAt、current、complete、gaps、分析器/profile 与可选 locator。没有目标交集时显示“未观察到交集”，历史观察不能用于当前判定。
 
-文件级依赖始终标 FileScope，不把文件中另一 case 的导入称为当前 case 的调用证明。调用观察始终标 OpenWorldCalls；LSP 无法核验的动态派发、子进程与协议边界分别标 UnknownDynamicDispatch、UnknownSubprocessBoundary 与 UnknownProtocolBoundary。动态 import、未解析模块、外部目标、网络、子进程与预算截断分别记录缺口。没有观察到交集不产生 finding 或失败退出码。current 表达仓库内输入一致性；复核通过的 LSP 观察可用于符号定位与 observed 判定。未核验的外部 SDK、环境与私有索引保留 UnverifiedEnvironment，complete 为 false。
+文件级依赖始终标 FileScope，不把文件中另一 case 的导入称为当前 case 的调用证明。调用观察始终标 OpenWorldCalls；LSP 无法核验的动态派发、子进程与协议边界分别标 UnknownDynamicDispatch、UnknownSubprocessBoundary 与 UnknownProtocolBoundary。动态 import、未解析模块、外部目标、网络、子进程与预算截断分别记录缺口。
+
+没有观察到交集不产生 finding 或失败退出码。current 表达仓库内输入一致性；复核通过的 LSP 观察可用于符号定位与 observed 判定。未核验的外部 SDK、环境与私有索引保留 UnverifiedEnvironment，complete 为 false。
 
 具体语言、server 与 profile 的兼容承诺须有固定版本的真实 fixture。标记关系和协议 fake 不能替代真实 Python、Go、Rust 或 Java server 兼容证据。
 

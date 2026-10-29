@@ -4,26 +4,28 @@
 
 [English](README.md) · 简体中文
 
-Concord 是面向开发者和 coding agent 的本地开发工作流工具。产品契约保存在 Markdown 中，实现与测试通过源码注释关联契约，工程经验通过 Memory 保留。CLI 和随包提供的 Web 工作台操作同一份仓库数据。
+Concord 是面向开发者和 coding agent 的本地开发工作流工具。产品 Spec 保存在 Markdown 中，实现与测试通过源码注释关联 Spec，工程经验通过 Memory 保留。CLI 和随包提供的 Web 工作台操作同一份仓库数据。
 
-从契约出发，完成实现与测试，再在审阅改动或排查问题时反查这些关系。核心流程使用项目自己的 Git worktree，不需要账号、模型 API 或云服务。
+从 Spec 出发，完成实现与测试，再在审阅改动或排查问题时反查这些关系。核心流程使用项目自己的 Git worktree，不需要账号、模型 API 或云服务。
 
 ## 解决什么问题
 
-一个软件项目里，"要做什么"、"怎么做的"和"为什么这样做"通常散在不同地方。需求在聊天记录和 PR 描述里，设计取舍在某个人的记忆里，测试声称保护某个功能，但没人能确认它保护的是哪一条行为。和 coding agent 一起开发时，这个问题更明显：每次对话都从零开始，agent 会重新决定已经定过的语义，用不同的词指同一件事，或者在没有证据时宣布问题已修复。
+一个软件项目里，"要做什么"、"怎么做的"和"为什么这样做"通常散在不同地方。需求在聊天记录和 PR 描述里，设计取舍在某个人的记忆里，测试声称保护某个功能，但没人能确认它保护的是哪一条行为。
 
-Concord 把这三类信息放进同一个 Git 仓库，并维护它们之间的关系。契约写在 Markdown 中，代码与测试用源码标记指向契约，反向关系由工具从源码推导。人和 agent 读写的是同一份数据，`concord check` 检查这些关系是否仍然成立。
+和 coding agent 一起开发时，这个问题更明显：每次对话都从零开始，agent 会重新决定已经定过的语义，用不同的词指同一件事，或者在没有证据时宣布问题已修复。
+
+Concord 把这三类信息放进同一个 Git 仓库，并维护它们之间的关系。Spec 写在 Markdown 中，代码与测试用源码标记指向 Spec，反向关系由工具从源码推导。人和 agent 读写的是同一份数据，`concord check` 检查这些关系是否仍然成立。
 
 ## 为什么需要这些概念
 
 | 概念 | 解决的问题 |
 | --- | --- |
-| Feature 与 Use Case | 把产品必须做到的行为写成持久的契约，先于实现。Feature 描述一项能力；Use Case 描述一条用户路径的主流程与验收，给代码和测试一个比"整个功能"更具体的目标。 |
+| Feature 与 Use Case | 把产品必须做到的行为写成持久的 Spec，先于实现。Feature 描述一项能力；Use Case 描述一条用户路径的主流程与验收，给代码和测试一个比"整个功能"更具体的目标。 |
 | Design | 有多个可行方案时，在共同的目标与约束下比较候选，记录唯一选择和理由。后来的人和 agent 能看到为什么选它、为什么没选别的，不会反复重新讨论。 |
-| Roadmap 与 Research | Roadmap 保存已经定下但尚未采用的方向；Research 保存带日期和来源的外部事实，作为决策输入，和契约分开。 |
-| 术语表 | 同一个概念只用一个首选名称，弃用名称会被 `check` 报告。按目录划分作用域，不同 Feature 中的同名概念可以各有定义。agent 按字面理解文字，术语统一了，契约才不会被读出两种意思。 |
-| 写作政策 | 禁用"helper"、"resolve"这类没有说明职责的词，限制句长与段长，并给出替代写法和理由。契约写得清楚，实现才不需要猜。 |
-| 源码标记 | 实现与测试在源码中声明自己关联哪个契约，关系随代码一起出现在 diff 中。反向列表由工具推导，不另外维护登记表，所以不会和代码脱节。 |
+| Roadmap 与 Research | Roadmap 保存已经定下但尚未采用的方向；Research 保存带日期和来源的外部事实，作为决策输入，和 Spec 分开。 |
+| 术语表 | 同一个概念只用一个首选名称，弃用名称会被 `check` 报告。按目录划分作用域，不同 Feature 中的同名概念可以各有定义。agent 按字面理解文字，术语统一了，Spec 才不会被读出两种意思。 |
+| 写作政策 | 禁用 `helper`、`resolve` 这类没有说明职责的词，限制句长与段长，并给出替代写法和理由。Spec 写得清楚，实现才不需要猜。 |
+| 源码标记 | 实现与测试在源码中声明自己关联哪个 Spec，关系随代码一起出现在 diff 中。反向列表由工具推导，不另外维护登记表，所以不会和代码脱节。 |
 | 命令收据 | `test run` 记录一次真实执行的结果。关闭一个 Problem 需要同一测试先失败、再通过的两份收据，"已修复"要有证据。 |
 | Memory 与 Issue | 排障经过、根因、决策和经验写入 Memory，待调查的观察写入 Issue。`docs/` 因此只保留当前的声明，不混入开发日志。 |
 | 项目宪法 | 记录跨功能、长期有效的规则。Feature 与 Design 引用适用的条款，修订时保留理由和影响。 |
@@ -31,11 +33,11 @@ Concord 把这三类信息放进同一个 Git 仓库，并维护它们之间的�
 ## 可以做什么
 
 - **定义要做的事。** 描述 Feature 与 Use Case，比较设计候选，在实现前记录明确裁决。
-- **找到对应实现。** 从契约反查标注过的文件、函数、代码段和测试，反向关系从源码派生。
+- **找到对应实现。** 从 Spec 反查标注过的文件、函数、代码段和测试，反向关系从源码派生。
 - **保留有用的历史。** 用 Memory 记录问题、决策和经验；使用相匹配的 red / green 执行证据，将问题关闭为 fixed。
-- **结合上下文审阅。** 在 Web 工作台查看契约、源码、测试证据、反馈与 Git 改动，或通过 CLI 生成本地审阅材料。
+- **结合上下文审阅。** 在 Web 工作台查看 Spec、源码、测试证据、反馈与 Git 改动，或通过 CLI 生成本地审阅材料。
 
-Concord 要求契约先于实现，项目的语言、包管理器和测试 runner 由项目自己选择。源码标注表达关联，命令收据记录执行结果，两者都不代表完整测试覆盖。
+Concord 要求 Spec 先于实现，项目的语言、包管理器和测试 runner 由项目自己选择。源码标注表达关联，命令收据记录执行结果，两者都不代表完整测试覆盖。
 
 ## 安装
 
@@ -55,7 +57,11 @@ concord --help
 
 运行需要 Node.js 24.15+ 和 Git，Repository 工具还使用 `ripgrep`。发行包自带原生缓存引擎，安装使用不需要 Rust 或数据库服务。
 
-发行包的原生目标为 Linux x64/glibc 与 macOS arm64，macOS 最低部署目标为 15。源码发布必须通过完整测试集和最终归档的冻结生产安装检查；Homebrew 与 Nix 渠道更新另需通过各自的安装检查。允许在 macOS 27 安装，但尚未由 CI 实测。Windows 执行与网络多机协调不在兼容声明内。详见[发行契约](docs/feature/cross-platform-release/README.md)。
+发行包的原生目标为 Linux x64/glibc 与 macOS arm64，macOS 最低部署目标为 15。
+
+源码发布必须通过完整测试集和最终归档的冻结生产安装检查；Homebrew 与 Nix 渠道更新另需通过各自的安装检查。
+
+允许在 macOS 27 安装，但尚未由 CI 实测。Windows 执行与网络多机协调不在兼容声明范围内。详见[发行 Spec](docs/feature/cross-platform-release/README.md)。
 
 ## 快速上手
 
@@ -76,7 +82,7 @@ docs/feature/greeting/README.md
 docs/feature/greeting/use-case/greet-name.md
 ```
 
-在对应实现声明前紧邻放置注释，关联契约：
+在对应实现声明前紧邻放置注释，关联 Spec：
 
 ```ts
 // @concord-code
@@ -138,9 +144,9 @@ concord --skill memory
 | 记录和关闭工程问题 | [Memory 指引](skills/concord/references/memory.md) |
 | 将 GitHub、Linear 反馈与本地观察一起查看 | [反馈命令](docs/feature/feedback/cli.md) |
 | 接入原生测试清单与可靠性政策 | [高级测试治理](docs/repository-profile.md) |
-| 浏览产品契约 | [文档目录](docs/README.md) |
+| 浏览产品 Spec | [文档目录](docs/README.md) |
 
-链接中的详细指引与契约以中文为主。两份 README 提供内容对应的产品介绍和入门流程。
+链接中的详细指引与 Spec 以中文为主。两份 README 提供内容对应的产品介绍和入门流程。
 
 ## 开发 Concord
 
@@ -156,9 +162,13 @@ pnpm exec vp run concord --help
 pnpm exec vp run check
 ```
 
-`pnpm check`（也可通过 `vp run check` 调用）是唯一的检查入口：先构建 CLI 与 Web 工作台并复用已校验的原生产物，再并行做 repository、测试和脚本的类型检查以及当前 checkout 的契约检查，最后在隔离 Git 消费者中并发运行打包 CLI 的 Node 与浏览器测试。运行 `pnpm concord trace show local-sdlc` 可从源码查看关联。
+`pnpm check`（也可通过 `vp run check` 调用）是唯一的检查入口。它先构建 CLI 与 Web 工作台并复用已校验的原生产物，再并行做 repository、测试和脚本的类型检查以及当前 checkout 的 Spec 检查，最后在隔离 Git 消费者中并发运行打包 CLI 的 Node 与浏览器测试。
 
-没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。`pnpm check test/writing-cache.test.ts` 在完整构建和静态检查之后只运行指定文件；用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。只跑部分测试不能代替完整门禁。
+运行 `pnpm concord trace show local-sdlc` 可从源码查看关联。
+
+没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。
+
+`pnpm check test/writing-cache.test.ts` 在完整构建和静态检查之后只运行指定文件；用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。只跑部分测试不能代替完整门禁。
 
 `vp run check` 是完整交付门禁。`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。测试使用 Node runner，每次调用共享一份打包产物，消费者独立安装。任务缓存关闭；局部检查不替代完整验收。
 

@@ -1,7 +1,11 @@
 {
   "format": "concord.writing/v3",
   "roots": [
-    "docs"
+    "docs",
+    "skills",
+    "templates",
+    "README.md",
+    "README.zh-CN.md"
   ],
   "bannedTerms": [
     {

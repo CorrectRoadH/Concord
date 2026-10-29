@@ -1,6 +1,6 @@
 # 检查、追踪与审阅
 
-Concord 从契约 owner、测试源码注释和 Memory 动态编译关系，不维护反向 registry。
+Concord 从 Spec owner、测试源码注释和 Memory 动态编译关系，不维护反向 registry。
 
 ```sh
 concord check --json

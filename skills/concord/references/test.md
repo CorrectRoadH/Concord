@@ -16,7 +16,7 @@ concord test annotate --contract docs/feature/login/use-case/expired-token.md --
 test('rejects expired tokens', () => {})
 ```
 
-指向整个 Feature 时改用 `// @feature docs/feature/login/README.md`，每个测试只选择一个契约目标。
+指向整个 Feature 时改用 `// @feature docs/feature/login/README.md`，每个测试只选择一个 Spec 目标。
 
 测试标记指向能完整描述其断言的最小行为范围：一个 Use Case 步骤、行为页的标题 anchor，或整个 Use Case。跨多个步骤的端到端测试指向整个 Use Case，不拆成逐步骤标记。只验证内部不变量的测试可以指向 architecture 页的 anchor；使用者能观察到的保证，先写进行为页，再让测试指向那里。
 
@@ -40,7 +40,7 @@ concord trace show docs/feature/login/use-case/expired-token.md --fresh
 
 测试关联没有 `@concord-verifies` 标记。`@concord-implements` 声明实现归属，必须紧随 `@concord-file`、`@concord-code` 或 `@concord-begin`；不能用它代替测试关联。测试文件也可以显式声明实现归属，但只有测试根中的 `@feature` / `@use-case` 才建立测试关系。目标路径使用 owner 的实际文件名，中文名称与内部 ID 可以不同。
 
-不要另建测试关系 JSON。Git 保存测试演进。缺值、一块标记上的重复契约、以及只有 `@regression` / `@status` / `@name` 的块会形成 finding；不认识的测试写法不是 finding。退役关系使用 `// @status retired`。Repository profile 的注释解析是另一套规则，不由本页的 CLI 扫描代替。先检查并发现 case：
+不要另建测试关系 JSON。Git 保存测试演进。缺值、一块标记上的重复 Spec、以及只有 `@regression` / `@status` / `@name` 的块会形成 finding；不认识的测试写法不是 finding。退役关系使用 `// @status retired`。Repository profile 的注释解析是另一套规则，不由本页的 CLI 扫描代替。先检查并发现 case：
 
 ```sh
 concord check --json
@@ -57,7 +57,7 @@ concord test evidence ccev_REPLACE_WITH_ID --json
 
 未配置 adapter 或无法精确绑定时，收据的 evidence scope 是整个作者声明 command，不是底层 runner 的逐 case 原生覆盖证明。超时、信号、启动失败、已知零执行、全 skip/todo 或输出限制不能作为 fixed 的正常 green；通用 runner 的 unknown execution 也不能表述为 native case passed。
 
-修复 Problem 时先取得正常非零退出的 red，保持测试定义与契约不变，只修产品实现，再取得成功且清理完成的 green。候选、完整测试文件、runner 配置、声明的 sourceFiles 或契约变化都会使证据陈旧。不要手写或导入收据。
+修复 Problem 时先取得正常非零退出的 red，保持测试定义与 Spec 不变，只修产品实现，再取得成功且清理完成的 green。候选、完整测试文件、runner 配置、声明的 sourceFiles 或 Spec 变化都会使证据陈旧。不要手写或导入收据。
 
 
 ## 原生 adapter
