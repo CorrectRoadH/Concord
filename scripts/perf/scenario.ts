@@ -140,7 +140,7 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
 
     }, catch: cause => new PerfError({ message: `Request ${scenario.id}: ${String(cause)}` }) });
   } else {
-    const argv = 'scan' in run ? [process.execPath, join(context.artifact.dir, 'dist/query-scan-worker.js'), context.consumer.root, JSON.stringify(run.scan)]
+    const argv = 'scan' in run ? [process.execPath, join(dirname(context.artifact.entry), 'query-scan-worker.js'), context.consumer.root, JSON.stringify(run.scan)]
       : cliCommand(context.artifact, context.consumer.root, runArguments(run));
     const count = 'argv' in run ? run.concurrency : 1;
     const results = yield* Effect.all(Array.from({ length: count }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,
