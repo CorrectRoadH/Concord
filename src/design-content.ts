@@ -148,7 +148,7 @@ export function validateDesignContent(base: string, alternatives: readonly strin
     catch { return []; }
   });
   const selected = declarations.length === 1 ? declarations[0] : undefined;
-  if (selected === undefined || decision.length !== 1) report(decisionPath, 'DesignSelectionInvalid', 'Decision must contain one explicit Selected declaration linking the actual Plan entry');
+  if (selected === undefined) report(decisionPath, 'DesignSelectionInvalid', 'Decision must contain one explicit Selected declaration linking the actual Plan entry');
   if (expectedSelection !== undefined && selected !== expectedSelection) report(decisionPath, 'DesignSelectionConflict', `DECISION must select ${expectedSelection}`);
   const rationaleNodes = section(decisionPath, decisionNodes, ['Rationale', '依据']);
   const rationale = rationaleNodes.filter(node => node.type === 'paragraph' || node.type === 'list').map(node => raw(sources.get(decisionPath) ?? '', node)).join('\n\n');

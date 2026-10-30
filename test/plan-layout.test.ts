@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import { createDocument, checkDesign, decideDesign, loadDocuments } from '../dist/documents.js';
-import { addPage, showPage, setPage } from '../dist/document-pages.js';
-import { resolveReference } from '../dist/refs.js';
-import { readDesignPlanPaths } from '../dist/document-layout.js';
-import { getWorkspaceSnapshot } from '../dist/application.js';
+import { LocalRepository, initialize } from '../src/storage.js';
+import { createDocument, checkDesign, decideDesign, loadDocuments } from '../src/documents.js';
+import { addPage, showPage, setPage } from '../src/document-pages.js';
+import { resolveReference } from '../src/refs.js';
+import { readDesignPlanPaths } from '../src/document-layout.js';
+import { getWorkspaceSnapshot } from '../src/application.js';
 import { authorDesignFixture } from './design-fixture.js';
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
@@ -40,6 +40,7 @@ test('file and directory Plans share gates, nested editing, reference ownership 
       assert.equal(resolveReference(repo, loadDocuments(repo), `${page.path}#边界`).path, `${base}/README.md`);
       assert.throws(() => addPage(repo, 'design', 'storage', 'plans/remote/bypass'), { code: 'InvalidPage' });
       assert.throws(() => addPage(repo, 'design', 'storage', '../escape', false, 'remote'));
+      writeFileSync(join(root, base, 'DECISION.md'), readFileSync(join(root, base, 'DECISION.md'), 'utf8').replace(/^Selected:.*$/mu, ''));
       const receipt = decideDesign(repo, 'storage', 'local', [], 'Local storage');
       assert(receipt.changedPaths.includes(page.path));
       mkdirSync(join(root, base, 'plans/local'));

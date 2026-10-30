@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** Authored documents, not a replica of the validator. */
-export function authorDesignFixture(root: string, id: string, alternatives: readonly string[], selected: string): void {
+export function authorDesignFixture(root: string, id: string, alternatives: readonly string[], selected: string, decided = true): void {
   const base = join(root, 'docs/design', id);
   writeFileSync(join(base, 'GOALS.md'), '# Goals\n\n## G1: Local queries\n\nQueries return results without contacting a server. Source: consumer requirements.\n');
   writeFileSync(join(base, 'LIMITS.md'), '# Limits\n\n## L1: Offline\n\nNo network calls are permitted. Verify in an isolated consumer.\n');
@@ -40,7 +40,7 @@ The README defines this complete candidate.
 
 ## Decision
 
-Selected: [${selected}](plans/${selected}/README.md)
+${decided ? `Selected: [${selected}](plans/${selected}/README.md)` : 'Compare the candidates before selecting one.'}
 
 ## Rationale
 

@@ -1,3 +1,4 @@
+import { createConsumer } from './support/consumer.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -5,18 +6,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { checkDesign, checkDocuments, createDocument, decideDesign, formatDesign, loadDocuments } from '../dist/documents.js';
-import { formatDesignMarkdown } from '../dist/design-content.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
+import { checkDesign, checkDocuments, createDocument, decideDesign, formatDesign, loadDocuments } from '../src/documents.js';
+import { formatDesignMarkdown } from '../src/design-content.js';
+import { LocalRepository, initialize } from '../src/storage.js';
 import { authorDesignFixture } from './design-fixture.js';
-import { executeViewAction } from '../dist/application.js';
+import { executeViewAction } from '../src/application.js';
 
 function consumer(run: (repo: LocalRepository, base: string) => void): void {
-  const root = mkdtempSync(join(tmpdir(), 'concord-design-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
+  const root = createConsumer();
+  const repo = new LocalRepository(root);
   try {
-    initialize(repo, false, { testRoots: [] });
     createDocument(repo, 'design', { id: 'storage', title: 'Storage', alternatives: ['local', 'remote'] });
     authorDesignFixture(root, 'storage', ['local', 'remote'], 'local');
     run(repo, join(root, 'docs/design/storage'));
@@ -34,13 +33,13 @@ test('Web structured actions use the same Design decision gate', async () => {
       finally { repo.close(); }
     }));
     const action = { action: 'design.decide', id: 'storage', selected: 'local', targets: [], reason: 'Offline storage' };
-    await assert.rejects(Effect.runPromise(executeViewAction(root, action)), /DesignSelectionInvalid/u);
-    authorDesignFixture(root, 'storage', ['local', 'remote'], 'local');
+    await assert.rejects(Effect.runPromise(executeViewAction(root, action)), { code: 'DesignDecisionIncomplete' });
+    authorDesignFixture(root, 'storage', ['local', 'remote'], 'local', false);
     const ownerPath = join(root, 'docs/design/storage/README.md'); const before = readFileSync(ownerPath, 'utf8');
     await Effect.runPromise(executeViewAction(root, { ...action, dryRun: true }));
     assert.equal(readFileSync(ownerPath, 'utf8'), before);
     await Effect.runPromise(executeViewAction(root, action));
-    assert.match(readFileSync(ownerPath, 'utf8'), /selected: local/u);
+    assert.match(readFileSync(join(root, 'docs/design/storage/DECISION.md'), 'utf8'), /Selected: \[local\]/u);
   } finally { await Effect.runPromise(Effect.sync(() => rmSync(root, { recursive: true, force: true }))); }
 });
 
@@ -66,7 +65,10 @@ test('Design validates all candidates, selected constraints, explicit selection,
   for (const [source, code] of cases) {
     writeFileSync(planPath, source);
     assert(checkDesign(repo, 'storage').findings.some(item => item.code === code), code);
+    const decision = readFileSync(join(base, 'DECISION.md'), 'utf8');
+    writeFileSync(join(base, 'DECISION.md'), decision.replace(/^Selected:.*$/mu, ''));
     assert.throws(() => decideDesign(repo, 'storage', 'local', [], 'Reason', true), { code: 'DesignDecisionIncomplete' });
+    writeFileSync(join(base, 'DECISION.md'), decision);
     assert.equal(readFileSync(join(base, 'README.md'), 'utf8'), owner);
   }
   writeFileSync(planPath, original.replace('| satisfied | Index', '| partial | Index'));
@@ -74,6 +76,7 @@ test('Design validates all candidates, selected constraints, explicit selection,
   const decision = readFileSync(decisionPath, 'utf8');
   writeFileSync(decisionPath, decision.replace('## Rationale\n', '## Rationale\n\nG1: Queries remain local, but latency needs measurement.\n'));
   assert.equal(checkDesign(repo, 'storage').ok, true);
+  writeFileSync(decisionPath, readFileSync(decisionPath, 'utf8').replace(/^Selected:.*$/mu, ''));
   assert.throws(() => decideDesign(repo, 'storage', 'remote', [], 'Reason'), { code: 'DesignDecisionIncomplete' });
   const dry = decideDesign(repo, 'storage', 'local', [], 'Accepted latency gap', true);
   assert.equal(dry.dryRun, true);
@@ -82,8 +85,9 @@ test('Design validates all candidates, selected constraints, explicit selection,
   assert(receipt.changedPaths.includes('docs/design/storage/plans/remote/README.md'), 'unselected candidate is guarded');
   assert.equal(checkDesign(repo, 'storage').ok, true);
   writeFileSync(decisionPath, decision.replaceAll('local', 'remote'));
-  assert(checkDesign(repo, 'storage').findings.some(item => item.code === 'DesignSelectionConflict'));
-  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), [], 'ordinary historical checks do not enforce new prose');
+  assert.equal(checkDesign(repo, 'storage').selected, 'remote');
+  assert(checkDesign(repo, 'storage').findings.some(item => item.code === 'DesignLimitUnsatisfied'));
+  assert(checkDocuments(repo, loadDocuments(repo)).some(item => item.code === 'DesignLimitUnsatisfied'));
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
@@ -96,12 +100,14 @@ test('Design rejects duplicate or wrong-level requirements and incomplete unsele
   writeFileSync(limitsPath, original);
   const remote = join(base, 'plans/remote/README.md'); const source = readFileSync(remote, 'utf8');
   writeFileSync(remote, source.replace(/^\| \[G1\].*\n/mu, ''));
+  writeFileSync(join(base, 'DECISION.md'), readFileSync(join(base, 'DECISION.md'), 'utf8').replace(/^Selected:.*$/mu, ''));
   assert.throws(() => decideDesign(repo, 'storage', 'local', [], 'Reason'), { code: 'DesignDecisionIncomplete' });
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
 test('Design publication binds all validated bytes even for dry-run', () => Effect.runPromise(Effect.sync(() => {
   for (const dryRun of [true, false]) consumer((repo, base) => {
+    writeFileSync(join(base, 'DECISION.md'), readFileSync(join(base, 'DECISION.md'), 'utf8').replace(/^Selected:.*$/mu, ''));
     const publish = repo.publish.bind(repo); const owner = readFileSync(join(base, 'README.md'), 'utf8');
     repo.publish = (operation, changes, dry) => {
       writeFileSync(join(base, 'plans/remote/README.md'), '# Concurrent edit\n');
