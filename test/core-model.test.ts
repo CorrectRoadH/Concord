@@ -11,6 +11,7 @@ import { activateMemory, adoptRoadmap, checkDocuments, createDocument, decideDes
 import { LocalRepository, initialize } from '../dist/storage.js';
 import type { DocumentMeta } from '../dist/shared.js';
 import { authorDesignFixture } from './design-fixture.js';
+import { renderMemorySource } from '../dist/memory-write.js';
 import { withConsumer as consumer } from './support/consumer.js';
 
 const base = { format: 'concord.document/v1' as const, id: 'sample', title: '样例', createdAt: '2026-10-30' };
@@ -74,6 +75,13 @@ test('Research sources and observed date belong to its Sources section', () => {
   assert.equal(source.startsWith('---'), false);
   assert.deepEqual(researchSources(source), { observedAt: '2026-10-30', sources: ['https://example.invalid/paper'] });
   assert.deepEqual(researchSources('# Topic\n\n```md\n## Sources\n- Source: false\n```\n\n## 来源\n\n- Observed at: 2026-10-30\n- Source: [证据](https://example.invalid/evidence)\n'), { observedAt: '2026-10-30', sources: ['https://example.invalid/evidence'] });
+});
+
+// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#amend
+test('constitution Memory rendering uses the same AST heading validation as other Memory writers', () => {
+  const source = renderMemorySource(memory, '```md\n# Example heading\n```\n');
+  assert.equal(decodeDocumentSource('memory/sample.md', source)?.metadata.title, '样例');
+  assert.throws(() => renderMemorySource(memory, '# First\n\n# Second\n'), code('InvalidData'));
 });
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#路径与身份

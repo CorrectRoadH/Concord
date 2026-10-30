@@ -1,5 +1,5 @@
-import { renderOwnerFrontmatter } from './owner-frontmatter.js';
-import { ConcordError, DocumentSchema, decode, type Change, type MemoryMeta, type ProjectConfig } from './shared.js';
+import { renderDocument } from './document-codec.js';
+import { ConcordError, type Change, type MemoryMeta, type ProjectConfig } from './shared.js';
 
 type MemorySources = NonNullable<ProjectConfig['memorySources']>;
 export const DEFAULT_MEMORY_SOURCES: MemorySources = [{ name: 'project', provider: 'local-files', path: 'memory', access: 'read-write', defaultWrite: true }];
@@ -16,9 +16,7 @@ export function memoryWriteDirectory(sources: MemorySources | undefined, selecto
 }
 
 export function renderMemorySource(metadata: MemoryMeta, body: string): string {
-  const valid = decode(DocumentSchema, metadata, `memory:${metadata.id}`);
-  const content = /^# /mu.test(body) ? body : `# ${valid.title}\n\n${body}`;
-  return `${renderOwnerFrontmatter(valid)}${content.endsWith('\n') ? content : `${content}\n`}`;
+  return renderDocument(metadata, body);
 }
 // @concord-end
 
