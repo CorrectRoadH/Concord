@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: use-unified-cache
 title: 使用统一的可重建持久缓存
-createdAt: 2026-09-23T04:17:21.113Z
 kind: use-case
 feature: docs/feature/local-data-engine/README.md
 ---

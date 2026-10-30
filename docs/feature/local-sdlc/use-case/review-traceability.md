@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: review-traceability
 title: 追踪 Spec 并生成审阅材料
-createdAt: 2026-09-13T11:00:37.386Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

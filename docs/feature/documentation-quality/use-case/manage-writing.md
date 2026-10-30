@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: manage-writing
 title: 在 Web 管理写作规则与术语
-createdAt: 2026-09-23T01:55:52.629Z
 kind: use-case
 feature: docs/feature/documentation-quality/README.md
 ---

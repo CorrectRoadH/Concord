@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: resolve-with-command-evidence
 title: 记录命令证据并关闭 Problem
-createdAt: 2026-09-13T11:00:35.726Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

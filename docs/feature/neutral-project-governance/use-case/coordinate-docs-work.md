@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: coordinate-docs-work
 title: 并行切分文档工作
-createdAt: 2026-10-01T04:04:38.383Z
 kind: use-case
 feature: docs/feature/neutral-project-governance/README.md
 ---

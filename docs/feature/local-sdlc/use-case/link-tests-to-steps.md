@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: link-tests-to-steps
 title: 把测试关联到 Use Case 步骤
-createdAt: 2026-10-21T09:27:52.349Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

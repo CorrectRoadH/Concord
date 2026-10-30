@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: release-from-tag
 title: Release tested macOS and Linux packages from a tag
-createdAt: 2026-09-21T09:55:09.057Z
 kind: use-case
 feature: docs/feature/cross-platform-release/README.md
 ---

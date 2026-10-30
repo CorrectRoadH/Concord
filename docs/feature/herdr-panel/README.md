@@ -2,9 +2,7 @@
 format: concord.document/v1
 id: herdr-panel
 title: 在 Herdr 面板中查看 Spec
-createdAt: 2026-10-30T01:49:52.946Z
 kind: feature
-origin: docs/roadmap/herdr-side-panel/README.md
 ---
 
 # 在 Herdr 面板中查看 Spec

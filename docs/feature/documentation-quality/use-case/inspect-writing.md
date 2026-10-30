@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: inspect-writing
 title: 检查文档写作与术语一致性
-createdAt: 2026-09-23T01:43:02.525Z
 kind: use-case
 feature: docs/feature/documentation-quality/README.md
 ---

@@ -1,120 +1,6 @@
 ---
-format: concord.constitution/v2
+format: concord.constitution/v3
 status: active
-ratifiedAt: 2026-09-14
-amendedAt: 2026-10-30
-amendments:
-  - date: 2026-09-14
-    reason: 汇总已采用的工程约束，并落实本轮 dogfood 要求
-    sources:
-      - AGENTS.md
-      - docs/architecture.md
-      - docs/feature/project-onboarding/README.md
-    impact: 适用于 Concord 后续 Feature、Design、实现与验收；不声明历史功能已自动符合全部规则
-  - date: 2026-09-14
-    reason: 落实用户无 legacy 运行时约束
-    sources:
-      - docs/design/ts-only-runtime/README.md
-      - docs/feature/project-onboarding/README.md
-    impact: 旧格式须离线迁移；保留现场，旧证据重新取证
-  - date: 2026-09-20
-    reason: 将项目实践提升为中立治理标准，明确消费者执行职责和不可降级的证据要求
-    sources:
-      - docs/feature/neutral-project-governance/README.md
-      - docs/design/neutral-project-governance/README.md
-    impact: 适用于 Concord 新接入设计及当前 repository 治理中立化；消费者适配中立协议，历史证明不自动升级，源码语言和包管理器仍由项目选择
-  - date: 2026-09-22
-    reason: 移除宪法语义版本并保留修订历史
-    sources:
-      - docs/feature/project-onboarding/use-case/evolve-constitution.md
-      - docs/design/onboarding-contracts/plans/compatible/governance.md
-    impact: 现有项目的宪法修订无需版本号；旧文件只读兼容，首次授权修订投影为无版本历史
-  - date: 2026-09-22
-    reason: 测试关联改为源码标记，不再解析宿主测试语法
-    sources:
-      - docs/constitution.md#c-010
-      - docs/architecture.md
-    impact: 标记存在即构成测试关联；旧的按测试标题派生的 neref_ 不再视为同一身份，已有命令证据须重新取证。不改变代码声明的 AST 规则，也不把命令收据升级为原生用例通过
-  - date: 2026-09-23
-    reason: 明确声明式契约与工程过程分工，并要求Memory/Issue通过Concord工具操作
-    sources:
-      - docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
-      - docs/feature/feedback/use-case/manage-local-observations.md
-    impact: 适用于后续Agent治理和init随包指引；保留既有来源历史、持久化格式和远端授权，不批量改写历史资料
-  - date: 2026-09-23
-    reason: 采用按目录拥有的结构化领域术语与写作政策
-    sources:
-      - docs/design/scoped-terminology/README.md
-      - docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-    impact: 为领域术语与写作政策声明 JSON owner 例外；局部范围按目录，全局汇总派生，旧写作格式显式迁移，其他契约和证据来源不变
-  - date: 2026-09-23
-    reason: 按用户要求统一到HawDB，并落实独立挑战要求的窄原生边界
-    sources:
-      - docs/design/hawdb-data-engine/README.md
-      - docs/feature/local-data-engine/README.md
-    impact: 所有可重建缓存采用HawDB；只允许引擎桥接与所有权适配使用Rust，事实owner、证据、授权和TS/Effect领域职责不变；实现须满足已记录的生命周期、预算及同包平台验收
-  - date: 2026-09-27
-    reason: 按操作所需事实划分依赖，分开只读访问、发布协调与证据裁决
-    sources:
-      - docs/design/operation-boundaries/README.md
-      - docs/architecture.md
-    impact: 适用于当前架构重构与后续命令；保留 owner/journal 格式、路径安全、完整图门禁及既有证据下限，不声明未复现平台故障已解决
-  - date: 2026-09-27
-    reason: docs 只写声明；接入项目采用 Concord 范式并以 concord check 执行写作门禁；性能成为交付约束
-    sources:
-      - docs/feature/documentation-quality/README.md
-      - docs/engineering/concord-self-hosting/performance.md
-      - docs/feature/local-sdlc/README.md
-    impact: 改写全部条款为编号规则，正文不再附来源行。C-010 要求接入项目采用 Concord 方法论（技术栈仍中立），concord check 纳入写作政策检查，属消费者兼容变更，契约与验收见 documentation-quality；C-012 禁止 docs 记录实施过程与点名已删除内容；新增 C-014 性能预算、测量方法与缓存一致性。经未参与方案的 GPT-6 Astra reviewer 只读审查三轮，全部阻断意见已按建议修订，结论 PASS。
-  - date: 2026-09-28
-    reason: 分离历史诊断与当前事实门禁，采用乐观读取及短期提交协调
-    sources:
-      - docs/design/asynchronous-projections/README.md
-      - docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-    impact: 诊断查询可异步刷新并返回明确标识的历史投影；当前事实与证据门禁保持严格；普通读取不再持共享租约
-  - date: 2026-09-29
-    reason: 工作区导航由只读历史投影提供，允许诚实标注的来源漂移，防止普通编辑阻断工作台
-    sources:
-      - docs/design/workspace-projection/README.md
-    impact: 仅扩展历史导航展示；当前查询、写入、check、恢复和证据仍使用当前事实。工作台缓存不可用具名失败，不回退扫描。
-  - date: 2026-09-30
-    reason: 精简宪法边界：删除无条款使用的“应当”偏离机制，功能级投影语义交还契约，补充凭据边界与机器可读输出契约
-    sources:
-      - docs/design/workspace-projection/README.md
-      - docs/feature/feedback/cli-integration.md
-    impact: C-014.4 只保留历史投影不授权当前裁决的原则，工作区导航的漂移与不可用语义由 workspace-projection 拥有；新增 C-012.6 凭据边界与 C-015 机器可读输出兼容规则，不声明既有功能已符合
-  - date: 2026-10-21
-    reason: 允许显式 adapter 在执行时绑定并选择原生用例，同时明确静态关联扫描的禁止边界
-    sources:
-      - docs/design/test-adapters/README.md
-      - docs/design/test-journey-steps/共同身份.md
-    impact: 第 1 款限定为静态关联扫描，第 3 款增加 adapter 执行例外；源码标记仍是唯一关联来源，原生观察不创建关联、不影响 check。旧收据保留原件，新执行语义重新取证。适用于 test-adapters 采用后的实现
-  - date: 2026-10-23
-    reason: 契约写法与源码关联：C-011 覆盖测试与代码声明并规定最小完整范围，C-012 规定行为页与实现页分工；C-012 原第 4 至 6 款逐字移到 C-001、C-002、C-007，C-011 原第 2、3 款改为第 5、6 款
-    sources:
-      - docs/design/contract-writing/README.md
-    impact: 引用 c-012 的凭据规则改引 c-007；引用 c-012 覆盖 Memory/Issue 工具维护、本地 Issue 或凭据的 owner 补引 c-001、c-002 或 c-007；引用 C-011 原第 2、3 款的位置改为第 5、6 款；现有行为页与代码声明按新规则逐步改写，宪法不声称现状合规
-  - date: 2026-10-29
-    reason: 采用 link-owned 宪法结构：条款与款使用 {#id}，依据关系由正文链接拥有；总则新增条款写法，正文的序号引用改为链接
-    sources:
-      - docs/design/constitution-structure/README.md
-    impact: 取消 Feature 与 Design 的 constitutionRefs，依据关系改由 docs 下的正文链接表达并由 check 校验；C-008 第 4 款改为按 ID 维护身份；迁移不改变既有规则含义，不声称现有页面符合条款写法
-  - date: 2026-10-29
-    reason: 文档只有一个主语言，每个概念只需要一个写法；领域术语改由按目录归属的 concepts.md 拥有，定义与解释同处一页，正文可以链接到定义
-    sources:
-      - docs/design/markdown-terminology/README.md
-    impact: C-001 第 1、2 款的术语 owner 由 concepts.json 改为 concepts.md；多语言名称与允许别名取消；运行时只识别 concepts.md，不读取、检测或迁移 concepts.json，接入项目手动改写；条文中的「契约」统一写作 Spec，C-010 第 1 款句首改为「一套工作范式」，规则含义与款 ID 不变
-  - date: 2026-10-29
-    reason: 已裁决的 Design 是决策记录，现行规则只由 Spec 拥有并可由检查器强制链接边界
-    sources:
-      - docs/design/decided-design-records/README.md
-    impact: Spec 不再依赖候选页、CASES、GOALS 与 LIMITS；27 个已裁决包的现行规则迁入 Spec；concord check 新增 SpecDependsOnDesignRecord；agent 默认阅读范围收窄到 Spec
-  - date: 2026-10-30
-    reason: 按 HawDB 一个目录一个长期持有者的规定，由每个 worktree 的工作区服务持有持久缓存
-    sources:
-      - docs/design/cli-hot-path/DECISION.md
-      - docs/feature/local-data-engine/architecture.md
-    impact: 持久句柄不再随来源快照结束；写入、发布、恢复与证据仍不依赖缓存所有者
 ---
 
 
@@ -224,11 +110,12 @@ amendments:
 3. architecture 与 lifecycle 页声明该 Feature 的内部实现：实体归属、数据流、不变量、失败阶段与资源生命周期。它们随实现修改，不重新定义行为。跨 Feature 的系统边界写在项目 `docs/architecture.md`。只改内部实现的修改不改行为页。 {#c-012-3}
 4. Roadmap 与 Feature 同体裁，表示尚未采用的方向，其示例均为预期输出。实现与测试不指向 Roadmap。 {#c-012-4}
 5. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。Design 的历史方案记录按裁决时的陈述理解，不因本款被解释为当前要求。 {#c-012-5}
-6. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交收据和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。Research 的研究事实、Design 的候选与裁决，以及工具拥有的修订和生命周期元数据，由各自 owner 保留，不借此记录实施日志、审阅经过或交接。本规则不授权删除或改写既有证据、来源及生命周期历史；Design 记录与 Spec 的分工见 [C-012-7](#c-012-7) 至 [C-012-10](#c-012-10)。 {#c-012-6}
+6. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交收据和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。Research 的研究事实、Design 的候选与裁决，以及记录类 owner 由工具维护的生命周期元数据，由各自 owner 保留，不借此记录实施日志、审阅经过或交接。本规则不授权删除或改写既有证据、来源及生命周期历史；Design 记录与 Spec 的分工见 [C-012-7](#c-012-7) 至 [C-012-10](#c-012-10)。 {#c-012-6}
 7. 已裁决 Design 的候选、共同约束、验收与裁决正文是裁决时的方案记录，不作为现行 Spec 的 owner。 {#c-012-7}
 8. 裁决时，选中方案中仍适用的要求完整写入相应的行为页、architecture 页或工程页；此后这些要求在 Spec 中维护，不因实现尚未满足而丢弃。 {#c-012-8}
 9. Design 不为追随实现改写历史方案。经授权的理由更正与内容组织调整，仍遵守已有的来源保留、身份与生命周期规则。 {#c-012-9}
 10. Spec 对 Design 的引用只用于导航或说明决策依据；链接目标的检查范围由 [documentation-quality 的聚合门禁](feature/documentation-quality/README.md#聚合门禁)声明。 {#c-012-10}
+11. 声明式 owner（Feature、Use Case、Engineering、宪法、`concepts.md` 与写作政策）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git、Memory 或记录类 owner（Research、Design、Roadmap、Issue、Memory）保存，需要时派生。 {#c-012-11}
 
 ## C-013 操作依赖、发布协调和证据裁决分别定义 {#c-013}
 

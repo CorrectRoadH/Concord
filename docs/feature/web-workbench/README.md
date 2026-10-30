@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: web-workbench
 title: 面向人的项目工作台
-createdAt: 2026-09-14T00:00:00.000Z
 kind: feature
 ---
 

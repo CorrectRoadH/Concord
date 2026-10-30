@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: concord-self-hosting
 title: Concord 自举维护
-createdAt: 2026-09-13T11:00:38.822Z
 kind: engineering
 ---
 

@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: coordinate-local-publications
 title: Coordinate local edits without external lock helpers
-createdAt: 2026-09-22T00:05:17.678Z
 kind: use-case
 feature: docs/feature/portable-coordination/README.md
 ---

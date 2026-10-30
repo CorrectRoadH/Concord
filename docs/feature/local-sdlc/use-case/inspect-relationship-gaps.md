@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: inspect-relationship-gaps
 title: 检查 Spec 与 CLI 页面的实现和测试关系缺口
-createdAt: 2026-09-21T00:00:00.000Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

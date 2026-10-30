@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: portable-coordination
 title: Portable coordination with short publication leases
-createdAt: 2026-09-22T00:05:16.786Z
 kind: feature
 ---
 

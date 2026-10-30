@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: use-web-workbench
 title: 浏览、编辑并检查项目变化
-createdAt: 2026-09-14T00:00:00.000Z
 kind: use-case
 feature: docs/feature/web-workbench/README.md
 ---

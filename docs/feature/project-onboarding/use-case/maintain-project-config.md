@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: maintain-project-config
 title: 安全维护项目配置
-createdAt: 2026-09-14T14:03:12.465Z
 kind: use-case
 feature: docs/feature/project-onboarding/README.md
 ---

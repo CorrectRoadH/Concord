@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: load-compatible-repository-profile
 title: 加载中立项目治理接入
-createdAt: 2026-09-13T11:00:38.089Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

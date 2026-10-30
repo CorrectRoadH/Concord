@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: neutral-project-governance
 title: 统一项目治理与中立测试接入
-createdAt: 2026-09-20T07:01:06.119Z
 kind: feature
 ---
 

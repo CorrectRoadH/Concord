@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: feedback
 title: 多来源反馈与本地处理
-createdAt: 2026-09-14T00:00:00.000Z
 kind: feature
 ---
 

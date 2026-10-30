@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: query-current-projections
 title: 检索当前来源的派生投影
-createdAt: 2026-09-23T04:17:21.855Z
 kind: use-case
 feature: docs/feature/local-data-engine/README.md
 ---

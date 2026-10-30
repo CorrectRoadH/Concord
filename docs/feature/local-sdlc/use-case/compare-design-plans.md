@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: compare-design-plans
 title: 逐项比较方案并明确裁决
-createdAt: 2026-09-20T10:00:00.000Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

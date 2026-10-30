@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: local-sdlc
 title: 本地 SDLC 闭环
-createdAt: 2026-09-13T11:00:32.576Z
 kind: feature
 ---
 

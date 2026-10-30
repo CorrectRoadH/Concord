@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: documentation-quality
 title: 文档写作与一致性检查
-createdAt: 2026-09-23T01:42:51.054Z
 kind: feature
 ---
 

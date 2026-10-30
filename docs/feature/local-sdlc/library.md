@@ -4,6 +4,8 @@
 
 Feature 与 Use Case 拥有当前产品 Spec；Engineering 拥有仓库维护机制；Research 保存带时间的决策输入；Design 保存候选与唯一裁决；Roadmap 保存方向和采用历史；Memory 保存 Problem、Decision、Insight 及其生命周期。测试源码拥有 case 身份和正向关系，Git 保存它们的演进。
 
+Feature、Use Case 与 Engineering 是声明式 owner（[C-012](../../constitution.md#c-012-11)）：frontmatter 只有 `format`、`id`、`title`、`kind`、可选的 `description`，Use Case 另有所属 `feature`，不含 `createdAt`、`createdAtSource` 或 `origin`。创建时间从 Git 派生；Feature 由哪个 Roadmap 采用，从该 Roadmap 的 `adoptedAs` 反查，trace 的 `origin` 边由此派生。Research、Design、Roadmap、Memory 与 Issue 是记录，保留 `createdAt` 与各自的生命周期字段。
+
 ## 派生关系
 
 `@feature` 或 `@use-case` 用 canonical 路径指向对应 Spec，`@regression` 可重复指向 Problem。每个标记块恰有一个 Spec 目标，同一 Spec 可有多个测试。执行引用由文件路径与测试名称自动派生，测试名称只描述行为，不携带机器 ID；不提供人工分配 ID 或先分配再关联的步骤（[决策依据](../../design/annotation-case-identity/DECISION.md)）。Spec 不反写测试列表，trace 每次从 owner 和源码重新编译反向关系。

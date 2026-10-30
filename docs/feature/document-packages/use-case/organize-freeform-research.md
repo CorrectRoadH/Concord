@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: organize-freeform-research
 title: 自由组织研究主题
-createdAt: 2026-09-15T00:23:50.194Z
 kind: use-case
 feature: docs/feature/document-packages/README.md
 ---

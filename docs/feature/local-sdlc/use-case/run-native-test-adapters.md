@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: run-native-test-adapters
 title: 通过 adapter 执行原生测试用例
-createdAt: 2026-10-21T09:27:53.033Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: mutate-remote-issue
 title: 计划并执行一次远端 Issue 写入
-createdAt: 2026-10-01T04:04:37.739Z
 kind: use-case
 feature: docs/feature/neutral-project-governance/README.md
 ---

@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: configure-memory-sources
 title: 配置和使用多个 Memory 来源
-createdAt: 2026-09-14T13:53:35.522Z
 kind: use-case
 feature: docs/feature/project-onboarding/README.md
 ---

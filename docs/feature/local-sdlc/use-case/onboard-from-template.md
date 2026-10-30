@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: onboard-from-template
 title: 接入并取得模板
-createdAt: 2026-09-13T11:00:33.375Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

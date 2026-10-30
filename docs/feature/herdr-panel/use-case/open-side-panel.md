@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: open-side-panel
 title: 在 Herdr 中打开 Spec 面板
-createdAt: 2026-10-30T01:50:54.567Z
 kind: use-case
 feature: docs/feature/herdr-panel/README.md
 ---

@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: discover-annotated-tests
 title: 发现测试并重建缓存
-createdAt: 2026-09-13T11:00:35.003Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

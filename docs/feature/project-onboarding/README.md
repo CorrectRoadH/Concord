@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: project-onboarding
 title: 渐进式项目初始化与宪法治理
-createdAt: 2026-09-14T13:52:46.538Z
 kind: feature
 ---
 

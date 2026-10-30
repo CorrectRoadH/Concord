@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: document-packages
 title: 文档目录与完整发现
-createdAt: 2026-09-15T00:23:49.206Z
 kind: feature
 ---
 

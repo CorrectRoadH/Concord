@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: trace-code-ownership
 title: 从源码追踪实现归属
-createdAt: 2026-09-13T14:47:27.123Z
 kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---

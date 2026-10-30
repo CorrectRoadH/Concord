@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: cross-platform-release
 title: Cross-platform tagged releases
-createdAt: 2026-09-21T09:55:08.120Z
 kind: feature
 ---
 

@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: inherit-template-defaults
 title: 按项目默认值创建功能文档
-createdAt: 2026-09-14T13:53:33.750Z
 kind: use-case
 feature: docs/feature/project-onboarding/README.md
 ---

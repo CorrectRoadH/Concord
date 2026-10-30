@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: query-asynchronous-projections
 title: 读取异步刷新的诊断投影
-createdAt: 2026-09-28T05:39:06.816Z
 kind: use-case
 feature: docs/feature/local-data-engine/README.md
 ---

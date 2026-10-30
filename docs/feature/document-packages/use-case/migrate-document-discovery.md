@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: migrate-document-discovery
 title: 完整发现受管文档
-createdAt: 2026-09-15T00:23:51.211Z
 kind: use-case
 feature: docs/feature/document-packages/README.md
 ---

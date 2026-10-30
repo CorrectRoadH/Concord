@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: read-spec-detail
 title: 阅读 Use Case、测试与概念
-createdAt: 2026-10-30T01:50:57.612Z
 kind: use-case
 feature: docs/feature/herdr-panel/README.md
 ---

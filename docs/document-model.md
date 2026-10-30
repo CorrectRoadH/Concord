@@ -1,6 +1,6 @@
 # 文档模型与格式边界
 
-Research、Memory 和 Issue 的当前 owner 统一使用 `concord.document/v1`，类型与严格 Schema 由 `concord-sdlc/model` 导出。输入只按当前 Schema 严格解码，不提供兼容读取或格式转换入口。无法识别的受管输入产生诊断，保留原文件；列表和关系从当前 owner 派生。
+Research、Memory 和 Issue 的当前 owner 统一使用 `concord.document/v1`，Feature、Use Case 与 Engineering 的声明式 frontmatter 见[领域与数据所有权](feature/local-sdlc/library.md#owner)，类型与严格 Schema 由 `concord-sdlc/model` 导出。输入只按当前 Schema 严格解码，不提供兼容读取或格式转换入口。无法识别的受管输入产生诊断，保留原文件；列表和关系从当前 owner 派生。
 
 Research owner 位于 `docs/research/<主题>/README.md`，可以嵌套。有独立问题和研究结论的页面成为 owner；纯导航、来源清单和执行收据保留为 supporting 页面。嵌套 owner 截断祖先归属。`observedAt` 表示原文明确的观察日期，可以省略。使用 Git 首次记录时间填写 `createdAt` 时，必须保存 `createdAtSource`，不得将其描述为观察日期或实际创作日期。
 

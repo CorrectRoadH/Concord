@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: continue-in-web
 title: 在 Web 工作台继续
-createdAt: 2026-10-30T01:50:59.141Z
 kind: use-case
 feature: docs/feature/herdr-panel/README.md
 ---

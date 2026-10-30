@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: review-pull-request
 title: 在 PR 预览中审阅变更
-createdAt: 2026-09-30T00:00:00.000Z
 kind: use-case
 feature: docs/feature/web-workbench/README.md
 ---

@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: apply-controlled-writing
 title: 应用受控写作规则
-createdAt: 2026-10-21T09:27:55.112Z
 kind: use-case
 feature: docs/feature/documentation-quality/README.md
 ---
