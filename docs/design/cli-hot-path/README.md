@@ -7,6 +7,7 @@ kind: design
 alternatives:
   - hawdb-owner-service
   - per-command-open
+  - workspace-server
 ---
 
 # CLI 热路径与 HawDB 进程模型
@@ -34,7 +35,11 @@ Concord 的现行设计与之相反：
 
 第 2、4 项成本直接来自这一错配；第 3 项是缺少持久解析投影；第 1 项是每个进程都要加载整个 CLI。
 
-需要决定的是：让一个共享的后台进程按引擎规定长期持有 HawDB 并承载命令执行，还是保持每个命令各自打开、在其外部补齐维护。
+### 新增的消费者
+
+[Herdr 面板](../../feature/herdr-panel/README.md)要求终端面板与 Web 工作台在 agent 写入后一秒内显示新内容，并与 agent 的 CLI 调用同时运行（[G8](GOALS.md#g8-面板与-web-实时显示来源变化)）。这需要某个进程持续监听来源、保持解析结果，并把新代次推送给多个客户端。现在的 `concord view` 已经是这样一个按 worktree 常驻的进程，但它与 CLI、其它 View 进程共享 HawDB 目录，所以需要刷新租约、`HawdbBusy` 重试与持久代次交换。
+
+需要决定的是：由谁长期持有 HawDB、在哪里保持解析结果与推送代次。候选有三个：每个用户一个托管 HawDB 的后台（hawdb-owner-service）；每个 worktree 一个持有缓存并提供领域查询与订阅的工作区服务（workspace-server）；保持每个命令各自打开（per-command-open）。
 
 ## Core Mental Model
 
@@ -57,7 +62,7 @@ Concord 的现行设计与之相反：
 
 ## 宪法修订提案
 
-选择 hawdb-owner-service 时修订 [C-005-4](../../constitution.md#c-005)，它现在规定持久句柄受来源快照生命周期管理：
+选择 hawdb-owner-service 或 workspace-server 时修订 [C-005-4](../../constitution.md#c-005)，它现在规定持久句柄受来源快照生命周期管理：
 
 > 持久句柄由明确的唯一所有者管理，来源快照不拥有跨请求句柄；客户端的逻辑会话、事务、快照与清理的生命周期分别声明。缓存不参与来源发布或证据裁决。
 
@@ -77,7 +82,7 @@ Concord 的现行设计与之相反：
 - [Limits](LIMITS.md)
 - [Cases](CASES.md)
 - [Decision](DECISION.md)
-- 候选：[hawdb-owner-service](plans/hawdb-owner-service/README.md)、[per-command-open](plans/per-command-open/README.md)
+- 候选：[hawdb-owner-service](plans/hawdb-owner-service/README.md)、[workspace-server](plans/workspace-server/README.md)、[per-command-open](plans/per-command-open/README.md)
 
 ## Constitution
 

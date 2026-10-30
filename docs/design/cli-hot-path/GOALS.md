@@ -29,3 +29,7 @@ G1–G3 合计使测试中的单次 CLI 调用成本降低一个数量级以上�
 ## G7: 引擎能力不在外部重写
 
 缓存的维护（compaction、旧代次回收）与 Memory、Issue 检索由 HawDB 自身完成，Concord 不另行实现淘汰顺序、代次重建或检索评分。判据：上述职责在 Concord 源码中没有对应实现，验收以 C7 与 C17 为准。来源：Problem 一节的根因。
+
+## G8: 面板与 Web 实时显示来源变化
+
+服务 [Herdr 面板](../../feature/herdr-panel/README.md)与 Web 工作台：来源写入停止后 1 s 内，打开的面板与 Web 显示新内容；工作区已有可读投影时，`concord panel` 从启动到首屏可读 ≤ 300 ms；面板与 Web 打开期间，同一 worktree 上的 CLI 调用不因它们失败或等待。来源：herdr-panel 的 Use Case 验收。

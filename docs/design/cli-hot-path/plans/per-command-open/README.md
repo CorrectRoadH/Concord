@@ -45,6 +45,7 @@
 | [G5](../../GOALS.md#g5-并发调用互不串行) | not-satisfied | 并发命令竞争排他句柄锁，竞争者只能回源 | 2026-10-29 `trace show` 首次返回 HawdbBusy |
 | [G6](../../GOALS.md#g6-支撑分钟级交付门禁) | partial | 解析成本下降，固定开销与并发竞争仍在 | 推算 |
 | [G7](../../GOALS.md#g7-引擎能力不在外部重写) | partial | 维护调用引擎入口，但时机与超限丢弃由 Concord 编排；检索仍在 TypeScript | 设计推理 |
+| [G8](../../GOALS.md#g8-面板与-web-实时显示来源变化) | partial | 现行 View 进程可监听与推送，但与 CLI 共享目录，仍需刷新租约与忙重试；面板需各自扫描或读取持久代次 | 设计推理 |
 
 ## Entry Points
 
