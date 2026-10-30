@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { parseTypeScriptConfig, renderTypeScriptConfig } from '../dist/config.js';
-import { digest } from '../dist/shared.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
+import { parseTypeScriptConfig, renderTypeScriptConfig } from '../src/config.js';
+import { digest } from '../src/shared.js';
+import { LocalRepository, initialize } from '../src/storage.js';
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('packed config has usable type hints and rejects misspelled fields', () => Effect.runPromise(Effect.sync(() => {
@@ -28,10 +28,10 @@ test('packed config has usable type hints and rejects misspelled fields', () => 
     assert.equal(preset.policy.paragraphLength, 320);
     assert.ok(preset.policy.bannedTerms.some((ban: { term: string }) => ban.term === '兜底'));
     writeFileSync(join(project, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'NodeNext', moduleResolution: 'NodeNext', noEmit: true }, include: ['concord.config.ts'] }));
-    const valid = `import type { ProjectConfig } from 'concord-sdlc/config';\nexport default { format: 'concord.project/v1', projectId: 'typed', testRoots: [], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } } as const satisfies ProjectConfig;\n`;
+    const valid = `import type { ProjectConfig } from 'concord-sdlc/config';\nexport default { testRoots: [], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } } as const satisfies ProjectConfig;\n`;
     writeFileSync(join(project, 'concord.config.ts'), valid);
     execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: project, encoding: 'utf8', timeout: 30_000 });
-    writeFileSync(join(project, 'concord.config.ts'), valid.replace("projectId: 'typed'", "projectId: 'typed', projectID: 'misspelled'"));
+    writeFileSync(join(project, 'concord.config.ts'), valid.replace("testRoots: []", "testRoots: [], testRoot: []"));
     const invalid = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: project, encoding: 'utf8', timeout: 30_000 });
     assert.notEqual(invalid.status, 0, invalid.stdout + invalid.stderr);
   } finally { rmSync(scratch, { recursive: true, force: true }); }
@@ -43,12 +43,12 @@ test('prepared config recovery restores the frozen source bytes', () => Effect.r
   let repo: LocalRepository | undefined;
   try {
     execFileSync('git', ['init', '-q', root]);
-    repo = new LocalRepository(root, { initialize: true }); initialize(repo); repo.close(); repo = undefined;
+    repo = new LocalRepository(root, { initialize: true }); initialize(repo, false, { testRoots: [] }); repo.close(); repo = undefined;
     const path = 'concord.config.ts', before = readFileSync(join(root, path), 'utf8');
     const config = parseTypeScriptConfig(before);
     const after = `// normalized later\n${renderTypeScriptConfig({ ...config, testRoots: [] })}`;
     const privateDir = join(root, '.git', 'concord');
-    const journal = { format: 'concord.journal', root, privateDir, projectId: config.projectId, operation: 'set-config', phase: 'prepared', directories: [], scope: { kind: 'documents', configPath: path, configSource: before, configDigest: digest(before) }, changes: [{ path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }] };
+    const journal = { format: 'concord.journal', root, privateDir, operation: 'set-config', phase: 'prepared', directories: [], scope: { kind: 'documents', configPath: path, configSource: before, configDigest: digest(before) }, changes: [{ path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }] };
     writeFileSync(join(root, path), after);
     writeFileSync(join(privateDir, 'journal.json'), `${JSON.stringify(journal)}\n`);
     repo = new LocalRepository(root, { recover: true });

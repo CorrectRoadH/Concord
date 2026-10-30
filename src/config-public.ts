@@ -7,14 +7,6 @@ export type Runner =
   | { readonly kind: 'node-test'; readonly sourceFiles: readonly string[]; readonly timeoutMs: number }
   | { readonly kind: 'command'; readonly argv: readonly [string, ...string[]]; readonly sourceFiles: readonly string[]; readonly timeoutMs: number };
 
-export interface MemorySource {
-  readonly name: string;
-  readonly provider: 'local-files';
-  readonly path: string;
-  readonly access: 'read-only' | 'read-write';
-  readonly defaultWrite?: boolean;
-}
-
 export type FeedbackConnection =
   | { readonly id: string; readonly provider: 'github'; readonly credentialEnv: string; readonly owner: string; readonly repo: string; readonly repositoryId?: string }
   | { readonly id: string; readonly provider: 'linear'; readonly credentialEnv: string; readonly team: string; readonly organizationId?: string; readonly teamId?: string };
@@ -36,15 +28,13 @@ export interface TestAdapter {
 }
 
 export interface ProjectConfig {
-  readonly format: 'concord.project/v1';
-  readonly projectId: string;
-  readonly testRoots: readonly string[];
+  readonly testRoots?: readonly string[];
   readonly sourceRoots?: readonly string[];
   readonly languageServers?: readonly LanguageServer[];
   /** Repository-relative files or directory subtrees excluded from automatic code/test discovery; no globs. */
   readonly sourceIgnore?: readonly string[];
   readonly p5?: { readonly libraries: readonly string[] };
-  readonly runner: Runner;
+  readonly runner?: Runner;
   readonly testAdapters?: readonly TestAdapter[];
   readonly docsWork?: {
     readonly checks?: Readonly<Record<string, {
@@ -58,14 +48,7 @@ export interface ProjectConfig {
     readonly sharedPaths?: readonly string[];
   };
   readonly feedbackConnections?: readonly FeedbackConnection[];
-  readonly projectTypes?: readonly ('library' | 'cli')[];
-  readonly documentDefaults?: {
-    readonly featurePages: readonly ('library' | 'cli' | 'architecture' | 'lifecycle' | 'use-case')[];
-    readonly roadmapPages: readonly ('library' | 'cli' | 'architecture' | 'lifecycle' | 'use-case')[];
-    readonly designPages: readonly ('library' | 'cli' | 'architecture' | 'lifecycle' | 'use-case')[];
-  };
-  readonly constitution?: { readonly path: 'docs/constitution.md' };
-  readonly memorySources?: readonly [MemorySource, ...MemorySource[]];
+
 }
 
 /** Declarative profiles select only built-in lexical and range policies. */

@@ -20,8 +20,8 @@ export const TestAdapterSchema = Schema.Struct({
 }).check(Schema.makeFilter(value => (value.builtin === undefined) !== (value.argv === undefined) && (value.argv === undefined || value.implementationFiles.length > 0)));
 export type TestAdapter = typeof TestAdapterSchema.Type;
 export const inPath = (file: string, root: string): boolean => file === root || file.startsWith(`${root}/`);
-export function validAdapters(config: { readonly testRoots: readonly string[]; readonly testAdapters?: readonly TestAdapter[] }): boolean {
+export function validAdapters(config: { readonly testRoots?: readonly string[]; readonly testAdapters?: readonly TestAdapter[] }): boolean {
   const adapters = config.testAdapters ?? [];
   const includes = adapters.flatMap(adapter => adapter.include);
-  return new Set(adapters.map(adapter => adapter.id)).size === adapters.length && includes.every(root => config.testRoots.some(testRoot => inPath(root, testRoot))) && includes.every((root, index) => includes.every((other, second) => index === second || !inPath(root, other) && !inPath(other, root)));
+  return new Set(adapters.map(adapter => adapter.id)).size === adapters.length && includes.every(root => (config.testRoots ?? ['test', 'tests']).some(testRoot => inPath(root, testRoot))) && includes.every((root, index) => includes.every((other, second) => index === second || !inPath(root, other) && !inPath(other, root)));
 }

@@ -229,7 +229,7 @@ export interface ConstitutionInspection { readonly record?: ConstitutionRecord; 
 
 /** Structure, current adoption state and all in-scope references, without throwing for diagnosable states. */
 export function inspectConstitution(repo: Repository, read?: (path: string) => string | undefined): ConstitutionInspection {
-  if (repo.config.constitution === undefined) return { references: [], findings: [], complete: true };
+  if (repo.read(CONSTITUTION_PATH) === undefined) return { references: [], findings: [], complete: true };
   let record: ConstitutionRecord;
   try { record = showConstitution(repo); }
   catch (cause) {
@@ -286,7 +286,7 @@ function guardReferences(repo: Repository, current: ConstitutionRecord, candidat
     if (target?.kind === 'fragment' && !candidate.has(target.id)) internal.push({ path: CONSTITUTION_PATH, line: link.line, id: target.id });
   }
   const removedIds = new Set([...previous.keys()].filter(id => !candidate.has(id)));
-  const promotions = removedIds.size === 0 ? [] : loadDocuments(repo, ['memory']).flatMap(record => record.metadata.kind !== 'memory' || record.metadata.state !== 'current' ? [] : record.metadata.promotions.flatMap(reference => {
+  const promotions = removedIds.size === 0 ? [] : loadDocuments(repo, ['memory']).flatMap(record => record.metadata.kind !== 'memory' || record.metadata.status !== 'current' ? [] : record.metadata.relations.filter(relation => relation.role === 'amends').map(relation => relation.target).flatMap(reference => {
     if (!reference.startsWith(`${CONSTITUTION_PATH}#`)) return [];
     const id = reference.slice(CONSTITUTION_PATH.length + 1);
     if (!removedIds.has(id)) return [];
@@ -346,7 +346,7 @@ function lifecycle(repo: Repository, operation: 'constitution-adopt' | 'constitu
   const sources = input.sources.map(source => required(source, 'source'));
   const after = render({ status: 'active' }, input.body);
   guardReferences(repo, current, after);
-  const decision = constitutionDecisionChange(repo.config.memorySources, path => repo.read(path) !== undefined, {
+  const decision = constitutionDecisionChange(path => repo.read(path) !== undefined, {
     adoption, reason, impact, sources, at: new Date().toISOString(),
     promotions: adoption ? [CONSTITUTION_PATH] : amendedTargets(current.source, after),
   });
@@ -368,7 +368,6 @@ export interface InitialConstitutionOptions {
   readonly reason?: string;
   readonly impact?: string;
   readonly sources?: readonly string[];
-  readonly memorySources?: ProjectConfig['memorySources'];
   readonly exists?: (path: string) => boolean;
 }
 
@@ -378,7 +377,7 @@ export function initialConstitution(options: InitialConstitutionOptions): { read
   if (active && (!options.reason || !options.impact)) throw new ConcordError('InvalidConstitution', 'Adopting the constitution requires a non-empty reason and impact');
   const source = render({ status: active ? 'active' : 'draft' }, options.body);
   if (!active) return { source };
-  const decision = constitutionDecisionChange(options.memorySources, options.exists ?? (() => false), {
+  const decision = constitutionDecisionChange(options.exists ?? (() => false), {
     adoption: true, reason: required(options.reason!, 'reason'), impact: required(options.impact!, 'impact'),
     sources: (options.sources ?? []).map(value => required(value, 'source')), promotions: [CONSTITUTION_PATH], at: new Date().toISOString(),
   });
@@ -387,10 +386,7 @@ export function initialConstitution(options: InitialConstitutionOptions): { read
 
 export function initializeConstitution(repo: Repository, dryRun = false): MutationReceipt {
   if (repo.read(CONSTITUTION_PATH) !== undefined) throw new ConcordError('ConstitutionExists', 'docs/constitution.md already exists');
-  const next = decode(ProjectSchema, { ...repo.config, constitution: { path: CONSTITUTION_PATH } }, 'constitution configuration');
-  const configAfter = renderTypeScriptConfig(next);
   return repo.publish('constitution-initialize', [
-    { path: repo.configSnapshot.path, before: repo.configSnapshot.source, after: configAfter },
     { path: CONSTITUTION_PATH, before: null, after: initialConstitution({ body: '# Project constitution\n\nNo project principles have been adopted. This constitution is a draft.\n' }).source },
   ], dryRun);
 }

@@ -19,7 +19,7 @@ Code declarations describe implementation associations, not completion or test c
 - [Design](design/README.md): goals, constraints, self-contained alternatives, and the reason for a decision.
 - [Engineering](engineering/README.md): how this repository is tested and maintained.
 - [Research](research/README.md): freeform research topics and supporting materials.
-- [Memory](../memory/README.md): problems, decisions, and reusable lessons with their history.
+- [Memory](../memory/README.md): decisions, insights, and notes.
 - [Issues](issues/README.md): local observations awaiting investigation.
 
 Write contracts as declarations of intended behavior, constraints, and acceptance. Product workflows and lifecycle rules belong in contracts. Development logs, investigation history, and implementation progress belong in Memory. Observations awaiting investigation belong in Issues.
@@ -31,11 +31,11 @@ Read docs/constitution.md before creating or revising Feature and Design owners.
 
 ## Recall and maintain local knowledge
 
-Use \`concord memory index --json\` and \`concord memory recall "query" --json\` to discover current memories and read their content. Use \`concord issue index --json\` and \`concord issue recall "query" --json\` for observations. These indexes are derived; do not maintain a manual INDEX.md or directly read or edit Memory/Issue owner files.
+Use \`concord memory recall "query" --json\` and \`concord issue recall "query" --json\` to search current knowledge. Indexes and reverse relations are derived; do not maintain a manual INDEX.
 
-Create through \`memory add\` or \`issue create\`; update author prose with \`memory edit\` or \`issue edit\`, supplying the latest digest from recall. Change lifecycle state and relationships only with the corresponding Concord commands. If an operation is missing, report or implement the tool gap instead of editing files around its guards.
+Every file under docs/ and memory/ can be edited directly, including status and relations. Create scaffolds with \`concord new memory <name> --type decision\` or \`concord new issue <name>\`. Commands run required steps such as fix verification. Run \`concord check --since <base>\` before delivery.
 
-Local issues require no external account or connection. GitHub and Linear are optional read adapters; local notes and state remain local. Only an unlinked local draft with no history can be removed with \`issue remove\` and its current digest. Local removal never deletes a remote issue.
+Local issues require no external account or connection. Local changes never authorize remote writes.
 
 ## Scoped concepts and writing
 
@@ -43,7 +43,7 @@ Use \`concord concepts index --json\` for a derived project glossary. The global
 
 Keep each stable ID, its single term, definition paragraph and explanation together in concepts.md. Use optional imports and deprecated YAML frontmatter. Only deprecated names generate terminology bans.
 
-Use concepts and writing show/set commands or the Web workbench to maintain each owner with its current digest. Do not duplicate definitions into a global aggregate or edit managed owners around these guards.
+Edit concepts.md and concord-writing.json directly. Concord check validates their structure, scope and references. Do not duplicate definitions in a global aggregate.
 
 Writing v3 composes ancestor policy within scope. Check saved inputs with \`concord docs check --json\`. Policies must match the current Schema. Only explicitly deprecated names are banned.
 
@@ -54,21 +54,19 @@ Init supplies the missing architecture.md outline, an empty global concepts.md c
 
 The preset limits sentences to 140 characters and paragraphs to 320. It checks vague wording and unused concepts in Markdown and MDX.
 
-Feature, Roadmap, and each Design candidate require README. Select optional pages with \`--pages library,cli,architecture,lifecycle,use-case\`, or repeat \`--pages\`. Omission uses project defaults. \`--no-pages\` creates README only.
+Feature, Roadmap, and each Design candidate require README. Select optional pages with \`--pages library,cli,architecture,use-case\`, or repeat \`--pages\`. Omission creates README only.
 
 Design decision wrapper pages are always created. Engineering starts with README and expands by topic.
 
-Page add adds optional pages or supporting topics using a single Unicode name, such as migration or 认知与执行. Update the author-owned README links after adding pages. Custom pages remain part of their package, with the same digest checks.
-
-Design pages also accept safe nested Markdown paths. A declared Plan uses either plans/name.md or plans/name/README.md, never both; single-file Plans must be moved to directory form before adding pages.
+Add supporting pages by editing files directly and link them from README. Design candidates use plans/name.md or plans/name/README.md, never both.
 
 Document IDs and Use Case filenames also accept Unicode letters, combining marks and numbers, with single hyphen separators; spelling is preserved. Names cannot contain path separators, whitespace or traversal components.
 
 ## First feature
 
 \`\`\`
-concord feature create login --title "Login"
-concord use-case create expired-token --feature login --title "Reject expired tokens"
+concord new feature login --title "Login"
+concord new use-case expired-token --feature login --title "Reject expired tokens"
 \`\`\`
 
 Fill in the generated author prose. Use \`concord template list\` and \`concord template show feature\` to inspect bundled templates.
@@ -126,6 +124,6 @@ See \`concord memory resolve --help\`. Use \`concord review render\` for local r
 \`--dry-run\` previews document mutations. Existing files are never overwritten by init or create.
 \`--json\` emits machine-readable results. An empty repository can pass integrity checks without having tests.
 
-Private evidence is per Git worktree and is not copied by a normal clone; missing historical evidence remains unavailable.
+Fix verification is recorded in its Issue and can be replayed with concord test verify.
 Use \`concord recover\` for an interrupted publication and \`concord cache rebuild\` for disposable cache repair.
 `;

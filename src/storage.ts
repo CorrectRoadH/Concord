@@ -5,7 +5,7 @@ import { release } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Predicate, Schema } from 'effect';
 import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from './coordination.js';
-import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Change, type ConfigSnapshot, type MemorySource, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
+import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Change, type ConfigSnapshot, type MutationReceipt, type ProjectConfig, type ResolvedProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig, snapshot } from './config.js';
 import { closeRepositoryCache } from './cache-store.js';
 import { invalidateActiveRun } from './run-coordination.js';
@@ -181,7 +181,7 @@ const JournalScopeSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('step-rename'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text, useCase: Text, oldId: Text, newId: Text, inputsDigest: Text, memberships: Schema.Array(Schema.Struct({ path: Text, scope: Schema.optional(Schema.Literal('source')), observation: Schema.String })) }),
 ]);
 const JournalSchema = Schema.Struct({
-  format: Schema.Literal('concord.journal'), root: Text, privateDir: Text, projectId: Text, operation: Text,
+  format: Schema.Literal('concord.journal'), root: Text, privateDir: Text, operation: Text,
   phase: Schema.Literals(['prepared', 'committed']), directories: Schema.Array(Text), changes: Schema.Array(JournalChangeSchema), scope: JournalScopeSchema,
   catalogDependencies: Schema.optional(Schema.Array(Schema.Struct({ path: Text, digest: Text }))),
 });
@@ -209,25 +209,18 @@ export function discoverRoot(input?: string, initialize = false): string {
   let cursor = resolve(input ?? process.cwd());
   assertNoSymlink(cursor);
   if (initialize || input !== undefined) return cursor;
-  for (;;) {
-    if (present(join(cursor, 'concord.config.ts'))) return cursor;
-    const parent = dirname(cursor);
-    if (parent === cursor) throw new ConcordError('ProjectNotFound', 'No Concord project configuration was found; run concord init in a Git worktree root');
-    cursor = parent;
-  }
+  try { return git(cursor, ['rev-parse', '--show-toplevel']); }
+  catch { throw new ConcordError('ProjectNotFound', 'The current directory is not in a Git worktree'); }
 }
 // @concord-end
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
-function defaultConfig(): ProjectConfig {
-  return {
-    format: 'concord.project/v1', projectId: randomUUID(), testRoots: ['test', 'tests'], sourceRoots: [],
-    runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 60000 }, projectTypes: [],
-    documentDefaults: { featurePages: [], roadmapPages: [], designPages: [] },
-    constitution: { path: 'docs/constitution.md' },
-    memorySources: [{ name: 'project', provider: 'local-files', path: 'memory', access: 'read-write', defaultWrite: true }],
+export function resolveProjectConfig(root: string, config: ProjectConfig): ResolvedProjectConfig {
+  const exists = (path: string): boolean => {
+    try { return lstatSync(join(root, path)).isDirectory(); } catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; }
   };
+  return { ...config, testRoots: config.testRoots ?? ['test', 'tests'].filter(exists), sourceRoots: config.sourceRoots ?? ['src'].filter(exists) };
 }
 const fixedOwner = (path: string): boolean => path === 'docs/concord-writing.json' || path === 'AGENTS.md' || path === 'concord.config.ts' || path === 'DESIGN.md' || path.startsWith('docs/') && path.endsWith('.md');
 
@@ -240,14 +233,14 @@ This repository uses Concord-driven development. Product contracts, executable t
 Before planning, implementing, or reviewing governed work:
 
 - Run \`concord --skill\` to read the task router from the installed Concord version.
-- Run \`concord --skill <topic>\` for the relevant workflow, where topics include \`init\`, \`document\`, \`code\`, \`test\`, \`memory\`, \`trace\`, \`recovery\`, \`view\`, \`feedback\`, and \`repository\`.
+- Run \`concord --skill <topic>\` for the relevant workflow, where topics include \`init\`, \`document\`, \`code\`, \`test\`, \`memory\`, \`trace\`, \`recovery\`, \`view\`, \`feedback\`.
 - Use \`concord --skill all\` only when the complete offline guide is needed.
 - Before changing behavior, read or update the owning Feature, leaf Use Case, documented CLI page, and any required Design. Then run \`concord trace gaps --json\` to inspect missing explicit code/test relationships before implementation.
 - Write contracts as declarations of intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Memory; product workflows remain valid contract content.
-- Use Concord commands for all Memory and Issue indexing, recall, reading, creation, editing, relations, and lifecycle changes. Start with \`concord memory index\` / \`concord memory recall\` or \`concord issue index\` / \`concord issue recall\`. Do not directly read or edit their owner files or maintain a manual INDEX.
+- Directly edit files under \`docs/\` and \`memory/\`, including statuses and relations. Use \`concord memory recall\` and \`concord issue recall\` for search. Commands run required steps such as fix verification; run \`concord check --since <base>\` before delivery. Do not maintain a manual INDEX.
 - For remote Issue writes, run plan, obtain explicit user agreement to its authorization string (or its action, target, and payload), then execute with \`--authorize\`; never infer authorization from plan success, tool availability, or permissive access.
-- Local issues work without GitHub, Linear, credentials, or connections. Use \`concord issue create\` for local observations; local operations never authorize remote mutations.
-- Use \`concord concepts\` and \`concord writing\` tools for Markdown terminology and JSON policy owners. Their directories under docs define scope; project indexes are derived. Keep definitions and explanations together in concepts.md; each concept has one term and only deprecated names become terminology bans. Do not duplicate a local definition into a global registry or bypass digest-protected edits.
+- Local issues work without GitHub, Linear, credentials, or connections. Use \`concord new issue\` for local observations; local operations never authorize remote mutations.
+- Directly edit directory-scoped \`concepts.md\` and \`concord-writing.json\`; \`concord check\` validates them. Keep each concept's term, definition and explanation together; only deprecated names become terminology bans.
 
 Follow the returned instructions and the repository's current \`docs/constitution.md\`. A gap result means an explicit Concord relationship is absent; it is not code coverage, and undocumented CLI commands require the product's own inventory. Do not infer completion or test coverage from document structure or command receipts alone.`;
 
@@ -265,11 +258,13 @@ function withAgentInstructions(source: string): string {
 // @concord-end
 
 export class LocalRepository implements Repository {
+  readonly runtimeVersion = process.version;
+  exists(path: string): boolean { return this.inspectComponents(path).stat !== undefined; }
   readonly access: 'read' | 'write';
   readonly persistentCache: 'use' | 'off';
   readonly root: string;
   readonly privateDir: string;
-  config: ProjectConfig;
+  config: ResolvedProjectConfig;
   configSnapshot: ConfigSnapshot;
   private traceLease: TraceLease | undefined;
   private readonly coordinationDirectory: string;
@@ -342,17 +337,14 @@ export class LocalRepository implements Repository {
       const marker = this.read('concord.config.ts');
       const markerPath = 'concord.config.ts';
       const recoveryJournal = options.recover && present(genericJournal) ? currentJournal(genericJournal) : undefined;
-      if (options.recover && marker === undefined && (recoveryJournal?.operation !== 'init' || recoveryJournal.phase !== 'prepared')) throw new ConcordError('RecoveryConflict', 'Missing TS configuration may only be recovered from a current prepared init journal');
       if (options.initialize && marker !== undefined) throw new ConcordError('ProjectExists', `${markerPath} already exists`);
-      if (!options.initialize && marker === undefined && !options.recover) throw new ConcordError('ProjectNotFound', 'The selected worktree has no Concord project configuration; run concord init');
-      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: defaultConfig() } : snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir);
-      this.config = this.configSnapshot.config;
+      this.configSnapshot = marker === undefined ? { path: 'concord.config.ts', source: '', digest: digest(''), config: {} } : snapshot(markerPath, marker, this.persistentCache === 'off' ? undefined : this.privateDir);
+      this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
       this.validateConfiguredRoots(this.config);
-      for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...this.config.runner.sourceFiles]) this.absolute(path);
+      for (const path of [...this.config.testRoots, ...(this.config.sourceRoots ?? []), ...(this.config.runner?.sourceFiles ?? [])]) this.absolute(path);
       for (const adapter of this.config.testAdapters ?? []) {
         for (const path of [...adapter.include, ...adapter.inputRoots, ...adapter.implementationFiles, ...adapter.lockFiles]) this.absolute(path);
       }
-      this.validateMemorySources(this.config);
       if (recoveryJournal !== undefined) this.preflight(recoveryJournal, true);
       if (this.optimistic) this.verifySnapshot();
 
@@ -476,7 +468,7 @@ export class LocalRepository implements Repository {
     this.absolute(path);
   }
   private sourceScopeRoots(config: ProjectConfig): readonly string[] {
-    const roots = [...config.testRoots, ...(config.sourceRoots ?? [])];
+    const roots = [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])];
     const unique = [...new Set(roots)].sort();
     if (unique.length === 0) throw new ConcordError('InvalidSourcePath', 'source.set requires at least one configured sourceRoot or testRoot');
     for (const root of unique) this.validateConfiguredRoot(root);
@@ -485,43 +477,16 @@ export class LocalRepository implements Repository {
   // @concord-code
   // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md#完整路径
   private validateConfiguredRoots(config: ProjectConfig): void {
-    for (const root of [...config.testRoots, ...(config.sourceRoots ?? [])]) this.validateConfiguredRoot(root);
-  }
-  // @concord-code
-  // @concord-implements docs/feature/project-onboarding/use-case/configure-memory-sources.md#完整路径
-  private validateMemorySources(config: ProjectConfig): void {
-    const sources = config.memorySources ?? [{ name: 'project', provider: 'local-files' as const, path: 'memory', access: 'read-write' as const, defaultWrite: true }];
-    if (new Set(sources.map((source) => source.name)).size !== sources.length) throw new ConcordError('InvalidMemorySources', 'Memory source names must be unique');
-    if (new Set(sources.map((source) => source.path)).size !== sources.length) throw new ConcordError('InvalidMemorySources', 'Memory source canonical paths must be unique');
-    const defaults = sources.filter((source) => source.defaultWrite === true);
-    if (defaults.length !== 1 || defaults[0]?.access !== 'read-write') throw new ConcordError('InvalidMemorySources', 'Exactly one writable Memory source must be the default write target');
-    const reserved = ['docs', '.git', ...config.testRoots, ...(config.sourceRoots ?? [])];
-    for (const source of sources) {
-      canonicalPath(source.path); this.absolute(source.path);
-      if (forbiddenSourcePart(source.path)) throw new ConcordError('InvalidMemorySources', `Unsafe Memory source path: ${source.path}`);
-      if ([...reserved, ...sources.filter((other) => other !== source).map((other) => other.path)].some((root) => source.path === root || source.path.startsWith(`${root}/`) || root.startsWith(`${source.path}/`))) {
-        throw new ConcordError('InvalidMemorySources', `Memory source ${source.path} overlaps a managed, source, test, or private root`);
-      }
-    }
+    for (const root of [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])]) this.validateConfiguredRoot(root);
   }
   private validateProjectConfig(config: ProjectConfig): void {
     this.validateConfiguredRoots(config);
-    for (const path of config.runner.sourceFiles) this.absolute(path);
-    this.validateMemorySources(config);
+    for (const path of config.runner?.sourceFiles ?? []) this.absolute(path);
   }
-  private memorySource(path: string, config: ProjectConfig = this.config): MemorySource | undefined {
-    return (config.memorySources ?? [{ name: 'project', provider: 'local-files' as const, path: 'memory', access: 'read-write' as const, defaultWrite: true }])
-      .find((source) => path === source.path || path.startsWith(`${source.path}/`));
-  }
-  private allowedOwner(path: string, config: ProjectConfig = this.config): boolean { return fixedOwner(path) || (path.endsWith('.md') && this.memorySource(path, config) !== undefined); }
-  private assertWritable(path: string, config: ProjectConfig = this.config): void {
-    const source = this.memorySource(path, config);
-    if (source?.access === 'read-only') throw new ConcordError('ReadOnlyMemorySource', `Memory source ${source.name} is read-only: ${path}`);
-  }
+  private allowedOwner(path: string, _config: ProjectConfig = this.config): boolean { return fixedOwner(path) || path.startsWith('memory/') && path.endsWith('.md') || path.startsWith('docs/') && path.endsWith('/concord-writing.json'); }
   private currentSnapshot(): ConfigSnapshot {
     const source = this.read('concord.config.ts');
-    if (source === undefined) throw new ConcordError('ProjectNotFound', 'Project configuration disappeared');
-    return snapshot('concord.config.ts', source, this.privateDir);
+    return snapshot('concord.config.ts', source ?? '', this.privateDir, source === undefined);
   }
   private validateConfiguredRoot(root: string): void {
       canonicalPath(root);
@@ -683,29 +648,18 @@ export class LocalRepository implements Repository {
   publish(operation: string, changes: readonly Change[], dryRun = false, catalogGuard?: readonly { path: string; digest: string }[]): MutationReceipt {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const managedWritingOwner = (path: string) => path.startsWith('docs/') && !path.split('/').some(part => part === '_template' || part === '.git' || part === 'node_modules') && (path.endsWith(`/${policyName}`) || path.endsWith(`/${catalogName}`));
-    if (operation === 'set-writing-policy' || changes.some(change => managedWritingOwner(change.path) && change.path.endsWith(`/${policyName}`))) {
-      if (operation === 'init') {
-        const policies = changes.filter(change => change.path.endsWith(`/${policyName}`));
-        if (policies.length !== 1 || policies[0]?.path !== 'docs/concord-writing.json' || policies[0].before !== null || policies[0].after !== defaultWritingSource) throw new ConcordError('InvalidChange', 'Init may only create the exact global writing preset');
-      } else {
-        if (operation !== 'set-writing-policy' || changes.length !== 1 || changes[0]?.after === null) throw new ConcordError('InvalidChange', 'Writing policy publication requires one non-null managed owner');
-        scopeOf(changes[0]!.path, 'policy');
-        readWritingPolicy(changes[0]!.after!, changes[0]!.path);
-      }
+    if (operation === 'init') {
+      const policies = changes.filter(change => managedWritingOwner(change.path) && change.path.endsWith(`/${policyName}`));
+      if (policies.length > 0 && (policies.length !== 1 || policies[0]!.path !== 'docs/concord-writing.json' || policies[0]!.before !== null || policies[0]!.after !== defaultWritingSource)) throw new ConcordError('InvalidChange', 'Init may only create the exact global writing preset');
+      const catalogs = changes.filter(change => managedWritingOwner(change.path) && change.path.endsWith(`/${catalogName}`));
+      if (catalogs.length > 0 && (catalogs.length !== 1 || catalogs[0]!.path !== 'docs/concepts.md' || catalogs[0]!.before !== null || catalogs[0]!.after !== EMPTY_CONCEPT_CATALOG)) throw new ConcordError('InvalidChange', 'Init may only create the exact empty global catalog');
     }
-    if (operation === 'set-concepts' || changes.some(change => managedWritingOwner(change.path) && change.path.endsWith(`/${catalogName}`))) {
-      const change = changes[0];
-      const catalogChanges = changes.filter(item => managedWritingOwner(item.path) && item.path.endsWith(`/${catalogName}`));
-      const initException = operation === 'init' && catalogChanges.length === 1 && catalogChanges[0]?.path === 'docs/concepts.md' && catalogChanges[0].before === null && catalogChanges[0].after === EMPTY_CONCEPT_CATALOG;
-      if (operation !== 'set-concepts' && !initException) throw new ConcordError('ManagedConceptCatalog', 'Catalog paths are managed by concepts set');
-      if (!initException) {
-        if (operation !== 'set-concepts' || changes.length !== 1 || change?.after === null) throw new ConcordError('InvalidChange', 'Concept publication requires one non-null managed owner');
-        scopeOf(change!.path, 'catalog');
-        readConceptCatalog(change!.after!);
-      }
+    if (operation === 'set-writing-policy') {
+      if (changes.length !== 1 || changes[0]?.after == null) throw new ConcordError('InvalidChange', 'Writing policy helper requires one non-null owner');
+      scopeOf(changes[0]!.path, 'policy');
+      readWritingPolicy(changes[0]!.after!, changes[0]!.path);
     }
-    if (operation !== 'set-concepts' && catalogGuard !== undefined) throw new ConcordError('InvalidChange', 'Catalog dependency guard belongs only to set-concepts');
-    if (operation === 'set-concepts' && catalogGuard === undefined) throw new ConcordError('InvalidChange', 'Concept publication requires a catalog dependency guard');
+    if (operation === 'set-concepts' && catalogGuard === undefined) throw new ConcordError('InvalidChange', 'Concept helper requires a dependency guard');
     if (changes.length === 0) return { operation, dryRun, changedPaths: [] };
     if (new Set(changes.map(c => c.path)).size !== changes.length) throw new ConcordError('InvalidChange', 'A path occurs more than once in the publication');
     const configChanges = changes.filter((change) => change.path === 'concord.config.ts');
@@ -713,7 +667,6 @@ export class LocalRepository implements Repository {
     const plannedConfigChange = configChanges[0];
     if (plannedConfigChange?.after === null) throw new ConcordError('InvalidChange', 'The runtime configuration cannot be deleted or renamed');
     if (operation === 'set-config' && changes.length !== 1) throw new ConcordError('InvalidChange', 'config.set must publish exactly one configuration');
-    if (operation === 'init' && plannedConfigChange === undefined) throw new ConcordError('InvalidChange', 'Init must publish exactly one project configuration');
     const authorizationConfig = plannedConfigChange?.after === null || plannedConfigChange?.after === undefined ? this.config : snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, dryRun || this.persistentCache === 'off' ? undefined : this.privateDir).config;
     if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) this.validateProjectConfig(authorizationConfig);
     const governanceGuard = (change: Change): boolean => change.path === 'concord.repository.json' && change.before === change.after;
@@ -722,7 +675,6 @@ export class LocalRepository implements Repository {
       this.absolute(c.path);
       const guard = governanceGuard(c);
       if (!guard && !this.allowedOwner(c.path, authorizationConfig) && !(operation === 'set-concepts' && managedWritingOwner(c.path)) && !(operation === 'set-writing-policy' && managedWritingOwner(c.path)) && !(operation === 'init' && c.path === 'docs/concepts.md')) throw new ConcordError('InvalidChange', `Not a Concord document owner: ${c.path}`);
-      if (!guard) this.assertWritable(c.path, authorizationConfig);
       const current = this.read(c.path) ?? null;
       if (current !== c.before) throw new ConcordError('PreimageChanged', `${c.path} changed; read its current digest and retry`);
       if (!guard && c.before === null && c.after === null) throw new ConcordError('InvalidChange', 'An absent same-preimage guard is only valid for concord.repository.json');
@@ -731,11 +683,11 @@ export class LocalRepository implements Repository {
     const directories = new Set<string>();
     for (const c of entries) { let dir = dirname(c.path); while (dir !== '.') { if (!present(this.absolute(dir))) directories.add(dir); dir = dirname(dir); } }
     const isInit = operation === 'init' && this.configSnapshot.source === '';
-    const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, projectId: authorizationConfig.projectId, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest }, ...(catalogGuard === undefined ? {} : { catalogDependencies: [...catalogGuard] }) };
+    const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest }, ...(catalogGuard === undefined ? {} : { catalogDependencies: [...catalogGuard] }) };
     const receipt = this.publishJournal(journal, dryRun);
     if (!receipt.dryRun && plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
       this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir);
-      this.config = this.configSnapshot.config;
+      this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
     }
     return receipt;
   }
@@ -747,7 +699,6 @@ export class LocalRepository implements Repository {
     const frozen = this.currentSnapshot();
     const configSource = frozen.source;
     const config = frozen.config;
-    if (config.projectId !== this.config.projectId) throw new ConcordError('PreimageChanged', 'Project identity changed before source publication');
     const roots = this.sourceScopeRoots(config);
     this.sourcePath(path, roots);
     const target = this.absolute(path);
@@ -758,7 +709,7 @@ export class LocalRepository implements Repository {
     if (after === before) return { operation: 'set-source', dryRun: dryRun || this.noWrite, changedPaths: [] };
     const change = { path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: stat.mode & 0o777 };
     const journal: Journal = {
-      format: 'concord.journal', root: this.root, privateDir: this.privateDir, projectId: config.projectId,
+      format: 'concord.journal', root: this.root, privateDir: this.privateDir, 
       operation: 'set-source', phase: 'prepared', directories: [], changes: [change],
       scope: { kind: 'source', configPath: frozen.path, configSource, configDigest: frozen.digest },
     };
@@ -777,7 +728,7 @@ export class LocalRepository implements Repository {
       if (!stat.isFile()) throw new ConcordError('InvalidChange', 'Step rename can only replace existing files');
       return { ...change, beforeDigest: digest(change.before), afterDigest: digest(change.after), mode: stat.mode & 0o777 };
     });
-    return this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, projectId: frozen.config.projectId, operation: 'rename-step', phase: 'prepared', directories: [], changes,
+    return this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation: 'rename-step', phase: 'prepared', directories: [], changes,
       scope: { kind: 'step-rename', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, useCase: plan.useCase, oldId: plan.oldId, newId: plan.newId, inputsDigest: plan.inputsDigest, memberships: [...this.observedDirectories.values()].map(({ path, scope, observation }) => ({ path, ...(scope === undefined ? {} : { scope }), observation })) } }, dryRun);
   }
   // @concord-code
@@ -799,7 +750,7 @@ export class LocalRepository implements Repository {
           const config = journal.changes.find(change => change.path === 'concord.config.ts');
           if (config?.after !== undefined && config.after !== null) {
             this.configSnapshot = snapshot('concord.config.ts', config.after, this.persistentCache === 'off' ? undefined : this.privateDir);
-            this.config = this.configSnapshot.config;
+            this.config = resolveProjectConfig(this.root, this.configSnapshot.config);
           }
         }
         return receipt;
@@ -865,7 +816,7 @@ export class LocalRepository implements Repository {
     if (journal.operation === 'rename-step' && journal.scope.kind !== 'step-rename') fail('Step rename requires its dedicated publication scope');
     const policyChanges = journal.changes.filter(change => change.path.endsWith(`/${policyName}`));
     const catalogChanges = journal.changes.filter(change => change.path.endsWith(`/${catalogName}`) && !change.path.split('/').some(part => part === '_template' || part === '.git' || part === 'node_modules'));
-    if (journal.operation === 'set-writing-policy' || policyChanges.length) {
+    if (journal.operation === 'set-writing-policy' || journal.operation === 'init' && policyChanges.length > 0) {
       if (journal.operation === 'init') {
         if (policyChanges.length !== 1 || policyChanges[0]?.path !== 'docs/concord-writing.json' || policyChanges[0].before !== null || policyChanges[0].after !== defaultWritingSource) fail('Init may only create the exact global writing preset. Preserve the journal; recover an older init with the version that created it before upgrading.');
       } else {
@@ -874,7 +825,7 @@ export class LocalRepository implements Repository {
         try { scopeOf(policyChange!.path, 'policy'); readWritingPolicy(policyChange!.after!, policyChange!.path); } catch { fail('Writing policy journal contains an invalid after image. Preserve the journal; recover older policies with the version that created them before removing retired fields.'); }
       }
     }
-    if (journal.operation === 'set-concepts' || catalogChanges.length) {
+    if (journal.operation === 'set-concepts' || journal.operation === 'init' && catalogChanges.length > 0) {
       if (journal.operation === 'init') {
         if (catalogChanges.length !== 1 || catalogChanges[0]?.path !== 'docs/concepts.md' || catalogChanges[0].before !== null || catalogChanges[0].after !== EMPTY_CONCEPT_CATALOG) fail('Init may only create the exact empty global catalog');
       } else {
@@ -904,10 +855,9 @@ export class LocalRepository implements Repository {
       const scope = journal.scope;
       if (journal.operation !== 'rename-step' || journal.directories.length !== 0 || journal.catalogDependencies !== undefined) fail('Step rename cannot create directories or use another operation');
       const current = this.currentSnapshot();
-      if (current.path !== scope.configPath || current.source !== scope.configSource || digest(scope.configSource) !== scope.configDigest || current.config.projectId !== journal.projectId) fail('Frozen step rename configuration or project identity changed');
       const before = new Map(journal.changes.map(change => [change.path, change.before]));
       const requiredMemberships = new Set<string>();
-      const reader: Repository = { root: this.root, privateDir: this.privateDir, config: current.config, configSnapshot: current,
+      const reader: Repository = { root: this.root, privateDir: this.privateDir, config: resolveProjectConfig(this.root, current.config), configSnapshot: current,
         read: path => before.has(path) ? before.get(path) ?? undefined : this.read(path), files: (path, scope) => { requiredMemberships.add(canonical([path, scope ?? 'all'])); return this.files(path, scope); }, absolute: path => this.absolute(path), publish: () => { throw new ConcordError('InvalidChange', 'Recovery recomputation cannot publish'); } };
       try {
         const plan = planStepRename(reader, scope);
@@ -935,8 +885,7 @@ export class LocalRepository implements Repository {
       const frozenPath = journal.scope.configPath;
       const current = this.currentSnapshot();
       if (current.path !== frozenPath || current.digest !== journal.scope.configDigest) fail('Project configuration changed since source publication');
-      const config = snapshot(frozenPath, journal.scope.configSource, this.privateDir).config;
-      if (config.projectId !== journal.projectId || config.projectId !== this.config.projectId) fail('Project identity changed');
+      const config = snapshot(frozenPath, journal.scope.configSource, this.privateDir, true).config;
       const change = journal.changes[0]!;
       const roots = this.sourceScopeRoots(config);
       this.sourcePath(change.path, roots);
@@ -951,18 +900,15 @@ export class LocalRepository implements Repository {
       {
         if (digest(journal.scope.configSource) !== journal.scope.configDigest) fail('Frozen project configuration digest is invalid');
         if (journal.operation === 'init') {
-          if (journal.scope.configSource !== '' || journal.scope.configPath !== 'concord.config.ts' || plannedConfigChange?.path !== 'concord.config.ts' || plannedConfigChange.before !== null || plannedConfigChange.after === null || plannedConfigChange.after === undefined) fail('Init journal does not bind one new static configuration');
-          const plannedSource = plannedConfigChange?.after;
-          if (typeof plannedSource !== 'string') fail('Init journal configuration is missing');
+          if (journal.scope.configSource !== '' || journal.scope.configPath !== 'concord.config.ts' || plannedConfigChange !== undefined && (plannedConfigChange.before !== null || plannedConfigChange.after == null)) fail('Invalid init configuration scope');
+          const plannedSource = plannedConfigChange?.after ?? '';
           const typed = this.read('concord.config.ts');
           if (!recovering && typed !== undefined) fail('Project configuration appeared since init planning');
-          authorizationConfig = snapshot('concord.config.ts', plannedSource as string, this.privateDir).config;
+          authorizationConfig = snapshot('concord.config.ts', plannedSource as string, this.privateDir, true).config;
           this.validateProjectConfig(authorizationConfig);
-          if (authorizationConfig.projectId !== journal.projectId) fail('Project identity changed');
         } else {
-          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.privateDir).config;
+          authorizationConfig = snapshot(journal.scope.configPath as ConfigSnapshot['path'], journal.scope.configSource, this.privateDir, true).config;
           this.validateProjectConfig(authorizationConfig);
-          if (authorizationConfig.projectId !== journal.projectId) fail('Project identity changed');
           const current = this.currentSnapshot();
           const recoveringPlannedConfig = recovering && plannedConfigChange?.path === journal.scope.configPath && plannedConfigChange.after !== null && current.source === plannedConfigChange.after;
           if (current.path !== journal.scope.configPath || current.source !== journal.scope.configSource && !recoveringPlannedConfig) fail('Project configuration changed since publication planning');
@@ -971,7 +917,6 @@ export class LocalRepository implements Repository {
       if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
         const next = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.privateDir).config;
         this.validateProjectConfig(next);
-        if (next.projectId !== journal.projectId) fail('Planned configuration changes project identity');
       }
       if (plannedConfigChange?.after === null) fail('A journal cannot delete the runtime configuration');
       if (authorizationConfig === undefined) fail('Missing current TS authorization');
@@ -1057,25 +1002,21 @@ export class LocalRepository implements Repository {
   }
 }
 
-export interface InitializeOptions { readonly projectId?: string; readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner']; readonly projectTypes?: readonly ('library' | 'cli')[]; readonly pages?: readonly ('library' | 'cli' | 'architecture' | 'lifecycle' | 'use-case')[]; readonly design?: boolean; readonly constitutionBody?: string; readonly adoptConstitution?: boolean; readonly constitutionReason?: string; readonly constitutionImpact?: string; readonly constitutionSources?: readonly string[]; readonly memorySources?: ProjectConfig['memorySources'] }
+export interface InitializeOptions { readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner']; readonly constitutionBody?: string; readonly adoptConstitution?: boolean; readonly constitutionReason?: string; readonly constitutionImpact?: string; readonly constitutionSources?: readonly string[] }
 export interface InitializationReceipt extends MutationReceipt { readonly config: ProjectConfig; readonly createdPaths: readonly string[]; readonly preservedPaths: readonly string[] }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
 export function initialize(repo: Repository, dryRun = false, options: InitializeOptions = {}): InitializationReceipt {
-  const projectTypes = [...(options.projectTypes ?? [])];
-  const inferredPages = options.pages ?? [...new Set(projectTypes.flatMap((type) => type === 'library' ? ['library', 'architecture'] as const : ['cli', 'architecture'] as const))];
-  const config = decode(ProjectSchema, { ...repo.config, ...(options.projectId ? { projectId: options.projectId } : {}), ...(options.testRoots ? { testRoots: options.testRoots } : {}), ...(options.sourceRoots ? { sourceRoots: options.sourceRoots } : {}), ...(options.runner ? { runner: options.runner } : {}), projectTypes, documentDefaults: { featurePages: inferredPages, roadmapPages: inferredPages, designPages: inferredPages }, constitution: { path: 'docs/constitution.md' }, ...(options.memorySources ? { memorySources: options.memorySources } : {}) }, 'init configuration');
-  for (const root of [...config.testRoots, ...(config.sourceRoots ?? [])]) {
+  const config = decode(ProjectSchema, { ...(options.testRoots === undefined ? {} : { testRoots: options.testRoots }), ...(options.sourceRoots === undefined ? {} : { sourceRoots: options.sourceRoots }), ...(options.runner === undefined ? {} : { runner: options.runner }) }, 'init configuration');
+  for (const root of [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])]) {
     canonicalPath(root);
     if (forbiddenSourcePart(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot or testRoot: ${root}`);
     repo.absolute(root);
   }
-  for (const path of config.runner.sourceFiles) repo.absolute(path);
-  for (const source of config.memorySources ?? []) if (source.access === 'read-only' && !existsSync(repo.absolute(source.path))) throw new ConcordError('MemorySourceUnavailable', `Read-only Memory source must already exist: ${source.path}`);
+  for (const path of config.runner?.sourceFiles ?? []) repo.absolute(path);
   const active = options.adoptConstitution === true;
-  const constitution = initialConstitution({ body: options.constitutionBody ?? templateBody('constitution', 'Project'), active, reason: options.constitutionReason, impact: options.constitutionImpact, sources: options.constitutionSources, memorySources: config.memorySources, exists: path => repo.read(path) !== undefined });
-  const paths: Record<string, string> = { 'concord.config.ts': renderTypeScriptConfig(config), 'docs/constitution.md': constitution.source, ...(constitution.decision === undefined ? {} : { [constitution.decision.path]: constitution.decision.after! }), 'docs/concord.md': onboardingGuide, ...projectTemplateFiles() };
-  if (options.design === true) paths['DESIGN.md'] = templateBody('project-design', 'Project');
+  const constitution = initialConstitution({ body: options.constitutionBody ?? templateBody('constitution', 'Project'), active, reason: options.constitutionReason, impact: options.constitutionImpact, sources: options.constitutionSources, exists: path => repo.read(path) !== undefined });
+  const paths: Record<string, string> = { ...(Object.keys(config).length === 0 ? {} : { 'concord.config.ts': renderTypeScriptConfig(config) }), 'docs/constitution.md': constitution.source, ...(constitution.decision === undefined ? {} : { [constitution.decision.path]: constitution.decision.after! }), 'docs/concord.md': onboardingGuide, ...projectTemplateFiles() };
   const preservedPaths: string[] = [];
   for (const [path, name] of [['docs/README.md', 'project-index'], ['docs/concepts.md', 'concepts'], ['docs/architecture.md', 'project-architecture']] as const) {
     if (repo.read(path) === undefined) paths[path] = name === 'concepts' ? EMPTY_CONCEPT_CATALOG : templateBody(name, 'Project');
@@ -1084,15 +1025,15 @@ export function initialize(repo: Repository, dryRun = false, options: Initialize
   if (repo.read('docs/concord-writing.json') === undefined) paths['docs/concord-writing.json'] = defaultWritingSource;
   else preservedPaths.push('docs/concord-writing.json');
   const sections: Record<string, [string, string, string]> = {
-    'docs/feature/README.md': ['Features', 'Adopted product contracts. Write the target behavior and link complete user paths.', 'feature create'],
-    'docs/roadmap/README.md': ['Roadmap', 'Settled directions awaiting adoption as current Feature contracts.', 'roadmap create'],
-    'docs/design/README.md': ['Design decisions', 'Compare self-contained candidates against shared goals and constraints. Record selection with design decide.', 'design create'],
-    'docs/engineering/README.md': ['Engineering', 'Repository testing and maintenance mechanisms, their usage and acceptance requirements.', 'engineering create'],
-    'docs/research/README.md': ['Research', 'Dated external facts and primary sources informing decisions.', 'research create'],
-    'docs/issues/README.md': ['Local feedback and observations', 'Editable local feedback, imported source snapshots, and investigation links. Concord reads configured providers only during explicit sync/import and never mutates remote issues.', 'feedback create'],
+    'docs/feature/README.md': ['Features', 'Adopted product contracts. Write the target behavior and link complete user paths.', 'new feature'],
+    'docs/roadmap/README.md': ['Roadmap', 'Settled directions awaiting adoption as current Feature contracts.', 'new roadmap'],
+    'docs/design/README.md': ['Design decisions', 'Compare self-contained candidates against shared goals and constraints. Record selection with design decide.', 'new design'],
+    'docs/engineering/README.md': ['Engineering', 'Repository testing and maintenance mechanisms, their usage and acceptance requirements.', 'new engineering'],
+    'docs/research/README.md': ['Research', 'Dated external facts and primary sources informing decisions.', 'new research'],
+    'docs/issues/README.md': ['Local feedback and observations', 'Editable local feedback, imported source snapshots, and investigation links. Concord reads configured providers only during explicit sync/import and never mutates remote issues.', 'new issue'],
   };
-  for (const source of config.memorySources ?? []) if (source.access === 'read-write') sections[`${source.path}/README.md`] = ['Engineering memory', `Memory source ${source.name} (${source.access}).`, 'memory add'];
-  for (const [path, [title, description, command]] of Object.entries(sections)) paths[path] = `# ${title}\n\n${description}\n\nStart with \`concord ${command} --help\`.\nUse \`concord ${command.split(' ')[0]} list\` to discover documents.\n`;
+  sections['memory/README.md'] = ['Engineering memory', 'Decisions, insights and notes. Edit files directly and validate with concord check.', 'new memory'];
+  for (const [path, [title, description, command]] of Object.entries(sections)) paths[path] = `# ${title}\n\n${description}\n\nStart with \`concord ${command} --help\`.\nUse \`concord list\` to discover documents.\n`;
   for (const path of Object.keys(paths)) if (repo.read(path) !== undefined) throw new ConcordError('InitializationConflict', `${path} already exists; no existing file will be overwritten`);
   const agentBefore = repo.read('AGENTS.md') ?? null;
   const agentAfter = withAgentInstructions(agentBefore ?? '');

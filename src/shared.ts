@@ -42,30 +42,16 @@ export const RunnerSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('command'), argv: Schema.NonEmptyArray(Text), sourceFiles: Strings, timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
 ]);
 export type Runner = typeof RunnerSchema.Type;
-export const TemplatePageSchema = Schema.Literals(['library', 'cli', 'architecture', 'lifecycle', 'use-case']);
-export const MemorySourceSchema = Schema.Struct({
-  name: Slug,
-  provider: Schema.Literal('local-files'),
-  path: Text,
-  access: Schema.Literals(['read-only', 'read-write']),
-  defaultWrite: Schema.optional(Schema.Boolean),
-});
-export const DocumentDefaultsSchema = Schema.Struct({
-  featurePages: Schema.Array(TemplatePageSchema),
-  roadmapPages: Schema.Array(TemplatePageSchema),
-  designPages: Schema.Array(TemplatePageSchema),
-});
+export const TemplatePageSchema = Schema.Literals(['library', 'cli', 'architecture', 'use-case']);
 export const ProjectSchema = Schema.Struct({
-  format: Schema.Literal('concord.project/v1'),
-  projectId: Text,
-  testRoots: Schema.Array(Text),
+  testRoots: Schema.optional(Schema.Array(Text)),
   sourceRoots: Schema.optional(Schema.Array(Text)),
   languageServers: Schema.optional(LanguageServersSchema),
   sourceIgnore: Schema.optional(Schema.Array(Text.check(Schema.makeFilter(validSourceIgnore)))),
   p5: Schema.optional(Schema.Struct({
     libraries: Schema.Array(Text).check(Schema.isMaxLength(16), Schema.makeFilter(values => new Set(values).size === values.length)),
   })),
-  runner: RunnerSchema,
+  runner: Schema.optional(RunnerSchema),
   testAdapters: Schema.optional(Schema.Array(TestAdapterSchema)),
   docsWork: Schema.optional(Schema.Struct({
     checks: Schema.optional(Schema.Record(Schema.String, Schema.Struct({ argv: Schema.NonEmptyArray(Text), timeoutMs: Schema.optional(Schema.Int.check(Schema.isGreaterThan(0))) }))),
@@ -73,13 +59,9 @@ export const ProjectSchema = Schema.Struct({
     sharedPaths: Schema.optional(Schema.Array(Text)),
   })),
   feedbackConnections: Schema.optional(FeedbackConnectionsSchema),
-  projectTypes: Schema.optional(Schema.Array(Schema.Literals(['library', 'cli']))),
-  documentDefaults: Schema.optional(DocumentDefaultsSchema),
-  constitution: Schema.optional(Schema.Struct({ path: Schema.Literal('docs/constitution.md') })),
-  memorySources: Schema.optional(Schema.NonEmptyArray(MemorySourceSchema)),
 }).check(Schema.makeFilter(validAdapters));
 export type ProjectConfig = typeof ProjectSchema.Type;
-export type MemorySource = typeof MemorySourceSchema.Type;
+export type ResolvedProjectConfig = ProjectConfig & { readonly testRoots: readonly string[]; readonly sourceRoots: readonly string[] };
 export interface ConfigSnapshot { readonly path: 'concord.config.ts'; readonly source: string; readonly digest: string; readonly config: ProjectConfig }
 // @concord-end
 
@@ -92,7 +74,9 @@ export interface Repository {
   readonly persistentCache?: 'use' | 'off';
   readonly root: string;
   readonly privateDir: string;
-  readonly config: ProjectConfig;
+  readonly runtimeVersion?: string;
+  exists?(path: string): boolean;
+  readonly config: ResolvedProjectConfig;
   readonly configSnapshot: ConfigSnapshot;
   snapshot?<A>(read: () => A): A;
   read(path: string): string | undefined;
