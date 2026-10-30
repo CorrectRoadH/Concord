@@ -12,7 +12,7 @@ import { readProjectConfig, writeProjectConfig } from './support.js';
 import { caseDiscriminator, deriveTestReference } from '../src/test-reference.js';
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
-test('packed CLI traces code scopes and preserves the original fixed evidence gate', () => Effect.runPromise(Effect.sync(() => {
+test('packed CLI traces code scopes and keeps command execution independent of code findings', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-code-cli-'));
   try {
     const packed = packConcord(scratch);
@@ -46,7 +46,7 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     assert.deepEqual(call(['doctor'], Schema.Struct({ missingSourceRoots: Schema.Array(Schema.String) })).missingSourceRoots, ['src', 'test']);
     call(['new', 'feature', 'orders', '--title', 'Orders'], ack);
     call(['new', 'use-case', 'create-order', '--feature', feature, '--title', 'Create order'], ack);
-    call(['new', 'engineering', 'tooling', '--title', 'Tooling', '--pages', 'architecture'], ack);
+    call(['new', 'engineering', 'tooling', '--title', 'Tooling'], ack);
     writeFileSync(join(root, 'docs/feature/orders/behavior.md'), '# Behavior\n\n## Normalize\n\n## Validate\n');
     const engineering = 'docs/engineering/tooling/README.md';
     const engineeringPage = 'docs/engineering/tooling/architecture.md';
@@ -106,7 +106,7 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
       'docs/feature/orders/behavior.md#validate',
       `${engineeringPage}#overview`,
     ]);
-    const engineeringShow = call(['engineering', 'show', 'tooling'], Schema.Struct({ codeDeclarations: Schema.Array(Schema.Struct({ id: Schema.String })) }));
+    const engineeringShow = call(['show', engineering], Schema.Struct({ codeDeclarations: Schema.Array(Schema.Struct({ id: Schema.String })) }));
     assert.deepEqual(engineeringShow.codeDeclarations.map(item => item.id), [anchor.id]);
     assert.match(call(['review', 'render', 'tooling'], Schema.String), /validate/);
     const check = call(['check'], Schema.Struct({ ok: Schema.Boolean, codeDeclarations: Schema.Int, cases: Schema.Int }));
@@ -128,7 +128,7 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     // A code finding must not become an extra precondition for real red/green evidence.
     call(['new', 'issue', 'wrong-result', '--title', 'Wrong result'], ack);
     const problem = 'docs/issues/wrong-result.md';
-    writeProjectConfig(root, { ...config, testRoots: ['test'] });
+    writeProjectConfig(root, { ...config, testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
     writeFileSync(join(root, 'test/result.test.mjs'), [
       "import test from 'node:test';", "import assert from 'node:assert/strict';", "import { result } from '../src/result.mjs';",
       `// @use-case ${useCase}`, `// @issue ${problem}`,

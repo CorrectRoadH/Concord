@@ -73,6 +73,6 @@ try {
   }
 } catch (cause) {
   const error = cause as { code?: string; message?: string };
-  process.stderr.write(JSON.stringify({ ok: false, error: error.code ?? 'RepositoryProfileFailed', message: error.message ?? String(cause) }) + '\n');
+  process.stderr.write(JSON.stringify({ ok: false, error: error.code ?? 'OperationFailed', message: error.message ?? String(cause) }) + '\n');
   process.exitCode = 1;
 }

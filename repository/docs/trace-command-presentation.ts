@@ -1,6 +1,6 @@
 import type { TraceCoordinationError, TraceError } from "./trace/index.js";
 
-const TRACE_RECOVERY_COMMAND = "concord repo docs trace recover";
+const TRACE_RECOVERY_COMMAND = "concord recover";
 
 type DocsTraceCommandError = TraceError | TraceCoordinationError;
 
@@ -14,7 +14,7 @@ export function renderDocsTraceError(error: DocsTraceCommandError): string {
     case "TraceFormatError":
       return `${error._tag}: ${error.path} (${error.subject}): ${error.message}`;
     case "TraceSelectorMissing":
-      return `${error._tag}: no ${error.subject} matches ${JSON.stringify(error.selector)}; run concord repo docs ${error.subject} list`;
+      return `${error._tag}: no ${error.subject} matches ${JSON.stringify(error.selector)}; run concord list ${error.subject}`;
     case "TraceSelectorAmbiguous":
       return `${error._tag}: ${JSON.stringify(error.selector)} is ambiguous:\n${error.candidates.map((candidate) => `  ${candidate}`).join("\n")}`;
     case "TraceSnapshotChanged":

@@ -202,14 +202,14 @@ test('steps C19 second CLI blocks interrupted work and recovers prepared and com
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#rename-step
 // @name steps-managed-reference-block
-test('steps C20 managed Design decision references reject the entire rename', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
+test('steps rename updates ordinary Design decision Markdown references', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document('1. A {#old}\n'));
   createDocument(repo, 'design', { id: 'sample', title: 'Sample', alternatives: ['one', 'two'], pages: [] });
-  const design = 'docs/design/sample/README.md';
-  const before = repo.read(design)!;
-  write(root, design, before.replace('alternatives:', `decision:\n  selected: one\n  reason: Step target\n  at: 2026-10-21T00:00:00.000Z\n  targets:\n    - ${path}#old\nalternatives:`));
-  assert.throws(() => renameUseCaseStep(repo, path, 'old', 'new'), { code: 'ManagedReferenceBlocked' });
-  assert.match(repo.read(path)!, /\{#old\}/u);
+  const design = 'docs/design/sample/DECISION.md';
+  write(root, design, `${repo.read(design)!}\n[Step](../../feature/sample/use-case/flow.md#old)\n`);
+  renameUseCaseStep(repo, path, 'old', 'new');
+  assert.match(repo.read(path)!, /\{#new\}/u);
+  assert.match(repo.read(design)!, /flow\.md#new/u);
   assert.equal(existsSync(join(repo.privateDir, 'journal.json')), false);
 }))));
 
@@ -241,9 +241,9 @@ test('steps C19 recovery rejects a forged postimage even when its digest matches
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#rename-step
 // @name steps-memory-reference-block
-test('steps C20 Memory promotion references block rename with zero writes', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
+test('steps C20 Memory support relations block rename with zero writes', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document('1. A {#old}\n'));
-  createDocument(repo, 'memory', { id: 'promotion', title: 'Promotion', memoryKind: 'note' });
+  createDocument(repo, 'memory', { id: 'support', title: 'Support', memoryKind: 'note' });
   const memory = loadDocuments(repo, ['memory'])[0]!;
   if (memory.metadata.kind !== 'memory') throw new Error('Expected Memory');
   write(root, memory.path, renderDocument({ ...memory.metadata, relations: [{ role: 'supports', target: `${path}#old` }] }, memory.body));

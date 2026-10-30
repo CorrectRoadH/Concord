@@ -21,7 +21,7 @@ export const changedSelection = Effect.fn('perf.changedSelection')(function*(roo
   const features = [...new Set([...files, ...refs].flatMap(path => { const match = /^docs\/feature\/([^/]+)\//u.exec(path); return match ? [match[1]!] : []; }))];
   return { files, features };
 });
-/** CLI help renders the top-level definitions, including the entry router's repo group. */
+/** CLI help renders the current top-level command definitions. */
 export const commandGroups = Effect.fn('perf.commandGroups')(function*(entry: string, root: string, outputDir: string) {
   const help = yield* mustRun([process.execPath, entry, '--help'], { cwd: root, outputDir, env: { NO_COLOR: '1' } });
   const section = help.stdout.split(/SUBCOMMANDS\s*\n/u)[1]?.split(/\n[A-Z][A-Z ]+:?\n/u)[0] ?? '';

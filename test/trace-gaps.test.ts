@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument, resolveReference } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { buildTrace, documentShow, renderReview, requireValidTrace, traceGaps, traceShow } from '../dist/trace.js';
-import { referenceResolver } from '../dist/refs.js';
+import { createDocument, resolveReference } from '../src/documents.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { buildTrace, documentShow, renderReview, requireValidTrace, traceGaps, traceShow } from '../src/trace.js';
+import { referenceResolver } from '../src/refs.js';
 
 function naiveGaps(repo: LocalRepository) {
   return repo.snapshot(() => {
@@ -100,8 +100,6 @@ test('every derived trace reuses repeated exact references and releases its memo
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
 test('partial derived relationships retain healthy endpoints and reject malformed nested boundaries', () => Effect.runPromise(Effect.sync(() => withTraceConsumer((repo, root) => {
-  const orphan = join(root, 'docs/feature/shared/use-case/flow.md');
-  writeFileSync(orphan, readFileSync(orphan, 'utf8').replace('feature: docs/feature/shared/README.md', 'feature: docs/feature/missing/README.md'));
   const nested = join(root, 'docs/feature/shared/nested'); mkdirSync(nested);
   writeFileSync(join(nested, 'README.md'), '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
   writeFileSync(join(nested, 'page.md'), '# Page\n');
@@ -111,7 +109,7 @@ test('partial derived relationships retain healthy endpoints and reject malforme
   assert.equal(result.complete, false);
   assert.equal(result.codeDeclarations.length, 1);
   assert.equal(result.incoming.filter(edge => edge.relation === 'implements').length, 1);
-  assert.ok(result.findings.some(finding => finding.code === 'ReferenceNotFound' && finding.path.endsWith('/flow.md')));
+  assert.ok(result.findings.some(finding => finding.code === 'InvalidData' && finding.path.endsWith('/nested/README.md')));
   assert.throws(() => traceGaps(repo, 'off'), { code: 'TraceInvalid' });
 }))));
 

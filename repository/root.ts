@@ -1,8 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
-import { resolve } from 'node:path';
 
-export class RepositoryProfileError extends Error {
+export class RepositoryRootError extends Error {
   constructor(readonly code: string, message: string) {
     super(message);
     this.name = code;
@@ -19,10 +18,10 @@ export function repositoryRoot(): string {
       encoding: 'utf8', env, timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
   } catch {
-    throw new RepositoryProfileError('RepositoryRootInvalid', 'Run the repository API from a Git worktree root.');
+    throw new RepositoryRootError('RepositoryRootInvalid', 'Run the repository API from a Git worktree root.');
   }
   if (realpathSync(top) !== root) {
-    throw new RepositoryProfileError('RepositoryRootInvalid', 'Run the repository API from the Git worktree top-level directory.');
+    throw new RepositoryRootError('RepositoryRootInvalid', 'Run the repository API from the Git worktree top-level directory.');
   }
   return root;
 }
