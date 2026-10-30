@@ -2,12 +2,14 @@ import { posix } from 'node:path';
 import type { Heading, Nodes, Paragraph, PhrasingContent } from 'mdast';
 import { Predicate } from 'effect';
 import { parseDocument, stringify } from 'yaml';
-import { ConcordError, ProjectSchema, Text, decode, digest, type Finding, type MutationReceipt, type Repository } from './shared.js';
+import { ConcordError, ProjectSchema, Text, decode, digest, type Change, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
 import { ConstitutionSchema, type ConstitutionMeta } from './constitution-schema.js';
 import { fromMarkdown, mdxProse } from './markdown-parser.js';
 import { markdownAnchor, markdownBody } from './steps.js';
 import { documentMarkdown, documentMarkdownProjection } from './document-projection.js';
+import { constitutionDecisionChange } from './memory-write.js';
+import { loadDocuments } from './documents.js';
 
 export { ConstitutionSchema } from './constitution-schema.js';
 export type { ConstitutionMeta } from './constitution-schema.js';
@@ -109,9 +111,7 @@ function frontmatter(source: string): { readonly value: Record<string, unknown>;
 
 export function parseConstitution(source: string): ConstitutionRecord {
   const { value, body } = frontmatter(source);
-  if (value.format === 'concord.constitution/v1') throw new ConcordError('ConstitutionMigrationRequired', 'docs/constitution.md uses concord.constitution/v1; run concord constitution migrate', { path: CONSTITUTION_PATH });
   const metadata = decode(ConstitutionSchema, value, CONSTITUTION_PATH);
-  if ((metadata.status === 'draft') !== (metadata.ratifiedAt === null)) throw new ConcordError('InvalidConstitution', 'draft requires ratifiedAt:null and active requires a ratified date');
   const clauses = constitutionClauses(source);
   if (metadata.status === 'active' && !clauses.some(clause => clause.id !== 'general')) throw new ConcordError('InvalidConstitution', 'An active constitution requires at least one clause with a {#c-NNN} ID');
   return { path: CONSTITUTION_PATH, source, metadata, body, digest: digest(source), clauses };
@@ -227,7 +227,7 @@ export function scanConstitutionLinks(repo: Repository, index: ReadonlyMap<strin
 
 export interface ConstitutionInspection { readonly record?: ConstitutionRecord; readonly references: ConstitutionLinkScan['references']; readonly findings: readonly Finding[]; readonly complete: boolean }
 
-/** Structure, migration state and all in-scope references, without throwing for diagnosable states. */
+/** Structure, current adoption state and all in-scope references, without throwing for diagnosable states. */
 export function inspectConstitution(repo: Repository, read?: (path: string) => string | undefined): ConstitutionInspection {
   if (repo.config.constitution === undefined) return { references: [], findings: [], complete: true };
   let record: ConstitutionRecord;
@@ -285,34 +285,81 @@ function guardReferences(repo: Repository, current: ConstitutionRecord, candidat
     if (target?.kind === 'invalid') throw new ConcordError('ConstitutionLinkInvalid', `${CONSTITUTION_PATH}:${link.line}: ${target.message}`);
     if (target?.kind === 'fragment' && !candidate.has(target.id)) internal.push({ path: CONSTITUTION_PATH, line: link.line, id: target.id });
   }
-  const removed = [...scan.broken, ...internal].filter(item => previous.has(item.id));
+  const removedIds = new Set([...previous.keys()].filter(id => !candidate.has(id)));
+  const promotions = removedIds.size === 0 ? [] : loadDocuments(repo, ['memory']).flatMap(record => record.metadata.kind !== 'memory' || record.metadata.state !== 'current' ? [] : record.metadata.promotions.flatMap(reference => {
+    if (!reference.startsWith(`${CONSTITUTION_PATH}#`)) return [];
+    const id = reference.slice(CONSTITUTION_PATH.length + 1);
+    if (!removedIds.has(id)) return [];
+    const lines = repo.read(record.path)!.split('\n');
+    const occurrence = lines.findIndex(line => line.includes(reference));
+    return [{ path: record.path, line: occurrence < 0 ? 1 : occurrence + 1, id }];
+  }));
+  const removed = [...scan.broken, ...internal, ...promotions].filter(item => previous.has(item.id));
   if (removed.length > 0) throw new ConcordError('ConstitutionClauseReferenced', `Removed IDs are still referenced: ${removed.map(item => `${item.path}:${item.line} #${item.id}`).join(', ')}`, removed);
   const missing = internal.find(item => !previous.has(item.id));
   if (missing !== undefined) throw new ConcordError('AnchorNotFound', `${CONSTITUTION_PATH}:${missing.line}: Constitution clause ${missing.id} does not exist`);
 }
 
-export function adoptConstitution(repo: Repository, body: string, reason: string, impact: string, sources: readonly string[], expectedDigest: string, dryRun = false): MutationReceipt {
-  const current = showConstitution(repo);
-  if (current.digest !== expectedDigest) throw new ConcordError('PreimageChanged', 'docs/constitution.md changed; reload it and retry');
-  if (current.metadata.status !== 'draft') throw new ConcordError('ConstitutionAlreadyActive', 'Use constitution amend for an active constitution');
-  const date = new Date().toISOString().slice(0, 10);
-  const entry = { date, reason: required(reason, 'reason'), sources: sources.map((source) => required(source, 'source')), impact: required(impact, 'impact') };
-  const metadata = decode(ConstitutionSchema, { ...current.metadata, status: 'active', ratifiedAt: date, amendedAt: date, amendments: [...current.metadata.amendments, entry] }, 'constitution adoption');
-  const after = render(metadata, body);
-  guardReferences(repo, current, after);
-  return repo.publish('constitution-adopt', [{ path: current.path, before: current.source, after }], dryRun);
+/** Compare the complete owned clause prose and list items, including continuation blocks. */
+function declarationBodies(source: string): Map<string, string> {
+  const masked = markdownBody(source), bodies = new Map<string, string>();
+  let clause: string | undefined;
+  for (const node of documentMarkdown(CONSTITUTION_PATH, source).children) {
+    const raw = masked.slice(node.position?.start.offset, node.position?.end.offset).trim();
+    if (node.type === 'heading' && node.depth <= 2) {
+      clause = node.depth === 2 ? trailingId(masked, node)?.id : undefined;
+      if (clause !== undefined) bodies.set(clause, raw);
+    } else if (clause !== undefined && node.type === 'list' && node.ordered === true) {
+      for (const item of node.children) {
+        const first = item.children[0];
+        const id = first?.type === 'paragraph' ? trailingId(masked, first)?.id : undefined;
+        if (id !== undefined) bodies.set(id, masked.slice(item.position?.start.offset, item.position?.end.offset).trim());
+      }
+    } else if (clause !== undefined) bodies.set(clause, `${bodies.get(clause)}\n${raw}`);
+  }
+  return bodies;
 }
 
-export function amendConstitution(repo: Repository, body: string, reason: string, impact: string, sources: readonly string[], expectedDigest: string, dryRun = false): MutationReceipt {
+/** Removed paragraphs promote to their surviving clause; no promotion points at a removed ID. */
+export function amendedTargets(before: string, after: string): string[] {
+  const previous = declarationBodies(before), current = declarationBodies(after), next = clauseIndex(parseConstitution(after).clauses);
+  const changed = new Set([...next.keys()].filter(id => current.get(id) !== previous.get(id)));
+  for (const id of previous.keys()) {
+    if (next.has(id)) continue;
+    const clause = id.startsWith('general-') ? 'general' : /^c-\d{3}/u.exec(id)?.[0];
+    if (clause !== undefined && next.has(clause)) changed.add(clause);
+  }
+  return changed.size === 0 ? [CONSTITUTION_PATH] : [...changed].map(id => `${CONSTITUTION_PATH}#${id}`);
+}
+
+export interface ConstitutionReceipt extends MutationReceipt { readonly memory: string }
+
+interface LifecycleInput { readonly body: string; readonly reason: string; readonly impact: string; readonly sources: readonly string[]; readonly expectedDigest: string }
+
+function lifecycle(repo: Repository, operation: 'constitution-adopt' | 'constitution-amend', input: LifecycleInput, dryRun: boolean): ConstitutionReceipt {
   const current = showConstitution(repo);
-  if (current.digest !== expectedDigest) throw new ConcordError('PreimageChanged', 'docs/constitution.md changed; reload it and retry');
-  if (current.metadata.status !== 'active') throw new ConcordError('ConstitutionNotActive', 'Adopt the draft constitution before amending it');
-  const date = new Date().toISOString().slice(0, 10);
-  const entry = { date, reason: required(reason, 'reason'), sources: sources.map((source) => required(source, 'source')), impact: required(impact, 'impact') };
-  const metadata = decode(ConstitutionSchema, { ...current.metadata, amendedAt: date, amendments: [...current.metadata.amendments, entry] }, 'constitution amendment');
-  const after = render(metadata, body);
+  if (current.digest !== input.expectedDigest) throw new ConcordError('PreimageChanged', 'docs/constitution.md changed; reload it and retry');
+  const adoption = operation === 'constitution-adopt';
+  if (adoption && current.metadata.status !== 'draft') throw new ConcordError('ConstitutionAlreadyActive', 'Use constitution amend for an active constitution');
+  if (!adoption && current.metadata.status !== 'active') throw new ConcordError('ConstitutionNotActive', 'Adopt the draft constitution before amending it');
+  const reason = required(input.reason, 'reason'), impact = required(input.impact, 'impact');
+  const sources = input.sources.map(source => required(source, 'source'));
+  const after = render({ format: 'concord.constitution/v3', status: 'active' }, input.body);
   guardReferences(repo, current, after);
-  return repo.publish('constitution-amend', [{ path: current.path, before: current.source, after }], dryRun);
+  const decision = constitutionDecisionChange(repo.config.memorySources, path => repo.read(path) !== undefined, {
+    adoption, reason, impact, sources, at: new Date().toISOString(),
+    promotions: adoption ? [CONSTITUTION_PATH] : amendedTargets(current.source, after),
+  });
+  const receipt = repo.publish(operation, [{ path: current.path, before: current.source, after }, decision], dryRun);
+  return { ...receipt, memory: decision.path };
+}
+
+export function adoptConstitution(repo: Repository, body: string, reason: string, impact: string, sources: readonly string[], expectedDigest: string, dryRun = false): ConstitutionReceipt {
+  return lifecycle(repo, 'constitution-adopt', { body, reason, impact, sources, expectedDigest }, dryRun);
+}
+
+export function amendConstitution(repo: Repository, body: string, reason: string, impact: string, sources: readonly string[], expectedDigest: string, dryRun = false): ConstitutionReceipt {
+  return lifecycle(repo, 'constitution-amend', { body, reason, impact, sources, expectedDigest }, dryRun);
 }
 
 export interface InitialConstitutionOptions {
@@ -321,20 +368,21 @@ export interface InitialConstitutionOptions {
   readonly reason?: string;
   readonly impact?: string;
   readonly sources?: readonly string[];
-  readonly date?: string;
+  readonly memorySources?: ProjectConfig['memorySources'];
+  readonly exists?: (path: string) => boolean;
 }
 
-/** Shared constructor for init and the later constitution lifecycle. */
-export function initialConstitutionSource(options: InitialConstitutionOptions): string {
-  const date = options.date ?? new Date().toISOString().slice(0, 10);
+/** Shared constructor for init and the later constitution lifecycle; an active start also records its Decision. */
+export function initialConstitution(options: InitialConstitutionOptions): { readonly source: string; readonly decision?: Change } {
   const active = options.active === true;
   if (active && (!options.reason || !options.impact)) throw new ConcordError('InvalidConstitution', 'Adopting the constitution requires a non-empty reason and impact');
-  const amendments = active ? [{ date, reason: required(options.reason!, 'reason'), sources: (options.sources ?? []).map((source) => required(source, 'source')), impact: required(options.impact!, 'impact') }] : [];
-  const metadata = decode(ConstitutionSchema, {
-    format: 'concord.constitution/v2', status: active ? 'active' : 'draft',
-    ratifiedAt: active ? date : null, amendedAt: date, amendments,
-  }, 'constitution initialization');
-  return render(metadata, options.body);
+  const source = render({ format: 'concord.constitution/v3', status: active ? 'active' : 'draft' }, options.body);
+  if (!active) return { source };
+  const decision = constitutionDecisionChange(options.memorySources, options.exists ?? (() => false), {
+    adoption: true, reason: required(options.reason!, 'reason'), impact: required(options.impact!, 'impact'),
+    sources: (options.sources ?? []).map(value => required(value, 'source')), promotions: [CONSTITUTION_PATH], at: new Date().toISOString(),
+  });
+  return { source, decision };
 }
 
 export function initializeConstitution(repo: Repository, dryRun = false): MutationReceipt {
@@ -343,7 +391,7 @@ export function initializeConstitution(repo: Repository, dryRun = false): Mutati
   const configAfter = renderTypeScriptConfig(next);
   return repo.publish('constitution-initialize', [
     { path: repo.configSnapshot.path, before: repo.configSnapshot.source, after: configAfter },
-    { path: CONSTITUTION_PATH, before: null, after: initialConstitutionSource({ body: '# Project constitution\n\nNo project principles have been adopted. This constitution is a draft.\n' }) },
+    { path: CONSTITUTION_PATH, before: null, after: initialConstitution({ body: '# Project constitution\n\nNo project principles have been adopted. This constitution is a draft.\n' }).source },
   ], dryRun);
 }
 // @concord-end

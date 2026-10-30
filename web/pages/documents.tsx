@@ -1052,7 +1052,7 @@ function MetadataEditor({ initial }: { initial: DocumentRecord }) {
     <>
       <PanelHeader title="元数据" actions={<span className="form-status" role="status">{autoSave.status}</span>} />
       <ContentSection title="身份信息" className="form-section">
-        <dl><Definition label="类型">{humanKind(baseline.metadata.kind)}</Definition><Definition label="ID"><code>{baseline.metadata.id}</code></Definition><Definition label="创建于">{baseline.metadata.createdAt}</Definition></dl>
+        <dl><Definition label="类型">{humanKind(baseline.metadata.kind)}</Definition><Definition label="ID"><code>{baseline.metadata.id}</code></Definition>{"createdAt" in baseline.metadata ? <Definition label="创建于">{baseline.metadata.createdAt}</Definition> : null}</dl>
       </ContentSection>
       <ContentSection title="可编辑字段" className="form-section">
         <form className="form-grid" onSubmit={event => { event.preventDefault(); void autoSave.flush().catch(() => undefined) }}>

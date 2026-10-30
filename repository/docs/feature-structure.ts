@@ -58,12 +58,12 @@ function read(root: string, path: string, operation: FeatureStructureError["oper
 function template(root: string, path: string, operation: FeatureStructureError["operation"]): Effect.Effect<string, FeatureStructureError> {
   return read(root, `${TEMPLATE}/${path}`, operation);
 }
-function frontmatter(id: string, title: string, createdAt: string): string {
-  return `---\n${stringify({ format: "concord.document/v1", id, title, createdAt, kind: "feature" }).trimEnd()}\n---\n\n`;
+function frontmatter(id: string, title: string): string {
+  return `---\n${stringify({ format: "concord.document/v1", id, title, kind: "feature" }).trimEnd()}\n---\n\n`;
 }
-function render(source: string, title: string, root = false, id = "", createdAt = ""): string {
+function render(source: string, title: string, root = false, id = ""): string {
   const body = source.replaceAll("<功能或候选名>", title).trimEnd();
-  return root ? `${frontmatter(id, title, createdAt)}${body}\n` : `${body}\n`;
+  return root ? `${frontmatter(id, title)}${body}\n` : `${body}\n`;
 }
 function manifest(root: string, stage: string, operation: FeatureStructureError["operation"]): readonly TraceDirectoryManifestEntry[] {
   const base = resolve(root, stage);
@@ -111,7 +111,6 @@ function authorAndManaged(source: string, operation: FeatureStructureError["oper
 export function createFeatureAt(root: string, input: { readonly slug: string; readonly title: string; readonly pages: readonly string[]; readonly dryRun: boolean }): Effect.Effect<FeatureStructureReceipt, FeatureStructureError | import("./trace/errors.js").TraceError | import("./trace/relation-mutation.js").TraceCoordinationError, FileSystem.FileSystem> {
   return Effect.gen(function*() {
     const value = yield* slug(input.slug, "create");
-    const createdAt = new Date().toISOString();
     if (input.title.trim().length === 0) return yield* fail("create", value, "title must not be empty");
     const selected = yield* Effect.all(input.pages.map((item) => page(item, "create")));
     if (new Set(selected).size !== selected.length) return yield* fail("create", value, "pages must be unique");
@@ -120,7 +119,7 @@ export function createFeatureAt(root: string, input: { readonly slug: string; re
     const optional = yield* Effect.all(selected.map((item) => template(root, PAGE_FILES[item], "create").pipe(
       Effect.map((source) => ({ path: PAGE_FILES[item], source, bytes: render(source, input.title) })),
     )));
-    const files = [{ path: "README.md", bytes: render(rootSource, input.title, true, value, createdAt) }, ...optional];
+    const files = [{ path: "README.md", bytes: render(rootSource, input.title, true, value) }, ...optional];
     const ownerPath = defaultDocumentPath('feature', value);
     const execute = (publication?: { readonly stagePath: string; readonly targetPath: string }) => mutateTraceOwner({ root, operation: "feature-create", ownerPath, dryRun: input.dryRun,
       prepareUnderLease: Effect.gen(function*() {

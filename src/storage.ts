@@ -4,13 +4,13 @@ import { closeSync, constants, existsSync, fstatSync, fsyncSync, lstatSync, mkdi
 import { release } from 'node:os';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { Predicate, Schema } from 'effect';
-import { acquireTraceLeaseSync, assertLegacyTraceStateMigratedSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from './coordination.js';
+import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from './coordination.js';
 import { ConcordError, ProjectSchema, Text, canonical, decode, digest, type Change, type ConfigSnapshot, type MemorySource, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig, snapshot } from './config.js';
 import { closeRepositoryCache } from './cache-store.js';
 import { invalidateActiveRun } from './run-coordination.js';
 import { acquireFileLease, acquireRecoverablePublicationLease, advancePublicationRevision, publicationRevision } from './file-lease.js';
-import { initialConstitutionSource } from './constitution.js';
+import { initialConstitution } from './constitution.js';
 import { onboardingGuide } from './onboarding-guide.js';
 import { projectTemplateFiles, templateBody } from './templates.js';
 import { defaultWritingSource } from './writing-defaults.js';
@@ -34,7 +34,6 @@ function storageCoordinationFailure(cause: unknown): ConcordError {
   const coordination = cause instanceof CoordinationError || (typeof cause === 'object' && cause !== null && '_tag' in cause && cause._tag === 'CoordinationError');
   if (!coordination) return cause instanceof ConcordError ? cause : new ConcordError('CoordinationFailed', cause instanceof Error ? cause.message : String(cause));
   const error = cause as CoordinationError;
-  if (error.phase === 'migration') return new ConcordError('CoordinationMigrationRequired', error.message, { operation: error.operation, path: error.path });
   if (error.message.includes('busy')) return new ConcordError('RepositoryBusy', error.message, { operation: error.operation, path: error.path });
   return new ConcordError('CoordinationFailed', error.message, { operation: error.operation, phase: error.phase, path: error.path });
 }
@@ -189,15 +188,7 @@ const JournalSchema = Schema.Struct({
 type Journal = typeof JournalSchema.Type;
 
 function currentJournal(path: string): Journal {
-  const value = jsonFile(path, Schema.Unknown);
-  if (Predicate.isObject(value) && value.format === 'concord.journal') {
-    const scope = Predicate.isObject(value.scope) ? value.scope : undefined;
-    const unbound = scope !== undefined && (scope.kind === 'documents' || scope.kind === 'source') && scope.configPath === undefined && scope.configSource === undefined && scope.configDigest === undefined;
-    const historicalSource = scope?.kind === 'source' && scope.configPath === undefined && typeof scope.configSource === 'string' && typeof scope.configDigest === 'string' && scope.configDigest === digest(scope.configSource) && scope.configSource.trimStart().startsWith('{');
-    const oldOwner = Array.isArray(value.changes) && value.changes.some((change: unknown) => Predicate.isObject(change) && change.path === 'concord.json');
-    if (unbound || historicalSource || scope?.configPath === 'concord.json' || oldOwner) throw new ConcordError('JournalMigrationRequired', 'Historical journal requires explicit offline recovery before configuration migration; preserve the journal, locks, and files. Ordinary recover cannot process it.');
-  }
-  return decode(JournalSchema, value, path);
+  return jsonFile(path, JournalSchema);
 }
 // @concord-end
 
@@ -206,10 +197,7 @@ function currentJournal(path: string): Journal {
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function assertCurrentRuntimeFormat(root: string, privateDir = genericPrivateDirectorySync(root)): void {
   const journal = join(privateDir, 'journal.json');
-  const governanceMigration = join(privateDir, 'neutral-governance-migration-journal.json');
-  if (present(governanceMigration)) throw new ConcordError('CoordinationMigrationRequired', 'An unsupported interrupted transaction is present; preserve the journal, locks, and files. Recovery requires the matching historical tool version.');
   if (present(journal)) currentJournal(journal);
-  if (present(join(root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'concord.json is not a runtime configuration. No format conversion is provided; preserve original files, interrupted journals, and locks for handling with the matching tool version.');
 }
 
 // @concord-begin
@@ -222,7 +210,7 @@ export function discoverRoot(input?: string, initialize = false): string {
   assertNoSymlink(cursor);
   if (initialize || input !== undefined) return cursor;
   for (;;) {
-    if (present(join(cursor, 'concord.config.ts')) || present(join(cursor, 'concord.json'))) return cursor;
+    if (present(join(cursor, 'concord.config.ts'))) return cursor;
     const parent = dirname(cursor);
     if (parent === cursor) throw new ConcordError('ProjectNotFound', 'No Concord project configuration was found; run concord init in a Git worktree root');
     cursor = parent;
@@ -331,12 +319,11 @@ export class LocalRepository implements Repository {
       const coordinationDir = tracePrivateDirectorySync(this.root);
       // Only a new owner-free, lock-free repository may preview without creating private state.
       const emptyPreview = options.initialize === true && this.noWrite
-        && !['concord.config.ts', 'concord.json', 'docs', 'memory', 'DESIGN.md'].some(path => present(this.absolute(path)))
+        && !['concord.config.ts', 'docs', 'memory', 'DESIGN.md'].some(path => present(this.absolute(path)))
         && ![join(this.privateDir, 'lock.json'), join(this.privateDir, 'journal.json'), join(coordinationDir, PUBLICATION_LEASE), join(coordinationDir, 'publication-journal.json'), join(coordinationDir, 'multi-file-publication-journal.json')].some(present);
       this.previewWithoutState = emptyPreview;
       if (options.recover && options.reclaimPublication !== false) recoverPublicationLeaseSync(this.root);
       try {
-        assertLegacyTraceStateMigratedSync(this.root, 'repository');
         if (!this.optimistic) this.traceLease = acquireTraceLeaseSync(this.root, 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview, !options.recover && options.reclaimPublication !== false);
         this.revision = publicationRevision(this.coordinationDirectory);
       }
@@ -532,7 +519,6 @@ export class LocalRepository implements Repository {
     if (source?.access === 'read-only') throw new ConcordError('ReadOnlyMemorySource', `Memory source ${source.name} is read-only: ${path}`);
   }
   private currentSnapshot(): ConfigSnapshot {
-    if (present(join(this.root, 'concord.json'))) throw new ConcordError('ProjectMigrationRequired', 'Unsupported project configuration appeared; preserve it and use the matching tool version');
     const source = this.read('concord.config.ts');
     if (source === undefined) throw new ConcordError('ProjectNotFound', 'Project configuration disappeared');
     return snapshot('concord.config.ts', source, this.privateDir);
@@ -1072,8 +1058,8 @@ export function initialize(repo: Repository, dryRun = false, options: Initialize
   for (const path of config.runner.sourceFiles) repo.absolute(path);
   for (const source of config.memorySources ?? []) if (source.access === 'read-only' && !existsSync(repo.absolute(source.path))) throw new ConcordError('MemorySourceUnavailable', `Read-only Memory source must already exist: ${source.path}`);
   const active = options.adoptConstitution === true;
-  const constitution = initialConstitutionSource({ body: options.constitutionBody ?? templateBody('constitution', 'Project'), active, reason: options.constitutionReason, impact: options.constitutionImpact, sources: options.constitutionSources });
-  const paths: Record<string, string> = { 'concord.config.ts': renderTypeScriptConfig(config), 'docs/constitution.md': constitution, 'docs/concord.md': onboardingGuide, ...projectTemplateFiles() };
+  const constitution = initialConstitution({ body: options.constitutionBody ?? templateBody('constitution', 'Project'), active, reason: options.constitutionReason, impact: options.constitutionImpact, sources: options.constitutionSources, memorySources: config.memorySources, exists: path => repo.read(path) !== undefined });
+  const paths: Record<string, string> = { 'concord.config.ts': renderTypeScriptConfig(config), 'docs/constitution.md': constitution.source, ...(constitution.decision === undefined ? {} : { [constitution.decision.path]: constitution.decision.after! }), 'docs/concord.md': onboardingGuide, ...projectTemplateFiles() };
   if (options.design === true) paths['DESIGN.md'] = templateBody('project-design', 'Project');
   const preservedPaths: string[] = [];
   for (const [path, name] of [['docs/README.md', 'project-index'], ['docs/concepts.md', 'concepts'], ['docs/architecture.md', 'project-architecture']] as const) {

@@ -48,7 +48,6 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
     const add = (to: string, relation: string) => edges.push({ from: doc.path, to, relation });
     switch (m.kind) {
       case 'use-case': add(m.feature, 'feature'); break;
-      case 'feature': if (m.origin) add(m.origin, 'origin'); break;
       case 'roadmap': if (m.adoptedAs) add(m.adoptedAs, 'adopted-as'); break;
       case 'design': for (const ref of m.decision?.targets ?? []) add(ref, 'decides'); break;
       case 'memory': for (const ref of m.promotions) add(ref, 'promotion'); if (m.supersededBy) add(m.supersededBy, 'superseded-by'); break;
@@ -122,7 +121,7 @@ const pathOf = (ref: string) => ref.split('#')[0]!;
 function findTraced(trace: ReturnType<typeof buildTrace>, selector: string, kind?: DocumentRecord['metadata']['kind']): DocumentRecord {
   try { return findDocument(trace.documents, selector, kind); }
   catch (cause) {
-    const skipped = cause instanceof ConcordError && cause.code === 'DocumentNotFound' ? trace.findings.find(finding => finding.path === selector && ['ConstitutionMigrationRequired', 'ResearchMigrationRequired', 'InvalidData'].includes(finding.code)) : undefined;
+    const skipped = cause instanceof ConcordError && cause.code === 'DocumentNotFound' ? trace.findings.find(finding => finding.path === selector && ['InvalidData', 'InvalidPlacement'].includes(finding.code)) : undefined;
     if (skipped !== undefined) throw new ConcordError(skipped.code, skipped.message);
     throw cause;
   }
@@ -134,13 +133,14 @@ function pageOwner(references: ReturnType<typeof referenceResolver>, page: strin
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 function belongsTo(references: ReturnType<typeof referenceResolver>, trace: ReturnType<typeof buildTrace>, selectedPaths: ReadonlySet<string>, ref: string): boolean {
+  if (pathOf(ref) === CONSTITUTION_PATH) return selectedPaths.has(CONSTITUTION_PATH);
   try {
     const owner = references.resolve(ref);
     return selectedPaths.has(owner.path) || (owner.metadata.kind === 'use-case' && selectedPaths.has(owner.metadata.feature));
   } catch (cause) {
     // Findings retain missing/malformed endpoints. Partial displays must not
     // turn one unresolved edge into a failure to inspect a healthy subject.
-    if (!trace.complete && cause instanceof ConcordError && ['ReferenceNotFound', 'InvalidReferenceTarget', 'AnchorNotFound', 'InvalidReference', 'InvalidData', 'ResearchMigrationRequired', 'ConstitutionMigrationRequired'].includes(cause.code)) return false;
+    if (!trace.complete && cause instanceof ConcordError && ['ReferenceNotFound', 'InvalidReferenceTarget', 'AnchorNotFound', 'InvalidReference', 'InvalidData', 'InvalidPlacement'].includes(cause.code)) return false;
     throw cause;
   }
 }

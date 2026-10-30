@@ -37,6 +37,8 @@ import {
   supersededMemory,
 } from './memory-state.js';
 import { parseReference, resolveReference } from './refs.js';
+import { CONSTITUTION_PATH, clauseIndex, showConstitution } from './constitution.js';
+import { memoryWriteDirectory } from './memory-write.js';
 import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { rebaseAdoptedMarkdown } from './adoption.js';
 import { inspectDocumentProjections, projectionRecord } from './document-projection.js';
@@ -117,7 +119,7 @@ function memory(record: DocumentRecord): MemoryMeta {
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
-// @concord-implements docs/feature/document-packages/use-case/migrate-document-discovery.md
+// @concord-implements docs/feature/document-packages/use-case/discover-managed-documents.md
 export function loadDocuments(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
   return inRepositorySnapshot(repo, () => loadDocumentsUnderSnapshot(repo, kinds));
 }
@@ -164,7 +166,7 @@ export interface DocumentInventory {
 /** Diagnostic records and completeness travel together across projection boundaries. */
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
-// @concord-implements docs/feature/document-packages/use-case/migrate-document-discovery.md
+// @concord-implements docs/feature/document-packages/use-case/discover-managed-documents.md
 export function diagnoseDocuments(repo: Repository): DocumentInventory {
   return inRepositorySnapshot(repo, () => {
     const documents: DocumentRecord[] = [], findings: Finding[] = [];
@@ -177,7 +179,7 @@ export function diagnoseDocuments(repo: Repository): DocumentInventory {
         const record = result.value;
         if (currentDocument(repo, record)) documents.push(record);
       } catch (cause) {
-        if (!(cause instanceof ConcordError) || !['InvalidData', 'ResearchMigrationRequired', 'ConstitutionMigrationRequired'].includes(cause.code)) throw cause;
+        if (!(cause instanceof ConcordError) || !['InvalidData', 'InvalidPlacement'].includes(cause.code)) throw cause;
         findings.push({ code: cause.code, path: input.path, message: cause.message });
       }
     }
@@ -255,6 +257,14 @@ function finding(findings: Finding[], code: string, path: string, message: strin
   findings.push({ code, path, message });
 }
 
+/** A Decision may be promoted to the constitution or one of its clauses and paragraphs. */
+function constitutionPromotion(repo: Repository, target: string): string | undefined {
+  const parsed = parseReference(target);
+  if (parsed.path !== CONSTITUTION_PATH) return undefined;
+  if (parsed.anchor !== undefined && !clauseIndex(showConstitution(repo).clauses).has(parsed.anchor)) throw new ConcordError('AnchorNotFound', `Constitution clause ${parsed.anchor} does not exist`);
+  return parsed.ref;
+}
+
 function checkRef(
   findings: Finding[], repo: Repository, documents: readonly DocumentRecord[], owner: DocumentRecord,
   ref: string, kinds: readonly DocumentKind[], label: string,
@@ -307,12 +317,6 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
 
     const metadata = document.metadata;
     if (metadata.kind === 'use-case') checkRef(findings, repo, documents, document, metadata.feature, ['feature'], 'feature');
-    if (metadata.kind === 'feature' && metadata.origin !== undefined) {
-      const origin = checkRef(findings, repo, documents, document, metadata.origin, ['roadmap'], 'origin');
-      if (origin?.metadata.kind === 'roadmap' && (origin.metadata.state !== 'adopted' || origin.metadata.adoptedAs !== document.path)) {
-        finding(findings, 'InvalidState', document.path, 'Feature origin does not identify a Roadmap adopted as this Feature');
-      }
-    }
     if (metadata.kind === 'design') {
       try { repo.files(`${posix.dirname(document.path)}/plans`); readDesignPlanPaths(repo.root, posix.dirname(document.path), metadata.alternatives); }
       catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidPlan', document.path, String(cause)); }
@@ -368,6 +372,11 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       if (metadata.state === 'superseded' && metadata.supersededBy === undefined && metadata.supersession === undefined) finding(findings, 'InvalidState', document.path, 'Superseded Memory without a target must declare supersession statement and source');
       if (new Set(metadata.promotions).size !== metadata.promotions.length) finding(findings, 'InvalidState', document.path, 'Current promotions must be unique');
       for (const target of metadata.promotions) {
+        if (target.split('#')[0] === CONSTITUTION_PATH) {
+          try { constitutionPromotion(repo, target); }
+          catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidReference', document.path, `promotion: ${cause instanceof Error ? cause.message : String(cause)}`); }
+          continue;
+        }
         const resolved = checkRef(findings, repo, documents, document, target, CONTRACT_KINDS, 'promotion');
         if (resolved?.metadata.kind === 'roadmap' && resolved.metadata.state !== 'planned') finding(findings, 'InvalidState', document.path, `Promotion targets adopted Roadmap ${target}`);
       }
@@ -455,13 +464,13 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   let metadata: DocumentMeta;
   let template: string = kind;
   switch (kind) {
-    case 'feature': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind }; break;
+    case 'feature': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, kind }; break;
     case 'use-case': {
       const feature = findDocument(documents, required(input.feature, 'feature'), 'feature');
       const placement = documentPlacementError('feature', feature.path);
       if (placement !== undefined) throw new ConcordError('InvalidPlacement', placement);
       path = defaultDocumentPath(kind, id, feature.path);
-      metadata = { format: 'concord.document/v1', id, title, createdAt, kind, feature: feature.path };
+      metadata = { format: 'concord.document/v1', id, title, kind, feature: feature.path };
       break;
     }
     case 'roadmap': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'planned' }; break;
@@ -471,16 +480,12 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
       path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]] };
       break;
     }
-    case 'engineering': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind }; break;
+    case 'engineering': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, kind }; break;
     case 'research': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, ...(input.observedAt === undefined ? {} : { observedAt: required(input.observedAt, 'observedAt') }), sources: input.sources ?? [] }; break;
     case 'memory': {
       const memoryKind = input.memoryKind;
       if (memoryKind === undefined) throw new ConcordError('InvalidInput', 'memoryKind is required');
-      const memorySources = repo.config.memorySources ?? [{ name: 'project', provider: 'local-files' as const, path: 'memory', access: 'read-write' as const, defaultWrite: true }];
-      const chosen = input.memorySource === undefined ? memorySources.filter((source) => source.defaultWrite === true) : memorySources.filter((source) => source.name === input.memorySource || source.path === input.memorySource);
-      if (chosen.length !== 1) throw new ConcordError(input.memorySource === undefined ? 'DefaultMemorySourceInvalid' : 'MemorySourceNotFound', `Expected one Memory write source, found ${chosen.length}`);
-      if (chosen[0]!.access !== 'read-write') throw new ConcordError('ReadOnlyMemorySource', `Memory source ${chosen[0]!.name} is read-only`);
-      path = `${chosen[0]!.path}/${id}.md`;
+      path = `${memoryWriteDirectory(repo.config.memorySources, input.memorySource)}/${id}.md`;
       template = memoryKind;
       metadata = { format: 'concord.document/v1', id, title, createdAt, kind, memoryKind, state: memoryKind === 'note' ? 'captured' : memoryKind === 'problem' ? 'open' : 'current', epoch: 0, promotions: [], history: [] };
       break;
@@ -671,7 +676,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   if (documents.some(document => document.metadata.kind === 'feature' && document.metadata.id === id)) throw new ConcordError('DocumentExists', `Feature id ${id} already exists`);
   if (repo.read(featurePath) !== undefined) throw new ConcordError('DocumentExists', `${featurePath} already exists`);
   const at = now();
-  const feature: DocumentMeta = { format: 'concord.document/v1', id, title: roadmap.metadata.title, createdAt: at, kind: 'feature', origin: roadmap.path };
+  const feature: DocumentMeta = { format: 'concord.document/v1', id, title: roadmap.metadata.title, kind: 'feature' };
   const adopted: DocumentMeta = { ...roadmap.metadata, state: 'adopted', adoptedAs: featurePath };
   const roadmapDirectory = posix.dirname(roadmap.path);
   const featureDirectory = posix.dirname(featurePath);
@@ -791,6 +796,11 @@ export function promoteMemory(repo: Repository, selector: string, target: string
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'memory');
   if (memory(record).state === 'captured') throw new ConcordError('InvalidMemoryState', 'Captured Memory cannot be promoted; activate it first');
+  const constitution = constitutionPromotion(repo, target);
+  if (constitution !== undefined) {
+    if (memory(record).memoryKind !== 'decision') throw new ConcordError('InvalidMemoryState', 'Only a Decision can be promoted to the constitution');
+    return changed(repo, 'promote-memory', record, promotedMemory(memory(record), constitution), record.body, dryRun);
+  }
   const owner = resolveReference(repo, documents, target, CONTRACT_KINDS);
   if (owner.metadata.kind === 'roadmap' && owner.metadata.state !== 'planned') throw new ConcordError('InvalidRoadmapState', 'Only a planned Roadmap can receive a promotion');
   const canonical = parseReference(target).ref;

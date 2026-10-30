@@ -88,7 +88,10 @@ function decodeNode(record: DocumentRecord, owners: readonly DocumentRecord[], r
     throw new TraceFormatError({ path, subject: "decision", message: "decision.selected must be one declared alternative" });
   }
   const relations: Record<string, readonly string[]> = {};
-  if (metadata.kind === "feature" && metadata.origin !== undefined) relations.buildsOn = [metadata.origin];
+  if (metadata.kind === "feature") {
+    const adopted = owners.flatMap(owner => owner.metadata.kind === "roadmap" && owner.metadata.adoptedAs === path ? [owner.path] : []).sort();
+    if (adopted.length > 0) relations.buildsOn = adopted;
+  }
   if (metadata.kind === "use-case") relations.composes = [featurePath!];
   if (metadata.kind === "design" && metadata.decision !== undefined) {
     relations.selectedPlan = [readDesignPlanPaths(root, posix.dirname(path), metadata.alternatives).get(metadata.decision.selected)!];
