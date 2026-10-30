@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File, OpenOptions};
-use std::io;
+use std::io::{self, Read};
 use std::num::NonZeroUsize;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Component, Path, PathBuf};
@@ -13,6 +13,7 @@ use napi_derive::napi;
 const REVISION: &str = "91aec4960ed27516962cf1dc918307f57faef15d";
 const ABI: &str = "concord-hawdb-1";
 const LOCK: &str = "owner.hawdb.lock";
+const IDENTITY: &str = "concord.identity";
 const CREATE_ENTRIES: &str = "CREATE TABLE concord_cache_entries (namespace TEXT NOT NULL, cache_key TEXT NOT NULL, payload BYTEA NOT NULL, sequence BIGINT NOT NULL, PRIMARY KEY (namespace, cache_key))";
 const CREATE_SCHEMA: &str = "CREATE TABLE concord_cache_schema (version TEXT NOT NULL PRIMARY KEY)";
 const INSERT_SCHEMA: &str = "INSERT INTO concord_cache_schema (version) VALUES ($1)";
@@ -228,12 +229,34 @@ fn all_rows(db: &Database, memory: bool) -> napi::Result<Vec<Row>> {
     for namespace in namespaces(memory) { rows.extend(read_rows(db, namespace)?); }
     Ok(rows)
 }
+// Admission is bound to the pinned engine's current directory protocol.
+// Refuse before opening the engine, whose writable open can otherwise convert a directory.
+fn admit_manifest(path: &Path) -> napi::Result<()> {
+    let expected_identity = cache_identity();
+    let mut identity = Vec::new();
+    File::open(path.join(IDENTITY)).map_err(|error| if error.kind() == io::ErrorKind::NotFound {
+        err("HawdbIncompatible", "cache identity is unavailable")
+    } else { unavailable(error) })?
+        .take(expected_identity.len() as u64 + 1).read_to_end(&mut identity).map_err(unavailable)?;
+    if identity != expected_identity.as_bytes() {
+        return Err(err("HawdbIncompatible", "cache identity differs"));
+    }
+    let mut file = File::open(path.join("manifest.hawdb")).map_err(unavailable)?;
+    let expected = b"HAWDB_BRANCH_PROJECT_V2\n";
+    let mut prefix = [0_u8; 24];
+    let count = file.read(&mut prefix).map_err(unavailable)?;
+    if count < expected.len() || &prefix[..expected.len()] != expected {
+        return Err(err("HawdbIncompatible", "cache directory format is unavailable"));
+    }
+    Ok(())
+}
+fn cache_identity() -> String { format!("{REVISION}/{ABI}/1") }
 fn schema(db: &Database) -> napi::Result<()> {
     let output = db.begin_read_transaction().map_err(engine_open_error)?.query_sql_with_params_bounded(SELECT_SCHEMA, &[], Some(2))
         .map_err(|error| if engine_busy(&error) { engine_open_error(error) } else { err("HawdbIncompatible", error) })?;
     if output.rows.len() != 1 { return Err(err("HawdbIncompatible", "cache schema version missing")); }
     match output.rows.get(0, "version") {
-        Some(ValueRef::String("1")) => (),
+        Some(ValueRef::String(value)) if value == cache_identity() => (),
         _ => return Err(err("HawdbIncompatible", "unsupported cache schema")),
     }
     read_rows(db, namespaces(false)[0]).map(|_| ()).or_else(|_| {
@@ -243,7 +266,7 @@ fn schema(db: &Database) -> napi::Result<()> {
 fn initialize(db: &mut Database) -> napi::Result<()> {
     db.query_sql(CREATE_ENTRIES).map_err(unavailable)?;
     db.query_sql(CREATE_SCHEMA).map_err(unavailable)?;
-    db.query_sql_with_params(INSERT_SCHEMA, &[Value::String("1".into())]).map_err(unavailable)?;
+    db.query_sql_with_params(INSERT_SCHEMA, &[Value::String(cache_identity())]).map_err(unavailable)?;
     Ok(())
 }
 
@@ -265,10 +288,15 @@ impl CacheBridge {
             return Err(err("HawdbIncompatible", "existing database is incomplete"));
         }
         if !manifest_exists && lock_exists && read_only { return Err(unavailable("database manifest is absent")); }
+        if manifest_exists { admit_manifest(path)?; }
         inspect_lock(path, !read_only)?;
         let mut db = Database::open_with_config(path, config(read_only)).map_err(engine_open_error)?;
         if manifest_exists { schema(&db)?; }
-        else { initialize(&mut db)?; }
+        else {
+            initialize(&mut db)?;
+            db.checkpoint().map_err(unavailable)?;
+            fs::write(path.join(IDENTITY), cache_identity()).map_err(unavailable)?;
+        }
         lease.verify()?;
         Ok(Self { handle: Mutex::new(Handle { db: Some(db), lease: Some(lease), path: Some(path.to_owned()), memory: false, read_only, writes: 0, churn: 0, poisoned: false }) })
     }

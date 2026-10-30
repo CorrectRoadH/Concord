@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
-import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from './cache-file.js';
-import { HawdbFailure, openHawdb, type HawdbDatabase } from './hawdb-native.js';
+import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly, inspectCacheClear, deleteInspectedCache } from './cache-file.js';
+import { HawdbFailure, openHawdb, acquireHawdbClearGuard, type HawdbDatabase } from './hawdb-native.js';
 import type { Repository } from './shared.js';
 import { ensureGenericPrivateDirectorySync } from './coordination.js';
 import { requestCacheMaintenance } from './cache-maintenance.js';
@@ -29,7 +29,15 @@ export function withPersistentCache<A>(repo: Repository, writable: boolean, use:
   if (scope !== undefined && writable && !scope.writable) { closeRepositoryCache(repo); scope = undefined; }
   if (scope === undefined) {
     if (writable) ensureGenericPrivateDirectorySync(repo.root, repo.privateDir);
-    const database = openHawdb(path, { readOnly: !writable, create: writable });
+    let database: HawdbDatabase;
+    try { database = openHawdb(path, { readOnly: !writable, create: writable }); }
+    catch (cause) {
+      if (!writable || !(cause instanceof HawdbFailure) || cause.code !== 'HawdbIncompatible') throw cause;
+      const guard = acquireHawdbClearGuard(path);
+      try { deleteInspectedCache(inspectCacheClear(repo.privateDir), () => guard.verify()); }
+      finally { guard.close(); }
+      database = openHawdb(path, { readOnly: false, create: true });
+    }
     scope = { database, writable };
     scopes.set(repo, scope);
   }
