@@ -59,9 +59,13 @@
 | `init` | 每个仓库只执行一次 |
 | `recover` | 只在异常中断后执行 |
 | `feedback sync`、`feedback import` | 耗时由远端决定；本地部分由 `feedback list` 场景覆盖 |
-| `test run`、`docs work` | 耗时由被执行的 runner 与检查决定 |
+| `test run`、`test verify`、`docs work` | 耗时由被执行的 runner 与检查决定 |
 | `view` | 长期运行的服务，请求耗时由 `web-workbench` 场景测量 |
 | `lsp` | 长期运行的编辑器服务 |
+| `new`、`design`、`roadmap` | 创建文档、裁决与采用是低频写入，耗时由模板与前像核验决定 |
+| `show` | 与 `trace show` 读取同一份文档与关系，由 `local-sdlc/trace-show-fresh` 覆盖 |
+| `use-case` | 步骤查看与改写是低频操作，解析路径与 `docs check` 相同 |
+| `panel` | 长期运行的终端界面，读取由工作区服务提供，见 [Herdr 面板](../../feature/herdr-panel/README.md) |
 
 ## 测量路径
 
