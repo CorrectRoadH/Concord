@@ -98,7 +98,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | Installation | 安装包根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自包根）、模板与 skill 资源、工作进程入口 |
 | Workspace | worktree 根、Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
 | Sources | 路径安全的读取、乐观快照与返回前核验 |
-| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有 |
+| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作政策、概念目录、步骤重命名规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
 | Cache | 解析缓存（内存或持久）、只读远端观察快照、持久命名空间的独占写入，三种能力分开提供 |
 | Git | 状态、diff、提交与 worktree 操作 |
 | OwnedProcess | 用 `unstable/process` 的 ChildProcess 启动与发送信号；Concord 负责后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出也核对后代 |
