@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Schema } from "effect";
-import { resourcePath } from "../../base/installation/index.js";
+import { resourcePath } from "../../app/index.js";
 
 const TOPICS = ['init', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback'] as const;
 const TopicSchema = Schema.Literals(TOPICS);

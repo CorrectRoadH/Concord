@@ -1,3 +1,4 @@
+import { runApplication } from './support/repository.js';
 import { createConsumer } from './support/consumer.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -8,7 +9,9 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { getViewFile, getWorkspaceSnapshot } from "../src/app/index.js";
 import { cacheStatus, scanAnnotations, clearCache } from "../src/domain/tests/index.js";
-import { checkDocuments, closeIssue, createDocument, linkFeedbackFeature, loadDocuments, setAuthor } from "../src/domain/documents/index.js";
+import { checkDocuments, loadDocuments, setAuthor } from "../src/domain/documents/index.js";
+import { createDocument } from "../src/app/index.js";
+import { closeIssue, linkFeedbackFeature } from "../src/domain/issues/index.js";
 import { renderDocument } from "../src/model/index.js";
 import { mergeFeedbackCache, readFeedbackCache } from "../src/base/cache/index.js";
 import { openHawdb } from "../src/base/cache/index.js";
@@ -17,7 +20,8 @@ import { type RemoteFeedback } from "../src/model/index.js";
 import { type FeedbackTransport } from "../src/domain/feedback/index.js";
 import { setConfig, showConfig } from "../src/app/index.js";
 import { ConcordError } from "../src/model/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { humanOutput } from "../src/entry/cli/index.js";
 import { projectConfigPath } from './support.js';
 
@@ -79,14 +83,14 @@ test('directed feedback reads recover from a brief cache writer and keep source 
     });
     const cache = join(root, '.git/concord/cache.hawdb');
     writer = openHawdb(cache, { readOnly: false, create: false });
-    const reading = Effect.runPromise(getViewFile(root, path));
-    await Effect.runPromise(Effect.sleep('50 millis'));
+    const reading = runApplication(getViewFile(root, path));
+    await runApplication(Effect.sleep('50 millis'));
     writer.close(); writer = undefined;
     const readable = await reading;
     assert.equal(readable.feedback?.remote?.body, 'Cached remote body');
 
     writer = openHawdb(cache, { readOnly: false, create: false });
-    const unavailable = await Effect.runPromise(getViewFile(root, path));
+    const unavailable = await runApplication(getViewFile(root, path));
     assert.equal(unavailable.feedback?.remote, null);
     assert.equal(unavailable.feedback?.document.metadata.source?.body, 'First source body');
     assert.equal(unavailable.feedback?.document.body, '# Local\n\nLocal notes\n');
@@ -100,13 +104,13 @@ test('feedback workspace stays tolerant and readonly when its cache table or unr
   const uninitialized = mkdtempSync(join(tmpdir(), 'concord-feedback-uninitialized-'));
   try {
     execFileSync('git', ['init', '-q', uninitialized]);
-    assert.deepEqual((await Effect.runPromise(getWorkspaceSnapshot(uninitialized))).feedback, []);
+    assert.deepEqual((await runApplication(getWorkspaceSnapshot(uninitialized))).feedback, []);
     open(root, repo => createDocument(repo, 'issue', { id: 'local-note', title: 'Local note' }));
     mkdirSync(join(root, 'memory'), { recursive: true });
     writeFileSync(join(root, 'memory', 'broken.md'), '---\nformat: concord.document/v1\nid: broken\n---\n');
     const cache = join(root, '.git', 'concord', 'cache.hawdb');
     assert.equal(existsSync(cache), false);
-    const workspace = await Effect.runPromise(getWorkspaceSnapshot(root));
+    const workspace = await runApplication(getWorkspaceSnapshot(root));
     assert.deepEqual(workspace.feedback.map(item => item.document.metadata.id), ['local-note']);
     assert.equal(existsSync(cache), false, 'workspace polling must not create a feedback cache');
     rmSync(join(root, 'memory', 'broken.md'));
@@ -128,7 +132,7 @@ test('feedback workspace stays tolerant and readonly when its cache table or unr
 test('sync binds and imports atomically while repeat sync preserves editable local state and first source snapshot', async () => {
   const root = fixture();
   try {
-    const first = await Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
+    const first = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
     assert.equal(first.imported, 1);
     assert.deepEqual([...first.changedPaths].sort(), ['concord.config.ts', 'docs/issues/feedback-github-9001.md']);
     open(root, repo => {
@@ -141,7 +145,7 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
       const edited = loadDocuments(repo).find(item => item.metadata.id === 'feedback-github-9001')!;
       setAuthor(repo, edited.path, '# Local investigation\n', edited.digest);
     });
-    const second = await Effect.runPromise(syncFeedback(root, 'github-main', {
+    const second = await runApplication(syncFeedback(root, 'github-main', {
       transport: githubTransport([issue({ title: 'Changed remote title', body: 'Remote rewrite', state: 'closed', updated_at: '2026-09-14T01:00:00Z' })]),
       credential: 'test-token',
     }));
@@ -163,14 +167,14 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
       assert.equal(uncached.availability, 'unavailable');
       assert.equal(uncached.remote, null);
     });
-    const afterClear = await Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue({ state: 'open', updated_at: '2026-09-14T02:00:00Z' })]), credential: 'test-token' }));
+    const afterClear = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue({ state: 'open', updated_at: '2026-09-14T02:00:00Z' })]), credential: 'test-token' }));
     assert.equal(afterClear.imported, 0, 'cache clear must not erase durable source identity');
     open(root, repo => {
       assert.equal(listFeedback(repo)[0]?.document.metadata.status, 'closed', 'remote open state must not reopen local feedback');
       const current = showConfig(repo);
       setConfig(repo, { ...current.config, feedbackConnections: [...(current.config.feedbackConnections ?? []), { id: 'github-copy', provider: 'github', credentialEnv: 'TEST_GITHUB_TOKEN', owner: 'acme', repo: 'project' }] }, current.digest);
     });
-    const otherConnection = await Effect.runPromise(syncFeedback(root, 'github-copy', { transport: githubTransport([issue({ updated_at: '2026-09-14T03:00:00Z' })]), credential: 'test-token' }));
+    const otherConnection = await runApplication(syncFeedback(root, 'github-copy', { transport: githubTransport([issue({ updated_at: '2026-09-14T03:00:00Z' })]), credential: 'test-token' }));
     assert.equal(otherConnection.imported, 0);
     open(root, repo => assert.equal(listFeedback(repo).length, 1, 'the same remote identity across connections remains one local owner'));
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -182,19 +186,19 @@ test('dry-run and failed or stale fetches write neither documents nor cache', as
   try {
     const configPath = projectConfigPath(root);
     const before = readFileSync(join(root, configPath), 'utf8');
-    const dry = await Effect.runPromise(syncFeedback(root, 'github-main', { dryRun: true, transport: githubTransport([issue()]), credential: 'test-token' }));
+    const dry = await runApplication(syncFeedback(root, 'github-main', { dryRun: true, transport: githubTransport([issue()]), credential: 'test-token' }));
     assert.equal(dry.imported, 1);
     assert.equal(readFileSync(join(root, configPath), 'utf8'), before);
     assert.equal(existsSync(join(root, 'docs/issues/feedback-github-9001.md')), false);
     assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
 
-    await assert.rejects(Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([], { failList: true }), credential: 'test-token' })), error => errorCode(error, 'InjectedFailure'));
+    await assert.rejects(runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([], { failList: true }), credential: 'test-token' })), error => errorCode(error, 'InjectedFailure'));
     assert.equal(readFileSync(join(root, configPath), 'utf8'), before);
 
     let reached!: () => void, release!: () => void;
     const atList = new Promise<void>(resolve => { reached = resolve; });
     const wait = new Promise<void>(resolve => { release = resolve; });
-    const running = Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()], { wait, reached }), credential: 'test-token' }));
+    const running = runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()], { wait, reached }), credential: 'test-token' }));
     await atList;
     open(root, repo => {
       const current = showConfig(repo);
@@ -206,12 +210,12 @@ test('dry-run and failed or stale fetches write neither documents nor cache', as
     assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
 
     writeFileSync(join(root, '.git/concord/cache.hawdb'), 'not a HawDB directory');
-    const cacheFailed = await Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
+    const cacheFailed = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
     assert.equal(cacheFailed.imported, 1);
     assert.ok(cacheFailed.warnings.some(warning => warning.includes('cache could not be updated')));
     assert.match(humanOutput(cacheFailed), /Fetched: 1; imported: 1/u);
     assert.match(humanOutput(cacheFailed), /Warnings:/u);
-    const retried = await Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
+    const retried = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
     assert.equal(retried.imported, 0);
     assert.ok(retried.warnings.some(warning => warning.includes('cache could not be updated')));
     open(root, repo => assert.equal(loadDocuments(repo).filter(document => document.metadata.kind === 'issue' && document.metadata.source !== undefined).length, 1));
@@ -222,7 +226,7 @@ test('dry-run and failed or stale fetches write neither documents nor cache', as
 test('cache compares real instants, rejects unsafe paths, and duplicate source identities are findings plus sync failures', async () => {
   const root = fixture();
   try {
-    await Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
+    await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' }));
     open(root, repo => {
       const stale: RemoteFeedback = { provider: 'github', instance: 'https://api.github.com', id: '9001', url: 'https://github.com/acme/project/issues/7', title: 'Stale', body: '', state: 'open', updatedAt: '2026-09-14T00:00:00Z' };
       mergeFeedbackCache(repo, 'github-main', [stale]);
@@ -232,7 +236,7 @@ test('cache compares real instants, rejects unsafe paths, and duplicate source i
       writeFileSync(join(root, 'docs/issues/duplicate-feedback.md'), renderDocument(duplicate, original.body));
       assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => finding.code === 'DuplicateFeedbackSource'));
     });
-    await assert.rejects(Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' })), error => errorCode(error, 'FeedbackIdentityConflict'));
+    await assert.rejects(runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue()]), credential: 'test-token' })), error => errorCode(error, 'FeedbackIdentityConflict'));
     rmSync(join(root, 'docs/issues/duplicate-feedback.md'));
     open(root, repo => clearCache(repo));
     const dangling = join(root, '.git/concord/cache.hawdb');

@@ -8,19 +8,18 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { setConfig, showConfig } from "../src/app/index.js";
-import { ConcordError } from "../src/model/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
 import { fetchFresh } from './support.js';
 
 if (process.platform === 'win32') {
   // @use-case docs/feature/feedback/use-case/triage-feedback.md
   test('Windows reports gh capability missing while API feedback remains available', async () => {
+    const { runApplication } = await import('./support/repository.js');
+    const { ConcordError } = await import('../src/model/index.js');
     const { checkGhConnection } = await import("../src/domain/feedback/feedback-gh.js");
     const { fetchFeedback } = await import("../src/domain/feedback/feedback-providers.js");
     const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
-    await assert.rejects(Effect.runPromise(checkGhConnection(process.cwd(), connection)), (cause) => cause instanceof ConcordError && cause.code === 'GhPlatformUnsupported');
-    const api = await Effect.runPromise(fetchFeedback({ id: 'github-api', provider: 'github', credentialEnv: 'TEST_TOKEN', owner: 'acme', repo: 'widgets' }, {
+    await assert.rejects(runApplication(checkGhConnection(process.cwd(), connection)), (cause) => cause instanceof ConcordError && cause.code === 'GhPlatformUnsupported');
+    const api = await runApplication(fetchFeedback({ id: 'github-api', provider: 'github', credentialEnv: 'TEST_TOKEN', owner: 'acme', repo: 'widgets' }, {
       credential: 'fixture',
       transport: (request) => Effect.succeed({ status: 200, headers: {}, body: request.url.endsWith('/widgets') ? { id: 42 } : [] }),
     }));
@@ -68,6 +67,9 @@ process.env.GH_TOKEN = 'fixture-token';
 process.env.GH_DEBUG = 'api';
 process.env.GH_REPO = 'attacker/elsewhere';
 
+const { LocalRepository, initialize, runApplication } = await import('./support/repository.js');
+const { setConfig, showConfig } = await import('../src/app/index.js');
+const { ConcordError } = await import('../src/model/index.js');
 const { checkGhConnection, fetchGhFeedback } = await import("../src/domain/feedback/feedback-gh.js");
 const { syncFeedback } = await import("../src/domain/feedback/feedback.js");
 const { startViewServer } = await import("../src/entry/http/view-server.js");
@@ -94,7 +96,7 @@ async function waitForCall(after: number): Promise<void> {
 }
 async function waitForSlot(): Promise<void> {
   for (let attempt = 0; attempt < 100; attempt++) {
-    try { await Effect.runPromise(checkGhConnection(consumer, connection)); return; }
+    try { await runApplication(checkGhConnection(consumer, connection)); return; }
     catch (cause) { if (!errorCode(cause, 'GhBusy')) throw cause; }
     await new Promise((resolveWait) => setTimeout(resolveWait, 25));
   }
@@ -105,10 +107,10 @@ async function waitForSlot(): Promise<void> {
 test('real gh process fixture uses isolated scope, fixed requests, strict identity, and atomic publication', async () => {
   try {
     configure();
-    const checked = await Effect.runPromise(checkGhConnection(consumer, connection));
+    const checked = await runApplication(checkGhConnection(consumer, connection));
     assert.equal(checked.target, 'acme/widgets');
     assert.equal(existsSync(join(consumer, 'docs/issues/feedback-github-101.md')), false, 'check must not import or bind');
-    const receipt = await Effect.runPromise(syncFeedback(consumer, connection.id));
+    const receipt = await runApplication(syncFeedback(consumer, connection.id));
     assert.equal(receipt.imported, 1);
     assert.equal(receipt.connection.provider, 'github');
     assert.equal(receipt.connection.repositoryId, '42');
@@ -125,16 +127,16 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
       assert.deepEqual(call.args.slice(0, 7), ['api', '--hostname', 'github.com', '--method', 'GET', '--include', call.args[6]]);
     }
     writeFileSync(scenario, JSON.stringify({ badScope: true }));
-    await assert.rejects(Effect.runPromise(fetchGhFeedback(consumer, connection)), (cause) => errorCode(cause, 'FeedbackScopeMismatch'));
+    await assert.rejects(runApplication(fetchGhFeedback(consumer, connection)), (cause) => errorCode(cause, 'FeedbackScopeMismatch'));
     writeFileSync(scenario, JSON.stringify({ repositoryId: 43 }));
-    await assert.rejects(Effect.runPromise(syncFeedback(consumer, connection.id)), (cause) => errorCode(cause, 'ConnectionIdentityMismatch'));
+    await assert.rejects(runApplication(syncFeedback(consumer, connection.id)), (cause) => errorCode(cause, 'ConnectionIdentityMismatch'));
     const configured = new LocalRepository(consumer);
     try { assert.equal(configured.config.feedbackConnections?.[0]?.provider === 'github' ? configured.config.feedbackConnections[0].repositoryId : undefined, '42'); }
     finally { configured.close(); }
     writeFileSync(scenario, JSON.stringify({ wrongName: true }));
-    await assert.rejects(Effect.runPromise(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhTargetInaccessible'));
+    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhTargetInaccessible'));
     writeFileSync(scenario, JSON.stringify({ auth: true }));
-    await assert.rejects(Effect.runPromise(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhNotAuthenticated') && !String(cause).includes('SECRET-DO-NOT-PRINT'));
+    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhNotAuthenticated') && !String(cause).includes('SECRET-DO-NOT-PRINT'));
     writeFileSync(scenario, '{}');
     const entry = fileURLToPath(new URL('../dist/entry.js', import.meta.url));
     const cli = (...args: readonly string[]): unknown => JSON.parse(execFileSync(process.execPath, ['--import', 'tsx', entry, '--root', consumer, '--json', ...args], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 })) as unknown;
@@ -149,16 +151,16 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     assert.notEqual(rejected.status, 0);
     assert.equal((JSON.parse(rejected.stderr.trim()) as { error: string }).error, 'InvalidOption');
     writeFileSync(scenario, JSON.stringify({ oversize: true }));
-    await assert.rejects(Effect.runPromise(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhLimitExceeded'));
+    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhLimitExceeded'));
     writeFileSync(scenario, JSON.stringify({ totalLimit: true }));
-    await assert.rejects(Effect.runPromise(fetchGhFeedback(consumer, connection)), (cause) => errorCode(cause, 'GhLimitExceeded'));
+    await assert.rejects(runApplication(fetchGhFeedback(consumer, connection)), (cause) => errorCode(cause, 'GhLimitExceeded'));
     writeFileSync(scenario, JSON.stringify({ hang: true }));
     const controller = new AbortController();
-    const cancelled = Effect.runPromise(fetchGhFeedback(consumer, connection), { signal: controller.signal });
+    const cancelled = runApplication(fetchGhFeedback(consumer, connection), { signal: controller.signal });
     setTimeout(() => controller.abort(), 800);
     await assert.rejects(cancelled);
     writeFileSync(scenario, '{}');
-    assert.equal((await Effect.runPromise(checkGhConnection(consumer, connection))).target, 'acme/widgets', 'slot must be reusable after confirmed cancellation');
+    assert.equal((await runApplication(checkGhConnection(consumer, connection))).target, 'acme/widgets', 'slot must be reusable after confirmed cancellation');
     const server = await startViewServer({ root: consumer, host: '127.0.0.1', port: 0 });
     const endpoint = `http://127.0.0.1:${server.port}/api/action`;
     const post = (signal?: AbortSignal) => fetchFresh(endpoint, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'feedback.check', connection: connection.id }), signal });
@@ -185,9 +187,9 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
     } finally { await server.close(); }
     process.env.TMPDIR = isolatedTmp;
     writeFileSync(scenario, JSON.stringify({ lockCleanup: true }));
-    await assert.rejects(Effect.runPromise(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhCleanupUnconfirmed'));
+    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhCleanupUnconfirmed'));
     const count = readCalls().length;
-    await assert.rejects(Effect.runPromise(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhCleanupUnconfirmed'));
+    await assert.rejects(runApplication(checkGhConnection(consumer, connection)), (cause) => errorCode(cause, 'GhCleanupUnconfirmed'));
     assert.equal(readCalls().length, count, 'poisoned slot must not start another process');
   } finally {
     try { const { chmodSync } = await import('node:fs'); chmodSync(isolatedTmp, 0o700); } catch { /* fixture may already be removed */ }

@@ -5,9 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument, resolveReference } from "../src/domain/documents/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
-import { buildTrace, documentShow, renderReview, requireValidTrace, traceGaps, traceShow } from "../src/domain/trace/index.js";
+import { resolveReference } from "../src/domain/documents/index.js";
+import { createDocument } from "../src/app/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
+import { buildTrace, requireValidTrace } from "../src/domain/trace/index.js";
+import { documentShow, renderReview, traceGaps, traceShow } from "../src/app/index.js";
 import { referenceResolver } from "../src/domain/documents/index.js";
 
 function naiveGaps(repo: LocalRepository) {

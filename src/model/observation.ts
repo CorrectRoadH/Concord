@@ -41,6 +41,6 @@ export const RelevanceSchema = Schema.Union([
 export type Relevance = typeof RelevanceSchema.Type;
 
 /** Builds an observation and enforces that incomplete results carry at least one named gap. */
-export function observation<T>(value: T, inputs: string, gaps: readonly string[], current: boolean, observedAt = new Date().toISOString()): Observation<T> {
+export function observation<T>(value: T, inputs: string, gaps: readonly string[], current: boolean, observedAt: string): Observation<T> {
   return { value, inputs, complete: gaps.length === 0, gaps: [...new Set(gaps)].sort(), observedAt, current };
 }

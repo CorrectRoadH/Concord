@@ -1,10 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
+import { openWriteRepository } from "../../app/index.js";
 import { Effect, Option } from "effect";
 import { Command, Flag, Prompt } from "effect/unstable/cli";
-import { initialize, LocalRepository } from "../../base/workspace/index.js";
+
+import { initialize } from "../../app/index.js";
 import { ConcordError, RunnerSchema } from "../../model/index.js";
-import { adoptConstitution } from "../../domain/constitution/index.js";
+import { adoptConstitution } from "../../app/index.js";
 import { root, optional, many, body, jsonBody, emit, sync } from "./cli-base.js";
 import { withRepo } from "./cli-repository.js";
 
@@ -33,7 +35,7 @@ const init = Command.make('init', {
   const confirmed = args.yes || !interactive || (yield* Prompt.run(Prompt.confirm({ message: `Create ${preview.changedPaths.length} files?`, initial: true })));
   if (!confirmed) return { operation: 'init-cancelled', cancelled: true, dryRun: true, changedPaths: [], plannedPaths: preview.changedPaths };
   yield* sync(() => repo.close());
-  const writer = yield* Effect.acquireRelease(sync(() => new LocalRepository(repo.root, { initialize: true })), (opened) => Effect.sync(() => opened.close()));
+  const writer = yield* Effect.acquireRelease(openWriteRepository(repo.root, { initialize: true }), (opened) => Effect.sync(() => opened.close()));
   return yield* sync(() => writer.snapshot(() => {
     for (const preimage of preimages) if (writer.read(preimage.path) !== preimage.source) throw new ConcordError('PreimageChanged', `${preimage.path} changed since init preview; review a fresh preview`);
     return initialize(writer, false, options);

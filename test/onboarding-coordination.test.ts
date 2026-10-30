@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { acquireTraceLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../src/base/publication/index.js";
 
 // @use-case docs/feature/project-onboarding/use-case/initialize-project.md

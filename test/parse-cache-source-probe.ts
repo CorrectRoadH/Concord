@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import { LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
 import { loadDocuments, inspectDocumentRecords } from "../src/domain/documents/index.js";
 import { decodeDocumentSource } from "../src/domain/documents/index.js";
 import { headingAnchors, inspectSteps } from "../src/domain/documents/index.js";

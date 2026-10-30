@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { closeGitBaselineCache, getGitDiff, getGitStatus, type GitBaselineCache } from "../src/base/git/index.js";
+import { closeGitBaselineCache, getGitDiff, getGitStatus, type GitBaselineCache } from "../src/app/index.js";
 import { caseDiscriminator, deriveTestReference } from "../src/model/index.js";
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

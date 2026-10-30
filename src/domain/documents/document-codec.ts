@@ -9,6 +9,3 @@ import { documentProjection, projectionRecord } from "./document-projection.js";
 export function decodeDocumentSource(path: string, source: string): DocumentRecord | undefined {
   return projectionRecord(path, documentProjection(path, source));
 }
-
-
-

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { startupData } from "../../app/startup/index.js";
 import { enableCompileCache } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -12,23 +11,7 @@ import { type StartupData } from "../../model/index.js";
 // unwritable caches as an optimization failure, without changing CLI results.
 enableCompileCache(process.env.NODE_COMPILE_CACHE ?? join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord', 'node-compile-cache'));
 
-const source = import.meta.url.endsWith('.ts');
-const digest = (url: URL): string => createHash('sha256').update(readFileSync(url)).digest('hex');
 const args = process.argv.slice(2);
-
-async function startupData(): Promise<StartupData | undefined> {
-  try {
-    const location = source ? '../../../dist/startup-data.js' : '../../startup-data.js';
-    // This is generated executable package code, not consumer-authored JSON.
-    // The build strictly decodes every recorded process result before emission.
-    const data = (await import(new URL(location, import.meta.url).href) as { default: StartupData }).default;
-    if (data.format !== 'concord.startup/v1' || digest(new URL('../../../package.json', import.meta.url)) !== data.packageDigest) return;
-    for (const [file, expected] of Object.entries(source ? data.sourceFiles : data.files)) {
-      if (digest(new URL(file, import.meta.url)) !== expected) return;
-    }
-    return data;
-  } catch { return; }
-}
 
 function selectedGroup(data: StartupData): string | undefined {
   // Let Effect own parsing. This conservative scan only chooses a module graph;

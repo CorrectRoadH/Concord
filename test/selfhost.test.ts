@@ -9,9 +9,9 @@ import { Effect, Schema } from 'effect';
 import { scanAnnotations } from "../src/domain/tests/index.js";
 import { scanCode } from "../src/domain/code/index.js";
 import { inlineLinks, relativeMarkdownLink } from "../src/domain/constitution/index.js";
-import { traceGaps } from "../src/domain/trace/index.js";
+import { traceGaps } from "../src/app/index.js";
 import { loadDocuments } from "../src/domain/documents/index.js";
-import { LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
 import { readWritingPolicy } from "../src/domain/writing/index.js";
 import { projectConfigPath, readProjectConfig } from './support.js';
 

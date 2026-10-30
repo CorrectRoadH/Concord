@@ -1,3 +1,5 @@
+import { openWriteRepository, openReadRepository } from "../../base/workspace/index.js";
+import { type Publication } from "../../base/publication/index.js";
 import { Effect } from "effect";
 import { readFeedbackCache, mergeFeedbackCache } from "../../base/cache/index.js";
 import { FeedbackConnectionSchema, FeedbackSourceSchema, RemoteFeedbackSchema, feedbackIdentity, type feedback_schema_FeedbackConnection as FeedbackConnection, type FeedbackItem, type FeedbackSource, type RemoteFeedback } from "../../model/index.js";
@@ -37,9 +39,9 @@ function withRepository<A>(
   root: string,
   use: (repo: LocalRepository) => Effect.Effect<A, ConcordError>,
   dryRun: boolean,
-): Effect.Effect<A, ConcordError> {
+): Effect.Effect<A, ConcordError, Publication> {
   return Effect.acquireRelease(
-    attempt('feedback.openRepository', () => new LocalRepository(root, { dryRun })),
+    openWriteRepository(root, { dryRun }),
     (repo) => Effect.sync(() => repo.close()),
   ).pipe(Effect.flatMap(repo => Effect.acquireRelease(
     attempt('feedback.snapshot', () => repo.beginSnapshot()),
@@ -143,8 +145,8 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
   root: string,
   connectionId: string,
   options: FeedbackSyncOptions = {},
-): Effect.fn.Return<FeedbackSyncReceipt, ConcordError> {
-  const observed = yield* withRepository(root, (repo) => attempt('feedback.snapshot', () => configSnapshot(repo, connectionId)), true);
+): Effect.fn.Return<FeedbackSyncReceipt, ConcordError, Publication> {
+  const observed = yield* Effect.acquireUseRelease(openReadRepository(root, { access: 'read', dryRun: true }), repo => attempt('feedback.snapshot', () => repo.snapshot(() => configSnapshot(repo, connectionId))), repo => Effect.sync(() => repo.close()));
   const fetched = observed.connection.provider === 'github' && observed.connection.transport === 'gh'
     ? yield* fetchGhFeedback(root, observed.connection, options.url)
     : yield* fetchFeedback(observed.connection, {
@@ -216,7 +218,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
 // @concord-begin
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 export const checkFeedbackConnection = Effect.fn('feedback.check')(function*(root: string, connectionId: string): Effect.fn.Return<{ readonly connectionId: string; readonly provider: 'github'; readonly transport: 'gh'; readonly target: string; readonly checkedAt: string }, ConcordError> {
-  const observed = yield* withRepository(root, (repo) => attempt('feedback.checkSnapshot', () => configSnapshot(repo, connectionId)), true);
+  const observed = yield* Effect.acquireUseRelease(openReadRepository(root, { access: 'read', dryRun: true }), repo => attempt('feedback.checkSnapshot', () => repo.snapshot(() => configSnapshot(repo, connectionId))), repo => Effect.sync(() => repo.close()));
   if (observed.connection.provider !== 'github' || observed.connection.transport !== 'gh') return yield* Effect.fail(new ConcordError('FeedbackCheckUnsupported', 'Connection checks are available only for GitHub CLI connections'));
   return yield* checkGhConnection(root, observed.connection);
 });

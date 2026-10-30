@@ -8,7 +8,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { setConfig, showConfig } from "../src/app/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('packed public CLI adds gh connection, checks scope, and executes shared feedback action offline', { skip: process.platform === 'win32' }, () => {

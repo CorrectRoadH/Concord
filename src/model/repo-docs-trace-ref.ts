@@ -1,3 +1,4 @@
+import { parseReference } from "./reference.js";
 import { Data, Result, Schema, SchemaIssue } from "effect";
 
 import { repositoryDirname } from "./repo-path.js";
@@ -7,19 +8,7 @@ import { type DocsNodeKind, type TraceNode, type TraceSnapshot } from "./repo-do
 const REPO_REF_BRAND = "concord/RepoRef";
 
 function isCanonicalRepoRef(value: string): boolean {
-  if (value.trim() !== value || value.length === 0 || value.includes("\\") || value.startsWith("/")) return false;
-  const hashes = [...value.matchAll(/#/gu)];
-  if (hashes.length > 1) return false;
-  const hash = value.indexOf("#");
-  const path = hash < 0 ? value : value.slice(0, hash);
-  const anchor = hash < 0 ? undefined : value.slice(hash + 1);
-  if (path.length === 0 || path.endsWith("/") || path.includes("//") || path.includes("\0")) return false;
-  if (path.split("/").some((part) => part === "" || part === "." || part === "..")) return false;
-  return anchor === undefined || (
-    anchor.length > 0 &&
-    anchor.trim() === anchor &&
-    !/[#/?\\\s]/u.test(anchor)
-  );
+  try { parseReference(value); return true; } catch { return false; }
 }
 
 export const RepoRefSchema = Schema.String.pipe(

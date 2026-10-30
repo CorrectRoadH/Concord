@@ -1,9 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { Command } from "effect/unstable/cli";
-import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../../domain/tests/index.js";
+import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../../app/index.js";
 import { ConcordError } from "../../model/index.js";
-import { scanCode } from "../../domain/code/index.js";
+import { scanCode } from "../../app/index.js";
 import { sync } from "./cli-base.js";
 import { withRepo, withReadRepo } from "./cli-repository.js";
 

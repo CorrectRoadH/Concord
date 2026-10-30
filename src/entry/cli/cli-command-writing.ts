@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/manage-writing.md
-import { checkWriting } from "../../domain/writing/index.js";
-import { showWriting, setWriting, writingIndex } from "../../domain/writing/index.js";
-import { readWritingPolicy } from "../../domain/writing/index.js";
+import { checkWriting } from "../../app/index.js";
+import { showWriting, setWriting, writingIndex } from "../../app/index.js";
+import { readWritingPolicy } from "../../app/index.js";
 import { Option } from "effect";
 import { Command } from "effect/unstable/cli";
 import { text, optional, body, sync, expected } from "./cli-base.js";

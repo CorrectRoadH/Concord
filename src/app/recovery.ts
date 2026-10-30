@@ -1,12 +1,13 @@
-import * as recovery from "../base/publication/repo-docs-trace-relation-mutation.js";
+import { openWriteRepository } from "../base/workspace/index.js";
+import * as recovery from "../base/publication/index.js";
 import { lstatSync } from "node:fs";
 import { join } from "node:path";
 import { Effect } from "effect";
-import { acquireTraceLeaseSync, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../base/publication/coordination.js";
-import { CoordinationError } from "../base/publication/file-lease.js";
+import { acquireTraceLeaseSync, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../base/publication/index.js";
+import { CoordinationError } from "../base/publication/index.js";
 import { ConcordError, failure } from "../model/index.js";
-import { assertCurrentRuntimeFormat, discoverRoot, LocalRepository } from "../base/workspace/index.js";
-import { inspectRunner } from "../base/publication/run-coordination.js";
+import { assertCurrentRuntimeFormat, discoverRoot } from "../base/workspace/index.js";
+import { inspectRunner } from "../base/publication/index.js";
 
 
 export function pendingJournals(root: string): readonly string[] {
@@ -53,7 +54,7 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
       return { operation: 'recover', status: 'trace-recovered', receipt };
     }
     return yield* Effect.acquireUseRelease(
-      Effect.try({ try: () => new LocalRepository(selected.root, { recover: true, reclaimPublication: false }), catch: failure }),
+      openWriteRepository(selected.root, { recover: true, reclaimPublication: false }),
       repo => Effect.try({ try: () => repo.recover(), catch: failure }),
       repo => Effect.sync(() => repo.close()),
     );

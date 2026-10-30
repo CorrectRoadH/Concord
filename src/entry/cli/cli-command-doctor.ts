@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#结果
 import { Command } from "effect/unstable/cli";
-import { doctor } from "../../domain/onboarding/index.js";
+import { doctor } from "../../app/index.js";
 import { sync } from "./cli-base.js";
 import { withReadRepo } from "./cli-repository.js";
 

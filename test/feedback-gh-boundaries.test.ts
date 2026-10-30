@@ -107,8 +107,8 @@ async function child(scenario: Scenario): Promise<void> {
   try {
     process.chdir(temporary);
     process.env.PATH = ['', 'relative', modules, join(consumer, 'bin'), symlinkDirectory, linkedExecutable, gitBin, ...(scenario === 'missing' ? [] : [trusted])].join(delimiter);
-    const [{ syncFeedback, listFeedback }, { initialize, LocalRepository }, { setConfig, showConfig }, { ConcordError }] = await Promise.all([
-      import("../src/domain/feedback/feedback.js"), import("../src/base/workspace/storage.js"), import("../src/app/editing.js"), import("../src/model/shared.js"),
+    const [{ syncFeedback, listFeedback }, { initialize, LocalRepository, runApplication }, { setConfig, showConfig }, { ConcordError }] = await Promise.all([
+      import("../src/domain/feedback/feedback.js"), import("./support/repository.js"), import("../src/app/editing.js"), import("../src/model/shared.js"),
     ]);
     const first = new LocalRepository(consumer, { initialize: true });
     try { initialize(first); } finally { first.close(); }
@@ -126,7 +126,7 @@ async function child(scenario: Scenario): Promise<void> {
     const issuePath = join(consumer, 'docs', 'issues', 'feedback-github-1001.md');
     if (scenario === 'trusted-path') process.env.PATH = [join(consumer, 'bin'), modules, gitBin].join(delimiter);
     if (scenario === 'trusted-path' || scenario === 'normal') {
-      const result = await Effect.runPromise(syncFeedback(consumer, connection.id));
+      const result = await runApplication(syncFeedback(consumer, connection.id));
       assert.equal(result.connection.provider, 'github');
       assert.equal(result.connection.provider === 'github' ? result.connection.repositoryId : undefined, '42');
       if (scenario === 'normal') {
@@ -139,17 +139,17 @@ async function child(scenario: Scenario): Promise<void> {
     } else if (scenario === 'switch') {
       const api: FeedbackTransport = request => Effect.succeed({ status: 200, headers: {}, body: request.url.endsWith('/widgets') ? { id: 42 } : [issue(1)] });
       configure({ id: connection.id, provider: 'github', transport: 'api', credentialEnv: 'FIXTURE_TOKEN', owner: 'acme', repo: 'widgets' });
-      const initial = await Effect.runPromise(syncFeedback(consumer, connection.id, { transport: api, credential: 'fixture-token' }));
+      const initial = await runApplication(syncFeedback(consumer, connection.id, { transport: api, credential: 'fixture-token' }));
       assert.equal(initial.imported, 1);
       const originalIssue = readFileSync(issuePath, 'utf8');
       configure({ ...connection, repositoryId: '42' });
-      const repeat = await Effect.runPromise(syncFeedback(consumer, connection.id));
+      const repeat = await runApplication(syncFeedback(consumer, connection.id));
       assert.equal(repeat.imported, 0);
       assert.equal(repeat.connection.provider === 'github' ? repeat.connection.repositoryId : undefined, '42');
       assert.equal(readFileSync(issuePath, 'utf8'), originalIssue);
       assert.equal(withRepo(repo => listFeedback(repo).filter(item => item.document.metadata.source !== undefined).length), 1);
     } else if (scenario === 'cas') {
-      const running = Effect.runPromise(syncFeedback(consumer, connection.id));
+      const running = runApplication(syncFeedback(consumer, connection.id));
       try {
         for (let attempt = 0; attempt < 300 && !existsSync(readyPath); attempt++) await new Promise(resolve => setTimeout(resolve, 10));
         assert.equal(existsSync(readyPath), true, 'fixture did not reach page read');
@@ -164,7 +164,7 @@ async function child(scenario: Scenario): Promise<void> {
       assert.equal(withRepo(repo => repo.config.feedbackConnections?.[0]?.provider === 'github' ? repo.config.feedbackConnections[0].repositoryId : undefined), undefined);
     } else {
       const code = scenario === 'missing' ? 'GhUnavailable' : scenario === 'old-version' || scenario === 'bad-help' || scenario === 'bad-protocol' ? 'GhProtocolInvalid' : scenario === 'budget' ? 'GhLimitExceeded' : 'ProviderRequestFailed';
-      await assert.rejects(Effect.runPromise(syncFeedback(consumer, connection.id)), cause => cause instanceof ConcordError && cause.code === code);
+      await assert.rejects(runApplication(syncFeedback(consumer, connection.id)), cause => cause instanceof ConcordError && cause.code === code);
       assert.equal(readFileSync(configPath, 'utf8'), originalConfig, 'failure must not bind the connection');
       assert.equal(existsSync(issuePath), false, 'failure must not publish the first page');
       assert.equal(withRepo(repo => listFeedback(repo).filter(item => item.document.metadata.source !== undefined).length), 0);

@@ -11,7 +11,8 @@ import { cacheStatus, clearCache, scanAnnotations } from "../src/domain/tests/in
 import { acquireHawdbClearGuard, hawdbIdentity, openHawdb } from "../src/base/cache/index.js";
 import { getWorkspaceSnapshot } from "../src/app/index.js";
 import { deleteInspectedCache, inspectCacheClear } from "../src/base/cache/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { ensureGenericPrivateDirectorySync } from "../src/base/publication/index.js";
 
 const CacheReport = Schema.Struct({ status: Schema.String });

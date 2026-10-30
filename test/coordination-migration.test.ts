@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { Effect } from "effect";
 import { renderTypeScriptConfig } from "../src/base/workspace/index.js";
-import { LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
 import { acquireTraceLeaseSync, genericJournalPath, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../src/base/publication/index.js";
 import { mutateTraceFiles, recoverTrace, traceDigest, withTraceReadLease } from "../src/base/publication/index.js";
 import { TraceRecoveryConflict, TraceRecoveryRequired } from "../src/model/index.js";

@@ -2,10 +2,10 @@
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { listFeedback, syncFeedback } from "../../domain/feedback/index.js";
+import { listFeedback, syncFeedback } from "../../app/index.js";
 import { FeedbackConnectionSchema } from "../../model/index.js";
 import { setConfig, showConfig } from "../../app/index.js";
-import { documentShow } from "../../domain/trace/index.js";
+import { documentShow } from "../../app/index.js";
 import { ConcordError, decode } from "../../model/index.js";
 import { executeViewAction } from "../../app/index.js";
 import { root, text, optional, id, emit, sync, cached, viewRoot } from "./cli-base.js";

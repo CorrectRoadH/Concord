@@ -4,8 +4,10 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { addPage, createDocument, loadDocuments, resolveReference, showPage } from "../src/domain/documents/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { addPage, loadDocuments, resolveReference, showPage } from "../src/domain/documents/index.js";
+import { createDocument } from "../src/app/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 
 // @use-case docs/feature/document-packages/use-case/organize-freeform-research.md
 test('research starts without a questionnaire and supports nested freeform pages with strict owner boundaries', t => {

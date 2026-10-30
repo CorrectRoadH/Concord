@@ -7,8 +7,9 @@ import { dirname, join, resolve } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
 import { Effect, Schema } from 'effect';
-import { createDocument } from "../../src/domain/documents/index.js";
-import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { createDocument } from "../../src/app/index.js";
+import { LocalRepository } from "../support/repository.js";
+import { initialize } from "../../src/app/index.js";
 import { readProjectConfig, writeProjectConfig } from '../support.js';
 
 const inline = `let label: import('p5').default.Element;

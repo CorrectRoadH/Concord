@@ -1,7 +1,7 @@
 import { createRequire } from "node:module";
 import type { Nodes } from "mdast";
 import type * as Esbuild from "esbuild";
-import { ConcordError } from "../../model/shared.js";
+import { ConcordError } from "../../model/index.js";
 import { fromMarkdown } from "../../model/index.js";
 
 

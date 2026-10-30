@@ -5,7 +5,7 @@ import { Effect, Fiber, Predicate, Schema } from "effect";
 import { ConcordError, decode, failure, objectDigest, type AnnotatedCase, type Repository } from "../../model/index.js";
 import { OwnedProcess, hasConfirmedOwnedGroupCleanup, type OwnedProcessResult } from "./owned-process.js";
 import { analysisBudgets, type language_server_config_LanguageServer as LanguageServer } from "../../model/index.js";
-import { LspConnection } from "../../model/index.js";
+import { LspConnection } from "./lsp-protocol.js";
 import { bindSymbol, documentSymbols, flattenSymbols, OutgoingSchema, PrepareSchema, validRange, type CallItem, type DocumentSymbol, type PositionEncoding, type SymbolLocator } from "../../model/index.js";
 import { sourceUri, uriPath } from "./source-uri.js";
 import { type CodeDeclaration } from "../../model/index.js";

@@ -1,3 +1,4 @@
+import { packageBin } from '../scripts/package-location.js';
 import { packConcord, installConcord } from './installed-package.js';
 import { tmpdir } from 'node:os';
 import { after as nodeAfter, before as nodeBefore } from 'node:test';
@@ -10,7 +11,7 @@ import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
 import { parseTypeScriptConfig, renderTypeScriptConfig } from "../src/base/workspace/index.js";
 import { ProjectSchema, decode, type shared_ProjectConfig as ProjectConfig } from "../src/model/index.js";
 import { type WorkspaceProjection } from "../src/model/index.js";
-import { WorkspaceProjectionSnapshotSchema } from "../src/entry/server/index.js";
+import { WorkspaceProjectionSnapshotSchema } from "../src/model/index.js";
 
 type TestEffect = Effect.Effect<void, unknown, never>;
 
@@ -209,7 +210,7 @@ export function installedConcordCli(): string {
       const install = join(scratch, 'consumer'); mkdirSync(install);
       writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
       installConcord(install, packConcord(scratch));
-      sharedInstalledCli = join(install, 'node_modules/concord-sdlc/dist/entry.js');
+      sharedInstalledCli = packageBin(join(install, 'node_modules/concord-sdlc'));
       sharedInstalledScratch = scratch;
       return sharedInstalledCli;
     } catch (cause) { rmSync(scratch, { recursive: true, force: true }); throw cause; }

@@ -7,7 +7,9 @@ import { dirname, join, sep } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { Effect } from 'effect';
 import { readProjectConfig, writeProjectConfig } from './support.js';
-import { LocalRepository, initialize, readRepositoryFileSync } from "../src/base/workspace/index.js";
+import { readRepositoryFileSync } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 
 function fixture(t: TestContext): { container: string; parent: string; root: string } {
   const container = realpathSync(mkdtempSync(join(tmpdir(), 'concord-path-cost-')));

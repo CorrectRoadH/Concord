@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { Effect, Option, Schema } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ConcordError, decode, failure } from "../../model/index.js";
-import { discoverRoot } from "../../base/workspace/index.js";
+import { discoverRoot } from "../../app/index.js";
 import { humanOutput } from "./presentation.js";
 
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({

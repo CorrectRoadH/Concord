@@ -1,3 +1,5 @@
+import { runApplication } from './support/repository.js';
+import { openWriteRepository } from '../src/base/workspace/index.js';
 import { caseDiscriminator, deriveTestReference } from "../src/model/index.js";
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -8,9 +10,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from "../src/domain/documents/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
-import { ViewJobManager } from "../src/entry/http/index.js";
+import { createDocument } from "../src/app/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
+import { ViewJobManager } from "../src/app/index.js";
 import { formatViewAddress, startViewServer, type ViewServerHandle } from "../src/entry/http/index.js";
 import { parseWorkspaceProjection, pollUntil, installedConcordCli } from './support.js';
 import { type WorkspaceProjection } from "../src/model/index.js";
@@ -413,7 +416,7 @@ test('view jobs preserve pre-spawn cancellation, serialize repository ownership,
   const root = initializedJobFixture();
   let held: LocalRepository | undefined;
   try {
-    const manager = new ViewJobManager(root);
+    const manager = new ViewJobManager(root, () => {}, selected => runApplication(openWriteRepository(selected)));
     const beforeSpawn = manager.start(viewJobCase);
     assert.equal(manager.cancel(beforeSpawn.id).state, 'cancelling');
     assert.equal((await waitFor(manager, beforeSpawn.id, ['cancelled'])).state, 'cancelled');

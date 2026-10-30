@@ -3,14 +3,14 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#原生测试-adapter
 import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { collectNativeTests, readNativeObservations } from "../../domain/tests/index.js";
-import { runCase } from "../../domain/tests/index.js";
-import { replayFix } from "../../domain/tests/index.js";
-import { buildTrace, requireValidTrace, selectCase } from "../../domain/trace/index.js";
+import { collectNativeTests, readNativeObservations } from "../../app/index.js";
+import { runCase } from "../../app/index.js";
+import { replayFix } from "../../app/index.js";
+import { buildTrace, requireValidTrace, selectCase } from "../../app/index.js";
 import { ConcordError } from "../../model/index.js";
-import { annotationSnippet } from "../../domain/onboarding/index.js";
-import { analysisView } from "../../domain/trace/index.js";
-import { scanCode } from "../../domain/code/index.js";
+import { annotationSnippet } from "../../app/index.js";
+import { analysisView } from "../../app/index.js";
+import { scanCode } from "../../app/index.js";
 import { text, many, id, sync, cached } from "./cli-base.js";
 import { withRepo, withReadRepo } from "./cli-repository.js";
 

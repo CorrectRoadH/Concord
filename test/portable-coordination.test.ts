@@ -1,3 +1,4 @@
+import { runApplication } from './support/repository.js';
 import { createConsumer } from './support/consumer.js';
 import { readProjectConfig, writeProjectConfig } from './support.js';
 import { installedConcordCli } from './support.js';
@@ -12,12 +13,13 @@ import { join, resolve } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { Effect, Schema } from 'effect';
 import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../src/base/publication/index.js";
-import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { beginRun, finalizeRun } from "../src/base/publication/index.js";
 import { runCase } from "../src/domain/tests/index.js";
 import { OwnedProcessLive } from "../src/base/process/index.js";
 import { buildTrace, requireValidTrace } from "../src/domain/trace/index.js";
-import { createDocument } from "../src/domain/documents/index.js";
+import { createDocument } from "../src/app/index.js";
 import { type FileLease } from "../src/base/publication/index.js";
 import { digest, failure } from "../src/model/index.js";
 import { waitForPublication } from "../src/base/publication/index.js";
@@ -84,7 +86,7 @@ test('acquisition waiting does not reclaim an owner that arrived after its first
   };
   syncBuiltinESMExports();
   try {
-    await assert.rejects(Effect.runPromise(waitForPublication(reclaimDead => Effect.try({
+    await assert.rejects(runApplication(waitForPublication(reclaimDead => Effect.try({
       try: () => new LocalRepository(root, { reclaimPublication: reclaimDead }), catch: failure,
     }))), { code: 'RepositoryBusy' });
     assert.ok(existsSync(join(path, `${token}.json`)));
@@ -245,7 +247,7 @@ test('recover reclaims a real reader killed after linking beside a dead writer',
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name cli-shared-operation-access
-test('ordinary CLI queries share ownership with a live reader', t => Effect.runPromise(Effect.sync(() => {
+test('ordinary CLI queries share ownership with a live reader', t => runApplication(Effect.sync(() => {
   const root = fixture(t);
   const setup = new LocalRepository(root);
   try { setup.snapshot(() => createDocument(setup, 'feature', { id: 'target', title: 'Target' })); }
@@ -267,7 +269,7 @@ test('ordinary CLI queries share ownership with a live reader', t => Effect.runP
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name recovery-reports-runner-blocker
-test('CLI recovery reports quarantined runner instead of claiming clean readiness', t => Effect.runPromise(Effect.sync(() => {
+test('CLI recovery reports quarantined runner instead of claiming clean readiness', t => runApplication(Effect.sync(() => {
   const root = fixture(t);
   const repo = new LocalRepository(root);
   try {
@@ -285,7 +287,7 @@ test('CLI recovery reports quarantined runner instead of claiming clean readines
 })));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('recovery preserves prepared and committed journals when runner cleanup is unknown', t => Effect.runPromise(Effect.sync(() => {
+test('recovery preserves prepared and committed journals when runner cleanup is unknown', t => runApplication(Effect.sync(() => {
   for (const phase of ['prepared', 'committed']) {
     const root = fixture(t);
     const repo = new LocalRepository(root);
@@ -323,7 +325,7 @@ test('recovery final verification reports a competing publication owner', async 
     if (++closes === 2) concurrent = acquireTraceLeaseSync(root, 'exclusive', 'between-recovery-and-verification');
   };
   try {
-    await assert.rejects(Effect.runPromise(recoverLocalState(root)), { code: 'RepositoryBusy' });
+    await assert.rejects(runApplication(recoverLocalState(root)), { code: 'RepositoryBusy' });
     assert.ok(concurrent);
     assert.ok(existsSync(join(concurrent.path, `${concurrent.owner.token}.json`)));
   } finally {
@@ -339,7 +341,7 @@ test('recovery preserves a new dead owner between dispatch and either recovery e
     if (trace) {
       execFileSync('git', ['-C', root, 'add', 'concord.config.ts']);
       execFileSync('git', ['-C', root, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
-      await assert.rejects(Effect.runPromise(mutateTraceFiles({ root, operation: 'stage-barrier', changes: [{ path: 'interrupted.md', bytes: 'planned\n' }], injectFailureAfterRename: 1 })), /injected interruption/);
+      await assert.rejects(runApplication(mutateTraceFiles({ root, operation: 'stage-barrier', changes: [{ path: 'interrupted.md', bytes: 'planned\n' }], injectFailureAfterRename: 1 })), /injected interruption/);
     }
     const publicationPath = join(tracePrivateDirectorySync(root), 'publication.lease');
     const original = fs.rmdirSync;
@@ -360,11 +362,11 @@ test('recovery preserves a new dead owner between dispatch and either recovery e
     };
     syncBuiltinESMExports();
     try {
-      await assert.rejects(Effect.runPromise(recoverLocalState(root)), { code: 'RepositoryBusy' });
+      await assert.rejects(runApplication(recoverLocalState(root)), { code: 'RepositoryBusy' });
       assert.ok(existsSync(join(publicationPath, `${token}.json`)), 'the selected engine must not perform an unreported second reclamation');
       if (trace) assert.ok(existsSync(join(tracePrivateDirectorySync(root), 'multi-file-publication-journal.json')));
     } finally { fs.rmdirSync = original; syncBuiltinESMExports(); }
-    const retried = await Effect.runPromise(recoverLocalState(root));
+    const retried = await runApplication(recoverLocalState(root));
     assert.deepEqual(retried.coordination.publication.reclaimedTokens, [token]);
     assert.equal(retried.status, trace ? 'trace-recovered' : 'clean');
   }
@@ -386,7 +388,7 @@ test('unknown lock state and repeated old close preserve a new owner', t => {
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 // @name shared-join-directory-replacement
-test('reader admission rechecks a replaced directory and writer release tolerates pending readers', t => Effect.runPromise(Effect.sync(() => {
+test('reader admission rechecks a replaced directory and writer release tolerates pending readers', t => runApplication(Effect.sync(() => {
   const root = fixture(t);
   for (const writerExitsBeforeValidation of [false, true]) {
     const first = acquireTraceLeaseSync(root, 'shared', 'first-reader')!;
@@ -473,7 +475,7 @@ test('wait for editor', async () => {
   writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], runner: { kind: 'command', argv: [process.execPath, '--test', '{file}'], timeoutMs: 15000, sourceFiles: [] } });
   const repo = new LocalRepository(root);
   const trace = repo.snapshot(() => buildTrace(repo, 'off', { includeCode: false })); requireValidTrace(trace);
-  const result = Effect.runPromise(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
+  const result = runApplication(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
   try {
     const deadline = Date.now() + 15000;
     while (!existsSync(join(root, '.git/concord/test-ready'))) {
@@ -494,7 +496,7 @@ test('wait for editor', async () => {
     // successfully cleaned-up process group locked forever.
     rmSync(join(root, '.git/concord/test-ready'));
     rmSync(join(root, '.git/concord/test-continue'));
-    const changedConfigRun = Effect.runPromise(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
+    const changedConfigRun = runApplication(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
     const rejected = assert.rejects(changedConfigRun, { code: 'PreimageChanged' });
     const configDeadline = Date.now() + 15000;
     try {

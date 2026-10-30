@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { checkWriting } from "../src/domain/writing/index.js";
 import { openHawdb } from "../src/base/cache/index.js";
 

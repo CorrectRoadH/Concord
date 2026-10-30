@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { checkWriting } from "../src/domain/writing/index.js";
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md

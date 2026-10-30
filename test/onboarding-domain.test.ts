@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from "../src/domain/documents/index.js";
+import { createDocument } from "../src/app/index.js";
 import { parseTypeScriptConfig } from "../src/base/workspace/index.js";
-import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 
 function consumer(run: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), 'concord-onboarding-'));

@@ -7,7 +7,8 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { scanCode } from "../src/domain/code/index.js";
 import type { Change, Repository } from "../src/model/index.js";
-import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 function consumer(): string {

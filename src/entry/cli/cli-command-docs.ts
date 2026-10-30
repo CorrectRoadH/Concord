@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
-import { checkWriting } from "../../domain/writing/index.js";
+import { checkWriting } from "../../app/index.js";
 
 import { Effect, Option } from "effect";
 import { Command } from "effect/unstable/cli";

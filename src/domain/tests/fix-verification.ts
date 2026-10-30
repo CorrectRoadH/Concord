@@ -7,7 +7,8 @@ import { dirname, join } from "node:path";
 
 import { Effect, Schema } from "effect";
 import { scanAnnotations } from "./annotations.js";
-import { closeIssue, readDocumentSelector } from "../documents/index.js";
+import { readDocumentSelector } from "../documents/index.js";
+import { closeIssue } from "../issues/index.js";
 import { executeCommand, requireRunner, withRunner } from "./evidence.js";
 import { safeRunnerEnvironment } from "../../base/process/index.js";
 import { type CommandEvidence } from "../../model/index.js";

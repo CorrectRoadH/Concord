@@ -1,0 +1,78 @@
+// Application operations used by transport adapters. Domain policy remains in its owner.
+import * as Module0 from "../base/workspace/index.js";
+import * as Module1 from "../domain/tests/index.js";
+import * as Module2 from "../domain/code/index.js";
+import * as Module3 from "../domain/concepts/index.js";
+import * as Module4 from "../domain/constitution/index.js";
+import * as Module5 from "../domain/writing/index.js";
+import * as Module6 from "../domain/documents/index.js";
+import * as Module7 from "../domain/designs/index.js";
+import * as Module8 from "../domain/feedback/index.js";
+import * as Module9 from "../domain/issues/index.js";
+import * as Module10 from "../domain/memory/index.js";
+import * as Module11 from "../domain/trace/index.js";
+import * as Module12 from "../domain/onboarding/index.js";
+import * as Module13 from "../base/publication/index.js";
+import * as Module14 from "../base/installation/index.js";
+import * as Module15 from "../base/process/index.js";
+export const discoverRoot: typeof Module0.discoverRoot = (...args) => Module0.discoverRoot(...args);
+export const cacheStatus: typeof Module1.cacheStatus = (...args) => Module1.cacheStatus(...args);
+export const clearCache: typeof Module1.clearCache = (...args) => Module1.clearCache(...args);
+export const previewCacheClear: typeof Module1.previewCacheClear = (...args) => Module1.previewCacheClear(...args);
+export const scanAnnotations: typeof Module1.scanAnnotations = (...args) => Module1.scanAnnotations(...args);
+export const scanCode: typeof Module2.scanCode = (...args) => Module2.scanCode(...args);
+export const indexConcepts: typeof Module3.indexConcepts = (...args) => Module3.indexConcepts(...args);
+export const setConcepts: typeof Module3.setConcepts = (...args) => Module3.setConcepts(...args);
+export const showConcepts: typeof Module3.showConcepts = (...args) => Module3.showConcepts(...args);
+export const adoptConstitution: typeof Module4.adoptConstitution = (...args) => Module4.adoptConstitution(...args);
+export const amendConstitution: typeof Module4.amendConstitution = (...args) => Module4.amendConstitution(...args);
+export const constitutionShow: typeof Module4.constitutionShow = (...args) => Module4.constitutionShow(...args);
+export const checkWriting: typeof Module5.checkWriting = (...args) => Module5.checkWriting(...args);
+export const loadDocuments: typeof Module6.loadDocuments = (...args) => Module6.loadDocuments(...args);
+export const readDocumentReference: typeof Module6.readDocumentReference = (...args) => Module6.readDocumentReference(...args);
+export const findDocument: typeof Module6.findDocument = (...args) => Module6.findDocument(...args);
+export const checkDesign: typeof Module7.checkDesign = (...args) => Module7.checkDesign(...args);
+export const decideDesign: typeof Module7.decideDesign = (...args) => Module7.decideDesign(...args);
+export const deferDesign: typeof Module7.deferDesign = (...args) => Module7.deferDesign(...args);
+export const formatDesign: typeof Module7.formatDesign = (...args) => Module7.formatDesign(...args);
+export const listFeedback: typeof Module8.listFeedback = (...args) => Module8.listFeedback(...args);
+export const syncFeedback: typeof Module8.syncFeedback = (...args) => Module8.syncFeedback(...args);
+export const openWriteRepository: typeof Module0.openWriteRepository = (...args) => Module0.openWriteRepository(...args);
+export const reopenIssue: typeof Module9.reopenIssue = (...args) => Module9.reopenIssue(...args);
+export const closeIssue: typeof Module9.closeIssue = (...args) => Module9.closeIssue(...args);
+export const linkIssue: typeof Module9.linkIssue = (...args) => Module9.linkIssue(...args);
+export const unlinkIssue: typeof Module9.unlinkIssue = (...args) => Module9.unlinkIssue(...args);
+export const closeFixedIssue: typeof Module1.closeFixedIssue = (...args) => Module1.closeFixedIssue(...args);
+export const activateMemory: typeof Module10.activateMemory = (...args) => Module10.activateMemory(...args);
+export const supersedeMemory: typeof Module10.supersedeMemory = (...args) => Module10.supersedeMemory(...args);
+export const listTemplates: typeof Module6.listTemplates = (...args) => Module6.listTemplates(...args);
+export const templateBody: typeof Module6.templateBody = (...args) => Module6.templateBody(...args);
+export const collectNativeTests: typeof Module1.collectNativeTests = (...args) => Module1.collectNativeTests(...args);
+export const readNativeObservations: typeof Module1.readNativeObservations = (...args) => Module1.readNativeObservations(...args);
+export const runCase: typeof Module1.runCase = (...args) => Module1.runCase(...args);
+export const replayFix: typeof Module1.replayFix = (...args) => Module1.replayFix(...args);
+export const buildTrace: typeof Module11.buildTrace = (...args) => Module11.buildTrace(...args);
+export const requireValidTrace: typeof Module11.requireValidTrace = (...args) => Module11.requireValidTrace(...args);
+export const selectCase: typeof Module11.selectCase = (...args) => Module11.selectCase(...args);
+export const annotationSnippet: typeof Module12.annotationSnippet = (...args) => Module12.annotationSnippet(...args);
+export const showWriting: typeof Module5.showWriting = (...args) => Module5.showWriting(...args);
+export const setWriting: typeof Module5.setWriting = (...args) => Module5.setWriting(...args);
+export const writingIndex: typeof Module5.writingIndex = (...args) => Module5.writingIndex(...args);
+export const readWritingPolicy: typeof Module5.readWritingPolicy = (...args) => Module5.readWritingPolicy(...args);
+export const waitForPublication: typeof Module13.waitForPublication = (...args) => Module13.waitForPublication(...args);
+export type LocalRepository = Module0.LocalRepository;
+export const openReadRepository: typeof Module0.openReadRepository = (...args) => Module0.openReadRepository(...args);
+export const resourcePath: typeof Module14.resourcePath = (...args) => Module14.resourcePath(...args);
+export const builtAssetRoot: typeof Module14.builtAssetRoot = (...args) => Module14.builtAssetRoot(...args);
+export const readRepositoryFileSync: typeof Module0.readRepositoryFileSync = (...args) => Module0.readRepositoryFileSync(...args);
+export function uriPath(repo: import('../model/index.js').Repository, uri: string): string;
+export function uriPath(repo: import('../model/index.js').Repository, uri: string, allowExternal: true): string | undefined;
+export function uriPath(repo: import('../model/index.js').Repository, uri: string, allowExternal = false): string | undefined {
+  return allowExternal ? Module15.uriPath(repo, uri, true) : Module15.uriPath(repo, uri);
+}
+export const readPublicationRevisionSync: typeof Module13.readPublicationRevisionSync = (...args) => Module13.readPublicationRevisionSync(...args);
+export const makeOwnedProcessService: typeof Module15.makeOwnedProcessService = (...args) => Module15.makeOwnedProcessService(...args);
+
+export function createReadRepository(root: string | undefined, options: import('../base/workspace/index.js').ReadRepositoryOptions) {
+  return new Module0.LocalRepository(root, options);
+}

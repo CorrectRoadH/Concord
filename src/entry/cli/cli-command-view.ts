@@ -3,8 +3,8 @@
 import { Effect, Option } from "effect";
 import { Command, Flag } from "effect/unstable/cli";
 import { ConcordError } from "../../model/index.js";
-import { serveViewServer } from "../http/index.js";
-import { viewAddresses } from "../http/index.js";
+import { ViewLauncher } from "./launchers.js";
+
 import { exportChangePreview } from "../../app/index.js";
 import { root, optional, emit, sync, viewRoot } from "./cli-base.js";
 
@@ -14,7 +14,8 @@ const view = Command.make('view', {
 }, args => Effect.gen(function*() {
   const settings = yield* root;
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view does not accept --dry-run'));
-  return yield* serveViewServer({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) }, settings.json));
+  const launcher = yield* ViewLauncher;
+  return yield* launcher.serve({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', ...server }, settings.json));
 })).pipe(Command.withDescription('Review local changes, or export a static committed comparison.'), Command.withSubcommands([
   Command.make('export', {
     base: Flag.string('base'), head: Flag.string('head').pipe(Flag.withDefault('HEAD')),

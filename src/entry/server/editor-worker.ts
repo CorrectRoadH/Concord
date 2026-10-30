@@ -1,8 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/use-editor-service.md#文件与资源边界
 import { Effect } from "effect";
-import { Job, editorLimits } from "./editor-protocol.js";
-import { computeEditor } from "./editor-compute.js";
+import { Job, editorLimits } from "../../model/editor/index.js";
+import { computeEditor } from "../../app/index.js";
 import { ConcordError, decode, failure } from "../../model/index.js";
 
 // One bounded request per process; the parent owns this process and its compiler group.

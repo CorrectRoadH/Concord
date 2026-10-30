@@ -3,8 +3,8 @@ import { appendFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { createConsumer } from './support/consumer.js';
-import { LocalRepository } from "../src/base/workspace/index.js";
-import { createDocument } from "../src/domain/documents/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { createDocument } from "../src/app/index.js";
 import { checkProject } from "../src/app/index.js";
 
 // @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#check-links

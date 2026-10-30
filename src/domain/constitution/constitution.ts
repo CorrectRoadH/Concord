@@ -10,7 +10,7 @@ import { mdxProse } from "../../base/process/index.js";
 import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/index.js";
 import { markdownBody } from "../../model/index.js";
 import { documentMarkdown, documentMarkdownProjection } from "../documents/index.js";
-import { constitutionDecisionChange } from "../memory/index.js";
+import { constitutionDecisionChange } from "../../model/index.js";
 import { loadDocuments } from "../documents/index.js";
 
 

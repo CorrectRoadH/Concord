@@ -4,10 +4,10 @@
 
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { reopenIssue, closeIssue, linkIssue, unlinkIssue } from "../../domain/documents/index.js";
-import { closeFixedIssue } from "../../domain/tests/index.js";
+import { reopenIssue, closeIssue, linkIssue, unlinkIssue } from "../../app/index.js";
+import { closeFixedIssue } from "../../app/index.js";
 
-import { knowledgeRecall } from "../../domain/issues/index.js";
+import { knowledgeRecall } from "../../app/index.js";
 
 import { ConcordError, IssueClosureSchema, MEMORY_RELATION_KINDS, decode } from "../../model/index.js";
 import { root, text, optional, many, id, sync } from "./cli-base.js";
@@ -16,7 +16,7 @@ import { withRepo } from "./cli-repository.js";
 const closureFlags = { kind: Flag.choice('kind', ['fixed', 'delivered', 'duplicate', 'declined', 'invalid', 'external-fixed', 'closed']).pipe(Flag.withDefault('closed')), memory: optional('memory'), target: optional('target'), proof: many('proof'), canonical: optional('canonical'), evidence: many('evidence'), dependency: optional('dependency'), version: optional('version'), reason: optional('reason') };
 
 import { type IssueError } from "../../model/index.js";
-import { type IssueCommandRequirements } from "../../domain/issues/index.js";
+import { type IssueCommandRequirements } from "../../app/index.js";
 import * as issueRemoteContribution from './repo-issue-contribution.js';
 import { makeNodeIssueCommandRunner } from "../../app/index.js";
 

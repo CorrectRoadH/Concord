@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import test, { mock } from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { createDesignAt, checkDesignAt, decideDesignAt } from "../src/domain/designs/index.js";
+import { createDesignAt, checkDesignAt, decideDesignAt } from "../src/app/index.js";
 import { templateBody } from "../src/domain/documents/index.js";
 import { authorDesignFixture } from './design-fixture.js';
 

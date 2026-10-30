@@ -9,7 +9,7 @@ import { OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess } fr
 import { ProjectSchema } from "../src/model/index.js";
 import { renderTypeScriptConfig, parseTypeScriptConfig } from "../src/base/workspace/index.js";
 import { type test_adapter_config_TestAdapter as TestAdapter } from "../src/model/index.js";
-import { LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
 import { closeRepositoryCache, withPersistentCache } from "../src/base/cache/index.js";
 import { installConcord, packConcord } from './installed-package.js';
 

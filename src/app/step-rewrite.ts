@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
+import { type StepRename } from "../model/index.js";
 import { posix } from "node:path";
 import type { Nodes } from "mdast";
 import { fromMarkdown } from "../model/index.js";
@@ -14,7 +15,6 @@ import { DOCUMENT_NAME_PATTERN } from "../model/index.js";
 import { ConcordError, canonical, digest, type Change, type Repository } from "../model/index.js";
 
 interface Replacement { readonly start: number; readonly end: number; readonly text: string }
-export interface StepRename { readonly useCase: string; readonly oldId: string; readonly newId: string }
 const incomplete = (path: string): never => { throw new ConcordError('ReferenceScanIncomplete', `Cannot reliably locate or scan reference tokens in ${path}`); };
 const within = (path: string, roots: readonly string[]) => roots.some(root => path === root || path.startsWith(`${root}/`));
 function replace(source: string, replacements: readonly Replacement[]): string {

@@ -1,3 +1,4 @@
+import { runApplication } from './support/repository.js';
 import { createConsumer } from './support/consumer.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -6,9 +7,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { checkDesign, checkDocuments, createDocument, decideDesign, formatDesign, loadDocuments } from "../src/domain/documents/index.js";
-import { formatDesignMarkdown } from "../src/domain/designs/index.js";
-import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { checkDocuments, loadDocuments } from "../src/domain/documents/index.js";
+import { createDocument } from "../src/app/index.js";
+import { checkDesign, decideDesign, formatDesign } from "../src/domain/designs/index.js";
+import { formatDesignMarkdown } from "../src/model/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { authorDesignFixture } from './design-fixture.js';
 import { executeViewAction } from "../src/app/index.js";
 
@@ -26,25 +30,25 @@ function consumer(run: (repo: LocalRepository, base: string) => void): void {
 test('Web structured actions use the same Design decision gate', async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-design-action-'));
   try {
-    await Effect.runPromise(Effect.sync(() => {
+    await runApplication(Effect.sync(() => {
       execFileSync('git', ['init', '-q', root]);
       const repo = new LocalRepository(root, { initialize: true });
       try { initialize(repo, false, { testRoots: [] }); createDocument(repo, 'design', { id: 'storage', title: 'Storage', alternatives: ['local', 'remote'] }); }
       finally { repo.close(); }
     }));
     const action = { action: 'design.decide', id: 'storage', selected: 'local', targets: [], reason: 'Offline storage' };
-    await assert.rejects(Effect.runPromise(executeViewAction(root, action)), { code: 'DesignDecisionIncomplete' });
+    await assert.rejects(runApplication(executeViewAction(root, action)), { code: 'DesignDecisionIncomplete' });
     authorDesignFixture(root, 'storage', ['local', 'remote'], 'local', false);
     const ownerPath = join(root, 'docs/design/storage/README.md'); const before = readFileSync(ownerPath, 'utf8');
-    await Effect.runPromise(executeViewAction(root, { ...action, dryRun: true }));
+    await runApplication(executeViewAction(root, { ...action, dryRun: true }));
     assert.equal(readFileSync(ownerPath, 'utf8'), before);
-    await Effect.runPromise(executeViewAction(root, action));
+    await runApplication(executeViewAction(root, action));
     assert.match(readFileSync(join(root, 'docs/design/storage/DECISION.md'), 'utf8'), /Selected: \[local\]/u);
-  } finally { await Effect.runPromise(Effect.sync(() => rmSync(root, { recursive: true, force: true }))); }
+  } finally { await runApplication(Effect.sync(() => rmSync(root, { recursive: true, force: true }))); }
 });
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
-test('Design validates all candidates, selected constraints, explicit selection, and Goal gap explanations', () => Effect.runPromise(Effect.sync(() => consumer((repo, base) => {
+test('Design validates all candidates, selected constraints, explicit selection, and Goal gap explanations', () => runApplication(Effect.sync(() => consumer((repo, base) => {
   assert.equal(checkDesign(repo, 'storage').ok, true);
   assert.deepEqual(checkDesign(repo, 'storage').candidates.map(plan => plan.eligible), [true, false]);
   const planPath = join(base, 'plans/local/README.md');
@@ -91,7 +95,7 @@ test('Design validates all candidates, selected constraints, explicit selection,
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
-test('Design rejects duplicate or wrong-level requirements and incomplete unselected candidates', () => Effect.runPromise(Effect.sync(() => consumer((repo, base) => {
+test('Design rejects duplicate or wrong-level requirements and incomplete unselected candidates', () => runApplication(Effect.sync(() => consumer((repo, base) => {
   const limitsPath = join(base, 'LIMITS.md'); const original = readFileSync(limitsPath, 'utf8');
   writeFileSync(limitsPath, original + '\n## L1: Another constraint\n\nA different condition.\n');
   assert(checkDesign(repo, 'storage').findings.some(item => item.code === 'DesignRequirementDuplicate'));
@@ -105,7 +109,7 @@ test('Design rejects duplicate or wrong-level requirements and incomplete unsele
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
-test('Design publication binds all validated bytes even for dry-run', () => Effect.runPromise(Effect.sync(() => {
+test('Design publication binds all validated bytes even for dry-run', () => runApplication(Effect.sync(() => {
   for (const dryRun of [true, false]) consumer((repo, base) => {
     writeFileSync(join(base, 'DECISION.md'), readFileSync(join(base, 'DECISION.md'), 'utf8').replace(/^Selected:.*$/mu, ''));
     const publish = repo.publish.bind(repo); const owner = readFileSync(join(base, 'README.md'), 'utf8');
@@ -120,7 +124,7 @@ test('Design publication binds all validated bytes even for dry-run', () => Effe
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
-test('Design formatter is idempotent, preserves code and semantic content, and supports dry-run', () => Effect.runPromise(Effect.sync(() => consumer((repo, base) => {
+test('Design formatter is idempotent, preserves code and semantic content, and supports dry-run', () => runApplication(Effect.sync(() => consumer((repo, base) => {
   assert.equal(formatDesignMarkdown('##   L1: \\*literal\\*  \n'), '## L1: \\*literal\\*\n');
   const file = join(base, 'plans/local/README.md'); const original = readFileSync(file, 'utf8');
   const source = original.replace('## Limits', '##   Limits  ').replace('| satisfied |', '|satisfied|') + '\n```md\n##   Example\n| a| b|c| d|\n```\n';

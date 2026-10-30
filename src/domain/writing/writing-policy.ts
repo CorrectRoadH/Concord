@@ -36,4 +36,3 @@ export function readWritingPolicy(source: string, path = 'docs/concord-writing.j
     throw new ConcordError('InvalidWritingPolicy', cause instanceof Error ? cause.message : String(cause));
   }
 }
-

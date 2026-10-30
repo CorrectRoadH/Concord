@@ -8,7 +8,7 @@ import test, { after, before } from 'node:test';
 import { Effect, Schema } from 'effect';
 import { parseDocumentRecord } from "../src/domain/documents/index.js";
 import { renderDocument } from "../src/model/index.js";
-import { LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
 import { digest } from "../src/model/index.js";
 import { setConfig, showConfig } from "../src/app/index.js";
 import { humanOutput } from "../src/entry/cli/index.js";

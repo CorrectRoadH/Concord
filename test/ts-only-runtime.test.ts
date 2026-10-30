@@ -7,7 +7,8 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { snapshot } from "../src/base/workspace/index.js";
-import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { digest } from "../src/model/index.js";
 
 const cli = installedConcordCli();

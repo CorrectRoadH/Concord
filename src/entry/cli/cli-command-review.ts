@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
 import { Option } from "effect";
 import { Argument, Command } from "effect/unstable/cli";
-import { renderReview } from "../../domain/trace/index.js";
+import { renderReview } from "../../app/index.js";
 import { optional, sync, cached } from "./cli-base.js";
 import { withReadRepo } from "./cli-repository.js";
 

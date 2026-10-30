@@ -5,12 +5,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { createDocument } from "../src/domain/documents/index.js";
+import { createDocument } from "../src/app/index.js";
 import { ConcordError, digest, failure } from "../src/model/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import type { WorkspaceProjection } from "../src/model/index.js";
 import { startViewServer, type ViewServerHandle } from "../src/entry/http/index.js";
-import { readWorkspaceProjection, workspaceProjectionContext } from "../src/entry/server/index.js";
+import { readWorkspaceProjection, workspaceProjectionContext } from "../src/app/index.js";
 import { readProjectConfig, writeProjectConfig } from './support.js';
 
 const ownerPath = 'docs/feature/projected/README.md';

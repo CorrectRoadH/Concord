@@ -1,4 +1,4 @@
-import { ConcordError } from "../../model/shared.js";
+import { ConcordError } from "../../model/index.js";
 import { lstatSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { isDocumentName } from "../../model/index.js";

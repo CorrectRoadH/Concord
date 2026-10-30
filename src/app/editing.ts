@@ -3,7 +3,7 @@ import { renderTypeScriptConfig } from "../base/workspace/index.js";
 import { documentRoots, inspectDocumentRecords, parseDocumentRecord } from "../domain/documents/index.js";
 import { type LocalRepository } from "../base/workspace/index.js";
 import { documentDisposition } from "../model/index.js";
-import { deriveDesignRecord } from "../domain/designs/index.js";
+import { deriveDesignRecord } from "../domain/documents/index.js";
 import { type ViewFile } from "../model/index.js";
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;

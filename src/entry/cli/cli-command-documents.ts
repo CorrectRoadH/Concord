@@ -2,8 +2,11 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#创建与编辑文档
 import { Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { adoptRoadmap, checkDesign, createDocument, decideDesign, deferDesign, formatDesign, loadDocuments, readDocumentReference, findDocument } from "../../domain/documents/index.js";
-import { documentShow } from "../../domain/trace/index.js";
+import { loadDocuments, readDocumentReference, findDocument } from "../../app/index.js";
+import { adoptRoadmap } from "../../app/index.js";
+import { createDocument } from "../../app/index.js";
+import { checkDesign, decideDesign, deferDesign, formatDesign } from "../../app/index.js";
+import { documentShow } from "../../app/index.js";
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../app/index.js";
 import { ConcordError, type DocumentKind } from "../../model/index.js";
 import { text, optional, many, id, body, sync, cached } from "./cli-base.js";

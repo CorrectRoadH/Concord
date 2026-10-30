@@ -12,14 +12,13 @@ import { type DocumentRecord } from "../../model/index.js";
 
 
 
-import { documentPlacementError, validPackagePath, validDesignPlanPath } from "../../model/index.js";
+import { documentPlacementError } from "../../model/index.js";
 import { readDesignPlanPaths } from "../../base/sources/index.js";
 
 import { TraceFormatError, TraceIncomplete, TraceInputChanged, TraceIoError, TraceMutationActive, TraceSnapshotChanged, type TraceError } from "../../model/index.js";
-import { ref_markdownAnchor as markdownAnchor, parseRepoRef, validateRepoRefTarget } from "../../model/index.js";
 import { readTraceGeneration, withTraceReadLease } from "../../base/publication/index.js";
 import { TraceMutationError } from "../../model/index.js";
-import { type DocsNodeKind, type TraceFeedback, type TraceMemory, type TraceNode, type TracePage, type TracePageRole, type TraceSnapshot, type TraceFinding, type TraceTest } from "../../model/index.js";
+import { type TraceFeedback, type TraceMemory, type TraceNode, type TracePage, type TracePageRole, type TraceSnapshot, type TraceFinding, type TraceTest } from "../../model/index.js";
 
 
 const sorted = <A>(items: readonly A[], key: (item: A) => string): readonly A[] =>
@@ -37,14 +36,6 @@ const pure = <A>(
     ? cause
     : new TraceFormatError({ path, subject, message: message(cause) }),
 });
-
-function referenceParts(reference: string): { readonly path: string; readonly anchor?: string } {
-  const parsed = parseRepoRef(reference);
-  if (Result.isFailure(parsed)) throw new Error(parsed.failure.message);
-  return parsed.success.anchor === undefined
-    ? { path: parsed.success.path }
-    : { path: parsed.success.path, anchor: parsed.success.anchor };
-}
 
 function parseFrontmatter(path: string, text: string): { readonly value: unknown; readonly body: string } | undefined {
   if (!text.startsWith("---\n") && !text.startsWith("---\r\n")) return undefined;
@@ -88,20 +79,6 @@ function decodeNode(record: DocumentRecord, owners: readonly DocumentRecord[], r
   };
 }
 
-function validNodePlacement(node: TraceNode): boolean {
-  switch (node.kind) {
-    case "feature":
-    case "roadmap":
-    case "engineering":
-    case "design":
-      return validPackagePath(node.kind, node.path);
-    case "design-plan":
-      return validDesignPlanPath(node.path);
-    case "use-case":
-      return documentPlacementError('use-case', node.path, node.relations.composes?.[0]) === undefined;
-  }
-}
-
 function deriveDesignPlans(nodes: readonly TraceNode[], documents: readonly (readonly [string, string])[], root: string): readonly TraceNode[] {
   const sources = new Map(documents);
   return nodes.flatMap((design): TraceNode[] => {
@@ -128,11 +105,6 @@ function featureForPath(nodes: readonly TraceNode[], path: string): TraceNode | 
     .filter((node) => node.kind === "feature" &&
       path.startsWith(node.path.slice(0, -"README.md".length)))
     .sort((left, right) => right.path.length - left.path.length)[0];
-}
-
-function isInsideUseCaseBoundary(nodes: readonly TraceNode[], path: string): boolean {
-  return nodes.some((node) => node.kind === "use-case" && node.path.endsWith("/README.md") &&
-    path !== node.path && path.startsWith(node.path.slice(0, -"README.md".length)));
 }
 
 function pageRole(featurePath: string, pagePath: string): TracePageRole {
@@ -172,135 +144,6 @@ function deriveFeaturePages(
   }), (page) => page.path);
 }
 
-function hasHeading(source: string, anchor: string): boolean {
-  return source.split(/\r?\n/u).some((line) => markdownAnchor(line) === anchor);
-}
-
-function validateReferenceTarget(
-  sourcePath: string,
-  subject: string,
-  reference: string,
-  documentIndex: ReadonlyMap<string, string>,
-): string {
-  const target = referenceParts(reference);
-  const source = documentIndex.get(target.path);
-  if (source === undefined) {
-    throw new TraceFormatError({
-      path: sourcePath,
-      subject,
-      message: `target file ${target.path} does not exist`,
-    });
-  }
-  if (target.anchor !== undefined && (target.anchor.length === 0 || !hasHeading(source, target.anchor))) {
-    throw new TraceFormatError({
-      path: sourcePath,
-      subject,
-      message: `target anchor ${target.anchor || "<empty>"} does not exist`,
-    });
-  }
-  return target.path;
-}
-
-function validateNodeRelations(
-  snapshot: TraceSnapshot,
-  documentIndex: ReadonlyMap<string, string>,
-): void {
-  const targetKinds: Readonly<Record<string, readonly DocsNodeKind[]>> = {
-    buildsOn: ["feature", "roadmap"],
-    supports: ["feature", "roadmap", "engineering"],
-    selectedPlan: ["design-plan"],
-    decides: ["feature", "roadmap", "engineering"],
-    composes: ["use-case", "feature"],
-  };
-  const roadmapGraph = new Map<string, Set<string>>();
-  for (const node of snapshot.nodes) {
-    if (!validNodePlacement(node)) {
-      throw new TraceFormatError({ path: node.path, subject: "placement", message: `${node.kind} is not valid at this path` });
-    }
-    if (node.kind === "use-case") {
-      const composes = node.relations.composes ?? [];
-      if (composes.length !== 1) throw new TraceFormatError({ path: node.path, subject: "feature", message: "concord.document/v1 Use Case must name exactly one Feature" });
-    }
-    if (node.kind === "roadmap") roadmapGraph.set(node.path, new Set());
-    for (const [relation, references] of Object.entries(node.relations)) {
-      for (const reference of references) {
-        const targetPath = referenceParts(reference).path;
-        const permitted = targetKinds[relation] ?? [];
-        const target = validateRepoRefTarget(
-          snapshot,
-          reference,
-          permitted,
-          documentIndex.get(targetPath),
-        );
-        if (Result.isFailure(target)) {
-          throw new TraceFormatError({
-            path: node.path,
-            subject: relation,
-            message: target.failure.message,
-          });
-        }
-        if (target.success.owner.path === node.path) {
-          throw new TraceFormatError({ path: node.path, subject: relation, message: "must not be a self-reference" });
-        }
-        if (
-          relation === "selectedPlan" &&
-          (target.success.path.endsWith('/README.md')
-            ? posix.dirname(posix.dirname(posix.dirname(target.success.path)))
-            : posix.dirname(posix.dirname(target.success.path))) !== posix.dirname(node.path)
-        ) {
-          throw new TraceFormatError({
-            path: node.path,
-            subject: relation,
-            message: "must target a directly contained Design Plan",
-          });
-        }
-        if (relation === "composes") {
-          if (target.success.kind === "use-case" && (target.success.owner.relations.composes?.length ?? 0) > 0) {
-            throw new TraceFormatError({ path: node.path, subject: relation, message: "must target a leaf Use Case" });
-          }
-        }
-        if (node.kind === "roadmap" && relation === "buildsOn" && target.success.kind === "roadmap") {
-          roadmapGraph.get(node.path)?.add(target.success.owner.path);
-        }
-      }
-    }
-  }
-  const visited = new Set<string>();
-  const active = new Set<string>();
-  const visit = (path: string): void => {
-    if (active.has(path)) throw new TraceFormatError({ path, subject: "buildsOn", message: "Roadmap cycle" });
-    if (visited.has(path)) return;
-    active.add(path);
-    for (const target of roadmapGraph.get(path) ?? []) visit(target);
-    active.delete(path);
-    visited.add(path);
-  };
-  for (const path of [...roadmapGraph.keys()].sort()) visit(path);
-}
-
-function featuresForContract(nodes: readonly TraceNode[], contractPath: string): readonly TraceNode[] {
-  const useCase = nodes.find((node) => node.kind === "use-case" && node.path === contractPath);
-  if (useCase !== undefined) {
-    const composed = useCase.relations.composes ?? [];
-    if (composed.length === 0) {
-      const owner = featureForPath(nodes, contractPath);
-      return owner === undefined ? [] : [owner];
-    }
-    return [
-      ...new Map(
-        composed
-          .map((reference) => referenceParts(reference).path)
-          .map((path) => featureForPath(nodes, path))
-          .filter((node): node is TraceNode => node !== undefined)
-          .map((node) => [node.path, node]),
-      ).values(),
-    ];
-  }
-  if (isInsideUseCaseBoundary(nodes, contractPath)) return [];
-  const owner = featureForPath(nodes, contractPath);
-  return owner === undefined ? [] : [owner];
-}
-
 /** Reuse the current compiler; repository APIs do not read legacy profiles. */
 function compileTraceAtGeneration(root: string, generation: number, _attempt: number, findings?: TraceFinding[]): Effect.Effect<TraceSnapshot, TraceError, FileSystem.FileSystem> {
   return Effect.gen(function* () {
@@ -325,7 +168,7 @@ function compileTraceAtGeneration(root: string, generation: number, _attempt: nu
         return sources;
       };
       const captured = capture();
-      const configSnapshot: import("../../model/shared.js").ConfigSnapshot = captured.has('concord.config.ts') ? modules.config.snapshot('concord.config.ts', captured.get('concord.config.ts')!) : { path: 'concord.config.ts', source: '', digest: `sha256:${createHash('sha256').update('').digest('hex')}`, config: {} };
+      const configSnapshot: import("../../model/index.js").ConfigSnapshot = captured.has('concord.config.ts') ? modules.config.snapshot('concord.config.ts', captured.get('concord.config.ts')!) : { path: 'concord.config.ts', source: '', digest: `sha256:${createHash('sha256').update('').digest('hex')}`, config: {} };
       const repo: Repo = {
         root, privateDir: join(root, '.git/concord'), access: 'read', persistentCache: 'off', configSnapshot,
         config: { ...configSnapshot.config, testRoots: configSnapshot.config.testRoots ?? ['test', 'tests'].filter(directory => [...captured.keys()].some(path => path.startsWith(`${directory}/`))), sourceRoots: configSnapshot.config.sourceRoots ?? [] },

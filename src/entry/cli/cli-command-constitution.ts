@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/project-onboarding/use-case/evolve-constitution.md
 import { Command } from "effect/unstable/cli";
-import { adoptConstitution, amendConstitution, constitutionShow } from "../../domain/constitution/index.js";
+import { adoptConstitution, amendConstitution, constitutionShow } from "../../app/index.js";
 import { text, many, body, sync } from "./cli-base.js";
 import { withRepo, withReadRepo } from "./cli-repository.js";
 

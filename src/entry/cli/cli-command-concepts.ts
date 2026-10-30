@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-import { indexConcepts, setConcepts, showConcepts } from "../../domain/concepts/index.js";
+import { indexConcepts, setConcepts, showConcepts } from "../../app/index.js";
 import { Option } from "effect";
 import { Command } from "effect/unstable/cli";
 import { text, optional, body, sync, expected } from "./cli-base.js";

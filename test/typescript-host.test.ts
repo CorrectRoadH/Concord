@@ -72,7 +72,7 @@ test('native compiler closes after nested domain failure and snapshot disposal f
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('editor verifies cleanup records only after Scope release and rejects every unconfirmed ownership state', { skip: process.platform === 'win32' }, () => Effect.runPromise(Effect.tryPromise(async () => {
-  const { runEditorJob } = await import("../src/entry/server/editor-job.js");
+  const { runEditorJob } = await import("../src/app/index.js");
   const computed = { generation: 0, revision: '', config: 'fixture', complete: true, gaps: [], value: null, diagnostics: [], reads: [], listings: [] };
   const job = { root: process.cwd(), generation: 0, config: 'fixture', revision: '', overlays: [], method: 'diagnostics' };
   const { makeOwnedProcessService } = await import("../src/base/process/owned-process.js");

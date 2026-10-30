@@ -1,8 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
 import { Command, Flag, Argument } from "effect/unstable/cli";
-import { activateMemory, linkMemory, supersedeMemory } from "../../domain/documents/index.js";
-import { knowledgeIndex, knowledgeRecall } from "../../domain/issues/index.js";
+import { linkMemory } from "../../app/index.js";
+import { activateMemory, supersedeMemory } from "../../app/index.js";
+import { knowledgeIndex, knowledgeRecall } from "../../app/index.js";
 import { text, id, sync } from "./cli-base.js";
 import { withRepo, withReadRepo } from "./cli-repository.js";
 

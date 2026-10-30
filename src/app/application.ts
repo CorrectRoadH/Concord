@@ -1,33 +1,43 @@
+import { type Publication } from "../base/publication/index.js";
+import { openReadRepository, openWriteRepository } from "../base/workspace/index.js";
 import { checkCurrentProject } from "./check-current.js";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Result, Predicate } from "effect";
 import { recoverLocalState } from "./recovery.js";
 import { waitForPublication } from "../base/publication/index.js";
-import { getGitStatus, type GitBaselineCache } from "../base/git/index.js";
+import { getGitStatus, type GitBaselineCache } from "./git-view.js";
 import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../domain/tests/index.js";
-import { codeSnippet, locateCode } from "../domain/code/index.js";
+import { codeSnippet, locateCode } from "./code-commands.js";
 import { scanCode } from "../domain/code/index.js";
-import { activateMemory, adoptRoadmap, reopenIssue, closeIssue, createDocument, decideDesign, checkDesign, formatDesign, linkIssue, linkMemory, unlinkIssue, deferDesign, supersedeMemory } from "../domain/documents/index.js";
+import { adoptRoadmap } from "./adopt-roadmap.js";
+import { createDocument } from "./create-document.js";
+import { reopenIssue, closeIssue, linkIssue, unlinkIssue } from "../domain/issues/index.js";
+import { linkMemory } from "./memory-relations.js";
+import { activateMemory, supersedeMemory } from "../domain/memory/index.js";
+import { decideDesign, checkDesign, formatDesign, deferDesign } from "../domain/designs/index.js";
 import { checkFeedbackConnection, listFeedback, syncFeedback } from "../domain/feedback/index.js";
 import { readFeedbackCache } from "../base/cache/index.js";
 import { HawdbFailure } from "../base/cache/index.js";
-import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from "../domain/issues/index.js";
+import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from "./knowledge.js";
 import { inspectDocuments, inspectDocumentFile, isSourcePath, readSource, setConfig, setMarkdown, setSource } from "./editing.js";
-import { annotationSnippet, doctor } from "../domain/onboarding/index.js";
+import { annotationSnippet } from "../domain/onboarding/index.js";
+import { doctor } from "./onboarding.js";
 import { ConcordError, IssueClosureSchema, decode, digest, failure } from "../model/index.js";
-import { assertCurrentRuntimeFormat, discoverRoot, git, initialize, LocalRepository } from "../base/workspace/index.js";
+import { assertCurrentRuntimeFormat, discoverRoot, git, LocalRepository } from "../base/workspace/index.js";
+import { initialize } from "./initialize.js";
 import { snapshot as parseConfigSnapshot } from "../base/workspace/index.js";
 import { adoptConstitution, amendConstitution, initializeConstitution } from "../domain/constitution/index.js";
 import { listTemplates, templateBody } from "../domain/documents/index.js";
-import { buildTrace, renderReview, traceShow } from "../domain/trace/index.js";
+import { buildTrace } from "../domain/trace/index.js";
+import { renderReview, traceShow } from "./trace-queries.js";
 import { readWritingPolicy } from "../domain/writing/index.js";
 import { ViewActionSchema, type ViewAction, type ViewFile, type WorkspaceSnapshot } from "../model/index.js";
 import { showWriting, setWriting, writingIndex } from "../domain/writing/index.js";
 import { checkWriting } from "../domain/writing/index.js";
 import { checkProject } from "./project-check.js";
 import { indexConcepts, setConcepts, showConcepts } from "../domain/concepts/index.js";
-import { type RequestTiming } from "../entry/http/index.js";
+import { type RequestTiming } from "./request-timing.js";
 
 const sync = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> => Effect.try({
   try: evaluate,
@@ -94,17 +104,18 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
   }
 }
 
-// @concord-code
+// @concord-begin
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
-function withRepository<A>(
-  root: string,
-  operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError>,
-  options: { readonly initialize?: boolean; readonly recover?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off' } = {},
-  timing?: RequestTiming,
-): Effect.Effect<A, ConcordError> {
+type OpenOptions = { readonly initialize?: boolean; readonly recover?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off' };
+// @concord-end
+function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options: OpenOptions & { readonly access: 'read' }, timing?: RequestTiming): Effect.Effect<A, ConcordError, R>;
+function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options?: OpenOptions, timing?: RequestTiming): Effect.Effect<A, ConcordError, R | Publication>;
+function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options: OpenOptions = {}, timing?: RequestTiming): Effect.Effect<A, ConcordError, R | Publication> {
   return Effect.acquireRelease(
-    waitForPublication(reclaimDead => measuredSync(timing)('view.openRepository', () => new LocalRepository(root, { optimistic: true, ...options, reclaimPublication: reclaimDead }))),
-    (repo) => Effect.sync(() => timing === undefined ? repo.close() : timing.sync('view.closeRepository', () => repo.close())),
+    waitForPublication(reclaimPublication => options.access === 'read'
+      ? openReadRepository(root, { optimistic: true, ...options, access: 'read', reclaimPublication })
+      : openWriteRepository(root, { optimistic: true, ...options, reclaimPublication })),
+    repo => Effect.sync(() => timing === undefined ? repo.close() : timing.sync('view.closeRepository', () => repo.close())),
   ).pipe(Effect.flatMap(operation), Effect.scoped);
 }
 
@@ -393,7 +404,7 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError> {
+export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError, Publication> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const action = yield* sync('view.decodeAction', () => decodeViewAction(input));

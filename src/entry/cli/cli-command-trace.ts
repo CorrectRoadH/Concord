@@ -3,7 +3,8 @@
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 // @concord-implements docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md#list-gaps
 import { Argument, Command } from "effect/unstable/cli";
-import { buildTrace, traceGaps, traceShow } from "../../domain/trace/index.js";
+import { buildTrace } from "../../app/index.js";
+import { traceGaps, traceShow } from "../../app/index.js";
 import { sync, cached } from "./cli-base.js";
 import { withReadRepo } from "./cli-repository.js";
 

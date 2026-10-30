@@ -8,16 +8,17 @@ import { Effect } from 'effect';
 import { getWorkspaceSnapshot } from "../src/app/index.js";
 import { cacheDatabasePath } from "../src/base/cache/index.js";
 import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from "../src/base/publication/index.js";
-import { createDocument } from "../src/domain/documents/index.js";
+import { createDocument } from "../src/app/index.js";
 import { openHawdb } from "../src/base/cache/index.js";
 import { digest } from "../src/model/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { type WorkspaceProjection } from "../src/model/index.js";
-import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from "../src/entry/server/index.js";
+import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from "../src/app/index.js";
 import { type ViewServerHandle } from "../src/entry/http/index.js";
 import { startViewServer } from './e2e/server.js';
 import { installConcord, packConcord } from './installed-package.js';
-import { ViewScanManager } from "../src/entry/server/index.js";
+import { ViewScanManager } from "../src/app/index.js";
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from './support.js';
 
 function fixture(): string {

@@ -36,6 +36,7 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
   // repository contributions and all public exports. The bundle stays at dist's
   // root, preserving every source module's import.meta.url resource base.
   const closure = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/cli-fallback.js'], outfile: 'dist/entry/cli/cli-fallback-bundle.js', metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
+  const bootstrap = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js'], outdir: 'dist/startup-graph', write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
   const definitions = yield* Effect.tryPromise(async () => {
     const file = './dist/entry/cli/cli-full.js';
     const { fullCommand } = await import(pathToFileURL(resolve(file)).href) as { fullCommand: Definition };
@@ -55,7 +56,7 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
     // esbuild's input graph is the actual command-definition closure, including
     // ordinary imports and finite dynamic chunks, rather than a filename prefix.
     const roots = ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js'];
-    const emitted = [...new Set([...Object.keys(closure.metafile!.inputs), ...roots])].filter(file => file.startsWith('dist/') && file.endsWith('.js')).sort();
+    const emitted = [...new Set([...Object.keys(closure.metafile!.inputs), ...Object.keys(bootstrap.metafile!.inputs), ...roots])].filter(file => file.startsWith('dist/') && file.endsWith('.js')).sort();
     const modulePath = (file: string, root: string): string => {
       const path = relative(resolve(root, 'entry/cli'), resolve(file));
       return path.startsWith('.') ? path : `./${path}`;

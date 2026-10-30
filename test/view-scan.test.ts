@@ -5,9 +5,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ViewScanManager } from "../src/entry/server/index.js";
+import { ViewScanManager } from "../src/app/index.js";
 import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../src/base/publication/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 
 async function scanPid(root: string): Promise<number> {
   const deadline = performance.now() + 15000;

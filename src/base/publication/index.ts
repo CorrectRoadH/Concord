@@ -88,3 +88,5 @@ export { digest } from './repo-issue-plan-store.js';
 export { detail } from './repo-issue-plan-store.js';
 export { isCode } from './repo-issue-plan-store.js';
 export { gitDirectory } from './repo-issue-plan-store.js';
+export { Publication, PublicationValidation } from './validation.js';
+export type { PublicationCatalog, StepRenamePlan } from './validation.js';

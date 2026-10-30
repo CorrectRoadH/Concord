@@ -1,5 +1,6 @@
 import { readDocumentSelector } from "../domain/documents/index.js";
-import { buildTrace, stepGroups } from "../domain/trace/index.js";
+import { buildTrace } from "../domain/trace/index.js";
+import { stepGroups } from "./trace-queries.js";
 import { formatStepSource, planStepRename } from "./step-rewrite.js";
 import { ConcordError, inRepositorySnapshot, type Repository } from "../model/index.js";
 import { type LocalRepository } from "../base/workspace/index.js";

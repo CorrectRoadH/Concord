@@ -1,18 +1,20 @@
+import { runOperation, openHttpWriter } from "./main.js";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
-import { builtAssetRoot } from "../../base/installation/index.js";
+import { builtAssetRoot } from "../../app/index.js";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { Effect, Schema } from "effect";
 import { decodeViewAction, executeViewAction, getViewGitStatus, getViewFile, validateViewRoot } from "../../app/index.js";
-import { ViewProjectionManager } from "../server/index.js";
-import { closeGitBaselineCache, getGitDiff, type GitBaselineCache } from "../../base/git/index.js";
+import { ViewProjectionManager } from "../../app/index.js";
+import { closeGitBaselineCache, getGitDiff, type GitBaselineCache } from "../../app/index.js";
 import { type GitArea } from "../../model/index.js";
 import { ConcordError, decode, digest, failure } from "../../model/index.js";
-import { ViewJobManager } from "./view-jobs.js";
+import { ViewJobManager } from "../../app/index.js";
 import { type ViewFailure, type ViewResponse } from "../../model/index.js";
-import { ViewRequestLog, type RequestTiming } from "./view-request-log.js";
+import { ViewRequestLog } from "./view-request-log.js";
+import { type RequestTiming } from "../../app/index.js";
 
 const BODY_LIMIT = 4 * 1024 * 1024;
 const STATIC_LIMIT = 16 * 1024 * 1024;
@@ -327,7 +329,7 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
     exactQuery(url, []);
     mutationJson(request);
     const input = await readJson(request);
-    const { compileP5 } = await import("../../app/p5-compiler.js");
+    const { compileP5 } = await import("../../app/index.js");
     return respond(await Effect.runPromise(compileP5(root, input)));
   }
   if (method === 'POST' && url.pathname === '/api/action') {
@@ -377,7 +379,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? builtAssetRoot('web');
   const scans = new ViewProjectionManager(root);
-  const jobs = new ViewJobManager(root, () => scans.request(true));
+  const jobs = new ViewJobManager(root, () => scans.request(true), openHttpWriter);
   const baselineCache: GitBaselineCache = {};
   const requestLog = new ViewRequestLog();
   let stopping = false;
@@ -386,13 +388,13 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   const runAction = (input: unknown, response: ServerResponse, timing: RequestTiming): Promise<unknown> => {
     if (stopping) throw new ConcordError('ServerStopping', 'The workbench is shutting down');
     const action = input !== null && typeof input === 'object' && 'action' in input ? input.action : undefined;
-    if (action !== 'feedback.sync' && action !== 'feedback.check') return Effect.runPromise(executeViewAction(root, input, undefined, timing));
+    if (action !== 'feedback.sync' && action !== 'feedback.check') return runOperation(executeViewAction(root, input, undefined, timing));
     const controller = new AbortController();
     feedbackControllers.add(controller);
     const onClose = () => { if (!response.writableFinished) controller.abort(); };
     response.once('close', onClose);
     if (response.destroyed) controller.abort();
-    const task = Effect.runPromise(executeViewAction(root, input, controller.signal, timing), { signal: controller.signal });
+    const task = runOperation(executeViewAction(root, input, controller.signal, timing), { signal: controller.signal });
     feedbackTasks.add(task);
     void task.finally(() => { feedbackTasks.delete(task); feedbackControllers.delete(controller); response.off('close', onClose); }).catch(() => {});
     return task;

@@ -4,8 +4,8 @@
 import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { ConcordError } from "../../model/index.js";
-import { analyzeCode } from "../../domain/code/index.js";
-import { codeSnippet, listCode, locateCode } from "../../domain/code/index.js";
+import { analyzeCode } from "../../app/index.js";
+import { codeSnippet, listCode, locateCode } from "../../app/index.js";
 import { many, sync } from "./cli-base.js";
 import { withRepo, withReadRepo } from "./cli-repository.js";
 

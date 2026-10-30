@@ -3,10 +3,11 @@
 import { NodeRuntime } from "@effect/platform-node";
 import { Effect, Queue, Schema } from "effect";
 import { observeWorkspaceProjection } from "../../app/index.js";
-import { makeWorkspaceProjectionRecord, WORKSPACE_PROJECTION_LIMIT } from "./workspace-projection.js";
+import { makeWorkspaceProjectionRecord } from "../../app/index.js";
+import { WORKSPACE_PROJECTION_LIMIT } from "../../model/index.js";
 import { ConcordError, failure } from "../../model/index.js";
-import { RequestTiming } from "../http/index.js";
-import { ScanRequest, ScanMessage } from "./view-scan-protocol.js";
+import { RequestTiming } from "../../app/index.js";
+import { ScanRequest, ScanMessage } from "../../model/index.js";
 
 const scan = (root: string, id: number) => Effect.gen(function*() {
   const timing = new RequestTiming(performance.now());

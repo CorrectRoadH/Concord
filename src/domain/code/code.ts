@@ -6,7 +6,7 @@ import { cacheDatabasePath } from "../../base/cache/index.js";
 import { readCodePayloads, writeCodePayloads } from "../../base/cache/index.js";
 import { persistNotedConfig } from "../../base/workspace/index.js";
 import { decode, canonical, digest, objectDigest, Text, type Finding, type Repository } from "../../model/index.js";
-import { parseReference } from "../documents/index.js";
+import { parseReference } from "../../model/index.js";
 import { ContentCache } from "../../base/cache/index.js";
 import { measureScan, type ScanTiming } from "../../base/sources/index.js";
 import * as ts from 'typescript/ast';

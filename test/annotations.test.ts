@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { cacheStatus, clearCache, scanAnnotations } from "../src/domain/tests/index.js";
 import { openHawdb } from "../src/base/cache/index.js";
 

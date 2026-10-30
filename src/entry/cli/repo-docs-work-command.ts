@@ -1,9 +1,9 @@
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { defineDocsCommandContribution, type TerminalDeliverySink } from "./repo-docs-contribution.js";
-import { readJson } from "./repo-cli-support.js";
+import { type TerminalDeliverySink } from "./delivery.js";
+import { readJson } from "./input.js";
 import { problem } from "../../model/index.js";
-import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from "../../domain/docs-work/index.js";
+import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from "../../app/index.js";
 
 export interface WorkSettings { readonly root?: string | undefined; readonly json: boolean; readonly dryRun?: boolean }
 export function makeDocsWorkCommand<SettingsR = never>(deliver: TerminalDeliverySink, settings?: Effect.Effect<WorkSettings, never, SettingsR>) {
@@ -41,4 +41,3 @@ export function makeDocsWorkCommand<SettingsR = never>(deliver: TerminalDelivery
     Command.make('finalize', { runId }, args => invoke(s => finalizeDocsWork(args.runId, s.root))),
   ]));
 }
-export const docsWorkCommandContribution = defineDocsCommandContribution({ name: 'work', summary: 'Coordinate documentation work and verify declared checks.', makeCommand: deliver => makeDocsWorkCommand(deliver) });

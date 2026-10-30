@@ -1,3 +1,4 @@
+import { runApplication } from './support/repository.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,7 +7,8 @@ import { join } from 'node:path';
 import test, { mock } from 'node:test';
 import { Effect } from 'effect';
 import { executeViewAction } from "../src/app/index.js";
-import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { initialize } from "../src/app/index.js";
 import { checkProject } from "../src/app/index.js";
 import { checkCurrentProject } from "../src/app/index.js";
 import { ConcordError } from "../src/model/index.js";
@@ -43,7 +45,7 @@ test('project check combines relation and writing findings and reports incomplet
   assert(writingOnly.findings.some(finding => finding.category === 'writing' && finding.code === 'bannedTerm'));
   assert.equal(callCheck().status, 1);
   assert.deepEqual(callCheck().output.checks, writingOnly.checks);
-  const action = await Effect.runPromise(executeViewAction(root, { action: 'check' })) as ReturnType<typeof checkProject>;
+  const action = await runApplication(executeViewAction(root, { action: 'check' })) as ReturnType<typeof checkProject>;
   assert.deepEqual(action.checks, writingOnly.checks);
   assert.deepEqual(action.findings, writingOnly.findings);
 
@@ -83,14 +85,14 @@ test('current check retries real observed edits, closes attempts and refuses per
     return source;
   });
   try {
-    const result = await Effect.runPromise(checkCurrentProject(root, 'off'));
+    const result = await runApplication(checkCurrentProject(root, 'off'));
     assert.equal(result.ok, true);
     assert.equal(changed, 1);
     changes = 100;
-    await assert.rejects(Effect.runPromise(checkCurrentProject(root, 'off')), /after 3 attempts/u);
+    await assert.rejects(runApplication(checkCurrentProject(root, 'off')), /after 3 attempts/u);
   } finally { spy.mock.restore(); }
   const error = mock.method(LocalRepository.prototype, 'verifySnapshot', () => { throw new ConcordError('UnsafePath', 'fixture unsafe path'); });
-  try { await assert.rejects(Effect.runPromise(checkCurrentProject(root, 'off')), /fixture unsafe path/u); }
+  try { await assert.rejects(runApplication(checkCurrentProject(root, 'off')), /fixture unsafe path/u); }
   finally { error.mock.restore(); }
-  assert.equal((await Effect.runPromise(checkCurrentProject(root, 'off'))).ok, true);
+  assert.equal((await runApplication(checkCurrentProject(root, 'off'))).ok, true);
 });

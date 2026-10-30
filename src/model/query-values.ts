@@ -47,4 +47,3 @@ export function stripQueryBodies(value: unknown): QueryValue {
   const projected = Schema.decodeUnknownSync(Schema.Union([TraceGapsValue, TraceShowValue, ReviewRenderValue]), { onExcessProperty: 'ignore' })(value);
   return projected;
 }
-

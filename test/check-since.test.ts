@@ -1,7 +1,7 @@
 import { createConsumer } from './support/consumer.js';
 import { gitCommit } from './support/fix-consumer.js';
-import { LocalRepository } from "../src/base/workspace/index.js";
-import { createDocument } from "../src/domain/documents/index.js";
+import { LocalRepository } from "./support/repository.js";
+import { createDocument } from "../src/app/index.js";
 import { OwnedProcessLive } from "../src/base/process/index.js";
 import { checkSince } from "../src/app/index.js";
 import { Effect } from 'effect';

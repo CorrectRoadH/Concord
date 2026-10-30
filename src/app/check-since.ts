@@ -7,7 +7,7 @@ import { fromMarkdown } from "../model/index.js";
 import { decodeUncachedDocumentSource, ownerKind } from "../model/index.js";
 import { rebaseAdoptedMarkdown } from "../domain/documents/index.js";
 import { designState } from "../model/index.js";
-import { validateDesignContent } from "../domain/designs/index.js";
+import { validateDesignContent } from "../domain/documents/index.js";
 import { parseConstitution, trailingId, markdownLinks, relativeMarkdownLink } from "../domain/constitution/index.js";
 import { replayFix } from "../domain/tests/index.js";
 import { checkCurrentProject } from "./check-current.js";

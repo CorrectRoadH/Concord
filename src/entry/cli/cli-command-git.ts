@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/web-workbench/use-case/review-local-changes.md
 import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { getGitDiff, getGitStatus } from "../../base/git/index.js";
+import { getGitDiff, getGitStatus } from "../../app/index.js";
 import { root, emit, sync, viewRoot } from "./cli-base.js";
 
 const gitView = Command.make('git').pipe(Command.withDescription('Inspect readonly working-tree status and diffs.'), Command.withSubcommands([

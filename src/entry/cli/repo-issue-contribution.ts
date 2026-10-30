@@ -1,11 +1,12 @@
-import { IssueProject, type IssueCommandRequirements, type IssueCommandRunner } from "../../domain/issues/index.js";
-import { Clock, Effect, Option, Schema } from "effect";
+import { planRemoteIssue, readRemoteIssueBody, executeRemoteIssue } from "../../app/index.js";
+
+import { type IssueCommandRequirements, type IssueCommandRunner } from "../../app/index.js";
+import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { type RepositoryCommandContribution } from "./repo-contribution.js";
-import { type TerminalDeliverySink } from "./repo-docs-contribution.js";
-import { IssuePlanStore, executeIssuePlan, issueAuthorization, issueTarget, prepareIssue } from "../../domain/issues/index.js";
-import { ConcordError, IssueInputError, type IssueError } from "../../model/index.js";
-import { IssuePayloadSchema, type IssueIdentity, type CreateIdentity, type IssuePayload } from "../../model/index.js";
+import { type TerminalDeliverySink } from "./delivery.js";
+
+import { ConcordError, type IssueError } from "../../model/index.js";
+
 export function makeIssueRemoteSubcommands<R>(deliver: TerminalDeliverySink, run: IssueCommandRunner<R>, sharedJson?: boolean): readonly Command.Command<any, never, unknown, never, R>[];
 export function makeIssueRemoteSubcommands<R = never>(deliver: TerminalDeliverySink, run?: IssueCommandRunner<R>, sharedJson?: boolean): readonly Command.Command<any, never, unknown, never, IssueCommandRequirements | R>[];
 export function makeIssueRemoteSubcommands<R = never>(deliver: TerminalDeliverySink, run?: IssueCommandRunner<R>, sharedJson = false) {
@@ -22,44 +23,23 @@ export function makeIssueRemoteSubcommands<R = never>(deliver: TerminalDeliveryS
       return deliver({ stdout: "", stderr: `${structured ? JSON.stringify({ ok: false, error: code, message, ...(details === undefined ? {} : { details }) }) : `${code}: ${message}`}\n`, exitCode: 1 });
     } }));
   };
-  const plan = (id: string, number: number | undefined, payload: IssuePayload, originKey?: string) => Effect.gen(function*() {
-    const project = yield* IssueProject;
-    const binding = yield* project.connection(id);
-    const validated = yield* Effect.try({ try: () => Schema.decodeUnknownSync(IssuePayloadSchema, { onExcessProperty: "error" })(payload), catch: () => new IssueInputError({ message: "Invalid Issue payload or label (maximum 50 characters, no control characters)" }) });
-    const identity: IssueIdentity | CreateIdentity = number === undefined ? { ...binding.repository, kind: originKey === undefined ? "manual" : "machine-origin", ...(originKey === undefined ? {} : { originKey }) } : { ...binding.repository, number };
-    const receipt = yield* prepareIssue(identity, payload.operation, validated, yield* Clock.currentTimeMillis, binding);
-    return { operation: "issue-plan", receiptId: receipt.id, connection: receipt.connection, issueOperation: receipt.operation, target: issueTarget(receipt), payloadDigest: receipt.payloadDigest, remotePreimageDigest: receipt.remotePreimageDigest, expiresAt: new Date(receipt.expiresAt).toISOString(), authorize: issueAuthorization(receipt) };
-  });
   const number = Argument.integer("number").pipe(Argument.filter(n => n > 0 && Number.isSafeInteger(n), () => "Issue number must be a positive safe integer"));
   const bodyPlan = (operation: "body-set" | "comment-add") => Command.make(operation, { number, connection, ...jsonConfig, body: Flag.string("body") }, args => handle(args.connection, false, Effect.gen(function*() {
-    const body = yield* (yield* IssueProject).readBody(args.body);
-    return yield* plan(args.connection, args.number, { operation, body });
+    const body = yield* readRemoteIssueBody(args.body);
+    return yield* planRemoteIssue(args.connection, args.number, { operation, body });
   }), process.argv.includes("--json"))).pipe(Command.withDescription(`Plan one Issue ${operation} write.`));
   return [
     Command.make("plan").pipe(Command.withDescription("Read remote Issues and prepare one explicitly authorized write."), Command.withSubcommands([
       Command.make("create", { connection, ...jsonConfig, title: Flag.string("title"), body: Flag.string("body"), originKey: Flag.string("origin-key").pipe(Flag.optional) }, args => handle(args.connection, false, Effect.gen(function*() {
-        const body = yield* (yield* IssueProject).readBody(args.body);
-        return yield* plan(args.connection, undefined, { operation: "create", title: args.title, body }, Option.getOrUndefined(args.originKey));
+        const body = yield* readRemoteIssueBody(args.body);
+        return yield* planRemoteIssue(args.connection, undefined, { operation: "create", title: args.title, body }, Option.getOrUndefined(args.originKey));
       }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan creation of one remote Issue.")),
       bodyPlan("body-set"), bodyPlan("comment-add"),
-      Command.make("labels-add", { number, connection, ...jsonConfig, labels: Flag.string("label").pipe(Flag.atLeast(1)) }, args => handle(args.connection, false, plan(args.connection, args.number, { operation: "labels-add", labels: [...new Set(args.labels)].sort() }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan adding labels to one Issue.")),
-      Command.make("labels-remove", { number, connection, ...jsonConfig, label: Flag.string("label").pipe(Flag.between(1, 1)) }, args => handle(args.connection, false, plan(args.connection, args.number, { operation: "labels-remove", labels: args.label }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan removal of exactly one Issue label.")),
-      Command.make("close", { number, connection, ...jsonConfig, reason: Flag.choice("reason", ["completed", "not_planned"]).pipe(Flag.optional) }, args => handle(args.connection, false, plan(args.connection, args.number, { operation: "close", ...(Option.isSome(args.reason) ? { reason: args.reason.value } : {}) }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan closing one Issue.")),
-      Command.make("reopen", { number, connection, ...jsonConfig }, args => handle(args.connection, false, plan(args.connection, args.number, { operation: "reopen" }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan reopening one Issue.")),
+      Command.make("labels-add", { number, connection, ...jsonConfig, labels: Flag.string("label").pipe(Flag.atLeast(1)) }, args => handle(args.connection, false, planRemoteIssue(args.connection, args.number, { operation: "labels-add", labels: [...new Set(args.labels)].sort() }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan adding labels to one Issue.")),
+      Command.make("labels-remove", { number, connection, ...jsonConfig, label: Flag.string("label").pipe(Flag.between(1, 1)) }, args => handle(args.connection, false, planRemoteIssue(args.connection, args.number, { operation: "labels-remove", labels: args.label }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan removal of exactly one Issue label.")),
+      Command.make("close", { number, connection, ...jsonConfig, reason: Flag.choice("reason", ["completed", "not_planned"]).pipe(Flag.optional) }, args => handle(args.connection, false, planRemoteIssue(args.connection, args.number, { operation: "close", ...(Option.isSome(args.reason) ? { reason: args.reason.value } : {}) }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan closing one Issue.")),
+      Command.make("reopen", { number, connection, ...jsonConfig }, args => handle(args.connection, false, planRemoteIssue(args.connection, args.number, { operation: "reopen" }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan reopening one Issue.")),
     ])),
-    Command.make("execute", { receiptId: Argument.string("receipt-id"), connection, authorize: Flag.string("authorize"), ...jsonConfig }, args => handle(args.connection, true, Effect.gen(function*() {
-      const receipt = yield* (yield* IssuePlanStore).read(args.receiptId);
-      const binding = yield* (yield* IssueProject).connection(args.connection);
-      const result = yield* executeIssuePlan(receipt, yield* Clock.currentTimeMillis, binding, args.authorize);
-      const { number, url, state, title, labels } = result.issue;
-      return { operation: "issue-execute", receiptId: receipt.id, issueOperation: receipt.operation, issue: { number, url, state, title, labels } };
-    }), process.argv.includes("--json"))).pipe(Command.withDescription("Execute one Issue plan after explicit user authorization.")),
+    Command.make("execute", { receiptId: Argument.string("receipt-id"), connection, authorize: Flag.string("authorize"), ...jsonConfig }, args => handle(args.connection, true, executeRemoteIssue(args.connection, args.receiptId, args.authorize), process.argv.includes("--json"))).pipe(Command.withDescription("Execute one Issue plan after explicit user authorization.")),
   ] as const;
 }
-export const issueRemoteCommandContribution: RepositoryCommandContribution<"issue", IssueCommandRequirements> = Object.freeze({
-  name: "issue", summary: "Plan and explicitly authorize remote Issue writes.",
-  makeCommand: (deliver: TerminalDeliverySink) => Command.make("issue").pipe(Command.withSubcommands(makeIssueRemoteSubcommands(deliver))),
-});
-
-
-

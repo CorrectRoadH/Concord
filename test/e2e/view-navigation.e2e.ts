@@ -6,8 +6,9 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
 import { Schema } from 'effect';
-import { createDocument } from "../../src/domain/documents/index.js";
-import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { createDocument } from "../../src/app/index.js";
+import { LocalRepository } from "../support/repository.js";
+import { initialize } from "../../src/app/index.js";
 import { startViewServer } from './server.js';
 import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
 
