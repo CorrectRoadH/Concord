@@ -4,10 +4,11 @@ import { readFileSync } from 'node:fs';
 import { Effect, Option, Schema } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { ConcordError, decode, failure } from './shared.js';
+import { discoverRoot } from './storage.js';
 import { humanOutput } from './presentation.js';
 
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
-  root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise discover concord.config.ts from cwd; unsupported configuration is refused without conversion.')),
+  root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise use the Git worktree containing cwd; configuration is optional.')),
   json: Flag.boolean('json').pipe(Flag.withDefault(false)),
   fresh: Flag.boolean('fresh').pipe(Flag.withDefault(false), Flag.withDescription('Wait for current diagnostic sources instead of reading an asynchronously refreshed snapshot.')),
   dryRun: Flag.boolean('dry-run').pipe(Flag.withDefault(false), Flag.withDescription('Validate a document mutation without writing.')),
@@ -53,7 +54,7 @@ const sync = <A>(fn: () => A) => Effect.try({ try: fn, catch: failure });
 
 const cached = (dry: boolean) => dry ? 'off' as const : 'use' as const;
 
-const viewRoot = (settings: { readonly root: Option.Option<string> }): string => Option.getOrUndefined(settings.root) ?? process.cwd();
+const viewRoot = (settings: { readonly root: Option.Option<string> }): string => discoverRoot(Option.getOrUndefined(settings.root));
 
 const expected = (value: string): string | null => value === 'null' ? null : value;
 

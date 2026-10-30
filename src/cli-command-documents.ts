@@ -1,41 +1,53 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
-// @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page
-import { formatUseCase, renameUseCaseStep, useCaseSteps } from './step-commands.js';
+// @concord-implements docs/feature/local-sdlc/cli.md#创建与编辑文档
 import { Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
-import { addPage, showPage, setPage, adoptRoadmap, correctDesignReason, createDocument, decideDesign, loadDocuments } from './documents.js';
-import { checkDesign, formatDesign } from './documents.js';
+import { adoptRoadmap, checkDesign, createDocument, decideDesign, deferDesign, formatDesign, loadDocuments, findDocument } from './documents.js';
 import { documentShow } from './trace.js';
+import { formatUseCase, renameUseCaseStep, useCaseSteps } from './step-commands.js';
 import { ConcordError, type DocumentKind } from './shared.js';
-import { text, optional, many, id, body, sync, cached, expected } from './cli-base.js';
+import { text, optional, many, id, body, sync, cached } from './cli-base.js';
 import { withRepo, withReadRepo } from './cli-repository.js';
 
-function docsGroup(kind: Exclude<DocumentKind, 'memory' | 'issue'>) {
-  const create = Command.make('create', { id, title: text('title'), body: optional('body'), feature: optional('feature'), observedAt: optional('observed-at'), source: many('source'), alternative: many('alternative'), pages: many('pages'), noPages: Flag.boolean('no-pages').pipe(Flag.withDefault(false)) }, args => withRepo((repo, s) => sync(() => {
-    if (args.noPages && args.pages.length) throw new ConcordError('ConflictingOptions', '--no-pages cannot be combined with --pages');
-    return createDocument(repo, kind, { id: args.id, title: args.title, body: Option.isSome(args.body) ? body(args.body.value) : undefined, feature: Option.getOrUndefined(args.feature), observedAt: Option.getOrUndefined(args.observedAt), sources: args.source, alternatives: args.alternative, pages: args.noPages ? [] : args.pages.length ? args.pages.flatMap(value => value.split(',').map(page => page.trim())) : undefined, dryRun: s.dryRun });
-  }))).pipe(Command.withDescription('Create a writing scaffold. Feature/Roadmap/Design omitted pages use project defaults; --no-pages explicitly creates README only. Link applicable constitution clauses from the body.'));
-  const list = Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: `${kind}-list`, documents: loadDocuments(repo).filter(d => d.metadata.kind === kind).map(d => ({ path: d.path, ...d.metadata })) }))));
-  const show = Command.make('show', { id }, ({ id }) => withReadRepo((repo, settings) => sync(() => documentShow(repo, id, kind, cached(settings.dryRun)))));
-  const adopt = Command.make('adopt', { id, feature: text('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, args.feature, s.dryRun))));
-  const decide = Command.make('decide', { id, selected: text('selected'), target: many('target'), reason: text('reason') }, args => withRepo((repo, s) => sync(() => decideDesign(repo, args.id, args.selected, args.target, args.reason, s.dryRun))));
-  const correctReason = Command.make('correct-reason', { id, reason: text('reason'), memory: text('memory'), explanation: text('explanation'), expectedDigest: text('expected-digest'), expectedMemoryDigest: text('expected-memory-digest') }, args => withRepo((repo, s) => sync(() => correctDesignReason(repo, args.id, args.reason, args.memory, args.explanation, args.expectedDigest, args.expectedMemoryDigest, s.dryRun))));
-  const designCheck = Command.make('check', { id }, args => withRepo(repo => sync(() => { const result = checkDesign(repo, args.id); if (!result.ok) process.exitCode = 1; return result; }), { readonly: true }));
-  const designFormat = Command.make('format', { id }, args => withRepo((repo, s) => sync(() => formatDesign(repo, args.id, s.dryRun))));
-  const pageName = Argument.string('page');
-  const page = Command.make('page').pipe(Command.withDescription('Add, inspect, or replace a package page. Use --plan <alternative> for a Design candidate.'), Command.withSubcommands([
-    Command.make('add', { id, page: pageName, plan: optional('plan') }, args => withRepo((repo,s) => sync(() => addPage(repo,kind,args.id,args.page,s.dryRun,Option.getOrUndefined(args.plan))))),
-    Command.make('show', { id, page: pageName, plan: optional('plan') }, args => withReadRepo(repo => sync(() => showPage(repo,kind,args.id,args.page,Option.getOrUndefined(args.plan))))),
-    Command.make('set', { id, page: pageName, body: text('body'), expectedDigest: text('expected-digest'), plan: optional('plan') }, args => withRepo((repo,s) => sync(() => setPage(repo,kind,args.id,args.page,body(args.body),args.expectedDigest,s.dryRun,Option.getOrUndefined(args.plan))))),
-  ]));
-  const stepCommands = [
+const kinds = ['feature', 'use-case', 'research', 'design', 'roadmap', 'engineering', 'issue', 'memory'] as const;
+const category = Argument.choice('category', kinds);
+
+export const newDocument = Command.make('new', {
+  category, name: Argument.string('name'), title: optional('title'), body: optional('body'),
+  type: Flag.choice('type', ['decision', 'insight', 'note']).pipe(Flag.optional),
+  feature: optional('feature'), pages: many('pages'), alternative: many('alternative'), observedAt: optional('observed-at'), source: many('source'),
+}, args => withRepo((repo, settings) => sync(() => {
+  if (args.category === 'memory' && Option.isNone(args.type)) throw new ConcordError('InvalidInput', 'Memory creation requires --type');
+  const receipt = createDocument(repo, args.category, {
+    id: args.name, title: Option.getOrUndefined(args.title) ?? args.name,
+    body: Option.isSome(args.body) ? body(args.body.value) : undefined,
+    memoryKind: Option.getOrUndefined(args.type), feature: Option.getOrUndefined(args.feature),
+    pages: args.pages.length ? args.pages.flatMap(value => value.split(',').map(page => page.trim())) : undefined,
+    alternatives: args.category === 'design' && args.alternative.length === 0 ? ['plan-1', 'plan-2'] : args.alternative, observedAt: Option.getOrUndefined(args.observedAt), sources: args.source, dryRun: settings.dryRun,
+  });
+  return { ...receipt, operation: 'new' };
+}))).pipe(Command.withDescription('Create a document from its bundled template; --pages selects optional pages, --type selects Memory type.'));
+
+export const showDocument = Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => ({ ...documentShow(repo, args.id, findDocument(loadDocuments(repo), args.id).metadata.kind, cached(settings.dryRun)), operation: 'show' })))).pipe(Command.withDescription('Show a document and its relationships by path or selector.'));
+
+export const listDocuments = Command.make('list', { category: category.pipe(Argument.optional), open: Flag.boolean('open').pipe(Flag.withDefault(false)) }, args => withReadRepo(repo => sync(() => {
+  const kind = Option.getOrUndefined(args.category);
+  if (args.open && kind !== undefined && kind !== 'issue') throw new ConcordError('InvalidOption', '--open applies to Issues');
+  return { operation: 'list', documents: loadDocuments(repo, args.open ? ['issue'] : kind === undefined ? undefined : [kind]).filter(document => !args.open || document.metadata.kind === 'issue' && document.metadata.status !== 'closed').map(document => ({ path: document.path, ...document.metadata })) };
+}))).pipe(Command.withDescription('List documents; --open selects open Issues.'));
+
+export function docsGroup(kind: Extract<DocumentKind, 'use-case' | 'design' | 'roadmap'>) {
+  const commands = kind === 'roadmap' ? [
+    Command.make('adopt', { id, feature: text('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, args.feature, s.dryRun)))),
+  ] : kind === 'design' ? [
+    Command.make('decide', { id, selected: text('selected'), target: many('target'), reason: text('reason') }, args => withRepo((repo, s) => sync(() => decideDesign(repo, args.id, args.selected, args.target, args.reason, s.dryRun)))),
+    Command.make('defer', { id, reason: text('reason') }, args => withRepo((repo, s) => sync(() => deferDesign(repo, args.id, args.reason, s.dryRun)))),
+    Command.make('check', { id }, args => withReadRepo(repo => sync(() => { const result = checkDesign(repo, args.id); if (!result.ok) process.exitCode = 1; return result; }))),
+    Command.make('format', { id }, args => withRepo((repo, s) => sync(() => formatDesign(repo, args.id, s.dryRun)))),
+  ] : [
     Command.make('steps', { id }, args => withReadRepo(repo => sync(() => useCaseSteps(repo, args.id)))),
     Command.make('format', { id, seed: Flag.boolean('seed').pipe(Flag.withDefault(false)), list: Flag.integer('list').pipe(Flag.optional) }, args => withRepo((repo, s) => sync(() => formatUseCase(repo, args.id, args.seed, Option.getOrUndefined(args.list), s.dryRun)))),
     Command.make('rename-step', { id, oldId: Argument.string('old-id'), newId: Argument.string('new-id') }, args => withRepo((repo, s) => sync(() => renameUseCaseStep(repo, args.id, args.oldId, args.newId, s.dryRun)))),
   ];
-  const commands = kind === 'roadmap' ? [create, list, show, page, adopt] : kind === 'design' ? [create, list, show, page, decide, correctReason, designCheck, designFormat] : kind === 'feature' || kind === 'engineering' || kind === 'research' ? [create, list, show, page] : kind === 'use-case' ? [create, list, show, ...stepCommands] : [create, list, show];
-  return Command.make(kind).pipe(Command.withDescription(`Maintain ${kind} contracts.`), Command.withSubcommands(commands));
+  return Command.make(kind).pipe(Command.withDescription(`Maintain ${kind} documents.`), Command.withSubcommands(commands));
 }
-
-export { docsGroup };

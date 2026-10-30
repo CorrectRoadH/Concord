@@ -9,11 +9,13 @@ import { normalizeArguments, runCli } from './cli-run.js';
 import type { StartupData } from './cli-startup-types.js';
 
 const loaders = {
+  new: () => import('./cli-command-documents.js').then(m => m.newDocument),
+  show: () => import('./cli-command-documents.js').then(m => m.showDocument),
+  list: () => import('./cli-command-documents.js').then(m => m.listDocuments),
   init: () => import('./cli-command-init.js').then(m => m.init),
   recover: () => import('./cli-command-recover.js').then(m => m.recover),
   config: () => import('./cli-command-config.js').then(m => m.config),
   constitution: () => import('./cli-command-constitution.js').then(m => m.constitution),
-  author: () => import('./cli-command-author.js').then(m => m.author),
   memory: () => import('./cli-command-memory.js').then(m => m.memory),
   issue: () => import('./cli-command-issue.js').then(m => m.issue),
   feedback: () => import('./cli-command-feedback.js').then(m => m.feedback),
@@ -30,14 +32,12 @@ const loaders = {
   template: () => import('./cli-command-template.js').then(m => m.templates),
   doctor: () => import('./cli-command-doctor.js').then(m => m.diagnose),
   action: () => import('./cli-command-action.js').then(m => m.action),
-  workspace: () => import('./cli-command-workspace.js').then(m => m.workspace),
-  git: () => import('./cli-command-git.js').then(m => m.gitView),
   view: () => import('./cli-command-view.js').then(m => m.view),
 };
 
 export async function loadCommand(group: string, data: StartupData): Promise<() => void> {
   normalizeArguments();
-  const documentKinds = ['feature', 'use-case', 'research', 'design', 'roadmap', 'engineering'] as const;
+  const documentKinds = ['use-case', 'design', 'roadmap'] as const;
   const kind = documentKinds.find(name => name === group);
   const selected = kind === undefined ? await loaders[group as keyof typeof loaders]() : (await import('./cli-command-documents.js')).docsGroup(kind);
   // Preserve parent usage and error suggestions. Built-ins and ambiguous routing
