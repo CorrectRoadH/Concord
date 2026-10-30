@@ -1,3 +1,6 @@
+import { startViewServer } from '../e2e/server.js';
+import { waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
+import { execFileSync } from 'node:child_process';
 import { installationResources } from "../../src/base/installation/index.js";
 import { relative } from "node:path";
 import { packageBin } from '../../scripts/package-location.js';
@@ -78,33 +81,26 @@ test('parallel consumers share one installed dependency set while damage stays i
   }
 })).pipe(Effect.provide(NodeServices.layer))));
 
-test('native installation damage and repair preserve an image already mapped by a consumer', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-  const root = yield* Effect.sync(() => mkdtempSync(join(tmpdir(), 'concord-mapped-install-')));
+test('native installation damage and repair preserve an image already mapped by a consumer', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-mapped-install-'));
   try {
-    yield* Effect.sync(() => {
-      writeFileSync(join(root, 'package.json'), '{"private":true}');
-      installConcord(root, packConcord(root), [], { private: true });
-    });
+    writeFileSync(join(root, 'package.json'), '{"private":true}');
+    installConcord(root, packConcord(root), [], { private: true });
     const installed = join(root, 'node_modules/concord-sdlc');
     const binary = join(installationResources(installed).native, hawdbTarget(), 'hawdb.node');
-    const ready = join(root, 'ready'), release = join(root, 'release');
-    yield* Effect.scoped(Effect.gen(function*() {
-      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--expose-gc', '--import', 'tsx',
-        resolve('test/fixtures/native-mapped-consumer.ts'), binary, ready, release],
-      { stdout: 'inherit', stderr: 'inherit' }));
-      yield* Effect.tryPromise(() => pollUntil(async () => existsSync(ready) ? true : undefined, { description: 'native image mapped' }));
-      yield* Effect.sync(() => {
-        const bytes = readFileSync(binary);
-        const inode = statSync(binary).ino;
-        replaceInstalledNativeBinary(binary, Buffer.concat([bytes, Buffer.from('digest mismatch')]));
-        assert.notEqual(statSync(binary).ino, inode, 'a mapped image must not be truncated');
-        replaceInstalledNativeBinary(binary, bytes);
-        writeFileSync(release, 'finalize');
-      });
-      assert.equal(Number(yield* child.exitCode), 0, 'the existing native instance must still finalize after installation repair');
-    }));
-  } finally {
-    yield* Effect.sync(() => rmSync(root, { recursive: true, force: true }));
-  }
-})).pipe(Effect.provide(NodeServices.layer))));
+    const consumer = join(root, 'consumer'); mkdirSync(consumer);
+    execFileSync('git', ['init', '-q', consumer]);
+    execFileSync(process.execPath, [packageBin(installed), '--root', consumer, '--json', 'init', '--docs-only'], { encoding: 'utf8' });
+    const server = await startViewServer({ root: consumer, installedBin: packageBin(installed) });
+    try {
+      await waitForWorkspaceProjection(server.address.replace(/\/$/u, ''));
+      const bytes = readFileSync(binary), inode = statSync(binary).ino;
+      replaceInstalledNativeBinary(binary, Buffer.concat([bytes, Buffer.from('digest mismatch')]));
+      assert.notEqual(statSync(binary).ino, inode, 'a mapped image must not be truncated');
+      replaceInstalledNativeBinary(binary, bytes);
+      assert.equal((await fetchFresh(`${server.address}api/workspace`)).status, 200);
+    } finally { await server.close(); }
+    assert.equal(server.process.signalCode, null, 'mapped native finalizers must not crash shutdown');
+    assert.equal(server.process.exitCode, 130, 'Effect reports the requested interruption after releasing native resources');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -1,11 +1,11 @@
 import { nativeArtifactRoot } from "../../src/base/installation/index.js";
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdtempSync, realpathSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, linkSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
+import { cpSync, mkdtempSync, realpathSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, linkSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
 import { hawdbTarget } from "../../src/base/installation/index.js";
@@ -311,6 +311,38 @@ if (childRole) {
       const reopened = openHawdb(f.db, { readOnly: true, create: false });
       assert.deepEqual(reopened.scan('code_cache'), []); reopened.close();
     } finally { if (proc) proc.kill('SIGKILL'); f.cleanup(); }
+  });
+
+  // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+  test('native binding bounds repeated installation failures and retries a repaired private cache image', () => {
+    const root = mkdtempSync(join(tmpdir(), 'concord-native-retry-'));
+    try {
+      const cache = join(root, 'cache');
+      const folder = join(cache, 'concord/native', basename(nativeArtifactRoot), hawdbTarget());
+      cpSync(join(nativeArtifactRoot, hawdbTarget()), folder, { recursive: true });
+      const binary = join(folder, 'hawdb.node'), original = join(root, 'original.node');
+      writeFileSync(original, readFileSync(binary));
+      writeFileSync(binary, Buffer.concat([readFileSync(binary), Buffer.from('digest mismatch')]));
+      const script = `
+        import fs from 'node:fs';
+        import { syncBuiltinESMExports } from 'node:module';
+        import { setTimeout as delay } from 'node:timers/promises';
+        const [module, binary, original] = process.argv.slice(1);
+        const { hawdbIdentity } = await import(module);
+        const read = fs.readFileSync;
+        let reads = 0, failures = 0;
+        fs.readFileSync = function(path, ...args) { if (path === binary) reads++; return read.call(this, path, ...args); };
+        syncBuiltinESMExports();
+        for (let i = 0; i < 100; i++) { try { hawdbIdentity(); } catch (error) { if (error.code !== 'HawdbIncompatible') throw error; failures++; } }
+        const failedReads = reads;
+        fs.writeFileSync(binary + '.repair', read(original)); fs.renameSync(binary + '.repair', binary);
+        await delay(1100);
+        console.log(JSON.stringify({ failedReads, failures, engine: hawdbIdentity().engine }));
+      `;
+      const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script, new URL('../../src/base/cache/index.ts', import.meta.url).href, binary, original], { env: { ...process.env, XDG_CACHE_HOME: cache }, encoding: 'utf8', timeout: 30_000 });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.deepEqual(JSON.parse(result.stdout), { failedReads: 1, failures: 100, engine: 'hawdb' });
+    } finally { rmSync(root, { recursive: true, force: true }); }
   });
 
 }

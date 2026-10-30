@@ -8,8 +8,9 @@ const commands: Readonly<Record<string, readonly string[]>> = {
   'code-list': ['code', 'list'], 'test-list': ['test', 'list'], 'template-list': ['template', 'list'],
 
 };
+const helpEnvironment: NodeJS.ProcessEnv = { NO_COLOR: '1', TERM: 'dumb', FORCE_COLOR: undefined, NODE_DISABLE_COMPILE_CACHE: '1', NODE_COMPILE_CACHE: undefined, NODE_OPTIONS: '' };
 const reads = Object.entries(commands).map(([name, run]) => ({
-  id: `local-sdlc/${name}`, consumer: 'self' as const, state: 'warm' as const, run, expect: { exitCode: 0 },
+  id: `local-sdlc/${name}`, consumer: 'self' as const, state: 'warm' as const, run, ...(name === 'help' ? { env: helpEnvironment } : {}), expect: { exitCode: 0 },
 }));
 
 export default defineBenchmarks('local-sdlc', reads);

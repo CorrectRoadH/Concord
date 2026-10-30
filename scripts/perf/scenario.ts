@@ -10,7 +10,7 @@ import { io, mustRun, PerfError, timedRun, type TimedRun } from './process.js';
 
 export interface BenchContext {
   readonly artifact: Artifact; readonly consumer: Consumer; readonly outputDir: string;
-  readonly smoke: boolean; readonly refreshLimitMs: number; readonly env?: Record<string, string>;
+  readonly smoke: boolean; readonly refreshLimitMs: number; readonly env?: NodeJS.ProcessEnv;
   readonly services: Map<string, string>;
   readonly cli: (argv: readonly string[], timeoutMs?: number) => Effect.Effect<TimedRun, PerfError>;
 }
@@ -25,6 +25,7 @@ export type BenchRun = readonly string[] | { readonly argv: readonly string[]; r
   | { readonly request: RequestSpec } | { readonly scan: readonly string[] };
 export interface BenchScenario {
   readonly id: string; readonly consumer: 'self' | 'scale' | `fixture:${string}`;
+  readonly env?: NodeJS.ProcessEnv;
   readonly state: 'warm' | 'cold'; readonly prepare?: BenchStep; readonly beforeEach?: BenchStep;
   readonly run: BenchRun;
   readonly expect: { readonly exitCode: number; readonly json?: Schema.ConstraintDecoder<unknown, never> };
@@ -60,7 +61,7 @@ export function runArguments(run: BenchRun): readonly string[] {
 }
 export const cliCommand = (artifact: Artifact, root: string, argv: readonly string[]) => (argv[0] === 'repo' || argv.includes('--skill'))
   ? [process.execPath, artifact.entry, ...argv] : [process.execPath, artifact.entry, '--root', root, ...argv];
-export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: Record<string, string>, refreshLimitMs = 0): BenchContext => ({
+export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: NodeJS.ProcessEnv, refreshLimitMs = 0): BenchContext => ({
   artifact, consumer, outputDir, smoke, refreshLimitMs, services: new Map(), ...(env ? { env } : {}),
   cli: (argv, timeoutMs) => timedRun(cliCommand(artifact, consumer.root, argv), { cwd: consumer.root, outputDir, ...(env ? { env } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }) }),
 });
@@ -145,7 +146,7 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
       : cliCommand(context.artifact, context.consumer.root, runArguments(run));
     const count = 'argv' in run ? run.concurrency : 1;
     const results = yield* Effect.all(Array.from({ length: count }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,
-      ...(timeoutMs === undefined ? {} : { timeoutMs }), ...(context.env ? { env: context.env } : {}) })), { concurrency: 'unbounded' });
+      ...(timeoutMs === undefined ? {} : { timeoutMs }), env: { ...context.env, ...scenario.env } })), { concurrency: 'unbounded' });
     for (const item of results) {
       yield* checkExpectation(scenario, item);
       if ('scan' in run) {

@@ -11,7 +11,7 @@ class StartupBuildFailed extends Schema.TaggedError<StartupBuildFailed>()('Start
 const Receipt = Schema.Struct({ stdout: Schema.String, stderr: Schema.String, status: Schema.Int });
 const Group = Schema.Struct({ name: Schema.String, description: Schema.optional(Schema.String) });
 const Data = Schema.Struct({
-  format: Schema.Literal('concord.startup/v1'), packageDigest: Schema.String,
+  format: Schema.Literal('concord.startup/v1'), packageDigest: Schema.String, dataDigest: Schema.String,
   files: Schema.Record(Schema.String, Schema.String), sourceFiles: Schema.Record(Schema.String, Schema.String),
   receipts: Schema.Record(Schema.String, Receipt), groups: Schema.Array(Group),
 });
@@ -33,8 +33,7 @@ const capture = (args: readonly string[]) => Effect.tryPromise({
 export const buildStartup = Effect.fn('build.startup')(function*() {
   // Keep a self-contained application fallback, independent of command chunks.
   // Package dependencies remain external to preserve Effect service identity with
-  // repository contributions and all public exports. The bundle stays at dist's
-  // root, preserving every source module's import.meta.url resource base.
+  // repository contributions and all public exports. Installation resources resolve their package owner independently of bundle depth.
   const closure = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/cli-fallback.js'], outfile: 'dist/entry/cli/cli-fallback-bundle.js', metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
   const bootstrap = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js'], outdir: 'dist/startup-graph', write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
   const definitions = yield* Effect.tryPromise(async () => {
@@ -63,11 +62,12 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
     };
     const files = Object.fromEntries(emitted.map(file => [modulePath(file, 'dist'), digest(file)]));
     const sourceFiles = Object.fromEntries(emitted.map(file => file.replace(/^dist\//u, 'src/').replace(/\.js$/u, '.ts')).map(file => [modulePath(file, 'src'), digest(file)]));
-    const data: StartupData = Schema.decodeUnknownSync(Data, { onExcessProperty: 'error' })({
+    const payload = {
       format: 'concord.startup/v1', packageDigest: digest('package.json'), files, sourceFiles,
       receipts: Object.fromEntries(receipts),
       groups: definitions.fullCommand.subcommands.flatMap(group => group.commands.map(command => ({ name: command.name, ...(command.description === undefined ? {} : { description: command.description }) }))),
-    });
+    };
+    const data: StartupData = Schema.decodeUnknownSync(Data, { onExcessProperty: 'error' })({ ...payload, dataDigest: createHash('sha256').update(JSON.stringify(payload)).digest('hex') });
     writeFileSync('dist/startup-data.js', `// Generated from the complete CLI. Do not edit.\nexport default ${JSON.stringify(data)};\n`);
     console.error(`# Startup: recorded ${paths.length} help paths, version and no-argument output`);
   });

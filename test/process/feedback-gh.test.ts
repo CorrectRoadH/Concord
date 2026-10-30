@@ -180,11 +180,12 @@ test('real gh process fixture uses isolated scope, fixed requests, strict identi
       await waitForSlot();
       writeFileSync(scenario, JSON.stringify({ hang: true }));
       const beforeShutdown = readCalls().length;
-      const pendingShutdown = post();
+      const pendingShutdown = post().then(response => ({ kind: 'response' as const, response }), error => ({ kind: 'disconnected' as const, error }));
       await waitForCall(beforeShutdown + 2);
       await server.close();
       const shutdownResponse = await pendingShutdown;
-      assert.equal(shutdownResponse.ok, false);
+      assert.equal(shutdownResponse.kind, 'disconnected');
+      if (shutdownResponse.kind === 'disconnected') assert.ok(shutdownResponse.error instanceof TypeError);
     } finally { await server.close(); }
     process.env.TMPDIR = isolatedTmp;
     writeFileSync(scenario, JSON.stringify({ lockCleanup: true }));

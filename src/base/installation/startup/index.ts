@@ -13,6 +13,8 @@ export async function readStartupData(): Promise<StartupData | undefined> {
     const location = new URL('dist/startup-data.js', installation);
     // The target is a build-generated resource, never consumer-authored code.
     const data = (await import(location.href) as { default: StartupData }).default;
+    const { dataDigest, ...payload } = data;
+    if (createHash('sha256').update(JSON.stringify(payload)).digest('hex') !== dataDigest) return;
     if (data.format !== 'concord.startup/v1' || digest(new URL('package.json', installation)) !== data.packageDigest) return;
     for (const [file, expected] of Object.entries(source ? data.sourceFiles : data.files)) {
       if (digest(new URL(file, entry)) !== expected) return;

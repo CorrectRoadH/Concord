@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/cross-platform-release/use-case/release-from-tag.md
 import { execFileSync } from 'node:child_process';
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from './test-temporary.js';
 import { join, resolve } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -16,22 +16,22 @@ export type PackedConcord = typeof PackageArtifact.Type;
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url));
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-export function packConcord(destination: string): PackedConcord {
+export function packConcord(destination: string, repository = sourceRoot): PackedConcord {
   return Effect.runSync(Effect.sync(() => {
     const scratch = mkdtempSync(join(tmpdir(), 'concord-release-pack-'));
     try {
       const output = execFileSync('pnpm', ['--config.ignore-scripts=true', 'pack', '--skip-manifest-obfuscation', '--json', '--pack-destination', scratch], {
-        cwd: sourceRoot, encoding: 'utf8', timeout: 60_000,
+        cwd: repository, encoding: 'utf8', timeout: 60_000,
       });
       const artifact = Schema.decodeUnknownSync(Schema.fromJsonString(PackageArtifact))(output);
       execFileSync('tar', ['-xzf', resolve(scratch, artifact.filename), '-C', scratch]);
       // pnpm pack 强制排除自己的锁；补入唯一原始锁，不能另生成与开发依赖图不同的发布锁。
       const manifestSchema = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown));
-      if (!isDeepStrictEqual(Schema.decodeUnknownSync(manifestSchema)(readFileSync(join(sourceRoot, 'package.json'), 'utf8')), Schema.decodeUnknownSync(manifestSchema)(readFileSync(join(scratch, 'package/package.json'), 'utf8')))) throw new Error('pnpm changed package metadata');
+      if (!isDeepStrictEqual(Schema.decodeUnknownSync(manifestSchema)(readFileSync(join(repository, 'package.json'), 'utf8')), Schema.decodeUnknownSync(manifestSchema)(readFileSync(join(scratch, 'package/package.json'), 'utf8')))) throw new Error('pnpm changed package metadata');
       // pnpm 会移除 manifest 末尾换行；语义相同后恢复源字节，保持跨渠道身份。
-      for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) copyFileSync(join(sourceRoot, name), join(scratch, 'package', name));
+      for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) copyFileSync(join(repository, name), join(scratch, 'package', name));
       for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
-        if (!readFileSync(join(sourceRoot, name)).equals(readFileSync(join(scratch, 'package', name)))) throw new Error(`Packed identity differs: ${name}`);
+        if (!readFileSync(join(repository, name)).equals(readFileSync(join(scratch, 'package', name)))) throw new Error(`Packed identity differs: ${name}`);
       }
       mkdirSync(destination, { recursive: true });
       const filename = resolve(destination, `${artifact.name}-${artifact.version}.tgz`);

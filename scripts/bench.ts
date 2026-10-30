@@ -138,6 +138,7 @@ const main = Effect.gen(function*() {
     ...(values.quick ? ['quick mode'] : []), ...(!values.reference && values.compare === undefined ? ['no baseline and not reference'] : []),
     ...(measured.length === 0 ? ['no measured scenarios'] : [])];
   const record = { format: 'concord.bench/v2', selection: { ...(values.changed !== undefined ? { changed: `${base}...worktree` } : {}), scenarios: selected.map(s => s.id) },
+    scenarioEnvironments: Object.fromEntries(selected.filter(s => s.env !== undefined).map(s => [s.id, Object.fromEntries(Object.entries(s.env!).map(([key, value]) => [key, value ?? 'unset']))])),
     measuredAt: new Date().toISOString(), environment: environment(), reference: values.reference, samples, artifacts,
     consumers: Object.fromEntries([...contexts].map(([key, c]) => [key, c.consumer])), cold, snapshots, verdicts, pass, acceptance: acceptanceGaps.length === 0,
     ...(acceptanceGaps.length ? { acceptanceGaps } : {}) };

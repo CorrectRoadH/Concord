@@ -19,7 +19,10 @@ export default {
       "{file}"
     ],
     "sourceFiles": [
-      "test/support",
+      "test/support/support.ts",
+      "test/support/installed-package.ts",
+      "test/support/repository.ts",
+      "test/support/temporary.ts",
       "test/e2e/fixtures.ts",
       "test/e2e/engine.ts",
       "test/e2e/local-browser.ts",

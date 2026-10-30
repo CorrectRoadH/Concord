@@ -3,11 +3,11 @@ import { once } from 'node:events';
 import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { installationResources } from '../../src/base/installation/index.js';
+import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
 import { tmpdir } from '../support/temporary.js';
 import { packConcord, installConcord } from '../support/installed-package.js';
 
-export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly webRoot?: string }
+export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly webRoot?: string; readonly installedBin?: string }
 export interface ViewServerHandle {
   readonly root: string; readonly host: string; readonly port: number; readonly address: string;
   readonly process: ChildProcess;
@@ -20,10 +20,14 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   const scratch = mkdtempSync(join(tmpdir(), 'concord-browser-server-'));
   let child: ChildProcess | undefined;
   try {
-    const install = join(scratch, 'tool'); mkdirSync(install);
-    writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-    installConcord(install, packConcord(scratch), [], { private: options.webRoot !== undefined });
-    const resources = installationResources(join(install, 'node_modules/concord-sdlc'));
+    let resources: ReturnType<typeof installationResources>;
+    if (options.installedBin !== undefined) resources = installationResources(installationRootForBin(options.installedBin));
+    else {
+      const install = join(scratch, 'tool'); mkdirSync(install);
+      writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
+      installConcord(install, packConcord(scratch), [], { private: options.webRoot !== undefined });
+      resources = installationResources(join(install, 'node_modules/concord-sdlc'));
+    }
     if (options.webRoot !== undefined) {
       rmSync(resources.web, { recursive: true, force: true });
       cpSync(options.webRoot, resources.web, { recursive: true });

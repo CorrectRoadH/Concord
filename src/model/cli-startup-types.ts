@@ -9,6 +9,7 @@ export interface StartupReceipt {
 export interface StartupData {
   readonly format: 'concord.startup/v1';
   readonly packageDigest: string;
+  readonly dataDigest: string;
   readonly files: Readonly<Record<string, string>>;
   readonly sourceFiles: Readonly<Record<string, string>>;
   readonly receipts: Readonly<Record<string, StartupReceipt>>;

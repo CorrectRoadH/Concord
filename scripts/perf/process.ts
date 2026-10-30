@@ -16,7 +16,7 @@ let sequence = 0;
 
 /** Redirect directly to file descriptors; output reading is outside the timed interval. */
 export const timedRun = Effect.fn('perf.timedRun')(function*(argv: readonly string[], options: {
-  readonly cwd: string; readonly outputDir: string; readonly env?: Record<string, string>; readonly timeoutMs?: number; readonly processGroup?: boolean;
+  readonly cwd: string; readonly outputDir: string; readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number; readonly processGroup?: boolean;
 }) {
   if (argv.length === 0) return yield* new PerfError({ message: 'Empty process argv' });
   const id = String(++sequence).padStart(4, '0');
@@ -49,7 +49,7 @@ export const timedRun = Effect.fn('perf.timedRun')(function*(argv: readonly stri
 }, Effect.scoped);
 
 export const mustRun = Effect.fn('perf.mustRun')(function*(argv: readonly string[], options: {
-  readonly cwd: string; readonly outputDir: string; readonly env?: Record<string, string>;
+  readonly cwd: string; readonly outputDir: string; readonly env?: NodeJS.ProcessEnv;
 }) {
   const run = yield* timedRun(argv, options);
   if (run.exitCode !== 0) return yield* new PerfError({ message: `${argv.join(' ')} exited ${run.exitCode ?? run.signal}: ${(run.stderr || run.stdout).slice(0, 2000)}` });

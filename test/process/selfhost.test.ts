@@ -29,7 +29,7 @@ test('current checkout configures a version-matched runner whose annotations sca
   assert.equal(project.runner.kind, 'command');
   if (project.runner.kind !== 'command') assert.fail('self-host runner must use explicit command argv');
   assert.deepEqual(project.runner.argv, ['node', '--import', 'tsx', 'scripts/test-built.ts', '--test-name-pattern', '{pattern}', '{file}']);
-  assert.deepEqual(project.runner.sourceFiles, ['test/support', 'test/e2e/fixtures.ts', 'test/e2e/engine.ts',
+  assert.deepEqual(project.runner.sourceFiles, ['test/support/support.ts', 'test/support/installed-package.ts', 'test/support/repository.ts', 'test/support/temporary.ts', 'test/e2e/fixtures.ts', 'test/e2e/engine.ts',
     'test/e2e/local-browser.ts', 'test/e2e/server.ts', 'test/e2e/journey.ts', 'e2e.config.ts',
     'scripts/test-built.ts', 'scripts/test-reporter.ts', 'tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']);
 
@@ -88,7 +88,7 @@ test('current checkout configures a version-matched runner whose annotations sca
     const rejected = spawnSync(process.execPath, [installedConcordCli(), '--root', consumer, '--json', 'check'], { cwd: consumer, encoding: 'utf8' });
     assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(rejected.stdout).ok, false);
-    assert.match(rejected.stdout, /src\/storage\.ts/u);
+    assert.match(rejected.stdout, /src\/base\/workspace\/storage\.ts/u);
   } finally {
     rmSync(consumer, { recursive: true, force: true });
   }
