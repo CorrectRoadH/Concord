@@ -1,6 +1,6 @@
 # Web 工作台架构
 
-React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。HTTP 由该 Git 工作区的[工作区服务](../local-data-engine/architecture.md#工作区服务)托管：`concord view` 连接或启动服务并请求开启 HTTP，`view` 退出时关闭 HTTP，服务按自身规则继续或退出；`view --in-process` 在本进程运行同一服务。HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
+React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。HTTP 由该 Git 工作区的[工作区服务](../local-data-engine/architecture.md#工作区服务)托管，见[服务托管](#服务托管)。HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
 
 工作台根地址进入 `/git`，总览位于 `/overview`。Git 页默认列出全部未提交文件，文档与测试作为筛选；Git 读取失败独立显示错误和重试入口，不伪装为空列表。PR 静态产物的比较身份与发布边界见[变更预览](change-preview.md)。
 
@@ -16,13 +16,13 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。HTTP �
 
 参考模板树从现有 inventory 的路径派生，由共享 ContentSidebar 渲染；不新增存储索引。树形导航采用 [WAI 折叠导航模式](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/examples/disclosure-navigation/) 的嵌套列表、aria-expanded 按钮和 aria-current 链接。目录展开是展示状态，文件选择由 URL 拥有；筛选和当前文件定位不建立另一份导航来源。
 
-每次领域操作独立取得、释放 LocalRepository；读取与规划不持锁，提交短暂取得独占 publication lease。测试由服务拥有的单槽 job 管理，浏览器断开不取消任务。取消须确认子进程组退出，才能释放租约和运行槽，失败时保留租约并提供诊断。
+每次领域操作独立取得、释放 LocalRepository；读取与规划不持锁，提交短暂取得独占 publication lease。写入、恢复与证据终结在服务拥有的操作进程中执行，HTTP handler 只转交严格解码的操作并返回回执。测试由服务拥有的单槽 job 管理，浏览器断开不取消任务。取消须确认子进程组退出，才能释放租约和运行槽，失败时保留租约并提供诊断。
 
 工作区导航读取[工作区投影](#工作区投影)，不在请求内扫描来源。
 
 后台编译复用 trace 生成诊断。文档与代码的纯解析结果使用有容量上限的 HawDB 内存缓存，以当前原文匹配；目录集合、文件读取、路径安全、配置、租约及恢复检查仍每次执行，不以时间戳代替内容校验。单文件预览只读取目标和其 README 归属链，全局 inventory 异常由 workspace/check 诊断。Git 测试基线在 HawDB 内存 namespace 中按 worktree、不可变 HEAD revision、测试根与解析器版本缓存，工作树状态仍实时读取。
 
-浏览器以 `GET /api/events`（SSE）接收新代次号与任务状态变化，收到后读取工作区缓存；SSE 断开期间改为每四秒读取工作区缓存和任务状态并重连。Git 每三十二秒读取，轮询不重叠；首次构建期间每两秒重试读取缓存。读取不触发扫描，不重置当前文件或草稿。写入后的读取排在已有读取之后。首次取得工作区后不立即重复读取。同一 Research 主题内切换文件保留文件树节点、折叠和滚动状态，加载占位保持工具栏布局。
+浏览器以 `GET /api/events`（SSE）接收工作区服务的状态事件（代次、刷新状态与任务变化），收到后读取工作区缓存；SSE 断开期间改为每四秒读取工作区缓存和任务状态并重连。Git 每三十二秒读取，轮询不重叠；首次构建期间每两秒重试读取缓存。读取不触发扫描，不重置当前文件或草稿。写入后的读取排在已有读取之后。首次取得工作区后不立即重复读取。同一 Research 主题内切换文件保留文件树节点、折叠和滚动状态，加载占位保持工具栏布局。
 
 文档与源码使用一套当前恢复日志，按写入范围区分文档事务和源码事务，不维护历史格式兼容分支。源码事务冻结经过验证的配置范围与身份，仅替换既有 JS/TS 常规文件，不与配置修改混合。prepared 可回滚，committed 只核验完成后的内容；外部改动导致具名冲突，不删除恢复现场。
 
@@ -31,6 +31,12 @@ Web 操作者拥有与本地 CLI 相同的仓库代码执行能力。默认只�
 Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时必须为 HTTP/HTTPS 且与 Host 匹配；不携带 Origin 的请求仍可访问，默认端口按 Origin 协议归一化。拒绝重复 Host、非法 Origin 和能改变 authority 的请求路径。Host/Origin 校验不提供身份认证或 DNS rebinding 防护。
 
 刷新页面保留当前深链接。HTTP 面向可信网络；TLS 终止代理必须保留浏览器使用的外部 Host（含非默认端口），不自动信任代理转发头。Markdown 中只有显式 p5 图块经专用沙箱运行，普通 HTML 脚本和 MDX 不执行。
+
+## 服务托管
+
+`concord view` 连接或启动工作区服务，请求以 `--host` 与 `--port`（默认 127.0.0.1:4317）开启监听，得到绑定实例 token 的租约。相同 `(host, port)` 的请求共用一个监听并各得一个租约；端口已被其它程序占用时返回具名错误。监听在仍有租约或仍有浏览器 SSE 连接时保持：`view` 退出只释放自己的租约；面板为打开浏览器开启的租约在没有 SSE 连接 10 分钟后释放。最后一个租约释放且没有连接时关闭监听。Host/Origin 检查与信任边界不因托管位置改变。
+
+服务停止时先向 SSE 连接发送 `stopping` 事件。页面显示服务已停止及重新运行 `concord view` 的提示；新服务不自动恢复旧监听。
 
 ## 工作区投影
 
@@ -56,7 +62,7 @@ snapshot 由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写�
 
 `ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移代次发布后一秒再申请一次。刷新失败不改变已完成写入的回执。
 
-服务锁保证每个 worktree 只有一个刷新者。扫描 worker 复用 `ViewScanManager` 的 owned process 与 60 秒上限，只返回候选；服务确认回复、身份与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
+服务锁保证每个 worktree 只有一个刷新者。扫描在服务的计算进程中执行，60 秒上限与超时整组终止沿用 `ViewScanManager` 的规则，计算进程只返回候选；主进程确认回复、身份与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
 
 遇到 journal 时，若它已移除或本工作区发布 owner 仍存活，丢弃本次扫描并重新调度；否则记录 RecoveryRequired。服务持有持久句柄，发布不与其它进程争用数据库。
 

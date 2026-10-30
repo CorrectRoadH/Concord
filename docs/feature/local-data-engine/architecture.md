@@ -4,7 +4,7 @@
 
 ## 原生边界
 
-Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [C-005](../../constitution.md#c-005-3)。引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。关系缓存使用参数化 SQL。现有子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据（[决策依据](../../design/hawdb-data-engine/DECISION.md)）。
+Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [C-005](../../constitution.md#c-005-3)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放，复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。关系缓存使用参数化 SQL。现有子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据（[决策依据](../../design/hawdb-data-engine/DECISION.md)）。
 
 桥接识别 typed `HawDBError::BranchBusy` 与固定版本的旧目录锁争用，该分类贯穿 schema 与事务准入；事务获取失败保留具名错误，真正的 schema 形状错误为 `HawdbIncompatible`。
 
@@ -12,7 +12,7 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 持久库位于 Git-private `cache.hawdb`，各类持久缓存以命名空间隔离。持久句柄只有一个所有者（[C-005](../../constitution.md#c-005-4)）：该 worktree 的[工作区服务](#工作区服务)运行时由它长期持有；没有服务时由当前命令的最外层来源快照按需打开，嵌套调用只复用，快照结束时释放。只读句柄需要写入时，关闭后以写模式重开并重新竞争所有权。原生事务不跨调用逃逸。publication lease 的持有者不持有持久句柄，存在独占提交时数据库先于 lease 释放。
 
-持久句柄因协调锁被占用而无法打开时，命令改用本进程的内存缓存继续完成，不等待、不重试打开，也不把 `HawdbBusy` 报告为命令失败；结果与持久缓存命中时相同。`cache status`、`cache clear` 与 `cache rebuild` 仍如实报告占用。
+持久句柄因协调锁被占用、或发现运行中的工作区服务而不打开时，可由当前来源完整重建的解析缓存（文档、配置、代码、测试标记与 Git 基线）改用本进程的内存缓存，命令照常完成，正确性仍由当前来源核验保证。缓存诊断保留 `HawdbBusy` 原因。远端反馈快照与诊断投影不是解析缓存：服务运行时经由服务读取，没有服务而库被占用时如实报告不可用，不把空内存实例当作已读取的快照，不自动联网。损坏、预算、路径安全与原生产物失败保留各自的具名失败。`cache status`、`cache clear` 与 `cache rebuild` 如实报告占用。
 
 文档与静态配置解析、代码解析及不可变 Git 测试基线使用进程期内存实例。纯解析入口不依赖 Repository 或磁盘目录；命名空间区分数据，源摘要与解析器身份区分代次。内存实例没有文件锁，关闭或失效后可以重建。
 
@@ -32,7 +32,7 @@ Repository 的只读属性 `persistentCache: 'use' | 'off'` 独立于来源访�
 
 ## 清理
 
-有工作区服务时，`cache clear` 发送给服务：服务暂停刷新，等待进行中的读取完成，关闭持久句柄并在本进程执行下述清理，然后重新打开并从头刷新；服务全程持有服务锁。重新打开因其它进程短暂占用而失败时，以 100 ms 间隔重试至多 3 s，仍失败则以内存缓存继续服务并在 `cache status` 中报告。没有服务时，清理在本进程执行。
+有工作区服务时，`cache clear` 发送给服务：服务进入 draining，等待已受理的请求完成，关闭持久句柄，再异步取得独占 publication lease（最多等待 3 秒，超时重新打开并返回 `RepositoryBusy`），执行下述清理，释放 lease 后重新打开并从头刷新。服务全程持有服务锁，当前版本的其它进程不会在此期间打开持久库。没有服务时，清理在本进程按现行方式执行。
 
 clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.lock`，并按路径排序锁住树内全部以 `.lock` 结尾的普通文件，包括分支与 catalog 锁。描述符持有到清理结束。任一锁占用、权限、I/O、路径异常或未知错误都拒绝删除；打开失败不代表可删除，损坏的 manifest 不影响独立取锁。只有显式 clear 可以为已验证目录补建根锁，不补建嵌套引擎锁。
 
@@ -44,66 +44,94 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 ## 工作区服务
 
-每个 worktree 最多一个工作区服务：它是该 worktree 持久 HawDB 的唯一打开者，在内存命名空间中长期保持解析结果，监听来源并刷新工作区投影，通过本机 socket 向 [Herdr 面板](../herdr-panel/README.md)、[Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。HawDB 规定一个目录由一个进程长期持有，服务按此持有缓存（[决策依据](../../design/cli-hot-path/DECISION.md)）。
+每个 worktree 最多一个工作区服务。它长期持有该 worktree 的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Herdr 面板](../herdr-panel/README.md)、[Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。HawDB 规定一个目录由一个进程长期持有，服务按此持有缓存（[决策依据](../../design/cli-hot-path/DECISION.md)）。
 
-| 实体 | 身份 | 生命周期 |
+### 进程与资源
+
+| 实体 | 身份 | 拥有与生命周期 |
 | --- | --- | --- |
-| 服务锁 | `<privateDir>/server/lock`，原生排他文件锁，规则同[协调锁](#协调锁) | 服务存活期间持有；进程死亡时由操作系统释放 |
-| 运行记录 | `<privateDir>/server/current.json`：`{pid, startedAt, token, installation, protocol, socket}`，严格解码 | 取得服务锁后原子写入；退出时按 token 删除 |
-| socket | `<runtime>/concord-<uid>/<privateDir 的 sha256 前 32 位>.sock`，0600；Windows 为同名 named pipe | 取得服务锁后创建；退出时删除 |
-| 解析结果 | 服务进程的内存命名空间，预算见[资源预算](#资源预算) | 随服务进程 |
+| 服务主进程 | worktree 的 Git-private 目录 + 安装身份 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算，不持有 publication lease |
+| 计算进程 | 由主进程经 `OwnedProcessService` 启动的长期子进程 | 持有内存解析缓存，执行刷新扫描与只读查询；不打开持久库；60 秒无响应或超出预算时整组终止并重启，缓存冷启动 |
+| 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动 | 执行现行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库；结束后退出 |
+| 服务锁 | `<privateDir>/server/lock`，原生排他文件锁，单链接普通文件，按 device/inode 校验 | 与数据库[协调锁](#协调锁)是两把锁；服务存活期间一直持有，清理期间也不释放；进程死亡时由操作系统释放 |
+| 运行记录 | `<privateDir>/server/current.json`：`{state, pid, startedAt, token, lock, installation, protocol, socket}`，严格解码 | 只由服务锁持有者在锁内原子写入与按 token 删除；`pid` 与 `startedAt` 只用于诊断，不参与裁决 |
+| socket | `<runtime>/concord-<uid>/<privateDir 的 sha256 前 32 位>.sock`，0600；Windows 为同名 named pipe | 只由服务锁持有者在锁内创建；删除前核对其 inode 与运行记录一致 |
+| HTTP 监听 | `(host, port)`，每次开启返回绑定实例 token 的租约 | 按租约计数，见 [Web 工作台架构](../web-workbench/architecture.md#服务托管) |
 
-`<runtime>` 依次取 `XDG_RUNTIME_DIR` 与 `os.tmpdir()`。目录必须属于当前 uid、权限 0700、不是符号链接，socket 路径不超过平台上限（Linux 107 字节），否则不创建服务。
+`<runtime>` 依次取 `XDG_RUNTIME_DIR` 与 `os.tmpdir()`。目录必须属于当前 uid、权限 0700、不是符号链接，socket 路径不超过平台上限（Linux 107 字节），否则不创建服务并报告原因。
+
+主进程把需要的持久数据（远端反馈快照、诊断投影）随请求交给计算进程，计算进程把结果交回主进程写入；持久命名空间只在主进程读写。
 
 ### 启动与裁决
 
-只有 `concord panel`、`concord view` 与 `concord server start` 启动服务；其它 CLI 命令只使用已有服务，不启动它。
+只有 `concord panel`、`concord view` 与 `concord server start` 启动服务；其它 CLI 命令只使用已有服务。`view --in-process` 在本进程运行同一服务，同样先取得服务锁。
 
-1. 启动者读取运行记录，连接其 socket 并握手。安装身份与协议相同则直接使用。
-2. 否则以 detached 方式启动 `concord server run --root <worktree>`，最多等待 1 s 出现可握手的服务。
-3. `server run` 取得服务锁；失败表示已有服务，进程退出。成功后删除残留 socket，绑定新 socket，原子写入运行记录，打开持久 HawDB 并读取已有代次，再接受连接。
-4. 已有服务的安装身份或协议不同时，启动者发送 `shutdown`，等待其释放服务锁（上限 3 s，超时报 `WorkspaceServerBusy`）后按第 2 步启动。
+1. 启动者读取运行记录，核对 worktree、privateDir 与安装身份，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
+2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
+3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者；权限、I/O、类型或身份失败分别以具名错误 `ServerLockUnavailable` 报告。
+4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`，然后打开持久库、读取已有代次并启动计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务并在状态中报告原因。
+5. 启动者等待可握手的服务最多 1 秒；`opening` 已可握手，不必等待打开持久库。
 
-只有服务锁的持有者可以删除 socket 与运行记录；连接失败、权限错误或超时只表示服务不可用，不授权删除。安装身份沿用工作区投影身份中的安装部分，服务只为同身份的客户端回答。
+`hello` 与 `shutdown` 是控制帧，结构由本页固定：`hello {protocol, installation}` 返回 `{protocol, installation, token, state, generation}`；安装身份或协议不同时只回应这两种控制帧。启动者遇到不同身份的服务时发送带对方 token 的 `shutdown`，等待其释放服务锁（上限 3 秒），超时返回 `WorkspaceServerBusy` 并在 details 中给出对方 pid 与安装身份。CLI 只读命令遇到不同身份的服务时在本进程计算，不接管。
 
-服务在无客户端连接且 10 分钟无请求后退出；worktree 或 Git-private 目录消失时 5 s 内退出；收到 `shutdown` 时排空后退出。退出依次停止监听与定时器，完成或明确失败进行中的请求，关闭 HTTP 与持久句柄，按 token 删除运行记录与 socket，最后释放服务锁。
+### 状态
+
+| 状态 | 接受的工作 | 离开条件 |
+| --- | --- | --- |
+| opening | `hello`、订阅（推送 opening 状态） | 持久库打开成功进入 running，失败进入 degraded |
+| running | 全部请求 | clear、维护或 shutdown 进入 draining |
+| degraded | 全部请求；持久命名空间不可用，状态中给出原因 | 用户 clear 或下次重启 |
+| draining | 新的相关请求排队，已受理的请求完成 | 进入 clearing、maintaining 或 stopping |
+| clearing / maintaining | 只读订阅与 `hello` | 完成后进入 opening |
+| stopping | 无新请求 | 进程退出 |
+
+clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发布与清理前核对服务锁路径的 device/inode 与自身持有的一致，监听事件后与每 5 秒也核对一次；不一致（例如 privateDir 被删除重建）时进入 stopping，不再发布，只删除仍与自身 token 和 inode 一致的 socket 与记录。
+
+服务在无客户端连接且 10 分钟无请求后退出；worktree 消失时 5 秒内退出；收到 `shutdown` 时退出。退出先停止受理新工作，向全部订阅者与 SSE 连接发送 `stopping` 事件并关闭长期订阅，再在 3 秒内完成或明确失败在途请求，然后停止计算进程，关闭 HTTP 与持久句柄，按 token 删除记录与 socket，最后释放服务锁。
 
 ### 刷新与推送
 
-服务是该 worktree 唯一的工作区投影刷新者，读取、漂移与替换规则沿用[工作区投影](../web-workbench/architecture.md#工作区投影)，刷新在服务内的 worker 线程执行，不阻塞 socket 与 HTTP。监听只产生失效信号，另外监听 Git-private 目录的 `HEAD`，使 Git 测试基线随提交更新。最新代次同时写入 `workspace_projection` 持久行，服务重启后立即可读。
+服务是该 worktree 唯一的工作区投影刷新者。监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。刷新在计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)；主进程确认结果、身份与无待恢复 journal 后写入 `workspace_projection`，服务重启后最新代次立即可读。
 
-每个代次带测试声明与可见收据的对应；收据之后测试源码或其指向的 Spec 有改动的，标为过期。代次发布后推送给全部订阅者；同一连接上未发送的旧代次被新代次替换，不排队。
+订阅以 `(token, generation)` 识别代次。首次订阅与重连先发送完整状态；之后代次、`lastAttempt`、错误、状态与任务变化都发送事件，即使没有新代次。同一连接上未发送的旧事件被新的完整状态替换，不排队。每个代次带测试声明与可见收据的对应；收据之后测试源码或其指向的 Spec 有改动的，标为过期。
 
 ### 协议
 
-本机 socket 上的长度前缀 JSON 帧，每帧严格 Schema 解码，未知字段拒绝。单帧上限 8 MiB，每个连接的待发送字节上限 16 MiB，超出时断开该连接，其它连接不受影响。
+本机 socket 上的长度前缀 JSON 帧，严格 Schema 解码，未知字段拒绝。数据请求带 `requestId` 与截止时间，可取消；结果按不超过 1 MiB 的块分帧，累计上限沿用对应公开读取的上限（例如定向文件读取 32 MiB），全部块到齐并校验后才交给调用者，超限返回具名失败，不截断。
 
 | 请求 | 应答 |
 | --- | --- |
-| `hello {protocol, installation}` | `{protocol, installation, token, generation}`；身份不同时只返回身份，不接受其它请求 |
-| `subscribe {kind: workspace}` | 先发送当前代次，之后每个新代次推送一次 |
-| `read {path}` | 与 Web `/api/file` 相同的定向严格读取 |
-| `query {name, input}` | 只读命令的领域结果，见下文 |
-| `http {enable}` | 开启或关闭 Web 工作台的 HTTP 监听，返回地址 |
+| `hello`、`shutdown` | 见启动与裁决 |
+| `subscribe {kind: workspace}` | 完整状态，之后的事件 |
+| `read {path, expectedDigest?}` | 与 Web `/api/file` 相同的定向严格读取，另附实际摘要 |
+| `query {name, input}` | 白名单只读查询的结果或具名错误，见 CLI 查询 |
+| `http {open \| close, host, port, lease?}` | 监听地址与租约 |
 | `cache-clear` | 按[清理](#清理)执行后应答 |
-| `shutdown` | 排空后应答并退出 |
+
+每个服务最多 64 个连接，每个连接最多 8 个在途请求，全服务最多 256 个排队请求，待发送字节合计不超过 64 MiB；超限按请求或连接以 `WorkspaceServerBusy` 失败，其它连接不受影响。
 
 ### CLI 查询
 
-各类 `list`、`show`、`trace`、`check`、`docs check` 与 `memory index` 先读运行记录；有同安装身份的服务时发送 `query`，否则在本进程计算。服务回答前读取全部来源并核对摘要，变化的来源先刷新，因此结果等价于本进程同源计算。CLI 用同一格式化代码输出，结构、错误码与退出码不变。查询在应答前断开时，CLI 在本进程重新计算。写命令、交互命令、`view`、`lsp` 与外部 runner 不经由服务。
+可经由服务的命令是固定白名单：各类 `list` 与 `show`、`trace check`、`check`、`docs check` 与 `memory index`。每项在计算进程中以一个新的乐观 Repository 快照执行与本进程相同的领域函数，返回前按该命令原有规则核验文件、缺失路径、目录集合、配置、路径安全、publication.revision 与恢复状态；服务只提供热的解析缓存，不提供结果。`trace show`、`trace gaps` 与 `review render` 的历史投影读取保留[异步诊断投影](use-case/query-asynchronous-projections.md)的语义，只是由服务读取投影。
+
+CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`--dry-run` 不连接服务。查询在应答前断开时，CLI 以相同输入在本进程重新计算；服务已返回的领域错误原样输出，不重算。写命令、交互命令、`view`、`lsp` 与外部 runner 不经由服务。
 
 ### 不变量
 
-1. 一个 worktree 任一时刻最多一个工作区服务，由服务锁裁决。
-2. 服务运行时只有它打开该 worktree 的持久 HawDB；其它进程使用内存缓存，结果不变。
-3. 写入、发布、恢复与证据不依赖服务：服务不存在、崩溃或版本不同时，同一命令得到相同结果。
-4. 服务不持有 publication lease，也不在持有持久句柄时同步等待其它进程。
+1. 一个 worktree 任一时刻最多一个工作区服务，由服务锁裁决；服务锁在清理期间也不释放。
+2. 当前版本的 Concord 进程在发现运行中的服务后不打开该 worktree 的持久库；任一时刻最多一个打开者由数据库协调锁保证。
+3. 持有 publication lease 的进程不打开持久库；服务主进程不持有 publication lease，只在清理时持有，且此时已关闭持久库。
+4. 客户端不取得数据库句柄；经由服务的查询结果与本进程计算相同。
+5. 写入、发布、恢复与证据不依赖服务：服务不存在、崩溃或版本不同时，同一命令得到相同结果。
 
 | 失败 | 结果 |
 | --- | --- |
-| 1 s 内没有可握手的服务 | 面板与 `view` 报 `WorkspaceServerUnavailable` 并以非零码退出；`view --in-process` 在本进程运行；CLI 在本进程计算 |
-| 运行目录的属主、权限、类型或路径长度不符 | 不创建服务，报告原因 |
-| 服务进程被杀 | 操作系统释放服务锁，下一个启动者删除残留 socket 后启动；面板与浏览器显示重连中并自动重连 |
+| 1 秒内没有可握手的服务 | 面板与 `view` 报 `WorkspaceServerUnavailable` 并以非零码退出；CLI 在本进程计算 |
+| 服务锁无法取得（非 WouldBlock） | `ServerLockUnavailable`，details 给出原因 |
+| 运行目录不符合要求 | 不创建服务，报告原因 |
+| 不同身份的服务 3 秒内未退出 | `WorkspaceServerBusy`，details 给出对方 pid 与安装身份 |
+| 计算进程超时或崩溃 | 当前请求以具名错误失败，计算进程重启，后续请求冷启动 |
+| 服务进程被杀 | 操作系统释放服务锁，下一个启动者删除残留 socket 后启动；面板与浏览器显示重连中 |
 
 ## 资源预算
 

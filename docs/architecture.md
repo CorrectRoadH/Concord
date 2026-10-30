@@ -77,7 +77,7 @@ HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对
 
 缓存只保存解析结果和投影，不缓存授权或 Problem fixed 判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有。
 
-HawDB 句柄的所有权、只读与可写打开、dry-run 与 cache-off 的行为见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。每个 worktree 最多一个[工作区服务](feature/local-data-engine/architecture.md#工作区服务)长期持有持久缓存、刷新工作区投影并向 Herdr 面板、Web 与 CLI 提供领域结果；持久缓存被占用时，其它进程改用内存缓存照常完成。
+HawDB 句柄的所有权、只读与可写打开、dry-run 与 cache-off 的行为见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。每个 worktree 最多一个[工作区服务](feature/local-data-engine/architecture.md#工作区服务)长期持有持久缓存、刷新工作区投影并向 Herdr 面板、Web 与 CLI 提供领域结果；持久缓存被占用时，可重建的解析缓存改用内存缓存，命令照常完成。
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。每篇文档每个进程最多解析一次，元数据、标题锚点、steps 与链接事实取自同一棵语法树。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
