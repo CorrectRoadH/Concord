@@ -32,6 +32,8 @@ const loaders = {
   template: () => import('./cli-command-template.js').then(m => m.templates),
   doctor: () => import('./cli-command-doctor.js').then(m => m.diagnose),
   action: () => import('./cli-command-action.js').then(m => m.action),
+  workspace: () => import('./cli-command-workspace.js').then(m => m.workspace),
+  git: () => import('./cli-command-git.js').then(m => m.gitView),
   view: () => import('./cli-command-view.js').then(m => m.view),
 };
 

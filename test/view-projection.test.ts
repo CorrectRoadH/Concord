@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -16,6 +16,7 @@ import type { WorkspaceProjection } from '../src/view-contract.js';
 import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from '../src/workspace-projection.js';
 import type { ViewServerHandle } from '../src/view-server.js';
 import { startViewServer } from './e2e/server.js';
+import { installConcord, packConcord } from './installed-package.js';
 import { ViewScanManager } from '../src/view-scan.js';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from './support.js';
 
@@ -355,6 +356,23 @@ test('a completed workspace scan survives brief contention at publication', asyn
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('an installation missing native artifacts reports unavailable instead of pending', () => {
+  const root = fixture();
+  const installation = mkdtempSync(join(tmpdir(), 'concord-projection-install-'));
+  try {
+    writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
+    installConcord(installation, packConcord(installation), [], { private: true });
+    const installed = join(installation, 'node_modules/concord-sdlc');
+    rmSync(join(installed, 'dist/native'), { recursive: true });
+    const result = spawnSync(process.execPath, [join(installed, 'dist/entry.js'), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    const failure = JSON.parse(result.stderr) as { error: string; details: { reason: string } };
+    assert.equal(failure.error, 'WorkspaceProjectionUnavailable', result.stderr);
+    assert.equal(failure.details.reason, 'HawdbUnavailable');
+  } finally { rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
