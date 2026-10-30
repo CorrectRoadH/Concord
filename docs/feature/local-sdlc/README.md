@@ -49,7 +49,7 @@ Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal
 | --- | --- | ---: |
 | `local-sdlc/help` | 由静态数据输出的 CLI 帮助 | 50ms |
 | `local-sdlc/skill` | Agent 指引 | 350ms |
-| `local-sdlc/memory-index`、`local-sdlc/memory-list`、`local-sdlc/memory-recall`、`local-sdlc/memory-search` | Memory 索引、列表与检索 | 550ms |
+| `local-sdlc/memory-index`、`local-sdlc/memory-list`、`local-sdlc/memory-recall` | Memory 索引、列表与检索 | 550ms |
 | `local-sdlc/issue-index`、`local-sdlc/issue-list`、`local-sdlc/issue-recall` | Issue 索引、列表与检索 | 500ms |
 | `local-sdlc/feature-list`、`local-sdlc/use-case-list`、`local-sdlc/research-list`、`local-sdlc/design-list`、`local-sdlc/roadmap-list`、`local-sdlc/engineering-list` | 文档类别列表 | 600ms |
 | `local-sdlc/docs-check` | 写作检查 | 1000ms |
@@ -58,7 +58,6 @@ Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal
 | `local-sdlc/code-list` | 代码声明列表 | 2460ms |
 | `local-sdlc/test-list` | 测试声明列表 | 1910ms |
 | `local-sdlc/template-list` | 随包模板列表 | 430ms |
-| `local-sdlc/author-preimage` | 作者正文的真实前像核验与 dry-run | 580ms |
 
 帮助预算按静态输出的实测确定（禁用编译缓存时 p50 约 47 ms）；代码、测试、模板与作者正文四行的参照消费者为本仓库 `d267e06` 的独立 clone。
 
