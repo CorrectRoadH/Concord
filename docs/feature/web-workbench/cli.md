@@ -49,7 +49,7 @@
 
 worktree、配置原文或安装产物变化后旧代次不再展示，先报告 Pending。
 
-`GET /api/workspace`（无查询参数）返回同一 `{ snapshot, projection }`，`ETag` 为响应摘要，匹配时 304；遇 `HawdbBusy` 在 500 ms 内重试，仍占用则不可用。GET 不申请刷新。`POST /api/workspace` 只接受 `{}`，沿用 Host/Origin 与 JSON 检查，申请一次刷新后返回 HTTP 202 `{ ok: true, value: { status: 'requested' } }`，不等待扫描、不读来源，原生不可用或清理失败时返回对应错误。
+`GET /api/workspace`（无查询参数）返回同一 `{ snapshot, projection }`，`ETag` 为响应摘要，匹配时 304；HTTP 由工作区服务托管，读取不与其它进程争用缓存。`workspace projection` 在有同安装身份的服务时向服务读取，否则直接读取持久行，遇 `HawdbBusy` 在 500 ms 内重试，仍占用则不可用。GET 不申请刷新。`POST /api/workspace` 只接受 `{}`，沿用 Host/Origin 与 JSON 检查，申请一次刷新后返回 HTTP 202 `{ ok: true, value: { status: 'requested' } }`，不等待扫描、不读来源，原生不可用或清理失败时返回对应错误。
 
 ## PR 静态预览导出
 

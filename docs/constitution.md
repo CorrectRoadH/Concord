@@ -2,7 +2,7 @@
 format: concord.constitution/v2
 status: active
 ratifiedAt: 2026-09-14
-amendedAt: 2026-10-29
+amendedAt: 2026-10-30
 amendments:
   - date: 2026-09-14
     reason: 汇总已采用的工程约束，并落实本轮 dogfood 要求
@@ -109,7 +109,14 @@ amendments:
     sources:
       - docs/design/decided-design-records/README.md
     impact: Spec 不再依赖候选页、CASES、GOALS 与 LIMITS；27 个已裁决包的现行规则迁入 Spec；concord check 新增 SpecDependsOnDesignRecord；agent 默认阅读范围收窄到 Spec
+  - date: 2026-10-30
+    reason: 按 HawDB 一个目录一个长期持有者的规定，由每个 worktree 的工作区服务持有持久缓存
+    sources:
+      - docs/design/cli-hot-path/DECISION.md
+      - docs/feature/local-data-engine/architecture.md
+    impact: 持久句柄不再随来源快照结束；写入、发布、恢复与证据仍不依赖缓存所有者
 ---
+
 
 # Concord 项目宪法
 
@@ -127,7 +134,7 @@ amendments:
 
 1. 每条款陈述一项跨功能规则，标题就是规则本身。 {#general-one-rule}
 2. 每款一项可审阅的规则：义务、禁止或许可。未写“必须”“不得”的规范性陈述同样有约束力。 {#general-paragraph}
-3. 条款写约束，不写达成约束的机制。明确采用的技术栈、依赖固定、信任与资源边界属于约束；实现方式写在 architecture 页，理由、来源与影响写在修订记录，过程写在 Memory。 {#general-rules-only}
+3. 条款写约束，不写达成约束的机制。明确采用的技术栈、依赖固定、信任与资源边界属于约束；实现方式写在 architecture 页，理由、来源与影响写在修订对应的 Decision Memory，过程写在 Memory。 {#general-rules-only}
 4. 用现行句式，不描述与过去的差别。 {#general-present}
 5. 依据某条规则的句子旁写指向其 ID 的链接，不用“第 N 款”这类序号文字。 {#general-link}
 
@@ -162,7 +169,7 @@ amendments:
 1. 实现、测试和构建脚本采用严格 TypeScript，执行与副作用通过 Effect 组织。不添加手工维护的 JavaScript，不绕过类型检查；编译输出和 JavaScript 消费者兼容 fixture 除外。 {#c-005-1}
 2. Effect 依赖精确固定，使用 API 前读取安装包指引。不可信边界严格 Schema 解码并返回具名失败。 {#c-005-2}
 3. 唯一原生例外是 `native/hawdb`：Rust N-API 桥接、链接胶水、字节转换、预算执行与固定 revision 的目录所有权锁适配。领域决策、来源核验、测试和构建编排仍属 TypeScript/Effect。 {#c-005-3}
-4. 桥接、引擎、Rust toolchain 与依赖精确固定。持久句柄受来源快照生命周期管理，内存句柄按进程管理。发行包携带目标平台产物，消费者不需要 Rust、全局 HawDB 或数据库服务。锁协议与上游 revision 绑定，升级必须重新验证互斥与清理。 {#c-005-4}
+4. 桥接、引擎、Rust toolchain 与依赖精确固定。持久句柄由明确的唯一所有者管理，来源快照不拥有跨请求句柄；客户端的逻辑会话、事务、快照与清理的生命周期分别声明，内存句柄按进程管理。缓存不参与来源发布或证据裁决。发行包携带目标平台产物，消费者不需要 Rust、全局 HawDB 或数据库服务。锁协议与上游 revision 绑定，升级必须重新验证互斥与清理。 {#c-005-4}
 5. 本条约束 Concord 自身。接入项目的语言、包管理器和运行时由其自行选择。 {#c-005-5}
 
 ## C-006 用产品自身管理和验收开发 {#c-006}
@@ -181,7 +188,7 @@ amendments:
 ## C-008 宪法随功能经验明确修订 {#c-008}
 
 1. 功能规划、实施和审阅读取当前宪法。新发现的跨功能约束通过修订写入；功能专属细节留在对应 Spec。 {#c-008-1}
-2. 修订须按项目授权采用，说明适用范围、理由、来源和影响，由 `concord constitution amend` 在元数据中追加日期与修订记录，不覆盖既有历史。 {#c-008-2}
+2. 修订须按项目授权采用，说明适用范围、理由、来源和影响。`concord constitution amend` 改写正文，并在同一次发布中写入一条 Decision Memory 记录这些内容；宪法文件只声明当前规则与采用状态，不保存修订历史，历史从 Memory 与 Git 派生。 {#c-008-2}
 3. 正文只维护当前规则，修订时直接改写，不追加相反规则，不声称已有功能自动满足新规则。 {#c-008-3}
 4. 条款与款的身份由 ID 拥有，ID 一经采用不改名、不复用，不设版本号。修订后必须检查链接被修改 ID 的页面。 {#c-008-4}
 

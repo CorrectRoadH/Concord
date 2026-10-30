@@ -28,14 +28,14 @@
 
 | Limit | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
-| [L1](../../LIMITS.md#l1-缓存成功结果与同源重建一致) | pending | 服务回答查询前读取全部来源并核对摘要，变化的来源先刷新再回答；订阅推送的每个代次来自同一来源状态 | 待 C1–C10、C20 对照 |
+| [L1](../../LIMITS.md#l1-缓存成功结果与同源重建一致) | satisfied | 服务回答查询前读取全部来源并核对摘要，变化的来源先刷新再回答；订阅推送的每个代次来自同一来源状态 | 设计推理；实现验收为 C1–C10、C20 |
 | [L2](../../LIMITS.md#l2-不跳过安全与完整性检查) | satisfied | 监听只触发刷新，不替代读取与摘要；路径安全、Schema 与完整性检查不变 | 设计推理 |
 | [L3](../../LIMITS.md#l3-hawdb-只保存可重建缓存) | satisfied | 存储内容与清理协议不变；其它进程降为内存缓存不改变结果 | 设计推理 |
 | [L4](../../LIMITS.md#l4-写入发布与证据核对原文字节) | satisfied | 写入不经过服务 | 设计推理 |
 | [L5](../../LIMITS.md#l5-按引擎规定持有-hawdb) | satisfied | 一个目录一个持有者，由原生目录锁裁决；服务运行时其它进程不打开该目录 | 待 C21、C24 |
 | [L6](../../LIMITS.md#l6-本地可安装无部署服务) | satisfied | 服务由 Concord 按需启动、空闲退出；不可用时命令在本进程完成 | 待 C16 |
-| [L7](../../LIMITS.md#l7-固定依赖不变) | pending | 不需要新的 HawDB feature；面板的终端渲染库需按固定版本引入 | 待依赖选型 |
-| [L8](../../LIMITS.md#l8-公开输出不变) | pending | 第 2 阶段经由服务的查询，输出须与本进程计算逐字节一致 | 待第 2 阶段对照 |
+| [L7](../../LIMITS.md#l7-固定依赖不变) | satisfied | 不启用新的 HawDB feature，不改 revision 与工具链；面板新增的终端渲染依赖按精确版本固定 | 设计推理 |
+| [L8](../../LIMITS.md#l8-公开输出不变) | satisfied | 经由服务的查询返回领域结果，由 CLI 用同一格式化代码输出；结构、错误码与退出码不变 | 设计推理；实现验收为三种方式的输出对照 |
 | [L9](../../LIMITS.md#l9-严格-typescript-与-effect) | satisfied | 服务、协议与客户端都在 TypeScript/Effect；原生不变 | 设计推理 |
 
 ## Goals

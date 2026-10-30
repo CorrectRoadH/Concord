@@ -28,7 +28,7 @@ Concord keeps all three in one Git repository and maintains the relationships be
 | Source annotations | Code and tests declare in source which spec they relate to, so the relationship appears in the same diff as the code. Reverse lists are derived, with no separate registry to drift. |
 | Command receipts | `test run` records the result of a real execution. Closing a Problem requires two receipts from the same test, one failing and one passing, so "fixed" comes with evidence. |
 | Memory and Issue | Investigation history, root causes, decisions, and lessons go into Memory; observations awaiting investigation go into Issue. `docs/` therefore holds only current declarations, not development logs. |
-| Project constitution | Records long-lived rules that span features. Features and Designs cite the clauses that apply, and amendments keep their reason and impact. |
+| Project constitution | Records long-lived rules that span features. Features and Designs cite the clauses that apply, and each amendment records its reason and impact as a Decision memory. |
 
 ## What you can do
 

@@ -61,7 +61,7 @@ Feature、Roadmap 与每个 Design 候选必须有 README。用 `--pages library
 
 规划、实施或审阅功能前阅读[宪法](constitution.md)。依据某条规则的句子旁链接其条款或款的 ID，`concord check` 校验这些链接。
 
-`concord constitution show` 查看正文、digest、条款与款，以及每处引用位置；adopt 与 amend 记录理由、来源和影响。draft 模板不表示合规。
+`concord constitution show` 查看正文、digest、条款与款，以及每处引用位置；adopt 与 amend 把理由、来源和影响写入 Decision Memory，宪法本身只声明当前规则。draft 模板不表示合规。
 
 ## 第一个 Feature
 

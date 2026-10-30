@@ -10,7 +10,7 @@
 
 ## Memory
 
-Problem 从 epoch 0 开始，reopen 增加 epoch 并将旧 resolution 追加进 history。Decision 与 Insight 可被同 kind 的新 Memory supersede；promotion 只指向有效当前 Spec，retire 保留历史。新 clone 缺少私有证据时，历史 resolution 可读但标记为 unavailable。
+Problem 从 epoch 0 开始，reopen 增加 epoch 并将旧 resolution 追加进 history。Decision 与 Insight 可被同 kind 的新 Memory supersede；promotion 只指向有效当前 Spec 或宪法的条款与款（`docs/constitution.md#c-NNN[-K]`），retire 保留历史。宪法 adopt 与 amend 创建的 Decision 直接为 current 并 promote 到受影响的条款，见[演进宪法](../project-onboarding/use-case/evolve-constitution.md#amend)。新 clone 缺少私有证据时，历史 resolution 可读但标记为 unavailable。
 
 ## 退役与恢复
 

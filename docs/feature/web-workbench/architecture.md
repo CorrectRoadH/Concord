@@ -1,6 +1,6 @@
 # Web 工作台架构
 
-React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node 服务固定一个 Git 工作区，HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
+React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。HTTP 由该 Git 工作区的[工作区服务](../local-data-engine/architecture.md#工作区服务)托管：`concord view` 连接或启动服务并请求开启 HTTP，`view` 退出时关闭 HTTP，服务按自身规则继续或退出；`view --in-process` 在本进程运行同一服务。HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
 
 工作台根地址进入 `/git`，总览位于 `/overview`。Git 页默认列出全部未提交文件，文档与测试作为筛选；Git 读取失败独立显示错误和重试入口，不伪装为空列表。PR 静态产物的比较身份与发布边界见[变更预览](change-preview.md)。
 
@@ -22,7 +22,7 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。Node �
 
 后台编译复用 trace 生成诊断。文档与代码的纯解析结果使用有容量上限的 HawDB 内存缓存，以当前原文匹配；目录集合、文件读取、路径安全、配置、租约及恢复检查仍每次执行，不以时间戳代替内容校验。单文件预览只读取目标和其 README 归属链，全局 inventory 异常由 workspace/check 诊断。Git 测试基线在 HawDB 内存 namespace 中按 worktree、不可变 HEAD revision、测试根与解析器版本缓存，工作树状态仍实时读取。
 
-浏览器每四秒读取工作区缓存和任务状态，每三十二秒读取 Git，轮询不重叠；首次构建期间每两秒重试读取缓存。读取不触发扫描，不重置当前文件或草稿。写入后的读取排在已有读取之后。首次取得工作区后不立即重复读取。同一 Research 主题内切换文件保留文件树节点、折叠和滚动状态，加载占位保持工具栏布局。
+浏览器以 `GET /api/events`（SSE）接收新代次号与任务状态变化，收到后读取工作区缓存；SSE 断开期间改为每四秒读取工作区缓存和任务状态并重连。Git 每三十二秒读取，轮询不重叠；首次构建期间每两秒重试读取缓存。读取不触发扫描，不重置当前文件或草稿。写入后的读取排在已有读取之后。首次取得工作区后不立即重复读取。同一 Research 主题内切换文件保留文件树节点、折叠和滚动状态，加载占位保持工具栏布局。
 
 文档与源码使用一套当前恢复日志，按写入范围区分文档事务和源码事务，不维护历史格式兼容分支。源码事务冻结经过验证的配置范围与身份，仅替换既有 JS/TS 常规文件，不与配置修改混合。prepared 可回滚，committed 只核验完成后的内容；外部改动导致具名冲突，不删除恢复现场。
 
@@ -54,22 +54,22 @@ snapshot 由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写�
 
 ### 刷新所有权
 
-`ViewProjectionManager` 拥有监听、调度与关闭。View 启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移代次发布后一秒再申请一次。刷新失败不改变已完成写入的回执。
+`ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移代次发布后一秒再申请一次。刷新失败不改变已完成写入的回执。
 
-多个 View 进程以 Git-private `workspace-refresh/current` 文件租约按 worktree 互斥：占用时只用 `recoverFileLease` 回收已死亡 token 并重试一次，活跃或异机 owner 不等待、不抢占、不按年龄抢占，未持有者只读。扫描 worker 复用 `ViewScanManager` 的 owned process 与 60 秒上限，只返回候选；持有租约的主进程确认回复、身份、租约与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
+服务锁保证每个 worktree 只有一个刷新者，不使用刷新租约。扫描 worker 复用 `ViewScanManager` 的 owned process 与 60 秒上限，只返回候选；服务确认回复、身份与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
 
-遇到 journal 时，若它已移除或本工作区发布 owner 仍存活，丢弃本次扫描并重新调度；否则记录 RecoveryRequired。发布遇 `HawdbBusy` 时保留候选并在三秒内重试，每次重新核验身份、租约与 journal，等待时不持有句柄；持续占用保留旧代次并报告失败。
+遇到 journal 时，若它已移除或本工作区发布 owner 仍存活，丢弃本次扫描并重新调度；否则记录 RecoveryRequired。服务持有持久句柄，发布不与其它进程争用数据库。
 
 | 状态 | 恢复条件 | 呈现 |
 | --- | --- | --- |
 | building | 首个代次写入 | 每 2 秒自动重试，可手动重试 |
 | refresh-failed | 下次成功刷新；漂移与身份变化不进入此状态 | 旧代次、失败码与重试 |
-| unavailable:native | 修复安装并重启 View | 原生诊断与重启提示 |
+| unavailable:native | 修复安装并重启服务 | 原生诊断与重启提示 |
 | unavailable:corrupt | writer 覆盖，或无法打开时清理缓存 | 损坏码、重试，必要时提示 `concord cache clear` |
 | blocked:recovery-required | `concord recover` 或 HTTP recover 成功后立即刷新 | 恢复按钮与错误码 |
-| cleanup-failed | 重启 View，按租约协议回收 | 清理失败码与重启提示 |
+| cleanup-failed | 重启服务，由服务锁回收 | 清理失败码与重启提示 |
 
-关闭依次停止定时器与监听、等待监听核对、取消扫描并确认进程组清理、关闭句柄、释放租约，之后不再发布。清理无法确认时记录 CleanupFailed、停止刷新并保留租约，由重启后的死亡 owner 恢复协议回收。
+关闭依次停止定时器与监听、等待监听核对、取消扫描并确认进程组清理、关闭句柄，之后不再发布。清理无法确认时记录 CleanupFailed 并停止刷新，服务退出后由下一个服务重新开始。
 
 ### 来源监听
 
@@ -79,7 +79,7 @@ snapshot 由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写�
 
 正文、设置、元数据与反馈详情的前像只来自 `/api/file`。`ViewFile` 在同一次严格读取内可附目标的 `document`、`project` 或 `feedback`，不扫描全仓库；解析失败的原文仍可读，不制造有效 owner。定向 `feedback.warnings` 只报告该对象可确认的状态，跨文件告警来自投影。
 
-投影 digest 只触发核对：与编辑器基线不同且未处理过时，至多发起一次定向读取；读回仍不同且草稿干净才替换，有草稿则进入 external 对比。较旧代次不替换较新基线，提交使用建立草稿时的 digest；保存后定向读取确认。导航在下一代次前显示正在更新，新建对象短暂缺席不是创建失败。不同安装进程交替服务同一 worktree 时只保留最近身份，不提供兼容读取或第二份缓存。
+投影 digest 只触发核对：与编辑器基线不同且未处理过时，至多发起一次定向读取；读回仍不同且草稿干净才替换，有草稿则进入 external 对比。较旧代次不替换较新基线，提交使用建立草稿时的 digest；保存后定向读取确认。导航在下一代次前显示正在更新，新建对象短暂缺席不是创建失败。不同安装的服务按[启动与裁决](../local-data-engine/architecture.md#启动与裁决)交接同一 worktree，只保留最近身份，不提供兼容读取或第二份缓存。
 
 ### 模块
 
