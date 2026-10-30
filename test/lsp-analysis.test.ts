@@ -252,7 +252,8 @@ test('packed public CLI analyzes an isolated offline consumer without a source c
     // Match the release packer's fixed-lock identity without writing to the shared package store.
     copyFileSync('pnpm-lock.yaml', join(unpacked, 'pnpm-lock.yaml'));
     copyFileSync('pnpm-workspace.yaml', join(unpacked, 'pnpm-workspace.yaml'));
-    run('pnpm', ['install', '--prod', '--offline', '--frozen-store', '--frozen-lockfile', '--ignore-scripts'], unpacked);
+    const store = run('pnpm', ['store', 'path'], resolve('.')).trim();
+    run('pnpm', ['install', '--prod', '--offline', '--frozen-store', '--frozen-lockfile', '--ignore-scripts', '--store-dir', store], unpacked);
     const binary = join(unpacked, 'dist/entry.js');
     root = mkdtempSync(join(scratch, 'consumer-'));
     execFileSync('git', ['init', '-q', root], { stdio: 'ignore' });
