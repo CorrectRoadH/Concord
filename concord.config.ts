@@ -1,9 +1,8 @@
-import type { ProjectConfig } from 'concord-sdlc/config';
+import { type config_public_ProjectConfig as ProjectConfig } from "./src/model/index.js";
 
 export default {
   "sourceRoots": [
     "src",
-    "repository",
     "web",
     "scripts"
   ],

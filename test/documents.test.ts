@@ -8,28 +8,10 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { authorDesignFixture } from './design-fixture.js';
-import {
-  adoptRoadmap,
-  activateMemory,
-  addPage,
-  checkDocuments,
-  closeIssue,
-  createDocument,
-  decideDesign,
-  findDocument,
-  linkIssue,
-  linkMemory,
-  loadDocuments,
-  parseDocumentRecord,
-  renderDocument,
-  resolveReference,
-  setAuthor,
-  setPage,
-  showPage,
-  supersedeMemory,
-} from '../src/documents.js';
-import { LocalRepository, initialize } from '../src/storage.js';
-import { inspectDocuments } from '../src/editing.js';
+import { adoptRoadmap, activateMemory, addPage, checkDocuments, closeIssue, createDocument, decideDesign, findDocument, linkIssue, linkMemory, loadDocuments, parseDocumentRecord, resolveReference, setAuthor, setPage, showPage, supersedeMemory } from "../src/domain/documents/index.js";
+import { renderDocument } from "../src/model/index.js";
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { inspectDocuments } from "../src/app/index.js";
 
 function useConsumer(run: (repo: LocalRepository, root: string) => void): void {
   const root = createConsumer();

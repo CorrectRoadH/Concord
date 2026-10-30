@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { addPage, createDocument } from '../../src/documents.js';
-import { initialize, LocalRepository } from '../../src/storage.js';
-import type { ViewServerHandle } from '../../src/view-server.js';
+import { addPage, createDocument } from "../../src/domain/documents/index.js";
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { type ViewServerHandle } from "../../src/entry/http/index.js";
 import { startViewServer } from './server.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

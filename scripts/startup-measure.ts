@@ -8,7 +8,7 @@ import { Effect } from 'effect';
 // variants use the same consumer, rendering environment and compile-cache mode.
 Effect.runSync(Effect.sync(() => {
   const baseline = resolve('.test-results/startup-baseline/dist/entry.js');
-  const candidate = resolve('dist/entry.js');
+  const candidate = resolve('dist/entry/cli/entry.js');
   const consumer = resolve('.test-results/startup-consumer');
   const cached = process.argv.includes('--compile-cache');
   const environment: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', TERM: 'dumb', NODE_OPTIONS: '' };

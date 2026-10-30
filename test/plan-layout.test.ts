@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, initialize } from '../src/storage.js';
-import { createDocument, checkDesign, decideDesign, loadDocuments } from '../src/documents.js';
-import { addPage, showPage, setPage } from '../src/document-pages.js';
-import { resolveReference } from '../src/refs.js';
-import { readDesignPlanPaths } from '../src/document-layout.js';
-import { getWorkspaceSnapshot } from '../src/application.js';
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { createDocument, checkDesign, decideDesign, loadDocuments } from "../src/domain/documents/index.js";
+import { addPage, showPage, setPage } from "../src/domain/documents/index.js";
+import { resolveReference } from "../src/domain/documents/index.js";
+import { readDesignPlanPaths } from "../src/base/sources/index.js";
+import { getWorkspaceSnapshot } from "../src/app/index.js";
 import { authorDesignFixture } from './design-fixture.js';
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md

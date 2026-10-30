@@ -3,7 +3,7 @@ import * as stylex from '@stylexjs/stylex';
 import { ChevronRight, FileDiff, Folder } from 'lucide-react';
 import { useState } from 'react';
 import { SidebarItem } from '../../components/content-sidebar';
-import type { GitEntry } from '../../../src/git-view';
+import type { GitEntry } from '../../../src/model/index';
 import type { CaseLink, TreeNode } from './model';
 
 const styles = stylex.create({

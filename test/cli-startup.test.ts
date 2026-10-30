@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test, { before, after } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { fullCommand } from '../src/cli-full.js';
+import { fullCommand } from "../src/entry/cli/index.js";
 import { installConcord, packConcord } from './installed-package.js';
 
 const environment: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', TERM: 'dumb', NODE_OPTIONS: '' };

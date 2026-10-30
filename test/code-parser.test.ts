@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { scanCode } from '../dist/code.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
+import { scanCode } from "../src/domain/code/index.js";
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 function consumer(): string {

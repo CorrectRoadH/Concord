@@ -2,7 +2,7 @@ import * as stylex from '@stylexjs/stylex';
 import { Diff, Hunk, parseDiff } from 'react-diff-view';
 import { AlertTriangle, FileDiff } from 'lucide-react';
 import { useLayoutEffect, useMemo, useRef } from 'react';
-import type { GitDiff } from '../../../src/git-view';
+import type { GitDiff } from '../../../src/model/index';
 import { Badge } from '../../components/ui/badge';
 type DiffContent = Pick<GitDiff, 'path' | 'patch' | 'binary' | 'truncated' | 'message'>;
 

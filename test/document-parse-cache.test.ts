@@ -1,7 +1,7 @@
 import { createConsumer } from './support/consumer.js';
-import { setWriting } from '../src/writing-management.js';
-import { setConcepts } from '../src/concepts.js';
-import { digest } from '../src/shared.js';
+import { setWriting } from "../src/domain/writing/index.js";
+import { setConcepts } from "../src/domain/concepts/index.js";
+import { digest } from "../src/model/index.js";
 import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -11,9 +11,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { initialize, LocalRepository } from '../src/storage.js';
-import { renderDocument } from '../src/documents.js';
-import { openHawdb } from '../src/hawdb-native.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { renderDocument } from "../src/model/index.js";
+import { openHawdb } from "../src/base/cache/index.js";
 import { writeProjectConfig, readProjectConfig } from './support.js';
 
 const useCasePath = 'docs/feature/sample/use-case/inspect.md';

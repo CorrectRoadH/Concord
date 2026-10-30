@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
+import { packageBin } from '../package-location.js';
 import { Effect } from 'effect';
 import { io, PerfError } from './process.js';
 
@@ -26,11 +27,11 @@ function digestDist(directory: string): string {
 /** A built Concord checkout; the baseline is prepared before measuring, normally from the candidate's parent commit. */
 export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string, installedEntry?: string) {
   const dir = yield* io('Resolve artifact', () => realpathSync(resolve(path)));
-  const entry = installedEntry ?? join(dir, 'dist/entry.js');
+  const entry = installedEntry ?? packageBin(dir);
   if (!(yield* io('Find artifact', () => existsSync(entry)))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
   const git = (...args: string[]) => Effect.tryPromise({ try: () => new Promise<string>((accept, reject) => execFile('git', ['-C', dir, ...args], { encoding: 'utf8' }, (error, stdout) => error ? reject(error) : accept(stdout.trim()))), catch: cause => new PerfError({ message: `Identify artifact: ${String(cause)}` }) });
   const commit = yield* git('rev-parse', 'HEAD'), dirty = (yield* git('status', '--porcelain')) !== '';
-  const digest = yield* io('Digest artifact', () => digestDist(dirname(entry)));
+  const digest = yield* io('Digest artifact', () => digestDist(join(dir, 'dist')));
   return { label, dir, entry, commit, dirty, digest } satisfies Artifact;
 });
 

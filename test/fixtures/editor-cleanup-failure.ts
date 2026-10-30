@@ -1,6 +1,6 @@
 import * as Effect from 'effect/Effect';
-import { serveEditor } from '../../dist/lsp-server.js';
-import { makeOwnedProcessService, type OwnedProcessService } from '../../dist/owned-process.js';
+import { serveEditor } from "../../src/entry/lsp/index.js";
+import { makeOwnedProcessService, type OwnedProcessService } from "../../src/base/process/index.js";
 
 // Only the external process observation is faked; run, cancellation and Scope
 // finalizers still use real processes and the production editor implementation.

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ProjectSchema } from '../src/shared.js';
+import { ProjectSchema } from "../src/model/index.js";
 import { readProjectConfig, writeProjectConfig } from './support.js';
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md

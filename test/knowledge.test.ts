@@ -6,11 +6,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { after, before } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { parseDocumentRecord, renderDocument } from '../src/documents.js';
-import { LocalRepository } from '../src/storage.js';
-import { digest } from '../src/shared.js';
-import { setConfig, showConfig } from '../src/editing.js';
-import { humanOutput } from '../src/presentation.js';
+import { parseDocumentRecord } from "../src/domain/documents/index.js";
+import { renderDocument } from "../src/model/index.js";
+import { LocalRepository } from "../src/base/workspace/index.js";
+import { digest } from "../src/model/index.js";
+import { setConfig, showConfig } from "../src/app/index.js";
+import { humanOutput } from "../src/entry/cli/index.js";
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-knowledge-packed-'));
 let cli: string;

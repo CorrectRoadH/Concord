@@ -1,21 +1,22 @@
-import { initialConstitution } from '../src/constitution.js';
+import { initialConstitution } from "../src/domain/constitution/index.js";
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { execFileSync } from 'node:child_process';
-import { scanCode } from '../src/code.js';
-import { initialize, LocalRepository } from '../src/storage.js';
+import { scanCode } from "../src/domain/code/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
 import { Effect, Schema } from 'effect';
-import { QueryCacheEnvelope, queryRequestSatisfied, replaceQueryEnvelope, type QueryUpdate } from '../src/query-cache.js';
-import { classifyQueryRefresh, classifyQueryScan } from '../src/query-refresh-worker.js';
-import { decodeQueryScanMessage } from '../src/query-scan-protocol.js';
-import { TraceShowValue, hydrateQueryValue, stripQueryBodies } from '../src/query-values.js';
-import { requireValidTrace, siftQueryDrift, type buildTrace } from '../src/trace.js';
-import { ConcordError, digest, type Finding, type Repository } from '../src/shared.js';
-import { renderDocument } from '../src/documents.js';
-import type { OwnedProcessResult } from '../src/owned-process.js';
+import { QueryCacheEnvelope, queryRequestSatisfied, replaceQueryEnvelope, type QueryUpdate } from "../src/app/index.js";
+import { classifyQueryRefresh, classifyQueryScan } from "../src/entry/server/index.js";
+import { decodeQueryScanMessage } from "../src/entry/server/index.js";
+import { hydrateQueryValue } from "../src/app/index.js";
+import { TraceShowValue, stripQueryBodies } from "../src/model/index.js";
+import { requireValidTrace, siftQueryDrift, type buildTrace } from "../src/domain/trace/index.js";
+import { ConcordError, digest, type Finding, type Repository } from "../src/model/index.js";
+import { renderDocument } from "../src/model/index.js";
+import { type OwnedProcessResult } from "../src/base/process/index.js";
 
 const value = { operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } };
 function candidate(at: number, paths: string[] = [], publicationChanged = false): QueryUpdate {

@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
-import { initialize, LocalRepository } from '../../src/storage.js';
-import type { ViewServerHandle } from '../../src/view-server.js';
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { type ViewServerHandle } from "../../src/entry/http/index.js";
 import { startViewServer } from './server.js';
-import { defaultWritingPolicy } from '../../src/writing-defaults.js';
-import { showWriting, setWriting } from '../../src/writing-management.js';
+import { defaultWritingPolicy } from "../../src/model/index.js";
+import { showWriting, setWriting } from "../../src/domain/writing/index.js";
 import { waitForWorkspaceProjection } from '../support.js';
 
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md

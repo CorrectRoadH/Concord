@@ -10,7 +10,7 @@ import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project
 import { documentHref, relativeMarkdownTarget } from './documents';
 import { Empty, PageHeader } from '../components/page';
 import { projectionIsConclusive, useWorkspace } from '../workspace';
-import type { ViewFile } from '../../src/view-contract';
+import type { ViewFile } from '../../src/model/index';
 
 export function ProjectDocsPage() {
   const { snapshot, api, projection } = useWorkspace();

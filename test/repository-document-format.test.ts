@@ -9,14 +9,14 @@ import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
 import { renderOwnerFixture } from './owner-fixture.js';
-import { compileTrace } from '../repository/docs/trace/compiler.js';
-import { createFeatureAt, addFeaturePageAt, setFeaturePageAt } from '../repository/docs/feature-structure.js';
-import { createUseCaseAt } from '../repository/docs/use-case/domain.js';
-import { decodeDesignReadme } from '../repository/docs/design/codec.js';
-import { readDesignPlanPaths } from '../src/document-layout.js';
-import { leafOwnerSelection, assertSameLeafSelection } from '../repository/document-owners.js';
-import { traceDigest } from '../repository/docs/trace/relation-mutation.js';
-import { templateBody } from '../src/templates.js';
+import { compileTrace } from "../src/domain/trace/index.js";
+import { createFeatureAt, addFeaturePageAt, setFeaturePageAt } from "../src/domain/documents/index.js";
+import { createUseCaseAt } from "../src/domain/documents/index.js";
+import { decodeDesignReadme } from "../src/model/index.js";
+import { readDesignPlanPaths } from "../src/base/sources/index.js";
+import { leafOwnerSelection, assertSameLeafSelection } from "../src/domain/documents/index.js";
+import { traceDigest } from "../src/base/publication/index.js";
+import { templateBody } from "../src/domain/documents/index.js";
 
 function write(root: string, path: string, source: string): void { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), source); }
 function fixture(): string {

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { GitDiff, GitEntry } from '../../../src/git-view';
+import type { GitDiff, GitEntry } from '../../../src/model/index';
 import { urlChoice } from '../../hooks/use-url-navigation';
 import { useWorkspace } from '../../workspace';
 import { entriesFor, fileTree, firstArea, sortedFiles, validArea, type Category } from './model';

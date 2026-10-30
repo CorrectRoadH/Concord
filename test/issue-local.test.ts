@@ -6,7 +6,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { before, after } from 'node:test';
-import { decodeDocumentSource } from '../src/document-codec.js';
+import { decodeDocumentSource } from "../src/domain/documents/index.js";
 
 const packedRoot = mkdtempSync(join(tmpdir(), 'concord-issue-packed-'));
 let cli: string;

@@ -1,5 +1,5 @@
 import * as Effect from 'effect/Effect';
-import { withTypeScriptSource } from '../../dist/typescript-host.js';
+import { withTypeScriptSource } from "../../src/base/process/index.js";
 
 Effect.runSync(Effect.sync(() => withTypeScriptSource('worker.ts', 'export const value = 1;', source => {
   process.stdout.write(`compiler-ready:${source.statements.length}\n`);

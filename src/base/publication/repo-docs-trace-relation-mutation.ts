@@ -1,0 +1,1102 @@
+import { TraceMutationError, type TraceCoordinationError } from "../../model/index.js";
+import { execFileSync } from "node:child_process";
+import { validPackagePath } from "../../model/index.js";
+import { createHash, randomUUID } from "node:crypto";
+import { closeSync, existsSync, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, rmdirSync, statSync, writeFileSync } from "node:fs";
+import { hostname } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+
+import { Cause, Effect, Exit, Result, Schema, SchemaIssue } from "effect";
+
+import { acquireTraceLease, readPublicationRevisionSync, genericJournalPath, recoverPublicationLeaseSync, releaseTraceLease, tracePrivateDirectorySync, type TraceLease } from "./coordination.js";
+import { advancePublicationRevision } from "./file-lease.js";
+import { invalidateActiveRun } from "./run-coordination.js";
+
+import { TraceRecoveryConflict, TraceRecoveryRequired } from "../../model/index.js";
+import { type RepoRef, type ValidatedRepoRefTarget } from "../../model/index.js";
+
+const GENERATION_FILE = "generation";
+const COORDINATION_ID_FILE = "coordination-id";
+const JOURNAL_FILE = "publication-journal.json";
+const MAXIMUM_OWNER_BYTES = 32 * 1024 * 1024;
+
+export interface TraceMutationPreimage {
+  readonly path: string;
+  readonly digest: string;
+}
+
+export interface TraceMutationPreparation {
+  readonly generation: number;
+  readonly snapshotDigest: string;
+  readonly target?: ValidatedRepoRefTarget;
+  readonly preimages?: readonly TraceMutationPreimage[];
+  readonly regressionOwners?: readonly string[];
+}
+
+export interface TraceMutationPlanned<A, Changes> {
+  readonly bytes: string;
+  readonly value: A;
+  readonly changes: Changes;
+}
+
+export interface TraceMutationReceipt<A, Changes> {
+  readonly format: "concord.docs-trace/relation-mutation/v1";
+  readonly operation: string;
+  readonly dryRun: boolean;
+  readonly owner: string;
+  readonly target?: RepoRef;
+  readonly targetKind?: ValidatedRepoRefTarget["kind"];
+  readonly targetOwner?: string;
+  readonly snapshotDigest: string;
+  readonly generation: number;
+  readonly nextGeneration: number;
+  readonly changed: boolean;
+  readonly headCommit: string;
+  readonly preimageDigest: string | null;
+  readonly plannedBytesDigest: string;
+  readonly changes: Changes;
+  readonly value: A;
+}
+
+export type TraceDirectoryManifestEntry =
+  | { readonly kind: "directory"; readonly path: string; readonly mode: number }
+  | {
+      readonly kind: "file";
+      readonly path: string;
+      readonly mode: number;
+      readonly byteLength: number;
+      readonly digest: string;
+    };
+
+export interface TraceDirectoryPublication {
+  readonly kind: "new-feedback-directory" | "new-docs-directory";
+  readonly stagePath: string;
+  readonly targetPath: string;
+  readonly expectedManifest?: readonly TraceDirectoryManifestEntry[];
+}
+
+export interface TraceMutationOptions<A, Changes, E, R> {
+  readonly root: string;
+  readonly operation: string;
+  readonly ownerPath: string;
+  readonly dryRun: boolean;
+  readonly prepareUnderLease: Effect.Effect<TraceMutationPreparation, E | TraceCoordinationError, R>;
+  readonly plan: (input: {
+    readonly source: string | undefined;
+    readonly headCommit: string;
+    readonly preparation: TraceMutationPreparation;
+  }) => Effect.Effect<TraceMutationPlanned<A, Changes>, E, R>;
+  readonly publication?: TraceDirectoryPublication;
+}
+
+export interface TraceRecoveryReceipt {
+  readonly format: "concord.docs-trace/recovery/v1";
+  readonly operation: "trace-recover";
+  readonly recovered: boolean;
+  readonly action: "none" | "discarded-unpublished" | "rolled-back" | "completed" | "finished-discard";
+  readonly owner?: string;
+  readonly generation: number;
+}
+
+interface FileSnapshotAbsent { readonly kind: "absent" }
+interface FileSnapshotPresent {
+  readonly kind: "file";
+  readonly bytes: Buffer;
+  readonly digest: string;
+  readonly byteLength: number;
+  readonly mode: number;
+}
+type FileSnapshot = FileSnapshotAbsent | FileSnapshotPresent;
+
+const NonEmptyTrimmedString = Schema.String.check(Schema.isTrimmed(), Schema.isMinLength(1));
+const DigestSchema = Schema.String.check(Schema.isPattern(/^sha256:[0-9a-f]{64}$/u));
+const ModeSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+const GenerationSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+const IdentityPartSchema = Schema.Struct({ path: Schema.String, device: Schema.String, inode: Schema.String });
+const WorktreeIdentitySchema = Schema.Struct({
+  root: IdentityPartSchema,
+  gitDir: IdentityPartSchema,
+  commonDir: IdentityPartSchema,
+  coordinationId: Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/u)),
+});
+const ManifestEntrySchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("directory"), path: Schema.String, mode: ModeSchema }),
+  Schema.Struct({
+    kind: Schema.Literal("file"),
+    path: Schema.String,
+    mode: ModeSchema,
+    byteLength: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+    digest: DigestSchema,
+  }),
+]);
+const JournalCommon = {
+  format: Schema.Literal("concord.trace/publication-journal/v1"),
+  token: Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/u)),
+  operation: NonEmptyTrimmedString,
+  owner: NonEmptyTrimmedString,
+  oldGeneration: GenerationSchema,
+  newGeneration: GenerationSchema,
+  snapshotDigest: DigestSchema,
+  headCommit: NonEmptyTrimmedString,
+  indexEntry: Schema.NullOr(Schema.String),
+  identity: WorktreeIdentitySchema,
+  createdAt: NonEmptyTrimmedString,
+  process: Schema.Struct({ pid: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)), host: NonEmptyTrimmedString }),
+} as const;
+const FileJournalSchema = Schema.Struct({
+  ...JournalCommon,
+  publication: Schema.Literal("file-replace"),
+  temporary: NonEmptyTrimmedString,
+  preimage: Schema.Union([
+    Schema.Struct({ kind: Schema.Literal("absent") }),
+    Schema.Struct({
+      kind: Schema.Literal("file"),
+      bytesBase64: Schema.String,
+      digest: DigestSchema,
+      byteLength: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+      mode: ModeSchema,
+    }),
+  ]),
+  planned: Schema.Struct({ digest: DigestSchema, byteLength: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)), mode: ModeSchema }),
+});
+const DirectoryJournalSchema = Schema.Struct({
+  ...JournalCommon,
+  publication: Schema.Literals(["new-feedback-directory", "new-docs-directory"]),
+  phase: Schema.Literals(["prepared", "discarding-stage"]),
+  stage: NonEmptyTrimmedString,
+  target: NonEmptyTrimmedString,
+  manifest: Schema.Array(ManifestEntrySchema).pipe(Schema.check(Schema.isMinLength(1))),
+});
+const JournalSchema = Schema.Union([FileJournalSchema, DirectoryJournalSchema]);
+type FileJournal = typeof FileJournalSchema.Type;
+type DirectoryJournal = typeof DirectoryJournalSchema.Type;
+type PublicationJournal = typeof JournalSchema.Type;
+type ManifestEntry = typeof ManifestEntrySchema.Type;
+type WorktreeIdentity = typeof WorktreeIdentitySchema.Type;
+
+export function message(cause: unknown): string { return cause instanceof Error ? cause.message : String(cause); }
+function mutationFailure(operation: string, phase: TraceMutationError["phase"], cause: unknown, path?: string): TraceMutationError {
+  return new TraceMutationError({ operation, phase, ...(path === undefined ? {} : { path }), message: message(cause) });
+}
+
+export function traceDigest(bytes: string | Uint8Array): string {
+  return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
+}
+
+function slash(path: string): string { return path.split(sep).join("/"); }
+
+function repositoryPath(root: string, path: string, operation: string): string {
+  if (path.length === 0 || isAbsolute(path) || path.includes("\\") || path.includes("\0")) {
+    throw mutationFailure(operation, "read", "path must be a canonical repository-relative path", path);
+  }
+  const segments = path.split("/");
+  if (segments.some((segment) => segment.length === 0 || segment === "." || segment === "..")) {
+    throw mutationFailure(operation, "read", "path contains an unsafe segment", path);
+  }
+  const repository = resolve(root);
+  const target = resolve(repository, path);
+  if (!target.startsWith(`${repository}${sep}`)) throw mutationFailure(operation, "read", "path escapes repository root", path);
+  return target;
+}
+
+function gitOutput(root: string, operation: string, args: readonly string[]): string {
+  try {
+    return execFileSync("git", [...args], {
+      cwd: resolve(root), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 128 * 1024 * 1024,
+    }).trimEnd();
+  } catch (cause) { throw mutationFailure(operation, "git-private", cause, args.join(" ")); }
+}
+
+export function tracePrivateDirectory(root: string): Effect.Effect<string, TraceMutationError> {
+  return Effect.try({
+    try: () => {
+      return tracePrivateDirectorySync(root);
+    },
+    catch: (cause) => cause instanceof TraceMutationError ? cause : mutationFailure("trace", "git-private", cause),
+  });
+}
+
+function readGenerationPath(path: string): number {
+  if (!existsSync(path)) return 0;
+  const source = readFileSync(path, "utf8").trim();
+  if (!/^(?:0|[1-9]\d*)$/u.test(source)) throw new Error(`invalid Trace generation ${JSON.stringify(source)}`);
+  const generation = Number(source);
+  if (!Number.isSafeInteger(generation)) throw new Error("Trace generation exceeds the safe integer range");
+  return generation;
+}
+
+export function readTraceGeneration(root: string): Effect.Effect<number, TraceMutationError> {
+  return tracePrivateDirectory(root).pipe(Effect.flatMap((directory) => Effect.try({
+    try: () => readGenerationPath(resolve(directory, GENERATION_FILE)),
+    catch: (cause) => mutationFailure("trace", "read", cause, GENERATION_FILE),
+  })));
+}
+
+function fsyncDirectory(path: string): void {
+  const descriptor = openSync(path, "r");
+  try { fsyncSync(descriptor); } finally { closeSync(descriptor); }
+}
+
+function durableReplace(path: string, bytes: string | Uint8Array, mode: number): void {
+  mkdirSync(dirname(path), { recursive: true });
+  const temporary = `${path}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    const descriptor = openSync(temporary, "wx", mode);
+    try { fchmodSync(descriptor, mode); writeFileSync(descriptor, bytes); fsyncSync(descriptor); }
+    finally { closeSync(descriptor); }
+    renameSync(temporary, path);
+    fsyncDirectory(dirname(path));
+  } finally { rmSync(temporary, { force: true }); }
+}
+
+function acquireLease(root: string, mode: TraceLease["mode"], operation: string, create: boolean, reclaimPublication = true): Effect.Effect<TraceLease | undefined, TraceMutationError> {
+  if (operation === "trace-recover" && reclaimPublication) {
+    try { recoverPublicationLeaseSync(root); } catch (cause) { return Effect.fail(mutationFailure(operation, "lock", cause)); }
+  }
+  return acquireTraceLease(root, mode, operation, create).pipe(Effect.mapError((cause) => mutationFailure(operation, cause.phase === "git-private" ? "git-private" : cause.phase === "cleanup" ? "cleanup" : "lock", cause, cause.path)));
+}
+
+function releaseLease(lease: TraceLease, operation: string): Effect.Effect<void, TraceMutationError> {
+  return releaseTraceLease(lease, operation).pipe(Effect.mapError((cause) => mutationFailure(operation, "cleanup", cause, cause.path)));
+}
+
+function withLease<A, E, R>(
+  root: string,
+  mode: TraceLease["mode"],
+  operation: string,
+  create: boolean,
+  use: (lease: TraceLease | undefined) => Effect.Effect<A, E, R>,
+  reclaimPublication = true,
+): Effect.Effect<A, E | TraceMutationError | TraceRecoveryConflict | TraceRecoveryRequired, R> {
+  return Effect.uninterruptibleMask((restore) => Effect.gen(function*() {
+    if (operation === "trace-recover") {
+      try {
+        const generic = genericJournalPath(root);
+        if (existsSync(generic)) throw new TraceRecoveryRequired({ path: generic, nextStep: "concord recover" });
+        const directory = tracePrivateDirectorySync(root);
+        readJournal(root, directory);
+        readMultiJournal(root, directory);
+      } catch (cause) {
+        return yield* Effect.fail(cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(operation, "read", cause));
+      }
+    }
+    const lease = yield* acquireLease(root, mode, operation, create, reclaimPublication);
+    const useExit = yield* Effect.exit(restore(use(lease)));
+    if (lease === undefined) {
+      if (Exit.isFailure(useExit)) return yield* Effect.failCause(useExit.cause);
+      return useExit.value;
+    }
+    const releaseExit = yield* Effect.exit(releaseLease(lease, operation));
+    if (Exit.isFailure(releaseExit)) {
+      if (Exit.isFailure(useExit)) return yield* Effect.failCause(Cause.combine(useExit.cause, releaseExit.cause));
+      return yield* Effect.failCause(releaseExit.cause);
+    }
+    if (Exit.isFailure(useExit)) return yield* Effect.failCause(useExit.cause);
+    return useExit.value;
+  }));
+}
+
+function journalPath(directory: string): string { return resolve(directory, JOURNAL_FILE); }
+function pendingRecovery(root: string, directory: string): { readonly path: string; readonly nextStep: "pnpm trace recover" | "concord recover" } | undefined {
+  const trace = journalPath(directory);
+  if (existsSync(trace)) return { path: trace, nextStep: "pnpm trace recover" };
+  const multi = multiJournalPath(directory);
+  if (existsSync(multi)) return { path: multi, nextStep: "pnpm trace recover" };
+  const generic = genericJournalPath(root);
+  return existsSync(generic) ? { path: generic, nextStep: "concord recover" } : undefined;
+}
+
+export function withTraceReadLease<A, E, R>(root: string, read: () => Effect.Effect<A, E, R>): Effect.Effect<A, E | TraceMutationError | TraceRecoveryRequired, R> {
+  return Effect.gen(function*() {
+    const revision = () => Effect.try({ try: () => readPublicationRevisionSync(root), catch: cause => mutationFailure('read', 'preimage', cause) });
+    const before = yield* revision();
+    const directory = yield* tracePrivateDirectory(root);
+    const pending = pendingRecovery(root, directory);
+    if (pending !== undefined) return yield* new TraceRecoveryRequired(pending);
+    const result = yield* read();
+    const afterPending = pendingRecovery(root, directory);
+    if (afterPending !== undefined) return yield* new TraceRecoveryRequired(afterPending);
+    if ((yield* revision()) !== before) return yield* new TraceMutationError({ operation: 'read', phase: 'preimage', message: 'Publication changed while reading Trace sources' });
+    return result;
+  });
+}
+
+export function isTraceMutationActive(root: string): Effect.Effect<boolean, TraceMutationError> {
+  return Effect.gen(function*() {
+    const result = yield* Effect.result(acquireLease(root, "shared", "read", true));
+    if (Result.isFailure(result)) {
+      if (result.failure.phase === "lock" && result.failure.message.includes("busy")) return true;
+      return yield* result.failure;
+    }
+    if (result.success === undefined) return false;
+    yield* releaseLease(result.success, "read");
+    return false;
+  });
+}
+
+export function withStableTraceRead<A, E, R>(
+  root: string,
+  read: (generation: number) => Effect.Effect<A, E, R>,
+): Effect.Effect<{ readonly generation: number; readonly value: A }, E | TraceCoordinationError, R> {
+  return withTraceReadLease(root, () => Effect.gen(function*() {
+    const generation = yield* readTraceGeneration(root);
+    const value = yield* read(generation);
+    const after = yield* readTraceGeneration(root);
+    if (after !== generation) return yield* new TraceMutationError({ operation: "read", phase: "preimage", path: GENERATION_FILE, message: "Trace generation changed while compiling" });
+    return { generation, value };
+  }));
+}
+
+function identityPart(path: string): { readonly path: string; readonly device: string; readonly inode: string } {
+  const canonical = realpathSync(path);
+  const status = statSync(canonical);
+  return { path: canonical, device: String(status.dev), inode: String(status.ino) };
+}
+
+function coordinationId(directory: string, create: boolean): string {
+  const path = resolve(directory, COORDINATION_ID_FILE);
+  if (!existsSync(path)) {
+    if (!create) throw new Error("coordination identity is missing");
+    durableReplace(path, `${randomUUID()}\n`, 0o600);
+  }
+  const value = readFileSync(path, "utf8").trim();
+  if (!/^[0-9a-f-]{36}$/u.test(value)) throw new Error("coordination identity is invalid");
+  return value;
+}
+
+function worktreeIdentity(root: string, directory: string, create: boolean, operation: string): WorktreeIdentity {
+  try {
+    return {
+      root: identityPart(resolve(root)),
+      gitDir: identityPart(gitOutput(root, operation, ["rev-parse", "--path-format=absolute", "--git-dir"]).trim()),
+      commonDir: identityPart(gitOutput(root, operation, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim()),
+      coordinationId: coordinationId(directory, create),
+    };
+  } catch (cause) {
+    if (cause instanceof TraceMutationError) throw cause;
+    throw mutationFailure(operation, "journal", cause, directory);
+  }
+}
+
+function sameIdentity(left: WorktreeIdentity, right: WorktreeIdentity): boolean { return JSON.stringify(left) === JSON.stringify(right); }
+function headCommit(root: string, operation: string): string { return gitOutput(root, operation, ["rev-parse", "HEAD"]).trim(); }
+function indexEntry(root: string, owner: string, operation: string): string | null {
+  const output = gitOutput(root, operation, ["ls-files", "--stage", "--", owner]);
+  return output.length === 0 ? null : output;
+}
+
+function readFileSnapshot(path: string, operation: string): FileSnapshot {
+  try {
+    if (!existsSync(path)) return { kind: "absent" };
+    const status = lstatSync(path);
+    if (!status.isFile() || status.isSymbolicLink()) throw new Error("owner must be a regular, non-symlink file");
+    if (status.size > MAXIMUM_OWNER_BYTES) throw mutationFailure(operation, "capacity", `owner exceeds ${MAXIMUM_OWNER_BYTES} bytes`, path);
+    const bytes = readFileSync(path);
+    return { kind: "file", bytes, digest: traceDigest(bytes), byteLength: bytes.byteLength, mode: status.mode & 0o7777 };
+  } catch (cause) {
+    if (cause instanceof TraceMutationError) throw cause;
+    throw mutationFailure(operation, "read", cause, path);
+  }
+}
+
+type SnapshotExpectation = FileJournal["preimage"] | FileJournal["planned"] | MultiFileJournalEntry["preimage"] | MultiFileJournalEntry["planned"];
+function fileSnapshotMatches(snapshot: FileSnapshot, expected: SnapshotExpectation): boolean {
+  if ("kind" in expected && expected.kind === "absent") return snapshot.kind === "absent";
+  return snapshot.kind === "file" && snapshot.digest === expected.digest && snapshot.byteLength === expected.byteLength && snapshot.mode === expected.mode;
+}
+
+function preimageForJournal(snapshot: FileSnapshot): FileJournal["preimage"] {
+  return snapshot.kind === "absent" ? { kind: "absent" } : {
+    kind: "file", bytesBase64: snapshot.bytes.toString("base64"), digest: snapshot.digest, byteLength: snapshot.byteLength, mode: snapshot.mode,
+  };
+}
+
+function manifest(root: string, operation: string): readonly ManifestEntry[] | undefined {
+  if (!existsSync(root)) return undefined;
+  const entries: ManifestEntry[] = [];
+  const visit = (absolute: string, path: string): void => {
+    const status = lstatSync(absolute);
+    if (status.isSymbolicLink()) throw new Error(`${path}: symlink is forbidden`);
+    if (status.isDirectory()) {
+      entries.push({ kind: "directory", path, mode: status.mode & 0o7777 });
+      for (const child of readdirSync(absolute).sort()) visit(resolve(absolute, child), path === "." ? child : `${path}/${child}`);
+      return;
+    }
+    if (!status.isFile()) throw new Error(`${path}: special file is forbidden`);
+    const bytes = readFileSync(absolute);
+    entries.push({ kind: "file", path, mode: status.mode & 0o7777, byteLength: bytes.byteLength, digest: traceDigest(bytes) });
+  };
+  try { visit(root, "."); return entries.sort((left, right) => left.path.localeCompare(right.path)); }
+  catch (cause) { throw mutationFailure(operation, "read", cause, root); }
+}
+
+function sameManifest(
+  left: readonly TraceDirectoryManifestEntry[] | undefined,
+  right: readonly TraceDirectoryManifestEntry[],
+): boolean {
+  return left !== undefined && JSON.stringify(left) === JSON.stringify(right);
+}
+function manifestIsSubset(current: readonly ManifestEntry[] | undefined, planned: readonly ManifestEntry[]): boolean {
+  if (current === undefined) return true;
+  const expected = new Map(planned.map((entry) => [entry.path, entry]));
+  return current.every((entry) => JSON.stringify(entry) === JSON.stringify(expected.get(entry.path)));
+}
+
+function validateJournal(root: string, directory: string, input: unknown): PublicationJournal {
+  const decoded = Schema.decodeUnknownResult(JournalSchema, { errors: "all", onExcessProperty: "error" })(input);
+  if (Result.isFailure(decoded)) throw new TraceRecoveryConflict({ path: journalPath(directory), message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue) });
+  const journal = decoded.success;
+  if (journal.newGeneration !== journal.oldGeneration + 1) throw new TraceRecoveryConflict({ path: journalPath(directory), message: "journal generations are not consecutive" });
+  repositoryPath(root, journal.owner, "recover");
+  if (journal.publication === "file-replace") {
+    repositoryPath(root, journal.temporary, "recover");
+    if (dirname(journal.temporary) !== dirname(journal.owner) || !basename(journal.temporary).includes(journal.token)) {
+      throw new TraceRecoveryConflict({ path: journalPath(directory), message: "file temporary path does not belong to the owner transaction" });
+    }
+    if (journal.preimage.kind === "file") {
+      const bytes = Buffer.from(journal.preimage.bytesBase64, "base64");
+      if (bytes.byteLength !== journal.preimage.byteLength || traceDigest(bytes) !== journal.preimage.digest || bytes.byteLength > MAXIMUM_OWNER_BYTES) {
+        throw new TraceRecoveryConflict({ path: journalPath(directory), message: "file preimage bytes do not match their receipt" });
+      }
+    }
+  } else {
+    const stage = repositoryPath(root, journal.stage, "recover");
+    const target = repositoryPath(root, journal.target, "recover");
+    const feedbackDirectory = journal.publication === "new-feedback-directory" &&
+      /^feedback\/\.stage-[0-9a-f-]{36}$/u.test(journal.stage) &&
+      /^feedback\/(?!\.)[^/]+$/u.test(journal.target);
+    const docsDirectory = journal.publication === "new-docs-directory" &&
+      /^docs\/(?:design|feature)\/\.stage-[0-9a-f-]{36}$/u.test(journal.stage) &&
+      (validPackagePath('design', `${journal.target}/README.md`) || validPackagePath('feature', `${journal.target}/README.md`));
+    if ((!feedbackDirectory && !docsDirectory) || journal.owner !== `${journal.target}/README.md` ||
+      dirname(stage) !== dirname(target)) {
+      throw new TraceRecoveryConflict({ path: journalPath(directory), message: "directory publication paths are invalid" });
+    }
+    const keys = journal.manifest.map((entry) => entry.path);
+    if (journal.manifest[0]?.path !== "." || new Set(keys).size !== keys.length || journal.manifest.some((entry) =>
+      entry.path !== "." && (entry.path.startsWith("/") || entry.path.includes("\\") || entry.path.split("/").some((segment) => segment === "" || segment === "." || segment === "..")))) {
+      throw new TraceRecoveryConflict({ path: journalPath(directory), message: "directory manifest paths are invalid" });
+    }
+  }
+  return journal;
+}
+
+function readJournal(root: string, directory: string): PublicationJournal | undefined {
+  const path = journalPath(directory);
+  if (!existsSync(path)) return undefined;
+  try { return validateJournal(root, directory, JSON.parse(readFileSync(path, "utf8")) as unknown); }
+  catch (cause) {
+    if (cause instanceof TraceRecoveryConflict) throw cause;
+    throw new TraceRecoveryConflict({ path, message: message(cause) });
+  }
+}
+
+/** Exclude only this process's validated staged file from source membership guards. */
+export function ownedPublicationTemporary(root: string): string | undefined {
+  const journal = readJournal(root, tracePrivateDirectorySync(root));
+  return journal?.publication === 'file-replace' && journal.process.pid === process.pid && journal.process.host === hostname()
+    ? journal.temporary : undefined;
+}
+function writeJournal(directory: string, journal: PublicationJournal): void { durableReplace(journalPath(directory), `${JSON.stringify(journal, null, 2)}\n`, 0o600); }
+function removeJournal(directory: string): void { advancePublicationRevision(directory); rmSync(journalPath(directory), { force: true }); fsyncDirectory(directory); }
+
+function removeExactFile(path: string, expected: FileJournal["planned"], operation: string): void {
+  const current = readFileSnapshot(path, operation);
+  if (current.kind === "absent") return;
+  if (!fileSnapshotMatches(current, expected)) throw new TraceRecoveryConflict({ path, message: "transaction temporary file changed" });
+  rmSync(path);
+  fsyncDirectory(dirname(path));
+}
+
+function writePreparedFile(path: string, bytes: Buffer, mode: number): void {
+  const descriptor = openSync(path, "wx", mode);
+  try { fchmodSync(descriptor, mode); writeFileSync(descriptor, bytes); fsyncSync(descriptor); }
+  finally { closeSync(descriptor); }
+  fsyncDirectory(dirname(path));
+}
+
+function restoreFile(root: string, journal: FileJournal): void {
+  const owner = repositoryPath(root, journal.owner, "recover");
+  const temporary = repositoryPath(root, journal.temporary, "recover");
+  if (journal.preimage.kind === "absent") { rmSync(owner); fsyncDirectory(dirname(owner)); return; }
+  const bytes = Buffer.from(journal.preimage.bytesBase64, "base64");
+  if (existsSync(temporary)) removeExactFile(temporary, journal.planned, "recover");
+  writePreparedFile(temporary, bytes, journal.preimage.mode);
+  if (!fileSnapshotMatches(readFileSnapshot(owner, "recover"), journal.planned)) {
+    throw new TraceRecoveryConflict({ path: journal.owner, message: "owner changed immediately before rollback" });
+  }
+  renameSync(temporary, owner);
+  fsyncDirectory(dirname(owner));
+}
+
+function discardStage(root: string, directory: string, journal: DirectoryJournal): void {
+  const stage = repositoryPath(root, journal.stage, "recover");
+  const target = repositoryPath(root, journal.target, "recover");
+  if (existsSync(target)) throw new TraceRecoveryConflict({ path: journal.target, message: "target reappeared while discarding stage" });
+  const current = manifest(stage, "recover");
+  if (!manifestIsSubset(current, journal.manifest)) throw new TraceRecoveryConflict({ path: journal.stage, message: "discarding stage is not an exact remaining subset of its manifest" });
+  if (current !== undefined) {
+    const ordered = [...current].sort((left, right) => {
+      const depth = right.path.split("/").length - left.path.split("/").length;
+      if (depth !== 0) return depth;
+      if (left.kind !== right.kind) return left.kind === "file" ? -1 : 1;
+      return right.path.localeCompare(left.path);
+    });
+    for (const entry of ordered) {
+      const absolute = entry.path === "." ? stage : resolve(stage, entry.path);
+      const status = lstatSync(absolute);
+      if (entry.kind === "file") {
+        if (!status.isFile() || status.isSymbolicLink()) throw new TraceRecoveryConflict({ path: journal.stage, message: `${entry.path} changed while discarding` });
+        const bytes = readFileSync(absolute);
+        if ((status.mode & 0o7777) !== entry.mode || bytes.byteLength !== entry.byteLength || traceDigest(bytes) !== entry.digest) {
+          throw new TraceRecoveryConflict({ path: journal.stage, message: `${entry.path} changed while discarding` });
+        }
+        rmSync(absolute);
+      } else {
+        if (!status.isDirectory() || status.isSymbolicLink() || (status.mode & 0o7777) !== entry.mode || readdirSync(absolute).length > 0) {
+          throw new TraceRecoveryConflict({ path: journal.stage, message: `${entry.path} changed while discarding` });
+        }
+        rmdirSync(absolute);
+      }
+      fsyncDirectory(dirname(absolute));
+    }
+  }
+  if (existsSync(stage)) throw new TraceRecoveryConflict({ path: journal.stage, message: "stage remained after exact discard" });
+  fsyncDirectory(dirname(stage));
+  removeJournal(directory);
+}
+
+function verifyRecoveryIdentity(root: string, directory: string, journal: PublicationJournal): void {
+  if (journal.process.host !== hostname()) {
+    throw new TraceRecoveryConflict({ path: journalPath(directory), message: "journal belongs to another host" });
+  }
+  if (!sameIdentity(worktreeIdentity(root, directory, false, "recover"), journal.identity)) {
+    throw new TraceRecoveryConflict({ path: journalPath(directory), message: "worktree or Git identity changed while a journal was active" });
+  }
+}
+function verifyRecoveryGit(root: string, journal: PublicationJournal): void {
+  if (headCommit(root, "recover") !== journal.headCommit || indexEntry(root, journal.owner, "recover") !== journal.indexEntry) {
+    throw new TraceRecoveryConflict({ path: journal.owner, message: "HEAD or owner Git index entry changed while a journal was active" });
+  }
+}
+
+function recoverFileJournal(root: string, directory: string, journal: FileJournal): TraceRecoveryReceipt {
+  verifyRecoveryIdentity(root, directory, journal);
+  const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
+  const owner = repositoryPath(root, journal.owner, "recover");
+  const temporary = repositoryPath(root, journal.temporary, "recover");
+  const ownerState = readFileSnapshot(owner, "recover");
+  const temporaryState = readFileSnapshot(temporary, "recover");
+  if (generation === journal.newGeneration) {
+    if (!fileSnapshotMatches(ownerState, journal.planned) || temporaryState.kind !== "absent") throw new TraceRecoveryConflict({ path: journal.owner, message: "committed file publication no longer matches its journal" });
+    removeJournal(directory);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner, generation };
+  }
+  if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither the journal old nor new value" });
+  verifyRecoveryGit(root, journal);
+  if (fileSnapshotMatches(ownerState, journal.preimage)) {
+    if (temporaryState.kind !== "absent") removeExactFile(temporary, journal.planned, "recover");
+    removeJournal(directory);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner, generation };
+  }
+  if (fileSnapshotMatches(ownerState, journal.planned) && temporaryState.kind === "absent") {
+    restoreFile(root, journal);
+    removeJournal(directory);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner, generation };
+  }
+  throw new TraceRecoveryConflict({ path: journal.owner, message: "file publication state does not match a safe recovery transition" });
+}
+
+function recoverDirectoryJournal(root: string, directory: string, journal: DirectoryJournal): TraceRecoveryReceipt {
+  verifyRecoveryIdentity(root, directory, journal);
+  const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
+  const stage = repositoryPath(root, journal.stage, "recover");
+  const target = repositoryPath(root, journal.target, "recover");
+  if (journal.phase === "discarding-stage") {
+    if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "discard phase requires the old generation" });
+    verifyRecoveryGit(root, journal);
+    discardStage(root, directory, journal);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "finished-discard", owner: journal.owner, generation };
+  }
+  const stageManifest = manifest(stage, "recover");
+  const targetManifest = manifest(target, "recover");
+  if (generation === journal.newGeneration) {
+    if (stageManifest !== undefined || !sameManifest(targetManifest, journal.manifest)) throw new TraceRecoveryConflict({ path: journal.target, message: "committed directory publication no longer matches its journal" });
+    removeJournal(directory);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner, generation };
+  }
+  if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither the journal old nor new value" });
+  verifyRecoveryGit(root, journal);
+  if (sameManifest(stageManifest, journal.manifest) && targetManifest === undefined) {
+    const discarding = { ...journal, phase: "discarding-stage" as const };
+    writeJournal(directory, discarding);
+    discardStage(root, directory, discarding);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner, generation };
+  }
+  if (stageManifest === undefined && sameManifest(targetManifest, journal.manifest)) {
+    if (existsSync(stage)) throw new TraceRecoveryConflict({ path: journal.stage, message: "stage appeared immediately before rollback" });
+    renameSync(target, stage);
+    fsyncDirectory(dirname(target));
+    const discarding = { ...journal, phase: "discarding-stage" as const };
+    writeJournal(directory, discarding);
+    discardStage(root, directory, discarding);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner, generation };
+  }
+  throw new TraceRecoveryConflict({ path: journal.target, message: "directory publication state does not match a safe recovery transition" });
+}
+
+function recoverUnderLease(root: string, directory: string): TraceRecoveryReceipt {
+  const journal = readJournal(root, directory);
+  const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
+  if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none", generation };
+  invalidateActiveRun(root);
+  return journal.publication === "file-replace" ? recoverFileJournal(root, directory, journal) : recoverDirectoryJournal(root, directory, journal);
+}
+
+export function recoverTrace(root: string, options: { readonly reclaimPublication?: boolean } = {}): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError> {
+  return withLease(root, "exclusive", "trace-recover", true, (lease) => Effect.try({
+    try: () => {
+      if (lease === undefined) throw new Error("exclusive Trace lease was not created");
+      worktreeIdentity(root, lease.directory, true, "trace-recover");
+      const genericPath = genericJournalPath(root);
+      if (existsSync(genericPath)) throw new TraceRecoveryRequired({ path: genericPath, nextStep: "concord recover" });
+      if (existsSync(journalPath(lease.directory)) && existsSync(multiJournalPath(lease.directory))) throw new TraceRecoveryConflict({ path: lease.directory, message: "Multiple publication journals exist; preserve the conflicting recovery state" });
+      const single = recoverUnderLease(root, lease.directory);
+      return single.recovered ? single : recoverMultiUnderLease(root, lease.directory);
+    },
+    catch: (cause) => cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
+  }), options.reclaimPublication !== false);
+}
+
+function writeGeneration(directory: string, generation: number, operation: string): void {
+  try { durableReplace(resolve(directory, GENERATION_FILE), `${generation}\n`, 0o600); }
+  catch (cause) { throw mutationFailure(operation, "generation", cause, GENERATION_FILE); }
+}
+function verifyAdditionalPreimages(operation: string, preimages: readonly TraceMutationPreimage[]): void {
+  for (const preimage of preimages) {
+    const state = readFileSnapshot(preimage.path, operation);
+    if (state.kind !== "file" || state.digest !== preimage.digest) throw mutationFailure(operation, "preimage", "preimage changed during publication", preimage.path);
+  }
+}
+function samePreparation(left: TraceMutationPreparation, right: TraceMutationPreparation): boolean { return JSON.stringify(left) === JSON.stringify(right); }
+
+function receiptFor<A, Changes>(input: {
+  readonly options: TraceMutationOptions<A, Changes, unknown, unknown>;
+  readonly preparation: TraceMutationPreparation;
+  readonly planned: TraceMutationPlanned<A, Changes>;
+  readonly source: FileSnapshot;
+  readonly headCommit: string;
+  readonly changed: boolean;
+}): TraceMutationReceipt<A, Changes> {
+  return {
+    format: "concord.docs-trace/relation-mutation/v1", operation: input.options.operation, dryRun: input.options.dryRun, owner: input.options.ownerPath,
+    ...(input.preparation.target === undefined ? {} : { target: input.preparation.target.ref, targetKind: input.preparation.target.kind, targetOwner: input.preparation.target.owner.path }),
+    snapshotDigest: input.preparation.snapshotDigest,
+    generation: input.preparation.generation,
+    nextGeneration: input.preparation.generation + (input.changed ? 1 : 0),
+    changed: input.changed,
+    headCommit: input.headCommit,
+    preimageDigest: input.source.kind === "absent" ? null : input.source.digest,
+    plannedBytesDigest: traceDigest(input.planned.bytes),
+    changes: input.planned.changes,
+    value: input.planned.value,
+  };
+}
+
+function buildFileJournal(
+  root: string, directory: string, operation: string, ownerPath: string, preparation: TraceMutationPreparation,
+  source: FileSnapshot, plannedBytes: Buffer, plannedMode: number, head: string, index: string | null,
+): FileJournal {
+  const token = randomUUID();
+  const temporary = slash(relative(resolve(root), resolve(dirname(repositoryPath(root, ownerPath, operation)), `.${basename(ownerPath)}.concord-${token}.tmp`)));
+  return {
+    format: "concord.trace/publication-journal/v1", publication: "file-replace", token, operation, owner: ownerPath, temporary,
+    oldGeneration: preparation.generation, newGeneration: preparation.generation + 1, snapshotDigest: preparation.snapshotDigest,
+    headCommit: head, indexEntry: index, identity: worktreeIdentity(root, directory, true, operation), createdAt: new Date().toISOString(),
+    process: { pid: process.pid, host: hostname() }, preimage: preimageForJournal(source),
+    planned: { digest: traceDigest(plannedBytes), byteLength: plannedBytes.byteLength, mode: plannedMode },
+  };
+}
+
+function buildDirectoryJournal(
+  root: string, directory: string, operation: string, ownerPath: string, publication: TraceDirectoryPublication,
+  preparation: TraceMutationPreparation, plannedManifest: readonly ManifestEntry[], head: string, index: string | null,
+): DirectoryJournal {
+  return {
+    format: "concord.trace/publication-journal/v1", publication: publication.kind, phase: "prepared",
+    token: basename(publication.stagePath).slice(".stage-".length), operation, owner: ownerPath, stage: publication.stagePath, target: publication.targetPath,
+    oldGeneration: preparation.generation, newGeneration: preparation.generation + 1, snapshotDigest: preparation.snapshotDigest,
+    headCommit: head, indexEntry: index, identity: worktreeIdentity(root, directory, true, operation), createdAt: new Date().toISOString(),
+    process: { pid: process.pid, host: hostname() }, manifest: plannedManifest,
+  };
+}
+
+function publishJournal(root: string, journal: PublicationJournal): void {
+  if (journal.publication === "file-replace") {
+    const temporary = repositoryPath(root, journal.temporary, journal.operation);
+    const owner = repositoryPath(root, journal.owner, journal.operation);
+    if (!fileSnapshotMatches(readFileSnapshot(owner, journal.operation), journal.preimage)) throw mutationFailure(journal.operation, "preimage", "owner changed immediately before atomic rename", journal.owner);
+    renameSync(temporary, owner);
+    fsyncDirectory(dirname(owner));
+    return;
+  }
+  const stage = repositoryPath(root, journal.stage, journal.operation);
+  const target = repositoryPath(root, journal.target, journal.operation);
+  if (!sameManifest(manifest(stage, journal.operation), journal.manifest) || existsSync(target)) throw mutationFailure(journal.operation, "preimage", "stage or target changed immediately before atomic rename", journal.target);
+  renameSync(stage, target);
+  fsyncDirectory(dirname(target));
+}
+
+function committedJournalState(root: string, directory: string, journal: PublicationJournal): boolean {
+  if (readGenerationPath(resolve(directory, GENERATION_FILE)) !== journal.newGeneration) return false;
+  if (journal.publication === "file-replace") {
+    return fileSnapshotMatches(readFileSnapshot(repositoryPath(root, journal.owner, "recover-after-failure"), "recover-after-failure"), journal.planned) &&
+      readFileSnapshot(repositoryPath(root, journal.temporary, "recover-after-failure"), "recover-after-failure").kind === "absent";
+  }
+  return manifest(repositoryPath(root, journal.stage, "recover-after-failure"), "recover-after-failure") === undefined &&
+    sameManifest(manifest(repositoryPath(root, journal.target, "recover-after-failure"), "recover-after-failure"), journal.manifest);
+}
+
+function safelyCommittedJournalState(root: string, directory: string, journal: PublicationJournal): boolean {
+  try { return committedJournalState(root, directory, journal); }
+  catch { return false; }
+}
+
+function cleanAfterFailedPublication<E>(
+  root: string,
+  directory: string,
+  journal: PublicationJournal,
+  original: E | TraceCoordinationError,
+): { readonly committed: true } | { readonly committed: false; readonly error: E | TraceCoordinationError } {
+  try {
+    const recovery = recoverUnderLease(root, directory);
+    if (recovery.action === "completed" || (
+      recovery.action === "none" && !existsSync(journalPath(directory)) && safelyCommittedJournalState(root, directory, journal)
+    )) return { committed: true };
+    return { committed: false, error: original };
+  }
+  catch (recoveryCause) {
+    if (!existsSync(journalPath(directory)) && safelyCommittedJournalState(root, directory, journal)) return { committed: true };
+    return {
+      committed: false,
+      error: new TraceMutationError({ operation: "recover-after-failure", phase: "rollback", message: `publication failed (${message(original)}) and recovery failed (${message(recoveryCause)})` }),
+    };
+  }
+}
+
+export function mutateTraceOwner<A, Changes, E, R>(
+  options: TraceMutationOptions<A, Changes, E, R>,
+): Effect.Effect<TraceMutationReceipt<A, Changes>, E | TraceCoordinationError, R> {
+  if (options.dryRun) {
+    return withTraceReadLease(options.root, () => Effect.gen(function*() {
+      const preparation = yield* options.prepareUnderLease;
+      const owner = repositoryPath(options.root, options.ownerPath, options.operation);
+      const source = readFileSnapshot(owner, options.operation);
+      const head = headCommit(options.root, options.operation);
+      const planned = yield* options.plan({ source: source.kind === "absent" ? undefined : source.bytes.toString("utf8"), headCommit: head, preparation });
+      const changed = source.kind === "absent" || !source.bytes.equals(Buffer.from(planned.bytes, "utf8"));
+      return receiptFor({ options: options as TraceMutationOptions<A, Changes, unknown, unknown>, preparation, planned, source, headCommit: head, changed });
+    }));
+  }
+
+  return withLease(options.root, "exclusive", options.operation, true, (lease) => Effect.uninterruptible(Effect.gen(function*() {
+    if (lease === undefined) return yield* mutationFailure(options.operation, "lock", "exclusive Trace lease was not created");
+    worktreeIdentity(options.root, lease.directory, true, options.operation);
+    const pending = pendingRecovery(options.root, lease.directory);
+    if (pending !== undefined) return yield* new TraceRecoveryRequired(pending);
+    invalidateActiveRun(options.root);
+    const preparation = yield* options.prepareUnderLease;
+    const owner = repositoryPath(options.root, options.ownerPath, options.operation);
+    const source = readFileSnapshot(owner, options.operation);
+    const head = headCommit(options.root, options.operation);
+    const index = indexEntry(options.root, options.ownerPath, options.operation);
+    const planned = yield* options.plan({ source: source.kind === "absent" ? undefined : source.bytes.toString("utf8"), headCommit: head, preparation });
+    const plannedBytes = Buffer.from(planned.bytes, "utf8");
+    if (plannedBytes.byteLength > MAXIMUM_OWNER_BYTES) return yield* mutationFailure(options.operation, "capacity", `planned owner exceeds ${MAXIMUM_OWNER_BYTES} bytes`, options.ownerPath);
+    const changed = source.kind === "absent" || !source.bytes.equals(plannedBytes);
+    const receipt = receiptFor({ options: options as TraceMutationOptions<A, Changes, unknown, unknown>, preparation, planned, source, headCommit: head, changed });
+    if (!changed) return receipt;
+
+    let journal: PublicationJournal;
+    if (options.publication === undefined) {
+      journal = buildFileJournal(options.root, lease.directory, options.operation, options.ownerPath, preparation, source, plannedBytes, source.kind === "file" ? source.mode : 0o644, head, index);
+    } else {
+      if (source.kind !== "absent") return yield* mutationFailure(options.operation, "preimage", "new directory publication requires an absent owner", options.ownerPath);
+      const stage = repositoryPath(options.root, options.publication.stagePath, options.operation);
+      const target = repositoryPath(options.root, options.publication.targetPath, options.operation);
+      if (existsSync(target)) return yield* mutationFailure(options.operation, "preimage", "directory publication target already exists", options.publication.targetPath);
+      const plannedManifest = manifest(stage, options.operation);
+      if (plannedManifest === undefined) return yield* mutationFailure(options.operation, "preimage", "directory publication stage is missing", options.publication.stagePath);
+      if (options.publication.expectedManifest !== undefined &&
+        !sameManifest(plannedManifest, options.publication.expectedManifest)) {
+        return yield* mutationFailure(options.operation, "preimage", "directory publication stage differs from the planned manifest", options.publication.stagePath);
+      }
+      const readme = plannedManifest.find((entry) => entry.kind === "file" && entry.path === "README.md");
+      if (readme?.kind !== "file" || readme.digest !== traceDigest(plannedBytes)) return yield* mutationFailure(options.operation, "preimage", "staged README differs from planned owner bytes", options.publication.stagePath);
+      journal = buildDirectoryJournal(options.root, lease.directory, options.operation, options.ownerPath, options.publication, preparation, plannedManifest, head, index);
+    }
+
+    const execution = Effect.try({
+      try: () => { invalidateActiveRun(options.root); writeJournal(lease.directory, journal); },
+      catch: (cause) => mutationFailure(options.operation, "journal", cause, journalPath(lease.directory)),
+    }).pipe(Effect.flatMap(() => Effect.gen(function*() {
+      if (journal.publication === "file-replace") {
+        yield* Effect.try({
+          try: () => writePreparedFile(repositoryPath(options.root, journal.temporary, options.operation), plannedBytes, journal.planned.mode),
+          catch: (cause) => mutationFailure(options.operation, "publish", cause, journal.temporary),
+        });
+      }
+      const confirmed = yield* options.prepareUnderLease;
+      if (!samePreparation(preparation, confirmed)) return yield* mutationFailure(options.operation, "preimage", "Trace Snapshot or target preparation changed after journal fsync");
+      const confirmedOwner = readFileSnapshot(owner, options.operation);
+      if (!fileSnapshotMatches(confirmedOwner, journal.publication === "file-replace" ? journal.preimage : { kind: "absent" })) return yield* mutationFailure(options.operation, "preimage", "owner changed after journal fsync", options.ownerPath);
+      if (headCommit(options.root, options.operation) !== head || indexEntry(options.root, options.ownerPath, options.operation) !== index) return yield* mutationFailure(options.operation, "preimage", "HEAD or owner Git index entry changed after journal fsync", options.ownerPath);
+      verifyAdditionalPreimages(options.operation, preparation.preimages ?? []);
+      if (journal.publication !== "file-replace" && !sameManifest(manifest(repositoryPath(options.root, journal.stage, options.operation), options.operation), journal.manifest)) {
+        return yield* mutationFailure(options.operation, "preimage", "directory manifest changed after journal fsync", journal.stage);
+      }
+      yield* Effect.try({ try: () => publishJournal(options.root, journal), catch: (cause) => cause instanceof TraceMutationError ? cause : mutationFailure(options.operation, "publish", cause, options.ownerPath) });
+      yield* Effect.try({ try: () => writeGeneration(lease.directory, preparation.generation + 1, options.operation), catch: (cause) => cause instanceof TraceMutationError ? cause : mutationFailure(options.operation, "generation", cause) });
+      yield* Effect.try({ try: () => removeJournal(lease.directory), catch: (cause) => mutationFailure(options.operation, "cleanup", cause, journalPath(lease.directory)) });
+      return receipt;
+    })));
+    const completed = yield* Effect.result(execution);
+    if (Result.isSuccess(completed)) return completed.success;
+    const cleanup = cleanAfterFailedPublication(options.root, lease.directory, journal, completed.failure);
+    if (cleanup.committed) return receipt;
+    return yield* Effect.fail(cleanup.error);
+  })));
+}
+
+export const mutateTraceOwnerFile = mutateTraceOwner;
+
+const MULTI_FILE_JOURNAL = "multi-file-publication-journal.json";
+
+export interface TraceMultiFileChange {
+  readonly path: string;
+  readonly bytes: string | Uint8Array | null;
+  readonly mode?: number;
+  readonly expectedDigest?: string | null;
+}
+export interface TraceMultiFileReceipt {
+  readonly format: "concord.docs-trace/multi-file-mutation/v1";
+  readonly transactionId: string;
+  readonly generationBefore: number;
+  readonly generationAfter: number;
+  readonly preimages: readonly { readonly path: string; readonly digest: string | null }[];
+  readonly plannedDigests: readonly { readonly path: string; readonly digest: string | null }[];
+  readonly committed: true;
+}
+export interface TraceMultiFileOptions<E = never, R = never> {
+  readonly root: string;
+  readonly operation: string;
+  /**
+   * Builds the publication while the exclusive Trace lease is held.  A case
+   * relation's dependencies are not just its output sidecar, so callers that
+   * validate Trace or remote state must use this instead of validating first
+   * and handing us a stale array of changes.
+   */
+  readonly prepareUnderLease?: Effect.Effect<readonly TraceMultiFileChange[], E, R>;
+  readonly changes?: readonly TraceMultiFileChange[];
+  readonly injectFailureAfterRename?: number;
+  readonly injectFailureAfterGeneration?: boolean;
+}
+interface MultiFileJournalEntry {
+  readonly path: string;
+  readonly temporary: string;
+  readonly preimage: { readonly kind: "absent" } | { readonly kind: "file"; readonly bytesBase64: string; readonly digest: string; readonly byteLength: number; readonly mode: number };
+  readonly planned: { readonly kind: "absent" } | { readonly kind: "file"; readonly digest: string; readonly byteLength: number; readonly mode: number };
+}
+interface MultiFileJournalV2 {
+  readonly format: "concord.trace/multi-file-publication-journal/v1";
+  readonly phase: "prepared" | "publishing" | "generation-committed" | "cleanup";
+  readonly transactionId: string;
+  readonly operation: string;
+  readonly oldGeneration: number;
+  readonly newGeneration: number;
+  readonly headCommit: string;
+  readonly indexEntries: Readonly<Record<string, string | null>>;
+  readonly identity: WorktreeIdentity;
+  readonly files: readonly MultiFileJournalEntry[];
+}
+
+const MultiPreimageSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("absent") }),
+  Schema.Struct({ kind: Schema.Literal("file"), bytesBase64: Schema.String, digest: DigestSchema, byteLength: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)), mode: ModeSchema }),
+]);
+const MultiPlannedSchema = Schema.Union([
+  Schema.Struct({ kind: Schema.Literal("absent") }),
+  Schema.Struct({ kind: Schema.Literal("file"), digest: DigestSchema, byteLength: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)), mode: ModeSchema }),
+]);
+const MultiFileEntrySchema = Schema.Struct({ path: NonEmptyTrimmedString, temporary: NonEmptyTrimmedString, preimage: MultiPreimageSchema, planned: MultiPlannedSchema });
+const MultiJournalSchema = Schema.Struct({
+  format: Schema.Literal("concord.trace/multi-file-publication-journal/v1"),
+  phase: Schema.Literals(["prepared", "publishing", "generation-committed", "cleanup"]),
+  transactionId: Schema.String.check(Schema.isPattern(/^netxn_[0-9a-f]+$/u)), operation: NonEmptyTrimmedString,
+  oldGeneration: GenerationSchema, newGeneration: GenerationSchema, headCommit: NonEmptyTrimmedString,
+  indexEntries: Schema.Record(Schema.String, Schema.NullOr(Schema.String)), identity: WorktreeIdentitySchema,
+  files: Schema.Array(MultiFileEntrySchema).pipe(Schema.check(Schema.isMinLength(1))),
+});
+
+function multiJournalPath(directory: string): string { return resolve(directory, MULTI_FILE_JOURNAL); }
+function validateMultiJournal(root: string, directory: string, input: unknown): MultiFileJournalV2 {
+  const path = multiJournalPath(directory);
+  const decoded = Schema.decodeUnknownResult(MultiJournalSchema, { errors: "all", onExcessProperty: "error" })(input);
+  if (Result.isFailure(decoded)) throw new TraceRecoveryConflict({ path, message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue) });
+  const journal = decoded.success;
+  if (journal.newGeneration !== journal.oldGeneration + 1) throw new TraceRecoveryConflict({ path, message: "journal generations are not consecutive" });
+  const keys = Object.keys(journal.indexEntries);
+  const paths = journal.files.map((file) => file.path);
+  if (new Set(paths).size !== paths.length || keys.length !== paths.length || keys.some((key) => !paths.includes(key))) throw new TraceRecoveryConflict({ path, message: "journal index entries and files differ" });
+  const owners = new Set(paths);
+  const temporaries = new Set<string>();
+  for (const file of journal.files) {
+    repositoryPath(root, file.path, "multi-file-recover");
+    repositoryPath(root, file.temporary, "multi-file-recover");
+    const expectedTemporary = slash(join(dirname(file.path), `.${basename(file.path)}.concord-${journal.transactionId}.tmp`));
+    if (file.temporary !== expectedTemporary || temporaries.has(file.temporary) || owners.has(file.temporary)) throw new TraceRecoveryConflict({ path, message: `temporary path is not exactly owned by ${journal.transactionId}` });
+    temporaries.add(file.temporary);
+    const checkMode = (mode: number): void => { if (!Number.isInteger(mode) || mode < 0 || mode > 0o7777) throw new TraceRecoveryConflict({ path, message: `invalid mode for ${file.path}` }); };
+    if (file.preimage.kind === "file") {
+      if (file.preimage.byteLength > MAXIMUM_OWNER_BYTES) throw new TraceRecoveryConflict({ path, message: `preimage exceeds ${MAXIMUM_OWNER_BYTES} bytes` });
+      const bytes = Buffer.from(file.preimage.bytesBase64, "base64");
+      if (bytes.byteLength !== file.preimage.byteLength || bytes.toString("base64") !== file.preimage.bytesBase64 || traceDigest(bytes) !== file.preimage.digest) throw new TraceRecoveryConflict({ path, message: `preimage does not match ${file.path}` });
+      checkMode(file.preimage.mode);
+    }
+    if (file.planned.kind === "file") { if (file.planned.byteLength > MAXIMUM_OWNER_BYTES) throw new TraceRecoveryConflict({ path, message: `planned file exceeds ${MAXIMUM_OWNER_BYTES} bytes` }); checkMode(file.planned.mode); }
+  }
+  return journal;
+}
+function writeMultiJournal(root: string, directory: string, journal: MultiFileJournalV2): void {
+  const validated = validateMultiJournal(root, directory, journal);
+  durableReplace(multiJournalPath(directory), `${JSON.stringify(validated)}\n`, 0o600);
+}
+function readMultiJournal(root: string, directory: string): MultiFileJournalV2 | undefined {
+  const path = multiJournalPath(directory);
+  if (!existsSync(path)) return undefined;
+  let value: unknown;
+  try { value = JSON.parse(readFileSync(path, "utf8")); }
+  catch (cause) { throw new TraceRecoveryConflict({ path, message: `invalid multi-file journal: ${message(cause)}` }); }
+  return validateMultiJournal(root, directory, value);
+}
+function removeMultiJournal(directory: string): void { advancePublicationRevision(directory); rmSync(multiJournalPath(directory), { force: true }); fsyncDirectory(directory); }
+function assertMultiGit(root: string, journal: MultiFileJournalV2): void {
+  if (headCommit(root, "multi-file-recover") !== journal.headCommit || journal.files.some((file) => indexEntry(root, file.path, "multi-file-recover") !== journal.indexEntries[file.path])) {
+    throw new TraceRecoveryConflict({ path: multiJournalPath(root), message: "HEAD or Git index changed while multi-file journal was active" });
+  }
+}
+function restoreMultiPreimages(root: string, journal: MultiFileJournalV2): void {
+  for (const file of journal.files) {
+    const target = repositoryPath(root, file.path, journal.operation);
+    const state = readFileSnapshot(target, journal.operation);
+    if (!fileSnapshotMatches(state, file.preimage) && !fileSnapshotMatches(state, file.planned)) throw new TraceRecoveryConflict({ path: file.path, message: "file is neither its recorded preimage nor planned image" });
+    const temporary = repositoryPath(root, file.temporary, journal.operation);
+    const temporaryState = readFileSnapshot(temporary, journal.operation);
+    if (file.planned.kind === "absent") {
+      if (temporaryState.kind !== "absent") throw new TraceRecoveryConflict({ path: file.temporary, message: "temporary exists for an absent planned image" });
+    } else if (temporaryState.kind !== "absent" && !fileSnapshotMatches(temporaryState, file.planned)) {
+      throw new TraceRecoveryConflict({ path: file.temporary, message: "temporary is neither absent nor its planned image" });
+    }
+  }
+  for (const file of journal.files) {
+    const target = repositoryPath(root, file.path, journal.operation);
+    if (file.preimage.kind === "absent") {
+      if (existsSync(target)) { rmSync(target); fsyncDirectory(dirname(target)); }
+    } else if (!fileSnapshotMatches(readFileSnapshot(target, journal.operation), file.preimage)) {
+      durableReplace(target, Buffer.from(file.preimage.bytesBase64, "base64"), file.preimage.mode);
+    }
+    const temporary = repositoryPath(root, file.temporary, journal.operation);
+    if (existsSync(temporary) && file.planned.kind === "file") removeExactFile(temporary, file.planned, journal.operation);
+    else if (existsSync(temporary)) throw new TraceRecoveryConflict({ path: file.temporary, message: "unexpected temporary file for an absent planned image" });
+  }
+}
+function recoverMultiUnderLease(root: string, directory: string): TraceRecoveryReceipt {
+  const journal = readMultiJournal(root, directory);
+  const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
+  if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none", generation };
+  if (!sameIdentity(worktreeIdentity(root, directory, false, "multi-file-recover"), journal.identity)) throw new TraceRecoveryConflict({ path: multiJournalPath(directory), message: "worktree identity changed" });
+  if (generation === journal.newGeneration) {
+    for (const file of journal.files) {
+      if (!fileSnapshotMatches(readFileSnapshot(repositoryPath(root, file.path, journal.operation), journal.operation), file.planned)) throw new TraceRecoveryConflict({ path: file.path, message: "committed planned digest changed" });
+      if (existsSync(repositoryPath(root, file.temporary, journal.operation))) throw new TraceRecoveryConflict({ path: file.temporary, message: "committed temporary file remains" });
+    }
+    removeMultiJournal(directory);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", generation };
+  }
+  if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither old nor new" });
+  assertMultiGit(root, journal);
+  invalidateActiveRun(root);
+  restoreMultiPreimages(root, journal);
+  removeMultiJournal(directory);
+  return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", generation };
+}
+
+export function recoverTraceMultiFile(root: string): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError> {
+  return withLease(root, "exclusive", "trace-recover", true, (lease) => Effect.try({
+    try: () => {
+      if (lease === undefined) throw new Error("exclusive Trace lease was not created");
+      const genericPath = genericJournalPath(root);
+      if (existsSync(genericPath)) throw new TraceRecoveryRequired({ path: genericPath, nextStep: "concord recover" });
+      if (existsSync(journalPath(lease.directory))) throw new TraceRecoveryRequired({ path: journalPath(lease.directory), nextStep: "concord recover" });
+      return recoverMultiUnderLease(root, lease.directory);
+    },
+    catch: (cause) => cause instanceof TraceRecoveryConflict || cause instanceof TraceMutationError || cause instanceof TraceRecoveryRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
+  }));
+}
+
+export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Effect.Effect<TraceMultiFileReceipt, E | TraceCoordinationError, R> {
+  return withLease(options.root, "exclusive", options.operation, true, (lease) => Effect.gen(function*() {
+    try {
+      if (lease === undefined) throw new Error("exclusive Trace lease was not created");
+      const pending = pendingRecovery(options.root, lease.directory);
+      if (pending !== undefined) throw new TraceRecoveryRequired(pending);
+      invalidateActiveRun(options.root);
+      const changes = options.prepareUnderLease === undefined ? options.changes : yield* options.prepareUnderLease;
+      if (changes === undefined || changes.length === 0 || new Set(changes.map((change) => change.path)).size !== changes.length) throw mutationFailure(options.operation, "preimage", "changes must be non-empty and path-unique");
+      const generation = readGenerationPath(resolve(lease.directory, GENERATION_FILE));
+      const head = headCommit(options.root, options.operation);
+      const token = `netxn_${randomUUID().replaceAll("-", "")}`;
+      const files = changes.map((change): MultiFileJournalEntry => {
+        const target = repositoryPath(options.root, change.path, options.operation);
+        const source = readFileSnapshot(target, options.operation);
+        const expected = change.expectedDigest;
+        if (expected !== undefined && (source.kind === "absent" ? null : source.digest) !== expected) throw mutationFailure(options.operation, "preimage", "expected preimage digest changed", change.path);
+        const bytes = change.bytes === null ? null : Buffer.from(change.bytes);
+        const temporary = slash(relative(resolve(options.root), resolve(dirname(target), `.${basename(target)}.concord-${token}.tmp`)));
+        return { path: change.path, temporary, preimage: preimageForJournal(source), planned: bytes === null ? { kind: "absent" as const } : { kind: "file" as const, digest: traceDigest(bytes), byteLength: bytes.byteLength, mode: change.mode ?? (source.kind === "file" ? source.mode : 0o644) } };
+      });
+      const journal: MultiFileJournalV2 = { format: "concord.trace/multi-file-publication-journal/v1", phase: "prepared", transactionId: token, operation: options.operation, oldGeneration: generation, newGeneration: generation + 1, headCommit: head, indexEntries: Object.fromEntries(files.map((file) => [file.path, indexEntry(options.root, file.path, options.operation)])), identity: worktreeIdentity(options.root, lease.directory, true, options.operation), files };
+      invalidateActiveRun(options.root);
+      writeMultiJournal(options.root, lease.directory, journal);
+      files.forEach((file, index) => {
+        if (file.planned.kind === "file") {
+          const temporary = repositoryPath(options.root, file.temporary, options.operation);
+          mkdirSync(dirname(temporary), { recursive: true });
+          writePreparedFile(temporary, Buffer.from(changes[index]!.bytes!), file.planned.mode);
+        }
+      });
+      writeMultiJournal(options.root, lease.directory, { ...journal, phase: "publishing" });
+      assertMultiGit(options.root, journal);
+      files.forEach((file, index) => {
+        const target = repositoryPath(options.root, file.path, options.operation);
+        if (!fileSnapshotMatches(readFileSnapshot(target, options.operation), file.preimage)) throw mutationFailure(options.operation, "preimage", "preimage changed before publish", file.path);
+        if (file.planned.kind === "absent") {
+          rmSync(target, { force: true });
+          fsyncDirectory(dirname(target));
+        } else {
+          renameSync(repositoryPath(options.root, file.temporary, options.operation), target);
+          fsyncDirectory(dirname(target));
+        }
+        if (options.injectFailureAfterRename === index + 1) throw mutationFailure(options.operation, "publish", "injected interruption", file.path);
+      });
+      writeGeneration(lease.directory, generation + 1, options.operation);
+      writeMultiJournal(options.root, lease.directory, { ...journal, phase: "generation-committed" });
+      if (options.injectFailureAfterGeneration === true) throw mutationFailure(options.operation, "cleanup", "injected interruption");
+      writeMultiJournal(options.root, lease.directory, { ...journal, phase: "cleanup" });
+      removeMultiJournal(lease.directory);
+      return { format: "concord.docs-trace/multi-file-mutation/v1", transactionId: token, generationBefore: generation, generationAfter: generation + 1, preimages: files.map((file) => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map((file) => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
+    } catch (cause) {
+      return yield* Effect.fail(cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(options.operation, "publish", cause));
+    }
+  }));
+}

@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { LocalRepository, initialize } from '../src/storage.js';
-import { renderTypeScriptConfig } from '../src/config.js';
-import { digest } from '../src/shared.js';
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { renderTypeScriptConfig } from "../src/base/workspace/index.js";
+import { digest } from "../src/model/index.js";
 import { projectConfigPath, readProjectConfig } from './support.js';
 const fixture = () => { const root=mkdtempSync(join(tmpdir(),'concord-storage-'));execFileSync('git',['init','-q',root]);return root; };
 

@@ -6,11 +6,11 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { Effect } from 'effect';
 import { expect, type Page } from '@playwright/test';
-import { createDocument } from '../../src/documents.js';
-import { initialize, LocalRepository } from '../../src/storage.js';
-import type { ViewServerHandle } from '../../src/view-server.js';
+import { createDocument } from "../../src/domain/documents/index.js";
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { type ViewServerHandle } from "../../src/entry/http/index.js";
 import { startViewServer } from './server.js';
-import type { WorkspaceProjection } from '../../src/view-contract.js';
+import { type WorkspaceProjection } from "../../src/model/index.js";
 import { waitForWorkspaceProjection } from '../support.js';
 
 const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((page: Page, incomplete: boolean, run: (page: Page, origin: string, value: WorkspaceProjection) => Promise<void>) => Effect.tryPromise(async () => {

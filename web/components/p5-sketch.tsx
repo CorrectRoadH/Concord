@@ -4,7 +4,7 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { Effect, Schema } from 'effect';
 import { CodeMirrorEditor, useCodeBlockEditorContext, type CodeBlockEditorProps } from '@mdxeditor/editor';
-import { P5BundleSchema, P5EventSchema, parseP5Options, type P5Bundle } from '../../src/p5-contract';
+import { P5BundleSchema, P5EventSchema, parseP5Options, type P5Bundle } from "../../src/model/p5/index.js";
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 

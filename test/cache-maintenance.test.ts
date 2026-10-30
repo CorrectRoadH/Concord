@@ -1,3 +1,4 @@
+import { workerEntryArgv, CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../src/base/installation/index.js";
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
@@ -6,13 +7,13 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { cachePhysicalBytes } from '../dist/cache-file.js';
-import { cacheStatus } from '../dist/annotations.js';
-import { openHawdb, createMemoryHawdb, HawdbFailure } from '../dist/hawdb-native.js';
-import { maintainCache } from '../dist/cache-maintenance-worker.js';
-import { CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from '../dist/hawdb-native-contract.js';
-import { workerEntryArgv } from '../dist/installation.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { cachePhysicalBytes } from "../src/base/cache/index.js";
+import { cacheStatus } from "../src/domain/tests/index.js";
+import { openHawdb, createMemoryHawdb, HawdbFailure } from "../src/base/cache/index.js";
+import { maintainCache } from "../src/entry/server/index.js";
+
+
 import { packConcord, installConcord } from './installed-package.js';
 import { pollUntil } from './support.js';
 

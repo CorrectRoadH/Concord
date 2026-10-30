@@ -4,8 +4,8 @@ import { Activity, AlertTriangle, Braces, CheckCircle2, Clipboard, Code2, Databa
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import { documentHref } from '../lib/document-routing';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
-import type { ViewAction } from '../../src/view-contract';
-import type { WorkspaceDocument, WorkspaceProjectionSnapshot } from '../../src/view-contract';
+import type { ViewAction } from '../../src/model/index';
+import type { WorkspaceDocument, WorkspaceProjectionSnapshot } from '../../src/model/index';
 import { ActionResult as ResultCard } from '../components/action-result';
 export { ImplementationPanel } from '../components/implementation-panel';
 import { Definition, Empty, Field, PageHeader } from '../components/page';

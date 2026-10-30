@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { rebaseAdoptedMarkdown } from '../dist/adoption.js';
+import { rebaseAdoptedMarkdown } from "../src/domain/documents/index.js";
 
 const rebase = (source: string) => rebaseAdoptedMarkdown(source, 'docs/roadmap/session/README.md', 'docs/feature/session/README.md', 'docs/roadmap/session');
 

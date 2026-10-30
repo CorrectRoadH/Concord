@@ -5,7 +5,7 @@
   "type": "module",
   "private": true,
   "bin": {
-    "concord": "dist/entry.js"
+    "concord": "dist/entry/cli/entry.js"
   },
   "files": [
     "dist",
@@ -13,7 +13,6 @@
     "docs",
     "NOTICE.md",
     "pnpm-workspace.yaml",
-    "repository",
     "templates",
     "skills"
   ],
@@ -24,7 +23,7 @@
   "scripts": {
     "build": "vp build",
     "check": "node --import tsx scripts/check.ts",
-    "concord": "node --import tsx src/entry.ts",
+    "concord": "node --import tsx src/entry/cli/entry.ts",
     "bench": "vp build 1>&2 && node --import tsx scripts/bench.ts",
     "bench:profile": "vp build 1>&2 && node --import tsx scripts/profile.ts",
     "test:e2e:agent": "node --import tsx scripts/test-built.ts --suite=agent",
@@ -97,59 +96,26 @@
   },
   "imports": {
     "#typescript-host": {
-      "types": "./dist/typescript-host.d.ts",
-      "default": "./dist/typescript-host.js"
+      "types": "./dist/base/process/typescript-host.d.ts",
+      "default": "./dist/base/process/typescript-host.js"
     }
   },
   "exports": {
-    "./change-preview": {
-      "types": "./dist/change-preview.d.ts",
-      "default": "./dist/change-preview.js"
-    },
-    "./document-codec": {
-      "types": "./dist/document-codec.d.ts",
-      "default": "./dist/document-codec.js"
-    },
-    "./document-layout": {
-      "types": "./dist/document-layout.d.ts",
-      "default": "./dist/document-layout.js"
-    },
-    "./design-content": {
-      "types": "./dist/design-content.d.ts",
-      "default": "./dist/design-content.js"
-    },
-    "./templates": {
-      "types": "./dist/templates.d.ts",
-      "default": "./dist/templates.js"
-    },
-    "./memory-state": {
-      "types": "./dist/memory-state.d.ts",
-      "default": "./dist/memory-state.js"
-    },
-    "./coordination": {
-      "types": "./dist/coordination.d.ts",
-      "default": "./dist/coordination.js"
+    "./config": {
+      "types": "./dist/model/config-public.d.ts",
+      "default": "./dist/model/config-public.js"
     },
     "./model": {
-      "types": "./dist/shared.d.ts",
-      "default": "./dist/shared.js"
-    },
-    "./config": {
-      "types": "./dist/config-public.d.ts",
-      "default": "./dist/config-public.js"
-    },
-    "./repository/*": {
-      "types": "./dist/repository/*.d.ts",
-      "default": "./dist/repository/*.js"
-    },
-    "./package.json": "./package.json",
-    "./owned-process": {
-      "types": "./dist/owned-process.d.ts",
-      "default": "./dist/owned-process.js"
+      "types": "./dist/model/index.d.ts",
+      "default": "./dist/model/index.js"
     },
     "./test-adapter-protocol": {
-      "types": "./dist/test-adapter-protocol.d.ts",
-      "default": "./dist/test-adapter-protocol.js"
+      "types": "./dist/model/test-adapter-protocol.d.ts",
+      "default": "./dist/model/test-adapter-protocol.js"
+    },
+    "./change-preview": {
+      "types": "./dist/model/change-preview.d.ts",
+      "default": "./dist/model/change-preview.js"
     }
   }
 }

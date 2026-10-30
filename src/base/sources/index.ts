@@ -1,0 +1,16 @@
+export { absolutePath } from './repo-docs-runtime.js';
+export { atomicWriteJson } from './repo-docs-runtime.js';
+export { atomicWriteText } from './repo-docs-runtime.js';
+export { decodeUnknown } from './repo-docs-runtime.js';
+export { pathExists } from './repo-docs-runtime.js';
+export { readJson } from './repo-docs-runtime.js';
+export { readText } from './repo-docs-runtime.js';
+export { REPOSITORY_ROOT } from './repo-docs-runtime.js';
+export { repositoryRelative } from './repo-docs-runtime.js';
+export { runCommand } from './repo-docs-runtime.js';
+export { runSuccessfulCommand } from './repo-docs-runtime.js';
+export { sha256 } from './repo-docs-runtime.js';
+export { withFileLock } from './repo-docs-runtime.js';
+export { measureScan } from './scan-timing.js';
+export type { ScanTiming } from './scan-timing.js';
+export { readDesignPlanPaths } from './design-plan-paths.js';

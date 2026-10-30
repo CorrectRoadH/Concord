@@ -1,23 +1,23 @@
 // @concord-file
 // @concord-implements docs/engineering/concord-self-hosting/README.md#从源码运行
-import { lstatSync, readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { packageRoot } from './location.js';
-export { packageRoot } from './location.js';
-import { hawdbTarget } from '../../hawdb-native-contract.js';
-import { ConcordError, digest } from '../../shared.js';
+import { lstatSync, readFileSync, readdirSync } from "node:fs";
+import { join } from "node:path";
+import { packageRoot } from "./location.js";
+export { packageRoot } from "./location.js";
+import { hawdbTarget } from "./hawdb-native-contract.js";
+import { ConcordError, digest } from "../../model/index.js";
 
 export const sourceInstallation = import.meta.url.endsWith('.ts');
 const directory = join(packageRoot, sourceInstallation ? 'src' : 'dist');
 const distribution = join(packageRoot, 'dist');
-export { nativeArtifactRoot, verifySourceNativeArtifact } from './native-artifact.js';
-import { nativeArtifactRoot, verifySourceNativeArtifact } from './native-artifact.js';
+export { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.js";
+import { nativeArtifactRoot, verifySourceNativeArtifact } from "./native-artifact.js";
 export const resourcePath = (path: string): string => join(packageRoot, path);
 export const helpManifestPath = join(distribution, 'startup-data.js');
 
 /** Resolve the loader at the installation, independently of a consumer's cwd. */
-export function workerEntryArgv(name: 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'cache-maintenance-worker', nodeOptions: readonly string[] = []): string[] {
-  return [...nodeOptions, ...(sourceInstallation ? ['--import', import.meta.resolve('tsx')] : []), join(directory, `${name}.${sourceInstallation ? 'ts' : 'js'}`)];
+export function workerEntryArgv(name: 'test-adapter-vitest' | 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'cache-maintenance-worker', nodeOptions: readonly string[] = []): string[] {
+  return [...nodeOptions, ...(sourceInstallation ? ['--import', import.meta.resolve('tsx')] : []), join(directory, 'entry/server', `${name}.${sourceInstallation ? 'ts' : 'js'}`)];
 }
 
 export function builtAssetRoot(name: 'web' | 'preview' | 'p5-types'): string {
@@ -63,7 +63,7 @@ function sourceIdentity(): InstallationFiles {
 /** Preserve the built query key's ordered file list. Source and built keys never overlap. */
 export function queryInstallationIdentity(): InstallationFiles {
   if (sourceInstallation) return sourceIdentity();
-  const files = readdirSync(directory).filter(name => name.endsWith('.js')).sort().map(name => [name, digest(readFileSync(join(directory, name)))]);
+  const files = collectFiles(directory, '', (name, relative) => name.endsWith('.js') && !relative.startsWith('native/'));
   for (const target of readdirSync(nativeArtifactRoot).sort()) {
     for (const name of ['artifact.json', 'hawdb.node']) files.push([`native/${target}/${name}`, digest(readFileSync(join(nativeArtifactRoot, target, name)))]);
   }
@@ -80,3 +80,5 @@ export function workspaceInstallationIdentity(): string {
   workspaceIdentity = digest(JSON.stringify(files));
   return workspaceIdentity;
 }
+export * from './hawdb-native-contract.js';
+export { nativeSourceDigest, nativeCacheRoot, nativeSourceFiles, nativeLockDigest } from './native-artifact.js';

@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
-import type { WorkspacePage, WorkspaceProjectionSnapshot } from '../../src/view-contract';
-import { DOCUMENT_ROOTS } from '../../src/document-layout';
+import type { WorkspacePage, WorkspaceProjectionSnapshot } from '../../src/model/index';
+import { DOCUMENT_ROOTS } from '../../src/model/index';
 
 const ROOT_RANK = ['docs/README.md', 'docs/architecture.md', 'docs/constitution.md', 'docs/concepts.md', 'docs/concord.md'];
 

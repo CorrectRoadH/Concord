@@ -1,4 +1,4 @@
-import type { WorkspaceDocument } from '../../src/view-contract'
+import type { WorkspaceDocument } from '../../src/model/index'
 
 /** Physical topic grouping is presentation only; nested owners keep their identities. */
 export function researchTopicDirectory(path: string): string {

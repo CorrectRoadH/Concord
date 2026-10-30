@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { initialize, LocalRepository } from '../../src/storage.js';
-import { beginRun, finalizeRun } from '../../src/run-coordination.js';
-import type { ViewServerHandle } from '../../src/view-server.js';
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { beginRun, finalizeRun } from "../../src/base/publication/index.js";
+import { type ViewServerHandle } from "../../src/entry/http/index.js";
 import { startViewServer } from './server.js';
 import { waitForWorkspaceProjection } from '../support.js';
 

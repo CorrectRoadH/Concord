@@ -1,8 +1,8 @@
 import { Effect, Schema } from 'effect';
-import { getWorkspaceSnapshot } from '../src/application.js';
-import { setConfig, showConfig } from '../src/editing.js';
-import { listFeedback } from '../src/feedback.js';
-import { LocalRepository } from '../src/storage.js';
+import { getWorkspaceSnapshot } from "../src/app/index.js";
+import { setConfig, showConfig } from "../src/app/index.js";
+import { listFeedback } from "../src/domain/feedback/index.js";
+import { LocalRepository } from "../src/base/workspace/index.js";
 
 const [root, mode] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.Literals(['workspace', 'config-preview', 'feedback'])]))(process.argv.slice(2));
 if (mode === 'workspace') await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));

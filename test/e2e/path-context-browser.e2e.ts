@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
-import { initialize, LocalRepository } from '../../src/storage.js';
-import { createDocument } from '../../src/documents.js';
-import type { ViewServerHandle } from '../../src/view-server.js';
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { createDocument } from "../../src/domain/documents/index.js";
+import { type ViewServerHandle } from "../../src/entry/http/index.js";
 import { startViewServer } from './server.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

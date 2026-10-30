@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { observeOwnedProcessGroup } from '../dist/owned-process.js';
-import { assertDarwinPublicationPaths, darwinPathCollisionKey, hasExactDarwinEntry } from '../dist/storage.js';
+import { observeOwnedProcessGroup } from "../src/base/process/index.js";
+import { assertDarwinPublicationPaths, darwinPathCollisionKey, hasExactDarwinEntry } from "../src/base/workspace/index.js";
 
 test('Darwin path guards preserve exact bytes and reject case or Unicode publication aliases', () => {
   assert.equal(hasExactDarwinEntry([Buffer.from('.git')], '.git'), true);

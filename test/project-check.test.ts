@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test, { mock } from 'node:test';
 import { Effect } from 'effect';
-import { executeViewAction } from '../dist/application.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { checkProject } from '../dist/project-check.js';
-import { checkCurrentProject } from '../dist/check-current.js';
-import { ConcordError } from '../dist/shared.js';
+import { executeViewAction } from "../src/app/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { checkProject } from "../src/app/index.js";
+import { checkCurrentProject } from "../src/app/index.js";
+import { ConcordError } from "../src/model/index.js";
 
 const cli = new URL('../dist/entry.js', import.meta.url).pathname;
 

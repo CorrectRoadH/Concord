@@ -6,15 +6,15 @@ import { Effect } from 'effect';
 import { buildSync } from 'esbuild';
 import { readProjectConfig, writeProjectConfig, pollUntil } from './support.js';
 import { createConsumer } from './support/consumer.js';
-import { analyzeCode } from '../src/code-analysis.js';
-import { createDocument } from '../src/documents.js';
-import { LocalRepository } from '../src/storage.js';
-import { openHawdb } from '../src/hawdb-native.js';
-import { ConcordError } from '../src/shared.js';
-import { OwnedProcessLive } from '../src/owned-process.js';
-import { tracePrivateDirectorySync } from '../src/coordination.js';
-import { inspectRunner } from '../src/run-coordination.js';
-import { collectNativeTests } from '../src/test-adapters.js';
+import { analyzeCode } from "../src/domain/code/index.js";
+import { createDocument } from "../src/domain/documents/index.js";
+import { LocalRepository } from "../src/base/workspace/index.js";
+import { openHawdb } from "../src/base/cache/index.js";
+import { ConcordError } from "../src/model/index.js";
+import { OwnedProcessLive } from "../src/base/process/index.js";
+import { tracePrivateDirectorySync } from "../src/base/publication/index.js";
+import { inspectRunner } from "../src/base/publication/index.js";
+import { collectNativeTests } from "../src/domain/tests/index.js";
 
 const target = 'docs/feature/sample/use-case/sample.md';
 function consumer(): string {

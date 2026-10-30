@@ -1,3 +1,4 @@
+import { hawdbTarget, decodeNativeArtifact, HAWDB_MACOS_DEPLOYMENT_TARGET } from "../src/base/installation/index.js";
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -9,7 +10,7 @@ import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { decodeNativeArtifact, HAWDB_MACOS_DEPLOYMENT_TARGET, hawdbTarget } from '../dist/hawdb-native-contract.js';
+
 
 const target = hawdbTarget();
 const original = resolve('dist/native', target);

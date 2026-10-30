@@ -1,0 +1,53 @@
+// @concord-file
+// @concord-implements docs/feature/local-sdlc/use-case/analyze-other-languages.md#原生测试范围
+import { adapterFor, adapterInputSnapshot, readNativeObservations } from "../tests/index.js";
+import { bindNative } from "../tests/index.js";
+import { ConcordError, objectDigest, type AnnotatedCase, type Repository } from "../../model/index.js";
+import { type NativeAnalysisScope } from "../../model/index.js";
+
+/** Called within the analysis source snapshot; never collects or starts a provider. */
+export function captureNativeAnalysis(repo: Repository, cases: readonly AnnotatedCase[]) {
+  const observations = readNativeObservations(repo);
+  const identity = observations.map(item => ({
+    adapterId: item.adapterId, current: item.observation.current, inputs: item.observation.inputs,
+    manifestDigest: objectDigest(item.observation.value), versions: item.inputScope?.versions ?? null,
+  })).sort((a, b) => a.adapterId.localeCompare(b.adapterId));
+  const scopes = new Map<string, NativeAnalysisScope>();
+  const gaps = new Map<string, readonly string[]>();
+  for (const test of cases) {
+    const adapter = adapterFor(repo, test.file);
+    if (adapter === undefined) continue;
+    const item = observations.find(item => item.adapterId === adapter.id && item.observation.current);
+    if (item === undefined) { gaps.set(test.id, ['NativeObservationUnavailable']); continue; }
+    const manifest = item.observation.value;
+    try {
+      const ids = bindNative(repo, test, manifest);
+      const selected = ids?.map(id => manifest.cases.find(native => native.nativeId === id));
+      if (!ids?.length || !manifest.capabilities.range || !selected?.every(native => native?.range !== undefined)) {
+        gaps.set(test.id, [...manifest.completeness.gaps, 'NativeRangeUnavailable']);
+        continue;
+      }
+      const ranges = selected.map(native => native!.range!);
+      const firstRange = ranges[0]!, firstId = ids[0]!;
+      scopes.set(test.id, {
+        adapterId: adapter.id, manifestInputs: item.observation.inputs, manifestDigest: objectDigest(manifest),
+        bindingVersion: 'concord.native-analysis-binding/v1', nativeIds: [firstId, ...ids.slice(1)], ranges: [firstRange, ...ranges.slice(1)],
+        selectionDigest: objectDigest({ ids, selections: selected.map(native => native!.selection), ranges, versions: item.inputScope?.versions ?? null }),
+        gaps: [...new Set([...item.observation.gaps, ...manifest.completeness.gaps])].sort(),
+      });
+    } catch (cause) {
+      gaps.set(test.id, [...manifest.completeness.gaps, cause instanceof ConcordError ? cause.code : 'NativeBindingUnavailable']);
+    }
+  }
+  // Adapter inputs can include ignored fixture/lock files that the Git candidate
+  // and ordinary source reads do not cover. Recheck them without opening HawDB.
+  const verifyInputs = () => {
+    for (const item of observations.filter(item => item.observation.current)) {
+      const adapter = repo.config.testAdapters?.find(adapter => adapter.id === item.adapterId);
+      if (adapter === undefined || adapterInputSnapshot(repo, adapter).inputs !== item.observation.inputs) {
+        throw new ConcordError('AnalysisSourceChanged', 'Native observation inputs changed before analysis publication');
+      }
+    }
+  };
+  return { identity, scopes, gaps, verifyInputs };
+}

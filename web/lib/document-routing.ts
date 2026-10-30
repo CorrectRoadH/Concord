@@ -1,5 +1,5 @@
-import type { WorkspaceDocument } from '../../src/view-contract';
-import { matchingOwners } from '../../src/document-layout';
+import type { WorkspaceDocument } from '../../src/model/index';
+import { matchingOwners } from '../../src/model/index';
 
 export function documentHref(document: Pick<WorkspaceDocument, 'path' | 'metadata'>, documents: readonly WorkspaceDocument[]): string {
   if (document.metadata.kind === 'use-case') {

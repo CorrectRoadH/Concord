@@ -1,17 +1,17 @@
 import { createConsumer } from './support/consumer.js';
 import { gitCommit } from './support/fix-consumer.js';
-import { LocalRepository } from '../src/storage.js';
-import { createDocument } from '../src/documents.js';
-import { OwnedProcessLive } from '../src/owned-process.js';
-import { checkSince } from '../src/check-since.js';
+import { LocalRepository } from "../src/base/workspace/index.js";
+import { createDocument } from "../src/domain/documents/index.js";
+import { OwnedProcessLive } from "../src/base/process/index.js";
+import { checkSince } from "../src/app/index.js";
 import { Effect } from 'effect';
 import { rmSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { inspectEndpointEvents } from '../src/check-since.js';
-import { renderDocument } from '../src/document-codec.js';
-import { initialConstitution } from '../src/constitution.js';
-import { digest, type DocumentMeta, type Repository } from '../src/shared.js';
+import { inspectEndpointEvents } from "../src/app/index.js";
+import { renderDocument } from "../src/model/index.js";
+import { initialConstitution } from "../src/domain/constitution/index.js";
+import { digest, type DocumentMeta, type Repository } from "../src/model/index.js";
 
 /** Captured domain input, not a second implementation of Git or transition rules. */
 function sources(input: Readonly<Record<string, string>>): Repository {

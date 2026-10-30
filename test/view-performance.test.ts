@@ -6,12 +6,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getWorkspaceSnapshot } from '../dist/application.js';
-import { recoverPublicationLeaseSync } from '../dist/coordination.js';
-import { createDocument } from '../dist/documents.js';
-import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from '../dist/editing.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { startViewServer } from '../dist/view-server.js';
+import { getWorkspaceSnapshot } from "../src/app/index.js";
+import { recoverPublicationLeaseSync } from "../src/base/publication/index.js";
+import { createDocument } from "../src/domain/documents/index.js";
+import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from "../src/app/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { startViewServer } from "../src/entry/http/index.js";
 import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from './support.js';
 
 function fixture(): string {

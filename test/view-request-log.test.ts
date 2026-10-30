@@ -3,7 +3,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ViewRequestLog } from '../dist/view-request-log.js';
+import { ViewRequestLog } from "../src/entry/http/index.js";
 import { fetchFresh } from './support.js';
 
 const Record = Schema.Struct({

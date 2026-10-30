@@ -6,9 +6,9 @@ import { hostname, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { snapshot } from '../src/config.js';
-import { LocalRepository, initialize } from '../src/storage.js';
-import { digest } from '../src/shared.js';
+import { snapshot } from "../src/base/workspace/index.js";
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { digest } from "../src/model/index.js";
 
 const cli = installedConcordCli();
 const fixture = (body: (root: string) => void) => {

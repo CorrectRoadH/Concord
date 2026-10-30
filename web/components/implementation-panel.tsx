@@ -2,7 +2,7 @@ import { PathContextMenu } from './path-context-menu';
 import { Clipboard, FileCode2 } from 'lucide-react';
 import { Suspense, lazy, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { WorkspaceDocument } from '../../src/view-contract';
+import type { WorkspaceDocument } from '../../src/model/index';
 import { projectionIsConclusive, useWorkspace } from '../workspace';
 import { useSourceNavigation } from '../hooks/use-url-navigation';
 import { ActionResult as ResultCard } from './action-result';

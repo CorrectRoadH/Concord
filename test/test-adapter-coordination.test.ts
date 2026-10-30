@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { collectNativeTests, readNativeObservations } from '../dist/test-adapters.js';
-import { OwnedProcess, OwnedProcessLive, runOwnedProcess, type OwnedProcessResult, type OwnedProcessService } from '../dist/owned-process.js';
-import { inspectRunner, invalidateActiveRun } from '../dist/run-coordination.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { collectNativeTests, readNativeObservations } from "../src/domain/tests/index.js";
+import { OwnedProcess, OwnedProcessLive, runOwnedProcess, type OwnedProcessResult, type OwnedProcessService } from "../src/base/process/index.js";
+import { inspectRunner, invalidateActiveRun } from "../src/base/publication/index.js";
 import { readProjectConfig, writeProjectConfig } from './support.js';
 
 const emptyResult: OwnedProcessResult = { command: ['fixture'], exitCode: 0, signal: null, timedOut: false, cancelled: false, outputLimitExceeded: false, stdout: '', stderr: '', outputBytes: 0, processGroupOwned: true, groupCleanup: { owned: true, checked: true, aliveAfterLeaderClose: false, groupId: 999999, signalsSent: [], gone: true, detail: 'external boundary fixture' } };

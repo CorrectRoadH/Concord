@@ -6,8 +6,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Effect } from "effect";
-import { runResearchAt } from "../repository/docs/research/domain.js";
-import { tracePrivateDirectorySync } from "../src/coordination.js";
+import { runResearchAt } from "../src/domain/documents/index.js";
+import { tracePrivateDirectorySync } from "../src/base/publication/index.js";
 
 function repo(): string {
   const root = mkdtempSync(join(tmpdir(), "concord-research-current-"));

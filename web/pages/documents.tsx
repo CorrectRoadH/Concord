@@ -1,7 +1,7 @@
 import { fromMarkdown } from 'mdast-util-from-markdown'
 import { PathContextMenu } from '../components/path-context-menu'
-import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
-import { matchingOwners } from '../../src/document-layout'
+import { DOCUMENT_NAME_PATTERN } from '../../src/model/index'
+import { matchingOwners } from '../../src/model/index'
 import { documentHref } from '../lib/document-routing'
 export { documentHref } from '../lib/document-routing'
 import {
@@ -22,10 +22,10 @@ import * as React from "react"
 import { createPortal } from "react-dom"
 import { Link, Navigate, Outlet, useNavigate, useParams } from "react-router-dom"
 
-import type { DocumentKind, DocumentRecord } from "../../src/shared"
-import type { ViewAction, ViewFile } from "../../src/view-contract"
-import type { WorkspaceDocument, WorkspacePage } from "../../src/view-contract"
-import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../src/template-pages"
+import type { DocumentKind, DocumentRecord } from '../../src/model/index'
+import type { ViewAction, ViewFile } from '../../src/model/index'
+import type { WorkspaceDocument, WorkspacePage } from '../../src/model/index'
+import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from '../../src/model/index'
 import { MarkdownEditor } from "@/components/markdown-editor"
 import { Definition, Empty, Field, PageHeader } from "@/components/page"
 import { Badge } from "@/components/ui/badge"

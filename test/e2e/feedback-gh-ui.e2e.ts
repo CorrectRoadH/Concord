@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { initialize, LocalRepository } from '../../src/storage.js';
-import type { ViewServerHandle } from '../../src/view-server.js';
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { type ViewServerHandle } from "../../src/entry/http/index.js";
 import { startViewServer } from './server.js';
 import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
 

@@ -6,12 +6,12 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 import { Effect } from 'effect';
 import { createConsumer } from './support/consumer.js';
-import { LocalRepository } from '../src/storage.js';
-import { createDocument, readDocumentSelector } from '../src/documents.js';
-import { renderTypeScriptConfig } from '../src/config.js';
-import { closeFixedIssue, replayFix } from '../src/fix-verification.js';
-import { OwnedProcessLive } from '../src/owned-process.js';
-import { inspectEndpointEvents, checkSince } from '../src/check-since.js';
+import { LocalRepository } from "../src/base/workspace/index.js";
+import { createDocument, readDocumentSelector } from "../src/domain/documents/index.js";
+import { renderTypeScriptConfig } from "../src/base/workspace/index.js";
+import { closeFixedIssue, replayFix } from "../src/domain/tests/index.js";
+import { OwnedProcessLive } from "../src/base/process/index.js";
+import { inspectEndpointEvents, checkSince } from "../src/app/index.js";
 
 async function verify(root: string, defect?: string) {
   const repo = new LocalRepository(root, { optimistic: true });

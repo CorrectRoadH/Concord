@@ -7,9 +7,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
-import { hawdbTarget } from '../src/hawdb-native-contract.js';
-import { acquireHawdbClearGuard, createMemoryHawdb, hawdbIdentity, openHawdb, type HawdbFailureCode } from '../src/hawdb-native.js';
-import { deleteInspectedCache, inspectCacheClear } from '../src/cache-file.js';
+import { hawdbTarget } from "../src/base/installation/index.js";
+import { acquireHawdbClearGuard, createMemoryHawdb, hawdbIdentity, openHawdb, type HawdbFailureCode } from "../src/base/cache/index.js";
+import { deleteInspectedCache, inspectCacheClear } from "../src/base/cache/index.js";
 
 interface RawDatabase { get(namespace: string, keys: string[]): unknown; close(): void }
 function rawEngine(path: string, admit = true): RawDatabase {

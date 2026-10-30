@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { before, after, test } from 'node:test';
 import { Schema } from 'effect';
-import { decode, FixVerificationSchema } from '../src/shared.js';
+import { decode, FixVerificationSchema } from "../src/model/index.js";
 import { createFixConsumer } from './support/fix-consumer.js';
 import { packConcord, installConcord } from './installed-package.js';
 

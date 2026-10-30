@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { makeOwnedProcessService } from '../src/owned-process.js';
+import { makeOwnedProcessService } from "../src/base/process/index.js";
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('owned process counts raw bytes and decodes UTF-8 across chunks', { skip: process.platform === 'win32' }, async () => {

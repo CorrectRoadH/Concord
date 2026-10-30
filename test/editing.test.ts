@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from '../src/documents.js';
-import { inspectDocumentFile, inspectDocuments, listSources, readSource, setConfig, setMarkdown, setSource } from '../src/editing.js';
-import { digest } from '../src/shared.js';
-import { LocalRepository, initialize } from '../src/storage.js';
+import { createDocument } from "../src/domain/documents/index.js";
+import { inspectDocumentFile, inspectDocuments, listSources, readSource, setConfig, setMarkdown, setSource } from "../src/app/index.js";
+import { digest } from "../src/model/index.js";
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
 import { projectConfigPath, readProjectConfig, writeProjectConfig } from './support.js';
 
 function fixture(): string {
@@ -93,7 +93,7 @@ test('project documents under docs are readable without becoming category owners
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('config editing rejects retired fields and validates source roots', () => Effect.runPromise(Effect.sync(() => withRepository((_root, repo) => {
   const source = repo.configSnapshot.source;
-  throwsCode('InvalidData', () => setConfig(repo, { ...repo.config, projectId: 'other-project' } as unknown as import('../src/shared.js').ProjectConfig, digest(source)));
+  throwsCode('InvalidData', () => setConfig(repo, { ...repo.config, projectId: 'other-project' } as unknown as import("../src/model/shared.js").ProjectConfig, digest(source)));
   throwsCode('InvalidSourcePath', () => setConfig(repo, { ...repo.config, sourceRoots: ['node_modules'] }, digest(source)));
   throwsCode('InvalidSourcePath', () => setConfig(repo, { ...repo.config, testRoots: ['node_modules'] }, digest(source)));
   const receipt = setConfig(repo, { ...repo.config, sourceRoots: ['src', 'test'] }, digest(source));

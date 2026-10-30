@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { makeOwnedProcessService } from '../dist/owned-process.js';
+import { makeOwnedProcessService } from "../src/base/process/index.js";
 import { Effect } from 'effect';
-import { withTypeScript, withTypeScriptFiles, withTypeScriptSource } from '../dist/typescript-host.js';
+import { withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../src/base/process/index.js";
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('owned editor job timeout releases its real native compiler group', { skip: process.platform !== 'linux', timeout: 15000 }, () => Effect.runPromise(Effect.gen(function*() {
@@ -72,11 +72,11 @@ test('native compiler closes after nested domain failure and snapshot disposal f
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('editor verifies cleanup records only after Scope release and rejects every unconfirmed ownership state', { skip: process.platform === 'win32' }, () => Effect.runPromise(Effect.tryPromise(async () => {
-  const { runEditorJob } = await import('../dist/editor-job.js');
+  const { runEditorJob } = await import("../src/entry/server/editor-job.js");
   const computed = { generation: 0, revision: '', config: 'fixture', complete: true, gaps: [], value: null, diagnostics: [], reads: [], listings: [] };
   const job = { root: process.cwd(), generation: 0, config: 'fixture', revision: '', overlays: [], method: 'diagnostics' };
-  const { makeOwnedProcessService } = await import('../dist/owned-process.js');
-  type Result = import('../dist/owned-process.js').OwnedProcessResult;
+  const { makeOwnedProcessService } = await import("../src/base/process/owned-process.js");
+  type Result = import("../src/base/process/index.js").OwnedProcessResult;
   const confirmed: Result = { command: ['fixture'], exitCode: 0, signal: null, timedOut: false, cancelled: false, outputLimitExceeded: false, stdout: JSON.stringify({ ok: true, result: computed }), stderr: '', outputBytes: 0, processGroupOwned: true, groupCleanup: { owned: true, checked: true, gone: true, aliveAfterLeaderClose: false, signalsSent: [], detail: 'fixture' } };
   const variants: readonly (Result | undefined)[] = [confirmed, { ...confirmed, processGroupOwned: false }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, owned: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, checked: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, gone: false } }, { ...confirmed, groupCleanup: { ...confirmed.groupCleanup, gone: null } }, undefined];
   for (const record of variants) {

@@ -1,0 +1,235 @@
+import { Schema } from "effect";
+import { FeedbackFilterFields } from "./feedback-filter.js";
+import { TEMPLATE_PAGES } from "./template-pages.js";
+import { type CodeDeclaration } from "./code-declaration.js";
+import { type Evidence } from "./evidence-values.js";
+import { type GitDiff, type GitStatus } from "./git-values.js";
+import { type AnnotatedCase, type DocumentKind, type DocumentMeta, type DocumentRecord, type Finding, type ProjectConfig, type Runner } from "./shared.js";
+import { MEMORY_RELATION_KINDS, ProjectSchema } from "./shared.js";
+import { type TraceEdge } from "./trace-edge.js";
+import { type FeedbackAvailability, type FeedbackItem, type FeedbackTriage, type RemoteFeedback } from "./feedback-schema.js";
+import { WritingPolicySchema } from "./writing-schema.js";
+
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/architecture.md
+export interface ViewFile {
+  readonly path: string;
+  readonly body: string;
+  readonly digest: string;
+  readonly documentPath?: string;
+  readonly document?: DocumentRecord;
+  readonly project?: ProjectConfig;
+  readonly feedback?: FeedbackItem;
+}
+
+export interface WorkspaceSnapshot {
+  readonly complete?: boolean;
+  readonly root: string;
+  readonly project: ProjectConfig | null;
+  readonly configDigest: string | null;
+  readonly documents: readonly DocumentRecord[];
+  readonly feedback: readonly FeedbackItem[];
+  readonly pages: readonly ViewFile[];
+  readonly cases: readonly AnnotatedCase[];
+  readonly codes: readonly CodeDeclaration[];
+  readonly edges: readonly TraceEdge[];
+  readonly findings: readonly Finding[];
+  readonly sources: readonly { readonly path: string; readonly digest: string }[];
+  readonly evidenceIds: readonly string[];
+  readonly templates: readonly { readonly name: string; readonly description: string }[];
+  readonly cache: unknown;
+  readonly diagnostics: unknown;
+}
+
+/**
+ * Durable, body-free projection collections shared by Web and CLI.
+ * `WorkspaceDocument` is a `DocumentRecord` without its body; an issue's
+ * `metadata.source.body` is removed as well. Detail bodies are always read
+ * through directed current `/api/file` reads, never from this cache.
+ */
+export type WorkspaceRemote =
+  | Omit<Extract<RemoteFeedback, { readonly provider: 'github' }>, 'body'>
+  | Omit<Extract<RemoteFeedback, { readonly provider: 'linear' }>, 'body'>;
+export type WorkspaceFeedbackSource = WorkspaceRemote & { readonly connectionId: string; readonly importedAt: string };
+export type WorkspaceDocumentMetadata =
+  | Exclude<DocumentMeta, { readonly kind: 'issue' }>
+  | (Omit<Extract<DocumentMeta, { readonly kind: 'issue' }>, 'source'> & { readonly source?: WorkspaceFeedbackSource });
+export interface WorkspaceDocument {
+  readonly path: string;
+  readonly metadata: WorkspaceDocumentMetadata;
+  readonly digest: string;
+}
+export interface WorkspaceIssueDocument {
+  readonly path: string;
+  readonly metadata: Extract<WorkspaceDocumentMetadata, { readonly kind: 'issue' }>;
+  readonly digest: string;
+}
+export interface WorkspacePage {
+  readonly path: string;
+  readonly digest: string;
+  readonly documentPath?: string;
+  readonly derivedTitle?: string;
+}
+export interface WorkspaceFeedback {
+  readonly document: WorkspaceIssueDocument;
+  readonly provider: 'local' | 'github' | 'linear';
+  readonly triage: FeedbackTriage;
+  readonly availability: FeedbackAvailability;
+  readonly warnings: readonly string[];
+  readonly remote: WorkspaceRemote | null;
+}
+/** Navigator-only derivation of `WorkspaceSnapshot`; never authorizes current facts. */
+export interface WorkspaceProjectionSnapshot {
+  readonly complete?: boolean;
+  readonly root: string;
+  readonly project: ProjectConfig | null;
+  readonly configDigest: string | null;
+  readonly documents: readonly WorkspaceDocument[];
+  readonly feedback: readonly WorkspaceFeedback[];
+  readonly pages: readonly WorkspacePage[];
+  readonly cases: readonly AnnotatedCase[];
+  readonly codes: readonly CodeDeclaration[];
+  readonly edges: readonly TraceEdge[];
+  readonly findings: readonly Finding[];
+  readonly sources: readonly { readonly path: string; readonly digest: string }[];
+  readonly evidenceIds: readonly string[];
+  readonly templates: readonly { readonly name: string; readonly description: string }[];
+  readonly cache: unknown;
+  readonly diagnostics: unknown;
+}
+// @concord-end
+export interface WorkspaceProjectionRefreshError { readonly failedAt: string; readonly code: string; readonly message: string }
+export interface WorkspaceProjectionAttempt { readonly at: string; readonly complete: boolean; readonly changedPaths: readonly string[] }
+/** `consistent` marks a drift-free build; `complete` keeps the scan/finding semantics. Never current facts. */
+export interface WorkspaceProjectionStatus {
+  readonly status: 'ready' | 'refresh-failed' | 'blocked';
+  readonly current: false;
+  readonly refreshOwner: 'active' | 'none';
+  readonly builtAt: string;
+  readonly builtFrom: string;
+  readonly builtUntil: string;
+  readonly consistent: boolean;
+  readonly complete: boolean;
+  readonly changedPaths: readonly string[];
+  readonly unknownRelations: boolean;
+  readonly lastError?: WorkspaceProjectionRefreshError;
+  readonly lastAttempt?: WorkspaceProjectionAttempt;
+}
+export interface WorkspaceProjection {
+  readonly snapshot: WorkspaceProjectionSnapshot;
+  readonly projection: WorkspaceProjectionStatus;
+}
+
+export type ViewJobState = 'queued' | 'running' | 'cancelling' | 'cancelled' | 'completed' | 'failed' | 'cleanup-failed';
+export interface ViewJob {
+  readonly id: string;
+  readonly caseId: string;
+  readonly state: ViewJobState;
+  readonly startedAt: string;
+  readonly finishedAt?: string;
+  readonly evidence?: Evidence;
+  readonly error?: { readonly code: string; readonly message: string };
+}
+
+export interface ViewSuccess<T> { readonly ok: true; readonly value: T }
+export interface ViewFailure { readonly ok: false; readonly complete?: false; readonly error: string; readonly message: string; readonly details?: unknown }
+export type ViewResponse<T> = ViewSuccess<T> | ViewFailure;
+export type { GitDiff, GitStatus };
+
+const Text = Schema.String.check(Schema.isMinLength(1));
+const Strings = Schema.Array(Text);
+const RunnerInputSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal('node-test'),
+    sourceFiles: Strings,
+    timeoutMs: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3_600_000 })),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('command'),
+    argv: Schema.NonEmptyArray(Text),
+    sourceFiles: Strings,
+    timeoutMs: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 3_600_000 })),
+  }),
+]);
+// @concord-begin
+// @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
+export const ProjectInputSchema = ProjectSchema;
+const DryRun = { dryRun: Schema.optional(Schema.Boolean) } as const;
+
+/** Strictly decoded at every CLI and HTTP action boundary. */
+export const ViewActionSchema = Schema.Union([
+  Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), runner: Schema.optional(RunnerInputSchema), docsOnly: Schema.optional(Schema.Boolean), constitutionBody: Schema.optional(Schema.String), adoptConstitution: Schema.optional(Schema.Boolean), constitutionReason: Schema.optional(Text), constitutionImpact: Schema.optional(Text), constitutionSources: Schema.optional(Strings), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('recover') }),
+  Schema.Struct({
+    action: Schema.Literal('document.create'),
+    kind: Schema.Literals(['feature', 'use-case', 'research', 'design', 'roadmap', 'engineering', 'memory', 'issue']),
+    id: Text,
+    title: Text,
+    body: Schema.optional(Schema.String),
+    feature: Schema.optional(Text),
+    observedAt: Schema.optional(Text),
+    sources: Schema.optional(Strings),
+    alternatives: Schema.optional(Strings),
+    pages: Schema.optional(Schema.Array(Schema.Literals(TEMPLATE_PAGES))),
+    type: Schema.optional(Schema.Literals(['decision', 'insight', 'note'])),
+    ...DryRun,
+  }),
+  Schema.Struct({ action: Schema.Literal('document.set'), path: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('roadmap.adopt'), id: Text, feature: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('design.decide'), id: Text, selected: Text, targets: Strings, reason: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('design.check'), id: Text }),
+  Schema.Struct({ action: Schema.Literal('design.format'), id: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('memory.index') }),
+  Schema.Struct({ action: Schema.Literal('memory.recall'), query: Text }),
+  Schema.Struct({ action: Schema.Literal('memory.activate'), id: Text, reason: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('memory.supersede'), id: Text, replacement: Text, reason: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('memory.link'), id: Text, target: Text, role: Schema.optional(Schema.Literals(['supports', 'amends'])), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.unlink'), id: Text, memory: Text, role: Schema.optional(Schema.Literals([...MEMORY_RELATION_KINDS, 'adopts'])), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('design.defer'), id: Text, reason: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.link'), id: Text, memory: Text, role: Schema.optional(Schema.Literals([...MEMORY_RELATION_KINDS, 'adopts'])), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.reopen'), id: Text, reason: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.index') }),
+  Schema.Struct({ action: Schema.Literal('issue.list'), ...FeedbackFilterFields }),
+  Schema.Struct({ action: Schema.Literal('feedback.list'), ...FeedbackFilterFields }),
+  Schema.Struct({ action: Schema.Literal('issue.recall'), query: Text }),
+  Schema.Struct({ action: Schema.Literal('issue.edit'), id: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.remove'), id: Text, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.close'), id: Text, kind: Schema.optional(Schema.Literals(['fixed','delivered','duplicate','declined','invalid','external-fixed','closed'])), reason: Schema.optional(Text), memory: Schema.optional(Text), target: Schema.optional(Text), proof: Schema.optional(Schema.NonEmptyArray(Text)), canonical: Schema.optional(Text), evidence: Schema.optional(Schema.NonEmptyArray(Text)), dependency: Schema.optional(Text), version: Schema.optional(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('feedback.sync'), connection: Text, url: Schema.optional(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('feedback.check'), connection: Text }),
+  Schema.Struct({ action: Schema.Literal('feedback.link'), id: Text, feature: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('source.set'), path: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('writing.index') }),
+  Schema.Struct({ action: Schema.Literal('writing.show'), path: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('writing.set'), path: Schema.optional(Text), policy: WritingPolicySchema, expectedDigest: Schema.NullOr(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('writing.check'), path: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('concepts.index') }),
+  Schema.Struct({ action: Schema.Literal('concepts.show'), path: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('concepts.set'), path: Schema.optional(Text), source: Schema.String, expectedDigest: Schema.NullOr(Text), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('config.set'), config: ProjectInputSchema, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('constitution.initialize'), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('constitution.adopt'), body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('constitution.amend'), body: Schema.String, reason: Text, impact: Text, sources: Strings, expectedDigest: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('code.annotate'), scope: Schema.Literals(['file', 'node', 'region']), contracts: Strings }),
+  Schema.Struct({ action: Schema.Literal('code.locate'), path: Text, line: Schema.Int }),
+  Schema.Struct({ action: Schema.Literal('test.annotate'), contract: Text, issues: Strings }),
+  Schema.Struct({ action: Schema.Literal('cache.status') }),
+  Schema.Struct({ action: Schema.Literal('cache.clear'), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('cache.rebuild') }),
+  Schema.Struct({ action: Schema.Literal('check') }),
+  Schema.Struct({ action: Schema.Literal('trace.check') }),
+  Schema.Struct({ action: Schema.Literal('trace.show'), reference: Text }),
+  Schema.Struct({ action: Schema.Literal('review.render'), reference: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('template.show'), name: Text, title: Schema.optional(Text) }),
+  Schema.Struct({ action: Schema.Literal('doctor') }),
+]);
+// @concord-end
+
+export type ViewAction = typeof ViewActionSchema.Type;
+
+// Keep these assignments close to the schema so drift is caught without runtime imports.
+type _RunnerCompatible = Runner extends typeof RunnerInputSchema.Type ? true : never;
+type _ProjectCompatible = ProjectConfig extends typeof ProjectInputSchema.Type ? true : never;
+type _KindCompatible = DocumentKind extends Extract<ViewAction, { action: 'document.create' }>['kind'] ? true : never;
+const _typeCompatibility: readonly [_RunnerCompatible, _ProjectCompatible, _KindCompatible] = [true, true, true];
+void _typeCompatibility;

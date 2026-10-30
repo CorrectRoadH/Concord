@@ -2,10 +2,10 @@ import { AlertTriangle, RefreshCw } from "lucide-react"
 import * as React from "react"
 import { flushSync } from "react-dom"
 import { Schema } from "effect"
-import { ProjectInputSchema } from "../../src/view-contract"
+import { ProjectInputSchema } from '../../src/model/index'
 
-import type { ProjectConfig } from "../../src/shared"
-import type { FeedbackConnection } from "../../src/feedback-schema"
+import type { ProjectConfig } from '../../src/model/index'
+import type { FeedbackConnection } from '../../src/model/index'
 import { FeedbackConnectionsEditor } from "@/components/feedback-connections"
 import { urlChoice, useUrlNavigation } from "@/hooks/use-url-navigation"
 import { useAutoSave } from "@/hooks/use-auto-save"

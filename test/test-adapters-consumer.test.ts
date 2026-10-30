@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess } from '../src/owned-process.js';
-import { ProjectSchema } from '../src/shared.js';
-import { renderTypeScriptConfig, parseTypeScriptConfig } from '../src/config.js';
-import { type TestAdapter } from '../src/test-adapter-config.js';
-import { LocalRepository } from '../src/storage.js';
-import { closeRepositoryCache, withPersistentCache } from '../src/cache-store.js';
+import { OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess } from "../src/base/process/index.js";
+import { ProjectSchema } from "../src/model/index.js";
+import { renderTypeScriptConfig, parseTypeScriptConfig } from "../src/base/workspace/index.js";
+import { type test_adapter_config_TestAdapter as TestAdapter } from "../src/model/index.js";
+import { LocalRepository } from "../src/base/workspace/index.js";
+import { closeRepositoryCache, withPersistentCache } from "../src/base/cache/index.js";
 import { installConcord, packConcord } from './installed-package.js';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url));

@@ -3,7 +3,7 @@
 import { Plus, Trash2 } from "lucide-react"
 import * as React from "react"
 import { Schema } from "effect"
-import type { FeedbackConnection } from "../../src/feedback-schema"
+import type { FeedbackConnection } from '../../src/model/index'
 import { ContentSection, PanelEmpty, RecordDetails, RecordItem, RecordList } from "@/components/content-layout"
 import { Field } from "@/components/page"
 import { Badge } from "@/components/ui/badge"

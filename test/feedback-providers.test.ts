@@ -3,9 +3,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
-import type { FeedbackConnection } from '../src/feedback-schema.js';
-import { fetchFeedback, type FeedbackTransport } from '../src/feedback-providers.js';
-import { ConcordError } from '../src/shared.js';
+import { type feedback_schema_FeedbackConnection as FeedbackConnection } from "../src/model/index.js";
+import { fetchFeedback, type FeedbackTransport } from "../src/domain/feedback/index.js";
+import { ConcordError } from "../src/model/index.js";
 
 type Request = Parameters<FeedbackTransport>[0];
 type Response = { readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: unknown };

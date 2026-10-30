@@ -22,9 +22,9 @@ const main = Effect.gen(function*() {
   if (build !== 0) return yield* new CheckFailed({ phase: 'build', exitCode: build });
   const staticStarted = performance.now();
   const checks = yield* Effect.all([
-    ...['tsconfig.repository.json', 'tsconfig.test.json', 'tsconfig.scripts.json'].map(project =>
+    ...['tsconfig.json', 'tsconfig.test.json', 'tsconfig.scripts.json'].map(project =>
       command(project, process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmit'])),
-    command('Selfhost', process.execPath, ['dist/entry.js', '--json', '--dry-run', 'check']),
+    command('Selfhost', process.execPath, ['dist/entry/cli/entry.js', '--json', '--dry-run', 'check']),
   ], { concurrency: 'unbounded' });
   yield* Effect.sync(() => console.error(`# Static checks: ${((performance.now() - staticStarted) / 1000).toFixed(3)}s`));
   if (checks.some(code => code !== 0)) return yield* new CheckFailed({ phase: 'static checks', exitCode: 1 });

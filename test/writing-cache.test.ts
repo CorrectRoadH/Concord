@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { checkWriting } from '../dist/writing.js';
-import { openHawdb } from '../dist/hawdb-native.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { checkWriting } from "../src/domain/writing/index.js";
+import { openHawdb } from "../src/base/cache/index.js";
 
 const policy = JSON.stringify({ format: 'concord.writing/v3', roots: ['docs'], bannedTerms: [], sentenceLength: 5 });
 function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeof checkWriting>) => void) {

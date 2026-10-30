@@ -2,7 +2,7 @@ import { Effect } from 'effect';
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { startViewServer as start, type ViewServerHandle } from '../../src/view-server.js';
+import { startViewServer as start, type ViewServerHandle } from "../../src/entry/http/index.js";
 import { packConcord, installConcord } from '../installed-package.js';
 
 /** Source behavior uses the invocation's installed Web assets; the fixture owns both resources. */

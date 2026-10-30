@@ -1,3 +1,4 @@
+import { hawdbTarget } from "../src/base/installation/index.js";
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -8,7 +9,7 @@ import { Effect } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { installConcord, packConcord } from './installed-package.js';
 import { replaceInstalledNativeBinary } from '../scripts/verify-installed-native.js';
-import { hawdbTarget } from '../dist/hawdb-native-contract.js';
+
 import { pollUntil } from './support.js';
 
 test('parallel consumers share one installed dependency set while damage stays in a private copy', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {

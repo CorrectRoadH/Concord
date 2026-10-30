@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { packageBin } from './package-location.js';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -34,7 +35,7 @@ export const replaceInstalledNativeBinary = (binary: string, bytes: Uint8Array):
 export const verifyInstalledNative = (packageRoot: string) => Effect.try({
   try: () => {
     const installed = realpathSync(resolve(packageRoot));
-    const cli = join(installed, 'dist/entry.js');
+    const cli = packageBin(installed);
     assert.ok(existsSync(cli), 'installed CLI is required');
     const scratch = mkdtempSync(join(tmpdir(), 'concord-native-install-'));
     try {
@@ -64,7 +65,7 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
         Schema.decodeUnknownSync(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(run(process.execPath, [cli, '--root', root, '--json', ...args]));
       // Explicit JavaScript-consumer fixture: this imports the installed native loader, never source TS.
       const identity = Schema.decodeUnknownSync(Schema.fromJsonString(Identity))(
-        run(process.execPath, ['--input-type=module', '-e', 'const {hawdbIdentity}=await import(process.argv[1]);console.log(JSON.stringify(hawdbIdentity()));', pathToFileURL(join(installed, 'dist/hawdb-native.js')).href]),
+        run(process.execPath, ['--input-type=module', '-e', 'const {hawdbIdentity}=await import(process.argv[1]);console.log(JSON.stringify(hawdbIdentity()));', pathToFileURL(join(installed, 'dist/base/cache/hawdb-native.js')).href]),
       );
       run(join(bin, 'git'), ['init', '-q', root]);
       call(['init', '--docs-only'], Ack);
@@ -162,7 +163,7 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
           await delay(1100);
           const identity = hawdbIdentity();
           console.log(JSON.stringify({ failedReads, failures, engine: identity.engine }));
-        `, pathToFileURL(join(installed, 'dist/hawdb-native.js')).href, nativeBinary, originalPath]);
+        `, pathToFileURL(join(installed, 'dist/base/cache/hawdb-native.js')).href, nativeBinary, originalPath]);
         assert.deepEqual(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ failedReads: Schema.Number, failures: Schema.Number, engine: Schema.String })))(retry), { failedReads: 1, failures: 100, engine: 'hawdb' });
       } finally { replaceInstalledNativeBinary(nativeBinary, binaryBytes); }
       assert.equal(call(['test', 'list'], CacheResult).cache.status, 'hit');

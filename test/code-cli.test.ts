@@ -6,10 +6,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { CodeDeclarationSchema } from '../src/code.js';
-import { ProjectSchema } from '../src/shared.js';
+import { CodeDeclarationSchema } from "../src/model/index.js";
+import { ProjectSchema } from "../src/model/index.js";
 import { readProjectConfig, writeProjectConfig } from './support.js';
-import { caseDiscriminator, deriveTestReference } from '../src/test-reference.js';
+import { caseDiscriminator, deriveTestReference } from "../src/model/index.js";
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('packed CLI traces code scopes and keeps command execution independent of code findings', () => Effect.runPromise(Effect.sync(() => {

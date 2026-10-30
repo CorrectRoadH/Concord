@@ -4,12 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ProjectSchema, digest, type Repository } from '../src/shared.js';
-import { parseTestDeclarations } from '../src/annotations.js';
-import { bindNative } from '../src/test-adapter-binding.js';
-import { ManifestSchema, PlanSchema, nativeVerdict, protocolDecode, protocolJson, type NativeManifest, type ProcessStatus } from '../src/test-adapter-protocol.js';
-import { readReports } from '../src/test-adapter-reports.js';
-import { TestAdapterSchema } from '../src/test-adapter-config.js';
+import { ProjectSchema, digest, type Repository } from "../src/model/index.js";
+import { parseTestDeclarations } from "../src/domain/tests/index.js";
+import { bindNative } from "../src/domain/tests/index.js";
+import { ManifestSchema, test_adapter_protocol_PlanSchema as PlanSchema, nativeVerdict, protocolDecode, protocolJson, type NativeManifest, type ProcessStatus } from "../src/model/index.js";
+import { readReports } from "../src/domain/tests/index.js";
+import { TestAdapterSchema } from "../src/model/index.js";
 
 const caps = { realCollection: true, leaf: true, parameterGroups: true, exactSelection: true, perItemReport: true, range: true, rangeTrivia: true, tags: true, skipVisibility: true };
 const config = { testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } };

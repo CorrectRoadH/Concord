@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { parseTypeScriptConfig, renderTypeScriptConfig } from '../src/config.js';
-import { digest } from '../src/shared.js';
-import { LocalRepository, initialize } from '../src/storage.js';
+import { parseTypeScriptConfig, renderTypeScriptConfig } from "../src/base/workspace/index.js";
+import { digest } from "../src/model/index.js";
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('packed config has usable type hints and rejects misspelled fields', () => Effect.runPromise(Effect.sync(() => {

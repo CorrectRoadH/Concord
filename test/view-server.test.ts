@@ -1,4 +1,4 @@
-import { caseDiscriminator, deriveTestReference } from '../src/test-reference.js';
+import { caseDiscriminator, deriveTestReference } from "../src/model/index.js";
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -8,12 +8,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from '../src/documents.js';
-import { initialize, LocalRepository } from '../src/storage.js';
-import { ViewJobManager } from '../src/view-jobs.js';
-import { formatViewAddress, startViewServer, type ViewServerHandle } from '../src/view-server.js';
+import { createDocument } from "../src/domain/documents/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { ViewJobManager } from "../src/entry/http/index.js";
+import { formatViewAddress, startViewServer, type ViewServerHandle } from "../src/entry/http/index.js";
 import { parseWorkspaceProjection, pollUntil, installedConcordCli } from './support.js';
-import type { WorkspaceProjection } from '../src/view-contract.js';
+import { type WorkspaceProjection } from "../src/model/index.js";
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-'));

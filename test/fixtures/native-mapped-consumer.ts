@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { existsSync, writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
-import type { HawdbDatabase } from '../../src/hawdb-native.js';
+import { type HawdbDatabase } from "../../src/base/cache/index.js";
 import { pollUntil } from '../support.js';
 
 await Effect.runPromise(Effect.tryPromise(async () => {
   const [loader, ready, release] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String, Schema.String]))(process.argv.slice(2));
-  const native = await import(pathToFileURL(loader).href) as typeof import('../../src/hawdb-native.js');
+  const native = await import(pathToFileURL(loader).href) as typeof import("../../src/base/cache/hawdb-native.js");
   let database: HawdbDatabase | undefined = native.createMemoryHawdb();
   database.put('document_parse', [{ key: 'mapped', payload: 'native image remains loaded' }]);
   database.close();

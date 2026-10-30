@@ -5,11 +5,11 @@ import { join } from "node:path";
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import { Effect } from "effect";
-import { renderTypeScriptConfig } from '../src/config.js';
-import { LocalRepository } from "../src/storage.js";
-import { acquireTraceLeaseSync, genericJournalPath, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../src/coordination.js";
-import { mutateTraceFiles, recoverTrace, traceDigest, withTraceReadLease } from "../repository/docs/trace/relation-mutation.js";
-import { TraceRecoveryConflict, TraceRecoveryRequired } from "../repository/docs/trace/errors.js";
+import { renderTypeScriptConfig } from "../src/base/workspace/index.js";
+import { LocalRepository } from "../src/base/workspace/index.js";
+import { acquireTraceLeaseSync, genericJournalPath, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../src/base/publication/index.js";
+import { mutateTraceFiles, recoverTrace, traceDigest, withTraceReadLease } from "../src/base/publication/index.js";
+import { TraceRecoveryConflict, TraceRecoveryRequired } from "../src/model/index.js";
 
 function isolatedRepository(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), "concord-coordination-"));

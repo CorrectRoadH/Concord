@@ -10,7 +10,7 @@ import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 're
 import { useNavigationScroll } from './hooks/use-navigation-scroll';
 import { Link, Navigate, Route, Routes, useBlocker, useLocation, useNavigate } from 'react-router-dom';
 import { CloseMobileOnNavigate, DocumentNavigation } from './components/document-navigation';
-import type { WorkspaceProjection } from '../src/view-contract';
+import type { WorkspaceProjection } from '../src/model/index';
 const DocumentsListPage = lazy(() => import('./pages/documents').then(module => ({ default: module.DocumentsListPage })));
 const FeatureDetailPage = lazy(() => import('./pages/documents').then(module => ({ default: module.FeatureDetailPage })));
 const DocumentDetailPage = lazy(() => import('./pages/documents').then(module => ({ default: module.DocumentDetailPage })));

@@ -6,8 +6,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { authorDesignFixture } from './design-fixture.js';
-import { deferDesign, checkDocuments, createDocument, decideDesign, findDocument, loadDocuments, renderDocument } from '../src/documents.js';
-import { initialize, LocalRepository } from '../src/storage.js';
+import { deferDesign, checkDocuments, createDocument, decideDesign, findDocument, loadDocuments } from "../src/domain/documents/index.js";
+import { renderDocument } from "../src/model/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
 
 // @use-case docs/feature/document-packages/use-case/discover-managed-documents.md
 test('a Design decision replaces its current Deferred declaration', t => Effect.runPromise(Effect.sync(() => {

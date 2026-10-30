@@ -8,7 +8,7 @@ import * as ts from 'typescript/ast';
 import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { build as bundle } from 'esbuild';
 import { buildStartup } from './startup-build.js';
-import { P5_LIBRARIES } from '../src/p5-contract.js';
+import { P5_LIBRARIES } from "../src/model/p5/index.js";
 
 class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
   project: Schema.String,
@@ -109,15 +109,8 @@ const prepare = Effect.gen(function*() {
   if (process.env.CONCORD_REQUIRE_PORTABLE_NATIVE === '1') nativeArgs.push('--require-portable');
   const nativeExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, nativeArgs, { stdout: 'inherit', stderr: 'inherit' }));
   if (nativeExit !== 0) return yield* new BuildFailed({ project: 'hawdb-native', exitCode: nativeExit });
-  // Repository self-imports resolve the package's dist declarations. Generate
-  // fresh, strictly checked inputs before the three complete projects run. Keep
-  // them immutable while repository reads them; the parallel CLI pass emits JS.
-  const declarations = yield* spawner.exitCode(ChildProcess.make(process.execPath,
-    ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json', '--emitDeclarationOnly', '--noEmitOnError'],
-    { stdout: 'inherit', stderr: 'inherit' }));
-  if (declarations !== 0) return yield* new BuildFailed({ project: 'public declarations', exitCode: declarations });
-  yield* Effect.all(['tsconfig.json', 'tsconfig.repository.json', 'tsconfig.web.json'].map(project => Effect.gen(function*() {
-    const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError', ...(project === 'tsconfig.json' ? ['--declaration', 'false'] : [])], { stdout: 'inherit', stderr: 'inherit' }));
+  yield* Effect.all(['tsconfig.json', 'tsconfig.web.json'].map(project => Effect.gen(function*() {
+    const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError'], { stdout: 'inherit', stderr: 'inherit' }));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
   })), { concurrency: 'unbounded' });
   yield* narrowGeneratedImports();
@@ -141,8 +134,8 @@ const finish = Effect.gen(function*() {
   yield* fs.copyFile('node_modules/@fontsource-variable/noto-sans-sc/LICENSE', 'dist/web/FONT-LICENSE.txt');
   const fontLicense = yield* fs.readFileString('node_modules/@fontsource-variable/noto-sans-sc/LICENSE');
   yield* fs.writeFileString('dist/preview/FONT-LICENSE.html', `<!doctype html><meta charset="utf-8"><title>Font license</title><pre>${fontLicense.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`);
-  yield* fs.chmod('dist/entry.js', 0o755);
-  yield* fs.chmod('dist/cli.js', 0o755);
+  yield* fs.chmod('dist/entry/cli/entry.js', 0o755);
+  yield* fs.chmod('dist/entry/cli/cli.js', 0o755);
 });
 
 export const prepareDistribution = () => Effect.runPromise(prepare.pipe(Effect.provide(NodeServices.layer)));

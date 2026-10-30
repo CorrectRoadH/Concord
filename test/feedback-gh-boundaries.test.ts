@@ -8,8 +8,8 @@ import { delimiter, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import type { FeedbackTransport } from '../dist/feedback-providers.js';
-import type { FeedbackConnection } from '../dist/feedback-schema.js';
+import type { FeedbackTransport } from "../src/domain/feedback/index.js";
+import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../src/model/index.js";
 
 type Scenario = 'trusted-path' | 'missing' | 'old-version' | 'bad-help' | 'bad-protocol' | 'page-failure' | 'budget' | 'cas' | 'normal' | 'switch';
 type Call = { readonly args: readonly string[]; readonly outputBytes?: number };
@@ -108,7 +108,7 @@ async function child(scenario: Scenario): Promise<void> {
     process.chdir(temporary);
     process.env.PATH = ['', 'relative', modules, join(consumer, 'bin'), symlinkDirectory, linkedExecutable, gitBin, ...(scenario === 'missing' ? [] : [trusted])].join(delimiter);
     const [{ syncFeedback, listFeedback }, { initialize, LocalRepository }, { setConfig, showConfig }, { ConcordError }] = await Promise.all([
-      import('../dist/feedback.js'), import('../dist/storage.js'), import('../dist/editing.js'), import('../dist/shared.js'),
+      import("../src/domain/feedback/feedback.js"), import("../src/base/workspace/storage.js"), import("../src/app/editing.js"), import("../src/model/shared.js"),
     ]);
     const first = new LocalRepository(consumer, { initialize: true });
     try { initialize(first); } finally { first.close(); }
@@ -208,7 +208,7 @@ if (process.argv[2] === '--fixture-child') {
   test('configuration digest drift during gh read prevents publication', { skip: process.platform === 'win32' }, () => run('cas'));
   test('API to gh switch retains repository binding and one imported source', { skip: process.platform === 'win32' }, () => run('switch'));
   test('connection schema rejects credential and transport combinations outside their modes', async () => {
-    const [{ FeedbackConnectionSchema }, { decode }] = await Promise.all([import('../dist/feedback-schema.js'), import('../dist/shared.js')]);
+    const [{ FeedbackConnectionSchema }, { decode }] = await Promise.all([import("../src/model/feedback-schema.js"), import("../src/model/shared.js")]);
     for (const invalid of [
       { ...connection, credentialEnv: 'SHOULD_NOT_BE_ACCEPTED' },
       { ...connection, transport: 'api' },

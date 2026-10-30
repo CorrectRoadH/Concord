@@ -6,9 +6,9 @@ import { homedir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget, type NativeArtifact } from '../src/hawdb-native-contract.js';
+import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget, type NativeArtifact } from "../src/base/installation/index.js";
 
-import { nativeSourceDigest, nativeCacheRoot } from '../src/base/installation/native-artifact.js';
+import { nativeSourceDigest, nativeCacheRoot } from "../src/base/installation/index.js";
 
 const root = resolve(import.meta.dirname, '..');
 const crate = join(root, 'native/hawdb');

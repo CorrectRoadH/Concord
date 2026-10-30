@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, initialize } from '../src/storage.js';
-import { acquireTraceLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from '../src/coordination.js';
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { acquireTraceLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../src/base/publication/index.js";
 
 // @use-case docs/feature/project-onboarding/use-case/initialize-project.md
 test('init preview is write-free and independent of publication owners but rejects pending journals', () => Effect.runPromise(Effect.sync(() => {

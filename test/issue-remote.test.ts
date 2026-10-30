@@ -7,9 +7,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { makeOwnedProcessService } from '../src/owned-process.js';
-import { initialize, LocalRepository } from '../src/storage.js';
-import { setConfig, showConfig } from '../src/editing.js';
+import { makeOwnedProcessService } from "../src/base/process/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { setConfig, showConfig } from "../src/app/index.js";
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
 test('owned process transports stdin and preserves default ignored stdin', async () => {

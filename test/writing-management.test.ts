@@ -6,10 +6,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../src/storage.js';
-import { digest } from '../src/shared.js';
-import { showWriting, setWriting } from '../src/writing-management.js';
-import { checkWriting } from '../src/writing.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { digest } from "../src/model/index.js";
+import { showWriting, setWriting } from "../src/domain/writing/index.js";
+import { checkWriting } from "../src/domain/writing/index.js";
 
 const policyPath = 'docs/concord-writing.json';
 const policy = { format: 'concord.writing/v3' as const, roots: ['docs'] as [string, ...string[]], bannedTerms: [{ term: 'Resolve', use: '修复', why: '统一写法' }] };

@@ -2,9 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createConsumer } from './consumer.js';
-import { LocalRepository } from '../../src/storage.js';
-import { createDocument } from '../../src/documents.js';
-import { renderTypeScriptConfig } from '../../src/config.js';
+import { LocalRepository } from "../../src/base/workspace/index.js";
+import { createDocument } from "../../src/domain/documents/index.js";
+import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
 
 export const gitCommand = (root: string, ...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_AUTHOR_NAME: 'Concord', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Concord', GIT_COMMITTER_EMAIL: 'test@example.invalid' } }).trim();
 export const gitCommit = (root: string, message: string) => { gitCommand(root, 'add', '.'); gitCommand(root, 'commit', '-qm', message); return gitCommand(root, 'rev-parse', 'HEAD'); };

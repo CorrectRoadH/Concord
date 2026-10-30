@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/web-workbench/architecture.md
 import '@fontsource-variable/noto-sans-sc/wght.css';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import type { GitStatus, ViewAction, ViewJob, WorkspaceProjection, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../src/view-contract';
+import type { GitStatus, ViewAction, ViewJob, WorkspaceProjection, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../src/model/index';
 import { ApiError, ConcordApi } from './lib/api';
 
 interface Notice { readonly id: number; readonly tone: 'success' | 'error' | 'info'; readonly text: string }

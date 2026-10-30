@@ -6,9 +6,9 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect, type Locator } from '@playwright/test';
 import { Effect } from 'effect';
-import { createDocument } from '../../src/documents.js';
-import { initialize, LocalRepository } from '../../src/storage.js';
-import type { ViewServerHandle } from '../../src/view-server.js';
+import { createDocument } from "../../src/domain/documents/index.js";
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { type ViewServerHandle } from "../../src/entry/http/index.js";
 import { startViewServer } from './server.js';
 
 const example = String.raw`P(\Phi_h(S))=P(S)`;

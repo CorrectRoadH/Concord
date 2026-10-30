@@ -1,6 +1,6 @@
 import { installedConcordCli } from './support.js';
 import { stringify } from 'yaml';
-import { EMPTY_CONCEPT_CATALOG } from '../src/concepts-schema.js';
+import { EMPTY_CONCEPT_CATALOG } from "../src/model/index.js";
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,12 +8,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../src/storage.js';
-import { renderTypeScriptConfig } from '../src/config.js';
-import { digest } from '../src/shared.js';
-import { catalogDependencies, indexConcepts, readConceptCatalog, setConcepts, showConcepts } from '../src/concepts.js';
-import { checkWriting } from '../src/writing.js';
-import { setWriting, showWriting, writingIndex } from '../src/writing-management.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { renderTypeScriptConfig } from "../src/base/workspace/index.js";
+import { digest } from "../src/model/index.js";
+import { catalogDependencies, indexConcepts, readConceptCatalog, setConcepts, showConcepts } from "../src/domain/concepts/index.js";
+import { checkWriting } from "../src/domain/writing/index.js";
+import { setWriting, showWriting, writingIndex } from "../src/domain/writing/index.js";
 
 const json = (value: unknown): string => typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`;
 const policy = (extra: Record<string, unknown> = {}) => ({ format: 'concord.writing/v3' as const, bannedTerms: [], ...extra });

@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { act } from './journey.js';
 import { expect } from '@playwright/test';
-import { createDocument } from '../../src/documents.js';
-import { initialize, LocalRepository } from '../../src/storage.js';
+import { createDocument } from "../../src/domain/documents/index.js";
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
 import { startViewServer } from './server.js';
 import { waitForWorkspaceProjection } from '../support.js';
 

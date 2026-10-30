@@ -1,4 +1,4 @@
-import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
+import { DOCUMENT_NAME_PATTERN } from '../../src/model/index'
 import { ExternalLink, GitPullRequestArrow, Link2, Plus, RefreshCw, Trash2 } from "lucide-react"
 import * as React from "react"
 import { ContentSidebar } from "@/components/content-sidebar"
@@ -6,8 +6,8 @@ import ReactMarkdown from "react-markdown"
 import { Link, useMatch, useNavigate, useParams } from "react-router-dom"
 import remarkGfm from "remark-gfm"
 
-import type { FeedbackConnection, FeedbackItem } from "../../src/feedback-schema"
-import type { ViewAction, WorkspaceFeedback } from "../../src/view-contract"
+import type { FeedbackConnection, FeedbackItem } from '../../src/model/index'
+import type { ViewAction, WorkspaceFeedback } from '../../src/model/index'
 import { connectionSummary } from "@/components/feedback-connections"
 import { DocumentDetailPage } from "@/pages/documents"
 import { Definition, Empty, Field } from "@/components/page"

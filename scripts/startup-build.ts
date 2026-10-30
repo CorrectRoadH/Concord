@@ -1,11 +1,11 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, readdirSync, writeFileSync, unlinkSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
 import { build } from 'esbuild';
-import type { StartupData } from '../src/cli-startup-types.js';
+import { type StartupData } from "../src/model/index.js";
 
 class StartupBuildFailed extends Schema.TaggedError<StartupBuildFailed>()('StartupBuildFailed', { message: Schema.String }) {}
 const Receipt = Schema.Struct({ stdout: Schema.String, stderr: Schema.String, status: Schema.Int });
@@ -22,7 +22,7 @@ delete environment.FORCE_COLOR;
 
 const capture = (args: readonly string[]) => Effect.tryPromise({
   try: () => new Promise<Schema.Schema.Type<typeof Receipt>>((accept, reject) => {
-    execFile(process.execPath, [resolve('dist/entry-full.js'), ...args], { env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(process.execPath, [resolve('dist/entry/cli/entry-full.js'), ...args], { env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error && typeof error.code !== 'number') { reject(error); return; }
       accept(Schema.decodeUnknownSync(Receipt, { onExcessProperty: 'error' })({ stdout, stderr, status: error?.code ?? 0 }));
     });
@@ -35,9 +35,9 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
   // Package dependencies remain external to preserve Effect service identity with
   // repository contributions and all public exports. The bundle stays at dist's
   // root, preserving every source module's import.meta.url resource base.
-  yield* Effect.tryPromise(() => build({ entryPoints: ['dist/cli-fallback.js'], outfile: 'dist/cli-fallback-bundle.js', bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
+  const closure = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/cli-fallback.js'], outfile: 'dist/entry/cli/cli-fallback-bundle.js', metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
   const definitions = yield* Effect.tryPromise(async () => {
-    const file = './dist/cli-full.js';
+    const file = './dist/entry/cli/cli-full.js';
     const { fullCommand } = await import(pathToFileURL(resolve(file)).href) as { fullCommand: Definition };
     return { fullCommand };
   });
@@ -52,19 +52,16 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
   const calls = [[], ['--version'], ...paths.map(path => [...path, '--help'])];
   const receipts = yield* Effect.all(calls.map(args => capture(args).pipe(Effect.map(receipt => [JSON.stringify(args), receipt] as const))), { concurrency: 4 });
   yield* Effect.sync(() => {
-    const names = readdirSync('src').filter(name => name === 'entry.ts' || name === 'entry-full.ts' || name.startsWith('cli')).sort();
-    const files = Object.fromEntries(names.filter(name => name !== 'cli-startup-types.ts').map(name => [`./${name.replace(/\.ts$/u, '.js')}`, digest(`dist/${name.replace(/\.ts$/u, '.js')}`)]));
-    const sourceFiles = Object.fromEntries(names.map(name => [`./${name}`, digest(`src/${name}`)]));
-    // Repository contributions and their enums also define help. Authenticate
-    // those owners so a source edit or mixed installation cannot serve stale
-    // repository or Issue/Docs help from an otherwise matching CLI build.
-    files['./shared.js'] = digest('dist/shared.js');
-    sourceFiles['./shared.ts'] = digest('src/shared.ts');
-    for (const file of readdirSync('repository', { recursive: true, encoding: 'utf8' }).filter(name => name.endsWith('.ts') && !name.endsWith('.d.ts')).sort()) {
-      const emitted = file.replace(/\.ts$/u, '.js');
-      files[`./repository/${emitted}`] = digest(`dist/repository/${emitted}`);
-      sourceFiles[`../repository/${file}`] = digest(`repository/${file}`);
-    }
+    // esbuild's input graph is the actual command-definition closure, including
+    // ordinary imports and finite dynamic chunks, rather than a filename prefix.
+    const roots = ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js'];
+    const emitted = [...new Set([...Object.keys(closure.metafile!.inputs), ...roots])].filter(file => file.startsWith('dist/') && file.endsWith('.js')).sort();
+    const modulePath = (file: string, root: string): string => {
+      const path = relative(resolve(root, 'entry/cli'), resolve(file));
+      return path.startsWith('.') ? path : `./${path}`;
+    };
+    const files = Object.fromEntries(emitted.map(file => [modulePath(file, 'dist'), digest(file)]));
+    const sourceFiles = Object.fromEntries(emitted.map(file => file.replace(/^dist\//u, 'src/').replace(/\.js$/u, '.ts')).map(file => [modulePath(file, 'src'), digest(file)]));
     const data: StartupData = Schema.decodeUnknownSync(Data, { onExcessProperty: 'error' })({
       format: 'concord.startup/v1', packageDigest: digest('package.json'), files, sourceFiles,
       receipts: Object.fromEntries(receipts),

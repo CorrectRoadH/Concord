@@ -1,13 +1,4 @@
-import type {
-  GitDiff,
-  GitStatus,
-  ViewAction,
-  ViewFailure,
-  ViewFile,
-  ViewJob,
-  ViewResponse,
-  WorkspaceProjection,
-} from '../../src/view-contract';
+import type { GitDiff, GitStatus, ViewAction, ViewFailure, ViewFile, ViewJob, ViewResponse, WorkspaceProjection } from '../../src/model/index';
 
 export class ApiError extends Error {
   constructor(

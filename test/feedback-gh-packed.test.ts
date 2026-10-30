@@ -7,8 +7,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { setConfig, showConfig } from '../src/editing.js';
-import { initialize, LocalRepository } from '../src/storage.js';
+import { setConfig, showConfig } from "../src/app/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('packed public CLI adds gh connection, checks scope, and executes shared feedback action offline', { skip: process.platform === 'win32' }, () => {

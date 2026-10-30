@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { compileP5 } from '../dist/p5-compiler.js';
+import { createDocument } from "../src/domain/documents/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { compileP5 } from "../src/app/index.js";
 import { readProjectConfig, writeProjectConfig } from './support.js';
 
 // @use-case docs/feature/web-workbench/use-case/embed-p5-sketch.md

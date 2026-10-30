@@ -1,7 +1,7 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Schema } from 'effect';
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { Schema } from "effect";
 
 const Package = Schema.fromJsonString(Schema.Struct({ name: Schema.Literal('concord-sdlc') }));
 /** Works for emitted modules and the complete CLI bundle alike. */

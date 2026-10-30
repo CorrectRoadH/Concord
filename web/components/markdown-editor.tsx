@@ -24,7 +24,7 @@ import { AlertTriangle, GitCompareArrows, RefreshCw } from 'lucide-react';
 import { Component, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import type { ViewFile } from '../../src/view-contract';
+import type { ViewFile } from '../../src/model/index';
 import { ApiError } from '../lib/api';
 import { useAutoSave } from '../hooks/use-auto-save';
 import { flushSync } from 'react-dom';

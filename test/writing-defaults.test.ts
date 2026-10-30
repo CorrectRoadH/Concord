@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../src/storage.js';
-import { checkWriting } from '../src/writing.js';
-import { showWriting } from '../src/writing-management.js';
-import { renderTypeScriptConfig } from '../src/config.js';
-import { digest } from '../src/shared.js';
-import { defaultWritingSource } from '../src/writing-defaults.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { checkWriting } from "../src/domain/writing/index.js";
+import { showWriting } from "../src/domain/writing/index.js";
+import { renderTypeScriptConfig } from "../src/base/workspace/index.js";
+import { digest } from "../src/model/index.js";
+import { defaultWritingSource } from "../src/model/index.js";
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('init adopts a complete writing preset, checks it immediately, and preserves existing policy bytes', () => Effect.runPromise(Effect.sync(() => {

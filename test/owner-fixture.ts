@@ -1,5 +1,5 @@
-import { renderDocument } from '../src/document-codec.js';
-import { DocumentSchema, decode } from '../src/shared.js';
+import { renderDocument } from "../src/model/index.js";
+import { DocumentSchema, decode } from "../src/model/index.js";
 
 /** Fixtures use the format owner's renderer, including strict metadata validation. */
 export function renderOwnerFixture(fields: { readonly kind: string; readonly [key: string]: unknown }, body?: string): string {

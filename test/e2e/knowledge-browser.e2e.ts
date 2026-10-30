@@ -7,8 +7,8 @@ import { test } from './fixtures.js';
 import { act } from './journey.js';
 import { Effect, Schema } from 'effect';
 import { expect } from '@playwright/test';
-import { initialize, LocalRepository } from '../../src/storage.js';
-import type { ViewServerHandle } from '../../src/view-server.js';
+import { initialize, LocalRepository } from "../../src/base/workspace/index.js";
+import { type ViewServerHandle } from "../../src/entry/http/index.js";
 import { startViewServer } from './server.js';
 import { pollUntil, waitForWorkspaceProjection } from '../support.js';
 

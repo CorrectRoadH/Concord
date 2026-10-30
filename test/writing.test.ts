@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import { checkWriting } from '../dist/writing.js';
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
+import { checkWriting } from "../src/domain/writing/index.js";
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('writing scan refuses edits to inputs and directory membership during a real repository read', () => Effect.runPromise(Effect.sync(() => {

@@ -6,11 +6,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { checkDesign, checkDocuments, createDocument, decideDesign, formatDesign, loadDocuments } from '../src/documents.js';
-import { formatDesignMarkdown } from '../src/design-content.js';
-import { LocalRepository, initialize } from '../src/storage.js';
+import { checkDesign, checkDocuments, createDocument, decideDesign, formatDesign, loadDocuments } from "../src/domain/documents/index.js";
+import { formatDesignMarkdown } from "../src/domain/designs/index.js";
+import { LocalRepository, initialize } from "../src/base/workspace/index.js";
 import { authorDesignFixture } from './design-fixture.js';
-import { executeViewAction } from '../src/application.js';
+import { executeViewAction } from "../src/app/index.js";
 
 function consumer(run: (repo: LocalRepository, base: string) => void): void {
   const root = createConsumer();

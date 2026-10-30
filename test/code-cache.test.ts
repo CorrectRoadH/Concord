@@ -7,12 +7,12 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { Effect } from 'effect';
-import { cacheStatus, clearCache } from '../dist/annotations.js';
-import { scanCode } from '../dist/code.js';
-import { openHawdb } from '../dist/hawdb-native.js';
-import { createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { traceGaps } from '../dist/trace.js';
+import { cacheStatus, clearCache } from "../src/domain/tests/index.js";
+import { scanCode } from "../src/domain/code/index.js";
+import { openHawdb } from "../src/base/cache/index.js";
+import { createDocument } from "../src/domain/documents/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { traceGaps } from "../src/domain/trace/index.js";
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 const dist = fileURLToPath(new URL('../dist/', import.meta.url));

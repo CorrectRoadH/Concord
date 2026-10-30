@@ -7,12 +7,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { cacheStatus, clearCache, scanAnnotations } from '../src/annotations.js';
-import { acquireHawdbClearGuard, hawdbIdentity, openHawdb } from '../src/hawdb-native.js';
-import { getWorkspaceSnapshot } from '../src/application.js';
-import { deleteInspectedCache, inspectCacheClear } from '../src/cache-file.js';
-import { initialize, LocalRepository } from '../src/storage.js';
-import { ensureGenericPrivateDirectorySync } from '../src/coordination.js';
+import { cacheStatus, clearCache, scanAnnotations } from "../src/domain/tests/index.js";
+import { acquireHawdbClearGuard, hawdbIdentity, openHawdb } from "../src/base/cache/index.js";
+import { getWorkspaceSnapshot } from "../src/app/index.js";
+import { deleteInspectedCache, inspectCacheClear } from "../src/base/cache/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { ensureGenericPrivateDirectorySync } from "../src/base/publication/index.js";
 
 const CacheReport = Schema.Struct({ status: Schema.String });
 const ScanReport = Schema.Struct({ cache: CacheReport, codeCache: CacheReport });

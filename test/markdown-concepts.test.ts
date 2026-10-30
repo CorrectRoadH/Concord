@@ -5,16 +5,16 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../src/storage.js';
-import { EMPTY_CONCEPT_CATALOG } from '../src/concepts-schema.js';
-import { indexConcepts, readConceptCatalog, setConcepts, showConcepts } from '../src/concepts.js';
-import { checkWriting } from '../src/writing.js';
-import { setWriting, showWriting } from '../src/writing-management.js';
-import { checkProject } from '../src/project-check.js';
-import { createDocument, setAuthor } from '../src/documents.js';
-import { addPage, setPage } from '../src/document-pages.js';
-import { setMarkdown } from '../src/editing.js';
-import { digest } from '../src/shared.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
+import { EMPTY_CONCEPT_CATALOG } from "../src/model/index.js";
+import { indexConcepts, readConceptCatalog, setConcepts, showConcepts } from "../src/domain/concepts/index.js";
+import { checkWriting } from "../src/domain/writing/index.js";
+import { setWriting, showWriting } from "../src/domain/writing/index.js";
+import { checkProject } from "../src/app/index.js";
+import { createDocument, setAuthor } from "../src/domain/documents/index.js";
+import { addPage, setPage } from "../src/domain/documents/index.js";
+import { setMarkdown } from "../src/app/index.js";
+import { digest } from "../src/model/index.js";
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-markdown-concepts-'));

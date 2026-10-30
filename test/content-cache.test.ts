@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { ContentCache } from '../dist/content-cache.js';
-import { createMemoryHawdb, hawdbIdentity, type HawdbDatabase } from '../dist/hawdb-native.js';
-import { readCachePayloads, writeCachePayloads } from '../dist/cache-query.js';
+import { ContentCache } from "../src/base/cache/index.js";
+import { createMemoryHawdb, hawdbIdentity, type HawdbDatabase } from "../src/base/cache/index.js";
+import { readCachePayloads, writeCachePayloads } from "../src/base/cache/index.js";
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('document parse entries use real bounded HawDB and preserve undefined and caller isolation', () => {

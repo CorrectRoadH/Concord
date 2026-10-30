@@ -8,16 +8,16 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { setConfig, showConfig } from '../dist/editing.js';
-import { ConcordError } from '../dist/shared.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
+import { setConfig, showConfig } from "../src/app/index.js";
+import { ConcordError } from "../src/model/index.js";
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
 import { fetchFresh } from './support.js';
 
 if (process.platform === 'win32') {
   // @use-case docs/feature/feedback/use-case/triage-feedback.md
   test('Windows reports gh capability missing while API feedback remains available', async () => {
-    const { checkGhConnection } = await import('../dist/feedback-gh.js');
-    const { fetchFeedback } = await import('../dist/feedback-providers.js');
+    const { checkGhConnection } = await import("../src/domain/feedback/feedback-gh.js");
+    const { fetchFeedback } = await import("../src/domain/feedback/feedback-providers.js");
     const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
     await assert.rejects(Effect.runPromise(checkGhConnection(process.cwd(), connection)), (cause) => cause instanceof ConcordError && cause.code === 'GhPlatformUnsupported');
     const api = await Effect.runPromise(fetchFeedback({ id: 'github-api', provider: 'github', credentialEnv: 'TEST_TOKEN', owner: 'acme', repo: 'widgets' }, {
@@ -68,9 +68,9 @@ process.env.GH_TOKEN = 'fixture-token';
 process.env.GH_DEBUG = 'api';
 process.env.GH_REPO = 'attacker/elsewhere';
 
-const { checkGhConnection, fetchGhFeedback } = await import('../dist/feedback-gh.js');
-const { syncFeedback } = await import('../dist/feedback.js');
-const { startViewServer } = await import('../dist/view-server.js');
+const { checkGhConnection, fetchGhFeedback } = await import("../src/domain/feedback/feedback-gh.js");
+const { syncFeedback } = await import("../src/domain/feedback/feedback.js");
+const { startViewServer } = await import("../src/entry/http/view-server.js");
 const connection = { id: 'github-main', provider: 'github', transport: 'gh', owner: 'acme', repo: 'widgets' } as const;
 
 function configure(): void {

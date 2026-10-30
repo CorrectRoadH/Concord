@@ -1,0 +1,12 @@
+export { checkGhConnection } from './feedback-gh.js';
+export { fetchGhFeedback } from './feedback-gh.js';
+export { withGhIssueTransport } from './feedback-gh.js';
+export type { FeedbackFetch } from './feedback-providers.js';
+export type { FeedbackFetchOptions } from './feedback-providers.js';
+export type { FeedbackTransport } from './feedback-providers.js';
+export { fetchFeedback } from './feedback-providers.js';
+export { checkFeedbackConnection } from './feedback.js';
+export type { FeedbackSyncOptions } from './feedback.js';
+export type { FeedbackSyncReceipt } from './feedback.js';
+export { listFeedback } from './feedback.js';
+export { syncFeedback } from './feedback.js';

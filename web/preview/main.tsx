@@ -2,7 +2,7 @@ import { createRoot } from 'react-dom/client';
 import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { decodeChangePreview, PREVIEW_DATA_LIMIT, type ChangePreview } from '../../src/change-preview';
+import { decodeChangePreview, PREVIEW_DATA_LIMIT, type ChangePreview } from '../../src/model/index';
 import { DiffReading } from '../pages/git/diff-reading';
 import { fileTree, type TreeNode } from '../pages/git/model';
 import 'react-diff-view/style/index.css';

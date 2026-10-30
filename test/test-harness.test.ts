@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../dist/storage.js';
+import { initialize, LocalRepository } from "../src/base/workspace/index.js";
 import { pollUntil, waitForWorkspaceNotModified, fetchFresh } from './support.js';
 import { startViewServer } from './e2e/server.js';
 

@@ -7,10 +7,10 @@ import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
 import type { Transform } from 'node:stream';
 import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
-import { parseTypeScriptConfig, renderTypeScriptConfig } from '../src/config.js';
-import { ProjectSchema, decode, type ProjectConfig } from '../src/shared.js';
-import type { WorkspaceProjection } from '../src/view-contract.js';
-import { WorkspaceProjectionSnapshotSchema } from '../src/workspace-projection.js';
+import { parseTypeScriptConfig, renderTypeScriptConfig } from "../src/base/workspace/index.js";
+import { ProjectSchema, decode, type shared_ProjectConfig as ProjectConfig } from "../src/model/index.js";
+import { type WorkspaceProjection } from "../src/model/index.js";
+import { WorkspaceProjectionSnapshotSchema } from "../src/entry/server/index.js";
 
 type TestEffect = Effect.Effect<void, unknown, never>;
 

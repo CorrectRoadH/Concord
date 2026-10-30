@@ -1,6 +1,6 @@
 import { createConsumer } from './support/consumer.js';
-import { LocalRepository } from '../src/storage.js';
-import { editKnowledge } from '../src/knowledge.js';
+import { LocalRepository } from "../src/base/workspace/index.js";
+import { editKnowledge } from "../src/domain/issues/index.js";
 import { installedConcordCli, writeProjectConfig } from './support.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
