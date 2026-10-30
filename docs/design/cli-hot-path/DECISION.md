@@ -30,4 +30,4 @@ hawdb-owner-service 按当时的写法以每个用户一个后台托管全部 wo
 
 ## Residual Risks
 
-本裁决依据用户 2026-10-30 的指示作出，workspace-server 尚未经过独立审查；审查要点见 `/tmp/workspace-server-review-prompt.md` 记录的七项，实现前仍应完成。服务锁需要原生绑定新增入口；Herdr 插件上下文能否提供当前 pane 的工作目录、manifest 的 split 方向尚未核实；面板的终端渲染依赖尚未选定。第 2 阶段经由服务的查询能否让 G1 达标待实测。
+本裁决依据用户 2026-10-30 的指示作出；独立审查在六轮复核后通过，修订已提升进现行 Spec。服务锁需要原生绑定新增入口；Herdr 插件上下文能否提供当前 pane 的工作目录、manifest 的 split 方向尚未核实；面板的终端渲染依赖尚未选定。第 2 阶段经由服务的查询能否让 G1 达标待实测。

@@ -6,6 +6,58 @@ Concord 把 Spec、测试归属、Memory 与审阅闭环做成可安装到任意
 
 源码注释与 Markdown 拥有协作事实，HawDB 只保存可重建缓存。运行证据和事务恢复材料与缓存分开存储。跨功能规则见[宪法](constitution.md)，Web 界面设计见根目录 `DESIGN.md`。
 
+## 代码结构
+
+代码由 Effect 服务组成（[C-005](constitution.md#c-005-1)）。领域逻辑只依赖服务接口，文件、进程、时间、网络与缓存等副作用都由服务提供；每种进程用一组 Layer 组合出自己需要的服务。直接使用固定版本 Effect 已有的能力，不手写同类机制。
+
+### 分层
+
+| 层 | 内容 | 只依赖 |
+| --- | --- | --- |
+| 入口 | CLI 命令（`effect/unstable/cli`）、HTTP 路由（`unstable/http`）、工作区服务的 RPC 处理（`unstable/rpc`）、终端面板 | 应用操作 |
+| 应用操作 | 每个用户操作一个 `Effect.fn`，输入与输出由 Schema 定义，失败为 `Schema.TaggedError`；CLI、HTTP 与 action 调用同一个操作 | 领域服务 |
+| 领域服务 | Documents、Trace、Writing、Concepts、Issues、Memory、Designs、Tests、Code、Feedback | 基础服务 |
+| 基础服务 | Workspace、Sources、Publication、Cache、Git、OwnedProcess，以及 `@effect/platform` 的 FileSystem、Path 与 Clock | 平台 |
+
+领域与应用代码不直接导入 `node:fs`、`node:child_process`，也不读写 `process` 的 cwd、env、argv 与标准流；这些都经由基础服务，使同一操作可以在 CLI、服务主进程、计算进程与操作进程中运行。每个服务一个模块，接口与实现层分开。
+
+### 基础服务
+
+| 服务 | 职责 | 实现层 |
+| --- | --- | --- |
+| Workspace | worktree 根、Git-private 目录、配置快照与安装身份 | 每个进程一个，绑定一个 worktree |
+| Sources | 路径安全的读取、乐观快照与返回前核验 | 基于 FileSystem |
+| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有 | 基于 FileSystem |
+| Cache | 解析缓存与持久命名空间 | 持久（服务主进程或无服务时的命令）与内存两种层 |
+| Queries | 白名单只读查询 | `Queries.Local` 在本进程计算；`Queries.Remote` 是工作区服务的 RPC 客户端。CLI 启动时按[工作区服务](feature/local-data-engine/architecture.md#cli-查询)的规则选择，两者接口相同 |
+| OwnedProcess | 子进程与进程组的启动、取消与清理确认 | 基于 `unstable/process` 的 ChildProcess |
+
+### 进程组合
+
+| 进程 | 组合的层 |
+| --- | --- |
+| CLI | Workspace、Sources、Publication、Cache（内存，或无服务时持久）、Queries（Remote 或 Local） |
+| 工作区服务主进程 | Workspace、Cache（持久）、工作区投影、RPC 服务、HTTP 服务、OwnedProcess |
+| 计算进程 | Workspace、Sources、Cache（内存）、Queries.Local，经标准输入输出提供 RPC |
+| 操作进程 | Workspace、Sources、Publication、Cache（内存） |
+| 面板 | 工作区服务的 RPC 客户端与终端渲染 |
+
+### 采用的 Effect 能力
+
+| 需要 | Effect 能力 |
+| --- | --- |
+| 锁、租约、句柄、子进程与监听的生命周期 | Scope、`Effect.acquireRelease`、`Layer.effect` |
+| 工作区服务协议 | `unstable/rpc` 的 RpcGroup、RpcServer 与 RpcClient，经 `unstable/socket` 传输，msgpack 序列化；字节字段为 `Uint8Array`；请求 ID、取消与流式结果由 Rpc 提供 |
+| 当前状态与订阅推送 | SubscriptionRef 保存状态，其 changes Stream 推给 RPC 订阅与 SSE |
+| 合并监听事件、补偿刷新与重试 | Schedule 与 Stream 的 debounce |
+| 唯一刷新者与串行维护 | 一个许可的 Semaphore |
+| 在途请求与取消 | FiberMap、FiberSet 与 Fiber 中断 |
+| 启动就绪 | Deferred |
+| HTTP 与静态资源 | `unstable/http` 的 HttpRouter 与 HttpStaticServer |
+| 不可信输入与输出 | Schema 严格解码与编码 |
+| 测试中的时间与协议 | TestClock；RPC 用 RpcTest 在进程内测试 |
+| 性能剖析 | `Effect.fn` 的 span；需要时经 `unstable/observability` 导出 |
+
 ## 初始化与项目治理
 
 新项目生成静态 `concord.config.ts`，运行时只读取这一个配置文件，不执行 TS 模块。配置快照拥有原文前像、路径与摘要，写入、恢复与证据使用同一协议。journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)，无效输入见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#无效输入)。
