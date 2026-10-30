@@ -447,7 +447,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       stopping = true;
       for (const controller of feedbackControllers) controller.abort();
       const closed = new Promise<void>((resolveClosed, reject) => server.close((cause) => cause ? reject(failure(cause)) : resolveClosed()));
-      server.closeIdleConnections();
+      server.closeAllConnections();
       try { await Promise.allSettled([...feedbackTasks]); await Promise.all([scans.close(), jobs.close(), closed]); }
       finally { requestLog.close(); closeGitBaselineCache(baselineCache); }
     })(),
