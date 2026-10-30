@@ -48,7 +48,7 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
     if (selected.trace) {
       // Repository code is built after the core CLI; retain the package-relative
       // runtime boundary rather than importing repository source into this build.
-      const entry = './repository/docs/trace/relation-mutation.js';
+      const entry = import.meta.url.endsWith('.ts') ? '../repository/docs/trace/relation-mutation.ts' : './repository/docs/trace/relation-mutation.js';
       const recovery = yield* Effect.tryPromise({ try: () => import(entry), catch: failure });
       const receipt = yield* (recovery.recoverTrace(selected.root, { reclaimPublication: false }) as Effect.Effect<unknown, unknown>).pipe(Effect.mapError(recoveryFailure));
       return { operation: 'recover', status: 'trace-recovered', receipt };

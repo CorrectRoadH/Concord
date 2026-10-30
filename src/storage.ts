@@ -468,7 +468,8 @@ export class LocalRepository implements Repository {
     this.absolute(path);
   }
   private sourceScopeRoots(config: ProjectConfig): readonly string[] {
-    const roots = [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])];
+    const resolved = resolveProjectConfig(this.root, config);
+    const roots = [...resolved.testRoots, ...(resolved.sourceRoots ?? [])];
     const unique = [...new Set(roots)].sort();
     if (unique.length === 0) throw new ConcordError('InvalidSourcePath', 'source.set requires at least one configured sourceRoot or testRoot');
     for (const root of unique) this.validateConfiguredRoot(root);

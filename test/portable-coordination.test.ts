@@ -1,3 +1,5 @@
+import { createConsumer } from './support/consumer.js';
+import { readProjectConfig, writeProjectConfig } from './support.js';
 import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
@@ -24,11 +26,9 @@ import { mutateTraceFiles } from '../repository/docs/trace/relation-mutation.js'
 
 const entry = installedConcordCli();
 function fixture(t: TestContext): string {
-  const root = mkdtempSync(join(tmpdir(), 'concord-portable-'));
+  const root = createConsumer();
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { repo.snapshot(() => initialize(repo, false, { testRoots: [] })); } finally { repo.close(); }
+  writeProjectConfig(root, { testRoots: [] });
   return root;
 }
 
@@ -100,7 +100,7 @@ test('ordinary built CLI reads despite a killed publication owner and preserves 
   try {
     assert.equal(await line(dead), 'held');
     await stop(dead);
-    const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'memory', 'list'], { encoding: 'utf8', timeout: 15000 });
+    const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'list', 'memory'], { encoding: 'utf8', timeout: 15000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.equal(existsSync(join(tracePrivateDirectorySync(root), 'publication.lease')), true);
   } finally { await stop(dead); recoverPublicationLeaseSync(root); }
@@ -116,7 +116,7 @@ test('built CLI reads without waiting for live publication owners and preserves 
     const path = join(tracePrivateDirectorySync(root), 'publication.lease');
     const before = readdirSync(path);
     const started = performance.now();
-    const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'memory', 'list'], { encoding: 'utf8', timeout: 15000 });
+    const result = spawnSync(process.execPath, [entry, '--root', root, '--json', 'list', 'memory'], { encoding: 'utf8', timeout: 15000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
     assert.deepEqual(readdirSync(path), before);
   } finally { await stop(live); recoverPublicationLeaseSync(root); }
@@ -129,7 +129,7 @@ test('built CLI succeeds when a contending writer finishes within the acquisitio
   const live = holder(root);
   try {
     assert.equal(await line(live), 'held');
-    const query = spawn(process.execPath, [entry, '--root', root, '--json', 'memory', 'list'], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const query = spawn(process.execPath, [entry, '--root', root, '--json', 'list', 'memory'], { stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     query.stdout.on('data', chunk => { output += String(chunk); });
     query.stderr.on('data', chunk => { output += String(chunk); });
@@ -253,7 +253,7 @@ test('ordinary CLI queries share ownership with a live reader', t => Effect.runP
   const reader = acquireTraceLeaseSync(root, 'shared', 'query-observer')!;
   try {
     for (const args of [
-      ['memory', 'list'], ['memory', 'index'], ['memory', 'recall', 'missing'],
+      ['list', 'memory'], ['memory', 'index'], ['memory', 'recall', 'missing'],
       ['code', 'annotate', '--scope', 'file', '--contract', 'docs/feature/target/README.md'],
       ['test', 'annotate', '--contract', 'docs/feature/target/README.md'],
     ]) {
@@ -278,7 +278,7 @@ test('CLI recovery reports quarantined runner instead of claiming clean readines
     const report = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.String })))(result.stdout);
     assert.equal(report.status, 'blocked');
     assert.ok(existsSync(join(run.lease.path, `${run.lease.owner.token}.json`)));
-    const observed = spawnSync(process.execPath, [entry, '--root', root, '--json', 'memory', 'list'], { encoding: 'utf8', timeout: 15000 });
+    const observed = spawnSync(process.execPath, [entry, '--root', root, '--json', 'list', 'memory'], { encoding: 'utf8', timeout: 15000 });
     assert.equal(observed.status, 0, observed.stderr);
     assert.throws(() => repo.publish('still-blocked', [{ path: 'memory/blocked.md', before: null, after: 'no' }]), { code: 'CleanupFailed' });
   } finally { repo.close(); }
@@ -436,7 +436,7 @@ test('built CLI initializes and publishes with only Node and Git on PATH', t => 
   symlinkSync(git, join(bin, 'git')); symlinkSync(process.execPath, join(bin, 'node'));
   const env = { ...process.env, PATH: bin };
   execFileSync(git, ['init', '-q', consumer], { env });
-  for (const args of [['init', '--docs-only'], ['feature', 'create', 'portable', '--title', 'Portable'], ['check']]) {
+  for (const args of [['init', '--docs-only'], ['new', 'feature', 'portable', '--title', 'Portable'], ['check']]) {
     execFileSync(process.execPath, [entry, '--root', consumer, ...args], { env });
   }
   assert.ok(existsSync(join(consumer, 'docs/feature/portable/README.md')));
@@ -470,7 +470,7 @@ test('wait for editor', async () => {
 });\n`);
   // Change the fixture configuration before opening its execution snapshot.
   const config = join(root, 'concord.config.ts');
-  writeFileSync(config, readFileSync(config, 'utf8').replace('"testRoots": []', '"testRoots": ["test"]'));
+  writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['test'], runner: { kind: 'command', argv: [process.execPath, '--test', '{file}'], timeoutMs: 15000, sourceFiles: [] } });
   const repo = new LocalRepository(root);
   const trace = repo.snapshot(() => buildTrace(repo, 'off', { includeCode: false })); requireValidTrace(trace);
   const result = Effect.runPromise(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
@@ -488,16 +488,14 @@ test('wait for editor', async () => {
       editor.publish('revert-edit', [{ path, before: `${original}\nTransient edit\n`, after: original }]);
     } finally { editor.close(); }
     writeFileSync(join(root, '.git/concord/test-continue'), 'continue');
-    const evidence = await result;
-    assert.equal(evidence.commandOutcome, 'invalid');
-    assert.equal(evidence.cleanupOk, true);
+    await assert.rejects(result, { code: 'PreimageChanged' });
     assert.equal(existsSync(join(root, '.git/concord/runner.lease')), false);
     // A changed configuration can reject receipt validation, but cannot keep a
     // successfully cleaned-up process group locked forever.
     rmSync(join(root, '.git/concord/test-ready'));
     rmSync(join(root, '.git/concord/test-continue'));
     const changedConfigRun = Effect.runPromise(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
-    const rejected = assert.rejects(changedConfigRun, /configuration changed/);
+    const rejected = assert.rejects(changedConfigRun, { code: 'PreimageChanged' });
     const configDeadline = Date.now() + 15000;
     try {
       while (!existsSync(join(root, '.git/concord/test-ready'))) {

@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#创建与编辑文档
 import { Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
-import { adoptRoadmap, checkDesign, createDocument, decideDesign, deferDesign, formatDesign, loadDocuments, findDocument } from './documents.js';
+import { adoptRoadmap, checkDesign, createDocument, decideDesign, deferDesign, formatDesign, loadDocuments, readDocumentReference, findDocument } from './documents.js';
 import { documentShow } from './trace.js';
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from './step-commands.js';
 import { ConcordError, type DocumentKind } from './shared.js';
@@ -28,7 +28,10 @@ export const newDocument = Command.make('new', {
   return { ...receipt, operation: 'new' };
 }))).pipe(Command.withDescription('Create a document from its bundled template; --pages selects optional pages, --type selects Memory type.'));
 
-export const showDocument = Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => ({ ...documentShow(repo, args.id, findDocument(loadDocuments(repo), args.id).metadata.kind, cached(settings.dryRun)), operation: 'show' })))).pipe(Command.withDescription('Show a document and its relationships by path or selector.'));
+export const showDocument = Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => {
+  const selected = args.id.includes('/') ? readDocumentReference(repo, args.id) : findDocument(loadDocuments(repo), args.id);
+  return { ...documentShow(repo, args.id, selected.metadata.kind, cached(settings.dryRun)), operation: 'show' };
+}))).pipe(Command.withDescription('Show a document and its relationships by path or selector.'));
 
 export const listDocuments = Command.make('list', { category: category.pipe(Argument.optional), open: Flag.boolean('open').pipe(Flag.withDefault(false)) }, args => withReadRepo(repo => sync(() => {
   const kind = Option.getOrUndefined(args.category);

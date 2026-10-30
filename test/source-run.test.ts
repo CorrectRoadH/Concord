@@ -58,7 +58,7 @@ test('source CLI and refresh workers run without any built JavaScript in an isol
       assert.equal(version.status, 0, version.stderr);
       assert.equal(version.stdout.trim(), `concord v${manifest.version}`);
       fixture.success('init', '--docs-only', '--yes');
-      fixture.success('feature', 'create', 'sample', '--title', 'Sample');
+      fixture.success('new', 'feature', 'sample', '--title', 'Sample');
       assert.equal(fixture.success('--dry-run', 'check').ok, true);
       assert.equal(fixture.success('docs', 'check').ok, true);
       const refresh = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), join(fixture.tool, 'src/query-refresh-worker.ts'),

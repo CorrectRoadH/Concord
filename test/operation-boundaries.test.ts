@@ -1,3 +1,5 @@
+import { createConsumer } from './support/consumer.js';
+import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -5,34 +7,28 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getWorkspaceSnapshot } from '../dist/application.js';
-import { createDocument, diagnoseDocuments, readDocumentReference, readDocumentSelector, renderDocument } from '../dist/documents.js';
-import { editKnowledge } from '../dist/knowledge.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import { acquireTraceLeaseSync, releaseTraceLeaseSync } from '../dist/coordination.js';
-import { beginRun } from '../dist/run-coordination.js';
-import { setSource } from '../dist/editing.js';
-import { digest } from '../dist/shared.js';
+import { getWorkspaceSnapshot } from '../src/application.js';
+import { createDocument, diagnoseDocuments, readDocumentReference, readDocumentSelector, renderDocument } from '../src/documents.js';
+import { editKnowledge } from '../src/knowledge.js';
+import { LocalRepository, initialize } from '../src/storage.js';
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from '../src/coordination.js';
+import { beginRun } from '../src/run-coordination.js';
+import { setSource } from '../src/editing.js';
+import { digest } from '../src/shared.js';
 import { readProjectConfig, writeProjectConfig } from './support.js';
 
-const cli = resolve('dist/entry.js');
+const cli = installedConcordCli();
 
 function withConsumer(run: (root: string) => void): void {
-  const root = mkdtempSync(join(tmpdir(), 'concord-operation-boundaries-'));
+  const root = createConsumer();
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial); } finally { initial.close(); }
     run(root);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
 async function withConsumerAsync(run: (root: string) => Promise<void>): Promise<void> {
-  const root = mkdtempSync(join(tmpdir(), 'concord-operation-boundaries-web-'));
+  const root = createConsumer();
   try {
-    execFileSync('git', ['init', '-q', root]);
-    const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial); } finally { initial.close(); }
     await run(root);
   } finally { rmSync(root, { recursive: true, force: true }); }
 }
@@ -59,13 +55,13 @@ function call(root: string, args: readonly string[], status: number, input = '')
 }
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('exact references accept ordinary YAML pages and reject malformed, historical, and misplaced owners', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
+test('exact references derive identity from paths and reject malformed owners', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
   withRepo(root, repo => {
     createDocument(repo, 'feature', { id: 'alpha', title: 'Alpha', pages: [] });
     createDocument(repo, 'feature', { id: 'beta', title: 'Beta', pages: [] });
     createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'alpha' });
     const alpha = readDocumentReference(repo, 'docs/feature/alpha/README.md', ['feature']);
-    write(root, 'docs/feature/alpha/guide.md', '---\ntitle: Human guide\n---\n\n# Guide\n\n## Allowed anchor\n');
+    write(root, 'docs/feature/alpha/guide.md', renderDocument(alpha.metadata, '# Guide\n\n## Allowed anchor\n'));
     assert.equal(readDocumentReference(repo, 'docs/feature/alpha/guide.md#allowed-anchor', ['feature']).path, alpha.path);
 
     write(root, 'docs/feature/alpha/nested/README.md', '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken owner\n');
@@ -74,11 +70,12 @@ test('exact references accept ordinary YAML pages and reject malformed, historic
     throwsCode('InvalidData', () => readDocumentReference(repo, 'docs/feature/alpha/nested/README.md', ['feature']));
 
     write(root, 'memory/historical-feature.md', renderDocument(alpha.metadata, alpha.body));
-    throwsCode('InvalidReferenceTarget', () => readDocumentReference(repo, 'memory/historical-feature.md', ['feature']));
+    throwsCode('InvalidData', () => readDocumentReference(repo, 'memory/historical-feature.md', ['feature']));
 
     const flow = readDocumentReference(repo, 'docs/feature/alpha/use-case/flow.md', ['use-case']);
     write(root, 'docs/feature/beta/use-case/misplaced.md', renderDocument(flow.metadata, flow.body));
-    throwsCode('InvalidPlacement', () => readDocumentReference(repo, 'docs/feature/beta/use-case/misplaced.md', ['use-case']));
+    const moved = readDocumentReference(repo, 'docs/feature/beta/use-case/misplaced.md', ['use-case']);
+    assert.equal(moved.metadata.kind === 'use-case' ? moved.metadata.feature : undefined, 'docs/feature/beta/README.md');
   });
 }))));
 
@@ -95,7 +92,8 @@ test('canonical Issue edit ignores a malformed sibling while short IDs still req
     throwsCode('InvalidData', () => readDocumentSelector(repo, 'target', 'issue'));
     rmSync(join(root, 'docs/issues/broken.md'));
     write(root, 'docs/issues/second.md', readFileSync(join(root, path), 'utf8'));
-    throwsCode('AmbiguousDocument', () => readDocumentSelector(repo, 'target', 'issue'));
+    assert.equal(readDocumentSelector(repo, 'target', 'issue').path, path);
+    assert.equal(readDocumentSelector(repo, 'second', 'issue').path, 'docs/issues/second.md');
     assert.equal(readDocumentSelector(repo, path, 'issue').path, path);
   });
 }))));
@@ -175,7 +173,7 @@ test('partial relationships never assign a malformed nested owner page to its he
   write(root, reference, '# Page\n');
   write(root, 'src/declared.ts', `// @concord-file\n// @concord-implements ${reference}\nexport const value = 1;\n`);
   call(root, ['code', 'annotate', '--scope', 'file', '--contract', reference], 1);
-  const show = JSON.parse(call(root, ['feature', 'show', 'parent'], 0).stdout) as { complete: boolean; codeDeclarations: unknown[]; incoming: unknown[] };
+  const show = JSON.parse(call(root, ['show', 'docs/feature/parent/README.md'], 0).stdout) as { complete: boolean; codeDeclarations: unknown[]; incoming: unknown[] };
   assert.equal(show.complete, false);
   assert.deepEqual(show.codeDeclarations, []);
   assert.deepEqual(show.incoming, []);
