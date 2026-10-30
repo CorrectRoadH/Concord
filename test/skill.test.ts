@@ -39,11 +39,11 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   assert.equal(main.status, 0, main.stderr);
   assert.match(main.stdout, /^---\nname: concord\n/);
   assert.match(main.stdout, /concord --skill test/);
-  assert.doesNotMatch(main.stdout, /# 测试注释与命令证据/);
+  assert.doesNotMatch(main.stdout, /# 测试标记与执行/);
 
   const topic = spawnSync(process.execPath, [cli, '--skill', 'test'], { cwd: outside, encoding: 'utf8' });
   assert.equal(topic.status, 0, topic.stderr);
-  assert.match(topic.stdout, /# 测试注释与命令证据/);
+  assert.match(topic.stdout, /# 测试标记与执行/);
   assert.match(topic.stdout, /concord test show/);
 
   const feedback = spawnSync(process.execPath, [cli, '--skill', 'feedback'], { cwd: outside, encoding: 'utf8' });
@@ -53,7 +53,7 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   const all = spawnSync(process.execPath, [cli, '--skill', 'all'], { cwd: outside, encoding: 'utf8' });
   assert.equal(all.status, 0, all.stderr);
   assert.match(all.stdout, /# 初始化与模板/);
-  assert.match(all.stdout, /# 高级测试治理/);
+  assert.match(all.stdout, /# Issue 与多来源反馈/);
   assert.equal(existsSync(join(outside, 'concord.config.ts')), false);
 
   const installedMain = join(cli, '../../skills/concord/SKILL.md');
