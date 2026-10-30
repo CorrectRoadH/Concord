@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: decided-design-records
-title: 已裁决的 Design 只保留决策记录
-createdAt: 2026-10-29T13:52:47.968Z
-kind: design
-alternatives:
-  - promote-to-spec
-  - designs-as-spec
-decision:
-  selected: promote-to-spec
-  reason: 已裁决的 Design 只作决策记录，现行规则提升到 Spec；concord check 强制 Spec 不链接 Design 中的规则页，完整归属由迁移核对验收。
-  at: 2026-10-29T14:21:21.978Z
-  targets:
-    - docs/feature/documentation-quality/README.md
----
-
 # 已裁决的 Design 只保留决策记录
 
 ## Problem

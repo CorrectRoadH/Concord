@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: hawdb-013-adoption
-title: HawDB 0.13 所有权适配与发行验收
-createdAt: 2026-10-23T08:25:04.488Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # HawDB 0.13 采用与发行验收

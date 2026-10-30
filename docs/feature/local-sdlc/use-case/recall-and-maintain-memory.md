@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: recall-and-maintain-memory
-title: 通过工具检索与维护工程知识
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 检索与维护工程知识
 
 ## 用户目标

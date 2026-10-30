@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: fresh-clone-cache-never-created
-title: 新 clone 永远不创建持久缓存
-createdAt: 2026-10-06T04:50:07.162Z
-kind: memory
-memoryKind: problem
-state: open
-epoch: 0
-evidenceRequirement: command
-promotions: []
-history: []
+status: open
 ---
 
 # 新 clone 永远不创建持久缓存
@@ -25,3 +15,11 @@ history: []
 ## 推断
 
 Git-private 目录 `.git/concord` 只由写入路径（租约、journal）创建；缓存写入以 `create: true` 打开数据库时父目录不存在，失败后静默回源。`cache rebuild` 没有把不可用视为失败。
+
+## 原记录信息
+
+```yaml
+createdAt: 2026-10-06T04:50:07.162Z
+epoch: 0
+evidenceRequirement: command
+```

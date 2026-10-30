@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: plan-content-performance
-title: Plan 内容与 check 性能对照
-createdAt: 2026-10-02T01:25:20.652Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # Plan 内容与 check 性能对照

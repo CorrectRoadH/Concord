@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: neutral-project-governance
-title: 将项目专属流程归还消费者并统一治理模型
-createdAt: 2026-09-20T07:01:18.077Z
-kind: design
-alternatives:
-  - consolidate
-  - generalize-profile
-decision:
-  selected: generalize-profile
-  reason: 采用中立高级治理入口，保留项目工具所有权，统一最低证据要求与 formal 校验，原生执行编排由消费者承担。
-  at: 2026-09-20T07:07:09.887Z
-  targets:
-    - docs/feature/neutral-project-governance/README.md
----
-
 # 将项目专属流程归还消费者并统一治理模型
 
 ## 问题

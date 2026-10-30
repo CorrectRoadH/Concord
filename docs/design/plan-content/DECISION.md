@@ -6,6 +6,8 @@ Selected: [derived-entry](plans/derived-entry/README.md)
 
 ## Rationale
 
+
+候选名保持唯一身份，文件或目录入口精确派生；当前检查仅在来源漂移时有界重试
 候选名是唯一身份，入口由文件系统精确派生，适配不同规模的正文；当前 check 在完整来源核验基础上有界重试。
 
 ## Rejected Options

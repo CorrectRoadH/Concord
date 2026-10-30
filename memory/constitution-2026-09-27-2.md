@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-27-2
-title: docs 只写声明；接入项目采用 Concord 范式并以 concord check 执行写作门禁；性能成为交付约束
-createdAt: 2026-10-30T02:52:55.777Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# docs 只写声明；接入项目采用 Concord 范式并以 concord check 执行写作门禁；性能成为交付约束
 
 宪法修订，日期 2026-09-27。
 

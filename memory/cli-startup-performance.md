@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: cli-startup-performance
-title: CLI 启动性能测量与瓶颈
-createdAt: 2026-09-27T02:23:48.225Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # CLI 启动性能测量（启动优化）

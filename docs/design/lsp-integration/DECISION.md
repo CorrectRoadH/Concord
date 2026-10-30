@@ -6,6 +6,8 @@ Selected: [lsp-client](plans/lsp-client/README.md)
 
 ## Rationale
 
+
+显式 code analyze 取得符号定位与正向调用观察，源码标记始终拥有关系，不修订 C-005；编辑器服务只读并与分析进程分离
 lsp-client 通过显式 `code analyze` 启动项目配置的 language server，取得符号定位与正向调用观察。源码标记始终拥有关系，观察只进入可丢弃投影，`check` 不读取观察。它满足全部 Limit，并且不需要修订 C-005。编辑器服务只读、使用 stdio，与分析进程分离。
 
 G1: 非 JS/TS 的关系从源码标记重建，始终可用；准确的符号范围依赖语言 profile 与 server 版本的兼容证据，证据不足时只定位到标记行。

@@ -1,15 +1,9 @@
 ---
-format: concord.document/v1
-id: typescript-native-acceptance
-title: 四项方案集成与 TS7 优化验收
-createdAt: 2026-10-21T13:56:13.649Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
+
+# 四项方案集成与 TS7 优化验收
 
 2026-10-21 完成四项采用方案的集成、编辑器服务与 TypeScript 7.1.0-beta 原生同步 API 迁移。设计经原生 Codex / GPT-6.1 Sol 独立审查，主 agent 完成集成与验收；本轮 Herdr worker pane/tab 已全部回收。
 

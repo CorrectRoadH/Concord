@@ -1,16 +1,8 @@
 ---
-format: concord.document/v1
-id: effect-service-architecture
-title: 代码尚未按 Effect 服务组合
-createdAt: 2026-10-30T04:15:44.059Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
+
+# 代码尚未按 Effect 服务组合
 
 ## 现象
 

@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: constitution-link-owned-migration
-title: link-owned 宪法迁移与验收记录
-createdAt: 2026-10-29T02:35:59.460Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # link-owned 宪法迁移与验收记录

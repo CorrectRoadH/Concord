@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-22-1
-title: 移除宪法语义版本并保留修订历史
-createdAt: 2026-10-30T02:52:49.699Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 移除宪法语义版本并保留修订历史
 
 宪法修订，日期 2026-09-22。
 

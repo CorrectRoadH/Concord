@@ -6,6 +6,8 @@ Selected: [derived](plans/derived/README.md)
 
 ## Rationale
 
+
+采用由 canonical 源路径、scope 与完整 AST 结构位置派生的引用；保留 implements 关系，删除手写声明 ID，并明确失效与复用边界。
 采用自动派生引用；当前 Spec 由源码归属 Use Case 拥有。
 
 派生引用的关键裁决：引用可能失效或被另一声明复用；冻结基于完整 AST 的静态名称与兄弟序号元组；无效 begin 仍占据边界栈。具体算法见[架构](plans/derived/architecture.md)。

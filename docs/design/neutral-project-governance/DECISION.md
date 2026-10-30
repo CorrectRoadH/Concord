@@ -6,6 +6,8 @@ Selected: [generalize-profile](plans/generalize-profile/README.md)
 
 ## Rationale
 
+
+采用中立高级治理入口，保留项目工具所有权，统一最低证据要求与 formal 校验，原生执行编排由消费者承担。
 采用 generalize-profile：产品工具归消费者，身份、证据和生命周期治理由 Concord 拥有。
 
 消费者拥有产品命令与 runner；Concord 拥有身份、证据和生命周期的统一规则与权威校验。

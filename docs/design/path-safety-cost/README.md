@@ -1,19 +1,3 @@
----
-format: concord.document/v1
-id: path-safety-cost
-title: 读取路径安全检查的成本边界
-createdAt: 2026-10-06T05:38:05.153Z
-kind: design
-alternatives:
-  - anchored-root
-  - realpath-compare
-decision:
-  selected: anchored-root
-  reason: 祖先以 bigint inode 与快照内根 fd 锚定，读取与写入解析分离，文件以不跟随 symlink 方式打开并 fstat 核对，Darwin 拼写只复核查过条目；独立 Opus 5.5 审查三轮 PASS。
-  at: 2026-10-06T05:55:37.155Z
-  targets: []
----
-
 # 读取路径安全检查的成本边界
 
 ## Problem

@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-21-1
-title: 允许显式 adapter 在执行时绑定并选择原生用例，同时明确静态关联扫描的禁止边界
-createdAt: 2026-10-30T02:52:59.613Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 允许显式 adapter 在执行时绑定并选择原生用例，同时明确静态关联扫描的禁止边界
 
 宪法修订，日期 2026-10-21。
 

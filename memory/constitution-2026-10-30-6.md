@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-30-6
-title: 按独立复核：修复核验验证被接受的快照，red 只表示冻结命令的非零结果
-createdAt: 2026-10-30T07:57:30.264Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md#c-004-2
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md#c-004-2
 ---
+
+# 按独立复核：修复核验验证被接受的快照，red 只表示冻结命令的非零结果
 
 宪法修订，日期 2026-10-30。
 

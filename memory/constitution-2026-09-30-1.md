@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-30-1
-title: 精简宪法边界：删除无条款使用的“应当”偏离机制，功能级投影语义交还契约，补充凭据边界与机器可读输出契约
-createdAt: 2026-10-30T02:52:58.665Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 精简宪法边界：删除无条款使用的“应当”偏离机制，功能级投影语义交还契约，补充凭据边界与机器可读输出契约
 
 宪法修订，日期 2026-09-30。
 

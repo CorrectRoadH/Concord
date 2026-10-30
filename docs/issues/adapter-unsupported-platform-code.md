@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: adapter-unsupported-platform-code
-title: 不支持的平台上 adapter 返回了清理未知的错误码
-createdAt: 2026-10-29T21:12:53.829Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # 不支持的平台上 adapter 返回了清理未知的错误码

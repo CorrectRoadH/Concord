@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: evidence-execution-naming
-title: 命令收据的 execution 取值 nonzero 容易误读
-createdAt: 2026-10-23T03:12:30.303Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # 命令收据的 execution 取值 nonzero 容易误读

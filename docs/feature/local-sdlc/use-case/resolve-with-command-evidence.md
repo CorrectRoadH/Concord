@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: resolve-with-command-evidence
-title: 记录命令证据并关闭 Problem
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 核验修复并关闭缺陷
 
 ## 用户目标

@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: release-from-tag
-title: Release tested macOS and Linux packages from a tag
-kind: use-case
-feature: docs/feature/cross-platform-release/README.md
----
-
 # 从标签发布 macOS 与 Linux 包
 
 ## 用户目标
@@ -30,7 +22,7 @@ feature: docs/feature/cross-platform-release/README.md
 
 - [CLI](../cli.md)
 - [架构](../architecture.md)
-- [生命周期](../lifecycle.md)
+- [生命周期](../architecture.md)
 - [可移植发布协调设计](../../../design/portable-publication/README.md)
 
 ## 渠道通知与恢复

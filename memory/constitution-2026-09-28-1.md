@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-28-1
-title: 分离历史诊断与当前事实门禁，采用乐观读取及短期提交协调
-createdAt: 2026-10-30T02:52:56.743Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 分离历史诊断与当前事实门禁，采用乐观读取及短期提交协调
 
 宪法修订，日期 2026-09-28。
 

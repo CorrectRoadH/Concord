@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: release-preview-cache-retry
-title: PR 预览发版前的缓存占用回归
-createdAt: 2026-09-30T07:07:13.927Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # 缓存占用与浏览器验收

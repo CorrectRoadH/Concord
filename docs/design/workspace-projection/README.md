@@ -1,21 +1,3 @@
----
-format: concord.document/v1
-id: workspace-projection
-title: 工作区只读投影
-createdAt: 2026-09-29T05:54:31.477Z
-kind: design
-alternatives:
-  - shared-projection
-  - web-only
-  - sync-scan
-decision:
-  selected: shared-projection
-  reason: 工作台与显式 CLI 缓存入口共享服务端维护的结构投影；当前查询和定向编辑保留严格前像。独立 Opus 5.5 设计挑战 PASS，采用单一路径、漂移标注、独立配额和显式恢复。
-  at: 2026-09-29T06:25:49.829Z
-  targets:
-    - docs/feature/web-workbench/README.md
----
-
 # 工作区只读投影
 
 ## Problem

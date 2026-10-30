@@ -1,17 +1,14 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-30-2
-title: 宪法与声明式 owner 只保存当前声明
-createdAt: 2026-10-30T02:53:05.326Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-  - docs/constitution.md#c-012-11
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md#c-012-11
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 宪法与声明式 owner 只保存当前声明
 
 宪法修订，日期 2026-10-30。
 

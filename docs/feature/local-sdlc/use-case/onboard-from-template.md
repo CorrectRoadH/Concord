@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: onboard-from-template
-title: 接入并取得模板
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 接入并取得模板
 
 ## 用户目标

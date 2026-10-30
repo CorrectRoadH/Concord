@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: offline-switch-dual-lock
-title: 离线切换没有持有新旧锁的受管入口
-createdAt: 2026-10-29T16:23:47.441Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # 离线切换没有持有新旧锁的受管入口

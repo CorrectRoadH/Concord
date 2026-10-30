@@ -6,6 +6,8 @@ Selected: [anchored-root](plans/anchored-root/README.md)
 
 ## Rationale
 
+
+祖先以 bigint inode 与快照内根 fd 锚定，读取与写入解析分离，文件以不跟随 symlink 方式打开并 fstat 核对，Darwin 拼写只复核查过条目；独立 Opus 5.5 审查三轮 PASS。
 祖先目录在打开仓库时完整检查一次，之后用 bigint `dev`/`ino` 与根目录 fd 锚定，快照内读取不再枚举仓库根之上的目录。只读解析与写入解析分成两个入口，写入、建目录与删除、发布、恢复和 init 保持每次完整检查。文件以不跟随 symlink 的方式打开并 `fstat` 核对，比现状更早拒绝叶子竞态。Darwin 拼写只复核实际查过的条目，漂移路径与 diagnostic-projection-drift 的 `changedPaths` 语义一致。
 
 G2: 刷新扫描能否进入上限只能实测确定；实现交付须附 `pnpm bench query --consumer scale` 的记录，未达标时按 [C-014](../../constitution.md#c-014-3) 继续定位，不放宽检查。

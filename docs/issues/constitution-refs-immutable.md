@@ -1,21 +1,8 @@
 ---
-format: concord.document/v1
-id: constitution-refs-immutable
-title: 既有 owner 无法修改 constitutionRefs
-createdAt: 2026-09-27T02:11:48.229Z
-kind: issue
-state: closed
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
+status: closed
 closure:
   kind: closed
   reason: 依据关系改由正文链接拥有，constitutionRefs 已取消；用 author set、page set 或 issue edit 修改链接即可增删引用
-history:
-  - at: 2026-10-29T02:34:40.320Z
-    action: close
-    reason: 依据关系改由正文链接拥有，constitutionRefs 已取消；用 author set、page set 或 issue edit 修改链接即可增删引用
 ---
 
 # 既有 Feature/Design 无法修改 constitutionRefs

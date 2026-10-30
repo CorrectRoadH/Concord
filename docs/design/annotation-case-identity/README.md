@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: annotation-case-identity
-title: 测试通过 Spec 注释关联并自动派生执行身份
-createdAt: 2026-09-15T09:17:52.573Z
-kind: design
-alternatives:
-  - annotations
-  - title-token
-decision:
-  selected: annotations
-  reason: 用户要求测试声明直接关联 canonical Feature/Use Case；每个测试的文件与名称自动派生执行 reference，不设人工 ID 或前置 attach 流程。
-  at: 2026-09-15T09:19:53.850Z
-  targets:
-    - docs/feature/local-sdlc/library.md
----
-
 # 测试通过 Spec 注释关联并自动派生执行身份
 
 测试只需要在顶层声明旁放置一个指向 canonical Feature 或 Use Case 的注释。测试名称和文件路径共同决定自动派生的执行 reference，因此名称不携带 ID，也不存在先分配 ID、再 attach contract 的前置步骤。

@@ -1,12 +1,4 @@
----
-format: concord.document/v1
-id: herdr-side-panel
-title: 在 Herdr 侧边面板中跟随 agent 查看 Spec
-createdAt: 2026-10-30T01:44:36.743Z
-kind: roadmap
-state: adopted
-adoptedAs: docs/feature/herdr-panel/README.md
----
+# 在 Herdr 侧边面板中跟随 agent 查看 Spec
 
 ## Problem
 

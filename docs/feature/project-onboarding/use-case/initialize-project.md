@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: initialize-project
-title: 渐进选择并初始化项目
-kind: use-case
-feature: docs/feature/project-onboarding/README.md
----
-
 
 
 

@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-29-2
-title: 文档只有一个主语言，每个概念只需要一个写法；领域术语改由按目录归属的 concepts.md 拥有，定义与解释同处一…
-createdAt: 2026-10-30T02:53:02.440Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 文档只有一个主语言，每个概念只需要一个写法；领域术语改由按目录归属的 concepts.md 拥有，定义与解释同处一…
 
 宪法修订，日期 2026-10-29。
 

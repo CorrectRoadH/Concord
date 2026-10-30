@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: test-linkage-requirements
-title: 测试关联、多框架、LSP 与受控写作的需求裁决
-createdAt: 2026-10-21T07:41:32.988Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions: []
-history: []
+type: decision
+status: current
 ---
 
 # 测试关联、多框架、LSP 与受控写作的需求裁决

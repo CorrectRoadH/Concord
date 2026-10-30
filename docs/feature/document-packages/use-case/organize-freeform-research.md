@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: organize-freeform-research
-title: 自由组织研究主题
-kind: use-case
-feature: docs/feature/document-packages/README.md
----
-
 # 自由组织研究主题
 
 维护者从 Web 或 CLI 新建一个研究主题，填写名称与标题后立即进入主题 README。未填写来源、观察日期、正文或附页时，创建仍成功，README 仅含标题，没有研究提纲或示例正文。

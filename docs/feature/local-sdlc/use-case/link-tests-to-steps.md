@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: link-tests-to-steps
-title: 把测试关联到 Use Case 步骤
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 把测试关联到 Use Case 步骤
 
 ## 场景

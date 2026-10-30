@@ -1,19 +1,3 @@
----
-format: concord.document/v1
-id: repository-process-adapter
-title: 可靠原生证据的进程接入
-createdAt: 2026-10-22T05:02:45.654Z
-kind: design
-alternatives:
-  - process-bridge
-  - module-host
-decision:
-  selected: process-bridge
-  reason: 保留单一治理权威及正式证据门，通过进程接入消除消费者内部库耦合。
-  at: 2026-10-22T05:17:37.684Z
-  targets: []
----
-
 # 可靠原生证据的进程接入
 
 消费者通过版本化进程协议调用 Concord，不在 runner 中加载 Concord 的内部模块或 Effect 服务。

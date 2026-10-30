@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: analyze-other-languages
-title: 分析其它语言的代码声明与测试依赖
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 分析其它语言的代码声明与测试依赖
 
 ## 场景

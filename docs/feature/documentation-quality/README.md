@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: documentation-quality
-title: 文档写作与一致性检查
-kind: feature
----
-
 # 文档写作与领域术语
 
 维护者通过 Concord CLI 与 Web 在全局、Feature、Engineering 及其它 docs 子目录定义领域术语和写作规则。术语由 concepts.md 拥有：每个概念有稳定 ID、唯一写法、定义段落与解释，旧写法列为弃用名；写作规则由 concord-writing.json 拥有禁词和检查选项。所在目录决定局部作用域，全项目视图自动汇总并保留来源，不复制定义。

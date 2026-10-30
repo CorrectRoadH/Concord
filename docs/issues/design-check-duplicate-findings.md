@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: design-check-duplicate-findings
-title: design check 对同一条要求重复报告相同 finding
-createdAt: 2026-10-23T03:49:00.717Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # design check 对同一条要求重复报告相同 finding

@@ -6,6 +6,8 @@ Selected: [annotations](plans/annotations/README.md)
 
 ## Rationale
 
+
+用户要求测试声明直接关联 canonical Feature/Use Case；每个测试的文件与名称自动派生执行 reference，不设人工 ID 或前置 attach 流程。
 采用声明旁的路径注释，形式为 `// @feature <路径>` 或 `// @use-case <路径>`。不要求人工测试 ID 或前置关联步骤。它保留测试名称的行为语义，并由工具自动生成执行引用。
 
 G1: annotations 明确保留自然语言测试名称；原文支持该目标。

@@ -6,6 +6,8 @@ Selected: [process-adapter](plans/process-adapter/README.md)
 
 ## Rationale
 
+
+源码标记保持唯一关联来源，adapter 只在显式收集与执行时提供原生观察，保留 @native 后备；C-011 第 1、3 款已修订
 process-adapter 保持源码标记为唯一关联来源，adapter 只在显式收集与执行时提供原生观察，并保留 `@native` 作为显式选择后备。协议拆成计划与解析两步，进程由 Concord 管理并裁决状态，收据逐项核对 requested 与 observed。[C-011](../../constitution.md#c-011-1) 与 [C-011](../../constitution.md#c-011-6) 已修订，全部 Limit 满足。
 
 G1: 自动绑定依赖框架能否给出完整声明范围。能力矩阵中未经固定版本验收的组合不宣称支持，范围缺失时回退到 `@native` 或文件级执行。

@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: review-pull-request
-title: 在 PR 预览中审阅变更
-kind: use-case
-feature: docs/feature/web-workbench/README.md
----
-
 # 在 PR 预览中审阅变更
 
 审阅者打开 PR 提供的 Concord 预览，看到该 PR 相对于合并目标分支引入的变更。目标分支由 PR 的 base 决定，不假定名称为 main。

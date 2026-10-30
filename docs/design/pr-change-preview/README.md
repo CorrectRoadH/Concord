@@ -1,19 +1,3 @@
----
-format: concord.document/v1
-id: pr-change-preview
-title: PR 变更的静态审阅
-createdAt: 2026-09-30T02:22:00.081Z
-kind: design
-alternatives:
-  - static
-  - hosted-workbench
-decision:
-  selected: static
-  reason: 静态阅读隔离本地写入与执行能力；固定 Git 对象、严格共享格式及消费者 PR 身份核验满足比较与发布边界。
-  at: 2026-09-30T04:24:44.526Z
-  targets: []
----
-
 # PR 变更的静态审阅
 
 ## Problem

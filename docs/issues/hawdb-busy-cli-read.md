@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: hawdb-busy-cli-read
-title: CLI 读命令把短暂的 HawdbBusy 直接返回给调用者
-createdAt: 2026-10-29T13:07:44.916Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # CLI 读命令把短暂的 HawdbBusy 直接返回给调用者

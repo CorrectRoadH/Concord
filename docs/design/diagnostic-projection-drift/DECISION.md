@@ -6,6 +6,8 @@ Selected: [annotated-drift](plans/annotated-drift/README.md)
 
 ## Rationale
 
+
+诊断投影与工作区导航采用同一 observeProjection 原语、漂移分拣与替换规则；漂移结果诚实标注后可作为首份投影，失败具名并保留 scannedAt。独立 Opus 5.5 审查两轮，阻断项已修订。
 诊断投影与工作区导航使用同一个 `observeProjection` 原语与同一套替换规则。扫描内部复核产生的漂移 finding 先分拣为漂移，再执行完整图门禁，因此 docs、测试与代码编辑下的结果都能诚实标注后作为第一份投影发布。已有一致投影永不被不一致结果替换，陈旧程度不比现状差。失败按开放的具名码追加，不淘汰已有投影；`scannedAt` 保留，同键合并仍能判定请求已满足。
 
 ## Rejected Options

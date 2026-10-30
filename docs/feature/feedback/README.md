@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: feedback
-title: 多来源反馈与本地处理
-kind: feature
----
-
 # 多来源反馈与本地处理
 
 维护者和 AI 将本地观察、GitHub issue、Linear issue 汇入同一反馈入口，以带角色的关系关联工程 Memory 与承接它的 Spec，并在项目中保留调查笔记和关闭结论。来源由可扩展的读取适配器提供；产品行为由 Feature 声明，修复核验的结论写在 Issue 的关闭结论中。
@@ -14,7 +7,7 @@ Web 以常驻反馈导航和右侧详情组织处理流程，导航提供搜索�
 - [处理来自不同来源的反馈](use-case/triage-feedback.md)
 - [CLI 与 Web 用法](cli.md)
 - [身份、存储与接入边界](architecture.md)
-- [生命周期](lifecycle.md)
+- [生命周期](architecture.md)
 - [适配器接口](library.md)
 - [CLI 登录态复用设计](cli-integration.md)
 

@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: vite-plus-toolchain-validation
-title: Vite+ 任务入口与脚本职责验收
-createdAt: 2026-10-23T06:28:51.409Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # Vite+ 任务入口与脚本职责验收

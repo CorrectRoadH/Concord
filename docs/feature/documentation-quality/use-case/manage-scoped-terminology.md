@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: manage-scoped-terminology
-title: 管理按目录归属的术语与写作写作规则
-kind: use-case
-feature: docs/feature/documentation-quality/README.md
----
-
 
 
 # 管理按目录归属的术语与写作写作规则

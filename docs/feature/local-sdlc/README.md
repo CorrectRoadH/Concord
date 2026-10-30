@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: local-sdlc
-title: 本地 SDLC 闭环
-kind: feature
----
-
 # 本地 SDLC 闭环
 
 Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品 Spec、可执行验收、Issue 和 Memory。它面向离线、可移植的开发流程：文档与源码是事实来源，全部文件可以直接编辑。缓存可以随时删除，删除后结论不变。修复核验的结论写在 Issue 中，中断写入的恢复记录必须保留。

@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: refresh-timeout-query-pending
-title: 大仓库后台刷新超时导致诊断查询持续 QueryPending
-createdAt: 2026-10-06T03:44:03.044Z
-kind: memory
-memoryKind: problem
-state: open
-epoch: 0
-evidenceRequirement: command
-promotions: []
-history: []
+status: open
 ---
 
 # 大仓库后台刷新超时导致诊断查询持续 QueryPending
@@ -41,3 +31,11 @@ system 时间占比约 55%，推测文件系统调用次数是主要成本，尚
 - 用 `pnpm profile refresh --consumer scale` 或冻结的 rpg-game 副本定位耗时来源（测量路径见 docs/engineering/concord-self-hosting/performance.md）。
 - 用 `pnpm bench query --consumer scale` 检查刷新上限（契约见 query-asynchronous-projections 的“刷新上限”表）。
 - 超时需要具名错误并记录耗时。
+
+## 原记录信息
+
+```yaml
+createdAt: 2026-10-06T03:44:03.044Z
+epoch: 0
+evidenceRequirement: command
+```

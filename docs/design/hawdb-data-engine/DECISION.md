@@ -6,6 +6,8 @@ Selected: [native-embedded](plans/native-embedded/README.md)
 
 ## Rationale
 
+
+采用受限 HawDB 原生引擎，明确打开模式、资源预算、窄原生边界、发行条件与缓存清理的所有权。
 统一 HawDB 满足用户对持久与短期缓存的明确要求。实际原生探针证明所需存储、事务与内存 API 可用；来源 owner 和授权仍在既有边界内。独立挑战的有限定案条件已写入具体打开模式、锁 guard、资源预算及发行 Spec，并显式修订 c-001/c-005。实现后必须完成相应故障、性能与包体验收，不以设计结构检查替代测试。
 
 ## Rejected Options

@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-14-1
-title: 汇总已采用的工程约束，并落实本轮 dogfood 要求
-createdAt: 2026-10-30T02:52:46.834Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 汇总已采用的工程约束，并落实本轮 dogfood 要求
 
 宪法采用，日期 2026-09-14。
 

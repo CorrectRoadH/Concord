@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: web-workbench
-title: 面向人的项目工作台
-kind: feature
----
-
 # 面向人的项目工作台
 
 `concord view` 在当前 Git 工作区提供 Web 工作台。Web 为维护者提供导航、表单、富文本编辑与结果检查；CLI 为 AI 提供严格输入、明确命令和 JSON 输出。两者使用同一套领域校验。

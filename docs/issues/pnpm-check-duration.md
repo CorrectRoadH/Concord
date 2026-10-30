@@ -1,17 +1,8 @@
 ---
-format: concord.document/v1
-id: pnpm-check-duration
-title: pnpm check 在本机运行接近一小时
-createdAt: 2026-10-23T03:49:01.461Z
-kind: issue
-state: draft
-memoryRelations:
-  - kind: delivery
-    memory: memory/pnpm-check-performance.md
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
+relations:
+  - role: decision
+    target: memory/pnpm-check-performance.md
 ---
 
 # pnpm check 在本机运行接近一小时

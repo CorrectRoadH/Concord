@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: portable-publication
-title: Portable publication coordination
-createdAt: 2026-09-22T00:05:18.595Z
-kind: design
-alternatives:
-  - single-lock
-  - retain-flock
-decision:
-  selected: single-lock
-  reason: 以 Node 文件租约和短快照协调发布，保留缓存可重建、journal 恢复与持久 runner 清理状态。
-  at: 2026-09-22T00:22:46.603Z
-  targets:
-    - docs/feature/portable-coordination/README.md
----
-
 # Portable publication coordination
 
 本设计比较 Node 文件协调与外部 `flock`。共享读取的行为以 [功能验收](../../feature/portable-coordination/use-case/coordinate-local-publications.md) 和 [总架构](../../architecture.md) 为准；缓存边界见 HawDB 设计。

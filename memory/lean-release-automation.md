@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: lean-release-automation
-title: 快速发布与无人值守渠道同步
-createdAt: 2026-09-27T14:18:30.430Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions: []
-history: []
+type: decision
+status: current
 ---
 
 # 快速发布与无人值守渠道同步

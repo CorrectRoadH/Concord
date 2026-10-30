@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: hawdb-unified-cache-acceptance
-title: HawDB 统一缓存验收
-createdAt: 2026-09-23T05:16:58.431Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # HawDB 统一缓存验收

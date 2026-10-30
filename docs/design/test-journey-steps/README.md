@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: test-journey-steps
-title: 测试关联到 Use Case 步骤
-createdAt: 2026-10-21T07:31:30.413Z
-kind: design
-alternatives:
-  - step-anchor
-  - step-heading
-decision:
-  selected: step-anchor
-  reason: 显式列表项 anchor 保持主流程连续，身份独立于文字与位置，并提供补齐与原子改名工具；相关性只报告正向观察
-  at: 2026-10-21T09:28:46.414Z
-  targets:
-    - docs/feature/local-sdlc/use-case/link-tests-to-steps.md
----
-
 # 测试关联到 Use Case 步骤
 
 ## Problem

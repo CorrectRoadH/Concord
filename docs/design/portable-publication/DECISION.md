@@ -8,6 +8,8 @@ Selected: [single-lock](plans/single-lock/README.md)
 
 ## Rationale
 
+
+以 Node 文件租约和短快照协调发布，保留缓存可重建、journal 恢复与持久 runner 清理状态。
 Use one Node filesystem publication lease and short snapshots. Coordination retains durable running, finalizing, and quarantined runner states. The cache is disposable. The selected plan excludes old-version migration and requires release validation.
 
 ## Rejected Options

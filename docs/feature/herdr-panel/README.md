@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: herdr-panel
-title: 在 Herdr 面板中查看 Spec
-kind: feature
----
-
 # 在 Herdr 面板中查看 Spec
 
 Concord 提供一个 Herdr 插件，在终端 pane 中打开只读的 Spec 面板。维护者不用离开终端，就能像在 Web 工作台中一样读到 Spec 的内容：Feature 正文、Use Case 的主流程与验收、关联的实现与测试、测试最近的状态，以及概念的定义。

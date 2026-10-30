@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: plan-content-delivery
-title: Plan 内容发布验证
-createdAt: 2026-10-02T01:33:07.890Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # Plan 内容发布验证

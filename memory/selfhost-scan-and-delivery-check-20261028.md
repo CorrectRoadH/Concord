@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: selfhost-scan-and-delivery-check-20261028
-title: 自举扫描与交付门禁核验
-createdAt: 2026-10-28T04:46:34.910Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # 自举扫描与交付门禁核验

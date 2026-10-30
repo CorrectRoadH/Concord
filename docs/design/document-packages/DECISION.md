@@ -6,6 +6,8 @@ Selected: [preserve-identities](plans/preserve-identities/README.md)
 
 ## Rationale
 
+
+保留现有身份、历史来源与当前引用；Research 以目录归属并允许自由正文。
 选择 preserve-identities。目录用于组织，owner ID 继续标识独立文档。Research 统一以目录 README 为 owner，附页不带 owner metadata；顶层主题只从物理目录派生，不增加注册表。
 
 离线工具保存原路径、实际字节摘要、Git 基线和逐项分类。当前关系及 Markdown 链接随路径重定向；历史、执行收据和来源路径保持原声明。原文明示的取消、暂缓、选择分别进入 cancellation、deferral、decision，不推断未知裁决时间。

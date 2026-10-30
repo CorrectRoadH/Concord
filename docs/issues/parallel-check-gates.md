@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: parallel-check-gates
-title: 多个 agent 在同一 checkout 并行运行完整门禁
-createdAt: 2026-10-29T13:39:05.626Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # 多个 agent 在同一 checkout 并行运行完整门禁

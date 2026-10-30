@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: portable-coordination
-title: Portable coordination with short publication leases
-kind: feature
----
-
 
 
 # Portable coordination with short publication leases

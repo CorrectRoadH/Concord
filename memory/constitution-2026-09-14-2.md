@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-14-2
-title: 落实用户无 legacy 运行时约束
-createdAt: 2026-10-30T02:52:47.784Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 落实用户无 legacy 运行时约束
 
 宪法修订，日期 2026-09-14。
 

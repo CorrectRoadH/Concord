@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: continue-in-web
-title: 在 Web 工作台继续
-kind: use-case
-feature: docs/feature/herdr-panel/README.md
----
-
 # 在 Web 工作台继续
 
 维护者在面板中读到需要修改的 Spec，在 Web 工作台中打开同一个条目继续编辑。

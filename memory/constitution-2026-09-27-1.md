@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-27-1
-title: 按操作所需事实划分依赖，分开只读访问、发布协调与证据裁决
-createdAt: 2026-10-30T02:52:54.803Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 按操作所需事实划分依赖，分开只读访问、发布协调与证据裁决
 
 宪法修订，日期 2026-09-27。
 

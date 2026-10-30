@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: embed-p5-sketch
-title: 在 Markdown 中运行 p5 交互图解
-kind: use-case
-feature: docs/feature/web-workbench/README.md
----
-
 
 # 在 Markdown 中运行 p5 交互图解
 

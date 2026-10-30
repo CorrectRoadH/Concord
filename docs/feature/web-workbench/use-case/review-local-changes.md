@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: review-local-changes
-title: 查看本地未提交变更
-kind: use-case
-feature: docs/feature/web-workbench/README.md
----
-
 # 查看本地未提交变更
 
 开发者在 Git 工作区运行 `concord view`，打开显示的地址，直接看到尚未提交的变更。

@@ -8,6 +8,8 @@ Selected: [compatible](plans/compatible/README.md)
 
 ## Rationale
 
+
+采用兼容演进，明确治理格式、条款 anchor 解析、恢复授权与组合验收的边界。
 选择 compatible。格式、锚点、恢复授权和组合验收边界见 [governance](plans/compatible/governance.md)。
 
 G1: compatible 原文定义新 init、严格可解析 TS 数据配置和非交互行为，但其部分旧 JSON 运行时兼容后来被 TS-only 裁决替代；历史目标不能据此解释为当前 runtime 支持。

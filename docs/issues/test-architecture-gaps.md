@@ -1,16 +1,8 @@
 ---
-format: concord.document/v1
-id: test-architecture-gaps
-title: 测试集与测试架构的差距
-createdAt: 2026-10-30T03:36:33.470Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
+
+# 测试集与测试架构的差距
 
 ## 现象
 

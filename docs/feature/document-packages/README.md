@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: document-packages
-title: 文档目录与完整发现
-kind: feature
----
-
 # 文档目录与完整发现
 
 维护者在 Concord 中看到消费仓库的完整文档主题，并以主题目录自由组织 Research。主题由路径与 README 的一级标题确定（[领域与数据所有权](../local-sdlc/library.md#owner)）；无法读取的受管输入产生诊断和不完整状态，保留原文件。

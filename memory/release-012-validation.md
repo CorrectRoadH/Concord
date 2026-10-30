@@ -1,15 +1,9 @@
 ---
-format: concord.document/v1
-id: release-012-validation
-title: 0.12 发布验证与缓存关闭回归
-createdAt: 2026-10-22T02:47:27.307Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
+
+# 0.12 发布验证与缓存关闭回归
 
 2026-10-22 为四项方案、编辑器服务与 TypeScript 7 beta 集成执行发布验证。
 

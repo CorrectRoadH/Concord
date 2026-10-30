@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: documentation-writing-import-acceptance
-title: 文档检查迁入的初轮验收
-createdAt: 2026-09-23T02:15:14.794Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # 文档检查迁入的初轮验收

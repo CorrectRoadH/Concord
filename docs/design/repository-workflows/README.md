@@ -1,21 +1,3 @@
----
-format: concord.document/v1
-id: repository-workflows
-title: 仓库工作流贡献的归属与远端 Issue 写入
-createdAt: 2026-10-01T03:54:52.005Z
-kind: design
-alternatives:
-  - profile-owned
-  - main-cli-owned
-decision:
-  selected: main-cli-owned
-  reason: 本地 Issue 写入留在基础 concord issue 以满足无 profile 的本地 CRUD；远端写入以绑定 payload 的授权串、CAS 与固定 gh 写请求执行一次；Trace 只读查询隔离单文件测试源码错误，完整图裁决仍拒绝不完整输入；Docs Work 采用 scoped-clean 与配置声明的检查。独立审查 8 项阻断已修订。
-  at: 2026-10-01T07:58:45.990Z
-  targets:
-    - docs/feature/neutral-project-governance/README.md
-    - docs/feature/feedback/README.md
----
-
 # 仓库工作流贡献的归属与远端 Issue 写入
 
 ## Problem

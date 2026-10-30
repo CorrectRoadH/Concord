@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-29-1
-title: 工作区导航由只读历史投影提供，允许诚实标注的来源漂移，防止普通编辑阻断工作台
-createdAt: 2026-10-30T02:52:57.706Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 工作区导航由只读历史投影提供，允许诚实标注的来源漂移，防止普通编辑阻断工作台
 
 宪法修订，日期 2026-09-29。
 

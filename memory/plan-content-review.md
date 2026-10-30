@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: plan-content-review
-title: Plan 内容布局设计挑战
-createdAt: 2026-10-02T01:07:40.015Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # Plan 文件与目录的设计挑战

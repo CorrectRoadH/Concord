@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: manage-writing
-title: 在 Web 管理写作规则与术语
-kind: use-case
-feature: docs/feature/documentation-quality/README.md
----
-
 # 在 Web 管理写作规则与术语
 
 维护者在侧栏独立的「写作」或「术语」入口选择全局或局部目录，分别编辑本目录写作规则和术语。术语列表从全项目来源派生，选中后编辑所属 concepts.md 源码，显示定义来源和作用域；新建局部来源通过受管 API 验证路径。

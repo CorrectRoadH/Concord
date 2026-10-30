@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-23-1
-title: 契约写法与源码关联：C-011 覆盖测试与代码声明并规定最小完整范围，C-012 规定行为页与实现页分工；C-012…
-createdAt: 2026-10-30T02:53:00.552Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 契约写法与源码关联：C-011 覆盖测试与代码声明并规定最小完整范围，C-012 规定行为页与实现页分工；C-012…
 
 宪法修订，日期 2026-10-23。
 

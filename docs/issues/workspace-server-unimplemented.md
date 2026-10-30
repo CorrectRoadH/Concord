@@ -1,16 +1,8 @@
 ---
-format: concord.document/v1
-id: workspace-server-unimplemented
-title: 工作区服务与 Herdr 面板尚未实现
-createdAt: 2026-10-30T02:03:12.146Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
+
+# 工作区服务与 Herdr 面板尚未实现
 
 ## 现象
 

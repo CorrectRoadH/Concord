@@ -1,5 +1,4 @@
 ---
-format: concord.constitution/v3
 status: active
 ---
 

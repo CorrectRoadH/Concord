@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: document-identity
-title: 文档身份与物理名称分离
-createdAt: 2026-09-24T00:00:00.000Z
-kind: design
-alternatives:
-  - shared-policy
-  - per-entry-validation
-decision:
-  selected: shared-policy
-  reason: 各入口共享布局和身份解析，避免中文名称、归档分类与写入定位出现分歧。
-  at: 2026-09-24T00:00:00.000Z
-  targets:
-    - docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
----
-
 # 文档身份与物理名称分离
 
 采用共享政策：内部 ID 用于查询，实际路径拥有 canonical 身份，创建命名是默认值。名称语法、分类根、package/leaf 布局、现行与历史分类由同一模块定义；各入口保留自己的错误协议与资源生命周期。

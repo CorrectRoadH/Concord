@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: recover-local-state
-title: 保护并恢复本地状态
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 保护并恢复本地状态
 
 ## 用户目标

@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: exit-hang-after-output
-title: 命令输出完整 JSON 后进程偶发不退出
-createdAt: 2026-10-29T13:07:47.374Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # 命令输出完整 JSON 后进程偶发不退出

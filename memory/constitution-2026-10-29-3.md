@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-29-3
-title: 已裁决的 Design 是决策记录，现行规则只由 Spec 拥有并可由检查器强制链接边界
-createdAt: 2026-10-30T02:53:03.400Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 已裁决的 Design 是决策记录，现行规则只由 Spec 拥有并可由检查器强制链接边界
 
 宪法修订，日期 2026-10-29。
 

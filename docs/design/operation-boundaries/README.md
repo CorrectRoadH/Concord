@@ -1,21 +1,3 @@
----
-format: concord.document/v1
-id: operation-boundaries
-title: 按操作依赖划分读取、发布与恢复边界
-createdAt: 2026-09-26T23:36:59.072Z
-kind: design
-alternatives:
-  - scoped
-  - global
-decision:
-  selected: scoped
-  reason: 按操作依赖划分读取与发布边界，同时保留完整性、证据与恢复门禁。
-  at: 2026-09-27T00:03:15.879Z
-  targets:
-    - docs/feature/portable-coordination/README.md
-    - docs/feature/local-sdlc/README.md
----
-
 # 按操作依赖划分读取、发布与恢复边界
 
 本设计定义局部操作的依赖、故障影响与恢复结果。适用宪法条款见本页 Constitution 一节。

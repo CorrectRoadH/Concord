@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: query-asynchronous-projections
-title: 读取异步刷新的诊断投影
-kind: use-case
-feature: docs/feature/local-data-engine/README.md
----
-
 # 读取异步刷新的诊断投影
 
 用户执行 trace show、trace gaps 或 review render 时，CLI 立即读取最近完成的诊断投影，并请求后台刷新。首次无缓存返回 QueryPending，退出码为 1；该状态不表示没有问题。--fresh 使用当前来源并等待扫描结果，--dry-run 不启动后台刷新。

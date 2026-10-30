@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: operation-boundaries-diagnosis
-title: 操作依赖、完整性与恢复回执的边界
-createdAt: 2026-09-27T00:22:36.252Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # 操作依赖、完整性与恢复回执的边界

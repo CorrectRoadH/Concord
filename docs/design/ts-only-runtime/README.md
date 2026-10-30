@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: ts-only-runtime
-title: 仅静态 TS 的运行时与离线迁移边界
-createdAt: 2026-09-14T15:25:32.984Z
-kind: design
-alternatives:
-  - ts-only
-  - runtime-compatibility
-decision:
-  selected: ts-only
-  reason: 仅接受 TypeScript 配置运行时；旧格式离线迁移，错误优先级、拒绝识别与 prepared-init 的例外由契约约束。
-  at: 2026-09-14T15:33:25.190Z
-  targets:
-    - docs/feature/project-onboarding/README.md
----
-
 
 # 仅静态 TS 的运行时与离线迁移边界
 

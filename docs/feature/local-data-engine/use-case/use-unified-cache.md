@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: use-unified-cache
-title: 使用统一的可重建持久缓存
-kind: use-case
-feature: docs/feature/local-data-engine/README.md
----
-
 # 使用统一的可重建持久缓存
 
 缓存的 `ready` 状态表示投影可读取，不表示某次扫描命中。扫描分别报告测试与代码缓存的状态、命中数和未命中数；不可用时保留原因，回源结果仍需通过来源一致性核验。

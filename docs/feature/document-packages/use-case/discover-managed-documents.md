@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: discover-managed-documents
-title: 完整发现受管文档
-kind: use-case
-feature: docs/feature/document-packages/README.md
----
-
 # 完整发现受管文档
 
 维护者打开消费仓库，从 CLI 和 Web 发现当前格式的 Engineering、Roadmap、Design 和 Research。主题由目录与 README 的一级标题确定；候选、材料、索引和模板保持各自角色。

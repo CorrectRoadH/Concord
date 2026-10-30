@@ -6,6 +6,8 @@ Selected: [directory-owned](plans/directory-owned/README.md)
 
 ## Rationale
 
+
+采用目录归属、JSON 真源和派生汇总，明确局部术语作用域与迁移边界。
 目录直接拥有术语与政策作用域，全项目视图只派生。写入、恢复、迁移和有效语料遵守采用方案中的明确限制。
 
 ## Rejected Options

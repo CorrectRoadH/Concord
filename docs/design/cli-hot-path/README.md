@@ -1,21 +1,3 @@
----
-format: concord.document/v1
-id: cli-hot-path
-title: CLI 热路径与 HawDB 进程模型
-createdAt: 2026-10-29T13:34:01.670Z
-kind: design
-alternatives:
-  - hawdb-owner-service
-  - per-command-open
-  - workspace-server
-decision:
-  selected: workspace-server
-  reason: 按引擎规定由每个 worktree 唯一的工作区服务持有缓存，并为 Herdr 面板与 Web 推送代次
-  at: 2026-10-30T01:59:01.856Z
-  targets:
-    - docs/feature/local-data-engine/README.md
----
-
 # CLI 热路径与 HawDB 进程模型
 
 ## Problem

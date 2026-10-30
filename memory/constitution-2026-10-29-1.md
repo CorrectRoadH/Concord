@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-29-1
-title: 采用 link-owned 宪法结构：条款与款使用 {#id}，依据关系由正文链接拥有；总则新增条款写法，正文的序号…
-createdAt: 2026-10-30T02:53:01.498Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 采用 link-owned 宪法结构：条款与款使用 {#id}，依据关系由正文链接拥有；总则新增条款写法，正文的序号…
 
 宪法修订，日期 2026-10-29。
 

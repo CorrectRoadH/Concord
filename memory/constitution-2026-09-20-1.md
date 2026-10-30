@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-20-1
-title: 将项目实践提升为中立治理标准，明确消费者执行职责和不可降级的证据要求
-createdAt: 2026-10-30T02:52:48.762Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 将项目实践提升为中立治理标准，明确消费者执行职责和不可降级的证据要求
 
 宪法修订，日期 2026-09-20。
 

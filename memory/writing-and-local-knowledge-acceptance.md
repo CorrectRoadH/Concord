@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: writing-and-local-knowledge-acceptance
-title: 写作管理与本地知识功能验收
-createdAt: 2026-09-23T02:40:35.234Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # 写作管理与本地知识功能验收

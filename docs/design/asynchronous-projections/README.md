@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: asynchronous-projections
-title: 无阻塞查询与异步投影
-createdAt: 2026-09-28T05:30:26.645Z
-kind: design
-alternatives:
-  - snapshots
-  - shared-leases
-decision:
-  selected: snapshots
-  reason: 采用历史诊断投影、乐观来源读取与短提交；当前事实门禁和资源所有权保持独立。
-  at: 2026-09-28T06:30:30.842Z
-  targets:
-    - docs/feature/local-data-engine/README.md
----
-
 # 无阻塞查询与异步投影
 
 ## Problem

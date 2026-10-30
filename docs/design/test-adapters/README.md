@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: test-adapters
-title: 多框架测试 adapter
-createdAt: 2026-10-21T07:34:14.443Z
-kind: design
-alternatives:
-  - process-adapter
-  - marker-extension
-decision:
-  selected: process-adapter
-  reason: 源码标记保持唯一关联来源，adapter 只在显式收集与执行时提供原生观察，保留 @native 后备；C-011 第 1、3 款已修订
-  at: 2026-10-21T09:29:58.762Z
-  targets:
-    - docs/feature/local-sdlc/use-case/run-native-test-adapters.md
----
-
 # 多框架测试 adapter
 
 ## Problem

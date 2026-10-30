@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: cli-hot-path-measurements-20261029
-title: CLI 热路径与 HawDB 进程模型的实测
-createdAt: 2026-10-29T22:06:10.846Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # CLI 热路径与 HawDB 进程模型的实测（2026-10-29）

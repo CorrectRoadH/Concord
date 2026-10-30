@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: coordinate-local-publications
-title: Coordinate local edits without external lock helpers
-kind: use-case
-feature: docs/feature/portable-coordination/README.md
----
-
 
 # Coordinate local edits without external lock programs
 

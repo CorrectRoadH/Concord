@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: pnpm-check-performance
-title: pnpm check 的并发、归档复用与完整验收测量
-createdAt: 2026-10-23T05:19:58.549Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # pnpm check 的性能测量与隔离

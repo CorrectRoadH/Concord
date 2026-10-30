@@ -6,6 +6,8 @@ Selected: [scoped](plans/scoped/README.md)
 
 ## Rationale
 
+
+按操作依赖划分读取与发布边界，同时保留完整性、证据与恢复门禁。
 操作依赖由目标与不变量决定。乐观来源核验保护合作发布的一致性，局部 owner 查询消除无关内容错误的传播，全局诊断显式保留不完整状态。准确 token 恢复、完整性传播与 runner 阻塞规则由所选方案明确约束。
 
 ## Rejected Options

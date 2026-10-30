@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: cross-platform-release
-title: Cross-platform tagged releases
-kind: feature
----
-
 # 跨平台标签发布
 
 ## 问题
@@ -33,7 +26,7 @@ macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安
 
 - [CLI](cli.md)
 - [架构](architecture.md)
-- [生命周期](lifecycle.md)
+- [生命周期](architecture.md)
 
 包内含同一固定源码与 Cargo lock 构建的 linux-x64-glibc 与 darwin-arm64 HawDB N-API 引擎，macOS 部署目标为 15.0。原生目标任务先于唯一的打包任务；ABI、源码身份、上游 revision 或摘要缺失或不一致都会阻止发布。
 

@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: scoped-terminology-acceptance
-title: 目录作用域术语与写作政策验收
-createdAt: 2026-09-23T03:38:20.591Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # 目录作用域术语与写作政策验收

@@ -1,19 +1,18 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-30-3
-title: 不做迁移与向前兼容：只有当前格式，没有历史包袱
-createdAt: 2026-10-30T03:06:04.207Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md#c-009
-  - docs/constitution.md#c-009-1
-  - docs/constitution.md#c-009-2
-  - docs/constitution.md#c-009-3
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md#c-009
+  - role: amends
+    target: docs/constitution.md#c-009-1
+  - role: amends
+    target: docs/constitution.md#c-009-2
+  - role: amends
+    target: docs/constitution.md#c-009-3
 ---
+
+# 不做迁移与向前兼容：只有当前格式，没有历史包袱
 
 宪法修订，日期 2026-10-30。
 

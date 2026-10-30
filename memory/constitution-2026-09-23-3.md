@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-23-3
-title: 按用户要求统一到HawDB，并落实独立挑战要求的窄原生边界
-createdAt: 2026-10-30T02:52:53.836Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 按用户要求统一到HawDB，并落实独立挑战要求的窄原生边界
 
 宪法修订，日期 2026-09-23。
 

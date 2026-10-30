@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: triage-feedback
-title: 将外部反馈关联到项目调查与功能
-kind: use-case
-feature: docs/feature/feedback/README.md
----
-
 
 # 将外部反馈关联到项目调查与功能
 

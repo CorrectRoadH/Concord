@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: concord-self-hosting
-title: Concord 自举维护
-kind: engineering
----
-
 # Concord 自举维护
 
 本工程主题规定 Concord 如何用当前 checkout 的 CLI（`pnpm concord`）维护本仓库 Spec。仓库中的 Markdown owner 与真实测试注释共同接受 `doctor`、`check`、`trace` 和 `review` 验证；最终质量门是包含构建、类型检查、自身 Spec 检查与打包消费者测试的 `pnpm check`。

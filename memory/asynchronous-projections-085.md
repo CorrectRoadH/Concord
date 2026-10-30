@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: asynchronous-projections-085
-title: 0.8.5 异步诊断与短提交验收
-createdAt: 2026-09-28T06:44:28.446Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # 0.8.5 异步诊断与短提交

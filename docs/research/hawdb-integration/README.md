@@ -1,13 +1,3 @@
----
-format: concord.document/v1
-id: hawdb-integration
-title: HawDB 接入边界与上游证据
-createdAt: 2026-09-23T04:17:23.353Z
-kind: research
-sources:
-  - https://github.com/nowledge-co/hawdb
----
-
 # HawDB 接入边界与上游证据
 
 ## 上游事实
@@ -31,3 +21,7 @@ Node 24.19.0 通过 N-API 调用真实公开 Database facade 的隔离探针验�
 固定 napi 3.13.0、napi-derive 3.6.9，stripped release 产物为 20,062,528 bytes。单次本机粗测使用 1000 条、每条 8,683 bytes：单事务批量写约 302 ms，逐条事务写约 1207 ms，首次/重复完整读取约 69/74 ms，已有数据库重开约 90 ms。此数据不包含真实 Concord 对象解码与完整请求，也不是断电冷启动或跨平台性能保证。
 
 本机产物依赖 Nix glibc/libgcc，不能直接当通用 Linux 包。生产桥接必须补齐路径和大小边界、具名错误、Schema 验证及资源释放；不能照搬原型的“任何表读取错误都尝试建表”。普通事务回滚不能替代强制中断恢复验收。
+
+## Sources
+
+- Source: https://github.com/nowledge-co/hawdb

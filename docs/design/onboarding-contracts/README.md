@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: onboarding-contracts
-title: 初始化配置与项目治理 Spec
-createdAt: 2026-09-14T13:53:56.667Z
-kind: design
-alternatives:
-  - compatible
-  - replacement
-decision:
-  selected: compatible
-  reason: 采用兼容演进，明确治理格式、条款 anchor 解析、恢复授权与组合验收的边界。
-  at: 2026-09-14T14:00:13.281Z
-  targets:
-    - docs/feature/project-onboarding/README.md
----
-
 
 > 历史裁决：其中旧配置、journal 和收据的运行时兼容规则已被 [TS-only 裁决](../ts-only-runtime/README.md) 替代；以下保留原设计记录。
 

@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: inspect-writing
-title: 检查文档写作与术语一致性
-kind: use-case
-feature: docs/feature/documentation-quality/README.md
----
-
 
 # 检查文档写作与术语一致性
 

@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: shared-scan-cache-performance-20260928
-title: 共享扫描与缓存性能复测
-createdAt: 2026-09-28T02:46:16.631Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # 共享扫描与缓存性能复测

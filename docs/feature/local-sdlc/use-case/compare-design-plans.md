@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: compare-design-plans
-title: 逐项比较方案并明确裁决
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 逐项比较方案并明确裁决
 
 ## 场景

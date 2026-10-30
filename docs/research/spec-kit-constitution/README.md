@@ -1,16 +1,3 @@
----
-format: concord.document/v1
-id: spec-kit-constitution
-title: Spec Kit 宪法与功能计划流程
-createdAt: 2026-09-14T13:55:59.202Z
-kind: research
-observedAt: 2026-09-14
-sources:
-  - https://github.com/github/spec-kit/blob/main/templates/constitution-template.md
-  - https://github.com/github/spec-kit/blob/main/templates/commands/constitution.md
-  - https://github.com/github/spec-kit/blob/main/templates/plan-template.md
----
-
 # Spec Kit 宪法与功能计划流程
 
 ## 调研结论
@@ -26,3 +13,10 @@ sources:
 宪法位于 docs/constitution.md 且必需，DESIGN.md 可选。功能发现的通用规则经过明确修订进入宪法，功能专属细节保留在 Feature。来源与影响可追溯；当前正文只维护一份。
 
 参见 [需求 Feature](../../feature/project-onboarding/README.md) 和 [待裁决 Design](../../design/onboarding-contracts/README.md)。本调研不构成已采用的存储或安全 Spec。
+
+## Sources
+
+- Observed at: 2026-09-14
+- Source: https://github.com/github/spec-kit/blob/main/templates/constitution-template.md
+- Source: https://github.com/github/spec-kit/blob/main/templates/commands/constitution.md
+- Source: https://github.com/github/spec-kit/blob/main/templates/plan-template.md

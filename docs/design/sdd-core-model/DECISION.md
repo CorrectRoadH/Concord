@@ -6,6 +6,8 @@ Selected: [derive-duplicates](plans/derive-duplicates/README.md)
 
 ## Rationale
 
+
+约定推导重复事实，显式保存不可推导语义，全部文件直接编辑并由差异门禁保证
 derive-duplicates 删除能从路径、一级标题与 Git 推导的全部重复声明与空样板，同时显式保存推导不出的语义：生命周期状态、带角色的关系、远端来源的稳定身份、关闭结论与修复核验。convention-first 删掉了后一类，trimmed-current 保留了前一类。全部文件可以直接编辑，可信度由差异门禁保证，符合用户「agent 直接编辑文件」的要求。
 
 G3: 编辑全部文件不需要命令，修复缺陷少两步；顶层命令仍有 24 个，其中 6 个是维护与集成命令。

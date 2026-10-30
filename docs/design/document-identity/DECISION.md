@@ -6,6 +6,8 @@ Selected: [shared-policy](plans/shared-policy/README.md)
 
 ## Rationale
 
+
+各入口共享布局和身份解析，避免中文名称、归档分类与写入定位出现分歧。
 共享政策将名称与布局判断收敛为单一事实，同时让现有资源 owner 保留发布职责。ID 的唯一查询与实际路径分开，归档也由来源和类型共同分类，满足跨入口一致目标。
 
 ## Rejected Options

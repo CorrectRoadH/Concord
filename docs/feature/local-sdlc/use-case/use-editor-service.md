@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: use-editor-service
-title: 在编辑器中查看 Concord 关系
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 在编辑器中查看 Concord 关系
 
 ## 场景

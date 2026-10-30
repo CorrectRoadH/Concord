@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: view-native-failure-latency
-title: View 慢请求与原生产物失败退避
-createdAt: 2026-09-27T08:13:54.107Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # View 慢请求与原生产物加载失败

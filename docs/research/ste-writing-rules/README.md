@@ -1,16 +1,3 @@
----
-format: concord.document/v1
-id: ste-writing-rules
-title: ASD-STE100 规则类别与使用边界
-createdAt: 2026-10-21T07:38:10.055Z
-kind: research
-observedAt: 2026-10-21
-sources:
-  - https://www.asd-europe.org/news-media/news-events/news/simplified-technical-english-asd-ste100-issue-9/
-  - https://asd-ste100.org/
-  - https://www.asd-ste100.org/software.html
----
-
 # ASD-STE100 规则类别与使用边界
 
 ## 规范事实与证据等级
@@ -54,3 +41,10 @@ Concord 的中文阈值、Han 比例、混排策略、token、缩写集合、代
 Concord 使用自己的规则名与项目自有词表，不随包分发 ASD-STE100 原文、词典或商标标志，不宣称获得认证或符合该规范。批准词表由项目维护，不从免费申请机制推导复制与再分发权利。
 
 工具来源、项目参数与规范事实分别标注；无论候选选择何种 linter，建议和门禁都不能作为合规证明。
+
+## Sources
+
+- Observed at: 2026-10-21
+- Source: https://www.asd-europe.org/news-media/news-events/news/simplified-technical-english-asd-ste100-issue-9/
+- Source: https://asd-ste100.org/
+- Source: https://www.asd-ste100.org/software.html

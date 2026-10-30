@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: workspace-refresh-false-failure
-title: 工作区刷新误报刷新失败
-createdAt: 2026-09-30T08:25:13.180Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # 工作区刷新误报“最近刷新失败”

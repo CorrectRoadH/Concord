@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: adopt-neutral-governance
-title: 按 Concord 规范接入软件项目
-kind: use-case
-feature: docs/feature/neutral-project-governance/README.md
----
-
 # 按 Concord 规范接入软件项目
 
 ## 用户目标

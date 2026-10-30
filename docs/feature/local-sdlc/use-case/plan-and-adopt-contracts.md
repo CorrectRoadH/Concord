@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: plan-and-adopt-contracts
-title: 规划并采用文档 Spec
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 规划并采用文档 Spec
 
 ## 用户目标

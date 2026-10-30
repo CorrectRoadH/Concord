@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: apply-controlled-writing
-title: 应用受控写作规则
-kind: use-case
-feature: docs/feature/documentation-quality/README.md
----
-
 # 应用受控写作规则
 
 ## 场景

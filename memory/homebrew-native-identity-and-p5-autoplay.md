@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: homebrew-native-identity-and-p5-autoplay
-title: Homebrew 原生摘要与 p5 自动展示验收
-createdAt: 2026-09-27T12:41:09.295Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # Homebrew 原生产物摘要与 p5 自动展示

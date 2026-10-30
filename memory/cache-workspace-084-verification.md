@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: cache-workspace-084-verification
-title: 0.8.4 缓存恢复与工作区扫描验收
-createdAt: 2026-09-28T05:03:52.415Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # 0.8.4 缓存恢复与工作区扫描验收

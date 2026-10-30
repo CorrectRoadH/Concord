@@ -1,12 +1,3 @@
----
-imports:
-  - docs/feature/feedback/concepts.md#index
-  - docs/feature/feedback/concepts.md#recall
-deprecated:
-  cache-namespace: [缓存命名空间]
-  ownership-guard: [所有权守卫]
----
-
 # 本地数据引擎术语
 
 本页定义统一数据引擎中的术语，并引用反馈功能的 Index 与 Recall。

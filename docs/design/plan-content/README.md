@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: plan-content
-title: Plan 文件与目录
-createdAt: 2026-10-02T01:00:00.000Z
-kind: design
-alternatives:
-  - derived-entry
-  - directory-only
-decision:
-  selected: derived-entry
-  reason: 候选名保持唯一身份，文件或目录入口精确派生；当前检查仅在来源漂移时有界重试
-  at: 2026-10-02T01:10:36.225Z
-  targets:
-    - docs/feature/document-packages/README.md
----
-
 # Plan 文件与目录
 
 ## Problem

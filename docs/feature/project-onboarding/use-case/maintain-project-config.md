@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: maintain-project-config
-title: 安全维护项目配置
-kind: use-case
-feature: docs/feature/project-onboarding/README.md
----
-
 # 安全维护项目配置
 
 ## 用户目标

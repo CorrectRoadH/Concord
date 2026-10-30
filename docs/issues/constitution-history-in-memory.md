@@ -1,16 +1,8 @@
 ---
-format: concord.document/v1
-id: constitution-history-in-memory
-title: 宪法修订历史仍写在 frontmatter
-createdAt: 2026-10-30T02:03:13.507Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
+
+# 宪法修订历史仍写在 frontmatter
 
 ## 现象
 

@@ -6,6 +6,8 @@ Selected: [promote-to-spec](plans/promote-to-spec/README.md)
 
 ## Rationale
 
+
+已裁决的 Design 只作决策记录，现行规则提升到 Spec；concord check 强制 Spec 不链接 Design 中的规则页，完整归属由迁移核对验收。
 promote-to-spec 满足全部 Limit：迁移只改 Spec 与链接，不移动文件、不改 Design 记录；宪法修订按 C-008 记录；新增的 finding 不改变既有输出。它直接实现 G1：每个迁移输入条目在核对表中有唯一 owner 或取代依据，已采用但未实现的要求仍作为预期行为写入 Spec。G3 由 `SpecDependsOnDesignRecord` 强制链接目标的边界，正文委托由迁移核对逐条处理。
 
 G1: 待迁移完成后按核对表验收，当前为 pending。

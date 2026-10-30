@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: manage-local-observations
-title: 无外部服务时管理本地观察
-kind: use-case
-feature: docs/feature/feedback/README.md
----
-
 
 
 # 无外部服务时管理本地观察

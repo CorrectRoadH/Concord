@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: constitution-structure
-title: 宪法的结构、关联与写法
-createdAt: 2026-10-23T04:26:33.083Z
-kind: design
-alternatives:
-  - link-owned
-  - metadata-owned
-decision:
-  selected: link-owned
-  reason: 依据关系定位到句子，附页同样可以声明；条款与款用统一的 {#id}；独立审查两轮后采纳全部修正
-  at: 2026-10-23T04:44:36.897Z
-  targets:
-    - docs/feature/project-onboarding/README.md
----
-
 # 宪法的结构、关联与写法
 
 ## Problem

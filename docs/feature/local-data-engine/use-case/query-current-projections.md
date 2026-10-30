@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: query-current-projections
-title: 检索当前来源的派生投影
-kind: use-case
-feature: docs/feature/local-data-engine/README.md
----
-
 # 检索当前来源的派生投影
 
 Memory 和 Issue 的 index、recall 通过 Concord 工具读取。数据引擎保存可重建投影，来源文件拥有身份、正文、关联与生命周期。派生投影不能成为第二个登记表，不能绕过来源 Schema、路径、权限或当前摘要核验。

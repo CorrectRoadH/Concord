@@ -6,6 +6,8 @@ Selected: [snapshots](plans/snapshots/README.md)
 
 ## Rationale
 
+
+采用历史诊断投影、乐观来源读取与短提交；当前事实门禁和资源所有权保持独立。
 诊断可使用明确标识的历史结果；乐观读取与短提交允许查询和文档准备并行。
 
 ## Rejected Options

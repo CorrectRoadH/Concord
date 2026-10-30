@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: onboarding-delivery-history
-title: 初始化功能历史交付声明
-createdAt: 2026-09-23T02:12:15.856Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # 初始化功能历史交付声明

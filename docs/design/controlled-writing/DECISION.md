@@ -6,6 +6,8 @@ Selected: [policy-rules](plans/policy-rules/README.md)
 
 ## Rationale
 
+
+内置 v3 规则按目录合成，门禁确定且不依赖外部进程，字符路径与 token 路径分离并覆盖中英文
 policy-rules 在 `concord.writing/v3` 中内置受控写作规则，按目录作用域合成，门禁只读输入快照，不依赖外部进程。字符长度路径保持现有语义，controlled token 路径独立计数，中英文分别处理。全部 Limit 满足；性能预算已定义，实测是实现验收条件。
 
 G3: 动作词出现次数不能证明指令数量，规则默认关闭，finding 只陈述"命中多个受控动作词"。

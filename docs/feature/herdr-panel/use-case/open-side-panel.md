@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: open-side-panel
-title: 在 Herdr 中打开 Spec 面板
-kind: use-case
-feature: docs/feature/herdr-panel/README.md
----
-
 # 在 Herdr 中打开 Spec 面板
 
 维护者在 Herdr 中按下 Concord 插件的快捷键，或在任意终端运行 `concord panel`，打开当前工作树的 Spec 面板。

@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: markdown-terminology
-title: 单一写法的术语由 Markdown 拥有
-createdAt: 2026-10-29T03:30:00.000Z
-kind: design
-alternatives:
-  - markdown-owned
-  - json-single-term
-decision:
-  selected: markdown-owned
-  reason: 每个概念只有一个写法；定义与解释同在一页，正文链接到定义并由 check 校验；作用域、导入与发布恢复沿用目录归属方案
-  at: 2026-10-29T03:30:00.000Z
-  targets:
-    - docs/feature/documentation-quality/README.md
----
-
 # 单一写法的术语由 Markdown 拥有
 
 ## Problem

@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: trace-show-first-run-pending
-title: 首次运行 trace show 直接返回 QueryPending
-createdAt: 2026-10-23T03:12:31.363Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # 首次运行 trace show 直接返回 QueryPending

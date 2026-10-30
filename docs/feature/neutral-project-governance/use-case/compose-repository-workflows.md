@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: compose-repository-workflows
-title: 组合仓库工作流命令
-kind: use-case
-feature: docs/feature/neutral-project-governance/README.md
----
-
 # 组合仓库工作流命令
 
 ## 用户目标

@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: mutate-remote-issue
-title: 计划并执行一次远端 Issue 写入
-kind: use-case
-feature: docs/feature/neutral-project-governance/README.md
----
-
 # 计划并执行一次远端 Issue 写入
 
 ## 用户目标

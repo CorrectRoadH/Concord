@@ -6,6 +6,8 @@ Selected: [workspace-server](plans/workspace-server/README.md)
 
 ## Rationale
 
+
+按引擎规定由每个 worktree 唯一的工作区服务持有缓存，并为 Herdr 面板与 Web 推送代次
 HawDB 规定一个目录由一个进程长期持有。workspace-server 让每个 worktree 唯一的工作区服务持有缓存，其它进程只取领域结果或改用内存缓存，因此满足 L5，也不需要远程数据库句柄、同步调用桥或在后台执行任意命令。Herdr 面板与 Web 需要的实时推送由同一个进程提供。候选表中的「满足」表示方案机制满足约束，不代表实现验收通过。
 
 G1: 静态版本与帮助已达成；其余命令经由服务查询时，CLI 只加载协议与格式化代码，是否进入 50 ms 由第 2 阶段实测判定。

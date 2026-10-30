@@ -1,15 +1,9 @@
 ---
-format: concord.document/v1
-id: pr-change-preview-review
-title: PR 变更预览设计审查阻塞
-createdAt: 2026-09-30T02:25:14.052Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
+
+# PR 变更预览设计审查阻塞
 
 ## 设计收敛
 

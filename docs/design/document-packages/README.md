@@ -1,21 +1,3 @@
----
-format: concord.document/v1
-id: document-packages
-title: 文档目录与历史格式迁移
-createdAt: 2026-09-15T00:28:03.335Z
-kind: design
-alternatives:
-  - preserve-identities
-  - keep-single-files
-  - merge-topics
-decision:
-  selected: preserve-identities
-  reason: 保留现有身份、历史来源与当前引用；Research 以目录归属并允许自由正文。
-  at: 2026-09-15T01:01:58.907Z
-  targets:
-    - docs/feature/document-packages/README.md
----
-
 # 文档目录与历史格式迁移
 
 NiceEval 已有的工程文档与规划因缺少当前 metadata 而未完整出现在 Concord 中。Research 的创建入口又固定生成单文件，并要求研究提纲。用户要求补齐原仓库格式迁移，并按文件夹自由组织研究。

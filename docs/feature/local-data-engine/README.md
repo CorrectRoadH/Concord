@@ -1,10 +1,3 @@
----
-format: concord.document/v1
-id: local-data-engine
-title: 统一的本地缓存与检索引擎
-kind: feature
----
-
 
 # 统一的本地缓存与检索引擎
 

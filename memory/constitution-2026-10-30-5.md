@@ -1,17 +1,14 @@
 ---
-format: concord.document/v1
-id: constitution-2026-10-30-5
-title: 拆分 C-001-1 与 C-010-1 的长句，规则不变
-createdAt: 2026-10-30T07:54:57.418Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md#c-001-1
-  - docs/constitution.md#c-010-1
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md#c-001-1
+  - role: amends
+    target: docs/constitution.md#c-010-1
 ---
+
+# 拆分 C-001-1 与 C-010-1 的长句，规则不变
 
 宪法修订，日期 2026-10-30。
 

@@ -1,20 +1,3 @@
----
-format: concord.document/v1
-id: derived-code-reference
-title: 实现声明自动派生查询引用
-createdAt: 2026-09-20T08:38:16.851Z
-kind: design
-alternatives:
-  - derived
-  - explicit
-decision:
-  selected: derived
-  reason: 采用由 canonical 源路径、scope 与完整 AST 结构位置派生的引用；保留 implements 关系，删除手写声明 ID，并明确失效与复用边界。
-  at: 2026-09-20T08:42:30.587Z
-  targets:
-    - docs/feature/local-sdlc/use-case/trace-code-ownership.md
----
-
 # 实现声明自动派生查询引用
 
 维护者需要显式表达实现与 Spec 的关系，但不需要为每段实现另取声明 ID。用户明确保留 `@concord-implements`，要求移除人工身份定义。

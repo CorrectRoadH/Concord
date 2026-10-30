@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: read-spec-detail
-title: 阅读 Use Case、测试与概念
-kind: use-case
-feature: docs/feature/herdr-panel/README.md
----
-
 # 阅读 Use Case、测试与概念
 
 维护者在面板中打开一个 Feature 或 Use Case，读它的正文，查看实现它的代码和保护它的测试，并查询正文中概念的定义。

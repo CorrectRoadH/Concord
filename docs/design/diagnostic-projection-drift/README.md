@@ -1,19 +1,3 @@
----
-format: concord.document/v1
-id: diagnostic-projection-drift
-title: 诊断投影的漂移发布与刷新失败分类
-createdAt: 2026-10-06T04:31:50.113Z
-kind: design
-alternatives:
-  - annotated-drift
-  - strict-reject
-decision:
-  selected: annotated-drift
-  reason: 诊断投影与工作区导航采用同一 observeProjection 原语、漂移分拣与替换规则；漂移结果诚实标注后可作为首份投影，失败具名并保留 scannedAt。独立 Opus 5.5 审查两轮，阻断项已修订。
-  at: 2026-10-06T05:02:52.646Z
-  targets: []
----
-
 # 诊断投影的漂移发布与刷新失败分类
 
 ## Problem

@@ -1,16 +1,12 @@
 ---
-format: concord.document/v1
-id: constitution-2026-09-22-2
-title: 测试关联改为源码标记，不再解析宿主测试语法
-createdAt: 2026-10-30T02:52:50.679Z
-kind: memory
-memoryKind: decision
-state: current
-epoch: 0
-promotions:
-  - docs/constitution.md
-history: []
+type: decision
+status: current
+relations:
+  - role: amends
+    target: docs/constitution.md
 ---
+
+# 测试关联改为源码标记，不再解析宿主测试语法
 
 宪法修订，日期 2026-09-22。
 

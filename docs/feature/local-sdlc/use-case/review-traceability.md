@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: review-traceability
-title: 追踪 Spec 并生成审阅材料
-kind: use-case
-feature: docs/feature/local-sdlc/README.md
----
-
 # 追踪 Spec 并生成审阅材料
 
 ## 用户目标

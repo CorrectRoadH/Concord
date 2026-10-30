@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: parallel-dist-build-window
-title: 并行 worker 共享 dist 的构建窗口
-createdAt: 2026-10-01T09:26:49.116Z
-kind: memory
-memoryKind: insight
-state: current
-epoch: 0
-promotions: []
-history: []
+type: insight
+status: current
 ---
 
 # 并行 worker 共享 dist 的构建窗口

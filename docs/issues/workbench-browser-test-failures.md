@@ -1,15 +1,5 @@
 ---
-format: concord.document/v1
-id: workbench-browser-test-failures
-title: 两个工作台浏览器测试在 master 上稳定失败
-createdAt: 2026-10-21T10:16:41.724Z
-kind: issue
-state: draft
-memoryRelations: []
-adoptions:
-  current: []
-  history: []
-history: []
+status: open
 ---
 
 # 两个工作台浏览器测试在 master 上稳定失败

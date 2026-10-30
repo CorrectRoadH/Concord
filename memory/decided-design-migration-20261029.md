@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: decided-design-migration-20261029
-title: 已裁决 Design 迁入 Spec 的执行记录
-createdAt: 2026-10-29T22:06:12.173Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # 已裁决 Design 迁入 Spec 的执行记录（2026-10-29）

@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: coordinate-docs-work
-title: 并行切分文档工作
-kind: use-case
-feature: docs/feature/neutral-project-governance/README.md
----
-
 # 并行切分文档工作
 
 ## 用户目标

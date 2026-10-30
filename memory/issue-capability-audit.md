@@ -1,14 +1,6 @@
 ---
-format: concord.document/v1
-id: issue-capability-audit
-title: Issue 评论与生命周期入口核查
-createdAt: 2026-09-27T08:22:46.418Z
-kind: memory
-memoryKind: note
-state: captured
-epoch: 0
-promotions: []
-history: []
+type: note
+status: captured
 ---
 
 # Issue 功能核查与未完成边界

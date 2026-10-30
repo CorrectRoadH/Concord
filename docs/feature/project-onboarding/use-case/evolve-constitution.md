@@ -1,11 +1,3 @@
----
-format: concord.document/v1
-id: evolve-constitution
-title: 功能开发遵守并修订项目宪法
-kind: use-case
-feature: docs/feature/project-onboarding/README.md
----
-
 # 功能开发遵守并修订项目宪法
 
 ## 用户目标
