@@ -2,13 +2,13 @@ import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { cpus, totalmem } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { Effect } from 'effect';
 import { io, PerfError } from './process.js';
 
 export interface Artifact { readonly label: 'candidate' | 'baseline'; readonly dir: string; readonly entry: string; readonly commit: string; readonly dirty: boolean; readonly digest: string }
 
-function digestDist(dir: string): string {
+function digestDist(directory: string): string {
   const hash = createHash('sha256');
   const visit = (folder: string, prefix: string): void => {
     for (const entry of readdirSync(folder, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -19,18 +19,18 @@ function digestDist(dir: string): string {
       }
     }
   };
-  visit(join(dir, 'dist'), 'dist');
+  visit(directory, 'dist');
   return `sha256:${hash.digest('hex')}`;
 }
 
 /** A built Concord checkout; the baseline is prepared before measuring, normally from the candidate's parent commit. */
-export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string) {
+export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string, installedEntry?: string) {
   const dir = yield* io('Resolve artifact', () => realpathSync(resolve(path)));
-  const entry = join(dir, 'dist/entry.js');
+  const entry = installedEntry ?? join(dir, 'dist/entry.js');
   if (!(yield* io('Find artifact', () => existsSync(entry)))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
   const git = (...args: string[]) => Effect.tryPromise({ try: () => new Promise<string>((accept, reject) => execFile('git', ['-C', dir, ...args], { encoding: 'utf8' }, (error, stdout) => error ? reject(error) : accept(stdout.trim()))), catch: cause => new PerfError({ message: `Identify artifact: ${String(cause)}` }) });
   const commit = yield* git('rev-parse', 'HEAD'), dirty = (yield* git('status', '--porcelain')) !== '';
-  const digest = yield* io('Digest artifact', () => digestDist(dir));
+  const digest = yield* io('Digest artifact', () => digestDist(dirname(entry)));
   return { label, dir, entry, commit, dirty, digest } satisfies Artifact;
 });
 

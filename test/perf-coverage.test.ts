@@ -8,6 +8,7 @@ import { loadBudgets } from '../scripts/perf/budgets.js';
 import { commandGroups, selectScenarios } from '../scripts/perf/selection.js';
 import { executeScenario, loadScenarios, makeContext, runArguments, type BenchScenario } from '../scripts/perf/scenario.js';
 import { io, mustRun } from '../scripts/perf/process.js';
+import { installedConcordCli } from './support.js';
 import { prepareConsumer, workDirectory } from '../scripts/perf/workspace.js';
 const root = resolve('.');
 // @feature docs/feature/local-sdlc/README.md
@@ -25,7 +26,7 @@ test('performance budgets and executable scenarios have exactly one consistent o
 // @feature docs/feature/local-sdlc/README.md
 test('CLI top-level command definitions have scenarios or documented exemptions', () => Effect.runPromise(Effect.gen(function*() {
   const work = yield* workDirectory('concord-coverage-', false);
-  const artifact = yield* loadArtifact('candidate', root);
+  const artifact = yield* loadArtifact('candidate', root, installedConcordCli());
   const groups = yield* commandGroups(artifact.entry, root, work);
   const scenarios = yield* loadScenarios(root);
   const policy = readFileSync(join(root, 'docs/engineering/concord-self-hosting/performance.md'), 'utf8');
@@ -40,7 +41,7 @@ test('all benchmark scenarios execute on minimal frozen consumers without timing
   const trace = (label: string, since: number) => io('Trace smoke execution', () => { if (process.env.CONCORD_BENCH_SMOKE_TRACE === '1') process.stderr.write(`# smoke ${label}: ${(performance.now() - since).toFixed(0)}ms\n`); });
   const work = yield* workDirectory('concord-bench-smoke-', false), outputDir = join(work, 'runs');
   yield* io('Create smoke outputs', () => mkdirSync(outputDir));
-  const artifact = yield* loadArtifact('candidate', root), scenarios = yield* loadScenarios(root);
+  const artifact = yield* loadArtifact('candidate', root, installedConcordCli()), scenarios = yield* loadScenarios(root);
   const folder = join(work, 'consumer'); yield* io('Create smoke consumer directory', () => mkdirSync(folder));
   const consumer = yield* prepareConsumer('fixture:smoke', { repository: root, entry: artifact.entry, commit: 'HEAD', scale: { sources: 1, tests: 1, pages: 1 }, workDir: folder, smoke: true });
   yield* trace('fixture', started);
@@ -73,7 +74,7 @@ test('all benchmark scenarios execute on minimal frozen consumers without timing
 // @feature docs/feature/local-sdlc/README.md
 test('scenario execution checks every concurrent result and restores beforeEach edits on failure', () => Effect.runPromise(Effect.gen(function*() {
   const work = yield* workDirectory('concord-scenario-lifecycle-', false);
-  const artifact = yield* loadArtifact('candidate', root);
+  const artifact = yield* loadArtifact('candidate', root, installedConcordCli());
   const consumer = yield* prepareConsumer('fixture:minimal', { repository: root, entry: artifact.entry, commit: 'HEAD', scale: { sources: 1, tests: 1, pages: 1 }, workDir: work, smoke: true });
   const context = makeContext(artifact, consumer, work, true);
   const source = join(consumer.root, 'src/file-0.ts'), transient = join(consumer.root, 'src/transient.ts');
