@@ -5,6 +5,7 @@ import { feedbackFilters, selectedFeedbackFilters } from './cli-feedback-flags.j
 import { Effect, Option } from 'effect';
 import { Argument, Command, Flag } from 'effect/unstable/cli';
 import { adoptIssue, retireIssue, reopenIssue, closeIssue, createDocument, linkIssue, unlinkIssue } from './documents.js';
+import { closeFixedIssue } from './fix-verification.js';
 import { listFeedback } from './feedback.js';
 import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from './knowledge.js';
 import { documentShow } from './trace.js';
@@ -40,10 +41,14 @@ const issue = Command.make('issue').pipe(Command.withDescription('Maintain local
   Command.make('link', { id, target: Argument.string('target'), role: Flag.choice('role', [...MEMORY_RELATION_KINDS, 'adopts']).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(() => linkIssue(repo,args.id,args.target,s.dryRun,args.role)))).pipe(Command.withDescription('Relate an Issue to Memory or Spec.')),
   Command.make('unlink', { id, target: Argument.string('target'), role: Flag.choice('role', [...MEMORY_RELATION_KINDS, 'adopts']).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(() => unlinkIssue(repo,args.id,args.target,s.dryRun,args.role)))),
   Command.make('reopen', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => reopenIssue(repo,args.id,args.reason,s.dryRun)))).pipe(Command.withDescription('Reopen a closed Issue with a reason.')),
-  Command.make('close', { id, ...closureFlags }, args => withRepo((repo,s) => sync(() => {
+  Command.make('close', { id, ...closureFlags, fixed: Flag.boolean('fixed').pipe(Flag.withDefault(false)), defect: optional('defect') }, args => withRepo((repo,s) => Effect.gen(function* () {
+    if (args.fixed || args.kind === 'fixed') { if (s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','fixed verification does not accept --dry-run')); return yield* closeFixedIssue(repo,args.id,Option.getOrUndefined(args.reason) ?? 'Verified fix',Option.getOrUndefined(args.defect)); }
+    if (Option.isSome(args.defect)) return yield* Effect.fail(new ConcordError('InvalidOption','--defect requires --fixed'));
+    return yield* sync(() => {
     const closure = { kind: args.kind, ...Object.fromEntries(['memory','target','canonical','dependency','version','reason'].flatMap(key => { const value = Option.getOrUndefined(args[key as 'memory']); return value === undefined ? [] : [[key,value]]; })), ...(args.proof.length ? { proof: args.proof } : {}), ...(args.evidence.length ? { evidence: args.evidence } : {}) };
     return closeIssue(repo,args.id,decode(IssueClosureSchema,closure,'Issue closure'),s.dryRun);
-  }))).pipe(Command.withDescription('Close an Issue with a validated conclusion.')),
+  });
+  }), { unlocked: true })).pipe(Command.withDescription('Close an Issue with a validated conclusion.')),
 ]));
 
 export { issue };

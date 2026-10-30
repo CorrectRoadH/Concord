@@ -8,7 +8,6 @@ import type {
   TestListInput,
   TestListReceipt,
   TestShowReceipt,
-  TraceAdoptionHistory,
   TraceFeedback,
   TraceFeedbackAdoption,
   TraceFeedbackMemoryRelation,
@@ -19,7 +18,6 @@ import type {
   TraceMemorySummary,
   TraceNode,
   TraceNodeRelation,
-  TraceRegression,
   TraceRelationsByTarget,
   TraceScope,
   TraceScopedTest,
@@ -99,15 +97,15 @@ const feedbackSummary = (feedback: TraceFeedback): TraceFeedbackSummary => ({
   id: feedback.id,
   path: feedback.path,
   title: feedback.title,
-  state: feedback.state,
+  status: feedback.status,
 });
 
 const memorySummary = (memory: TraceMemory): TraceMemorySummary => ({
   id: memory.id,
   path: memory.path,
   title: memory.title,
-  kind: memory.kind,
-  ...(memory.state === undefined ? {} : { state: memory.state }),
+  type: memory.type,
+  ...(memory.status === undefined ? {} : { status: memory.status }),
 });
 
 const relationKey = (relation: { readonly target: string; readonly via: string }): string =>
@@ -144,10 +142,6 @@ export function listTests(snapshot: TraceSnapshot, input: TestListInput = {}): T
       if (pattern === undefined) return true;
       const contract = test.contract;
       const features = contract === undefined ? [] : featuresForTarget(snapshot, contract);
-      const regressionValues = test.regressions.flatMap((reference) => {
-        const entry = memory.get(pathOf(reference));
-        return entry === undefined ? [reference] : [reference, entry.id, entry.path, entry.title, entry.kind, entry.state ?? ""];
-      });
       return [
         test.selector,
         test.caseId,
@@ -156,7 +150,6 @@ export function listTests(snapshot: TraceSnapshot, input: TestListInput = {}): T
         test.suite,
         contract ?? "",
         ...features.flatMap((feature) => [featureId(feature.path), feature.path, feature.title]),
-        ...regressionValues,
         ...test.issues,
       ].some((value) => value.toLocaleLowerCase().includes(pattern));
     })
@@ -235,23 +228,22 @@ export function showFeature(
 
   const feedbackAdoptions: TraceFeedbackAdoption[] = [];
   const feedbackMemoryRelations: TraceFeedbackMemoryRelation[] = [];
-  const adoptionHistory: TraceAdoptionHistory[] = [];
   const issueProvenance: TraceIssueProvenance[] = [];
   const memoryById = new Map(snapshot.memory.map((memory) => [memory.path, memory]));
 
   for (const feedback of snapshot.feedback) {
     const summary = feedbackSummary(feedback);
-    for (const reference of feedback.adoptions.current) {
+    for (const reference of feedback.relations.filter(relation => relation.role === 'adopts').map(relation => relation.target)) {
       const target = includedTarget(reference);
       if (target === undefined) continue;
       feedbackAdoptions.push({ ...target, via: "feedback-adoption", feedback: summary });
-      for (const relation of feedback.memoryRelations) {
-        const memory = memoryById.get(relation.memory);
+      for (const relation of feedback.relations.filter(relation => relation.role !== 'adopts' && relation.role !== 'related')) {
+        const memory = memoryById.get(relation.target);
         if (memory === undefined) continue;
         feedbackMemoryRelations.push({
           ...target,
           via: "feedback-memory-relation",
-          kind: relation.kind,
+          kind: relation.role,
           feedback: summary,
           memory: memorySummary(memory),
         });
@@ -267,49 +259,19 @@ export function showFeature(
         });
       }
     }
-    for (const history of feedback.adoptions.history) {
-      const target = includedTarget(history.target);
-      if (target === undefined) continue;
-      adoptionHistory.push({
-        ...target,
-        via: "feedback-adoption-history",
-        feedback: summary,
-        commit: history.commit,
-      });
-    }
   }
 
   const memoryPromotions: TraceMemoryPromotionRelation[] = [];
   for (const memory of snapshot.memory) {
-    for (const promotion of memory.promotions) {
-      for (const reference of promotion.current) {
-        const target = includedTarget(reference);
-        if (target === undefined) continue;
-        memoryPromotions.push({
-          ...target,
-          via: "memory-promotion",
-          promotionKind: promotion.kind,
-          memory: memorySummary(memory),
-        });
-      }
+    for (const relation of memory.relations) {
+      const target = includedTarget(relation.target);
+      if (target) memoryPromotions.push({ ...target, via: "memory-promotion", role: relation.role, memory: memorySummary(memory) });
     }
   }
 
-  const regressions: TraceRegression[] = [];
   for (const relation of tests) {
     const test = snapshot.tests.find((item) => item.selector === relation.selector);
     if (test === undefined) continue;
-    for (const reference of test.regressions) {
-      const memory = snapshot.memory.find((item) => item.path === pathOf(reference));
-      if (memory === undefined) continue;
-      regressions.push({
-        target: relation.target,
-        scope: relation.scope,
-        via: "test-regression",
-        test: test.selector,
-        memory: memorySummary(memory),
-      });
-    }
     for (const issue of test.issues) {
       issueProvenance.push({
         target: relation.target,
@@ -324,7 +286,6 @@ export function showFeature(
   const stableFeedbackAdoptions = byKey(feedbackAdoptions, relationKey);
   const stableFeedbackMemoryRelations = byKey(feedbackMemoryRelations, relationKey);
   const stableMemoryPromotions = byKey(memoryPromotions, relationKey);
-  const stableRegressions = byKey(regressions, relationKey);
   const stableIssueProvenance = byKey(issueProvenance, relationKey);
 
   const belongsToGroup = (
@@ -344,12 +305,10 @@ export function showFeature(
       feedbackAdoptions: stableFeedbackAdoptions.filter((relation) => belongsToGroup(relation, group)),
       feedbackMemoryRelations: stableFeedbackMemoryRelations.filter((relation) => belongsToGroup(relation, group)),
       memoryPromotions: stableMemoryPromotions.filter((relation) => belongsToGroup(relation, group)),
-      regressions: stableRegressions.filter((relation) => belongsToGroup(relation, group)),
       issueProvenance: stableIssueProvenance.filter((relation) => belongsToGroup(relation, group)),
     }))
     .filter((group) => group.tests.length > 0 || group.feedbackAdoptions.length > 0 ||
-      group.feedbackMemoryRelations.length > 0 || group.memoryPromotions.length > 0 ||
-      group.regressions.length > 0 || group.issueProvenance.length > 0);
+      group.feedbackMemoryRelations.length > 0 || group.memoryPromotions.length > 0 || group.issueProvenance.length > 0);
 
   const related = (relationName: string, kind: TraceNode["kind"]): readonly TraceNodeRelation[] => byKey(
     snapshot.nodes.flatMap((node): TraceNodeRelation[] => {
@@ -388,9 +347,7 @@ export function showFeature(
     feedbackAdoptions: stableFeedbackAdoptions,
     feedbackMemoryRelations: stableFeedbackMemoryRelations,
     memoryPromotions: stableMemoryPromotions,
-    regressions: stableRegressions,
     issueProvenance: stableIssueProvenance,
-    adoptionHistory: byKey(adoptionHistory, relationKey),
     findings: [],
     roadmaps: related("buildsOn", "roadmap"),
     designs: related("decides", "design"),
@@ -421,15 +378,7 @@ export function showTest(
     return Effect.fail(new TraceSelectorMissing({ selector: test.contract, subject: "feature" }));
   }
 
-  const regressions = byKey(test.regressions.flatMap((reference): TraceRegression[] => {
-    const memory = snapshot.memory.find((item) => item.path === pathOf(reference));
-    return memory === undefined ? [] : [{
-      ...target,
-      via: "test-regression",
-      test: test.selector,
-      memory: memorySummary(memory),
-    }];
-  }), relationKey);
+
   const issueProvenance = byKey(test.issues.map((issue): TraceIssueProvenance => ({
     ...target,
     via: "test",
@@ -456,7 +405,6 @@ export function showTest(
       path: feature.path,
       title: feature.title,
     })),
-    regressions,
     issueProvenance,
     findings: [],
   });

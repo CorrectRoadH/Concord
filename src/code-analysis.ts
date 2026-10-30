@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { Effect } from 'effect';
 import { buildTrace, requireValidTrace } from './trace.js';
-import { candidateDigest } from './evidence.js';
+import { worktreeIdentity } from './verification-git.js';
 import { LocalRepository } from './storage.js';
 import { closeRepositoryCache, withPersistentCache } from './cache-store.js';
 import { readCachePayloads, writeCachePayloads } from './cache-query.js';
@@ -19,7 +19,7 @@ import { captureNativeAnalysis } from './native-analysis.js';
 
 const ALGORITHM = 'concord.analysis/v1';
 const sync = <A>(run: () => A) => Effect.try({ try: run, catch: failure });
-const unitKey = (repo: Repository, analyzer: string): string => objectDigest({ kind: ALGORITHM, projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, analyzer });
+const unitKey = (repo: Repository, analyzer: string): string => objectDigest({ kind: ALGORITHM, root: repo.root, privateDir: repo.privateDir, analyzer });
 
 /** Entire analysis unit, including membership and declared ignored implementation inputs. */
 // @concord-begin
@@ -27,7 +27,7 @@ const unitKey = (repo: Repository, analyzer: string): string => objectDigest({ k
 export function captureAnalysisInputs(repo: Repository) {
   const paths = [...new Set([...repo.config.testRoots, ...(repo.config.sourceRoots ?? [])].flatMap(root => repo.files(root, 'source')))];
   if (paths.length > ANALYSIS_LIMITS.files) throw new ConcordError('AnalysisBudgetExceeded', 'FileLimit');
-  const explicit = new Set(['tsconfig.json', 'jsconfig.json', 'package.json', 'pnpm-lock.yaml', ...repo.config.runner.sourceFiles]);
+  const explicit = new Set(['tsconfig.json', 'jsconfig.json', 'package.json', 'pnpm-lock.yaml', ...(repo.config.runner?.sourceFiles ?? [])]);
   for (const server of repo.config.languageServers ?? []) {
     try { if (server.cwd !== '.') repo.absolute(server.cwd); }
     catch { throw new ConcordError('InvalidLanguageServer', 'Language server cwd is not a safe repository directory'); }
@@ -51,7 +51,7 @@ export function captureAnalysisInputs(repo: Repository) {
   const contractPaths = [...new Set([...trace.documents.map(doc => doc.path), ...repo.files('docs').filter(path => path.endsWith('.md') || path.endsWith('.json'))])].sort();
   const contracts = contractPaths.map(path => ({ path, digest: digest(repo.read(path) ?? '') }));
   const native = captureNativeAnalysis(repo, trace.annotations.cases);
-  const identity = { algorithm: ALGORITHM, compiler: typescriptPackageVersion(), projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, config: repo.configSnapshot.digest, candidate: candidateDigest(repo, [...trace.documents]), members: identities, contracts, budgets: ANALYSIS_LIMITS, native: { observations: native.identity, bindings: [...native.scopes], gaps: [...native.gaps] } };
+  const identity = { algorithm: ALGORITHM, compiler: typescriptPackageVersion(), root: repo.root, privateDir: repo.privateDir, config: repo.configSnapshot.digest, candidate: worktreeIdentity(repo), members: identities, contracts, budgets: ANALYSIS_LIMITS, native: { observations: native.identity, bindings: [...native.scopes], gaps: [...native.gaps] } };
   const inputs = objectDigest(identity);
   return { identity, inputs, files, trace, native, revision: readPublicationRevisionSync(repo.root) };
 }
@@ -91,7 +91,7 @@ function readCapture(root: string) {
       for (const { prefix, scope, paths } of listings.values()) {
         if (objectDigest(reader.files(prefix, scope)) !== objectDigest(paths)) throw new ConcordError('AnalysisSourceChanged', `Analysis membership changed: ${prefix}`);
       }
-      if (candidateDigest(reader, [...captured.trace.documents]) !== captured.identity.candidate) throw new ConcordError('AnalysisSourceChanged', 'Analysis candidate changed');
+      if (worktreeIdentity(reader) !== captured.identity.candidate) throw new ConcordError('AnalysisSourceChanged', 'Analysis candidate changed');
       captured.native.verifyInputs();
     }) };
   }

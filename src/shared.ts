@@ -97,38 +97,6 @@ export const Sha256 = Schema.String.check(Schema.isPattern(/^sha256:[0-9a-f]{64}
 export const ContentHash = Schema.String.check(Schema.isPattern(/^(?:sha256:)?[0-9a-f]{64}$/));
 export const GitCommit = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/));
 export const SourceRecordSchema = Schema.Struct({ path: Text, commit: GitCommit, digest: Sha256 });
-export const EvidenceFileSchema = Schema.Struct({ path: Text, digest: Sha256 });
-export const RepositoryCaseEvidenceSchema = Schema.Struct({
-  selector: Text, caseId: Text,
-  binding: Schema.Struct({ kind: Schema.Literal('direct-contract'), contractRef: Text, contractSha256: ContentHash }),
-  sourceDigest: ContentHash, candidateSha256: ContentHash,
-  sourceIdentityDigest: Schema.optional(ContentHash),
-  red: EvidenceFileSchema, green: EvidenceFileSchema, certificate: EvidenceFileSchema, inventory: EvidenceFileSchema,
-  reliability: Schema.Array(EvidenceFileSchema).check(Schema.makeFilter(
-    values => values.length === 6 && new Set(values.map(value => value.path)).size === 6,
-    { description: 'six distinct reliability receipt paths' },
-  )),
-  invocationIds: Schema.NonEmptyArray(Text).check(Schema.makeFilter(
-    values => values.length === 8 && new Set(values).size === 8,
-    { description: 'distinct red, green and six reliability invocation identities' },
-  )),
-});
-export const RepositoryEvidenceSchema = Schema.Struct({
-  policy: Schema.optional(Schema.Literal('concord.native-reliability/v1')),
-  memory: Text, epoch: Nat, validatedAt: Text, cases: Schema.NonEmptyArray(RepositoryCaseEvidenceSchema),
-});
-export type RepositoryEvidence = typeof RepositoryEvidenceSchema.Type;
-const resolution = { reason: Text, at: Text, epoch: Nat };
-export const ResolutionSchema = Schema.Union([
-  Schema.Struct({ ...resolution, kind: Schema.Literal('fixed'), evidenceLevel: Schema.Literal('command'), red: Text, green: Text, selectedCaseId: Text }),
-  Schema.Struct({ ...resolution, kind: Schema.Literals(['not-a-bug', 'wont-fix', 'external-fixed']), evidenceLevel: Schema.Literal('author') }),
-  Schema.Struct({ ...resolution, kind: Schema.Literals(['fixed', 'not-a-bug', 'wont-fix', 'external-fixed']), evidenceLevel: Schema.Literal('attested'),
-    attestation: Schema.Struct({ statement: Text, proof: Strings, source: SourceRecordSchema, eventAt: Schema.optional(Text) }) }),
-  Schema.Struct({ ...resolution, kind: Schema.Literal('fixed'), evidenceLevel: Schema.Literal('repository'), repositoryEvidence: RepositoryEvidenceSchema }),
-]);
-export type Resolution = typeof ResolutionSchema.Type;
-export const HistorySchema = Schema.Struct({ at: Text, action: Text, reason: Text, ref: Schema.optional(Text), resolution: Schema.optional(ResolutionSchema), commit: Schema.optional(GitCommit), source: Schema.optional(SourceRecordSchema), eventAt: Schema.optional(Text) });
-export type HistoryEntry = typeof HistorySchema.Type;
 // @concord-end
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/library.md#owner
@@ -145,12 +113,12 @@ export const HistoricalDispositionSchema = Schema.Struct({ reason: Text, source:
 export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.Array(DocumentName), decision: Schema.optional(Schema.Struct({ selected: DocumentName, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
 export const RoadmapSchema = Schema.Struct({ ...base, kind: Schema.Literal('roadmap'), state: Schema.Literals(['planned', 'adopted', 'cancelled']), adoptedAs: Schema.optional(Text), cancellation: Schema.optional(HistoricalDispositionSchema) });
 export const EngineeringSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('engineering') });
-export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), memoryKind: Schema.Literals(['problem', 'decision', 'insight', 'note']), state: Schema.Literals(['captured', 'open', 'resolved', 'current', 'superseded']), epoch: Nat, evidenceRequirement: Schema.optional(Schema.Literals(['command', 'concord.native-reliability/v1'])), promotions: Strings, history: Schema.Array(HistorySchema), resolution: Schema.optional(ResolutionSchema), supersededBy: Schema.optional(Text), supersession: Schema.optional(Schema.Struct({ statement: Text, source: SourceRecordSchema })) });
+export const MemoryRelationSchema = Schema.Struct({ role: Schema.Literals(['supports', 'amends']), target: Text });
+export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), type: Schema.Literals(['decision', 'insight', 'note']), status: Schema.Literals(['captured', 'current', 'superseded']), relations: Schema.Array(MemoryRelationSchema), supersededBy: Schema.optional(Text), supersession: Schema.optional(Schema.Struct({ statement: Text, source: SourceRecordSchema })) });
 export type MemoryMeta = typeof MemorySchema.Type;
 export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'decision', 'related'] as const;
-export const IssueMemoryRelationSchema = Schema.Struct({ kind: Schema.Literals(MEMORY_RELATION_KINDS), memory: Text });
-export type IssueMemoryRelation = typeof IssueMemoryRelationSchema.Type;
-export const IssueAdoptionsSchema = Schema.Struct({ current: Strings, history: Schema.Array(Schema.Struct({ target: Text, commit: GitCommit })) });
+export const IssueRelationSchema = Schema.Struct({ role: Schema.Literals([...MEMORY_RELATION_KINDS, 'adopts']), target: Text });
+export type IssueRelation = typeof IssueRelationSchema.Type;
 export const FixVerificationSchema = Schema.Struct({ defect: GitCommit, fix: GitCommit, tests: Schema.NonEmptyArray(Text).check(Schema.makeFilter(values => new Set(values).size === values.length)), runner: Sha256, concord: Text });
 export const IssueClosureSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('fixed'), reason: Text, verification: Schema.optional(FixVerificationSchema) }),
@@ -167,11 +135,11 @@ export const IssueOriginSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('dogfood'), repository: Text, originId: Text, commit: Text }),
   Schema.Struct({ kind: Schema.Literal('issue'), repository: Text, number: Nat, url: Text }),
 ]);
-export const IssueSchema = Schema.Struct({ ...base, kind: Schema.Literal('issue'), state: Schema.Literals(['draft', 'closed']),
-  memoryRelations: Schema.Array(IssueMemoryRelationSchema), adoptions: IssueAdoptionsSchema, closure: Schema.optional(IssueClosureSchema),
+export const IssueSchema = Schema.Struct({ ...base, kind: Schema.Literal('issue'), status: Schema.Literals(['open', 'closed']),
+  relations: Schema.Array(IssueRelationSchema), closure: Schema.optional(IssueClosureSchema),
   source: Schema.optional(FeedbackSourceSchema), origin: Schema.optional(IssueOriginSchema),
   subject: Schema.optional(Schema.Literals(['product', 'repository', 'dependency'])), claim: Schema.optional(Schema.Literals(['defect', 'friction', 'request'])),
-  observation: Schema.optional(Text), impact: Schema.optional(Text), history: Schema.Array(HistorySchema),
+  observation: Schema.optional(Text), impact: Schema.optional(Text),
 });
 export type IssueMeta = typeof IssueSchema.Type;
 export const DocumentSchema = Schema.Union([FeatureSchema, UseCaseSchema, ResearchSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, IssueSchema]);
@@ -185,7 +153,7 @@ export interface DocumentRecord { readonly path: string; readonly metadata: Docu
 export interface Finding { readonly code: string; readonly path: string; readonly message: string; readonly line?: number }
 export const AnnotatedCaseSchema = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(/^neref_[0-9a-f]{32}$/u)), file: Text, line: Schema.Int, name: Text,
-  contract: Text, contractKind: Schema.Literals(['feature', 'use-case']), regressions: Strings,
+  contract: Text, contractKind: Schema.Literals(['feature', 'use-case']), issues: Strings,
   status: Schema.Literals(['active', 'retired']), framework: Schema.Literals(['node:test', 'vitest', '@playwright/test', 'marker']),
   skipped: Schema.Boolean, named: Schema.optional(Schema.Boolean), native: Schema.optional(Text), markerEndLine: Schema.optional(Schema.Int),
 });
@@ -197,8 +165,4 @@ export interface AnnotationSnapshot {
   readonly digest: string;
   readonly cache: { readonly status: string; readonly hits: number; readonly misses: number; readonly path: string; readonly detail?: string };
 }
-// @concord-end
-// @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#resolve-fixed
-export interface FixedProof { readonly red: string; readonly green: string; readonly selectedCaseId: string; readonly epoch: number }
 // @concord-end

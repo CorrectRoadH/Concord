@@ -75,94 +75,24 @@ function templateFailure(path: string, cause: unknown): DesignManifestInvalid {
   return new DesignManifestInvalid({ path, message: message(cause) });
 }
 
-function readTemplateInventory(root: string, templatePath: string): readonly string[] {
-  const absolute = resolve(root, templatePath);
-  const files: string[] = [];
-  const visit = (directory: string): void => {
-    for (const name of readdirSync(directory).sort()) {
-      const path = resolve(directory, name);
-      const status = lstatSync(path);
-      const item = slash(relative(absolute, path));
-      if (status.isSymbolicLink()) throw new Error(`${item}: symlink is forbidden`);
-      if (status.isDirectory()) {
-        visit(path);
-      } else if (status.isFile()) {
-        files.push(item);
-      } else {
-        throw new Error(`${item}: special file is forbidden`);
-      }
-    }
-  };
-  visit(absolute);
-  return files.sort();
-}
-
+/** Repository API creation uses the same bundled templates as concord new. */
 function loadTemplate(
-  root: string,
+  _root: string,
   templatePath: string,
-  expectedKinds: readonly string[],
+  expectedKinds: readonly ('feature' | 'roadmap' | 'design' | 'design-plan')[],
   expectedOptionalKeys: readonly string[],
 ): Effect.Effect<LoadedTemplate, DesignManifestInvalid> {
-  const manifestPath = `${templatePath}/${MANIFEST_FILE}`;
   return Effect.try({
     try: () => {
-      const absoluteManifest = resolve(root, manifestPath);
-      const manifestSource = readFileSync(absoluteManifest, "utf8");
-      const input: unknown = JSON.parse(manifestSource);
-      const decoded = Schema.decodeUnknownResult(DocsTemplateManifestSchema, {
-        errors: "all",
-        onExcessProperty: "error",
-      })(input);
-      if (Result.isFailure(decoded)) {
-        throw new Error(SchemaIssue.makeFormatterDefault()(decoded.failure.issue));
-      }
-      const manifest = decoded.success;
-      if (JSON.stringify([...manifest.applicableKinds].sort()) !== JSON.stringify([...expectedKinds].sort())) {
-        throw new Error(`applicableKinds must be exactly ${expectedKinds.join(", ")}`);
-      }
-      const optionalKeys = Object.keys(manifest.optionalFiles).sort();
-      if (JSON.stringify(optionalKeys) !== JSON.stringify([...expectedOptionalKeys].sort())) {
-        throw new Error(`optionalFiles keys must be exactly ${expectedOptionalKeys.join(", ")}`);
-      }
-      const declared = [
-        ...manifest.requiredFiles,
-        ...Object.values(manifest.optionalFiles).flat(),
-      ].sort();
-      if (new Set(declared).size !== declared.length) throw new Error("a template file is declared more than once");
-      const inventory = readTemplateInventory(root, templatePath).filter((path) => path !== MANIFEST_FILE);
-      if (JSON.stringify(inventory) !== JSON.stringify(declared)) {
-        throw new Error(`manifest inventory differs: declared ${declared.join(", ")}; found ${inventory.join(", ")}`);
-      }
-      const sources = new Map(declared.map((path) => [
-        path,
-        readFileSync(resolve(root, templatePath, path), "utf8"),
-      ]));
-      const manifestDigest = traceDigest(JSON.stringify({
-        format: manifest.format,
-        applicableKinds: [...manifest.applicableKinds].sort(),
-        requiredFiles: [...manifest.requiredFiles].sort(),
-        optionalFiles: Object.fromEntries(Object.entries(manifest.optionalFiles)
-          .sort(([left], [right]) => left.localeCompare(right))
-          .map(([name, paths]) => [name, [...paths].sort()])),
-        files: declared.map((path) => {
-          const templateSource = sources.get(path);
-          if (templateSource === undefined) throw new Error(`${path}: source disappeared while computing the manifest digest`);
-          return { path, digest: traceDigest(templateSource) };
-        }),
-      }));
-      const preimagePaths = [manifestPath, ...declared.map((path) => `${templatePath}/${path}`)];
-      return {
-        path: templatePath,
-        manifest,
-        manifestDigest,
-        sources,
-        preimages: preimagePaths.map((path) => {
-          const absolutePath = resolve(root, path);
-          return { path: absolutePath, digest: traceDigest(readFileSync(absolutePath)) };
-        }),
-      };
+      const design = expectedKinds.includes('design');
+      const requiredFiles = design ? ['README.md', 'GOALS.md', 'LIMITS.md', 'DECISION.md'] : ['README.md'];
+      const optionalFiles = Object.fromEntries(expectedOptionalKeys.map(page => [page, [page === 'use-case' ? 'use-case/README.md' : page === 'cases' ? 'CASES.md' : `${page}.md`]]));
+      const manifest: DocsTemplateManifest = { format: 'concord.templates/v1', applicableKinds: [...expectedKinds], requiredFiles, optionalFiles };
+      const names: Record<string, string> = { 'README.md': design ? 'design' : 'design-plan', 'GOALS.md': 'goals', 'LIMITS.md': 'limits', 'DECISION.md': 'decision-record', 'CASES.md': 'cases', 'use-case/README.md': 'use-case-index', 'cli.md': 'cli', 'library.md': 'library', 'architecture.md': 'architecture' };
+      const sources = new Map([...requiredFiles, ...Object.values(optionalFiles).flat()].map(path => [path, templateBody(names[path]!, design ? '<决策主题名>' : '<功能或候选名>')]));
+      return { path: templatePath, manifest, sources, manifestDigest: traceDigest(JSON.stringify([...sources])), preimages: [] };
     },
-    catch: (cause) => templateFailure(manifestPath, cause),
+    catch: cause => templateFailure(templatePath, cause),
   });
 }
 

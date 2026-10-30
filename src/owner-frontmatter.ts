@@ -40,16 +40,16 @@ export const MemoryFrontmatterSchema = Schema.Struct({
 export function ownerFrontmatter(metadata: DocumentMeta): Record<string, unknown> | undefined {
   if (metadata.kind === 'memory') {
     return decode(MemoryFrontmatterSchema, {
-      type: metadata.memoryKind, status: metadata.state,
-      ...(metadata.promotions.length === 0 ? {} : { relations: metadata.promotions.map(target => ({ role: target === 'docs/constitution.md' || target.startsWith('docs/constitution.md#') ? 'amends' : 'supports', target })) }),
+      type: metadata.type, status: metadata.status,
+      ...(metadata.relations.length === 0 ? {} : { relations: metadata.relations }),
       ...(metadata.supersededBy === undefined ? {} : { supersededBy: metadata.supersededBy }),
       ...(metadata.supersession === undefined ? {} : { supersession: metadata.supersession }),
     }, metadata.id);
   }
   if (metadata.kind !== 'issue') return undefined;
-  const relations = [...metadata.memoryRelations.map(item => ({ role: item.kind, target: item.memory })), ...metadata.adoptions.current.map(target => ({ role: 'adopts', target }))];
+  const relations = metadata.relations;
   return decode(IssueFrontmatterSchema, {
-    status: metadata.state === 'draft' ? 'open' : metadata.state,
+    status: metadata.status,
     ...(relations.length === 0 ? {} : { relations }),
     ...Object.fromEntries(['source', 'closure', 'origin', 'subject', 'claim', 'observation', 'impact'].flatMap(key => {
       const value = metadata[key as keyof typeof metadata]; return value === undefined ? [] : [[key, value]];

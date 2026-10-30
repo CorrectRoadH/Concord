@@ -2,27 +2,27 @@ import { analysisView, type AnalysisView } from './analysis-view.js';
 import { scanAnnotations } from './annotations.js';
 import { scanCode, type CodeDeclaration } from './code.js';
 import { checkDocuments, diagnoseDocuments, findDocument, type DocumentInventory } from './documents.js';
-import { inspectResolutionEvidence } from './evidence.js';
 import { ConcordError, type AnnotatedCase, type DocumentRecord, type Finding, type Repository } from './shared.js';
 import { CONSTITUTION_PATH, inspectConstitution, showConstitution } from './constitution.js';
 import { measureScan, type ScanTiming } from './scan-timing.js';
 import { referenceResolver } from './refs.js';
+import { resolveCommit } from './verification-git.js';
 import { extractSteps } from './steps.js';
 
 export interface TraceEdge { readonly from: string; readonly to: string; readonly relation: string }
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
-export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming } = {}) {
+export function buildTrace(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' } = {}) {
   const read = () => buildUnderSnapshot(repo, cache, options).trace;
   return repo.snapshot === undefined ? read() : repo.snapshot(read);
 }
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#编译管线
 // @concord-implements docs/feature/local-sdlc/architecture.md#完整性诊断
-function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming }) {
+function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', options: { includeCode?: boolean; inventory?: DocumentInventory; timing?: ScanTiming; annotationSourceMode?: 'overlay' }) {
   const inventory = options.inventory ?? diagnoseDocuments(repo);
   const documents = inventory.documents;
-  const annotations = measureScan(options.timing, 'trace.annotations', () => scanAnnotations(repo, { cache }));
+  const annotations = measureScan(options.timing, 'trace.annotations', () => scanAnnotations(repo, { cache, sourceMode: options.annotationSourceMode }));
   // Steps and constitution links share one read of each docs page.
   const pages = new Map<string, { readonly source?: string; readonly cause?: unknown }>();
   const readPage = (path: string): string | undefined => {
@@ -50,10 +50,9 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
       case 'use-case': add(m.feature, 'feature'); break;
       case 'roadmap': if (m.adoptedAs) add(m.adoptedAs, 'adopted-as'); break;
       case 'design': for (const ref of m.decision?.targets ?? []) add(ref, 'decides'); break;
-      case 'memory': for (const ref of m.promotions) add(ref, ref === 'docs/constitution.md' || ref.startsWith('docs/constitution.md#') ? 'amends' : 'supports'); if (m.supersededBy) add(m.supersededBy, 'superseded-by'); break;
+      case 'memory': for (const relation of m.relations) add(relation.target, relation.role); if (m.supersededBy) add(m.supersededBy, 'superseded-by'); break;
       case 'issue': {
-        for (const relation of m.memoryRelations) add(relation.memory, relation.kind);
-        for (const ref of m.adoptions.current) add(ref, 'adopts');
+        for (const relation of m.relations) add(relation.target, relation.role);
         const closure = m.closure;
         if (closure !== undefined && 'memory' in closure) add(closure.memory, `closure:${closure.kind}`);
         if (closure?.kind === 'delivered') add(closure.target, 'closure:delivered-target');
@@ -71,12 +70,11 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
   }
   for (const item of annotations.cases) {
     const source = `case:${item.id}`;
-    for (const [target, relation] of [[item.contract, 'contract'], ...item.regressions.map(r => [r, 'regression'])] as const) {
+    for (const [target, relation] of [[item.contract, 'contract'], ...item.issues.map(r => [r, 'issue'])] as const) {
       if (target === undefined || relation === undefined) continue;
       try {
-        const owner = references.resolve(target, relation === 'contract' ? ['feature', 'use-case'] : ['memory']);
+        const owner = references.resolve(target, relation === 'contract' ? ['feature', 'use-case'] : ['issue']);
         if (relation === 'contract' && owner.metadata.kind !== item.contractKind) throw new ConcordError('ContractKindMismatch', `@${item.contractKind} must point to a ${item.contractKind} contract`);
-        if (relation === 'regression' && (owner.metadata.kind !== 'memory' || owner.metadata.memoryKind !== 'problem')) throw new ConcordError('InvalidRegression', 'Regression targets must be Problem Memory');
         if (item.status === 'active') edges.push({ from: source, to: target, relation });
       } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
     }
@@ -92,10 +90,15 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
     } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
   findings.push(...measureScan(options.timing, 'trace.verifyReferences', () => references.verify()));
-  const memories = documents.flatMap(doc => doc.metadata.kind === 'memory' && doc.metadata.resolution !== undefined
-    ? [{ path: doc.path, evidenceLevel: doc.metadata.resolution.evidenceLevel, evidence: inspectResolutionEvidence(repo, doc.metadata.resolution) }]
-    : []);
-  const trace = { documents, annotations, constitutionReferences: constitution.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, inventoryComplete: inventory.complete, advisories, memories, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
+  for (const document of documents) if (document.metadata.kind === 'issue' && document.metadata.closure?.kind === 'fixed' && document.metadata.closure.verification) {
+    const verification = document.metadata.closure.verification;
+    try {
+      resolveCommit(repo.root, verification.defect); resolveCommit(repo.root, verification.fix);
+      for (const id of verification.tests) if (!annotations.cases.some(test => test.id === id && test.status === 'active' && test.issues.includes(document.path))) throw new ConcordError('FixUnverifiable', `Recorded test ${id} no longer has an @issue relation to ${document.path}`);
+    } catch (cause) { findings.push({ code: 'FixUnverifiable', path: document.path, message: cause instanceof Error ? cause.message : String(cause) }); }
+  }
+  const verifications = documents.flatMap(doc => doc.metadata.kind === 'issue' && doc.metadata.closure?.kind === 'fixed' && doc.metadata.closure.verification ? [{ path: doc.path, verified: 'recorded' as const, verification: doc.metadata.closure.verification }] : []);
+  const trace = { documents, annotations, constitutionReferences: constitution.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, inventoryComplete: inventory.complete, advisories, verifications, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
   return { trace, references };
 }
 /** Derivation and its temporary resolver share the graph's source snapshot. */
@@ -290,7 +293,7 @@ export function renderReview(repo: Repository, selector: string | undefined, cac
 export function renderReviewValue(repo: Repository, trace: ReturnType<typeof buildTrace>, references: ReturnType<typeof referenceResolver>, selector: string | undefined) {
     const docs: readonly DocumentRecord[] = selector ? [findTraced(trace, selector)] : trace.documents;
     const selectedPaths = new Set(docs.map(d => d.path));
-    const cases = selector ? trace.annotations.cases.filter(c => belongsTo(references, trace, selectedPaths, c.contract) || c.regressions.some(r => belongsTo(references, trace, selectedPaths, r))) : trace.annotations.cases;
+    const cases = selector ? trace.annotations.cases.filter(c => belongsTo(references, trace, selectedPaths, c.contract) || c.issues.some(r => belongsTo(references, trace, selectedPaths, r))) : trace.annotations.cases;
     const codes = selector ? trace.codeDeclarations.filter(c => c.contracts.some(ref => belongsTo(references, trace, selectedPaths, ref))) : trace.codeDeclarations;
     const segments: ({ text: string } | { constitution: { path: string; digest: string } })[] = [];
     const lines = ['# Concord review', '', 'This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe ownership; command evidence does not prove native case coverage.', '', '## Constitution', ''];
@@ -313,7 +316,7 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
     lines.push('', '## Code declarations', '');
     for (const c of codes) lines.push(`- **${c.symbol ?? `${c.file}:${c.line}–${c.endLine}`}** — [${c.file}:${c.line}–${c.endLine}](${c.file}#L${c.line}); ${c.scope}`, ...c.contracts.map(ref => `  - Implements: [${ref}](${ref})`));
     lines.push('', '## Test declarations', '');
-    for (const c of cases) lines.push(`- **${c.id}** — [${c.file}:${c.line}](${c.file}#L${c.line}); ${c.status}${c.skipped ? ', skipped/todo' : ''}; contract: [${c.contract}](${c.contract})`, ...c.regressions.map(r => `  - Regression: [${r}](${r})`));
+    for (const c of cases) lines.push(`- **${c.id}** — [${c.file}:${c.line}](${c.file}#L${c.line}); ${c.status}${c.skipped ? ', skipped/todo' : ''}; contract: [${c.contract}](${c.contract})`, ...c.issues.map(r => `  - Regression: [${r}](${r})`));
     const analysis = analysisView(repo, cases, trace.codeDeclarations, trace.documents, references);
     for (const doc of trace.documents.filter(doc => doc.metadata.kind === 'use-case' && (!selector || selectedPaths.has(doc.path) || doc.metadata.kind === 'use-case' && selectedPaths.has(doc.metadata.feature)))) {
       const groups = stepGroups(repo, trace, doc, analysis);
@@ -327,14 +330,13 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
       }
     }
     lines.push('', '## Engineering memory', '');
-    const memoryPaths = new Set(cases.flatMap(c => c.regressions.map(pathOf)));
+    const memoryPaths = new Set(cases.flatMap(c => c.issues.map(pathOf)));
     for (const d of trace.documents) if (d.metadata.kind === 'memory' && (!selector || selectedPaths.has(d.path) || memoryPaths.has(d.path))) {
       const m = d.metadata;
-      lines.push(`- [${m.title}](${d.path}) — ${m.memoryKind}, ${m.state}, epoch ${m.epoch}`);
-      if (m.resolution) lines.push(`  - Resolution: ${m.resolution.kind}; evidence level: ${m.resolution.evidenceLevel}; ${m.resolution.reason}`, `  - Historical evidence availability: ${JSON.stringify(inspectResolutionEvidence(repo, m.resolution))}`);
+      lines.push(`- [${m.title}](${d.path}) — ${m.type}, ${m.status}`);
     }
     lines.push('', '## Local feedback and observations', '');
-    for (const d of docs) if (d.metadata.kind === 'issue') lines.push(`- [${d.metadata.title}](${d.path}) — ${d.metadata.state} (local document; Concord never mutates the remote provider)`);
+    for (const d of docs) if (d.metadata.kind === 'issue') lines.push(`- [${d.metadata.title}](${d.path}) — ${d.metadata.status} (local document; Concord never mutates the remote provider)`);
     segments.push({ text: `${lines.join('\n')}\n` });
     return { segments };
 }

@@ -12,8 +12,8 @@ function ownerRecords(repo: Repository, kind: KnowledgeKind): readonly DocumentR
 
 function summary(record: DocumentRecord) {
   return { path: record.path, id: record.metadata.id, title: record.metadata.title, digest: record.digest,
-    ...(record.metadata.kind === 'memory' ? { type: record.metadata.memoryKind, status: record.metadata.state } :
-      record.metadata.kind === 'issue' ? { status: record.metadata.state === 'draft' ? 'open' : 'closed', provider: record.metadata.source?.provider ?? 'local' as const } : {}) };
+    ...(record.metadata.kind === 'memory' ? { type: record.metadata.type, status: record.metadata.status } :
+      record.metadata.kind === 'issue' ? { status: record.metadata.status, provider: record.metadata.source?.provider ?? 'local' as const } : {}) };
 }
 // @concord-end
 
@@ -77,8 +77,8 @@ export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: s
 function isUnlinkedDraft(record: DocumentRecord): boolean {
   if (record.metadata.kind !== 'issue') return false;
   const issue = record.metadata;
-  return issue.state === 'draft' && issue.source === undefined && issue.origin === undefined && issue.closure === undefined &&
-    issue.history.length === 0 && issue.memoryRelations.length === 0 && issue.adoptions.current.length === 0 && issue.adoptions.history.length === 0;
+  return issue.status === 'open' && issue.source === undefined && issue.origin === undefined && issue.closure === undefined &&
+    issue.relations.length === 0;
 }
 
 export function removeIssue(repo: Repository, selector: string, expectedDigest: string, dryRun = false): MutationReceipt {

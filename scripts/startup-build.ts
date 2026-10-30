@@ -39,24 +39,13 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
   const definitions = yield* Effect.tryPromise(async () => {
     const file = './dist/cli-full.js';
     const { fullCommand } = await import(pathToFileURL(resolve(file)).href) as { fullCommand: Definition };
-    // Read the real repository entry's constructed definition without running it.
-    // The temporary sibling preserves its relative imports and resource URLs.
-    const repository = readFileSync('dist/repository/cli.js', 'utf8');
-    const start = repository.lastIndexOf('runComposedCli(root,');
-    if (start < 0) throw new StartupBuildFailed({ message: 'Cannot inspect the repository CLI definition' });
-    const inspection = 'dist/repository/cli-startup-inspect.js';
-    writeFileSync(inspection, repository.slice(0, start) + '\nexport { root };\n');
-    try {
-      const { root } = await import(pathToFileURL(resolve(inspection)).href) as { root: Definition };
-      return { fullCommand, repositoryCommand: root };
-    } finally { unlinkSync(inspection); }
+    return { fullCommand };
   });
   const paths: string[][] = [];
   const visit = (command: Definition, path: string[]): void => {
     paths.push(path);
     for (const group of command.subcommands) for (const child of group.commands) {
-      if (path.length === 0 && child.name === 'repo') visit(definitions.repositoryCommand, ['repo']);
-      else visit(child, [...path, child.name]);
+      visit(child, [...path, child.name]);
     }
   };
   visit(definitions.fullCommand, []);

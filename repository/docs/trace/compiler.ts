@@ -1,3 +1,4 @@
+import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import * as FileSystem from "effect/FileSystem";
 import { createHash } from "node:crypto";
 import { join, posix, relative, sep } from "node:path";
@@ -8,10 +9,6 @@ import type { DocumentRecord } from 'concord-sdlc/model';
 import { decodeDocumentSource, deriveDesignRecord, documentTitle } from 'concord-sdlc/document-codec';
 import { documentDisposition, documentPlacementError, validPackagePath, validDesignPlanPath, readDesignPlanPaths } from 'concord-sdlc/document-layout';
 
-import { decodeFeedbackDocument } from "../../feedback/codec.js";
-import { decodeMemoryDocument } from "../../memory/codec.js";
-import { repositoryConfiguration } from "../../root.js";
-import { decodeCaseDeclarations, decodeCaseArchive } from "../test-case/annotations.js";
 import {
   TraceFormatError,
   TraceIncomplete,
@@ -319,503 +316,62 @@ function featuresForContract(nodes: readonly TraceNode[], contractPath: string):
   return owner === undefined ? [] : [owner];
 }
 
-/** Defensive domain check: every declaration owner of a conflicting ID is excluded. */
-export function findCaseIdConflicts(
-  declarations: readonly import("../test-case/annotations.js").CaseDeclaration[],
-  historyPath: string,
-  tombstoneCaseIds: readonly string[],
-): ReadonlyMap<string, readonly TraceFinding[]> {
-  const owners = new Map<string, Set<string>>();
-  for (const declaration of declarations) {
-    const paths = owners.get(declaration.caseId) ?? new Set<string>();
-    paths.add(declaration.declarationPath);
-    owners.set(declaration.caseId, paths);
-  }
-  const tombstones = new Set(tombstoneCaseIds);
-  const conflicts = new Map<string, TraceFinding[]>();
-  for (const [caseId, paths] of [...owners].sort(([left], [right]) => left.localeCompare(right))) {
-    if (paths.size < 2 && !tombstones.has(caseId)) continue;
-    for (const path of [...paths].sort()) {
-      const conflictsWith = [...paths].filter(other => other !== path);
-      if (tombstones.has(caseId)) conflictsWith.push(historyPath);
-      conflictsWith.sort();
-      const fileFindings = conflicts.get(path) ?? [];
-      fileFindings.push({ code: "CaseIdConflict", path, subject: "caseId", message: `${caseId} conflicts with ${conflictsWith.join(", ")}`, conflictsWith });
-      conflicts.set(path, fileFindings);
-    }
-  }
-  return new Map([...conflicts].sort(([left], [right]) => left.localeCompare(right)));
-}
-
-function validateRegressions(
-  tests: readonly TraceTest[],
-  memory: readonly TraceMemory[],
-  memorySources: ReadonlyMap<string, string>,
-): void {
-  const memoryByPath = new Map(memory.map((entry) => [entry.path, entry]));
-  for (const test of tests) {
-    for (const reference of test.regressions) {
-      const targetPath = validateReferenceTarget(test.path, "regression", reference, memorySources);
-      const target = memoryByPath.get(targetPath);
-      if (target === undefined) {
-        throw new TraceFormatError({
-          path: test.path,
-          subject: "regression",
-          message: `target ${reference} is not a Memory document`,
-        });
-      }
-      if (target.kind !== "problem") {
-        throw new TraceFormatError({
-          path: test.path,
-          subject: "regression",
-          message: `structured target ${reference} must be a Problem Memory`,
-        });
-      }
-    }
-  }
-}
-
-function validateScopedRepoRef(
-  sourcePath: string,
-  subject: string,
-  reference: string,
-  snapshot: TraceSnapshot,
-  documents: ReadonlyMap<string, string>,
-  expectedKinds: readonly DocsNodeKind[],
-): DocsNodeKind {
-  const targetPath = referenceParts(reference).path;
-  const validated = validateRepoRefTarget(snapshot, reference, expectedKinds, documents.get(targetPath));
-  if (Result.isFailure(validated)) {
-    throw new TraceFormatError({ path: sourcePath, subject, message: validated.failure.message });
-  }
-  if (!validated.success.directNode && isInsideUseCaseBoundary(snapshot.nodes, targetPath)) {
-    throw new TraceFormatError({
-      path: sourcePath,
-      subject,
-      message: `supporting target ${reference} is inside a Use Case boundary; target the exact Use Case node`,
+/** Reuse the current compiler; repository APIs do not read legacy profiles. */
+function compileTraceAtGeneration(root: string, generation: number, _attempt: number, findings?: TraceFinding[]): Effect.Effect<TraceSnapshot, TraceError, FileSystem.FileSystem> {
+  return Effect.gen(function* () {
+    const source = import.meta.url.endsWith('.ts');
+    const storagePath = source ? '../../../src/storage.ts' : '../../../storage.js';
+    const configPath = source ? '../../../src/config.ts' : '../../../config.js';
+    const tracePath = source ? '../../../src/trace.ts' : '../../../trace.js';
+    type Repo = import('concord-sdlc/model').Repository;
+    type CurrentTrace = { documents: readonly DocumentRecord[]; annotations: { cases: readonly import('concord-sdlc/model').AnnotatedCase[] }; findings: readonly { path: string; code: string; message: string }[]; complete: boolean };
+    const modules = yield* Effect.tryPromise({
+      try: async () => ({ storage: await import(storagePath) as { canonicalPath(path: string): string }, config: await import(configPath) as { snapshot(path: 'concord.config.ts', source: string): import('concord-sdlc/model').ConfigSnapshot }, trace: await import(tracePath) as { buildTrace(repo: Repo, cache: 'off', options: object): CurrentTrace } }),
+      catch: cause => new TraceIoError({ operation: 'read', path: root, message: message(cause) }),
     });
-  }
-  return validated.success.kind;
-}
-
-function validateFeedbackRelations(
-  feedback: readonly TraceFeedback[],
-  snapshot: TraceSnapshot,
-  documents: ReadonlyMap<string, string>,
-  memory: readonly TraceMemory[],
-): void {
-  const memoryIds = new Set(memory.map((entry) => entry.path));
-  for (const entry of feedback) {
-    for (const target of entry.adoptions.current) {
-      validateScopedRepoRef(
-        entry.path,
-        "adoption",
-        target,
-        snapshot,
-        documents,
-        ADOPTABLE_DOCS_NODE_KINDS,
-      );
-    }
-    for (const relation of entry.memoryRelations) {
-      if (relation.kind === 'related' ? relation.memory === entry.path || !feedback.some(target => target.path === relation.memory) : !memoryIds.has(relation.memory)) {
-        throw new TraceFormatError({
-          path: entry.path,
-          subject: "memory relation",
-          message: `Memory ${relation.memory} does not exist`,
-        });
-      }
-    }
-  }
-}
-
-function validateMemoryPromotions(
-  memory: readonly TraceMemory[],
-  snapshot: TraceSnapshot,
-  documents: ReadonlyMap<string, string>,
-): void {
-  for (const entry of memory) {
-    for (const promotion of entry.promotions) {
-      for (const target of promotion.current) {
-        if (target === 'docs/constitution.md' || target.startsWith('docs/constitution.md#')) {
-          const source = documents.get('docs/constitution.md');
-          const anchor = target.split('#')[1];
-          if (source === undefined || anchor !== undefined && !source.split(/\r?\n/u).some(line => line.endsWith(`{#${anchor}}`))) throw new TraceFormatError({ path: entry.path, subject: 'amends', message: `Constitution target does not exist: ${target}` });
-          continue;
-        }
-        validateScopedRepoRef(entry.path, "promotion", target, snapshot, documents, ADOPTABLE_DOCS_NODE_KINDS);
-      }
-    }
-  }
-}
-
-function walk(directory: string): Effect.Effect<readonly string[], TraceIoError, FileSystem.FileSystem> {
-  return Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem;
-    const entries = yield* fs.readDirectory(directory).pipe(
-      Effect.mapError((cause) => new TraceIoError({
-        operation: "scan",
-        path: directory,
-        message: message(cause),
-      })),
-    );
-    const nested = yield* Effect.forEach(entries, (entry) => {
-      if (
-        entry.startsWith(".stage-") ||
-        entry === "node_modules" ||
-        entry === ".git"
-      ) return Effect.succeed([] as readonly string[]);
-      const path = join(directory, entry);
-      return fs.stat(path).pipe(
-        Effect.mapError((cause) => new TraceIoError({ operation: "scan", path, message: message(cause) })),
-        Effect.flatMap((status) => status.type === "Directory"
-          ? walk(path)
-          : status.type === "File"
-            ? Effect.succeed([path])
-            : Effect.fail(new TraceIoError({ operation: "scan", path, message: `unsupported ${status.type} entry` }))),
-      );
-    });
-    return nested.flat();
-  });
-}
-
-type RepositoryConfiguration = ReturnType<typeof repositoryConfiguration>["config"];
-const inDirectory = (file: string, directory: string): boolean => file === directory || file.startsWith(`${directory}/`);
-
-function traceInputPaths(root: string, paths: readonly string[], config: RepositoryConfiguration): readonly string[] {
-  return sorted(paths.filter((path) => {
-    const file = slash(relative(root, path));
-    if (/^docs\/.*\.md$/u.test(file)) return true;
-    if (/^memory\/.*\.md$/u.test(file)) return true;
-    if (file === config.historyPath) return true;
-    return /\.(?:[cm]?[jt]sx?)$/u.test(file) && config.suites.some(suite => inDirectory(file, suite.root));
-  }), (path) => slash(relative(root, path)));
-}
-
-function changedInputs(
-  root: string,
-  firstPaths: readonly string[],
-  secondPaths: readonly string[],
-  firstSources: ReadonlyMap<string, string>,
-  secondSources: ReadonlyMap<string, string>,
-): readonly string[] {
-  const changed = new Set<string>();
-  const firstRelative = new Set(firstPaths.map((path) => slash(relative(root, path))));
-  const secondRelative = new Set(secondPaths.map((path) => slash(relative(root, path))));
-  for (const path of firstRelative) if (!secondRelative.has(path)) changed.add(path);
-  for (const path of secondRelative) if (!firstRelative.has(path)) changed.add(path);
-  for (const path of firstPaths) {
-    if (secondSources.get(path) !== firstSources.get(path)) changed.add(slash(relative(root, path)));
-  }
-  return [...changed].sort();
-}
-
-function compileTraceAtGeneration(
-  root: string,
-  generation: number,
-  attempt: number,
-  findings?: TraceFinding[],
-): Effect.Effect<TraceSnapshot, TraceError, FileSystem.FileSystem> {
-  return Effect.gen(function*() {
-    const fs = yield* FileSystem.FileSystem;
-    const profile = yield* pure("concord.repository.json", "configuration", () => repositoryConfiguration(root));
-    const scan = Effect.fn("repository.trace.scanGovernedInputs")(function*() {
-      const directories = [...new Set(["docs", "memory", ...profile.config.suites.map(suite => suite.root)])];
-      const groups = yield* Effect.forEach(directories, directory => walk(join(root, directory)));
-      const files = new Set(groups.flat());
-      const history = join(root, profile.config.historyPath);
-      const historyExists = yield* fs.exists(history).pipe(Effect.mapError(cause => new TraceIoError({
-        operation: "scan",
-        path: profile.config.historyPath,
-        message: message(cause),
-      })));
-      if (historyExists) files.add(history);
-      return [...files];
-    });
-    const firstAll = yield* scan();
-    const firstInputs = traceInputPaths(root, firstAll, profile.config);
-    const firstPairs = yield* Effect.forEach(firstInputs, (path) => fs.readFileString(path).pipe(
-      Effect.map((source) => [path, source] as const),
-      Effect.mapError((cause) => new TraceIoError({
-        operation: "read",
-        path: slash(relative(root, path)),
-        message: message(cause),
-      })),
-    ));
-    const secondAll = yield* scan();
-    const secondInputs = traceInputPaths(root, secondAll, profile.config);
-    const secondPairs = yield* Effect.forEach(secondInputs, (path) => fs.readFileString(path).pipe(
-      Effect.map((source) => [path, source] as const),
-      Effect.mapError((cause) => new TraceIoError({
-        operation: "read",
-        path: slash(relative(root, path)),
-        message: message(cause),
-      })),
-    ));
-    const firstSources = new Map(firstPairs);
-    const capturedSources = new Map(secondPairs);
-    const changed = [...changedInputs(root, firstInputs, secondInputs, firstSources, capturedSources)];
-    const currentProfile = yield* pure("concord.repository.json", "configuration", () => repositoryConfiguration(root));
-    if (currentProfile.digest !== profile.digest) changed.push("concord.repository.json");
-    if (changed.length > 0) {
-      return yield* new TraceInputChanged({ path: root, attempts: attempt, changed });
-    }
-    const all = secondAll;
-    const relativeFiles = new Set(all.map((path) => slash(relative(root, path))));
-    const read = (path: string): Effect.Effect<string, TraceIoError> => {
-      const source = capturedSources.get(path);
-      return source === undefined
-        ? Effect.fail(new TraceIoError({
-            operation: "read",
-            path: slash(relative(root, path)),
-            message: "file was not part of the stable Trace input capture",
-          }))
-        : Effect.succeed(source);
-    };
-
-    const docFiles = all.filter((path) => path.startsWith(join(root, "docs") + sep) && path.endsWith(".md"));
-    const documentSources = yield* Effect.forEach(docFiles, (path) => read(path).pipe(
-      Effect.map((source) => [slash(relative(root, path)), source] as const),
-    ));
-    const documentIndex = new Map(documentSources);
-    const ownerValues = yield* Effect.forEach(
-      documentSources,
-      ([path, source]) => pure(path, "frontmatter", () => decodeDocumentSource(path, source)),
-    );
-    const ownerReader = { root, read: (path: string) => documentIndex.get(path), files: (directory: string) => documentSources.map(([path]) => path).filter(path => path.startsWith(`${directory}/`)) };
-    const owners = ownerValues.filter((owner): owner is DocumentRecord => owner !== undefined && documentDisposition(owner.metadata.kind, owner.path, ['memory']) === 'current').map(owner => deriveDesignRecord(ownerReader, owner));
-    const identities = new Set<string>();
-    for (const owner of owners) {
-      if (owner.metadata.kind === 'memory') continue;
-      if (owner.metadata.kind !== 'use-case') {
-        const placement = documentPlacementError(owner.metadata.kind, owner.path);
-        if (placement !== undefined) return yield* new TraceFormatError({ path: owner.path, subject: 'placement', message: placement });
-      }
-      const identity = owner.path;
-      if (identities.has(identity)) return yield* new TraceFormatError({ path: owner.path, subject: 'identity', message: `${identity} is not unique` });
-      identities.add(identity);
-    }
-    const nodeValues = yield* Effect.forEach(owners, owner => pure(owner.path, 'placement', () => decodeNode(owner, owners, root)));
-    const parsedNodes = nodeValues.filter((item): item is TraceNode => item !== undefined);
-    const nodes = sorted(
-      [...parsedNodes, ...(yield* pure(root, "plans", () => deriveDesignPlans(parsedNodes, documentSources, root)))],
-      (item) => item.path,
-    );
-    const pages = deriveFeaturePages(nodes, documentSources);
-    const targetSnapshot: TraceSnapshot = {
-      digest: "",
-      generation,
-      nodes,
-      pages,
-      tests: [],
-      feedback: [],
-      memory: [],
-    };
-    yield* pure("docs", "relations", () => validateNodeRelations(targetSnapshot, documentIndex));
-
-    const annotationFiles = all.filter((path) => {
-      const file = slash(relative(root, path));
-      return file !== profile.config.historyPath && /\.(?:[cm]?[jt]sx?)$/u.test(file)
-        && profile.config.suites.some(suite => inDirectory(file, suite.root));
-    });
-    const candidateSources = yield* Effect.forEach(annotationFiles, (path) => read(path).pipe(
-      Effect.map((source) => ({ path: slash(relative(root, path)), source })),
-    ));
-    const knownCaseIds = new Map<string, string>();
-    const tests: TraceTest[] = [];
-
-    const annotated = [] as import("../test-case/annotations.js").CaseDeclaration[];
-    for (const candidate of candidateSources) {
-      const decoded = decodeCaseDeclarations(candidate.path, candidate.source);
-      if (Result.isFailure(decoded)) {
-        if (findings === undefined) return yield* new TraceFormatError({ path: candidate.path, subject: "case relations", message: decoded.failure.message });
-        findings.push({ code: "CaseAnnotationInvalid", path: candidate.path, subject: "case relations", message: decoded.failure.message, ...(decoded.failure.suggestion === undefined ? {} : { suggestion: decoded.failure.suggestion }) });
-        continue;
-      }
-      annotated.push(...decoded.success);
-    }
-    const historyPath = profile.config.historyPath;
-    const archived = relativeFiles.has(historyPath) ? decodeCaseArchive(historyPath, yield* read(join(root, historyPath))) : Result.succeed({ history: [], tombstones: [] });
-    if (Result.isFailure(archived)) return yield* Effect.fail(new TraceFormatError({ path: historyPath, subject: "case history", message: archived.failure.message }));
-    const archivedIds = new Set<string>();
-    for (const entry of archived.success.tombstones) {
-      if (archivedIds.has(entry.event.caseId)) return yield* new TraceFormatError({ path: historyPath, subject: "caseId", message: `${entry.event.caseId} has duplicate tombstones` });
-      archivedIds.add(entry.event.caseId);
-    }
-    const casesByFile = new Map<string, typeof annotated>();
-    for (const item of annotated) {
-      const fileCases = casesByFile.get(item.declarationPath) ?? [];
-      fileCases.push(item);
-      casesByFile.set(item.declarationPath, fileCases);
-    }
-    const conflictsByFile = findCaseIdConflicts(annotated, historyPath, archived.success.tombstones.map(entry => entry.event.caseId));
-    for (const [declarationPath, fileCases] of casesByFile) {
-      const conflicts = conflictsByFile.get(declarationPath);
-      if (conflicts !== undefined) {
-        if (findings === undefined) return yield* new TraceFormatError({ path: declarationPath, subject: "caseId", message: conflicts[0]!.message });
-        findings.push(...conflicts);
-        continue;
-      }
-      const start = tests.length;
-      const validated = yield* Effect.result(Effect.gen(function*() {
-        for (const item of fileCases) {
-          if (!relativeFiles.has(item.testFile)) return yield* Effect.fail(new TraceFormatError({ path: item.declarationPath, subject: "testFile", message: `${item.testFile} does not exist` }));
-          {
-            const caseId = item.caseId;
-            const previous = knownCaseIds.get(caseId);
-            if (previous !== undefined) return yield* Effect.fail(new TraceFormatError({
-              path: item.declarationPath,
-              subject: "caseId",
-              message: `${caseId} is already owned by ${previous}`,
-            }));
-            knownCaseIds.set(caseId, item.declarationPath);
-          }
-
-          const contract = item.contract;
-          if (item.contract !== undefined) {
-            const contractPath = referenceParts(contract).path;
-            const target = validateRepoRefTarget(targetSnapshot, contract, ["feature", "use-case"], documentIndex.get(contractPath));
-            if (Result.isFailure(target)) return yield* Effect.fail(new TraceFormatError({
-              path: item.declarationPath, subject: "contract", message: target.failure.message,
-            }));
-            if (target.success.kind !== item.contractKind) return yield* Effect.fail(new TraceFormatError({
-              path: item.declarationPath, subject: "contract", message: `@${item.contractKind} must point to a ${item.contractKind} contract`,
-            }));
-            if (featuresForContract(nodes, target.success.path).length === 0) return yield* Effect.fail(new TraceFormatError({
-              path: item.declarationPath, subject: "contract", message: `${contract} is not a Feature contract or composed Use Case`,
-            }));
-          }
-
-          const suites = profile.config.suites.filter(suite => inDirectory(item.testFile, suite.root));
-          if (suites.length !== 1) {
-            return yield* Effect.fail(new TraceFormatError({
-              path: item.declarationPath,
-              subject: "suite",
-              message: `${item.testFile} must belong to exactly one configured suite`,
-            }));
-          }
-          const suite = suites[0]!;
-          if (!inDirectory(item.declarationPath, suite.root)) {
-            return yield* Effect.fail(new TraceFormatError({
-              path: item.declarationPath,
-              subject: "suite",
-              message: `declaration helper and native test must belong to suite ${suite.id}`,
-            }));
-          }
-          {
-            tests.push({
-              caseId: item.caseId,
-              title: item.title,
-              selector: `${item.testFile}#${item.caseId}`,
-              path: item.testFile,
-              contract,
-              regressions: [...item.regressions],
-              issues: item.issues.map((issue) => issue.url),
-              suite: suite.id,
-            });
-          }
-        }
-      }));
-      if (Result.isFailure(validated)) {
-        tests.splice(start);
-        for (const item of fileCases) if (knownCaseIds.get(item.caseId) === declarationPath) knownCaseIds.delete(item.caseId);
-        if (findings === undefined) return yield* Effect.fail(validated.failure);
-        const error = validated.failure;
-        findings.push({ code: error.subject === "caseId" ? "CaseIdConflict" : error.subject === "suite" ? "CaseSuiteInvalid" : "CaseContractInvalid", path: declarationPath, subject: error.subject, message: error.message });
-      }
-    }
-
-    const memoryFiles = all.filter((path) =>
-      path.startsWith(join(root, "memory") + sep) && path.endsWith(".md")
-    );
-    const allMemorySources = yield* Effect.forEach(memoryFiles, (path) => read(path).pipe(
-      Effect.map((source) => [slash(relative(root, path)), source] as const),
-    ));
-    const memorySources = yield* pure('memory', 'classification', () => allMemorySources.filter(([path, source]) => decodeDocumentSource(path, source)?.metadata.kind === 'memory'));
-    const memorySourceIndex = new Map(memorySources);
-    const memory = yield* Effect.forEach(memorySources, ([relativePath, source]) => pure(
-      relativePath,
-      "memory",
-      (): TraceMemory => {
-        const decoded = decodeMemoryDocument(
-          relativePath,
-          relativePath.slice("memory/".length, -".md".length),
-          source,
-        );
-        return {
-          path: relativePath,
-          id: decoded.metadata.id,
-          title: decoded.metadata.title,
-          kind: decoded.metadata.memoryKind,
-          state: decoded.metadata.state,
-          promotions: [{
-            kind: "promotion",
-            current: sorted(decoded.metadata.promotions, (target) => target),
-            history: decoded.metadata.history
-              .flatMap((entry) => entry.action !== "promote" && entry.action !== "retire-promotion"
-                ? []
-                : entry.ref === undefined
-                  ? []
-                  : [{ at: entry.at, action: entry.action, reason: entry.reason, ref: entry.ref, ...(entry.commit === undefined ? {} : { commit: entry.commit }) }]),
-          }],
-          metadataDigest: digest(decoded.metadata),
+    return yield* pure(root, 'sources', () => {
+      const capture = (): Map<string, string> => {
+        const sources = new Map<string, string>();
+        const visit = (directory: string): void => {
+          const parts = directory.split('/');
+          for (let end = 1; end <= parts.length; end++) if (lstatSync(join(root, ...parts.slice(0, end)), { throwIfNoEntry: false })?.isSymbolicLink()) throw new TraceIoError({ operation: 'read', path: directory, message: 'Source path has a symbolic-link component' });
+          const absolute = join(root, directory); const stat = lstatSync(absolute, { throwIfNoEntry: false });
+          if (!stat) return;
+          if (stat.isSymbolicLink()) throw new TraceIoError({ operation: 'read', path: directory, message: 'Symbolic links are not supported in repository sources' });
+          if (stat.isDirectory()) { for (const name of readdirSync(absolute).sort()) if (!['.git', 'node_modules', 'dist', '.test-results'].includes(name)) visit(directory ? `${directory}/${name}` : name); }
+          else if (stat.isFile()) sources.set(directory, readFileSync(absolute, 'utf8'));
+          else throw new TraceIoError({ operation: 'read', path: directory, message: 'Source is not a regular file' });
         };
-      },
-    ));
-    for (const [declarationPath, fileCases] of casesByFile) {
-      const ids = new Set(fileCases.map(item => item.caseId));
-      const fileTests = tests.filter(test => ids.has(test.caseId));
-      if (fileTests.length === 0) continue;
-      const validation = yield* Effect.result(pure(declarationPath, "regression", () => validateRegressions(fileTests, memory, memorySourceIndex)));
-      if (Result.isFailure(validation)) {
-        if (findings === undefined) return yield* Effect.fail(validation.failure);
-        findings.push({ code: "CaseRegressionInvalid", path: declarationPath, subject: "regression", message: validation.failure.message });
-        for (let index = tests.length - 1; index >= 0; index--) if (ids.has(tests[index]!.caseId)) tests.splice(index, 1);
-      }
-    }
-
-    const feedbackFiles = owners.filter(owner => owner.metadata.kind === 'issue').map(owner => join(root, owner.path));
-    const feedback = yield* Effect.forEach(feedbackFiles, (path) => read(path).pipe(
-      Effect.flatMap((source) => {
-        const relativePath = slash(relative(root, path));
-        return pure(relativePath, "feedback", (): TraceFeedback => {
-          const { metadata } = decodeFeedbackDocument(relativePath, source);
-          const current = sorted(metadata.adoptions.current, (target) => target);
-          const history = sorted(metadata.adoptions.history, (item) => `${item.target}\0${item.commit}`);
-          const memoryRelations = sorted(metadata.memoryRelations, (relation) => `${relation.kind}\0${relation.memory}`);
-          return {
-            path: relativePath,
-            id: metadata.id,
-            title: metadata.title,
-            state: metadata.state,
-            ...(metadata.subject === undefined ? {} : { subject: metadata.subject }),
-            ...(metadata.claim === undefined ? {} : { claim: metadata.claim }),
-            adoptions: { current, history },
-            memoryRelations,
-            metadataDigest: digest({
-              ...metadata,
-              adoptions: { current, history },
-              memoryRelations,
-            }),
-          };
-        });
-      }),
-    ));
-    const raw = {
-      generation,
-      nodes,
-      pages,
-      tests: sorted(tests, (item) => item.selector),
-      feedback: sorted(feedback, (item) => item.path),
-      memory: sorted(memory, (item) => item.path),
-    };
-    const snapshot: TraceSnapshot = { ...raw, digest: digest(raw) };
-    yield* pure("memory", "promotion", () => validateMemoryPromotions(memory, snapshot, documentIndex));
-    yield* pure(
-      "feedback",
-      "relations",
-      () => validateFeedbackRelations(feedback, snapshot, documentIndex, memory),
-    );
-    return snapshot;
+        visit('concord.config.ts');
+        const config = sources.has('concord.config.ts') ? modules.config.snapshot('concord.config.ts', sources.get('concord.config.ts')!).config : {};
+        for (const directory of new Set(['docs', 'memory', ...(config.testRoots ?? ['test', 'tests'])])) { modules.storage.canonicalPath(directory); visit(directory); }
+        return sources;
+      };
+      const captured = capture();
+      const configSnapshot: import('concord-sdlc/model').ConfigSnapshot = captured.has('concord.config.ts') ? modules.config.snapshot('concord.config.ts', captured.get('concord.config.ts')!) : { path: 'concord.config.ts', source: '', digest: `sha256:${createHash('sha256').update('').digest('hex')}`, config: {} };
+      const repo: Repo = {
+        root, privateDir: join(root, '.git/concord'), access: 'read', persistentCache: 'off', configSnapshot,
+        config: { ...configSnapshot.config, testRoots: configSnapshot.config.testRoots ?? ['test', 'tests'].filter(directory => [...captured.keys()].some(path => path.startsWith(`${directory}/`))), sourceRoots: configSnapshot.config.sourceRoots ?? [] },
+        read: path => { modules.storage.canonicalPath(path); return captured.get(path); },
+        files: directory => [...captured.keys()].filter(path => path === directory || path.startsWith(`${directory}/`)),
+        absolute: path => { modules.storage.canonicalPath(path); return join(root, path); },
+        publish: () => { throw new TraceFormatError({ path: root, subject: 'read', message: 'Trace compilation cannot publish' }); },
+      };
+        const current = modules.trace.buildTrace(repo, 'off', { includeCode: false, annotationSourceMode: 'overlay' });
+        const problems = current.findings.map(finding => ({ ...finding, subject: 'source' }));
+        if (findings === undefined && (!current.complete || problems.length)) throw new TraceIncomplete({ findings: problems });
+        findings?.push(...problems);
+        const documentSources = repo.files('docs').filter(path => path.endsWith('.md')).map(path => [path, repo.read(path)!] as const);
+        const nodes = current.documents.flatMap(record => { const node = decodeNode(record, current.documents, root); return node ? [node] : []; });
+        const plans = deriveDesignPlans(nodes, documentSources, root);
+        const allNodes = sorted([...nodes, ...plans], item => item.path);
+        const memory: TraceMemory[] = current.documents.flatMap(record => record.metadata.kind === 'memory' ? [{ path: record.path, id: record.metadata.id, title: record.metadata.title, type: record.metadata.type, status: record.metadata.status, relations: record.metadata.relations, metadataDigest: digest(record.metadata) }] : []);
+        const feedback: TraceFeedback[] = current.documents.flatMap(record => record.metadata.kind === 'issue' ? [{ path: record.path, id: record.metadata.id, title: record.metadata.title, status: record.metadata.status, ...(record.metadata.origin === undefined ? {} : { source: record.metadata.origin }), relations: record.metadata.relations, metadataDigest: digest(record.metadata) }] : []);
+        const tests: TraceTest[] = current.annotations.cases.filter(test => test.status === 'active').map(test => ({ caseId: test.id, selector: test.id, path: test.file, title: test.name, suite: 'project', contract: test.contract, issues: test.issues }));
+        const value = { generation, nodes: allNodes, pages: deriveFeaturePages(allNodes, documentSources), memory, feedback, tests };
+        if (digest([...capture()]) !== digest([...captured])) throw new TraceInputChanged({ path: root, attempts: _attempt, changed: ['source snapshot'] });
+        return { ...value, digest: digest(value) };
+      });
   });
 }
 

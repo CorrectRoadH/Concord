@@ -11,7 +11,7 @@ import { withTypeScript, withTypeScriptSource, typescriptPackageVersion } from '
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#标记规则
-function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-annotations-v5-native-selector`; }
+function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-annotations-v6-issue`; }
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/;
 const TEXT_LIMIT = 1_048_576;
 const COMMENT_LINE = /^[ \t]*(?:\/\/+|#|--)[ \t]?(.*)$/u;
@@ -28,11 +28,11 @@ interface Source { readonly path: string; readonly text: string; readonly digest
 interface Parsed { readonly cases: AnnotatedCase[]; readonly findings: Finding[] }
 
 function finding(findings: Finding[], code: string, path: string, message: string, line?: number): void { findings.push(line === undefined ? { code, path, message } : { code, path, message, line }); }
-function parseAnnotations(values: readonly string[], lines: readonly number[], path: string, findings: Finding[]): { readonly contract?: string; readonly contractKind?: 'feature' | 'use-case'; readonly contractLine?: number; readonly regressions: string[]; readonly status: 'active' | 'retired'; readonly name?: string; readonly native?: string; readonly recognized: boolean; readonly rejected: boolean } {
+function parseAnnotations(values: readonly string[], lines: readonly number[], path: string, findings: Finding[]): { readonly contract?: string; readonly contractKind?: 'feature' | 'use-case'; readonly contractLine?: number; readonly issues: string[]; readonly status: 'active' | 'retired'; readonly name?: string; readonly native?: string; readonly recognized: boolean; readonly rejected: boolean } {
   let contract: string | undefined, contractKind: 'feature' | 'use-case' | undefined, contractLine: number | undefined, status: 'active' | 'retired' = 'active', name: string | undefined, native: string | undefined, recognized = false, rejected = false;
-  const regressions: string[] = [];
+  const issues: string[] = [];
   for (let index = 0; index < values.length; index++) {
-    const match = /^@(feature|use-case|regression|status|name|native)(?:\s+(.+?))?\s*$/u.exec(values[index] ?? '');
+    const match = /^@(feature|use-case|issue|status|name|native)(?:\s+(.+?))?\s*$/u.exec(values[index] ?? '');
     if (!match) continue;
     recognized = true;
     const kind = match[1], argument = match[2]?.trim(), line = lines[index];
@@ -43,14 +43,14 @@ function parseAnnotations(values: readonly string[], lines: readonly number[], p
     } else if (kind === 'native') {
       if (native !== undefined) { finding(findings, 'InvalidAnnotation', path, '@native must appear once', line); rejected = true; }
       else native = argument;
-    } else if (kind === 'regression') regressions.push(argument);
+    } else if (kind === 'issue') issues.push(argument);
     else if (kind === 'name') {
       if (name !== undefined) { finding(findings, 'InvalidAnnotation', path, '@name must appear once', line); rejected = true; }
       else name = argument;
     } else if (argument === 'retired') status = 'retired';
     else { finding(findings, 'InvalidAnnotation', path, '@status must be retired', line); rejected = true; }
   }
-  return { contract, contractKind, contractLine, regressions, status, name, native, recognized, rejected };
+  return { contract, contractKind, contractLine, issues, status, name, native, recognized, rejected };
 }
 function realCommentLines(path: string, text: string): ReadonlySet<number> | undefined {
   if (!SOURCE_EXTENSION.test(path)) return undefined;
@@ -73,7 +73,7 @@ function realCommentLines(path: string, text: string): ReadonlySet<number> | und
     return lines;
   });
 }
-function hasTestMarker(text: string): boolean { return !text.includes('\0') && /@(?:feature|use-case|regression|status|name|native)(?:\s|$)/u.test(text); }
+function hasTestMarker(text: string): boolean { return !text.includes('\0') && /@(?:feature|use-case|issue|status|name|native)(?:\s|$)/u.test(text); }
 export function parseTestDeclarations(path: string, text: string): { readonly cases: readonly AnnotatedCase[]; readonly findings: readonly Finding[] } {
   return parseSource({ path, text, digest: digest(text) });
 }
@@ -112,8 +112,8 @@ function parseSource(input: Source): Parsed {
     try {
       cases.push(decode(AnnotatedCaseSchema, {
         id, file: input.path, line: parsed.contractLine, name, contract: parsed.contract, contractKind: parsed.contractKind,
-        regressions: parsed.regressions, status: parsed.status, framework: 'marker', skipped: false, named: parsed.name !== undefined, ...(parsed.native === undefined ? {} : { native: parsed.native }),
-        markerEndLine: valueLines.filter((_, index) => /^@(feature|use-case|regression|status|name|native)(?:\s|$)/u.test(values[index] ?? '')).at(-1),
+        issues: parsed.issues, status: parsed.status, framework: 'marker', skipped: false, named: parsed.name !== undefined, ...(parsed.native === undefined ? {} : { native: parsed.native }),
+        markerEndLine: valueLines.filter((_, index) => /^@(feature|use-case|issue|status|name|native)(?:\s|$)/u.test(values[index] ?? '')).at(-1),
       }, `${input.path}:${parsed.contractLine}`));
     } catch (cause) { finding(findings, 'InvalidAnnotation', input.path, cause instanceof Error ? cause.message : String(cause), parsed.contractLine); }
   }
@@ -144,7 +144,7 @@ function sources(repo: Repository, mode: SourceMode): Source[] {
 }
 function cachePath(repo: Repository): string { return cacheDatabasePath(repo.privateDir); }
 function cacheKey(repo: Repository, current: readonly Source[]): string {
-  return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: parserVersion(), files: current.map(source => ({ path: source.path, digest: source.digest })) });
+  return objectDigest({ root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: parserVersion(), files: current.map(source => ({ path: source.path, digest: source.digest })) });
 }
 function readCache(repo: Repository, key: string): CachedSnapshot | undefined {
   return withPersistentCache(repo, false, db => {

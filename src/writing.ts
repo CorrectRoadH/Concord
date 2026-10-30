@@ -246,7 +246,7 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
         if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
       }
     }
-    for (const [path, before] of inputs) if (repo.read(path) !== before) throw new ConcordError('WritingInputsChanged', `${path} changed during writing checks`);
+    for (const [path, before] of inputs) if (repo.read(path) !== (path === 'concord.config.ts' && before === '' ? undefined : before)) throw new ConcordError('WritingInputsChanged', `${path} changed during writing checks`);
     const currentDocsMembers = repo.files('docs');
     for (const [root, before] of memberships) {
       const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();

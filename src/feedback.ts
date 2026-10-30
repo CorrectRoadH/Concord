@@ -136,10 +136,10 @@ export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonl
       availability = remote === null ? 'unavailable' : 'cached';
       if (cacheWarning !== undefined) warnings.push(cacheWarning);
     }
-    const features = document.metadata.adoptions.current;
-    const triage: FeedbackItem['triage'] = document.metadata.state === 'closed'
+    const features = document.metadata.relations.filter(relation => relation.role === 'adopts');
+    const triage: FeedbackItem['triage'] = document.metadata.status === 'closed'
       ? 'closed'
-      : features.length > 0 || document.metadata.memoryRelations.length > 0 ? 'linked' : 'pending';
+      : features.length > 0 || document.metadata.relations.length > 0 ? 'linked' : 'pending';
     return { document: issueRecord(document), provider: source?.provider ?? 'local', triage, remote, availability, warnings };
   }).filter(item => matchesFeedback(item, selected));
 }
@@ -201,7 +201,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
       const path = `docs/issues/${id}.md`;
       const source: FeedbackSource = decode(FeedbackSourceSchema, { ...item, connectionId, importedAt }, `feedback source ${identity}`);
       const metadata: DocumentMeta = {
-        format: 'concord.document/v1', id, title: item.title, createdAt: importedAt, kind: 'issue', state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, source, history: [],
+        format: 'concord.document/v1', id, title: item.title, createdAt: importedAt, kind: 'issue', status: 'open', relations: [], source,
       };
       const body = item.body.trim().length > 0 ? item.body : `Imported feedback: ${item.url}`;
       changes.push({ path, before: null, after: renderDocument(metadata, body) });

@@ -1,273 +1,106 @@
-import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
-import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Effect, Predicate, Schema } from 'effect';
-import { AnnotatedCaseSchema, ConcordError, MemorySchema, Sha256, Text, canonical, decode, digest, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type FixedProof, type ProjectConfig, type Repository, type Resolution } from './shared.js';
+// @concord-file
+// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
+import { Effect } from 'effect';
+import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type Repository, type Runner } from './shared.js';
 import { hasConfirmedOwnedGroupCleanup, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from './owned-process.js';
-import { loadDocuments, resolveReference } from './documents.js';
-import { parseReference } from './refs.js';
-import { snapshot as parseConfigSnapshot } from './config.js';
 import type { LocalRepository } from './storage.js';
 import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './coordination.js';
 import { beginRun, finalizeRun, finishRun, quarantineRun } from './run-coordination.js';
-import { adapterFor, adapterInputSnapshot, executeNativeCase, type NativeExecution } from './test-adapters.js';
-import { AdapterVersionsSchema, CapabilitiesSchema, NativeResultSchema, ProcessStatusSchema, nativeVerdict } from './test-adapter-protocol.js';
+import { adapterFor, executeNativeCase, type NativeExecution } from './test-adapters.js';
+import { nativeVerdict } from './test-adapter-protocol.js';
 
-const MAX_EVIDENCE_BYTES = 1024 * 1024;
-const MAX_NATIVE_EVIDENCE_BYTES = 32 * 1024 * 1024;
-const OPAQUE_ID = /^ccev_[0-9a-f]{32}$/u;
-const INITIAL_INDEX = new Set(['docs/feature/README.md', 'docs/roadmap/README.md', 'docs/design/README.md', 'docs/research/README.md', 'docs/issues/README.md', 'memory/README.md']);
-const safeEnvironment = (): NodeJS.ProcessEnv => { const env = { ...process.env }; for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key]; return env; };
-const iso = () => new Date().toISOString();
+export const safeRunnerEnvironment = (): NodeJS.ProcessEnv => { const env = { ...process.env }; for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key]; return env; };
+export interface CommandEvidence {
+  readonly operation: 'test-run'; readonly scope: 'command'; readonly selectedCaseId: string;
+  readonly commandOutcome: 'pass' | 'fail' | 'invalid'; readonly execution: 'nonzero' | 'zero' | 'skipped' | 'unknown';
+  readonly exitCode: number | null; readonly signal: string | null; readonly timedOut: boolean; readonly cancelled: boolean;
+  readonly cleanupOk: boolean; readonly arguments: readonly string[];
+}
+export interface NativeEvidence {
+  readonly operation: 'test-run'; readonly scope: 'native'; readonly selectedCaseId: string;
+  readonly commandOutcome: 'green' | 'red' | 'invalid'; readonly execution: 'unknown';
+  readonly exitCode: number | null; readonly signal: string | null; readonly timedOut: boolean; readonly cancelled: boolean; readonly cleanupOk: boolean;
+  readonly arguments: readonly string[]; readonly adapterId: string; readonly requested: readonly string[];
+  readonly observed: import('./test-adapter-protocol.js').AdapterReport['observed'];
+  readonly complete: boolean; readonly gaps: readonly string[];
+  readonly inputs: string; readonly definitionDigest: string; readonly planId: string; readonly planDigest: string; readonly manifestDigest: string;
+  readonly statuses: NativeExecution['statuses']; readonly assignments: readonly { readonly invocationId: string; readonly requested?: readonly string[] }[];
+  readonly capabilities: NativeExecution['report']['capabilities']; readonly versions: NativeExecution['versions']; readonly commandExecutionCount: number;
+}
+export type Evidence = CommandEvidence | NativeEvidence;
 
-// @concord-begin
-// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
-export const CommandEvidenceSchema = Schema.Struct({
-  id: Schema.String.check(Schema.isPattern(OPAQUE_ID)), format: Schema.Literal('concord.command-evidence/v1'), scope: Schema.Literal('command'),
-  selectedCaseId: Text, projectId: Text, root: Text, implementationDigest: Text, definitionDigest: Text, contractDigest: Text, candidateDigest: Text,
-  configPath: Schema.Literal('concord.config.ts'), configDigest: Sha256,
-  problemEpochs: Schema.Record(Text, Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))), argv: Schema.NonEmptyArray(Text),
-  startedAt: Text, finishedAt: Text, commandOutcome: Schema.Literals(['pass', 'fail', 'invalid']), execution: Schema.Literals(['nonzero', 'zero', 'skipped', 'unknown']),
-  exitCode: Schema.NullOr(Schema.Int), signal: Schema.NullOr(Text), timedOut: Schema.Boolean, cancelled: Schema.Boolean, cleanupOk: Schema.Boolean,
-  stdoutDigest: Text, stderrDigest: Text, integrity: Text,
-});
-export const NativeEvidenceSchema = Schema.Struct({
-  ...CommandEvidenceSchema.fields,
-  format: Schema.Literal('concord.native-evidence/v2'), scope: Schema.Literal('native'),
-  commandOutcome: Schema.Literals(['green', 'red', 'invalid']),
-  adapterId: Text, inputs: Sha256, bindingDigest: Sha256, planId: Text, planDigest: Sha256, manifestDigest: Sha256,
-  requested: Schema.NonEmptyArray(Text).check(Schema.isMaxLength(100_000)), observed: Schema.Array(NativeResultSchema).check(Schema.isMaxLength(100_000)),
-  statuses: Schema.NonEmptyArray(ProcessStatusSchema).check(Schema.isMaxLength(128)),
-  assignments: Schema.NonEmptyArray(Schema.Struct({ invocationId: Text, requested: Schema.NonEmptyArray(Text) })),
-  capabilities: CapabilitiesSchema, complete: Schema.Boolean, gaps: Schema.Array(Text),
-  versions: AdapterVersionsSchema,
-  commandExecutionCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-}).check(Schema.makeFilter(value => (value.complete || value.gaps.length > 0) && value.commandExecutionCount === value.statuses.length));
-export const EvidenceSchema = Schema.Union([CommandEvidenceSchema, NativeEvidenceSchema]);
-export type CommandEvidence = typeof CommandEvidenceSchema.Type;
-export type NativeEvidence = typeof NativeEvidenceSchema.Type;
-export type Evidence = typeof EvidenceSchema.Type;
-const decodeEvidence = (value: unknown, source: string): Evidence => {
-  const evidence = decode(EvidenceSchema, value, source);
-  if (evidence.format === 'concord.native-evidence/v2' && nativeVerdict(evidence.requested, evidence.observed, evidence.statuses, evidence.complete, evidence.assignments) !== evidence.commandOutcome) fail('EvidenceIntegrity', 'Native receipt verdict disagrees with its recorded observations');
-  if (evidence.format === 'concord.native-evidence/v2' && evidence.definitionDigest !== nativeDefinitionDigest(evidence.bindingDigest, evidence.inputs, evidence.requested, evidence.planDigest, evidence.versions)) fail('EvidenceIntegrity', 'Native receipt definition does not match its recorded input and plan identities');
-  return evidence;
-};
-// @concord-end
-
-// @concord-begin
-// @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
-function fail(code: string, message: string): never { throw new ConcordError(code, message); }
-function regular(path: string): void { try { const stat = lstatSync(path); if (!stat.isFile()) fail('UnsafePath', `Expected a regular file: ${path}`); } catch (cause) { if (cause instanceof ConcordError) throw cause; fail('InvalidFile', `Required file does not exist: ${path}`); } }
-function implementationDigest(): string {
-  const root = dirname(fileURLToPath(import.meta.url)); const entries: { path: string; digest: string }[] = [];
-  const walk = (directory: string) => { for (const name of readdirSync(directory).sort()) { const path = join(directory, name); const stat = lstatSync(path); if (stat.isSymbolicLink()) fail('UnsafeToolInstallation', `Concord implementation contains a symbolic link: ${path}`); if (stat.isDirectory()) walk(path); else if (stat.isFile() && /\.(?:[cm]?js)$/u.test(name)) entries.push({ path: relative(root, path), digest: digest(readFileSync(path)) }); } };
-  walk(root); return objectDigest(entries);
-}
-function git(repo: Repository, args: readonly string[]): string { try { return execFileSync('git', ['-C', repo.root, ...args], { env: safeEnvironment(), encoding: 'buffer', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 32 * 1024 * 1024 }).toString('utf8'); } catch { return fail('GitFailed', 'Could not inspect the current Git worktree'); } }
-function nul(value: string): string[] { return value.split('\0').filter(Boolean); }
-function currentCandidate(repo: Repository, documents = loadDocuments(repo)): string {
-  const owners = new Set([...documents.map((document) => document.path), ...INITIAL_INDEX]);
-  const tracked = nul(git(repo, ['ls-files', '-z'])); const untracked = nul(git(repo, ['ls-files', '--others', '--exclude-standard', '-z']));
-  const deleted = new Set(nul(git(repo, ['ls-files', '--deleted', '-z']))); const paths = [...new Set([...tracked, ...untracked])].sort();
-  const entries = paths.filter((path) => !owners.has(path) && path !== 'concord.config.ts').map((path) => {
-    const target = repo.absolute(path); if (deleted.has(path) || !existsSync(target)) return { path, state: 'deleted' as const };
-    regular(target); return { path, state: 'present' as const, digest: digest(readFileSync(target)) };
-  });
-  return objectDigest(entries);
-}
-export const candidateDigest = currentCandidate;
-function documentFor(repo: Repository, documents: readonly DocumentRecord[], reference: string, kinds: readonly ('feature' | 'use-case' | 'memory')[]): DocumentRecord { return resolveReference(repo, documents, reference, kinds); }
-function documentDigest(repo: Repository, document: DocumentRecord, reference: string): string { const target = parseReference(reference).path; const source = repo.read(target); if (source === undefined) fail('ReferenceNotFound', `Contract source disappeared: ${reference}`); return objectDigest({ owner: { path: document.path, metadata: document.metadata, body: document.body }, reference, source: digest(source) }); }
-function currentConfig(repo: Repository): ProjectConfig {
-  const source = repo.read(repo.configSnapshot.path);
-  if (source === undefined || digest(source) !== repo.configSnapshot.digest) fail('PreimageChanged', `${repo.configSnapshot.path} changed during evidence execution`);
-  return repo.configSnapshot.config;
-}
-function buildDefinition(repo: Repository, selected: AnnotatedCase, config: ProjectConfig, documents: readonly DocumentRecord[]): { readonly digest: string; readonly argv: readonly string[] } {
-  if (selected.status !== 'active' || selected.skipped) fail('CaseNotRunnable', 'Retired or known skipped/todo test cases cannot issue fixed evidence');
-  const owners = new Set(documents.map((document) => document.path));
-  const test = repo.absolute(selected.file); regular(test); if (owners.has(selected.file)) fail('InvalidDefinition', 'A Concord Markdown owner cannot be a test file');
-  const sourceFiles = config.runner.sourceFiles.map((path) => { if (owners.has(path)) fail('InvalidDefinition', 'A Concord Markdown owner cannot be a runner source file'); const target = repo.absolute(path); regular(target); return { path, digest: digest(readFileSync(target)) }; });
-  const runner = config.runner;
-  let argv: readonly string[];
-  const named = selected.named === true && adapterFor(repo, selected.file) === undefined;
+export function runnerArguments(runner: Runner, selected: AnnotatedCase): readonly string[] {
+  if (selected.status !== 'active' || selected.skipped) throw new ConcordError('CaseNotRunnable', 'Only active, runnable markers can execute');
+  const named = selected.named === true;
   const pattern = named ? `^${selected.name.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&')}$` : '.*';
-  if (runner.kind === 'node-test') argv = ['node', '--test', '--test-reporter=tap', ...(named ? ['--test-name-pattern', pattern] : []), selected.file];
-  else {
-    const replacement: Record<string, string> = { '{file}': selected.file, '{name}': selected.name, '{pattern}': pattern };
-    argv = runner.argv.map((part) => { if (/\{(?:file|name|pattern)\}/u.test(part) && !(part in replacement)) fail('InvalidRunner', 'Runner placeholders must occupy an entire argv element'); if (/\{[^}]*\}/u.test(part) && !(part in replacement)) fail('InvalidRunner', `Unknown runner placeholder: ${part}`); return replacement[part] ?? part; });
-  }
-  return { digest: objectDigest({ annotation: selected, testFile: { path: selected.file, digest: digest(readFileSync(test)) }, runner, sourceFiles, config: { path: repo.configSnapshot.path, digest: repo.configSnapshot.digest } }), argv };
+  if (runner.kind === 'node-test') return ['node', '--test', '--test-reporter=tap', ...(named ? ['--test-name-pattern', pattern] : []), selected.file];
+  const replacements: Record<string, string> = { '{file}': selected.file, '{name}': selected.name, '{pattern}': pattern };
+  return runner.argv.map(part => {
+    if (/\{[^}]*\}/u.test(part) && !(part in replacements)) throw new ConcordError('InvalidRunner', 'Runner placeholders must occupy an entire argument and be file, name, or pattern');
+    return replacements[part] ?? part;
+  });
 }
-function safeEvidencePath(repo: Repository, id: string): string { if (!OPAQUE_ID.test(id)) fail('InvalidEvidenceId', 'Evidence IDs are opaque Concord IDs'); const directory = resolve(repo.privateDir, 'evidence'); const root = resolve(repo.privateDir); if (!directory.startsWith(`${root}${sep}`)) fail('UnsafePath', 'Evidence directory escaped repository private state'); for (const part of [root, directory]) { if (existsSync(part) && lstatSync(part).isSymbolicLink()) fail('UnsafePath', `Symbolic links are not permitted: ${part}`); } return join(directory, `${id}.json`); }
-function store(repo: Repository, evidence: Evidence): void { const path = safeEvidencePath(repo, evidence.id); const directory = dirname(path); mkdirSync(directory, { recursive: true, mode: 0o700 }); if (lstatSync(directory).isSymbolicLink()) fail('UnsafePath', 'Evidence directory is a symbolic link'); const source = `${canonical(evidence)}\n`; const temporary = `${path}.${process.pid}.${randomBytes(8).toString('hex')}.tmp`; let fd: number | undefined; try { fd = openSync(temporary, 'wx', 0o600); writeFileSync(fd, source); closeSync(fd); fd = undefined; renameSync(temporary, path); } finally { if (fd !== undefined) closeSync(fd); try { unlinkSync(temporary); } catch { /* renamed or absent */ } } }
-export function readEvidence(repo: Repository, id: string): Evidence {
-  const path = safeEvidencePath(repo, id); regular(path); let value: unknown;
-  try {
-    if (lstatSync(path).size > MAX_NATIVE_EVIDENCE_BYTES) fail('InvalidEvidence', 'Evidence receipt exceeds its size limit');
-    const source = readFileSync(path);
-    if (source.byteLength > MAX_NATIVE_EVIDENCE_BYTES) fail('InvalidEvidence', 'Evidence receipt exceeds its size limit');
-    value = JSON.parse(source.toString('utf8'));
-    const native = Predicate.isObject(value) && value.format === 'concord.native-evidence/v2';
-    if (!native && source.byteLength > MAX_EVIDENCE_BYTES) fail('InvalidEvidence', 'Evidence receipt exceeds its size limit');
-  } catch (cause) { if (cause instanceof ConcordError) throw cause; fail('InvalidEvidence', `Cannot decode evidence receipt: ${cause instanceof Error ? cause.message : String(cause)}`); }
-  const evidence = decodeEvidence(value, `evidence ${id}`); if (evidence.id !== id) fail('EvidenceIntegrity', 'Evidence receipt ID does not match its opaque filename'); const { integrity, ...unsigned } = evidence; if (integrity !== objectDigest(unsigned)) fail('EvidenceIntegrity', 'Evidence receipt failed its accidental-corruption integrity check'); return evidence;
-}
-function observed(result: OwnedProcessResult, node: boolean): { execution: CommandEvidence['execution']; outcome: CommandEvidence['commandOutcome'] } {
-  if (result.outputLimitExceeded || result.timedOut || result.cancelled || result.signal !== null || result.error !== undefined) return { execution: 'unknown', outcome: 'invalid' };
-  if (!node) return { execution: 'unknown', outcome: result.exitCode === 0 ? 'pass' : 'fail' };
+
+/** Unknown command counts stay unknown; explicit zero/all-skipped counts invalidate a run. */
+export function commandObservation(result: OwnedProcessResult, runner: Runner): Pick<CommandEvidence, 'commandOutcome' | 'execution'> {
+  if (result.outputLimitExceeded || result.timedOut || result.cancelled || result.signal !== null || result.exitCode === null || result.error !== undefined || !hasConfirmedOwnedGroupCleanup(result)) return { execution: 'unknown', commandOutcome: 'invalid' };
   const tap = `${result.stdout}\n${result.stderr}`;
-  const count = (name: string): number | undefined => { const values = [...tap.matchAll(new RegExp(`^# ${name} (\\d+)\\s*$`, 'gmu'))].map((match) => Number(match[1])); return values.at(-1); };
+  const count = (name: string) => [...tap.matchAll(new RegExp(`^# ${name} (\\d+)\\s*$`, 'gmu'))].map(match => Number(match[1])).at(-1);
   const tests = count('tests'), pass = count('pass'), failed = count('fail'), skipped = count('skipped'), todo = count('todo');
-  if ([tests, pass, failed, skipped, todo].some((value) => value === undefined) || tests === undefined || pass === undefined || failed === undefined || skipped === undefined || todo === undefined || pass + failed + skipped + todo !== tests) return { execution: 'unknown', outcome: 'invalid' };
-  const execution: Evidence['execution'] = tests === 0 ? 'zero' : pass + failed > 0 ? 'nonzero' : skipped + todo === tests ? 'skipped' : 'unknown';
-  return { execution, outcome: execution === 'zero' || execution === 'skipped' || execution === 'unknown' ? 'invalid' : result.exitCode === 0 ? 'pass' : 'fail' };
+  let execution: CommandEvidence['execution'] = 'unknown';
+  if (tests !== undefined && pass !== undefined && failed !== undefined && skipped !== undefined && todo !== undefined && pass + failed + skipped + todo === tests) execution = tests === 0 ? 'zero' : pass + failed > 0 ? 'nonzero' : 'skipped';
+  // A command runner can report no per-case counts, including a build failure.
+  if (execution === 'zero' || execution === 'skipped' || runner.kind === 'node-test' && execution === 'unknown') return { execution, commandOutcome: 'invalid' };
+  return { execution, commandOutcome: result.exitCode === 0 ? 'pass' : 'fail' };
 }
-// @concord-end
-// @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#run-red
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#run-green
-export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[]): Effect.Effect<CommandEvidence, ConcordError, OwnedProcess> => Effect.gen(function*() {
+
+/** One runner owner spans all child scopes; unknown cleanup preserves quarantine. */
+export const withRunner = <A>(repo: LocalRepository, run: (release: () => void, cleanupUnknown: () => void) => Effect.Effect<A, ConcordError, OwnedProcess>): Effect.Effect<A, ConcordError, OwnedProcess> => Effect.scoped(Effect.gen(function* () {
   const process = yield* OwnedProcess;
-  const prepared = yield* Effect.acquireRelease(
-    Effect.try({ try: () => repo.snapshot(() => {
-  const annotation = decode(AnnotatedCaseSchema, selected, 'selected test case'); const beforeDocuments = loadDocuments(repo); const beforeConfig = currentConfig(repo); const definition = buildDefinition(repo, annotation, beforeConfig, beforeDocuments); const contract = documentFor(repo, beforeDocuments, annotation.contract, ['feature', 'use-case']); const problems = annotation.regressions.map((ref) => documentFor(repo, beforeDocuments, ref, ['memory'])).filter((doc) => doc.metadata.kind === 'memory' && doc.metadata.memoryKind === 'problem');
-  const epochs: Record<string, number> = {}; for (const problem of problems) { const metadata = decode(MemorySchema, problem.metadata, problem.path); epochs[problem.path] = metadata.epoch; }
-  const contractDigest = documentDigest(repo, contract, annotation.contract); const candidate = currentCandidate(repo, beforeDocuments); const implementation = implementationDigest(); const startedAt = iso();
-      return { run: beginRun(repo.root), annotation, beforeConfig, definition, epochs, contractDigest, candidate, implementation, startedAt };
-    }), catch: failure }),
-    prepared => Effect.gen(function*() {
-      const results = yield* process.cleanupResults;
+  let released = false;
+  let cleanupUnknown = false;
+  const lease = yield* Effect.acquireRelease(
+    Effect.try({ try: () => repo.snapshot(() => beginRun(repo.root)), catch: failure }),
+    lease => Effect.gen(function* () {
+      if (released) return;
       const idle = (yield* process.activeCount) === 0;
+      const results = yield* process.cleanupResults;
       yield* Effect.sync(() => {
-        try {
-          // Releasing a confirmed process group must not depend on unchanged
-          // configuration or a healthy journal. Only coordination is required.
-          const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'test-finalize')!;
-          try {
-            const cleanupOk = idle && results.every(hasConfirmedOwnedGroupCleanup);
-            finalizeRun(repo.root, prepared.run, cleanupOk);
-            if (cleanupOk) finishRun(repo.root, prepared.run);
-          } finally { releaseTraceLeaseSync(lease, 'test-finalize'); }
-        } catch (cause) { quarantineRun(repo.root, prepared.run); throw cause; }
+        const lock = acquireTraceLeaseSync(repo.root, 'exclusive', 'test-finalize')!;
+        try { const clean = !cleanupUnknown && idle && results.every(hasConfirmedOwnedGroupCleanup); finalizeRun(repo.root, lease, clean); if (clean) finishRun(repo.root, lease); else quarantineRun(repo.root, lease); }
+        catch (cause) { quarantineRun(repo.root, lease); throw cause; }
+        finally { releaseTraceLeaseSync(lock, 'test-finalize'); }
       });
     }),
   );
-  const { run, annotation, beforeConfig, definition, epochs, contractDigest, candidate, implementation, startedAt } = prepared;
-  const result = yield* runOwnedProcess(definition.argv, { cwd: repo.root, env: safeEnvironment(), timeoutMs: beforeConfig.runner.timeoutMs }).pipe(Effect.scoped);
+  return yield* run(() => {
+    if (finalizeRun(repo.root, lease, true)) throw new ConcordError('PreimageChanged', 'Publication invalidated the running verification');
+    if (cleanupUnknown) throw new ConcordError('FixUnverifiable', 'Runner worktree cleanup is unconfirmed');
+    finishRun(repo.root, lease); released = true;
+  }, () => { cleanupUnknown = true; quarantineRun(repo.root, lease); });
+})).pipe(Effect.catchDefect(cause => Effect.fail(failure(cause))));
+
+export const executeCommand = (cwd: string, runner: Runner, selected: AnnotatedCase) => runOwnedProcess(runnerArguments(runner, selected), { cwd, env: safeRunnerEnvironment(), timeoutMs: runner.timeoutMs }).pipe(Effect.scoped, Effect.map(result => ({ ...commandObservation(result, runner), operation: 'test-run' as const, scope: 'command' as const, selectedCaseId: selected.id, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk: hasConfirmedOwnedGroupCleanup(result), arguments: result.command })), Effect.mapError(failure));
+
+export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, _documents: readonly DocumentRecord[]): Effect.Effect<CommandEvidence, ConcordError, OwnedProcess> => withRunner(repo, release => Effect.gen(function* () {
+  const runner = requireRunner(repo);
+  const before = objectDigest({ config: repo.configSnapshot.source, test: repo.read(selected.file), sources: runner.sourceFiles.map(path => repo.read(path)), contract: repo.read(selected.contract.split('#')[0]!) });
+  const result = yield* executeCommand(repo.root, runner, selected);
   return yield* Effect.try({ try: () => repo.snapshot(() => {
-    const cleanupOk = hasConfirmedOwnedGroupCleanup(result);
-    const invalidated = finalizeRun(repo.root, run, cleanupOk);
-    const afterDocuments = loadDocuments(repo); const afterConfigSource = repo.read(repo.configSnapshot.path); const afterConfigSnapshot = afterConfigSource === undefined ? undefined : parseConfigSnapshot(repo.configSnapshot.path, afterConfigSource); const afterConfig = afterConfigSnapshot?.config ?? beforeConfig; const afterProblems = annotation.regressions.map((ref) => documentFor(repo, afterDocuments, ref, ['memory'])).filter((doc) => doc.metadata.kind === 'memory' && doc.metadata.memoryKind === 'problem');
-    const afterEpochs = Object.fromEntries(afterProblems.map((problem) => [problem.path, decode(MemorySchema, problem.metadata, problem.path).epoch])); const afterContract = documentFor(repo, afterDocuments, annotation.contract, ['feature', 'use-case']);
-    const stable = afterConfigSnapshot !== undefined && afterConfigSnapshot.digest === repo.configSnapshot.digest && candidate === currentCandidate(repo, afterDocuments) && implementation === implementationDigest() && canonical(beforeConfig) === canonical(afterConfig) && definition.digest === buildDefinition(repo, annotation, afterConfig, afterDocuments).digest && contractDigest === documentDigest(repo, afterContract, annotation.contract) && canonical(epochs) === canonical(afterEpochs);
-    const state = observed(result, beforeConfig.runner.kind === 'node-test'); const outcome = stable && !invalidated && cleanupOk ? state.outcome : 'invalid'; const unsigned = { id: `ccev_${randomBytes(16).toString('hex')}`, format: 'concord.command-evidence/v1' as const, scope: 'command' as const, selectedCaseId: annotation.id, projectId: beforeConfig.projectId, root: repo.root, implementationDigest: implementation, definitionDigest: definition.digest, contractDigest, candidateDigest: candidate, configPath: repo.configSnapshot.path, configDigest: repo.configSnapshot.digest, problemEpochs: epochs, argv: [...definition.argv], startedAt, finishedAt: iso(), commandOutcome: outcome, execution: state.execution, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk, stdoutDigest: digest(result.stdout), stderrDigest: digest(result.stderr) }; const evidence = decode(CommandEvidenceSchema, { ...unsigned, integrity: objectDigest(unsigned) }, 'issued evidence'); store(repo, evidence); return evidence;
+    const after = objectDigest({ config: repo.read(repo.configSnapshot.path), test: repo.read(selected.file), sources: runner.sourceFiles.map(path => repo.read(path)), contract: repo.read(selected.contract.split('#')[0]!) });
+    release(); return before === after ? result : { ...result, commandOutcome: 'invalid' as const };
   }), catch: failure });
-}).pipe(Effect.scoped, Effect.mapError(failure), Effect.catchDefect(cause => Effect.fail(failure(cause))));
-// @concord-end
-// @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
-function nativeBindingDigest(repo: Repository, selected: AnnotatedCase): string {
-  const adapter = adapterFor(repo, selected.file);
-  if (!adapter) fail('EvidenceStale', 'The selected test no longer has its adapter');
-  return objectDigest({ annotation: selected, file: digest(repo.read(selected.file) ?? ''), config: repo.configSnapshot.digest, adapter });
-}
-function nativeDefinitionDigest(bindingDigest: string, inputs: string, requested: readonly string[], plan: string, versions: NativeExecution['versions']): string {
-  return objectDigest({ bindingDigest, inputs, requested, plan, versions, protocol: 'concord.test-adapter/v1', codec: 'concord.native-evidence/v2' });
-}
-// @concord-end
-// @concord-begin
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#主流程
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#run-red
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#run-green
+}));
+
 export const runCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[], options: { requireNative?: boolean } = {}): Effect.Effect<Evidence, ConcordError, OwnedProcess> => Effect.gen(function* () {
   if (!adapterFor(repo, selected.file)) {
     if (options.requireNative) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'No adapter covers this source marker'));
     return yield* runCommandCase(repo, selected, documents);
   }
-  const before = yield* Effect.try({ try: () => repo.snapshot(() => {
-    if (selected.status !== 'active' || selected.skipped) fail('CaseNotRunnable', 'Only active source markers may run');
-    const currentDocuments = loadDocuments(repo); const config = currentConfig(repo);
-    const contract = documentFor(repo, currentDocuments, selected.contract, ['feature', 'use-case']);
-    const epochs = Object.fromEntries(selected.regressions.map(reference => documentFor(repo, currentDocuments, reference, ['memory'])).filter(document => document.metadata.kind === 'memory' && document.metadata.memoryKind === 'problem').map(document => [document.path, decode(MemorySchema, document.metadata, document.path).epoch]));
-    return { bindingDigest: nativeBindingDigest(repo, selected), config, contractDigest: documentDigest(repo, contract, selected.contract), candidate: adapterInputSnapshot(repo, adapterFor(repo, selected.file)!).inputs, implementation: implementationDigest(), epochs, startedAt: iso() };
-  }), catch: failure });
-  let issued: NativeEvidence | undefined;
-  yield* executeNativeCase(repo, selected, options.requireNative, execution => {
-    const currentDocuments = loadDocuments(repo); const contract = documentFor(repo, currentDocuments, selected.contract, ['feature', 'use-case']);
-    const epochs = Object.fromEntries(selected.regressions.map(reference => documentFor(repo, currentDocuments, reference, ['memory'])).filter(document => document.metadata.kind === 'memory' && document.metadata.memoryKind === 'problem').map(document => [document.path, decode(MemorySchema, document.metadata, document.path).epoch]));
-    if (before.bindingDigest !== nativeBindingDigest(repo, selected) || before.candidate !== adapterInputSnapshot(repo, execution.adapter).inputs || before.implementation !== implementationDigest() || before.contractDigest !== documentDigest(repo, contract, selected.contract) || canonical(before.epochs) !== canonical(epochs)) fail('InputChanged', 'Native evidence identities changed during execution');
-    const complete = execution.report.completeness.complete && execution.report.capabilities.perItemReport && execution.report.capabilities.exactSelection;
-    const commandOutcome = nativeVerdict(execution.requested, execution.report.observed, execution.statuses, complete, execution.plan.invocations);
-    const unsigned = {
-      id: `ccev_${randomBytes(16).toString('hex')}`, format: 'concord.native-evidence/v2' as const, scope: 'native' as const,
-      selectedCaseId: selected.id, projectId: before.config.projectId, root: repo.root, implementationDigest: before.implementation,
-      definitionDigest: nativeDefinitionDigest(before.bindingDigest, execution.inputs, execution.requested, objectDigest(execution.plan), execution.versions), bindingDigest: before.bindingDigest,
-      contractDigest: before.contractDigest, candidateDigest: before.candidate, configPath: repo.configSnapshot.path, configDigest: repo.configSnapshot.digest,
-      problemEpochs: before.epochs, argv: ['native-adapter', execution.adapter.id], startedAt: before.startedAt, finishedAt: iso(), commandOutcome,
-      execution: 'unknown' as const, exitCode: execution.statuses.every(status => status.exitCode === 0) ? 0 : execution.statuses.find(status => status.exitCode !== 0)?.exitCode ?? null,
-      signal: execution.statuses.find(status => status.signal !== null)?.signal ?? null,
-      timedOut: execution.statuses.some(status => status.timedOut), cancelled: execution.statuses.some(status => status.cancelled), cleanupOk: execution.statuses.every(status => status.cleanup === 'complete'),
-      stdoutDigest: objectDigest(execution.report.observed), stderrDigest: objectDigest(execution.report.completeness),
-      adapterId: execution.adapter.id, inputs: execution.inputs, planId: execution.planId, planDigest: objectDigest(execution.plan), manifestDigest: objectDigest(execution.manifest),
-      requested: execution.requested, observed: execution.report.observed, statuses: execution.statuses,
-      assignments: execution.plan.invocations.map(invocation => ({ invocationId: invocation.invocationId, requested: invocation.requested })),
-      capabilities: execution.report.capabilities, complete,
-      gaps: [...new Set(['ExternalInputUnknown', ...execution.report.completeness.gaps, ...(!complete && execution.report.completeness.gaps.length === 0 ? ['NativeCapabilityUnavailable'] : [])])],
-      versions: execution.versions, commandExecutionCount: execution.statuses.length,
-    };
-    issued = decode(NativeEvidenceSchema, { ...unsigned, integrity: objectDigest(unsigned) }, 'issued native evidence');
-    store(repo, issued);
-  });
-  if (issued) return issued;
-  return yield* runCommandCase(repo, selected, documents);
-}).pipe(Effect.mapError(failure), Effect.catchDefect(cause => Effect.fail(failure(cause))));
-// @concord-end
+  const execution = yield* executeNativeCase(repo, selected, options.requireNative);
+  if (!execution) return yield* runCommandCase(repo, selected, documents);
+  const complete = execution.report.completeness.complete && execution.report.capabilities.perItemReport && execution.report.capabilities.exactSelection;
+  return { operation: 'test-run', scope: 'native', selectedCaseId: selected.id, commandOutcome: nativeVerdict(execution.requested, execution.report.observed, execution.statuses, complete, execution.plan.invocations), execution: 'unknown', exitCode: execution.statuses.every(status => status.exitCode === 0) ? 0 : execution.statuses.find(status => status.exitCode !== 0)?.exitCode ?? null, signal: execution.statuses.find(status => status.signal !== null)?.signal ?? null, timedOut: execution.statuses.some(status => status.timedOut), cancelled: execution.statuses.some(status => status.cancelled), cleanupOk: execution.statuses.every(status => status.cleanup === 'complete'), arguments: ['native-adapter', execution.adapter.id], adapterId: execution.adapter.id, requested: execution.requested, observed: execution.report.observed, inputs: execution.inputs, definitionDigest: objectDigest({ selected, inputs: execution.inputs, plan: execution.plan, versions: execution.versions }), planId: execution.planId, planDigest: objectDigest(execution.plan), manifestDigest: objectDigest(execution.manifest), statuses: execution.statuses, assignments: execution.plan.invocations.map(invocation => ({ invocationId: invocation.invocationId, requested: invocation.requested })), capabilities: execution.report.capabilities, versions: execution.versions, commandExecutionCount: execution.statuses.length, complete, gaps: [...new Set(['ExternalInputUnknown', ...execution.report.completeness.gaps])] } satisfies NativeEvidence;
+}).pipe(Effect.mapError(failure));
 
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md#约束
-function verifyNativeFixed(repo: Repository, cases: readonly AnnotatedCase[], problem: DocumentRecord, red: Evidence, green: Evidence): FixedProof {
-  if (red.format !== 'concord.native-evidence/v2' || green.format !== 'concord.native-evidence/v2') fail('EvidenceMismatch', 'Fixed proof cannot mix command and native receipt formats');
-  const documents = loadDocuments(repo); const currentProblem = documents.find(document => document.path === problem.path);
-  if (!currentProblem) fail('ProblemNotOpen', 'The Problem no longer exists');
-  const meta = decode(MemorySchema, currentProblem.metadata, problem.path);
-  if (meta.memoryKind !== 'problem' || meta.state !== 'open') fail('ProblemNotOpen', 'Fixed evidence requires an open Problem');
-  const selected = cases.find(item => item.id === green.selectedCaseId);
-  if (!selected || selected.status !== 'active' || !selected.regressions.includes(problem.path)) fail('EvidenceMismatch', 'The current source marker must regress this Problem');
-  const adapter = adapterFor(repo, selected.file); if (!adapter) fail('EvidenceStale', 'The current test has no adapter');
-  const bindingDigest = nativeBindingDigest(repo, selected);
-  const contract = documentFor(repo, documents, selected.contract, ['feature', 'use-case']);
-  for (const evidence of [red, green]) {
-    if (evidence.selectedCaseId !== selected.id || evidence.projectId !== repo.config.projectId || evidence.root !== repo.root || evidence.implementationDigest !== implementationDigest() || evidence.configPath !== repo.configSnapshot.path || evidence.configDigest !== repo.configSnapshot.digest || evidence.bindingDigest !== bindingDigest || evidence.contractDigest !== documentDigest(repo, contract, selected.contract) || evidence.problemEpochs[problem.path] !== meta.epoch || evidence.adapterId !== adapter.id) fail('EvidenceStale', 'Native evidence binding, contract, implementation or Problem epoch is no longer current');
-    const assigned = evidence.assignments.flatMap(assignment => assignment.requested);
-    if (evidence.assignments.length !== evidence.statuses.length || new Set(evidence.assignments.map(assignment => assignment.invocationId)).size !== evidence.assignments.length || evidence.assignments.some(assignment => !evidence.statuses.some(status => status.invocationId === assignment.invocationId)) || assigned.length !== evidence.requested.length || new Set(assigned).size !== assigned.length || assigned.some(id => !evidence.requested.includes(id))) fail('EvidenceIntegrity', 'Native invocation assignments are incomplete');
-  }
-  if (canonical(red.requested) !== canonical(green.requested)) fail('EvidenceMismatch', 'Red and green must prove the same native selection');
-  if (red.commandOutcome !== 'red') fail('InvalidRedEvidence', 'Native red proof requires complete failed native observations');
-  if (green.commandOutcome !== 'green') fail('InvalidGreenEvidence', 'Native green proof requires every requested native item to pass');
-  if (Date.parse(red.finishedAt) > Date.parse(green.startedAt) || !Number.isFinite(Date.parse(red.finishedAt)) || !Number.isFinite(Date.parse(green.startedAt))) fail('EvidenceOrder', 'Red proof must precede green proof');
-  if (green.inputs !== adapterInputSnapshot(repo, adapter).inputs || green.candidateDigest !== adapterInputSnapshot(repo, adapter).inputs) fail('EvidenceStale', 'Native green inputs no longer match this candidate');
-  return { red: red.id, green: green.id, selectedCaseId: selected.id, epoch: meta.epoch };
-}
-
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#resolve-fixed
-export function verifyFixedEvidence(repo: Repository, documents: readonly DocumentRecord[], cases: readonly AnnotatedCase[], problem: DocumentRecord, redId: string, greenId: string): FixedProof {
-  const currentDocuments = loadDocuments(repo); const currentProblem = currentDocuments.find((document) => document.path === problem.path); if (currentProblem === undefined) fail('ProblemNotOpen', 'Problem disappeared while verifying fixed evidence'); const meta = decode(MemorySchema, currentProblem.metadata, currentProblem.path); if (meta.memoryKind !== 'problem' || meta.state !== 'open') fail('ProblemNotOpen', 'Fixed evidence requires an open Problem'); const config = currentConfig(repo); const red = readEvidence(repo, redId); const green = readEvidence(repo, greenId); if (red.format === 'concord.native-evidence/v2' || green.format === 'concord.native-evidence/v2') return verifyNativeFixed(repo, cases, problem, red, green); if (red.selectedCaseId !== green.selectedCaseId || red.projectId !== config.projectId || green.projectId !== config.projectId || red.root !== repo.root || green.root !== repo.root || red.implementationDigest !== implementationDigest() || green.implementationDigest !== implementationDigest()) fail('EvidenceMismatch', 'Evidence receipts do not share this current worktree and Concord implementation'); const selected = cases.find((item) => item.id === red.selectedCaseId); if (selected === undefined || selected.status !== 'active' || !selected.regressions.includes(currentProblem.path)) fail('EvidenceMismatch', 'The current active annotation must regress this Problem by canonical path'); const definition = buildDefinition(repo, selected, config, currentDocuments); const contract = documentFor(repo, currentDocuments, selected.contract, ['feature', 'use-case']); const expectedEpoch = meta.epoch; for (const evidence of [red, green]) if (evidence.configPath !== repo.configSnapshot.path || evidence.configDigest !== repo.configSnapshot.digest || evidence.definitionDigest !== definition.digest || evidence.contractDigest !== documentDigest(repo, contract, selected.contract) || evidence.problemEpochs[currentProblem.path] !== expectedEpoch) fail('EvidenceStale', 'Evidence configuration, definition, contract, or Problem epoch is no longer current'); if (red.commandOutcome !== 'fail' || red.execution === 'zero' || red.execution === 'skipped' || red.exitCode === 0 || red.timedOut || red.cancelled || red.signal !== null || !red.cleanupOk) fail('InvalidRedEvidence', 'Red evidence must be a normal nonzero command result with confirmed cleanup'); if (green.commandOutcome !== 'pass' || green.execution === 'zero' || green.execution === 'skipped' || green.exitCode !== 0 || green.timedOut || green.cancelled || green.signal !== null || !green.cleanupOk) fail('InvalidGreenEvidence', 'Green evidence must be a normal successful command result with confirmed cleanup'); if (Date.parse(red.finishedAt) > Date.parse(green.startedAt) || Number.isNaN(Date.parse(red.finishedAt)) || Number.isNaN(Date.parse(green.startedAt))) fail('EvidenceOrder', 'Red evidence must not follow green evidence'); const current = currentCandidate(repo, currentDocuments); if (green.candidateDigest !== current) fail('EvidenceStale', 'Green evidence does not match the current implementation candidate'); return { red: red.id, green: green.id, selectedCaseId: selected.id, epoch: expectedEpoch };
-}
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
-export function inspectResolutionEvidence(repo: Repository, resolution: Resolution): object {
-  if (resolution.kind !== 'fixed' || resolution.evidenceLevel !== 'command') {
-    return { availability: 'unavailable', evidenceLevel: resolution.evidenceLevel, note: resolution.evidenceLevel === 'attested' ? 'Historical attestation is an unverified fact, not current verification.' : resolution.evidenceLevel === 'repository' ? 'Repository evidence is unavailable as current-worktree verification.' : 'No command evidence is attached.' };
-  }
-  try {
-    const red = readEvidence(repo, resolution.red); const green = readEvidence(repo, resolution.green);
-    return { availability: red.commandOutcome === 'invalid' || green.commandOutcome === 'invalid' ? 'invalid' : 'available', evidenceLevel: 'command', red: red.id, green: green.id, note: 'Historical command evidence; not current verification.' };
-  } catch (cause) {
-    return { availability: 'unavailable', evidenceLevel: 'command', note: cause instanceof ConcordError && cause.code === 'EvidenceIntegrity' ? 'Evidence receipt is invalid.' : 'Historical private evidence is unavailable; not current verification.' };
-  }
-}
+export function requireRunner(repo: Repository): Runner { if (!repo.config.runner) throw new ConcordError('FixUnverifiable', 'Configure a runner before executing tests or fix verification'); return repo.config.runner; }

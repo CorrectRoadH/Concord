@@ -4,7 +4,7 @@ import { DocumentName } from 'concord-sdlc/model';
 import { DesignInputInvalid } from "./errors.js";
 
 const NonEmptyTrimmedString = Schema.String.check(Schema.isTrimmed(), Schema.isMinLength(1));
-export const DESIGN_PAGE_ORDER = ["library", "cli", "architecture", "lifecycle", "use-case"] as const;
+export const DESIGN_PAGE_ORDER = ["library", "cli", "architecture", "use-case"] as const;
 export const DesignPageSchema = Schema.Literals(DESIGN_PAGE_ORDER);
 export type DesignPage = typeof DesignPageSchema.Type;
 

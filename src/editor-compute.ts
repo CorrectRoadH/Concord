@@ -98,7 +98,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
       for (const item of annotations.cases) {
         const owner = checkReference(item.file, item.line, item.contract, ['feature', 'use-case']);
         if (owner !== undefined && owner.metadata.kind !== item.contractKind) findings.push({ code: 'ContractKindMismatch', path: item.file, line: item.line, message: `@${item.contractKind} must reference that contract kind` });
-        for (const target of item.regressions) checkReference(item.file, item.line, target, ['memory']);
+        for (const target of item.issues) checkReference(item.file, item.line, target, ['issue']);
       }
       for (const item of code.codes) for (const target of item.contracts) checkReference(item.file, item.line, target, ['feature', 'use-case', 'engineering']);
       try {

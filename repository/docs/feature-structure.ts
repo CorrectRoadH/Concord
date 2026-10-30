@@ -10,10 +10,10 @@ import { isDocumentName, defaultDocumentPath } from 'concord-sdlc/document-layou
 import { compileTraceReportUnderLease } from "./trace/compiler.js";
 import { mutateTraceOwner, withTraceReadLease, traceDigest, type TraceDirectoryManifestEntry, type TraceMutationPreparation } from "./trace/relation-mutation.js";
 
-const PAGES = ["library", "cli", "architecture", "lifecycle", "use-case"] as const;
+const PAGES = ["library", "cli", "architecture", "use-case"] as const;
 type FeaturePage = typeof PAGES[number];
 const PAGE_FILES: Readonly<Record<FeaturePage, string>> = {
-  library: "library.md", cli: "cli.md", architecture: "architecture.md", lifecycle: "lifecycle.md", "use-case": "use-case/README.md",
+  library: "library.md", cli: "cli.md", architecture: "architecture.md", "use-case": "use-case/README.md",
 };
 const TEMPLATE = "docs/_template/feature-design";
 const managedStart = "<!-- concord.feature-index/v1:start -->";

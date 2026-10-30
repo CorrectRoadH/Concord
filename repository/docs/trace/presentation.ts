@@ -91,9 +91,6 @@ function testListTree(receipt: TestListReceipt, details: readonly TestShowReceip
           ? "None"
           : detail.features.map((feature) => `${feature.id} — ${feature.title}`).join("; ")}`,
       },
-      section("Regression / Bug Memory", detail.regressions.map((relation) => ({
-        label: `${relation.memory.path} — ${relation.memory.title} [${relation.memory.kind}${relation.memory.state === undefined ? "" : `/${relation.memory.state}`}]`,
-      }))),
       section("Issues", detail.issueProvenance.map((issue) => issue.via === "test"
         ? { label: issue.issue }
         : { label: `${issue.repository}#${issue.number} ${issue.url}` })),
@@ -124,17 +121,14 @@ function targetRelations(group: TraceRelationsByTarget): readonly TreeNode[] {
     children: [{ label: `Description: ${test.description}` }],
   }));
   const feedback = group.feedbackAdoptions.map((relation) => ({
-    label: `${relation.feedback.id} — ${relation.feedback.title} [${relation.feedback.state}; exact target: ${relation.target}; via: ${relation.via}]`,
+    label: `${relation.feedback.id} — ${relation.feedback.title} [${relation.feedback.status}; exact target: ${relation.target}; via: ${relation.via}]`,
   }));
   const memory = [
     ...group.feedbackMemoryRelations.map((relation) => ({
       label: `${relation.kind}: ${relation.memory.path} [feedback: ${relation.feedback.id}; exact target: ${relation.target}; via: ${relation.via}]`,
     })),
     ...group.memoryPromotions.map((relation) => ({
-      label: `${relation.promotionKind} promotion: ${relation.memory.path} [exact target: ${relation.target}; via: ${relation.via}]`,
-    })),
-    ...group.regressions.map((relation) => ({
-      label: `regression: ${relation.memory.path} (${relation.memory.kind}) [test: ${relation.test}; exact target: ${relation.target}; via: ${relation.via}]`,
+      label: `${relation.role} promotion: ${relation.memory.path} [exact target: ${relation.target}; via: ${relation.via}]`,
     })),
   ].sort((left, right) => left.label.localeCompare(right.label));
   const issues = group.issueProvenance.map((issue) => issue.via === "feedback"
@@ -169,7 +163,6 @@ function featureShowTree(receipt: FeatureShowReceipt): string {
         feedbackAdoptions: [],
         feedbackMemoryRelations: [],
         memoryPromotions: [],
-        regressions: [],
         issueProvenance: [],
       }) : targetRelations(group),
     };
@@ -185,9 +178,6 @@ function featureShowTree(receipt: FeatureShowReceipt): string {
       label: `Engineering: ${relation.source.title} [${relation.source.path}; exact target: ${relation.target}; via: ${relation.via}]`,
     })),
   ].sort((left, right) => left.label.localeCompare(right.label));
-  const history = receipt.adoptionHistory.map((relation) => ({
-    label: `${relation.feedback.id} [exact target: ${relation.target}; scope: ${relation.scope}; commit: ${relation.commit}; via: ${relation.via}]`,
-  }));
   return renderTree({
     label: `Feature ${receipt.subject.id} — ${receipt.subject.title} [${receipt.subject.path}]`,
     children: [
@@ -207,12 +197,10 @@ function featureShowTree(receipt: FeatureShowReceipt): string {
           feedbackAdoptions: [],
           feedbackMemoryRelations: [],
           memoryPromotions: [],
-          regressions: [],
           issueProvenance: [],
         }) : targetRelations(featureGroup),
       },
       section("Use Cases", useCaseGroups),
-      ...(history.length === 0 ? [] : [section("Adoption History", history)]),
       ...(related.length === 0 ? [] : [section("Related Docs", related)]),
       ...(receipt.findings.length === 0 ? [] : [section("Findings", receipt.findings.map((finding) => ({
         label: `${finding.code}: ${finding.subject}: ${finding.message}`,
@@ -232,9 +220,6 @@ function testShowTree(receipt: TestShowReceipt): string {
       { label: `Contract (${receipt.contract.kind}): ${receipt.contract.ref}` },
       section("Features", receipt.features.map((feature) => ({
         label: `${feature.id} — ${feature.title} [${feature.path}]`,
-      }))),
-      section("Regression Memory", receipt.regressions.map((relation) => ({
-        label: `${relation.memory.path} (${relation.memory.kind}) [exact target: ${relation.target}; via: ${relation.via}]`,
       }))),
       section("Issues", receipt.issueProvenance.map((issue) => issue.via === "test"
         ? { label: `${issue.issue} [via: test]` }

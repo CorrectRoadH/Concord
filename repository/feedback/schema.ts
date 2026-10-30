@@ -1,17 +1,4 @@
 import { Schema } from "effect";
-import { IssueAdoptionsSchema, IssueClosureSchema, IssueMemoryRelationSchema, IssueSchema, type IssueClosure, type IssueMemoryRelation, type IssueMeta } from "concord-sdlc/model";
-
-export const FeedbackMemoryRelationSchema = IssueMemoryRelationSchema;
-export const FeedbackClosureSchema = IssueClosureSchema;
-export const FeedbackAdoptionsSchema = IssueAdoptionsSchema;
-export const FeedbackIssueSchema = IssueSchema;
-export type FeedbackMemoryRelation = IssueMemoryRelation;
-export type FeedbackClosure = IssueClosure;
-export type FeedbackAdoptions = typeof IssueAdoptionsSchema.Type;
-export type FeedbackDocumentMetadata = IssueMeta;
-export const FEEDBACK_MEMORY_RELATION_KINDS = ["investigation", "root-cause", "decision", "delivery"] as const;
-export const FEEDBACK_CLOSURE_KINDS = ["fixed", "delivered", "duplicate", "declined", "invalid", "external-fixed", "closed"] as const;
-
 export const FeedbackEnvelopeV1Schema = Schema.Struct({
   format: Schema.Literal("concord.feedback-envelope/v1"),
   origin: Schema.Struct({ repository: Schema.NonEmptyString, originId: Schema.NonEmptyString, commit: Schema.NonEmptyString }),

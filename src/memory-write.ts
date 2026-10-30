@@ -30,7 +30,7 @@ export function constitutionDecisionChange(exists: (path: string) => boolean, in
   const title = summary.length > 60 ? `${summary.slice(0, 58)}…` : summary;
   const sources = input.sources.length === 0 ? '- 无' : input.sources.map(source => `- \`${source}\``).join('\n');
   const body = `## 适用范围\n\n项目宪法及依赖其条款的工作。\n\n宪法${input.adoption ? '采用' : '修订'}，日期 ${date}。\n\n## 理由\n\n${input.reason}\n\n## 影响\n\n${input.impact}\n\n## 来源\n\n${sources}\n`;
-  const metadata: MemoryMeta = { format: 'concord.document/v1', id, title, createdAt: input.at, kind: 'memory', memoryKind: 'decision', state: 'current', epoch: 0, promotions: [...input.promotions], history: [] };
+  const metadata: MemoryMeta = { format: 'concord.document/v1', id, title, createdAt: input.at, kind: 'memory', type: 'decision', status: 'current', relations: input.promotions.map(target => ({ role: 'amends', target })) };
   return { path: `${directory}/${id}.md`, before: null, after: renderMemorySource(metadata, body) };
 }
 // @concord-end

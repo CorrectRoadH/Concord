@@ -141,8 +141,6 @@ const finish = Effect.gen(function*() {
   yield* fs.copyFile('node_modules/@fontsource-variable/noto-sans-sc/LICENSE', 'dist/web/FONT-LICENSE.txt');
   const fontLicense = yield* fs.readFileString('node_modules/@fontsource-variable/noto-sans-sc/LICENSE');
   yield* fs.writeFileString('dist/preview/FONT-LICENSE.html', `<!doctype html><meta charset="utf-8"><title>Font license</title><pre>${fontLicense.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`);
-  yield* fs.remove('dist/repository/host-types', { recursive: true, force: true });
-  yield* fs.copy('repository/host-types', 'dist/repository/host-types');
   yield* fs.chmod('dist/entry.js', 0o755);
   yield* fs.chmod('dist/cli.js', 0o755);
 });

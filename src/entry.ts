@@ -2,8 +2,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#入口与命令加载
 import { createHash } from 'node:crypto';
-import { execFileSync } from 'node:child_process';
-import { readFileSync, realpathSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { enableCompileCache } from 'node:module';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -16,20 +15,6 @@ enableCompileCache(process.env.NODE_COMPILE_CACHE ?? join(process.env.XDG_CACHE_
 const source = import.meta.url.endsWith('.ts');
 const digest = (url: URL): string => createHash('sha256').update(readFileSync(url)).digest('hex');
 const args = process.argv.slice(2);
-
-function repositoryHelpAvailable(): boolean {
-  // repositoryRoot validates cwd before its CLI renders even help. This only
-  // gates the shortcut; failures still go through that original authority.
-  try {
-    const cwd = realpathSync(process.cwd());
-    const env = { ...process.env };
-    for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
-    const top = execFileSync('git', ['-C', cwd, 'rev-parse', '--show-toplevel'], {
-      encoding: 'utf8', env, timeout: 10_000, stdio: ['ignore', 'pipe', 'pipe'],
-    }).trim();
-    return realpathSync(top) === cwd;
-  } catch { return false; }
-}
 
 async function startupData(): Promise<StartupData | undefined> {
   try {
@@ -55,7 +40,7 @@ function selectedGroup(data: StartupData): string | undefined {
     if (['--json', '--fresh', '--dry-run'].includes(arg) || /^(?:--json|--fresh|--dry-run)=(?:true|false)$/u.test(arg)) { index++; continue; }
     if (arg.startsWith('--root=')) { index++; continue; }
     if (arg === '--root' && args[index + 1] !== undefined && !args[index + 1]!.startsWith('-')) { index += 2; continue; }
-    return data.groups.find(item => item.name === arg && item.name !== 'repo')?.name;
+    return data.groups.find(item => item.name === arg)?.name;
   }
 }
 
@@ -70,7 +55,7 @@ try {
       && !process.stdin.isTTY && !process.stdout.isTTY && !process.stderr.isTTY
       && process.env.FORCE_COLOR === undefined;
     const captured = plain ? data?.receipts[JSON.stringify(args)] : undefined;
-    const receipt = captured !== undefined && (args[0] !== 'repo' || repositoryHelpAvailable()) ? captured : undefined;
+    const receipt = captured;
     if (receipt !== undefined) {
       process.stdout.write(receipt.stdout);
       process.stderr.write(receipt.stderr);

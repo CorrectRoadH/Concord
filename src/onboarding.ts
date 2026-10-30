@@ -23,16 +23,16 @@ export function doctor(repo: Repository, trace = buildTrace(repo, 'off'), cache:
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#annotate
-export function annotationSnippet(repo: Repository, contract: string, regressions: readonly string[]) {
+export function annotationSnippet(repo: Repository, contract: string, issues: readonly string[]) {
   return inRepositorySnapshot(repo, () => {
   const target = readDocumentReference(repo, contract, ['feature', 'use-case']);
-  if (new Set(regressions).size !== regressions.length) throw new ConcordError('DuplicateRegression', 'Each Problem reference must appear once');
-  for (const ref of regressions) {
-    const owner = readDocumentReference(repo, ref, ['memory']);
-    if (owner.metadata.kind !== 'memory' || owner.metadata.memoryKind !== 'problem') throw new ConcordError('InvalidRegression', `${ref} is not a Problem Memory`);
+  if (new Set(issues).size !== issues.length) throw new ConcordError('DuplicateIssue', 'Each Issue reference must appear once');
+  for (const ref of issues) {
+    const owner = readDocumentReference(repo, ref, ['issue']);
+    if (owner.metadata.kind !== 'issue') throw new ConcordError('InvalidIssue', `${ref} is not an Issue`);
   }
   const tag = target.metadata.kind === 'use-case' ? '@use-case' : '@feature';
-  const snippet = [`// ${tag} ${contract}`, ...regressions.map(ref => `// @regression ${ref}`)].join('\n') + '\n';
+  const snippet = [`// ${tag} ${contract}`, ...issues.map(ref => `// @issue ${ref}`)].join('\n') + '\n';
   return { operation: 'test-annotate', snippet };
   });
 }

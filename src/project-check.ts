@@ -98,6 +98,6 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
     },
     advisories: trace.advisories, documents: trace.documents.length,
     cases: trace.annotations.cases.length, codeDeclarations: trace.codeDeclarations.length,
-    memoryEvidence: trace.memories, cache: trace.annotations.cache, codeCache: trace.codeCache,
+    verifications: trace.verifications, cache: trace.annotations.cache, codeCache: trace.codeCache,
   };
 }

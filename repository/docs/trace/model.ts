@@ -1,4 +1,4 @@
-import type { IssueMemoryRelation, MemoryMeta } from "concord-sdlc/model";
+import type { IssueRelation, MemoryMeta } from "concord-sdlc/model";
 
 export const DOCS_NODE_KINDS = ["feature", "roadmap", "engineering", "design", "design-plan", "use-case"] as const;
 export type DocsNodeKind = typeof DOCS_NODE_KINDS[number];
@@ -28,7 +28,6 @@ export interface TraceTest {
   readonly title?: string;
   readonly suite: string;
   readonly contract: string;
-  readonly regressions: readonly string[];
   readonly issues: readonly string[];
 }
 
@@ -54,34 +53,19 @@ export interface TraceFeedback {
   readonly path: string;
   readonly id: string;
   readonly title: string;
-  readonly state: "draft" | "closed";
+  readonly status: "open" | "closed";
   readonly source?: TraceFeedbackSource;
   readonly subject?: "product" | "repository" | "dependency";
   readonly claim?: "defect" | "friction" | "request";
-  readonly adoptions: {
-    readonly current: readonly string[];
-    readonly history: readonly { readonly target: string; readonly commit: string }[];
-  };
-  readonly memoryRelations: readonly IssueMemoryRelation[];
+  readonly relations: readonly IssueRelation[];
   /** Digest of the complete decoded metadata, including closure credentials. */
   readonly metadataDigest: string;
 }
 
-export interface TraceMemoryPromotion {
-  readonly kind: "promotion";
-  readonly current: readonly string[];
-  readonly history: readonly { readonly at: string; readonly action: string; readonly reason: string; readonly ref?: string; readonly commit?: string }[];
-}
-
 export interface TraceMemory {
-  readonly path: string;
-  readonly id: string;
-  readonly title: string;
-  readonly kind: MemoryMeta["memoryKind"];
-  readonly state: MemoryMeta["state"];
-  readonly promotions: readonly TraceMemoryPromotion[];
-  /** Digest of decoded structured metadata. Legacy body bytes intentionally do not participate. */
-  readonly metadataDigest?: string;
+  readonly path: string; readonly id: string; readonly title: string;
+  readonly type: MemoryMeta['type']; readonly status: MemoryMeta['status'];
+  readonly relations: MemoryMeta['relations']; readonly metadataDigest?: string;
 }
 
 export interface TraceSnapshot {
@@ -104,15 +88,15 @@ export interface TraceFeedbackSummary {
   readonly id: string;
   readonly path: string;
   readonly title: string;
-  readonly state: "draft" | "closed";
+  readonly status: "open" | "closed";
 }
 
 export interface TraceMemorySummary {
   readonly id: string;
   readonly path: string;
   readonly title: string;
-  readonly kind: TraceMemory["kind"];
-  readonly state?: TraceMemory["state"];
+  readonly type: TraceMemory["type"];
+  readonly status?: TraceMemory["status"];
 }
 
 export interface TraceScopedTest extends TraceTargetRelation {
@@ -132,14 +116,14 @@ export interface TraceFeedbackAdoption extends TraceTargetRelation {
 
 export interface TraceFeedbackMemoryRelation extends TraceTargetRelation {
   readonly via: "feedback-memory-relation";
-  readonly kind: IssueMemoryRelation["kind"];
+  readonly kind: IssueRelation["role"];
   readonly feedback: TraceFeedbackSummary;
   readonly memory: TraceMemorySummary;
 }
 
 export interface TraceMemoryPromotionRelation extends TraceTargetRelation {
   readonly via: "memory-promotion";
-  readonly promotionKind: TraceMemoryPromotion["kind"];
+  readonly role: "supports" | "amends";
   readonly memory: TraceMemorySummary;
 }
 
@@ -147,12 +131,6 @@ export interface TraceAdoptionHistory extends TraceTargetRelation {
   readonly via: "feedback-adoption-history";
   readonly feedback: TraceFeedbackSummary;
   readonly commit: string;
-}
-
-export interface TraceRegression extends TraceTargetRelation {
-  readonly via: "test-regression";
-  readonly test: string;
-  readonly memory: TraceMemorySummary;
 }
 
 export type TraceIssueProvenance = TraceTargetRelation & ({
@@ -192,7 +170,6 @@ export interface TraceRelationsByTarget {
   readonly feedbackAdoptions: readonly TraceFeedbackAdoption[];
   readonly feedbackMemoryRelations: readonly TraceFeedbackMemoryRelation[];
   readonly memoryPromotions: readonly TraceMemoryPromotionRelation[];
-  readonly regressions: readonly TraceRegression[];
   readonly issueProvenance: readonly TraceIssueProvenance[];
 }
 
@@ -236,9 +213,7 @@ export interface FeatureShowReceipt {
   readonly feedbackAdoptions: readonly TraceFeedbackAdoption[];
   readonly feedbackMemoryRelations: readonly TraceFeedbackMemoryRelation[];
   readonly memoryPromotions: readonly TraceMemoryPromotionRelation[];
-  readonly regressions: readonly TraceRegression[];
   readonly issueProvenance: readonly TraceIssueProvenance[];
-  readonly adoptionHistory: readonly TraceAdoptionHistory[];
   readonly findings: readonly TraceFinding[];
   readonly roadmaps: readonly TraceNodeRelation[];
   readonly designs: readonly TraceNodeRelation[];
@@ -260,7 +235,6 @@ export interface TestShowReceipt {
   };
   readonly contract: { readonly ref: string; readonly kind: TraceScope };
   readonly features: readonly { readonly id: string; readonly path: string; readonly title: string }[];
-  readonly regressions: readonly TraceRegression[];
   readonly issueProvenance: readonly TraceIssueProvenance[];
   readonly findings: readonly TraceFinding[];
 }

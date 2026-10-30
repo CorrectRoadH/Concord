@@ -62,7 +62,7 @@ export function makeDesignCommand(
       Options.withDescription("Include the optional shared CASES.md page."),
     ),
     pages: Options.string("pages").pipe(
-      Options.withDescription("Comma-separated Plan pages: library,cli,architecture,lifecycle,use-case."),
+      Options.withDescription("Comma-separated Plan pages: library,cli,architecture,use-case."),
       Options.optional,
     ),
     dryRun: dryRunOption,

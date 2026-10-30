@@ -51,7 +51,6 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
     })));
     yield* cli('writing', 'set', '--body', input, '--expected-digest', digest);
   }
-  yield* io('Declare the governance fixture', () => writeFileSync(join(root, 'concord.repository.json'), JSON.stringify({ format: 'concord.repository/v2', suites: [{ id: 'bench', root: 'test' }], historyPath: 'case-history.ts', policy: 'concord.native-reliability/v1' })));
   yield* git('add', '.');
   yield* git('-c', 'user.name=Concord bench', '-c', 'user.email=bench@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Frozen benchmark fixture');
   const commit = (yield* git('rev-parse', 'HEAD')).stdout.trim();

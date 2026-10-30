@@ -67,12 +67,13 @@ export function humanOutput(value: unknown): string {
     const terms = value.query.trim().split(/\s+/u);
     return [label(value.operation), ...entries.filter(Predicate.isObject).flatMap(entry => [
       `${String(entry.path)} — ${String(entry.title ?? (Predicate.isObject(entry.metadata) ? entry.metadata.title : ''))}`,
-      `  ${String(entry.type ?? entry.memoryKind ?? (Predicate.isObject(entry.metadata) ? entry.metadata.memoryKind : 'issue'))}: ${String(entry.status ?? entry.state ?? (Predicate.isObject(entry.metadata) ? entry.metadata.state : 'unknown'))}`,
+      `  ${String(entry.type ?? (Predicate.isObject(entry.metadata) ? entry.metadata.type : 'issue'))}: ${String(entry.status ?? (Predicate.isObject(entry.metadata) ? entry.metadata.status : 'unknown'))}`,
       `  ${matchingSnippet(typeof entry.body === 'string' ? entry.body : '', terms)}`,
     ])].join('\n');
   }
   if ('changedPaths' in value && Array.isArray(value.changedPaths)) {
-    const lines = [`${value.dryRun ? 'Would apply' : 'Applied'} ${String(value.operation)}:`, ...value.changedPaths.map(path => `  ${String(path)}`)];
+    const verified = Predicate.isObject(value.verification) ? [`Verified fix — ${String(value.changedPaths[0])}`, `Defect: ${String(value.verification.defect)}`, `Fix: ${String(value.verification.fix)}`, `Tests: ${Array.isArray(value.verification.tests) ? value.verification.tests.join(', ') : ''}`] : [];
+    const lines = [...verified, `${value.dryRun ? 'Would apply' : 'Applied'} ${String(value.operation)}:`, ...value.changedPaths.map(path => `  ${String(path)}`)];
     if ((value.operation === 'feedback-sync' || value.operation === 'feedback-import') && typeof value.fetched === 'number' && typeof value.imported === 'number') {
       lines.push('', `Fetched: ${String(value.fetched)}; imported: ${String(value.imported)}.`);
     }
@@ -86,13 +87,10 @@ export function humanOutput(value: unknown): string {
   if (value.operation === 'template-show' && typeof value.body === 'string') return value.body;
   if (value.scope === 'command') return [
     `Command ${String(value.commandOutcome)} — ${String(value.selectedCaseId)}`,
-    `Receipt: ${String(value.id)}`,
     'Scope: command (does not prove native case coverage)',
     `Execution: ${String(value.execution)}; exit: ${String(value.exitCode)}; cleanup: ${String(value.cleanupOk)}`,
     `Timeout: ${String(value.timedOut)}; cancelled: ${String(value.cancelled)}; signal: ${String(value.signal)}`,
-    `Arguments: ${JSON.stringify(value.argv)}`,
-    `Started: ${String(value.startedAt)}; finished: ${String(value.finishedAt)}`,
-    'Use --json to inspect all recorded digests.',
+    `Arguments: ${JSON.stringify(value.arguments)}`,
   ].join('\n');
   const lines: string[] = [];
   if (typeof value.operation === 'string') lines.push(label(value.operation));
@@ -106,7 +104,7 @@ export function humanOutput(value: unknown): string {
         if (Predicate.isObject(entry) && typeof entry.path === 'string') {
           const metadata = Predicate.isObject(entry.metadata) ? entry.metadata : entry;
           lines.push(`  ${entry.path}${entry.line ? `:${String(entry.line)}` : ''}${metadata.title ? ` — ${String(metadata.title)}` : ''}${metadata.kind ? ` (${String(metadata.kind)})` : ''}`);
-          if (entry.state) lines.push(`    ${String(entry.memoryKind ?? entry.kind ?? (value.operation === 'issue-index' ? 'issue' : 'memory'))}: ${String(entry.state)}`);
+          if (entry.status) lines.push(`    ${String(entry.type ?? entry.kind ?? (value.operation === 'issue-index' ? 'issue' : 'memory'))}: ${String(entry.status)}`);
           if (entry.message) lines.push(`    ${String(entry.code ?? 'Finding')}: ${String(entry.message)}`);
           if (entry.evidence) lines.push(indent(humanOutput(entry.evidence), 4));
           if (Array.isArray(entry.steps)) lines.push(indent(humanOutput({ steps: entry.steps, wholeUseCase: entry.wholeUseCase, nonStepAnchors: entry.nonStepAnchors, unassociatedSteps: entry.unassociatedSteps, observation: entry.observation }), 4));
@@ -115,7 +113,7 @@ export function humanOutput(value: unknown): string {
           lines.push(`  ${String(entry.id)} — ${entry.file}:${String(entry.line)}–${String(entry.endLine)} (${String(entry.scope)})`, ...entry.contracts.map(ref => `    Implements: ${String(ref)}`));
         } else if (Predicate.isObject(entry) && typeof entry.file === 'string') {
           lines.push(`  ${String(entry.id)} — ${entry.file}:${String(entry.line)}`, `    Contract: ${String(entry.contract)}`, `    Declaration: ${String(entry.status)}${entry.skipped ? ', skipped/todo' : ''}`);
-          if (Array.isArray(entry.regressions)) for (const ref of entry.regressions) lines.push(`    Regression: ${String(ref)}`);
+          if (Array.isArray(entry.issues)) for (const ref of entry.issues) lines.push(`    Issue: ${String(ref)}`);
         } else lines.push(indent(humanOutput(entry), 2));
       }
     } else if (Predicate.isObject(item)) {

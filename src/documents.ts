@@ -11,7 +11,7 @@ import {
   IssueClosureSchema,
   MEMORY_RELATION_KINDS,
   type IssueClosure,
-  type IssueMemoryRelation,
+  type IssueRelation,
   DocumentName,
   Text,
   decode,
@@ -21,27 +21,16 @@ import {
   type DocumentMeta,
   type DocumentRecord,
   type Finding,
-  type FixedProof,
   type MemoryMeta,
   type MutationReceipt,
   type Repository,
-  type Resolution,
 } from './shared.js';
-import {
-  lifecycleHistory,
-  promotedMemory,
-  reopenedMemory,
-  resolvedMemory,
-  retiredPromotion,
-  supersededMemory,
-} from './memory-state.js';
+import { supersededMemory } from './memory-state.js';
 import { parseReference, resolveReference } from './refs.js';
 import { CONSTITUTION_PATH, clauseIndex, showConstitution } from './constitution.js';
 import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { rebaseAdoptedMarkdown } from './adoption.js';
 import { inspectDocumentProjections, projectionRecord } from './document-projection.js';
-import { readGovernanceConfiguration } from './governance-config.js';
-import { adoptMemoryEvidenceRequirement, memoryEvidenceRequirement } from './evidence-policy.js';
 import { designContentPaths, formatDesignMarkdown, validateDesignContent } from './design-content.js';
 import { git } from './storage.js';
 import { DOCUMENT_ROOTS, defaultDocumentPath, documentDisposition, documentPlacementError, matchingOwners } from './document-layout.js';
@@ -88,15 +77,6 @@ export function inspectDocumentRecords(inputs: readonly { readonly path: string;
 // @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
 function changed(repo: Repository, operation: string, record: DocumentRecord, metadata: DocumentMeta, body = record.body, dryRun = false): MutationReceipt {
   return repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, body) }], dryRun);
-}
-
-function problemPolicy(repo: Repository) {
-  const config = readGovernanceConfiguration(repo.root);
-  return { policy: config?.config.policy ?? 'command' as const, guard: { path: config?.path ?? 'concord.repository.json', before: config?.source ?? null, after: config?.source ?? null } };
-}
-
-function changedProblem(repo: Repository, operation: string, record: DocumentRecord, metadata: MemoryMeta, policy: ReturnType<typeof problemPolicy>, dryRun: boolean): MutationReceipt {
-  return repo.publish(operation, [{ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, record.body) }, policy.guard], dryRun);
 }
 
 function preimage(repo: Repository, record: DocumentRecord): string {
@@ -269,17 +249,17 @@ function checkIssueClosure(repo: Repository, documents: readonly DocumentRecord[
     const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
     if (closureMemory?.metadata.kind === 'memory') {
       const m = closureMemory.metadata;
-      if (metadata.closure.kind === 'declined' && (m.memoryKind !== 'decision' || m.state !== 'current')) finding(findings, 'InvalidState', document.path, 'Declined closure requires a current Decision');
+      if (metadata.closure.kind === 'declined' && (m.type !== 'decision' || m.status !== 'current')) finding(findings, 'InvalidState', document.path, 'Declined closure requires a current Decision');
     }
   }
   if (metadata.closure?.kind === 'delivered') {
     const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
-    if (closureMemory?.metadata.kind === 'memory' && !(closureMemory.metadata.memoryKind === 'decision' && closureMemory.metadata.state === 'current')) finding(findings, 'InvalidState', document.path, 'Delivery requires a current Decision');
+    if (closureMemory?.metadata.kind === 'memory' && !(closureMemory.metadata.type === 'decision' && closureMemory.metadata.status === 'current')) finding(findings, 'InvalidState', document.path, 'Delivery requires a current Decision');
     checkRef(findings, repo, documents, document, metadata.closure.target, CONTRACT_KINDS, 'closure target');
-    if (!metadata.adoptions.current.includes(metadata.closure.target)) finding(findings, 'InvalidState', document.path, 'Delivered target must be a current adopts relation');
+    if (!metadata.relations.some(relation => relation.role === 'adopts' && metadata.closure?.kind === 'delivered' && relation.target === metadata.closure.target)) finding(findings, 'InvalidState', document.path, 'Delivered target must be a current adopts relation');
   }
   if (metadata.closure?.kind === 'duplicate') checkRef(findings, repo, documents, document, metadata.closure.canonical, ['issue'], 'canonical Issue');
-  if (metadata.closure !== undefined && ['duplicate', 'declined', 'invalid'].includes(metadata.closure.kind) && metadata.adoptions.current.length !== 0) finding(findings, 'InvalidState', document.path, 'This closure requires current adoptions to be retired explicitly');
+  if (metadata.closure !== undefined && ['duplicate', 'declined', 'invalid'].includes(metadata.closure.kind) && metadata.relations.some(relation => relation.role === 'adopts')) finding(findings, 'InvalidState', document.path, 'This closure requires current adoptions to be retired explicitly');
   const seen = new Set<string>(); let cursor: DocumentRecord | undefined = document;
   while (cursor?.metadata.kind === 'issue' && cursor.metadata.closure?.kind === 'duplicate') {
     if (seen.has(cursor.path)) { finding(findings, 'ReferenceCycle', document.path, 'Issue duplicate closure contains a cycle'); break; }
@@ -325,66 +305,29 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       if (metadata.adoptedAs !== undefined) checkRef(findings, repo, documents, document, metadata.adoptedAs, ['feature'], 'adoptedAs');
     }
     if (metadata.kind === 'memory') {
-      const problem = metadata.memoryKind === 'problem';
-      if (metadata.memoryKind === 'note' && metadata.state !== 'captured') finding(findings, 'InvalidState', document.path, 'Note Memory must remain captured');
-      if (metadata.state !== 'superseded' && (metadata.supersededBy !== undefined || metadata.supersession !== undefined)) finding(findings, 'InvalidState', document.path, 'Only superseded Memory may declare supersession');
-      if (problem && metadata.state === 'open' && metadata.resolution !== undefined) finding(findings, 'InvalidState', document.path, 'Open Problem cannot have a current resolution');
-      if (problem && (metadata.state !== 'captured' && metadata.state !== 'open' && metadata.state !== 'resolved' && metadata.state !== 'superseded')) finding(findings, 'InvalidState', document.path, 'Problem state must be captured, open, resolved, or superseded');
-      if (problem && metadata.state === 'resolved' && metadata.resolution === undefined) finding(findings, 'InvalidState', document.path, 'Resolved Problem must have a resolution');
-      if (metadata.resolution !== undefined && metadata.resolution.epoch !== metadata.epoch) finding(findings, 'InvalidState', document.path, 'Resolution epoch does not match current Problem epoch');
-      if (metadata.resolution?.kind === 'fixed' && metadata.resolution.evidenceLevel === 'command' && memoryEvidenceRequirement(metadata) === 'concord.native-reliability/v1') finding(findings, 'EvidenceRequirementUnsatisfied', document.path, 'Command resolution does not satisfy the persisted native evidence requirement');
-      if (metadata.resolution?.kind === 'fixed' && metadata.resolution.evidenceLevel === 'command' && (!metadata.resolution.red || !metadata.resolution.green || !metadata.resolution.selectedCaseId)) finding(findings, 'InvalidState', document.path, 'Fixed resolution lacks complete command evidence');
-      if (metadata.resolution?.kind === 'fixed' && metadata.resolution.evidenceLevel === 'repository') {
-        const evidence = metadata.resolution.repositoryEvidence;
-        if (evidence.memory !== document.path) finding(findings, 'InvalidState', document.path, 'Repository evidence identifies a different Memory');
-        if (evidence.epoch !== metadata.epoch) finding(findings, 'InvalidState', document.path, 'Repository evidence epoch does not match Memory epoch');
-        const selectors = new Set<string>(); const caseIds = new Set<string>(); const invocations = new Set<string>();
-        for (const item of evidence.cases) {
-          if (selectors.has(item.selector)) finding(findings, 'InvalidState', document.path, `Repository evidence selector is duplicated: ${item.selector}`); selectors.add(item.selector);
-          if (caseIds.has(item.caseId)) finding(findings, 'InvalidState', document.path, `Repository evidence case is duplicated: ${item.caseId}`); caseIds.add(item.caseId);
-          for (const invocation of item.invocationIds) { if (invocations.has(invocation)) finding(findings, 'InvalidState', document.path, `Repository evidence invocation is duplicated: ${invocation}`); invocations.add(invocation); }
-          // Formal owners can be E2E declarations outside generic document
-          // roots. Historical evidence does not require their current presence.
-          for (const ref of [item.binding.contractRef, ...[item.red, item.green, item.certificate, item.inventory, ...item.reliability].map(file => file.path)]) {
-            try { parseReference(ref); } catch { finding(findings, 'InvalidState', document.path, `Invalid repository evidence reference: ${ref}`); }
-          }
-        }
-      }
-      if (metadata.resolution !== undefined && !(problem && metadata.state === 'resolved')) finding(findings, 'InvalidState', document.path, 'Only a resolved Problem may have a current resolution');
-      if (metadata.state === 'captured' && metadata.resolution !== undefined) finding(findings, 'InvalidState', document.path, 'Captured Memory cannot have a resolution');
-      if (!problem && metadata.state !== 'captured' && (metadata.state !== 'current' && metadata.state !== 'superseded')) finding(findings, 'InvalidState', document.path, 'Decision/Insight state must be captured, current, or superseded');
-      if (!problem && metadata.state === 'current' && metadata.supersededBy !== undefined) finding(findings, 'InvalidState', document.path, 'Current Memory cannot have supersededBy');
-      if (metadata.state === 'superseded' && metadata.resolution !== undefined) finding(findings, 'InvalidState', document.path, 'Superseded Memory cannot retain a current resolution');
-      if (metadata.state === 'superseded' && metadata.supersededBy === undefined && metadata.supersession === undefined) finding(findings, 'InvalidState', document.path, 'Superseded Memory without a target must declare supersession statement and source');
-      if (new Set(metadata.promotions).size !== metadata.promotions.length) finding(findings, 'InvalidState', document.path, 'Current promotions must be unique');
-      for (const target of metadata.promotions) {
-        if (target.split('#')[0] === CONSTITUTION_PATH) {
-          try { constitutionPromotion(repo, target); }
-          catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidReference', document.path, `promotion: ${cause instanceof Error ? cause.message : String(cause)}`); }
-          continue;
-        }
-        const resolved = checkRef(findings, repo, documents, document, target, CONTRACT_KINDS, 'promotion');
-        if (resolved?.metadata.kind === 'roadmap' && resolved.metadata.state !== 'planned') finding(findings, 'InvalidState', document.path, `Promotion targets adopted Roadmap ${target}`);
+      if (metadata.type === 'note' && metadata.status !== 'captured') finding(findings, 'InvalidState', document.path, 'Note Memory must remain captured');
+      if (metadata.status !== 'superseded' && (metadata.supersededBy !== undefined || metadata.supersession !== undefined)) finding(findings, 'InvalidState', document.path, 'Only superseded Memory may declare supersession');
+      if (metadata.status === 'superseded' && metadata.supersededBy === undefined && metadata.supersession === undefined) finding(findings, 'InvalidState', document.path, 'Superseded Memory requires a replacement or supersession source');
+      for (const relation of metadata.relations) {
+        if (relation.role === 'amends') {
+          if (metadata.type !== 'decision') finding(findings, 'InvalidState', document.path, 'Only a Decision can amend the constitution');
+          if (!/^docs\/constitution\.md(?:#c-(?!000)\d{3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)?$/u.test(relation.target)) finding(findings, 'InvalidReference', document.path, 'amends requires a constitution ID');
+        } else checkRef(findings, repo, documents, document, relation.target, CONTRACT_KINDS, 'supports');
       }
       if (metadata.supersededBy !== undefined) {
         const replacement = checkRef(findings, repo, documents, document, metadata.supersededBy, ['memory'], 'supersededBy');
-        if (replacement?.metadata.kind === 'memory' && replacement.metadata.memoryKind !== metadata.memoryKind) finding(findings, 'InvalidState', document.path, 'Replacement Memory has a different kind');
+        if (replacement?.metadata.kind === 'memory' && replacement.metadata.type !== metadata.type) finding(findings, 'InvalidState', document.path, 'Replacement Memory must have the same type');
       }
     }
     if (metadata.kind === 'issue') {
-      if (metadata.state === 'closed' && metadata.closure === undefined) finding(findings, 'InvalidState', document.path, 'Closed Issue must declare closure');
-      if (metadata.state === 'draft' && metadata.closure !== undefined) finding(findings, 'InvalidState', document.path, 'Draft Issue cannot declare closure');
+      if (metadata.status === 'closed' && metadata.closure === undefined) finding(findings, 'InvalidState', document.path, 'Closed Issue must declare closure');
+      if (metadata.status === 'open' && metadata.closure !== undefined) finding(findings, 'InvalidState', document.path, 'Open Issue cannot declare closure');
       findings.push(...checkIssueClosure(repo, documents, document));
-      const relations = metadata.memoryRelations;
-      const relationKeys = relations.map((relation) => `${relation.kind}\u0000${relation.memory}`);
-      if (new Set(relationKeys).size !== relationKeys.length) finding(findings, 'InvalidState', document.path, 'Issue Memory relations must be unique');
-      for (const relation of relations) {
-        const linked = checkRef(findings, repo, documents, document, relation.memory, relation.kind === 'related' ? ['issue'] : ['memory'], `relation (${relation.kind})`);
-        if (linked?.metadata.kind === 'memory' && !['current', 'superseded'].includes(linked.metadata.state)) finding(findings, 'InvalidState', document.path, `${relation.kind} requires current or superseded Memory`);
-        if (relation.kind === 'related' && linked?.path === document.path) finding(findings, 'InvalidState', document.path, 'related requires another Issue');
+      for (const relation of metadata.relations) {
+        const linked = checkRef(findings, repo, documents, document, relation.target, relation.role === 'related' ? ['issue'] : relation.role === 'adopts' ? CONTRACT_KINDS : ['memory'], `relation (${relation.role})`);
+        if (linked?.metadata.kind === 'memory' && !['current', 'superseded'].includes(linked.metadata.status)) finding(findings, 'InvalidState', document.path, `${relation.role} requires current or superseded Memory`);
+        if (relation.role === 'related' && linked?.path === document.path) finding(findings, 'InvalidState', document.path, 'related requires another Issue');
       }
-      if (new Set(metadata.adoptions.current).size !== metadata.adoptions.current.length) finding(findings, 'InvalidState', document.path, 'Issue adoptions must be unique');
-      for (const target of metadata.adoptions.current) checkRef(findings, repo, documents, document, target, CONTRACT_KINDS, 'adopted contract');
     }
   }
   const feedbackSources = new Map<string, string>();
@@ -472,13 +415,12 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     case 'memory': {
       const memoryKind = input.memoryKind;
       if (memoryKind === undefined) throw new ConcordError('InvalidInput', 'memoryKind is required');
-      if (memoryKind === 'problem') throw new ConcordError('InvalidInput', 'Defects belong to Issue; Memory type must be decision, insight, or note');
       path = `memory/${id}.md`;
       template = memoryKind;
-      metadata = { format: 'concord.document/v1', id, title, createdAt, kind, memoryKind, state: 'captured', epoch: 0, promotions: [], history: [] };
+      metadata = { format: 'concord.document/v1', id, title, createdAt, kind, type: memoryKind, status: 'captured', relations: [] };
       break;
     }
-    case 'issue': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }; break;
+    case 'issue': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, status: 'open', relations: [] }; break;
   }
   const body = kind === 'research' && input.body === undefined ? `# ${title}\n` : bodyFor(template);
   if (kind === 'research' && repo.files(posix.dirname(path)).length > 0) throw new ConcordError('DocumentExists', `${posix.dirname(path)} already contains files; creating an owner would change their ownership`);
@@ -591,57 +533,6 @@ export function deferDesign(repo: Repository, selector: string, reason: string, 
   });
 }
 
-/** Correct a reason without replacing the historical choice or changing the Design schema. */
-export function correctDesignReason(
-  repo: Repository,
-  selector: string,
-  reason: string,
-  memorySelector: string,
-  explanation: string,
-  expectedDigest: string,
-  expectedMemoryDigest: string,
-  dryRun = false,
-): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-    const documents = loadDocuments(repo);
-    const design = findDocument(documents, selector, 'design');
-    const note = findDocument(documents, memorySelector, 'memory');
-    if (design.metadata.kind !== 'design' || note.metadata.kind !== 'memory') throw new ConcordError('InvalidDocumentKind', 'Design reason correction requires Design and Memory owners');
-    if (design.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${design.path} changed; use its current digest`);
-    if (note.digest !== expectedMemoryDigest) throw new ConcordError('PreimageChanged', `${note.path} changed; use its current digest`);
-    const decision = design.metadata.decision;
-    if (decision === undefined) throw new ConcordError('DecisionMissing', `${design.path} has no recorded decision`);
-    if ((note.metadata.memoryKind !== 'note' && note.metadata.memoryKind !== 'decision') || !['captured', 'current'].includes(note.metadata.state)) {
-      throw new ConcordError('InvalidMemoryState', 'Reason corrections require a captured Note or current Decision Memory');
-    }
-    const nextReason = required(reason, 'reason');
-    if (nextReason === decision.reason) throw new ConcordError('InvalidInput', 'The corrected reason must differ from the current reason');
-    const why = required(explanation, 'explanation');
-    const before = preimage(repo, design);
-    const memoryBefore = preimage(repo, note);
-    let commit: string;
-    try { commit = git(repo.root, ['rev-parse', 'HEAD']); }
-    catch { throw new ConcordError('DecisionSourceUncommitted', 'Commit the Design before correcting its reason'); }
-    const env = { ...process.env };
-    for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
-    let committed: string;
-    try {
-      committed = execFileSync('git', ['-C', repo.root, 'show', `${commit}:${design.path}`], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 10 * 1024 * 1024, timeout: 10_000 });
-    } catch {
-      throw new ConcordError('DecisionSourceUncommitted', `${design.path} has no readable HEAD version`);
-    }
-    if (committed !== before) throw new ConcordError('DecisionSourceUncommitted', `${design.path} differs from HEAD; commit it before correcting the reason`);
-    const source = { path: design.path, commit, digest: digest(committed) };
-    const nextDesign = renderDocument({ ...design.metadata, decision: { ...decision, reason: nextReason } }, design.body);
-    const at = now();
-    const nextMemory = renderDocument({ ...note.metadata, history: [...note.metadata.history, { at, action: 'correct-design-reason', reason: why, ref: design.path, source }] }, note.body);
-    return repo.publish('correct-design-reason', [
-      { path: design.path, before, after: nextDesign },
-      { path: note.path, before: memoryBefore, after: nextMemory },
-    ], dryRun);
-  });
-}
-
 function designSnapshot(repo: Repository, record: DocumentRecord): Map<string, string | undefined> {
   if (record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', record.path);
   const base = posix.dirname(record.path);
@@ -714,14 +605,13 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
     if (before === undefined) continue;
     const record = byPath.get(path);
     let source = before;
-    if (record?.metadata.kind === 'memory') {
-      const promotions = record.metadata.promotions.map(mapReference);
-      if (JSON.stringify(promotions) !== JSON.stringify(record.metadata.promotions)) source = renderDocument({ ...record.metadata, promotions }, record.body);
-    }
-    if (record?.metadata.kind === 'issue') {
-      const adoptions = { ...record.metadata.adoptions, current: record.metadata.adoptions.current.map(mapReference) };
-      const closure = record.metadata.closure?.kind === 'delivered' ? { ...record.metadata.closure, target: mapReference(record.metadata.closure.target) } : record.metadata.closure;
-      if (JSON.stringify(adoptions.current) !== JSON.stringify(record.metadata.adoptions.current) || closure?.kind === 'delivered' && record.metadata.closure?.kind === 'delivered' && closure.target !== record.metadata.closure.target) source = renderDocument({ ...record.metadata, adoptions, ...(closure === undefined ? {} : { closure }) }, record.body);
+    if (record?.metadata.kind === 'memory' || record?.metadata.kind === 'issue') {
+      const relations = record.metadata.relations.map(relation => ({ ...relation, target: mapReference(relation.target) }));
+      if (JSON.stringify(relations) !== JSON.stringify(record.metadata.relations)) source = renderDocument({ ...record.metadata, relations } as DocumentMeta, record.body);
+      if (record.metadata.kind === 'issue' && record.metadata.closure?.kind === 'delivered') {
+        const closure = { ...record.metadata.closure, target: mapReference(record.metadata.closure.target) };
+        if (closure.target !== record.metadata.closure.target) source = renderDocument({ ...record.metadata, relations: relations as import('./shared.js').IssueMeta['relations'], closure }, record.body);
+      }
     }
     // Only documents with an inbound Markdown link need the bounded link transform.
     const links: { url: string }[] = [];
@@ -742,25 +632,6 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   });
 }
 
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#resolve-fixed
-export function resolveMemory(repo: Repository, selector: string, kind: Resolution['kind'], reason: string, proof?: FixedProof, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-  const governance = problemPolicy(repo);
-  const record = findDocument(loadDocuments(repo), selector, 'memory'); const metadata = adoptMemoryEvidenceRequirement(memory(record), governance.policy); const at = now();
-  const why = required(reason, 'reason');
-  let resolution: Resolution;
-  if (kind === 'fixed') {
-    if (proof === undefined || !proof.red || !proof.green || !proof.selectedCaseId || proof.epoch !== metadata.epoch) throw new ConcordError('InvalidProof', 'Fixed resolution requires verified red/green evidence for the current epoch');
-    resolution = { kind, reason: why, at, epoch: metadata.epoch, evidenceLevel: 'command', red: proof.red, green: proof.green, selectedCaseId: proof.selectedCaseId };
-  } else {
-    if (proof !== undefined) throw new ConcordError('InvalidProof', 'Author resolutions do not accept command proof');
-    if (!(['not-a-bug', 'wont-fix', 'external-fixed'] as const).includes(kind as never)) throw new ConcordError('InvalidInput', `Unknown resolution kind: ${kind}`);
-    resolution = { kind, reason: why, at, epoch: metadata.epoch, evidenceLevel: 'author' };
-  }
-  return changedProblem(repo, 'resolve-memory', record, resolvedMemory(metadata, resolution), governance, dryRun);
-  });
-}
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
@@ -768,23 +639,14 @@ export function activateMemory(repo: Repository, selector: string, reason: strin
   return inRepositorySnapshot(repo, () => {
   const record = readDocumentSelector(repo, selector, 'memory');
   const metadata = memory(record);
-  if (metadata.state !== 'captured') throw new ConcordError('InvalidMemoryState', 'Only captured Memory can be activated');
-  if (metadata.memoryKind === 'note') throw new ConcordError('InvalidMemoryState', 'A note cannot be activated without explicit classification');
+  if (metadata.status !== 'captured') throw new ConcordError('InvalidMemoryState', 'Only captured Memory can be activated');
+  if (metadata.type === 'note') throw new ConcordError('InvalidMemoryState', 'A note cannot be activated without explicit classification');
   const at = now();
   required(reason, 'reason');
-  return changed(repo, 'activate-memory', record, { ...metadata, state: 'current' }, record.body, dryRun);
+  return changed(repo, 'activate-memory', record, { ...metadata, status: 'current' }, record.body, dryRun);
   });
 }
 
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
-export function reopenMemory(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-  const governance = problemPolicy(repo);
-  const record = findDocument(loadDocuments(repo), selector, 'memory');
-  return changedProblem(repo, 'reopen-memory', record, reopenedMemory(adoptMemoryEvidenceRequirement(memory(record), governance.policy), reason, now()), governance, dryRun);
-  });
-}
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
@@ -800,32 +662,6 @@ export function supersedeMemory(repo: Repository, selector: string, replacement:
   });
 }
 
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
-export function promoteMemory(repo: Repository, selector: string, target: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-  const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'memory');
-  if (memory(record).state === 'captured') throw new ConcordError('InvalidMemoryState', 'Captured Memory cannot be promoted; activate it first');
-  const constitution = constitutionPromotion(repo, target);
-  if (constitution !== undefined) {
-    if (memory(record).memoryKind !== 'decision') throw new ConcordError('InvalidMemoryState', 'Only a Decision can be promoted to the constitution');
-    return changed(repo, 'promote-memory', record, promotedMemory(memory(record), constitution), record.body, dryRun);
-  }
-  const owner = resolveReference(repo, documents, target, CONTRACT_KINDS);
-  if (owner.metadata.kind === 'roadmap' && owner.metadata.state !== 'planned') throw new ConcordError('InvalidRoadmapState', 'Only a planned Roadmap can receive a promotion');
-  const canonical = parseReference(target).ref;
-  return changed(repo, 'promote-memory', record, promotedMemory(memory(record), canonical), record.body, dryRun);
-  });
-}
-
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
-export function retirePromotion(repo: Repository, selector: string, target: string, reason: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-  const record = findDocument(loadDocuments(repo), selector, 'memory'); const canonical = parseReference(target).ref;
-  return changed(repo, 'retire-promotion', record, retiredPromotion(memory(record), canonical, reason, now()), record.body, dryRun);
-  });
-}
 
 /** Lifecycle-independent relation helper used by the current Memory command surface. */
 export function linkMemory(repo: Repository, selector: string, target: string, role: 'supports' | 'amends' = 'supports', dryRun = false): MutationReceipt {
@@ -836,38 +672,38 @@ export function linkMemory(repo: Repository, selector: string, target: string, r
     if (role === 'amends') {
       if (constitutionPromotion(repo, canonical) === undefined) throw new ConcordError('InvalidReferenceTarget', 'amends requires the constitution or one of its clauses');
     } else readDocumentReference(repo, canonical, CONTRACT_KINDS);
-    if (metadata.promotions.includes(canonical)) throw new ConcordError('DuplicateLink', `${role}: ${canonical}`);
-    return changed(repo, 'link-memory', record, { ...metadata, promotions: [...metadata.promotions, canonical] }, record.body, dryRun);
+    if (metadata.relations.some(relation => relation.role === role && relation.target === canonical)) throw new ConcordError('DuplicateLink', `${role}: ${canonical}`);
+    return changed(repo, 'link-memory', record, { ...metadata, relations: [...metadata.relations, { role, target: canonical }] }, record.body, dryRun);
   });
 }
 
 // @concord-code
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
-export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false, kind: IssueMemoryRelation['kind'] | 'adopts' = 'investigation'): MutationReceipt {
+export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false, kind: Exclude<IssueRelation['role'], 'adopts'> | 'adopts' = 'investigation'): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   if (kind === 'adopts') return adoptIssue(repo, selector, memoryRef, dryRun);
   const record = readDocumentSelector(repo, selector, 'issue');
   if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-  if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed Issue cannot gain links');
+  if (record.metadata.status !== 'open') throw new ConcordError('InvalidIssueState', 'Closed Issue cannot gain links');
   decode(Schema.Literals(MEMORY_RELATION_KINDS), kind, 'relation kind');
   const target = readDocumentReference(repo, memoryRef, kind === 'related' ? ['issue'] : ['memory']); const canonical = parseReference(memoryRef).ref;
-  if (target.metadata.kind === 'memory' && !['current', 'superseded'].includes(target.metadata.state)) throw new ConcordError('InvalidMemoryState', 'Issue relations require current or superseded Memory');
+  if (target.metadata.kind === 'memory' && !['current', 'superseded'].includes(target.metadata.status)) throw new ConcordError('InvalidMemoryState', 'Issue relations require current or superseded Memory');
   if (kind === 'related' && target.path === record.path) throw new ConcordError('InvalidReferenceTarget', 'related requires another Issue');
-  if (record.metadata.memoryRelations.some((relation) => relation.memory === canonical && relation.kind === kind)) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
-  return changed(repo, 'link-issue', record, { ...record.metadata, memoryRelations: [...record.metadata.memoryRelations, { kind, memory: canonical }] }, record.body, dryRun);
+  if (record.metadata.relations.some((relation) => relation.target === canonical && relation.role === kind)) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
+  return changed(repo, 'link-issue', record, { ...record.metadata, relations: [...record.metadata.relations, { role: kind, target: canonical }] }, record.body, dryRun);
   });
 }
 
-export function unlinkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueMemoryRelation['kind'] | 'adopts' = 'investigation'): MutationReceipt {
+export function unlinkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: Exclude<IssueRelation['role'], 'adopts'> | 'adopts' = 'investigation'): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     if (role === 'adopts') return retireIssue(repo, selector, reference, dryRun);
     const record = readDocumentSelector(repo, selector, 'issue');
     if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-    if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed Issue must be reopened before unlinking');
+    if (record.metadata.status !== 'open') throw new ConcordError('InvalidIssueState', 'Closed Issue must be reopened before unlinking');
     const canonical = parseReference(reference).ref;
-    const relations = record.metadata.memoryRelations.filter(item => item.kind !== role || item.memory !== canonical);
-    if (relations.length === record.metadata.memoryRelations.length) throw new ConcordError('LinkNotFound', `${role}: ${canonical}`);
-    return changed(repo, 'unlink-issue', record, { ...record.metadata, memoryRelations: relations }, record.body, dryRun);
+    const relations = record.metadata.relations.filter(item => item.role !== role || item.target !== canonical);
+    if (relations.length === record.metadata.relations.length) throw new ConcordError('LinkNotFound', `${role}: ${canonical}`);
+    return changed(repo, 'unlink-issue', record, { ...record.metadata, relations: relations }, record.body, dryRun);
   });
 }
 
@@ -886,15 +722,10 @@ export function closeIssue(repo: Repository, selector: string, closureInput: str
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
   if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-  if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Issue is already closed');
-  for (const relation of record.metadata.memoryRelations) {
-    const ref = relation.memory;
-    const target = resolveReference(repo, documents, ref, relation.kind === 'related' ? ['issue'] : ['memory']);
-    if (target.metadata.kind === 'memory' && target.metadata.memoryKind === 'problem' && (target.metadata.state === 'captured' || target.metadata.state === 'open')) throw new ConcordError('OpenProblem', `Activate and resolve linked Problem ${ref} before closing the Issue`);
-  }
+  if (record.metadata.status !== 'open' && !(record.metadata.closure?.kind === 'fixed' && record.metadata.closure.verification === undefined)) throw new ConcordError('InvalidIssueState', 'Issue is already closed');
   const closure = decode(IssueClosureSchema, typeof closureInput === 'string' ? { kind: 'closed', reason: closureInput } : closureInput, 'Issue closure');
   const at = now(); const why = closure.kind === 'closed' ? closure.reason : closure.kind;
-  const metadata = { ...record.metadata, state: 'closed' as const, closure, history: [...record.metadata.history, lifecycleHistory('close', why, at)] };
+  const metadata = { ...record.metadata, status: 'closed' as const, closure };
   const candidate = { ...record, metadata };
   const findings = checkIssueClosure(repo, documents.map(document => document.path === record.path ? candidate : document), candidate);
   if (findings.length > 0) throw new ConcordError(findings[0]!.code, findings[0]!.message, { findings });
@@ -907,12 +738,12 @@ export function closeIssue(repo: Repository, selector: string, closureInput: str
 export function adoptIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
-    if (record.metadata.kind !== 'issue' || record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Only a draft Issue can adopt a contract');
+    if (record.metadata.kind !== 'issue' || record.metadata.status !== 'open') throw new ConcordError('InvalidIssueState', 'Only a draft Issue can adopt a contract');
     const parsed = parseReference(reference);
     const target = resolveReference(repo, documents, reference, CONTRACT_KINDS);
     const canonical = parsed.ref;
-    if (record.metadata.adoptions.current.includes(canonical)) throw new ConcordError('DuplicateLink', `${canonical} is already adopted`);
-    return changed(repo, 'adopt-issue', record, { ...record.metadata, adoptions: { ...record.metadata.adoptions, current: [...record.metadata.adoptions.current, canonical] } }, record.body, dryRun);
+    if (record.metadata.relations.some(relation => relation.role === 'adopts' && relation.target === canonical)) throw new ConcordError('DuplicateLink', `${canonical} is already adopted`);
+    return changed(repo, 'adopt-issue', record, { ...record.metadata, relations: [...record.metadata.relations, { role: 'adopts', target: canonical }] }, record.body, dryRun);
   });
 }
 
@@ -923,9 +754,9 @@ export function retireIssue(repo: Repository, selector: string, reference: strin
     const record = findDocument(loadDocuments(repo), selector, 'issue');
     if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
     const canonical = parseReference(reference).ref;
-    if (!record.metadata.adoptions.current.includes(canonical)) throw new ConcordError('InvalidIssueState', `${canonical} is not a current adoption`);
-    if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed Issue must be reopened before unlinking');
-    return changed(repo, 'retire-issue', record, { ...record.metadata, adoptions: { current: record.metadata.adoptions.current.filter(target => target !== canonical), history: [] } }, record.body, dryRun);
+    if (!record.metadata.relations.some(relation => relation.role === 'adopts' && relation.target === canonical)) throw new ConcordError('InvalidIssueState', `${canonical} is not a current adoption`);
+    if (record.metadata.status !== 'open') throw new ConcordError('InvalidIssueState', 'Closed Issue must be reopened before unlinking');
+    return changed(repo, 'retire-issue', record, { ...record.metadata, relations: record.metadata.relations.filter(relation => relation.role !== 'adopts' || relation.target !== canonical) }, record.body, dryRun);
   });
 }
 
@@ -934,8 +765,8 @@ export function retireIssue(repo: Repository, selector: string, reference: strin
 export function reopenIssue(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const record = findDocument(loadDocuments(repo), selector, 'issue');
-    if (record.metadata.kind !== 'issue' || record.metadata.state !== 'closed') throw new ConcordError('InvalidIssueState', 'Only a closed Issue can reopen');
+    if (record.metadata.kind !== 'issue' || record.metadata.status !== 'closed') throw new ConcordError('InvalidIssueState', 'Only a closed Issue can reopen');
     const why = required(reason, 'reason'); const { closure: _, ...metadata } = record.metadata;
-    return changed(repo, 'reopen-issue', record, { ...metadata, state: 'draft', history: [...metadata.history, lifecycleHistory('reopen', why, now())] }, record.body, dryRun);
+    return changed(repo, 'reopen-issue', record, { ...metadata, status: 'open' }, record.body, dryRun);
   });
 }

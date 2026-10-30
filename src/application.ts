@@ -4,7 +4,6 @@ import { join } from 'node:path';
 import { Effect, Result, Predicate } from 'effect';
 import { recoverLocalState } from './recovery.js';
 import { waitForPublication } from './publication-wait.js';
-import { readRepositoryTestView, type RepositoryTestView } from './view-profile.js';
 import { getGitStatus, type GitBaselineCache } from './git-view.js';
 import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from './annotations.js';
 import { codeSnippet, locateCode } from './code-commands.js';
@@ -23,7 +22,6 @@ import {
   linkMemory,
   unlinkIssue,
   deferDesign,
-  resolveMemory,
   supersedeMemory,
 } from './documents.js';
 import { checkFeedbackConnection, listFeedback, syncFeedback } from './feedback.js';
@@ -40,7 +38,6 @@ import {
   setMarkdown,
   setSource,
 } from './editing.js';
-import { readEvidence, verifyFixedEvidence } from './evidence.js';
 import { annotationSnippet, doctor } from './onboarding.js';
 import { ConcordError, IssueClosureSchema, ProjectSchema, decode, digest, failure, type Repository } from './shared.js';
 import { assertCurrentRuntimeFormat, discoverRoot, git, initialize, LocalRepository } from './storage.js';
@@ -98,7 +95,6 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'roadmap.adopt':
     case 'design.decide':
     case 'design.format':
-    case 'memory.resolve':
     case 'memory.activate':
     case 'memory.supersede':
     case 'issue.reopen':
@@ -144,25 +140,6 @@ function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefine
     () => measuredSync(timing)(name, () => { const value = evaluate(); repo.verifySnapshot(); return value; }),
     () => Effect.sync(() => repo.endSnapshot()),
   );
-}
-
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
-function evidenceIds(repo: Repository): readonly string[] {
-  const directory = join(repo.privateDir, 'evidence');
-  if (!existsSync(directory)) return [];
-  const directoryStat = lstatSync(directory);
-  if (directoryStat.isSymbolicLink()) throw new ConcordError('UnsafePath', 'The private evidence directory must not be a symbolic link');
-  if (!directoryStat.isDirectory()) throw new ConcordError('InvalidEvidence', 'The private evidence path must be a directory');
-  return readdirSync(directory)
-    .flatMap((name) => {
-      const id = /^((?:ccev_)[0-9a-f]{32})\.json$/u.exec(name)?.[1];
-      if (id === undefined) return [];
-      const stat = lstatSync(join(directory, name));
-      if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', `Evidence receipt must not be a symbolic link: ${name}`);
-      return stat.isFile() ? [id] : [];
-    })
-    .sort();
 }
 
 // @concord-code
@@ -273,7 +250,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       edges,
       findings,
       sources: [...new Map([...cases.files, ...codeFiles].map(file => [file.path, file])).values()].sort((left, right) => left.path.localeCompare(right.path)),
-      evidenceIds: evidenceIds(repo),
+      evidenceIds: [],
       templates: listTemplates(),
       cache: cases.cache,
       diagnostics,
@@ -282,17 +259,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
     const snapshot = yield* observe === undefined
       ? snapshotSync(repo, timing, 'view.compileWorkspace', compile)
       : sync('view.observeProjection', () => { const result = repo.observeProjection(compile); observe(result.drift); return result.value; });
-    let repositoryTests: RepositoryTestView = { status: 'not-configured', tests: [] };
-    const hasProfile = yield* sync('view.detectRepositoryProfile', () => lstatSync(join(root, 'concord.repository.json'), { throwIfNoEntry: false }) !== undefined);
-    if (hasProfile) {
-      const result = yield* Effect.result(readRepositoryTestView(root));
-      if (Result.isSuccess(result)) repositoryTests = { status: 'ready', tests: result.success };
-      else {
-        const cause = (typeof result.failure === 'object' && result.failure !== null ? result.failure : {}) as { _tag?: string; code?: string; message?: string };
-        repositoryTests = { status: 'failed', tests: [], error: { code: cause.code ?? cause._tag ?? 'RepositoryProfileReadFailed', message: cause.message ?? String(result.failure) } };
-      }
-    }
-    return { ...snapshot, complete: snapshot.complete && repositoryTests.status !== 'failed', repositoryTests };
+    return { ...snapshot };
   }), { access: 'read', persistentCache: cache }, timing);
 });
 
@@ -366,14 +333,6 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
     const ordinary = read.success;
     if (ordinary !== undefined) return ordinary;
 
-    const projected = yield* Effect.result(readRepositoryTestView(validatedRoot));
-    if (Result.isSuccess(projected) && projected.success.some(test => test.file === path)) {
-      return yield* snapshotSync(repo, timing, 'view.readRepositoryTestFile', () => repo.snapshot(() => {
-        const body = repo.read(path);
-        if (body === undefined) throw new ConcordError('FileNotFound', 'The explicitly associated project test file no longer exists');
-        return { path, body, digest: digest(body) };
-      }));
-    }
     return yield* Effect.fail(new ConcordError('FileNotFound', 'The requested path is not in the Concord document, configured source, or explicitly associated project test inventory'));
   }), { access: 'read' }, timing);
 });
@@ -393,15 +352,6 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'design.decide': return decideDesign(repo, action.id, action.selected, action.targets, action.reason, dryRun);
     case 'design.check': return checkDesign(repo, action.id);
     case 'design.format': return formatDesign(repo, action.id, dryRun);
-    case 'memory.resolve': {
-      const trace = buildTrace(repo, 'off', { includeCode: false });
-      requireValidTrace(trace);
-      const problem = findDocument(trace.documents, action.id, 'memory');
-      if (action.kind === 'fixed' && (!action.red || !action.green)) throw new ConcordError('EvidenceRequired', 'fixed requires red and green evidence IDs');
-      if (action.kind !== 'fixed' && (action.red || action.green)) throw new ConcordError('InvalidOption', 'Evidence IDs apply only to fixed resolutions');
-      const proof = action.kind === 'fixed' ? verifyFixedEvidence(repo, trace.documents, trace.annotations.cases, problem, action.red!, action.green!) : undefined;
-      return resolveMemory(repo, action.id, action.kind, action.reason, proof, dryRun);
-    }
     case 'memory.index': return knowledgeIndex(repo, 'memory');
     case 'memory.recall': return knowledgeRecall(repo, 'memory', action.query);
     case 'memory.activate': return activateMemory(repo, action.id, action.reason, dryRun);
@@ -430,8 +380,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'constitution.amend': return amendConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
     case 'code.annotate': return codeSnippet(repo, action.scope, action.contracts);
     case 'code.locate': return locateCode(repo, action.path, action.line);
-    case 'test.annotate': return annotationSnippet(repo, action.contract, action.regressions);
-    case 'evidence.show': return readEvidence(repo, action.id);
+    case 'test.annotate': return annotationSnippet(repo, action.contract, action.issues);
     case 'cache.status': return cacheStatus(repo);
     case 'cache.clear': return dryRun ? previewCacheClear(repo) : clearCache(repo);
     case 'cache.rebuild': {
@@ -459,7 +408,7 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
   switch (action) {
     case 'design.check': case 'memory.index': case 'memory.recall': case 'issue.index': case 'issue.recall': case 'issue.list': case 'feedback.list':
     case 'writing.index': case 'writing.show': case 'writing.check': case 'concepts.index': case 'concepts.show':
-    case 'code.annotate': case 'code.locate': case 'test.annotate': case 'evidence.show': case 'cache.status':
+    case 'code.annotate': case 'code.locate': case 'test.annotate': case 'cache.status':
     case 'check': case 'trace.check': case 'trace.show': case 'review.render': case 'doctor': case 'template.show':
       return 'read';
     default: return 'write';

@@ -91,13 +91,10 @@ export function decodeUncachedDocumentSource(path: string, source: string): Docu
     body = match[2]!.replace(/^\r?\n/u, '');
     if (kind === 'memory') {
       const metadata = decode(MemoryFrontmatterSchema, value, path);
-      fields = { memoryKind: metadata.type, state: metadata.status, epoch: 0, history: [], promotions: (metadata.relations ?? []).map(item => item.target),
-        ...(metadata.supersededBy === undefined ? {} : { supersededBy: metadata.supersededBy }), ...(metadata.supersession === undefined ? {} : { supersession: metadata.supersession }) };
+      fields = { ...metadata, relations: metadata.relations ?? [] };
     } else {
-      const { status, relations = [], ...metadata } = decode(IssueFrontmatterSchema, value, path);
-      fields = { ...metadata, state: status === 'open' ? 'draft' : 'closed', history: [],
-        memoryRelations: relations.filter(item => item.role !== 'adopts').map(item => ({ kind: item.role, memory: item.target })),
-        adoptions: { current: relations.filter(item => item.role === 'adopts').map(item => item.target), history: [] } };
+      const metadata = decode(IssueFrontmatterSchema, value, path);
+      fields = { ...metadata, relations: metadata.relations ?? [] };
     }
   }
   const id = kind === 'use-case' || kind === 'issue' || kind === 'memory' ? path.split('/').at(-1)!.slice(0, -3) : path.split('/').at(-2)!;
@@ -105,7 +102,6 @@ export function decodeUncachedDocumentSource(path: string, source: string): Docu
   if (kind === 'design') fields = { alternatives: [] };
   if (kind === 'roadmap') fields = { state: 'planned' };
   if (kind === 'research') fields = researchSources(body);
-  // Projection-only fields remain until the retired evidence consumers are removed.
   const metadata = decode(DocumentSchema, { format: 'concord.document/v1', id, title: documentTitle(path, body), kind, ...fields }, path);
   return { path, metadata, body, digest: digest(source) };
 }
