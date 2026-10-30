@@ -42,7 +42,7 @@ deprecated:
 3. 去掉 id 后的标题文字是该概念唯一的写法（term）：非空、首尾无空白，只能是纯文本，不含行内代码、链接、强调或 HTML。
 4. 二级标题后的第一个块必须是段落，即定义，可含链接与行内代码；结构化视图的 `definition` 是该段落的 Markdown 原文。定义之后、下一个二级标题以前是解释，可用三级及更深的标题和任意块。
 
-frontmatter 可选，存在时位于文件开头，严格解码，只接受 imports 与 deprecated：imports 是不重复的 path#id 列表，path 必须是 catalog 路径；deprecated 的键为本文件已有的概念 ID，值为非空的弃用名列表。弃用名放在 frontmatter，写作检查不扫描它。catalog 不设版本字段，文件名区分新旧格式。
+frontmatter 可选，存在时位于文件开头，严格解码，只接受 imports 与 deprecated：imports 是不重复的 path#id 列表，path 必须是 catalog 路径；deprecated 的键为本文件已有的概念 ID，值为非空的弃用名列表。弃用名放在 frontmatter，写作检查不扫描它。catalog 不设版本字段。
 
 同一文件内 term 规范化后互不重复，弃用名互不重复且不等于任何 term。ASCII 写法按忽略大小写和单词边界匹配，其它写法按字面匹配，不依赖 locale；规则检查、名称碰撞与禁词共用这一匹配。
 
@@ -57,11 +57,10 @@ frontmatter 可选，存在时位于文件开头，严格解码，只接受 impo
 | `AmbiguousConceptName` | 两个在同一范围生效的概念有相同的规范化 term |
 | `ConceptInUse` | 写入会删除或改名仍被其它 catalog 导入的 ID；消息列出引用者 |
 | `ConceptReferencesUnknown` | 另一 catalog 格式错误使反向引用无法确定时，写入删除目标中原本有效的定义 |
-| `ManagedConceptCatalog` | 非 concepts 工具的写入目标是 catalog 路径 |
 
 正文可以链接到定义，例如 `[反馈](../payments/concepts.md#feedback)`。docs 下（排除 docs/_template）Markdown 正文中相对解析后指向已发现 catalog 的行内链接是术语链接，筛选与解码规则与[宪法链接](../project-onboarding/use-case/evolve-constitution.md#link-clause)相同。fragment 不是该 catalog 的概念 ID 时，`concord check` 报告 relation 类 `AnchorNotFound`，带路径与行号；不带 fragment 的链接指向整页，不产生 finding。链接文字等于 term 时照常计为使用，链接本身不计。正文链接不阻止删除定义；断开的链接由检查报告。
 
-catalog 只能由 concepts 工具写入；author set、page set、page add 与 Web 通用保存遇到 catalog 路径返回 `ManagedConceptCatalog`，提示改用 concepts set。位于 Feature 或 Engineering 包内的 concepts.md 不作为该包的附页创建或改写。
+catalog 可以直接编辑，`concord check` 报告上表的结构、导入与歧义错误；`concepts set` 在写入前执行同一校验。位于 Feature 或 Engineering 包内的 concepts.md 是该目录的概念来源，不是该包的支持页面。
 
 ## 写作政策
 
@@ -97,15 +96,15 @@ roots 可省略：全局默认为 docs，局部默认为所在目录。全局 ro
 
 ## 工具管理与恢复
 
-通过 writing 与 concepts 工具及 Web 编辑来源，使用完整 owner 摘要保护修改。公开 action 为 `writing.index/show/set/check` 与 `concepts.index/show/set`，path 默认全局。show 区分 missing/valid/invalid，返回原文与 digest，安全读取的无效原文可以显式修复；危险路径和读取失败不会伪装为空态。
+来源可以直接编辑，也可以通过 writing 与 concepts 工具及 Web 编辑；工具与 Web 使用完整 owner 摘要保护修改，直接编辑的结果由 `concord check` 校验。公开 action 为 `writing.index/show/set/check` 与 `concepts.index/show/set`，path 默认全局。show 区分 missing/valid/invalid，返回原文与 digest，安全读取的无效原文可以显式修复；危险路径和读取失败不会伪装为空态。
 
-正文输入可来自临时文件或 stdin，不直接绕过工具改受管来源。set 是整 owner CAS，新建时 digest 为 null，返回实际提交的来源、digest 与收据；同一 digest 的第二个写者得到 `PreimageChanged`。concepts set 按提交的字节保存 Markdown，不重新序列化。
+工具的正文输入可来自临时文件或 stdin。set 是整 owner CAS，新建时 digest 为 null，返回实际提交的来源、digest 与收据；同一 digest 的第二个写者得到 `PreimageChanged`。concepts set 按提交的字节保存 Markdown，不重新序列化。
 
 concepts set 先严格解析目标，再检查其 imports 与其它 catalog 对它的导入。各无效 catalog 可逐项修复，修复后已知的有效导入者必须仍能解析；无关的格式错误或悬空 catalog 不阻止增量修复，但 check 与 index 不把它们报告为正常。设置 catalog 不需要解析写作政策。
 
 publication 与 recovery 双向校验精确路径、具名操作、唯一有效 after 和配置绑定；错误操作、任意 JSON 或 Markdown、删除、额外文件、symlink、配置漂移与未知编辑在写入前被拒绝。concepts 写入还保存其它 catalog 的完整集合与原文摘要（操作名 `set-concepts`）；事务中断后新增、删除或修改 importer 会以 `RecoveryConflict` 拒绝恢复并保留现场。prepared 恢复精确 before（包括原来的无效 bytes），committed 保留已提交内容，不要求 before 已经符合当前 Schema。
 
-init 只在缺失时把 docs/concepts.md 创建为随包空 catalog，并绑定真实的新配置初始化；保留已有 docs/concepts.md 的全部字节，即使它不是合法 catalog，之后的检查报告 `InvalidConceptCatalog`。这个例外不允许局部 catalog、非空定义或任意 Markdown 混入 init，init 不创建 concepts.json。
+init 只在缺失时把 docs/concepts.md 创建为随包空 catalog，并绑定真实的新配置初始化；保留已有 docs/concepts.md 的全部字节，即使它不是合法 catalog，之后的检查报告 `InvalidConceptCatalog`。这个例外不允许局部 catalog、非空定义或任意 Markdown 混入 init。
 
 ```markdown
 # Project concepts
@@ -133,11 +132,11 @@ concord writing set --path docs/feature/payments/concord-writing.json \
 concord docs check --rules docs/feature/payments/concord-writing.json --json
 ```
 
-`--body -` 接受 stdin；根命令的 `--dry-run` 验证同一规划但不保存来源。删除条目通过带最新摘要的整份 catalog 更新完成，不能移除仍被引用的定义。
+`--body -` 接受 stdin；根命令的 `--dry-run` 验证同一规划但不保存来源。经工具删除条目通过带最新摘要的整份 catalog 更新完成，不能移除仍被其它 catalog 导入的定义；直接编辑删除这类定义时，`check` 报告 `DanglingConceptImport`。
 
 `concepts index` 返回全部 catalog、概念与诊断，每个概念为 `{ reference, path, scope, concept: { id, term, definition, deprecated } }`，没有弃用名时 `deprecated` 为空数组。`concepts show` 返回 `state`、`source`、`digest`、解析后的 `catalog`（`title`、`imports`、`deprecated`、`concepts`），以及当前目录的有效概念与诊断。结构化 action `concepts.set` 的输入为 `{ path, source, expectedDigest }`。
 
-init 在全局政策缺失时创建随包通用预设，并保留既有政策原文。初始化和恢复只允许精确的随包预设、全局路径及空前像；自定义政策继续通过 writing.set 保存。
+init 在全局政策缺失时创建随包通用预设，并保留既有政策原文。初始化和恢复只允许精确的随包预设、全局路径及空前像；自定义政策直接编辑或通过 writing.set 保存。
 
 ## 检查的文件类型
 
@@ -190,7 +189,7 @@ token 从左到右最长匹配：每个汉字一个；拉丁字母连同结合�
 | `passiveVoice.zh` | 未豁免的字符“被” | `passiveVoice`，“命中被动形式候选” |
 | `passiveVoice.en` | `am/is/are/was/were/be/been/being` 紧接 participles 中的词形 | `passiveVoice`，“命中被动形式候选” |
 
-启用前两个开关时，每个可能选中的语言都须有非空 verbs 表（auto 要求 zh 与 en）；启用 `passiveVoice.en` 须有非空 participles。空表或 null 不隐式关闭开关，有效政策返回 `InvalidWritingPolicy` 并列出开关与词表来源。数字、代码与非拉丁 token 不参与批准词检查，概念 term 不自动加入批准词表。词法 finding 只陈述词面观察，不证明指令数量、词性或语态。预设与迁移都不开启词法开关。
+启用前两个开关时，每个可能选中的语言都须有非空 verbs 表（auto 要求 zh 与 en）；启用 `passiveVoice.en` 须有非空 participles。空表或 null 不隐式关闭开关，有效政策返回 `InvalidWritingPolicy` 并列出开关与词表来源。数字、代码与非拉丁 token 不参与批准词检查，概念 term 不自动加入批准词表。词法 finding 只陈述词面观察，不证明指令数量、词性或语态。随包预设不开启词法开关。
 
 项目开启词法门禁前，用含真实中英文程序性、描述性与混排段落的人工标注语料记录样本规模、各规则 TP/FP/FN、局部豁免与可接受阈值；结果归 Memory。
 

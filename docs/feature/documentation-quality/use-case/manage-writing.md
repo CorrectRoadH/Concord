@@ -22,7 +22,7 @@ feature: docs/feature/documentation-quality/README.md
 
 路径选择、草稿、基线和异步响应绑定 kind 与 canonicalPath。A 切换到 B 后迟到的 A 响应不得覆盖 B。切换/离开遵守脏草稿保护，不触发隐藏自动保存。保存后的刷新不能拿另一写者的 digest 作为旧草稿基线。
 
-CLI action 与 Web 共用严格解码、作用域编译、摘要和恢复授权；只允许 docs 下精确受管文件名，不提供任意 JSON 或 Markdown 写入口；通用文档保存遇到 concepts.md 返回 `ManagedConceptCatalog`。非法局部 roots、悬空引用、空字段、重复身份或危险路径被服务端拒绝。
+CLI action 与 Web 共用严格解码、作用域编译、摘要和恢复授权；`writing.set` 与 `concepts.set` 只接受 docs 下精确的政策与 catalog 文件名，不提供任意 JSON 或 Markdown 写入口。非法局部 roots、悬空引用、空字段、重复身份或危险路径被服务端拒绝。
 
 真实浏览器覆盖写作规则与术语创建/修改/删除条目、来源筛选、全局汇总、原定义直接编辑、部分保存冲突、切换竞态及继承目录的外部修改。恢复、输入快照和语料范围见[文件格式与作用域](../policy.md)。检查不能冒充执行证据。
 

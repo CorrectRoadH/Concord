@@ -7,19 +7,19 @@
 | 启动工作台 | `view --host <host> --port <port>` | 直接打开与项目导航 |
 | 当前项目完整快照 | `workspace show --json` | 定向当前读取提供编辑前像 |
 | 工作区历史结构投影 | `workspace projection --json` | 概览、列表、搜索 |
-| 创建 Spec | 各类型 `create` | 对应入口的创建表单 |
-| Use Case | `use-case create --feature <ref>` | 所属 Feature 内创建 |
-| 正文与页面 | `author set`、各包 `page add/show/set` | 富文本与源码编辑 |
-| 作者字段、源码、配置 | `action --input <file|->` | 详情、源码、设置表单 |
-| 生命周期 | `memory`、`issue`、`design decide/correct-reason`、`roadmap adopt` | 对应记录的操作表单或结构化 action |
-| 测试与证据 | `test run/evidence` | 测试、运行及证据页 |
-| 注释辅助 | `code annotate`、`test annotate` | 代码与测试声明助手 |
+| 创建文档 | `new <类别> <名称>` | 对应入口的创建表单；Use Case 在所属 Feature 内创建 |
+| 读取文档 | `show <路径或选择器>`、`list [类别]` | 分类列表与详情 |
+| 正文与页面 | 直接编辑文件 | 富文本与源码编辑 |
+| 元数据、源码、配置 | 直接编辑文件，或 `action --input <file|->` | 详情、源码、设置表单 |
+| 生命周期 | `issue`、`memory`、`design decide/defer`、`roadmap adopt`、`constitution adopt/amend` | 对应记录的操作表单或结构化 action |
+| 测试与修复核验 | `test list/run/verify` | 测试与运行页 |
+| 声明辅助 | — | 代码与测试声明助手生成可粘贴的注释 |
 | Git 变化 | `git status`、`git diff <path> --area staged|unstaged|untracked` | Git 面板 |
 | 多来源反馈 | `feedback`、`issue link` | 反馈列表、来源、连接与本地笔记 |
 | 检查与恢复 | `check`、`doctor`、`cache`、`recover` | 检查与设置 |
-| 审阅、模板 | `review render`、`template list/show` | 审阅与模板操作 |
+| 审阅 | `review render` | 审阅 |
 
-结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新仍执行原有领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。高级原生证据入口执行同一最低证明要求，不能由通用 command 操作绕过。
+结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新执行同一领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。`document.set` 拒绝的内容见[自动保存](README.md#自动保存)。
 
 ## 工作区投影
 

@@ -4,4 +4,4 @@
 
 Git 已暂存、未暂存与未跟踪变化独立于浏览器草稿。保存后刷新 Git 状态；查看 diff 不执行 Git 写操作。
 
-测试任务从 queued 进入 running；取消进入 cancelling，待进程组清理结束后进入 cancelled。成功执行进入 completed，领域或执行错误进入 failed。清理不能确认时进入 cleanup-failed，保留锁并阻断后续操作。命令结果和收据不等于原生测试覆盖证明。
+测试任务从 queued 进入 running；取消进入 cancelling，待进程组清理结束后进入 cancelled。成功执行进入 completed，领域或执行错误进入 failed。清理不能确认时进入 cleanup-failed，保留锁并阻断后续操作。命令结果不等于原生测试覆盖证明。

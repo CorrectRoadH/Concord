@@ -13,21 +13,21 @@ feature: docs/feature/project-onboarding/README.md
 
 ## 用户目标
 
-维护者从尚未接入的 Git worktree 顶层完成项目特点、文档、测试源码与 Memory 选择，得到可以继续维护的 Concord 项目。
+维护者从尚未接入的 Git worktree 顶层完成初始化，得到可以继续维护的 Concord 项目；不需要 runner 或覆盖默认值的项目不写配置。
 
 ## 完整路径
 
-1. 运行 init，组合选择 Library、CLI 等项目特点，或保留通用默认值。
-2. 创建必需的项目宪法；没有已采用原则时保留明确 draft，后续由作者显式采用为 active。独立选择是否生成 DESIGN.md，调整后续文档默认页面。
-3. 确认测试根、源码根和 runner；无测试项目允许空测试根。
-4. 配置 Memory 来源，provider 为本地文件。
-5. 预览配置与完整文件变更后完成；非交互输入能表达相同选择。
-6. 在根 AGENTS.md 读取 Concord 托管指引，通过 `concord --skill` 获取当前安装版本的任务路由和主题说明。
-7. 运行 doctor，查看真实配置与待完善项。
+1. 运行 init，查看按约定发现的测试根与源码根。
+2. 创建必需的项目宪法；没有已采用原则时保留明确 draft，后续由作者显式采用为 active。独立选择是否生成 DESIGN.md。
+3. 需要 `test run` 或修复核验时配置 runner；测试或实现不在约定位置时覆盖发现范围。无测试项目允许没有测试根。
+4. 预览完整文件变更后完成；非交互输入能表达相同选择。
+5. 在根 AGENTS.md 读取 Concord 托管指引，通过 `concord --skill` 获取当前安装版本的任务路由和主题说明。
+6. 运行 doctor，查看实际生效的配置与待完善项。
 
 ## 可观察验收
 
 - 新项目必有 docs/constitution.md；不将未填写原则或模板示例当成已采用规则。
+- 没有选择 runner 或覆盖时不创建 `concord.config.ts`，`check`、`trace` 与 Web 工作台按[默认值](maintain-project-config.md#配置项)工作。
 - 没有 AGENTS.md 时创建；已有文件只追加或刷新边界明确的托管区块，保留区块外的原字节。标记残缺时原子拒绝，不覆盖未知内容。
 - DESIGN.md 仅在选中时创建，已有文档保留。
 - 缺失的全局写作政策直接采用随包预设，已有政策保留原文。新项目生成的指南和模板通过这套规则；预设值与来源见[写作管理](../../documentation-quality/use-case/manage-writing.md)。

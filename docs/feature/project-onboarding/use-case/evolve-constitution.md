@@ -14,7 +14,7 @@ feature: docs/feature/project-onboarding/README.md
 
 ## 起始状态
 
-- 项目已初始化，`docs/constitution.md` 为 `concord.constitution/v3`，状态为 active。
+- 项目已初始化，`docs/constitution.md` 的 `status` 为 active。
 
 ## 完整路径
 
@@ -76,27 +76,54 @@ feature: docs/feature/project-onboarding/README.md
 
 5. 修订宪法。 {#amend}
 
+   直接编辑 `docs/constitution.md`，并在同一变化中新建一条 Decision Memory：
+
+   ```markdown
+   ---
+   type: decision
+   status: current
+   relations:
+     - role: amends
+       target: docs/constitution.md#c-007-4
+   ---
+
+   # 凭据不进入诊断
+
+   适用范围、理由与影响……
+   ```
+
+   也可以用助手命令一次写入二者：
+
    ```sh
    concord constitution amend --body ./constitution.md --reason "..." --impact "..." --source docs/design/<id>/README.md --expected-digest sha256:...
    ```
 
-   正文只维护当前规则。理由、来源与影响写入一条新的 Decision Memory，与正文在同一次发布中提交；输出的 `memory` 字段给出它的路径。
+   正文只维护当前规则。助手把理由、来源与影响写入一条新的 Decision Memory，与正文在同一次发布中提交；输出的 `memory` 字段给出它的路径。
+
+6. 提交前检查本次变化。 {#check-amendment}
+
+   ```sh
+   concord --json check --since master
+   ```
+
+   active 宪法中有条款或款改变、而本次变化中没有 `type: decision` 的 Memory 以 `amends` 指向它们时，`check --since` 报告 finding 并退出 1。CI 对每个变更运行这条检查。
 
 ## 格式与状态
 
-宪法的 frontmatter 只有 `format: concord.constitution/v3` 与 `status`（draft 或 active）。宪法是声明式的当前规则，不保存采用日期、修订日期或修订历史，不设语义版本号；整文件 digest 是并发前像。
+宪法的 frontmatter 只有 `status`（draft 或 active）；status 是采用授权的边界。宪法是声明式的当前规则，不保存采用日期、修订日期或修订历史，不设语义版本号（[C-012-11](../../../constitution.md#c-012-11)）；整文件 digest 是并发前像。
 
-采用与每次修订各写入一条 Decision Memory：标题概括修订，正文写适用范围、理由与影响，来源列为仓库相对引用，状态直接为 current，并 promote 到受影响的条款或款（`docs/constitution.md#c-NNN-K`）。修订历史由 `concord memory list` 按这些 promotion 派生，逐字差异由 Git 提供。Decision Memory 写入项目唯一的默认可写 Memory 来源（见[配置 Memory 来源](configure-memory-sources.md#规则)）。
+采用与每次修订各对应一条 Decision Memory：`type: decision`、`status: current`，以 `amends` 关系指向受影响的条款或款（`docs/constitution.md#c-NNN-K`）；标题概括修订，正文写适用范围、理由与影响，来源列为仓库相对引用。Memory 位于 `memory/`。按条款检索修订从这些 `amends` 关系派生，逐字差异由 Git 提供（[决策依据](../../../design/sdd-core-model/DECISION.md)）。
 
-init 默认生成 draft，正文说明尚未采用项目原则，非 TTY 同样如此。提供正文不会自动变为 active。
+宪法文件存在即启用其规则；不存在时 `doctor` 提示创建。init 默认生成 draft，正文说明尚未采用项目原则，非 TTY 同样如此。提供正文不会自动变为 active。
+
+宪法可以直接编辑，包括 status 与正文；`check --since <base>` 对照基线检查：active 宪法中改变的条款与款（由 draft 变为 active 时为全部条款）必须有本次变化中的 Decision Memory 以 `amends` 指向。draft 宪法的编辑不要求 Decision Memory。助手命令执行同样的检查并一次写入宪法与 Memory：
 
 | 命令 | 前提 | 结果 |
 | --- | --- | --- |
-| `constitution initialize` | 既有项目尚无宪法 | 在配置中声明宪法并创建 draft；已存在时返回 `ConstitutionExists` |
 | `constitution adopt` | draft，正文至少一个带 ID 的条款，理由与影响非空 | 变为 active，写入采用的 Decision Memory；已 active 返回 `ConstitutionAlreadyActive` |
 | `constitution amend` | active，理由与影响非空 | 改写正文，写入修订的 Decision Memory；draft 返回 `ConstitutionNotActive` |
 
-adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 `PreimageChanged`。普通正文编辑不能改变状态，也不产生 Decision Memory。宪法未配置时 `doctor` 提示 `constitution initialize`；宪法缺失或状态无效不阻碍 `recover`。结构合法不等于治理通过。
+adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 `PreimageChanged`。宪法缺失或状态无效不阻碍 `recover`。结构合法不等于治理通过。
 
 ## 结果
 
@@ -105,15 +132,15 @@ adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 
 | `AnchorNotFound` | 链接的 fragment 不是条款、款或总则的 ID |
 | `ConstitutionLinkInvalid` | 宪法链接带 query，或百分号编码无法解码 |
 | `ConstitutionClauseInvalid` | 宪法中条款或款缺少 ID、ID 格式不对、重复，或标签与 ID 不一致 |
-| `ConstitutionClauseReferenced` | `amend` 或 `adopt` 删除仍被链接、或仍被 current Memory promotion 指向的 ID；输出列出引用位置，不写入 |
+| `ConstitutionClauseReferenced` | `amend` 或 `adopt` 删除仍被正文链接的 ID；输出列出引用位置，不写入 |
 
-`amend` 按候选正文校验引用，同次删除一款及宪法内指向它的链接可以通过。要撤销一款时，先改写引用它的页面（Issue 用 `issue edit`），并用 `memory retire` 退役指向它的 promotion，再删除该款。任何纳入范围的文件无法读取时，`check` 与 `constitution show` 返回 `complete: false`，`amend` 与 `adopt` 拒绝执行。
+`amend` 按候选正文校验引用，同次删除一款及宪法内指向它的链接可以通过。要撤销一款时，先改写引用它的页面，再删除该款；直接编辑删除仍被链接的款时，`check` 报告 `AnchorNotFound`。任何纳入范围的文件无法读取时，`check` 与 `constitution show` 返回 `complete: false`，`amend` 与 `adopt` 拒绝执行。
 
 `check` 只校验引用的结构，不判断语义是否合规。宪法中的列表 ID 不是 Use Case 步骤，不进入 `use-case steps` 与 `trace gaps`。
 
 ## Web 修订
 
-Web 文档页可以进入宪法正文编辑，通过 `constitution.adopt` 与 `constitution.amend` action 提交正文、理由、影响、可选来源与当前摘要。状态与 Decision Memory 由领域操作维护。理由或影响未填时保留草稿，导航、外部改写和保存失败遵守草稿保护。
+Web 文档页可以进入宪法正文编辑，通过 `constitution.adopt` 与 `constitution.amend` action 提交正文、理由、影响、可选来源与当前摘要，状态与 Decision Memory 由这两个操作一并写入。通用保存修改 active 宪法正文时拒绝，规则见 [Web 工作台的保存](../../web-workbench/README.md#自动保存)。理由或影响未填时保留草稿，导航、外部改写和保存失败遵守草稿保护。
 
 CLI、Web 与 action 使用同一宪法 Schema，严格拒绝额外字段。读取不重写文件。
 
@@ -122,8 +149,9 @@ CLI、Web 与 action 使用同一宪法 Schema，严格拒绝额外字段。读�
 - 在一款前插入新款并修订后，指向原款的链接仍有效；新款取未使用的 ID。
 - Use Case 与附页各链接 `#c-007-4`，`constitution show` 列出两处的路径、行号、条款与款。
 - 路径或 fragment 的百分号编码无法解码时，`check` 退出 1 并带路径与行号，`constitution show` 的 `complete` 为 false，amend 与 adopt 拒绝执行。
-- 删除仍被 Issue 链接的款时 amend 拒绝并列出位置；用 `issue edit` 改链接后可以删除。
-- amend 之后宪法 frontmatter 只有 `format` 与 `status`；新 Decision Memory 为 current，promote 到修改的款，`memory list` 能按条款列出全部修订。Memory 写入失败时宪法不变，二者不出现只写一半的状态。
+- 删除仍被 Issue 链接的款时 amend 拒绝并列出位置；直接编辑 Issue 改链接后可以删除。
+- amend 之后宪法 frontmatter 只有 `status`；新 Decision Memory 为 current，以 `amends` 指向修改的款，按条款能列出全部修订。Memory 写入失败时宪法不变，二者不出现只写一半的状态。
+- 直接编辑 active 宪法的一款而不新建 Decision Memory，`check --since <base>` 报告 finding 并退出 1；同一变化中加入以 `amends` 指向该款的 Decision Memory 后通过。只编辑 draft 宪法时不要求 Memory。
 
 ## Spec 来源
 

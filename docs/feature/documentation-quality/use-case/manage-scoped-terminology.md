@@ -12,7 +12,7 @@ feature: docs/feature/documentation-quality/README.md
 
 领域术语由 concepts.md 拥有：每个概念有稳定局部 ID、唯一写法、定义段落与解释，旧写法列为弃用名称。全局与 Feature、Engineering 及其子目录可以分别声明；文件所在目录决定局部作用域。全项目视图自动汇总来源，不创建第二份登记表或把局部定义改成全局。
 
-Concord CLI 与 Web 提供发现、读取、显式创建、摘要保护的修改和条目删除；导入与正文链接都指向原定义。弃用名称只在有效作用域派生检查，建议改为该概念的写法。局部写作规则不能扩大路径范围，不能静默覆盖全局定义；同名不同义在不同范围可并存，汇总保留出处。
+concepts.md 可以直接编辑，`concord check` 校验结构、作用域与被引用的定义；Concord CLI 与 Web 提供发现、读取、显式创建、摘要保护的修改和条目删除；导入与正文链接都指向原定义。弃用名称只在有效作用域派生检查，建议改为该概念的写法。局部写作规则不能扩大路径范围，不能静默覆盖全局定义；同名不同义在不同范围可并存，汇总保留出处。
 
 规则发现、解析、有效作用域与检查共用实现；结构不合规、路径不安全、悬空引用、断开的正文链接及同作用域冲突不被静默忽略。写入和中断恢复遵守同一授权。定义与解释写在同一 concepts.md，其它 Markdown 链接到定义；工具不从其它文件推断定义。
 
@@ -31,7 +31,8 @@ Concord CLI 与 Web 提供发现、读取、显式创建、摘要保护的修改
   - `deprecated` 指向不存在的 ID，或弃用名等于本文件 term。
   - frontmatter 含 `format` 或其它字段，以及无 `{#id}` 的二级标题。
 - `concepts set` 保存的字节与提交内容相同；两个写者基于同一 digest 先后 set，后者得到 `PreimageChanged`，Web 保留草稿。
-- 删除仍被其它 catalog 导入的概念返回 `ConceptInUse` 并列出引用者；`author set` 或 `feature page set` 改写 concepts.md 返回 `ManagedConceptCatalog`，不写入。
+- 经 `concepts set` 删除仍被其它 catalog 导入的概念返回 `ConceptInUse` 并列出引用者，不写入；直接编辑删除同一概念后，`check` 报告 `DanglingConceptImport` 并退出 1。
+- 直接编辑 concepts.md 写入缺少 `{#id}` 的二级标题后，`check` 报告带行号的 `InvalidConceptCatalog`；修正后通过。
 - 两个兄弟目录各定义 term 为 `Job` 的概念时无诊断；一方导入另一方后报告 `AmbiguousConceptName`。全局与某个 Feature 的局部概念共存，局部政策越出所在目录被拒绝。
 - 新仓库 `concord init` 只创建随包空 `docs/concepts.md`；concepts.md 以外的文件不定义概念。
 - 保存后另一写者修改政策时保留草稿；prepared 或 committed 现场混入未知字节时拒绝恢复并保留现场。

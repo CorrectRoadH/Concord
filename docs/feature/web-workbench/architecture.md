@@ -8,9 +8,9 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。HTTP �
 
 术语由 `docs/**/concepts.md` 拥有，目录决定作用域；文档术语页通过 concepts 工具读取当前文档目录的有效定义、直接导入与来源诊断，不在前端解析 catalog 或自行实现第二套合成规则。术语编辑打开 catalog 源码，保存调用 `concepts.set`。全项目汇总与写作页共享同一后端来源，不建立术语注册表。
 
-`docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering、Issue 或 Memory 来源的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 提供专用正文编辑入口，草稿采用与正式修订分别调用 constitution adopt 与 amend；普通 document.set 仍不能覆写宪法元数据与历史。阅读不是合规证据。
+`docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering 或 Issue 的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/constitution.md` 提供专用正文编辑入口，草稿采用与正式修订分别调用 constitution adopt 与 amend。阅读不是合规证据。
 
-`docs/README.md`、`docs/architecture.md`、`docs/concord.md` 和 `docs/_template/` 下无 frontmatter 的参考模板沿用支持页面的摘要保护写入；`concepts.md` 只经 `concepts.set` 写入。其余未授权路径只读。单文件读取仍不枚举全仓库。
+`docs/` 与 `memory/` 下的 Markdown 经 `document.set` 以整文件摘要写入。`document.set` 解析目标的当前原文与候选原文，按[自动保存](README.md#自动保存)列出的字段与规则比较二者，命中时在发布前拒绝；其它差异不做语义判断。术语编辑器经 `concepts.set` 写入，写入前校验 catalog。`source.set` 只写配置范围内的既有 JS/TS 文件，其余路径只读。单文件读取仍不枚举全仓库。
 
 只读 Markdown 按 [MDXEditor 官方建议](https://mdxeditor.dev/editor/docs/overview) 使用独立阅读渲染器。复用 react-markdown，通过 remark-frontmatter 识别元数据；rehype-raw 后接 rehype-sanitize，不使用未经净化的 HTML。保留净化器的 DOM clobbering 前缀，由阅读导航映射源锚点，不能为保留锚点关闭净化。正文和原文／元数据详情来自同一读取结果；预览不产生写入或自动归一化。可编辑正文继续使用 MDXEditor 及原文回退，错误不得清空草稿。
 
@@ -79,7 +79,7 @@ snapshot 由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写�
 
 ### 来源监听
 
-监听只产生失效信号，不读正文、不编译、不发布，也不是安全边界或当前事实证明。启动时监听仓库根与 docs，首次扫描后按配置覆盖 sourceRoots、testRoots、`runner.sourceFiles`、Memory 来源与投影 sources，缺失目录监听已有祖先。每个目录非递归监听，跳过 `.git`、`node_modules` 与符号链接，不按事件路径读取来源。事件在 250 ms 内合并，持续写入最多两秒后申请刷新；每次扫描后核对监听集合，新增监听后补一次刷新，目录删除或替换后重建。至多 8192 个目录句柄；失败报 `WorkspaceWatchUnavailable`，保留缓存并靠补偿刷新，下次扫描重建。缓存写入不触发监听。
+监听只产生失效信号，不读正文、不编译、不发布，也不是安全边界或当前事实证明。启动时监听仓库根与 docs，首次扫描后按配置覆盖 sourceRoots、testRoots、`runner.sourceFiles`、`memory/` 与投影 sources，缺失目录监听已有祖先。每个目录非递归监听，跳过 `.git`、`node_modules` 与符号链接，不按事件路径读取来源。事件在 250 ms 内合并，持续写入最多两秒后申请刷新；每次扫描后核对监听集合，新增监听后补一次刷新，目录删除或替换后重建。至多 8192 个目录句柄；失败报 `WorkspaceWatchUnavailable`，保留缓存并靠补偿刷新，下次扫描重建。缓存写入不触发监听。
 
 ### 编辑前像
 
@@ -103,9 +103,7 @@ CSS 与静态资源进入当前图块的编译结果。项目配置的 `p5.libra
 
 ## 项目测试只读投影
 
-存在 `concord.repository.json` 时，工作区在同一次来源快照内严格读取 profile 配置，复用 `compileTraceUnderLease` 和 `showFeature`，从用户已写入的测试注释、Engineering owner 与 Feature／Use Case 派生关系。内部 `repositoryTests` 投影返回读取状态、测试身份、路径、owner、Spec、执行器与运行通道，不写第二份登记表、不加载宿主模块。Web 将它与通用 case 投影统一呈现为用户已关联的测试；profile 测试仍由原有宿主 CLI 执行。
-
-测试页合并呈现两种来源并标注来源；Feature 汇总使用 profile 自身的归属规则，Use Case 匹配原始 Spec。实现页按 Feature 公共实现及各个 Use Case 分组，只展示明确关联的实现文件、符号、范围和 Spec；同一源码可出现在多个实际关联组。测试文件保留在测试页。点击实现位置打开源码并选择对应行范围；空组提供预填当前 Spec 的关联入口。未配置目录、扫描失败、筛选无匹配和确实无关联分别呈现；profile 失败不得回退成空列表成功。
+工作区复用 `compileTraceUnderLease` 和 `showFeature`，从用户已写入的测试与源码标记派生关系，不写第二份登记表。测试页列出关联到 Feature 与 Use Case 的测试；实现页按 Feature 公共实现及各个 Use Case 分组，只展示明确关联的实现文件、符号、范围和 Spec；同一源码可出现在多个实际关联组。测试文件保留在测试页。点击实现位置打开源码并选择对应行范围；空组提供预填当前 Spec 的关联入口。未配置目录、扫描失败、筛选无匹配和确实无关联分别呈现，扫描失败不得回退成空列表成功。
 
 服务将慢请求写入 stderr：处理耗时或采样到的事件循环延迟达到 250 ms 时，记录方法、规范化路由、状态、完成标志、耗时、阶段及有限原因标签。每分钟最多 20 条，后续记录带被抑制数量；stderr 积压达到 64 KiB 时跳过。阶段至多 24 个命名项及一个汇总项，不记录请求正文、查询参数、文件路径、请求头或原始错误详情。
 
