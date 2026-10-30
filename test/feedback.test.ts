@@ -1,3 +1,4 @@
+import { createConsumer } from './support/consumer.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -31,10 +32,7 @@ const issue = (overrides: Record<string, unknown> = {}) => ({
 });
 
 function fixture(): string {
-  const root = mkdtempSync(join(tmpdir(), 'concord-feedback-'));
-  execFileSync('git', ['init', '-q', root]);
-  const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial); } finally { initial.close(); }
+  const root = createConsumer();
   const repo = new LocalRepository(root);
   try {
     const current = showConfig(repo);
@@ -90,7 +88,7 @@ test('directed feedback reads recover from a brief cache writer and keep source 
     const unavailable = await Effect.runPromise(getViewFile(root, path));
     assert.equal(unavailable.feedback?.remote, null);
     assert.equal(unavailable.feedback?.document.metadata.source?.body, 'First source body');
-    assert.equal(unavailable.feedback?.document.body, 'Local notes\n');
+    assert.equal(unavailable.feedback?.document.body, '# Local\n\nLocal notes\n');
     assert.ok(unavailable.feedback?.warnings.some(warning => warning.includes('Feedback cache unavailable')));
   } finally { writer?.close(); rmSync(root, { recursive: true, force: true }); }
 });
@@ -149,10 +147,10 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
     assert.equal(second.imported, 0);
     open(root, repo => {
       const item = listFeedback(repo)[0]!;
-      assert.equal(item.document.metadata.title, 'Local title');
+      assert.equal(item.document.metadata.title, 'Local investigation');
       assert.equal(item.document.body, '# Local investigation\n');
       assert.equal(item.document.metadata.source?.title, 'Remote report');
-      assert.equal(item.document.metadata.status, 'draft');
+      assert.equal(item.document.metadata.status, 'open');
       assert.equal(item.remote?.title, 'Changed remote title');
       assert.equal(item.triage, 'pending');
       createDocument(repo, 'feature', { id: 'feedback-home', title: 'Feedback home' });

@@ -1,3 +1,4 @@
+import { createConsumer } from './support/consumer.js';
 import { packConcord, installConcord } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
@@ -265,7 +266,7 @@ function readPage(root: string, path: string) { const body = readFileSync(join(r
 function savePage(root: string, path: string, body: string, expectedDigest: string, status = 0) {
  return call(root, ['action', '--input', '-'], status === 0 ? Ack : ErrorOutput, JSON.stringify({ action: 'document.set', path, body, expectedDigest }), status) as { error?: string };
 }
-function consumer(name: string){const root=join(scratch,name);mkdirSync(root);execFileSync('git',['init','-q',root]);call(root,['init','--test-root','test','--test-root','tests'],Ack);return root;}
+function consumer(name: string){const root=join(scratch,name);cpSync(createConsumer(),root,{recursive:true});writeProjectConfig(root,{testRoots:['test','tests']});return root;}
 function write(root: string,path: string,source: string){mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),source);}
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('packed feedback commands persist connections and local triage without remote calls', () => Effect.runPromise(Effect.sync(() => {

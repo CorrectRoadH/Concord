@@ -7,6 +7,7 @@ import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import test, { after, before } from 'node:test';
 import { Effect, Schema } from 'effect';
+import { renderDocument } from '../src/document-codec.js';
 import { installConcord, packConcord } from './installed-package.js';
 
 const Finding = Schema.Struct({ category: Schema.String, code: Schema.String, path: Schema.String, line: Schema.optional(Schema.Number), message: Schema.String });
@@ -46,7 +47,7 @@ const records = (output: typeof Check.Type) => output.findings.filter(finding =>
 // @feature docs/feature/documentation-quality/README.md
 test('packed check reports Spec links to Design records with decoded normalized targets and original occurrence lines', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('spec');
-  call(root, ['feature', 'create', 'cart', '--title', 'Cart']);
+  call(root, ['new', 'feature', 'cart', '--title', 'Cart']);
   const path = 'docs/feature/cart/README.md';
   const before = readFileSync(join(root, path), 'utf8');
   const lines = [
@@ -90,7 +91,7 @@ test('packed check reports Spec links to Design records with decoded normalized 
 test('packed check scopes Spec sources and excludes metadata, comments, code and MDX source while retaining JSX prose', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('scope');
   for (const path of ['docs/design/store/notes.md', 'docs/research/notes.md', 'docs/roadmap/notes.md', 'docs/issues/notes.mdx', 'docs/_template/notes.md', 'memory/notes.md']) {
-    write(root, path, '[excluded](../../design/store/CASES.md)\n');
+    write(root, path, path === 'memory/notes.md' ? renderDocument({ format: 'concord.document/v1', kind: 'memory', id: 'notes', title: 'Notes', type: 'note', status: 'captured', relations: [] }, '# Notes\n\n[excluded](../../design/store/CASES.md)\n') : '# Notes\n\n[excluded](../../design/store/CASES.md)\n');
   }
   const path = 'docs/prose.mdx';
   const lines = [
@@ -164,8 +165,8 @@ test('packed CLI, structured action and Web project check return the same Design
   write(root, 'docs/links.md', '[record](design/store/CASES.md)\n');
   const expected = decodeCheck(call(root, ['check'], 1));
   assert.deepEqual(decodeCheck(call(root, ['action', '--input', '-'], 0, '{"action":"check"}')), expected);
-  const { startViewServer } = await import(pathToFileURL(join(dirname(cli), 'view-server.js')).href) as typeof import('../dist/view-server.js');
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const { startViewServer } = await import('../src/view-server.js');
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot: join(dirname(cli), 'web') });
   try {
     const body = await new Promise<string>((resolve, reject) => {
       const call = request({ hostname: '127.0.0.1', port: server.port, path: '/api/action', method: 'POST', agent: false, headers: { 'content-type': 'application/json' } }, response => {

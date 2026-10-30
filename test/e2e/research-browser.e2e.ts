@@ -33,7 +33,7 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
       await page.setViewportSize(viewport);
       await page.goto(`http://127.0.0.1:${server.port}/research/first`);
       const navigation = page.getByRole('navigation', { name: '内容导航', exact: true });
-      await expect(navigation.getByRole('link', { name: 'adapters', exact: true })).toHaveCount(1);
+      await expect(navigation.getByRole('link', { name: 'Adapters navigation', exact: true })).toHaveCount(1);
       await expect(navigation.getByRole('link', { name: 'First independent study', exact: true })).toHaveCount(0);
       const tree = page.getByTestId('document-file-tree');
       await expect(tree).toBeVisible();
@@ -108,7 +108,7 @@ test('Research sidebar groups physical topics and file tree opens nested owners 
       }
       await page.reload();
       await expect(page.getByRole('heading', { name: 'Second independent study', exact: true })).toBeVisible();
-      assert.match(readFileSync(join(root, 'docs/research/adapters/second/README.md'), 'utf8'), /id: second/);
+      assert.match(readFileSync(join(root, 'docs/research/adapters/second/README.md'), 'utf8'), /^# Second independent study\n/u);
       await page.goto('about:blank');
     }
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }

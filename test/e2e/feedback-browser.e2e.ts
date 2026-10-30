@@ -40,12 +40,12 @@ test('feedback browser separates remote observations from local editing and prot
     const errors:string[]=[];
     page.on('pageerror',error=>errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);
-    const filtered = await page.request.post(`http://127.0.0.1:${server.port}/api/action`, { data: { action: 'feedback.list', provider: 'github', state: 'draft', triage: 'pending', query: 'original remote' } });
+    const filtered = await page.request.post(`http://127.0.0.1:${server.port}/api/action`, { data: { action: 'feedback.list', provider: 'github', state: 'open', triage: 'pending', query: 'original remote' } });
     assert.equal(filtered.status(), 200);
     const filteredValue = await filtered.json() as { ok: boolean; value: { feedback: { document: { metadata: { id: string } } }[] } };
     assert.equal(filteredValue.ok, true);
     assert.deepEqual(filteredValue.value.feedback.map(item => item.document.metadata.id), ['remote-observation']);
-    const invalidFilter = await page.request.post(`http://127.0.0.1:${server.port}/api/action`, { data: { action: 'issue.list', state: 'open' } });
+    const invalidFilter = await page.request.post(`http://127.0.0.1:${server.port}/api/action`, { data: { action: 'issue.list', state: 'draft' } });
     assert.equal(invalidFilter.status(), 400);
     await expect(page.getByRole('complementary',{name:'反馈 侧栏'})).toBeVisible();
     await expect(page.getByRole('button',{name:'添加连接',exact:true})).toHaveCount(0);
@@ -58,7 +58,7 @@ test('feedback browser separates remote observations from local editing and prot
     await page.getByLabel('GitHub repository',{exact:true}).fill('demo');
     const configPath=join(root,projectConfigPath(root));
     const config=readProjectConfig(root);
-    writeProjectConfig(root,{...config,runner:{...config.runner,timeoutMs:54321}});
+    writeProjectConfig(root,{...config,sourceRoots:['external-source']});
     const external=readFileSync(configPath,'utf8');
     await page.getByRole('button',{name:'添加',exact:true}).click();
     await expect(page.getByRole('tabpanel',{name:'反馈来源'}).getByRole('status').filter({hasText:'自动保存失败'})).toBeVisible();

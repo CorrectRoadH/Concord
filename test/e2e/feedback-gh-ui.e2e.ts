@@ -61,7 +61,7 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     await page.getByRole('option', { name: '复用 gh 登录' }).click();
     await expect(page.getByRole('dialog').getByLabel('凭据环境变量')).toHaveCount(0);
     // A concurrent disk edit must reject the draft; checking cannot use the old saved API connection.
-    writeProjectConfig(root, { ...readProjectConfig(root), runner: { ...initial.runner, timeoutMs: 54321 } });
+    writeProjectConfig(root, { ...readProjectConfig(root), sourceRoots: ['external-source'] });
     await page.getByRole('button', { name: '保存方式' }).click();
     await existing.getByRole('button', { name: '检测连接' }).click();
     await expect(existing.getByRole('alert')).toBeVisible();

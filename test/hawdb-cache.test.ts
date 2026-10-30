@@ -1,3 +1,4 @@
+import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -6,12 +7,12 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { cacheStatus, clearCache, scanAnnotations } from '../dist/annotations.js';
-import { acquireHawdbClearGuard, hawdbIdentity, openHawdb } from '../dist/hawdb-native.js';
-import { getWorkspaceSnapshot } from '../dist/application.js';
-import { deleteInspectedCache, inspectCacheClear } from '../dist/cache-file.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { ensureGenericPrivateDirectorySync } from '../dist/coordination.js';
+import { cacheStatus, clearCache, scanAnnotations } from '../src/annotations.js';
+import { acquireHawdbClearGuard, hawdbIdentity, openHawdb } from '../src/hawdb-native.js';
+import { getWorkspaceSnapshot } from '../src/application.js';
+import { deleteInspectedCache, inspectCacheClear } from '../src/cache-file.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { ensureGenericPrivateDirectorySync } from '../src/coordination.js';
 
 const CacheReport = Schema.Struct({ status: Schema.String });
 const ScanReport = Schema.Struct({ cache: CacheReport, codeCache: CacheReport });
@@ -31,7 +32,7 @@ function freshConsumer(): string {
 }
 
 function cli(root: string, ...args: string[]) {
-  return spawnSync(process.execPath, ['dist/entry.js', '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 30_000 });
+  return spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 30_000 });
 }
 
 function cacheDiskSnapshot(path: string) {
@@ -50,9 +51,9 @@ test('fresh dry-run and cache-off processes never touch an existing complete cac
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     const shown = cli(root, 'config', 'show');
     assert.equal(shown.status, 0, shown.stderr);
-    const config = JSON.parse(shown.stdout) as { config: { runner: { timeoutMs: number } }; digest: string };
+    const config = JSON.parse(shown.stdout) as { config: { sourceRoots: string[] }; digest: string };
     const input = join(root, 'config-preview.json');
-    writeFileSync(input, JSON.stringify({ ...config.config, runner: { ...config.config.runner, timeoutMs: config.config.runner.timeoutMs + 1 } }));
+    writeFileSync(input, JSON.stringify({ ...config.config, sourceRoots: [...config.config.sourceRoots, 'extra-src'] }));
     const path = join(root, '.git/concord/cache.hawdb');
     const before = cacheDiskSnapshot(path);
     for (const args of [['check'], ['docs', 'check'], ['writing', 'check'], ['cache', 'status'], ['cache', 'clear'], ['feedback', 'list'], ['config', 'set', '--input', input, '--expected-digest', config.digest]]) {
@@ -196,7 +197,7 @@ test('cache-enabled workspace recovers an interrupted WAL without clearing commi
     const repo = new LocalRepository(root, { initialize: true });
     const path = join(repo.privateDir, 'cache.hawdb');
     try { initialize(repo, false, { testRoots: [] }); scanAnnotations(repo); } finally { repo.close(); }
-    const child = spawnSync(process.execPath, ['--input-type=module', '-e', "import { openHawdb } from './dist/hawdb-native.js'; const db = openHawdb(process.argv[1], {readOnly:false,create:false}); db.put('config_cache', [{key:'interrupted',payload:'committed'}]); process.kill(process.pid, 'SIGKILL');", path], { encoding: 'utf8', timeout: 15000 });
+    const child = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), 'test/fixtures/hawdb-interrupted.ts', path], { encoding: 'utf8', timeout: 15000 });
     assert.equal(child.signal, 'SIGKILL', child.stderr);
     const interrupted = cacheDiskSnapshot(path);
     await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));

@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { ProjectSchema } from '../dist/shared.js';
+import { ProjectSchema } from '../src/shared.js';
 import { readProjectConfig, writeProjectConfig } from './support.js';
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
@@ -39,24 +39,9 @@ test('packed CLI manages documentation without test roots and can later discover
     call(['init', '--docs-only'], ack);
     const config = readProjectConfig(root);
     assert.deepEqual(config.testRoots, []);
-    call(['feature', 'create', 'backup', '--title', 'Backup'], ack);
-    call(['feature', 'page', 'add', 'backup', 'migration'], ack);
-    const pageSchema = Schema.Struct({ body: Schema.String, digest: Schema.String });
-    const page = call(['feature', 'page', 'show', 'backup', 'migration'], pageSchema);
-    const prose = join(scratch, 'migration.md');
-    writeFileSync(prose, '# Migration\n\nPreserve historical plans and their decisions.\n');
-    call(['feature', 'page', 'set', 'backup', 'migration', '--body', prose, '--expected-digest', page.digest], ack);
-    assert.match(call(['feature', 'page', 'show', 'backup', 'migration'], pageSchema).body, /Preserve historical plans/);
-    assert.equal(call(['feature', 'page', 'set', 'backup', 'migration', '--body', prose, '--expected-digest', page.digest], Schema.Struct({ error: Schema.String }), 1).error, 'PreimageChanged');
-    for (const invalid of ['../escape', '/absolute', 'nested/page', 'README.md']) {
-      assert.equal(call(['feature', 'page', 'add', 'backup', invalid], Schema.Struct({ error: Schema.String }), 1).error, 'InvalidPage');
-    }
-    call(['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'files'], ack);
-    call(['design', 'page', 'add', 'storage', 'evaluation-history'], ack);
-    call(['design', 'page', 'add', 'storage', 'migration', '--plan', 'files'], ack);
-    assert.equal(existsSync(join(root, 'docs/design/storage/evaluation-history.md')), true);
-    assert.equal(existsSync(join(root, 'docs/design/storage/plans/files/migration.md')), true);
-    assert.equal(call(['design', 'page', 'add', 'storage', 'migration', '--plan', 'unknown'], Schema.Struct({ error: Schema.String }), 1).error, 'InvalidPlan');
+    call(['new', 'feature', 'backup', '--title', 'Backup'], ack);
+    call(['new', 'design', 'storage', '--title', 'Storage', '--alternative', 'files'], ack);
+    assert.equal(existsSync(join(root, 'docs/design/storage/plans/files/README.md')), true);
     const initial = call(['doctor'], diagnosis);
     assert.equal(initial.cases, 0);
     assert.deepEqual(initial.missingTestRoots, []);

@@ -39,9 +39,9 @@ function cli(root: string, ...args: string[]) {
 function consumer(): string {
   const root = mkdtempSync(join(scratch, 'consumer-'));
   execFileSync('git', ['init', '-q', root]);
-  cli(root, 'init', '--test-root', 'test', '--source-root', 'src', '--no-default-pages');
-  cli(root, 'feature', 'create', 'sample', '--title', 'Sample');
-  cli(root, 'use-case', 'create', 'flow', '--title', 'Flow', '--feature', 'sample');
+  cli(root, 'init', '--test-root', 'test', '--source-root', 'src');
+  cli(root, 'new', 'feature', 'sample', '--title', 'Sample');
+  cli(root, 'new', 'use-case', 'flow', '--title', 'Flow', '--feature', 'sample');
   for (const directory of ['src', 'test']) mkdirSync(join(root, directory));
   writeFileSync(join(root, file), source('old-step'));
   writeFileSync(join(root, 'test/flow.ts'), testText(`${file}#old-step`));

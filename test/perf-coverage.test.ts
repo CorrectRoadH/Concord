@@ -81,8 +81,8 @@ test('scenario execution checks every concurrent result and restores beforeEach 
   const scenario: BenchScenario = {
     id: 'local-sdlc/lifecycle-fixture', consumer: 'fixture:minimal', state: 'warm',
     beforeEach: () => io('Change fixture sources', () => { writeFileSync(source, `${original}\n// changed before sample\n`); writeFileSync(transient, '// transient fixture\n'); }),
-    run: { argv: ['--json', 'feature', 'list'], concurrency: 2 },
-    expect: { exitCode: 0, json: Schema.Struct({ operation: Schema.Literal('feature-list'), documents: Schema.Array(Schema.Json) }) },
+    run: { argv: ['--json', 'list', 'feature'], concurrency: 2 },
+    expect: { exitCode: 0, json: Schema.Struct({ operation: Schema.Literal('list'), documents: Schema.Array(Schema.Json) }) },
   };
   yield* executeScenario(scenario, context);
   const rejected = yield* Effect.result(executeScenario({ ...scenario, expect: { exitCode: 42 } }, context));

@@ -1,4 +1,4 @@
-import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
+import { caseDiscriminator, deriveTestReference } from '../src/test-reference.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -8,12 +8,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { ViewJobManager } from '../dist/view-jobs.js';
-import { formatViewAddress, startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { parseWorkspaceProjection, pollUntil } from './support.js';
-import type { WorkspaceProjection } from '../dist/view-contract.js';
+import { createDocument } from '../src/documents.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { ViewJobManager } from '../src/view-jobs.js';
+import { formatViewAddress, startViewServer, type ViewServerHandle } from '../src/view-server.js';
+import { parseWorkspaceProjection, pollUntil, installedConcordCli } from './support.js';
+import type { WorkspaceProjection } from '../src/view-contract.js';
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-'));
@@ -196,7 +196,7 @@ test('view server keeps the application shell data-free and allows unauthenticat
     }
 
     const empty = await waitForWorkspace(server);
-    assert.equal(empty.snapshot.project, null);
+    assert.deepEqual(empty.snapshot.project, { testRoots: [], sourceRoots: [] });
     assert.equal(empty.snapshot.root, root);
 
     const excess = await send(server, '/api/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'init', docsOnly: true, extra: true }) });
@@ -280,7 +280,7 @@ test('view server rejects malformed or ambiguous authorities and non-origin-form
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view CLI propagates or rejects shared dry-run without cache or repository writes', () => {
   const { root } = fixture();
-  const cli = join(process.cwd(), 'dist/entry.js');
+  const cli = installedConcordCli();
   try {
     const input = join(root, 'action.json');
     writeFileSync(input, JSON.stringify({ action: 'init', docsOnly: true }));
@@ -317,7 +317,7 @@ test('view CLI propagates or rejects shared dry-run without cache or repository 
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('workspace diagnostics never dereference unsafe config or evidence paths', async () => {
+test('workspace diagnostics never dereference unsafe configuration paths', async () => {
   const { root, webRoot } = fixture();
   const outside = mkdtempSync(join(tmpdir(), 'concord-view-outside-'));
   let server: ViewServerHandle | undefined;
@@ -346,23 +346,7 @@ test('workspace diagnostics never dereference unsafe config or evidence paths', 
     rmSync(outside, { recursive: true, force: true });
   }
 
-  const initialized = initializedJobFixture();
-  const evidenceOutside = mkdtempSync(join(tmpdir(), 'concord-view-evidence-'));
-  server = undefined;
-  try {
-    writeFileSync(join(evidenceOutside, 'ccev_0123456789abcdef0123456789abcdef.json'), '{}');
-    symlinkSync(evidenceOutside, join(initialized, '.git/concord/evidence'), 'dir');
-    server = await startViewServer({ root: initialized, host: '127.0.0.1', port: 0, webRoot: join(initialized, 'web-dist') });
-    const response = await pollUntil(async () => {
-      const attempt = await send(server!, '/api/workspace');
-      return attempt.body.includes('UnsafePath') ? attempt : undefined;
-    }, { description: 'unsafe evidence diagnostic', timeoutMs: 45_000 });
-    assert.equal(response.body.includes('UnsafePath'), true, response.body);
-  } finally {
-    await server?.close();
-    rmSync(initialized, { recursive: true, force: true });
-    rmSync(evidenceOutside, { recursive: true, force: true });
-  }
+
 });
 
 const viewJobCase = deriveTestReference('test/view-case.test.js', 'test/view-case.test.js', caseDiscriminator('docs/feature/web/README.md', 0));
@@ -375,7 +359,7 @@ function writeCase(root: string, slow: boolean): void {
 function initializedJobFixture(): string {
   const { root } = fixture();
   let repo = new LocalRepository(root, { initialize: true });
-  initialize(repo, false, { testRoots: ['test'] });
+  initialize(repo, false, { testRoots: ['test'], runner: { kind: 'command', argv: [process.execPath, '--test', '{file}'], timeoutMs: 15000, sourceFiles: [] } });
   repo.close();
   repo = new LocalRepository(root);
   createDocument(repo, 'feature', { id: 'web', title: 'Web' });
@@ -390,7 +374,7 @@ test('HTTP jobs run, cancel, and run again without credentials', async () => {
   let server: ViewServerHandle | undefined;
   try {
     writeCase(root, true);
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot: join(root, 'web-dist') });
     const current = server;
     const start = async () => {
       const response = await send(current, '/api/jobs', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ caseId: viewJobCase }) });

@@ -146,7 +146,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await expect(contentNavigation.getByRole('button', { name: '新建 Feature', exact: true })).toBeVisible();
     await page.goto(`${url}?tab=actions`);
     await expect(page.getByRole('tab', { name: '元数据', exact: true })).toHaveAttribute('data-state', 'active');
-    await expect(page.getByText('ID', { exact: true })).toBeVisible();
+    await expect(page.getByText('路径', { exact: true })).toBeVisible();
     await expect(page.getByText('创建于', { exact: true })).toHaveCount(0);
     let holdWorkspace = true;
     let refreshRequests = 0;
@@ -267,7 +267,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     execFileSync('git',['init','-q',root]);
     const repo=new LocalRepository(root,{initialize:true});
     try {
-      initialize(repo,false,{testRoots:['test'],sourceRoots:['src']});
+      initialize(repo,false,{testRoots:['test'],sourceRoots:['src'],runner:{kind:'command',argv:[process.execPath,'--test','{file}'],timeoutMs:15000,sourceFiles:[]}});
       createDocument(repo,'engineering',{id:'build',title:'Build workflow'});
       const engineeringPath=join(root,'docs/engineering/build/README.md');
       writeFileSync(engineeringPath,`${readFileSync(engineeringPath,'utf8')}\n\`\`\`mermaid\nflowchart LR\n  Source --> Result\n\`\`\`\n`);
@@ -400,7 +400,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
         await route.fulfill({ status: 409, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'RepositoryBusy', message: 'shared Trace lease is busy' }) });
       } else await route.continue();
     });
-    await editor.fill('Browser edited paragraph.');
+    await editor.locator('p').first().fill('Browser edited paragraph.');
     await expect(page.locator('.editor-shell')).toHaveAttribute('data-dirty', 'true');
     await page.getByRole('tab',{name:'术语',exact:true}).click();
     await expect(page.getByRole('tab',{name:'术语',exact:true})).toHaveAttribute('data-state', 'active', { timeout: 20000 });
@@ -428,9 +428,9 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
       }
       await route.continue();
     });
-    await editor.fill('Browser edited paragraph. First revision.');
+    await editor.locator('p').first().fill('Browser edited paragraph. First revision.');
     await expect.poll(() => writes).toBe(1);
-    await editor.fill('Browser edited paragraph. Latest revision.');
+    await editor.locator('p').first().fill('Browser edited paragraph. Latest revision.');
     assert.equal(writes, 1, 'later input waits behind the in-flight save');
     releaseSave?.();
     await expect.poll(()=>readFileSync(path,'utf8')).toContain('Latest revision.');
@@ -446,7 +446,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
       if (action.action === 'document.set' && action.path === 'docs/feature/browser-feature/README.md') writeFileSync(path,disk);
       await route.continue();
     });
-    await editor.fill('Unsaved browser draft.');
+    await editor.locator('p').first().fill('Unsaved browser draft.');
     await expect(page.getByRole('dialog')).toBeVisible();
     await expect(page.getByRole('dialog')).toContainText('Unsaved browser draft.');
     assert.equal(readFileSync(path,'utf8'),disk,'conflict must preserve the external edit');
@@ -464,9 +464,9 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     const primaryBounds=await sidebar.boundingBox();
     const contentBounds=await navigation.boundingBox();
     assert.ok(primaryBounds && contentBounds && contentBounds.x >= primaryBounds.x + primaryBounds.width, 'content navigation occupies its own column');
-    assert.match(readFileSync(join(root,'docs/feature/browser-feature/use-case/browser-flow.md'),'utf8'),/feature: docs\/feature\/browser-feature\/README\.md/);
+    assert.match(readFileSync(join(root,'docs/feature/browser-feature/use-case/browser-flow.md'),'utf8'),/^# Nested browser flow\n/u);
     await page.getByRole('tab',{name:'正文',exact:true}).click();
-    await editor.fill('External editor wins. Flushed from Feature.');
+    await editor.locator('p').first().fill('External editor wins. Flushed from Feature.');
     await page.getByRole('tab',{name:'Use Cases',exact:true}).click();
     await expect(page.getByRole('tab',{name:'Use Cases',exact:true})).toHaveAttribute('data-state','active');
     assert.ok(readFileSync(path,'utf8').includes('Flushed from Feature.'));
@@ -486,9 +486,9 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.locator('.feature-use-cases').getByRole('link').filter({hasText:'Nested browser flow'}).click();
     const drawerEditor=drawer.locator('[contenteditable="true"]').first();
     await expect(drawerEditor).toBeVisible();
-    await drawerEditor.fill('Saved Use Case body.');
+    await drawerEditor.locator('p').first().fill('Saved Use Case body.');
     await expect.poll(()=>readFileSync(join(root,'docs/feature/browser-feature/use-case/browser-flow.md'),'utf8')).toContain('Saved Use Case body.');
-    await drawerEditor.fill('Saved on drawer close.');
+    await drawerEditor.locator('p').first().fill('Saved on drawer close.');
     await drawer.getByRole('button',{name:'Close',exact:true}).click();
     await expect(drawer).toHaveCount(0);
     assert.ok(readFileSync(join(root,'docs/feature/browser-feature/use-case/browser-flow.md'),'utf8').includes('Saved on drawer close.'));
@@ -507,7 +507,7 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await expect(documentTree).toHaveCSS('position','sticky');
     await documentTree.getByRole('button',{name:'architecture.md',exact:true}).click();
     await expect(editor).toContainText('Entity Ownership');
-    await editor.fill('Architecture from browser.');
+    await editor.locator('p').first().fill('Architecture from browser.');
     const documentPane=page.locator('.document-workspace > .page');
     await documentPane.evaluate(element=>{element.scrollTop=500;});
     await documentTree.evaluate(element=>{element.scrollTop=80;});
@@ -719,6 +719,6 @@ test('browser creates Unicode Feature and Use Case names and restores their enco
     assert.match(decodeURIComponent(new URL(page.url()).pathname), /角色NPC\/use-cases\/扩展NPC动作$/u);
     await page.reload();
     await expect(page.getByRole('dialog')).toContainText('扩展 NPC 动作');
-    assert.match(readFileSync(join(root, 'docs/feature/角色NPC/use-case/扩展NPC动作.md'), 'utf8'), /id: 扩展NPC动作/u);
+    assert.match(readFileSync(join(root, 'docs/feature/角色NPC/use-case/扩展NPC动作.md'), 'utf8'), /^# 扩展 NPC 动作\n/u);
   } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
