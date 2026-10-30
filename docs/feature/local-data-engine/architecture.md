@@ -62,7 +62,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 主进程把需要的持久数据（远端反馈快照、诊断投影）随请求交给计算进程，计算进程把结果交回主进程写入；持久命名空间只在主进程读写。
 
-远端观察由发起同步的 CLI 或操作进程取得。它完成来源发布并释放 publication lease 后，以 `feedback-merge` 把完整批次交给服务；主进程严格解码，对当前持久行执行现行的单调时间戳与同版本冲突检查，在一个事务中合并并返回 warnings。该请求只更新可丢弃的远端观察缓存，不写来源。服务不存在、处于降级或合并失败时，按现行缓存更新失败处理：来源回执不变，结果带 warning，不重跑来源写入。没有服务时仍由本进程在释放 lease 后直接合并。
+远端观察由发起同步的 CLI 或操作进程取得。它完成来源发布并释放 publication lease 后，以 `feedback-merge` 会话把完整批次分块交给服务（begin、若干 append、commit）；主进程逐块严格解码并累计到批量上限，在 commit 时对当前持久行执行现行的单调时间戳与同版本冲突检查，在一个事务中合并并返回 warnings；未 commit 的会话随连接断开丢弃。该请求只更新可丢弃的远端观察缓存，不写来源。服务不存在、处于降级或合并失败时，按现行缓存更新失败处理：来源回执不变，结果带 warning，不重跑来源写入。没有服务时仍由本进程在释放 lease 后直接合并。
 
 ### 启动与裁决
 
@@ -114,7 +114,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 | `query {name, input}` | 白名单只读查询的结果或具名错误，见 CLI 查询 |
 | `http {open \| close, host, port, lease?}` | 监听地址与租约 |
 | `cache-clear` | 按[清理](#清理)执行后应答 |
-| `feedback-merge {observations}` | 合并后的 warnings；见进程与资源 |
+| `feedback-merge begin \| append \| commit` | commit 返回合并后的 warnings；见进程与资源 |
 
 每个服务最多 64 个连接，每个连接最多 8 个在途请求，全服务最多 256 个排队请求，待发送字节合计不超过 64 MiB；超限按请求或连接以 `WorkspaceServerBusy` 失败，其它连接不受影响。
 

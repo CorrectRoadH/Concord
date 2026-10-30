@@ -1,28 +1,36 @@
-# 文档模型与格式边界
+# 文档模型
 
-Research、Memory 和 Issue 的当前 owner 统一使用 `concord.document/v1`，Feature、Use Case 与 Engineering 的声明式 frontmatter 见[领域与数据所有权](feature/local-sdlc/library.md#owner)，类型与严格 Schema 由 `concord-sdlc/model` 导出。输入只按当前 Schema 严格解码，不提供兼容读取或格式转换入口。无法识别的受管输入产生诊断，保留原文件；列表和关系从当前 owner 派生。
+Concord 管理的文档按回答的问题分组。身份、类别、所属关系与名称由位置和一级标题决定；只有推导不出的语义写在 frontmatter，字段只在非空时出现。全部文件都可以直接编辑，Concord 从文件派生索引与反向关系，`concord check --since <base>` 检查变化是否合法（[C-001](constitution.md#c-001-5)，[决策依据](design/sdd-core-model/DECISION.md)）。
 
-Research owner 位于 `docs/research/<主题>/README.md`，可以嵌套。有独立问题和研究结论的页面成为 owner；纯导航、来源清单和执行收据保留为 supporting 页面。嵌套 owner 截断祖先归属。`observedAt` 表示原文明确的观察日期，可以省略。使用 Git 首次记录时间填写 `createdAt` 时，必须保存 `createdAtSource`，不得将其描述为观察日期或实际创作日期。
+| 分组 | 文档 | 位置 | frontmatter |
+| --- | --- | --- | --- |
+| Spec | Feature：README（能力）、`use-case/`（用户路径与验收）、`architecture.md`（实现）、`cli.md` 或 `library.md`（示例） | `docs/feature/<f>/` | 无 |
+| Spec | Engineering：本仓库自身维护机制，结构同 Feature | `docs/engineering/<t>/` | 无 |
+| 提案 | Roadmap：尚未采用的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
+| 项目规则 | 宪法、概念、写作政策 | `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 宪法只有 `status` |
+| 决策记录 | Design：候选比较与正式选择 | `docs/design/<d>/` | 无；候选来自 `plans/`，选择来自 DECISION 的 `Selected:` 行 |
+| 决策记录 | Research：带来源与观察时间的研究输入 | `docs/research/<r>/` | 无；观察日期与来源在正文 |
+| 工作项 | Issue：缺陷、请求与观察 | `docs/issues/<i>.md` | `status`、`relations`、`source`、`closure` |
+| 知识 | Memory：decision、insight 与 note | `memory/<m>.md` | `type`、`status`、`relations`、`supersededBy` |
 
-Memory 在 `memory/<id>.md`。Problem、Decision、Insight 保存已明确的分类，Note 表示未分类笔记。`captured` 表示已经捕获但尚未确认当前生命周期；它适用于所有分类，Note 只允许这一状态。`memory activate --reason` 将已分类的 captured Problem 激活为 open，将 Decision／Insight 激活为 current，并追加历史。captured 不能用于 fixed 或 promotion。`superseded` 表示记录不再适用，Problem 也可处于此状态，绝不等价于修复。替代目标未知时保存原声明及来源，不生成虚构图边。
+`docs/` 下其它 Markdown 是普通文档，不是 owner。
 
-Resolution 的解决事实与证据核验分开表达：
+## 身份
 
-| evidenceLevel | 含义 | 进入方式 |
-| --- | --- | --- |
-| `command` | Concord 命令的 red／green 收据 | 当前 open Problem 的严格 command gate |
-| `author` | 非 fixed 的明确处理裁决 | 带原因的具名解决操作 |
-| `attested` | 原记录已有的明确处理声明及来源 | 已有历史声明，始终未验证，不产生当前证明 |
-| `repository` | Profile 核验正式收据后绑定到 Memory epoch 的结果 | 正式 gate；通用模式显示无法核验 |
+canonical 仓库相对路径是唯一身份。目录名与文件名是同类别内的短选择器，歧义时具名拒绝；名称取自正文唯一的一级标题，与路径 slug 可以不同，不超过 1024 个字符。名称保留 Unicode 原拼写与组合标记，大小写与 Unicode 规范化碰撞按路径保护规则拒绝。移动文件即改变身份，`check` 报告全部失效的精确引用。frontmatter 中的路径值是仓库相对路径。
 
-Repository 证据保存原文件字节摘要、owner／contract／source 摘要、候选和八个 invocation 身份。六条 reliability 收据必须独立。epoch 表示 profile 在该 epoch 核验并绑定证据，不声称原 runner 在该 epoch 签发。candidate 仅表示 green 与 reliability 一致的候选，不据此宣称当前工作区已验证。reopen 增加 epoch 并保留完整旧 resolution；历史 invocation 不能被换路径后重复用于新解决。
+## Issue
 
-Issue 在 `docs/issues/<id>.md`。`memoryRelations` 保存调查、根因、裁决和交付角色；`adoptions.current/history` 保存 Spec 采用与退役；`closure` 保存明确处理理由和引用。远端 `source` 与本地 `origin` 分开，dev／dogfood 记录不伪造成 GitHub 来源。历史 fixed closure 保留原声明，但不会因此产生新执行证据。
+Issue 的 `status` 为 open 或 closed。`relations` 中参与生命周期裁决的关系带角色：`investigation`、`root-cause` 与 `decision` 指向 Memory，`adopts` 指向承接它的 Spec，`duplicate-of` 指向另一个 Issue。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。`closure` 的种类与必需字段见[本地观察](feature/feedback/use-case/manage-local-observations.md)；fixed 的修复核验见[修复缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)。普通正文链接只是导航。
 
-发布与恢复使用 Git-private 的短 publication lease 和当前 journal 协议。读取使用乐观快照，实际提交使用短期独占保护；dry-run 不发布文件，实际执行仍须重新校验。未知格式或不完整事务保留现场并具名拒绝，恢复使用与现场匹配的工具版本。
+## Memory
 
-项目配置使用静态 concord.config.ts。Schema、配置原文和摘要共同确定当前输入身份；不支持的配置不被读取为当前授权。
+Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Design 的结论；缺陷由 Issue 跟踪。`status` 为 captured、current 或 superseded：captured 表示尚未确认，note 只能是 captured，superseded 带 `supersededBy` 或写明原因与来源的 `supersession`。`relations` 的 `supports` 指向它支持的 Spec，`amends` 指向宪法修订影响的条款与款。
 
-Research 不预设章节、日期、来源或附页。创建只需要 ID 和标题；附页可使用安全的相对路径，含子目录。Web 按物理主题目录分组，文件树包含主题内的嵌套 owner；选择它仍进入自身身份和关系。导航 README 不会自动成为 owner。
+## 格式边界
 
-Roadmap 的 `cancelled` 必须有包含理由及原文来源的 `cancellation`，不能采用。Design 的 `deferral` 与 `decision` 互斥；历史选择未知时间时必须提供原文来源，不生成虚假日期。新的选择操作写入实际时间并清除暂缓状态。
+只有当前格式（[C-009](constitution.md#c-009-1)）。frontmatter 严格解码，未知字段与可推导字段都是无效输入。
+
+发布与恢复使用 Git-private 的短 publication lease 与 journal 协议。读取使用乐观快照，提交短期独占；dry-run 不发布文件。无法解码的 journal 保留现场并阻断写入。
+
+配置 `concord.config.ts` 可以不存在；存在时只声明 runner、测试与源码目录的覆盖、排除项与可选集成，见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md)。

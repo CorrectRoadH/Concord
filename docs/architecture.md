@@ -8,55 +8,61 @@ Concord 把 Spec、测试归属、Memory 与审阅闭环做成可安装到任意
 
 ## 代码结构
 
-代码由 Effect 服务组成（[C-005](constitution.md#c-005-1)）。领域逻辑只依赖服务接口，文件、进程、时间、网络与缓存等副作用都由服务提供；每种进程用一组 Layer 组合出自己需要的服务。直接使用固定版本 Effect 已有的能力，不手写同类机制。
+代码由 Effect 服务组成（[C-005](constitution.md#c-005-1)）。领域逻辑只依赖端口，文件、进程、时间、网络与缓存等副作用由基础服务提供；每种进程用一组 Layer 组合出自己被允许的能力。固定版本 Effect 已等价提供的能力直接使用，不重复实现；库未提供的保证（例如进程组清理确认、字节预算）由 Concord 的适配层补齐。
 
 ### 分层
 
-| 层 | 内容 | 只依赖 |
+| 层 | 内容 | 依赖 |
 | --- | --- | --- |
-| 入口 | CLI 命令（`effect/unstable/cli`）、HTTP 路由（`unstable/http`）、工作区服务的 RPC 处理（`unstable/rpc`）、终端面板 | 应用操作 |
-| 应用操作 | 每个用户操作一个 `Effect.fn`，输入与输出由 Schema 定义，失败为 `Schema.TaggedError`；CLI、HTTP 与 action 调用同一个操作 | 领域服务 |
-| 领域服务 | Documents、Trace、Writing、Concepts、Issues、Memory、Designs、Tests、Code、Feedback | 基础服务 |
-| 基础服务 | Workspace、Sources、Publication、Cache、Git、OwnedProcess，以及 `@effect/platform` 的 FileSystem、Path 与 Clock | 平台 |
+| 入口 | CLI 命令（`effect/unstable/cli`）、HTTP 路由（`unstable/http`）、RPC 处理（`unstable/rpc`）、终端面板 | 应用端口 |
+| 应用 | 每个用户操作一个 `Effect.fn`，输入、结果与错误由 Schema 定义；CLI、HTTP、action 与 RPC 调用同一个操作。应用端口包括 Queries | 领域服务与基础服务 |
+| 领域服务 | Documents、Trace、Writing、Concepts、Issues、Memory、Designs、Tests、Code、Feedback；可以依赖其它领域服务，依赖关系无环，例如 Trace 依赖 Documents、Code 与 Tests | 领域服务、基础服务与模型 |
+| 基础服务 | Workspace、Sources、Publication、Cache、Git、OwnedProcess，以及 `effect` 的 FileSystem、Path 与 Clock（Node 实现来自 `@effect/platform-node`） | 平台 |
+| 模型 | Schema、纯函数与算法（解析、关系推导、写作规则），不依赖任何服务 | 无 |
 
-领域与应用代码不直接导入 `node:fs`、`node:child_process`，也不读写 `process` 的 cwd、env、argv 与标准流；这些都经由基础服务，使同一操作可以在 CLI、服务主进程、计算进程与操作进程中运行。每个服务一个模块，接口与实现层分开。
+领域与应用代码不直接导入 `node:fs`、`node:child_process`，也不读写 `process` 的 cwd、env、argv 与标准流。
 
 ### 基础服务
 
-| 服务 | 职责 | 实现层 |
-| --- | --- | --- |
-| Workspace | worktree 根、Git-private 目录、配置快照与安装身份 | 每个进程一个，绑定一个 worktree |
-| Sources | 路径安全的读取、乐观快照与返回前核验 | 基于 FileSystem |
-| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有 | 基于 FileSystem |
-| Cache | 解析缓存与持久命名空间 | 持久（服务主进程或无服务时的命令）与内存两种层 |
-| Queries | 白名单只读查询 | `Queries.Local` 在本进程计算；`Queries.Remote` 是工作区服务的 RPC 客户端。CLI 启动时按[工作区服务](feature/local-data-engine/architecture.md#cli-查询)的规则选择，两者接口相同 |
-| OwnedProcess | 子进程与进程组的启动、取消与清理确认 | 基于 `unstable/process` 的 ChildProcess |
-
-### 进程组合
-
-| 进程 | 组合的层 |
+| 服务 | 职责 |
 | --- | --- |
-| CLI | Workspace、Sources、Publication、Cache（内存，或无服务时持久）、Queries（Remote 或 Local） |
-| 工作区服务主进程 | Workspace、Cache（持久）、工作区投影、RPC 服务、HTTP 服务、OwnedProcess |
-| 计算进程 | Workspace、Sources、Cache（内存）、Queries.Local，经标准输入输出提供 RPC |
-| 操作进程 | Workspace、Sources、Publication、Cache（内存） |
-| 面板 | 工作区服务的 RPC 客户端与终端渲染 |
+| Workspace | worktree 根、Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
+| Sources | 路径安全的读取、乐观快照与返回前核验 |
+| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有 |
+| Cache | 解析缓存（内存或持久）、只读远端观察快照、持久命名空间的独占写入，三种能力分开提供 |
+| Git | 状态、diff、提交与 worktree 操作 |
+| OwnedProcess | 用 `unstable/process` 的 ChildProcess 启动与发送信号；Concord 负责后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出也核对后代 |
+
+### 应用端口 Queries
+
+Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Local` 调用同一应用查询，`Queries.Remote` 是工作区服务的 RPC 客户端。CLI 按[工作区服务](feature/local-data-engine/architecture.md#cli-查询)的规则选择。两者实现同一份完整的操作定义：输入模式、领域结果与错误 Schema，以及从结果到退出码的同一映射；公开输出只在入口生成一次。Remote 把传输失败（断线、超时、编码失败）在适配层归类为本进程重算或既有的服务失败，不把 RPC 包装错误当作领域错误输出，也不为等待重连突破回退的截止时间。
+
+### 进程能力
+
+| 进程 | 提供 | 不提供 |
+| --- | --- | --- |
+| CLI | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存；无服务时持久）、Queries（Remote 或 Local） | — |
+| 工作区服务主进程 | Workspace、Git、Cache 的持久独占写入、工作区投影、RPC 与 HTTP 服务、计算与操作进程的监督；Publication 只在清理作用域中、关闭持久库之后提供 | 领域计算 |
+| 计算进程 | Workspace、Sources、Cache（内存解析与主进程交来的只读快照）、Queries.Local；RPC 经标准输入输出，日志只写标准错误 | Publication、持久 Cache、OwnedProcess 之外的子进程 |
+| 操作进程 | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存）、远端读取；发布后经 `feedback-merge` 更新远端观察 | 持久 Cache |
+| 面板 | RPC 客户端与终端渲染 | 文件与缓存 |
+
+每个入口的 Layer 构建在测试中验证：缺少能力时编译或构建失败，不在运行时才发现。
 
 ### 采用的 Effect 能力
 
-| 需要 | Effect 能力 |
-| --- | --- |
-| 锁、租约、句柄、子进程与监听的生命周期 | Scope、`Effect.acquireRelease`、`Layer.effect` |
-| 工作区服务协议 | `unstable/rpc` 的 RpcGroup、RpcServer 与 RpcClient，经 `unstable/socket` 传输，msgpack 序列化；字节字段为 `Uint8Array`；请求 ID、取消与流式结果由 Rpc 提供 |
-| 当前状态与订阅推送 | SubscriptionRef 保存状态，其 changes Stream 推给 RPC 订阅与 SSE |
-| 合并监听事件、补偿刷新与重试 | Schedule 与 Stream 的 debounce |
-| 唯一刷新者与串行维护 | 一个许可的 Semaphore |
-| 在途请求与取消 | FiberMap、FiberSet 与 Fiber 中断 |
-| 启动就绪 | Deferred |
-| HTTP 与静态资源 | `unstable/http` 的 HttpRouter 与 HttpStaticServer |
-| 不可信输入与输出 | Schema 严格解码与编码 |
-| 测试中的时间与协议 | TestClock；RPC 用 RpcTest 在进程内测试 |
-| 性能剖析 | `Effect.fn` 的 span；需要时经 `unstable/observability` 导出 |
+| 需要 | Effect 能力 | Concord 补齐 |
+| --- | --- | --- |
+| 资源生命周期 | Scope、`Effect.acquireRelease`、`Layer.effect` | — |
+| 工作区服务协议 | `unstable/rpc`（请求关联、具名错误、取消、结果流）经 `unstable/socket` | wire codec 须经真实往返测试证明字节字段以原生二进制传输，首选 `RpcSerialization.layerSchemaBinary`，不接受 Base64；领域 Schema 显式拒绝额外字段；单帧、累计、连接、在途与发送字节的准入由传输适配层执行，`maxBufferSize` 只限不完整消息；`feedback-merge` 以 begin、append 与 commit 分块提交，commit 原子生效 |
+| 当前状态与订阅 | SubscriptionRef | 每个订阅只保留最新状态，慢订阅的旧状态被替换，计入发送预算 |
+| 合并监听事件与补偿刷新 | Stream 与 Schedule | 去抖有最长等待（两秒），扫描期间只合并一次后续刷新 |
+| 串行维护 | Semaphore | 只在进程内互斥；服务锁、publication 与超时各自裁决 |
+| 在途请求与取消 | FiberMap、FiberSet | 键为实例、连接与请求身份；中断不替代进程组回收与 60 秒超时 |
+| 启动就绪 | Deferred | — |
+| HTTP 与静态资源 | HttpRouter、HttpStaticServer | Host/Origin 校验沿用现行规则 |
+| 测试中的时间与协议 | TestClock；RpcTest | RpcTest 只验证逻辑；公开输出等价用真实序列化验收 |
+| 性能剖析 | `Effect.fn` 的 span，按需经 `unstable/observability` 导出 | — |
 
 ## 初始化与项目治理
 
