@@ -48,9 +48,17 @@ export function gitBlobBytes(root: string, commit: string, path: string): Buffer
   catch { throw new ConcordError('FixUnverifiable', `Cannot read ${path} in ${commit}`); }
 }
 export const gitBlob = (root: string, commit: string, path: string): string => gitBlobBytes(root, commit, path).toString('utf8');
-export function worktreeIdentity(repo: Repository): string {
+export function worktreeIdentity(repo: Repository, allowUnborn = false): string {
+  let head: string | null;
+  try { head = resolveCommit(repo.root, 'HEAD'); }
+  catch (cause) {
+    if (!allowUnborn) throw cause;
+    const branch = git(repo.root, ['symbolic-ref', '--quiet', 'HEAD']);
+    if (git(repo.root, ['for-each-ref', '--format=%(refname)', branch]) !== '') throw cause;
+    head = null;
+  }
   const paths = [...new Set([...git(repo.root, ['ls-files', '-z']).split('\0'), ...git(repo.root, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0')].filter(Boolean))].sort();
-  return objectDigest({ head: resolveCommit(repo.root, 'HEAD'), status: git(repo.root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']), files: paths.map(path => {
+  return objectDigest({ head, status: git(repo.root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']), files: paths.map(path => {
     canonicalPath(path); const target = join(repo.root, path); const stat = lstatSync(target, { throwIfNoEntry: false });
     if (!stat) return { path, absent: true };
     if (stat.isSymbolicLink()) return { path, symlink: readlinkSync(target) };

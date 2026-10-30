@@ -51,7 +51,7 @@ export function captureAnalysisInputs(repo: Repository) {
   const contractPaths = [...new Set([...trace.documents.map(doc => doc.path), ...repo.files('docs').filter(path => path.endsWith('.md') || path.endsWith('.json'))])].sort();
   const contracts = contractPaths.map(path => ({ path, digest: digest(repo.read(path) ?? '') }));
   const native = captureNativeAnalysis(repo, trace.annotations.cases);
-  const identity = { algorithm: ALGORITHM, compiler: typescriptPackageVersion(), root: repo.root, privateDir: repo.privateDir, config: repo.configSnapshot.digest, candidate: worktreeIdentity(repo), members: identities, contracts, budgets: ANALYSIS_LIMITS, native: { observations: native.identity, bindings: [...native.scopes], gaps: [...native.gaps] } };
+  const identity = { algorithm: ALGORITHM, compiler: typescriptPackageVersion(), root: repo.root, privateDir: repo.privateDir, config: repo.configSnapshot.digest, candidate: worktreeIdentity(repo, true), members: identities, contracts, budgets: ANALYSIS_LIMITS, native: { observations: native.identity, bindings: [...native.scopes], gaps: [...native.gaps] } };
   const inputs = objectDigest(identity);
   return { identity, inputs, files, trace, native, revision: readPublicationRevisionSync(repo.root) };
 }
@@ -91,7 +91,7 @@ function readCapture(root: string) {
       for (const { prefix, scope, paths } of listings.values()) {
         if (objectDigest(reader.files(prefix, scope)) !== objectDigest(paths)) throw new ConcordError('AnalysisSourceChanged', `Analysis membership changed: ${prefix}`);
       }
-      if (worktreeIdentity(reader) !== captured.identity.candidate) throw new ConcordError('AnalysisSourceChanged', 'Analysis candidate changed');
+      if (worktreeIdentity(reader, true) !== captured.identity.candidate) throw new ConcordError('AnalysisSourceChanged', 'Analysis candidate changed');
       captured.native.verifyInputs();
     }) };
   }

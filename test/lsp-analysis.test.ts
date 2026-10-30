@@ -1,3 +1,6 @@
+import { createDocument } from '../src/documents.js';
+import { createConsumer } from './support/consumer.js';
+import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,22 +9,22 @@ import { tmpdir } from 'node:os';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { buildSync } from 'esbuild';
-import { analysisBudgets, LanguageServersSchema, type LanguageServer } from '../dist/language-server-config.js';
-import { documentSymbols, positionOffset, bindSymbol } from '../dist/lsp-symbols.js';
-import { LspConnection } from '../dist/lsp-protocol.js';
-import { AnalysisObservationSchema } from '../dist/analysis-values.js';
-import { AnalysisViewSchema, historicalAnalysis, relevanceFor } from '../dist/analysis-view.js';
-import { CodeDeclarationSchema } from '../dist/code.js';
-import { decode, type AnnotatedCase, type DocumentRecord } from '../dist/shared.js';
-import { observation } from '../dist/observation.js';
-import { LocalRepository } from '../dist/storage.js';
-import { withPersistentCache } from '../dist/cache-store.js';
-import { observeOwnedProcessGroup } from '../dist/owned-process.js';
-import { TraceShowValue, hydrateQueryValue } from '../dist/query-values.js';
+import { analysisBudgets, LanguageServersSchema, type LanguageServer } from '../src/language-server-config.js';
+import { documentSymbols, positionOffset, bindSymbol } from '../src/lsp-symbols.js';
+import { LspConnection } from '../src/lsp-protocol.js';
+import { AnalysisObservationSchema } from '../src/analysis-values.js';
+import { AnalysisViewSchema, historicalAnalysis, relevanceFor } from '../src/analysis-view.js';
+import { CodeDeclarationSchema } from '../src/code.js';
+import { decode, type AnnotatedCase, type DocumentRecord } from '../src/shared.js';
+import { observation } from '../src/observation.js';
+import { LocalRepository } from '../src/storage.js';
+import { withPersistentCache } from '../src/cache-store.js';
+import { observeOwnedProcessGroup } from '../src/owned-process.js';
+import { TraceShowValue, hydrateQueryValue } from '../src/query-values.js';
 import { pollUntil, readProjectConfig, writeProjectConfig } from './support.js';
 import { packConcord } from './installed-package.js';
 
-const cli = resolve('dist/entry.js');
+const cli = installedConcordCli();
 const target = 'docs/feature/sample/use-case/sample.md';
 const source = `# @concord-code\n# @concord-implements ${target}\ndef implementation():\n    return 1\n`;
 function write(root: string, path: string, text: string): void { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); }
@@ -40,11 +43,13 @@ function server(mode = 'normal'): LanguageServer {
   return { id: 'python-fixture', languageId: 'python', extensions: ['.py'], argv: [process.execPath, 'server.mjs'], cwd: '.', environment: ['LANG'], initializationOptions: { mode }, implementationFiles: ['server.mjs'], sourceFiles: [], budgets: { totalMs: 5000, requestMs: 500 }, profile: { version: 'fixture-v1', serverVersion: '1.0.0', commentPrefixes: ['#'], declarationKinds: [5, 6, 12], symbolShape: 'document-symbol', decorators: 'at-line', leadingComments: true, readiness: { kind: 'progress', token: 'index' }, positionEncodings: ['utf-16'] } };
 }
 function consumer(): string {
-  const root = mkdtempSync(join(tmpdir(), 'concord-lsp-test-'));
-  execFileSync('git', ['init', '-q', root], { stdio: 'ignore' });
-  call(root, ['init', '--test-root', 'test', '--source-root', 'src'], ack);
-  call(root, ['feature', 'create', 'sample', '--title', 'Sample'], ack);
-  call(root, ['use-case', 'create', 'sample', '--feature', 'sample', '--title', 'Sample'], ack);
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: ['test'], sourceRoots: ['src'] });
+  const repository = new LocalRepository(root);
+  try {
+    createDocument(repository, 'feature', { id: 'sample', title: 'Sample' });
+    createDocument(repository, 'use-case', { id: 'sample', feature: 'sample', title: 'Sample' });
+  } finally { repository.close(); }
   buildSync({ entryPoints: ['test/fixtures/lsp-server.ts'], bundle: true, platform: 'node', format: 'esm', outfile: join(root, 'server.mjs'), logLevel: 'silent' });
   write(root, 'src/sample.py', source);
   write(root, 'test/sample.py', `# @use-case ${target}\n# @name native-sample\ndef test_sample():\n    helper()\n`);
@@ -252,8 +257,8 @@ test('packed public CLI analyzes an isolated offline consumer without a source c
     root = mkdtempSync(join(scratch, 'consumer-'));
     execFileSync('git', ['init', '-q', root], { stdio: 'ignore' });
     call(root, ['init', '--test-root', 'test', '--source-root', 'src'], ack, 0, binary);
-    call(root, ['feature', 'create', 'sample', '--title', 'Sample'], ack, 0, binary);
-    call(root, ['use-case', 'create', 'sample', '--feature', 'sample', '--title', 'Sample'], ack, 0, binary);
+    call(root, ['new', 'feature', 'sample', '--title', 'Sample'], ack, 0, binary);
+    call(root, ['new', 'use-case', 'sample', '--feature', 'sample', '--title', 'Sample'], ack, 0, binary);
     write(root, 'src/sample.ts', `// @concord-file\n// @concord-implements ${target}\nexport const value = 1;\n`);
     write(root, 'test/sample.ts', `// @use-case ${target}\n// @name packed\nimport { value } from '../src/sample.js';\n`);
     assert.equal(call(root, ['check'], projectCheck, 0, binary).ok, true);
@@ -303,15 +308,17 @@ test('analysis runner ownership survives cancellation and rejects coordinated A-
     const slow = server(), gatePath = join(root, '.git/continue-analysis');
     writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...slow, initializationOptions: { auditPath, gatePath }, budgets: { totalMs: 30000, requestMs: 10000 } }] });
     const original = readFileSync(join(root, target), 'utf8');
-    const body = original.slice(original.indexOf('\n---\n') + 5).trim();
+    const body = original.trim();
     const document = Schema.Struct({ document: Schema.Struct({ digest: Schema.String }) });
-    const before = call(root, ['use-case', 'show', target], document).document.digest;
+    const before = call(root, ['show', target], document).document.digest;
     active = start(); await waitStarted();
     write(root, '.git/body', body + '\n\nChanged during analysis.\n');
-    call(root, ['author', 'set', target, '--body', join(root, '.git/body'), '--expected-digest', before], ack);
-    const changed = call(root, ['use-case', 'show', target], document).document.digest;
+    write(root, '.git/action.json', JSON.stringify({ action: 'document.set', path: target, body: body + '\n\nChanged during analysis.\n', expectedDigest: before }));
+    call(root, ['action', '--input', join(root, '.git/action.json')], ack);
+    const changed = call(root, ['show', target], document).document.digest;
     write(root, '.git/body', body + '\n');
-    call(root, ['author', 'set', target, '--body', join(root, '.git/body'), '--expected-digest', changed], ack);
+    write(root, '.git/action.json', JSON.stringify({ action: 'document.set', path: target, body: original, expectedDigest: changed }));
+    call(root, ['action', '--input', join(root, '.git/action.json')], ack);
     assert.equal(readFileSync(join(root, target), 'utf8'), original);
     writeFileSync(gatePath, 'continue');
     assert.equal(await active.done, 1);
