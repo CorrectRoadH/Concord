@@ -7,6 +7,7 @@ kind: design
 alternatives:
   - convention-first
   - trimmed-current
+  - derive-duplicates
 ---
 
 # 以 Spec 驱动开发的核心模型
@@ -23,7 +24,7 @@ Concord 存在的理由是让 Spec 成为软件的唯一事实来源，并为人
 - 配置声明了约定就能决定的事：`constitution.path` 只能取一个值，`projectId` 与 worktree 根和 Git-private 目录重复，`documentDefaults`、`testRoots` 与 `sourceRoots` 多数项目取默认值。
 - 因为元数据由工具维护，编辑 Spec 也要经过专用命令（`author set`、`page set`、各类 `create`），CLI 有约 30 个子命令组。
 
-需要决定的是：按 Spec 驱动开发所需的最小分类重建模型，让位置与约定决定身份，还是保留现行分类、只删掉样板字段。
+需要决定的是：哪些事实由位置与约定推导、哪些语义必须显式保存，以及哪些现有保证要明确放弃。三个候选分别是：按约定重建并放弃部分保证（convention-first），只删空样板（trimmed-current），约定推导重复事实、显式保存不可推导语义（derive-duplicates）。
 
 ## Core Mental Model
 
@@ -50,13 +51,13 @@ Spec 由 Feature 组成。一个 Feature 包含四种页面：README 说明能�
 
 ## 宪法修订提案
 
-选择 convention-first 时按 [C-008](../../constitution.md#c-008-2) 修订：
+选择 derive-duplicates 时按 [C-008](../../constitution.md#c-008-2) 修订：
 
-- C-001-1：Memory 拥有自己的正文与「现行或被替代」状态；生命周期历史在 Git。
-- C-001-5：删除「Memory 与 Issue 只能经由 CLI 操作」；它们的元数据只有状态，可以直接编辑，状态转换的约束由 `check` 验证。
-- C-004-2：「Issue 标记为 fixed 时，至少一个回归测试指向它；修复前失败、修复后通过由 Git 复现，不以存储的收据代替。」
-- C-008-2：宪法直接编辑；每次采用与修订写一条 `type: decision` 的 Memory，正文链接受影响的条款。
-- C-012-4：删除 Roadmap 一款；未实现的方向写成尚无测试的 Feature。
+- C-001-1：Memory 拥有正文、类型、状态与替代关系；缺陷的生命周期归 Issue。
+- C-001-5：Memory 与 Issue 的正文可以直接编辑；状态、带角色的关系与关闭结论只经由 Concord 命令写入。
+- C-004-2：「Issue 标记为 fixed 前，回归测试必须在明确的缺陷提交上失败、在修复提交上通过；核验结论写入 Issue，可在声明的输入与环境下重放。」
+- C-010-5、C-010-6 与 C-012-6：明确放弃 Git-private 收据作为修复证明；已有收据原地保留、不再读取，不删除原件；repository profile 的可靠性证据另行决定，在决定前保持现行。
+- C-012-4 不变：Roadmap 仍表示尚未采用的方向。
 
 ## Entry Points
 
@@ -64,7 +65,7 @@ Spec 由 Feature 组成。一个 Feature 包含四种页面：README 说明能�
 - [Limits](LIMITS.md)
 - [Cases](CASES.md)
 - [Decision](DECISION.md)
-- 候选：[convention-first](plans/convention-first/README.md)、[trimmed-current](plans/trimmed-current/README.md)
+- 候选：[convention-first](plans/convention-first/README.md)、[trimmed-current](plans/trimmed-current/README.md)、[derive-duplicates](plans/derive-duplicates/README.md)
 
 ## Constitution
 

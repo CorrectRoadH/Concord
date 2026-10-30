@@ -40,20 +40,23 @@ Spec 由 Feature 组成，每个 Feature 有固定的四种页面；此外只需
 
 | Limit | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
-| [L1](../../LIMITS.md#l1-只有当前格式) | satisfied | 一次性改写全部文件，不保留旧读取路径 | 设计推理 |
-| [L2](../../LIMITS.md#l2-修复可以复现) | satisfied | 回归测试以标记指向 Issue；`test verify` 在修复提交与父提交上复现失败与通过，不存储收据 | 设计推理；待实现验收 |
-| [L3](../../LIMITS.md#l3-工具写入保护前像) | satisfied | Concord 的写入（脚手架、Issue 关闭、Memory 替代、宪法 Decision）仍走 publication；人工编辑由 Git 与编辑器负责 | 设计推理 |
-| [L4](../../LIMITS.md#l4-关系从来源派生) | satisfied | 关系取自正文链接与标记，元数据中不再保存关系列表 | 设计推理 |
+| [L1](../../LIMITS.md#l1-只有当前格式) | satisfied | 一次性改写 | 设计推理 |
+| [L2](../../LIMITS.md#l2-修复经过核验且可审计) | not-satisfied | 只要求标记存在，关闭与核验分离；关闭提交与父提交不是可靠的红绿基线 | sdd-model-review R1、R2 |
+| [L3](../../LIMITS.md#l3-工具写入保护前像) | not-satisfied | 未定义 Web 与 action 的受管保存及裁决、宪法采用的授权 | sdd-model-review R5 |
+| [L4](../../LIMITS.md#l4-关系从来源派生) | satisfied | 正文链接派生 | 设计推理 |
+| [L5](../../LIMITS.md#l5-声明式文档只写当前) | satisfied | Spec 无 frontmatter | 设计推理 |
+| [L6](../../LIMITS.md#l6-不重复保存可推导的事实) | satisfied | 全部推导 | 设计推理 |
+| [L7](../../LIMITS.md#l7-只有当前格式) | satisfied | 同 L1 | 设计推理 |
 
 ## Goals
 
 | Goal | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
-| [G1](../../GOALS.md#g1-每个事实只声明一次) | satisfied | 路径、一级标题、正文链接与 Git 各承担一类事实 | 本仓库 164 个 owner 的 id 全部等于路径名 |
-| [G2](../../GOALS.md#g2-分类少而不重叠) | satisfied | 五类文档，Roadmap 并入 Feature，Problem 并入 Issue，Memory 只存知识 | 设计推理 |
-| [G3](../../GOALS.md#g3-编辑-spec-不需要专用命令) | satisfied | Spec 无元数据，直接编辑；命令面见 CLI 页，顶层 10 个 | 设计推理 |
-| [G4](../../GOALS.md#g4-零配置可用) | satisfied | 布局固定；标记在全部 Git 跟踪文件中发现；配置只保留 runner 等真实选择 | 设计推理；待 C1 验收 |
-| [G5](../../GOALS.md#g5-检查不变弱) | pending | 现有检查按新来源改写；正文链接取代元数据关系后，需确认悬空、放置与证据检查全部保留 | 待实现验收 |
+| [G1](../../GOALS.md#g1-重复声明最少) | satisfied | Spec 与记录都按约定推导 | 设计推理 |
+| [G2](../../GOALS.md#g2-每件事只有一个归属) | partial | 提案并入 Feature 后，已采用与未采用混为一类（审查 R3） | sdd-model-review R3 |
+| [G3](../../GOALS.md#g3-日常维护的步骤少) | satisfied | 顶层命令 16 个 | CLI 页 |
+| [G4](../../GOALS.md#g4-零配置可用) | partial | 全部 Git 跟踪文件发现会误认 vendor 与示例标记，漏掉未跟踪测试（审查 R6） | sdd-model-review R6 |
+| [G5](../../GOALS.md#g5-检查与保证不变弱) | not-satisfied | fixed 可未经核验成立；关系角色、远端身份、写入与采用授权被删除（审查 R1、R4、R5） | sdd-model-review |
 
 ## Entry Points
 
