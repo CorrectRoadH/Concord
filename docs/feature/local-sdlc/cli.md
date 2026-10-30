@@ -14,17 +14,22 @@
 | `list [类别]` | 列出文档；`--open` 列出打开的 Issue |
 | `check` | 放置、关系、概念、写作与修复核验记录；`--since <base>` 另外检查本次变化 |
 | `trace` | 关系图与缺口 |
-| `test` | `list`、`run`、`verify <issue>` |
-| `issue` | `close`（fixed 时先核验）、`reopen`、`link`、`unlink` |
-| `memory` | `activate`、`supersede`、`link` |
-| `design` | `decide`、`defer` |
-| `roadmap` | `adopt`（移入 `docs/feature/`） |
+| `test` | `list`、`show`、`collect`、`annotate`、`run`、`verify <issue>` |
+| `code` | `annotate`、`list`、`locate`、`analyze`：实现与 Spec 的关联 |
+| `use-case` | `steps`、`format`、`rename-step`：Use Case 步骤 |
+| `issue` | `close`（fixed 时先核验）、`reopen`、`link`、`unlink`、`recall`；`plan` 与 `execute` 写入远端 |
+| `memory` | `activate`、`supersede`、`link`、`index`、`recall` |
+| `design` | `decide`、`defer`、`check`、`format` |
+| `roadmap` | `adopt`（移入 `docs/feature/`）；取消方向即删除目录，历史在 Git |
 | `constitution` | `show`、`adopt`、`amend` |
 | `concepts`、`writing` | 概念与写作政策的查看与受管写入 |
 | `docs` | `docs check` 与 `docs work` |
 | `feedback` | 外部来源的同步与导入 |
 | `view`、`panel` | Web 工作台与终端面板 |
+| `config`、`template` | 查看与替换配置；查看随包模板 |
 | `cache`、`recover`、`doctor`、`lsp`、`review`、`action` | 维护与集成 |
+
+顶层共 28 个命令。Design 暂缓写成 DECISION 中的 `Deferred:` 行加理由。
 
 本页其余各节给出这些命令的调用、输出与错误。
 

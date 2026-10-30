@@ -23,7 +23,7 @@
 - Feature 目录名、Use Case 文件名、Issue 与 Memory 文件名是短选择器。同一类别中歧义时具名拒绝，例如两个 Feature 都有 `use-case/create.md` 时，`show create` 要求写出路径。
 - 名称取自正文唯一的一级标题，可以与路径名不同。标题按 Markdown 语法树识别，代码块中的标题不计；名称保留 Unicode 原拼写与组合标记。
 - 普通正文链接只是导航。frontmatter 中的路径值一律是仓库相对路径，字段只在非空时出现。
-- Research 的观察日期与来源写在正文的「来源」小节，格式由写作模板固定。Design 的候选来自 `plans/` 的直接子项，裁决写在 DECISION 的 `Selected:` 行，见[逐项比较方案并明确裁决](use-case/compare-design-plans.md)。
+- Research 的观察日期与来源写在正文标题为 `## Sources` 或 `## 来源` 的小节，格式由写作模板固定。Design 的候选来自 `plans/` 的直接子项，裁决写在 DECISION 的 `Selected:` 行，见[逐项比较方案并明确裁决](use-case/compare-design-plans.md)。
 - 宪法的 `status` 取 `draft` 或 `active`，是采用授权的边界，见[演进宪法](../project-onboarding/use-case/evolve-constitution.md)。
 
 创建时间、采用来源与修订历史由 Git 提供（[C-012-11](../../constitution.md#c-012-11)）。测试源码拥有 case 身份和正向关系。
