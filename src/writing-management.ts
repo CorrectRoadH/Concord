@@ -25,7 +25,7 @@ export function showWriting(repo: Repository, path = globalPolicyPath) {
       return { operation: 'writing-show', state: 'invalid' as const, path, scope, digest: sourceDigest, source, policy: null, diagnostic: cause instanceof Error ? cause.message : String(cause), code: cause instanceof ConcordError ? cause.code : 'InvalidWritingPolicy', concepts: [], derived: [], conflicts: [] };
     }
     const effectiveControlledDiagnostics: { path: string; message: string }[] = [];
-    const owners = discovered(repo, 'policy').filter(owner => applies(`${scope}/_scope.md`, scopeOf(owner, 'policy'))).sort((a, b) => a.length - b.length).flatMap(owner => { try { return [{ path: owner, policy: readWritingPolicy(repo.read(owner)!, owner) }]; } catch (cause) { if (!(cause instanceof ConcordError) || !['InvalidWritingPolicy', 'WritingMigrationRequired', 'WritingBudgetExceeded'].includes(cause.code)) throw cause; effectiveControlledDiagnostics.push({ path: owner, message: cause instanceof Error ? cause.message : String(cause) }); return []; } });
+    const owners = discovered(repo, 'policy').filter(owner => applies(`${scope}/_scope.md`, scopeOf(owner, 'policy'))).sort((a, b) => a.length - b.length).flatMap(owner => { try { return [{ path: owner, policy: readWritingPolicy(repo.read(owner)!, owner) }]; } catch (cause) { if (!(cause instanceof ConcordError) || !['InvalidWritingPolicy', 'WritingBudgetExceeded'].includes(cause.code)) throw cause; effectiveControlledDiagnostics.push({ path: owner, message: cause instanceof Error ? cause.message : String(cause) }); return []; } });
     const effectiveControlled = Object.fromEntries(composeControlled(owners, false));
     const aggregate = indexConcepts(repo);
     const concepts = effectiveConcepts(`${scope}/_scope.md`, aggregate.catalogs);
@@ -47,17 +47,5 @@ export function setWriting(repo: LocalRepository, policy: WritingPolicy, expecte
     const validated = readWritingPolicy(after, path);
     const receipt = repo.publish('set-writing-policy', [{ path, before, after }], dryRun);
     return { ...receipt, policy: validated, source: after, digest: digest(after), path, scope };
-  });
-}
-
-// @concord-code
-// @concord-implements docs/feature/documentation-quality/policy.md#从-writingv1-迁移
-// @concord-implements docs/feature/documentation-quality/policy.md#从-writingv2-迁移
-export function migrateWriting(repo: LocalRepository, path: string, dryRun = false) {
-  return inRepositorySnapshot(repo, () => {
-    const shown = showWriting(repo, path);
-    if (shown.source === null) throw new ConcordError('WritingPolicyNotFound', `Missing writing policy: ${path}`);
-    const policy = readWritingPolicy(shown.source, path, true, true);
-    return { ...setWriting(repo, policy, shown.digest, dryRun, path), operation: 'writing-migrate', from: 'concord.writing/v2', to: 'concord.writing/v3' };
   });
 }

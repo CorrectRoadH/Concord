@@ -45,7 +45,7 @@ Keep each stable ID, its single term, definition paragraph and explanation toget
 
 Use concepts and writing show/set commands or the Web workbench to maintain each owner with its current digest. Do not duplicate definitions into a global aggregate or edit managed owners around these guards.
 
-Writing v3 composes ancestor policy within scope. Check saved inputs with \`concord docs check --json\`. Migrate writing/v1 only after author review. Only explicitly deprecated names are banned.
+Writing v3 composes ancestor policy within scope. Check saved inputs with \`concord docs check --json\`. Policies must match the current Schema. Only explicitly deprecated names are banned.
 
 ## Complete setup
 
