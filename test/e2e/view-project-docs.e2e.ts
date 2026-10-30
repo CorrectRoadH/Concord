@@ -49,6 +49,8 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
       }
       await expect.poll(() => readFileSync(join(root, path), 'utf8'), { timeout: 15000 }).toContain('通过浏览器保存');
       if (path !== paths[0]) assert.equal(readFileSync(join(root, path), 'utf8'), `${before}\n通过浏览器保存。\n`);
+      await expect(editor.locator('.editor-shell')).toHaveAttribute('data-dirty', 'false');
+      await expect(page.getByText('已自动保存', { exact: true })).toBeVisible();
       const reloadedWorkspace = page.waitForResponse(response => new URL(response.url()).pathname === '/api/workspace', { timeout: 65000 });
       await page.reload();
       const reloadedStatus = (await reloadedWorkspace).status();
