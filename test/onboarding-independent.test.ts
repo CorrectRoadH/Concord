@@ -38,7 +38,8 @@ test('installed CLI exposes exactly the current command inventory and rejects re
     assert.equal(help.status, 0, help.stderr);
     assert.doesNotMatch(help.stdout, /\n  (?:create|add|page|promote|retire|correct-reason|resolve|metadata)\s/u);
   }
-
+  assert.equal(run(root, ['workspace', 'show']).root, root);
+  assert.deepEqual(run(root, ['git', 'status']).entries, []);
 })));
 
 // @use-case docs/feature/project-onboarding/use-case/initialize-project.md
