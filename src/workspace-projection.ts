@@ -13,7 +13,6 @@ import { requestCacheMaintenance } from './cache-maintenance.js';
 import { AnnotatedCaseSchema, ConcordError, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, ResearchSchema, RoadmapSchema, UseCaseSchema, digest, failure } from './shared.js';
 import { GitHubRemoteFeedbackSchema, LinearRemoteFeedbackSchema, FeedbackSourceSchema } from './feedback-schema.js';
 import { CodeDeclarationSchema } from './code.js';
-import { RepositoryViewTestSchema } from './view-profile.js';
 import type { WorkspaceProjection, WorkspaceSnapshot } from './view-contract.js';
 
 const { body: _githubBody, ...githubFields } = GitHubRemoteFeedbackSchema.fields;
@@ -48,7 +47,6 @@ export const WorkspaceProjectionSnapshotSchema = Schema.Struct({
   edges: Schema.Array(Schema.Struct({ from: Schema.String, to: Schema.String, relation: Schema.String })), findings: Schema.Array(Finding),
   sources: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })), evidenceIds: Schema.Array(Schema.String),
   templates: Schema.Array(Schema.Struct({ name: Schema.String, description: Schema.String })),
-  repositoryTests: Schema.optional(Schema.Struct({ status: Schema.Literals(['not-configured', 'ready', 'failed']), tests: Schema.Array(RepositoryViewTestSchema), error: Schema.optional(Schema.Struct(ErrorFields)) })),
   cache: Schema.Struct({ status: Schema.String, hits: Schema.optional(Schema.Number), misses: Schema.optional(Schema.Number), path: Schema.optional(Schema.String), detail: Schema.optional(Schema.String) }),
   diagnostics: Diagnostic,
 });

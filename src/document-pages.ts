@@ -1,4 +1,3 @@
-import { assertGenericConceptWrite } from './writing-scopes.js';
 import { posix } from 'node:path';
 import { ConcordError, digest, decode, DocumentName, inRepositorySnapshot, type DocumentKind, type MutationReceipt, type Repository } from './shared.js';
 import { documentPlacementError, isDocumentName, readDesignPlanPaths } from './document-layout.js';
@@ -99,7 +98,6 @@ function template(page: DocumentPage): string | undefined {
 export function addPage(repo: Repository, kind: DocumentKind, selector: string, page: string, dryRun = false, plan?: string): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan, true);
-  assertGenericConceptWrite(target.path);
   if (repo.read(target.path) !== undefined) throw new ConcordError('PageExists', `${target.path} already exists`);
   if (kind === 'research') return repo.publish('add-page', [{ path: target.path, before: null, after: `# ${posix.basename(target.path, '.md')}\n` }], dryRun);
   const name = plan !== undefined && (page === 'README' || page === 'readme' || page === 'README.md') ? 'design-plan' : template(kind === 'design' ? page : checkedPage(page));
@@ -127,7 +125,6 @@ export function showPage(repo: Repository, kind: DocumentKind, selector: string,
 export function setPage(repo: Repository, kind: DocumentKind, selector: string, page: string, next: string, expectedDigest: string, dryRun = false, plan?: string): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan); const source = repo.read(target.path);
-  assertGenericConceptWrite(target.path);
   if (source === undefined) throw new ConcordError('PageNotFound', `${target.path} does not exist`);
   if (digest(source) !== expectedDigest) throw new ConcordError('PreimageChanged', `${target.path} changed; use its current digest`);
   if ((page === 'README' || page === 'readme' || (kind === 'research' || kind === 'design') && page === 'README.md') && plan === undefined) return setAuthor(repo, target.path, next, expectedDigest, dryRun);

@@ -10,7 +10,7 @@ import { canonicalPath } from './storage.js';
 function checkDesignRecordLinks(repo: Repository) {
   const findings: (Finding & { category: 'relation' })[] = [];
   let complete = true;
-  const memoryRoots = (repo.config.memorySources ?? []).map(source => source.path);
+  const memoryRoots = ['memory'];
   const sources = repo.files('docs').filter(path => /\.(?:md|mdx)$/u.test(path) &&
     (/^docs\/[^/]+$/u.test(path) || path.startsWith('docs/feature/') || path.startsWith('docs/engineering/')) &&
     !memoryRoots.some(root => path === root || path.startsWith(`${root}/`))).sort();

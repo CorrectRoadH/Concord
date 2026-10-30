@@ -13,7 +13,7 @@ import type {
   ProjectConfig,
   Runner,
 } from './shared.js';
-import { MEMORY_RELATION_KINDS, MemorySourceSchema, ProjectSchema } from './shared.js';
+import { MEMORY_RELATION_KINDS, ProjectSchema } from './shared.js';
 import type { TraceEdge } from './trace.js';
 import { FeedbackConnectionsSchema, type FeedbackAvailability, type FeedbackItem, type FeedbackTriage, type RemoteFeedback } from './feedback-schema.js';
 import { WritingPolicySchema } from './writing-schema.js';
@@ -32,7 +32,6 @@ export interface ViewFile {
 
 export interface WorkspaceSnapshot {
   readonly complete?: boolean;
-  readonly repositoryTests?: import('./view-profile.js').RepositoryTestView;
   readonly root: string;
   readonly project: ProjectConfig | null;
   readonly configDigest: string | null;
@@ -90,7 +89,6 @@ export interface WorkspaceFeedback {
 /** Navigator-only derivation of `WorkspaceSnapshot`; never authorizes current facts. */
 export interface WorkspaceProjectionSnapshot {
   readonly complete?: boolean;
-  readonly repositoryTests?: import('./view-profile.js').RepositoryTestView;
   readonly root: string;
   readonly project: ProjectConfig | null;
   readonly configDigest: string | null;
@@ -168,7 +166,7 @@ const DryRun = { dryRun: Schema.optional(Schema.Boolean) } as const;
 
 /** Strictly decoded at every CLI and HTTP action boundary. */
 export const ViewActionSchema = Schema.Union([
-  Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), runner: Schema.optional(RunnerInputSchema), docsOnly: Schema.optional(Schema.Boolean), projectTypes: Schema.optional(Schema.Array(Schema.Literals(['library', 'cli']))), pages: Schema.optional(Schema.Array(Schema.Literals(TEMPLATE_PAGES))), design: Schema.optional(Schema.Boolean), constitutionBody: Schema.optional(Schema.String), adoptConstitution: Schema.optional(Schema.Boolean), constitutionReason: Schema.optional(Text), constitutionImpact: Schema.optional(Text), constitutionSources: Schema.optional(Strings), memorySources: Schema.optional(Schema.NonEmptyArray(MemorySourceSchema)), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('init'), testRoots: Schema.optional(Strings), sourceRoots: Schema.optional(Strings), runner: Schema.optional(RunnerInputSchema), docsOnly: Schema.optional(Schema.Boolean), constitutionBody: Schema.optional(Schema.String), adoptConstitution: Schema.optional(Schema.Boolean), constitutionReason: Schema.optional(Text), constitutionImpact: Schema.optional(Text), constitutionSources: Schema.optional(Strings), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('recover') }),
   Schema.Struct({
     action: Schema.Literal('document.create'),
@@ -181,30 +179,23 @@ export const ViewActionSchema = Schema.Union([
     sources: Schema.optional(Strings),
     alternatives: Schema.optional(Strings),
     pages: Schema.optional(Schema.Array(Schema.Literals(TEMPLATE_PAGES))),
-    memorySource: Schema.optional(Text),
-    memoryKind: Schema.optional(Schema.Literals(['problem', 'decision', 'insight', 'note'])),
+    type: Schema.optional(Schema.Literals(['decision', 'insight', 'note'])),
     ...DryRun,
   }),
   Schema.Struct({ action: Schema.Literal('document.set'), path: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('document.metadata'), reference: Text, expectedDigest: Text, title: Schema.optional(Text), observedAt: Schema.optional(Schema.NullOr(Text)), sources: Schema.optional(Strings), ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('page.add'), kind: Schema.Literals(['feature', 'roadmap', 'design', 'engineering', 'research']), id: Text, page: Text, plan: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('roadmap.adopt'), id: Text, feature: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('design.decide'), id: Text, selected: Text, targets: Strings, reason: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('design.correct-reason'), id: Text, reason: Text, memory: Text, explanation: Text, expectedDigest: Text, expectedMemoryDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('design.check'), id: Text }),
   Schema.Struct({ action: Schema.Literal('design.format'), id: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.resolve'), id: Text, kind: Schema.Literals(['fixed', 'not-a-bug', 'wont-fix', 'external-fixed']), reason: Text, red: Schema.optional(Text), green: Schema.optional(Text), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.index') }),
   Schema.Struct({ action: Schema.Literal('memory.recall'), query: Text }),
-  Schema.Struct({ action: Schema.Literal('memory.edit'), id: Text, body: Schema.String, expectedDigest: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.activate'), id: Text, reason: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('memory.reopen'), id: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('memory.supersede'), id: Text, replacement: Text, reason: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('memory.promote'), id: Text, target: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('memory.retire'), id: Text, target: Text, reason: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('issue.link'), id: Text, memory: Text, kind: Schema.optional(Schema.Literals(MEMORY_RELATION_KINDS)), ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('issue.adopt'), id: Text, to: Text, ...DryRun }),
-  Schema.Struct({ action: Schema.Literal('issue.retire'), id: Text, from: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('memory.link'), id: Text, target: Text, role: Schema.optional(Schema.Literals(['supports', 'amends'])), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.unlink'), id: Text, memory: Text, role: Schema.optional(Schema.Literals([...MEMORY_RELATION_KINDS, 'adopts'])), ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('design.defer'), id: Text, reason: Text, ...DryRun }),
+  Schema.Struct({ action: Schema.Literal('issue.link'), id: Text, memory: Text, role: Schema.optional(Schema.Literals([...MEMORY_RELATION_KINDS, 'adopts'])), ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.reopen'), id: Text, reason: Text, ...DryRun }),
   Schema.Struct({ action: Schema.Literal('issue.index') }),
   Schema.Struct({ action: Schema.Literal('issue.list'), ...FeedbackFilterFields }),

@@ -294,7 +294,7 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
     const codes = selector ? trace.codeDeclarations.filter(c => c.contracts.some(ref => belongsTo(references, trace, selectedPaths, ref))) : trace.codeDeclarations;
     const segments: ({ text: string } | { constitution: { path: string; digest: string } })[] = [];
     const lines = ['# Concord review', '', 'This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe ownership; command evidence does not prove native case coverage.', '', '## Constitution', ''];
-    if (repo.config.constitution === undefined) lines.push('- Not configured. Existing projects must opt in with `concord constitution initialize`.');
+    if (repo.read('docs/constitution.md') === undefined) lines.push('- Not configured. Create docs/constitution.md to enable constitution checks.');
     else {
       const constitution = showConstitution(repo);
       lines.push(`- ${constitution.metadata.status}, digest ${constitution.digest}. Structural validity is not semantic compliance.`, '');

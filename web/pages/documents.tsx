@@ -1,3 +1,4 @@
+import { fromMarkdown } from 'mdast-util-from-markdown'
 import { PathContextMenu } from '../components/path-context-menu'
 import { DOCUMENT_NAME_PATTERN } from "../../src/document-name"
 import { matchingOwners } from '../../src/document-layout'
@@ -73,7 +74,7 @@ const descriptions: Record<string, string> = {
   roadmap: "尚未采用的方向与演进计划。",
   design: "备选方案、约束和已作出的技术裁决。",
   research: "按主题目录自由组织研究正文与资料。",
-  memory: "Problem、Decision 与 Insight 的工程记忆。",
+  memory: "Decision、Insight 与 Note 的工程记忆。",
   issue: "仅本地的观察草稿，不代表远端 Issue 状态。",
 }
 
@@ -242,8 +243,8 @@ export function CreateDocument({
   const [pages, setPages] = React.useState<TemplatePage[]>([])
   const selectablePages = kind === "feature" || kind === "roadmap" || kind === "design"
   const [memoryKind, setMemoryKind] = React.useState<
-    "problem" | "decision" | "insight"
-  >("problem")
+    "decision" | "insight" | "note"
+  >("note")
 
   async function submit(event: React.FormEvent): Promise<void> {
     event.preventDefault()
@@ -272,7 +273,7 @@ export function CreateDocument({
               .filter(Boolean),
           }
         : {}),
-      ...(kind === "memory" ? { memoryKind } : {}),
+      ...(kind === "memory" ? { type: memoryKind } : {}),
     }
     await act(action, `${humanKind(kind)} 已创建。`)
     setOpen(false)
@@ -329,7 +330,7 @@ export function CreateDocument({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="problem">Problem</SelectItem>
+                    <SelectItem value="note">Note</SelectItem>
                     <SelectItem value="decision">Decision</SelectItem>
                     <SelectItem value="insight">Insight</SelectItem>
                   </SelectContent>
@@ -486,13 +487,13 @@ function DocumentSummary({ document }: { document: WorkspaceDocument }) {
   if (metadata.kind === "memory") {
     return (
       <div className="inline-badges">
-        <Badge>{metadata.memoryKind}</Badge>
-        <Badge variant="secondary">{metadata.state}</Badge>
+        <Badge>{metadata.type}</Badge>
+        <Badge variant="secondary">{metadata.status}</Badge>
       </div>
     )
   }
   if (metadata.kind === "issue") {
-    return <Badge variant="outline">{metadata.state}</Badge>
+    return <Badge variant="outline">{metadata.status}</Badge>
   }
   return null
 }
@@ -759,27 +760,6 @@ function DocumentFiles({
     document.metadata.kind
   )
   const showPathList = allowed || pages.length > 0
-  async function submit(event: React.FormEvent): Promise<void> {
-    event.preventDefault()
-    if (!allowed) return
-    await act(
-      {
-        action: "page.add",
-        kind: document.metadata.kind as
-          | "feature"
-          | "roadmap"
-          | "design"
-          | "engineering"
-          | "research",
-        id: document.path,
-        page,
-        ...(plan ? { plan } : {}),
-      },
-      "支持页面已创建。"
-    )
-    setOpen(false)
-    setPage("")
-  }
   return (
     <div {...stylex.props(documentStyles.treeContainer)}>
     <div ref={layoutRef} {...stylex.props(documentStyles.fileLayout, !showPathList && documentStyles.singleFileLayout)}>
@@ -792,11 +772,7 @@ function DocumentFiles({
         <div id={fileListId} {...stylex.props(documentStyles.treeContent, fileListOpen && documentStyles.treeContentOpen)}>
         <div className="section-heading section-heading--compact">
           <strong>文件</strong>
-          {allowed && (
-            <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-              <FilePlus2 /> 添加
-            </Button>
-          )}
+
         </div>
         <FileTree
           nodes={tree}
@@ -830,43 +806,7 @@ function DocumentFiles({
           !error && <DocumentSkeleton />
         )}
       </section>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
-          <form onSubmit={(event) => fire(submit(event))}>
-            <DialogHeader>
-              <DialogTitle>添加支持页面</DialogTitle>
-              <DialogDescription>
-                页面属于当前文档，不会创建新的顶级 Spec。
-              </DialogDescription>
-            </DialogHeader>
-            <div className="form-grid">
-              <Field label="页面名称">
-                <Input
-                  aria-label="页面名称"
-                  value={page}
-                  onChange={(event) => setPage(event.target.value)}
-                  required
-                />
-              </Field>
-              {document.metadata.kind === "design" && (
-                <Field label="所属方案（可选）">
-                  <Input
-                    aria-label="所属设计方案"
-                    value={plan}
-                    onChange={(event) => setPlan(event.target.value)}
-                  />
-                </Field>
-              )}
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-                取消
-              </Button>
-              <Button type="submit">添加</Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
+
     </div>
     </div>
   )
@@ -971,131 +911,68 @@ function FileTree({ nodes, ownerDirectory, expanded, selectedPath, onToggle, onS
 // @concord-code
 // @concord-implements docs/feature/web-workbench/README.md#自动保存
 function MetadataForm({ document }: { document: WorkspaceDocument }) {
-  const { api } = useWorkspace()
-  const [loaded, setLoaded] = React.useState<DocumentRecord | null>(null)
-  const [error, setError] = React.useState("")
-  const [attempt, setAttempt] = React.useState(0)
-  // The edit baseline is the current owner digest, never a historical projection.
-  React.useEffect(() => {
-    const controller = new AbortController()
-    setLoaded(null)
-    setError("")
-    void api.file(document.path, controller.signal).then((file) => {
-      if (controller.signal.aborted) return
-      const record = file.document
-      if (!record || record.path !== document.path) { setError("无法建立当前文档前像，请重新载入。"); return }
-      setLoaded(record)
-    }).catch((cause: unknown) => {
-      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause))
-    })
-    return () => controller.abort()
-  }, [api, attempt, document.path])
-  if (error) return <><PanelHeader title="元数据" /><div className="form-error" role="alert">{error} <Button size="sm" variant="outline" onClick={() => setAttempt((value) => value + 1)}>重试</Button></div></>
-  if (!loaded) return <><PanelHeader title="元数据" /><p role="status">正在读取当前文档前像…</p></>
-  return <MetadataEditor key={document.path} initial={loaded} />
+  const metadata = document.metadata
+  return <><PanelHeader title="文档信息" /><ContentSection title="来源"><dl>
+    <Definition label="类型">{humanKind(metadata.kind)}</Definition>
+    <Definition label="路径"><code>{document.path}</code></Definition>
+    {metadata.kind === "research" && <><Definition label="观察日期">{metadata.observedAt ?? "未填写"}</Definition><Definition label="来源">{metadata.sources.join("\n")}</Definition></>}
+  </dl></ContentSection>{metadata.kind !== "memory" && metadata.kind !== "issue" && <HeadingEditor key={document.path} path={document.path} />}</>
 }
 
-// @concord-code
-// @concord-implements docs/feature/web-workbench/README.md#自动保存
-function MetadataEditor({ initial }: { initial: DocumentRecord }) {
+/** The title control edits the level-one heading and saves the same whole-file preimage as the source editor. */
+function HeadingEditor({ path }: { path: string }) {
   const { api, requestRefresh } = useWorkspace()
-  const [baseline, setBaseline] = React.useState(initial)
-  const [title, setTitle] = React.useState(initial.metadata.title)
-  const research = initial.metadata.kind === "research" ? initial.metadata : null
-  const [observedAt, setObservedAt] = React.useState(research?.observedAt ?? "")
-  const [sources, setSources] = React.useState(research?.sources.join("\n") ?? "")
-  const dirty = title !== baseline.metadata.title ||
-    (baseline.metadata.kind === "research" &&
-      (observedAt !== (baseline.metadata.observedAt ?? "") ||
-        sources !== baseline.metadata.sources.join("\n")))
-  const revision = JSON.stringify([title, observedAt, sources])
-  const currentRevision = React.useRef(revision)
-  currentRevision.current = revision
-
-  async function submit(): Promise<void> {
-    const sent = revision
-    await api.action({
-      action: "document.metadata",
-      reference: baseline.path,
-      expectedDigest: baseline.digest,
-      title,
-      ...(baseline.metadata.kind === "research"
-        ? {
-            observedAt: observedAt.trim() || null,
-            sources: sources.split("\n").map((value) => value.trim()).filter(Boolean),
-          }
-        : {}),
-    })
-    const file = await api.file(baseline.path)
-    const saved = file.document
-    if (!saved) throw new Error("保存后无法重新读取文档。")
-    flushSync(() => {
-      setBaseline(saved)
-      if (currentRevision.current === sent) {
-        setTitle(saved.metadata.title)
-        if (saved.metadata.kind === "research") {
-          setObservedAt(saved.metadata.observedAt ?? "")
-          setSources(saved.metadata.sources.join("\n"))
-        }
-      }
-    })
+  const [baseline, setBaseline] = React.useState<ViewFile | null>(null)
+  const [title, setTitle] = React.useState("")
+  const [error, setError] = React.useState("")
+  React.useEffect(() => {
+    const controller = new AbortController()
+    void api.file(path, controller.signal).then(file => {
+      if (controller.signal.aborted) return
+      setBaseline(file); setTitle(file.document?.metadata.title ?? "")
+    }).catch(cause => { if (!controller.signal.aborted) setError(String(cause)) })
+    return () => controller.abort()
+  }, [api, path])
+  const revision = React.useRef(title)
+  revision.current = title
+  const save = async () => {
+    if (!baseline) return
+    const sent = title
+    const heading = fromMarkdown(baseline.body).children.find(node => node.type === 'heading' && node.depth === 1)
+    if (!heading?.position || !sent.trim()) throw new Error("文档需要非空一级标题。")
+    const original = baseline.body.slice(heading.position.start.offset, heading.position.end.offset)
+    const anchor = /\s+(\{#[^{}\s]+\})\s*$/u.exec(original)?.[1]
+    const body = `${baseline.body.slice(0, heading.position.start.offset)}# ${sent}${anchor ? ` ${anchor}` : ''}${baseline.body.slice(heading.position.end.offset)}`
+    await api.action({ action: 'document.set', path, body, expectedDigest: baseline.digest })
+    const saved = await api.file(path)
+    flushSync(() => { setBaseline(saved); if (revision.current === sent) setTitle(saved.document?.metadata.title ?? sent) })
     await requestRefresh().catch(() => undefined)
   }
-  const autoSave = useAutoSave({ dirty, revision, save: submit, discard: () => {
-    setTitle(baseline.metadata.title)
-    if (baseline.metadata.kind === "research") {
-      setObservedAt(baseline.metadata.observedAt ?? "")
-      setSources(baseline.metadata.sources.join("\n"))
-    }
-  } })
-  return (
-    <>
-      <PanelHeader title="元数据" actions={<span className="form-status" role="status">{autoSave.status}</span>} />
-      <ContentSection title="身份信息" className="form-section">
-        <dl><Definition label="类型">{humanKind(baseline.metadata.kind)}</Definition><Definition label="ID"><code>{baseline.metadata.id}</code></Definition>{"createdAt" in baseline.metadata ? <Definition label="创建于">{baseline.metadata.createdAt}</Definition> : null}</dl>
-      </ContentSection>
-      <ContentSection title="可编辑字段" className="form-section">
-        <form className="form-grid" onSubmit={event => { event.preventDefault(); void autoSave.flush().catch(() => undefined) }}>
-          <Field label="标题">
-            <Input aria-label="文档标题" value={title} onChange={(event) => setTitle(event.target.value)} />
-          </Field>
-          {baseline.metadata.kind === "research" && (
-            <>
-              <Field label="观察日期（可选）"><Input aria-label="观察日期" value={observedAt} onChange={(event) => setObservedAt(event.target.value)} /></Field>
-              <Field label="来源"><Textarea aria-label="来源" value={sources} onChange={(event) => setSources(event.target.value)} /></Field>
-            </>
-          )}
-          {autoSave.error && <div className="form-error" role="alert">{autoSave.error}<Button type="submit" variant="outline">重试保存</Button></div>}
-        </form>
-      </ContentSection>
-    </>
-  )
+  const autoSave = useAutoSave({ dirty: baseline !== null && title !== baseline.document?.metadata.title, revision: title, save, discard: () => setTitle(baseline?.document?.metadata.title ?? "") })
+  if (error) return <p role="alert">{error}</p>
+  if (!baseline) return <p role="status">正在读取标题…</p>
+  return <ContentSection title="一级标题"><Field label="标题"><Input aria-label="文档标题" value={title} onChange={event => setTitle(event.target.value)} /></Field><span role="status">{autoSave.status}</span>{autoSave.error && <p role="alert">{autoSave.error}</p>}</ContentSection>
 }
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 function Lifecycle({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
-  const history = metadata.kind === "memory" || metadata.kind === "issue" ? metadata.history : []
   return (
     <><PanelHeader title="生命周期" /><div className="lifecycle-grid">
       <ContentSection title="当前状态">
           <dl>
             {metadata.kind === "design" && !metadata.decision && !metadata.deferral && <Definition label="状态">待裁决</Definition>}
-            {"state" in metadata && <Definition label="状态">{String(metadata.state)}</Definition>}
+            {"status" in metadata && <Definition label="状态">{metadata.status}</Definition>}
+            {metadata.kind === "roadmap" && <Definition label="状态">{metadata.state}</Definition>}
+            {(metadata.kind === "memory" || metadata.kind === "issue") && (metadata.relations ?? []).map(relation => <Definition key={`${relation.role}:${relation.target}`} label={relation.role}>{relation.target}</Definition>)}
             {metadata.kind === "roadmap" && metadata.cancellation && <><Definition label="取消理由">{metadata.cancellation.reason}</Definition>{metadata.cancellation.source && <Definition label="原文来源">{metadata.cancellation.source.path}</Definition>}</>}
             {metadata.kind === "design" && metadata.deferral && <><Definition label="状态">已暂缓</Definition><Definition label="暂缓理由">{metadata.deferral.reason}</Definition>{metadata.deferral.source && <Definition label="原文来源">{metadata.deferral.source.path}</Definition>}</>}
             {metadata.kind === "design" && metadata.decision && <><Definition label="已选择">{metadata.decision.selected}</Definition><Definition label="裁决理由">{metadata.decision.reason}</Definition><Definition label="裁决时间">{metadata.decision.at ?? "原文未记载"}</Definition></>}
           </dl>
       </ContentSection>
       <LifecycleActions document={document} />
-      {history.length > 0 && (
-        <ContentSection title="历史">
-          <div className="timeline">{history.map((entry, index) => (
-            <div key={`${entry.at}-${index}`}><i /><strong>{entry.action}</strong><time>{entry.at}</time><p>{entry.reason}</p></div>
-          ))}</div>
-        </ContentSection>
-      )}
+
     </div></>
   )
 }
@@ -1106,18 +983,13 @@ function LifecycleActions({ document }: { document: WorkspaceDocument }) {
   const [reason, setReason] = React.useState("")
   const [target, setTarget] = React.useState("")
   const [selected, setSelected] = React.useState("")
-  const [red, setRed] = React.useState("")
-  const [green, setGreen] = React.useState("")
-  const [resolution, setResolution] = React.useState<
-    "fixed" | "not-a-bug" | "wont-fix" | "external-fixed"
-  >("fixed")
   function invoke(action: ViewAction, text: string): void {
     fire(act(action, text).then(() => setReason("")))
   }
   if (!["roadmap", "design", "memory", "issue"].includes(metadata.kind)) {
     return null
   }
-  if (metadata.kind === "roadmap" && metadata.state !== "planned" || metadata.kind === "design" && metadata.decision || metadata.kind === "issue" && metadata.state !== "draft") return null
+  if (metadata.kind === "roadmap" && metadata.state !== "planned" || metadata.kind === "design" && metadata.decision || metadata.kind === "issue" && metadata.status !== "open") return null
   return (
     <ContentSection title="可用操作" className="form-section">
       <div className="form-grid">
@@ -1125,22 +997,17 @@ function LifecycleActions({ document }: { document: WorkspaceDocument }) {
           <><Field label="采用为 Feature ID"><Input aria-label="采用为 Feature ID" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button onClick={() => invoke({ action: "roadmap.adopt", id: metadata.id, feature: target }, "Roadmap 已采用为 Feature。")}>采用 Roadmap</Button></>
         )}
         {metadata.kind === "design" && !metadata.decision && (
-          <><Field label="选定方案"><Select value={selected} onValueChange={setSelected}><SelectTrigger aria-label="选定设计方案"><SelectValue placeholder="选择方案" /></SelectTrigger><SelectContent>{metadata.alternatives.map((item) => <SelectItem value={item} key={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="关联目标" hint="每行一个引用"><Textarea aria-label="设计关联目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Field label="裁决理由"><Textarea aria-label="设计裁决理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "design.decide", id: metadata.id, selected, targets: target.split("\n").filter(Boolean), reason }, "设计裁决已记录。")}>记录裁决</Button></>
+          <><Field label="选定方案"><Select value={selected} onValueChange={setSelected}><SelectTrigger aria-label="选定设计方案"><SelectValue placeholder="选择方案" /></SelectTrigger><SelectContent>{metadata.alternatives.map((item) => <SelectItem value={item} key={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="关联目标" hint="每行一个引用"><Textarea aria-label="设计关联目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Field label="裁决理由"><Textarea aria-label="设计裁决理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "design.decide", id: metadata.id, selected, targets: target.split("\n").filter(Boolean), reason }, "设计裁决已记录。")}>记录裁决</Button><Button variant="outline" onClick={() => invoke({ action: "design.defer", id: document.path, reason }, "设计已暂缓。")}>暂缓设计</Button></>
         )}
         {metadata.kind === "memory" && (
           <>
-            {metadata.state === "captured" && metadata.memoryKind !== "note" && <><Field label="激活理由"><Textarea aria-label="Memory 激活理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.activate", id: document.path, reason }, "Memory 已激活。")}>激活 Memory</Button></>}
-            {metadata.state === "open" ? (
-              <><Field label="关闭类型"><Select value={resolution} onValueChange={(value) => setResolution(value as typeof resolution)}><SelectTrigger aria-label="Memory 关闭类型"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="fixed">Fixed（命令证据）</SelectItem><SelectItem value="not-a-bug">Not a bug</SelectItem><SelectItem value="wont-fix">Won&apos;t fix</SelectItem><SelectItem value="external-fixed">External fixed</SelectItem></SelectContent></Select></Field>{resolution === "fixed" && <div className="two-column"><Field label="Red evidence"><Input aria-label="Red evidence" value={red} onChange={(event) => setRed(event.target.value)} list="evidence-ids" /></Field><Field label="Green evidence"><Input aria-label="Green evidence" value={green} onChange={(event) => setGreen(event.target.value)} list="evidence-ids" /></Field></div>}<Field label="理由"><Textarea aria-label="Memory 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.resolve", id: document.path, kind: resolution, reason, ...(resolution === "fixed" ? { red, green } : {}) }, "Memory 已关闭。")}>关闭 Memory</Button></>
-            ) : (
-              <><Field label="重开理由"><Textarea aria-label="Memory 重开理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "memory.reopen", id: document.path, reason }, "Memory 已重开。")}>重新打开</Button></>
-            )}
+            {metadata.status === "captured" && metadata.type !== "note" && <><Field label="激活理由"><Textarea aria-label="Memory 激活理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.activate", id: document.path, reason }, "Memory 已激活。")}>激活 Memory</Button></>}
             <Field label="目标或替代 Memory"><Input aria-label="Memory 目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field>
-            <div className="button-row"><Button variant="outline" onClick={() => invoke({ action: "memory.promote", id: document.path, target }, "Memory 已提升。")}>提升到 Spec</Button><Button variant="outline" onClick={() => invoke({ action: "memory.supersede", id: document.path, replacement: target, reason }, "Memory 已被替代。")}>标记替代</Button><Button variant="outline" onClick={() => invoke({ action: "memory.retire", id: document.path, target, reason }, "关联已退役。")}>退役关联</Button></div>
-            <datalist id="evidence-ids">{snapshot.evidenceIds.map((id) => <option key={id} value={id} />)}</datalist>
+            <Field label="理由"><Textarea aria-label="Memory 理由" value={reason} onChange={event => setReason(event.target.value)} /></Field>
+            <div className="button-row"><Button variant="outline" onClick={() => invoke({ action: "memory.link", id: document.path, target, role: "supports" }, "Memory 已关联。")}>关联 Spec</Button><Button variant="outline" onClick={() => invoke({ action: "memory.supersede", id: document.path, replacement: target, reason }, "Memory 已被替代。")}>标记替代</Button></div>
           </>
         )}
-        {metadata.kind === "issue" && metadata.state === "draft" && (
+        {metadata.kind === "issue" && metadata.status === "open" && (
           <><Field label="关联 Memory"><Input aria-label="关联 Memory" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "issue.link", id: metadata.id, memory: target }, "Issue 已关联 Memory。") }><Link2 /> 关联 Memory</Button><Field label="关闭理由"><Textarea aria-label="Issue 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "issue.close", id: metadata.id, reason }, "Issue 已关闭。")}>关闭草稿</Button></>
         )}
       </div>

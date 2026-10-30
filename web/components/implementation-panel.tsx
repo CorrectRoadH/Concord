@@ -8,7 +8,7 @@ import { useSourceNavigation } from '../hooks/use-url-navigation';
 import { ActionResult as ResultCard } from './action-result';
 import { Field } from './page';
 import { ContentSection, PanelEmpty, PanelHeader, RecordItem, RecordList } from './content-layout';
-import { ScanNotice } from './repository-tests';
+import { ScanNotice } from './scan-notice';
 const SourceDrawer = lazy(() => import('./source-drawer').then(module => ({ default: module.SourceDrawer })));
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';

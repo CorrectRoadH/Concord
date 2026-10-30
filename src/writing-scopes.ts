@@ -38,10 +38,3 @@ export function snapshotDigest(inputs: readonly [string, string][], memberships:
   return objectDigest({ inputs: [...inputs].sort(([a], [b]) => a.localeCompare(b)), memberships: [...memberships].sort(([a], [b]) => a.localeCompare(b)) });
 }
 
-// @concord-code
-// @concord-implements docs/feature/documentation-quality/policy.md#工具管理与恢复
-export function assertGenericConceptWrite(path: string): void {
-  if (!path.startsWith('docs/') || !path.endsWith(`/${catalogName}`)) return;
-  try { scopeOf(path, 'catalog'); } catch { return; }
-  throw new ConcordError('ManagedConceptCatalog', `${path} is managed by concepts set`);
-}

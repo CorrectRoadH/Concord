@@ -10,24 +10,20 @@ import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from './a
 import { codeSnippet, locateCode } from './code-commands.js';
 import { scanCode } from './code.js';
 import {
-  addPage,
   activateMemory,
   adoptRoadmap,
-  adoptIssue,
-  retireIssue,
   reopenIssue,
   closeIssue,
   createDocument,
-  correctDesignReason,
   decideDesign,
   checkDesign,
   formatDesign,
   findDocument,
   linkIssue,
-  promoteMemory,
-  reopenMemory,
+  linkMemory,
+  unlinkIssue,
+  deferDesign,
   resolveMemory,
-  retirePromotion,
   supersedeMemory,
 } from './documents.js';
 import { checkFeedbackConnection, listFeedback, syncFeedback } from './feedback.js';
@@ -42,7 +38,6 @@ import {
   readSource,
   setConfig,
   setMarkdown,
-  setMetadata,
   setSource,
 } from './editing.js';
 import { readEvidence, verifyFixedEvidence } from './evidence.js';
@@ -97,21 +92,15 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'init':
     case 'document.create':
     case 'document.set':
-    case 'document.metadata':
-    case 'page.add':
+    case 'memory.link':
+    case 'issue.unlink':
+    case 'design.defer':
     case 'roadmap.adopt':
     case 'design.decide':
-    case 'design.correct-reason':
     case 'design.format':
     case 'memory.resolve':
-    case 'memory.edit':
     case 'memory.activate':
-    case 'memory.reopen':
     case 'memory.supersede':
-    case 'memory.promote':
-    case 'memory.retire':
-    case 'issue.adopt':
-    case 'issue.retire':
     case 'issue.reopen':
     case 'issue.link':
     case 'issue.edit':
@@ -192,7 +181,7 @@ function directConfig(root: string): {
     const error = failure(cause);
     return { project: null, configDigest: null, source: undefined, path: relativePath, diagnostic: { error: error.code, message: error.message } };
   }
-  if (!existsSync(path)) return { project: null, configDigest: null, source: undefined, path: relativePath, diagnostic: { error: 'ProjectNotFound', message: 'No concord.config.ts exists; initialize this Git worktree.' } };
+  if (!existsSync(path)) return { project: {}, configDigest: digest(''), source: '', path: relativePath };
   let source: string;
   try {
     const stat = lstatSync(path);
@@ -363,7 +352,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
         return { path: source.path, body: source.body, digest: source.digest };
       }
       if (path === repo.configSnapshot.path) {
-        return { path, body: repo.configSnapshot.source, digest: repo.configSnapshot.digest, project: repo.config };
+        return { path, body: repo.configSnapshot.source, digest: repo.configSnapshot.digest, project: repo.configSnapshot.config };
       }
       return undefined;
     }));
@@ -395,13 +384,13 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
 function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>): unknown {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
-    case 'document.create': return createDocument(repo, action.kind, { ...action, dryRun });
+    case 'document.create': return createDocument(repo, action.kind, { ...action, memoryKind: action.type, dryRun });
+    case 'memory.link': return linkMemory(repo, action.id, action.target, action.role, dryRun);
+    case 'issue.unlink': return unlinkIssue(repo, action.id, action.memory, dryRun, action.role);
+    case 'design.defer': return deferDesign(repo, action.id, action.reason, dryRun);
     case 'document.set': return setMarkdown(repo, action.path, action.body, action.expectedDigest, dryRun);
-    case 'document.metadata': return setMetadata(repo, action.reference, { title: action.title, observedAt: action.observedAt, sources: action.sources }, action.expectedDigest, dryRun);
-    case 'page.add': return addPage(repo, action.kind, action.id, action.page, dryRun, action.plan);
     case 'roadmap.adopt': return adoptRoadmap(repo, action.id, action.feature, dryRun);
     case 'design.decide': return decideDesign(repo, action.id, action.selected, action.targets, action.reason, dryRun);
-    case 'design.correct-reason': return correctDesignReason(repo, action.id, action.reason, action.memory, action.explanation, action.expectedDigest, action.expectedMemoryDigest, dryRun);
     case 'design.check': return checkDesign(repo, action.id);
     case 'design.format': return formatDesign(repo, action.id, dryRun);
     case 'memory.resolve': {
@@ -415,21 +404,15 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     }
     case 'memory.index': return knowledgeIndex(repo, 'memory');
     case 'memory.recall': return knowledgeRecall(repo, 'memory', action.query);
-    case 'memory.edit': return editKnowledge(repo, 'memory', action.id, action.body, action.expectedDigest, dryRun);
     case 'memory.activate': return activateMemory(repo, action.id, action.reason, dryRun);
-    case 'memory.reopen': return reopenMemory(repo, action.id, action.reason, dryRun);
     case 'memory.supersede': return supersedeMemory(repo, action.id, action.replacement, action.reason, dryRun);
-    case 'memory.promote': return promoteMemory(repo, action.id, action.target, dryRun);
-    case 'memory.retire': return retirePromotion(repo, action.id, action.target, action.reason, dryRun);
-    case 'issue.link': return linkIssue(repo, action.id, action.memory, dryRun, action.kind);
+    case 'issue.link': return linkIssue(repo, action.id, action.memory, dryRun, action.role);
     case 'issue.list': { const { action: _, ...filter } = action; return { operation: 'issue-list', drafts: listFeedback(repo, undefined, filter).map(item => item.document) }; }
     case 'feedback.list': { const { action: _, ...filter } = action; return { operation: 'feedback-list', feedback: listFeedback(repo, undefined, filter) }; }
     case 'issue.index': return knowledgeIndex(repo, 'issue');
     case 'issue.recall': return knowledgeRecall(repo, 'issue', action.query);
     case 'issue.edit': return editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun);
     case 'issue.remove': return removeIssue(repo, action.id, action.expectedDigest, dryRun);
-    case 'issue.adopt': return adoptIssue(repo, action.id, action.to, dryRun);
-    case 'issue.retire': return retireIssue(repo, action.id, action.from, dryRun);
     case 'issue.reopen': return reopenIssue(repo, action.id, action.reason, dryRun);
     case 'issue.close': { const { action: _, id, dryRun: __, ...closure } = action; return closeIssue(repo, id, decode(IssueClosureSchema, { ...closure, kind: closure.kind ?? 'closed' }, 'Issue closure'), dryRun); }
     case 'feedback.link': throw new ConcordError('CommandRetired', 'Use concord issue adopt --to', { command: 'concord feedback link', replacement: 'concord issue adopt --to' });
@@ -497,15 +480,11 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
       testRoots: action.docsOnly ? [] : action.testRoots,
       sourceRoots: action.sourceRoots,
       runner: action.runner,
-      projectTypes: action.projectTypes,
-      pages: action.pages,
-      design: action.design,
       constitutionBody: action.constitutionBody,
       adoptConstitution: action.adoptConstitution,
       constitutionReason: action.constitutionReason,
       constitutionImpact: action.constitutionImpact,
       constitutionSources: action.constitutionSources,
-      memorySources: action.memorySources,
     }))), { initialize: true, dryRun }, timing);
   }
   if (action.action === 'check') return yield* checkCurrentProject(root);

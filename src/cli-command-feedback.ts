@@ -74,9 +74,6 @@ const feedback = Command.make('feedback').pipe(Command.withDescription('Connect 
     const relations = documentShow(repo, item.document.path, 'issue', cached(settings.dryRun));
     return { operation: 'feedback-show', feedback: { ...item, document: relations.document }, incoming: relations.incoming, outgoing: relations.outgoing, complete: relations.complete, findings: relations.findings };
   }))),
-  retiredFeedback('create', 'concord issue create'),
-  retiredFeedback('link', 'concord issue adopt --to'),
-  retiredFeedback('close', 'concord issue close'),
   feedbackSync,
   feedbackImport,
   feedbackConnection,

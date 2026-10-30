@@ -1,8 +1,5 @@
-import { assertGenericConceptWrite } from './writing-scopes.js';
 import { readDesignPlanPaths } from './document-layout.js';
 import { posix } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
 import { Schema } from 'effect';
 import { deriveDesignRecord, writeDesignDeclaration } from './design-state.js';
 import { fromMarkdown } from './markdown-parser.js';
@@ -40,7 +37,6 @@ import {
 } from './memory-state.js';
 import { parseReference, resolveReference } from './refs.js';
 import { CONSTITUTION_PATH, clauseIndex, showConstitution } from './constitution.js';
-import { memoryWriteDirectory } from './memory-write.js';
 import { templateBody, TEMPLATE_PAGES } from './templates.js';
 import { rebaseAdoptedMarkdown } from './adoption.js';
 import { inspectDocumentProjections, projectionRecord } from './document-projection.js';
@@ -52,9 +48,9 @@ import { DOCUMENT_ROOTS, defaultDocumentPath, documentDisposition, documentPlace
 
 export { DOCUMENT_ROOTS } from './document-layout.js';
 // @concord-code
-// @concord-implements docs/feature/project-onboarding/use-case/configure-memory-sources.md
+// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 export function documentRoots(repo: Repository): readonly string[] {
-  return inRepositorySnapshot(repo, () => { return [...DOCUMENT_ROOTS, ...(repo.config.memorySources ?? [{ path: 'memory' }]).map((source) => source.path)];   });
+  return inRepositorySnapshot(repo, () => { return [...DOCUMENT_ROOTS, ...['memory']];   });
 }
 const CONTRACT_KINDS: readonly DocumentKind[] = ['feature', 'use-case', 'engineering'];
 const now = (): string => new Date().toISOString();
@@ -123,17 +119,10 @@ export function loadDocuments(repo: Repository, kinds?: readonly DocumentKind[])
 }
 function documentInputs(repo: Repository, kinds?: readonly DocumentKind[], findings?: Finding[]): { path: string; source: string }[] {
   const paths = new Set<string>();
-  const memoryRoots = new Set((repo.config.memorySources ?? []).map((source) => source.path));
   const roots = kinds === undefined ? documentRoots(repo) : [...new Set(kinds.flatMap(kind => kind === 'memory'
-    ? (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path)
+    ? ['memory']
     : [kind === 'use-case' ? 'docs/feature' : kind === 'issue' ? 'docs/issues' : `docs/${kind}`]))];
   for (const root of roots) {
-    if (memoryRoots.has(root) && !existsSync(repo.absolute(root))) {
-      const error = new ConcordError('MemorySourceUnavailable', `Configured Memory source does not exist: ${root}`);
-      if (findings === undefined) throw error;
-      findings.push({ code: error.code, path: root, message: error.message });
-      continue;
-    }
     for (const path of repo.files(root)) if (path.endsWith('.md')) paths.add(path);
   }
   const inputs: { path: string; source: string }[] = [];
@@ -146,7 +135,7 @@ function documentInputs(repo: Repository, kinds?: readonly DocumentKind[], findi
 }
 
 function currentDocument(repo: Repository, record: DocumentRecord | undefined): record is DocumentRecord {
-  return record !== undefined && documentDisposition(record.metadata.kind, record.path, (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path)) === 'current';
+  return record !== undefined && documentDisposition(record.metadata.kind, record.path, ['memory']) === 'current';
 }
 
 function loadDocumentsUnderSnapshot(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
@@ -430,8 +419,7 @@ export interface CreateDocumentInput {
   readonly sources?: readonly string[];
   readonly alternatives?: readonly string[];
   readonly pages?: readonly string[];
-  readonly memorySource?: string;
-  readonly memoryKind?: 'problem' | 'decision' | 'insight' | 'note';
+  readonly memoryKind?: 'decision' | 'insight' | 'note';
   readonly dryRun?: boolean;
 }
 
@@ -440,7 +428,6 @@ export interface CreateDocumentInput {
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#roadmap
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#add
 // @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
-// @concord-implements docs/feature/project-onboarding/use-case/inherit-template-defaults.md
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const id = decode(DocumentName, input.id, 'id');
@@ -451,8 +438,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   if ((input.alternatives?.length ?? 0) > 0 && kind !== 'design') throw new ConcordError('InvalidInput', 'alternatives are only valid for design');
   if (input.memoryKind !== undefined && kind !== 'memory') throw new ConcordError('InvalidInput', 'memoryKind is only valid for memory');
   if (input.pages !== undefined && !['feature', 'roadmap', 'design'].includes(kind)) throw new ConcordError('InvalidInput', 'pages is only valid for feature, roadmap, and design');
-  const defaults = kind === 'feature' ? repo.config.documentDefaults?.featurePages : kind === 'roadmap' ? repo.config.documentDefaults?.roadmapPages : kind === 'design' ? repo.config.documentDefaults?.designPages : [];
-  const selected = decode(Schema.Array(Schema.Literals(TEMPLATE_PAGES)), input.pages ?? defaults ?? [], 'pages');
+  const selected = decode(Schema.Array(Schema.Literals(TEMPLATE_PAGES)), input.pages ?? [], 'pages');
   if (new Set(selected).size !== selected.length) throw new ConcordError('InvalidInput', 'pages must be unique');
   const requested = TEMPLATE_PAGES.filter(page => selected.includes(page));
   const bodyFor = (name: string) => authorBody(input.body ?? templateBody(name, title, requested));
@@ -487,7 +473,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
       const memoryKind = input.memoryKind;
       if (memoryKind === undefined) throw new ConcordError('InvalidInput', 'memoryKind is required');
       if (memoryKind === 'problem') throw new ConcordError('InvalidInput', 'Defects belong to Issue; Memory type must be decision, insight, or note');
-      path = `${memoryWriteDirectory(repo.config.memorySources, input.memorySource)}/${id}.md`;
+      path = `memory/${id}.md`;
       template = memoryKind;
       metadata = { format: 'concord.document/v1', id, title, createdAt, kind, memoryKind, state: 'captured', epoch: 0, promotions: [], history: [] };
       break;
@@ -522,7 +508,6 @@ export { addPage, setPage, showPage } from './document-pages.js';
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 export function setAuthor(repo: Repository, ref: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  assertGenericConceptWrite(parseReference(ref).path);
   const record = readDocumentReference(repo, ref);
   if (record.path !== parseReference(ref).path) throw new ConcordError('InvalidReferenceTarget', 'Author body belongs to an exact Concord owner, not supporting Markdown');
   if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);
@@ -706,7 +691,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   if (repo.read(featurePath) !== undefined) throw new ConcordError('DocumentExists', `${featurePath} already exists`);
   const roadmapDirectory = posix.dirname(roadmap.path);
   const featureDirectory = posix.dirname(featurePath);
-  if (repo.files(featureDirectory).length > 0 || existsSync(repo.absolute(featureDirectory))) throw new ConcordError('DocumentExists', `${featureDirectory} already exists`);
+  if (repo.files(featureDirectory).length > 0 || (repo.exists?.(featureDirectory) ?? false)) throw new ConcordError('DocumentExists', `${featureDirectory} already exists`);
   const sourcePaths = repo.files(roadmapDirectory).sort();
   const observed = new Map<string, string>();
   const changes: import('./shared.js').Change[] = [];

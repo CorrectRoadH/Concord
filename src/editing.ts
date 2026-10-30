@@ -1,11 +1,9 @@
-import { assertGenericConceptWrite } from './writing-scopes.js';
 import { ConcordError, ProjectSchema, decode, digest, inRepositorySnapshot, type DocumentRecord, type Finding, type MutationReceipt, type ProjectConfig, type Repository } from './shared.js';
 import { renderTypeScriptConfig } from './config.js';
-import { documentRoots, inspectDocumentRecords, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
+import { documentRoots, inspectDocumentRecords, parseDocumentRecord } from './documents.js';
 import type { LocalRepository } from './storage.js';
 import { documentDisposition } from './document-layout.js';
 import { deriveDesignRecord } from './design-state.js';
-import { existsSync } from 'node:fs';
 import type { ViewFile } from './view-contract.js';
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
@@ -35,7 +33,7 @@ function inspectMarkdown(repo: Repository, path: string, captured?: { source: st
     if (captured !== undefined && !captured.result.ok) throw captured.result.cause;
     const document = captured === undefined ? parseDocumentRecord(path, source) : captured.result.ok ? captured.result.value : undefined;
     if (document) {
-      const disposition = documentDisposition(document.metadata.kind, path, (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path));
+      const disposition = documentDisposition(document.metadata.kind, path, ['memory']);
       if (disposition === 'current') return { document: deriveDesignRecord(repo, document) };
       return { page: projectPage(path, source) };
     }
@@ -56,7 +54,7 @@ export function inspectDocumentFile(repo: Repository, path: string): ViewFile | 
   const inDocumentInventory = roots.some(root => underRoot(path, root));
   if (!path.endsWith('.md') || sourceForbidden(path) || (!inDocumentInventory && !loose)) return undefined;
   const target = inspectMarkdown(repo, path);
-  if (target.document) return { path, body: target.document.body, digest: target.document.digest, documentPath: path, document: target.document };
+  if (target.document) return { path, body: repo.read(path)!, digest: target.document.digest, documentPath: path, document: target.document };
   if (!target.page) return undefined;
   if (loose) return target.page;
   let owner: string | undefined;
@@ -76,9 +74,6 @@ function inspected(repo: Repository): { readonly documents: readonly DocumentRec
   const documents: DocumentRecord[] = [];
   const findings: Finding[] = [];
   const pages: ViewFile[] = [];
-  for (const source of repo.config.memorySources ?? []) {
-    if (!existsSync(repo.absolute(source.path))) findings.push({ code: 'MemorySourceUnavailable', path: source.path, message: `Configured Memory source does not exist: ${source.path}` });
-  }
   const inputs = markdownPaths(repo, roots).flatMap(path => {
     const source = repo.read(path);
     return source === undefined ? [] : [{ path, source }];
@@ -165,19 +160,10 @@ export function setConfig(repo: LocalRepository, config: ProjectConfig, expected
   const current = showConfig(repo);
   if (current.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${repo.configSnapshot.path} changed; use its current digest`);
   const next = decode(ProjectSchema, config, 'configuration');
-  if (next.format !== current.config.format || next.projectId !== current.config.projectId) throw new ConcordError('ImmutableProjectIdentity', 'config.set preserves project format and projectId');
-  for (const path of [...next.testRoots, ...(next.sourceRoots ?? []), ...next.runner.sourceFiles]) repo.absolute(path);
-  for (const root of [...next.testRoots, ...(next.sourceRoots ?? [])]) if (sourceForbidden(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot or testRoot: ${root}`);
+  for (const path of [...(next.testRoots ?? []), ...(next.sourceRoots ?? []), ...(next.runner?.sourceFiles ?? [])]) repo.absolute(path);
+  for (const root of [...(next.testRoots ?? []), ...(next.sourceRoots ?? [])]) if (sourceForbidden(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot or testRoot: ${root}`);
   const after = renderTypeScriptConfig(next);
-  return repo.publish('set-config', [{ path: repo.configSnapshot.path, before: repo.configSnapshot.source, after }], dryRun);
-  });
-}
-
-// @concord-code
-// @concord-implements docs/feature/web-workbench/README.md#自动保存
-export function setMetadata(repo: LocalRepository, reference: string, fields: { title?: string; observedAt?: string | null; sources?: readonly string[] }, expectedDigest: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-  return setDocumentMetadata(repo, reference, fields, expectedDigest, dryRun);
+  return repo.publish('set-config', [{ path: repo.configSnapshot.path, before: repo.configSnapshot.source || null, after }], dryRun);
   });
 }
 
@@ -185,10 +171,8 @@ export function setMetadata(repo: LocalRepository, reference: string, fields: { 
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
 export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  assertGenericConceptWrite(path);
   const page = inspectDocumentFile(repo, path);
   if (page === undefined) throw new ConcordError('FileNotFound', 'Markdown editing is limited to the Concord document and supporting-page inventory');
-  if (page.documentPath === path) return setAuthor(repo, path, body, expectedDigest, dryRun);
   if (page.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; use its current digest`);
   const before = repo.read(path);
   if (before === undefined) throw new ConcordError('FileNotFound', `${path} disappeared before publication`);

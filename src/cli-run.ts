@@ -8,13 +8,6 @@ import { ConcordError, failure } from './shared.js';
 import { humanOutput } from './presentation.js';
 import { OwnedProcessLive } from './owned-process.js';
 
-export function normalizeArguments(): void {
- const index = process.argv.indexOf('feedback');
- if (index >= 2 && ['create', 'link', 'close'].includes(process.argv[index + 1] ?? '')) {
-  const json = process.argv.includes('--json'); process.argv.splice(index + 2); if (json) process.argv.push('--json');
- }
-}
-
 export function runCli(command: Command.Command<any, any, any, any, NodeServices.NodeServices | import('./owned-process.js').OwnedProcess>): void {
  command.pipe(Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(new URL('../package.json',import.meta.url),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0

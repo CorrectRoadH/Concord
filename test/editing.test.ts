@@ -5,10 +5,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from '../dist/documents.js';
-import { inspectDocumentFile, inspectDocuments, listSources, readSource, setConfig, setMarkdown, setMetadata, setSource } from '../dist/editing.js';
-import { digest } from '../dist/shared.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
+import { createDocument } from '../src/documents.js';
+import { inspectDocumentFile, inspectDocuments, listSources, readSource, setConfig, setMarkdown, setSource } from '../src/editing.js';
+import { digest } from '../src/shared.js';
+import { LocalRepository, initialize } from '../src/storage.js';
 import { projectConfigPath, readProjectConfig, writeProjectConfig } from './support.js';
 
 function fixture(): string {
@@ -32,7 +32,7 @@ function throwsCode(code: string, operation: () => unknown): void {
 }
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('editing exposes configured source and known Markdown only, preserving managed metadata', () => Effect.runPromise(Effect.sync(() => withRepository((root, repo) => {
+test('editing exposes configured source and known Markdown only, with whole-file digest saves', () => Effect.runPromise(Effect.sync(() => withRepository((root, repo) => {
   assert.deepEqual(listSources(repo).map(item => item.path), ['src/main.ts']);
   const source = readSource(repo, 'src/main.ts');
   assert.equal(setSource(repo, source.path, 'export const answer = 2;\n', source.digest).operation, 'set-source');
@@ -45,16 +45,6 @@ test('editing exposes configured source and known Markdown only, preserving mana
   createDocument(repo, 'research', { id: 'study', title: 'Study', body: '# Notes\n', observedAt: '2026-09-14', sources: ['https://example.invalid'] });
   let document = inspectDocuments(repo).documents.find(item => item.metadata.id === 'study');
   assert.ok(document);
-  setMetadata(repo, document.path, { title: 'Updated study', sources: ['https://example.invalid/v2'] }, document.digest);
-  document = inspectDocuments(repo).documents.find(item => item.metadata.id === 'study');
-  assert.equal(document?.metadata.title, 'Updated study');
-  assert.deepEqual(document?.metadata.kind === 'research' ? document.metadata.sources : [], ['https://example.invalid/v2']);
-  setMetadata(repo, document!.path, { observedAt: null }, document!.digest);
-  document = inspectDocuments(repo).documents.find(item => item.metadata.id === 'study');
-  assert.ok(document?.metadata.kind === 'research' && !('observedAt' in document.metadata));
-  setMetadata(repo, document.path, { title: 'Undated study' }, document.digest);
-  document = inspectDocuments(repo).documents.find(item => item.metadata.id === 'study');
-  assert.ok(document?.metadata.kind === 'research' && !('observedAt' in document.metadata));
   const edited = setMarkdown(repo, document!.path, '# Edited notes\n', document!.digest);
   assert.deepEqual(edited.changedPaths, [document!.path]);
   assert.equal(inspectDocuments(repo).documents.find(item => item.metadata.id === 'study')?.body, '# Edited notes\n');
@@ -87,7 +77,7 @@ test('project documents under docs are readable without becoming category owners
   assert.deepEqual(saved.changedPaths, ['docs/architecture.md']);
   assert.match(readFileSync(join(root, 'docs/architecture.md'), 'utf8'), /Saved from the workbench/);
   setMarkdown(repo, constitution!.path, `${constitution!.body}\nAdditional principle.\n`, constitution!.digest);
-  assert.match(readFileSync(join(root, 'docs/constitution.md'), 'utf8'), /concord\.constitution\/v3/);
+  assert.match(readFileSync(join(root, 'docs/constitution.md'), 'utf8'), /status: draft/);
 
   mkdirSync(join(root, 'docs/notes'), { recursive: true });
   writeFileSync(join(root, 'docs/notes/extra.md'), '# Extra\n');
@@ -101,9 +91,9 @@ test('project documents under docs are readable without becoming category owners
 }))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('config editing keeps project identity and validates source roots', () => Effect.runPromise(Effect.sync(() => withRepository((_root, repo) => {
+test('config editing rejects retired fields and validates source roots', () => Effect.runPromise(Effect.sync(() => withRepository((_root, repo) => {
   const source = repo.configSnapshot.source;
-  throwsCode('ImmutableProjectIdentity', () => setConfig(repo, { ...repo.config, projectId: 'other-project' }, digest(source)));
+  throwsCode('InvalidData', () => setConfig(repo, { ...repo.config, projectId: 'other-project' } as unknown as import('../src/shared.js').ProjectConfig, digest(source)));
   throwsCode('InvalidSourcePath', () => setConfig(repo, { ...repo.config, sourceRoots: ['node_modules'] }, digest(source)));
   throwsCode('InvalidSourcePath', () => setConfig(repo, { ...repo.config, testRoots: ['node_modules'] }, digest(source)));
   const receipt = setConfig(repo, { ...repo.config, sourceRoots: ['src', 'test'] }, digest(source));
@@ -117,13 +107,13 @@ test('editing includes existing JS/TS files from testRoots without treating runn
   try {
     execFileSync('git', ['init', '-q', root]);
     const initial = new LocalRepository(root, { initialize: true });
-    try { initialize(initial); } finally { initial.close(); }
+    try { initialize(initial, false, { testRoots: ['test'] }); } finally { initial.close(); }
     mkdirSync(join(root, 'test'), { recursive: true });
     mkdirSync(join(root, 'runner-only'), { recursive: true });
     writeFileSync(join(root, 'test', 'association.ts'), 'export const association = 1;\n');
     writeFileSync(join(root, 'runner-only', 'setup.ts'), 'export const setup = 1;\n');
     const config = readProjectConfig(root);
-    writeProjectConfig(root, { ...config, runner: { ...config.runner, sourceFiles: ['runner-only/setup.ts'] } });
+    writeProjectConfig(root, { ...config, runner: { kind: 'node-test', timeoutMs: 60000, sourceFiles: ['runner-only/setup.ts'] } });
     repo = new LocalRepository(root);
     assert.deepEqual(listSources(repo).map(item => item.path), ['test/association.ts']);
     const source = readSource(repo, 'test/association.ts');
@@ -143,7 +133,7 @@ test('source recovery freezes the exact configuration and preserves external edi
     const configPath = projectConfigPath(root);
     const config = readFileSync(join(root, configPath), 'utf8');
     const journal = {
-      format: 'concord.journal', root, privateDir: join(root, '.git', 'concord'), projectId: readProjectConfig(root).projectId,
+      format: 'concord.journal', root, privateDir: join(root, '.git', 'concord'), 
       operation: 'set-source', phase: 'prepared', directories: [],
       changes: [{ path: 'src/main.ts', before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }],
       scope: { kind: 'source', configPath, configSource: config, configDigest: digest(config) },
@@ -165,5 +155,36 @@ test('source recovery freezes the exact configuration and preserves external edi
     writeFileSync(join(root, '.git', 'concord', 'journal.json'), `${JSON.stringify(committed)}\n`);
     assert.equal(repo.recover().status, 'committed');
     assert.equal(readFileSync(join(root, 'src', 'main.ts'), 'utf8'), after);
+  } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('Markdown save publishes the complete owner and catalog bytes using only the whole-file digest', () => Effect.runPromise(Effect.sync(() => withRepository((root, repo) => {
+  createDocument(repo, 'issue', { id: 'observation', title: 'Observation' });
+  const issue = inspectDocumentFile(repo, 'docs/issues/observation.md')!;
+  const before = readFileSync(join(root, issue.path), 'utf8');
+  assert.equal(issue.body, before, 'the editor must receive frontmatter and Markdown as one file');
+  const after = before.replace('status: open', 'status: closed\nclosure:\n  kind: closed\n  reason: Resolved locally');
+  setMarkdown(repo, issue.path, after, issue.digest);
+  assert.equal(readFileSync(join(root, issue.path), 'utf8'), after);
+  throwsCode('PreimageChanged', () => setMarkdown(repo, issue.path, before, issue.digest));
+  const catalog = inspectDocumentFile(repo, 'docs/concepts.md')!;
+  const invalid = '# Editing in progress\n\nThis will be validated by check.\n';
+  setMarkdown(repo, catalog.path, invalid, catalog.digest);
+  assert.equal(readFileSync(join(root, catalog.path), 'utf8'), invalid);
+}))));
+
+// @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
+test('default source discovery does not authorize Web source writes', () => Effect.runPromise(Effect.sync(() => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-default-source-write-'));
+  let repo: LocalRepository | undefined;
+  try {
+    execFileSync('git', ['init', '-q', root]); mkdirSync(join(root, 'src'));
+    writeFileSync(join(root, 'src/main.ts'), 'export const value = 1;\n');
+    repo = new LocalRepository(root);
+    assert.deepEqual(repo.config.sourceRoots, ['src']);
+    const source = readSource(repo, 'src/main.ts');
+    throwsCode('InvalidSourcePath', () => setSource(repo!, source.path, 'export const value = 2;\n', source.digest));
+    assert.equal(readFileSync(join(root, source.path), 'utf8'), source.body);
   } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
 })));

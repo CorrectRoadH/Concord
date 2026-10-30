@@ -5,7 +5,7 @@ import { Command } from 'effect/unstable/cli';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { root } from './cli-base.js';
-import { normalizeArguments, runCli } from './cli-run.js';
+import { runCli } from './cli-run.js';
 import type { StartupData } from './cli-startup-types.js';
 
 const loaders = {
@@ -36,7 +36,6 @@ const loaders = {
 };
 
 export async function loadCommand(group: string, data: StartupData): Promise<() => void> {
-  normalizeArguments();
   const documentKinds = ['use-case', 'design', 'roadmap'] as const;
   const kind = documentKinds.find(name => name === group);
   const selected = kind === undefined ? await loaders[group as keyof typeof loaders]() : (await import('./cli-command-documents.js')).docsGroup(kind);

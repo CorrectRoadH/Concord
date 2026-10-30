@@ -67,10 +67,10 @@ function retryableProjection(issue: WorkspaceIssue | null): boolean {
 /** Actions that change current sources and therefore request a navigation refresh. */
 const mutatingActions: ReadonlySet<ViewAction['action']> = new Set([
   'init', 'recover',
-  'document.create', 'document.set', 'document.metadata',
-  'page.add', 'roadmap.adopt', 'design.decide', 'design.correct-reason', 'design.format',
-  'memory.resolve', 'memory.edit', 'memory.activate', 'memory.reopen', 'memory.supersede', 'memory.promote', 'memory.retire',
-  'issue.adopt', 'issue.retire', 'issue.reopen', 'issue.link', 'issue.edit', 'issue.remove', 'issue.close',
+  'document.create', 'document.set',
+  'roadmap.adopt', 'design.decide', 'design.defer', 'design.format',
+  'memory.activate', 'memory.supersede', 'memory.link',
+  'issue.unlink', 'issue.reopen', 'issue.link', 'issue.edit', 'issue.remove', 'issue.close',
   'feedback.sync', 'feedback.link', 'source.set', 'writing.set', 'concepts.set', 'config.set',
   'constitution.initialize', 'constitution.adopt', 'constitution.amend',
 ]);

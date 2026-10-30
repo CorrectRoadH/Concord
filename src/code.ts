@@ -481,7 +481,7 @@ function sameSources(left: readonly Source[], right: readonly Source[]): boolean
 function parserVersion(): string { return `typescript-ast/${typescriptPackageVersion()}/concord-code-parse/v2`; }
 const codeContentCache = new ContentCache<ParsedFile>('code_parse', parserVersion(), Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), findings: Schema.Array(FindingSchema) }));
 function fileKey(repo: Repository, source: Source): string {
-  return objectDigest({ projectId: repo.config.projectId, root: repo.root, privateDir: repo.privateDir, parser: parserVersion(), path: source.path, sourceDigest: source.digest });
+  return objectDigest({ root: repo.root, privateDir: repo.privateDir, parser: parserVersion(), path: source.path, sourceDigest: source.digest });
 }
 function encodeParse(parsed: ParsedFile): string {
   return canonical({ codes: parsed.codes, findings: parsed.findings, digest: objectDigest({ codes: parsed.codes, findings: parsed.findings }) });

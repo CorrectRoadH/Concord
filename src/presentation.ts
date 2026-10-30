@@ -39,9 +39,7 @@ export function humanOutput(value: unknown): string {
   if (value.operation === 'init-cancelled') return 'Initialization cancelled. No files or private state were written.';
   if (value.operation === 'init-preview' && Predicate.isObject(value.configuration)) {
     const configuration = value.configuration;
-    const memorySources = Array.isArray(configuration.memorySources) ? configuration.memorySources : [];
-    const lines = ['Initialization preview', '', 'Final configuration:', `  ${JSON.stringify(configuration, null, 2).replaceAll('\n', '\n  ')}`, '', 'Memory sources:'];
-    for (const source of memorySources) if (Predicate.isObject(source)) lines.push(`  ${String(source.name)} — ${String(source.path)}; ${String(source.provider)}; ${String(source.access)}${source.defaultWrite === true ? '; default write target' : ''}`);
+    const lines = ['Initialization preview', '', 'Configuration overrides:', `  ${JSON.stringify(configuration, null, 2).replaceAll('\n', '\n  ')}`];
     lines.push('', 'Create:');
     for (const path of Array.isArray(value.create) ? value.create : []) lines.push(`  ${String(path)}`);
     lines.push('', 'Preserve:');
@@ -80,8 +78,8 @@ export function humanOutput(value: unknown): string {
     }
     if (Array.isArray(value.warnings) && value.warnings.length > 0) lines.push('', 'Warnings:', ...value.warnings.map(warning => `  ${String(warning)}`));
     if (value.recoveryRequired) lines.push('', 'Recovery required: run concord recover before another operation.');
-    if (value.operation === 'init') lines.push('', 'Start here: docs/concord.md', 'Next: concord feature create <id> --title "Your feature"', 'Inspect configuration: concord doctor');
-    else if (!value.dryRun && value.changedPaths.length > 0) lines.push('', typeof value.operation === 'string' && value.operation.startsWith('create-') ? 'Next: edit the author prose, then run concord check.' : 'Next: concord check.');
+    if (value.operation === 'init') lines.push('', 'Start here: docs/concord.md', 'Next: concord new feature <name> --title "Your feature"', 'Inspect configuration: concord doctor');
+    else if (!value.dryRun && value.changedPaths.length > 0) lines.push('', value.operation === 'new' ? 'Next: edit the pages, then run concord check.' : typeof value.operation === 'string' && value.operation.startsWith('create-') ? 'Next: edit the author prose, then run concord check.' : 'Next: concord check.');
     return lines.join('\n');
   }
   if ((value.operation === 'test-annotate' || value.operation === 'code-annotate') && typeof value.snippet === 'string') return value.snippet;

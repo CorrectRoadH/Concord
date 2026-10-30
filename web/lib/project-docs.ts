@@ -10,7 +10,7 @@ function under(path: string, root: string): boolean {
 }
 
 export function projectDocPages(snapshot: WorkspaceProjectionSnapshot): readonly WorkspacePage[] {
-  const memoryRoots = (snapshot.project?.memorySources ?? [{ path: 'memory' }]).map(source => source.path);
+  const memoryRoots = ['memory'];
   const roots = [...DOCUMENT_ROOTS, ...memoryRoots];
   return snapshot.pages
     .filter(page => page.path.endsWith('.md') && (page.path.startsWith('docs/') && !roots.some(root => under(page.path, root)) || page.documentPath === undefined && memoryRoots.some(root => under(page.path, root))))
