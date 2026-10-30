@@ -93,12 +93,12 @@ test('feedback browser separates remote observations from local editing and prot
     await expect(page.getByRole('button',{name:'删除本地草稿'})).toHaveCount(0);
     await expect.poll(()=>readFileSync(join(root,'docs/issues/browser-local.md'),'utf8')).toContain('docs/feature/target/README.md');
     await page.getByRole('tab',{name:'正文',exact:true}).click();
-    const editor=page.locator('[contenteditable="true"]').first();
-    await editor.fill('Edited through feedback workbench.');
+    const editor=page.getByRole('textbox',{name:'Markdown 原文',exact:true});
+    await editor.fill(readFileSync(join(root,'docs/issues/browser-local.md'),'utf8').replace('Authored local feedback.', 'Edited through feedback workbench.'));
     await expect.poll(()=>readFileSync(join(root,'docs/issues/browser-local.md'),'utf8')).toContain('Edited through feedback workbench.');
     const feedbackNavigation = page.getByRole('complementary', { name: '反馈 侧栏' });
     await expect(feedbackNavigation.getByRole('link').filter({hasText:'Browser local feedback'})).toHaveAttribute('aria-current', 'page');
-    await editor.fill('Saved before selecting another feedback.');
+    await editor.fill(readFileSync(join(root,'docs/issues/browser-local.md'),'utf8').replace('Edited through feedback workbench.', 'Saved before selecting another feedback.'));
     await feedbackNavigation.getByRole('link').filter({hasText:'Local title retained'}).click();
     await expect.poll(()=>readFileSync(join(root,'docs/issues/browser-local.md'),'utf8')).toContain('Saved before selecting another feedback.');
     await page.setViewportSize({width:390,height:844});
@@ -114,9 +114,9 @@ test('feedback browser separates remote observations from local editing and prot
     await page.setViewportSize({width:1440,height:1000});
     await page.getByRole('link',{name:'返回反馈列表',exact:true}).click();
     await page.getByRole('link').filter({hasText:'Local title retained'}).click();
-    const localEditor=page.locator('[contenteditable="true"]').first();
-    await expect(localEditor).toContainText('Local notes retained.');
-    await localEditor.fill('Local notes retained. Saved before opening sources.');
+    const localEditor=page.getByRole('textbox',{name:'Markdown 原文',exact:true});
+    await expect(localEditor).toHaveValue(/Local notes retained\./u);
+    await localEditor.fill(readFileSync(join(root,'docs/issues/remote-observation.md'),'utf8').replace('Local notes retained.', 'Local notes retained. Saved before opening sources.'));
     await page.getByRole('tab',{name:'来源与关联',exact:true}).click();
     await expect(page.getByRole('button',{name:'删除本地草稿'})).toHaveCount(0);
     await expect.poll(()=>readFileSync(join(root,'docs/issues/remote-observation.md'),'utf8')).toContain('Saved before opening sources.');
@@ -126,7 +126,7 @@ test('feedback browser separates remote observations from local editing and prot
     await expect(page.getByRole('tab',{name:'来源与关联',exact:true})).toHaveAttribute('data-state','active');
     await page.getByRole('tab',{name:'正文',exact:true}).click();
     await expect(page.getByText('Original remote body',{exact:true})).toHaveCount(0);
-    await expect(page.locator('[contenteditable="true"]').first()).toContainText('Local notes retained.');
+    await expect(page.getByRole('textbox',{name:'Markdown 原文',exact:true})).toHaveValue(/Local notes retained\./u);
     await page.goto(`http://127.0.0.1:${server.port}/settings?tab=feedback`);
     await page.getByRole('button',{name:'移除连接 browser-github'}).click();
     await expect.poll(()=>readProjectConfig(root).feedbackConnections?.length).toBe(0);

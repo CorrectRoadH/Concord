@@ -593,9 +593,9 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     // 丢弃冲突草稿后等待当前配置回读，避免在旧投影即将被替换时开始另一份草稿。
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await expect(page.getByLabel('高级项目配置 JSON',{exact:true})).toHaveValue(/"timeoutMs": 54321/u, { timeout: 65_000 });
-    await page.getByLabel('高级项目配置 JSON',{exact:true}).fill('{}');
+    await page.getByLabel('高级项目配置 JSON',{exact:true}).fill('{"testRoots":false}');
     await page.getByRole('tab',{name:'常用设置',exact:true}).click();
-    await expect(page.getByLabel('高级项目配置 JSON',{exact:true})).toHaveValue('{}');
+    await expect(page.getByLabel('高级项目配置 JSON',{exact:true})).toHaveValue('{"testRoots":false}');
     await expect(page.locator('.form-error').first()).toBeVisible();
     await page.getByRole('button',{name:'留在此页',exact:true}).click();
     await sidebar.getByRole('link',{name:'Feature',exact:true}).click();
