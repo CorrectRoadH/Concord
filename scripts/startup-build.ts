@@ -35,6 +35,7 @@ const capture = (args: readonly string[]) => Effect.tryPromise({
 /** Keep the source module's resource and identity owner after code splitting. */
 async function bundleCommands(entries: readonly string[], splitting = true): Promise<void> {
   const output = resolve('dist/entry/cli'), model = resolve('dist/model');
+  const libraries = ['model', 'base', 'domain', 'app'].map(layer => resolve('dist', layer) + '/');
   const parser = resolve(model, 'markdown-parser.js');
   const api = new API({ runExternalCode: false });
   try {
@@ -45,10 +46,11 @@ async function bundleCommands(entries: readonly string[], splitting = true): Pro
           if (!args.importer || !args.path.endsWith('.js')) return;
           const owner = resolve(dirname(args.importer), args.path);
           if (splitting && owner === resolve(output, 'skill.js')) return { path: './skill.js', external: true };
-          // Pure model exports can be removed when unused. Keep the actual parser
-          // boundary shared with source execution and installed instrumentation.
+          // Library modules declare models, services and operations; entry roots
+          // execute effects. Remove unused libraries while retaining one parser
+          // boundary for source execution and installed instrumentation.
           if (owner === parser) return { path: relative(output, parser), external: true, sideEffects: false };
-          if (owner.startsWith(`${model}/`)) return { path: owner, sideEffects: false };
+          if (libraries.some(directory => owner.startsWith(directory))) return { path: owner, sideEffects: false };
         });
         builder.onLoad({ filter: /\.js$/ }, args => {
           if (!args.path.startsWith(resolve('dist') + '/')) return;
