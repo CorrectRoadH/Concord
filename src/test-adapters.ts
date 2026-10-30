@@ -64,7 +64,7 @@ export function adapterInputSnapshot(repo: Repository, adapter: TestAdapter): { 
   for (const root of [...repo.config.testRoots, ...(repo.config.sourceRoots ?? []), ...adapter.inputRoots]) {
     for (const path of repo.files(root)) if (!(repo.config.sourceIgnore ?? []).some(ignored => inPath(path, ignored))) paths.add(path);
   }
-  for (const path of [...repo.config.runner.sourceFiles, ...adapter.implementationFiles, ...adapter.lockFiles, 'concord.config.ts']) paths.add(path);
+  for (const path of [...(repo.config.runner?.sourceFiles ?? []), ...adapter.implementationFiles, ...adapter.lockFiles, 'concord.config.ts']) paths.add(path);
   const members = [...paths].sort().map(path => {
     const target = repo.absolute(path);
     if (!existsSync(target)) return { path, digest: digest('concord:absent') };
@@ -81,7 +81,7 @@ export function adapterInputSnapshot(repo: Repository, adapter: TestAdapter): { 
   const command = executable(argv[0]!, repo.root);
   const env = Object.fromEntries(adapter.envNames.map(name => [name, process.env[name] ?? null]));
   const excluded = ['.git', '**/node_modules', 'AGENTS.md', ...(repo.config.sourceIgnore ?? [])];
-  const inputs = objectDigest({ algorithm: 'concord-native-inputs/v2', root: repo.root, projectId: repo.config.projectId, config: repo.configSnapshot.digest, adapter, implementation: adapterImplementation(), members, excluded, executable: { path: command, digest: digest(readFileSync(command)) }, runtime: process.version, env });
+  const inputs = objectDigest({ algorithm: 'concord-native-inputs/v2', root: repo.root, config: repo.configSnapshot.digest, adapter, implementation: adapterImplementation(), members, excluded, executable: { path: command, digest: digest(readFileSync(command)) }, runtime: process.version, env });
   return { inputs, members, excluded };
 }
 function safeEnvironment(names: readonly string[]): NodeJS.ProcessEnv {

@@ -84,19 +84,20 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
 
       const body = join(scratch, 'memory-input.md');
       writeFileSync(body, '# Cached knowledge\n\nold-native-projection-token\n');
-      call(['memory', 'add', 'native-recall', '--title', 'Cached knowledge', '--kind', 'note', '--body', body], Ack);
+      call(['new', 'memory', 'native-recall', '--title', 'Cached knowledge', '--type', 'note', '--body', body], Ack);
       assert.equal(call(['memory', 'recall', 'old-native-projection-token'], Recall).documents.length, 1);
-      const before = call(['memory', 'show', 'native-recall'], Memory).document.digest;
-      writeFileSync(body, '# Cached knowledge\n\ncurrent-native-projection-token\n');
-      call(['memory', 'edit', 'native-recall', '--body', body, '--expected-digest', before], Ack);
+      const before = call(['show', 'native-recall'], Memory).document.digest;
+      const memoryPath = join(root, 'memory/native-recall.md');
+      writeFileSync(memoryPath, readFileSync(memoryPath, 'utf8').replace('old-native-projection-token', 'current-native-projection-token'));
       assert.equal(call(['memory', 'recall', 'old-native-projection-token'], Recall).documents.length, 0);
       const current = call(['memory', 'recall', 'current-native-projection-token'], Recall);
       assert.equal(current.documents.length, 1);
-      const currentDigest = call(['memory', 'show', 'native-recall'], Memory).document.digest;
+      const currentDigest = call(['show', 'native-recall'], Memory).document.digest;
+      assert.notEqual(currentDigest, before);
       call(['cache', 'clear'], Ack);
       assert.equal(call(['cache', 'status'], CacheStatus).status, 'empty');
       assert.equal(call(['memory', 'recall', 'current-native-projection-token'], Recall).documents.length, 1);
-      assert.equal(call(['memory', 'show', 'native-recall'], Memory).document.digest, currentDigest);
+      assert.equal(call(['show', 'native-recall'], Memory).document.digest, currentDigest);
       call(['cache', 'clear'], Ack);
       assert.equal(call(['test', 'list'], CacheResult).cache.status, 'miss');
       assert.equal(call(['test', 'list'], CacheResult).cache.status, 'hit');
@@ -131,7 +132,7 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
         assert.notEqual(failedClear.status, 0);
         assert.deepEqual(readdirSync(cachePath).sort(), beforePreview);
         assert.equal(statSync(join(cachePath, 'owner.hawdb.lock')).ino, lockInode);
-        assert.equal(call(['memory', 'show', 'native-recall'], Memory).document.digest, currentDigest);
+        assert.equal(call(['show', 'native-recall'], Memory).document.digest, currentDigest);
         const originalPath = join(scratch, 'native-original');
         writeFileSync(originalPath, binaryBytes);
         // JavaScript consumer fixture: exercise the installed loader across

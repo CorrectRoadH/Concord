@@ -458,44 +458,6 @@ export function setAuthor(repo: Repository, ref: string, body: string, expectedD
 }
 
 /** Updates only explicit author-owned metadata; lifecycle and identity remain domain operations. */
-// @concord-code
-// @concord-implements docs/feature/web-workbench/README.md#自动保存
-export function setDocumentMetadata(
-  repo: Repository,
-  reference: string,
-  fields: { readonly title?: string; readonly observedAt?: string | null; readonly sources?: readonly string[] },
-  expectedDigest: string,
-  dryRun = false,
-): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-  if (fields.title === undefined && fields.observedAt === undefined && fields.sources === undefined) throw new ConcordError('InvalidInput', 'Provide at least one author metadata field');
-  const record = resolveReference(repo, loadDocuments(repo), reference);
-  if (record.path !== parseReference(reference).path) throw new ConcordError('InvalidReferenceTarget', 'Metadata belongs to an exact Concord owner, not supporting Markdown');
-  if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);
-  if ((fields.observedAt !== undefined || fields.sources !== undefined) && record.metadata.kind !== 'research') {
-    throw new ConcordError('InvalidDocumentKind', 'observedAt and sources are only author fields on Research documents');
-  }
-  const title = fields.title === undefined ? record.metadata.title : required(fields.title, 'title');
-  const heading = fromMarkdown(record.body).children.find(node => node.type === 'heading' && node.depth === 1);
-  if (heading === undefined) throw new ConcordError('InvalidData', 'Owner requires a level-one heading');
-  let body = fields.title === undefined ? record.body : `${record.body.slice(0, heading.position!.start.offset)}# ${title}${record.body.slice(heading.position!.end.offset)}`;
-  if (record.metadata.kind !== 'research') return changed(repo, 'set-metadata', record, { ...record.metadata, title }, body, dryRun);
-  const observedAt = fields.observedAt === undefined ? record.metadata.observedAt : fields.observedAt === null ? undefined : required(fields.observedAt, 'observedAt');
-  const sources = fields.sources === undefined ? record.metadata.sources : fields.sources.map((source, index) => required(source, `sources[${index}]`));
-  const { observedAt: _previousObservation, ...metadata } = record.metadata;
-  if (fields.observedAt !== undefined || fields.sources !== undefined) {
-    const nodes = fromMarkdown(body).children;
-    const section = nodes.findIndex(node => node.type === 'heading' && node.depth === 2 && node.children.some(child => child.type === 'text' && ['Sources', '来源'].includes(child.value)));
-    if (section >= 0) {
-      const start = nodes[section]!.position!.start.offset!;
-      const next = nodes.slice(section + 1).find(node => node.type === 'heading' && node.depth <= 2)?.position!.start.offset ?? body.length;
-      body = `${body.slice(0, start).trimEnd()}\n${renderResearchSources(observedAt, sources)}\n${body.slice(next)}`;
-    } else body = `${body.trimEnd()}\n${renderResearchSources(observedAt, sources)}`;
-  }
-  return changed(repo, 'set-metadata', record, { ...metadata, title, ...(observedAt === undefined ? {} : { observedAt }), sources }, body, dryRun);
-  });
-}
-
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/compare-design-plans.md
 export function decideDesign(repo: Repository, selector: string, selected: string, targets: readonly string[], reason: string, dryRun = false): MutationReceipt {

@@ -37,4 +37,3 @@ export function indexWritingScopes(repo: Repository) {
 export function snapshotDigest(inputs: readonly [string, string][], memberships: readonly [string, readonly string[]][]): string {
   return objectDigest({ inputs: [...inputs].sort(([a], [b]) => a.localeCompare(b)), memberships: [...memberships].sort(([a], [b]) => a.localeCompare(b)) });
 }
-

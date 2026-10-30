@@ -370,7 +370,6 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 // @concord-implements docs/feature/web-workbench/architecture.md
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
-  requireBuiltAssets();
   const root = validateViewRoot(options.root);
   const host = options.host ?? '127.0.0.1';
   const requestedPort = options.port ?? 4317;
