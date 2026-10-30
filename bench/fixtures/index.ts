@@ -13,8 +13,8 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
   const cli = (...argv: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
   yield* git('init', '-q');
   yield* cli('init', '--test-root', 'test', '--source-root', 'src', '--yes');
-  for (const feature of ['local-sdlc', 'measured']) yield* cli('feature', 'create', feature, '--title', feature, '--no-pages');
-  yield* cli('use-case', 'create', 'read', '--title', 'Read', '--feature', 'docs/feature/local-sdlc/README.md');
+  for (const feature of ['local-sdlc', 'measured']) yield* cli('new', 'feature', feature, '--title', feature);
+  yield* cli('new', 'use-case', 'read', '--title', 'Read', '--feature', 'docs/feature/local-sdlc/README.md');
   const sources = name === 'web' && !smoke ? 1112 : 1;
   const pages = smoke ? 1 : name === 'web' ? 110 : name === 'writing-scale' ? 1000 : 1;
   const fixtureStats = yield* io('Populate fixture', () => {

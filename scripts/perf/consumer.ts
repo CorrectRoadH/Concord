@@ -56,9 +56,9 @@ export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: st
   yield* git(root, workDir, 'init', '-q');
   const concord = (...args: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', ...args], { cwd: root, outputDir: workDir });
   yield* concord('init', '--test-root', 'test', '--source-root', 'src', '--yes');
-  yield* concord('feature', 'create', 'scale', '--title', 'Scale', '--no-pages');
-  yield* concord('feature', 'create', 'local-sdlc', '--title', 'Local SDLC query target', '--no-pages');
-  yield* concord('use-case', 'create', 'scale-read', '--title', 'Scale read', '--feature', 'docs/feature/scale/README.md');
+  yield* concord('new', 'feature', 'scale', '--title', 'Scale');
+  yield* concord('new', 'feature', 'local-sdlc', '--title', 'Local SDLC query target');
+  yield* concord('new', 'use-case', 'scale-read', '--title', 'Scale read', '--feature', 'docs/feature/scale/README.md');
   yield* io('Generate scale sources', () => {
     for (const folder of ['src', 'test', 'docs/feature/scale/pages']) mkdirSync(join(root, folder), { recursive: true });
     for (let index = 0; index < spec.sources; index++) {
