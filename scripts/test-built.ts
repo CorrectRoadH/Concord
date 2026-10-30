@@ -6,6 +6,7 @@ import { availableParallelism, tmpdir } from 'node:os';
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
+import { discoverTests } from './test-discovery.js';
 import { TestCounts } from './test-reporter.js';
 import { packConcord } from './release-package.js';
 
@@ -43,10 +44,7 @@ const main = Effect.scoped(Effect.gen(function* () {
     return pair;
   }, catch: cause => new TestArgumentsInvalid({ detail: `--test-shard: ${String(cause)}` }) });
   const nodeOptions = Object.entries(values).filter(([name]) => name !== 'suite' && name !== 'test-shard').map(([name, value]) => `--${name}=${value}`);
-  const files = positionals.length > 0 ? positionals : [
-    ...(browserOnly ? [] : (yield* fs.readDirectory('test')).filter(name => name.endsWith('.test.ts')).sort().map(name => join('test', name))),
-    ...(values.suite === 'node' ? [] : (yield* fs.readDirectory('test/e2e')).filter(name => name.endsWith('.e2e.ts')).sort().map(name => join('test/e2e', name))),
-  ];
+  const files = positionals.length > 0 ? positionals : (yield* discoverTests()).filter(file => browserOnly ? file.endsWith('.e2e.ts') : values.suite === 'node' ? file.endsWith('.test.ts') : true);
   for (const file of files) {
     if ((!file.endsWith('.test.ts') && !file.endsWith('.e2e.ts')) || !(yield* fs.exists(file))) {
       return yield* new TestArgumentsInvalid({ detail: `Not a test file: ${file}` });

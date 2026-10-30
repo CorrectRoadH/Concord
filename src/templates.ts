@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
 import { readFileSync, readdirSync, type Dirent } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { resourcePath } from './installation.js';
 import { Schema } from 'effect';
 import { ConcordError } from './shared.js';
 import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from './template-pages.js';
@@ -27,8 +27,8 @@ const ManifestSchema = Schema.Struct({
 type Manifest = typeof ManifestSchema.Type;
 type ManifestEntry = Manifest['templates'][number];
 
-const templatesDirectory = fileURLToPath(new URL('../templates/', import.meta.url));
-const manifestPath = fileURLToPath(new URL('../templates/manifest.json', import.meta.url));
+const templatesDirectory = resourcePath('templates');
+const manifestPath = resourcePath('templates/manifest.json');
 
 function templateFailure(code: string, message: string, cause?: unknown): ConcordError {
   return new ConcordError(code, message, cause);
@@ -101,7 +101,7 @@ export function templateBody(name: string, title: string, pages: readonly Templa
     const entryPoints = pages.length === 0
       ? 'Add supporting pages when needed and link them here. Keep the problem, mental model, and scope in this README.'
       : pages.map(page => `- [${PAGE_DESCRIPTIONS[page].label}](${page === 'use-case' ? 'use-case/README.md' : `${page}.md`})`).join('\n');
-    return readFileSync(new URL(`../templates/${entry.path}`, import.meta.url), 'utf8')
+    return readFileSync(resourcePath(`templates/${entry.path}`), 'utf8')
       .replaceAll('{{entryPoints}}', () => entryPoints).replaceAll('{{title}}', () => title);
   } catch (cause) {
     throw templateFailure('TemplateUnreadable', `Cannot read packaged template ${entry.name}`, cause);

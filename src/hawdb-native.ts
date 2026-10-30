@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { nativeArtifactRoot, sourceInstallation, verifySourceNativeArtifact } from './base/installation/index.js';
 import { Effect, Schema } from 'effect';
 import { HAWDB_ABI, HAWDB_REVISION, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget } from './hawdb-native-contract.js';
 
@@ -82,7 +82,8 @@ function load(): NativeModule {
 }
 function loadArtifact(): NativeModule {
   const target = hawdbTarget();
-  const base = fileURLToPath(new URL(`../dist/native/${target}/`, import.meta.url));
+  if (sourceInstallation) verifySourceNativeArtifact();
+  const base = join(nativeArtifactRoot, target);
   const metadata = decodeNativeArtifact(JSON.parse(readFileSync(join(base, 'artifact.json'), 'utf8')));
   if (metadata.target !== target || metadata.sourceDigest.length !== 64 || metadata.cargoLockDigest.length !== 64 || metadata.binarySha256.length !== 64 || metadata.noticesSha256.length !== 64) {
     throw new HawdbFailure('HawdbIncompatible', 'native artifact identity is incomplete');

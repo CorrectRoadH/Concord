@@ -8,11 +8,12 @@ import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { HAWDB_ABI, HAWDB_REVISION, HAWDB_TARGETS, HAWDB_MACOS_DEPLOYMENT_TARGET, decodeNativeArtifact, hawdbTarget, type NativeArtifact } from '../src/hawdb-native-contract.js';
 
+import { nativeSourceDigest, nativeCacheRoot } from '../src/base/installation/native-artifact.js';
+
 const root = resolve(import.meta.dirname, '..');
 const crate = join(root, 'native/hawdb');
-const sources = ['native/hawdb/Cargo.toml', 'native/hawdb/build.rs', 'native/hawdb/rust-toolchain.toml', 'native/hawdb/src/lib.rs', 'native/hawdb/UPSTREAM.txt', 'native/hawdb/HAWDB-LICENSE.txt', 'src/hawdb-native.ts', 'src/hawdb-native-contract.ts', 'scripts/build-native.ts'];
 const hash = (data: Buffer | string): string => createHash('sha256').update(data).digest('hex');
-const digestSources = (): string => hash(sources.map(name => `${name}\0${hash(readFileSync(join(root, name)))}\n`).join(''));
+const digestSources = nativeSourceDigest;
 const shaFile = (path: string): string => hash(readFileSync(path));
 const CargoMetadataSchema = Schema.Struct({ packages: Schema.Array(Schema.Struct({
   name: Schema.String, version: Schema.String, license: Schema.NullOr(Schema.String),
@@ -205,7 +206,7 @@ const program = Effect.gen(function*() {
     return;
   }
   const target = yield* Effect.sync(hawdbTarget);
-  const cache = join(process.env.XDG_CACHE_HOME || join(homedir(), '.cache'), 'concord/native', `${digestSources()}-${shaFile(join(crate, 'Cargo.lock'))}`);
+  const cache = nativeCacheRoot();
   if (args.reuse && !args.testHooks && !args.requirePortable && (yield* reuseNative(cache, output, target))) return;
   if (target === 'darwin-arm64' && process.env.MACOSX_DEPLOYMENT_TARGET !== HAWDB_MACOS_DEPLOYMENT_TARGET) return yield* Effect.fail(new Error(`MACOSX_DEPLOYMENT_TARGET=${HAWDB_MACOS_DEPLOYMENT_TARGET} required`));
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;

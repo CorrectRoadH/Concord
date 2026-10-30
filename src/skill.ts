@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
-import { fileURLToPath } from 'node:url';
+import { resourcePath } from './installation.js';
 
 const TOPICS = ['init', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback'] as const;
 const TopicSchema = Schema.Literals(TOPICS);
@@ -59,10 +59,9 @@ function parseRequest(input: unknown): Topic | 'main' | 'all' {
   }
 }
 
-const skillPath = (topic: Topic | 'main'): string => fileURLToPath(new URL(
-  topic === 'main' ? '../skills/concord/SKILL.md' : `../skills/concord/references/${topic}.md`,
-  import.meta.url,
-));
+const skillPath = (topic: Topic | 'main'): string => resourcePath(
+  topic === 'main' ? 'skills/concord/SKILL.md' : `skills/concord/references/${topic}.md`,
+);
 
 const readTopic = Effect.fn('readSkillTopic')(function*(topic: Topic | 'main') {
   const fs = yield* FileSystem.FileSystem;
