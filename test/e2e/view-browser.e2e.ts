@@ -2,7 +2,7 @@ import { Deferred, Effect } from 'effect';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { act } from './journey.js';
@@ -11,9 +11,9 @@ import { addPage } from "../../src/domain/documents/index.js";
 import { createDocument } from "../../src/app/index.js";
 import { LocalRepository } from "../support/repository.js";
 import { initialize } from "../../src/app/index.js";
-import { type ViewServerHandle } from "../../src/entry/http/index.js";
+import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
-import { parseWorkspaceProjection, pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
+import { parseWorkspaceProjection, pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('browser opens and refreshes a deep link without credentials and retries initial load failures', async ({ page }) => {

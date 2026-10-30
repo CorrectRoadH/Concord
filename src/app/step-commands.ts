@@ -3,7 +3,7 @@ import { buildTrace } from "../domain/trace/index.js";
 import { stepGroups } from "./trace-queries.js";
 import { formatStepSource, planStepRename } from "./step-rewrite.js";
 import { ConcordError, inRepositorySnapshot, type Repository } from "../model/index.js";
-import { type LocalRepository } from "../base/workspace/index.js";
+import type { LocalRepository } from "../base/workspace/index.js";
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#步骤分组输出

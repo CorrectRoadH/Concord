@@ -4,8 +4,8 @@
 
 import { Schema } from "effect";
 import { ConcordError, decode } from "./shared.js";
-import { type LanguageServer } from "./language-server-config.js";
-import { type CodeDeclaration } from "./code-declaration.js";
+import type { LanguageServer } from "./language-server-config.js";
+import type { CodeDeclaration } from "./code-declaration.js";
 
 const nat = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export const PositionSchema = Schema.Struct({ line: nat, character: nat });

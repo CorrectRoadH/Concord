@@ -1,4 +1,4 @@
-import { type GitEntry, type GitStatus, type GitArea, type GitDiff } from "../model/index.js";
+import type { GitEntry, GitStatus, GitArea, GitDiff } from "../model/index.js";
 import { lstatSync, readFileSync } from "node:fs";
 import { join, resolve, sep } from "node:path";
 import { Effect, Schema } from "effect";

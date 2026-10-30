@@ -1,3 +1,4 @@
+import { installationRootForBin } from '../../src/base/installation/index.js';
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -31,7 +32,7 @@ export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Arti
   if (!(yield* io('Find artifact', () => existsSync(entry)))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
   const git = (...args: string[]) => Effect.tryPromise({ try: () => new Promise<string>((accept, reject) => execFile('git', ['-C', dir, ...args], { encoding: 'utf8' }, (error, stdout) => error ? reject(error) : accept(stdout.trim()))), catch: cause => new PerfError({ message: `Identify artifact: ${String(cause)}` }) });
   const commit = yield* git('rev-parse', 'HEAD'), dirty = (yield* git('status', '--porcelain')) !== '';
-  const digest = yield* io('Digest artifact', () => digestDist(join(dir, 'dist')));
+  const digest = yield* io('Digest artifact', () => digestDist(join(installedEntry === undefined ? dir : installationRootForBin(installedEntry), 'dist')));
   return { label, dir, entry, commit, dirty, digest } satisfies Artifact;
 });
 

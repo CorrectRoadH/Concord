@@ -1,5 +1,5 @@
 import { analysisView } from "./analysis-view.js";
-import { type AnalysisView } from "../model/index.js";
+import type { AnalysisView } from "../model/index.js";
 import { findDocument } from "../domain/documents/index.js";
 import { ConcordError, type DocumentRecord, type Repository } from "../model/index.js";
 import { CONSTITUTION_PATH, showConstitution } from "../domain/constitution/index.js";

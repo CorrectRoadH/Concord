@@ -7,8 +7,8 @@ import { createFileSystem } from "typescript/fs";
 import type { API, RawCompilerOptions } from "typescript/sync";
 import { nativeTypeScript, typescriptPackageVersion, typescriptRequest, withTypeScriptFiles } from "../../base/process/index.js";
 import { ConcordError, type AnnotatedCase, type Repository } from "../../model/index.js";
-import { type CodeDeclaration } from "../../model/index.js";
-import { type AnalysisValue, type DependencyObservation } from "../../model/index.js";
+import type { CodeDeclaration } from "../../model/index.js";
+import type { AnalysisValue, DependencyObservation } from "../../model/index.js";
 import { analysisBudgets } from "../../model/index.js";
 
 export const JS_SOURCE = /\.(?:[cm]?[jt]sx?)$/u;

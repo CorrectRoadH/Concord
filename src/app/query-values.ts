@@ -9,7 +9,7 @@ import { readRepositoryFileSync } from "../base/workspace/index.js";
 import { decodeDocumentSource } from "../domain/documents/index.js";
 import { parseConstitution } from "../domain/constitution/index.js";
 
-import { type QueryValue } from "../model/index.js";
+import type { QueryValue } from "../model/index.js";
 
 /** Owner bodies are read through the repository's single standalone path guard. */
 export function readQueryBody(root: string, path: string): string {

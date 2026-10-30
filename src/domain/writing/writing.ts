@@ -1,4 +1,4 @@
-import { type WritingFinding, type WritingReport } from "../../model/index.js";
+import type { WritingFinding, WritingReport } from "../../model/index.js";
 import { fromMarkdown } from "../../model/index.js";
 import type { Nodes } from "mdast";
 import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.js";
@@ -7,7 +7,7 @@ import { composeControlled, WRITING_PARSER_VERSION, writingBudget, type PolicySo
 import { LocalRepository } from "../../base/workspace/index.js";
 import { canonicalPath } from "../../model/index.js";
 import { readWritingPolicy } from "./writing-policy.js";
-import { type BannedTerm, type WritingPolicy } from "../../model/index.js";
+import type { BannedTerm, WritingPolicy } from "../../model/index.js";
 import { analyzeCatalogs, effectiveConcepts, spellingKey, spellingPositions } from "../concepts/index.js";
 import { applies, discovered, scopeOf, snapshotDigest, under } from "../../model/index.js";
 import { extractSteps } from "../documents/index.js";

@@ -1,18 +1,3 @@
-export { DESIGN_DECISION_TEMPLATE } from './repo-docs-design-template.js';
-export { DESIGN_PROJECTION_END } from './repo-docs-design-template.js';
-export { DESIGN_PROJECTION_START } from './repo-docs-design-template.js';
-export type { DesignTemplateBundle } from './repo-docs-design-template.js';
-export { extractDesignProjection } from './repo-docs-design-template.js';
-export { FEATURE_DESIGN_TEMPLATE } from './repo-docs-design-template.js';
-export type { GeneratedDesignFile } from './repo-docs-design-template.js';
-export type { GeneratedDesignPackage } from './repo-docs-design-template.js';
-export { generatedDirectoryManifest } from './repo-docs-design-template.js';
-export { generateDesignPackage } from './repo-docs-design-template.js';
-export { loadDesignTemplates } from './repo-docs-design-template.js';
-export { removeDesignStage } from './repo-docs-design-template.js';
-export { renderDesignProjection } from './repo-docs-design-template.js';
-export { replaceDesignProjection } from './repo-docs-design-template.js';
-export { stageGeneratedDesign } from './repo-docs-design-template.js';
 export { decideDesign } from './lifecycle.js';
 export { deferDesign } from './lifecycle.js';
 export { checkDesign } from './lifecycle.js';

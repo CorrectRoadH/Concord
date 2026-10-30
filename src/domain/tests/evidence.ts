@@ -1,11 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#执行管线
 import { safeRunnerEnvironment } from "../../base/process/index.js";
-import { type CommandEvidence, type NativeEvidence, type Evidence } from "../../model/index.js";
+import type { CommandEvidence, NativeEvidence, Evidence } from "../../model/index.js";
 import { Effect } from "effect";
 import { ConcordError, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type Repository, type shared_Runner as Runner } from "../../model/index.js";
 import { hasConfirmedOwnedGroupCleanup, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.js";
-import { type LocalRepository } from "../../base/workspace/index.js";
+import type { LocalRepository } from "../../base/workspace/index.js";
 import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.js";
 import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.js";
 import { adapterFor, executeNativeCase } from "./test-adapters.js";

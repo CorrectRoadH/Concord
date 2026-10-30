@@ -6,6 +6,7 @@ export default {
     "web",
     "scripts"
   ],
+  "testRoots": ["test"],
   "runner": {
     "kind": "command",
     "argv": [
@@ -18,7 +19,7 @@ export default {
       "{file}"
     ],
     "sourceFiles": [
-      "test/support.ts",
+      "test/support",
       "test/e2e/fixtures.ts",
       "test/e2e/engine.ts",
       "test/e2e/local-browser.ts",

@@ -46,12 +46,12 @@ function collectFiles(root: string, relative: string, accept: (name: string, rel
 }
 
 function requireNativeArtifacts(): void {
-  if (sourceInstallation) verifySourceNativeArtifact();
   for (const name of ['artifact.json', 'hawdb.node', 'THIRD-PARTY-NOTICES.txt']) {
     if (lstatSync(join(nativeArtifactRoot, hawdbTarget(), name), { throwIfNoEntry: false }) === undefined) {
       throw new ConcordError('HawdbUnavailable', 'Required native cache artifact is missing; run pnpm exec vp run build:native.');
     }
   }
+  if (sourceInstallation) verifySourceNativeArtifact();
 }
 
 function sourceIdentity(): InstallationFiles {
@@ -82,3 +82,4 @@ export function workspaceInstallationIdentity(): string {
 }
 export * from './hawdb-native-contract.js';
 export { nativeSourceDigest, nativeCacheRoot, nativeSourceFiles, nativeLockDigest } from './native-artifact.js';
+export { installationResources, installationRootForBin } from './resources.js';

@@ -1,4 +1,4 @@
-import { type Item } from "../../model/index.js";
+import type { Item } from "../../model/index.js";
 
 
 

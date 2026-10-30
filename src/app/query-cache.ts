@@ -9,7 +9,7 @@ import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "
 import { HawdbFailure, openHawdb } from "../base/cache/index.js";
 import { hydrateQueryValue } from "./query-values.js";
 import { TraceGapsValue, TraceShowValue, ReviewRenderValue, queryValueSchema } from "../model/index.js";
-import { type QueryScanMessage } from "../model/index.js";
+import type { QueryScanMessage } from "../model/index.js";
 import { ConcordError, digest, failure } from "../model/index.js";
 import { queryInstallationIdentity, workerEntryArgv } from "../base/installation/index.js";
 import { requestCacheMaintenance } from "../base/cache/index.js";

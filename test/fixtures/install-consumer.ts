@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { Effect, Schema } from 'effect';
-import { installConcord } from '../installed-package.js';
+import { installConcord } from '../support/installed-package.js';
 import { PackageArtifact } from '../../scripts/release-package.js';
 
 Effect.runSync(Effect.sync(() => {

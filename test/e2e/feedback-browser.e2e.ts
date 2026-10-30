@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
@@ -11,10 +11,10 @@ import { loadDocuments } from "../../src/domain/documents/index.js";
 import { createDocument } from "../../src/app/index.js";
 import { renderDocument } from "../../src/model/index.js";
 import { mergeFeedbackCache } from "../../src/base/cache/index.js";
-import { type ViewServerHandle } from "../../src/entry/http/index.js";
+import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 import { type FeedbackSource } from "../../src/model/index.js";
-import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support.js';
+import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('feedback browser separates remote observations from local editing and protects connection drafts', async ({ page }) => {

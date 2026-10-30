@@ -1,6 +1,6 @@
-import { type MemoryMeta } from "./shared.js";
+import type { MemoryMeta } from "./shared.js";
 import { MemoryContentInvalid } from "./repo-memory-errors.js";
-import { type MemoryDocument } from "./repo-memory-schema.js";
+import type { MemoryDocument } from "./repo-memory-schema.js";
 import { decodeUncachedDocumentSource as decodeDocumentSource } from "./document-source.js";
 import { renderDocument } from "./document-render.js";
 

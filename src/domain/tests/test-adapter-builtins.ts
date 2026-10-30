@@ -6,7 +6,7 @@ import { dirname, join, relative } from "node:path";
 
 import { Schema } from "effect";
 import { ConcordError, Text } from "../../model/index.js";
-import { type test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.js";
+import type { test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.js";
 import { type AdapterContext, type AdapterPlan, type AdapterReport, type Captured, type Capabilities, type NativeCase, type NativeManifest, test_adapter_protocol_PlanSchema as PlanSchema, protocolDecode, protocolJson } from "../../model/index.js";
 
 const capabilities = (changes: Partial<Capabilities> = {}): Capabilities => ({ realCollection: true, leaf: true, parameterGroups: false, exactSelection: true, perItemReport: true, range: false, rangeTrivia: false, tags: false, skipVisibility: true, ...changes });

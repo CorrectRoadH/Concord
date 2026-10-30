@@ -5,7 +5,7 @@ import { startupData } from "../../app/startup/index.js";
 import { enableCompileCache } from "node:module";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type StartupData } from "../../model/index.js";
+import type { StartupData } from "../../model/index.js";
 
 // Enable before any dynamic application import. Node treats disabled or
 // unwritable caches as an optimization failure, without changing CLI results.

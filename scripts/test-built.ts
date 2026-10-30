@@ -2,7 +2,8 @@ import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { basename, join, resolve } from 'node:path';
-import { availableParallelism, tmpdir } from 'node:os';
+import { availableParallelism } from 'node:os';
+import { tmpdir } from './test-temporary.js';
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
@@ -34,7 +35,7 @@ const main = Effect.scoped(Effect.gen(function* () {
     } }),
     catch: cause => new TestArgumentsInvalid({ detail: String(cause) }),
   });
-  if (!['all', 'node', 'e2e', 'agent'].includes(values.suite)) return yield* new TestArgumentsInvalid({ detail: `Unknown suite: ${values.suite}` });
+  if (!['all', 'node', 'e2e', 'agent', 'source', 'packed'].includes(values.suite)) return yield* new TestArgumentsInvalid({ detail: `Unknown suite: ${values.suite}` });
   const browserOnly = values.suite === 'e2e' || values.suite === 'agent';
   const shard = yield* Effect.try({ try: () => {
     if (values['test-shard'] === undefined) return undefined;
@@ -44,7 +45,10 @@ const main = Effect.scoped(Effect.gen(function* () {
     return pair;
   }, catch: cause => new TestArgumentsInvalid({ detail: `--test-shard: ${String(cause)}` }) });
   const nodeOptions = Object.entries(values).filter(([name]) => name !== 'suite' && name !== 'test-shard').map(([name, value]) => `--${name}=${value}`);
-  const files = positionals.length > 0 ? positionals : (yield* discoverTests()).filter(file => browserOnly ? file.endsWith('.e2e.ts') : values.suite === 'node' ? file.endsWith('.test.ts') : true);
+  const discovered = yield* discoverTests();
+  const selected = positionals.length > 0 ? [...new Set(positionals)].sort() : discovered;
+  const sourceFile = (file: string) => /^test\/(?:model|domain)\//u.test(file) || file === 'test/architecture.test.ts';
+  const files = selected.filter(file => values.suite === 'source' ? sourceFile(file) : values.suite === 'packed' ? !sourceFile(file) : browserOnly ? file.endsWith('.e2e.ts') : values.suite === 'node' ? file.endsWith('.test.ts') : true);
   for (const file of files) {
     if ((!file.endsWith('.test.ts') && !file.endsWith('.e2e.ts')) || !(yield* fs.exists(file))) {
       return yield* new TestArgumentsInvalid({ detail: `Not a test file: ${file}` });
@@ -53,25 +57,31 @@ const main = Effect.scoped(Effect.gen(function* () {
       return yield* new TestArgumentsInvalid({ detail: `File does not belong to ${values.suite}: ${file}` });
     }
   }
-  if (files.length === 0) return yield* new TestArgumentsInvalid({ detail: 'No test files selected' });
+  if (files.length === 0) {
+    if (values.suite === 'source' || values.suite === 'packed') return;
+    return yield* new TestArgumentsInvalid({ detail: 'No test files selected' });
+  }
   const scratch = yield* Effect.acquireRelease(
     fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-test-run-' }),
     path => fs.remove(path, { recursive: true, force: true }).pipe(Effect.orDie),
   );
   const started = performance.now();
-  const artifact = yield* Effect.sync(() => packConcord(scratch));
+  const needsPackage = files.some(file => !sourceFile(file));
   const manifest = join(scratch, 'artifact.json');
-  yield* fs.writeFileString(manifest, JSON.stringify(artifact));
+  if (needsPackage) {
+    const artifact = yield* Effect.sync(() => packConcord(scratch));
+    yield* fs.writeFileString(manifest, JSON.stringify(artifact));
+  }
   yield* fs.makeDirectory('.test-results', { recursive: true });
   const output = resolve(yield* fs.makeTempDirectory({ directory: '.test-results', prefix: 'run-' }));
-  const env = { ...process.env, CONCORD_TEST_ARTIFACT: manifest, CONCORD_TEST_INSTALLS: join(scratch, 'installs'),
+  const env = { ...process.env, ...(needsPackage ? { CONCORD_TEST_ARTIFACT: manifest } : {}), CONCORD_TEST_INSTALLS: join(scratch, 'installs'),
     CONCORD_TEST_FAILURES: join(output, 'node-failures.jsonl'),
     CONCORD_TEST_TIMINGS: process.env.CONCORD_TEST_TIMINGS ?? join(output, 'node-timings.jsonl'),
     CONCORD_E2E_OUTPUT: join(output, 'e2e'), E2E_TELEMETRY_DISABLED: '1',
     CONCORD_E2E_AGENT: values.suite === 'agent' ? '1' : '0' };
-  yield* Effect.sync(() => console.error(`# Packed test artifact in ${(performance.now() - started).toFixed(0)}ms; Node concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}`));
-  const nodeFiles = [...new Set(files.filter(file => file.endsWith('.test.ts')).map(file => resolve(file)))].sort()
-    .filter((_file, index) => shard === undefined || index % shard[1] === shard[0] - 1);
+  yield* Effect.sync(() => console.error(`# ${needsPackage ? "Packed test artifact" : "Source tests prepared"} in ${(performance.now() - started).toFixed(0)}ms; Node concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}`));
+  const shardFiles = new Set(discovered.filter(file => file.endsWith('.test.ts')).filter((_file, index) => shard === undefined || index % shard[1] === shard[0] - 1));
+  const nodeFiles = [...new Set(files.filter(file => file.endsWith('.test.ts') && (shard === undefined || shardFiles.has(file))).map(file => resolve(file)))].sort();
   const browserFiles = files.filter(file => file.endsWith('.e2e.ts'));
   let failed = false;
   if (nodeFiles.length) {
@@ -82,6 +92,7 @@ const main = Effect.scoped(Effect.gen(function* () {
       const id = createHash('sha256').update(file).digest('hex');
       const log = join(logs, `${basename(file)}-${id}.log`), summary = join(logs, `${id}.json`);
       const fileStarted = performance.now();
+      const layer = file.includes('/test/model/') ? 'model' : file.includes('/test/domain/') ? 'domain' : file.includes('/test/cli/') ? 'cli' : file.includes('/test/process/') ? 'process' : 'architecture';
       const code = yield* Effect.scoped(Effect.gen(function*() {
         const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [
           '--import', 'tsx', '--test', '--test-isolation=none', '--test-concurrency=1', '--test-timeout=300000',
@@ -97,13 +108,17 @@ const main = Effect.scoped(Effect.gen(function* () {
         try: () => Schema.decodeUnknownSync(Schema.fromJsonString(TestCounts), { onExcessProperty: 'error' })(readFileSync(summary, 'utf8')),
         catch: cause => new TestArgumentsInvalid({ detail: `Missing or invalid summary for ${file}: ${String(cause)}` }),
       }).pipe(Effect.catch(cause => Effect.sync(() => { console.error(cause.detail); return undefined; })));
-      return { code, counts };
+      return { code, counts, layer, startedAtMs: fileStarted, duration_ms: performance.now() - fileStarted };
     })), { concurrency });
     const counts = { tests: 0, passed: 0, failed: 0, cancelled: 0, skipped: 0, todo: 0, topLevel: 0, suites: 0 };
     for (const result of results) if (result.counts !== undefined) {
       for (const key of Object.keys(counts) as (keyof typeof counts)[]) counts[key] += result.counts[key];
     }
     failed ||= results.some(result => result.code !== 0 || result.counts === undefined);
+    for (const layer of ['architecture', 'model', 'domain', 'cli', 'process']) {
+      const layerResults = results.filter(result => result.layer === layer);
+      if (layerResults.length) yield* Effect.sync(() => console.error(`# Test layer ${layer}: files=${layerResults.length}; wall=${((Math.max(...layerResults.map(result => result.startedAtMs + result.duration_ms)) - Math.min(...layerResults.map(result => result.startedAtMs))) / 1000).toFixed(3)}s; summed file time=${(layerResults.reduce((total, result) => total + result.duration_ms, 0) / 1000).toFixed(3)}s`));
+    }
     const timing = { success: !failed, counts, duration_ms: performance.now() - nodeStarted, scope: 'run' };
     yield* Effect.sync(() => {
       appendFileSync(env.CONCORD_TEST_TIMINGS, `${JSON.stringify(timing)}\n`);

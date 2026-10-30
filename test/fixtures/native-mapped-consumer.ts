@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { existsSync, writeFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { Effect, Schema } from 'effect';
 import { type HawdbDatabase } from "../../src/base/cache/index.js";
-import { pollUntil } from '../support.js';
+import { pollUntil } from '../support/support.js';
 
 await Effect.runPromise(Effect.tryPromise(async () => {
   const [loader, ready, release] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.String, Schema.String]))(process.argv.slice(2));
-  const native = await import(pathToFileURL(loader).href) as typeof import("../../src/base/cache/hawdb-native.js");
-  let database: HawdbDatabase | undefined = native.createMemoryHawdb();
+  const native = createRequire(import.meta.url)(loader) as { CacheBridge: { memory(): HawdbDatabase } };
+  let database: HawdbDatabase | undefined = native.CacheBridge.memory();
   database.put('document_parse', [{ key: 'mapped', payload: 'native image remains loaded' }]);
   database.close();
   writeFileSync(ready, 'ready');

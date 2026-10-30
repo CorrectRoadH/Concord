@@ -5,7 +5,7 @@ import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService, OwnedProcess, t
 import { ConcordError, failure } from "../model/index.js";
 import { LocalRepository } from "../base/workspace/index.js";
 import { buildTrace, requireValidTrace, selectCase } from "../domain/trace/index.js";
-import { type ViewJob, type ViewJobState } from "../model/index.js";
+import type { ViewJob, ViewJobState } from "../model/index.js";
 
 
 interface JobRecord {

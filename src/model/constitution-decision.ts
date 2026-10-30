@@ -1,5 +1,5 @@
 import { renderDocument } from "./document-render.js";
-import { type Change, type MemoryMeta } from "./shared.js";
+import type { Change, MemoryMeta } from "./shared.js";
 
 
 // @concord-begin

@@ -1,5 +1,5 @@
 import { openWriteRepository, openReadRepository } from "../../base/workspace/index.js";
-import { type Publication } from "../../base/publication/index.js";
+import type { Publication } from "../../base/publication/index.js";
 import { Effect } from "effect";
 import { readFeedbackCache, mergeFeedbackCache } from "../../base/cache/index.js";
 import { FeedbackConnectionSchema, FeedbackSourceSchema, RemoteFeedbackSchema, feedbackIdentity, type feedback_schema_FeedbackConnection as FeedbackConnection, type FeedbackItem, type FeedbackSource, type RemoteFeedback } from "../../model/index.js";

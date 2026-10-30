@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/documentation-quality/policy.md#受控写作规则
 import { Predicate } from "effect";
 import { ConcordError } from "./shared.js";
-import { type Controlled, type WritingPolicy } from "./writing-schema.js";
+import type { Controlled, WritingPolicy } from "./writing-schema.js";
 
 export const WRITING_PARSER_VERSION = 'controlled-v3.2/legacy-v3/markdown-v1/concepts-md-v1';
 export interface PolicySource { path: string; pointer: string }

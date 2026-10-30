@@ -3,7 +3,7 @@
 import { objectDigest } from "../../model/index.js";
 import type { Nodes, Root } from "mdast";
 import { fromMarkdown } from "../../model/index.js";
-import { type WritingFinding } from "../../model/index.js";
+import type { WritingFinding } from "../../model/index.js";
 import { normalizeWriting, writingBudget, type EffectiveControlled } from "../../model/index.js";
 
 interface Unit { char: string; start: number; end: number; code?: boolean }

@@ -1,4 +1,4 @@
-import { type Publication } from "../base/publication/index.js";
+import type { Publication } from "../base/publication/index.js";
 import { openReadRepository, openWriteRepository } from "../base/workspace/index.js";
 import { checkCurrentProject } from "./check-current.js";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
@@ -37,7 +37,7 @@ import { showWriting, setWriting, writingIndex } from "../domain/writing/index.j
 import { checkWriting } from "../domain/writing/index.js";
 import { checkProject } from "./project-check.js";
 import { indexConcepts, setConcepts, showConcepts } from "../domain/concepts/index.js";
-import { type RequestTiming } from "./request-timing.js";
+import type { RequestTiming } from "./request-timing.js";
 
 const sync = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> => Effect.try({
   try: evaluate,

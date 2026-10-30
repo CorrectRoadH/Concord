@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { root } from "./cli-base.js";
 import { runCli } from "./main.js";
-import { type StartupData } from "../../model/index.js";
+import type { StartupData } from "../../model/index.js";
 
 const loaders = {
   new: () => import("./cli-command-documents.js").then(m => m.newDocument),

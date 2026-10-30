@@ -1,13 +1,13 @@
 import { Schema } from "effect";
 import { FeedbackFilterFields } from "./feedback-filter.js";
 import { TEMPLATE_PAGES } from "./template-pages.js";
-import { type CodeDeclaration } from "./code-declaration.js";
-import { type Evidence } from "./evidence-values.js";
-import { type GitDiff, type GitStatus } from "./git-values.js";
-import { type AnnotatedCase, type DocumentKind, type DocumentMeta, type DocumentRecord, type Finding, type ProjectConfig, type Runner } from "./shared.js";
+import type { CodeDeclaration } from "./code-declaration.js";
+import type { Evidence } from "./evidence-values.js";
+import type { GitDiff, GitStatus } from "./git-values.js";
+import type { AnnotatedCase, DocumentKind, DocumentMeta, DocumentRecord, Finding, ProjectConfig, Runner } from "./shared.js";
 import { MEMORY_RELATION_KINDS, ProjectSchema } from "./shared.js";
-import { type TraceEdge } from "./trace-edge.js";
-import { type FeedbackAvailability, type FeedbackItem, type FeedbackTriage, type RemoteFeedback } from "./feedback-schema.js";
+import type { TraceEdge } from "./trace-edge.js";
+import type { FeedbackAvailability, FeedbackItem, FeedbackTriage, RemoteFeedback } from "./feedback-schema.js";
 import { WritingPolicySchema } from "./writing-schema.js";
 
 // @concord-begin

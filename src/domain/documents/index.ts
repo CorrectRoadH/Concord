@@ -1,10 +1,3 @@
-export { runResearchAt } from './repo-docs-research-domain.js';
-export type { NewPublication } from './repo-docs-research-publication.js';
-export { publishNewDirectory } from './repo-docs-research-publication.js';
-export { publishNewFile } from './repo-docs-research-publication.js';
-export { readResearchFile } from './repo-docs-research-publication.js';
-export { readResearchFileIfPresent } from './repo-docs-research-publication.js';
-export { sha256 } from './repo-docs-research-publication.js';
 export { assertSameLeafSelection } from './repo-document-owners.js';
 export type { LeafOwnerKind } from './repo-document-owners.js';
 export { leafOwners } from './repo-document-owners.js';

@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { DateTime, Effect, Schema } from "effect";
 import { fetchFeedback, type FeedbackFetch, type FeedbackTransport } from "./feedback-providers.js";
-import { type feedback_schema_FeedbackConnection as FeedbackConnection } from "../../model/index.js";
+import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../../model/index.js";
 import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService } from "../../base/process/index.js";
 import { ConcordError } from "../../model/index.js";
 

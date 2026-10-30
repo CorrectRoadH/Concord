@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
 import { LocalRepository } from "../support/repository.js";
 import { initialize } from "../../src/app/index.js";
-import { type ViewServerHandle } from "../../src/entry/http/index.js";
+import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 import { defaultWritingPolicy } from "../../src/model/index.js";
 import { showWriting, setWriting } from "../../src/domain/writing/index.js";
-import { waitForWorkspaceProjection } from '../support.js';
+import { waitForWorkspaceProjection } from '../support/support.js';
 
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 test('C24: browser preserves invalid controlled drafts across an in-flight save and checks the saved policy', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {

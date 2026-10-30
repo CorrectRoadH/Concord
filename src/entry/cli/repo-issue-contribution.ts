@@ -1,9 +1,9 @@
 import { planRemoteIssue, readRemoteIssueBody, executeRemoteIssue } from "../../app/index.js";
 
-import { type IssueCommandRequirements, type IssueCommandRunner } from "../../app/index.js";
+import type { IssueCommandRequirements, IssueCommandRunner } from "../../app/index.js";
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { type TerminalDeliverySink } from "./delivery.js";
+import type { TerminalDeliverySink } from "./delivery.js";
 
 import { ConcordError, type IssueError } from "../../model/index.js";
 

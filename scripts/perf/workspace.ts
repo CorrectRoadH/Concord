@@ -1,5 +1,5 @@
 import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../test-temporary.js';
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
 import { fixtureConsumer } from '../../bench/fixtures/index.js';

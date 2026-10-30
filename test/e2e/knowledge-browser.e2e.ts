@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { act } from './journey.js';
@@ -9,9 +9,9 @@ import { Effect, Schema } from 'effect';
 import { expect } from '@playwright/test';
 import { LocalRepository } from "../support/repository.js";
 import { initialize } from "../../src/app/index.js";
-import { type ViewServerHandle } from "../../src/entry/http/index.js";
+import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
-import { pollUntil, waitForWorkspaceProjection } from '../support.js';
+import { pollUntil, waitForWorkspaceProjection } from '../support/support.js';
 
 const ApiResult = Schema.Struct({ ok: Schema.Boolean, value: Schema.optional(Schema.Unknown), error: Schema.optional(Schema.String) });
 

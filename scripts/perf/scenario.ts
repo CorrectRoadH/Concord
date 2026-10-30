@@ -1,3 +1,4 @@
+import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
 import { existsSync, readdirSync, readFileSync, lstatSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -140,7 +141,7 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
 
     }, catch: cause => new PerfError({ message: `Request ${scenario.id}: ${String(cause)}` }) });
   } else {
-    const argv = 'scan' in run ? [process.execPath, join(dirname(context.artifact.entry), 'query-scan-worker.js'), context.consumer.root, JSON.stringify(run.scan)]
+    const argv = 'scan' in run ? [process.execPath, (existsSync(installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker')) ? installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker') : join(dirname(context.artifact.entry), 'query-scan-worker.js')), context.consumer.root, JSON.stringify(run.scan)]
       : cliCommand(context.artifact, context.consumer.root, runArguments(run));
     const count = 'argv' in run ? run.concurrency : 1;
     const results = yield* Effect.all(Array.from({ length: count }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,

@@ -11,7 +11,7 @@ import { readDocumentSelector } from "../documents/index.js";
 import { closeIssue } from "../issues/index.js";
 import { executeCommand, requireRunner, withRunner } from "./evidence.js";
 import { safeRunnerEnvironment } from "../../base/process/index.js";
-import { type CommandEvidence } from "../../model/index.js";
+import type { CommandEvidence } from "../../model/index.js";
 import { OwnedProcess, runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.js";
 import { LocalRepository, git } from "../../base/workspace/index.js";
 import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema } from "../../model/index.js";

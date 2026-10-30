@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
@@ -10,7 +10,7 @@ import { createDocument } from "../../src/app/index.js";
 import { LocalRepository } from "../support/repository.js";
 import { initialize } from "../../src/app/index.js";
 import { startViewServer } from './server.js';
-import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
+import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('URL navigation saves the latest draft and restores nested drawers without local selection state', async ({ page }) => {

@@ -1,7 +1,7 @@
 import { CodeDeclarationSchema, type CodeDeclaration } from "../../model/index.js";
 import { createHash } from "node:crypto";
 import { Schema } from "effect";
-import { type language_server_config_LanguageServer as LanguageServer } from "../../model/index.js";
+import type { language_server_config_LanguageServer as LanguageServer } from "../../model/index.js";
 import { cacheDatabasePath } from "../../base/cache/index.js";
 import { readCodePayloads, writeCodePayloads } from "../../base/cache/index.js";
 import { persistNotedConfig } from "../../base/workspace/index.js";

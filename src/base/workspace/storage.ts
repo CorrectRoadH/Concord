@@ -1,5 +1,5 @@
-import { type PublicationValidation } from "../publication/index.js";
-import { type StepRename } from "../../model/index.js";
+import type { PublicationValidation } from "../publication/index.js";
+import type { StepRename } from "../../model/index.js";
 
 import { canonicalPath } from "../../model/index.js";
 import { execFileSync } from "node:child_process";

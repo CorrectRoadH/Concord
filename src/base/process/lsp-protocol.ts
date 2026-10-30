@@ -1,6 +1,6 @@
 import { Effect, Predicate, Schema } from "effect";
 import { ConcordError, decode } from "../../model/index.js";
-import { type AnalysisBudgets } from "../../model/index.js";
+import type { AnalysisBudgets } from "../../model/index.js";
 
 
 export const id = Schema.Union([Schema.Int, Schema.String]);

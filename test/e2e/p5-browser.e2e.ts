@@ -1,8 +1,9 @@
-import { packConcord, installConcord } from '../installed-package.js';
+import { packageBin } from '../../scripts/package-location.js';
+import { packConcord, installConcord } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../support/temporary.js';
 import { dirname, join, resolve } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
@@ -10,7 +11,7 @@ import { Effect, Schema } from 'effect';
 import { createDocument } from "../../src/app/index.js";
 import { LocalRepository } from "../support/repository.js";
 import { initialize } from "../../src/app/index.js";
-import { readProjectConfig, writeProjectConfig } from '../support.js';
+import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 const inline = `let label: import('p5').default.Element;
 p.setup = () => { p.createCanvas(240, 100); label = p.createSpan('0'); label.id('ticks').style('display', 'inline-block').style('width', '5ch'); p.createButton('重新绘制').class('restart').mousePressed(() => p.redraw()); p.createButton('关闭循环').mousePressed(() => p.noLoop()); };
@@ -66,7 +67,7 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     const projectSketch = '# Project sketch\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n';
     write('docs/sketch.md', projectSketch);
     const before = readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8');
-    const cli = join(tool, 'node_modules/concord-sdlc/dist/entry.js');
+    const cli = packageBin(join(tool, 'node_modules/concord-sdlc'));
     server = spawn(process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
     exited = new Promise(done => server!.once('exit', () => done()));
     let output = ''; let errors = '';

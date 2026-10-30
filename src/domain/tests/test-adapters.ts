@@ -9,7 +9,7 @@ import { hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedPr
 import { observation, observationSchema, type Observation } from "../../model/index.js";
 import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.js";
 import { ConcordError, canonical, decode, digest, failure, objectDigest, Text, type AnnotatedCase, type Repository } from "../../model/index.js";
-import { type LocalRepository } from "../../base/workspace/index.js";
+import type { LocalRepository } from "../../base/workspace/index.js";
 import { inPath, type test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.js";
 import { bindNative } from "./test-adapter-binding.js";
 import { builtinCollectParse, builtinCollectPlan, builtinReportParse, builtinSelectPlan, builtinVersionCommand } from "./test-adapter-builtins.js";

@@ -1,7 +1,7 @@
 import { adapterFor, adapterInputSnapshot, readNativeObservations } from "../domain/tests/index.js";
 import { bindNative } from "../domain/tests/index.js";
 import { ConcordError, objectDigest, type AnnotatedCase, type Repository } from "../model/index.js";
-import { type NativeAnalysisScope } from "../model/index.js";
+import type { NativeAnalysisScope } from "../model/index.js";
 
 
 /** Called within the analysis source snapshot; never collects or starts a provider. */

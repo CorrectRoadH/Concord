@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
 import { LocalRepository } from "../support/repository.js";
 import { initialize } from "../../src/app/index.js";
-import { type ViewServerHandle } from "../../src/entry/http/index.js";
+import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 import { showWriting, setWriting } from "../../src/domain/writing/index.js";
 import { showConcepts, setConcepts } from "../../src/domain/concepts/index.js";
-import { waitForWorkspaceProjection } from '../support.js';
+import { waitForWorkspaceProjection } from '../support/support.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('real browser isolates scope responses and drafts, keeps partial save conflicts, and notices inherited concept changes', async ({ page }) => {

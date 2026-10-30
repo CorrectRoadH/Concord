@@ -3,7 +3,7 @@ import * as gh from '../domain/feedback/index.js';
 import { readFileSync } from "node:fs";
 import { Effect } from "effect";
 import { IssueProject } from "../domain/issues/index.js";
-import { type IssueCommandRunner } from "./issue-operations.js";
+import type { IssueCommandRunner } from "./issue-operations.js";
 import { IssuePlanStore, IssueRemote } from "../domain/issues/index.js";
 import { makeNodeIssuePlanStore } from "./issue-plan-store.js";
 import { makeGhIssueRemote, type IssueGhRequest } from "../domain/issues/index.js";

@@ -10,7 +10,7 @@ import { ViewScanManager } from "./view-scan.js";
 import { ViewSourceWatch } from "./view-source-watch.js";
 import { readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from "./workspace-projection.js";
 import { decodeWorkspaceProjectionRecord, type WorkspaceProjectionContext, type WorkspaceProjectionRecord } from "../model/index.js";
-import { type WorkspaceProjection } from "../model/index.js";
+import type { WorkspaceProjection } from "../model/index.js";
 
 
 const projectionFailure = (cause: unknown): ConcordError => cause instanceof HawdbFailure ? new ConcordError(cause.code, cause.message) : failure(cause);

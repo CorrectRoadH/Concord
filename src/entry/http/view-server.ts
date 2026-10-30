@@ -9,12 +9,12 @@ import { Effect, Schema } from "effect";
 import { decodeViewAction, executeViewAction, getViewGitStatus, getViewFile, validateViewRoot } from "../../app/index.js";
 import { ViewProjectionManager } from "../../app/index.js";
 import { closeGitBaselineCache, getGitDiff, type GitBaselineCache } from "../../app/index.js";
-import { type GitArea } from "../../model/index.js";
+import type { GitArea } from "../../model/index.js";
 import { ConcordError, decode, digest, failure } from "../../model/index.js";
 import { ViewJobManager } from "../../app/index.js";
-import { type ViewFailure, type ViewResponse } from "../../model/index.js";
+import type { ViewFailure, ViewResponse } from "../../model/index.js";
 import { ViewRequestLog } from "./view-request-log.js";
-import { type RequestTiming } from "../../app/index.js";
+import type { RequestTiming } from "../../app/index.js";
 
 const BODY_LIMIT = 4 * 1024 * 1024;
 const STATIC_LIMIT = 16 * 1024 * 1024;

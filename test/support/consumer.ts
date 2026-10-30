@@ -1,6 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tmpdir } from './temporary.js';
 import { join } from 'node:path';
 import { after, before } from 'node:test';
 import { LocalRepository } from "./repository.js";

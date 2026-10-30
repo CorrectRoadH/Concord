@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly, inspectCacheClear, deleteInspectedCache } from "./cache-file.js";
 import { HawdbFailure, openHawdb, acquireHawdbClearGuard, type HawdbDatabase } from "./hawdb-native.js";
-import { type Repository } from "../../model/index.js";
+import type { Repository } from "../../model/index.js";
 import { ensureGenericPrivateDirectorySync } from "../publication/index.js";
 import { requestCacheMaintenance } from "./cache-maintenance.js";
 

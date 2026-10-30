@@ -1,5 +1,5 @@
 import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.js";
-import { type LocalRepository } from "../../base/workspace/index.js";
+import type { LocalRepository } from "../../base/workspace/index.js";
 import { fromMarkdown } from "../../model/index.js";
 import { documentMarkdown } from "../documents/index.js";
 import { parseConceptCatalog, conceptSpellingKey, type ConceptCatalog, type ConceptDefinition } from "../../model/index.js";

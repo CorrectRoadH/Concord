@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
-import { type IssueRemoteService } from "./repo-issue-domain.js";
+import type { IssueRemoteService } from "./repo-issue-domain.js";
 import { ConnectionIdentityMismatch, IssueMutationUncertain, IssueRemoteBudgetExceeded, type IssueGhError } from "../../model/index.js";
-import { type IssuePlanReceipt, type RemoteIssue } from "../../model/index.js";
+import type { IssuePlanReceipt, RemoteIssue } from "../../model/index.js";
 export type IssueGhRequest = (method: "GET" | "POST" | "PATCH" | "DELETE", path: string, payload?: unknown) => Effect.Effect<{ readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: unknown }, IssueGhError>;
 const IssueSchema = Schema.Struct({ number: Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)), html_url: Schema.String, title: Schema.String, body: Schema.NullOr(Schema.String), state: Schema.Literals(["open", "closed"]), labels: Schema.Array(Schema.Union([Schema.String, Schema.Struct({ name: Schema.String })])), pull_request: Schema.optional(Schema.Unknown) });
 const RepositorySchema = Schema.Struct({ id: Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(Number.MAX_SAFE_INTEGER)), full_name: Schema.String });

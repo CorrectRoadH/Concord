@@ -1,7 +1,7 @@
 import { ConcordError, digest, inRepositorySnapshot, type Repository } from "../../model/index.js";
-import { type LocalRepository } from "../../base/workspace/index.js";
+import type { LocalRepository } from "../../base/workspace/index.js";
 import { readWritingPolicy } from "./writing-policy.js";
-import { type WritingPolicy } from "../../model/index.js";
+import type { WritingPolicy } from "../../model/index.js";
 import { composeControlled } from "../../model/index.js";
 import { applies, discovered, indexWritingScopes, globalPolicyPath, scopeOf } from "../../model/index.js";
 import { effectiveConcepts, indexConcepts, spellingKey } from "../concepts/index.js";

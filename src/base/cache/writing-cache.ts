@@ -4,7 +4,7 @@ import { Schema } from "effect";
 import { withPersistentCache } from "./cache-store.js";
 import { readCachePayloads, writeCachePayloads } from "./cache-query.js";
 import { canonical, decode, Nat, objectDigest, type Repository } from "../../model/index.js";
-import { type WritingFinding } from "../../model/index.js";
+import type { WritingFinding } from "../../model/index.js";
 
 const Source = Schema.Struct({ path: Schema.String, pointer: Schema.optional(Schema.String), line: Schema.optional(Nat), entry: Schema.optional(Nat), column: Schema.optional(Schema.String), ref: Schema.optional(Schema.String) });
 const Position = Schema.Struct({ line: Nat, column: Nat });

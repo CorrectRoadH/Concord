@@ -3,7 +3,7 @@
 import { constants, closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, readlinkSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { ConcordError, digest } from "../../model/index.js";
-import { type test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.js";
+import type { test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.js";
 
 export function reportPath(path: string): string {
   if (path.includes('\\') || path.includes('\0') || path.startsWith('/') || path.split('/').some(part => part === '' || part === '.' || part === '..')) throw new ConcordError('ReportUnsafe', `Report path must stay inside its allocated invocation directory: ${path}`);

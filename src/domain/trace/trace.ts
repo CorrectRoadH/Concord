@@ -1,9 +1,9 @@
-import { type TraceEdge } from "../../model/index.js";
+import type { TraceEdge } from "../../model/index.js";
 
 
 import { scanAnnotations } from "../tests/index.js";
 import { scanCode } from "../code/index.js";
-import { type CodeDeclaration } from "../../model/index.js";
+import type { CodeDeclaration } from "../../model/index.js";
 import { checkDocuments, diagnoseDocuments, type DocumentInventory } from "../documents/index.js";
 import { ConcordError, type AnnotatedCase, type Finding, type Repository } from "../../model/index.js";
 import { CONSTITUTION_PATH, inspectConstitution } from "../constitution/index.js";

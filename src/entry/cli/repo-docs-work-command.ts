@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
-import { type TerminalDeliverySink } from "./delivery.js";
+import type { TerminalDeliverySink } from "./delivery.js";
 import { readJson } from "./input.js";
 import { problem } from "../../model/index.js";
 import { prepareDocsWork, showDocsWork, checkDocsWork, finalizeDocsWork } from "../../app/index.js";

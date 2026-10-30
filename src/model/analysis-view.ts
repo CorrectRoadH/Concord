@@ -1,8 +1,8 @@
 import { Schema } from "effect";
 import { AnalysisObservationSchema, type AnalysisObservation } from "./analysis-values.js";
 import { RelevanceSchema, type Relevance } from "./observation.js";
-import { type AnnotatedCase, type DocumentRecord } from "./shared.js";
-import { type CodeDeclaration } from "./code-declaration.js";
+import type { AnnotatedCase, DocumentRecord } from "./shared.js";
+import type { CodeDeclaration } from "./code-declaration.js";
 export const TestRelevanceSchema = Schema.Struct({ testId: Schema.String, scope: Schema.Literals(['file', 'native-case']), relevance: RelevanceSchema, message: Schema.String });
 export const AnalysisViewSchema = Schema.Struct({ observations: Schema.Array(AnalysisObservationSchema), relevance: Schema.Array(TestRelevanceSchema) });
 export type AnalysisView = typeof AnalysisViewSchema.Type;

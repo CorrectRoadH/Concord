@@ -12,7 +12,7 @@ import { requestCacheMaintenance } from "../base/cache/index.js";
 import { ConcordError, digest, failure } from "../model/index.js";
 
 
-import { type WorkspaceProjection, type WorkspaceSnapshot } from "../model/index.js";
+import type { WorkspaceProjection, WorkspaceSnapshot } from "../model/index.js";
 
 const key = 'workspace';
 import { type WorkspaceProjectionRecord, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord } from "../model/index.js";

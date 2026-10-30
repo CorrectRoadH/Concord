@@ -15,8 +15,8 @@ import { withRepo } from "./cli-repository.js";
 
 const closureFlags = { kind: Flag.choice('kind', ['fixed', 'delivered', 'duplicate', 'declined', 'invalid', 'external-fixed', 'closed']).pipe(Flag.withDefault('closed')), memory: optional('memory'), target: optional('target'), proof: many('proof'), canonical: optional('canonical'), evidence: many('evidence'), dependency: optional('dependency'), version: optional('version'), reason: optional('reason') };
 
-import { type IssueError } from "../../model/index.js";
-import { type IssueCommandRequirements } from "../../app/index.js";
+import type { IssueError } from "../../model/index.js";
+import type { IssueCommandRequirements } from "../../app/index.js";
 import * as issueRemoteContribution from './repo-issue-contribution.js';
 import { makeNodeIssueCommandRunner } from "../../app/index.js";
 

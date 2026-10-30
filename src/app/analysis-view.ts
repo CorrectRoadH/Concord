@@ -1,8 +1,8 @@
 import { type AnalysisView, relevanceFor } from "../model/index.js";
 import { referenceResolver } from "../domain/documents/index.js";
 import { readAnalysisObservations } from "./code-analysis.js";
-import { type AnnotatedCase, type DocumentRecord, type Repository } from "../model/index.js";
-import { type CodeDeclaration } from "../model/index.js";
+import type { AnnotatedCase, DocumentRecord, Repository } from "../model/index.js";
+import type { CodeDeclaration } from "../model/index.js";
 import { extractSteps } from "../domain/documents/index.js";
 export function analysisView(repo: Repository, cases: readonly AnnotatedCase[], codes: readonly CodeDeclaration[], documents: readonly DocumentRecord[], references = referenceResolver(repo, documents)): AnalysisView {
   const observations = readAnalysisObservations(repo);

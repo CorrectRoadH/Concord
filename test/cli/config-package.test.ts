@@ -1,0 +1,60 @@
+import { packageBin } from '../../scripts/package-location.js';
+import { packConcord, installConcord } from '../support/installed-package.js';
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from '../support/temporary.js';
+import { join, resolve } from 'node:path';
+import test from 'node:test';
+import { Effect, Schema } from 'effect';
+import { parseTypeScriptConfig, renderTypeScriptConfig } from "../../src/base/workspace/index.js";
+import { digest } from "../../src/model/index.js";
+import { LocalRepository } from "../support/repository.js";
+import { initialize } from "../../src/app/index.js";
+
+// @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
+test('packed config has usable type hints and rejects misspelled fields', () => Effect.runPromise(Effect.sync(() => {
+  const scratch = mkdtempSync(join(tmpdir(), 'concord-config-package-'));
+  try {
+    const packed = packConcord(scratch);
+    const project = join(scratch, 'consumer'); mkdirSync(project);
+    writeFileSync(join(project, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
+    installConcord(project, packed, ['typescript@7.1.0-beta', '@types/node@24.13.3']);
+    const consumer = join(scratch, 'initialized');
+    execFileSync('git', ['init', '-q', consumer]);
+    const cli = packageBin(join(project, 'node_modules/concord-sdlc'));
+    execFileSync(process.execPath, [cli, '--root', consumer, 'init', '--docs-only'], { encoding: 'utf8', timeout: 30_000 });
+    const preset = JSON.parse(execFileSync(process.execPath, [cli, '--root', consumer, 'writing', 'show', '--json'], { encoding: 'utf8', timeout: 30_000 }));
+    assert.equal(preset.state, 'valid');
+    assert.equal(preset.policy.sentenceLength, 140);
+    assert.equal(preset.policy.paragraphLength, 320);
+    assert.ok(preset.policy.bannedTerms.some((ban: { term: string }) => ban.term === '兜底'));
+    writeFileSync(join(project, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'NodeNext', moduleResolution: 'NodeNext', noEmit: true }, include: ['concord.config.ts'] }));
+    const valid = `import type { ProjectConfig } from 'concord-sdlc/config';\nexport default { testRoots: [], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } } as const satisfies ProjectConfig;\n`;
+    writeFileSync(join(project, 'concord.config.ts'), valid);
+    execFileSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: project, encoding: 'utf8', timeout: 30_000 });
+    writeFileSync(join(project, 'concord.config.ts'), valid.replace("testRoots: []", "testRoots: [], testRoot: []"));
+    const invalid = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: project, encoding: 'utf8', timeout: 30_000 });
+    assert.notEqual(invalid.status, 0, invalid.stdout + invalid.stderr);
+  } finally { rmSync(scratch, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
+test('prepared config recovery restores the frozen source bytes', () => Effect.runPromise(Effect.sync(() => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-config-recovery-'));
+  let repo: LocalRepository | undefined;
+  try {
+    execFileSync('git', ['init', '-q', root]);
+    repo = new LocalRepository(root, { initialize: true }); initialize(repo, false, { testRoots: [] }); repo.close(); repo = undefined;
+    const path = 'concord.config.ts', before = readFileSync(join(root, path), 'utf8');
+    const config = parseTypeScriptConfig(before);
+    const after = `// normalized later\n${renderTypeScriptConfig({ ...config, testRoots: [] })}`;
+    const privateDir = join(root, '.git', 'concord');
+    const journal = { format: 'concord.journal', root, privateDir, operation: 'set-config', phase: 'prepared', directories: [], scope: { kind: 'documents', configPath: path, configSource: before, configDigest: digest(before) }, changes: [{ path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }] };
+    writeFileSync(join(root, path), after);
+    writeFileSync(join(privateDir, 'journal.json'), `${JSON.stringify(journal)}\n`);
+    repo = new LocalRepository(root, { recover: true });
+    assert.equal(repo.recover().status, 'rolled-back');
+    assert.equal(readFileSync(join(root, path), 'utf8'), before);
+  } finally { repo?.close(); rmSync(root, { recursive: true, force: true }); }
+})));

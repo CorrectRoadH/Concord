@@ -1,7 +1,7 @@
 import { designState } from "../../model/index.js";
 import { posix } from "node:path";
 import { readDesignPlanPaths } from "../../base/sources/index.js";
-import { type DocumentRecord, type Repository } from "../../model/index.js";
+import type { DocumentRecord, Repository } from "../../model/index.js";
 
 
 /** Keep the parser cache byte-local; filesystem-derived state belongs to this snapshot. */

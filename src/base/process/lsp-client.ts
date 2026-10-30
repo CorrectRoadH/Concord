@@ -8,8 +8,8 @@ import { analysisBudgets, type language_server_config_LanguageServer as Language
 import { LspConnection } from "./lsp-protocol.js";
 import { bindSymbol, documentSymbols, flattenSymbols, OutgoingSchema, PrepareSchema, validRange, type CallItem, type DocumentSymbol, type PositionEncoding, type SymbolLocator } from "../../model/index.js";
 import { sourceUri, uriPath } from "./source-uri.js";
-import { type CodeDeclaration } from "../../model/index.js";
-import { type AnalysisValue, type DependencyObservation, type NativeAnalysisScope } from "../../model/index.js";
+import type { CodeDeclaration } from "../../model/index.js";
+import type { AnalysisValue, DependencyObservation, NativeAnalysisScope } from "../../model/index.js";
 import { withinRoots } from "../../model/index.js";
 
 const sync = <A>(run: () => A) => Effect.try({ try: run, catch: cause => cause instanceof ConcordError && cause.code === 'InvalidData' ? new ConcordError('LanguageServerFailed', 'Language server returned an invalid result') : failure(cause) });

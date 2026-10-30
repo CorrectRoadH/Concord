@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
-import { type DocumentRecord } from "../../model/index.js";
+import type { DocumentRecord } from "../../model/index.js";
 
 
 import { documentProjection, projectionRecord } from "./document-projection.js";

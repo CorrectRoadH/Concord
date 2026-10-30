@@ -5,7 +5,7 @@ import { markdownBody } from "./markdown-body.js";
 import type { Root, RootContent, Nodes } from "mdast";
 import { Schema } from "effect";
 import { markdownAnchor } from "./markdown-facts.js";
-import { type Finding } from "./shared.js";
+import type { Finding } from "./shared.js";
 export type DesignSources = ReadonlyMap<string, string | undefined>;
 
 type Status = 'satisfied' | 'partial' | 'not-satisfied' | 'pending';
