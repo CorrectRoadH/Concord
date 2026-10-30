@@ -67,13 +67,13 @@ test('writing cache validates current sources, members, policies and payload int
 }))));
 
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-test('a new public CLI process reuses validated writing findings without loading the prose parser', () => Effect.runPromise(Effect.sync(() => fixture((root, scan) => {
-  const loaded = join(root, 'loaded.json');
+test('a new public CLI process reuses validated writing findings without reparsing prose', () => Effect.runPromise(Effect.sync(() => fixture((root, scan) => {
+  const loaded = join(root, 'loaded.json'), counts = join(root, 'parse-counts.jsonl');
   const modules = () => {
-    let output = '';
+    let output = ''; writeFileSync(counts, '');
     try {
-      output = execFileSync(process.execPath, ['--import', fileURLToPath(import.meta.resolve('tsx')), '--import', fileURLToPath(new URL('../support/cli-load-probe.ts', import.meta.url)), installedConcordCli(), '--root', root, 'docs', 'check', '--json'], {
-        encoding: 'utf8', env: { ...process.env, CONCORD_TEST_LOADED_MODULES: loaded }, stdio: 'pipe',
+      output = execFileSync(process.execPath, ['--import', fileURLToPath(import.meta.resolve('tsx')), '--import', fileURLToPath(new URL('../support/cli-load-probe.ts', import.meta.url)), '--import', fileURLToPath(new URL('../support/parse-count-probe.ts', import.meta.url)), installedConcordCli(), '--root', root, 'docs', 'check', '--json'], {
+        encoding: 'utf8', env: { ...process.env, CONCORD_TEST_LOADED_MODULES: loaded, CONCORD_TEST_PARSE_COUNTS: counts }, stdio: 'pipe',
       });
     } catch (cause) {
       const result = cause as { status: number; stdout: string; stderr: string };
@@ -81,13 +81,13 @@ test('a new public CLI process reuses validated writing findings without loading
       output = result.stdout || result.stderr;
     }
     assert.equal(JSON.parse(output).operation, 'docs-check', output);
-    return JSON.parse(readFileSync(loaded, 'utf8')) as string[];
+    return { output, parses: readFileSync(counts, 'utf8').trim().split('\n').filter(Boolean) };
   };
   const cold = modules();
-  assert.ok(cold.some(path => path.includes('/mdast-util-from-markdown/')), 'cold positive control must observe prose parsing');
+  assert.ok(cold.parses.length > 0, 'cold positive control must observe real prose parsing');
   const warm = modules();
-  assert.ok(warm.some(path => path.endsWith('/domain/writing/writing.js')));
-  assert.ok(warm.every(path => !path.includes('/mdast-util-from-markdown/')));
+  assert.equal(warm.parses.length, 0, 'validated cache hit must perform no Markdown parsing');
+  assert.equal(warm.output, cold.output, 'cache reuse preserves public output bytes');
   assert.deepEqual(scan(false), scan(), 'cache-disabled overlay analysis has identical findings');
 }))));
 

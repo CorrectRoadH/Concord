@@ -1,0 +1,148 @@
+import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, authorDesignFixture, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, DecisionOutput, MemoryLifecycleOutput, TemplatesOutput, scratch, cli, call, callString, clearDecision, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
+
+// @use-case docs/feature/feedback/use-case/triage-feedback.md
+test('packed feedback commands persist connections and local triage without remote calls', () => Effect.runPromise(Effect.sync(() => {
+ const root=consumer('packed-feedback');
+ call(root,['feedback','connection','add','--id','github-main','--provider','github','--owner','example','--repo','demo','--credential-env','CONCORD_TEST_MISSING_TOKEN'],Ack);
+ call(root,['feedback','connection','add','--id','linear-main','--provider','linear','--team','TEAM','--credential-env','CONCORD_TEST_MISSING_LINEAR_KEY'],Ack);
+ const project=readProjectConfig(root);
+ assert.deepEqual(project.feedbackConnections?.map(connection=>connection.provider),['github','linear']);
+ call(root,['new', 'feature','feedback-target','--title','Feedback target'],Ack);
+ call(root,['new', 'issue','observation','--title','Local observation'],Ack);
+ call(root,['issue','link','observation','--role','adopts','docs/feature/feedback-target/README.md'],Ack);
+ const relative='docs/issues/observation.md';
+ const linked=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
+ assert.equal(linked?.metadata.kind,'issue');
+ if(linked?.metadata.kind!=='issue')assert.fail('feedback must retain the local issue owner');
+ assert.deepEqual(linked.metadata.relations.filter(relation => relation.role === 'adopts').map(relation => relation.target),['docs/feature/feedback-target/README.md']);
+ assert.equal(linked.metadata.source,undefined);
+ const listed=call(root,['feedback','list'],Schema.Unknown);
+ assert.match(JSON.stringify(listed),/observation/);
+ call(root,['feedback','show','observation'],Schema.Unknown);
+ call(root,['issue','close','observation','--reason','Investigation complete'],Ack);
+ call(root,['new', 'issue','pending','--title','Pending observation'],Ack);
+ const feedbackList=Schema.Struct({feedback:Schema.Array(Schema.Struct({document:Schema.Struct({metadata:Schema.Struct({id:Schema.String})})}))});
+ const issueList=Schema.Struct({drafts:Schema.Array(Schema.Struct({metadata:Schema.Struct({id:Schema.String})}))});
+ assert.deepEqual(call(root,['feedback','list','--provider','local','--state','closed','--triage','closed','--query','LOCAL'],feedbackList).feedback.map(item=>item.document.metadata.id),['observation']);
+ assert.deepEqual(call(root,['feedback','list','--state','open','--triage','pending'],feedbackList).feedback.map(item=>item.document.metadata.id),['pending']);
+ assert.deepEqual(call(root,['feedback','list','--provider','github'],feedbackList).feedback,[]);
+ assert.deepEqual(call(root,['action','--input','-'],feedbackList,JSON.stringify({action:'feedback.list',provider:'local',state:'open',triage:'pending'})).feedback.map(item=>item.document.metadata.id),['pending']);
+ assert.deepEqual(call(root,['action','--input','-'],issueList,JSON.stringify({action:'issue.list',state:'closed'})).drafts.map(item=>item.metadata.id),['observation']);
+ call(root,['action','--input','-'],ErrorOutput,JSON.stringify({action:'feedback.list',state:'draft'}),1);
+ const closed=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
+ assert.equal(closed?.metadata.kind==='issue'&&closed.metadata.status,'closed');
+ call(root,['feedback','connection','remove','github-main'],Ack);
+ assert.ok(existsSync(join(root,relative)),'removing a connection must preserve local observations');
+ assert.equal(call(root,['check'],CheckOutput).ok,true);
+})));
+
+
+// @use-case docs/feature/web-workbench/use-case/review-pull-request.md
+test('packed PR export preserves Git object types and refuses unsafe or incomplete exports', async () => {
+ const root=join(scratch,'pr-export-boundaries');mkdirSync(root);
+ const git=(...args:string[])=>execFileSync('git',['-C',root,...args],{encoding:'utf8'}).trim();
+ git('init','-q');git('config','user.name','Fixture');git('config','user.email','fixture@example.invalid');
+ write(root,'empty.md','');write(root,'type.txt','ordinary content\n');write(root,'executable.sh','echo hello\n');write(root,'old.md','# Kept\n');
+ git('add',".");git('commit','-qm','base');const base=git('rev-parse','HEAD');
+ rmSync(join(root,'empty.md'));rmSync(join(root,'type.txt'));symlinkSync('/etc/passwd',join(root,'type.txt'));
+ git('mv','old.md','空 白\n名.md');git('add',".");git('update-index','--chmod=+x','executable.sh');git('update-index','--add','--cacheinfo',`160000,${base},submodule`);
+ git('commit','-qm','object types');const head=git('rev-parse','HEAD');git('replace',head,base);git('config','diff.ignoreSubmodules','all');
+ const invoke=(out:string,baseline=base,candidate=head)=>spawnSync(process.execPath,[cli,'--root',root,'--json','view','export','--base',baseline,'--head',candidate,'--out',out],{encoding:'utf8',timeout:120000});
+ const out=join(scratch,'types-preview');const success=invoke(out);assert.equal(success.status,0,success.stderr);
+ const {decodeChangePreview}=await import(pathToFileURL(createRequire(cli).resolve('concord-sdlc/change-preview')).href) as typeof import("../../src/model/change-preview.js");
+ const data=decodeChangePreview(JSON.parse(readFileSync(join(out,'changes.json'),'utf8')));
+ assert.equal(data.entries.find(entry=>entry.path==='submodule')?.after?.mode,'160000');
+ assert.equal(data.entries.find(entry=>entry.path==='type.txt')?.status,'T');assert.equal(data.entries.find(entry=>entry.path==='type.txt')?.after?.mode,'120000');
+ assert.equal(data.entries.find(entry=>entry.path==='executable.sh')?.after?.mode,'100755');
+ const removed=data.entries.find(entry=>entry.path==='empty.md');assert.equal(removed?.beforeMarkdown,'');assert.equal(removed?.after,null);
+ assert.equal(data.entries.find(entry=>entry.path==='空 白\n名.md')?.previousPath,'old.md');assert.doesNotMatch(JSON.stringify(data),/root:x:/u);
+ const sentinel=join(out,'keep');writeFileSync(sentinel,'unknown');assert.match(invoke(out).stderr,/PreviewOutputExists/u);assert.equal(readFileSync(sentinel,'utf8'),'unknown');
+ assert.match(invoke(root).stderr,/PreviewUnsafeOutput/u);assert.match(invoke(join(root,'.git','export')).stderr,/PreviewUnsafeOutput/u);
+ const alias=join(scratch,'preview-output-alias');symlinkSync(scratch,alias,'dir');assert.match(invoke(join(alias,'no-output')).stderr,/PreviewUnsafeOutput/u);
+ const missing=join(scratch,'missing-history-preview');assert.equal(invoke(missing,'no-such-branch').status,1);assert.equal(existsSync(missing),false);
+ const shallow=join(scratch,'shallow-pr');execFileSync('git',['clone','--quiet','--depth','1',pathToFileURL(root).href,shallow]);
+ const shallowResult=spawnSync(process.execPath,[cli,'--root',shallow,'--json','view','export','--base','HEAD','--out',join(scratch,'shallow-out')],{encoding:'utf8'});assert.match(shallowResult.stderr,/PreviewShallowRepository/u);
+ git('replace','-d',head);
+ writeFileSync(join(root,'oversized.txt'),Buffer.alloc(4*1024*1024+1,97));git('add','oversized.txt');git('commit','-qm','large object');
+ const large=join(scratch,'large-out');assert.match(invoke(large,head,'HEAD').stderr,/PreviewBudgetExceeded/u);assert.equal(existsSync(large),false);
+ rmSync(join(root,'oversized.txt'));git('add','-A');git('commit','-qm','remove large object');const clean=git('rev-parse','HEAD');
+ // Darwin rejects invalid UTF-8 filenames before Git can record them.
+ if(process.platform==='linux'){
+  const invalid=Buffer.concat([Buffer.from(root+'/'),Buffer.from([255])]);writeFileSync(invalid,'bytes');git('add','-A');git('commit','-qm','non UTF-8 path');
+  assert.match(invoke(join(scratch,'invalid-path-out'),clean,'HEAD').stderr,/GitPathEncodingUnsupported/u);
+ }
+ if(process.platform!=='win32'){
+  const shim=join(scratch,'cancel-git');mkdirSync(shim);const temporary=join(scratch,'cancel-tmp');mkdirSync(temporary);const pidFile=join(scratch,'cancel-git.pid');
+  const realGit=execFileSync('sh',['-c','command -v git'],{encoding:'utf8'}).trim();
+  const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
+  writeFileSync(join(shim,'git'),`#!/bin/sh\ncase " $* " in *" diff "*) echo $$ > "$CONCORD_TEST_GIT_PID"; sleep 60 & wait;; *) exec ${quote(realGit)} "$@";; esac\n`,{mode:0o755});
+  const child=spawn(process.execPath,[cli,'--root',root,'--json','view','export','--base',base,'--head',head,'--out',join(scratch,'cancelled-out')],{env:{...process.env,PATH:shim+':'+process.env.PATH,TMPDIR:temporary,CONCORD_TEST_GIT_PID:pidFile},stdio:'ignore'});
+  const exited=once(child,'exit');
+  try{
+   const deadline=Date.now()+15000;while(!existsSync(pidFile)&&Date.now()<deadline)await Effect.runPromise(Effect.sleep('20 millis'));
+   assert.ok(existsSync(pidFile),'export reached the scoped Git comparison');const pid=Number(readFileSync(pidFile,'utf8').trim());
+   child.kill('SIGTERM');await exited;assert.throws(()=>process.kill(pid,0));assert.deepEqual(readdirSync(temporary),[],'interruption releases the temporary Git repository');
+  }finally{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await exited;}}
+ }
+});
+
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
+test('packed templates work outside a project and fail clearly when their inventory is damaged', () => Effect.runPromise(Effect.sync(() => {
+ const installation = mkdtempSync(join(scratch, 'private-templates-'));
+ writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
+ installConcord(installation, packConcord(scratch), [], { private: true });
+ const cli = packageBin(join(installation, 'node_modules/concord-sdlc'));
+ const result = spawnSync(process.execPath, [cli, 'template', 'list', '--json'], { cwd: scratch, encoding: 'utf8' });
+ assert.equal(result.status, 0, result.stderr);
+ const templates = Schema.decodeUnknownSync(Schema.fromJsonString(TemplatesOutput))(result.stdout);
+ assert.ok(templates.templates.some(item => item.name === 'engineering'));
+ const shown = spawnSync(process.execPath, [cli, 'template', 'show', 'feature', '--title', 'Accounts'], { cwd: scratch, encoding: 'utf8' });
+ assert.equal(shown.status, 0, shown.stderr);
+ assert.match(shown.stdout, /# Accounts/);
+ const template = join(installation, 'node_modules/concord-sdlc/templates/feature.md');
+ const original = readFileSync(template, 'utf8');
+ try {
+  rmSync(template);
+  const broken = spawnSync(process.execPath, [cli, 'template', 'list', '--json'], { cwd: scratch, encoding: 'utf8' });
+  assert.equal(broken.status, 1);
+  assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(broken.stderr).error, 'TemplateInventoryInvalid');
+ } finally { writeFileSync(template, original); }
+})));
+
+
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('packed CLI creates and resolves Unicode Use Cases and supporting pages', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('unicode-names');
+ call(root, ['new', 'feature', 'npc', '--title', 'NPC'], Ack);
+ renameSync(join(root, 'docs/feature/npc'), join(root, 'docs/feature/角色目录'));
+ const paths = Schema.Struct({ changedPaths: Schema.Array(Schema.String) });
+ const useCase = ['new', 'use-case', '扩展NPC动作', '--feature', '角色目录', '--title', '扩展 NPC 动作'];
+ const expectedPath = 'docs/feature/角色目录/use-case/扩展NPC动作.md';
+ assert.deepEqual(call(root, ['--dry-run', ...useCase], paths).changedPaths, [expectedPath]);
+ assert.equal(existsSync(join(root, expectedPath)), false);
+ call(root, useCase, Ack);
+ for (const page of ['认知与执行', '常识与上下文']) {
+   write(root, `docs/feature/角色目录/${page}.md`, `# ${page}\n`);
+   const before = readPage(root, `docs/feature/角色目录/${page}.md`);
+   savePage(root, `docs/feature/角色目录/${page}.md`, `# ${page}\n\n中文正文。\n`, before.digest);
+   assert.match(readPage(root, `docs/feature/角色目录/${page}.md`).body, /中文正文/u);
+ }
+ const shown = call(root, ['show', '扩展NPC动作'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
+ assert.equal(shown.document.path, expectedPath);
+ write(root, 'test/unicode.test.ts', `// @use-case ${expectedPath}\n// @name 中文用例\n`);
+ const trace = call(root, ['trace', 'show', expectedPath], TraceOutput);
+ assert.equal(trace.tests.length, 1);
+ call(root, ['new', 'use-case', 'internal-id', '--feature', '角色目录', '--title', '内部身份与文件名独立'], Ack);
+ const namedPath = 'docs/feature/角色目录/use-case/中文文件名.md';
+ renameSync(join(root, 'docs/feature/角色目录/use-case/internal-id.md'), join(root, namedPath));
+ assert.equal(call(root, ['show', '中文文件名'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) })).document.path, namedPath);
+ write(root, 'test/named.test.ts', `// @use-case ${namedPath}\n`);
+ assert.equal(call(root, ['check'], CheckOutput).ok, true);
+ assert.equal(call(root, ['trace', 'check'], CheckOutput).ok, true);
+ assert.equal(call(root, ['trace', 'show', namedPath], TraceOutput).tests.length, 1);
+ call(root, ['trace', 'gaps'], Ack);
+ renameSync(join(root, namedPath), join(root, 'docs/feature/角色目录/中文文件名.md'));
+ assert.equal(call(root, ['check'], CheckOutput, '', 1).ok, false);
+ assert.equal(savePage(root, '../越界.md', '# No\n', 'sha256:unknown', 1).error, 'FileNotFound');
+ assert.equal(call(root, ['new', 'use-case', '坏/名称', '--feature', '角色目录', '--title', '坏名称'], ErrorOutput, '', 1).error, 'InvalidData');
+})));

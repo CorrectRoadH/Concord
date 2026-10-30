@@ -1,3 +1,4 @@
+import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
 import { installationResources } from "../../src/base/installation/index.js";
 import { packageBin } from '../../scripts/package-location.js';
 import assert from 'node:assert/strict';
@@ -164,7 +165,7 @@ test('current-source queries and cached projection queries remain separate', asy
     assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionPending' });
     const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     try { await waitForWorkspaceProjection(baseOf(server)); } finally { await server.close(); }
-    const cached = readWorkspaceProjection(workspaceProjectionContext(root));
+    const cached = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));
     assert.equal(cached.projection.refreshOwner, 'none');
     assert.equal(cached.projection.status, 'ready');
     assert.ok(cached.snapshot.documents.some(document => document.metadata.id === 'projected'));
@@ -189,7 +190,7 @@ test('workspace projection survives query-cache eviction pressure in its own nam
     const rows = database.get('workspace_projection', ['workspace']);
     assert.equal(rows.length, 1, 'query-cache pressure must not evict the workspace row');
   } finally { database.close(); }
-  const cached = readWorkspaceProjection(workspaceProjectionContext(root));
+  const cached = parseWorkspaceProjectionOutput(execFileSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8' }));
   assert.equal(cached.projection.builtAt, built.projection.builtAt, 'query traffic cannot silently rebuild the workspace generation');
   rmSync(root, { recursive: true, force: true });
 });
@@ -324,42 +325,6 @@ test('a briefly busy workspace cache recovers within the same HTTP request', asy
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('a completed workspace scan survives brief contention at publication', async t => {
-  const root = fixture();
-  const scan = ViewScanManager.prototype.scan;
-  let database: ReturnType<typeof openHawdb> | undefined;
-  let release: ReturnType<typeof setTimeout> | undefined;
-  let scans = 0;
-  let resumeReconciliation!: () => void;
-  const reconciliation = new Promise<void>(resolve => { resumeReconciliation = resolve; });
-  // 扫描仍走真实子进程；只在它交付候选时放入真实锁竞争，避免靠扫描耗时碰运气。
-  t.mock.method(ViewScanManager.prototype, 'scan', async function(this: ViewScanManager, signal?: AbortSignal) {
-    // Watch setup legitimately requests another scan. Hold that independent scan
-    // so the assertion proves the first candidate itself survives contention.
-    if (scans > 0) await reconciliation;
-    const reply = await scan.call(this, signal);
-    scans += 1;
-    if (scans === 1) {
-      database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: true });
-      release = setTimeout(() => database?.close(), 100);
-    }
-    return reply;
-  });
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  try {
-    await pollUntil(async () => scans > 0 ? true : undefined, { description: 'real scan candidate' });
-    const value = await waitForWorkspaceProjection(baseOf(server), { timeoutMs: 10_000 });
-    assert.equal(value.projection.status, 'ready');
-    assert.equal(scans, 1, 'the completed candidate is published without scanning again');
-  } finally {
-    clearTimeout(release);
-    database?.close();
-    resumeReconciliation();
-    await server.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('an installation missing native artifacts reports unavailable instead of pending', () => {

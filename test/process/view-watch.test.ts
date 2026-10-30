@@ -1,3 +1,6 @@
+import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
+import { genericPrivateDirectorySync } from '../../src/base/publication/index.js';
+import { spawnSync } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -48,12 +51,11 @@ const startServer = (root: string) => Effect.acquireRelease(
 
 /** Only the durable read API is polled: no HTTP request or refresh method is called. */
 function readPublished(root: string): WorkspaceProjection | undefined {
-  try { return readWorkspaceProjection(workspaceProjectionContext(root)); }
-  catch (cause) {
-    if (cause instanceof ConcordError && (cause.code === 'WorkspaceProjectionPending'
-      || cause.code === 'WorkspaceProjectionUnavailable' && Schema.is(busyDetails)(cause.details))) return undefined;
-    throw cause;
-  }
+  const result = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 10_000 });
+  if (result.status === 0) return parseWorkspaceProjectionOutput(result.stdout);
+  const error = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ error: Schema.String, details: Schema.optional(Schema.Unknown) })))(result.stderr);
+  if (error.error === 'WorkspaceProjectionPending' || error.error === 'WorkspaceProjectionUnavailable' && Schema.is(busyDetails)(error.details)) return undefined;
+  throw new Error(`Read installed projection exited ${result.status}: ${result.stdout}\n${result.stderr}`);
 }
 
 const waitForPublished = Effect.fn('waitForWatchedProjection')(function* (
@@ -194,11 +196,11 @@ test('cache publication settles and closing View stops updates and releases its 
   yield* Effect.sync(() => write(root, 'src/main.ts', mainSource.replace('1', '8')));
   yield* Effect.sleep(300);
   yield* closeServer(server);
-  const closed = yield* Effect.sync(() => readWorkspaceProjection(workspaceProjectionContext(root)));
+  const closed = yield* Effect.sync(() => readPublished(root)!);
   assert.equal(closed.projection.refreshOwner, 'none');
   assert.equal((server.process.exitCode === null && server.process.signalCode === null), false);
   yield* Effect.sync(() => {
-    assert.equal(existsSync(join(workspaceProjectionContext(root).privateDir, 'workspace-refresh/current')), false);
+    assert.equal(existsSync(join(genericPrivateDirectorySync(root), 'workspace-refresh/current')), false);
     const reopened = new LocalRepository(root);
     try { assert.ok(reopened.read('concord.config.ts')); } finally { reopened.close(); }
     write(root, 'src/main.ts', mainSource.replace('1', '9'));
@@ -208,7 +210,7 @@ test('cache publication settles and closing View stops updates and releases its 
   });
   const stoppedUntil = performance.now() + 3_000;
   while (performance.now() < stoppedUntil) {
-    const value = yield* Effect.sync(() => readWorkspaceProjection(workspaceProjectionContext(root)));
+    const value = yield* Effect.sync(() => readPublished(root)!);
     assert.deepEqual(value, closed, 'closed View must not publish or acquire another refresh lease after filesystem edits');
     yield* Effect.sleep(100);
   }

@@ -1,3 +1,4 @@
+import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.js';
 import { installedConcordCli } from '../support/support.js';
 import { runApplication } from '../support/repository.js';
 import assert from 'node:assert/strict';
@@ -75,10 +76,10 @@ test('current check retries real observed edits, closes attempts and refuses per
   execFileSync('git', ['init', '-q', root]);
   const setup = new LocalRepository(root, { initialize: true });
   try { initialize(setup, false, { testRoots: [] }); } finally { setup.close(); }
-  const original = LocalRepository.prototype.read;
+  const original = RepositoryBase.prototype.read;
   const page = join(root, 'docs/architecture.md');
   let changes = 1; let changed = 0;
-  const spy = mock.method(LocalRepository.prototype, 'read', function(this: LocalRepository, path: string) {
+  const spy = mock.method(RepositoryBase.prototype, 'read', function(this: LocalRepository, path: string) {
     const source = original.call(this, path);
     if (this.root === root && path === 'docs/architecture.md' && changes > 0 && source !== undefined) {
       changes--; changed++; writeFileSync(page, `${source}\n`);
@@ -92,7 +93,7 @@ test('current check retries real observed edits, closes attempts and refuses per
     changes = 100;
     await assert.rejects(runApplication(checkCurrentProject(root, 'off')), /after 3 attempts/u);
   } finally { spy.mock.restore(); }
-  const error = mock.method(LocalRepository.prototype, 'verifySnapshot', () => { throw new ConcordError('UnsafePath', 'fixture unsafe path'); });
+  const error = mock.method(RepositoryBase.prototype, 'verifySnapshot', () => { throw new ConcordError('UnsafePath', 'fixture unsafe path'); });
   try { await assert.rejects(runApplication(checkCurrentProject(root, 'off')), /fixture unsafe path/u); }
   finally { error.mock.restore(); }
   assert.equal((await runApplication(checkCurrentProject(root, 'off'))).ok, true);
