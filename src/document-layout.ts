@@ -57,7 +57,7 @@ export function resolveDesignPlanPath(base: string, name: string, present: (path
 }
 
 /** Callers observe the containing collection in their source snapshot before reading. */
-export function readDesignPlanPaths(root: string, base: string, alternatives: readonly string[]): ReadonlyMap<string, string> {
+export function readDesignPlanPaths(root: string, base: string, alternatives?: readonly string[]): ReadonlyMap<string, string> {
   if (!validPackagePath('design', `${base}/README.md`)) throw new ConcordError('InvalidPlacement', base);
   const directory = (path: string) => {
     let current = root;
@@ -72,13 +72,15 @@ export function readDesignPlanPaths(root: string, base: string, alternatives: re
   };
   const paths = new Set<string>();
   const names = new Set<string>();
+  const discovered: string[] = [];
   for (const entry of directory(`${base}/plans`)) {
     const key = entry.name.normalize('NFC').toLowerCase();
     if (names.has(key)) throw new ConcordError('InvalidPlan', `Colliding Plan path: ${entry.name}`);
     names.add(key);
     const name = entry.isDirectory() ? entry.name : entry.name.endsWith('.md') ? entry.name.slice(0, -3) : '';
     if (entry.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symlink in plans: ${entry.name}`);
-    if (!alternatives.includes(name) || !entry.isDirectory() && !entry.isFile()) throw new ConcordError('InvalidPlan', `Undeclared or invalid Plan member: ${base}/plans/${entry.name}`);
+    if (!isDocumentName(name) || name.toLowerCase() === 'readme' || alternatives !== undefined && !alternatives.includes(name) || !entry.isDirectory() && !entry.isFile()) throw new ConcordError('InvalidPlan', `Invalid Plan member: ${base}/plans/${entry.name}`);
+    discovered.push(name);
     paths.add(`${base}/plans/${entry.name}`);
     if (entry.isDirectory()) {
       const readme = directory(`${base}/plans/${entry.name}`).find(child => child.name === 'README.md');
@@ -88,7 +90,7 @@ export function readDesignPlanPaths(root: string, base: string, alternatives: re
       }
     }
   }
-  return new Map(alternatives.map(name => [name, resolveDesignPlanPath(base, name, path => paths.has(path))]));
+  return new Map((alternatives ?? discovered.sort()).map(name => [name, resolveDesignPlanPath(base, name, path => paths.has(path))]));
 }
 
 export function documentPlacementError(kind: DocumentKind, path: string, featurePath?: string): string | undefined {

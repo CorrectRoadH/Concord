@@ -157,18 +157,19 @@ const base = { ...declarative, createdAt: Text,
 export const FeatureSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('feature') });
 export const UseCaseSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('use-case'), feature: Text });
 export const ResearchSchema = Schema.Struct({ ...base, kind: Schema.Literal('research'), observedAt: Schema.optional(Text), sources: Strings });
-export const HistoricalDispositionSchema = Schema.Struct({ reason: Text, source: SourceRecordSchema, eventAt: Schema.optional(Text) });
-export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.NonEmptyArray(DocumentName), decision: Schema.optional(Schema.Struct({ selected: DocumentName, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
+export const HistoricalDispositionSchema = Schema.Struct({ reason: Text, source: Schema.optional(SourceRecordSchema), eventAt: Schema.optional(Text) });
+export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.Array(DocumentName), decision: Schema.optional(Schema.Struct({ selected: DocumentName, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
 export const RoadmapSchema = Schema.Struct({ ...base, kind: Schema.Literal('roadmap'), state: Schema.Literals(['planned', 'adopted', 'cancelled']), adoptedAs: Schema.optional(Text), cancellation: Schema.optional(HistoricalDispositionSchema) });
 export const EngineeringSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('engineering') });
 export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), memoryKind: Schema.Literals(['problem', 'decision', 'insight', 'note']), state: Schema.Literals(['captured', 'open', 'resolved', 'current', 'superseded']), epoch: Nat, evidenceRequirement: Schema.optional(Schema.Literals(['command', 'concord.native-reliability/v1'])), promotions: Strings, history: Schema.Array(HistorySchema), resolution: Schema.optional(ResolutionSchema), supersededBy: Schema.optional(Text), supersession: Schema.optional(Schema.Struct({ statement: Text, source: SourceRecordSchema })) });
 export type MemoryMeta = typeof MemorySchema.Type;
-export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'decision', 'delivery'] as const;
+export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'decision', 'related'] as const;
 export const IssueMemoryRelationSchema = Schema.Struct({ kind: Schema.Literals(MEMORY_RELATION_KINDS), memory: Text });
 export type IssueMemoryRelation = typeof IssueMemoryRelationSchema.Type;
 export const IssueAdoptionsSchema = Schema.Struct({ current: Strings, history: Schema.Array(Schema.Struct({ target: Text, commit: GitCommit })) });
+export const FixVerificationSchema = Schema.Struct({ defect: GitCommit, fix: GitCommit, tests: Schema.NonEmptyArray(Text).check(Schema.makeFilter(values => new Set(values).size === values.length)), runner: Sha256, concord: Text });
 export const IssueClosureSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('fixed'), memory: Text, proof: Schema.NonEmptyArray(Text) }),
+  Schema.Struct({ kind: Schema.Literal('fixed'), reason: Text, verification: Schema.optional(FixVerificationSchema) }),
   Schema.Struct({ kind: Schema.Literal('delivered'), memory: Text, target: Text, proof: Schema.NonEmptyArray(Text) }),
   Schema.Struct({ kind: Schema.Literal('duplicate'), canonical: Text }),
   Schema.Struct({ kind: Schema.Literal('declined'), memory: Text }),
