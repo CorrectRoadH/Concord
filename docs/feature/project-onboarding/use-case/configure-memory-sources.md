@@ -23,7 +23,7 @@ feature: docs/feature/project-onboarding/README.md
 ## 规则
 
 - 来源是当前 worktree 内互不重叠的安全目录，不与 docs 根、源码根、测试根或 Git-private 范围重叠。
-- canonical path 拥有 Memory 身份；同一来源内 ID 唯一。不同来源可以有相同 ID，按短 ID 选择时歧义返回 `AmbiguousDocument`，改用 canonical path。改名不改变身份；改目录不是自动迁移。
+- canonical path 拥有 Memory 身份；同一来源内 ID 唯一。不同来源可以有相同 ID，按短 ID 选择时歧义返回 `AmbiguousDocument`，改用 canonical path。改名不改变身份；改目录即改变 canonical path。
 - 恰好一个可写来源是默认写入目标。聚合读取不隐含多处同步写入。
 - 只读检查覆盖 author、metadata、Markdown 与 adoption 等间接写入；adoption 需要修改只读 Memory 时整批零写入。
 - 配置的来源缺失不视为空。`memory resolve --kind fixed` 用解析后的 canonical Problem 路径比对回归关系，只使用当前消费者签发的证据；外部来源不借用当前项目证据关闭 Problem。额外来源中的非 owner 文件仍计入实现候选摘要。

@@ -14,7 +14,7 @@ feature: docs/feature/project-onboarding/README.md
 
 ## 起始状态
 
-- 项目已初始化，`docs/constitution.md` 为 `concord.constitution/v2`，状态为 active。
+- 项目已初始化，`docs/constitution.md` 为 `concord.constitution/v3`，状态为 active。
 
 ## 完整路径
 
@@ -106,32 +106,10 @@ adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 
 | `ConstitutionLinkInvalid` | 宪法链接带 query，或百分号编码无法解码 |
 | `ConstitutionClauseInvalid` | 宪法中条款或款缺少 ID、ID 格式不对、重复，或标签与 ID 不一致 |
 | `ConstitutionClauseReferenced` | `amend` 或 `adopt` 删除仍被链接的 ID；输出列出引用位置，不写入 |
-| `ConstitutionMigrationRequired` | 宪法仍是 v1 或 v2，或 Feature、Design 元数据仍有 `constitutionRefs` |
 
 `amend` 按候选正文校验引用，同次删除一款及宪法内指向它的链接可以通过。要撤销一款时，先改写引用它的页面（Issue 用 `issue edit`），再删除该款。任何纳入范围的文件无法读取时，`check` 与 `constitution show` 返回 `complete: false`，`amend` 与 `adopt` 拒绝执行。
 
 `check` 只校验引用的结构，不判断语义是否合规。宪法中的列表 ID 不是 Use Case 步骤，不进入 `use-case steps` 与 `trace gaps`。
-
-## 迁移旧格式
-
-```sh
-concord --dry-run constitution migrate
-concord --json constitution migrate
-```
-
-预期输出：
-
-```json
-{"operation":"constitution-migrate","dryRun":false,"changedPaths":["docs/constitution.md","docs/feature/local-sdlc/README.md"],"clauses":15,"paragraphs":66,"movedReferences":248}
-```
-
-- 宪法：`<a id="c-NNN"></a>` 并入下一行标题，写成 `{#c-NNN}`；第 K 款补 `{#c-NNN-K}`；`## 总则` 补 `{#general}`。
-- v2 的修订记录：`ratifiedAt` 与每条 `amendments` 各转为一条 Decision Memory，日期写入正文，`reason`、`sources` 与 `impact` 原样保留，ID 为 `constitution-<date>-<序号>`；之后删除 `ratifiedAt`、`amendedAt` 与 `amendments`，format 改为 v3。同一次迁移在一个发布中写入宪法与全部 Memory，再次运行时 `changedPaths` 为空。
-- owner：删除 Feature 与 Design 元数据中的 `constitutionRefs`（含空数组），在正文唯一的 `## Constitution` 节末尾为每个条款追加一行 `- [C-NNN](<相对路径>#c-NNN)`，没有该节时在正文末尾新建，已有同目标链接时不重复。
-- 有未完成写入、待改文件无法解码、多个 `## Constitution` 节或该标题 slug 与已有 ID 冲突时，返回具名错误（`RecoveryRequired`、原解码错误或 `ConstitutionMigrationConflict`），不写任何文件；`--dry-run` 执行同样的预检与规划。
-- 中断时保留恢复现场，普通命令返回 `RecoveryRequired`，`concord recover` 按前后像完成或回退。已迁移的仓库再次运行时 `changedPaths` 为空；宪法已是 v2 而仍有 owner 带 `constitutionRefs` 时只迁移这些 owner。
-- 迁移只转换格式，不是修订；作者之后把 `## Constitution` 节中的链接移到依据它的句子旁。
-- 迁移后的仓库只支持提供 `constitution migrate` 的 CLI 版本。
 
 ## Web 修订
 
@@ -146,8 +124,6 @@ CLI、Web 与 action 使用同一宪法 Schema，严格拒绝额外字段。读�
 - 路径或 fragment 的百分号编码无法解码时，`check` 退出 1 并带路径与行号，`constitution show` 的 `complete` 为 false，amend 与 adopt 拒绝执行。
 - 删除仍被 Issue 链接的款时 amend 拒绝并列出位置；用 `issue edit` 改链接后可以删除。
 - amend 之后宪法 frontmatter 只有 `format` 与 `status`；新 Decision Memory 为 current，promote 到修改的款，`memory list` 能按条款列出全部修订。Memory 写入失败时宪法不变，二者不出现只写一半的状态。
-- v2 宪法迁移后，原有每条修订都能作为 Decision Memory 找到，理由、来源与影响逐字相同。
-- 迁移在第一个文件替换后中断，保留 journal 与已替换文件，`recover` 完成或回退。
 
 ## Spec 来源
 

@@ -14,9 +14,8 @@ feature: docs/feature/documentation-quality/README.md
 
 ## 主流程
 
-1. 运行 `concord writing migrate --path <policy>` 把 `concord.writing/v2` 政策显式迁移为 `concord.writing/v3`。普通入口遇到 v2 返回 `WritingMigrationRequired`。
-2. 在政策的 `controlled` 对象中声明阈值、词表与开关，按目录作用域合成。
-3. `concord docs check` 与 `concord check` 同时执行字符长度路径与 controlled token 路径。
+1. 在 `concord.writing/v3` 政策的 `controlled` 对象中声明阈值、词表与开关，按目录作用域合成。
+2. `concord docs check` 与 `concord check` 同时执行字符长度路径与 controlled token 路径。
 
 ## 验收
 
@@ -35,7 +34,7 @@ Schema、目录合成、抽取、分句、计数、词表匹配与错误见[受�
 | C7 | “被动模式”，zh 语态开启且 allowIn.zh 含被动 | 不报告；清空豁免后报告“被” |
 | C8 | 一段 7 句，paragraphSentences 为 6 | `paragraphSentences`，7 |
 | C9 | 根 en 阈值 20/25，子目录仅程序性 null | 程序性关闭，描述性 25；来源指向各自叶子 |
-| C10 | 合法 v2，无 controlled 与步骤标记，执行显式迁移 | 除 format 外字段相同，legacy finding 的规则、位置、计数和消息逐项相同；普通入口拒绝 v2 |
+| C10 | 无 controlled 与步骤标记的 v3 政策 | legacy finding 的规则、位置、计数和消息与只含长度规则的政策相同；非 v3 政策返回 `InvalidWritingPolicy` |
 | C11 | 步骤第一段末尾带 `{#read-token}`，与无标记副本比较 | 两条路径结果与副本相同；代码中的相同文本不认作步骤 |
 | C12 | listItem 有两段并嵌套无序列表，再嵌套有序列表 | 每段只计一次；最近列表决定类型，父段不累计子段 |
 | C13 | 同文含链接、目标 URL、图片、标题、表格、代码块与 MDX 表达式 | controlled 只取 paragraph 显示文本 |
@@ -48,7 +47,7 @@ Schema、目录合成、抽取、分句、计数、词表匹配与错误见[受�
 | C20 | en 表只列 write 与显式 forms，另有不同 lemma 的同形 form | 只匹配列出的形式；同形冲突被拒绝 |
 | C21 | “返回包含删除记录的列表”“写入失败时拒绝请求”“被动模式”、`read the read result` | 保留实际词面命中并记录语义误报；allowIn 可排除 |
 | C22 | 冷、暖、缓存损坏、清空后检查同一来源 | finding、完整性与退出码一致；不启动 adapter 或 LSP |
-| C23 | 迁移准备后目标被编辑、存在旧 journal、存在未知 publication owner | 分别拒绝 CAS、要求匹配 CLI 恢复、保留未知现场 |
+| C23 | writing set 准备后目标被编辑、存在无法解码的 journal、存在未知 publication owner | 分别拒绝 CAS、阻断写入并保留现场、保留未知现场 |
 | C24 | writing set、Web action 与 standalone profile 提交相同非法叶子 | 同一 Schema 与具名错误；未知字段、null 与空数组行为一致 |
 | C25 | 单表 4097 个形式、极端重叠匹配或超过 finding 上限 | `WritingBudgetExceeded`，complete 为 false，非零退出 |
 

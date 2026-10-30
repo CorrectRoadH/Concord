@@ -105,6 +105,6 @@ red 使用真实缺陷候选；green 与六次可靠性观察使用同一修复�
 
 ## 格式边界
 
-只读取 `concord.repository/v2`；其它格式返回具名迁移诊断，保留原件。已签发的 receipts、resolution、epoch 和已使用 invocation 保留原样，不补字段、不重签，也不作为当前验证展示。
+只读取 `concord.repository/v2`；其它格式是无效输入，返回具名解码错误并保留原件。已签发的 receipts、resolution、epoch 和已使用 invocation 保留原样，不补字段、不重签，也不作为当前验证展示。
 
 NiceEval 的 Preview、Examples、下游链接、产品文档站和 PR 编辑组合由 NiceEval 自己拥有。来源历史见 [provenance](provenance.md)，接入验收见[按 Concord 规范接入软件项目](feature/neutral-project-governance/use-case/adopt-neutral-governance.md#验收)。

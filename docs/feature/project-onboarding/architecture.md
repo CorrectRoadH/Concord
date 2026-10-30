@@ -8,13 +8,11 @@
 
 ## 运行时格式识别
 
-安全定位消费者后，先只读识别 Git-private 目录中的 journal，再用 `lstat` 检测 `concord.json`（含双配置与悬空 symlink），不读取其正文。识别器不解析旧配置，不构造旧授权。
+安全定位消费者后，先只读识别 Git-private 目录中的 journal。
 
 | 现场 | 结果 |
 | --- | --- |
-| journal 的 `documents`/`source` scope 缺冻结字段、缺 `configPath` 但携带匹配摘要的旧 JSON `source`、`configPath` 为 `concord.json`，或含 `concord.json` change | `JournalMigrationRequired`，优先于下一行 |
-| 存在 `concord.json` | `ProjectMigrationRequired` |
-| 坏 JSON、未知格式、残缺 TS scope | `InvalidData` |
+| journal、配置或 TS scope 不符合当前 Schema | `InvalidData`，保留现场并阻断写入 |
 | 摘要或前像冲突 | 恢复错误 |
 
 锁外识别只能拒绝，不授权读写；可继续者仍取得共享或独占 lease 并在锁内重验。拒绝路径不创建、删除、chmod 或改写配置、journal、通用锁、`publication.lock`、事务目标与临时文件。
@@ -31,8 +29,8 @@ init 的 `projectId`、配置路径与 Memory 范围取自最终计划配置快�
 
 ## 证据绑定
 
-命令收据含 `configPath` 与 `configDigest`，签发与核验都比较当前快照。缺少这两个字段的收据返回 `EvidenceMigrationRequired`，原文件保留，不补字段或重算摘要。
+命令收据含 `configPath` 与 `configDigest`，签发与核验都比较当前快照。缺少这两个字段的收据不符合当前 Schema，返回 `InvalidData`，原文件保留，需要重新取证。
 
 ## 宪法
 
-条款与款 ID 从 Markdown 语法树的标题与根有序列表项取得。引用扫描复用共享的链接提取与路径规范化，不另建索引。`constitution migrate` 在加载普通 owner 图之前路由，只有这条命令使用严格 v1 读取器；变更写入一个 journal 后逐文件替换，`recover` 处理该 journal 时不加载 owner 图，遇到未知编辑拒绝。
+条款与款 ID 从 Markdown 语法树的标题与根有序列表项取得。引用扫描复用共享的链接提取与路径规范化，不另建索引。adopt 与 amend 把宪法与 Decision Memory 写入同一个 journal 后逐文件替换，`recover` 按前后像完成或回退，遇到未知编辑拒绝。

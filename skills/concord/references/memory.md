@@ -48,4 +48,4 @@ concord memory promote token-format-v2 --target docs/feature/login/README.md
 concord memory retire token-format-v2 --target docs/feature/login/README.md --reason "目标已替换"
 ```
 
-迁移保留的原处理声明使用 `attested`，显示未验证。Profile 严格正式 gate 写入 `repository` 证据；通用入口显示其记录事实与 unavailable，不将它当作 command 证据。新 clone 缺少 Git-private evidence 时，历史 resolution 仍可读，但必须保留 evidence unavailable 的事实。
+记录中已有的原处理声明使用 `attested`，显示未验证。Profile 严格正式 gate 写入 `repository` 证据；通用入口显示其记录事实与 unavailable，不将它当作 command 证据。新 clone 缺少 Git-private evidence 时，历史 resolution 仍可读，但必须保留 evidence unavailable 的事实。

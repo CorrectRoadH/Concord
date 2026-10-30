@@ -113,17 +113,9 @@ init 只在缺失时把 docs/concepts.md 创建为随包空 catalog，并绑定�
 Each second-level heading defines one concept: its text is the only accepted spelling, `{#id}` is its stable identity, and the first paragraph is its definition.
 ```
 
-## 从 writing/v1 迁移
+## 无效输入
 
-普通检查遇到 v1 返回 WritingMigrationRequired，不自动解释旧概念表。先用 show 获取旧政策原文与 digest；作者审核概念定义与弃用名，为每个概念选定唯一写法，用 concepts.set 保存 concepts.md；最后用 writing.set 和旧政策 digest 显式替换为 v3。迁移中间阶段仍明确拒绝旧政策检查，writing.index 与各 show 的修复路径照常工作。
-
-catalog 编辑不依赖写作政策解析，因此 v1 政策不会阻断迁移。各无效来源可逐项修复，但已知引用不能被破坏。迁移不从名称自动编造 definition，也不把旧表的其它名称自动当成 deprecated。
-
-升级前若存在 v1 journal，先用匹配的旧 CLI 完成恢复；新运行时在变更前拒绝恢复该事务，不暗中恢复或改写其证据。
-
-## 旧格式
-
-Concord 只识别 concepts.md。concepts.json 不是 Concord 文件：不读取、不检测、不提示，也不提供迁移命令；接入项目按上文结构手动改写术语并删除旧文件，未改写前其中的概念不生效。以后的格式变化同样不向前兼容。
+写作政策只接受 `concord.writing/v3`，术语只由 concepts.md 拥有（[C-009](../../constitution.md#c-009-1)）。其它格式的政策是无效输入，返回 `InvalidWritingPolicy` 并保留原文；其它文件不被读取或检测。
 
 ## CLI 示例
 
@@ -202,10 +194,6 @@ token 从左到右最长匹配：每个汉字一个；拉丁字母连同结合�
 
 项目开启词法门禁前，用含真实中英文程序性、描述性与混排段落的人工标注语料记录样本规模、各规则 TP/FP/FN、局部豁免与可接受阈值；结果归 Memory。
 
-## 从 writing/v2 迁移
-
-普通入口遇到 v1/v2 返回 `WritingMigrationRequired`；show 保留安全读取的原文、digest 与具名诊断。`concord writing migrate --path docs/concord-writing.json --dry-run` 预览合法完整 v2 到 v3 的变更。省略 dry-run 时使用完整前像和受管 publication/journal 写入；迁移保留其它字段，只更换 format，不添加 controlled，legacy finding 逐项不变。v1 必须先审核并迁移概念定义，不由 migrate 猜测转换。旧事务由匹配的 CLI 恢复，未知现场保留；回退运行时须同时恢复匹配的格式与现场，不补写旧收据。
-
 ## 写作 JSON 结果
 
 `concord docs check --json` 返回 `complete`、`inputDigest` 和 findings。controlled finding 包含 rule、file、原始 line/column、actual、可用时的 limit，以及 language/languagePolicy 和 source/sources。
@@ -216,8 +204,7 @@ token 从左到右最长匹配：每个汉字一个；拉丁字母连同结合�
 
 | 错误 | 条件 |
 | --- | --- |
-| `WritingMigrationRequired` | 普通入口遇到非当前格式；保留原文与事务现场 |
-| `InvalidWritingPolicy` | 未知字段、非法阈值、词表重复或同形冲突、无效路径，或有效政策缺少所需词表；列出来源 |
+| `InvalidWritingPolicy` | 非当前格式、未知字段、非法阈值、词表重复或同形冲突、无效路径，或有效政策缺少所需词表；列出来源 |
 | `WritingBudgetExceeded` | 单个词表数组超过 4096 个形式，合成后单语言词表与豁免超过 16384 个形式或 1 MiB，短语超过 128 code point，单段候选区间超过 100000，或 finding 超过 10000；complete 为 false |
 | `WritingInputsChanged` | 读取期间字节、政策或成员集合变化 |
 
@@ -237,4 +224,4 @@ token 从左到右最长匹配：每个汉字一个；拉丁字母连同结合�
 
 场景准备由 `bench/documentation-quality.bench.ts` 与 `bench/fixtures/` 拥有。
 
-父提交与候选产物在等价 v2/v3 消费者上交错测量 legacy，回退不得超过 20%。新规则在有效 v3 消费者上按绝对预算判定，基线拒绝 v3 的耗时不是有效对照；缺少必需样本或对照不能判通过。极端重叠词表须以 `WritingBudgetExceeded` 失败而非耗尽资源。
+父提交与候选产物在同一 v3 消费者上交错测量 legacy 长度规则，回退不得超过 20%。controlled 规则按绝对预算判定；缺少必需样本或对照不能判通过。极端重叠词表须以 `WritingBudgetExceeded` 失败而非耗尽资源。

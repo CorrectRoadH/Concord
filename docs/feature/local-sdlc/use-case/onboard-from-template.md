@@ -86,7 +86,6 @@ feature: docs/feature/local-sdlc/README.md
 | `ProjectExists` | `concord.config.ts` 已存在 |
 | `InitializationConflict` | 任一待创建文件已存在，例如 `docs/concord.md` |
 | `ConflictingOptions` | `--docs-only` 与 `--test-root` 同时出现 |
-| `ProjectMigrationRequired` | 仓库里有旧的 `concord.json` |
 
 ```json
 {"ok":false,"error":"InitializationConflict","message":"docs/concord.md already exists; no existing file will be overwritten"}

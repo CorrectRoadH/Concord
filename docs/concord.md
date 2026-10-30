@@ -112,4 +112,4 @@ Local、GitHub 与 Linear 统一作为反馈来源。Local 无需连接即可用
 
 术语由 docs 下的 `concepts.md` 拥有，写作政策由 `concord-writing.json` 拥有，分别用 Concord concepts 与 writing 工具维护。目录拥有作用域：`docs/concepts.md` 保存全局定义，Feature 与 Engineering 子目录拥有各自的 `concepts.md` 与 `concord-writing.json`。每个二级标题 `## 写法 {#id}` 是一个概念，第一段是定义，之后是解释。
 
-Web 工作台聚合这些来源而不复制。只有 frontmatter 中显式弃用的名称产生禁词，正文链接到 `concepts.md#id`。见[政策与迁移](feature/documentation-quality/policy.md)。
+Web 工作台聚合这些来源而不复制。只有 frontmatter 中显式弃用的名称产生禁词，正文链接到 `concepts.md#id`。见[文件格式与作用域](feature/documentation-quality/policy.md)。

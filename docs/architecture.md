@@ -8,7 +8,7 @@ Concord 把 Spec、测试归属、Memory 与审阅闭环做成可安装到任意
 
 ## 初始化与项目治理
 
-新项目生成静态 `concord.config.ts`。存在 `concord.json` 或双配置时返回 `ProjectMigrationRequired`，不执行 TS 模块，不提供格式转换入口。配置快照拥有原文前像、路径与摘要，写入、恢复与证据使用同一协议。运行时格式识别、journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)，旧格式错误见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#旧格式)。
+新项目生成静态 `concord.config.ts`，运行时只读取这一个配置文件，不执行 TS 模块。配置快照拥有原文前像、路径与摘要，写入、恢复与证据使用同一协议。journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)，无效输入见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#无效输入)。
 
 Memory 来源限于 worktree 内本地文件，canonical path 拥有身份，只读权限在 publication 统一执行；规则与错误见[配置 Memory 来源](feature/project-onboarding/use-case/configure-memory-sources.md#规则)。
 

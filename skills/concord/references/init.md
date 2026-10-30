@@ -39,6 +39,6 @@ concord template show feature --title "登录"
 
 init 的 AGENTS 托管区与 docs/concord.md 必须把 Agent 引到当前安装版本的 skill：Spec 声明目标，开发过程与经验归 Memory，观察归 Issue。Memory/Issue 通过 Concord 工具索引、recall、读取和修改，禁止手工维护 owner 文件或 INDEX。检查生成指引时保留 AGENTS 托管区外内容。已有项目不会因升级安装包自动改写历史文档；运行 `concord --skill` 读取当前规则。
 
-概念由全局或局部 concepts.md 拥有，唯一写法、定义和解释写在同一页；concepts 工具提供派生汇总。init 只在缺失时写入随包空 catalog，保留既有内容的全部字节；concepts.json 不被读取、检测或迁移。局部 concord-writing.json 的目录决定 scope，不能用 roots 扩大局部范围。旧 writing/v1 须显式迁移，init 不从历史概念表猜测定义或弃用词。
+概念由全局或局部 concepts.md 拥有，唯一写法、定义和解释写在同一页；concepts 工具提供派生汇总。init 只在缺失时写入随包空 catalog，保留既有内容的全部字节。局部 concord-writing.json 的目录决定 scope，不能用 roots 扩大局部范围。旧 writing/v1 须显式迁移，init 不从历史概念表猜测定义或弃用词。
 
 写作预设限制句长 140、段长 320，包含通用禁用表达，并开启未使用概念检查。局部目录继承祖先规则，仅在需要调整时创建政策；通过 writing 工具修改已保存政策。

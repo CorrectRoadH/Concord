@@ -56,7 +56,7 @@ snapshot 由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写�
 
 `ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移代次发布后一秒再申请一次。刷新失败不改变已完成写入的回执。
 
-服务锁保证每个 worktree 只有一个刷新者，不使用刷新租约。扫描 worker 复用 `ViewScanManager` 的 owned process 与 60 秒上限，只返回候选；服务确认回复、身份与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
+服务锁保证每个 worktree 只有一个刷新者。扫描 worker 复用 `ViewScanManager` 的 owned process 与 60 秒上限，只返回候选；服务确认回复、身份与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
 
 遇到 journal 时，若它已移除或本工作区发布 owner 仍存活，丢弃本次扫描并重新调度；否则记录 RecoveryRequired。服务持有持久句柄，发布不与其它进程争用数据库。
 

@@ -10,7 +10,7 @@ Concord 拥有 canonical Spec、声明注释与测试支持文件映射、稳定
 
 regression add/refresh 与 fixed 共用唯一的 `validateNativeEvidence`，按[证据要求](../../repository-profile.md#证据要求)核验。red 是目标回归的普通失败；原生 inventory 没有发现错误，没有执行测试 body 或禁止的 setup。八个 invocation 唯一；inventory、source、runner 与配置身份一致。执行副本记录支持 isolated 互异与 same 一致的判定，文件名和收据数量不能单独证明隔离；全部事实绑定当前 open Problem 的 epoch。
 
-Problem 在创建、activate、reopen 或离线迁移时持久化当前 epoch 的最低要求。政策版本、配置原文摘要与 adapter 实现身份进入新证据的身份绑定，并参与发布前像检查。adapter 是受信任的本地代码：Concord 严格解码其输入并核验事实，不接受单独的 passed/verified 布尔值；完整性摘要不防御能修改本地文件的作者。
+Problem 在创建、activate 或 reopen 时持久化当前 epoch 的最低要求。政策版本、配置原文摘要与 adapter 实现身份进入新证据的身份绑定，并参与发布前像检查。adapter 是受信任的本地代码：Concord 严格解码其输入并核验事实，不接受单独的 passed/verified 布尔值；完整性摘要不防御能修改本地文件的作者。
 
 ## 离线切换
 

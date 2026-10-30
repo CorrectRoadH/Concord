@@ -22,26 +22,24 @@ feature: docs/feature/project-onboarding/README.md
 
 源码与测试自动发现可用 `sourceIgnore` 配置仓库相对路径，匹配与显式来源优先级见[发现测试](../../local-sdlc/use-case/discover-annotated-tests.md)。
 
-## 旧格式
+## 无效输入
 
-运行时不读取、不转换旧格式，也不提供迁移命令（[决策依据](../../../design/ts-only-runtime/DECISION.md)）。所有入口（CLI、init、dry-run、recover、workspace）对同一现场给出同一结果：
+运行时只读取 `concord.config.ts`，只接受当前格式（[C-009](../../../constitution.md#c-009-1)）；其它文件不是配置，不被读取或检测。所有入口（CLI、init、dry-run、recover、workspace）对同一现场给出同一结果：
 
 | 错误 | 触发条件 |
 | --- | --- |
 | `InvalidConfigSyntax` | 重复键、spread、computed key、调用、其它运行时表达式或额外语句 |
-| `JournalMigrationRequired` | 存在旧格式的未完成事务；优先于 `ProjectMigrationRequired` |
-| `ProjectMigrationRequired` | 存在 `concord.json`，包括双配置与从子目录向上发现 |
-| `EvidenceMigrationRequired` | 收据缺少配置绑定；保留原文件并重新取证 |
+| `InvalidData` | 配置、未完成事务或收据不符合当前 Schema |
 
-拒绝不改变配置、journal、锁、事务目标与临时文件的内容、存在性或权限。历史事务由匹配的工具版本在隔离环境中验证并恢复；诊断不建议删除现场或反复执行普通 `recover`。
+拒绝不改变配置、journal、锁、事务目标与临时文件的内容、存在性或权限；无法解码的 journal 阻断写入。缺少当前配置绑定的收据需要重新取证。
 
 ## 可观察验收
 
-- 双配置、非法运行时表达式、重复键与不安全路径明确拒绝且不执行消费者代码；JS 调用方绕过类型传入非法配置同样拒绝。
+- 非法运行时表达式、重复键与不安全路径明确拒绝且不执行消费者代码；JS 调用方绕过类型传入非法配置同样拒绝。
 - CAS 使用同一次读取的 source，拒绝覆盖外部编辑；普通工具编辑可规范化 TS 全文件，但恢复逐字节还原。
-- init 配置发布前后、`config set` 发布前后与源码写入的中断都能恢复；恢复再次中断可以重试；双配置保留现场。
+- init 配置发布前后、`config set` 发布前后与源码写入的中断都能恢复；恢复再次中断可以重试。
 - 配置仅改变注释也会改变新证据绑定的摘要，使此前的 fixed 证据失效，不改写历史证据。
-- 旧格式 journal 与残缺 TS scope 的拒绝早于任何遗留锁删除。畸形配置和宪法缺失不使恢复覆盖未知内容，也不阻断 `recover`。
+- 无法解码的 journal 与残缺 TS scope 的拒绝早于任何锁删除。畸形配置和宪法缺失不使恢复覆盖未知内容，也不阻断 `recover`。
 
 ## Spec 来源
 

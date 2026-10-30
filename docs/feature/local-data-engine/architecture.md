@@ -126,9 +126,9 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 累计 4 MiB WAL 增量或 32 个写事务后执行公开 checkpoint，失败使缓存不可用并保留现场。同批重复的 feedback identity 按输入顺序与本批已合并值比较，最后一次 putBatch 原子发布。
 
-## 升级
+## 引擎版本
 
-公开可写打开在协调锁内把有效的 v0.3 缓存接入分支项目格式，保留既有表与远端观察；来源、evidence 与 journal 不迁移。不增加兼容解析器、旧运行时或自动破坏性回退。0.13.0 之前的桥接拒绝内部硬链接，降级步骤见[统一缓存](use-case/use-unified-cache.md)。发行说明列明读取时的派生文件行为、混用限制与降级步骤。
+缓存只对写入它的引擎、桥接 ABI 与缓存表 schema 有效。打开时任一身份不符，缓存按不可用处理，以可写方式使用时按[清理](#清理)丢弃后重建；不读取、不转换其它版本的缓存（[C-009](../../constitution.md#c-009-2)）。来源、evidence 与 journal 不在缓存中。
 
 ## 诊断投影
 
@@ -136,7 +136,9 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 ### 刷新
 
-有工作区服务时，查询刷新由服务执行，扫描仍在下述内部入口的子进程中进行，服务确认消息后写入；没有服务时，每个查询键只有一个活跃刷新 owner `query-refresh-worker`，死亡 owner 可回收。合并只控制刷新，不限制查询或文档发布。刷新进程关闭继承的终端输入输出，在 `OwnedProcessService` 下启动内部入口 `dist/query-scan-worker.js <root> <query-json>`。扫描进程以只读乐观方式打开仓库，关闭持久解析缓存，在[工作区投影](../web-workbench/architecture.md#读取与发布)使用的 `repo.observeProjection(() => run(repo))` 中执行查询。stdout 只写一条由 `src/query-scan-protocol.ts` 严格编码的消息：
+有工作区服务时，查询刷新由服务执行，扫描仍在下述内部入口的子进程中进行，服务确认消息后写入。没有服务时，每个查询键只有一个活跃刷新 owner `query-refresh-worker`，死亡 owner 可回收。
+
+合并只控制刷新，不限制查询或文档发布。刷新进程关闭继承的终端输入输出，在 `OwnedProcessService` 下启动内部入口 `dist/query-scan-worker.js <root> <query-json>`。扫描进程以只读乐观方式打开仓库，关闭持久解析缓存，在[工作区投影](../web-workbench/architecture.md#读取与发布)使用的 `repo.observeProjection(() => run(repo))` 中执行查询。stdout 只写一条由 `src/query-scan-protocol.ts` 严格编码的消息：
 
 ```ts
 type QueryScanMessage =
@@ -160,7 +162,7 @@ type QueryScanMessage =
 
 ### 投影记录
 
-`query_cache` 的 envelope 为 `concord.query-cache/v3`，旧格式读取时视为无投影：
+`query_cache` 的 envelope 为 `concord.query-cache/v3`，其它 envelope 视为无投影：
 
 ```ts
 type QueryCacheEnvelope = {

@@ -46,7 +46,7 @@ Feature、Roadmap 和 Design candidate 只要求 README。可选页为 library�
 
 宪法条款写成 `## C-001 规则本身 {#c-001}`，款是条款下根有序列表项，第一段末尾写 ` {#c-001-1}`；总则用 `## 总则 {#general}`，其款用 `{#general-<name>}`。ID 一经采用不改名、不复用。条款写法：每条款一项跨功能规则，标题就是规则；每款一项可审阅的义务、禁止或许可；条款写约束，不写达成约束的机制；用现行句式；依据规则的句子旁链接 ID。v1 宪法或带 `constitutionRefs` 的元数据返回 `ConstitutionMigrationRequired`，用 `concord constitution migrate` 一次转换。
 
-Engineering 默认 README 包含目标、机制、使用和验收，按内容用 `engineering page add` 扩展，不接受创建时的 `--pages`。已有包不迁移或删除页面；依赖旧全量默认的脚本应显式选择全套。`page add` 不修改作者 README，新增页后维护其入口链接。页面维护命令为：
+Engineering 默认 README 包含目标、机制、使用和验收，按内容用 `engineering page add` 扩展，不接受创建时的 `--pages`。`page add` 只新增页面，不删除已有页面。`page add` 不修改作者 README，新增页后维护其入口链接。页面维护命令为：
 
 除了完整模板页，也可用 Unicode 名称新增专题页，例如 `认知与执行`、`常识与上下文` 或 `plan-history`。专题页仍属于 package，不成为独立 owner。Design 外层支持专题页，候选中的页面用 `--plan`；既有目标、约束和裁决页保留各自位置。
 
@@ -101,16 +101,9 @@ action `concepts.set` 接受 `{ path, source, expectedDigest }`。结构错误�
 
 `concord docs check --json` 自动发现政策与概念；`--rules <path>` 选择受管政策的扫描根，或使用外部只读 profile。报告说明实际范围与输入快照。发现问题退出 1，逐处核对上下文，不机械全仓替换；这不是测试覆盖率或实现证明。
 
-旧 writing/v1 的普通检查返回 WritingMigrationRequired。先 show 取得原文与摘要，作者审核并用 concepts.set 保存 concepts.md，再用 writing.set 和旧摘要显式替换为 v3。概念编辑不因仍存在旧政策而被阻断，中间阶段不宣称检查通过。不要从旧表的名字编造定义；有旧 journal 时先用匹配的旧 CLI 恢复，不能绕过新授权边界。
-
 文档 ID 与专题名允许 Unicode 字母、组合标记和数字，可用单连字符分隔；例如 `concord use-case create 扩展NPC动作 --feature npc --title "扩展 NPC 动作"` 和 `concord feature page add npc 认知与执行`。名称保留原样，不翻译或自动更改大小写；禁止路径分隔符、空白和路径穿越。固定入口 README.md、architecture.md 等继续保留。
 
 
 受控规则在 `controlled` 中按叶子合成，null 清除子树，每种语言的词表和 allowIn 整表替换。数值开启长度检查；词法开关默认 false。程序性动作词开关需要有效非空 verbs 表（auto 要求 zh/en）；英文被动候选需要显式 participles。字符长度与受控 token 长度可同时生效。精确抽取、计数、语言与资源上限见随包 docs/feature/documentation-quality/policy.md 的「受控写作规则」与「写作 JSON 结果」。
 
-```sh
-concord writing migrate --path docs/concord-writing.json --dry-run
-concord writing migrate --path docs/concord-writing.json
-```
-
-migrate 只接受完整合法 v2，保留字段并只换 format；v1 需先审核概念定义。show 返回原文和 digest，修改仍使用 writing set 的完整 CAS。旧 journal 由匹配 CLI 恢复；未知现场保持阻断。WritingBudgetExceeded 的 complete 为 false，不把截断报告当成功。词法 finding 陈述词面观察，不宣称符合 ASD-STE100，也不分发其原文或词典。
+非 v3 政策是无效输入，返回 InvalidWritingPolicy。show 返回原文和 digest，修改使用 writing set 的完整 CAS；无法解码的 journal 保持阻断。WritingBudgetExceeded 的 complete 为 false，不把截断报告当成功。词法 finding 陈述词面观察，不宣称符合 ASD-STE100，也不分发其原文或词典。

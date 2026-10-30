@@ -7,7 +7,8 @@ kind: memory
 memoryKind: decision
 state: current
 epoch: 0
-promotions: []
+promotions:
+  - docs/constitution.md
 history: []
 ---
 

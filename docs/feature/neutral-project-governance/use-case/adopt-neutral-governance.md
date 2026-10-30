@@ -31,7 +31,7 @@ feature: docs/feature/neutral-project-governance/README.md
 - 已采用 native 要求的 Problem 从任意入口拒绝 command fixed，删除配置不能降级。
 - 源码、Spec、adapter 实现、候选包、epoch、副本身份或 cleanup 改变，同副本不连续、隔离副本相同、零执行、skip、retry 与清理失败均被拒绝，历史原件字节不变。
 - adapter 返回未知字段、重复键、错误 requestId、额外 stdout、超限输出、非零退出、超时、取消或残留子进程时具名失败，没有有效收据、残留进程或跨调用响应复用；包括强杀 adapter 时仍在运行且忽略 TERM 的嵌套子进程，以及清理无法核实后拒绝后续能力调用。
-- 活跃旧锁、pending journal、中断迁移与未知前像不能被新入口绕过；迁移不改写旧证据字段或摘要来伪造当前证明。
+- 活跃锁、pending journal 与未知前像不能被新入口绕过；接入不改写已有证据字段或摘要来伪造当前证明。
 - NiceEval 用同一安装候选、新配置和真实 runner 完成一套无付费、无远端副作用的正式可靠性闭环，计划与打包不加载 Concord 库，产品 E2E expected 零 diff；完整产品矩阵交给其 CI。
 - 原有 Web 未提交编辑保留；验收不 push、不发布、不做远端写入或付费调用。
 
