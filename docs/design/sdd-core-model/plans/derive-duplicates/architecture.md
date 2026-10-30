@@ -66,7 +66,7 @@ supersededBy: memory/new.md     # 或 supersession 写明原因与来源
 
 ### 直接编辑与门禁
 
-人与 agent 直接编辑全部文件，包括 Issue 的状态与关闭结论、Memory 的状态与关系、DECISION 的 `Selected:` 行与宪法正文。具名命令（`issue close`、`memory activate`、`design decide`、`constitution amend`、`roadmap adopt` 等）是写入同样内容的助手：它们执行需要运行的步骤（例如修复核验）并把结果写进文件，但不是唯一的写入途径。
+人与 agent 直接编辑 `docs/` 与 `memory/` 下的全部文件，包括 Issue 的状态与关闭结论、Memory 的状态与关系、DECISION 的 `Selected:` 行、宪法正文、`concepts.md` 与 `concord-writing.json`。概念与写作政策的结构、作用域与被引用的定义由 `check` 校验。具名命令（`issue close`、`memory activate`、`design decide`、`constitution amend`、`roadmap adopt` 等）是写入同样内容的助手：它们执行需要运行的步骤（例如修复核验）并把结果写进文件，但不是唯一的写入途径。
 
 可信度由门禁保证。`concord check` 校验当前状态；`concord check --since <base>` 另外对照基线提交检查本次变化，CI 对每个变更运行它：
 

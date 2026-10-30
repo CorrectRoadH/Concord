@@ -8,6 +8,12 @@ alternatives:
   - convention-first
   - trimmed-current
   - derive-duplicates
+decision:
+  selected: derive-duplicates
+  reason: 约定推导重复事实，显式保存不可推导语义，全部文件直接编辑并由差异门禁保证
+  at: 2026-10-30T04:30:49.475Z
+  targets:
+    - docs/feature/local-sdlc/README.md
 ---
 
 # 以 Spec 驱动开发的核心模型
