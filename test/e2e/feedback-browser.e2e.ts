@@ -133,6 +133,7 @@ test('feedback browser separates remote observations from local editing and prot
     await page.goto(`http://127.0.0.1:${server.port}/settings?tab=feedback`);
     await page.getByRole('button',{name:'移除连接 browser-github'}).click();
     await expect.poll(()=>readProjectConfig(root).feedbackConnections?.length).toBe(0);
+    await expect(page.getByRole('status').filter({ hasText: '已自动保存' })).toBeVisible();
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);
     await expect(page.getByRole('link').filter({hasText:'Local title retained'})).toBeVisible();
     await expect(page.getByText('尚未配置远端来源')).toBeVisible();

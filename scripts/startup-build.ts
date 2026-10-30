@@ -60,7 +60,8 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
       const path = relative(resolve(root, 'entry/cli'), resolve(file));
       return path.startsWith('.') ? path : `./${path}`;
     };
-    const files = Object.fromEntries(emitted.map(file => [modulePath(file, 'dist'), digest(file)]));
+    const productionFiles = [...emitted, 'dist/entry/cli/cli-fallback-bundle.js'];
+    const files = Object.fromEntries(productionFiles.map(file => [modulePath(file, 'dist'), digest(file)]));
     const sourceFiles = Object.fromEntries(emitted.map(file => file.replace(/^dist\//u, 'src/').replace(/\.js$/u, '.ts')).map(file => [modulePath(file, 'src'), digest(file)]));
     const payload = {
       format: 'concord.startup/v1', packageDigest: digest('package.json'), files, sourceFiles,

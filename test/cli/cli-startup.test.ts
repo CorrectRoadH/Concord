@@ -132,6 +132,12 @@ test('help preserves terminal rendering and rejects mismatched generated data', 
     }
   }
   const expected = run(['--help'], environment, false);
+  const fallback = installationResources(packageRoot).fallback;
+  const fallbackBytes = readFileSync(fallback);
+  try {
+    appendFileSync(fallback, '\n// changed complete fallback bytes\n');
+    assert.deepEqual(run(['--help'], environment, false), expected, 'complete fallback identity');
+  } finally { writeFileSync(fallback, fallbackBytes); }
   const start = original.indexOf('export default ') + 'export default '.length;
   const payload = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(original.slice(start).trim().replace(/;$/u, ''));
   const receipts = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Struct({ stdout: Schema.String, stderr: Schema.String, status: Schema.Int })))(payload.receipts);
