@@ -7,16 +7,16 @@ import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
 import { renderOwnerFixture } from './owner-fixture.js';
-import { compileTrace } from '../dist/repository/docs/trace/compiler.js';
-import { createFeatureAt, addFeaturePageAt, setFeaturePageAt } from '../dist/repository/docs/feature-structure.js';
-import { createUseCaseAt } from '../dist/repository/docs/use-case/domain.js';
-import { decodeDesignReadme } from '../dist/repository/docs/design/codec.js';
-import { readDesignPlanPaths } from '../dist/document-layout.js';
-import { MemoryRepository } from '../dist/repository/memory/repository.js';
-import { FeedbackRepository } from '../dist/repository/feedback/repository.js';
-import { leafOwnerSelection, assertSameLeafSelection } from '../dist/repository/document-owners.js';
-import { traceDigest } from '../dist/repository/docs/trace/relation-mutation.js';
-import { templateBody } from '../dist/templates.js';
+import { compileTrace } from '../repository/docs/trace/compiler.js';
+import { createFeatureAt, addFeaturePageAt, setFeaturePageAt } from '../repository/docs/feature-structure.js';
+import { createUseCaseAt } from '../repository/docs/use-case/domain.js';
+import { decodeDesignReadme } from '../repository/docs/design/codec.js';
+import { readDesignPlanPaths } from '../src/document-layout.js';
+import { MemoryRepository } from '../repository/memory/repository.js';
+import { FeedbackRepository } from '../repository/feedback/repository.js';
+import { leafOwnerSelection, assertSameLeafSelection } from '../repository/document-owners.js';
+import { traceDigest } from '../repository/docs/trace/relation-mutation.js';
+import { templateBody } from '../src/templates.js';
 
 function write(root: string, path: string, source: string): void { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), source); }
 function fixture(): string {

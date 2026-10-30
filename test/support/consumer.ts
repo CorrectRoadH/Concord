@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before } from 'node:test';
-import { LocalRepository, initialize } from '../../dist/storage.js';
+import { LocalRepository, initialize } from '../../src/storage.js';
 
 let temporary: string | undefined;
 let template: string | undefined;

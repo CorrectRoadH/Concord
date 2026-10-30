@@ -30,11 +30,11 @@ import {
   setPage,
   showPage,
   supersedeMemory,
-} from '../dist/documents.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import { inspectResolutionEvidence } from '../dist/evidence.js';
-import { inspectDocuments } from '../dist/editing.js';
-import { MemorySchema, ResolutionSchema, decode, type Resolution } from '../dist/shared.js';
+} from '../src/documents.js';
+import { LocalRepository, initialize } from '../src/storage.js';
+import { inspectResolutionEvidence } from '../src/evidence.js';
+import { inspectDocuments } from '../src/editing.js';
+import { MemorySchema, ResolutionSchema, decode, type Resolution } from '../src/shared.js';
 
 function useConsumer(run: (repo: LocalRepository, root: string) => void): void {
   const root = createConsumer();

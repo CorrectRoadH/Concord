@@ -6,12 +6,12 @@ import { dirname, join } from 'node:path';
 import test, { after } from 'node:test';
 import { Effect } from 'effect';
 import { parse } from 'yaml';
-import { decodeDocumentSource, renderDocument, researchSources } from '../dist/document-codec.js';
-import { activateMemory, adoptRoadmap, checkDocuments, createDocument, decideDesign, deferDesign, findDocument, linkIssue, loadDocuments, promoteMemory, supersedeMemory, unlinkIssue } from '../dist/documents.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import type { DocumentMeta } from '../dist/shared.js';
+import { decodeDocumentSource, renderDocument, researchSources } from '../src/document-codec.js';
+import { activateMemory, adoptRoadmap, checkDocuments, createDocument, decideDesign, deferDesign, findDocument, linkIssue, loadDocuments, promoteMemory, supersedeMemory, unlinkIssue } from '../src/documents.js';
+import { LocalRepository, initialize } from '../src/storage.js';
+import type { DocumentMeta } from '../src/shared.js';
 import { authorDesignFixture } from './design-fixture.js';
-import { renderMemorySource } from '../dist/memory-write.js';
+import { renderMemorySource } from '../src/memory-write.js';
 import { withConsumer as consumer } from './support/consumer.js';
 
 const base = { format: 'concord.document/v1' as const, id: 'sample', title: '样例', createdAt: '2026-10-30' };

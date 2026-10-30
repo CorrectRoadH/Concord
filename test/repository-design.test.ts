@@ -7,8 +7,8 @@ import { tmpdir } from 'node:os';
 import test, { mock } from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
-import { createDesignAt, checkDesignAt, decideDesignAt } from '../dist/repository/docs/design/domain.js';
-import { templateBody } from '../dist/templates.js';
+import { createDesignAt, checkDesignAt, decideDesignAt } from '../repository/docs/design/domain.js';
+import { templateBody } from '../src/templates.js';
 import { authorDesignFixture } from './design-fixture.js';
 
 function write(root: string, path: string, source: string): void {
