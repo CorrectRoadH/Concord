@@ -63,7 +63,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | `base` | `model`、平台层与 `native/hawdb` 的 TypeScript 绑定；不导入领域或应用 |
 | `domain` | `model`、`base` 与下表中排在它之前的 `domain` 模块 |
 | `app` | `domain`、`base`、`model` |
-| `entry` | `app` 与 `model`；只有各入口的组合根 `entry/<入口>/main.ts` 可以导入 `domain` 与 `base` 的 Layer |
+| `entry` | `app` 与 `model`；只有各入口的组合根 `entry/<入口>/main.ts` 可以导入 `domain` 与 `base` 的 Layer 以及其它入口模块的出口；入口的其它文件互不导入 |
 
 领域之间的依赖按以下层级，只能依赖排在前面层级的模块；同一层级的领域互不依赖，需要同层能力时由 `app` 编排或提取共享的纯模型：
 
@@ -71,6 +71,8 @@ native/hawdb/   HawDB 的 N-API 绑定
 2. `concepts`、`constitution`、`designs`、`issues`、`memory`、`docs-work`：各自拥有生命周期与采用操作，`issues` 拥有远端写入与 IssueProject 端口，`docs-work` 拥有写集规划与 scoped-clean 规则；
 3. `writing`（依赖 `concepts`）、`code`、`tests`；
 4. `trace`（依赖 `documents`、`code`、`tests`、`constitution`）、`feedback`（依赖 `issues`）、`onboarding`（模板、配置与初始化规则，依赖 `documents`、`concepts`、`constitution`、`writing`）。
+
+一个入口需要启动另一个入口时（`concord view` 启动 HTTP 服务、`concord lsp` 启动语言服务），由该入口自己定义启动端口，组合根用对方入口的实现提供；协议实现留在对方入口，`app` 不感知传输。
 
 跨领域的编排在 `app`：分析观察对关系结果的补充、初始化与配置治理、步骤改写、docs work 的检查与收尾。`code` 不回调 `trace`，`concepts` 不依赖 `writing`，共享的作用域与路径算法在 `model`。
 
