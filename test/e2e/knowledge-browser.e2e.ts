@@ -7,8 +7,8 @@ import { test } from './fixtures.js';
 import { act } from './journey.js';
 import { Effect, Schema } from 'effect';
 import { expect } from '@playwright/test';
-import { initialize, LocalRepository } from '../../dist/storage.js';
-import type { ViewServerHandle } from '../../dist/view-server.js';
+import { initialize, LocalRepository } from '../../src/storage.js';
+import type { ViewServerHandle } from '../../src/view-server.js';
 import { startViewServer } from './server.js';
 import { pollUntil, waitForWorkspaceProjection } from '../support.js';
 
@@ -39,8 +39,8 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
       assert.equal(JSON.stringify(recall.value).includes('Local content.'), true);
 
 
-      assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'first-memory', title: 'First memory', body: 'First memory content.', memoryKind: 'note' })).ok, true);
-      assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'second-memory', title: 'Second memory', body: 'Second memory content.', memoryKind: 'note' })).ok, true);
+      assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'first-memory', title: 'First memory', body: 'First memory content.', type: 'note' })).ok, true);
+      assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'second-memory', title: 'Second memory', body: 'Second memory content.', type: 'note' })).ok, true);
       await pollUntil(async () => {
         const value = await waitForWorkspaceProjection(base);
         return ['first-memory', 'second-memory'].every(id => value.snapshot.documents.some(document => document.metadata.id === id)) ? true : undefined;

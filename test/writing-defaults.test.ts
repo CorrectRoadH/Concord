@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { checkWriting } from '../dist/writing.js';
-import { showWriting } from '../dist/writing-management.js';
-import { renderTypeScriptConfig } from '../dist/config.js';
-import { digest } from '../dist/shared.js';
-import { defaultWritingSource } from '../dist/writing-defaults.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { checkWriting } from '../src/writing.js';
+import { showWriting } from '../src/writing-management.js';
+import { renderTypeScriptConfig } from '../src/config.js';
+import { digest } from '../src/shared.js';
+import { defaultWritingSource } from '../src/writing-defaults.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('init adopts a complete writing preset, checks it immediately, and preserves existing policy bytes', () => Effect.runPromise(Effect.sync(() => {
@@ -78,7 +78,7 @@ test('init publication and recovery reject custom or local policies masquerading
       mkdirSync(privateDir, { recursive: true });
       const journalPath = join(privateDir, 'journal.json');
       for (const phase of ['prepared', 'committed']) {
-      writeFileSync(journalPath, JSON.stringify({ format: 'concord.journal', root, privateDir, projectId: preview.config.projectId, operation: 'init', phase, directories: ['docs'], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') }, changes }));
+      writeFileSync(journalPath, JSON.stringify({ format: 'concord.journal', root, privateDir, operation: 'init', phase, directories: ['docs'], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') }, changes }));
       assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
       assert.equal(existsSync(journalPath), true);
       assert.equal(existsSync(join(root, path)), false);

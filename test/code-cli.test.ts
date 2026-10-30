@@ -44,11 +44,9 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     assert.deepEqual(config.sourceRoots, ['src', 'test']);
     assert.deepEqual(config.testRoots, []);
     assert.deepEqual(call(['doctor'], Schema.Struct({ missingSourceRoots: Schema.Array(Schema.String) })).missingSourceRoots, ['src', 'test']);
-    call(['feature', 'create', 'orders', '--title', 'Orders'], ack);
-    call(['use-case', 'create', 'create-order', '--feature', feature, '--title', 'Create order'], ack);
-    call(['feature', 'page', 'add', 'orders', 'behavior'], ack);
-    call(['engineering', 'create', 'tooling', '--title', 'Tooling'], ack);
-    call(['engineering', 'page', 'add', 'tooling', 'architecture'], ack);
+    call(['new', 'feature', 'orders', '--title', 'Orders'], ack);
+    call(['new', 'use-case', 'create-order', '--feature', feature, '--title', 'Create order'], ack);
+    call(['new', 'engineering', 'tooling', '--title', 'Tooling', '--pages', 'architecture'], ack);
     writeFileSync(join(root, 'docs/feature/orders/behavior.md'), '# Behavior\n\n## Normalize\n\n## Validate\n');
     const engineering = 'docs/engineering/tooling/README.md';
     const engineeringPage = 'docs/engineering/tooling/architecture.md';
@@ -59,8 +57,8 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     assert.ok(engineeringOwnerSnippet.includes(`// @concord-implements ${engineering}`));
     assert.ok(engineeringPageSnippet.includes(`// @concord-implements ${engineeringPage}#overview`));
     assert.equal(call(['code', 'annotate', '--scope', 'node', '--contract', `${engineeringPage}#missing`], error, 1).error, 'AnchorNotFound');
-    call(['research', 'create', 'research-target', '--title', 'Research target'], ack);
-    call(['roadmap', 'create', 'roadmap-target', '--title', 'Roadmap target'], ack);
+    call(['new', 'research', 'research-target', '--title', 'Research target'], ack);
+    call(['new', 'roadmap', 'roadmap-target', '--title', 'Roadmap target'], ack);
     assert.equal(call(['code', 'annotate', '--scope', 'node', '--contract', 'docs/research/research-target/README.md'], error, 1).error, 'InvalidReferenceTarget');
     assert.equal(call(['code', 'annotate', '--scope', 'node', '--contract', 'docs/roadmap/roadmap-target/README.md'], error, 1).error, 'InvalidReferenceTarget');
     const snippet = call(['code', 'annotate', '--scope', 'node', '--contract', useCase, '--contract', `${feature}#orders`], Schema.Struct({ snippet: Schema.String })).snippet;

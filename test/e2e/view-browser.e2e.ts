@@ -7,9 +7,9 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { act } from './journey.js';
 import { expect } from '@playwright/test';
-import { addPage, createDocument } from '../../dist/documents.js';
-import { initialize, LocalRepository } from '../../dist/storage.js';
-import type { ViewServerHandle } from '../../dist/view-server.js';
+import { addPage, createDocument } from '../../src/documents.js';
+import { initialize, LocalRepository } from '../../src/storage.js';
+import type { ViewServerHandle } from '../../src/view-server.js';
 import { startViewServer } from './server.js';
 import { parseWorkspaceProjection, pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
 
@@ -175,12 +175,13 @@ test('browser opens and refreshes a deep link without credentials and retries in
     const adoptedProjection = page.waitForResponse(async response => {
       if (response.request().method() !== 'GET' || new URL(response.url()).pathname !== '/api/workspace' || response.status() !== 200) return false;
       const projection = parseWorkspaceProjection(await response.text());
-      return projection?.snapshot.documents.some(document => document.metadata.kind === 'roadmap' &&
-        document.metadata.id === 'planned' && document.metadata.state === 'adopted') ?? false;
+      return projection?.snapshot.documents.some(document => document.metadata.kind === 'feature' &&
+        document.metadata.id === 'adopted-direction') ?? false;
     });
     await page.getByRole('button', { name: '采用 Roadmap', exact: true }).click();
     assert.equal(await (await adoptedProjection).finished(), null);
-    await expect(page.getByText('adopted', { exact: true })).toBeVisible();
+    await page.goto(`http://127.0.0.1:${server.port}/features/adopted-direction`);
+    await expect(page.getByTestId('document-file-preview')).toBeVisible();
     await expect(page.getByRole('heading', { name: '可用操作', exact: true })).toHaveCount(0);
     await expect(page.getByText('Unexpected Application Error!', { exact: true })).toHaveCount(0);
     const configurationPath = join(root, 'concord.config.ts');
@@ -197,7 +198,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
     writeFileSync(configurationPath, originalConfiguration);
     await page.request.post(`http://127.0.0.1:${server.port}/api/workspace`, { data: {} });
     await page.getByRole('button', { name: '重新载入', exact: true }).click();
-    await expect(page.getByLabel('Project ID', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByLabel('测试目录', { exact: true })).toBeVisible({ timeout: 15_000 });
     assert.ok(authorizations.length > 0);
     assert.ok(authorizations.every(value => value === undefined));
     assert.deepEqual(errors, []);
@@ -547,13 +548,13 @@ test('real browser creates a Feature, edits Markdown, preserves conflicts and op
     await page.keyboard.press('Escape');
     await expect(page.getByRole('dialog')).toHaveCount(0);
     await page.getByRole('link',{name:'项目设置',exact:true}).click();
-    await expect(page.getByLabel('Project ID',{exact:true})).not.toBeEditable();
+    await expect(page.getByLabel('Project ID',{exact:true})).toHaveCount(0);
     const timeoutSave = page.waitForResponse(response => response.url().endsWith('/api/action') &&
       (response.request().postDataJSON() as { action?: string; config?: { runner?: { timeoutMs?: number } } }).action === 'config.set' &&
       (response.request().postDataJSON() as { config?: { runner?: { timeoutMs?: number } } }).config?.runner?.timeoutMs === 11111);
     await page.getByLabel('运行超时',{exact:true}).fill('11111');
     assert.equal((await timeoutSave).status(), 200);
-    await expect.poll(()=>readProjectConfig(root).runner.timeoutMs).toBe(11111);
+    await expect.poll(()=>readProjectConfig(root).runner?.timeoutMs).toBe(11111);
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await expect(page.getByRole('status')).toContainText('已自动保存');
     // 暂缓真实保存请求，分别观察草稿与回读，避免把自动保存速度当作断言条件。

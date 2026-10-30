@@ -5,16 +5,16 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { EMPTY_CONCEPT_CATALOG } from '../dist/concepts-schema.js';
-import { indexConcepts, readConceptCatalog, setConcepts, showConcepts } from '../dist/concepts.js';
-import { checkWriting } from '../dist/writing.js';
-import { setWriting, showWriting } from '../dist/writing-management.js';
-import { checkProject } from '../dist/project-check.js';
-import { createDocument, setAuthor } from '../dist/documents.js';
-import { addPage, setPage } from '../dist/document-pages.js';
-import { setMarkdown } from '../dist/editing.js';
-import { digest } from '../dist/shared.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { EMPTY_CONCEPT_CATALOG } from '../src/concepts-schema.js';
+import { indexConcepts, readConceptCatalog, setConcepts, showConcepts } from '../src/concepts.js';
+import { checkWriting } from '../src/writing.js';
+import { setWriting, showWriting } from '../src/writing-management.js';
+import { checkProject } from '../src/project-check.js';
+import { createDocument, setAuthor } from '../src/documents.js';
+import { addPage, setPage } from '../src/document-pages.js';
+import { setMarkdown } from '../src/editing.js';
+import { digest } from '../src/shared.js';
 
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-markdown-concepts-'));
@@ -154,22 +154,18 @@ test('terminology links reuse inline-link filtering and percent decoding', () =>
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 // C11, C12, C13
-test('generic writes reject catalogs and JSON files are completely outside terminology discovery', () => Effect.runPromise(Effect.sync(() => {
+test('generic saves permit direct catalog editing and JSON files stay outside terminology discovery', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   try {
     assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), EMPTY_CONCEPT_CATALOG);
     assert.equal(existsSync(join(root, 'docs/concepts.json')), false);
     withRepo(root, repo => createDocument(repo, 'feature', { id: 'sample', title: 'Sample', pages: [] }));
     const path = 'docs/feature/sample/concepts.md';
-    assert.throws(() => withRepo(root, repo => addPage(repo, 'feature', 'sample', 'concepts')), { code: 'ManagedConceptCatalog' });
+    withRepo(root, repo => addPage(repo, 'feature', 'sample', 'concepts'));
     write(root, path, term('local', 'Local'));
-    for (const writeOwner of [
-      (repo: LocalRepository) => setAuthor(repo, path, '# Changed\n', digest(term('local', 'Local'))),
-      (repo: LocalRepository) => setPage(repo, 'feature', 'sample', 'concepts', '# Changed\n', digest(term('local', 'Local'))),
-      (repo: LocalRepository) => setMarkdown(repo, path, '# Changed\n', digest(term('local', 'Local'))),
-      (repo: LocalRepository) => repo.publish('set-markdown', [{ path, before: term('local', 'Local'), after: term('local', 'Changed') }]),
-    ]) assert.throws(() => withRepo(root, writeOwner), { code: 'ManagedConceptCatalog' });
-    assert.equal(readFileSync(join(root, path), 'utf8'), term('local', 'Local'));
+    withRepo(root, repo => setMarkdown(repo, path, term('local', 'Changed'), digest(term('local', 'Local'))));
+    assert.equal(readFileSync(join(root, path), 'utf8'), term('local', 'Changed'));
+    assert.throws(() => withRepo(root, repo => setMarkdown(repo, path, '# Stale\n', digest(term('local', 'Local')))), { code: 'PreimageChanged' });
     const template = 'docs/_template/concepts.md';
     write(root, template, '# Template\n\n## Outline\n');
     withRepo(root, repo => setMarkdown(repo, template, '# Updated reference\n', digest('# Template\n\n## Outline\n')));

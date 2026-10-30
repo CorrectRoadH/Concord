@@ -5,12 +5,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { initialize, LocalRepository } from '../../dist/storage.js';
-import { createDocument, loadDocuments, renderDocument } from '../../dist/documents.js';
-import { mergeFeedbackCache } from '../../dist/feedback-cache.js';
-import type { ViewServerHandle } from '../../dist/view-server.js';
+import { initialize, LocalRepository } from '../../src/storage.js';
+import { createDocument, loadDocuments, renderDocument } from '../../src/documents.js';
+import { mergeFeedbackCache } from '../../src/feedback-cache.js';
+import type { ViewServerHandle } from '../../src/view-server.js';
 import { startViewServer } from './server.js';
-import type { FeedbackSource } from '../../dist/feedback-schema.js';
+import type { FeedbackSource } from '../../src/feedback-schema.js';
 import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support.js';
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md

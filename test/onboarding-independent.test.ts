@@ -83,7 +83,18 @@ test('installed new and relation helpers persist only current owner fields', () 
   run(root, ['new', 'issue', 'bug']);
   run(root, ['issue', 'link', 'bug', 'memory/choice.md', '--role', 'investigation']);
   run(root, ['issue', 'unlink', 'bug', 'memory/choice.md', '--role', 'investigation']);
+  run(root, ['issue', 'link', 'bug', 'docs/feature/cart/README.md', '--role', 'adopts']);
+  run(root, ['issue', 'unlink', 'bug', 'docs/feature/cart/README.md', '--role', 'adopts']);
   assert.match(readFileSync(join(root, 'memory/choice.md'), 'utf8'), /type: decision[\s\S]*status: current[\s\S]*role: supports/u);
   assert.doesNotMatch(readFileSync(join(root, 'docs/issues/bug.md'), 'utf8'), /relations:|history:|format:|draft/u);
   assert.equal(run(root, ['list', '--open']).documents.length, 1);
+})));
+
+// @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
+test('installed new Design creates candidate scaffolds and defer records its reason', () => Effect.runPromise(Effect.sync(() => {
+  const root = consumer('design');
+  run(root, ['new', 'design', 'storage']);
+  for (const plan of ['plan-1', 'plan-2']) assert.equal(existsSync(join(root, `docs/design/storage/plans/${plan}/README.md`)), true);
+  run(root, ['design', 'defer', 'storage', '--reason', 'Wait for measurements']);
+  assert.match(readFileSync(join(root, 'docs/design/storage/DECISION.md'), 'utf8'), /Deferred: Wait for measurements/u);
 })));

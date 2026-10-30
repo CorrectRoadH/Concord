@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { addPage, createDocument } from '../../dist/documents.js';
-import { initialize, LocalRepository } from '../../dist/storage.js';
+import { addPage, createDocument } from '../../src/documents.js';
+import { initialize, LocalRepository } from '../../src/storage.js';
 import { startViewServer } from './server.js';
 
 // @use-case docs/feature/document-packages/use-case/organize-freeform-research.md

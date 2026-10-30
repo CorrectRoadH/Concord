@@ -1,3 +1,4 @@
+import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -5,13 +6,13 @@ import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { scanAnnotations } from '../dist/annotations.js';
-import { scanCode } from '../dist/code.js';
-import { inlineLinks, relativeMarkdownLink } from '../dist/constitution.js';
-import { traceGaps } from '../dist/trace.js';
-import { loadDocuments } from '../dist/documents.js';
-import { LocalRepository } from '../dist/storage.js';
-import { readWritingPolicy } from '../dist/writing-policy.js';
+import { scanAnnotations } from '../src/annotations.js';
+import { scanCode } from '../src/code.js';
+import { inlineLinks, relativeMarkdownLink } from '../src/constitution.js';
+import { traceGaps } from '../src/trace.js';
+import { loadDocuments } from '../src/documents.js';
+import { LocalRepository } from '../src/storage.js';
+import { readWritingPolicy } from '../src/writing-policy.js';
 import { projectConfigPath, readProjectConfig } from './support.js';
 
 const PackageVersion = Schema.Struct({ version: Schema.String });
@@ -21,9 +22,10 @@ const CheckOutput = Schema.Struct({ ok: Schema.Boolean });
 test('current checkout configures a version-matched runner whose annotations scan cleanly', () => Effect.runPromise(Effect.sync(() => {
   const root = resolve('.');
   const project = readProjectConfig(root);
-  assert.equal(project.format, 'concord.project/v1');
-  assert.deepEqual(project.testRoots, ['test']);
+  assert.equal('format' in project, false);
+  assert.equal(project.testRoots, undefined);
   assert.deepEqual(project.sourceRoots, ['src', 'repository', 'web', 'scripts']);
+  assert.ok(project.runner);
   assert.equal(project.runner.kind, 'command');
   if (project.runner.kind !== 'command') assert.fail('self-host runner must use explicit command argv');
   assert.deepEqual(project.runner.argv, ['node', '--import', 'tsx', 'scripts/test-built.ts', '--test-name-pattern', '{pattern}', '{file}']);
@@ -32,7 +34,7 @@ test('current checkout configures a version-matched runner whose annotations sca
     'scripts/test-built.ts', 'scripts/test-reporter.ts', 'tsconfig.test.json', 'package.json', 'pnpm-lock.yaml']);
 
   const packageVersion = Schema.decodeUnknownSync(Schema.fromJsonString(PackageVersion))(readFileSync(join(root, 'package.json'), 'utf8')).version;
-  const version = spawnSync(process.execPath, [join(root, 'dist/entry.js'), '--version'], { cwd: root, encoding: 'utf8' });
+  const version = spawnSync(process.execPath, [installedConcordCli(), '--version'], { cwd: root, encoding: 'utf8' });
   assert.equal(version.status, 0, version.stderr);
   assert.equal(version.stdout.trim(), `concord v${packageVersion}`);
 
@@ -43,8 +45,8 @@ test('current checkout configures a version-matched runner whose annotations sca
     cpSync(join(root, configPath), join(consumer, configPath));
     // The global writing policy may select prose outside docs (READMEs, skills, templates).
     const writingRoots = readWritingPolicy(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')).roots ?? [];
-    const sources = new Set(['docs', ...project.testRoots, ...(project.sourceRoots ?? []),
-      ...(project.memorySources ?? []).map(source => source.path), ...project.runner.sourceFiles, ...writingRoots]);
+    const sources = new Set(['docs', ...(project.testRoots ?? ['test']), ...(project.sourceRoots ?? []),
+      'memory', ...(project.runner?.sourceFiles ?? []), ...writingRoots]);
     for (const source of sources) {
       mkdirSync(dirname(join(consumer, source)), { recursive: true });
       cpSync(join(root, source), join(consumer, source), { recursive: true });
@@ -58,9 +60,9 @@ test('current checkout configures a version-matched runner whose annotations sca
       assert.ok(useCases.length > 0, 'self-host contract inventory must contain at least one Use Case');
       const code = scanCode(repository);
       assert.deepEqual(code.findings, []);
-      assert.ok(code.codes.some(item => item.file === 'repository/engine.ts'), 'repository implementation must enter the self-host scan');
+      assert.ok(code.codes.some(item => item.file === 'src/storage.ts'), 'configured source roots must enter the self-host scan');
       assert.deepEqual(new Set(code.codes.map(item => item.scope)), new Set(['file', 'node', 'region']));
-      const tracked = new Set(documents.flatMap(issue => issue.metadata.kind !== 'issue' || issue.metadata.state !== 'draft' ? [] : inlineLinks(issue.body, issue.path).flatMap(link => {
+      const tracked = new Set(documents.flatMap(issue => issue.metadata.kind !== 'issue' || issue.metadata.status !== 'open' ? [] : inlineLinks(issue.body, issue.path).flatMap(link => {
         const target = relativeMarkdownLink(issue.path, link.url);
         return target?.kind === 'relative' && !target.query ? [target.path] : [];
       })));
@@ -72,21 +74,21 @@ test('current checkout configures a version-matched runner whose annotations sca
     } finally {
       repository.close();
     }
-    const checked = spawnSync(process.execPath, [join(root, 'dist/entry.js'), '--root', consumer, '--json', 'check'], { cwd: consumer, encoding: 'utf8' });
+    const checked = spawnSync(process.execPath, [installedConcordCli(), '--root', consumer, '--json', 'check'], { cwd: consumer, encoding: 'utf8' });
     assert.equal(checked.status, 0, checked.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(checked.stdout).ok, true);
-    const traced = spawnSync(process.execPath, [join(root, 'dist/entry.js'), '--root', consumer, '--json', 'trace', 'check'], { cwd: consumer, encoding: 'utf8' });
+    const traced = spawnSync(process.execPath, [installedConcordCli(), '--root', consumer, '--json', 'trace', 'check'], { cwd: consumer, encoding: 'utf8' });
     assert.equal(traced.status, 0, traced.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(traced.stdout).ok, true);
-    const engine = join(consumer, 'repository/engine.ts');
+    const engine = join(consumer, 'src/storage.ts');
     const source = readFileSync(engine, 'utf8');
-    const invalid = source.replace('docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md', 'docs/feature/missing-selfhost/README.md');
+    const invalid = source.replace('docs/feature/portable-coordination/architecture.md#invariants', 'docs/feature/missing-selfhost/README.md');
     assert.notEqual(invalid, source);
     writeFileSync(engine, invalid);
-    const rejected = spawnSync(process.execPath, [join(root, 'dist/entry.js'), '--root', consumer, '--json', 'check'], { cwd: consumer, encoding: 'utf8' });
+    const rejected = spawnSync(process.execPath, [installedConcordCli(), '--root', consumer, '--json', 'check'], { cwd: consumer, encoding: 'utf8' });
     assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr);
     assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CheckOutput), { onExcessProperty: 'ignore' })(rejected.stdout).ok, false);
-    assert.match(rejected.stdout, /repository\/engine\.ts/u);
+    assert.match(rejected.stdout, /src\/storage\.ts/u);
   } finally {
     rmSync(consumer, { recursive: true, force: true });
   }

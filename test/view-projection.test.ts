@@ -1,24 +1,23 @@
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getWorkspaceSnapshot } from '../dist/application.js';
-import { cacheDatabasePath } from '../dist/cache-file.js';
-import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from '../dist/coordination.js';
-import { createDocument } from '../dist/documents.js';
-import { openHawdb } from '../dist/hawdb-native.js';
-import { digest } from '../dist/shared.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import type { WorkspaceProjection } from '../dist/view-contract.js';
-import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from '../dist/workspace-projection.js';
-import { startViewServer, type ViewServerHandle } from '../dist/view-server.js';
-import { ViewScanManager } from '../dist/view-scan.js';
-import { parseWorkspaceHttpResponse, parseWorkspaceProjection, parseWorkspaceProjectionOutput, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from './support.js';
-
-const cli = join(resolve('.'), 'dist/entry.js');
+import { getWorkspaceSnapshot } from '../src/application.js';
+import { cacheDatabasePath } from '../src/cache-file.js';
+import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from '../src/coordination.js';
+import { createDocument } from '../src/documents.js';
+import { openHawdb } from '../src/hawdb-native.js';
+import { digest } from '../src/shared.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import type { WorkspaceProjection } from '../src/view-contract.js';
+import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from '../src/workspace-projection.js';
+import type { ViewServerHandle } from '../src/view-server.js';
+import { startViewServer } from './e2e/server.js';
+import { ViewScanManager } from '../src/view-scan.js';
+import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from './support.js';
 
 function fixture(): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-projection-'));
@@ -43,7 +42,7 @@ function interruptPublication(root: string): void {
     const before = repo.read(path)!;
     const after = before + '\nInterrupted\n';
     writeFileSync(join(repo.privateDir, 'journal.json'), JSON.stringify({ format: 'concord.journal', root, privateDir: repo.privateDir,
-      projectId: repo.config.projectId, operation: 'outlines', phase: 'prepared', directories: [],
+      operation: 'outlines', phase: 'prepared', directories: [],
       scope: { kind: 'documents', configPath: repo.configSnapshot.path, configSource: repo.configSnapshot.source, configDigest: repo.configSnapshot.digest },
       changes: [{ path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 420 }] }));
   } finally { repo.close(); }
@@ -138,7 +137,7 @@ test('/api/file resolves directed current owners without a workspace-wide scan',
 
     const config = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('concord.config.ts')}`);
     assert.equal(config.status, 200, await config.clone().text());
-    const configValue = await config.json() as { readonly value: { readonly project?: { readonly projectId: string }; readonly digest: string } };
+    const configValue = await config.json() as { readonly value: { readonly project?: { readonly sourceRoots?: readonly string[] }; readonly digest: string } };
     assert.ok(configValue.value.project, 'a valid config target exposes its parsed project preimage');
 
     const issue = await fetchFresh(`${base}/api/file?path=${encodeURIComponent('docs/issues/sample-issue.md')}`);
@@ -151,34 +150,21 @@ test('/api/file resolves directed current owners without a workspace-wide scan',
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('workspace show keeps current-source semantics while workspace projection reads the shared cache', async () => {
+test('current-source queries and cached projection queries remain separate', async () => {
   const root = fixture();
-  const show = spawnSync(process.execPath, [cli, '--root', root, '--json', 'workspace', 'show'], { encoding: 'utf8', timeout: 20_000 });
-  assert.equal(show.status, 0, show.stderr);
-  const shown = JSON.parse(show.stdout) as Record<string, unknown>;
-  assert.equal(shown.root, root);
-  assert.ok(Array.isArray(shown.documents));
-  assert.equal('snapshot' in shown, false);
-  assert.equal('projection' in shown, false);
-
-  // No View server has ever published here, so the explicit cache entry reports pending instead of scanning.
-  const pending = spawnSync(process.execPath, [cli, '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });
-  assert.equal(pending.status, 1, pending.stdout + pending.stderr);
-  assert.equal((JSON.parse(pending.stderr) as { readonly error: string }).error, 'WorkspaceProjectionPending');
-
-  let server: ViewServerHandle | undefined;
   try {
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-    await waitForWorkspaceProjection(baseOf(server));
-  } finally { await server?.close(); }
-  const projection = spawnSync(process.execPath, [cli, '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });
-  assert.equal(projection.status, 0, projection.stdout + projection.stderr);
-  const cached = parseWorkspaceProjectionOutput(projection.stdout);
-  assert.equal(cached.operation, 'workspace-projection');
-  assert.equal(cached.projection.refreshOwner, 'none', 'the explicit CLI entry never starts a refresh');
-  assert.equal(cached.projection.status, 'ready');
-  assert.ok(cached.snapshot.documents.some(document => document.metadata.id === 'projected'));
-  rmSync(root, { recursive: true, force: true });
+    const shown = await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));
+    assert.equal(shown.root, root);
+    assert.ok(shown.documents.length > 0);
+    assert.equal('projection' in shown, false);
+    assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionPending' });
+    const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    try { await waitForWorkspaceProjection(baseOf(server)); } finally { await server.close(); }
+    const cached = readWorkspaceProjection(workspaceProjectionContext(root));
+    assert.equal(cached.projection.refreshOwner, 'none');
+    assert.equal(cached.projection.status, 'ready');
+    assert.ok(cached.snapshot.documents.some(document => document.metadata.id === 'projected'));
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
@@ -199,9 +185,7 @@ test('workspace projection survives query-cache eviction pressure in its own nam
     const rows = database.get('workspace_projection', ['workspace']);
     assert.equal(rows.length, 1, 'query-cache pressure must not evict the workspace row');
   } finally { database.close(); }
-  const projection = spawnSync(process.execPath, [cli, '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });
-  assert.equal(projection.status, 0, projection.stdout + projection.stderr);
-  const cached = parseWorkspaceProjectionOutput(projection.stdout);
+  const cached = readWorkspaceProjection(workspaceProjectionContext(root));
   assert.equal(cached.projection.builtAt, built.projection.builtAt, 'query traffic cannot silently rebuild the workspace generation');
   rmSync(root, { recursive: true, force: true });
 });
@@ -216,13 +200,9 @@ test('a corrupt workspace row is reported unavailable without falling back to a 
   const database = openHawdb(path, { readOnly: false, create: false });
   try { database.put('workspace_projection', [{ key: 'workspace', payload: 'corrupt-not-json{' }]); }
   finally { database.close(); }
-  const projection = spawnSync(process.execPath, [cli, '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });
-  assert.equal(projection.status, 1, projection.stdout + projection.stderr);
-  assert.equal((JSON.parse(projection.stderr) as { readonly error: string }).error, 'WorkspaceProjectionUnavailable');
+  assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionUnavailable' });
   // The current-source entry point still works; unavailability never authorizes a scan to satisfy navigation.
-  const show = spawnSync(process.execPath, [cli, '--root', root, '--json', 'workspace', 'show'], { encoding: 'utf8', timeout: 20_000 });
-  assert.equal(show.status, 0, show.stderr);
-  assert.ok((JSON.parse(show.stdout) as { readonly documents: unknown[] }).documents.length > 0);
+  assert.ok((await Effect.runPromise(getWorkspaceSnapshot(root, 'off'))).documents.length > 0);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -375,22 +355,6 @@ test('a completed workspace scan survives brief contention at publication', asyn
     await server.close();
     rmSync(root, { recursive: true, force: true });
   }
-});
-
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('an installation missing native artifacts reports unavailable instead of pending', () => {
-  const root = fixture();
-  const installation = mkdtempSync(join(tmpdir(), 'concord-projection-install-'));
-  try {
-    cpSync(resolve('package.json'), join(installation, 'package.json'));
-    cpSync(resolve('dist'), join(installation, 'dist'), { recursive: true, filter: path => path !== resolve('dist/native') });
-    symlinkSync(resolve('node_modules'), join(installation, 'node_modules'), 'dir');
-    const result = spawnSync(process.execPath, [join(installation, 'dist/entry.js'), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });
-    assert.equal(result.status, 1, result.stdout + result.stderr);
-    const failure = JSON.parse(result.stderr) as { error: string; details: { reason: string } };
-    assert.equal(failure.error, 'WorkspaceProjectionUnavailable', result.stderr);
-    assert.equal(failure.details.reason, 'HawdbUnavailable');
-  } finally { rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md

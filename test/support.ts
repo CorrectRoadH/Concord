@@ -1,14 +1,16 @@
+import { packConcord, installConcord } from './installed-package.js';
+import { tmpdir } from 'node:os';
 import { after as nodeAfter, before as nodeBefore } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
 import type { Transform } from 'node:stream';
 import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
-import { parseTypeScriptConfig, renderTypeScriptConfig } from '../dist/config.js';
-import { ProjectSchema, decode, type ProjectConfig } from '../dist/shared.js';
-import type { WorkspaceProjection } from '../dist/view-contract.js';
-import { WorkspaceProjectionSnapshotSchema } from '../dist/workspace-projection.js';
+import { parseTypeScriptConfig, renderTypeScriptConfig } from '../src/config.js';
+import { ProjectSchema, decode, type ProjectConfig } from '../src/shared.js';
+import type { WorkspaceProjection } from '../src/view-contract.js';
+import { WorkspaceProjectionSnapshotSchema } from '../src/workspace-projection.js';
 
 type TestEffect = Effect.Effect<void, unknown, never>;
 
@@ -60,7 +62,9 @@ export const effectAfter = (program: TestEffect): void => {
 
 export const projectConfigPath = (_root: string): 'concord.config.ts' => 'concord.config.ts';
 export const readProjectConfig = (root: string): ProjectConfig => {
-  const path = projectConfigPath(root), source = readFileSync(join(root, path), 'utf8');
+  const path = projectConfigPath(root);
+  if (!existsSync(join(root, path))) return {};
+  const source = readFileSync(join(root, path), 'utf8');
   return parseTypeScriptConfig(source);
 };
 export const writeProjectConfig = (root: string, input: unknown): void => {
@@ -190,3 +194,20 @@ export const waitForWorkspaceNotModified = async (base: string, options: PollOpt
   }, { description: 'workspace not-modified response', ...options });
   return etag!;
 };
+
+let sharedInstalledCli: string | undefined;
+/** One read-only installed CLI per test process; the invocation supplies its frozen artifact. */
+export function installedConcordCli(): string {
+  if (sharedInstalledCli !== undefined) return sharedInstalledCli;
+  return Effect.runSync(Effect.sync(() => {
+    const scratch = mkdtempSync(join(tmpdir(), 'concord-cli-fixture-'));
+    try {
+      const install = join(scratch, 'consumer'); mkdirSync(install);
+      writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
+      installConcord(install, packConcord(scratch));
+      sharedInstalledCli = join(install, 'node_modules/concord-sdlc/dist/entry.js');
+      nodeAfter(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));
+      return sharedInstalledCli;
+    } catch (cause) { rmSync(scratch, { recursive: true, force: true }); throw cause; }
+  }));
+}

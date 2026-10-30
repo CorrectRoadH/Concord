@@ -1,5 +1,6 @@
+import { installedConcordCli } from './support.js';
 import { stringify } from 'yaml';
-import { EMPTY_CONCEPT_CATALOG } from '../dist/concepts-schema.js';
+import { EMPTY_CONCEPT_CATALOG } from '../src/concepts-schema.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -7,12 +8,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { renderTypeScriptConfig } from '../dist/config.js';
-import { digest } from '../dist/shared.js';
-import { catalogDependencies, indexConcepts, readConceptCatalog, setConcepts, showConcepts } from '../dist/concepts.js';
-import { checkWriting } from '../dist/writing.js';
-import { setWriting, showWriting, writingIndex } from '../dist/writing-management.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { renderTypeScriptConfig } from '../src/config.js';
+import { digest } from '../src/shared.js';
+import { catalogDependencies, indexConcepts, readConceptCatalog, setConcepts, showConcepts } from '../src/concepts.js';
+import { checkWriting } from '../src/writing.js';
+import { setWriting, showWriting, writingIndex } from '../src/writing-management.js';
 
 const json = (value: unknown): string => typeof value === 'string' ? value : `${JSON.stringify(value, null, 2)}\n`;
 const policy = (extra: Record<string, unknown> = {}) => ({ format: 'concord.writing/v3' as const, bannedTerms: [], ...extra });
@@ -185,7 +186,8 @@ test('init creates only the exact empty global catalog and preserves a pre-exist
   const fresh = fixture();
   try {
     assert.equal(readFileSync(join(fresh, 'docs/concepts.md'), 'utf8'), EMPTY_CONCEPT_CATALOG);
-    assert.throws(() => withRepo(fresh, repo => repo.publish('set-markdown', [{ path: 'docs/concepts.md', before: repo.read('docs/concepts.md')!, after: json(catalog([])) }])), { code: 'ManagedConceptCatalog' });
+    withRepo(fresh, repo => repo.publish('set-markdown', [{ path: 'docs/concepts.md', before: repo.read('docs/concepts.md')!, after: json(catalog([])) }]));
+    assert.equal(readFileSync(join(fresh, 'docs/concepts.md'), 'utf8'), json(catalog([])));
   } finally { rmSync(fresh, { recursive: true, force: true }); }
   const root = mkdtempSync(join(tmpdir(), 'concord-init-existing-catalog-'));
   try {
@@ -208,7 +210,7 @@ test('init creates only the exact empty global catalog and preserves a pre-exist
     const after = json(catalog([concept('forged', 'Forged')]));
     const journalPath = join(forgedRoot, '.git/concord/journal.json');
     mkdirSync(join(forgedRoot, '.git/concord'), { recursive: true });
-    writeFileSync(journalPath, json({ format: 'concord.journal', root: forgedRoot, privateDir: join(forgedRoot, '.git/concord'), projectId: preview.config.projectId, operation: 'init', phase: 'prepared', directories: ['docs'], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') }, changes: [
+    writeFileSync(journalPath, json({ format: 'concord.journal', root: forgedRoot, privateDir: join(forgedRoot, '.git/concord'), operation: 'init', phase: 'prepared', directories: ['docs'], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') }, changes: [
       { path: 'concord.config.ts', before: null, after: configSource, beforeDigest: null, afterDigest: digest(configSource), mode: 0o644 },
       { path: 'docs/concepts.md', before: null, after, beforeDigest: null, afterDigest: digest(after), mode: 0o644 },
     ] }));
@@ -227,9 +229,8 @@ test('persisted catalog dependency guard rejects forged membership and changed i
     write(root, target, before);
     write(root, importer, json(catalog([], [`${target}#item`])));
     const config = readFileSync(join(root, 'concord.config.ts'), 'utf8');
-    const projectId = withRepo(root, repo => repo.config.projectId);
     const deps = withRepo(root, repo => catalogDependencies(repo, target));
-    const base = { format: 'concord.journal', root, privateDir: join(root, '.git/concord'), projectId, operation: 'set-concepts', phase: 'prepared', directories: [], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: config, configDigest: digest(config) }, changes: [{ path: target, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }], catalogDependencies: deps };
+    const base = { format: 'concord.journal', root, privateDir: join(root, '.git/concord'), operation: 'set-concepts', phase: 'prepared', directories: [], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: config, configDigest: digest(config) }, changes: [{ path: target, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }], catalogDependencies: deps };
     writeFileSync(journalPath, json({ ...base, catalogDependencies: deps.filter(item => item.path !== importer) }));
     assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
     rmSync(journalPath);
@@ -261,7 +262,7 @@ test('persisted catalog dependency guard rejects forged membership and changed i
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('invalid policies can be replaced through the public CLI with explicit owner CAS', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), cli = join(process.cwd(), 'dist/entry.js');
+  const root = fixture(), cli = installedConcordCli();
   try {
     const old = json({ format: 'concord.writing/v1', roots: ['docs'], bannedTerms: [], concepts: 'docs/concepts.md' });
     write(root, 'docs/concord-writing.json', old);

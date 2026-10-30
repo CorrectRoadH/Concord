@@ -1,15 +1,23 @@
 import { Effect } from 'effect';
-import { startViewServer as start, type ViewServerHandle } from '../../dist/view-server.js';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { startViewServer as start, type ViewServerHandle } from '../../src/view-server.js';
+import { packConcord, installConcord } from '../installed-package.js';
 
-/** End fixture-owned HTTP connections without discarding the engine's failure screenshot. */
+/** Source behavior uses the invocation's installed Web assets; the fixture owns both resources. */
 export const startViewServer = (options: Parameters<typeof start>[0]): Promise<ViewServerHandle> =>
   Effect.runPromise(Effect.tryPromise(async () => {
-    const server = await start(options);
-    return { ...server, close: () => {
-      const closing = server.close();
-      // Chromium can hold a speculative connection that never sent an HTTP request.
-      // closeIdleConnections alone cannot drain that connection on Node.
-      server.server.closeAllConnections();
-      return closing;
-    } };
+    const scratch = mkdtempSync(join(tmpdir(), 'concord-browser-assets-'));
+    try {
+      const install = join(scratch, 'tool'); mkdirSync(install);
+      writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
+      installConcord(install, packConcord(scratch));
+      const server = await start({ ...options, webRoot: join(install, 'node_modules/concord-sdlc/dist/web') });
+      return { ...server, close: async () => {
+        const closing = server.close();
+        server.server.closeAllConnections();
+        try { await closing; } finally { rmSync(scratch, { recursive: true, force: true }); }
+      } };
+    } catch (cause) { rmSync(scratch, { recursive: true, force: true }); throw cause; }
   }));

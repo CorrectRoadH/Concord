@@ -5,11 +5,11 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { initialize, LocalRepository } from '../../dist/storage.js';
-import type { ViewServerHandle } from '../../dist/view-server.js';
+import { initialize, LocalRepository } from '../../src/storage.js';
+import type { ViewServerHandle } from '../../src/view-server.js';
 import { startViewServer } from './server.js';
-import { showWriting, setWriting } from '../../dist/writing-management.js';
-import { showConcepts, setConcepts } from '../../dist/concepts.js';
+import { showWriting, setWriting } from '../../src/writing-management.js';
+import { showConcepts, setConcepts } from '../../src/concepts.js';
 import { waitForWorkspaceProjection } from '../support.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md

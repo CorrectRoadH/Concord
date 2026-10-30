@@ -1,3 +1,4 @@
+import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -5,11 +6,11 @@ import { hostname, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { snapshot } from '../dist/config.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import { digest } from '../dist/shared.js';
+import { snapshot } from '../src/config.js';
+import { LocalRepository, initialize } from '../src/storage.js';
+import { digest } from '../src/shared.js';
 
-const cli = resolve('dist/entry.js');
+const cli = installedConcordCli();
 const fixture = (body: (root: string) => void) => {
   const root = mkdtempSync(join(tmpdir(), 'concord-ts-only-'));
   try { execFileSync('git', ['init', '-q', root]); body(root); }
@@ -19,10 +20,10 @@ const fixture = (body: (root: string) => void) => {
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('warm configuration parsing preserves caller isolation and rejects changed source bytes', () => Effect.runPromise(Effect.sync(() => fixture(root => {
   const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial); } finally { initial.close(); }
+  try { initialize(initial, false, { testRoots: ['test', 'tests'] }); } finally { initial.close(); }
   const source = readFileSync(join(root, 'concord.config.ts'), 'utf8');
   const first = snapshot('concord.config.ts', source);
-  const expected = [...first.config.testRoots];
+  const expected = [...(first.config.testRoots ?? [])];
   (first.config.testRoots as string[]).push('caller-only');
   assert.deepEqual(snapshot('concord.config.ts', source).config.testRoots, expected);
   assert.throws(() => snapshot('concord.config.ts', source.replace('testRoots', 'testRootz')), { code: 'InvalidData' });
@@ -33,11 +34,11 @@ test('warm configuration parsing preserves caller isolation and rejects changed 
 test('only the current TS config is read and unrelated files remain untouched', () => Effect.runPromise(Effect.sync(() => fixture(root => {
   const source = '{ deliberately invalid unrelated bytes }\n';
   writeFileSync(join(root, 'concord.json'), source);
-  const result = spawnSync(process.execPath, [cli, '--root', root, '--json', 'check'], { encoding: 'utf8', timeout: 20_000 });
-  assert.equal(result.status, 1);
-  assert.match(result.stderr, /ProjectNotFound/);
+  const result = spawnSync(process.execPath, [cli, '--root', root, '--json', 'config', 'show'], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
   const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial); } finally { initial.close(); }
+  try { initialize(initial, false, { testRoots: ['test', 'tests'] }); } finally { initial.close(); }
   const checked = spawnSync(process.execPath, [cli, '--root', root, '--json', 'check'], { encoding: 'utf8', timeout: 20_000 });
   assert.equal(checked.status, 0, checked.stdout + checked.stderr);
   assert.equal(readFileSync(join(root, 'concord.json'), 'utf8'), source);
@@ -47,7 +48,7 @@ test('only the current TS config is read and unrelated files remain untouched', 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('old journals are refused before stale locks or interrupted files can be changed', () => Effect.runPromise(Effect.sync(() => fixture(root => {
   const initial = new LocalRepository(root, { initialize: true });
-  initialize(initial); const config = initial.configSnapshot; initial.close();
+  initialize(initial, false, { testRoots: ['test', 'tests'] }); const config = initial.configSnapshot; initial.close();
   const privateDir = join(root, '.git/concord');
   const journalPath = join(privateDir, 'journal.json');
   const lockPath = join(privateDir, 'lock.json');
@@ -64,7 +65,7 @@ test('old journals are refused before stale locks or interrupted files can be ch
     [{ kind: 'documents', configPath: 'concord.json', configSource: '{}', configDigest: digest('{}') }, 'InvalidData'],
     [{ kind: 'documents', configPath: 'concord.config.ts', configSource: config.source }, 'InvalidData'],
   ] as const) {
-    const journal = JSON.stringify({ format: 'concord.journal', root, privateDir, projectId: config.config.projectId, operation: 'old-publication', phase: 'prepared', directories: [], scope, changes: [{ path, before: '# Before\n', after: '# Interrupted\n', beforeDigest: digest('# Before\n'), afterDigest: digest('# Interrupted\n'), mode: 420 }] });
+    const journal = JSON.stringify({ format: 'concord.journal', root, privateDir, operation: 'old-publication', phase: 'prepared', directories: [], scope, changes: [{ path, before: '# Before\n', after: '# Interrupted\n', beforeDigest: digest('# Before\n'), afterDigest: digest('# Interrupted\n'), mode: 420 }] });
     const lock = JSON.stringify({ format: 'concord.lock/v1', root, host: hostname(), pid: 2147483647, token: 'offline-recovery-only' });
     writeFileSync(journalPath, journal); writeFileSync(lockPath, lock);
     for (const options of [{ dryRun: true }, { recover: true }]) assert.throws(() => new LocalRepository(root, options), { code });
@@ -90,10 +91,10 @@ test('old journals are refused before stale locks or interrupted files can be ch
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('packed config commands reject non-current data and syntax without rewriting the source', () => Effect.runPromise(Effect.sync(() => fixture(root => {
   const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo); } finally { repo.close(); }
+  try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
   const path = join(root, 'concord.config.ts');
   const current = readFileSync(path, 'utf8');
-  for (const [source, code] of [[current.replace('concord.project/v1', 'concord.project/v0'), 'InvalidData'], ['export default { ...{} };\n', 'InvalidConfigSyntax']] as const) {
+  for (const [source, code] of [['export default { format: \"concord.project/v1\" };', 'InvalidData'], ['export default { ...{} };\n', 'InvalidConfigSyntax']] as const) {
     writeFileSync(path, source);
     const result = spawnSync(process.execPath, [cli, '--root', root, '--json', 'config', 'show'], { encoding: 'utf8', timeout: 20_000 });
     assert.equal(result.status, 1, result.stdout + result.stderr);

@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
 import { Schema } from 'effect';
-import { createDocument } from '../../dist/documents.js';
-import { initialize, LocalRepository } from '../../dist/storage.js';
+import { createDocument } from '../../src/documents.js';
+import { initialize, LocalRepository } from '../../src/storage.js';
 import { startViewServer } from './server.js';
 import { readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support.js';
 
@@ -21,7 +21,7 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     const body = '# Navigation\n\n' + 'A paragraph for restoring the reading position.\n\n'.repeat(60);
     createDocument(repo, 'feature', { id: 'navigation', title: 'Navigation', body });
     renameSync(join(root, 'docs/feature/navigation'), join(root, 'docs/feature/中文导航'));
-    createDocument(repo, 'use-case', { id: 'history', title: 'History', feature: 'navigation', body });
+    createDocument(repo, 'use-case', { id: 'history', title: 'History', feature: '中文导航', body: body.replace('# Navigation', '# History') });
   } finally { repo.close(); }
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src/navigation.ts'), '// @concord-file\n// @concord-implements docs/feature/中文导航/use-case/history.md\nexport const navigation = true;\n');
@@ -35,11 +35,11 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
     const origin = `http://127.0.0.1:${server.port}`;
-    await page.goto(`${origin}/features/navigation?tab=metadata`);
+    await page.goto(`${origin}/features/%E4%B8%AD%E6%96%87%E5%AF%BC%E8%88%AA?tab=metadata`);
     const gate = new Promise<void>(resolve => { release = resolve; });
     let intercepted = false;
     await page.route('**/api/action', async route => {
-      if (!intercepted && route.request().postDataJSON().action === 'document.metadata') {
+      if (!intercepted && route.request().postDataJSON().action === 'document.set') {
         intercepted = true;
         await gate;
       }
@@ -51,7 +51,7 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await page.getByLabel('文档标题', { exact: true }).fill('Latest revision');
     const latestSave = page.waitForResponse(response => {
       if (new URL(response.url()).pathname !== '/api/action') return false;
-      return Schema.is(Schema.Struct({ action: Schema.Literal('document.metadata'), title: Schema.Literal('Latest revision') }))(response.request().postDataJSON());
+      return Schema.is(Schema.Struct({ action: Schema.Literal('document.set'), body: Schema.String.check(Schema.isPattern(/^# Latest revision/m)) }))(response.request().postDataJSON());
     });
     const latestReadback = page.waitForResponse(async response => {
       const url = new URL(response.url());
@@ -67,7 +67,7 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await expect(page.getByRole('tab', { name: '实现', exact: true })).toHaveAttribute('data-state', 'active', { timeout: 15000 }).catch(async cause => {
       throw new Error(`Navigation failed at ${page.url()}: ${await page.locator('.form-error').allTextContents()}; ${errors}; ${await page.getByLabel('文档标题', { exact: true }).inputValue()}; ${readFileSync(join(root, 'docs/feature/中文导航/README.md'), 'utf8')}`, { cause });
     });
-    assert.match(readFileSync(join(root, 'docs/feature/中文导航/README.md'), 'utf8'), /title: Latest revision/);
+    assert.match(readFileSync(join(root, 'docs/feature/中文导航/README.md'), 'utf8'), /^# Latest revision/m);
     assert.equal(new URL(page.url()).searchParams.get('tab'), 'implementation');
     await page.unroute('**/api/action');
 
@@ -94,33 +94,33 @@ test('URL navigation saves the latest draft and restores nested drawers without 
     await source.getByRole('button', { name: 'Close', exact: true }).click();
     await expect(source).toHaveCount(0);
     await useCase.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(page).toHaveURL(`${origin}/features/navigation?tab=use-cases`);
+    await expect(page).toHaveURL(`${origin}/features/%E4%B8%AD%E6%96%87%E5%AF%BC%E8%88%AA?tab=use-cases`);
     await page.goto(nestedUrl);
     await expect(source.locator('.cm-content')).toContainText('navigation = true');
     await source.getByRole('button', { name: 'Close', exact: true }).click();
     await useCase.getByRole('button', { name: 'Close', exact: true }).click();
-    await expect(page).toHaveURL(`${origin}/features/navigation?tab=use-cases`);
+    await expect(page).toHaveURL(`${origin}/features/%E4%B8%AD%E6%96%87%E5%AF%BC%E8%88%AA?tab=use-cases`);
 
     await page.goto(`${origin}/settings`);
     const configBefore = readFileSync(join(root, 'concord.config.ts'), 'utf8');
     await page.getByRole('tab', { name: '高级 JSON', exact: true }).click();
-    await page.getByLabel('高级项目配置 JSON', { exact: true }).fill('{}');
+    await page.getByLabel('高级项目配置 JSON', { exact: true }).fill('{');
     await page.goBack();
     await expect(page.getByRole('dialog', { name: '离开并丢弃未保存内容？' })).toBeVisible();
     await expect(page).toHaveURL(`${origin}/settings?tab=advanced`);
     await page.getByRole('button', { name: '留在此页', exact: true }).click();
-    await expect(page.getByLabel('高级项目配置 JSON', { exact: true })).toHaveValue('{}');
+    await expect(page.getByLabel('高级项目配置 JSON', { exact: true })).toHaveValue('{');
     await page.getByRole('tab', { name: '常用设置', exact: true }).click();
     await page.getByRole('button', { name: '丢弃并离开', exact: true }).click();
-    await expect(page.getByLabel('Project ID', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('测试目录', { exact: true })).toBeVisible();
     await page.goBack();
-    await expect(page.getByLabel('高级项目配置 JSON', { exact: true })).not.toHaveValue('{}');
+    await expect(page.getByLabel('高级项目配置 JSON', { exact: true })).not.toHaveValue('{');
     await page.getByRole('tab', { name: '诊断', exact: true }).click();
     await expect(page.getByRole('heading', { name: '当前诊断', exact: true })).toBeVisible();
     assert.equal(readFileSync(join(root, 'concord.config.ts'), 'utf8'), configBefore);
     for (const width of [1440, 390]) {
       await page.setViewportSize({ width, height: 900 });
-      await page.goto(`${origin}/features/navigation?tab=body`);
+      await page.goto(`${origin}/features/%E4%B8%AD%E6%96%87%E5%AF%BC%E8%88%AA?tab=body`);
       await expect(page.locator('[contenteditable="true"]').first()).toContainText('A paragraph');
       const container = page.locator(width === 390 ? '.document-workspace' : '.page');
       // Real input cancels any pending initial route restoration, just as reading does.

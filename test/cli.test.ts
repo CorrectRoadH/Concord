@@ -11,11 +11,11 @@ import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
 import { chromium, expect, type Browser } from '@playwright/test';
 import { authorDesignFixture } from './design-fixture.js';
-import { pollUntil, readProjectConfig, waitForWorkspaceProjection, fetchFresh } from './support.js';
-import { ProjectSchema, digest } from '../dist/shared.js';
-import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
-import { parseDocumentRecord, renderDocument } from '../dist/documents.js';
-import { HAWDB_REVISION, openHawdb } from '../dist/hawdb-native.js';
+import { pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh } from './support.js';
+import { ProjectSchema, digest } from '../src/shared.js';
+import { caseDiscriminator, deriveTestReference } from '../src/test-reference.js';
+import { parseDocumentRecord, renderDocument } from '../src/documents.js';
+import { HAWDB_REVISION, openHawdb } from '../src/hawdb-native.js';
 import { verifyInstalledNative } from '../scripts/verify-installed-native.js';
 import { settleRefreshes } from '../scripts/perf/process.js';
 const Ack = Schema.Struct({});
@@ -30,7 +30,7 @@ const DryRunOutput = Schema.Struct({ dryRun: Schema.Boolean });
 const OwnerOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Unknown }) });
 const StateOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ state: Schema.String }) }) });
 const DecisionOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ decision: Schema.Struct({ selected: Schema.String }) }) }) });
-const MemoryLifecycleOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ state: Schema.String, history: Schema.Array(Schema.Struct({ action: Schema.String, reason: Schema.String })) }) }) });
+const MemoryLifecycleOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ status: Schema.String }) }) });
 const TemplatesOutput = Schema.Struct({ templates: Schema.Array(Schema.Struct({ name: Schema.String })) });
 const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
 let cli: string;
@@ -39,7 +39,7 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  assert.ok(packed);
  assert.ok(packed.files.some(file=>file.path==='pnpm-lock.yaml'), 'package must carry its runtime dependency lock');
  const install=join(scratch,'tool');mkdirSync(install);writeFileSync(join(install,'package.json'),JSON.stringify({private:true}));
- installConcord(install, packed);
+ installConcord(install, packed, [], { private: true });
  const packageRoot=join(install,'node_modules/concord-sdlc');
  const manifest=Schema.Struct({version:Schema.String,dependencies:Schema.Record(Schema.String,Schema.String),devDependencies:Schema.Record(Schema.String,Schema.String)});
  const published=Schema.decodeUnknownSync(Schema.fromJsonString(manifest))(readFileSync(join(packageRoot,'package.json'),'utf8'));
@@ -55,7 +55,7 @@ after(() => Effect.runPromise(Effect.gen(function*() {
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('packed diagnostic CLI refreshes after exit and marks cached output as historical', async () => {
  const root = consumer('async-query');
- call(root, ['feature', 'create', 'cached', '--title', 'Cached'], Ack);
+ call(root, ['new', 'feature', 'cached', '--title', 'Cached'], Ack);
  const query = () => spawnSync(process.execPath, [cli, '--root', root, '--json', 'trace', 'gaps'], { encoding: 'utf8', timeout: 20000 });
  const first = query();
  assert.equal(first.status, 1, first.stdout + first.stderr);
@@ -78,25 +78,25 @@ test('packed diagnostic CLI refreshes after exit and marks cached output as hist
 // @name packed-operation-boundaries
 test('packed local operations isolate unrelated malformed contracts and check reports all failures', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('operation-boundaries');
- call(root, ['feature', 'create', 'target', '--title', 'Target', '--no-pages'], Ack);
- call(root, ['feature', 'create', 'broken-a', '--title', 'Broken A', '--no-pages'], Ack);
- call(root, ['feature', 'create', 'broken-b', '--title', 'Broken B', '--no-pages'], Ack);
+ call(root, ['new', 'feature', 'target', '--title', 'Target'], Ack);
+ call(root, ['new', 'feature', 'broken-a', '--title', 'Broken A'], Ack);
+ call(root, ['new', 'feature', 'broken-b', '--title', 'Broken B'], Ack);
  for (const id of ['broken-a', 'broken-b']) write(root, `docs/feature/${id}/README.md`, '---\nformat: concord.document/v1\nkind: feature\n---\n# Incomplete owner\n');
  const target = 'docs/feature/target/README.md';
  assert.match(call(root, ['code', 'annotate', '--scope', 'file', '--contract', target], AnnotationOutput).snippet, /@concord-implements docs\/feature\/target\/README.md/u);
  assert.match(call(root, ['test', 'annotate', '--contract', target], AnnotationOutput).snippet, /@feature docs\/feature\/target\/README.md/u);
- call(root, ['memory', 'add', 'repair-note', '--title', 'Repair note', '--kind', 'note'], Ack);
+ call(root, ['new', 'memory', 'repair-note', '--title', 'Repair note', '--type', 'note'], Ack);
  const index = call(root, ['memory', 'index'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })) }));
  const note = index.documents.find(record => record.path === 'memory/repair-note.md');
  assert.ok(note);
- call(root, ['memory', 'edit', note.path, '--body', '-', '--expected-digest', note.digest], Ack, 'Observed broken contract metadata.\n');
+ call(root, ['action', '--input', '-'], Ack, JSON.stringify({ action: 'document.set', path: note.path, body: '---\ntype: note\nstatus: captured\n---\n\n# Repair note\n\nObserved broken contract metadata.\n', expectedDigest: note.digest }));
  const recalled = call(root, ['memory', 'recall', 'broken contract'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ body: Schema.String })) }));
  assert.equal(recalled.documents.length, 1);
  assert.match(recalled.documents[0]!.body, /Observed broken contract metadata/u);
- const listed = call(root, ['memory', 'list'], Schema.Struct({ memories: Schema.Array(Schema.Struct({ id: Schema.String })) }));
- assert.equal(listed.memories[0]?.id, 'repair-note');
- call(root, ['issue', 'draft', 'repair-observation', '--title', 'Repair observation'], Ack);
- assert.equal(call(root, ['issue', 'index'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ id: Schema.String })) })).documents[0]?.id, 'repair-observation');
+ const listed = call(root, ['list', 'memory'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ id: Schema.String })) }));
+ assert.equal(listed.documents[0]?.id, 'repair-note');
+ call(root, ['new', 'issue', 'repair-observation', '--title', 'Repair observation'], Ack);
+ assert.equal(call(root, ['list', 'issue'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ id: Schema.String })) })).documents[0]?.id, 'repair-observation');
  const checked = call(root, ['check'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String })) }), '', 1);
  assert.equal(checked.ok, false);
  for (const id of ['broken-a', 'broken-b']) assert.ok(checked.findings.some(finding => finding.path === `docs/feature/${id}/README.md`));
@@ -120,7 +120,7 @@ test('installed HawDB caches and current recall work through an installation sym
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
 test('packed Design commands require complete responses and preserve formatting and decision semantics', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('design-comparison');
- call(root, ['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'local', '--alternative', 'remote'], Ack);
+ call(root, ['new', 'design', 'storage', '--title', 'Storage', '--alternative', 'local', '--alternative', 'remote'], Ack);
  const base = join(root, 'docs/design/storage');
  assert.match(readFileSync(join(base, 'plans/local/README.md'), 'utf8'), /## Limits/u);
  const incomplete = call(root, ['design', 'check', 'storage'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String, code: Schema.String, message: Schema.String })) }), '', 1);
@@ -140,112 +140,80 @@ test('packed Design commands require complete responses and preserve formatting 
  call(root, ['design', 'format', 'storage'], Ack);
  assert.match(readFileSync(plan, 'utf8'), /\n## Limits\n/u);
  assert.deepEqual(call(root, ['design', 'format', 'storage'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) })).changedPaths, []);
+ clearDecision(root, 'storage');
  const owner = readFileSync(join(base, 'README.md'), 'utf8');
  call(root, ['--dry-run', 'design', 'decide', 'storage', '--selected', 'local', '--reason', 'Offline'], DryRunOutput);
  assert.equal(readFileSync(join(base, 'README.md'), 'utf8'), owner);
  assert.equal(call(root, ['design', 'decide', 'storage', '--selected', 'remote', '--reason', 'Remote'], ErrorOutput, '', 1).error, 'DesignDecisionIncomplete');
  call(root, ['design', 'decide', 'storage', '--selected', 'local', '--reason', 'Offline'], Ack);
- assert.equal(call(root, ['design', 'show', 'storage'], DecisionOutput).document.metadata.decision.selected, 'local');
+ assert.equal(call(root, ['show', 'storage'], DecisionOutput).document.metadata.decision.selected, 'local');
  call(root, ['design', 'check', 'storage'], CheckOutput);
- call(root, ['memory', 'add', 'decision-corrections', '--kind', 'note', '--title', 'Decision corrections'], Ack);
- execFileSync('git', ['-C', root, 'add', '.']);
- execFileSync('git', ['-C', root, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Design baseline']);
- const designPath = join(base, 'README.md');
- const before = readFileSync(designPath, 'utf8');
- const current = call(root, ['design', 'show', 'storage'], Schema.Struct({ document: Schema.Struct({ digest: Schema.String }) })).document.digest;
- const note = call(root, ['memory', 'show', 'decision-corrections'], Schema.Struct({ document: Schema.Struct({ digest: Schema.String }) })).document.digest;
- const correction = ['design', 'correct-reason', 'storage', '--reason', 'Local storage meets the offline constraint', '--memory', 'decision-corrections', '--explanation', 'Keep the rationale declarative', '--expected-digest', current, '--expected-memory-digest', note];
- assert.equal(call(root, [...correction.slice(0, -1), 'sha256:stale'], ErrorOutput, '', 1).error, 'PreimageChanged');
- writeFileSync(designPath, `${before}\n`);
- const changedCorrection = [...correction];
- changedCorrection[changedCorrection.indexOf('--expected-digest') + 1] = digest(`${before}\n`);
- assert.equal(call(root, changedCorrection, ErrorOutput, '', 1).error, 'DecisionSourceUncommitted');
- writeFileSync(designPath, before);
- call(root, ['--dry-run', ...correction], DryRunOutput);
- call(root, ['--dry-run', 'action', '--input', '-'], DryRunOutput, JSON.stringify({ action: 'design.correct-reason', id: 'storage', reason: 'Local storage meets the offline constraint', memory: 'decision-corrections', explanation: 'Keep the rationale declarative', expectedDigest: current, expectedMemoryDigest: note }));
- assert.equal(readFileSync(designPath, 'utf8'), before);
- assert.equal(call(root, ['memory', 'show', 'decision-corrections'], Schema.Struct({ document: Schema.Struct({ digest: Schema.String }) })).document.digest, note);
- call(root, correction, Ack);
- const corrected = call(root, ['design', 'show', 'storage'], Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ decision: Schema.Struct({ selected: Schema.String, reason: Schema.String, at: Schema.String }) }) }) })).document.metadata.decision;
- assert.equal(corrected.selected, 'local');
- assert.equal(corrected.reason, 'Local storage meets the offline constraint');
- const history = call(root, ['memory', 'show', 'decision-corrections'], Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ history: Schema.Array(Schema.Struct({ action: Schema.String, ref: Schema.String, source: Schema.Struct({ commit: Schema.String, digest: Schema.String }) })) }) }) })).document.metadata.history;
- assert.equal(history.length, 1);
- assert.equal(history[0]?.action, 'correct-design-reason');
- assert.equal(history[0]?.ref, 'docs/design/storage/README.md');
- assert.equal(history[0]?.source.digest, digest(before));
- assert.equal(history[0]?.source.commit, execFileSync('git', ['-C', root, 'rev-parse', 'HEAD'], { encoding: 'utf8' }).trim());
- assert.equal(call(root, correction, ErrorOutput, '', 1).error, 'PreimageChanged');
+
 })));
 
-test('memory note uses the captured template and activation records its reason', () => {
+// @use-case docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
+test('memory note stays captured and decision activation writes only current fields', () => {
  const root = consumer('memory-note-activation');
- call(root, ['memory', 'add', 'triage-note', '--title', 'Triage note', '--kind', 'note'], Ack);
- const captured = call(root, ['memory', 'show', 'triage-note'], MemoryLifecycleOutput).document;
- assert.equal(captured.metadata.state, 'captured');
- call(root, ['memory', 'add', 'triage-problem', '--title', 'Triage problem', '--kind', 'problem'], Ack);
- const path = 'memory/triage-problem.md';
- const pending = parseDocumentRecord(path, readFileSync(join(root, path), 'utf8'));
- assert.ok(pending?.metadata.kind === 'memory');
- write(root, path, renderDocument({ ...pending.metadata, state: 'captured' }, pending.body));
- call(root, ['memory', 'activate', 'triage-problem', '--reason', 'Begin investigation'], Ack);
- const active = call(root, ['memory', 'show', 'triage-problem'], MemoryLifecycleOutput).document;
- assert.equal(active.metadata.state, 'open');
- assert.deepEqual(active.metadata.history.at(-1), { action: 'activate', reason: 'Begin investigation' });
+ call(root, ['new', 'memory', 'triage-note', '--title', 'Triage note', '--type', 'note'], Ack);
+ assert.equal(call(root, ['show', 'memory/triage-note.md'], MemoryLifecycleOutput).document.metadata.status, 'captured');
+ assert.equal(call(root, ['memory', 'activate', 'triage-note', '--reason', 'Classify'], ErrorOutput, '', 1).error, 'InvalidMemoryState');
+ call(root, ['new', 'memory', 'choice', '--title', 'Choice', '--type', 'decision'], Ack);
+ call(root, ['memory', 'activate', 'choice', '--reason', 'Adopt'], Ack);
+ assert.equal(call(root, ['show', 'memory/choice.md'], MemoryLifecycleOutput).document.metadata.status, 'current');
+ assert.doesNotMatch(readFileSync(join(root, 'memory/choice.md'), 'utf8'), /epoch:|history:|createdAt:/);
 });
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('installed create selects optional pages, keeps README required, and rejects invalid selections before writing', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('optional-pages');
- const only = call(root, ['feature', 'create', 'minimal', '--title', 'Minimal'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
+ const only = call(root, ['new', 'feature', 'minimal', '--title', 'Minimal'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
  assert.deepEqual(only.changedPaths, ['docs/feature/minimal/README.md']);
  assert.doesNotMatch(readFileSync(join(root, only.changedPaths[0]!), 'utf8'), /\]\(/);
- call(root, ['feature', 'create', 'selected', '--title', 'Selected', '--pages', 'cli,library', '--pages', 'use-case'], Ack);
+ call(root, ['new', 'feature', 'selected', '--title', 'Selected', '--pages', 'cli,library', '--pages', 'use-case'], Ack);
  const base = 'docs/feature/selected/';
  const readme = readFileSync(join(root, base, 'README.md'), 'utf8');
  for (const match of readme.matchAll(/\]\(([^)]+)\)/g)) assert.equal(existsSync(join(root, base, match[1]!)), true);
  assert.equal(existsSync(join(root, base, 'architecture.md')), false);
  assert.equal(existsSync(join(root, base, 'lifecycle.md')), false);
- assert.equal(call(root, ['use-case', 'list'], Schema.Struct({ documents: Schema.Array(Schema.Unknown) })).documents.length, 0);
- call(root, ['feature', 'page', 'add', 'selected', 'architecture'], Ack);
+ assert.equal(call(root, ['list', 'use-case'], Schema.Struct({ documents: Schema.Array(Schema.Unknown) })).documents.length, 0);
  assert.equal(readFileSync(join(root, base, 'README.md'), 'utf8'), readme);
  const author = '# Custom\n\nKeep [my link](custom.md).\n';
- call(root, ['feature', 'create', 'custom', '--title', 'Custom', '--body', '-', '--pages', 'cli'], Ack, author);
- const shown = call(root, ['feature', 'show', 'custom'], Schema.Struct({
+ call(root, ['new', 'feature', 'custom', '--title', 'Custom', '--body', '-', '--pages', 'cli'], Ack, author);
+ const shown = call(root, ['show', 'custom'], Schema.Struct({
    document: Schema.Struct({ path: Schema.String, metadata: Schema.Unknown, digest: Schema.String }),
    useCases: Schema.Array(Schema.Unknown), tests: Schema.Array(Schema.Unknown), codeDeclarations: Schema.Array(Schema.Unknown), findings: Schema.Array(Schema.Unknown),
  }));
  assert.equal(shown.document.path, 'docs/feature/custom/README.md');
  assert.deepEqual(shown.useCases, []);
  assert.equal('body' in shown.document, false, 'feature show leaves author prose to direct file reads');
- call(root, ['use-case', 'create', 'custom-flow', '--title', 'Custom flow', '--feature', 'custom'], Ack);
- const featureRelations = call(root, ['feature', 'show', 'custom'], Schema.Struct({ useCases: Schema.Array(Schema.Struct({ path: Schema.String })) }));
+ call(root, ['new', 'use-case', 'custom-flow', '--title', 'Custom flow', '--feature', 'custom'], Ack);
+ const featureRelations = call(root, ['show', 'custom'], Schema.Struct({ useCases: Schema.Array(Schema.Struct({ path: Schema.String })) }));
  assert.deepEqual(featureRelations.useCases.map(item => item.path), ['docs/feature/custom/use-case/custom-flow.md']);
- const useCaseRelations = call(root, ['use-case', 'show', 'custom-flow'], Schema.Struct({
+ const useCaseRelations = call(root, ['show', 'custom-flow'], Schema.Struct({
    document: Schema.Struct({ path: Schema.String }), outgoing: Schema.Array(Schema.Struct({ to: Schema.String })),
  }));
  assert.equal(useCaseRelations.document.path, 'docs/feature/custom/use-case/custom-flow.md');
  assert.ok(useCaseRelations.outgoing.some(edge => edge.to === 'docs/feature/custom/README.md'));
- call(root, ['--dry-run', 'feature', 'create', 'preview', '--title', 'Preview', '--pages', 'cli'], Ack);
+ call(root, ['--dry-run', 'new', 'feature', 'preview', '--title', 'Preview', '--pages', 'cli'], Ack);
  assert.equal(existsSync(join(root, 'docs/feature/preview')), false);
  for (const [id, pages, error] of [['unknown', 'other', 'InvalidData'], ['duplicate', 'cli,cli', 'InvalidInput'], ['empty', 'cli,', 'InvalidData']] as const) {
-   assert.equal(call(root, ['feature', 'create', id, '--title', id, '--pages', pages], ErrorOutput, '', 1).error, error);
+   assert.equal(call(root, ['new', 'feature', id, '--title', id, '--pages', pages], ErrorOutput, '', 1).error, error);
    assert.equal(existsSync(join(root, 'docs/feature', id)), false);
  }
- assert.equal(call(root, ['engineering', 'create', 'invalid', '--title', 'Invalid', '--pages', 'cli'], ErrorOutput, '', 1).error, 'InvalidInput');
+ assert.equal(call(root, ['new', 'engineering', 'invalid', '--title', 'Invalid', '--pages', 'cli'], ErrorOutput, '', 1).error, 'InvalidInput');
  assert.equal(existsSync(join(root, 'docs/engineering/invalid')), false);
- const engineering = call(root, ['engineering', 'create', 'small', '--title', 'Small'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
+ const engineering = call(root, ['new', 'engineering', 'small', '--title', 'Small'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
  assert.deepEqual(engineering.changedPaths, ['docs/engineering/small/README.md']);
- const engineeringShow = call(root, ['engineering', 'show', 'small'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
+ const engineeringShow = call(root, ['show', 'small'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
  assert.equal(engineeringShow.document.path, 'docs/engineering/small/README.md');
  assert.equal('body' in engineeringShow.document, false);
  write(root, 'docs/feature/conflict/cli.md', '# Existing\n');
- assert.equal(call(root, ['feature', 'create', 'conflict', '--title', 'Conflict', '--pages', 'cli'], ErrorOutput, '', 1).error, 'DocumentExists');
+ assert.equal(call(root, ['new', 'feature', 'conflict', '--title', 'Conflict', '--pages', 'cli'], ErrorOutput, '', 1).error, 'DocumentExists');
  assert.equal(existsSync(join(root, 'docs/feature/conflict/README.md')), false);
  assert.equal(readFileSync(join(root, 'docs/feature/conflict/cli.md'), 'utf8'), '# Existing\n');
- call(root, ['design', 'create', 'minimal-design', '--title', 'Design', '--alternative', 'one'], Ack);
+ call(root, ['new', 'design', 'minimal-design', '--title', 'Design', '--alternative', 'one'], Ack);
  for (const file of ['README.md', 'GOALS.md', 'LIMITS.md', 'CASES.md', 'DECISION.md', 'plans/one/README.md']) assert.equal(existsSync(join(root, 'docs/design/minimal-design', file)), true);
  assert.equal(existsSync(join(root, 'docs/design/minimal-design/plans/one/cli.md')), false);
- call(root, ['roadmap', 'create', 'minimal-roadmap', '--title', 'Roadmap'], Ack);
+ call(root, ['new', 'roadmap', 'minimal-roadmap', '--title', 'Roadmap'], Ack);
  call(root, ['roadmap', 'adopt', 'minimal-roadmap', '--feature', 'adopted-minimal'], Ack);
  assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/README.md')), true);
  assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/cli.md')), false);
@@ -255,11 +223,11 @@ test('installed create selects optional pages, keeps README required, and reject
 test('packed steps C15 C16 C18 navigate exact steps, preserve examples and rename through one journal', () => Effect.runPromise(Effect.sync(() => {
  const root = join(scratch, 'steps'); mkdirSync(root); execFileSync('git', ['init', '-q', root]);
  call(root, ['init', '--source-root', 'src'], Ack);
- call(root, ['feature', 'create', 'journey', '--title', 'Journey', '--no-pages'], Ack);
- call(root, ['use-case', 'create', 'flow', '--title', 'Flow', '--feature', 'journey'], Ack);
+ call(root, ['new', 'feature', 'journey', '--title', 'Journey'], Ack);
+ call(root, ['new', 'use-case', 'flow', '--title', 'Flow', '--feature', 'journey'], Ack);
  const path = 'docs/feature/journey/use-case/flow.md';
- const owner = call(root, ['use-case', 'show', path], Schema.Struct({ document: DigestOutput }));
- call(root, ['author', 'set', path, '--expected-digest', owner.document.digest, '--body', '-'], Ack, '# Flow\n\n## Details\n\n1. Reject {#reject-token}\n2. Report\n\n## Acceptance\n\n1. Leave unmarked\n');
+ const owner = call(root, ['show', path], Schema.Struct({ document: DigestOutput }));
+ savePage(root, path, '# Flow\n\n## Details\n\n1. Reject {#reject-token}\n2. Report\n\n## Acceptance\n\n1. Leave unmarked\n', owner.document.digest);
  write(root, 'test/flow.ts', `// @use-case ${path}#reject-token\n// @name stable\n\n// @use-case ${path}#details\n\n// @use-case ${path}\n\n// pytest.mark.unrelated\nconst fake = '// @use-case ${path}#reject-token';\n`);
  write(root, 'src/flow.ts', `// @concord-file\n// @concord-implements ${path}#reject-token\nexport const flow = 1;\n`);
  write(root, 'docs/feature/journey/links.md', `[Flow](use-case/flow.md#reject-token)\n\n\`[Example](use-case/flow.md#reject-token)\`\n`);
@@ -292,7 +260,12 @@ function call<A>(root: string,args: readonly string[],schema: Schema.ConstraintD
 function callString(root: string,args: readonly string[],input='Contract body.\n',status=0): string {
  return call(root, args, Schema.String, input, status);
 }
-function consumer(name: string){const root=join(scratch,name);mkdirSync(root);execFileSync('git',['init','-q',root]);call(root,['init'],Ack);return root;}
+function clearDecision(root: string, id: string) { const path = `docs/design/${id}/DECISION.md`; write(root, path, readFileSync(join(root, path), 'utf8').replace(/^Selected:.*$/mu, '')); }
+function readPage(root: string, path: string) { const body = readFileSync(join(root, path), 'utf8'); return { body, digest: digest(body) }; }
+function savePage(root: string, path: string, body: string, expectedDigest: string, status = 0) {
+ return call(root, ['action', '--input', '-'], status === 0 ? Ack : ErrorOutput, JSON.stringify({ action: 'document.set', path, body, expectedDigest }), status) as { error?: string };
+}
+function consumer(name: string){const root=join(scratch,name);mkdirSync(root);execFileSync('git',['init','-q',root]);call(root,['init','--test-root','test','--test-root','tests'],Ack);return root;}
 function write(root: string,path: string,source: string){mkdirSync(join(root,path,'..'),{recursive:true});writeFileSync(join(root,path),source);}
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('packed feedback commands persist connections and local triage without remote calls', () => Effect.runPromise(Effect.sync(() => {
@@ -301,9 +274,9 @@ test('packed feedback commands persist connections and local triage without remo
  call(root,['feedback','connection','add','--id','linear-main','--provider','linear','--team','TEAM','--credential-env','CONCORD_TEST_MISSING_LINEAR_KEY'],Ack);
  const project=readProjectConfig(root);
  assert.deepEqual(project.feedbackConnections?.map(connection=>connection.provider),['github','linear']);
- call(root,['feature','create','feedback-target','--title','Feedback target'],Ack);
- call(root,['issue','create','observation','--title','Local observation'],Ack);
- call(root,['issue','adopt','observation','--to','docs/feature/feedback-target/README.md'],Ack);
+ call(root,['new', 'feature','feedback-target','--title','Feedback target'],Ack);
+ call(root,['new', 'issue','observation','--title','Local observation'],Ack);
+ call(root,['issue','link','observation','--role','adopts','docs/feature/feedback-target/README.md'],Ack);
  const relative='docs/issues/observation.md';
  const linked=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
  assert.equal(linked?.metadata.kind,'issue');
@@ -314,15 +287,15 @@ test('packed feedback commands persist connections and local triage without remo
  assert.match(JSON.stringify(listed),/observation/);
  call(root,['feedback','show','observation'],Schema.Unknown);
  call(root,['issue','close','observation','--reason','Investigation complete'],Ack);
- call(root,['issue','create','pending','--title','Pending observation'],Ack);
+ call(root,['new', 'issue','pending','--title','Pending observation'],Ack);
  const feedbackList=Schema.Struct({feedback:Schema.Array(Schema.Struct({document:Schema.Struct({metadata:Schema.Struct({id:Schema.String})})}))});
  const issueList=Schema.Struct({drafts:Schema.Array(Schema.Struct({metadata:Schema.Struct({id:Schema.String})}))});
  assert.deepEqual(call(root,['feedback','list','--provider','local','--state','closed','--triage','closed','--query','LOCAL'],feedbackList).feedback.map(item=>item.document.metadata.id),['observation']);
- assert.deepEqual(call(root,['issue','list','--state','draft','--triage','pending'],issueList).drafts.map(item=>item.metadata.id),['pending']);
- assert.deepEqual(call(root,['issue','list','--provider','github'],issueList).drafts,[]);
- assert.deepEqual(call(root,['action','--input','-'],feedbackList,JSON.stringify({action:'feedback.list',provider:'local',state:'draft',triage:'pending'})).feedback.map(item=>item.document.metadata.id),['pending']);
+ assert.deepEqual(call(root,['feedback','list','--state','open','--triage','pending'],feedbackList).feedback.map(item=>item.document.metadata.id),['pending']);
+ assert.deepEqual(call(root,['feedback','list','--provider','github'],feedbackList).feedback,[]);
+ assert.deepEqual(call(root,['action','--input','-'],feedbackList,JSON.stringify({action:'feedback.list',provider:'local',state:'open',triage:'pending'})).feedback.map(item=>item.document.metadata.id),['pending']);
  assert.deepEqual(call(root,['action','--input','-'],issueList,JSON.stringify({action:'issue.list',state:'closed'})).drafts.map(item=>item.metadata.id),['observation']);
- call(root,['action','--input','-'],ErrorOutput,JSON.stringify({action:'feedback.list',state:'open'}),1);
+ call(root,['action','--input','-'],ErrorOutput,JSON.stringify({action:'feedback.list',state:'draft'}),1);
  const closed=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
  assert.equal(closed?.metadata.kind==='issue'&&closed.metadata.status,'closed');
  call(root,['feedback','connection','remove','github-main'],Ack);
@@ -501,9 +474,9 @@ test('packed view serves its frontend and API without credentials in an isolated
  } finally {try {await browser?.close();} finally {process.kill('SIGTERM');await exited;}}
 });
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('packed workspace projection reads the shared generation and holds warm budgets', async t => {
+test('packed HTTP workspace projection reads the shared generation and holds warm budgets', async t => {
  const root = consumer('packed-projection');
- call(root,['feature','create','projected','--title','Projected','--pages','architecture'],Ack);
+ call(root,['new', 'feature','projected','--title','Projected','--pages','architecture'],Ack);
  const server = spawn(globalThis.process.execPath, [cli, '--root', root, '--json', 'view', '--host', '127.0.0.1', '--port', '0'], { stdio: ['ignore', 'pipe', 'pipe'] });
  const exited = once(server, 'exit');
  try {
@@ -532,35 +505,14 @@ test('packed workspace projection reads the shared generation and holds warm bud
   await httpSample();
   const httpTimes: number[] = [];
   for (let index = 0; index < 7; index += 1) httpTimes.push(await httpSample());
-  const cliSample = () => {
-   const started = performance.now();
-   const result = spawnSync(globalThis.process.execPath, [cli, '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20000 });
-   const ms = performance.now() - started;
-   assert.equal(result.status, 0, result.stdout + result.stderr);
-   const value = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({
-    operation: Schema.Literal('workspace-projection'),
-    snapshot: Schema.Struct({ root: Schema.String, documents: Schema.Array(Schema.Unknown) }),
-    projection: Schema.Struct({ status: Schema.Literal('ready'), current: Schema.Literal(false), refreshOwner: Schema.Literal('none'), builtAt: Schema.String, consistent: Schema.Boolean, complete: Schema.Boolean }),
-   })), { onExcessProperty: 'ignore', errors: 'all' })(result.stdout);
-   assert.equal(value.snapshot.root, root);
-   assert.equal(value.projection.builtAt, initial.projection.builtAt, 'the explicit entry reads the server-published generation');
-   return ms;
-  };
-  cliSample();
-  const cliTimes = Array.from({ length: 7 }, cliSample).sort((a, b) => a - b);
   httpTimes.sort((a, b) => a - b);
   const percentile = (sorted: readonly number[], fraction: number) => sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * fraction) - 1)]!;
-  const httpP50 = percentile(httpTimes, 0.5), httpP95 = percentile(httpTimes, 0.95), cliP50 = percentile(cliTimes, 0.5);
+  const httpP50 = percentile(httpTimes, 0.5), httpP95 = percentile(httpTimes, 0.95);
   t.diagnostic(`workspace projection: docs=${initial.snapshot.documents.length} pages=${initial.snapshot.pages.length} bytes=${projectionBytes} native=${HAWDB_REVISION} node=${process.version} ${process.platform}-${process.arch}`);
-  t.diagnostic(`HTTP warm p50=${httpP50.toFixed(1)}ms p95=${httpP95.toFixed(1)}ms; workspace projection p50=${cliP50.toFixed(1)}ms`);
+  t.diagnostic(`HTTP warm p50=${httpP50.toFixed(1)}ms p95=${httpP95.toFixed(1)}ms`);
   assert.ok(httpP50 <= 250, `HTTP warm p50 ${httpP50}ms exceeds 250ms`);
   assert.ok(httpP95 <= 600, `HTTP warm p95 ${httpP95}ms exceeds 600ms`);
-  assert.ok(cliP50 <= 600, `workspace projection p50 ${cliP50}ms exceeds 600ms`);
-  const show = spawnSync(globalThis.process.execPath, [cli, '--root', root, '--json', 'workspace', 'show'], { encoding: 'utf8', timeout: 20000 });
-  assert.equal(show.status, 0, show.stderr);
-  const shown = JSON.parse(show.stdout) as Record<string, unknown>;
-  assert.equal('projection' in shown, false, 'workspace show keeps its current-source JSON shape');
-  assert.ok(Array.isArray(shown.documents));
+
  } finally {server.kill('SIGTERM');await exited;}
 });
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
@@ -593,20 +545,20 @@ test('installed onboarding creates editable packages and connects supporting-pag
  assert.match(guide, /a product direction in the same genre as Feature that has not been adopted yet\. Its design is incomplete, or it is designed but not scheduled/u);
  assert.match(guide, /Behavior pages \(Feature README, Use Case, cli, library\) state commands, real human and JSON output, exit codes, and named errors\./u);
  assert.match(guide, /The architecture page states how the Feature is implemented\. Run `concord --skill document` for the full rules\./u);
- for (const path of ['docs/README.md', 'docs/_template/feature-design/lifecycle.md', 'docs/_template/roadmap/use-case/README.md', 'docs/_template/design-decision/CASES.md', 'docs/_template/design-decision/plans/plan-2/library.md', 'docs/_template/engineering/README.md', 'docs/concepts.md', 'docs/architecture.md', 'docs/_template/research/README.md', 'docs/_template/memory/problem.md']) assert.equal(existsSync(join(root, path)), true, path);
+ for (const path of ['docs/README.md', 'docs/_template/roadmap/use-case/README.md', 'docs/_template/design-decision/CASES.md', 'docs/_template/design-decision/plans/plan-2/library.md', 'docs/_template/engineering/README.md', 'docs/concepts.md', 'docs/architecture.md', 'docs/_template/research/README.md', 'docs/_template/memory/note.md']) assert.equal(existsSync(join(root, path)), true, path);
  assert.match(readFileSync(join(root, 'AGENTS.md'), 'utf8'), /BEGIN CONCORD AGENT INSTRUCTIONS[\s\S]*concord trace gaps --json/u);
- call(root, ['feature', 'create', 'accounts', '--title', 'Accounts', '--pages', 'library,cli,architecture,lifecycle,use-case'], Ack);
- for (const page of ['README.md', 'library.md', 'cli.md', 'architecture.md', 'lifecycle.md', 'use-case/README.md']) assert.equal(existsSync(join(root, 'docs/feature/accounts', page)), true, page);
- call(root, ['feature', 'create', 'other', '--title', 'Other'], Ack);
- call(root, ['engineering', 'create', 'ci', '--title', 'Continuous integration'], Ack);
- const page = call(root, ['feature', 'page', 'show', 'accounts', 'cli'], DigestOutput);
- call(root, ['feature', 'page', 'set', 'accounts', 'cli', '--body', '-', '--expected-digest', page.digest], Ack, '# Accounts CLI\n\n## Sign in\n\nReject expired tokens.\n');
- assert.equal(call(root, ['feature', 'page', 'set', 'accounts', 'cli', '--body', '-', '--expected-digest', page.digest], ErrorOutput, '# Stale\n', 1).error, 'PreimageChanged');
- const ownerBefore = call(root, ['feature', 'show', 'accounts'], OwnerOutput).document;
- const readme = call(root, ['feature', 'page', 'show', 'accounts', 'readme'], PageOutput);
+ call(root, ['new', 'feature', 'accounts', '--title', 'Accounts', '--pages', 'library,cli,architecture,use-case'], Ack);
+ for (const page of ['README.md', 'library.md', 'cli.md', 'architecture.md', 'use-case/README.md']) assert.equal(existsSync(join(root, 'docs/feature/accounts', page)), true, page);
+ call(root, ['new', 'feature', 'other', '--title', 'Other'], Ack);
+ call(root, ['new', 'engineering', 'ci', '--title', 'Continuous integration'], Ack);
+ const page = readPage(root, 'docs/feature/accounts/cli.md');
+ savePage(root, 'docs/feature/accounts/cli.md', '# Accounts CLI\n\n## Sign in\n\nReject expired tokens.\n', page.digest);
+ assert.equal(savePage(root, 'docs/feature/accounts/cli.md', '# Stale\n', page.digest, 1).error, 'PreimageChanged');
+ const ownerBefore = call(root, ['show', 'accounts'], OwnerOutput).document;
+ const readme = readPage(root, 'docs/feature/accounts/README.md');
  assert.ok(!readme.body.startsWith('---'));
- call(root, ['feature', 'page', 'set', 'accounts', 'readme', '--body', '-', '--expected-digest', readme.digest], Ack, '# Accounts\n\nUsers sign in with valid credentials.\n');
- assert.deepEqual(call(root, ['feature', 'show', 'accounts'], OwnerOutput).document.metadata, ownerBefore.metadata);
+ savePage(root, 'docs/feature/accounts/README.md', '# Accounts\n\nUsers sign in with valid credentials.\n', readme.digest);
+ assert.deepEqual(call(root, ['show', 'accounts'], OwnerOutput).document.metadata, ownerBefore.metadata);
  call(root, ['new', 'issue', 'expired', '--title', 'Expired token'], Ack);
  const annotation = call(root, ['test', 'annotate', '--contract', 'docs/feature/accounts/cli.md#sign-in', '--issue', 'docs/issues/expired.md'], AnnotationOutput);
  assert.equal(existsSync(join(root, 'test')), false, 'annotate must not edit test sources');
@@ -631,8 +583,6 @@ test('installed init previews configuration, preserves existing docs, and never 
  write(root, 'docs/README.md', '# Existing documentation\n');
  write(root, 'docs/concepts.md', '# Existing concepts\n');
  write(root, 'docs/architecture.md', '# Existing architecture\n');
- write(root, 'bad-memory-sources.json', '{not json');
- assert.equal(call(root, ['init', '--memory-sources', join(root, 'bad-memory-sources.json')], ErrorOutput, '', 1).error, 'InvalidJson');
  assert.equal(existsSync(join(root, 'concord.config.ts')), false);
  const runner = { kind: 'command', argv: ['node', '-e', 'require("node:fs").writeFileSync("EXECUTED", "bad")'], sourceFiles: [], timeoutMs: 1200 };
  write(root, 'runner.json', JSON.stringify(runner));
@@ -655,29 +605,32 @@ test('installed init previews configuration, preserves existing docs, and never 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('installed Design and Roadmap packages retain their pages and authoritative lifecycle metadata', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('document-packages');
- call(root, ['engineering', 'create', 'release', '--title', 'Release'], Ack);
- call(root, ['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'sqlite', '--alternative', 'files', '--pages', 'architecture'], Ack);
+ call(root, ['new', 'engineering', 'release', '--title', 'Release'], Ack);
+ call(root, ['new', 'design', 'storage', '--title', 'Storage', '--alternative', 'sqlite', '--alternative', 'files', '--pages', 'architecture'], Ack);
  assert.match(readFileSync(join(root, 'docs/design/storage/plans/sqlite/architecture.md'), 'utf8'), /Storage/);
  assert.equal(existsSync(join(root, 'docs/design/storage/GOALS.md')), true);
- const candidate = call(root, ['design', 'page', 'show', 'storage', 'readme', '--plan', 'sqlite'], DigestOutput);
- call(root, ['design', 'page', 'set', 'storage', 'readme', '--plan', 'sqlite', '--body', '-', '--expected-digest', candidate.digest], Ack, '# SQLite\n\nA single local store.\n');
+ const candidate = readPage(root, 'docs/design/storage/plans/sqlite/README.md');
+ savePage(root, 'docs/design/storage/plans/sqlite/README.md', '# SQLite\n\nA single local store.\n', candidate.digest);
  authorDesignFixture(root, 'storage', ['sqlite', 'files'], 'sqlite');
+ clearDecision(root, 'storage');
  call(root, ['design', 'decide', 'storage', '--selected', 'sqlite', '--target', 'docs/engineering/release/README.md', '--reason', 'One deployment owner'], Ack);
- const decision = call(root, ['design', 'show', 'storage'], DecisionOutput).document.metadata.decision;
+ const decision = call(root, ['show', 'storage'], DecisionOutput).document.metadata.decision;
  assert.equal(decision.selected, 'sqlite');
- call(root, ['roadmap', 'create', 'session', '--title', 'Session', '--pages', 'architecture'], Ack);
+ call(root, ['new', 'roadmap', 'session', '--title', 'Session', '--pages', 'architecture'], Ack);
  call(root, ['roadmap', 'adopt', 'session', '--feature', 'session'], Ack);
  assert.equal(existsSync(join(root, 'docs/feature/session/architecture.md')), true);
- assert.equal(call(root, ['roadmap', 'show', 'session'], StateOutput).document.metadata.state, 'adopted');
- call(root, ['memory', 'add', 'release-owner', '--kind', 'decision', '--title', 'Release owner'], Ack);
- call(root, ['memory', 'promote', 'release-owner', '--target', 'docs/engineering/release/README.md'], Ack);
+ assert.equal(call(root, ['show', 'session'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) })).document.path, 'docs/feature/session/README.md');
+ call(root, ['new', 'memory', 'release-owner', '--type', 'decision', '--title', 'Release owner'], Ack);
+ call(root, ['memory', 'activate', 'release-owner', '--reason', 'Adopt'], Ack);
+ call(root, ['memory', 'link', 'release-owner', '--target', 'docs/engineering/release/README.md'], Ack);
  assert.equal(call(root, ['test', 'annotate', '--contract', 'docs/engineering/release/README.md'], ErrorOutput, '', 1).error, 'InvalidReferenceTarget');
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
 })));
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 test('installed CLI returns a named failure for a known skipped declaration',()=>Effect.runPromise(Effect.sync(()=>{
  const root=consumer('skipped');
- call(root,['feature','create','skip-feature','--title','Skip feature','--body','-'],Ack);
+ writeProjectConfig(root, { ...readProjectConfig(root), runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 60000 } });
+ call(root,['new', 'feature','skip-feature','--title','Skip feature','--body','-'],Ack);
  write(root,'test/skipped.test.mjs',"import test from 'node:test';\n// @feature docs/feature/skip-feature/README.md\n// @status retired\ntest.skip('skipped',()=>{});\n");
  write(root,'test/browser.test.ts',"// @feature docs/feature/skip-feature/README.md\ntest.describe('session', () => { test('fails closed', () => {}); });\n");
  const skippedCase = deriveTestReference('test/skipped.test.mjs', 'test/skipped.test.mjs', caseDiscriminator('docs/feature/skip-feature/README.md', 0));
@@ -687,14 +640,14 @@ test('installed CLI returns a named failure for a known skipped declaration',()=
 // @use-case docs/feature/document-packages/use-case/organize-freeform-research.md
 test('packed Research creates only its title and edits arbitrary nested supporting Markdown', () => {
  const root = consumer('research-package');
- const created = call(root, ['research', 'create', 'notes', '--title', 'My notes'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
+ const created = call(root, ['new', 'research', 'notes', '--title', 'My notes'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
  assert.deepEqual(created.changedPaths, ['docs/research/notes/README.md']);
  const owner = parseDocumentRecord('docs/research/notes/README.md', readFileSync(join(root, 'docs/research/notes/README.md'), 'utf8'))!;
  assert.equal(owner.body.trim(), '# My notes');
- call(root, ['research', 'page', 'add', 'notes', '材料/比较'], Ack);
- const page = call(root, ['research', 'page', 'show', 'notes', '材料/比较'], PageOutput);
+ write(root, 'docs/research/notes/材料/比较.md', '# 比较\n');
+ const page = readPage(root, 'docs/research/notes/材料/比较.md');
  assert.equal(page.body.trim(), '# 比较');
- call(root, ['research', 'page', 'set', 'notes', '材料/比较', '--body', '-', '--expected-digest', page.digest], Ack, '# 任意结构\n\n自由正文。\n');
+ savePage(root, 'docs/research/notes/材料/比较.md', '# 任意结构\n\n自由正文。\n', page.digest);
  assert.equal(readFileSync(join(root, 'docs/research/notes/材料/比较.md'), 'utf8'), '# 任意结构\n\n自由正文。\n');
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
 });
@@ -788,9 +741,9 @@ test('packed scoped owner commands use path, Markdown catalog body, null creatio
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('packed concepts actions save Markdown stdin verbatim and protect every generic catalog writer', () => Effect.runPromise(Effect.sync(() => {
+test('packed concepts actions preserve Markdown and allow generic whole-file saves', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('markdown-catalog-cli');
- call(root, ['feature', 'create', 'catalog', '--title', 'Catalog', '--no-pages'], Ack);
+ call(root, ['new', 'feature', 'catalog', '--title', 'Catalog'], Ack);
  const path = 'docs/feature/catalog/concepts.md';
  const source = '# Terms\r\n\r\n## Memory {#memory}\r\n\r\nA durable finding.\r\n\r\n<!-- Author spacing -->\r\n';
  const receiptSchema = Schema.Struct({ source: Schema.String, digest: Schema.String });
@@ -801,11 +754,8 @@ test('packed concepts actions save Markdown stdin verbatim and protect every gen
  const saved = call(root, ['action', '--input', '-'], receiptSchema, JSON.stringify({ action: 'concepts.set', path, source: updated, expectedDigest: created.digest }));
  assert.equal(saved.source, updated);
  assert.equal(call(root, ['concepts', 'set', '--path', path, '--body', '-', '--expected-digest', created.digest], ErrorOutput, source, 1).error, 'PreimageChanged');
- for (const args of [['author', 'set', path], ['feature', 'page', 'set', 'catalog', 'concepts']]) {
-  assert.equal(call(root, [...args, '--body', '-', '--expected-digest', saved.digest], ErrorOutput, '# Changed\n', 1).error, 'ManagedConceptCatalog');
- }
- assert.equal(call(root, ['feature', 'page', 'add', 'catalog', 'concepts'], ErrorOutput, '', 1).error, 'ManagedConceptCatalog');
- assert.equal(readFileSync(join(root, path), 'utf8'), updated);
+ call(root, ['action', '--input', '-'], Ack, JSON.stringify({ action: 'document.set', path, body: source, expectedDigest: saved.digest }));
+ assert.equal(readFileSync(join(root, path), 'utf8'), source);
  write(root, 'docs/ignored/concepts.json', 'not parsed or reported');
  const index = call(root, ['concepts', 'index'], Schema.Struct({ catalogs: Schema.Array(Schema.Struct({ path: Schema.String })), diagnostics: Schema.Array(Schema.Unknown) }));
  assert(index.catalogs.every(item => item.path.endsWith('/concepts.md')));
@@ -815,29 +765,29 @@ test('packed concepts actions save Markdown stdin verbatim and protect every gen
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('packed CLI creates and resolves Unicode Use Cases and supporting pages', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('unicode-names');
- call(root, ['feature', 'create', 'npc', '--title', 'NPC'], Ack);
+ call(root, ['new', 'feature', 'npc', '--title', 'NPC'], Ack);
  renameSync(join(root, 'docs/feature/npc'), join(root, 'docs/feature/角色目录'));
  const paths = Schema.Struct({ changedPaths: Schema.Array(Schema.String) });
- const useCase = ['use-case', 'create', '扩展NPC动作', '--feature', 'npc', '--title', '扩展 NPC 动作'];
+ const useCase = ['new', 'use-case', '扩展NPC动作', '--feature', '角色目录', '--title', '扩展 NPC 动作'];
  const expectedPath = 'docs/feature/角色目录/use-case/扩展NPC动作.md';
  assert.deepEqual(call(root, ['--dry-run', ...useCase], paths).changedPaths, [expectedPath]);
  assert.equal(existsSync(join(root, expectedPath)), false);
  call(root, useCase, Ack);
  for (const page of ['认知与执行', '常识与上下文']) {
-   call(root, ['feature', 'page', 'add', 'npc', page], Ack);
-   const before = call(root, ['feature', 'page', 'show', 'npc', page], PageOutput);
-   call(root, ['feature', 'page', 'set', 'npc', page, '--body', '-', '--expected-digest', before.digest], Ack, `# ${page}\n\n中文正文。\n`);
-   assert.match(call(root, ['feature', 'page', 'show', 'npc', page], PageOutput).body, /中文正文/u);
+   write(root, `docs/feature/角色目录/${page}.md`, `# ${page}\n`);
+   const before = readPage(root, `docs/feature/角色目录/${page}.md`);
+   savePage(root, `docs/feature/角色目录/${page}.md`, `# ${page}\n\n中文正文。\n`, before.digest);
+   assert.match(readPage(root, `docs/feature/角色目录/${page}.md`).body, /中文正文/u);
  }
- const shown = call(root, ['use-case', 'show', '扩展NPC动作'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
+ const shown = call(root, ['show', '扩展NPC动作'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
  assert.equal(shown.document.path, expectedPath);
  write(root, 'test/unicode.test.ts', `// @use-case ${expectedPath}\n// @name 中文用例\n`);
  const trace = call(root, ['trace', 'show', expectedPath], TraceOutput);
  assert.equal(trace.tests.length, 1);
- call(root, ['use-case', 'create', 'internal-id', '--feature', 'npc', '--title', '内部身份与文件名独立'], Ack);
+ call(root, ['new', 'use-case', 'internal-id', '--feature', '角色目录', '--title', '内部身份与文件名独立'], Ack);
  const namedPath = 'docs/feature/角色目录/use-case/中文文件名.md';
  renameSync(join(root, 'docs/feature/角色目录/use-case/internal-id.md'), join(root, namedPath));
- assert.equal(call(root, ['use-case', 'show', 'internal-id'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) })).document.path, namedPath);
+ assert.equal(call(root, ['show', '中文文件名'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) })).document.path, namedPath);
  write(root, 'test/named.test.ts', `// @use-case ${namedPath}\n`);
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
  assert.equal(call(root, ['trace', 'check'], CheckOutput).ok, true);
@@ -845,23 +795,24 @@ test('packed CLI creates and resolves Unicode Use Cases and supporting pages', (
  call(root, ['trace', 'gaps'], Ack);
  renameSync(join(root, namedPath), join(root, 'docs/feature/角色目录/中文文件名.md'));
  assert.equal(call(root, ['check'], CheckOutput, '', 1).ok, false);
- assert.equal(call(root, ['feature', 'page', 'add', 'npc', '../越界'], ErrorOutput, '', 1).error, 'InvalidPage');
- assert.equal(call(root, ['use-case', 'create', '坏/名称', '--feature', 'npc', '--title', '坏名称'], ErrorOutput, '', 1).error, 'InvalidData');
+ assert.equal(savePage(root, '../越界.md', '# No\n', 'sha256:unknown', 1).error, 'FileNotFound');
+ assert.equal(call(root, ['new', 'use-case', '坏/名称', '--feature', '角色目录', '--title', '坏名称'], ErrorOutput, '', 1).error, 'InvalidData');
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
 test('packed CLI accepts file Plans and nested directory pages with exact entry links', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('plan-file');
- call(root, ['design', 'create', 'storage', '--title', 'Storage', '--alternative', 'local', '--alternative', 'remote'], Ack);
+ call(root, ['new', 'design', 'storage', '--title', 'Storage', '--alternative', 'local', '--alternative', 'remote'], Ack);
  authorDesignFixture(root, 'storage', ['local', 'remote'], 'local');
  const base = join(root, 'docs/design/storage');
  writeFileSync(join(base, 'plans/local.md'), readFileSync(join(base, 'plans/local/README.md'), 'utf8').replaceAll('../../', '../'));
  rmSync(join(base, 'plans/local'), { recursive: true });
  writeFileSync(join(base, 'DECISION.md'), readFileSync(join(base, 'DECISION.md'), 'utf8').replace('plans/local/README.md', 'plans/local.md'));
- call(root, ['design', 'page', 'add', 'storage', '存储/快照.md', '--plan', 'remote'], Ack);
- const page = call(root, ['design', 'page', 'show', 'storage', '存储/快照.md', '--plan', 'remote'], PageOutput);
+ write(root, 'docs/design/storage/plans/remote/存储/快照.md', '# 存储/快照.md\n');
+ const page = readPage(root, 'docs/design/storage/plans/remote/存储/快照.md');
  assert(page.body.includes('存储/快照.md'));
  call(root, ['design', 'check', 'storage'], CheckOutput);
+ clearDecision(root, 'storage');
  call(root, ['design', 'decide', 'storage', '--selected', 'local', '--reason', 'Local'], Ack);
  call(root, ['check'], CheckOutput);
 })));
@@ -908,7 +859,7 @@ test('packed boundaries reject non-current formats and preserve configuration, o
  const root = consumer('current-formats-only');
  const constitution = 'docs/constitution.md';
  const current = readFileSync(join(root, constitution), 'utf8');
- for (const source of [current.replace('/v3', '/v2'), current.replace('status: draft', 'status: draft\namendments: []')]) {
+ for (const source of [current.replace('---\n', '---\nformat: concord.constitution/v2\n'), current.replace('status: draft', 'status: draft\namendments: []')]) {
   write(root, constitution, source);
   assert.equal(call(root, ['constitution', 'show'], ErrorOutput, '', 1).error, 'InvalidData');
   assert.equal(readFileSync(join(root, constitution), 'utf8'), source);
@@ -916,7 +867,7 @@ test('packed boundaries reject non-current formats and preserve configuration, o
  write(root, constitution, current);
  const configPath = 'concord.config.ts';
  const config = readFileSync(join(root, configPath), 'utf8');
- for (const [source, code] of [[config.replace('concord.project/v1', 'concord.project/v0'), 'InvalidData'], ['export default { ...{} };\n', 'InvalidConfigSyntax']] as const) {
+ for (const [source, code] of [['export default { projectId: \"retired\" };', 'InvalidData'], ['export default { ...{} };\n', 'InvalidConfigSyntax']] as const) {
   write(root, configPath, source);
   assert.equal(call(root, ['config', 'show'], ErrorOutput, '', 1).error, code);
   assert.equal(readFileSync(join(root, configPath), 'utf8'), source);
@@ -932,7 +883,7 @@ test('packed boundaries reject non-current formats and preserve configuration, o
  const receiptPath = `.git/concord/evidence/${id}.json`;
  const receipt = JSON.stringify({ format: 'concord.command-evidence/v1', id });
  write(root, receiptPath, receipt);
- assert.equal(call(root, ['test', 'evidence', id], ErrorOutput, '', 1).error, 'InvalidData');
+ call(root, ['config', 'show'], Ack);
  assert.equal(readFileSync(join(root, receiptPath), 'utf8'), receipt);
  const journalPath = '.git/concord/journal.json', lockPath = '.git/concord/lock.json';
  const journal = JSON.stringify({ format: 'concord.journal', scope: { kind: 'documents' } });

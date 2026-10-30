@@ -15,7 +15,7 @@ function isolatedRepository(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), "concord-coordination-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   execFileSync("git", ["init", "-q", root]);
-  writeFileSync(join(root, "concord.config.ts"), renderTypeScriptConfig({ format: "concord.project/v1", projectId: "coordination-test", testRoots: ["test"], runner: { kind: "node-test", sourceFiles: [], timeoutMs: 60000 } }));
+  writeFileSync(join(root, "concord.config.ts"), renderTypeScriptConfig({ testRoots: ["test"], runner: { kind: "node-test", sourceFiles: [], timeoutMs: 60000 } }));
   execFileSync("git", ["-C", root, "add", "concord.config.ts"]);
   execFileSync("git", ["-C", root, "-c", "user.name=Concord Test", "-c", "user.email=test@example.invalid", "commit", "-qm", "fixture"]);
   return root;
@@ -63,7 +63,7 @@ test("multi-file deletion journals and recovers an interrupted Unicode path with
   assert.equal(readFileSync(join(root, "中文文档.md"), "utf8"), "before\n");
   assert.equal((await Effect.runPromise(recoverTrace(root))).recovered, false);
   const repository = new LocalRepository(root, { dryRun: true });
-  assert.equal(repository.config.projectId, "coordination-test");
+  assert.equal(repository.root, root);
   repository.close();
 });
 
@@ -144,7 +144,7 @@ test("generic and both Trace journals block ordinary reads/writes and cross-reco
   assert.throws(() => new LocalRepository(root, { dryRun: true }), /Trace publication/);
   await assert.rejects(Effect.runPromise(withTraceReadLease(root, () => Effect.succeed(true))), (cause) => cause instanceof TraceRecoveryRequired);
   await assert.rejects(Effect.runPromise(mutateTraceFiles({ root, operation: "blocked-by-trace", changes: [{ path: "blocked.md", bytes: "nope" }] })), (cause) => cause instanceof TraceRecoveryRequired);
-  writeFileSync(genericJournal, JSON.stringify({ format: "concord.journal", root, privateDir: genericPrivateDirectorySync(root), projectId: "coordination-test", operation: "pending", phase: "prepared", directories: [], changes: [], scope: { kind: "documents", configPath: "concord.config.ts", configSource: "", configDigest: "sha256:pending" } }));
+  writeFileSync(genericJournal, JSON.stringify({ format: "concord.journal", root, privateDir: genericPrivateDirectorySync(root), operation: "pending", phase: "prepared", directories: [], changes: [], scope: { kind: "documents", configPath: "concord.config.ts", configSource: "", configDigest: "sha256:pending" } }));
   await assert.rejects(Effect.runPromise(recoverTrace(root)), (cause) => cause instanceof TraceRecoveryRequired && cause.nextStep === "concord recover");
   assert.throws(() => new LocalRepository(root, { recover: true }), /Trace publication/);
   rmSync(traceJournal);

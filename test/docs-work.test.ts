@@ -1,3 +1,4 @@
+import { installedConcordCli } from './support.js';
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
@@ -7,7 +8,7 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 
-const cli = process.env.CONCORD_DOCS_WORK_CLI ?? resolve('dist/entry.js');
+const cli = process.env.CONCORD_DOCS_WORK_CLI ?? installedConcordCli();
 interface Output { operation?: string; runId?: string; statePath?: string; error?: string; details?: { problems?: { code: string; path?: string }[] }; receiptDigest?: string; receipt?: { status: string; writeDigest: string; changedPaths: string[]; checks: { status: string; exitCode: number | null; summary: string }[] }; status?: string; blocked?: { itemId: string; reason: string }[] }
 function git(root: string, ...args: string[]) { const result = spawnSync('git', args, { cwd: root, encoding: 'utf8' }); assert.equal(result.status, 0, result.stderr); return result.stdout.trim(); }
 function call(root: string, args: readonly string[], status = 0, input?: string): Output {
@@ -22,7 +23,7 @@ function fixture(docsWork?: unknown, initialConfig = true) {
   writeFileSync(join(root, 'docs/a/one.md'), '# One\n\nClear text.\n'); writeFileSync(join(root, 'docs/b/two.md'), '# Two\n\nClear text.\n');
   writeFileSync(join(root, 'docs/README.md'), '# Documentation\n');
   writeFileSync(join(root, 'docs/input.md'), '# Input\n'); writeFileSync(join(root, 'outside.txt'), 'Outside\n');
-  if (initialConfig) writeFileSync(join(root, 'concord.config.ts'), `export default ${JSON.stringify({ format: 'concord.project/v1', projectId: 'docs-work', testRoots: [], sourceRoots: [], runner: { kind: 'command', argv: [process.execPath, '-e', 'process.exit(0)'], sourceFiles: [], timeoutMs: 1000 }, ...(docsWork === undefined ? {} : { docsWork }) })} as const;\n`);
+  if (initialConfig) writeFileSync(join(root, 'concord.config.ts'), `export default ${JSON.stringify({ testRoots: [], sourceRoots: [], runner: { kind: 'command', argv: [process.execPath, '-e', 'process.exit(0)'], sourceFiles: [], timeoutMs: 1000 }, ...(docsWork === undefined ? {} : { docsWork }) })} as const;\n`);
   writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v3', bannedTerms: [], paragraphLength: 200, sentenceLength: 100 }));
   git(root, 'add', '.'); git(root, 'commit', '-qm', 'fixture');
   return root;

@@ -133,7 +133,7 @@ test('source recovery freezes the exact configuration and preserves external edi
     const configPath = projectConfigPath(root);
     const config = readFileSync(join(root, configPath), 'utf8');
     const journal = {
-      format: 'concord.journal', root, privateDir: join(root, '.git', 'concord'), 
+      format: 'concord.journal', root, privateDir: join(root, '.git', 'concord'),
       operation: 'set-source', phase: 'prepared', directories: [],
       changes: [{ path: 'src/main.ts', before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }],
       scope: { kind: 'source', configPath, configSource: config, configDigest: digest(config) },

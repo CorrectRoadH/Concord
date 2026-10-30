@@ -1,3 +1,4 @@
+import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
@@ -8,20 +9,20 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { type TestContext } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from '../dist/coordination.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import { beginRun, finalizeRun } from '../dist/run-coordination.js';
-import { runCase } from '../dist/evidence.js';
-import { OwnedProcessLive } from '../dist/owned-process.js';
-import { buildTrace, requireValidTrace } from '../dist/trace.js';
-import { createDocument } from '../dist/documents.js';
-import type { FileLease } from '../dist/file-lease.js';
-import { digest, failure } from '../dist/shared.js';
-import { waitForPublication } from '../dist/publication-wait.js';
-import { recoverLocalState } from '../dist/recovery.js';
-import { mutateTraceFiles } from '../dist/repository/docs/trace/relation-mutation.js';
+import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from '../src/coordination.js';
+import { LocalRepository, initialize } from '../src/storage.js';
+import { beginRun, finalizeRun } from '../src/run-coordination.js';
+import { runCase } from '../src/evidence.js';
+import { OwnedProcessLive } from '../src/owned-process.js';
+import { buildTrace, requireValidTrace } from '../src/trace.js';
+import { createDocument } from '../src/documents.js';
+import type { FileLease } from '../src/file-lease.js';
+import { digest, failure } from '../src/shared.js';
+import { waitForPublication } from '../src/publication-wait.js';
+import { recoverLocalState } from '../src/recovery.js';
+import { mutateTraceFiles } from '../repository/docs/trace/relation-mutation.js';
 
-const entry = resolve('dist/entry.js');
+const entry = installedConcordCli();
 function fixture(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-portable-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -42,9 +43,9 @@ async function line(child: ChildProcess): Promise<string> {
 }
 
 function holder(root: string, recover = false): ChildProcess {
-  // Explicit JavaScript consumer fixture of the built public coordination API.
-  return spawn(process.execPath, ['--input-type=module', '-e', `
-    import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync } from './dist/coordination.js';
+  // Real subprocess using the source coordination API.
+  return spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
+    import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync } from './src/coordination.ts';
     try {
       if (process.argv[2] === 'recover') recoverPublicationLeaseSync(process.argv[1]);
       const lease = acquireTraceLeaseSync(process.argv[1], 'exclusive', 'consumer');
@@ -73,8 +74,8 @@ test('acquisition waiting does not reclaim an owner that arrived after its first
     original(target, options);
     if (target === path && token === '') {
       token = 'starting';
-      const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
-        import { acquireTraceLeaseSync } from './dist/coordination.js';
+      const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
+        import { acquireTraceLeaseSync } from './src/coordination.ts';
         console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'new-dead-owner').owner.token);
       `, root], { cwd: process.cwd(), encoding: 'utf8', timeout: 15000 });
       assert.equal(child.status, 0, child.stderr);
@@ -193,12 +194,12 @@ test('real owner death and competing recoverers never grant two live writers', a
 test('recover reclaims a real reader killed after linking beside a dead writer', async t => {
   const root = fixture(t);
   const original = acquireTraceLeaseSync(root, 'shared', 'original')!;
-  // A built-API JavaScript consumer pauses only at the filesystem boundary;
+  // A source consumer pauses only at the filesystem boundary;
   // production lease code creates and validates every owner record.
-  const reader = spawn(process.execPath, ['--input-type=module', '-e', `
+  const reader = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
     import fs from 'node:fs';
     import { syncBuiltinESMExports } from 'node:module';
-    import { acquireTraceLeaseSync } from './dist/coordination.js';
+    import { acquireTraceLeaseSync } from './src/coordination.ts';
     const link = fs.linkSync;
     fs.linkSync = (source, target) => {
       console.log('before-link');
@@ -292,8 +293,7 @@ test('recovery preserves prepared and committed journals when runner cleanup is 
       const run = repo.snapshot(() => beginRun(root));
       repo.snapshot(() => finalizeRun(root, run, false));
       const config = repo.configSnapshot;
-      const journal = JSON.stringify({ format: 'concord.journal', root, privateDir: join(root, '.git/concord'), projectId: config.config.projectId,
-        operation: 'interrupted', phase, directories: [],
+      const journal = JSON.stringify({ format: 'concord.journal', root, privateDir: join(root, '.git/concord'), operation: 'interrupted', phase, directories: [],
         scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: config.source, configDigest: config.digest },
         changes: [{ path: 'memory/interrupted.md', before: null, after: 'pending\n', beforeDigest: null, afterDigest: digest('pending\n'), mode: 420 }],
       });
@@ -350,8 +350,8 @@ test('recovery preserves a new dead owner between dispatch and either recovery e
         token = 'starting';
         // The dispatcher has released its owner. A real process acquires the
         // resource and exits without releasing before the selected engine runs.
-        const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
-          import { acquireTraceLeaseSync } from './dist/coordination.js';
+        const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
+          import { acquireTraceLeaseSync } from './src/coordination.ts';
           console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'interstage-owner').owner.token);
         `, root], { cwd: process.cwd(), encoding: 'utf8', timeout: 15000 });
         assert.equal(child.status, 0, child.stderr);
