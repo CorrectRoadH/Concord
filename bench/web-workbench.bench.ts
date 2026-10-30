@@ -35,5 +35,6 @@ export default defineBenchmarks('web-workbench', [
   { id: 'web-workbench/git-status', consumer: 'self', state: 'warm', run: ['git', 'status'], expect: { exitCode: 0 } },
   { id: 'web-workbench/workspace-projection', consumer: 'fixture:web', state: 'warm',
     prepare: context => prepareView(context).pipe(Effect.scoped),
+    beforeEach: context => prepareView(context).pipe(Effect.scoped),
     run: ['workspace', 'projection', '--json'], expect: { exitCode: 0 } },
 ]);

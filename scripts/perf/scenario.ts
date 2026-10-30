@@ -59,7 +59,7 @@ export function runArguments(run: BenchRun): readonly string[] {
   if ('request' in run) return ['view'];
   return run;
 }
-export const cliCommand = (artifact: Artifact, root: string, argv: readonly string[]) => (argv[0] === 'repo' || argv.includes('--skill'))
+export const cliCommand = (artifact: Artifact, root: string, argv: readonly string[]) => (argv[0] === 'repo' || argv.includes('--skill') || argv.includes('--help') || argv.includes('--version'))
   ? [process.execPath, artifact.entry, ...argv] : [process.execPath, artifact.entry, '--root', root, ...argv];
 export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: NodeJS.ProcessEnv, refreshLimitMs = 0): BenchContext => ({
   artifact, consumer, outputDir, smoke, refreshLimitMs, services: new Map(), ...(env ? { env } : {}),
