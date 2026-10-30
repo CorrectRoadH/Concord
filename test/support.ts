@@ -196,6 +196,10 @@ export const waitForWorkspaceNotModified = async (base: string, options: PollOpt
 };
 
 let sharedInstalledCli: string | undefined;
+let sharedInstalledScratch: string | undefined;
+nodeAfter(() => Effect.runPromise(Effect.sync(() => {
+  if (sharedInstalledScratch !== undefined) rmSync(sharedInstalledScratch, { recursive: true, force: true });
+})));
 /** One read-only installed CLI per test process; the invocation supplies its frozen artifact. */
 export function installedConcordCli(): string {
   if (sharedInstalledCli !== undefined) return sharedInstalledCli;
@@ -206,7 +210,7 @@ export function installedConcordCli(): string {
       writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
       installConcord(install, packConcord(scratch));
       sharedInstalledCli = join(install, 'node_modules/concord-sdlc/dist/entry.js');
-      nodeAfter(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));
+      sharedInstalledScratch = scratch;
       return sharedInstalledCli;
     } catch (cause) { rmSync(scratch, { recursive: true, force: true }); throw cause; }
   }));
