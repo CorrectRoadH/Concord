@@ -5,7 +5,7 @@ title: 在 Herdr 侧边面板中跟随 agent 查看 Spec
 createdAt: 2026-10-30T01:44:36.743Z
 kind: roadmap
 state: adopted
-adoptedAs: docs/feature/follow-agent-work/README.md
+adoptedAs: docs/feature/herdr-panel/README.md
 ---
 
 ## Problem
