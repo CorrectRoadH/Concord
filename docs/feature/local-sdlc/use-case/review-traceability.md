@@ -10,7 +10,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 用户目标
 
-Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use Case、测试、代码声明、Memory 与证据之间的关系，判断这次变更有没有可审阅的验收依据。
+Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use Case、测试、代码声明、Issue、Memory 与修复核验之间的关系，判断这次变更有没有可审阅的验收依据。
 
 ## 起始状态
 
@@ -28,7 +28,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
    {"operation":"trace-check","ok":true,"complete":true,"findings":[],"edges":[
      {"from":"docs/feature/cart/use-case/add-item.md","to":"docs/feature/cart/README.md","relation":"feature"},
      {"from":"case:neref_854212737ecad7effc4666629752cb98","to":"docs/feature/cart/use-case/add-item.md","relation":"contract"},
-     {"from":"case:neref_854212737ecad7effc4666629752cb98","to":"memory/duplicate-sku.md","relation":"regression"},
+     {"from":"case:neref_854212737ecad7effc4666629752cb98","to":"docs/issues/duplicate-sku.md","relation":"issue"},
      {"from":"code:code-68054071298e32ca5ef1a72ca3a117d2","to":"docs/feature/cart/README.md","relation":"implements"}]}
    ```
 
@@ -51,7 +51,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
    ```markdown
    # Concord review
 
-   This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe ownership; command evidence does not prove native case coverage.
+   This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe ownership; fix verification does not prove native case coverage.
 
    ## Contracts and decisions
 
@@ -66,11 +66,11 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
    ## Test declarations
 
    - **neref_854212737ecad7effc4666629752cb98** — [test/cart.test.js:5](test/cart.test.js#L5); active; contract: [docs/feature/cart/use-case/add-item.md](docs/feature/cart/use-case/add-item.md)
-     - Regression: [memory/duplicate-sku.md](memory/duplicate-sku.md)
+     - Issue: [docs/issues/duplicate-sku.md](docs/issues/duplicate-sku.md)
 
-   ## Engineering memory
+   ## Issues
 
-   - [重复加入覆盖数量](memory/duplicate-sku.md) — problem, open, epoch 1
+   - [重复加入覆盖数量](docs/issues/duplicate-sku.md) — open
    ```
 
    `review render <feature>` 只生成一份 Feature 的材料。完整输出还包含宪法状态、Use Case 步骤分组与本地反馈。
@@ -81,7 +81,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
 
 - 目录名前缀相似的相邻 Feature 不会混入。
 - 删除、改名或退役测试后，下一次 `trace` 立即反映当前源码。
-- 证据缺失、`unknown` 执行结果和命令证据的边界在材料中明确写出，不当作覆盖率。
+- fixed 缺少修复核验、`unknown` 执行结果和修复核验的边界在材料中明确写出，不当作覆盖率。
 - 这些命令都不运行测试，不发送到 GitHub，也不修改远端。
 
 ## Spec 来源

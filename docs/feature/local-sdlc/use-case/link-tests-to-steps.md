@@ -17,7 +17,7 @@ feature: docs/feature/local-sdlc/README.md
 1. 作者按[步骤语法](#步骤语法)在主流程的根有序列表项第一段末尾写 `{#id}`，或运行 `concord use-case format <use-case>` 为已含 ID 的列表补齐缺失 ID。为未标记列表建立步骤时，先运行 `concord use-case steps <use-case>` 查看列表，再使用 `--seed --list <ordinal>` 显式选择一个列表。 {#declare-steps}
 2. 测试写 `@use-case <path>#<id>`，实现写 `@concord-implements <path>#<id>`。`concord check` 校验步骤位置、ID 命名空间与引用目标；已有标题 anchor 和整个 Use Case 的关联继续有效。 {#link-declarations}
 3. `concord use-case steps <use-case>`、`trace show` 与 `review render` 按步骤列出测试与代码声明，另列整个 Use Case 和非步骤 anchor 的关联。没有关联的步骤单独列出；`trace gaps` 提示含未标记项的根有序列表。 {#inspect-associations}
-4. 步骤改名使用 `concord use-case rename-step <use-case> <old-id> <new-id>`，在一个可恢复的变更集中改写正文、源码标记与 Markdown 链接。`--dry-run` 预览同一规划与校验；受管引用须先由其生命周期命令处理。 {#rename-step}
+4. 步骤改名使用 `concord use-case rename-step <use-case> <old-id> <new-id>`，在一个可恢复的变更集中改写正文、源码标记与 Markdown 链接。`--dry-run` 预览同一规划与校验；Issue 与 Memory 关系中的引用须先由作者修改。 {#rename-step}
 
 ## 步骤语法
 
@@ -44,9 +44,9 @@ feature: docs/feature/local-sdlc/README.md
 
 - `new-id` 须符合步骤 ID 语法，且不与该文件的标题 anchor 或其它步骤冲突。
 - 改写对象是 testRoots 中的 `@use-case` 标记、sourceRoots 中的 `@concord-implements`，以及 `docs/` 中解析后指向旧引用的 Markdown 链接。标记识别遵守 [C-011](../../../constitution.md#c-011-5)，JS/TS 字符串、模板、正则与 Markdown 代码示例中的相同文本不变；不解析测试声明，不启动 adapter 或 LSP。扫描不完整或无法可靠定位 token 时拒绝整次操作。
-- Memory 与 Issue 的 metadata 或正文链接、Design metadata 中出现旧引用时返回 `ManagedReferenceBlocked`，零写入，由对应生命周期命令处理。
-- 没有 `@name` 的测试标记随目标改变测试引用，带 `@name` 的保持不变；两种情况的旧收据都不能用于新目标，结果列出受影响的 case。
-- 只改写已识别的引用 token、步骤 ID 与链接目标，不创建、删除或移动文件，不改受管 metadata、Memory、Issue、配置与证据。提交前冲突零写入；发布开始后冲突或中断返回 `RecoveryRequired`，`recover` 回滚 prepared、保留 committed 结果，遇到未知编辑拒绝并保留现场。`--dry-run` 执行同一规划与校验，不发布。
+- Issue 与 Memory 的 frontmatter 关系或正文链接中出现旧引用时返回 `ManagedReferenceBlocked`，零写入，由作者直接修改或用对应命令处理。
+- 没有 `@name` 的测试标记随目标改变测试引用，带 `@name` 的保持不变；结果列出受影响的 case。
+- 只改写已识别的引用 token、步骤 ID 与链接目标，不创建、删除或移动文件，不改 frontmatter、Memory、Issue 与配置。提交前冲突零写入；发布开始后冲突或中断返回 `RecoveryRequired`，`recover` 回滚 prepared、保留 committed 结果，遇到未知编辑拒绝并保留现场。`--dry-run` 执行同一规划与校验，不发布。
 
 改名与补齐只处理单个 Use Case 的步骤，不处理文件移动或 Feature 改名。发布范围见[步骤改写的发布](../architecture.md#步骤改写的发布)。
 
@@ -59,7 +59,7 @@ feature: docs/feature/local-sdlc/README.md
 - 无序项、嵌套项、附页中的步骤语法报告 `InvalidStepPosition`，代码示例中的 `{#id}` 不生成步骤；未标记的验收列表不进入步骤视图。
 - 直接调用样本观察到同一步骤声明时为 `observed`、level 为 `step`；另一 case 导入的声明、辅助函数转调或只有其它 Feature 声明时不冒充该 case 的行为证明；打包 CLI 子进程、HTTP 边界、没有分析器或达到闭包上限时为 `not-observed` 并给出原因。
 - 冷、热、损坏与清空缓存时 `check` 的当前关系、finding、退出码与 `complete` 一致。错误原生标签且没有 Concord 标记时不产生关联。
-- 带 `@name` 的标记从文件改为步骤目标时 ID 保持，旧收据不能复用。
+- 带 `@name` 的标记从文件改为步骤目标时 ID 保持。
 - `format` 只给缺失项补 `step-N`；删除最大序号后不分配被标题或旧引用占用的值。`rename-step` 改写测试、代码与文档链接并列出受影响 case；规划后修改任一输入时零写入；在首个文件发布后和 committed journal 持久化后中断，由第二个 CLI 恢复时分别回滚与保留；受管引用阻断时零写入。
 
 ## 步骤分组输出

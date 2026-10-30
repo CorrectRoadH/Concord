@@ -8,7 +8,7 @@ feature: docs/feature/document-packages/README.md
 
 # 完整发现受管文档
 
-维护者打开消费仓库，从 CLI 和 Web 发现当前格式的 Engineering、Roadmap、Design 和 Research。主题由目录与严格 metadata 确定；候选、材料、索引和模板保持各自角色。
+维护者打开消费仓库，从 CLI 和 Web 发现当前格式的 Engineering、Roadmap、Design 和 Research。主题由目录与 README 的一级标题确定；候选、材料、索引和模板保持各自角色。
 
 发现读取当前配置与受管来源集合。无效格式产生路径明确的诊断，结果标注不完整；不猜测已采用或已裁决状态，不转换或重写输入。嵌套 owner 截断祖先归属，材料仍可从主题树访问。
 

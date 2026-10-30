@@ -10,21 +10,38 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 `concord --version`、各层 `--help` 与无参数调用由构建时生成的静态数据直接输出，不加载 Effect、命令模块或原生产物。静态数据从实际命令定义生成：构建时以原 CLI 执行每条帮助路径，记录 stdout、stderr 与退出码。运行时只在 NO_COLOR、TERM=dumb、非 TTY 等与生成时相同的渲染条件下使用它，其余情况交给完整 CLI，输出逐字节一致。
 
-其它调用按顶层命令组加载：入口只导入被调用命令组的模块图，不静态导入全部命令。静态数据或命令模块缺失、与安装身份不符时，入口回退到完整 CLI，结果与回退前相同。源码运行（`pnpm concord`）使用同一入口逻辑。`repo` 子树的静态帮助保留原有前置条件：cwd 不在 Git 工作树顶层时交给完整 CLI 作出具名失败。
+其它调用按顶层命令组加载：入口只导入被调用命令组的模块图，不静态导入全部命令。静态数据或命令模块缺失、与安装身份不符时，入口回退到完整 CLI，结果与回退前相同。源码运行（`pnpm concord`）使用同一入口逻辑。
 
 入口在加载任何命令模块之前启用 Node 编译缓存，目录为 `${XDG_CACHE_HOME:-~/.cache}/concord/node-compile-cache`，遵守 `NODE_COMPILE_CACHE` 与 `NODE_DISABLE_COMPILE_CACHE`。目录不可写或被禁用时照常加载，不改变命令结果。
 
 ## 自举
 
-本项目的实现文件与关键函数直接声明各自的 Feature / Use Case。共享基础模块关联 Feature，具体行为关联八条 Use Case；repository profile 路由和注释渲染使用显式 region。selfhost 验收要求每条 Use Case 都存在真实实现和测试关联，源码旁的声明仍是唯一 owner，不另存模块到功能的映射表。
+本项目的实现文件与关键函数直接声明各自的 Feature / Use Case。共享基础模块关联 Feature，具体行为关联各条 Use Case；注释渲染使用显式 region。selfhost 验收要求每条 Use Case 都存在真实实现和测试关联，源码旁的声明仍是唯一 owner，不另存模块到功能的映射表。
 
 ## 执行管线
 
-只有 `test run` 启动仓库命令。runner argv 逐参数替换 `{file}`、`{name}`、`{pattern}`，不经过 shell；timeout、取消和输出上限都由受 Scope 管理的进程组清理。收据记录 command outcome 与 observed execution，未知或全跳过不会被包装成 case passed。`code analyze` 启动的 language server、adapter 收集与测试执行共用同一套 runner 进程所有权和清理。
+只有 `test run`、`test verify` 与 `issue close --fixed` 启动仓库命令。runner argv 逐参数替换 `{file}`、`{name}`、`{pattern}`，不经过 shell；timeout、取消和输出上限都由受 Scope 管理的进程组清理。运行结果记录 command outcome 与 observed execution，未知或全跳过不会被包装成 case passed；结果不持久化。`code analyze` 启动的 language server、adapter 收集与测试执行共用同一套 runner 进程所有权和清理。
+
+## 修复核验
+
+只支持线性路径：先提交会失败的回归测试，再提交修复（[决策依据](../../design/sdd-core-model/DECISION.md)）。可观察行为见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
+
+1. 回归测试由 `@issue` 标记选出。`issue close --fixed` 要求工作树干净，修复候选即当前 HEAD。
+2. 缺陷候选默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
+3. 从缺陷候选到 HEAD 之间，测试文件、runner 配置、`runner.sourceFiles` 与测试指向的 Spec 字节不变；区间中有 merge 提交时不支持。
+4. 在 Git-private 目录 `verify/<i>/` 下以 detached worktree 检出缺陷候选，在主工作树运行修复候选。两次运行都在 runner 租约与 OwnedProcess 下执行，结束后删除临时 worktree；清理无法确认时按 runner 阻断处理。
+5. 缺陷候选上 runner 以非零码结束，修复候选上以零结束。缺测试、缺提交（含 shallow clone）、超时与清理未知都是 `FixUnverifiable`。
+6. 发布前重新核对 HEAD、工作树、配置与 Issue 前像，变化则拒绝。写入的 `verification` 包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本。
+
+`test verify` 与 `check --since` 的重放在两个提交各自的 detached worktree 中运行，不改变已记录的结论；提交、依赖或运行环境不可获得时报告无法重放。reopen 删除 `closure`。
 
 ## 写入管线
 
-文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整 preimage，再把全部计划变更写入绑定 projectId、root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配 preimage 也不匹配 planned digest 时拒绝覆盖外部编辑。
+文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整 preimage，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配 preimage 也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由[差异门禁](#差异门禁)检查。
+
+## 差异门禁
+
+`check --since <base>` 先完成当前状态检查，再用 Git 读取 `<base>` 与当前之间变化的文件，对每个变化按 [CLI](cli.md#检查本次变化) 的表格检查。Issue 与 Memory 的状态转换比较基线与当前的 frontmatter。`verification` 的重放复用[修复核验](#修复核验)。`Selected:` 的校验复用 `design decide` 的同一规则。Roadmap 移动复用采用命令的链接规则。无法读取基线或差异时传播 `complete: false`，不退回只检查当前状态。
 
 ## 步骤改写的发布
 
@@ -86,11 +103,29 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 - 绑定：先按 provider 的 group key（项目、文件、声明范围与组身份）归并参数项，不凭同名合并。标记块从首个关联标记到连续元数据末行；自动绑定优先最内层包含标记的唯一 leaf 组，否则取紧随其后的唯一 leaf 组，中间只允许空白及 provider 明确覆盖的注释或装饰器。有普通语句、同深度重叠、缺范围或只有 suite 时不自动绑定。`@native` 与可验证的自动绑定不一致时 `NativeSelectorConflict`，歧义为 `AmbiguousNativeBinding`，二者都是执行前失败，不是 check finding。执行集按 native ID 去重，一次结果可投射到多个关联。
 - 输入身份：`inputs` 绑定项目与 root、测试与源码及配置成员集合和字节、fixture、导入支持文件、构建配置、conftest 与 lockfile。它还绑定框架与运行时版本、adapter 真实脚本及传递实现文件、选择能力、算法版本与选中组范围；`node adapter.js` 摘要 adapter.js 而非 node。
 - 协调：任何 adapter 进程启动前取得与 runner 相同的 run lease 与失效 epoch，捕获完整快照后关闭来源句柄再运行外部进程；run 所有权贯穿收集、选择、执行、报告与终结，短发布协调不跨外部调用。结束后重读全部输入与成员，有漂移、非零收集退出、截断、缺失调用或清理未知时不发布当前清单，旧清单只作历史展示。
-- 报告：每个 run 分配新报告目录，每个 Invocation 独占执行前为空的子目录，以安全目录句柄读取并复核文件身份，读取后变化也拒绝。拒绝 symlink、多重硬链接、特殊文件、目录逃逸与非本次产生的文件；XML 禁止 DTD 与外部实体。目录在最后一个使用者结束后清理，失败保留恢复信息且不发布有效原生收据。
+- 报告：每个 run 分配新报告目录，每个 Invocation 独占执行前为空的子目录，以安全目录句柄读取并复核文件身份，读取后变化也拒绝。拒绝 symlink、多重硬链接、特殊文件、目录逃逸与非本次产生的文件；XML 禁止 DTD 与外部实体。目录在最后一个使用者结束后清理，失败保留恢复信息且不发布有效原生结果。
 
 ## 文档身份
 
-名称语法、分类根、package 与 leaf 布局、现行与历史分类及选择器由同一政策模块定义，严格解析共用 codec。CLI、高级治理、Web 与页面编辑把 ID 解析到实际路径后，冻结路径、类型、ID 与完整前像，在租约内重新核对映射，漂移即拒绝；各入口保留自己的错误协议、租约与发布日志，恢复只使用日志中的实际路径（[决策依据](../../design/document-identity/DECISION.md)）。
+名称语法、分类根、package 与 leaf 布局及短选择器由同一政策模块定义，严格解析共用 codec。类别由路径决定，名称取正文唯一的一级标题，按 Markdown 语法树识别，代码块中的标题不计；大小写与 Unicode 规范化碰撞按[路径安全](#路径安全)保护。CLI、Web 与页面编辑把选择器解析到实际路径后，冻结路径、类别与完整前像，在租约内重新核对映射，漂移即拒绝；各入口保留自己的错误协议、租约与发布日志，恢复只使用日志中的实际路径（[决策依据](../../design/document-identity/DECISION.md)）。
+
+## 生命周期
+
+### 从接入到 Spec
+
+初始化只在 Git worktree 顶层执行并以冲突即失败保护已有文件。Feature 与 Use Case 建立当前 Spec。Roadmap 采用把目录原子移入 `docs/feature/`：在一个 journal 中写入新路径、改写指向原路径的链接与关系并删除原目录，目标冲突与采用期间的来源变化在提交前拒绝；当前语义转由新 Feature 拥有，采用历史在 Git。
+
+### Issue
+
+Issue 打开时没有 `closure`，关闭时写入；fixed 的 `closure` 带[修复核验](#修复核验)的结论。reopen 删除 `closure`，状态回到 open，之前的结论只在 Git 历史中。`adopts` 只列当前承接的 Spec。
+
+### Memory
+
+Memory 从 captured 开始。decision 与 insight 经 activate 成为 current；note 保持 captured。被新记录替代时成为 superseded，并写 `supersededBy` 或 `supersession`。宪法每次 adopt 与 amend 写一条 `type: decision`、current 的 Memory，以 `amends` 指向受影响的条款与款，见[演进宪法](../project-onboarding/use-case/evolve-constitution.md#amend)。
+
+### 退役与恢复
+
+测试关系用 `@concord-status retired` 明示退役。缓存可随时 clear/rebuild。未完成写入由 recover 根据 journal 恢复；未知编辑导致具名冲突，必须由维护者裁决。
 
 ## 信任边界
 
@@ -103,20 +138,21 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 | 操作 | 内容依赖 | 协调 | 失败范围 |
 | --- | --- | --- | --- |
 | memory/issue list、index、recall、search | 相应来源内全部候选 owner | 乐观来源 snapshot | 范围内坏记录、来源缺失、配置或事务障碍 |
-| memory/issue edit 的 canonical path | 指定 owner 与当前摘要 | 独占 publication | 目标或其授权依赖、写入资源障碍 |
-| memory/issue edit 的短 ID | 相应类别的来源集合及唯一匹配 owner | 独占 publication | 集合不完整、歧义或写入资源障碍 |
-| memory/issue create | 目标路径、写来源权限；Issue 的同类 ID 集合；Problem 的证据政策 | 独占 publication | 身份冲突、必要依赖或写入资源障碍 |
-| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 regression Problem | 乐观来源 snapshot | 指定依赖缺陷，不加载全局 Trace |
-| show、trace、review | 展示的关系图 | 乐观来源 snapshot | 输出 findings；需要完整图的结论拒绝不完整输入 |
-| check | 全仓库事实与关联 | 乐观来源 snapshot | 各 owner 解析错误累计为 findings，`ok: false` |
-| fixed、关系变更、删除 | 当前证明与保证关系完整所需的集合 | 独占 publication | 保留现有严格身份、证据下限和逆向关系要求 |
+| show 的 canonical path | 指定 owner | 乐观来源 snapshot | 目标或其必要依赖 |
+| show 的短选择器 | 相应类别的全部候选及唯一匹配 owner | 乐观来源 snapshot | 集合不完整或歧义 |
+| new | 目标路径与同类短选择器集合 | 独占 publication | 身份冲突、必要依赖或写入资源障碍 |
+| memory activate、supersede、link；issue link、unlink、reopen | 指定 owner、当前摘要与关系目标 | 独占 publication | 目标或关系目标缺陷、写入资源障碍 |
+| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源 snapshot | 指定依赖缺陷，不加载全局 Trace |
+| trace、review | 展示的关系图 | 乐观来源 snapshot | 输出 findings；需要完整图的结论拒绝不完整输入 |
+| check | 全仓库事实与关联；`--since` 另读基线差异 | 乐观来源 snapshot | 各 owner 解析错误累计为 findings，`ok: false` |
+| issue close、roadmap adopt、design decide | 核验与保证关系完整所需的集合 | 独占 publication；fixed 另持 runner 租约 | 保留严格身份、修复核验和逆向关系要求 |
 
-集合查询先按物理来源限定路径，再解码。Feature 与 Use Case 共用物理根时，同根候选中的坏记录必须报错。Memory 精确路径不需要其它 Memory 内容有效。短 ID 读取全部候选，避免隐藏未解码记录中的同 ID。文件名不推导作者 ID。来源扫描按当前配置和安全目录读取。
+集合查询先按类别的固定目录限定路径，再解码。Feature 与 Use Case 共用 `docs/feature/` 时，同根候选中的坏记录必须报错。Memory 精确路径不需要其它 Memory 内容有效。短选择器读取全部候选，避免隐藏未解码记录中的同名文件。来源扫描使用安全目录读取。
 
-精确引用读取目标和沿路径最近的 README owner 边界。声明 Concord 格式的 frontmatter 必须严格解码。普通非 Concord frontmatter 保留 supporting page 语义。损坏的 Concord owner 不能当作普通页面。最近 owner 的 kind 不支持附页时拒绝，不向更高祖先回退。精确目标验证受管来源、current disposition 与 placement。Use Case 还须验证其 feature 为当前 canonical Feature，且路径符合归属。回归目标必须为 Problem。路径安全、目标类型和 anchor 校验保留。
+精确引用读取目标和沿路径最近的 README owner 边界。类别由路径决定；Issue、Memory 与宪法的 frontmatter 按各自 Schema 严格解码，Spec 页面没有 frontmatter。缺少唯一一级标题的 owner 不能当作普通页面。最近 owner 的类别不支持附页时拒绝，不向更高祖先回退。精确目标验证类别目录与放置。Use Case 的所属 Feature 由路径推导，该 Feature 的 README 必须存在。`@issue` 目标必须为 Issue。路径安全、目标类型和 anchor 校验保留。
 
 ## 完整性诊断
 
-全局诊断 inventory 同时携带 documents、findings 与 complete。单独的 documents 数组不表示集合完整。逐文件收集解码错误，保留错误路径与具名代码，并传播 `complete: false`。关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断。有效记录不能单独证明集合完整。requireValidTrace 同时检查 complete 和 findings。部分图不能关闭 Problem、删除 Issue 或批准关系迁移。
+全局诊断 inventory 同时携带 documents、findings 与 complete。单独的 documents 数组不表示集合完整。逐文件收集解码错误，保留错误路径与具名代码，并传播 `complete: false`。关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断。有效记录不能单独证明集合完整。requireValidTrace 同时检查 complete 和 findings。部分图不能把 Issue 关闭为 fixed、采用 Roadmap 或批准关系迁移。
 
 未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有 publication lease，返回前校验来源观察与发布代次，并在未完成 journal 前停止。读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../constitution.md#c-013)。

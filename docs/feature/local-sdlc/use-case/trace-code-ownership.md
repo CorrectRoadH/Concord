@@ -41,7 +41,7 @@ feature: docs/feature/local-sdlc/README.md
    // @concord-end
    ```
 
-   重复 `--contract` 生成多行 `@concord-implements`。命令只检查指定的 Spec（以及 `--regression` 给出的 Problem），不读取全项目关系，失败只涉及这些引用。
+   重复 `--contract` 生成多行 `@concord-implements`。命令只检查指定的 Spec，不读取全项目关系，失败只涉及这些引用。
 
 2. 把声明放进源码。 {#place}
 
@@ -109,9 +109,9 @@ feature: docs/feature/local-sdlc/README.md
 - region 嵌套、跨越函数边界、截断表达式或为空。
 - 带声明的文件有语法错误。
 
-字符串、模板、正则和 JSX 文本中的标记文本不算声明。`trace show` 与 `review render` 返回所展示关系的 findings 与 `complete`。`complete` 为 false 或 findings 非空时，依赖完整关系的操作拒绝执行。代码声明错误不影响测试执行，也不改变关闭 Problem 的证据要求。
+字符串、模板、正则和 JSX 文本中的标记文本不算声明。`trace show` 与 `review render` 返回所展示关系的 findings 与 `complete`。`complete` 为 false 或 findings 非空时，依赖完整关系的操作拒绝执行。代码声明错误不影响测试执行，也不改变修复核验。
 
-全局 `check` 逐个文件保留 owner 的解析错误，把它们累计为 findings，返回 `ok: false` 与 `complete: false`。`documents` 数组本身不说明集合是否完整。关闭 Problem、删除 Issue 和迁移关系时同时检查 `complete` 与 findings。
+全局 `check` 逐个文件保留 owner 的解析错误，把它们累计为 findings，返回 `ok: false` 与 `complete: false`。`documents` 数组本身不说明集合是否完整。把 Issue 关闭为 fixed 和迁移关系时同时检查 `complete` 与 findings。
 
 ## 声明规则
 

@@ -29,7 +29,7 @@ feature: docs/feature/local-sdlc/README.md
    // @use-case docs/feature/cart/use-case/add-item.md
    ```
 
-   `--regression memory/<id>.md` 追加 `@regression` 行。需要可读名称时，在标记块里手写 `@name <text>`。Spec 或 Problem 不存在时返回 `ReferenceNotFound`。
+   `--issue docs/issues/<i>.md` 追加 `@issue` 行，标明这条回归测试守护的 Issue。需要可读名称时，在标记块里手写 `@name <text>`。Spec 或 Issue 不存在时返回 `ReferenceNotFound`。
 
 2. 把标记放在测试声明上方。注释前缀可以是 `//`、`#` 或 `--`。 {#place}
 
@@ -45,7 +45,7 @@ feature: docs/feature/local-sdlc/README.md
    ```
 
    ```json
-   {"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"name":"docs/feature/cart/use-case/add-item.md#0","contract":"docs/feature/cart/use-case/add-item.md","contractKind":"use-case","regressions":[],"status":"active","framework":"marker","skipped":false,"named":false,"markerEndLine":5}],"observations":[]}
+   {"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"name":"docs/feature/cart/use-case/add-item.md#0","contract":"docs/feature/cart/use-case/add-item.md","contractKind":"use-case","issues":[],"status":"active","framework":"marker","skipped":false,"named":false,"markerEndLine":5}],"observations":[]}
    ```
 
    每个标记块是一个 case。`id` 由文件与标记位置派生，不需要手写。`concord --json test show <id>` 返回单个 case，附 `evidenceScope` 与 `analysis`。
@@ -75,7 +75,7 @@ feature: docs/feature/local-sdlc/README.md
 ## 标记规则
 
 - 每个标记块只选一个 Spec。多个标记块可以关联同一个 Feature 或 Use Case。
-- `@status retired` 表示测试已退役，不能用于关闭 Problem。
+- `@status retired` 表示测试已退役，不参与修复核验。
 - 工具不从测试语法推断跳过或待办状态。
 
 ## 忽略路径

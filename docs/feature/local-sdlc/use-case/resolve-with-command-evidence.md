@@ -6,153 +6,122 @@ kind: use-case
 feature: docs/feature/local-sdlc/README.md
 ---
 
-# 记录命令证据并关闭 Problem
+# 核验修复并关闭缺陷
 
 ## 用户目标
 
-修复缺陷的工程师要证明修复确实生效：同一个测试在修改产品代码之前失败，修改之后通过。Concord 保存这两次执行的收据，收据成立时才允许把 Problem 标为 fixed。审阅者不必相信“已修复”这句话，可以直接查看两份收据。
+修复缺陷的工程师要证明修复确实生效：回归测试在修复之前的提交上失败，在修复之后的提交上通过。Concord 在关闭 Issue 之前执行这次核验，把缺陷提交、修复提交与测试写进 Issue。审阅者不必相信“已修复”这句话，可以在任何具备依赖的 clone 中重放核验（[决策依据](../../../design/sdd-core-model/DECISION.md)）。
 
 ## 起始状态
 
-- 仓库已运行 `concord init`，`concord.config.ts` 的 runner 能执行测试文件。默认 runner 是 `node --test`。
-- 已有一个能复现缺陷的测试，或者准备写一个。
+- 仓库已运行 `concord init`，`concord.config.ts` 的 `runner` 能执行测试文件。修复核验需要配置 runner。
 - 下文的例子：购物车 `addItem` 第二次加入同一 SKU 时覆盖了数量，应该累加。
 
 ## 完整路径
 
-1. 把缺陷记录为 Problem。 {#record-problem}
+本页示例为预期输出。
+
+1. 把缺陷记录为 Issue。 {#record-issue}
 
    ```sh
-   printf '同一 SKU 第二次加入时数量被覆盖，应该累加。\n' \
-     | concord --json memory add duplicate-sku --kind problem --title "重复加入覆盖数量" --body -
+   concord --json new issue duplicate-sku
    ```
 
    ```json
-   {"operation":"create-memory","dryRun":false,"changedPaths":["memory/duplicate-sku.md"]}
+   {"operation":"new","dryRun":false,"changedPaths":["docs/issues/duplicate-sku.md"]}
    ```
 
-   `concord --json memory show duplicate-sku` 显示 `"state":"open"`、`"epoch":0` 和 `"evidenceRequirement":"command"`。
+   也可以直接创建 `docs/issues/duplicate-sku.md`，frontmatter 写 `status: open`，正文写一级标题与缺陷描述。
 
-2. 让复现测试指向 Use Case 和 Problem。 {#mark-regression}
+2. 提交会失败的回归测试。 {#commit-regression}
 
-   ```sh
-   concord test annotate --contract docs/feature/cart/use-case/add-item.md --regression memory/duplicate-sku.md
-   ```
-
-   ```text
+   ```js
    // @use-case docs/feature/cart/use-case/add-item.md
-   // @regression memory/duplicate-sku.md
+   // @issue docs/issues/duplicate-sku.md
+   test('adding the same sku twice sums the quantity', () => { ... });
    ```
 
-   把这两行放在测试声明上方并提交。`concord --json test list` 的 `cases[].id` 给出要运行的 case ID，例如 `neref_854212737ecad7effc4666629752cb98`，同一条目的 `regressions` 包含 `memory/duplicate-sku.md`。
+   `@issue` 指向这条测试守护的 Issue，可以重复。只提交测试，不改产品代码。
 
-3. 修改产品代码之前运行测试，取得 red 收据。 {#run-red}
+3. 修改产品代码并单独提交。 {#commit-fix}
+
+   修复提交不改回归测试、runner 配置、`runner.sourceFiles` 与测试指向的 Spec。
+
+4. 在干净的工作树中关闭 Issue。 {#close-fixed}
 
    ```sh
-   concord test run neref_854212737ecad7effc4666629752cb98
+   concord issue close duplicate-sku --fixed --reason "addItem 累加已有数量"
    ```
 
    ```text
-   Command fail — neref_854212737ecad7effc4666629752cb98
-   Receipt: ccev_c5131e3e563df91019790cf68acabbae
-   Scope: command (does not prove native case coverage)
-   Execution: nonzero; exit: 1; cleanup: true
-   Timeout: false; cancelled: false; signal: null
-   Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
-   Started: 2026-10-23T02:35:11.803Z; finished: 2026-10-23T02:35:12.023Z
-   Use --json to inspect all recorded digests.
+   Verified fix — docs/issues/duplicate-sku.md
+   Defect: 3f2a91c (runner exit 1)
+   Fix: HEAD 8c04d7e (runner exit 0)
+   Tests: neref_854212737ecad7effc4666629752cb98
+   Applied close-issue:
+     docs/issues/duplicate-sku.md
    ```
 
-   测试失败时命令退出 1，收据照常保存。`Execution: nonzero` 表示实际执行的测试数大于 0，与退出码无关。`--json` 输出完整收据，关键字段如下，省略的字段是各输入的摘要：
+   修复提交是当前 HEAD。缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；所有回归测试必须在同一提交中首次出现，否则用 `--defect <commit>` 指定，该提交必须是 HEAD 的 first-parent 祖先。runner 在缺陷提交上以非零码结束、在修复提交上以零结束时，核验成立。
 
-   ```json
-   {
-     "id": "ccev_c5131e3e563df91019790cf68acabbae",
-     "format": "concord.command-evidence/v1",
-     "scope": "command",
-     "selectedCaseId": "neref_854212737ecad7effc4666629752cb98",
-     "problemEpochs": {"memory/duplicate-sku.md": 0},
-     "commandOutcome": "fail",
-     "execution": "nonzero",
-     "exitCode": 1,
-     "timedOut": false,
-     "cleanupOk": true
-   }
-   ```
-
-4. 修改产品代码，不改测试和 Spec，再运行同一个 case，取得 green 收据。 {#run-green}
+5. 重放核验。 {#verify}
 
    ```sh
-   concord --json test run neref_854212737ecad7effc4666629752cb98
+   concord --json test verify duplicate-sku
    ```
 
-   命令退出 0，收据 `id` 为 `ccev_49ed61a97f02f8811dd528980849ceb8`，`commandOutcome` 为 `pass`，`exitCode` 为 0，`cleanupOk` 为 true。
-
-5. 用两份收据关闭 Problem。 {#resolve-fixed}
-
-   ```sh
-   concord memory resolve duplicate-sku --kind fixed \
-     --red ccev_c5131e3e563df91019790cf68acabbae \
-     --green ccev_49ed61a97f02f8811dd528980849ceb8 \
-     --reason "addItem 累加已有数量"
-   ```
-
-   ```text
-   Applied resolve-memory:
-     memory/duplicate-sku.md
-
-   Next: concord check.
-   ```
+   命令按 Issue 中记录的提交与测试重新运行，不改变已记录的结论。提交、依赖或运行环境不可获得时报告无法重放。
 
 ## 结果
 
-`concord --json memory show duplicate-sku` 的 `metadata` 变为：
+`docs/issues/duplicate-sku.md` 的 frontmatter 变为：
 
-```json
-{
-  "state": "resolved",
-  "resolution": {
-    "kind": "fixed",
-    "evidenceLevel": "command",
-    "epoch": 0,
-    "red": "ccev_c5131e3e563df91019790cf68acabbae",
-    "green": "ccev_49ed61a97f02f8811dd528980849ceb8",
-    "selectedCaseId": "neref_854212737ecad7effc4666629752cb98",
-    "reason": "addItem 累加已有数量",
-    "at": "2026-10-23T02:36:43.897Z"
-  }
-}
+```yaml
+status: closed
+closure:
+  kind: fixed
+  reason: addItem 累加已有数量
+  verification:
+    defect: 3f2a91c...
+    fix: 8c04d7e...
+    tests:
+      - neref_854212737ecad7effc4666629752cb98
+    runner: sha256:...
+    concord: 0.4.0
 ```
 
-之后的 `concord --json check` 在 `memoryEvidence` 中列出这两份收据，并附 `"note":"Historical command evidence; not current verification."`。这句说明表示收据记录的是当时的执行，不代表当前工作区重新验证过。
+`verification` 记录缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行核验的 Concord 版本。
 
-`memory resolve` 拒绝时退出 1，不修改 Problem。错误码与触发条件：
+不经 `issue close` 直接写入或修改的 `verification`，由 `check --since <base>` 按记录重放核验，见[检查本次变化](../cli.md#检查本次变化)。`check` 在以下情况报告 finding：fixed 没有 `verification`、记录的提交不存在、记录的测试不再用 `@issue` 指向该 Issue。
+
+`issue close --fixed` 拒绝时退出 1，不修改 Issue：
 
 | 错误 | 触发条件 |
 | --- | --- |
-| `InvalidRedEvidence` | red 收据不是普通失败：超时、被信号终止、清理未确认、零执行或全部跳过，或者传入了通过的收据 |
-| `InvalidGreenEvidence` | green 收据不是普通成功，或者同样属于超时、清理未确认、零执行、全部跳过 |
-| `EvidenceOrder` | red 收据的执行晚于 green 收据 |
-| `EvidenceStale` | 两次执行之间测试定义、runner 配置、Spec 或 Problem epoch 改变了，或者 green 不对应当前实现 |
-| `EvidenceMismatch` | 两份收据不属于同一个 case 或同一个 worktree，签发收据的 Concord 版本与当前版本不同，或者当前测试标记不再用 `@regression` 指向这个 Problem |
-| `ProblemNotOpen` | Problem 不存在或不是 open 状态 |
+| `FixUnverifiable` | 工作树不干净；缺少回归测试；回归测试不在同一提交中首次出现且未给出 `--defect`；`--defect` 不是 HEAD 的 first-parent 祖先；缺陷提交不存在，包括 shallow clone |
+| `FixUnverifiable` | 缺陷提交与 HEAD 之间含 merge 提交，或回归测试、runner 配置、`runner.sourceFiles`、测试指向的 Spec 字节有变化 |
+| `FixUnverifiable` | runner 在缺陷提交上以零结束，例如同一提交同时加入测试与修复；任一次运行超时或清理无法确认 |
+| `FixVerificationFailed` | runner 在修复提交上以非零码结束 |
+| `PreimageChanged` | 核验期间 HEAD、工作树、配置或 Issue 被改动 |
 
-拒绝时的人读输出：
+同一提交加入测试与修复时，错误提示用 `--defect` 指向修复前的提交。
 
 ```text
 ok: false
-error: InvalidRedEvidence
-message: Red evidence must be a normal nonzero command result with confirmed cleanup
+error: FixUnverifiable
+message: Regression tests and the fix were added in the same commit; pass --defect <commit before the fix>
 ```
 
-问题再次出现时运行 `concord memory reopen duplicate-sku --reason "..."`，`--reason` 必填。Problem 回到 open，epoch 加 1，旧收据不能关闭新一轮。
+问题再次出现时运行 `concord issue reopen duplicate-sku`。`closure` 被删除，`status` 回到 open；再次关闭需要新的核验。
 
 ## 边界
 
-- 收据标为 `scope: command`，只证明这条命令那次的退出结果。它不证明原生 runner 的逐用例覆盖，也不证明正式 E2E 可靠性。
-- 不修复缺陷的处理（`not-a-bug`、`wont-fix`、`external-fixed`）用 `--kind` 选择，只需要 `--reason`，记录为 `evidenceLevel: author`。
+- 只支持线性路径：先提交回归测试，再提交修复。
+- command runner 不区分断言失败与构建失败，缺陷提交上的非零退出码也可能来自构建失败。
+- 核验只证明 runner 在两个提交上的退出结果，不证明原生 runner 的逐用例覆盖，也不证明正式 E2E 可靠性。
+- 不修复缺陷的关闭种类见[本地观察](../../feedback/use-case/manage-local-observations.md)。
 
 ## Spec 来源
 
-- 命令参数与输出总览：[CLI](../cli.md#测试与证据)
-- 收据、摘要与 stale 判定的实现：[架构](../architecture.md#执行管线)
+- 命令参数与输出总览：[CLI](../cli.md#测试与修复核验)
+- 核验的执行与清理：[架构](../architecture.md#修复核验)

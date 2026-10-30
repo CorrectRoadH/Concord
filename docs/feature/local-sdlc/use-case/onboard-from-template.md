@@ -10,11 +10,11 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 用户目标
 
-第一次接入 Concord 的维护者要在一个 Git 仓库里得到项目配置、文档目录和写作模板，然后开始写 Spec。整个过程不需要外部 checkout、服务或凭据。
+第一次接入 Concord 的维护者要在一个 Git 仓库里得到文档布局、写作模板和可选的项目配置，然后开始写 Spec。整个过程不需要外部 checkout、服务或凭据。
 
 ## 起始状态
 
-- 当前目录是 Git worktree 顶层，还没有 `concord.config.ts`。
+- 当前目录是 Git worktree 顶层，还没有 Concord 布局与 `concord.config.ts`。
 - Concord 已安装，`concord --version` 可用。
 
 ## 完整路径
@@ -27,7 +27,6 @@ feature: docs/feature/local-sdlc/README.md
 
    ```text
    Would apply init:
-     concord.config.ts
      docs/constitution.md
      docs/concord.md
      docs/_template/feature-design/README.md
@@ -46,13 +45,14 @@ feature: docs/feature/local-sdlc/README.md
 
    ```text
    Start here: docs/concord.md
-   Next: concord feature create <id> --title "Your feature"
+   Next: concord new feature <name> --title "Your feature"
    Inspect configuration: concord doctor
    ```
 
    创建的内容：
 
-   - 配置与宪法：`concord.config.ts`、`docs/constitution.md`（draft）。
+   - 宪法：`docs/constitution.md`，`status` 为 draft。
+   - 配置：给出 `--test-root`、`--source-root` 或 `--docs-only` 时写入 `concord.config.ts`，只含这些项。
    - 入口与说明：`docs/concord.md`、`docs/README.md`、`docs/architecture.md`。
    - 术语与写作政策：随包空 catalog `docs/concepts.md`、预设的 `docs/concord-writing.json`。
    - 模板与目录：`docs/_template/`、各分类目录的 README。
@@ -77,7 +77,9 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 结果
 
-仓库得到一套可编辑的文档结构。下一步用 `concord feature create` 写第一份 Spec。
+仓库得到一套可编辑的文档结构。下一步用 `concord new feature` 或直接创建 `docs/feature/<f>/README.md` 写第一份 Spec。
+
+`concord.config.ts` 可以不存在。没有配置时，测试根取存在的 `test/`、`tests/`，实现源码根取存在的 `src/`；需要 `test run` 或修复核验时再配置 `runner`。配置项见[项目接入](../../project-onboarding/README.md)。
 
 `init` 拒绝时退出 1，不写任何文件：
 
@@ -99,7 +101,7 @@ feature: docs/feature/local-sdlc/README.md
 
 ## 页面选择
 
-Feature 只要求 README。`--pages` 从 `library`、`cli`、`architecture`、`lifecycle`、`use-case` 中选择附页，省略时用初始化时保存的项目默认，`--no-pages` 只建 README。README 的入口只链接选中的页面。Use Case 索引不创建叶子 Use Case。Engineering 从目标、机制、使用、验收四节开始，按主题加页。
+Feature 只要求 README。`concord new feature` 的 `--pages` 从 `library`、`cli`、`architecture`、`use-case` 中选择其余页面，省略时只建 README。README 的入口只链接选中的页面。Use Case 索引不创建叶子 Use Case。Engineering 从目标、机制、使用、验收四节开始，按主题加页。
 
 ## 纯文档仓库
 

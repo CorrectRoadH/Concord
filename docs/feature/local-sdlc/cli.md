@@ -1,13 +1,39 @@
 # 命令体验
 
-本页按日常顺序列出命令、实际输出、退出码与错误。示例来自一个只有 `src/cart.js` 与 `test/cart.test.js` 的消费仓库。摘要和时间戳因运行而异，其余字段与真实输出一致。实现方式见[架构](architecture.md)。
+本页按日常顺序列出命令、实际输出、退出码与错误。示例来自一个只有 `src/cart.js` 与 `test/cart.test.js` 的消费仓库。摘要和时间戳因运行而异，其余字段与真实输出一致；标为预期输出的示例尚待实现核对。实现方式见[架构](architecture.md)。
+
+全部文件都可以直接编辑。命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用，并把结果写进文件；可信度由 `check --since <base>` 保证（[决策依据](../../design/sdd-core-model/DECISION.md)）。
+
+## 命令面
+
+| 命令 | 作用 |
+| --- | --- |
+| `init` | 创建布局、`AGENTS.md` 区块与可选配置 |
+| `new <类别> <名称>` | 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Research、Issue 或 Memory |
+| `show <路径或选择器>` | 一个文档及其关系、测试与实现 |
+| `list [类别]` | 列出文档；`--open` 列出打开的 Issue |
+| `check` | 放置、关系、概念、写作与修复核验记录；`--since <base>` 另外检查本次变化 |
+| `trace` | 关系图与缺口 |
+| `test` | `list`、`run`、`verify <issue>` |
+| `issue` | `close`（fixed 时先核验）、`reopen`、`link`、`unlink` |
+| `memory` | `activate`、`supersede`、`link` |
+| `design` | `decide`、`defer` |
+| `roadmap` | `adopt`（移入 `docs/feature/`） |
+| `constitution` | `show`、`adopt`、`amend` |
+| `concepts`、`writing` | 概念与写作政策的查看与受管写入 |
+| `docs` | `docs check` 与 `docs work` |
+| `feedback` | 外部来源的同步与导入 |
+| `view`、`panel` | Web 工作台与终端面板 |
+| `cache`、`recover`、`doctor`、`lsp`、`review`、`action` | 维护与集成 |
+
+本页其余各节给出这些命令的调用、输出与错误。
 
 ## 通用约定
 
 - 每个命令都接受 `--json`。Agent 与脚本读取 JSON，不解析人读输出。JSON 字段是公开 Spec。
 - 退出码 0 表示成功。退出码 1 表示命令拒绝执行、检查发现问题或测试失败。
 - 命令拒绝执行时，错误对象写到 stderr，形如 `{"ok":false,"error":"<错误码>","message":"...","details":{...}}`。`details` 可省略。人读输出以 `ok: false`、`error:`、`message:` 三行开头。`check` 这类检查命令发现问题时，结果仍写到 stdout，`ok` 为 false。
-- `--root <worktree>` 指定消费仓库。省略时从 cwd 向上查找 `concord.config.ts`。
+- `--root <worktree>` 指定消费仓库。省略时取 cwd 所在 Git worktree 的顶层；`concord.config.ts` 可以不存在。
 - `--dry-run` 放在子命令之前，校验并预览写入，不改文件。人读输出以 `Would apply` 开头。
 - 诊断类读取默认返回后台刷新的快照。尚无快照时返回 `QueryPending`，`details.refresh` 为 `requested`。加 `--fresh` 等待当前来源。
 
@@ -26,7 +52,7 @@
   AGENTS.md
 
 Start here: docs/concord.md
-Next: concord feature create <id> --title "Your feature"
+Next: concord new feature <name> --title "Your feature"
 Inspect configuration: concord doctor
 ```
 
@@ -43,40 +69,40 @@ Inspect configuration: concord doctor
   "cases": 1,
   "codeDeclarations": 1,
   "findings": [{"code": "ConstitutionDraft", "path": "docs/constitution.md", "message": "The project constitution is structurally valid but still draft; adopt real principles explicitly."}],
-  "nextSteps": ["Adopt real project principles with concord constitution adopt; draft is not compliance.", "Run concord check to validate all relations.", "Run concord test run <id> to record command evidence."]
+  "nextSteps": ["Adopt real project principles with concord constitution adopt; draft is not compliance.", "Run concord check to validate all relations.", "Configure runner to run tests and verify fixes."]
 }
 ```
 
 `concord template list/show` 在未初始化的目录也能读取随包模板。
 
-## 创建 Spec
+## 创建与编辑文档
 
-`feature`、`use-case`、`roadmap`、`design`、`engineering` 与 `research` 各有 `create`、`list`、`show`。省略 `--body` 时使用模板正文，`--body <file>` 或 `--body -` 提交完整正文。
+`concord new <类别> <名称>` 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Research、Issue 或 Memory。`show <路径或选择器>` 返回一个文档及其关系、测试与实现，`list [类别]` 列出文档，`list --open` 列出打开的 Issue。以下为预期输出：
 
 ```sh
-concord feature create cart --title "购物车" --pages cli,use-case
+concord new feature cart --title "购物车" --pages cli,use-case
 ```
 
 ```text
-Applied create-feature:
+Applied new:
   docs/feature/cart/README.md
   docs/feature/cart/cli.md
   docs/feature/cart/use-case/README.md
 
-Next: edit the author prose, then run concord check.
+Next: edit the pages, then run concord check.
 ```
 
 ```sh
-concord --json use-case create add-item --feature cart --title "加入商品"
+concord --json new use-case add-item --feature cart --title "加入商品"
 ```
 
 ```json
-{"operation":"create-use-case","dryRun":false,"changedPaths":["docs/feature/cart/use-case/add-item.md"]}
+{"operation":"new","dryRun":false,"changedPaths":["docs/feature/cart/use-case/add-item.md"]}
 ```
 
-ID 已存在时返回 `DocumentExists`，退出 1，不改文件。
+路径已存在时返回 `DocumentExists`，退出 1，不改文件。短选择器在同一类别中匹配多个文档时返回具名错误，需要写出路径。路径、类别与名称的规则见[领域与数据所有权](library.md#owner)。
 
-修改正文用 `author set <path> --body <file> --expected-digest <digest>`，附页用 `<kind> page show/set`。digest 取自 `show --json` 或 `page show --json` 的 `digest` 字段。文件在读取后被改过时返回 `PreimageChanged`，需要重新读取并合并。
+创建之后直接编辑文件。Web 工作台的保存带整文件摘要；文件在读取后被外部改过时返回 `PreimageChanged`，需要重新读取并合并。摘要只防止覆盖并发编辑，不是授权边界。
 
 ## 关联源码
 
@@ -94,12 +120,12 @@ concord code annotate --scope file --contract docs/feature/cart/README.md
 `--scope node` 关联标记下方的一个声明，`--scope region` 关联一段代码。实现源码根由 `concord.config.ts` 的 `sourceRoots` 配置，`init --source-root src` 可在初始化时设置。
 
 ```sh
-concord test annotate --contract docs/feature/cart/use-case/add-item.md --regression memory/duplicate-sku.md
+concord test annotate --contract docs/feature/cart/use-case/add-item.md --issue docs/issues/duplicate-sku.md
 ```
 
 ```text
 // @use-case docs/feature/cart/use-case/add-item.md
-// @regression memory/duplicate-sku.md
+// @issue docs/issues/duplicate-sku.md
 ```
 
 `--json` 返回 `{"operation":"test-annotate","snippet":"..."}`。`code list` 返回当前代码声明，`code locate <path> --line <n>` 返回包含该行的全部声明。代码声明只表示实现关联，不代替测试，也不证明 Spec 已完成。完整语法见 `concord --skill code`。
@@ -148,19 +174,33 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 
 适用范围与规则见[聚合门禁](../documentation-quality/README.md#聚合门禁)。
 
-`ok` 为 false 表示发现违规。`complete` 为 false 表示有必需输入没能读取，结论不完整。`advisories` 是提示，不影响退出码。已关闭 Problem 的收据列在 `memoryEvidence`，附 `"note":"Historical command evidence; not current verification."`。
+`ok` 为 false 表示发现违规。`complete` 为 false 表示有必需输入没能读取，结论不完整。`advisories` 是提示，不影响退出码。
+
+### 检查本次变化
+
+`concord check --since <base>` 在当前状态检查之外，对照基线提交 `<base>` 检查本次变化。CI 对每个变更运行它；只在本地运行 `check` 时不重放核验。
+
+| 变化 | 检查 |
+| --- | --- |
+| Issue 新增或修改 fixed 的 `verification` | 按记录重放[修复核验](use-case/resolve-with-command-evidence.md)，失败或无法重放即报告 |
+| Issue、Memory 的 `status` 改变 | 转换合法，例如 note 不能成为 current，closed 必须带完整的 `closure` |
+| active 宪法的条款或款改变 | 本次变化中有一条 `type: decision` 的 Memory 以 `amends` 指向它们 |
+| DECISION 的 `Selected:` 改变 | 按 `design decide` 的规则校验全部候选与 Limits |
+| Roadmap 目录移入 `docs/feature/` | 链接改写与采用规则满足，见[采用 Roadmap](use-case/plan-and-adopt-contracts.md#结果) |
+
+`<base>` 必须是存在的提交，否则返回具名错误，退出 1。基线与当前之间的差异无法读取时，`complete` 为 false。
 
 ## 追踪关系
 
-`concord trace show --fresh <path>` 返回一份 Spec 的正文、关系、测试与代码声明。不加 `--fresh` 且尚无快照时返回 `QueryPending`。`--json` 的顶层字段为 `operation`、`subject`、`relatedPaths`、`incoming`、`outgoing`、`tests`、`codeDeclarations`、`stepGroups`、`cache` 与 `analysis`：
+`concord trace show --fresh <path>` 返回一份 Spec 的正文、关系、测试与代码声明。`subject` 的 `kind`、`title` 与 `feature` 由路径和一级标题推导，以下为预期输出。不加 `--fresh` 且尚无快照时返回 `QueryPending`。`--json` 的顶层字段为 `operation`、`subject`、`relatedPaths`、`incoming`、`outgoing`、`tests`、`codeDeclarations`、`stepGroups`、`cache` 与 `analysis`：
 
 ```json
 {
   "operation": "trace-show",
-  "subject": {"path": "docs/feature/cart/use-case/add-item.md", "metadata": {"kind": "use-case", "feature": "docs/feature/cart/README.md"}, "digest": "sha256:..."},
+  "subject": {"path": "docs/feature/cart/use-case/add-item.md", "kind": "use-case", "title": "加入商品", "feature": "docs/feature/cart/README.md", "digest": "sha256:..."},
   "incoming": [{"from": "case:neref_854212737ecad7effc4666629752cb98", "to": "docs/feature/cart/use-case/add-item.md", "relation": "contract"}],
   "outgoing": [{"from": "docs/feature/cart/use-case/add-item.md", "to": "docs/feature/cart/README.md", "relation": "feature"}],
-  "tests": [{"id": "neref_854212737ecad7effc4666629752cb98", "file": "test/cart.test.js", "line": 5, "contract": "docs/feature/cart/use-case/add-item.md", "regressions": ["memory/duplicate-sku.md"], "status": "active"}],
+  "tests": [{"id": "neref_854212737ecad7effc4666629752cb98", "file": "test/cart.test.js", "line": 5, "contract": "docs/feature/cart/use-case/add-item.md", "issues": ["docs/issues/duplicate-sku.md"], "status": "active"}],
   "codeDeclarations": [],
   "analysis": {"observations": [], "relevance": [{"testId": "neref_854212737ecad7effc4666629752cb98", "scope": "file", "relevance": {"verdict": "not-observed", "gaps": ["NoAnalyzer"]}, "message": "未观察到交集"}]}
 }
@@ -168,28 +208,27 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 
 `codeDeclarations` 为空表示没有代码直接声明实现这个 Use Case。示例中的代码声明指向 Feature README，在 Feature 的 `trace show` 中列出。`trace gaps --json` 列出缺少实现或测试关联的 Spec。`trace check` 只做关系检查。`review render` 生成审阅材料。这些命令都不运行测试。
 
-## 测试与证据
+## 测试与修复核验
 
 `concord --json test list` 列出测试根中的标记。`cases[].id` 是 `test run` 使用的 case ID：
 
 ```json
-{"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"contract":"docs/feature/cart/use-case/add-item.md","contractKind":"use-case","regressions":[],"status":"active","framework":"marker","skipped":false}],"observations":[]}
+{"operation":"test-list","cases":[{"id":"neref_854212737ecad7effc4666629752cb98","file":"test/cart.test.js","line":5,"contract":"docs/feature/cart/use-case/add-item.md","contractKind":"use-case","issues":[],"status":"active","framework":"marker","skipped":false}],"observations":[]}
 ```
 
-`concord test run <case-id>` 用配置的 runner 运行 case 所在文件，argv 不经过 shell，并保存一份收据。人读输出：
+`concord test run <case-id>` 用配置的 runner 运行 case 所在文件，argv 不经过 shell。人读输出：
 
 ```text
 Command fail — neref_854212737ecad7effc4666629752cb98
-Receipt: ccev_c5131e3e563df91019790cf68acabbae
 Scope: command (does not prove native case coverage)
 Execution: nonzero; exit: 1; cleanup: true
 Timeout: false; cancelled: false; signal: null
 Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 ```
 
-测试通过时首行为 `Command pass`，退出 0；测试失败时退出 1，收据照常保存。`--json` 输出完整收据，格式为 `concord.command-evidence/v1`。`commandOutcome` 取 `pass`、`fail` 或 `invalid`。`execution` 取 `nonzero`、`zero`、`skipped` 或 `unknown`，分别表示执行的测试数大于 0、等于 0、全部跳过或无法判断。
+测试通过时首行为 `Command pass`，退出 0；测试失败时退出 1。运行结果不保存。`--json` 输出 `commandOutcome`、`execution`、`exitCode`、`timedOut`、`cleanupOk` 与 `arguments`。`commandOutcome` 取 `pass`、`fail` 或 `invalid`。`execution` 取 `nonzero`、`zero`、`skipped` 或 `unknown`，分别表示执行的测试数大于 0、等于 0、全部跳过或无法判断。
 
-`memory resolve <id> --kind fixed --red <receipt> --green <receipt> --reason <text>` 用两份收据关闭 Problem。完整路径、输出与错误码见[记录命令证据并关闭 Problem](use-case/resolve-with-command-evidence.md)。
+`issue close <issue> --fixed --reason <text> [--defect <commit>]` 先核验回归测试在缺陷提交上失败、在当前 HEAD 上通过，再把结论写进 Issue。`test verify <issue>` 按 Issue 中的记录重放核验，不改变结论。完整路径、输出与错误码见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 
 ## 缓存与恢复
 
@@ -210,7 +249,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 ## 依赖分析
 
-`code analyze` 显式生成可丢弃依赖观察；不接受 `--dry-run`，不签发测试收据。JS/TS 使用内置 TypeScript 模块解析，不启动 server。其它语言根据 `languageServers` 配置启动受管 LSP 进程，具体配置见[多语言分析](use-case/analyze-other-languages.md)。
+`code analyze` 显式生成可丢弃依赖观察；不接受 `--dry-run`，不运行测试。JS/TS 使用内置 TypeScript 模块解析，不启动 server。其它语言根据 `languageServers` 配置启动受管 LSP 进程，具体配置见[多语言分析](use-case/analyze-other-languages.md)。
 
 `code list`、`trace show --fresh` 与 `test show` 展示 `analysis.observations` 和 `analysis.relevance`。`observed` 附层级及范围限制，`not-observed` 显示“未观察到交集”和具名缺口。历史诊断投影中的观察只作历史展示；当前判定须重新读取当前输入。
 
@@ -244,9 +283,9 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 配置 `testAdapters` 按测试根内的路径段匹配且不得重叠。每项声明 `id`、`include`、`builtin` 或外部 `argv`、`implementationFiles`、`inputRoots`、`frameworkVersion`、`lockFiles` 与 `envNames`；超时和预算只可缩小硬上限。未覆盖的文件使用原 runner。
 
-原生收据为 `concord.native-evidence/v2`，包含 requested、observed、Invocation 状态及输入摘要。green、red 与 invalid 表达逐项执行裁决；command scope 的 pass/fail 不表述为原生通过。缺少、重复、额外、skip、超时或清理未知均不能用于 fixed。能力与边界见[原生 adapter Use Case](use-case/run-native-test-adapters.md)。
+原生运行结果包含 requested、observed、Invocation 状态及输入摘要。green、red 与 invalid 表达逐项执行裁决；command scope 的 pass/fail 不表述为原生通过。缺少、重复、额外、skip、超时或清理未知均为 invalid，不能作为修复核验的任一端。能力与边界见[原生 adapter Use Case](use-case/run-native-test-adapters.md)。
 
-`inputScope` 展示仓库内输入成员、摘要、排除项和框架/运行时版本。系统库、工具链、外部服务和包缓存无法冻结时，观察标记 `ExternalInputUnknown`、`complete=false`；仍可按完整 provider 收集范围授权精确 native 选择。原生收据保留环境 gap 和版本，`complete` 仅表示逐项报告完整，不能满足 repository profile 的原生可靠性等级。
+`inputScope` 展示仓库内输入成员、摘要、排除项和框架/运行时版本。系统库、工具链、外部服务和包缓存无法冻结时，观察标记 `ExternalInputUnknown`、`complete=false`；仍可按完整 provider 收集范围授权精确 native 选择。运行结果保留环境 gap 和版本，`complete` 仅表示逐项报告完整。
 
 ## 编辑器服务
 
@@ -257,7 +296,3 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 导航仅使用同版当前输入。过期请求返回 ContentModified（-32801），取消返回 RequestCancelled（-32800）；输入缺失发布 EditorInputsIncomplete。悬停明确说明未提供分析观察，不将缺失观察解释成没有关系。
 
 服务只读，不提供 formatting、codeAction、executeCommand 或 willRenameFiles；未知编辑执行请求返回 EditorMethodNotSupported（-32601）。不启动 language server、collector 或 runner，不监听网络，不持久化 overlay。关闭、EOF 或 SIGINT 终结任务与句柄。预算与完整生命周期见[编辑器 Use Case](use-case/use-editor-service.md)。
-
-## 中立高级治理
-
-消费仓库通过锁定的 `concord repo` 入口加载自己的 host。`docs test` 的 current 关系写在真实声明上方，native inventory 校验 ID/path；history/tombstone 保存在注释归档。正式 v2 red/takeover 由 host 执行并签发，已有回归使用显式 `regression refresh --reason` 更新陈旧证据。此入口的 formal gate 不接受通用 command receipts。
