@@ -84,15 +84,13 @@ Then run \`concord check\`, \`concord test list\`, and \`concord trace show docs
 
 Run \`concord trace gaps --json\` to find contracts and documented CLI pages without explicit code or active test relationships. These are relationship gaps, not coverage results; product-owned inventory is still required to discover undocumented commands.
 
-Use \`--regression memory/<problem>.md\` when a test protects a recorded Problem.
+Add \`// @issue docs/issues/<id>.md\` beside the Spec marker when a test protects an Issue. Source annotations own these relations; Concord derives reverse lists and execution references. Use \`@status retired\` to retire an annotation.
 
-Source annotations are the only source of these test relations; reverse lists are derived. A marker is the case. Concord does not parse host test syntax. Concord derives the \`neref_...\` test reference from the file and marker; use \`@regression\` for a Problem and \`@status retired\` to retire a generic relation.
-
-Without \`@name\`, a run covers the marked file and does not claim a native case passed. Repository profile additionally supports \`@issue\` and file-wide \`@test-file\`; that parser is separate.
+Without \`@name\`, a run covers the marked file and does not claim a native case passed. Native test adapters report their own observed cases.
 
 ## Configure and run verification
 
-\`concord.config.ts\` owns testRoots and runner configuration for projects. Unsupported input is rejected without conversion. Defaults scan test/ and tests/ using Node native tests.
+\`concord.config.ts\` owns testRoots and runner configuration for projects. Unsupported input is rejected without conversion. Without configuration, discovery scans existing test/ and tests/ directories and existing src/ sources. No runner is configured by default. Explicit roots replace these defaults.
 
 For a documentation-only repository, initialize with \`concord init --docs-only\`: testRoots is empty and no test directories are required.
 Add real test roots to the project configuration when tests exist. A successful documentation check does not establish test coverage.
@@ -110,14 +108,18 @@ supported placeholders are {file}, {name}, and {pattern}. Arguments never run th
 
 Include additional assertion or runner configuration files in sourceFiles. Concord does not install your dependencies.
 
-Only \`concord test run <id>\` executes the runner. Check, trace, template, and doctor do not run tests.
+\`concord test run <id>\` executes the configured runner. Fix closure and replay also execute it; \`check --since <base>\` replays newly recorded fixes. Plain check, trace, template, and doctor do not run tests.
 
 Run results are command evidence, not proof that a native case executed or that a feature is covered.
 
-For a Problem fix, capture a normal failing red command, change the product implementation, then capture green.
+Close a defect through a reproducible regression:
 
-Keep the test definition and contract unchanged between both runs. Close the Problem using both receipt IDs and an explicit reason.
-See \`concord memory resolve --help\`. Use \`concord review render\` for local review material.
+1. Add a failing regression test marked with \`@issue docs/issues/<id>.md\` and commit it.
+2. Commit the product fix while keeping the test, runner inputs and referenced Spec unchanged.
+3. Run \`concord issue close <id> --fixed\` to verify the frozen command against the defect and fixed snapshots and record the result in the Issue.
+4. Run \`concord check --since <base>\` before delivery.
+
+Use \`concord test verify <issue>\` to replay a recorded fix. Verification proves that one frozen command failed on the defect and passed on the accepted snapshot; it does not establish native case coverage. Use \`concord review render\` for local review material.
 
 ## Working safely
 
