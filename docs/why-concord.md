@@ -1,6 +1,8 @@
 # 为什么需要 Concord
 
-本页说明 Concord 面向的问题、每个问题对应的机制，以及这些机制刻意不承担的责任。具体行为 Spec 见[架构](architecture.md)，跨功能规则见[宪法](constitution.md)。
+Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致。
+
+本页说明 Concord 面向的问题、每个问题对应的机制，以及这些机制刻意不承担的责任。文档的分组与字段见[文档模型](document-model.md)，具体行为 Spec 见[架构](architecture.md)，跨功能规则见[宪法](constitution.md)。
 
 ## 问题
 
@@ -17,29 +19,31 @@
 - 每次会话从零开始。agent 不知道哪些语义已经定下，会重新决定公共命名、数据模型或模块边界。
 - agent 按字面理解文字。同一个概念在两个文档里用两个词，agent 会把它们当成两件事。
 - agent 会报告"已修复"。没有失败再通过的执行记录时，这个结论无法核验。
-- agent 产出大量代码与测试。人工审阅时，最难回答的是"这个测试为什么存在"。
+- agent 产出大量代码与测试。人工审阅时，最难回答的是"这个测试为什么存在"。逐行审阅生成的代码，也比审阅背后几句意图难得多。
 
 ## 机制
 
-Concord 不新增服务，也不替代项目的语言、构建与测试工具。它在同一个 Git 仓库里给三类信息各自指定一个 owner，再从 owner 推导出它们之间的关系。
+Concord 不新增服务，也不替代项目的语言、构建与测试工具。它在同一个 Git 仓库里给每类信息指定一个 owner，再从 owner 推导出它们之间的关系。人把审阅放在 Spec 的变化上，agent 按 Spec 实现并写测试，`concord check` 检查 Spec、实现、测试与记录是否一致。
 
 ```mermaid
 flowchart LR
-  C[Spec docs/] -->|被指向| A[源码标记]
+  C[Spec] -->|被指向| A[源码标记]
   A --> I[实现代码]
   A --> T[测试代码]
-  T -->|test run| R[命令收据]
-  R -->|red 与 green| M[Memory]
-  M -->|promote| C
-  D[Design] -->|decide| C
-  G[术语与写作政策] -->|check| C
+  T -->|issue close --fixed| S[Issue 中的修复核验]
+  D[Design] -->|decide 后写入| C
+  R[Roadmap] -->|adopt| C
+  G[宪法、术语与写作政策] -->|check| C
+  K[Memory] -->|supports| C
 ```
+
+文档按回答的问题分为六组：Spec（Feature 与 Engineering）、提案（Roadmap）、项目规则（宪法、术语与写作政策）、决策记录（Design 与 Research）、工作项（Issue）与知识（Memory）。
 
 ### Spec 先于实现
 
 Feature 描述一项能力，Use Case 描述一条用户路径的主流程与验收。它们写在 `docs/feature/` 下，只声明目标、行为、约束与验收，不记录开发过程。
 
-先写 Spec，实现者就不需要猜测语义。agent 在会话开始时运行 `concord feature list` 和 `trace show`，读到的是当前约定，而不是上一次对话的残留印象。
+先写 Spec，实现者就不需要猜测语义。agent 在会话开始时运行 `concord list feature` 和 `show <feature>`，读到的是当前约定，而不是上一次对话的残留印象。
 
 ### 用 Feature 与 Use Case 书写
 
@@ -49,7 +53,7 @@ Feature 和 Use Case 用使用者的语言描述能力：谁要达成什么目�
 
 ### 行为页写结果，architecture 页写实现
 
-Feature 包按读者分页。README、Use Case、cli 与 library 页声明外部能看到的行为；architecture 页说明这个 Feature 内部怎么实现。
+Feature 由四种页面组成，按读者分页。README 说明能力，Use Case 写用户路径与验收，cli 或 library 示例页给出具体调用与输出，它们声明外部能看到的行为；architecture 页说明这个 Feature 内部怎么实现。
 
 cli 页直接写命令和输出：参数、人读输出、`--json` 字段、退出码和错误。读者不必推断"成功"是什么样子，测试可以逐项断言，agent 实现时也有明确的完成标准。
 
@@ -59,7 +63,7 @@ architecture 页写实体归属、数据流、不变量和失败阶段。功能�
 
 ### Roadmap 与 Engineering
 
-Roadmap 和 Feature 使用同一种体裁，区别只在于是否已采用为当前 Spec。方向进入 Roadmap 有两种原因：设计还不完整，或者已经设计好但暂不安排实现。测试和实现不指向 Roadmap。准备实现时，`roadmap adopt` 把整个 package 复制为新 Feature，Roadmap 保留采用历史。
+Roadmap 和 Feature 使用同一种体裁，区别只在于是否已采用为当前 Spec。方向进入 Roadmap 有两种原因：设计还不完整，或者已经设计好但暂不安排实现。测试和实现不指向 Roadmap。准备实现时，`roadmap adopt` 把整个目录移入 `docs/feature/` 并改写指向它的链接；采用经过留在 Git 历史中。
 
 这样做的好处是，未来方向可以提前用同样的语言写清楚，又不会被误读为已经承诺的行为。采用时不需要改写体裁。
 
@@ -69,7 +73,7 @@ Engineering 描述仓库自己的测试与维护机制，例如自举检查、�
 
 有多个可行方案时，Design 在共同的目标与约束下比较候选。每个候选逐项回应 Goals 与 Limits，状态如实标为满足、部分满足、不满足或待验证。
 
-`design decide` 保存唯一选择、理由与采用目标。之后再有人提出被否决的方案，Design 里能直接看到它当时为什么没有被选中。
+`design decide` 校验全部候选与 Limits，把唯一选择写进 DECISION。选中方案中仍适用的规则随后写进 Spec，Spec 把裁决链接为决策依据。之后再有人提出被否决的方案，Design 里能直接看到它当时为什么没有被选中。
 
 ### 一个概念一个名字
 
@@ -85,42 +89,46 @@ Engineering 描述仓库自己的测试与维护机制，例如自举检查、�
 
 ### 关系由源码拥有
 
-实现代码用 `@concord-implements` 指向 Spec，测试用 `@feature` 或 `@use-case` 指向 Spec。标记写在源码里，和代码出现在同一个 diff 中。
+实现代码用 `@concord-implements` 指向 Spec，测试用 `@feature` 或 `@use-case` 指向 Spec，回归测试另用 `@issue` 指向它守护的 Issue。标记写在源码里，和代码出现在同一个 diff 中。
 
 反向关系由工具推导：从 Spec 查到实现和测试，从代码行查到 Spec。仓库里没有第二份登记表，所以关系不会和代码脱节。
 
 ### 修复要有证据
 
-`concord test run` 执行一个测试声明并保存命令收据。关闭一个 Problem 需要同一测试的两份收据：修改产品代码之前失败，修改之后通过，两次之间测试定义与 Spec 不变。
+缺陷写成 Issue。先提交会失败的回归测试，再单独提交修复；`concord issue close --fixed` 在缺陷提交上运行测试并要求失败，在当前 HEAD 上运行并要求通过，两者之间测试、runner 配置与所指 Spec 不变（[C-004-2](constitution.md#c-004-2)）。核验结论写进 Issue：缺陷提交、修复提交与测试。
 
-超时、零执行和全部跳过都不能作为证据。问题复现时 `memory reopen` 开始新一轮，旧收据不能关闭新一轮。
+结论随仓库共享，`concord test verify` 可以在任意 clone 中按记录重放。同一提交同时加入测试与修复、缺少提交或超时时，核验返回 `FixUnverifiable`，Issue 不能以 fixed 关闭（[决策依据](design/sdd-core-model/DECISION.md)）。
 
 ### 过程与声明分开
 
-调查经过、根因、决策与经验写入 Memory，待调查的观察写入 Issue。`docs/` 只保留当前有效的声明。
+可复用的知识与不需要 Design 的决策写入 Memory，缺陷、请求与观察写入 Issue。`docs/` 只保留当前有效的声明，实施过程与排障经过不写进去。
 
-Memory 与 Issue 只能通过 Concord 命令维护，修改时携带最新摘要。成熟的 Memory 可以用 `memory promote` 升级为 Spec。
+### 直接编辑，门禁把关
+
+人和 agent 直接编辑全部文件，包括 Issue 的状态与关闭结论、Memory 的状态与关系、宪法正文。命令是执行需要运行的步骤的助手：修复核验、Design 裁决与 Roadmap 采用都要运行检查，命令替你运行并把结果写进文件。
+
+可信度由门禁保证（[C-001-5](constitution.md#c-001-5)）。`concord check --since <base>` 对照基线检查本次变化：新写入的修复核验会被重放，状态转换必须合法，修改 active 宪法必须同时记录一条修订决策。CI 对每个变化运行它。
 
 ### 写入可恢复
 
-所有写入核对目标路径、前像摘要与完整变更集。中断时保留可解释的恢复现场，`concord recover` 按 journal 完成或回退，不覆盖未知编辑。
+Concord 自己的写入（命令与 Web 工作台的保存）核对目标路径、前像摘要与完整变更集。中断时保留可解释的恢复现场，`concord recover` 按 journal 完成或回退，不覆盖未知编辑。
 
 缓存只保存可重建的投影。删除缓存后，`check` 从源码重建出相同的结论。
 
 ## 一次完整的变更
 
-1. 读取现状：`concord feature list`、`trace show <feature>`、`memory recall <query>`。
-2. 方向未定时写 Design，比较候选后 `design decide`。
+1. 读取现状：`concord list feature`、`show <feature>`、`memory recall <query>`、`list --open`。
+2. 方向未定时写 Design，比较候选后 `design decide`，把采用的规则写进 Spec。
 3. 写或修改 Feature 与 Use Case，声明行为与验收。
-4. 实现代码并加 `@concord-implements`，测试加 `@use-case`。
-5. `concord check` 检查关系、生命周期与写作政策。
-6. 修复 Problem 时，用 `test run` 取得 red 与 green，再 `memory resolve`。
-7. `review render` 或 `concord view` 生成审阅材料，reviewer 从 Spec 出发核对代码与证据。
+4. 实现代码并加 `@concord-implements`，测试加 `@use-case`，每条验收至少一个测试。
+5. `concord check` 检查关系、生命周期与写作政策，`trace gaps` 的缺口都有打开的 Issue。
+6. 修复缺陷时先提交失败的回归测试，再提交修复，`issue close --fixed` 核验。
+7. `review render` 或 `concord view` 生成审阅材料，reviewer 从 Spec 的变化出发核对代码与测试；CI 运行 `check --since <base>`。
 
 ## 不承担的责任
 
 - 源码标记只声明关联，不证明测试执行过对应行为。
-- 命令收据记录一次真实执行，不证明完整覆盖或正式 E2E 可靠性。
+- 修复核验证明回归测试在两个提交上的退出码，不证明完整覆盖或正式 E2E 可靠性；逐 case 的原生证据与可靠性治理由项目自己负责，见[项目测试接入边界](repository-profile.md)。
 - `check` 通过表示关系与写作规则成立，不表示功能完成。
 - Concord 不运行项目构建，不安装依赖，不发送远端消息，不调用模型 API。
 - Web 工作台默认只监听本机地址，没有认证；在不可信网络上不要对外暴露。

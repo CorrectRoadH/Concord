@@ -1,21 +1,21 @@
 # Agent 工作入口
 
-已安装 CLI 自带渐进式 skill。先运行 `concord --skill` 取得精简入口和主题列表，需要具体流程时再运行 `concord --skill <topic>`。离线加载全部资料使用 `concord --skill all`。该入口不依赖消费仓库、不加载 repository host，也不写文件。
+已安装 CLI 自带渐进式 skill。先运行 `concord --skill` 取得精简入口和主题列表，需要具体流程时再运行 `concord --skill <topic>`。离线加载全部资料使用 `concord --skill all`。该入口不依赖消费仓库，也不写文件。
 
-在消费仓库遵守其 AGENTS.md；先用 `concord --help` 和对应子命令的 `--help` 获取当前参数。工具安装目录与消费仓库分开，跨目录执行时显式传 `--root`。
+在消费仓库遵守其 AGENTS.md；先用 `concord --help` 和对应子命令的 `--help` 获取当前参数。工具安装目录与消费仓库分开，跨目录执行时显式传 `--root`。Agent 与脚本使用 `--json`，不要解析人读输出。
 
-首次接入用 `concord init`，完整目录和模板由 init 一次建好，从 `docs/concord.md` 和 `docs/_template/README.md` 进入。`template list/show` 可在未初始化时读取随包模板；创建文档不传 `--body` 会生成写作提示，传 `--body -` 仍可直接提交完整正文。各类文档直接生成完整结构，`page show --json` 提供 `page set --expected-digest` 使用的最新摘要。Engineering 保存维护机制，Design 候选由 `--alternative` 声明并使用 `--plan` 操作页面。
+Agent 直接编辑 `docs/` 与 `memory/` 下的全部文件。Concord 命令是执行需要运行的步骤的助手，例如修复核验、Design 裁决与 Roadmap 采用；变化是否合法由 CI 中的 `concord check --since <base>` 检查（[C-001-5](constitution.md#c-001-5)）。文档的分组与字段见[文档模型](document-model.md)，命令面见 [CLI](feature/local-sdlc/cli.md)。
 
-用 `concord doctor --json` 查看配置和接入缺口。`test annotate --contract <ref>` 只输出经过引用检查的标记；把它放进测试文件再运行 `check`。模板和注释均不证明测试执行或功能覆盖。Agent 与脚本使用 `--json`，不要解析人读输出。
+首次接入用 `concord init`，从 `docs/concord.md` 和 `docs/_template/README.md` 进入。用 `concord doctor --json` 查看配置和接入缺口。
 
-1. 用 `feature list`、`trace show <canonical-path>`、`memory recall <query>` 与 `issue recall <query>` 找当前 Spec、工程知识和待调查观察。`check` 校验当前关系，不执行测试。
-2. 已采用的用户目标进入 Feature / Use Case；设计未完成或暂不实现的方向进入 Roadmap，多方案比较进入 Design，带日期的事实进入 Research。Design 裁决后，把选中方案中仍适用的规则写入相应的 Feature、architecture 或 engineering 页；Spec 只把 Design 的 README 或 DECISION 链接为决策依据（[C-012-7](constitution.md#c-012-7)）。创建命令读取 `--body <file>` 或 `--body -`，写入前可以 `--dry-run`。
-3. 新问题进入 `memory add --kind problem`。在测试文件中放置 `@feature` 或 `@use-case` 标记，保护 Problem 时附 `@regression`；标记存在即关联，case ID 由文件和标记派生。关系随测试源码参与 Git diff，不手写运行收据或第二份测试关系 JSON。
-4. `test run <id> --json` 返回 command 收据。修复时先取得正常失败的 red，保持测试定义及 Spec 不变，修改产品实现，再取得 green。`memory resolve --kind fixed` 传两份 ID 和实际修复理由。超时、零执行、已知全跳过或陈旧候选不能作为修复证据。
-5. 问题再现使用 `memory reopen`；旧轮次收据不能关闭新轮次。作者裁决使用对应的非 fixed 理由，不用普通命令结果冒充原生用例覆盖证明。
-6. 晋升 Memory 到有效 Spec 用 `memory promote`；采用 Roadmap 用 `roadmap adopt`，由工具一起迁移当前 promotion。修改 Spec 正文用 `author set`，修改 Memory 与 Issue 正文用 `memory edit` 与 `issue edit`，均携带最新 owner digest。
-7. 用 `check`、`trace show`、`review render` 交接。私有证据缺失要保留“不可用”的事实，不能把已有结论当当前运行结果。实施过程与排障经过写入 Memory，不写入 `docs/`。
+1. 读取现状：`list`、`show <路径或选择器>`、`trace show` 找当前 Spec、实现与测试；`memory recall <query>` 与 `issue recall <query>` 找知识和打开的 Issue。
+2. 已采用的目标写进 Feature：README 写能力，Use Case 写用户路径与验收，architecture 写实现，cli 或 library 写示例。尚未决定做的方向写进 Roadmap，决定后 `roadmap adopt`。
+3. 有取舍时写 Design，`design decide` 裁决。把选中方案中仍适用的规则写进相应的 Feature、architecture 或 engineering 页；Spec 只把 Design 的 README 或 DECISION 链接为决策依据（[C-012-7](constitution.md#c-012-7)）。
+4. 实现带 `@concord-implements`，测试带 `@feature` 或 `@use-case`；每条验收至少一个测试。`test annotate --contract <ref>` 输出经过引用检查的标记。
+5. 缺陷写成 Issue。先提交会失败的回归测试并附 `@issue <path>`，再单独提交修复；`issue close <issue> --fixed` 核验并写入结论，`test verify <issue>` 重放（[C-004-2](constitution.md#c-004-2)）。
+6. 可复用的知识与不需要 Design 的决策直接写进 `memory/`。实施过程、排障经过与交接不写进 `docs/`（[C-012-6](constitution.md#c-012-6)）。
+7. 交接前 `check` 无 finding，测试通过，`trace gaps` 的缺口都有打开的 Issue；`review render` 生成审阅材料。
 
 HawDB 缓存损坏时源码查询会回源。`cache clear` / `cache rebuild` 只处理缓存；写事务中断使用 `recover`。恢复遇到未知修改时先保留现场，查明冲突，不删除 journal 强行绕过。
 
-本地 Issue 草稿与 Memory 工程状态独立。Concord 不发送远端消息；提交、push、部署和发布仍遵守用户授权及消费仓库规则。
+Concord 不发送远端消息；提交、push、部署和发布仍遵守用户授权及消费仓库规则。
