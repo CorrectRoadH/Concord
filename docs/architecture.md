@@ -24,12 +24,12 @@ Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent �
 
 ### 模块布局
 
-源码按层分目录，每个目录是一个模块，入口文件 `index.ts` 是模块对外的唯一出口；模块之间只通过出口导入。`src/` 之外的其它源码树只有 `web/`（浏览器前端）与 `native/hawdb/`（原生绑定）。
+源码按层分目录，每个目录是一个模块，入口文件 `index.ts` 是模块对外的唯一出口，只导出本模块的接口，不转出其它模块的实现；模块之间只通过出口导入。产品运行时代码位于 `src/`、`web/`（浏览器前端）与 `native/hawdb/`（原生绑定）；`test/`、`bench/` 与 `scripts/` 是维护的 TypeScript 源码，分别拥有验证、性能场景与构建编排。
 
 ```text
 src/
-  model/        纯模型：Schema、Markdown 与 frontmatter 解析、文档身份推导、关系推导、写作规则、步骤、代码引用
-  base/         基础服务：workspace、sources、publication、cache、git、process
+  model/        纯模型：Schema、Markdown 与 frontmatter 解析、文档身份推导、关系推导、写作规则、作用域与路径算法、步骤、代码引用
+  base/         基础服务：installation、workspace、sources、publication、cache、git、process
   domain/       领域服务：documents、designs、trace、tests、code、issues、memory、constitution、writing、concepts、feedback、onboarding、docs-work
   app/          应用操作、Queries 端口与 ViewAction
   entry/        入口：cli、http（Web 工作台的服务端）、server（工作区服务的主进程、计算进程与操作进程）、lsp、panel
@@ -37,7 +37,7 @@ web/            浏览器前端，只调用 HTTP 接口
 native/hawdb/   HawDB 的 N-API 绑定
 ```
 
-每个 Feature 的实现落在以下模块中；Feature 的 architecture 页描述模块内部，本表是 Feature 与模块的唯一对照：
+下表说明每个 Feature 的架构职责边界；同一模块被多个 Feature 使用是正常的交叉职责。实际的实现归属由源码声明派生，不维护第二份登记：
 
 | Feature | 模块 |
 | --- | --- |
@@ -51,7 +51,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | [portable-coordination](feature/portable-coordination/README.md) | `base/publication` |
 | [web-workbench](feature/web-workbench/README.md) | `entry/http`、`web/` |
 | [herdr-panel](feature/herdr-panel/README.md) | `entry/panel` |
-| [cross-platform-release](feature/cross-platform-release/README.md) | `scripts/` 与 `native/hawdb` 的发行构建 |
+| [cross-platform-release](feature/cross-platform-release/README.md) | `base/installation`、`scripts/` 与 `native/hawdb` 的发行构建 |
 
 同一职责只有一个实现：一个关系编译器、一个文档解码器、一个 publication 协议。
 
@@ -59,13 +59,22 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 | 模块 | 可以导入 |
 | --- | --- |
-| `model` | 只有 `effect` 与其它 `model` 模块 |
-| `base` | `model`、平台层与 `native/hawdb` 的 TypeScript 绑定 |
-| `domain` | `model`、`base` 与其它 `domain` 模块；领域之间的依赖无环 |
+| `model` | `effect`、纯解析依赖白名单（`yaml`、`mdast-util-*` 与 `micromark-*`、`mdast` 类型）、`node:crypto` 的摘要函数，以及其它 `model` 模块；不做文件读取、动态加载、时间、随机数、进程状态或缓存实例 |
+| `base` | `model`、平台层与 `native/hawdb` 的 TypeScript 绑定；不导入领域或应用 |
+| `domain` | `model`、`base` 与下表中排在它之前的 `domain` 模块 |
 | `app` | `domain`、`base`、`model` |
-| `entry` | `app` 与 `model`；不直接导入 `domain` 或 `base` 的实现层，只在组合 Layer 时引用它们的 Layer |
+| `entry` | `app` 与 `model`；只有各入口的组合根 `entry/<入口>/main.ts` 可以导入 `domain` 与 `base` 的 Layer |
 
-`node:fs`、`node:child_process`、`node:net` 与 `process` 的 cwd、env、argv、标准流只在 `base` 与 `entry` 中出现。一个架构测试从源码的导入图检查这些规则与领域依赖无环，违反即失败。
+领域之间的依赖按以下顺序，只能依赖排在前面的模块：
+
+1. `documents`：owner 读取、inventory 与精确引用解析；
+2. `concepts`、`constitution`、`designs`、`issues`、`memory`：各自拥有生命周期与采用操作，`issues` 拥有远端写入与 IssueProject 端口；
+3. `writing`（依赖 `concepts`）、`code`、`tests`；
+4. `trace`（依赖 `documents`、`code`、`tests`、`constitution`）、`feedback`（依赖 `issues`）。
+
+跨领域的编排在 `app`：分析观察对关系结果的补充、初始化与配置治理、步骤改写、docs work 的检查与收尾。`code` 不回调 `trace`，`concepts` 不依赖 `writing`，共享的作用域与路径算法在 `model`。
+
+`node:fs`、`node:child_process`、`node:net` 与 `process` 的 cwd、env、argv、标准流只在 `base` 与 `entry` 中出现。架构测试 `test/architecture.test.ts` 同时检查导入与导出图（含 `import type`、类型导入节点、字面 `import()` 与可静态枚举的内部动态目标；无法枚举的内部动态目标即失败）与 AST 中的平台能力访问；消费项目模块的动态加载只允许在受控的进程入口。领域之间的值依赖与类型依赖分别报告，二者都必须无环。
 
 ### 公开接口
 
@@ -86,6 +95,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 | 服务 | 职责 |
 | --- | --- |
+| Installation | 安装包根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自包根）、模板与 skill 资源、工作进程入口 |
 | Workspace | worktree 根、Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
 | Sources | 路径安全的读取、乐观快照与返回前核验 |
 | Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有 |

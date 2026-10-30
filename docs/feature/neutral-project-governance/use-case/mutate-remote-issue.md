@@ -24,7 +24,7 @@ concord issue plan reopen <number> --connection <id>
 concord issue execute <receipt-id> --connection <id> --authorize <target>
 ```
 
-只支持 github.com 的 `transport: 'gh'` 连接，凭据只来自 gh 登录态（[C-007](../../../constitution.md#c-007-4)）。远端写入只由 CLI 与宿主组合的同一命令贡献提供，Web 与 action 不提供；本地 `docs/issues` 不因远端写入改变。
+只支持 github.com 的 `transport: 'gh'` 连接，凭据只来自 gh 登录态（[C-007](../../../constitution.md#c-007-4)）。远端写入由 `concord issue plan` 与 `concord issue execute` 提供，Web 与 action 不提供；本地 `docs/issues` 不因远端写入改变。
 
 ## plan
 

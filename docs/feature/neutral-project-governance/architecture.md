@@ -10,7 +10,7 @@ Concord 拥有路径身份推导、源码标记与测试支持文件映射、稳
 
 配置、包依赖、入口与私有协调路径只在明确的停写窗口内切换。切换持有旧、新 exclusive 锁，先拒绝活跃 writer 与未完成 journal，不删除锁文件来解除占用；旧程序退出并切换入口，不让两把锁各自保护同一 owner。切换保存完整前像与可恢复现场，未知修改拒绝覆盖。普通运行拒绝旧格式现场并保留原件（[C-009](../../constitution.md#c-009-1)）。回滚包含消费仓库的依赖、入口与 Git-private 状态。
 
-## Trace 报告模式
+## 关系编译
 
 关系编译只有一个实现，完整性与 finding 的规则见 [local SDLC 架构](../local-sdlc/architecture.md#完整性诊断)。
 
@@ -27,6 +27,6 @@ run 写入 Git-private `concord/docs-work/v1/<run-id>/`，包含 `run.json`、`r
 
 run-id 默认由 Clock 时间与随机后缀生成。同一 run 的写操作持有 run 目录内的独占文件锁，文件经临时文件、fsync 与 rename 原子替换；中断只留下 `.tmp-` 临时文件，下次持锁时删除。检查子进程超时或取消时回收进程组。
 
-## 命令贡献
+## 命令入口
 
-贡献是 `RepositoryCommandContribution<Name, R>`：`name`、`summary` 与 `makeCommand(deliver)`。`R` 声明所需服务，宿主在组合边缘提供对应 Node 层；`repository/cli-support.ts` 提供共享的输入、输出与错误渲染。宿主不组合本地 Issue 写命令，直接调用 `concord issue`。
+Concord 的工作流由 `concord` bin 提供。消费项目以进程调用这些命令，领域操作与入口适配由 Concord 拥有，不向宿主导出命令贡献。
