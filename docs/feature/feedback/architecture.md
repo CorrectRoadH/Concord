@@ -22,7 +22,7 @@ closure:
 | --- | --- | --- |
 | `investigation`、`root-cause`、`decision` | current 或 superseded 的 Memory | 调查记录、根因、所依据的决策 |
 | `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前被这条 Spec 承接；退役即删除这一项，历史在 Git |
-| `duplicate-of` | 另一个 Issue | 由 duplicate 关闭写入，不得成环 |
+| `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
 同一角色与目标的关系只保存一次。`closure` 各种类的必需字段与写入规则见[本地观察](use-case/manage-local-observations.md#操作-spec)；fixed 的 `verification` 按[修复核验](../../constitution.md#c-004-2)写入。
 

@@ -17,6 +17,6 @@ Clause writing:
 - Each clause states one cross-feature rule; its heading is the rule itself.
 - Each paragraph states one reviewable rule: an obligation, a prohibition or a permission. Normative statements bind even without "must".
 - Clauses state constraints, not the mechanism that meets them. Adopted technology, pinned dependencies, trust and resource boundaries are constraints.
-- Implementation belongs on architecture pages. Every amendment adds, in the same change, a Decision memory with an `amends` relation to each affected clause or paragraph. Its body records the reason, sources and impact. Process belongs in Memory.
+- Implementation belongs on architecture pages. Every amendment adds a Decision memory in the same change. The memory has an `amends` relation to each affected clause or paragraph. Its body records the reason, sources and impact. Process belongs in Memory.
 - Use present-tense rules; do not describe differences from the past.
 - Pages that rely on a rule link its ID next to the sentence, for example `[C-001](../constitution.md#c-001-1)`, instead of writing "paragraph N".

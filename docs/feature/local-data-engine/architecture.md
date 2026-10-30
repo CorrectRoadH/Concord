@@ -100,7 +100,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 
 ### 协议
 
-协议由固定版本 Effect 的 `unstable/rpc` 实现：每种请求是一个 Rpc，经 `unstable/socket` 在本机 socket 上传输，msgpack 序列化，Schema 严格解码，未知字段拒绝。下文的帧、字节帧与额度是对 Rpc 消息的约束，字节帧对应 `Uint8Array` 字段。数据请求带 `requestId` 与截止时间，可取消；结果按不超过 1 MiB 的块分帧，逐块准入，不预先分配声明的长度；全部块到齐并严格解码后才交给调用者。
+协议由固定版本 Effect 的 `unstable/rpc` 实现：每种请求是一个 Rpc，经 `unstable/socket` 在本机 socket 上传输，以 `RpcSerialization.layerSchemaBinary` 序列化，字节字段原生二进制传输，Schema 严格解码，未知字段拒绝。下文的帧、字节帧与额度是对 Rpc 消息的约束，字节帧对应 `Uint8Array` 字段。数据请求带 `requestId` 与截止时间，可取消；结果按不超过 1 MiB 的块分帧，逐块准入，不预先分配声明的长度；全部块到齐并严格解码后才交给调用者。
 
 帧分两种：JSON 帧携带结构，字节帧携带来源原文。`read` 只返回目标与归属链各文件的原始字节（字节帧）和一个信封：路径、摘要、长度与具名诊断代码；客户端用与服务相同的共享解码函数在本地解析 frontmatter 与正文，不由服务把元数据编码进 JSON。来源大小上限按原始字节判定（例如定向文件读取 32 MiB），每个文件的字节不超过来源上限，归属链长度沿用定向读取的现行上限；`read` 的信封与控制帧的 JSON 合计不超过 1 MiB；领域请求与结果（例如 `feedback-merge`、`query`）的 JSON 按各自下文与现行的额度累计。
 

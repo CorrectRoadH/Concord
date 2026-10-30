@@ -46,7 +46,7 @@ closure:
 | --- | --- | --- |
 | `investigation`、`root-cause`、`decision` | current 或 superseded 的 Memory | 调查记录、根因、所依据的决策 |
 | `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前被这条 Spec 承接；不再承接时删除这一项 |
-| `duplicate-of` | 另一个 Issue | 由 `closure` 的 duplicate 写入，不得成环 |
+| `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
 缺陷只在 Issue 中跟踪。`source` 是远端来源的稳定身份，字段见[反馈来源](../feedback/architecture.md)。`closure` 的种类与必需字段见[本地观察](../feedback/use-case/manage-local-observations.md)；fixed 的 `verification` 见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 

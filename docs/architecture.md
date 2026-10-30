@@ -54,7 +54,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | 需要 | Effect 能力 | Concord 补齐 |
 | --- | --- | --- |
 | 资源生命周期 | Scope、`Effect.acquireRelease`、`Layer.effect` | — |
-| 工作区服务协议 | `unstable/rpc`（请求关联、具名错误、取消、结果流）经 `unstable/socket` | wire codec 须经真实往返测试证明字节字段以原生二进制传输，首选 `RpcSerialization.layerSchemaBinary`，不接受 Base64；领域 Schema 显式拒绝额外字段；单帧、累计、连接、在途与发送字节的准入由传输适配层执行，`maxBufferSize` 只限不完整消息；`feedback-merge` 以 begin、append 与 commit 分块提交，commit 原子生效 |
+| 工作区服务协议 | `unstable/rpc`（请求关联、具名错误、取消、结果流）经 `unstable/socket` | 序列化采用 `RpcSerialization.layerSchemaBinary`，字节字段以原生二进制传输，由真实往返与边界大小测试验收，不接受 Base64；领域 Schema 显式拒绝额外字段；单帧、累计、连接、在途与发送字节的准入由传输适配层执行，`maxBufferSize` 只限不完整消息；`feedback-merge` 以 begin、append 与 commit 分块提交，commit 原子生效 |
 | 当前状态与订阅 | SubscriptionRef | 每个订阅只保留最新状态，慢订阅的旧状态被替换，计入发送预算 |
 | 合并监听事件与补偿刷新 | Stream 与 Schedule | 去抖有最长等待（两秒），扫描期间只合并一次后续刷新 |
 | 串行维护 | Semaphore | 只在进程内互斥；服务锁、publication 与超时各自裁决 |

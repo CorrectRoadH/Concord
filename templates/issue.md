@@ -20,4 +20,4 @@ List the smallest repeatable steps, inputs, and resulting output.
 
 Record evidence, ruled-out explanations, and remaining hypotheses. Put reusable findings in Memory and link them from the `relations` frontmatter with the `investigation`, `root-cause`, or `decision` role.
 
-To close a defect as fixed, commit a failing regression test marked `@issue docs/issues/<id>.md`, commit the fix, then run `concord issue close <id> --fixed`. The command verifies both commits and writes the closure.
+To close a defect as fixed, first commit a failing regression test marked `@issue docs/issues/<id>.md`. Then commit the fix and run `concord issue close <id> --fixed`. The command verifies both commits and writes the closure.

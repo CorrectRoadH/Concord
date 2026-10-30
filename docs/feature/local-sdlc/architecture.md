@@ -30,10 +30,10 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 2. 缺陷候选默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
 3. 从缺陷候选到 HEAD 之间，测试文件、runner 配置、`runner.sourceFiles` 与测试指向的 Spec 字节不变；区间中有 merge 提交时不支持。
 4. 在 Git-private 目录 `verify/<i>/` 下以 detached worktree 检出缺陷候选，在主工作树运行修复候选。两次运行都在 runner 租约与 OwnedProcess 下执行，结束后删除临时 worktree；清理无法确认时按 runner 阻断处理。
-5. 缺陷候选上 runner 以非零码结束，修复候选上以零结束。缺测试、缺提交（含 shallow clone）、超时与清理未知都是 `FixUnverifiable`。
+5. 缺陷候选上同一冻结命令以非零码结束，修复候选上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果；runner 结果判定为零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
 6. 发布前重新核对 HEAD、工作树、配置与 Issue 前像，变化则拒绝。写入的 `verification` 包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本。
 
-`test verify` 与 `check --since` 的重放在两个提交各自的 detached worktree 中运行，不改变已记录的结论；提交、依赖或运行环境不可获得时报告无法重放。reopen 删除 `closure`。
+`verification.fix` 是实际验证的提交 F，承载关闭记录的提交通常在 F 之后。`test verify` 在记录的缺陷提交与 F 上重放；`check --since` 的重放在记录的缺陷提交与目标工作树上运行，因此验证的是被接受的快照，而不只是 F。已经关闭的记录不随后续变化重放，之后的回归由完整测试发现。提交、依赖或运行环境不可获得时报告无法重放，不改变已记录的结论。reopen 删除 `closure`。
 
 ## 写入管线
 

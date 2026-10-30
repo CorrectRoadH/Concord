@@ -178,17 +178,30 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 
 ### 检查本次变化
 
-`concord check --since <base>` 在当前状态检查之外，对照基线提交 `<base>` 检查本次变化。CI 对每个变更运行它；只在本地运行 `check` 时不重放核验。
+`concord check --since <base>` 在当前状态检查之外，比较基线与目标两个端点，检查本次变化。
 
-| 变化 | 检查 |
+- 基线 `<base>` 必须解析为一个提交，且是 HEAD 的祖先；否则返回具名错误 `InvalidBase`，退出 1。CI 在 PR 上取目标分支与 PR 的 merge-base，在默认分支上取上一次通过门禁的提交。
+- 目标是当前工作树：已提交、已暂存、未暂存与未被忽略的未跟踪文件，与 `check` 读取的范围相同。
+- 只比较两个端点，不检查范围内的中间提交；squash 掉的中间状态不在门禁范围内。
+- 基线对象缺失（例如 shallow clone）、基线或目标中的 owner 无法解码、检查期间目标文件变化时，`complete` 为 false 并以非零码退出，不报告通过。
+- `--json` 结果带 `since: {"base": "<提交>", "target": "worktree", "scope": "endpoints"}`。不带 `--since` 的 `check` 只证明当前结构合法；`closure: fixed` 在其结果中显示 `verified: "recorded"`，只有本次变化中经过重放的才显示 `verified: "replayed"`。
+
+门禁按 before 与 after 的领域差异识别事件，检查每种事件的全部规则；普通正文编辑不触发额外检查：
+
+| 事件 | 检查 |
 | --- | --- |
-| Issue 新增或修改 fixed 的 `verification` | 按记录重放[修复核验](use-case/resolve-with-command-evidence.md)，失败或无法重放即报告 |
-| Issue、Memory 的 `status` 改变 | 转换合法，例如 note 不能成为 current，closed 必须带完整的 `closure` |
-| active 宪法的条款或款改变 | 本次变化中有一条 `type: decision` 的 Memory 以 `amends` 指向它们 |
-| DECISION 的 `Selected:` 改变 | 按 `design decide` 的规则校验全部候选与 Limits |
+| Issue 新关闭为 fixed，或 closure 种类改为 fixed | 在记录的缺陷提交上重放回归测试并要求失败，在目标工作树上运行并要求通过；两端之间测试、runner 配置、`runner.sourceFiles` 与所指 Spec 不变，见[修复核验](use-case/resolve-with-command-evidence.md) |
+| Issue 关闭、重开或改变 closure 种类 | 目标状态的全部关闭规则；改变种类按重开后再关闭处理 |
+| Issue 或 Memory 删除 | 没有其它 owner 或标记仍指向它 |
+| Memory 的 `status` 改变 | 转换合法：captured 到 current，current 到 superseded；note 保持 captured |
+| 宪法从 draft 变为 active | 本次变化中新增一条 `type: decision` 的 Memory，以 `amends` 指向 `docs/constitution.md` |
+| active 宪法的条款或款新增、修改或删除 | 本次变化中新增一条 `type: decision` 的 Memory，以 `amends` 指向每个受影响的 ID（含已删除的 ID），正文含适用范围、理由、来源与影响四节 |
+| active 宪法改回 draft 或被删除 | 拒绝 |
+| 已裁决 Design 的候选、Goals、Limits 或 Cases 改变 | 拒绝；DECISION 的理由只能追加一节带日期与来源的更正 |
+| DECISION 的 `Selected:` 首次写入 | 按 `design decide` 的规则校验全部候选与 Limits |
 | Roadmap 目录移入 `docs/feature/` | 链接改写与采用规则满足，见[采用 Roadmap](use-case/plan-and-adopt-contracts.md#结果) |
 
-`<base>` 必须是存在的提交，否则返回具名错误，退出 1。基线与当前之间的差异无法读取时，`complete` 为 false。
+`amends` 指向已删除条款的关系是历史引用，此后的 `check` 只校验其 ID 格式。
 
 ## 追踪关系
 

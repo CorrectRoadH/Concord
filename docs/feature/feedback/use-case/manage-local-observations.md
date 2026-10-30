@@ -21,13 +21,13 @@ Local、GitHub、Linear 在同一反馈列表中作为三个来源呈现。Local
 - `concord new issue <名称>` 按模板创建 `status: open` 的本地 Issue；也可以直接创建文件。
 - Issue 的正文与 frontmatter 可以直接编辑。`concord check` 校验当前字段；`concord check --since <base>` 校验本次变化中的状态转换：closed 必须带完整的关闭结论，新增或修改的 `verification` 按记录重放（[决策依据](../../../design/sdd-core-model/DECISION.md)）。Web 保存使用整文件摘要，只防止覆盖并发的外部编辑。
 - `feedback list` 接受 `--status open|closed`、`--provider local|github|linear`、`--triage pending|linked|closed` 及 `--query`。筛选相交，空结果返回空列表；query 不区分大小写，匹配路径、名称、正文与已保存来源。`feedback.list` 受管操作使用相同筛选；Web 来源与处理状态筛选复用同一规则。筛选不读取远端网络，也不依赖无关 Spec 可解析。
-- `issue link <id> --role <role> <target>` 按[角色表](../architecture.md#issue-字段)校验目标类型，省略 `--role` 时为 investigation；同一角色与目标去重，只接受 open Issue。adopts 的锚点使用 `check` 的同一校验。duplicate-of 只由 duplicate 关闭写入。
+- `issue link <id> --role <role> <target>` 按[角色表](../architecture.md#issue-字段)校验目标类型，省略 `--role` 时为 investigation；同一角色与目标去重，只接受 open Issue。adopts 的锚点使用 `check` 的同一校验。重复关系只由 duplicate 关闭的 `canonical` 写入。
 - `issue unlink <id> --role <role> <target>` 删除这一项关系；删除 adopts 即退役该承接，历史在 Git。
 - `issue close <id>` 以种类选项写入关闭结论，省略种类时为 closed。各种类的必需字段：
   - closed：`reason`。
   - fixed：`reason` 与 `verification`。命令先按[修复核验](../../../constitution.md#c-004-2)核验，失败或无法核验时零写入。
   - delivered：`memory`、`target` 与至少一个 `proof`；`target` 必须是当前 adopts 之一。
-  - duplicate：目标 Issue，写为 duplicate-of 关系，不得成环。
+  - duplicate：`canonical` 指向目标 Issue，是唯一的重复关系来源，不得成环。
   - declined：`memory`，指向 current 的 decision Memory。
   - invalid：至少一个 `evidence`。
   - external-fixed：`dependency`、`version` 与至少一个 `proof`。

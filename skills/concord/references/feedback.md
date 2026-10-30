@@ -22,7 +22,7 @@ closure:
 | --- | --- | --- |
 | `investigation`、`root-cause`、`decision` | current 或 superseded 的 Memory | 调查记录、根因、所依据的决策 |
 | `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前由这条 Spec 承接；不再承接时删除这一项，历史在 Git |
-| `duplicate-of` | 另一个 Issue | 由 duplicate 关闭写入，不得成环 |
+| `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
 `source` 保存远端对象的稳定身份、去重键与首次来源摘录；同一外部对象换连接或清空缓存后仍是同一 Issue。不要按标题自动合并，也不要用远端显示编号作为对象身份。
 

@@ -4,7 +4,7 @@
 
 Undecided.
 
-Replace this section with one explicit declaration: `Selected: [plan-slug](plans/plan-slug/README.md)` (or `选择 [plan-slug](plans/plan-slug/README.md)。`). Use the candidate's directory name under `plans/`.
+Replace this section with one line: `Selected: [plan-slug](plans/plan-slug/README.md)`. A Chinese line `选择 [plan-slug](plans/plan-slug/README.md)。` also works. Use the candidate's directory name under `plans/`.
 
 This line is the decision. `concord design decide` validates every candidate and Limit, then writes it; `concord check` applies the same rules to direct edits.
 

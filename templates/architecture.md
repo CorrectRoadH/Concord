@@ -18,11 +18,11 @@ List the properties every implementation must preserve.
 
 ## Resource Lifecycle
 
-When the feature holds resources or state, describe in order how each owner acquires and validates them, runs, and reuses or revalidates them. Describe cleanup after normal and interrupted runs. State what invalidates reuse and the observable result of cleanup failure.
+When the feature holds resources or state, describe how each owner acquires and validates them. Then describe how it runs, reuses and revalidates them. Describe cleanup after normal and interrupted runs. State what invalidates reuse and the observable result of cleanup failure.
 
 ## Errors
 
-Assign each failure (acquisition, execution, cancellation, cleanup) to its stage and owner. Define the observable terminal result, and do not let one failure hide another.
+Assign each failure to its stage and owner: acquisition, execution, cancellation or cleanup. Define the observable terminal result, and do not let one failure hide another.
 
 ## Identity and Reuse
 

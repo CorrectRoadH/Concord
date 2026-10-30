@@ -12,7 +12,7 @@ decision:
   reason: 用户要求测试声明直接关联 canonical Feature/Use Case；每个测试的文件与名称自动派生执行 reference，不设人工 ID 或前置 attach 流程。
   at: 2026-09-15T09:19:53.850Z
   targets:
-    - docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
+    - docs/feature/local-sdlc/library.md
 ---
 
 # 测试通过 Spec 注释关联并自动派生执行身份

@@ -21,7 +21,7 @@ canonical 仓库相对路径是唯一身份。目录名与文件名是同类别�
 
 ## Issue
 
-Issue 的 `status` 为 open 或 closed。`relations` 中参与生命周期裁决的关系带角色：`investigation`、`root-cause` 与 `decision` 指向 Memory，`adopts` 指向承接它的 Spec，`duplicate-of` 指向另一个 Issue。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。`closure` 的种类与必需字段见[本地观察](feature/feedback/use-case/manage-local-observations.md)；fixed 的修复核验见[修复缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)。普通正文链接只是导航。
+Issue 的 `status` 为 open 或 closed。`relations` 中参与生命周期裁决的关系带角色：`investigation`、`root-cause` 与 `decision` 指向 Memory，`adopts` 指向承接它的 Spec，`related` 指向另一个 Issue；重复关系只由 duplicate 关闭的 `canonical` 表达。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。`closure` 的种类与必需字段见[本地观察](feature/feedback/use-case/manage-local-observations.md)；fixed 的修复核验见[修复缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)。普通正文链接只是导航。
 
 ## Memory
 
