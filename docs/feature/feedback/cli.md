@@ -1,6 +1,6 @@
 # CLI 与 Web 用法
 
-连接保存来源范围和读取方式，不保存密钥值。GitHub 可选择复用运行 Concord 的机器上已登录的 `gh`，或使用环境变量提供 token；Linear 使用个人 API key。省略读取方式仍为原有 API 模式。
+连接保存来源范围和读取方式，不保存密钥值。GitHub 可选择复用运行 Concord 的机器上已登录的 `gh`，或使用环境变量提供 token；Linear 使用个人 API key。省略读取方式时使用 API 模式。
 
 ```sh
 concord feedback connection add --id product-github --provider github \
@@ -15,9 +15,9 @@ concord feedback import https://github.com/example/product/issues/123 --connecti
 concord feedback sync --connection product-linear
 concord feedback list --json
 concord feedback show <id> --json
-concord issue create local-observation --title "调查观察"
-concord issue adopt <id> --to docs/feature/example/README.md
-concord issue link <id> --memory memory/example.md
+concord new issue local-observation
+concord issue link <id> --role adopts docs/feature/example/README.md
+concord issue link <id> --role investigation memory/example.md
 concord issue close <id> --reason "调查结论"
 concord feedback connection remove product-github
 ```
@@ -28,7 +28,7 @@ concord feedback connection remove product-github
 
 gh 模式要求 GitHub CLI 2.98.0 或更新的兼容版本，以及支持进程组回收的 POSIX 环境；不自动安装工具。Windows 上继续使用 API 模式或本地反馈。CLI 默认认证优先级为 GH_TOKEN、GITHUB_TOKEN、已保存的 gh 凭据，均来自启动 Concord 的环境。
 
-Web 从侧栏「反馈」进入：按来源或本地处理状态筛选，创建本地反馈，选择连接导入 URL 或同步，进入详情编辑本地 Markdown、关联 Feature / Memory 和关闭。在「项目设置 → 反馈来源」维护连接，表单保存名称与范围，用同一份配置摘要保护外部并发修改。正常工作台刷新只读取本地数据。
+Web 从侧栏「反馈」进入：按来源或本地处理状态筛选，创建本地反馈，选择连接导入 URL 或同步，进入详情编辑本地 Markdown、按角色关联 Memory 与承接的 Spec，以及关闭。在「项目设置 → 反馈来源」维护连接，表单保存名称与范围，用同一份配置摘要保护外部并发修改。正常工作台刷新只读取本地数据。
 
 GitHub 连接的读取方式可在项目设置中明确切换；切换保留仓库绑定和已导入对象身份。gh 模式不显示凭据变量输入，API 模式要求变量名。「检测连接」先保存当前设置，保存冲突时保留草稿并停止检测；检测结果只属于本次运行，不写回配置。普通刷新和保存设置不会检测账号或访问远端。
 
@@ -40,30 +40,18 @@ gh 模式使用服务端登录态，工作台操作者可触发该账号对配�
 ## 没有远端连接的本地工作流
 
 ```sh
-concord issue create output-confusion --title "输出含义不清楚"
-concord issue index --json
-concord issue recall "输出" --json
-concord issue edit output-confusion --body ./observation.md --expected-digest 'sha256:...'
-concord issue link output-confusion --memory memory/output-investigation.md
+concord new issue output-confusion
+concord feedback list --provider local --status open --json
+concord show docs/issues/output-confusion.md --json
+# 直接编辑 docs/issues/output-confusion.md 的正文
+concord issue link output-confusion --role investigation memory/output-investigation.md
+concord check --since master
 ```
 
-摘要取自工具返回的当前记录。没有来源、关系或历史的本地草稿可用 `issue remove <id> --expected-digest <digest>` 删除；关联后通过 close 等生命周期处理，不能删除来绕过调查与证明。本地 CRUD 从不自动写入 GitHub 或 Linear。
+Issue 文件可以直接编辑与删除；删除后 `check` 报告指向它的失效引用。已关联或已关闭的记录通过 close 与 reopen 处理，不能删除来绕过调查与关闭结论。本地写入从不自动写入 GitHub 或 Linear。
 
 ## 命令分工
 
-`concord issue` 是本地 Issue 的唯一写入口，命令与前置条件见[本地观察](use-case/manage-local-observations.md#操作-spec)；远端写入只经 [plan 与 execute](../neutral-project-governance/use-case/mutate-remote-issue.md)。`concord feedback` 只负责外部来源：`connection`、`sync`、`import <url>`、`list`、`show`。`concord repo feedback` 只保留信封 `import`、`export`、`list`、`show` 与 `check`。help 描述本地 owner 时统一使用 Issue 一词。action 使用 `issue.adopt`、`issue.retire`、`issue.reopen`，`issue.close` 与 `issue.link` 接受 kind；`issue.close` 省略 kind 等同 `closed`。
+`concord issue` 是执行必要步骤的本地 Issue 助手：`close`（fixed 时先核验）、`reopen`、`link`、`unlink`，命令与前置条件见[本地观察](use-case/manage-local-observations.md#操作-spec)。远端写入只经 [plan 与 execute](../neutral-project-governance/use-case/mutate-remote-issue.md)。`concord feedback` 只负责外部来源与反馈列表：`connection`、`sync`、`import <url>`、`list`、`show`。help 描述本地 owner 时统一使用 Issue 一词。action 提供 `issue.close`、`issue.reopen`、`issue.link` 与 `issue.unlink`，参数与 CLI 相同。
 
-退役命令留在命令树中，接受并忽略任意参数与选项，返回 `CommandRetired`，退出 1 且零写入；`details` 为 `{ command, replacement }`。action `feedback.link` 返回同一错误。
-
-| 退役命令 | 替代命令 |
-| --- | --- |
-| `concord feedback create` | `concord issue create` |
-| `concord feedback link --feature` | `concord issue adopt --to` |
-| `concord feedback close` | `concord issue close` |
-| `concord repo feedback link` | `concord issue link --kind` |
-| `concord repo feedback adopt` | `concord issue adopt` |
-| `concord repo feedback retire` | `concord issue retire` |
-| `concord repo feedback close` | `concord issue close --kind` |
-| `concord repo feedback reopen` | `concord issue reopen --reason` |
-
-本地 Issue 只保留一个写入口，不改变持久格式（[决策依据](../../design/repository-workflows/DECISION.md)）。
+全部 Issue 文件可以直接编辑，命令写入同样的内容，可信度由 `check --since <base>` 保证（[决策依据](../../design/sdd-core-model/DECISION.md)）。

@@ -1,12 +1,42 @@
 # 身份、存储与接入边界
 
-Feedback 是产品入口，已有 `kind: issue` 的本地观察继续拥有 `docs/issues/<id>.md`，不引入第二份反馈注册表。其可选 `source` 保存首次导入的远端身份、摘录、状态、时间和连接来源；`memories`、`features` 保存正向关系。反向关系由 Trace 推导。
+Feedback 是产品入口，本地 Issue `docs/issues/<id>.md` 是唯一 owner，不引入第二份反馈注册表。路径是 Issue 的身份，名称取自正文唯一的一级标题。反向关系由 Trace 推导。
+
+## Issue 字段
+
+frontmatter 只保存推导不出的字段，每个字段只在非空时出现：
+
+```yaml
+status: open                     # open 或 closed
+relations:
+  - role: root-cause
+    target: memory/token-race.md
+source: {...}                    # FeedbackSource，见下文
+closure:
+  kind: fixed
+  reason: 修正锁顺序
+  verification: {...}            # 仅 fixed
+```
+
+| 角色 | 目标 | 含义 |
+| --- | --- | --- |
+| `investigation`、`root-cause`、`decision` | current 或 superseded 的 Memory | 调查记录、根因、所依据的决策 |
+| `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前被这条 Spec 承接；退役即删除这一项，历史在 Git |
+| `duplicate-of` | 另一个 Issue | 由 duplicate 关闭写入，不得成环 |
+
+同一角色与目标的关系只保存一次。`closure` 各种类的必需字段与写入规则见[本地观察](use-case/manage-local-observations.md#操作-spec)；fixed 的 `verification` 按[修复核验](../../constitution.md#c-004-2)写入。
+
+`source` 是 FeedbackSource：GitHub 与 Linear 各一个分支，包含首次导入时的远端对象身份（见下文的去重键）、来源摘录、远端状态与时间，以及 `connectionId` 与 `importedAt`。没有 `source` 的 Issue 是 Local 来源。
+
+Issue 文件可以直接编辑，`concord issue` 是写入同样内容并执行必要步骤的助手。`concord check` 校验当前字段，`concord check --since <base>` 另外校验本次变化中的状态转换、关闭结论与修复核验记录（[决策依据](../../design/sdd-core-model/DECISION.md)）。
+
+## 远端来源
 
 `concord.config.ts` 的 `feedbackConnections` 保存读取范围、环境变量名和绑定的远端范围 ID。GitHub 的仓库 ID 与 Linear 的组织/team UUID 在首次成功同步时与新反馈同批发布；后续不匹配会失败，重新绑定须明确修改配置。删除连接不删除反馈。
 
 对象去重键与连接分开：GitHub 使用 API 实例与 REST issue ID；Linear 使用 API 实例、组织 UUID 和 issue UUID。仓库名称、team 选择器及人类可读编号可以改变，不能成为全局对象身份。GitHub GraphQL node ID 也不承担此 Spec。
 
-远端观察快照是 `.git/concord/cache.hawdb` 中的可删除投影（worktree 中用 `git rev-parse --git-path concord` 定位）。缓存清除后保留 Markdown 中的首次摘录；重新同步恢复本次观察，不能声称知道远端历史上的最新版本。缓存的远端状态永远不替代本地状态或 Memory 证据。
+远端观察快照是 `.git/concord/cache.hawdb` 中的可删除投影（worktree 中用 `git rev-parse --git-path concord` 定位）。缓存清除后保留 Markdown 中的首次摘录；重新同步恢复本次观察，不能声称知道远端历史上的最新版本。缓存的远端状态不替代本地状态或关闭结论。
 
 读取流程是配置快照 → 无锁网络读取 → 提交时取得短期独占 publication lease 并校验配置摘要 → 原子发布绑定与新增反馈 → 更新缓存。文档已发布但缓存失败时返回成功及警告，重试不能重复导入。较旧远端版本不覆盖较新版本；同 updatedAt 内容冲突不静默择一。列表中缺席不表示删除。
 
@@ -16,17 +46,16 @@ API 适配器只访问固定 HTTPS API，重定向拒绝，外部 URL 只用于�
 
 将来新增 provider 可实现同一读取与规范化 Spec；webhook 和 OAuth 回调需要另行定义权限、重试和资源归属。远端 Issue 写入不属于 Feedback 读取，见[远端 Issue 写入](../neutral-project-governance/use-case/mutate-remote-issue.md)。
 
-本地 Issue 写入使用基础 CLI 的单文件发布 journal（`concord recover` 恢复）；`concord repo feedback import` 创建 Issue 时使用 Trace 多文件发布（`concord repo docs trace recover` 恢复）。两条路径争用同一 `publication.lease`，不会并发发布。
-
+`concord issue` 助手与 Web 保存使用单文件发布 journal（`concord recover` 恢复）；同步与导入把远端绑定与新增 Issue 在一次发布中写入。两条路径争用同一 `publication.lease`，不会并发发布。
 
 ## 来源并列与能力边界
 
 | 来源 | 创建与读取 | 作者修改 | 删除 | 对外操作 |
 | --- | --- | --- | --- | --- |
-| Local | 本地 create、index、recall | 本地正文与关系 | 仅无来源、无关系、无历史的 draft | 无连接、无凭据、无同步 |
-| GitHub | 显式导入或同步后读取 | 本地调查笔记与关系 | 本轮不提供远端对象删除 | 只读 GitHub 来源 |
-| Linear | 显式导入或同步后读取 | 本地调查笔记与关系 | 本轮不提供远端对象删除 | 只读 Linear 来源 |
+| Local | `concord new issue` 或直接创建文件 | 本地正文、状态与关系 | 直接删除文件；Web 只删除安全的本地 Issue | 无连接、无凭据、无同步 |
+| GitHub | 显式导入或同步后读取 | 本地调查笔记与关系 | 不提供远端对象删除 | 只读 GitHub 来源 |
+| Linear | 显式导入或同步后读取 | 本地调查笔记与关系 | 不提供远端对象删除 | 只读 Linear 来源 |
 
 来源类型从现有 owner 的 source 派生，未声明 source 表示 Local；展示字段不是第二份持久登记表。远端连接配置仍只描述需要连接的 provider。Local 不实现假的同步接口，三种来源共享本地调查与关联能力，不假定全部来源拥有同样的外部权限。
 
-安全本地删除通过同一文档事务发布 after:null，要求当前完整摘要与合法关系图；任何入边、历史或已建立调查关联都阻止删除。详见[本地观察 Spec](use-case/manage-local-observations.md)。
+Web 的安全本地删除通过同一文档事务发布 after:null，要求当前完整摘要与合法关系图；任何入边、关系或关闭结论都阻止删除。直接删除文件时，`check` 报告指向它的失效引用。详见[本地观察 Spec](use-case/manage-local-observations.md)。

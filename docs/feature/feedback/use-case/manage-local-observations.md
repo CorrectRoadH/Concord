@@ -14,30 +14,33 @@ feature: docs/feature/feedback/README.md
 
 Local、GitHub、Linear 在同一反馈列表中作为三个来源呈现。Local 无需 connection、凭据或同步；其 Issue 正文与状态由本地 Markdown 拥有。GitHub/Linear 保存远端来源快照及本地调查笔记；不把本地编辑或删除投射成远端写入。
 
-本地记录沿用 docs/issues/<id>.md 和现有 kind: issue，不新增第二份 owner 或来源登记表。来源名称从已有 source 元数据派生：没有远端 source 的本地记录为 local。持久化格式保持不变。
+本地记录是 `docs/issues/<id>.md`，字段见[Issue 字段](../architecture.md#issue-字段)，不新增第二份 owner 或来源登记表。来源名称从 `source` 派生：没有 `source` 的记录为 local。
 
 ## 操作 Spec
 
-- `issue create` 与 `issue draft` 创建本地观察。
-- `issue list` 与 `feedback list` 接受 `--state draft|closed`、`--provider local|github|linear`、`--triage pending|linked|closed` 及 `--query`。筛选相交，空结果返回空列表；query 不区分大小写，匹配 ID、标题、正文与已保存来源。`issue.list`、`feedback.list` 受管操作使用相同筛选；Web 来源与处理状态筛选复用同一规则。筛选不读取远端网络，也不依赖无关 Spec 可解析。
-- `issue index` 提供动态摘要索引，`issue recall <query>` 检索标题和正文并返回正文、当前摘要与来源；`issue show` 保持现有行为。
-- `issue edit <id> --body <file> --expected-digest <digest>` 仅修改作者正文，保留来源、关系和生命周期；标题通过既有 document.metadata 操作修改。
-- `issue remove <id> --expected-digest <digest>` 只允许删除尚未建立关系或历史的本地 draft。条件是：无 source、origin、closure、history、Memory 关系、当前或历史 Feature adoption，Trace 也没有指向它或其 anchor 的关系。拒绝格式/关系不完整的仓库与陈旧摘要。删除复用当前发布日志与恢复，不运行远端调用。
-- 已经进入调查或关闭历史的记录继续使用 close 和现有生命周期，不能删除来规避证据与历史。导入记录不提供删除远端对象的能力。
-- Web 明确本地来源可直接创建、编辑与关联。安全可删除的本地草稿提供显式删除操作；其它来源和已进入调查的记录不显示可删除能力。服务端仍独立执行全部限制。
-- `issue link <id> --memory <ref> [--kind investigation|root-cause|decision|delivery]` 默认 investigation，按 kind 与 Memory 去重，只接受 draft。
-- `issue adopt <id> --to <ref>` 只接受 draft，目标是 Roadmap、Feature、Use Case 或 Engineering 的 exact owner ref；anchor 使用 check 的同一校验。基础加载不读取 concord.repository.json，也不要求 Trace 完整。
-- `issue retire <id> --from <ref>` 移除当前采用，并把执行时 HEAD 写入历史；无提交返回 IssueRetireRequiresCommit，零写入。
-- `issue close <id> --kind fixed|delivered|duplicate|declined|invalid|external-fixed|closed` 参数遵守 IssueClosureSchema。
-  - fixed 使用 memory 与至少一个 proof；delivered 另需 target，且属于当前或历史采用；duplicate 使用 canonical。
-  - declined 使用 memory；invalid 使用至少一个 evidence；external-fixed 使用 dependency、version 与至少一个 proof；proof 与 evidence 可以重复。
-  - 省略 kind 等同 closed，要求 reason；全部 kind 在存在 captured 或 open Problem 时返回 OpenProblem。fixed 要求 fixed Problem，declined 要求 current Decision，duplicate 要求无环 canonical Issue；duplicate、declined、invalid 要求先退役全部当前采用。写入与 concord check 共用闭合校验。
-- `issue reopen <id> --reason <text>` 移除 closure 并追加历史；closed Issue 先重开再关联或采用。
-- 本地写入使用单文件发布 journal 与 concord recover；错误返回具名 JSON、退出 1，失败零写入。Issue 文件格式、`IssueClosureSchema`、`adoptions`、`memoryRelations` 与 history 条目的含义不变，已有 Issue 无需迁移。
-- Feature、Memory 关联使用 issue 命令；不把来源接入实现成要求本地用户配置的虚假远端 connection。
+- `concord new issue <名称>` 按模板创建 `status: open` 的本地 Issue；也可以直接创建文件。
+- Issue 的正文与 frontmatter 可以直接编辑。`concord check` 校验当前字段；`concord check --since <base>` 校验本次变化中的状态转换：closed 必须带完整的关闭结论，新增或修改的 `verification` 按记录重放（[决策依据](../../../design/sdd-core-model/DECISION.md)）。Web 保存使用整文件摘要，只防止覆盖并发的外部编辑。
+- `feedback list` 接受 `--status open|closed`、`--provider local|github|linear`、`--triage pending|linked|closed` 及 `--query`。筛选相交，空结果返回空列表；query 不区分大小写，匹配路径、名称、正文与已保存来源。`feedback.list` 受管操作使用相同筛选；Web 来源与处理状态筛选复用同一规则。筛选不读取远端网络，也不依赖无关 Spec 可解析。
+- `issue link <id> --role <role> <target>` 按[角色表](../architecture.md#issue-字段)校验目标类型，省略 `--role` 时为 investigation；同一角色与目标去重，只接受 open Issue。adopts 的锚点使用 `check` 的同一校验。duplicate-of 只由 duplicate 关闭写入。
+- `issue unlink <id> --role <role> <target>` 删除这一项关系；删除 adopts 即退役该承接，历史在 Git。
+- `issue close <id>` 以种类选项写入关闭结论，省略种类时为 closed。各种类的必需字段：
+  - closed：`reason`。
+  - fixed：`reason` 与 `verification`。命令先按[修复核验](../../../constitution.md#c-004-2)核验，失败或无法核验时零写入。
+  - delivered：`memory`、`target` 与至少一个 `proof`；`target` 必须是当前 adopts 之一。
+  - duplicate：目标 Issue，写为 duplicate-of 关系，不得成环。
+  - declined：`memory`，指向 current 的 decision Memory。
+  - invalid：至少一个 `evidence`。
+  - external-fixed：`dependency`、`version` 与至少一个 `proof`。
+  - duplicate、declined、invalid 关闭时 Issue 不带 adopts；仍有 adopts 时命令拒绝，先用 `issue unlink` 删除。proof 与 evidence 可以重复。写入与 `concord check` 共用关闭校验。
+- `issue reopen <id>` 删除 `closure`，状态回到 open；closed Issue 先重开再关联。
+- 直接删除 Issue 文件时，`check` 报告指向它的失效引用。Web 只对安全的本地 Issue 显示删除操作：没有 `source`、`origin`、`closure`、`relations`，Trace 也没有指向它或其锚点的关系；服务端独立执行这些限制，拒绝陈旧摘要，删除复用当前发布日志与恢复，不运行远端调用。其它来源和已进入调查或关闭的记录不显示可删除能力。
+- 助手写入使用单文件发布 journal 与 `concord recover`；错误返回具名 JSON、退出 1，失败零写入。
+- 关联只使用本地 Issue；不把来源接入实现成要求本地用户配置的虚假远端 connection。
 
 ## 验收
 
-打包公开 CLI 在无任何 provider 配置的 Git 消费者中完成创建、动态索引、recall、摘要更新、关联及安全删除。关联、历史、远端来源、陈旧摘要分别拒绝删除；dry-run 不改文件。删除的 prepared 与 committed 恢复分别保留前像与已提交结果，未知编辑拒绝。
+打包公开 CLI 在无任何 provider 配置的 Git 消费者中完成创建、筛选、直接编辑、link、unlink、全部关闭种类与 reopen，`concord check` 无 finding；dry-run 不改文件。
 
-在无 `concord.repository.json` 的消费者中，`concord issue` 完成 link、adopt、retire、全部 close kind 与 reopen。关联 open Problem 时任何 kind 的 close 返回 `OpenProblem`；带旧参数的[退役命令](../cli.md#命令分工)返回 `CommandRetired` 且零写入。既有 Issue 在 `concord check` 与 `concord repo feedback check` 中的判定不变。HTTP 与真实浏览器验证本地来源和删除反馈；GitHub/Linear 保持只读接入。
+直接写入的 closed 缺少必需字段、delivered 的 target 不在 adopts、duplicate 成环、declined 指向非 current 的 decision Memory、fixed 没有 `verification`，分别由 `check` 报告。`check --since <base>` 报告非法状态转换与无法重放的 `verification`。
+
+Web 删除时，关系、关闭结论、远端来源、入边引用与陈旧摘要分别拒绝；删除的 prepared 与 committed 恢复分别保留前像与已提交结果，未知编辑拒绝。HTTP 与真实浏览器验证本地来源与删除反馈；GitHub/Linear 保持只读接入。
