@@ -46,7 +46,6 @@ Spec 由 Feature 组成，每个 Feature 有固定的四种页面；此外只需
 | [L4](../../LIMITS.md#l4-关系从来源派生) | satisfied | 正文链接派生 | 设计推理 |
 | [L5](../../LIMITS.md#l5-声明式文档只写当前) | satisfied | Spec 无 frontmatter | 设计推理 |
 | [L6](../../LIMITS.md#l6-不重复保存可推导的事实) | satisfied | 全部推导 | 设计推理 |
-| [L7](../../LIMITS.md#l7-只有当前格式) | satisfied | 同 L1 | 设计推理 |
 
 ## Goals
 

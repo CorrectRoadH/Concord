@@ -25,12 +25,11 @@
 | Limit | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
 | [L1](../../LIMITS.md#l1-只有当前格式) | satisfied | 一次性改写 | 设计推理 |
-| [L2](../../LIMITS.md#l2-修复经过核验且可审计) | partial | 现行门禁在关闭前核验，但收据在 Git-private 目录，仓库中不可审计 | 现行实现 |
+| [L2](../../LIMITS.md#l2-修复经过核验且可审计) | not-satisfied | 现行门禁在关闭前核验，但收据在 Git-private 目录，仓库中不可审计 | 现行实现 |
 | [L3](../../LIMITS.md#l3-工具写入保护前像) | satisfied | 写入路径不变 | 现行实现 |
 | [L4](../../LIMITS.md#l4-关系从来源派生) | satisfied | 关系保存在元数据，反向派生 | 现行实现 |
 | [L5](../../LIMITS.md#l5-声明式文档只写当前) | satisfied | 删除 createdAt | 设计推理 |
 | [L6](../../LIMITS.md#l6-不重复保存可推导的事实) | not-satisfied | id、kind、title、feature 仍保存 | 设计推理 |
-| [L7](../../LIMITS.md#l7-只有当前格式) | satisfied | 同 L1 | 设计推理 |
 
 ## Goals
 

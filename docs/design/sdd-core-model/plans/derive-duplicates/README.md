@@ -30,21 +30,20 @@
 
 包含：上表的布局与字段、修复核验、配置默认与覆盖、命令面、宪法修订，以及本仓库一次性改写。
 
-不包含：工作区服务、docsWork 与 repository profile 的正式治理（保持现行，profile 的可靠性证据另行决定）。
+不包含：工作区服务；docsWork 保持现行。
 
-接受的取舍：Git-private 收据不再作为修复证明，已有收据原地保留、不再读取；Memory Problem 与其生命周期命令删除，已有 Problem 改写为 Issue；移动文件会使指向旧路径的引用失效，由检查报告。
+接受的取舍：退休能力表中的四项；修复核验只支持线性路径；移动文件会使指向旧路径的引用失效，由检查报告。
 
 ## Limits
 
 | Limit | Status | Mechanism or gap | Evidence |
 | --- | --- | --- | --- |
 | [L1](../../LIMITS.md#l1-只有当前格式) | satisfied | 一次性改写，不保留旧读取 | 设计推理 |
-| [L2](../../LIMITS.md#l2-修复经过核验且可审计) | satisfied | `issue close --fixed` 在明确的缺陷与修复提交上执行核验后才写入；结论在 Issue 中，可重放 | 设计推理；待实现验收 |
-| [L3](../../LIMITS.md#l3-工具写入保护前像) | satisfied | Web 与 action 的受管保存、裁决、宪法采用与修订、Issue 关闭仍走 publication | 设计推理 |
+| [L2](../../LIMITS.md#l2-修复经过核验且可审计) | satisfied | 线性路径下，缺陷候选与当前 HEAD 之间只允许产品文件变化，核验在关闭前执行，结论写入 Issue，可重放；其它路径返回 FixUnverifiable | 设计推理；待实现验收 |
+| [L3](../../LIMITS.md#l3-工具写入保护前像) | satisfied | Concord 的写入（命令助手与 Web 保存）走 publication 与整文件摘要；直接编辑的可信度由 `check --since` 的门禁保证 | 设计推理 |
 | [L4](../../LIMITS.md#l4-关系从来源派生) | satisfied | 正向关系只保存一次，反向关系派生 | 设计推理 |
 | [L5](../../LIMITS.md#l5-声明式文档只写当前) | satisfied | Spec 无 frontmatter；宪法只有 status | 设计推理 |
 | [L6](../../LIMITS.md#l6-不重复保存可推导的事实) | satisfied | 见规则 2 | 本仓库 164 个 owner 的 id 全部等于路径名 |
-| [L7](../../LIMITS.md#l7-只有当前格式) | satisfied | 同 L1 | 设计推理 |
 
 ## Goals
 
@@ -52,9 +51,9 @@
 | --- | --- | --- | --- |
 | [G1](../../GOALS.md#g1-重复声明最少) | satisfied | Spec 每个 owner 的可推导字段从 5 个降为 0；改名只需移动文件并修正引用 | 现行 Feature 与 Use Case 的 frontmatter |
 | [G2](../../GOALS.md#g2-每件事只有一个归属) | satisfied | 提案在 Roadmap，已采用在 Feature，缺陷在 Issue，设计决定在 Design，其它决策与知识在 Memory | 设计推理 |
-| [G3](../../GOALS.md#g3-日常维护的步骤少) | partial | 编辑 Spec 不需要命令；顶层命令由约 30 个降为 24（见 CLI 页）；修复关闭多一步核验 | CLI 页统计 |
+| [G3](../../GOALS.md#g3-日常维护的步骤少) | partial | 全部文件直接编辑；修复缺陷少两步；顶层命令由约 30 个降为 24 | CLI 页的步骤表与统计 |
 | [G4](../../GOALS.md#g4-零配置可用) | satisfied | 固定布局与发现默认；配置只用于 runner 与可选覆盖 | 设计推理；待 C1 验收 |
-| [G5](../../GOALS.md#g5-检查与保证不变弱) | partial | 保留全部检查与授权；明确放弃「Git-private 收据作为证明」与 Memory Problem 的 epoch，改为 Issue 内的核验结论 | 宪法修订提案 |
+| [G5](../../GOALS.md#g5-检查与保证不变弱) | partial | 保留检查与授权；退休能力表列出明确放弃的四项 | 宪法修订提案 |
 
 ## Entry Points
 
