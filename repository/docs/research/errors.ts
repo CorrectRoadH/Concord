@@ -26,10 +26,6 @@ export class ResearchFormatError extends Data.TaggedError("ResearchFormatError")
   readonly message: string;
 }> {}
 
-export class ResearchMigrationRequired extends Data.TaggedError("ResearchMigrationRequired")<{
-  readonly message: string;
-}> {}
-
 export type ResearchError =
   | import("../trace/errors.js").TraceError
   | TraceCoordinationError
@@ -37,8 +33,7 @@ export type ResearchError =
   | ResearchPathError
   | ResearchConflictError
   | ResearchFileError
-  | ResearchFormatError
-  | ResearchMigrationRequired;
+  | ResearchFormatError;
 
 export function researchErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

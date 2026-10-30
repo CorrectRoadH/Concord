@@ -70,7 +70,7 @@ export function makeResearchCommand(deliver: TerminalDeliverySink, root = REPOSI
   }, ({ json }) => deliverResearchOutcome(run({
     command: "create-page",
   }), json, deliver)).pipe(
-    Command.withDescription("Standalone Research pages require offline migration."),
+    Command.withDescription("Research owners require a topic directory with README.md."),
   );
 
   const packageOptions = contentOptions();

@@ -295,7 +295,7 @@ function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, oper
 function planOne<E, R>(action: CaseRelationAction, expected: Maybe<string>, operation: string, dryRun: boolean, validateUnderLease?: Effect.Effect<void, E, R>) {
   const plan = Effect.sync(() => {
     const path = sidecarPath(action.selector.path); const before = decodeSidecar(path);
-    if (optional(expected) !== undefined) fail("PreimageChanged", "sidecar digests are not accepted after inline relation migration; use the transaction source preimages");
+    if (optional(expected) !== undefined) fail("PreimageChanged", "Relation updates require the transaction source preimages");
     const planned = planCaseRelation(before, action, audit());
     if (Result.isFailure(planned)) fail(planned.failure._tag, JSON.stringify(planned.failure));
     const next = Result.match(planned, { onFailure: (error) => fail(error._tag, JSON.stringify(error)), onSuccess: (value) => value });

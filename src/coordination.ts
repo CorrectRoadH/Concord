@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 import { execFileSync } from 'node:child_process';
-import { existsSync, readdirSync, lstatSync, mkdirSync } from 'node:fs';
+import { lstatSync, mkdirSync } from 'node:fs';
 import { resolve, join, sep } from 'node:path';
 import { Effect } from 'effect';
 import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, errno, publicationRevision, recoverFileLease, releaseFileLease, type FileLease } from './file-lease.js';
@@ -10,7 +10,6 @@ export { advancePublicationRevision } from './file-lease.js';
 export { invalidateActiveRun } from './run-coordination.js';
 export type TraceLease = FileLease;
 const TRACE_PRIVATE_PATH = 'concord/trace';
-const LEGACY_TRACE_PRIVATE_PATH = 'niceeval/docs-trace';
 export const PUBLICATION_LEASE = 'publication.lease';
 
 function gitPath(root: string, name: string): string {
@@ -32,10 +31,8 @@ function gitPath(root: string, name: string): string {
 
 export function tracePrivateDirectorySync(root: string): string { return gitPath(root, TRACE_PRIVATE_PATH); }
 export function readPublicationRevisionSync(root: string): string {
-  assertLegacyTraceStateMigratedSync(root, 'read');
   return publicationRevision(tracePrivateDirectorySync(root));
 }
-export function legacyTracePrivateDirectorySync(root: string): string { return gitPath(root, LEGACY_TRACE_PRIVATE_PATH); }
 export function genericPrivateDirectorySync(root: string): string { return gitPath(root, "concord"); }
 
 /** Explicit cache writers may create this Git-owned child; readers never call this. */
@@ -60,18 +57,7 @@ export function genericJournalPath(root: string): string {
   return path;
 }
 
-
-/** Historical payloads are refused, never migrated by ordinary runtime. */
-export function assertLegacyTraceStateMigratedSync(root: string, operation: string): void {
-  const directory = legacyTracePrivateDirectorySync(root);
-  if (!existsSync(directory)) return;
-  assertLeasePath(directory);
-  const payload = readdirSync(directory).filter(name => name !== 'publication.lock' && name !== PUBLICATION_LEASE && !name.startsWith(`.${PUBLICATION_LEASE}-`));
-  if (payload.length > 0) throw new CoordinationError({ operation, phase: 'migration', path: directory, message: 'Historical Trace state is unsupported; preserve it and use its original offline recovery tools.' });
-}
-
 function acquireNow(root: string, mode: TraceLease['mode'], operation: string, create: boolean, reclaimDead = false): TraceLease | undefined {
-  assertLegacyTraceStateMigratedSync(root, operation);
   const acquire = reclaimDead ? acquireRecoverablePublicationLease : acquireFileLease;
   return acquire(root, tracePrivateDirectorySync(root), PUBLICATION_LEASE, mode, operation, create);
 }

@@ -41,8 +41,6 @@ function humanError(error: DesignPresentationError): string {
       return `${error._tag}: ${error.operation} ${error.phase}${error.path === undefined ? "" : ` ${error.path}`}: ${error.message}`;
     case "TraceRecoveryRequired":
       return `${error._tag}: unfinished Trace publication at ${error.path}; run concord repo docs trace recover`;
-    case "TraceJournalMigrationRequired":
-      return `${error._tag}: ${error.path} (${error.format}): ${error.message}`;
     case "TraceRecoveryConflict":
       return `${error._tag}: ${error.path}: ${error.message}`;
     case "CaseExcluded":

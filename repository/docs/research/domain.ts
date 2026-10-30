@@ -10,7 +10,6 @@ import {
   ResearchFileError,
   ResearchFormatError,
   ResearchInputError,
-  ResearchMigrationRequired,
   ResearchPathError,
   researchErrorMessage,
   type ResearchError,
@@ -165,8 +164,8 @@ function checkFile(path: string, source: string): Effect.Effect<ResearchCheckFin
     }];
     if (!path.endsWith("/README.md")) return [{
       path,
-      code: "research-migration-required" as const,
-      message: `${path}: Research owners must use a topic directory with README.md; run the offline document package migration`,
+      code: "InvalidPlacement" as const,
+      message: `${path}: Research owners must use a topic directory with README.md`,
     }];
     return [];
   }));
@@ -381,8 +380,8 @@ function checkPackage(
       const inspection = yield* inspect(path, source);
       if (inspection.kind === "document") findings.push({
         path,
-        code: "research-migration-required",
-        message: `${path}: Research owners must use a topic directory with README.md; run the offline document package migration`,
+        code: "InvalidPlacement",
+        message: `${path}: Research owners must use a topic directory with README.md`,
       });
       else if (inspection.kind === "invalid") findings.push({ path, code: "invalid-document", message: inspection.message });
       checkedPaths.push(path);
@@ -429,8 +428,8 @@ function checkResearch(root: string, reference: string): Effect.Effect<ResearchC
 function runDecoded(root: string, input: ResearchCommandInput): Effect.Effect<ResearchOutcome, ResearchError> {
   switch (input.command) {
     case "create-page":
-      return Effect.fail(new ResearchMigrationRequired({
-        message: "Standalone Research page creation is retired; run the offline document package migration.",
+      return Effect.fail(new ResearchInputError({
+        message: "Standalone Research page creation is retired.",
       }));
     case "create-package":
       return createPackage(root, input.path, input.content, input.dryRun);
@@ -457,7 +456,6 @@ export function renderResearchError(error: ResearchError): string {
   switch (error._tag) {
     case "TraceMutationError": return `Research publication ${error.phase}: ${error.message}`;
     case "ResearchInputError": return `Research input is invalid: ${error.message}`;
-    case "ResearchMigrationRequired": return `ResearchMigrationRequired: ${error.message}`;
     case "ResearchPathError": return `Research path ${error.path} is invalid: ${error.message}`;
     case "ResearchConflictError": return `Research target ${error.path} conflicts: ${error.message}`;
     case "ResearchFileError": return `Research ${error.operation} failed for ${error.path}: ${error.message}`;

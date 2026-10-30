@@ -66,6 +66,6 @@ export function documentMarkdown(path: string, source: string): Root {
 export function projectionRecord(path: string, projection: Projection) {
   if (projection.error !== undefined) throw new ConcordError(projection.error.code, projection.error.message);
   const record = projection.record;
-  if (record?.metadata.kind === 'research' && !path.endsWith('/README.md')) throw new ConcordError('ResearchMigrationRequired', `${path}: Research owners must use a topic directory with README.md; run the offline document package migration`);
+  if (record?.metadata.kind === 'research' && !path.endsWith('/README.md')) throw new ConcordError('InvalidPlacement', `${path}: Research owners must use a topic directory with README.md`);
   return record;
 }

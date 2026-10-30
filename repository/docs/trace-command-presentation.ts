@@ -25,8 +25,6 @@ export function renderDocsTraceError(error: DocsTraceCommandError): string {
       return `${error._tag}: trace inputs changed while compiling ${error.path} after ${error.attempts} attempts (${error.changed.join(", ")}); retry after the files stop changing`;
     case "TraceRecoveryRequired":
       return `${error._tag}: unfinished Trace publication at ${error.path}; run ${TRACE_RECOVERY_COMMAND}`;
-    case "TraceJournalMigrationRequired":
-      return `${error._tag}: ${error.path} (${error.format}): ${error.message}`;
     case "TraceRecoveryConflict":
       return `${error._tag}: ${error.path}: ${error.message}`;
     case "TraceMutationError":
@@ -61,8 +59,6 @@ export function docsTraceErrorDocument(error: DocsTraceCommandError): object {
       return { _tag: error._tag, path: error.path, attempts: error.attempts, changed: error.changed };
     case "TraceRecoveryRequired":
       return { _tag: error._tag, path: error.path, nextStep: TRACE_RECOVERY_COMMAND };
-    case "TraceJournalMigrationRequired":
-      return { _tag: error._tag, path: error.path, format: error.format, message: error.message };
     case "TraceRecoveryConflict":
       return { _tag: error._tag, path: error.path, message: error.message };
     case "TraceMutationError":

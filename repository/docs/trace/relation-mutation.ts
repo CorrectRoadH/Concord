@@ -35,7 +35,7 @@ import {
   type TraceLease,
 } from "concord-sdlc/coordination";
 
-import { TraceJournalMigrationRequired, TraceRecoveryConflict, TraceRecoveryRequired } from "./errors.js";
+import { TraceRecoveryConflict, TraceRecoveryRequired } from "./errors.js";
 import type { RepoRef, ValidatedRepoRefTarget } from "./ref.js";
 
 const GENERATION_FILE = "generation";
@@ -47,7 +47,6 @@ export class TraceMutationError extends Data.TaggedError("TraceMutationError")<{
   readonly operation: string;
   readonly phase:
     | "git-private"
-    | "migration"
     | "read"
     | "lock"
     | "preimage"
@@ -61,7 +60,7 @@ export class TraceMutationError extends Data.TaggedError("TraceMutationError")<{
   readonly message: string;
 }> {}
 
-export type TraceCoordinationError = TraceMutationError | TraceRecoveryRequired | TraceRecoveryConflict | TraceJournalMigrationRequired;
+export type TraceCoordinationError = TraceMutationError | TraceRecoveryRequired | TraceRecoveryConflict;
 
 export interface TraceMutationPreimage {
   readonly path: string;
@@ -296,7 +295,7 @@ function acquireLease(root: string, mode: TraceLease["mode"], operation: string,
   if (operation === "trace-recover" && reclaimPublication) {
     try { recoverPublicationLeaseSync(root); } catch (cause) { return Effect.fail(mutationFailure(operation, "lock", cause)); }
   }
-  return acquireTraceLease(root, mode, operation, create).pipe(Effect.mapError((cause) => mutationFailure(operation, cause.phase === "git-private" ? "git-private" : (cause.phase as string) === "migration" ? "migration" : cause.phase === "cleanup" ? "cleanup" : "lock", cause, cause.path)));
+  return acquireTraceLease(root, mode, operation, create).pipe(Effect.mapError((cause) => mutationFailure(operation, cause.phase === "git-private" ? "git-private" : cause.phase === "cleanup" ? "cleanup" : "lock", cause, cause.path)));
 }
 
 function releaseLease(lease: TraceLease, operation: string): Effect.Effect<void, TraceMutationError> {
@@ -310,8 +309,19 @@ function withLease<A, E, R>(
   create: boolean,
   use: (lease: TraceLease | undefined) => Effect.Effect<A, E, R>,
   reclaimPublication = true,
-): Effect.Effect<A, E | TraceMutationError, R> {
+): Effect.Effect<A, E | TraceMutationError | TraceRecoveryConflict | TraceRecoveryRequired, R> {
   return Effect.uninterruptibleMask((restore) => Effect.gen(function*() {
+    if (operation === "trace-recover") {
+      try {
+        const generic = genericJournalPath(root);
+        if (existsSync(generic)) throw new TraceRecoveryRequired({ path: generic, nextStep: "concord recover" });
+        const directory = tracePrivateDirectorySync(root);
+        readJournal(root, directory);
+        readMultiJournal(root, directory);
+      } catch (cause) {
+        return yield* Effect.fail(cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(operation, "read", cause));
+      }
+    }
     const lease = yield* acquireLease(root, mode, operation, create, reclaimPublication);
     const useExit = yield* Effect.exit(restore(use(lease)));
     if (lease === undefined) {
@@ -475,9 +485,6 @@ function manifestIsSubset(current: readonly ManifestEntry[] | undefined, planned
 }
 
 function validateJournal(root: string, directory: string, input: unknown): PublicationJournal {
-  if (typeof input === "object" && input !== null && "format" in input && typeof input.format === "string" && input.format.startsWith("niceeval.docs-trace/")) {
-    throw new TraceJournalMigrationRequired({ path: journalPath(directory), format: input.format, message: "Legacy Trace journal requires explicit offline migration; ordinary recovery preserves it unchanged" });
-  }
   const decoded = Schema.decodeUnknownResult(JournalSchema, { errors: "all", onExcessProperty: "error" })(input);
   if (Result.isFailure(decoded)) throw new TraceRecoveryConflict({ path: journalPath(directory), message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue) });
   const journal = decoded.success;
@@ -521,7 +528,7 @@ function readJournal(root: string, directory: string): PublicationJournal | unde
   if (!existsSync(path)) return undefined;
   try { return validateJournal(root, directory, JSON.parse(readFileSync(path, "utf8")) as unknown); }
   catch (cause) {
-    if (cause instanceof TraceRecoveryConflict || cause instanceof TraceJournalMigrationRequired) throw cause;
+    if (cause instanceof TraceRecoveryConflict) throw cause;
     throw new TraceRecoveryConflict({ path, message: message(cause) });
   }
 }
@@ -699,7 +706,7 @@ export function recoverTrace(root: string, options: { readonly reclaimPublicatio
       const single = recoverUnderLease(root, lease.directory);
       return single.recovered ? single : recoverMultiUnderLease(root, lease.directory);
     },
-    catch: (cause) => cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired || cause instanceof TraceJournalMigrationRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
+    catch: (cause) => cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
   }), options.reclaimPublication !== false);
 }
 
@@ -976,9 +983,6 @@ const MultiJournalSchema = Schema.Struct({
 function multiJournalPath(directory: string): string { return resolve(directory, MULTI_FILE_JOURNAL); }
 function validateMultiJournal(root: string, directory: string, input: unknown): MultiFileJournalV2 {
   const path = multiJournalPath(directory);
-  if (typeof input === "object" && input !== null && "format" in input && typeof input.format === "string" && input.format.startsWith("niceeval.docs-trace/")) {
-    throw new TraceJournalMigrationRequired({ path, format: input.format, message: "Legacy Trace journal requires explicit offline migration; ordinary recovery preserves it unchanged" });
-  }
   const decoded = Schema.decodeUnknownResult(MultiJournalSchema, { errors: "all", onExcessProperty: "error" })(input);
   if (Result.isFailure(decoded)) throw new TraceRecoveryConflict({ path, message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue) });
   const journal = decoded.success;
@@ -1078,7 +1082,7 @@ export function recoverTraceMultiFile(root: string): Effect.Effect<TraceRecovery
       if (existsSync(journalPath(lease.directory))) throw new TraceRecoveryRequired({ path: journalPath(lease.directory), nextStep: "concord recover" });
       return recoverMultiUnderLease(root, lease.directory);
     },
-    catch: (cause) => cause instanceof TraceRecoveryConflict || cause instanceof TraceMutationError || cause instanceof TraceRecoveryRequired || cause instanceof TraceJournalMigrationRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
+    catch: (cause) => cause instanceof TraceRecoveryConflict || cause instanceof TraceMutationError || cause instanceof TraceRecoveryRequired ? cause : mutationFailure("trace-recover", "rollback", cause),
   }));
 }
 
@@ -1134,7 +1138,7 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
       removeMultiJournal(lease.directory);
       return { format: "concord.docs-trace/multi-file-mutation/v1", transactionId: token, generationBefore: generation, generationAfter: generation + 1, preimages: files.map((file) => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map((file) => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
     } catch (cause) {
-      return yield* Effect.fail(cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired || cause instanceof TraceJournalMigrationRequired ? cause : mutationFailure(options.operation, "publish", cause));
+      return yield* Effect.fail(cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(options.operation, "publish", cause));
     }
   }));
 }

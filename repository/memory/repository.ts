@@ -11,7 +11,7 @@ import { adoptMemoryEvidenceRequirement, validateNativeEvidence, decodeNativeEvi
 import { decodeMemoryDocument, encodeMemoryDocument } from "./codec.js";
 import { leafOwners, leafOwnerSelection } from '../document-owners.js';
 import { isDocumentName } from 'concord-sdlc/document-layout';
-import { MemoryContentInvalid, MemoryFileMissing, MemoryIoError, MemoryReferenceConflict, EvidenceMigrationRequired, type MemoryError } from "./errors.js";
+import { MemoryContentInvalid, MemoryFileMissing, MemoryIoError, MemoryReferenceConflict, type MemoryError } from "./errors.js";
 import type { MemoryDocument, ProblemResolutionIntent, PromotionKind } from "./schema.js";
 import { activateMemory, promoteMemory, reopenProblem, resolveProblem, retirePromotion, supersedeMemory } from "./state.js";
 import { decodeRepositorySourceIdentityV4, resolveRepositorySourceIdentity, sameRepositorySourceIdentity } from "../source-identity.js";
@@ -230,4 +230,4 @@ export class MemoryRepository {
     }
   }
 }
-export const memoryEffect = <A>(operation: string, thunk: () => A): Effect.Effect<A, MemoryError> => Effect.try({ try: thunk, catch: (cause) => cause instanceof ConcordError && cause.code === "EvidenceMigrationRequired" ? new EvidenceMigrationRequired({ operation, message: cause.message }) : cause instanceof EvidenceMigrationRequired || cause instanceof MemoryFileMissing || cause instanceof MemoryContentInvalid || cause instanceof MemoryReferenceConflict || cause instanceof MemoryIoError ? cause : new MemoryIoError({ operation, message: message(cause) }) });
+export const memoryEffect = <A>(operation: string, thunk: () => A): Effect.Effect<A, MemoryError> => Effect.try({ try: thunk, catch: (cause) => cause instanceof ConcordError && cause.code === "InvalidData" ? new MemoryContentInvalid({ operation, message: cause.message }) : cause instanceof MemoryFileMissing || cause instanceof MemoryContentInvalid || cause instanceof MemoryReferenceConflict || cause instanceof MemoryIoError ? cause : new MemoryIoError({ operation, message: message(cause) }) });

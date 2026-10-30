@@ -50,7 +50,6 @@ export type CommandEvidence = typeof CommandEvidenceSchema.Type;
 export type NativeEvidence = typeof NativeEvidenceSchema.Type;
 export type Evidence = typeof EvidenceSchema.Type;
 const decodeEvidence = (value: unknown, source: string): Evidence => {
-  if (Predicate.isObject(value) && value.format === 'concord.command-evidence/v1' && (value.configPath !== 'concord.config.ts' || value.configDigest === undefined)) throw new ConcordError('EvidenceMigrationRequired', 'Old evidence is not a current TS-bound receipt. Preserve it and run verification again; do not rebind or upgrade old proof.');
   const evidence = decode(EvidenceSchema, value, source);
   if (evidence.format === 'concord.native-evidence/v2' && nativeVerdict(evidence.requested, evidence.observed, evidence.statuses, evidence.complete, evidence.assignments) !== evidence.commandOutcome) fail('EvidenceIntegrity', 'Native receipt verdict disagrees with its recorded observations');
   if (evidence.format === 'concord.native-evidence/v2' && evidence.definitionDigest !== nativeDefinitionDigest(evidence.bindingDigest, evidence.inputs, evidence.requested, evidence.planDigest, evidence.versions)) fail('EvidenceIntegrity', 'Native receipt definition does not match its recorded input and plan identities');

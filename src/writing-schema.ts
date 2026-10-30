@@ -32,7 +32,6 @@ const Legacy = {
   roots: Schema.optional(Schema.NonEmptyArray(Text)), bannedTerms: Schema.Array(Ban),
   sentenceLength: clear(PositiveInt), paragraphLength: clear(PositiveInt), unusedConcepts: Schema.optional(Schema.Boolean),
 };
-export const WritingPolicyV2Schema = Schema.Struct({ format: Schema.Literal('concord.writing/v2'), ...Legacy });
 export const WritingPolicySchema = Schema.Struct({ format: Schema.Literal('concord.writing/v3'), ...Legacy, controlled: clear(ControlledSchema) });
 export type WritingPolicy = typeof WritingPolicySchema.Type;
 export type Controlled = typeof ControlledSchema.Type;

@@ -169,9 +169,6 @@ export function readGovernanceConfiguration(root: string): GovernanceConfigurati
   catch (cause) {
     throw new GovernanceConfigurationError('GovernanceConfigurationInvalid', `${GOVERNANCE_CONFIGURATION_PATH}: ${cause instanceof Error ? cause.message : String(cause)}`);
   }
-  if (typeof input === 'object' && input !== null && 'format' in input && input.format === 'concord.repository/v1') {
-    throw new GovernanceConfigurationError('GovernanceConfigurationMigrationRequired', 'Unsupported governance configuration; current input must use concord.repository/v2. Preserve original files; no format conversion is provided.');
-  }
   let config: GovernanceConfiguration;
   try {
     config = Schema.decodeUnknownSync(GovernanceConfigurationSchema, { errors: 'all', onExcessProperty: 'error' })(input);

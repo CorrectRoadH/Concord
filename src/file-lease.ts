@@ -9,7 +9,7 @@ import { Data, Schema } from 'effect';
 
 export class CoordinationError extends Data.TaggedError('CoordinationError')<{
   readonly operation: string;
-  readonly phase: 'git-private' | 'migration' | 'lock' | 'cleanup';
+  readonly phase: 'git-private' | 'lock' | 'cleanup';
   readonly path?: string;
   readonly message: string;
   readonly reason?: 'occupied' | 'admission-changed';

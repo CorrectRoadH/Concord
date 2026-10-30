@@ -72,7 +72,7 @@ export function renderTypeScriptConfig(config: ProjectConfig): string {
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export function snapshot(path: ConfigSnapshot['path'], source: string, privateDir?: string): ConfigSnapshot {
-  if (path !== 'concord.config.ts') throw new ConcordError('ProjectMigrationRequired', 'Runtime configuration must be concord.config.ts; migrate old configuration explicitly offline');
+  if (path !== 'concord.config.ts') throw new ConcordError('InvalidData', 'Runtime configuration must be concord.config.ts');
   const sourceDigest = digest(source);
   const config = configContentCache.get(path, source, () => {
     const cached = privateDir === undefined ? undefined : readCachedProjectConfig(privateDir, sourceDigest);

@@ -22,7 +22,6 @@ export class MemoryIoError extends Schema.TaggedError<MemoryIoError>(
   "@concord/repository/MemoryIoError",
 )("MemoryIoError", fields) {}
 
-export class EvidenceMigrationRequired extends Schema.TaggedError<EvidenceMigrationRequired>("@concord/repository/EvidenceMigrationRequired")("EvidenceMigrationRequired", fields) {}
 
-export type MemoryError = EvidenceMigrationRequired | MemoryFileMissing | MemoryContentInvalid | MemoryReferenceConflict |
+export type MemoryError = MemoryFileMissing | MemoryContentInvalid | MemoryReferenceConflict |
   MemoryLockConflict | MemoryIoError;
