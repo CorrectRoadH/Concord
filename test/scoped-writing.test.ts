@@ -100,7 +100,7 @@ test('standalone explicit profile works without managed owners and ignores unrel
     assert.equal(first.mode, 'standalone');
     assert.equal(first.findings.filter(item => item.rule === 'bannedTerm').length, 1);
     write(root, 'docs/concord-writing.json', json({ format: 'concord.writing/v1', roots: ['docs'], bannedTerms: [] }));
-    assert.throws(() => withRepo(root, checkWriting), { code: 'WritingMigrationRequired' });
+    assert.throws(() => withRepo(root, checkWriting), { code: 'InvalidWritingPolicy' });
     const second = withRepo(root, repo => checkWriting(repo, 'standalone.json'));
     assert.equal(second.mode, 'standalone');
     assert.equal(second.findings.filter(item => item.rule === 'bannedTerm').length, 1);
@@ -260,7 +260,7 @@ test('persisted catalog dependency guard rejects forged membership and changed i
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('explicit v1 migration uses public CLI Markdown catalog then policy CAS', () => Effect.runPromise(Effect.sync(() => {
+test('invalid policies can be replaced through the public CLI with explicit owner CAS', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture(), cli = join(process.cwd(), 'dist/entry.js');
   try {
     const old = json({ format: 'concord.writing/v1', roots: ['docs'], bannedTerms: [], concepts: 'docs/concepts.md' });
@@ -275,7 +275,7 @@ test('explicit v1 migration uses public CLI Markdown catalog then policy CAS', (
     const oldShow = JSON.parse(call('writing', 'show').stdout) as { state: string; digest: string; source: string };
     assert.equal(oldShow.state, 'invalid');
     assert.equal(oldShow.source, old);
-    assert.match(call('docs', 'check').stderr, /WritingMigrationRequired/u);
+    assert.match(call('docs', 'check').stderr, /InvalidWritingPolicy/u);
     const catalogBody = join(root, 'catalog.md'), policyBody = join(root, 'policy.json');
     writeFileSync(catalogBody, json(catalog([concept('term', 'Term')])));
     writeFileSync(policyBody, json(policy()));

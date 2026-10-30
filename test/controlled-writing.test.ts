@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -10,7 +10,7 @@ import { checkWriting } from '../dist/writing.js';
 import { readWritingPolicy } from '../dist/writing-policy.js';
 import { composeControlled } from '../dist/writing-controlled-policy.js';
 import { decodeViewAction } from '../dist/application.js';
-import { migrateWriting, setWriting, showWriting } from '../dist/writing-management.js';
+import { setWriting, showWriting } from '../dist/writing-management.js';
 import type { WritingPolicy } from '../dist/writing-schema.js';
 
 const base = (controlled: unknown = undefined, extra = {}) => ({ format: 'concord.writing/v3', bannedTerms: [], roots: ['docs/corpus.md'], ...(controlled === undefined ? {} : { controlled }), ...extra });
@@ -121,18 +121,16 @@ controlledTest('C9 C17 C18: recursive leaf composition, clear barriers and missi
   finally { repo.close(); }
 });
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-controlledTest('C10: migration preserves fields and legacy character observations without controlled defaults', (scan, root) => {
+controlledTest('C10: invalid formats preserve their bytes and current length rules remain available', (scan, root) => {
   scan('# Header\n\nAbc `inline content` [link](https://hidden) ![alt](url). Next Sentence!\n', undefined);
   const old = { format: 'concord.writing/v2', roots: ['docs/corpus.md'], bannedTerms: [], sentenceLength: 10, paragraphLength: 25, unusedConcepts: false };
   writeFileSync(join(root, 'docs/concord-writing.json'), encode(old));
   const repo = new LocalRepository(root);
   try {
-    assert.throws(() => checkWriting(repo), { code: 'WritingMigrationRequired' });
+    assert.throws(() => checkWriting(repo), { code: 'InvalidWritingPolicy' });
     const shown = showWriting(repo); assert.equal(shown.state, 'invalid'); assert.equal(shown.source, encode(old));
-    const dry = migrateWriting(repo, 'docs/concord-writing.json', true);
-    assert.equal(showWriting(repo).digest, shown.digest); assert.equal(dry.dryRun, true);
-    const result = migrateWriting(repo, 'docs/concord-writing.json');
-    assert.deepEqual(result.policy, { ...old, format: 'concord.writing/v3' });
+    assert.equal(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'), encode(old));
+    setWriting(repo, readWritingPolicy(encode({ ...old, format: 'concord.writing/v3' })), shown.digest);
     const findings = checkWriting(repo).findings;
     assert.deepEqual(findings.map(f => [f.rule, f.line, f.message, f.context]), [
       ['paragraphLength', 3, 'Paragraph has 34 characters; maximum 25', 'Abc inline content link . Next Sentence!'],

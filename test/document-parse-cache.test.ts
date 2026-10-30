@@ -20,8 +20,8 @@ function fixture() {
   try { initialize(repo, false, { testRoots: [], sourceRoots: [] }); } finally { repo.close(); }
   mkdirSync(join(root, 'docs/feature/sample/use-case'), { recursive: true });
   mkdirSync(join(root, 'docs/research/sample'), { recursive: true });
-  writeFileSync(join(root, 'docs/feature/sample/README.md'), renderDocument({ format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample', createdAt: '2026-10-29' }, '# Sample\n\nA local sample.\n'));
-  writeFileSync(join(root, useCasePath), renderDocument({ format: 'concord.document/v1', kind: 'use-case', id: 'inspect', title: 'Inspect', feature: 'docs/feature/sample/README.md', createdAt: '2026-10-29' }, '# Inspect\n\n## Flow {#flow}\n\n1. Read the parser-sentinel source. {#read}\n2. Return the facts. {#return}\n'));
+  writeFileSync(join(root, 'docs/feature/sample/README.md'), renderDocument({ format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample' }, '# Sample\n\nA local sample.\n'));
+  writeFileSync(join(root, useCasePath), renderDocument({ format: 'concord.document/v1', kind: 'use-case', id: 'inspect', title: 'Inspect', feature: 'docs/feature/sample/README.md' }, '# Inspect\n\n## Flow {#flow}\n\n1. Read the parser-sentinel source. {#read}\n2. Return the facts. {#return}\n'));
   writeFileSync(join(root, researchPath), renderDocument({ format: 'concord.document/v1', kind: 'research', id: 'sample-research', title: 'Research', createdAt: '2026-10-29', sources: [] }, '# Research\n\nLocal source bytes.\n'));
   return root;
 }
@@ -48,7 +48,7 @@ test('volatile document projections preserve current CLI facts across edits, pat
     const support = 'docs/feature/sample/research-copy.md';
     writeFileSync(join(root, support), readFileSync(join(root, researchPath)));
     parity(root);
-    assert.match(JSON.stringify(cli(root, false)), /ResearchMigrationRequired/u, 'README bytes at a supporting path are validated there');
+    assert.match(JSON.stringify(cli(root, false)), /InvalidPlacement/u, 'README bytes at a supporting path are validated there');
     rmSync(join(root, support));
     renameSync(join(root, useCasePath), join(root, 'docs/feature/sample/use-case/renamed.md'));
     parity(root);

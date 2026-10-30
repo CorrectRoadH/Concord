@@ -30,27 +30,18 @@ test('warm configuration parsing preserves caller isolation and rejects changed 
 }))));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
-test('JSON-only and dual-config projects require migration without interpreting old bytes', () => Effect.runPromise(Effect.sync(() => fixture(root => {
-  const source = '{ deliberately invalid old configuration }\n';
+test('only the current TS config is read and unrelated files remain untouched', () => Effect.runPromise(Effect.sync(() => fixture(root => {
+  const source = '{ deliberately invalid unrelated bytes }\n';
   writeFileSync(join(root, 'concord.json'), source);
-  mkdirSync(join(root, 'child'));
-  for (const args of [['doctor'], ['init'], ['recover']] as const) {
-    const result = spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20_000 });
-    assert.equal(result.status, 1, result.stdout + result.stderr);
-    assert.match(result.stderr, /ProjectMigrationRequired/);
-  }
-  const nested = spawnSync(process.execPath, [cli, '--json', 'doctor'], { cwd: join(root, 'child'), encoding: 'utf8', timeout: 20_000 });
-  assert.match(nested.stderr, /ProjectMigrationRequired/);
-  const workspace = execFileSync(process.execPath, [cli, '--root', root, '--json', 'workspace', 'show'], { encoding: 'utf8', timeout: 20_000 });
-  assert.match(workspace, /ProjectMigrationRequired/);
-  assert.doesNotMatch(workspace, /deliberately invalid/);
-  assert.match(workspace, /"project":null/);
-  assert.equal(existsSync(join(root, '.git/concord')), false);
-  assert.equal(existsSync(join(root, '.git/niceeval')), false);
-  writeFileSync(join(root, 'concord.config.ts'), 'export default {};\n');
-  assert.throws(() => new LocalRepository(root), { code: 'ProjectMigrationRequired' });
+  const result = spawnSync(process.execPath, [cli, '--root', root, '--json', 'check'], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /ProjectNotFound/);
+  const initial = new LocalRepository(root, { initialize: true });
+  try { initialize(initial); } finally { initial.close(); }
+  const checked = spawnSync(process.execPath, [cli, '--root', root, '--json', 'check'], { encoding: 'utf8', timeout: 20_000 });
+  assert.equal(checked.status, 0, checked.stdout + checked.stderr);
   assert.equal(readFileSync(join(root, 'concord.json'), 'utf8'), source);
-  assert.throws(() => Reflect.apply(snapshot, undefined, ['concord.json', source]), { code: 'ProjectMigrationRequired' });
+  assert.throws(() => Reflect.apply(snapshot, undefined, ['concord.json', source]), { code: 'InvalidData' });
 }))));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
@@ -66,17 +57,22 @@ test('old journals are refused before stale locks or interrupted files can be ch
   writeFileSync(publicationLock, '');
   chmodSync(publicationLock, 0o644);
   for (const [scope, code] of [
-    [{ kind: 'documents' }, 'JournalMigrationRequired'],
-    [{ kind: 'source', configSource: '{}', configDigest: digest('{}') }, 'JournalMigrationRequired'],
+    [{ kind: 'documents' }, 'InvalidData'],
+    [{ kind: 'source', configSource: '{}', configDigest: digest('{}') }, 'InvalidData'],
     [{ kind: 'source', configSource: config.source, configDigest: digest(config.source) }, 'InvalidData'],
     [{ kind: 'source', configSource: '{}', configDigest: 'tampered' }, 'InvalidData'],
-    [{ kind: 'documents', configPath: 'concord.json', configSource: '{}', configDigest: digest('{}') }, 'JournalMigrationRequired'],
+    [{ kind: 'documents', configPath: 'concord.json', configSource: '{}', configDigest: digest('{}') }, 'InvalidData'],
     [{ kind: 'documents', configPath: 'concord.config.ts', configSource: config.source }, 'InvalidData'],
   ] as const) {
     const journal = JSON.stringify({ format: 'concord.journal', root, privateDir, projectId: config.config.projectId, operation: 'old-publication', phase: 'prepared', directories: [], scope, changes: [{ path, before: '# Before\n', after: '# Interrupted\n', beforeDigest: digest('# Before\n'), afterDigest: digest('# Interrupted\n'), mode: 420 }] });
     const lock = JSON.stringify({ format: 'concord.lock/v1', root, host: hostname(), pid: 2147483647, token: 'offline-recovery-only' });
     writeFileSync(journalPath, journal); writeFileSync(lockPath, lock);
     for (const options of [{ dryRun: true }, { recover: true }]) assert.throws(() => new LocalRepository(root, options), { code });
+    for (const args of [['check'], ['recover']] as const) {
+      const result = spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20_000 });
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr, /InvalidData/);
+    }
     assert.equal(readFileSync(journalPath, 'utf8'), journal);
     assert.equal(readFileSync(lockPath, 'utf8'), lock);
     assert.equal(readFileSync(join(root, path), 'utf8'), '# Interrupted\n');
@@ -89,4 +85,19 @@ test('old journals are refused before stale locks or interrupted files can be ch
     assert.equal(existsSync(join(root, 'concord.json')), false);
     assert.throws(() => repo.publish('remove-config', [{ path: 'concord.config.ts', before: config.source, after: null }]), { code: 'InvalidChange' });
   } finally { repo.close(); }
+}))));
+
+// @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
+test('packed config commands reject non-current data and syntax without rewriting the source', () => Effect.runPromise(Effect.sync(() => fixture(root => {
+  const repo = new LocalRepository(root, { initialize: true });
+  try { initialize(repo); } finally { repo.close(); }
+  const path = join(root, 'concord.config.ts');
+  const current = readFileSync(path, 'utf8');
+  for (const [source, code] of [[current.replace('concord.project/v1', 'concord.project/v0'), 'InvalidData'], ['export default { ...{} };\n', 'InvalidConfigSyntax']] as const) {
+    writeFileSync(path, source);
+    const result = spawnSync(process.execPath, [cli, '--root', root, '--json', 'config', 'show'], { encoding: 'utf8', timeout: 20_000 });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, new RegExp(code));
+    assert.equal(readFileSync(path, 'utf8'), source);
+  }
 }))));

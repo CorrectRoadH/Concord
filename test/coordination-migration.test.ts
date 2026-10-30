@@ -9,7 +9,7 @@ import { renderTypeScriptConfig } from '../src/config.js';
 import { LocalRepository } from "../src/storage.js";
 import { acquireTraceLeaseSync, genericJournalPath, genericPrivateDirectorySync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../src/coordination.js";
 import { mutateTraceFiles, recoverTrace, traceDigest, withTraceReadLease } from "../repository/docs/trace/relation-mutation.js";
-import { TraceJournalMigrationRequired, TraceRecoveryRequired } from "../repository/docs/trace/errors.js";
+import { TraceRecoveryConflict, TraceRecoveryRequired } from "../repository/docs/trace/errors.js";
 
 function isolatedRepository(t: TestContext): string {
   const root = mkdtempSync(join(tmpdir(), "concord-coordination-"));
@@ -91,7 +91,7 @@ test("old multi-file journal format is rejected by strict recovery", async (t) =
   const directory = tracePrivateDirectorySync(root);
   mkdirSync(directory, { recursive: true });
   writeFileSync(join(directory, "multi-file-publication-journal.json"), JSON.stringify({ format: "niceeval.docs-trace/multi-file-publication-journal/v1", files: [] }));
-  await assert.rejects(Effect.runPromise(recoverTrace(root)), (cause) => cause instanceof TraceJournalMigrationRequired);
+  await assert.rejects(Effect.runPromise(recoverTrace(root)), (cause) => cause instanceof TraceRecoveryConflict);
 });
 
 test("a mixed write/delete transaction validates every temp before rolling back any target", async (t) => {
@@ -175,14 +175,14 @@ test("fresh repositories create only Concord private coordination state", (t) =>
   assert.equal(tracePrivateDirectorySync(root), join(root, ".git", "concord", "trace"));
 });
 
-test("ordinary runtime names and preserves unmigrated legacy coordination state", (t) => {
+test("ordinary runtime ignores unrelated private directories", (t) => {
   const root = isolatedRepository(t);
   const legacy = join(root, ".git", "niceeval", "docs-trace");
   mkdirSync(legacy, { recursive: true });
   writeFileSync(join(legacy, "generation"), "4\n");
-  assert.throws(() => new LocalRepository(root, { dryRun: true }), { code: "CoordinationMigrationRequired" });
+  new LocalRepository(root, { dryRun: true }).close();
   assert.equal(readFileSync(join(legacy, "generation"), "utf8"), "4\n");
-  assert.equal(existsSync(join(root, ".git", "concord", "trace")), false);
+
 });
 
 test("governance configuration participates as a same-preimage guard without becoming a writable owner", (t) => {

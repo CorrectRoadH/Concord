@@ -64,7 +64,7 @@ test("Research assigns files to the deepest owner and rejects unsafe or malforme
   writeFileSync(join(root, "docs/research/tree/legacy.md"), "---\nformat: concord.document/v1\nid: legacy\ntitle: 旧\ncreatedAt: 2026-09-15T00:00:00.000Z\nkind: research\nsources: []\n---\n\n# 旧\n");
   const migrationCheck = await run(root, { command: "check", ref: outer.ref });
   assert.equal(migrationCheck.command, "check");
-  assert.equal(migrationCheck.findings.some(finding => finding.code === "research-migration-required"), true);
+  assert.equal(migrationCheck.findings.some(finding => finding.code === "InvalidPlacement"), true);
   symlinkSync(join(root, "docs/research/tree/plain"), join(root, "docs/research/tree/link"));
   await assert.rejects(run(root, { command: "check", ref: outer.ref }), /symbolic links/);
   const nestedCheck = await run(root, { command: "check", ref: "research:docs/research/tree/nested/README.md" });
@@ -72,13 +72,13 @@ test("Research assigns files to the deepest owner and rejects unsafe or malforme
   assert.deepEqual(nestedCheck.checkedPaths, ["docs/research/tree/nested/README.md", "docs/research/tree/nested/child.md"]);
 });
 
-test("Research reports migration for old standalone owners and rejects symlinks and recovery journals", async t => {
+test("Research reports invalid placement for standalone owners and rejects symlinks and recovery journals", async t => {
   const root = repo(); t.after(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(join(root, "docs/research/old"), { recursive: true });
   writeFileSync(join(root, "docs/research/old/page.md"), "---\nformat: concord.document/v1\nid: old\ntitle: 旧\ncreatedAt: 2026-09-15T00:00:00.000Z\nkind: research\nsources: []\n---\n\n# 旧\n");
   const old = await run(root, { command: "check", ref: "research:docs/research/old/page.md" });
   assert.equal(old.command, "check");
-  assert.equal(old.ok, false); assert.equal(old.findings[0]?.code, "research-migration-required");
+  assert.equal(old.ok, false); assert.equal(old.findings[0]?.code, "InvalidPlacement");
   symlinkSync(join(root, "docs/research/old"), join(root, "docs/research/linked"));
   await assert.rejects(run(root, { command: "check", ref: "research:docs/research/linked/page.md" }), /symbolic links/);
   const privateDir = tracePrivateDirectorySync(root);

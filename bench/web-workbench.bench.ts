@@ -34,6 +34,6 @@ export default defineBenchmarks('web-workbench', [
     }), run: actionArgv, expect: { exitCode: 0 } },
   { id: 'web-workbench/git-status', consumer: 'self', state: 'warm', run: ['git', 'status'], expect: { exitCode: 0 } },
   { id: 'web-workbench/workspace-projection', consumer: 'fixture:web', state: 'warm',
-    prepare: context => context.smoke ? prepareView(context) : prepareView(context).pipe(Effect.scoped),
+    prepare: context => prepareView(context).pipe(Effect.scoped),
     run: ['workspace', 'projection'], expect: { exitCode: 0 } },
 ]);

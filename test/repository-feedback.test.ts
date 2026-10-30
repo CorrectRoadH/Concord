@@ -25,7 +25,7 @@ function fixture(t: TestContext): string {
   execFileSync('git', ['-C', root, '-c', 'user.name=Concord Test', '-c', 'user.email=test@example.invalid', 'commit', '-qm', 'fixture']);
   return root;
 }
-function owner(fields: object): string { return `---\n${JSON.stringify({ format: 'concord.document/v1', createdAt: '2026-09-14T00:00:00.000Z', ...fields })}\n---\n# Original body\n`; }
+function owner(fields: { readonly kind: string; readonly [key: string]: unknown }): string { return `---\n${JSON.stringify({ format: 'concord.document/v1', ...(['feature', 'use-case', 'engineering'].includes(fields.kind) ? {} : { createdAt: '2026-09-14T00:00:00.000Z' }), ...fields })}\n---\n# Original body\n`; }
 function issue(id: string): IssueMeta { return { format: 'concord.document/v1', id, title: id, createdAt: '2026-09-14T00:00:00.000Z', kind: 'issue', state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }; }
 const run = (root: string, input: unknown) => Effect.runPromise(runFeedbackCommand(input).pipe(Effect.provide(NodeFeedbackStoreLive(root)), Effect.provide(NodeServices.layer)));
 

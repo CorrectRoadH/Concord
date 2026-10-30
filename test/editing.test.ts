@@ -87,7 +87,7 @@ test('project documents under docs are readable without becoming category owners
   assert.deepEqual(saved.changedPaths, ['docs/architecture.md']);
   assert.match(readFileSync(join(root, 'docs/architecture.md'), 'utf8'), /Saved from the workbench/);
   setMarkdown(repo, constitution!.path, `${constitution!.body}\nAdditional principle.\n`, constitution!.digest);
-  assert.match(readFileSync(join(root, 'docs/constitution.md'), 'utf8'), /concord\.constitution\/v2/);
+  assert.match(readFileSync(join(root, 'docs/constitution.md'), 'utf8'), /concord\.constitution\/v3/);
 
   mkdirSync(join(root, 'docs/notes'), { recursive: true });
   writeFileSync(join(root, 'docs/notes/extra.md'), '# Extra\n');

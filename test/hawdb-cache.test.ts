@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync, truncateSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { cacheStatus, clearCache, scanAnnotations } from '../dist/annotations.js';
@@ -312,3 +312,29 @@ test('failed native close still releases the outer repository lease', () => {
     } finally { repo.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
+test('identity mismatch is unavailable for reads and the next writable rebuild discards and recreates under the same owner lock', () => Effect.runPromise(Effect.sync(() => {
+  const root = freshConsumer();
+  try {
+    const directory = join(root, '.git/concord');
+    mkdirSync(directory, { recursive: true });
+    execFileSync('tar', ['-xzf', resolve('test/fixtures/hawdb/v0.3.0-cache.tar.gz'), '-C', directory]);
+    const path = join(directory, 'cache.hawdb');
+    const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
+    const manifest = readFileSync(join(path, 'manifest.hawdb'));
+    const status = cli(root, 'cache', 'status');
+    assert.equal(status.status, 0, status.stdout + status.stderr);
+    assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(CacheReport), { onExcessProperty: 'ignore' })(status.stdout).status, 'unavailable');
+    assert.deepEqual(readFileSync(join(path, 'manifest.hawdb')), manifest);
+    const scan = cli(root, 'cache', 'rebuild');
+    assert.equal(scan.status, 0, scan.stdout + scan.stderr);
+    const current = openHawdb(path, { readOnly: true, create: false });
+    try {
+      assert.equal(current.scan('config_cache').some(entry => entry.key === 'legacy-config'), false);
+      assert.deepEqual(current.scan('feedback_cache'), []);
+    }
+    finally { current.close(); }
+    assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+})));

@@ -7,7 +7,7 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { digest } from '../dist/shared.js';
-import { showWriting, setWriting, migrateWriting } from '../dist/writing-management.js';
+import { showWriting, setWriting } from '../dist/writing-management.js';
 import { checkWriting } from '../dist/writing.js';
 
 const policyPath = 'docs/concord-writing.json';
@@ -35,7 +35,7 @@ test('writing show preserves invalid and v1 bytes for explicit CAS repair', () =
     write(root, policyPath, source({ ...policy, format: 'concord.writing/v1' }));
     const old = withRepo(root, showWriting);
     assert.equal(old.state, 'invalid');
-    assert.throws(() => withRepo(root, checkWriting), { code: 'WritingMigrationRequired' });
+    assert.throws(() => withRepo(root, checkWriting), { code: 'InvalidWritingPolicy' });
     assert.throws(() => withRepo(root, repo => setWriting(repo, policy, null)), { code: 'PreimageChanged' });
     const saved = withRepo(root, repo => setWriting(repo, policy, old.digest));
     assert.equal(saved.digest, digest(saved.source));
@@ -111,7 +111,7 @@ test('removed SVG fields reject every value and explicit CAS cleanup preserves t
       for (const fields of [{ svgTerms: true }, { svgTerms: false }, { svgStyle: null }, { svgStyle: 'docs/style.css' }]) {
         const before = source({ ...clean, ...fields });
         write(root, path, before);
-        assert.throws(() => withRepo(root, repo => checkWriting(repo, path)), /SVG writing checks were removed/);
+        assert.throws(() => withRepo(root, repo => checkWriting(repo, path)), { code: 'InvalidWritingPolicy' });
         if (path === 'standalone.json') continue;
         const shown = withRepo(root, repo => showWriting(repo, path));
         assert.equal(shown.state, 'invalid');
@@ -128,7 +128,7 @@ test('removed SVG fields reject every value and explicit CAS cleanup preserves t
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-test('C23: migration refuses edited before images and preserves old journal recovery scenes', () => Effect.runPromise(Effect.sync(() => {
+test('C23: policy replacement refuses edited preimages and preserves invalid recovery scenes', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture();
   try {
     const old = source({ ...policy, format: 'concord.writing/v2' });
@@ -142,7 +142,7 @@ test('C23: migration refuses edited before images and preserves old journal reco
       }
     }
     const repo = new ConcurrentRepository(root);
-    try { assert.throws(() => migrateWriting(repo, policyPath), { code: 'PreimageChanged' }); }
+    try { assert.throws(() => setWriting(repo, policy, digest(old)), { code: 'PreimageChanged' }); }
     finally { repo.close(); }
     assert.equal(readFileSync(join(root, policyPath), 'utf8'), `${old} `);
     write(root, policyPath, old);
@@ -157,7 +157,7 @@ test('C23: migration refuses edited before images and preserves old journal reco
     rmSync(journalPath);
     const lease = join(root, '.git/concord/trace/publication.lease');
     mkdirSync(lease, { recursive: true }); writeFileSync(join(lease, 'unknown-owner'), 'preserve');
-    assert.throws(() => withRepo(root, repo => migrateWriting(repo, policyPath)), /unexpected|owner|lease|publication/iu);
+    assert.throws(() => withRepo(root, repo => setWriting(repo, policy, digest(old))), /unexpected|owner|lease|publication/iu);
     assert.equal(readFileSync(join(lease, 'unknown-owner'), 'utf8'), 'preserve');
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

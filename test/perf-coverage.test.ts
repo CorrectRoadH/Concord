@@ -58,8 +58,10 @@ test('all benchmark scenarios execute on minimal frozen consumers without timing
     yield* trace(`${group.name} ready`, groupStarted);
     const context = makeContext(artifact, isolated, outputDir, true);
     for (const scenario of group.scenarios) {
-      if (scenario.prepare) yield* scenario.prepare(context);
-      yield* executeScenario(scenario, context);
+      yield* Effect.scoped(Effect.gen(function*() {
+        if (scenario.prepare) yield* scenario.prepare(context);
+        yield* executeScenario(scenario, context);
+      }));
     }
     const status = yield* mustRun(['git', 'status', '--porcelain'], { cwd: isolated.root, outputDir });
     assert.equal(status.stdout.trim(), '', `${group.name} changed its frozen consumer`);

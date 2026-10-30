@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -30,7 +30,7 @@ const repository = (root: string) => Effect.acquireRelease(
 );
 const withRepository = <A, E>(root: string, use: (repo: LocalRepository) => Effect.Effect<A, E, never>) =>
   Effect.scoped(repository(root).pipe(Effect.flatMap(use)));
-const feature = `---\nformat: concord.document/v1\nid: example\ntitle: Example\ncreatedAt: 2026-01-01T00:00:00.000Z\nkind: feature\n---\n\nFeature\n`;
+const feature = `---\nformat: concord.document/v1\nid: example\ntitle: Example\nkind: feature\n---\n\nFeature\n`;
 const problem = `---\nformat: concord.document/v1\nid: example-problem\ntitle: Problem\ncreatedAt: 2026-01-01T00:00:00.000Z\nkind: memory\nmemoryKind: problem\nstate: open\nepoch: 0\npromotions: []\nhistory: []\n---\n\nProblem\n`;
 const selected: AnnotatedCase = Schema.decodeUnknownSync(AnnotatedCaseSchema)({ id: deriveTestReference('test/example.test.mjs', 'test/example.test.mjs', 'case'), file: 'test/example.test.mjs', line: 5, name: 'case', contract: 'docs/feature/example/README.md', contractKind: 'feature', regressions: ['memory/example-problem.md'], status: 'active', framework: 'node:test', skipped: false });
 function setup(root: string, source = "import { test } from 'node:test';\nimport assert from 'node:assert/strict';\nimport { value } from '../fixture.mjs';\n// @feature docs/feature/example/README.md\n// @regression memory/example-problem.md\ntest('case', () => assert.equal(value, true));\n") { write(root, 'docs/feature/example/README.md', feature); write(root, 'memory/example-problem.md', problem); write(root, 'fixture.mjs', 'export const value = false;\n'); write(root, selected.file, source); }
@@ -83,11 +83,17 @@ test('rejects pre-binding receipts without converting them into current proof', 
     const legacyRed = 'ccev_11111111111111111111111111111111';
     const legacyGreen = 'ccev_22222222222222222222222222222222';
     legacy(red.id, legacyRed); legacy(green.id, legacyGreen);
-    assert.throws(() => readEvidence(repo, legacyGreen), { code: 'EvidenceMigrationRequired' });
+    const receiptPath = join(repo.privateDir, 'evidence', `${legacyGreen}.json`);
+    const before = readFileSync(receiptPath, 'utf8');
+    assert.throws(() => readEvidence(repo, legacyGreen), { code: 'InvalidData' });
+    const result = spawnSync(process.execPath, ['dist/entry.js', '--root', root, '--json', 'test', 'evidence', legacyGreen], { encoding: 'utf8', timeout: 30_000 });
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /InvalidData/);
+    assert.equal(readFileSync(receiptPath, 'utf8'), before);
     const documents = loadDocuments(repo);
     const owner = documents.find((document) => document.path === 'memory/example-problem.md');
     assert.ok(owner);
-    assert.throws(() => verifyFixedEvidence(repo, documents, [selected], owner, legacyRed, legacyGreen), (cause) => cause instanceof ConcordError && cause.code === 'EvidenceMigrationRequired');
+    assert.throws(() => verifyFixedEvidence(repo, documents, [selected], owner, legacyRed, legacyGreen), (cause) => cause instanceof ConcordError && cause.code === 'InvalidData');
   });
 }))));
 

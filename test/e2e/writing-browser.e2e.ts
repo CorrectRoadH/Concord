@@ -176,8 +176,8 @@ test('real browser displays invalid policy bytes and requires an explicit repair
 
     await page.goto(`http://127.0.0.1:${server.port}/writing`);
     await page.getByRole('link', { name: '写作', exact: true }).click();
-    await expect(page.getByRole('alert')).toContainText('SVG writing checks were removed');
-    await expect(page.getByRole('button', { name: '修复规则' })).toHaveCount(0);
+    await expect(page.getByRole('alert')).toContainText('svgTerms');
+    await expect(page.getByRole('button', { name: '修复规则' })).toBeVisible();
     assert.equal(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'), obsolete);
     writeFileSync(join(root, 'docs/concord-writing.json'), '{ broken policy');
     await page.getByRole('button', { name: '重新载入' }).click();

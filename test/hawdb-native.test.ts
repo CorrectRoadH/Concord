@@ -143,21 +143,37 @@ if (childRole) {
       assert.equal(existsSync(join(f.db, 'owner.hawdb.lock')), false);
     } finally { f.cleanup(); }
   });
-  test('the real v0.3 cache is adopted without losing configuration or remote observations', () => {
+  test('a cache with a different identity is unavailable without reading or converting its entries', () => {
     const f = fixture();
     const path = join(f.dir, 'cache.hawdb');
     try {
       execFileSync('tar', ['-xzf', fileURLToPath(new URL('./fixtures/hawdb/v0.3.0-cache.tar.gz', import.meta.url)), '-C', f.dir]);
       const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
-      const readonly = openHawdb(path, { readOnly: true, create: false });
-      assert.deepEqual(readonly.scan('config_cache'), [{ key: 'legacy-config', payload: 'retained Ω config' }]); readonly.close();
-      const upgraded = openHawdb(path, { readOnly: false, create: false });
-      assert.deepEqual(upgraded.scan('feedback_cache'), [{ key: 'legacy-feedback', payload: 'retained remote observation' }]);
-      upgraded.put('config_cache', [{ key: 'current', payload: 'new value' }]); upgraded.close();
-      const reopened = openHawdb(path, { readOnly: true, create: false });
-      assert.equal(reopened.scan('config_cache').length, 2);
-      assert.deepEqual(reopened.scan('feedback_cache'), [{ key: 'legacy-feedback', payload: 'retained remote observation' }]); reopened.close();
+      const before = diskSnapshot(path);
+      for (const readOnly of [true, false]) code(() => openHawdb(path, { readOnly, create: false }), 'HawdbIncompatible');
       assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
+      assert.deepEqual(diskSnapshot(path), before);
+    } finally { f.cleanup(); }
+  });
+  test('engine, bridge and table identities are checked before the engine touches persistent files', () => {
+    const f = fixture();
+    try {
+      const db = openHawdb(f.db, { readOnly: false, create: true });
+      db.put('config_cache', [{ key: 'current', payload: 'retained' }]); db.close();
+      const identity = join(f.db, 'concord.identity');
+      const current = readFileSync(identity, 'utf8');
+      const parts = current.split('/');
+      for (let index = 0; index < parts.length; index++) {
+        const invalid = [...parts]; invalid[index] = 'unavailable';
+        writeFileSync(identity, invalid.join('/'));
+        const before = diskSnapshot(f.db);
+        for (const readOnly of [true, false]) code(() => openHawdb(f.db, { readOnly, create: false }), 'HawdbIncompatible');
+        assert.deepEqual(diskSnapshot(f.db), before);
+      }
+      writeFileSync(identity, current);
+      const reopened = openHawdb(f.db, { readOnly: true, create: false });
+      try { assert.deepEqual(reopened.scan('config_cache'), [{ key: 'current', payload: 'retained' }]); }
+      finally { reopened.close(); }
     } finally { f.cleanup(); }
   });
   test('cross-process database and guard exclude both directions, preserve inode, and release', async () => {
@@ -241,7 +257,7 @@ if (childRole) {
       proc = await child('guard', f.db);
       code(() => openHawdb(f.db, { readOnly: false, create: false }), 'HawdbBusy');
       await stop(proc); proc = undefined;
-      code(() => openHawdb(f.db, { readOnly: false, create: false }), 'HawdbUnavailable');
+      code(() => openHawdb(f.db, { readOnly: false, create: false }), 'HawdbIncompatible');
       const guard = acquireHawdbClearGuard(f.db); guard.close();
     } finally { if (proc) await stop(proc); f.cleanup(); }
   });

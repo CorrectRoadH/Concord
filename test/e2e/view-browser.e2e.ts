@@ -146,7 +146,8 @@ test('browser opens and refreshes a deep link without credentials and retries in
     await expect(contentNavigation.getByRole('button', { name: '新建 Feature', exact: true })).toBeVisible();
     await page.goto(`${url}?tab=actions`);
     await expect(page.getByRole('tab', { name: '元数据', exact: true })).toHaveAttribute('data-state', 'active');
-    await expect(page.getByText('创建于', { exact: true })).toBeVisible();
+    await expect(page.getByText('ID', { exact: true })).toBeVisible();
+    await expect(page.getByText('创建于', { exact: true })).toHaveCount(0);
     let holdWorkspace = true;
     let refreshRequests = 0;
     await page.route('**/api/workspace', async route => {

@@ -11,7 +11,7 @@ import { adoptRoadmap, checkDocuments, createDocument, decideDesign, findDocumen
 import { initialize, LocalRepository } from '../dist/storage.js';
 import { decodeDesignReadme, encodeDecidedDesignReadme } from '../dist/repository/docs/design/codec.js';
 
-// @use-case docs/feature/document-packages/use-case/migrate-document-discovery.md
+// @use-case docs/feature/document-packages/use-case/discover-managed-documents.md
 test('cancelled Roadmap cannot be adopted and a new decision replaces historical deferral', t => {
   const root = mkdtempSync(join(tmpdir(), 'concord-dispositions-'));
   execFileSync('git', ['init', '-q', root]);

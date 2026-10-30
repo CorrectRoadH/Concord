@@ -22,7 +22,7 @@ import { OwnedProcess, type OwnedProcessResult } from '../dist/owned-process.js'
 const path = 'docs/feature/sample/use-case/flow.md';
 const entry = resolve('dist/entry.js');
 function document(body: string, kind: 'use-case' | 'feature' = 'use-case') {
-  return renderDocument(kind === 'use-case' ? { format: 'concord.document/v1', kind, id: 'flow', title: 'Flow', createdAt: '2026-10-21T00:00:00.000Z', feature: 'docs/feature/sample/README.md' } : { format: 'concord.document/v1', kind, id: 'sample', title: 'Sample', createdAt: '2026-10-21T00:00:00.000Z' }, body);
+  return renderDocument(kind === 'use-case' ? { format: 'concord.document/v1', kind, id: 'flow', title: 'Flow', feature: 'docs/feature/sample/README.md' } : { format: 'concord.document/v1', kind, id: 'sample', title: 'Sample' }, body);
 }
 function consumer(run: (repo: LocalRepository, root: string) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-steps-'));

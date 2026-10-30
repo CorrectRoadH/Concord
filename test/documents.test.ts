@@ -60,9 +60,22 @@ function throwsCode(code: string, operation: () => unknown): void {
 }
 
 test('shared owner decoding retains bounded YAML references and names malformed aliases', () => {
-  const source = '---\nformat: concord.document/v1\nid: example\ntitle: &title Shared title\ncreatedAt: *title\nkind: feature\n---\n# Body\n';
-  assert.equal(parseDocumentRecord('docs/feature/示例/README.md', source)?.metadata.createdAt, 'Shared title');
-  throwsCode('InvalidData', () => parseDocumentRecord('docs/feature/示例/README.md', source.replace('createdAt: *title', 'createdAt: *missing')));
+  const source = '---\nformat: concord.document/v1\nid: example\ntitle: &title Shared title\ndescription: *title\nkind: feature\n---\n# Body\n';
+  assert.equal(parseDocumentRecord('docs/feature/示例/README.md', source)?.metadata.description, 'Shared title');
+  throwsCode('InvalidData', () => parseDocumentRecord('docs/feature/示例/README.md', source.replace('description: *title', 'description: *missing')));
+});
+
+// @feature docs/feature/local-sdlc/README.md
+test('owner titles accept the declared boundary and reject multiline or oversized text', () => {
+  for (const kind of ['feature', 'use-case', 'engineering'] as const) {
+    const base = { format: 'concord.document/v1' as const, id: 'title-boundary', title: 'x'.repeat(1024) };
+    const metadata = kind === 'use-case' ? { ...base, kind, feature: 'docs/feature/example/README.md' } : { ...base, kind };
+    const source = renderDocument(metadata, '# Body\n');
+    assert.equal(parseDocumentRecord('owner.md', source)?.metadata.title.length, 1024);
+    for (const title of ['x'.repeat(1025), 'First\nSecond', 'First\rSecond', 'First\u2028Second', 'First\u2029Second']) {
+      throwsCode('InvalidData', () => renderDocument({ ...metadata, title }, '# Body\n'));
+    }
+  }
 });
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('creates strict owners, resolves feature supporting pages, and only replaces author prose', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
@@ -280,7 +293,8 @@ test('adopts Roadmap atomically and migrates current promotions to the Feature',
   const feature = findDocument(documents, 'offline-mode', 'feature');
   const memory = findDocument(documents, 'prefer-local', 'memory');
   assert.equal(roadmap.metadata.kind === 'roadmap' && roadmap.metadata.state, 'adopted');
-  assert.equal(feature.metadata.kind === 'feature' && feature.metadata.origin, roadmap.path);
+  assert.equal(roadmap.metadata.kind === 'roadmap' && roadmap.metadata.adoptedAs, feature.path);
+  assert.deepEqual(Object.keys(feature.metadata).sort(), ['format', 'id', 'kind', 'title']);
   assert.deepEqual(memory.metadata.kind === 'memory' && memory.metadata.promotions, ['docs/feature/offline-mode/README.md#sync-policy']);
   assert.equal(memory.metadata.kind === 'memory' && memory.metadata.history.at(-1)?.action, 'adopt-roadmap');
   assert.deepEqual(checkDocuments(repo, documents), []);

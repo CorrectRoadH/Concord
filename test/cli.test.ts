@@ -948,19 +948,16 @@ test('packed CLI accepts file Plans and nested directory pages with exact entry 
 })));
 
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-test('C10 C22 C24 C25: packed v3 migration and controlled checks keep cache-independent public results', () => Effect.runPromise(Effect.sync(() => {
+test('C10 C22 C24 C25: packed invalid policy rejection and controlled checks keep cache-independent public results', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('controlled-writing-v3');
  const path = 'docs/concord-writing.json';
  const original = { format: 'concord.writing/v2', roots: ['docs/corpus.md'], bannedTerms: [], sentenceLength: 100, paragraphLength: 200 };
  write(root, path, JSON.stringify(original));
  write(root, 'docs/corpus.md', '1. Read the read result.\n\nThe cache is cleared.\n');
- assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'WritingMigrationRequired');
+ assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'InvalidWritingPolicy');
  const shown = call(root, ['writing', 'show'], Schema.Struct({ digest: Schema.String, source: Schema.String, state: Schema.String }));
  assert.equal(shown.state, 'invalid');
- assert.equal(call(root, ['writing', 'migrate', '--path', path, '--dry-run'], DryRunOutput).dryRun, true);
  assert.equal(readFileSync(join(root, path), 'utf8'), shown.source);
- call(root, ['writing', 'migrate', '--path', path], Ack);
- assert.deepEqual(JSON.parse(readFileSync(join(root, path), 'utf8')), { ...original, format: 'concord.writing/v3' });
  const policy = { ...original, format: 'concord.writing/v3', controlled: { language: 'en', procedural: { singleInstruction: true, verbs: { en: [{ lemma: 'read' }] } }, passiveVoice: { en: true, participles: ['cleared'] } } };
  const current = call(root, ['writing', 'show'], DigestOutput);
  call(root, ['writing', 'set', '--body', '-', '--expected-digest', current.digest], Ack, JSON.stringify(policy));
@@ -985,4 +982,46 @@ test('C10 C22 C24 C25: packed v3 migration and controlled checks keep cache-inde
  assert.equal(call(root, ['docs', 'check', '--rules', 'profile.json'], ErrorOutput, '', 1).error, 'InvalidWritingPolicy');
  write(root, 'profile.json', JSON.stringify({ ...policy, controlled: { approvedWords: { en: Array(4097).fill('word') } } }));
  assert.equal(call(root, ['docs', 'check', '--rules', 'profile.json'], ErrorOutput, '', 1).error, 'WritingBudgetExceeded');
+})));
+
+// @feature docs/feature/project-onboarding/README.md
+test('packed boundaries reject non-current formats and preserve configuration, owners, receipts, journals and locks', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('current-formats-only');
+ const constitution = 'docs/constitution.md';
+ const current = readFileSync(join(root, constitution), 'utf8');
+ for (const source of [current.replace('/v3', '/v2'), current.replace('status: draft', 'status: draft\namendments: []')]) {
+  write(root, constitution, source);
+  assert.equal(call(root, ['constitution', 'show'], ErrorOutput, '', 1).error, 'InvalidData');
+  assert.equal(readFileSync(join(root, constitution), 'utf8'), source);
+ }
+ write(root, constitution, current);
+ const configPath = 'concord.config.ts';
+ const config = readFileSync(join(root, configPath), 'utf8');
+ for (const [source, code] of [[config.replace('concord.project/v1', 'concord.project/v0'), 'InvalidData'], ['export default { ...{} };\n', 'InvalidConfigSyntax']] as const) {
+  write(root, configPath, source);
+  assert.equal(call(root, ['config', 'show'], ErrorOutput, '', 1).error, code);
+  assert.equal(readFileSync(join(root, configPath), 'utf8'), source);
+ }
+ write(root, configPath, config);
+ for (const format of ['concord.writing/v1', 'concord.writing/v2']) {
+  const source = JSON.stringify({ format, bannedTerms: [] });
+  write(root, 'docs/concord-writing.json', source);
+  assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'InvalidWritingPolicy');
+  assert.equal(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'), source);
+ }
+ const id = 'ccev_11111111111111111111111111111111';
+ const receiptPath = `.git/concord/evidence/${id}.json`;
+ const receipt = JSON.stringify({ format: 'concord.command-evidence/v1', id });
+ write(root, receiptPath, receipt);
+ assert.equal(call(root, ['test', 'evidence', id], ErrorOutput, '', 1).error, 'InvalidData');
+ assert.equal(readFileSync(join(root, receiptPath), 'utf8'), receipt);
+ const journalPath = '.git/concord/journal.json', lockPath = '.git/concord/lock.json';
+ const journal = JSON.stringify({ format: 'concord.journal', scope: { kind: 'documents' } });
+ const lock = 'preserve invalid lock bytes';
+ write(root, journalPath, journal); write(root, lockPath, lock);
+ for (const command of ['check', 'recover']) {
+  assert.equal(call(root, [command], ErrorOutput, '', 1).error, 'InvalidData');
+  assert.equal(readFileSync(join(root, journalPath), 'utf8'), journal);
+  assert.equal(readFileSync(join(root, lockPath), 'utf8'), lock);
+ }
 })));

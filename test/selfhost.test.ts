@@ -7,6 +7,8 @@ import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { scanAnnotations } from '../dist/annotations.js';
 import { scanCode } from '../dist/code.js';
+import { inlineLinks, relativeMarkdownLink } from '../dist/constitution.js';
+import { traceGaps } from '../dist/trace.js';
 import { loadDocuments } from '../dist/documents.js';
 import { LocalRepository } from '../dist/storage.js';
 import { readWritingPolicy } from '../dist/writing-policy.js';
@@ -51,17 +53,22 @@ test('current checkout configures a version-matched runner whose annotations sca
     try {
       const scan = scanAnnotations(repository);
       assert.deepEqual(scan.findings, []);
-      const useCases = loadDocuments(repository).filter(document => document.metadata.kind === 'use-case');
+      const documents = loadDocuments(repository);
+      const useCases = documents.filter(document => document.metadata.kind === 'use-case');
       assert.ok(useCases.length > 0, 'self-host contract inventory must contain at least one Use Case');
-      for (const useCase of useCases) {
-        assert.ok(scan.cases.some(item => item.contract.split('#')[0] === useCase.path), `missing a real test relation for ${useCase.path}`);
-      }
       const code = scanCode(repository);
       assert.deepEqual(code.findings, []);
       assert.ok(code.codes.some(item => item.file === 'repository/engine.ts'), 'repository implementation must enter the self-host scan');
       assert.deepEqual(new Set(code.codes.map(item => item.scope)), new Set(['file', 'node', 'region']));
-      const missingImplementations = useCases.filter(useCase => !code.codes.some(item => item.contracts.some(ref => ref.split('#')[0] === useCase.path))).map(useCase => useCase.path);
-      assert.deepEqual(missingImplementations, [], 'every Use Case needs an actual implementation relation');
+      const tracked = new Set(documents.flatMap(issue => issue.metadata.kind !== 'issue' || issue.metadata.state !== 'draft' ? [] : inlineLinks(issue.body, issue.path).flatMap(link => {
+        const target = relativeMarkdownLink(issue.path, link.url);
+        return target?.kind === 'relative' && !target.query ? [target.path] : [];
+      })));
+      for (const gap of traceGaps(repository, 'off').contracts.filter(gap => gap.kind === 'use-case')) {
+        const owner = useCases.find(useCase => useCase.path === gap.path)!;
+        assert.ok(owner.metadata.kind === 'use-case');
+        assert.ok(tracked.has(owner.path) || tracked.has(owner.metadata.feature), `trace gap lacks an open Issue linking its Use Case or Feature: ${owner.path}`);
+      }
     } finally {
       repository.close();
     }

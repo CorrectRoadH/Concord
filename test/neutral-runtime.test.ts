@@ -52,7 +52,7 @@ test('governance v2 rejects legacy, duplicate, nested and unsafe suite roots', (
   try {
     for (const path of ['a', 'a-b', 'a/b']) mkdirSync(join(root, path), { recursive: true });
     write(root, 'concord.repository.json', JSON.stringify({ format: 'concord.repository/v1', host: 'host.ts' }));
-    assert.throws(() => readGovernanceConfiguration(root), hasCode('GovernanceConfigurationMigrationRequired'));
+    assert.throws(() => readGovernanceConfiguration(root), hasCode('GovernanceConfigurationInvalid'));
 
     write(root, 'concord.repository.json', configuration([{ id: 'one', root: 'a' }, { id: 'one', root: 'a-b' }]));
     assert.throws(() => readGovernanceConfiguration(root), hasCode('GovernanceSuiteDuplicate'));

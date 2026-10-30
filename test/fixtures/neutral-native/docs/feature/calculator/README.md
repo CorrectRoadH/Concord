@@ -2,7 +2,6 @@
 format: concord.document/v1
 id: calculator
 title: Public calculator
-createdAt: 2026-09-20
 kind: feature
 ---
 

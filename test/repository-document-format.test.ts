@@ -34,7 +34,6 @@ function fixture(): string {
 format: concord.document/v1
 id: migrated
 title: Migrated Feature
-createdAt: 2026-09-14T00:00:00.000Z
 kind: feature
 ---
 
@@ -45,7 +44,6 @@ kind: feature
 format: concord.document/v1
 id: flow
 title: Flow
-createdAt: 2026-09-14T00:00:00.000Z
 kind: use-case
 feature: docs/feature/migrated/README.md
 ---

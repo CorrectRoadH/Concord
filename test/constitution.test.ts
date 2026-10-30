@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { appendFileSync, chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -84,106 +84,57 @@ test('amendment lists Issue references to a removed paragraph until the Issue is
   run(root, ['check']);
 }))));
 
-const legacyConstitution = `---
-format: concord.constitution/v1
-status: active
-ratifiedAt: 2026-01-01
-amendedAt: 2026-01-01
-amendments:
-  - date: 2026-01-01
-    reason: Adopt
-    sources: []
-    impact: All pages
----
+const Receipt = Schema.Struct({ memory: Schema.String });
+const memoryPath = (output: string) => Schema.decodeUnknownSync(Schema.fromJsonString(Receipt), { onExcessProperty: 'ignore' })(output).memory;
 
-# Constitution
-
-## 总则
-
-**Scope.** Rules apply to docs.
-
-<a id="c-001"></a>
-## C-001 Preserve data
-
-1. Writes keep edits.
-2. Writes check
-   preimages.
-
-<a id="c-002"></a>
-## C-002 Stay local
-
-1. No services.
-`;
-const withRefs = (root: string, path: string, refs: readonly string[]) => writeFileSync(join(root, path), read(root, path).replace(/\n---\n/u, `\nconstitutionRefs:${refs.length === 0 ? ' []' : refs.map(ref => `\n  - docs/constitution.md#${ref}`).join('')}\n---\n`));
-const legacyConsumer = (root: string) => {
-  run(root, ['feature', 'create', 'alpha', '--title', 'Alpha']);
-  run(root, ['feature', 'create', 'beta', '--title', 'Beta']);
-  run(root, ['feature', 'create', 'gamma', '--title', 'Gamma']);
-  run(root, ['design', 'create', 'delta', '--title', 'Delta', '--alternative', 'one', '--alternative', 'two']);
-  appendFileSync(join(root, 'docs/feature/alpha/README.md'), '\nLocal only ([C-002](../../constitution.md#c-002)).\n');
-  appendFileSync(join(root, 'docs/feature/beta/README.md'), '\n## Constitution\n\nExisting note.\n\n## Later\n\nText.\n');
-  withRefs(root, 'docs/feature/alpha/README.md', ['c-001', 'c-002']);
-  withRefs(root, 'docs/feature/beta/README.md', ['c-001']);
-  withRefs(root, 'docs/feature/gamma/README.md', []);
-  withRefs(root, 'docs/design/delta/README.md', ['c-001']);
-  writeFileSync(join(root, 'docs/constitution.md'), legacyConstitution);
-};
-const MigrateView = Schema.Struct({ operation: Schema.Literal('constitution-migrate'), dryRun: Schema.Boolean, changedPaths: Schema.Array(Schema.String), clauses: Schema.Number, paragraphs: Schema.Number, movedReferences: Schema.Number });
-const migrate = (root: string, args: readonly string[] = []) => Schema.decodeUnknownSync(Schema.fromJsonString(MigrateView))(run(root, [...args, 'constitution', 'migrate']));
-
-// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#迁移旧格式
-test('migration converts v1 IDs and constitutionRefs into body links once, refusing conflicts without writes', () => Effect.runPromise(Effect.sync(() => withConsumer('migrate', root => {
-  legacyConsumer(root);
-  const legacy = findings(run(root, ['check'], 1)).map(item => `${item.code}:${item.path}`);
-  assert.ok(legacy.includes('ConstitutionMigrationRequired:docs/constitution.md'));
-  assert.ok(legacy.includes('ConstitutionMigrationRequired:docs/feature/gamma/README.md'));
-  assert.match(run(root, ['feature', 'show', 'docs/feature/alpha/README.md'], 1), /ConstitutionMigrationRequired/);
-  const beta = 'docs/feature/beta/README.md';
-  appendFileSync(join(root, beta), '\n## Constitution\n\nSecond section.\n');
-  const snapshot = execFileSync('git', ['-C', root, 'status', '--porcelain', '--untracked-files=all'], { encoding: 'utf8' });
-  const sources = ['docs/constitution.md', beta, 'docs/feature/alpha/README.md'].map(path => read(root, path));
-  assert.match(run(root, ['constitution', 'migrate'], 1), /ConstitutionMigrationConflict/);
-  assert.deepEqual(['docs/constitution.md', beta, 'docs/feature/alpha/README.md'].map(path => read(root, path)), sources);
-  assert.equal(execFileSync('git', ['-C', root, 'status', '--porcelain', '--untracked-files=all'], { encoding: 'utf8' }), snapshot);
-  writeFileSync(join(root, beta), read(root, beta).replace('\n## Constitution\n\nSecond section.\n', ''));
-  const preview = migrate(root, ['--dry-run']);
-  assert.equal(preview.dryRun, true);
-  assert.equal(read(root, 'docs/constitution.md'), legacyConstitution);
-  const changed = ['docs/constitution.md', 'docs/design/delta/README.md', 'docs/feature/alpha/README.md', beta, 'docs/feature/gamma/README.md'];
-  assert.deepEqual(migrate(root), { operation: 'constitution-migrate', dryRun: false, changedPaths: changed, clauses: 2, paragraphs: 3, movedReferences: 4 });
-  assert.deepEqual(preview.changedPaths, changed);
-  const constitution = read(root, 'docs/constitution.md');
-  assert.match(constitution, /format: concord\.constitution\/v2/);
-  assert.match(constitution, /^## 总则 \{#general\}$/mu);
-  assert.match(constitution, /^## C-001 Preserve data \{#c-001\}\n\n1\. Writes keep edits\. \{#c-001-1\}\n2\. Writes check\n {3}preimages\. \{#c-001-2\}$/mu);
-  assert.match(constitution, /^1\. No services\. \{#c-002-1\}$/mu);
-  assert.doesNotMatch(constitution, /<a id=/u);
-  assert.match(constitution, /reason: Adopt/);
-  const alpha = read(root, 'docs/feature/alpha/README.md');
-  assert.doesNotMatch(alpha, /constitutionRefs/);
-  assert.match(alpha, /\n## Constitution\n\n- \[C-001\]\(\.\.\/\.\.\/constitution\.md#c-001\)\n$/u);
-  assert.match(read(root, beta), /## Constitution\n\nExisting note\.\n\n- \[C-001\]\(\.\.\/\.\.\/constitution\.md#c-001\)\n\n## Later\n/u);
-  assert.doesNotMatch(read(root, 'docs/feature/gamma/README.md'), /constitutionRefs|## Constitution/u);
-  assert.match(read(root, 'docs/design/delta/README.md'), /- \[C-001\]\(\.\.\/\.\.\/constitution\.md#c-001\)/u);
+// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#amend
+test('adopt and amend record their reason as a current Decision promoted to the changed paragraphs', () => Effect.runPromise(Effect.sync(() => withConsumer('decision', root => {
+  const adopted = memoryPath(adopt(root, rules()));
+  assert.match(read(root, 'docs/constitution.md'), /^---\nformat: concord\.constitution\/v3\nstatus: active\n---\n/u);
+  assert.match(adopted, /^memory\/constitution-\d{4}-\d{2}-\d{2}-1\.md$/u);
+  const decision = read(root, adopted);
+  assert.match(decision, /memoryKind: decision\nstate: current/u);
+  assert.match(decision, /promotions:\n {2}- docs\/constitution\.md\n/u);
+  assert.match(decision, /## 理由\n\nAdopt rules\n\n## 影响\n\nAll pages\n/u);
+  const amended = memoryPath(amend(root, rules('1. Writes keep edits. {#c-001-1}\n2. Writes check every preimage. {#c-001-2}\n')));
+  assert.notEqual(amended, adopted);
+  assert.match(read(root, amended), /promotions:\n {2}- docs\/constitution\.md#c-001-2\n/u);
+  assert.doesNotMatch(read(root, 'docs/constitution.md'), /amend|ratified/u);
   run(root, ['check']);
-  const owners = new Set(show(root).references.map(reference => `${reference.path}#${reference.clause}`));
-  for (const expected of ['docs/feature/alpha/README.md#c-001', 'docs/feature/alpha/README.md#c-002', `${beta}#c-001`, 'docs/design/delta/README.md#c-001']) assert.ok(owners.has(expected), expected);
-  const after = changed.map(path => read(root, path));
-  assert.deepEqual(migrate(root).changedPaths, []);
-  assert.deepEqual(changed.map(path => read(root, path)), after);
 }))));
 
-// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#迁移旧格式
-test('interrupted migration keeps the journal, blocks ordinary commands and recovers', () => Effect.runPromise(Effect.sync(() => withConsumer('migrate-recover', root => {
-  legacyConsumer(root);
-  const blocked = join(root, 'docs/feature/beta');
-  chmodSync(blocked, 0o555);
-  try { assert.match(run(root, ['constitution', 'migrate'], 1), /RecoveryRequired/); }
-  finally { chmodSync(blocked, 0o755); }
-  assert.match(read(root, 'docs/constitution.md'), /concord\.constitution\/v2/);
-  assert.match(run(root, ['check'], 1), /RecoveryRequired/);
-  run(root, ['recover']);
-  migrate(root);
+
+// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md
+test('non-current constitutions and declarative history fields fail strict decoding without rewriting owners', () => Effect.runPromise(Effect.sync(() => withConsumer('invalid-format', root => {
+  const path = 'docs/constitution.md';
+  const current = read(root, path);
+  for (const source of [current.replace('/v3', '/v2'), current.replace('/v3', '/v1'), current.replace('status: draft', 'status: draft\namendments: []')]) {
+    writeFileSync(join(root, path), source);
+    assert.match(run(root, ['constitution', 'show'], 1), /InvalidData/);
+    assert.equal(read(root, path), source);
+  }
+  writeFileSync(join(root, path), current);
+  run(root, ['feature', 'create', 'cart', '--title', 'Cart']);
+  run(root, ['use-case', 'create', 'checkout', '--feature', 'cart', '--title', 'Checkout']);
+  run(root, ['engineering', 'create', 'build', '--title', 'Build']);
+  for (const owner of ['docs/feature/cart/README.md', 'docs/feature/cart/use-case/checkout.md', 'docs/engineering/build/README.md']) {
+    const original = read(root, owner);
+    for (const field of ['createdAt: 2026-01-01', 'createdAtSource: {}', 'origin: docs/roadmap/cart/README.md', 'constitutionRefs: []']) {
+      const source = original.replace('\n---\n', `\n${field}\n---\n`);
+      writeFileSync(join(root, owner), source);
+      assert.ok(findings(run(root, ['check'], 1)).some(finding => finding.path === owner && finding.code === 'InvalidData'), field);
+      assert.equal(read(root, owner), source);
+    }
+    writeFileSync(join(root, owner), original);
+  }
+}))));
+
+// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#amend
+test('amendment promotions include continuation changes and the surviving clause of a removed paragraph', () => Effect.runPromise(Effect.sync(() => withConsumer('continuation', root => {
+  adopt(root, rules('1. Preserve edits. {#c-001-1}\n\n   Keep the original bytes.\n2. Check preimages. {#c-001-2}\n'));
+  const revised = memoryPath(amend(root, rules('1. Preserve edits. {#c-001-1}\n\n   Keep the exact original bytes.\n2. Check preimages. {#c-001-2}\n')));
+  assert.match(read(root, revised), /promotions:\n {2}- docs\/constitution\.md#c-001-1\n/u);
+  const reduced = memoryPath(amend(root, rules('1. Preserve edits. {#c-001-1}\n\n   Keep the exact original bytes.\n')));
+  assert.match(read(root, reduced), /promotions:\n {2}- docs\/constitution\.md#c-001\n/u);
   run(root, ['check']);
-  assert.deepEqual(migrate(root).changedPaths, []);
 }))));

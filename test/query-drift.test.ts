@@ -129,10 +129,10 @@ test('every failure table row retains its meaning, including identity change bef
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('owner and remote bodies are stripped and restored only after safe matching reads', () => Effect.runPromise(Effect.sync(() => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-query-bodies-')));
-  const source = renderDocument({ format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample', createdAt: '2026-10-06T00:00:00.000Z' }, '# PRIVATE_OWNER_BODY\n');
+  const source = renderDocument({ format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample' }, '# PRIVATE_OWNER_BODY\n');
   const path = 'sample.md';
   writeFileSync(join(root, path), source);
-  const owner = { path, metadata: { format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample', createdAt: '2026-10-06T00:00:00.000Z' }, body: '# PRIVATE_OWNER_BODY\n', digest: digest(source) };
+  const owner = { path, metadata: { format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample' }, body: '# PRIVATE_OWNER_BODY\n', digest: digest(source) };
   try {
     const stored = stripQueryBodies({ operation: 'trace-show', subject: owner, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.ok(!JSON.stringify(stored).includes('PRIVATE_OWNER_BODY'));
@@ -154,7 +154,7 @@ test('owner and remote bodies are stripped and restored only after safe matching
     const remote = stripQueryBodies({ operation: 'trace-show', subject: { path, metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.doesNotMatch(JSON.stringify(remote), /PRIVATE_(REMOTE|ISSUE)_BODY/u);
     assert.match(JSON.stringify(hydrateQueryValue(root, remote, () => remoteSource).value), /PRIVATE_REMOTE_BODY/u);
-    const constitution = '---\nformat: concord.constitution/v2\nstatus: draft\nratifiedAt: null\namendedAt: 2026-10-06\namendments: []\n---\n# PRIVATE_CONSTITUTION_BODY\n';
+    const constitution = '---\nformat: concord.constitution/v3\nstatus: draft\n---\n# PRIVATE_CONSTITUTION_BODY\n';
     const matchedReview = hydrateQueryValue(root, { segments: [{ text: 'before\n' }, { constitution: { path, digest: digest(constitution) } }, { text: '\nafter' }] }, () => constitution).value;
     assert.ok('body' in matchedReview);
     assert.equal(matchedReview.body, 'before\n# PRIVATE_CONSTITUTION_BODY\nafter');

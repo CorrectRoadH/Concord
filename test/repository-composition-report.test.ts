@@ -12,7 +12,7 @@ import { compileTrace, compileTraceReport, findCaseIdConflicts } from "../dist/r
 import { decodeCaseDeclarations, encodeCaseArchive } from "../dist/repository/docs/test-case/annotations.js";
 
 const entry = resolve("dist/entry.js");
-const owner = (fields: object) => `---\n${JSON.stringify({ format: "concord.document/v1", createdAt: "2026-09-14T00:00:00.000Z", ...fields })}\n---\n# Owner\n`;
+const owner = (fields: { readonly kind: string; readonly [key: string]: unknown }) => `---\n${JSON.stringify({ format: "concord.document/v1", ...(['feature', 'use-case', 'engineering'].includes(fields.kind) ? {} : { createdAt: "2026-09-14T00:00:00.000Z" }), ...fields })}\n---\n# Owner\n`;
 function fixture(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "concord-composition-report-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));

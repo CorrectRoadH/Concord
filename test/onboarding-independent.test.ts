@@ -49,7 +49,7 @@ test('snapshot recovery restores exact TypeScript bytes and keeps legacy authori
 
   writeFileSync(join(root, memoryPath), '# After\n');
   journal('legacy-memory', { kind: 'documents' }, [entry(memoryPath, '# Before\n', '# After\n')]);
-  assert.match(run(root, ['recover'], '', 1), /JournalMigrationRequired/);
+  assert.match(run(root, ['recover'], '', 1), /InvalidData/);
   assert.equal(readFileSync(join(root, memoryPath), 'utf8'), '# After\n');
   assert.equal(existsSync(journalPath), true);
   rmSync(journalPath);
@@ -129,7 +129,7 @@ test('public configuration rejects executable TypeScript and stale edits without
   run(root, ['doctor'], '', 1);
   writeFileSync(path, before);
   writeFileSync(join(root, 'concord.json'), JSON.stringify(snapshot.project));
-  run(root, ['doctor'], '', 1);
+  run(root, ['doctor']);
   assert.equal(readFileSync(path, 'utf8'), before);
   assert.equal(existsSync(join(root, 'concord.json')), true);
 }))));
@@ -160,7 +160,7 @@ test('public constitution adoption requires clause IDs and amendment protects re
   action(root, { ...adoption, body: body('1. Writes preserve unknown changes. {#c-001-1}\n2. Writes check preimages. {#c-001-2}\n') });
   const activeSource = readFileSync(join(root, path), 'utf8');
   assert.match(activeSource, /status: active/);
-  assert.match(activeSource, /format: concord\.constitution\/v2/);
+  assert.match(activeSource, /format: concord\.constitution\/v3/);
   assert.doesNotMatch(activeSource, /^version:|^\s+- version:/mu);
   const legacySource = activeSource.replace('status: active\n', 'status: active\nversion: 1.0.0\n');
   writeFileSync(join(root, path), legacySource);
@@ -195,8 +195,18 @@ test('public constitution adoption requires clause IDs and amendment protects re
   assert.equal(readFileSync(join(root, path), 'utf8'), before);
   amend(body('1. Writes are scoped; see [preimages](#c-001-2). {#c-001-scope}\n2. Writes preserve unknown changes. {#c-001-1}\n3. Writes check preimages. {#c-001-2}\n'));
   assert.match(amend(body('1. Writes are scoped; see [preimages](#c-001-2). {#c-001-scope}\n2. Writes preserve unknown changes. {#c-001-1}\n'), 1), /ConstitutionClauseReferenced/);
-  amend(body('1. Writes are scoped. {#c-001-scope}\n2. Writes preserve unknown changes. {#c-001-1}\n'));
-  assert.match(readFileSync(join(root, path), 'utf8'), /Adopt project rules[\s\S]*Revise rules/);
+  const removal = body('1. Writes are scoped. {#c-001-scope}\n2. Writes preserve unknown changes. {#c-001-1}\n');
+  const memories = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ memories: Schema.Array(Schema.Struct({ path: Schema.String, promotions: Schema.Array(Schema.String) })) })), { onExcessProperty: 'ignore' })(run(root, ['memory', 'list'])).memories;
+  const constitutionBeforeRemoval = readFileSync(join(root, path), 'utf8');
+  const promotionConflict = amend(removal, 1);
+  assert.match(promotionConflict, /ConstitutionClauseReferenced/);
+  assert.match(promotionConflict, /memory\/constitution-/);
+  assert.equal(readFileSync(join(root, path), 'utf8'), constitutionBeforeRemoval);
+  for (const memory of memories) if (memory.promotions.includes(`${path}#c-001-2`)) {
+    run(root, ['memory', 'retire', memory.path, '--target', `${path}#c-001-2`, '--reason', 'The paragraph is being removed']);
+  }
+  amend(removal);
+  assert.doesNotMatch(readFileSync(join(root, path), 'utf8'), /Adopt project rules|Revise rules/);
   run(root, ['check']);
 }))));
 
