@@ -50,7 +50,17 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     let closing: Promise<void> | undefined;
     return { ...ready, process: processHandle, close: () => closing ??= (async () => {
       if (processHandle.exitCode === null && processHandle.signalCode === null) {
-        const stopped = once(processHandle, 'exit'); processHandle.kill('SIGTERM'); await stopped;
+        const stopped = once(processHandle, 'exit');
+        processHandle.kill('SIGTERM');
+        let deadline: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([stopped, new Promise<never>((_accept, reject) => {
+            deadline = setTimeout(() => reject(new Error('Installed View did not stop after SIGTERM with an unused socket')), 5_000);
+          })]);
+        } catch (cause) {
+          processHandle.kill('SIGKILL'); await stopped;
+          rmSync(scratch, { recursive: true, force: true }); throw cause;
+        } finally { if (deadline !== undefined) clearTimeout(deadline); }
       }
       rmSync(scratch, { recursive: true, force: true });
     })() };

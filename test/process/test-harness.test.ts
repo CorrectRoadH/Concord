@@ -47,13 +47,14 @@ test('poll deadline aborts an in-flight HTTP request and preserves unexpected HT
 }).pipe(Effect.timeout(5000))));
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+// @issue docs/issues/view-close-hangs-on-idle-socket.md
 test('browser fixture shutdown drains a speculative socket that never sent an HTTP request', () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-e2e-lifecycle-'));
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
   try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  
+
   const socket = connect(server.port, '127.0.0.1');
   socket.on('error', () => {});
   try {
