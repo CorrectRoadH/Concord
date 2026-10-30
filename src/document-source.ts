@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 import { parseDocument } from 'yaml';
-import type { Nodes } from 'mdast';
+import type { Nodes, Root } from 'mdast';
 import { fromMarkdown } from './markdown-parser.js';
 import { IssueFrontmatterSchema, MemoryFrontmatterSchema } from './owner-frontmatter.js';
 import { ConcordError, DocumentSchema, decode, digest, type DocumentKind, type DocumentRecord } from './shared.js';
@@ -12,13 +12,13 @@ function text(node: Nodes): string {
   return 'children' in node ? node.children.map(text).join('') : '';
 }
 
-export function documentTitle(path: string, body: string): string {
+export function documentTitle(path: string, body: string, tree: Root = fromMarkdown(body)): string {
   const headings: Nodes[] = [];
   const visit = (node: Nodes): void => {
     if (node.type === 'heading' && node.depth === 1) headings.push(node);
     if ('children' in node) node.children.forEach(visit);
   };
-  visit(fromMarkdown(body));
+  visit(tree);
   const title = headings.length === 1 ? text(headings[0]!).replace(/\s+\{#[^{}\s]+\}$/u, '') : '';
   if (!title.trim() || title.length > 1024 || /[\r\n\u2028\u2029]/u.test(title)) throw new ConcordError('InvalidData', `${path}: expected exactly one single-line level-one heading (at most 1024 characters)`);
   return title;
@@ -35,8 +35,8 @@ export function ownerKind(path: string): DocumentKind | undefined {
 }
 
 /** Read the template's Sources section through the Markdown tree. */
-export function researchSources(body: string): { observedAt?: string; sources: string[] } {
-  const nodes = fromMarkdown(body).children;
+export function researchSources(body: string, tree: Root = fromMarkdown(body)): { observedAt?: string; sources: string[] } {
+  const nodes = tree.children;
   const sections = nodes.flatMap((node, index) => node.type === 'heading' && node.depth === 2 && ['Sources', '来源'].includes(text(node)) ? [index] : []);
   if (sections.length > 1) throw new ConcordError('InvalidData', 'Research has more than one Sources section');
   if (sections.length === 0) return { sources: [] };
@@ -73,7 +73,7 @@ export function renderResearchSources(observedAt: string | undefined, sources: r
 }
 
 /** Current files only. Derivable metadata cannot authorize an old format. */
-export function decodeUncachedDocumentSource(path: string, source: string): DocumentRecord | undefined {
+export function decodeUncachedDocumentSource(path: string, source: string, tree?: Root): DocumentRecord | undefined {
   const kind = ownerKind(path);
   const specPage = /^docs\/(?:feature|engineering|roadmap|design|research)\//u.test(path) && path.endsWith('.md');
   if (specPage && /^(?:\uFEFF)?---\r?\n/u.test(source)) throw new ConcordError('InvalidData', `${path}: this document must not have frontmatter`);
@@ -101,7 +101,7 @@ export function decodeUncachedDocumentSource(path: string, source: string): Docu
   if (kind === 'use-case') fields = { feature: `${path.split('/').slice(0, 3).join('/')}/README.md` };
   if (kind === 'design') fields = { alternatives: [] };
   if (kind === 'roadmap') fields = { state: 'planned' };
-  if (kind === 'research') fields = researchSources(body);
-  const metadata = decode(DocumentSchema, { format: 'concord.document/v1', id, title: documentTitle(path, body), kind, ...fields }, path);
+  if (kind === 'research') fields = researchSources(body, tree);
+  const metadata = decode(DocumentSchema, { format: 'concord.document/v1', id, title: documentTitle(path, body, tree), kind, ...fields }, path);
   return { path, metadata, body, digest: digest(source) };
 }

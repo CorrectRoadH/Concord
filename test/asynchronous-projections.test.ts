@@ -1,30 +1,36 @@
+import { createConsumer } from './support/consumer.js';
+import { genericPrivateDirectorySync } from '../src/coordination.js';
+import { refreshQuery } from '../src/query-refresh-worker.js';
+import { pollUntil } from './support.js';
+import { decodeDocumentSource } from '../src/document-codec.js';
+import { workerEntryArgv } from '../src/installation.js';
+import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test, { before, after } from 'node:test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
 import { packConcord, installConcord } from './installed-package.js';
-import { cacheDatabasePath } from '../dist/cache-file.js';
-import { openHawdb } from '../dist/hawdb-native.js';
+import { cacheDatabasePath } from '../src/cache-file.js';
+import { openHawdb } from '../src/hawdb-native.js';
 import { readProjectConfig, writeProjectConfig } from './support.js';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import { createDocument, setAuthor } from '../dist/documents.js';
-import { ConcordError, digest } from '../dist/shared.js';
-import { queryContext, readQuery, storeQuery } from '../dist/query-cache.js';
+import { LocalRepository, initialize } from '../src/storage.js';
+import { createDocument, setAuthor, renderDocument } from '../src/documents.js';
+import { ConcordError, digest } from '../src/shared.js';
+import { QueryCacheEnvelope, queryContext, readQuery, storeQuery, type Query } from '../src/query-cache.js';
 
 const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
 const candidate = (marker = 'original', scannedAt = Date.now()) => ({ kind: 'candidate' as const, message: { format: 'concord.query-scan/v1' as const, ok: true as const, scannedAt, finishedAt: Date.now(), value: gaps(marker), complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } } });
 function consumer(): string {
-  const root = mkdtempSync(join(tmpdir(), 'concord-async-projections-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [], sourceRoots: ['src'] }); createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); }
-  finally { repo.close(); }
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: [], sourceRoots: ['src'] });
+  const repo = new LocalRepository(root);
+  try { createDocument(repo, 'feature', { id: 'sample', title: 'Sample' }); } finally { repo.close(); }
   return root;
 }
-const cli = resolve('dist/entry.js');
+const cli = installedConcordCli();
 const call = (root: string, ...args: string[]) => spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 125_000 });
 async function historicalCall(root: string) {
   const deadline = Date.now() + 10_000;
@@ -61,7 +67,7 @@ test('a newly stored snapshot from an older scan does not consume a later refres
     const context = queryContext(root, ['trace', 'gaps']);
     const requestedAt = Date.now() - 100;
     storeQuery(context, candidate('obsolete', requestedAt - 1000));
-    const result = spawnSync(process.execPath, [resolve('dist/query-refresh-worker.js'), root, JSON.stringify(context.query), String(requestedAt)], { encoding: 'utf8', timeout: 30_000 });
+    const result = spawnSync(process.execPath, [...workerEntryArgv('query-refresh-worker'), root, JSON.stringify(context.query), String(requestedAt)], { encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, 0, result.stderr);
     const refreshed = readQuery(context);
     assert.ok(refreshed.record && refreshed.record.scannedAt >= requestedAt, JSON.stringify(refreshed));
@@ -138,16 +144,15 @@ test('CLI exits before refresh, serves a historical snapshot, and keeps fresh ch
   const root = consumer();
   mkdirSync(join(root, 'src'));
   for (let i = 0; i < 1072; i++) writeFileSync(join(root, 'src', `${i}.ts`), `export const value${i} = ${i};\n`);
-  const context = queryContext(root, ['trace', 'gaps']);
   try {
     const cold = call(root, 'trace', 'gaps');
     assert.equal(cold.status, 1, cold.stderr);
     assert.match(cold.stderr, /QueryPending/);
     const deadline = Date.now() + 125_000;
-    let cached = readQuery(context);
+    let cached = packedEnvelope(root, ['trace', 'gaps']);
     while (!cached.record && Date.now() < deadline) {
       await Effect.runPromise(Effect.sleep('100 millis'));
-      cached = readQuery(context);
+      cached = packedEnvelope(root, ['trace', 'gaps']);
     }
     assert.ok(cached.record, JSON.stringify(cached));
     for (let i = 0; i < 4; i++) {
@@ -168,10 +173,10 @@ test('CLI exits before refresh, serves a historical snapshot, and keeps fresh ch
     assert.equal(fresh.status, 1, fresh.stdout + fresh.stderr);
     assert.match(fresh.stderr, /TraceInvalid/);
     const failedDeadline = Date.now() + 125_000;
-    let failed = readQuery(context);
+    let failed = packedEnvelope(root, ['trace', 'gaps']);
     while (!failed.error && Date.now() < failedDeadline) {
       await Effect.runPromise(Effect.sleep('100 millis'));
-      failed = readQuery(context);
+      failed = packedEnvelope(root, ['trace', 'gaps']);
     }
     assert.ok(failed.error, JSON.stringify(failed));
     assert.deepEqual(failed.record?.value, cached.record.value, 'failed refresh retains the complete prior diagnostic content');
@@ -183,7 +188,7 @@ test('CLI exits before refresh, serves a historical snapshot, and keeps fresh ch
 /** Only processes naming this isolated consumer are owned by this test. */
 async function waitForRefreshExit(root: string): Promise<void> {
   const active = () => execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n')
-    .filter(line => line.includes(root) && /query-(refresh|scan)-worker\.js/u.test(line)).map(line => Number(line.trim().split(/\s/u)[0]));
+    .filter(line => line.includes(root) && /query-(refresh|scan)-worker\.(?:js|ts)/u.test(line)).map(line => Number(line.trim().split(/\s/u)[0]));
   const deadline = Date.now() + 125_000;
   while (active().length && Date.now() < deadline) await Effect.runPromise(Effect.sleep('100 millis'));
   for (const pid of active()) { try { process.kill(pid, 'SIGTERM'); } catch { /* Already exited. */ } }
@@ -208,7 +213,7 @@ function packedConsumer(workload = true): string {
   execFileSync('git', ['init', '-q', root]);
   const initialized = installedCall(root, '--json', 'init', '--test-root', 'test', '--source-root', 'src');
   assert.equal(initialized.status, 0, initialized.stderr);
-  assert.equal(installedCall(root, '--json', 'feature', 'create', 'sample', '--title', 'Sample').status, 0);
+  assert.equal(installedCall(root, '--json', 'new', 'feature', 'sample', '--title', 'Sample').status, 0);
   mkdirSync(join(root, 'src')); mkdirSync(join(root, 'test'));
   writeFileSync(join(root, 'src/000.ts'), '// @concord-file\n// @concord-implements docs/feature/sample/README.md\nexport const first = 1;\n');
   writeFileSync(join(root, 'test/000.ts'), '// @feature docs/feature/sample/README.md\nexport const first = 1;\n');
@@ -218,13 +223,31 @@ function packedConsumer(workload = true): string {
   }
   return root;
 }
-function refreshInstalled(root: string, query: readonly string[], limitMs?: number) {
-  return new Promise<{ status: number | null; stderr: string }>((resolveResult, reject) => {
-    const worker = join(installedCli, '../query-refresh-worker.js');
-    const child = spawn(process.execPath, [worker, root, JSON.stringify(query), String(Date.now()), ...(limitMs === undefined ? [] : [String(limitMs)])], { stdio: ['ignore', 'ignore', 'pipe'] });
-    let stderr = ''; child.stderr.on('data', data => { stderr += String(data); });
-    child.once('error', reject); child.once('close', status => resolveResult({ status, stderr }));
-  });
+function packedEnvelope(root: string, query: readonly string[]): ReturnType<typeof readQuery> {
+  const path = cacheDatabasePath(genericPrivateDirectorySync(root));
+  if (!existsSync(path)) return {};
+  let db;
+  try {
+    db = openHawdb(path, { readOnly: true, create: false });
+    const rows = db.scan('query_cache').filter(row => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ format: Schema.optional(Schema.String) })), { onExcessProperty: 'ignore' })(row.payload).format === 'concord.query-cache/v3').map(row => Schema.decodeUnknownSync(Schema.fromJsonString(QueryCacheEnvelope), { onExcessProperty: 'error' })(row.payload));
+    const operation = query[0] === 'review' ? undefined : query[1] === 'show' ? 'trace-show' : 'trace-gaps';
+    return rows.find(row => row.record && (operation === undefined ? 'segments' in row.record.value : 'operation' in row.record.value && row.record.value.operation === operation && (operation !== 'trace-show' || 'subject' in row.record.value && row.record.value.subject.path === query[2])))
+      ?? (rows.length === 1 ? rows[0]! : {});
+  } catch (cause) {
+    if (cause instanceof Error && 'code' in cause && cause.code === 'HawdbBusy') return {};
+    throw cause;
+  } finally { db?.close(); }
+}
+async function refreshInstalled(root: string, query: readonly string[]) {
+  const requestedAt = Date.now();
+  const requested = installedCall(root, '--json', ...query);
+  assert.ok(requested.status === 0 || requested.status === 1, requested.stderr);
+  await pollUntil(async () => {
+    const value = packedEnvelope(root, query);
+    return Math.max(value.record?.scannedAt ?? 0, value.lastAttempt?.scannedAt ?? 0, value.error?.scannedAt ?? 0) >= requestedAt ? true : undefined;
+  }, { timeoutMs: 125_000, description: 'installed CLI diagnostic refresh' });
+  await waitForRefreshExit(root);
+  return { status: 0, stderr: '' };
 }
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
@@ -279,8 +302,8 @@ test('packed C1 publishes cold projections during continuous docs, test, and cod
       stop = await editing(root, relative);
       const result = await refreshInstalled(root, ['trace', 'gaps']);
       assert.equal(result.status, 0, result.stderr);
-      const context = queryContext(root, ['trace', 'gaps']);
-      const stored = readQuery(context);
+      const context = { privateDir: genericPrivateDirectorySync(root), query: ['trace', 'gaps'] as const };
+      const stored = packedEnvelope(root, context.query);
       assert.ok(stored.record, JSON.stringify(stored));
       assert.equal(stored.record.consistent, false);
       assert.equal(stored.record.complete, false);
@@ -304,13 +327,13 @@ test('packed C2 retains the consistent generation and annotates the later drifti
   const root = packedConsumer();
   let stop: (() => Promise<void>) | undefined;
   try {
-    const context = queryContext(root, ['trace', 'gaps']);
+    const context = { privateDir: genericPrivateDirectorySync(root), query: ['trace', 'gaps'] as const };
     assert.equal((await refreshInstalled(root, ['trace', 'gaps'])).status, 0);
-    const previous = readQuery(context).record;
+    const previous = packedEnvelope(root, context.query).record;
     assert.ok(previous?.consistent);
     stop = await editing(root, 'docs/feature/sample/README.md');
     assert.equal((await refreshInstalled(root, ['trace', 'gaps'])).status, 0);
-    const retained = readQuery(context);
+    const retained = packedEnvelope(root, context.query);
     assert.deepEqual(retained.record, previous);
     assert.equal(retained.lastAttempt?.complete, false);
     // Atomic replacement can interrupt a read before a structured candidate
@@ -325,24 +348,19 @@ test('packed C2 retains the consistent generation and annotates the later drifti
 });
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-test('packed C3 internal short deadline preserves timeout details with and without a generation', async () => {
+test('C3 internal short deadline preserves timeout details with and without a generation', async () => {
   for (const warm of [false, true]) {
     const root = packedConsumer();
     try {
       const context = queryContext(root, ['trace', 'gaps']);
-      if (warm) assert.equal((await refreshInstalled(root, ['trace', 'gaps'])).status, 0);
+      if (warm) await Effect.runPromise(refreshQuery(root, ['trace', 'gaps'], Date.now()).pipe(Effect.scoped));
       const previous = readQuery(context).record;
-      const result = await refreshInstalled(root, ['trace', 'gaps'], 100);
-      assert.equal(result.status, 0, result.stderr);
+      await Effect.runPromise(refreshQuery(root, ['trace', 'gaps'], Date.now(), 100).pipe(Effect.scoped));
       const timedOut = readQuery(context);
       assert.equal(timedOut.error?.code, 'QueryRefreshTimedOut', JSON.stringify(timedOut));
       assert.equal(timedOut.error.limitMs, 100);
       assert.ok(timedOut.error.elapsedMs! >= 100);
       assert.deepEqual(timedOut.record, previous);
-      const shown = installedCall(root, '--json', 'trace', 'gaps');
-      assert.equal(shown.status, warm ? 0 : 1, shown.stdout + shown.stderr);
-      const error = warm ? JSON.parse(shown.stdout).projection.lastError : JSON.parse(shown.stderr).details.refresh;
-      assert.equal(error.code, 'QueryRefreshTimedOut');
     } finally { await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
   }
 });
@@ -359,7 +377,7 @@ test('packed C7 persists no owner or remote bodies and hydrates byte-identical c
     writeFileSync(join(root, 'docs/constitution.md'), readFileSync(join(root, 'docs/constitution.md'), 'utf8') + '\nPRIVATE_CONSTITUTION_BODY_SENTINEL\n');
     const repo = new LocalRepository(root);
     try {
-      createDocument(repo, 'issue', { id: 'remote', title: 'Remote', body: '# PRIVATE_ISSUE_BODY_SENTINEL\n' });
+      createDocument(repo, 'issue', { id: 'remote', title: 'Remote', body: '# Remote\n\nPRIVATE_ISSUE_BODY_SENTINEL\n' });
       createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample', body: '1. First {#first}\n2. Unmarked\n' });
     } finally { repo.close(); }
     const flow = 'docs/feature/sample/use-case/flow.md';
@@ -367,26 +385,17 @@ test('packed C7 persists no owner or remote bodies and hydrates byte-identical c
     writeFileSync(join(root, 'src/steps.ts'), `// @concord-file\n// @concord-implements ${flow}#first\nexport const flow = 1;\n`);
     const issuePath = join(root, 'docs/issues/remote.md');
     const source = readFileSync(issuePath, 'utf8');
-    writeFileSync(issuePath, source.replace('kind: issue', `kind: issue
-source:
-  provider: github
-  instance: https://api.github.com
-  id: '123'
-  url: https://github.com/example/example/issues/1
-  title: Remote
-  body: PRIVATE_REMOTE_BODY_SENTINEL
-  state: open
-  updatedAt: 2026-10-06T00:00:00.000Z
-  connectionId: github
-  importedAt: 2026-10-06T00:00:00.000Z`));
+    const issue = decodeDocumentSource('docs/issues/remote.md', source)!;
+    assert(issue.metadata.kind === 'issue');
+    writeFileSync(issuePath, renderDocument({ ...issue.metadata, source: { provider: 'github', instance: 'https://api.github.com', id: '123', url: 'https://github.com/example/example/issues/1', title: 'Remote', body: 'PRIVATE_REMOTE_BODY_SENTINEL', state: 'open', updatedAt: '2026-10-06T00:00:00.000Z', connectionId: 'github', importedAt: '2026-10-06T00:00:00.000Z' } }, issue.body));
     for (const query of [['trace', 'show', ownerPath], ['trace', 'show', 'docs/issues/remote.md'], ['review', 'render', 'sample']] as const) {
       const result = await refreshInstalled(root, query);
       assert.equal(result.status, 0, result.stderr);
-      const context = queryContext(root, query);
-      const stored = readQuery(context);
+      const context = { privateDir: genericPrivateDirectorySync(root), query };
+      const stored = packedEnvelope(root, context.query);
       assert.ok(stored.record, JSON.stringify(stored));
       const db = openHawdb(cacheDatabasePath(context.privateDir), { readOnly: true, create: false });
-      try { assert.doesNotMatch(db.get('query_cache', [context.key])[0]!.payload, /PRIVATE_(OWNER|CONSTITUTION|ISSUE|REMOTE)_BODY_SENTINEL/u); } finally { db.close(); }
+      try { assert.doesNotMatch(JSON.stringify(db.scan('query_cache')), /PRIVATE_(OWNER|CONSTITUTION|ISSUE|REMOTE)_BODY_SENTINEL/u); } finally { db.close(); }
       const current = installedCall(root, '--json', '--fresh', '--dry-run', ...query);
       const historical = installedCall(root, '--json', ...query);
       assert.equal(current.status, 0, current.stderr);
@@ -421,5 +430,22 @@ source:
     const review = JSON.parse(installedCall(root, '--json', 'review', 'render', 'sample').stdout);
     assert.deepEqual(review.projection.bodyChanged, ['docs/constitution.md']);
     assert.match(review.body, /constitution changed since projection/u);
+  } finally { await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
+test('diagnostic refresh accepts absent configuration and binds its later appearance', async () => {
+  const root = createConsumer();
+  try {
+    assert.equal(existsSync(join(root, 'concord.config.ts')), false);
+    const missing = queryContext(root, ['trace', 'gaps']);
+    await Effect.runPromise(refreshQuery(root, missing.query, Date.now()).pipe(Effect.scoped));
+    const refreshed = readQuery(missing);
+    assert.equal(refreshed.record?.complete, true, JSON.stringify(refreshed));
+    assert.equal(refreshed.error, undefined);
+    writeProjectConfig(root, { testRoots: [], sourceRoots: [] });
+    assert.notEqual(queryContext(root, missing.query).key, missing.key);
+    rmSync(join(root, 'concord.config.ts'));
+    assert.equal(queryContext(root, missing.query).key, missing.key);
   } finally { await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
 });

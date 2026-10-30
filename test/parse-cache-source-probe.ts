@@ -1,8 +1,8 @@
 import { Effect } from 'effect';
-import { LocalRepository } from '../dist/storage.js';
-import { loadDocuments, inspectDocumentRecords } from '../dist/documents.js';
-import { decodeDocumentSource } from '../dist/document-codec.js';
-import { headingAnchors, inspectSteps } from '../dist/steps.js';
+import { LocalRepository } from '../src/storage.js';
+import { loadDocuments, inspectDocumentRecords } from '../src/documents.js';
+import { decodeDocumentSource } from '../src/document-codec.js';
+import { headingAnchors, inspectSteps } from '../src/steps.js';
 
 Effect.runSync(Effect.sync(() => {
   const root = process.argv[2];

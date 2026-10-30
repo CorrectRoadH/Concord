@@ -74,10 +74,11 @@ export function queryContext(input: string | undefined, query: Query): QueryCont
   const privateDir = genericPrivateDirectorySync(root);
   const config = join(root, 'concord.config.ts');
   assertLeasePath(config);
-  if (lstatSync(config).size > 4 * 1024 * 1024) throw new ConcordError('InvalidConfig', 'Configuration exceeds 4 MiB');
+  const configStat = lstatSync(config, { throwIfNoEntry: false });
+  if (configStat !== undefined && configStat.size > 4 * 1024 * 1024) throw new ConcordError('InvalidConfig', 'Configuration exceeds 4 MiB');
   // The installed build binds projections independently of the consumer cache.
   const installation = queryInstallationIdentity();
-  const key = digest(JSON.stringify([root, privateDir, query, digest(readFileSync(config)), installation]));
+  const key = digest(JSON.stringify([root, privateDir, query, configStat === undefined ? null : digest(readFileSync(config)), installation]));
   return { root, privateDir, key, query };
 }
 function decodeForQuery(context: QueryContext, payload: string): QueryCacheEnvelope | undefined {

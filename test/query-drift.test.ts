@@ -131,7 +131,8 @@ test('every failure table row retains its meaning, including identity change bef
 test('owner and remote bodies are stripped and restored only after safe matching reads', () => Effect.runPromise(Effect.sync(() => {
   const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-query-bodies-')));
   const source = renderDocument({ format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample' }, '# PRIVATE_OWNER_BODY\n');
-  const path = 'sample.md';
+  const path = 'docs/feature/sample/README.md';
+  mkdirSync(join(root, 'docs/feature/sample'), { recursive: true });
   writeFileSync(join(root, path), source);
   const owner = { path, metadata: { format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample' }, body: '# PRIVATE_OWNER_BODY\n', digest: digest(source) };
   try {
@@ -152,7 +153,7 @@ test('owner and remote bodies are stripped and restored only after safe matching
       relations: [],
       source: { provider: 'github' as const, instance: 'https://api.github.com' as const, id: '123', url: 'https://github.com/example/example/issues/1', title: 'Remote', body: 'PRIVATE_REMOTE_BODY', state: 'open', updatedAt: '2026-10-06T00:00:00.000Z', connectionId: 'github', importedAt: '2026-10-06T00:00:00.000Z' } };
     const remoteSource = renderDocument(metadata, '# PRIVATE_ISSUE_BODY\n');
-    const remote = stripQueryBodies({ operation: 'trace-show', subject: { path, metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
+    const remote = stripQueryBodies({ operation: 'trace-show', subject: { path: 'docs/issues/remote.md', metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.doesNotMatch(JSON.stringify(remote), /PRIVATE_(REMOTE|ISSUE)_BODY/u);
     assert.match(JSON.stringify(hydrateQueryValue(root, remote, () => remoteSource).value), /PRIVATE_REMOTE_BODY/u);
     const constitution = initialConstitution({ body: '# PRIVATE_CONSTITUTION_BODY\n' }).source;

@@ -4,14 +4,14 @@ import { Schema } from 'effect';
 import { deflateRawSync, inflateRawSync } from 'node:zlib';
 import type { Root } from 'mdast';
 import { ContentCache } from './content-cache.js';
-import { decodeUncachedDocumentSource } from './document-source.js';
+import { decodeUncachedDocumentSource, ownerKind } from './document-source.js';
 import { fromMarkdown } from './markdown-parser.js';
 import { MarkdownRoot } from './markdown-schema.js';
 import { headingAnchorsFromTree, inlineLinksFromTree, inspectTreeSteps } from './markdown-facts.js';
 import { ConcordError, decode, DocumentSchema } from './shared.js';
 
 /** Bump when Markdown/YAML parsers, schemas, masking, or path rules change. */
-export const DOCUMENT_PARSER_VERSION = 'concord-document-memory/v6:path-h1-relations:mdast-2.0.3:yaml-2.9.0';
+export const DOCUMENT_PARSER_VERSION = 'concord-document-memory/v7:shared-h1-tree:mdast-2.0.3:yaml-2.9.0';
 const Record = Schema.Struct({ path: Schema.String, metadata: DocumentSchema, body: Schema.String, digest: Schema.String });
 const Marker = Schema.Struct({ line: Schema.Int, startColumn: Schema.Int, endColumn: Schema.Int });
 const Steps = Schema.Struct({
@@ -19,8 +19,8 @@ const Steps = Schema.Struct({
   lists: Schema.Array(Schema.Struct({ ordinal: Schema.Int, line: Schema.Int, endLine: Schema.Int, items: Schema.Int, marked: Schema.Int })),
   markers: Schema.Array(Marker), findings: Schema.Array(Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int) })),
 });
-const Metadata = { record: Schema.optional(Record), error: Schema.optional(Schema.Struct({ code: Schema.String, message: Schema.String })) };
-const Markdown = Schema.Struct({ anchors: Schema.Array(Schema.String), links: Schema.Array(Schema.Struct({ url: Schema.String, line: Schema.Int })), steps: Steps, tree: Schema.String });
+const Metadata = { record: Schema.optional(Record), error: Schema.optional(Schema.Struct({ code: Schema.String, message: Schema.String })), tree: Schema.optional(Schema.String) };
+const Markdown = Schema.Struct({ anchors: Schema.Array(Schema.String), links: Schema.Array(Schema.Struct({ url: Schema.String, line: Schema.Int })), steps: Steps });
 const Projection = Schema.Struct({ ...Metadata, markdown: Schema.optional(Markdown) });
 type Projection = Schema.Schema.Type<typeof Projection>;
 const cache = new ContentCache('document_parse', DOCUMENT_PARSER_VERSION, Projection,
@@ -33,16 +33,25 @@ export function markdownBody(source: string): string {
 function parseMetadata(input: { readonly path: string; readonly source: string }): Projection {
   let record: ReturnType<typeof decodeUncachedDocumentSource>;
   let error: { code: string; message: string } | undefined;
-  try { record = decodeUncachedDocumentSource(input.path, input.source); }
+  const tree = ownerKind(input.path) === undefined ? undefined : fromMarkdown(markdownBody(input.source));
+  try { record = decodeUncachedDocumentSource(input.path, input.source, tree); }
   catch (cause) {
     if (!(cause instanceof ConcordError)) throw cause;
     error = { code: cause.code, message: cause.message };
   }
-  return { ...(record === undefined ? {} : { record }), ...(error === undefined ? {} : { error }) };
+  return { ...(record === undefined ? {} : { record }), ...(error === undefined ? {} : { error }), ...(tree === undefined ? {} : { tree: serializeTree(tree) }) };
 }
-function withMarkdown(input: { readonly path: string; readonly source: string }, previous = parseMetadata(input), tree = fromMarkdown(markdownBody(input.source))): Projection {
+function serializeTree(tree: Root): string { return deflateRawSync(JSON.stringify(tree), { level: 1 }).toString('base64'); }
+function decodeTree(tree: string): Root {
+  return decode(MarkdownRoot, JSON.parse(inflateRawSync(Buffer.from(tree, 'base64'), { maxOutputLength: 64 * 1024 * 1024 }).toString('utf8')), 'document syntax tree');
+}
+function currentTree(input: { readonly source: string }, previous: Projection): Root {
+  if (previous.tree !== undefined) try { return decodeTree(previous.tree); } catch { /* Rebuild a damaged disposable tree. */ }
+  return fromMarkdown(markdownBody(input.source));
+}
+function withMarkdown(input: { readonly path: string; readonly source: string }, previous = parseMetadata(input), tree = currentTree(input, previous)): Projection {
   const { items: _items, ...steps } = inspectTreeSteps(input.path, input.source, previous.record?.metadata.kind === 'use-case', tree);
-  return { ...(previous.record === undefined ? {} : { record: previous.record }), ...(previous.error === undefined ? {} : { error: previous.error }), markdown: { anchors: [...headingAnchorsFromTree(input.source, tree)], links: inlineLinksFromTree(tree), steps, tree: deflateRawSync(JSON.stringify(tree), { level: 1 }).toString('base64') } };
+  return { ...previous, tree: serializeTree(tree), markdown: { anchors: [...headingAnchorsFromTree(input.source, tree)], links: inlineLinksFromTree(tree), steps } };
 }
 export function documentProjection(path: string, source: string) { return cache.get(path, source, () => parseMetadata({ path, source })); }
 export function inspectDocumentProjections(inputs: readonly { readonly path: string; readonly source: string }[], markdown = false) {
@@ -56,7 +65,7 @@ export function documentMarkdown(path: string, source: string): Root {
   const projection = documentMarkdownProjection(path, source);
   try {
     // Decode the serialized tree only for consumers that need nodes and offsets.
-    return decode(MarkdownRoot, JSON.parse(inflateRawSync(Buffer.from(projection.tree, 'base64'), { maxOutputLength: 64 * 1024 * 1024 }).toString('utf8')), 'document syntax tree');
+    return decodeTree(projection.tree!);
   } catch {
     const tree = fromMarkdown(markdownBody(source));
     cache.get(path, source, () => withMarkdown({ path, source }, projection, tree), true);

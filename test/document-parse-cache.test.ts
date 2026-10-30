@@ -1,3 +1,8 @@
+import { createConsumer } from './support/consumer.js';
+import { setWriting } from '../src/writing-management.js';
+import { setConcepts } from '../src/concepts.js';
+import { digest } from '../src/shared.js';
+import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,18 +11,16 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { renderDocument } from '../dist/documents.js';
-import { openHawdb } from '../dist/hawdb-native.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { renderDocument } from '../src/documents.js';
+import { openHawdb } from '../src/hawdb-native.js';
 import { writeProjectConfig, readProjectConfig } from './support.js';
 
 const useCasePath = 'docs/feature/sample/use-case/inspect.md';
 const researchPath = 'docs/research/sample/README.md';
 function fixture() {
-  const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-document-parse-')));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [], sourceRoots: [] }); } finally { repo.close(); }
+  const root = createConsumer();
+  writeProjectConfig(root, { testRoots: [], sourceRoots: [] });
   mkdirSync(join(root, 'docs/feature/sample/use-case'), { recursive: true });
   mkdirSync(join(root, 'docs/research/sample'), { recursive: true });
   writeFileSync(join(root, 'docs/feature/sample/README.md'), renderDocument({ format: 'concord.document/v1', kind: 'feature', id: 'sample', title: 'Sample' }, '# Sample\n\nA local sample.\n'));
@@ -26,7 +29,7 @@ function fixture() {
   return root;
 }
 function cli(root: string, dryRun: boolean, args = ['check']) {
-  const result = spawnSync(process.execPath, ['dist/entry.js', '--root', root, '--json', ...(dryRun ? ['--dry-run'] : []), ...args], { encoding: 'utf8', timeout: 60_000, maxBuffer: 16 * 1024 * 1024 });
+  const result = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', ...(dryRun ? ['--dry-run'] : []), ...args], { encoding: 'utf8', timeout: 60_000, maxBuffer: 16 * 1024 * 1024 });
   assert.ok(result.status === 0 || result.status === 1, result.stdout + result.stderr);
   const value = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(JSON.parse(result.stdout));
   assert.equal(value.error, undefined, result.stdout + result.stderr);
@@ -48,16 +51,18 @@ test('volatile document projections preserve current CLI facts across edits, pat
     const support = 'docs/feature/sample/research-copy.md';
     writeFileSync(join(root, support), readFileSync(join(root, researchPath)));
     parity(root);
-    assert.match(JSON.stringify(cli(root, false)), /InvalidPlacement/u, 'README bytes at a supporting path are validated there');
+    assert.equal(cli(root, false).value.documents, 3, 'copying prose to a supporting path does not create an owner');
     rmSync(join(root, support));
     renameSync(join(root, useCasePath), join(root, 'docs/feature/sample/use-case/renamed.md'));
     parity(root);
     mkdirSync(join(root, 'acceptance'));
     writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['acceptance'] });
     parity(root);
-    writeFileSync(join(root, 'docs/concepts.md'), '# Concepts\n\n## Fact {#fact}\n\nA current source statement.\n');
+    const repo = new LocalRepository(root);
+    try { setConcepts(repo, '# Concepts\n\n## Fact {#fact}\n\nA current source statement.\n', digest(readFileSync(join(root, 'docs/concepts.md'), 'utf8'))); } finally { repo.close(); }
     parity(root);
-    writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v3', roots: ['docs'], bannedTerms: [{ term: 'undesirable', use: 'clear', why: 'Use a concrete term' }] }));
+    const writer = new LocalRepository(root);
+    try { setWriting(writer, { format: 'concord.writing/v3', roots: ['docs'], bannedTerms: [{ term: 'undesirable', use: 'clear', why: 'Use a concrete term' }] }, digest(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'))); } finally { writer.close(); }
     parity(root);
     assert.match(JSON.stringify(cli(root, false)), /undesirable/u);
     const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false });
@@ -79,7 +84,8 @@ test('metadata stays lazy and one tree serves repeated and duplicate requests wi
   const calls = () => existsSync(counts) ? readFileSync(counts, 'utf8').trim().split('\n').map(line => Schema.decodeUnknownSync(Schema.String)(JSON.parse(line))) : [];
   try {
     probe('metadata');
-    assert.equal(calls().length, 0, 'metadata-only commands never parse Markdown');
+    assert.equal(calls().filter(source => source.includes('parser-sentinel')).length, 1, 'title derivation parses the current owner once');
+    rmSync(counts);
     const first = probe();
     assert.equal(calls().filter(source => source.includes('parser-sentinel')).length, 1, 'duplicate batch inputs and repeated steps/anchors share one parse');
     const firstCalls = calls().length;
