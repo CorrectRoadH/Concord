@@ -122,14 +122,6 @@
       "types": "./dist/templates.d.ts",
       "default": "./dist/templates.js"
     },
-    "./governance-config": {
-      "types": "./dist/governance-config.d.ts",
-      "default": "./dist/governance-config.js"
-    },
-    "./evidence-policy": {
-      "types": "./dist/evidence-policy.d.ts",
-      "default": "./dist/evidence-policy.js"
-    },
     "./memory-state": {
       "types": "./dist/memory-state.d.ts",
       "default": "./dist/memory-state.js"

@@ -1,8 +1,8 @@
 ---
 status: closed
 closure:
-  kind: fixed
-  reason: check 校验 docs 下全部行内宪法链接：指向不存在 ID 的链接报告带路径与行号的 AnchorNotFound 并退出 1
+  kind: closed
+  reason: 旧模型下已修复，按提交级核验无法重放。原结论：check 校验 docs 下全部行内宪法链接，指向不存在 ID 的链接报告带路径与行号的 AnchorNotFound 并退出 1
 ---
 
 # 正文中断开的宪法链接通过 check
