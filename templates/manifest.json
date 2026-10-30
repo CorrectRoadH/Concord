@@ -17,7 +17,7 @@
     { "name": "decision", "description": "Decision memory rationale prompt.", "path": "decision.md" },
     { "name": "insight", "description": "Reusable engineering insight prompt.", "path": "insight.md" },
     { "name": "note", "description": "Captured memory note awaiting explicit classification.", "path": "note.md" },
-    { "name": "issue", "description": "Local observation draft prompt.", "path": "issue.md" },
+    { "name": "issue", "description": "Defect, request, or observation.", "path": "issue.md" },
     { "name": "library", "description": "Public library contract page.", "path": "library.md" },
     { "name": "cli", "description": "Command-line contract page.", "path": "cli.md" },
     { "name": "architecture", "description": "Internal ownership and data-flow page.", "path": "architecture.md" },

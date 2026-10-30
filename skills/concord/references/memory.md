@@ -1,51 +1,35 @@
 # 工程 Memory
 
-Memory 保存 Problem、Decision、Insight 与未分类 Note，不复制 Spec 正文或测试关系。唯一当前格式是 `concord.document/v1`，输入严格校验，不提供格式转换入口。
+Memory 保存可复用的知识与不需要 Design 的决策，每条是 `memory/<id>.md` 一个文件，不复制 Spec 正文、Design 结论或测试关系。缺陷由 Issue 跟踪，见 `concord --skill feedback`。
 
-索引、检索和正文读取使用 `concord memory index --json`、`concord memory recall "查询词" --json`。recall 返回匹配的实际正文与摘要，是本地文本检索，不调用模型。不要直接读取或编辑 Memory 文件，不维护人工 INDEX。需要查看状态与关系仍可使用 show；index/list 与 recall/search 都从当前 owner 派生。
+## 字段
 
-修改正文用 `concord memory edit <id-or-path> --body <file> --expected-digest <digest>`，或已有 `author set`。先从工具取得最新摘要，冲突后重新读取并核对，不盲目重试。正文更新不改状态、证据和历史；这些事实必须通过下述生命周期命令修改。受管文件以外的临时正文文件或 stdin 可以作为命令输入。
+路径是身份，名称是正文唯一的一级标题。frontmatter 只保存推导不出的事实，字段只在非空时出现：
 
-`captured` 表示已保存但尚未确认当前生命周期；它不允许 fixed 或 promotion。已分类记录通过 `concord memory activate <id> --reason <text>` 激活：Problem 变为 open，Decision／Insight 变为 current。Note 使用 `memory add --kind note` 创建，保持 captured。
-
-```sh
-concord memory add expired-token-accepted --kind problem --title "过期令牌被接受" --body ./problem.md
-concord memory add token-format --kind decision --title "令牌格式" --body -
-concord memory list --json
-concord memory search "expired token" --json
-concord memory show expired-token-accepted --json
+```yaml
+type: decision         # decision、insight、note
+status: current        # captured、current、superseded；note 只能是 captured
+relations:
+  - role: supports     # 支持一条 Spec；或 amends，指向宪法条款与款
+    target: docs/feature/login/README.md#token
+supersededBy: memory/token-format-v2.md
 ```
 
-配置可声明多个 worktree 内 `local-files` 来源。短 ID 在跨来源重复时拒绝并要求 canonical path；省略 `--source` 写唯一 `defaultWrite` 来源，显式写入用 `--source <name>`。read-only 权限在统一发布入口执行，包括 Roadmap adoption 的间接 promotion 改写。
+- `type`：decision 记录不需要 Design 比较的选择；insight 记录有证据支撑的经验；note 是尚未归类的记录。
+- `status`：captured 表示已保存、尚未确认；current 表示现行；superseded 表示不再适用，由 `supersededBy` 指向替代者，或用 `supersession` 写明原因与来源。替代只在同 type 之间，且不得成环。
+- `relations`：`supports` 指向它支持的 Feature、Use Case 或 Engineering 的路径或锚点；`amends` 指向宪法条款与款。Issue 指向 Memory 的关系写在 Issue 中，反向关系从中派生。
 
-fixed 必须绑定同一 active regression、当前 Problem epoch、相同测试定义与目标 Spec 的 red/green command evidence，并提供实际修复理由：
+## 编辑与检索
 
-```sh
-concord memory resolve expired-token-accepted --kind fixed \
-  --red ccev_REPLACE_WITH_RED_ID --green ccev_REPLACE_WITH_GREEN_ID \
-  --reason "修正校验后拒绝过期令牌"
-```
-
-作者裁决不用 command evidence：
+直接创建、阅读和编辑 Memory 文件，包括状态与关系。`memory activate`、`memory supersede` 与 `memory link` 是写入同样内容的助手：
 
 ```sh
-concord memory resolve expired-token-accepted --kind not-a-bug --reason "行为符合当前 Spec"
-concord memory resolve expired-token-accepted --kind wont-fix --reason "风险已接受"
-concord memory resolve expired-token-accepted --kind external-fixed --reason "上游版本已修复"
+concord memory activate token-format
+concord memory supersede token-format --replacement token-format-v2
+concord list memory --json
+concord show token-format-v2 --json
 ```
 
-`reopen` 会递增 Problem epoch，旧收据不能关闭新轮次。Problem、Decision、Insight 可被同 kind 的 Memory 替代，且不得形成循环。superseded 表示不再适用，不能据此称为 fixed；原 resolution 与 promotion 保留在历史：
+`memory link` 写入 `relations`。参数以各命令的 `--help` 为准。`list` 与 `show` 从当前文件派生索引与反向关系，不手工维护 INDEX。
 
-```sh
-concord memory reopen expired-token-accepted --reason "问题再次出现"
-concord memory supersede token-format --replacement token-format-v2 --reason "采用新格式"
-```
-
-promotion 只指向有效的当前 Spec；退役保留历史：
-
-```sh
-concord memory promote token-format-v2 --target docs/feature/login/README.md
-concord memory retire token-format-v2 --target docs/feature/login/README.md --reason "目标已替换"
-```
-
-记录中已有的原处理声明使用 `attested`，显示未验证。Profile 严格正式 gate 写入 `repository` 证据；通用入口显示其记录事实与 unavailable，不将它当作 command 证据。新 clone 缺少 Git-private evidence 时，历史 resolution 仍可读，但必须保留 evidence unavailable 的事实。
+`concord check` 校验字段与关系目标；`concord check --since <base>` 另外检查状态转换是否合法，例如 note 不能成为 current，宪法修订是否附带 `amends` 的 Decision。

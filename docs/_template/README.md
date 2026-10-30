@@ -1,17 +1,16 @@
 # Concord writing templates
 
-This complete reference set is installed by concord init. Create commands use bundled templates, not editable configuration from this directory. These examples are not adopted contracts or test evidence.
+This complete reference set is installed by concord init. `concord new` uses the bundled templates, not this directory. These examples are not adopted contracts or test evidence.
 
-Feature, Roadmap, and Design candidates require README only. Select optional pages with --pages library,cli,architecture,lifecycle,use-case (or repeat --pages). Omitted pages use project defaults; --no-pages explicitly creates README only. Design always includes its decision wrapper.
+A document's path is its identity and its single top-level heading is its name, so templates carry no frontmatter. Issue and Memory frontmatter holds only lifecycle facts, and only when they are non-empty.
 
-Engineering starts with goal, mechanism, usage, and acceptance in README; expand with page add when needed.
+Feature, Roadmap, Engineering, and Design candidates require README only; choose the other pages when creating them. Design always includes its decision wrapper.
 
 | Optional page | Use when |
 | --- | --- |
 | library | A public programming interface needs exact shapes and examples |
 | cli | Public commands need inputs, outputs, and errors |
-| architecture | Internal entities, boundaries, and invariants need explanation |
-| lifecycle | Resources or state transitions need ownership and cleanup rules |
+| architecture | Internal entities, boundaries, invariants, and resource lifecycles need explanation |
 | use-case | User goals need an index of complete paths; create actual cases separately |
 
 - [feature-design/README.md](feature-design/README.md)

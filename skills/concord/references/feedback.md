@@ -1,10 +1,65 @@
-# 多来源反馈
+# Issue 与多来源反馈
 
-先用 `concord feedback connection list --json` 和 `concord feedback list --json` 了解连接与本地观察。Feedback 是产品称呼，受管 Markdown 仍是 `docs/issues/<id>.md` 的 `kind: issue`，不能新建第二份关系索引。
+Issue 跟踪缺陷、请求与观察，每条是 `docs/issues/<id>.md` 一个文件。Local、GitHub、Linear 是并列来源；Local 无需账号、连接或同步，直接创建文件或运行 `concord new issue <id>`。Feedback 是外部来源的产品称呼，导入结果仍是同一种 Issue 文件，不另建关系索引。
 
-Local、GitHub、Linear 是并列来源。Local 无需账号、连接或同步：用 `concord issue create <id> --title <title>` 创建，`issue index --json` 获取派生索引，`issue recall "查询词" --json` 读取实际正文和摘要。issue draft、list/show 同样维护本地 Issue。不要直接读写 Issue owner 或维护人工索引。
+## 字段
 
-正文修改使用 `issue edit <id> --body <file> --expected-digest <digest>`；Memory 关联使用 issue link --kind。采用为 Spec 使用 issue adopt --to，退役使用 issue retire --from，重开使用 issue reopen --reason。删除使用 `issue remove <id> --expected-digest <digest>`，仅允许无来源、无关系、无历史的本地 draft。已进入调查、关闭或导入的记录保留生命周期，不能通过删除绕过证据；本地命令不删除 GitHub/Linear 对象。
+路径是身份，名称是正文唯一的一级标题。frontmatter 只保存推导不出的事实，字段只在非空时出现：
+
+```yaml
+status: open                     # open 或 closed
+relations:
+  - role: root-cause
+    target: memory/token-race.md
+source: {...}                    # 导入时写入的远端来源
+closure:
+  kind: fixed
+  reason: 修正锁顺序
+  verification: {...}            # 仅 fixed，由修复核验写入
+```
+
+| 角色 | 目标 | 含义 |
+| --- | --- | --- |
+| `investigation`、`root-cause`、`decision` | current 或 superseded 的 Memory | 调查记录、根因、所依据的决策 |
+| `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前由这条 Spec 承接；不再承接时删除这一项，历史在 Git |
+| `duplicate-of` | 另一个 Issue | 由 duplicate 关闭写入，不得成环 |
+
+`source` 保存远端对象的稳定身份、去重键与首次来源摘录；同一外部对象换连接或清空缓存后仍是同一 Issue。不要按标题自动合并，也不要用远端显示编号作为对象身份。
+
+关闭种类：
+
+| kind | 要求 |
+| --- | --- |
+| `fixed` | 带修复核验写入的 `verification`，见下文 |
+| `delivered` | target 是当前 `adopts` 之一，并带 proof |
+| `external-fixed` | 带 dependency、version 与 proof |
+| `declined` | 先删除全部 `adopts`，指向 current 的 Decision Memory |
+| `duplicate`、`invalid` | 先删除全部 `adopts` |
+
+## 编辑
+
+直接编辑 Issue 文件，包括正文、状态、关系与关闭结论。`issue close`、`issue reopen`、`issue link`、`issue unlink` 是写入同样内容的助手；`reopen` 删除 `closure`，状态回到 open。用 `concord list issue --open --json` 列出打开的 Issue，`concord show <id> --json` 读取它及派生关系。`check --since <base>` 检查状态转换与关闭结论是否完整。
+
+## 修复缺陷
+
+修复按线性路径进行：
+
+1. 在 Issue 中写观察、期望行为与复现；调查与根因写进 Memory，用 `relations` 关联。
+2. 写一个在当前代码上失败的回归测试，标记 `@issue docs/issues/<id>.md` 与它验证的 Spec，单独提交。
+3. 只修改产品文件，提交修复。测试文件、runner 配置、`runner.sourceFiles` 与测试指向的 Spec 在两次提交之间保持不变。
+4. 工作树干净时运行 `concord issue close <id> --fixed`。
+
+```sh
+concord issue close expired-token-accepted --fixed --json
+concord issue close expired-token-accepted --fixed --defect <commit> --json
+concord test verify expired-token-accepted --json
+```
+
+缺陷候选默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交，所有回归测试必须在同一提交中首次出现，否则用 `--defect` 指定 HEAD 的 first-parent 祖先。命令在临时 worktree 中运行缺陷候选、在当前工作树运行 HEAD：前者以非零码结束、后者以零结束才写入 `verification`，内容是两个提交、回归测试、runner 配置摘要与 Concord 版本。
+
+同一提交同时加入测试与修复、缺少测试或提交（包括 shallow clone）、区间含 merge 提交、超时，都返回 `FixUnverifiable`；command runner 不区分断言失败与构建失败。直接写入的 `verification` 由 `check --since` 按记录重放。`test verify` 在两个提交上重放已记录的结论，提交、依赖或运行环境不可获得时报告无法重放，不改变结论。
+
+远端 Closed / Done 不证明本地修复；fixed 始终经过这条核验。
 
 ## 建立连接并读取
 
@@ -21,30 +76,14 @@ API 连接只存凭据环境变量名，省略 transport 仍为 API。GitHub 可
 
 `feedback connection check <id>` 只检测 gh 连接的指定仓库，不导入、不持久绑定、不枚举账号。检测和同步都是明确的外部读取，不能仅为验证 UI 或配置保存而调用真实账号。工具缺失、未登录、无目标权限或协议错误不能通过自动切换 transport 绕过。gh 模式委托 CLI 处理认证和网络；Concord 保证固定初始只读请求、进程清理、输出预算和返回身份，不能声称控制 gh 内部重定向或网络缓冲。
 
-读取显式触发，不依赖网页刷新。分页只承诺本次有界遍历完成，不代表某时刻的完整远端快照。遇到鉴权、限流、分页不完整或配置冲突时处理具名失败，不把部分结果当作成功，不据缺席推断删除。
-
-## 调查与关联
-
-```sh
-concord feedback show <id> --json
-concord issue create observation --title "调查观察"
-concord issue adopt <id> --to docs/feature/example/README.md
-concord issue link <id> --memory memory/example.md
-concord issue close <id> --reason "调查结论"
-```
-
-本地标题、正文与关联是作者事实；source 是首次导入摘录，缓存 remote 是可重建观察。重复同步不覆盖笔记。关闭反馈仍受 open Problem 门禁；远端 Closed / Done 不证明本地修复，Memory fixed 继续要求正常证据流程。
-
-同一外部对象换连接或清空缓存后仍是同一反馈。不要按标题自动合并，也不要用远端显示编号作为对象身份。`cache clear` 只删投影，保留来源和笔记。需要修订正文时用现有摘要保护的 `author set`，或在 Web 反馈详情中编辑 Markdown。
-
-列表可组合筛选：`concord issue list --state draft --provider local --triage pending --query "关键词" --json`；`feedback list` 使用同样参数。state 为 draft/closed，triage 为 pending/linked/closed，来源为 local/github/linear。这些都是本地读取，不触发同步。本地重开使用 issue reopen --reason；独立评论和远端评论读取不属于本地操作；正文编辑不能代替评论记录。
+读取显式触发，不依赖网页刷新。分页只承诺本次有界遍历完成，不代表某时刻的完整远端快照。遇到鉴权、限流、分页不完整或配置冲突时处理具名失败，不把部分结果当作成功，不据缺席推断删除。本地标题、正文与关系是作者事实；缓存的远端状态是可重建观察，重复同步不覆盖本地内容，`cache clear` 只删投影。`feedback list` 与 `feedback show` 是本地读取，不触发同步。
 
 ## 远端 Issue 写入
 
-远端写入仅支持已绑定 `repositoryId` 的 GitHub `gh` 连接，复用当前机器的 `gh auth login` 登录态，不改本地 Issue owner。
+远端写入仅支持已绑定 `repositoryId` 的 GitHub `gh` 连接，复用当前机器的 `gh auth login` 登录态，不改本地 Issue 文件。
 
 1. 先只读计划：`concord issue plan close 12 --connection product-gh --reason completed --json`。create、body-set、comment-add 用 `--body <file|->`，labels-add 用可重复的 `--label`，labels-remove 每个计划只接受一个 `--label`；reopen 只需编号和连接。
 2. 把 plan 返回的 `authorize` 串（绑定动作、仓库、编号及 payload）交给用户确认。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传 `--authorize`；不得因 plan 成功、工具可用或权限宽松推断授权。
-3. 得到当次明确同意后执行：`concord issue execute <receipt-id> --connection product-gh --authorize '<plan 返回的原串>' --json`。
+3. 得到当次明确同意后执行：`concord issue execute <plan-id> --connection product-gh --authorize '<plan 返回的原串>' --json`。
 
 计划有效期为五分钟、只能消费一次；前像变化会拒绝写入。`IssueMutationUncertain` 不自动重试：必须重新 plan，manual create 与评论先人工核对远端。多个标签的移除分别 plan、确认并 execute。

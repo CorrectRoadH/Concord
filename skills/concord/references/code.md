@@ -42,7 +42,7 @@ export function parseOrder(input: string) {
 
 - 代码侧优先 `node` 或 `region`。只有整个文件服务同一份 Spec 时才用 `file`，例如只服务一个 Feature 的共享基础设施。
 - Spec 侧优先 Use Case 的步骤（`#<step-id>`）或行为页的标题 anchor。只有代码服务整份 Spec 时才指向 README。
-- 一个声明服务多项行为时，写多条 `@concord-implements`。只服务内部不变量或仓库维护机制的代码，指向 architecture、lifecycle 页的 anchor 或 Engineering owner。
+- 一个声明服务多项行为时，写多条 `@concord-implements`。只服务内部不变量或仓库维护机制的代码，指向 architecture 页的 anchor 或 Engineering owner。
 - 不为追求更窄而拆分实现或机械改名步骤。许多文件都指向同一份 README 或同一个 Use Case，通常说明关联太粗。`trace show` 和 `trace gaps` 无法据此回答哪一步由哪段代码实现。
 
 ## 作用域与边界
@@ -69,7 +69,7 @@ export function parseOrder(input: string) {
 
 引用只服务于当前扫描，不是永久历史身份、CAS token 或授权。自动消费者应重新 list/locate 并核对文件、符号和范围，不能凭旧引用的查询成功认定历史连续。移动或复制实现后重新查询即可，不需要命名新 ID。
 
-合法配置下，代码标注错误不会阻断 `test list/show/run` 或 `memory resolve`；这些命令继续执行原有文档、测试及证据校验。代码声明不能替代测试、red/green 收据或 Problem fixed 证明。
+合法配置下，代码标注错误不会阻断 `test list/show/run` 或 `issue close --fixed`；这些命令继续执行原有文档与测试校验。代码声明不能替代测试或修复核验。
 
 
 ## 多语言标记与显式分析

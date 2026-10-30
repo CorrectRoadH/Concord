@@ -8,7 +8,7 @@ concord cache clear
 concord cache rebuild
 ```
 
-缓存损坏、schema 不符或写失败时，查询应回退权威源码而非返回陈旧声明或关系。`cache clear` 不删除 evidence、journal 或 Memory。`cache rebuild` 不接受 `--dry-run`。
+缓存损坏、schema 不符或写失败时，查询应回退权威源码而非返回陈旧声明或关系。`cache clear` 不删除 journal、Issue 或 Memory。`cache rebuild` 不接受 `--dry-run`。
 
 `cache clear` 取得同级 Concord 协调锁及固定 HawDB revision 的根、分支锁。先删数据，再删嵌套锁，最后删空目录，保留根目录、根 owner.hawdb.lock 和 cache.hawdb.concord.lock 的 inode。不要删锁抢占。clear 因占用、路径异常或 I/O 失败而拒绝或部分完成时保留现场，处理原因后重试。
 
@@ -18,7 +18,7 @@ clear 只删除 cache.hawdb 内的数据，不删除同级协调锁。clear --dr
 
 缓存只对写入它的引擎版本有效，换用不同引擎版本的 Concord 时缓存按不可用处理并重建。短期解析及 Git baseline 使用进程内 HawDB；清理本进程不表示其它进程的短期缓存已清空，它们仍须核对当前来源。
 
-文档、配置、Memory 与源码写入使用短 publication lease、preimage journal 和逐文件原子 rename。查询声明 `access: read`，使用乐观 snapshot，并拒绝真正发布。普通写入仅在提交阶段取得独占所有权；外部执行、恢复、cache rebuild 与 cache clear 保留各自的独占边界。dry-run 预览使用乐观 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
+Concord 自己的写入（命令助手与 Web 保存）对文档、配置、Issue、Memory 与源码使用短 publication lease、preimage journal 和逐文件原子 rename。查询声明 `access: read`，使用乐观 snapshot，并拒绝真正发布。普通写入仅在提交阶段取得独占所有权；外部执行、恢复、cache rebuild 与 cache clear 保留各自的独占边界。dry-run 预览使用乐观 snapshot，不授权实际发布。配置正常编辑可规范化 TS，恢复严格还原冻结的原文字节。普通读取发现未完成 journal 时停止并报告 RecoveryRequired。确认写入进程已经退出后执行：
 
 ```sh
 concord recover --json
@@ -30,15 +30,15 @@ concord recover --json
 
 共享 token 加入现有目录后，须重读完整 owner 集合。只有自己的 token 存在，且全部 owner 为同 worktree 的 shared，才开始受保护读取。writer 已替换目录时，加入者撤销自己的 token 并报告 Busy，不能开始读取。writer 释放时只删除自己的 owner。尚未通过准入的 shared 记录不授予读取，也不阻止 writer 释放。
 
-只有当前格式（C-009）。无法解码的 journal、配置或收据返回 `InvalidData`：保留 journal、锁和目标文件，不反复调用普通 recover；配置改写为当前格式，收据重新取证。
+只有当前格式（C-009）。无法解码的 journal 或配置返回 `InvalidData`：保留 journal、锁和目标文件，不反复调用普通 recover；配置改写为当前格式。
 
 `--dry-run` 与 access 分开。它走同一规划校验，不发布项目文件。既有 dry-run 仍是预览，不会因为查询使用 read 而变成写入。已有 owner 的仓库仍须短快照 lease 和当前 journal 障碍，可能首次创建私有协调目录。只有全新且无 owner/锁的 init 预览可以完全不创建私有状态。它不等于真实发布完成。`recover` 不接受 `--dry-run`。
 
 
-发布协调使用 Node 文件 API 的短 publication lease，不需要外部 flock 或磁盘探测程序。`concord recover` 自动选择唯一的当前普通或 Trace journal，多 journal 时保留并拒绝。HawDB 仅为可清空缓存；不要把 journal、evidence、runner.lease 或 run 状态当作缓存删除。测试运行期间允许文档发布，但会使该次运行失效，即使稍后撤销修改也不会重新有效。runner 的 finalizing/quarantined、死父 PID 或未知状态阻断后续写操作；父进程死亡不证明子进程清理完成，必须先确认进程现场。不提供旧锁迁移或混合版本协调。
+发布协调使用 Node 文件 API 的短 publication lease，不需要外部 flock 或磁盘探测程序。`concord recover` 自动选择唯一的当前普通或 Trace journal，多 journal 时保留并拒绝。HawDB 仅为可清空缓存；不要把 journal、runner.lease 或 run 状态当作缓存删除。测试运行期间允许文档发布，但会使该次运行失效，即使稍后撤销修改也不会重新有效。runner 的 finalizing/quarantined、死父 PID 或未知状态阻断后续写操作；父进程死亡不证明子进程清理完成，必须先确认进程现场。不提供混合版本协调。
 
 恢复完成后重新取得短独占快照，直接核验 worktree 私有协调路径上的当前 journal 与 runner。init 回滚后不要求配置文件仍在。并发新发布可使最终核验 Busy。Busy 时早先的 journal 结果不是恢复完成，保留新 owner 后重试。
 
 `--json` 返回 `operation`、原 journal 结果、`changedPaths` 和 `coordination`。`journalStatus` 保留 journal 处理结果。`coordination.publication.reclaimedTokens` 列出已回收 token。`coordination.runner.status` 为 `absent`、`running` 或 `blocked`；blocked 带具名原因。无事务且 runner 为 absent 或健康 running 时可以返回 clean。runner 不确定时返回 blocked，并保留 journal 的实际处理结果。CLI 对 blocked 使用失败退出码。Web 与 action 保留相同状态字段。
 
-初次独占检查已发现 runner blocked 时，不开始任何 journal 恢复。此时 `journalStatus` 为 pending 或 clean，`changedPaths` 为空。journal 恢复之后 runner 变为 blocked 时，保留已完成的 `journalStatus`，总 status 设为 blocked。统一入口保留 prepared 和 committed 现场。recover 不删除 runner.lease、run state、证据或未知文件。blocked 表示当前操作无法恢复完整写能力。持久缓存句柄在 snapshot 结束前关闭。读取期间的缓存更新不取得独占发布锁；缓存不能安全使用时回源。
+初次独占检查已发现 runner blocked 时，不开始任何 journal 恢复。此时 `journalStatus` 为 pending 或 clean，`changedPaths` 为空。journal 恢复之后 runner 变为 blocked 时，保留已完成的 `journalStatus`，总 status 设为 blocked。统一入口保留 prepared 和 committed 现场。recover 不删除 runner.lease、run state 或未知文件。blocked 表示当前操作无法恢复完整写能力。持久缓存句柄在 snapshot 结束前关闭。读取期间的缓存更新不取得独占发布锁；缓存不能安全使用时回源。

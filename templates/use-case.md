@@ -20,4 +20,4 @@ Describe the observable end state. List every failure the user can see in a tabl
 
 ## Contract Sources
 
-Link only to existing pages that own the CLI, API, architecture, or lifecycle rules used by this path. Do not redefine those rules here. Implementation belongs in the architecture page, not here.
+Link only to existing pages that own the CLI, API, or architecture rules used by this path. Do not redefine those rules here. Implementation belongs in the architecture page, not here.

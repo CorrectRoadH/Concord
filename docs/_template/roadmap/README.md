@@ -1,5 +1,7 @@
 # Your title
 
+A Roadmap entry is a direction that has not been adopted. Implementation and tests do not point at it; `concord roadmap adopt` moves the directory into `docs/feature/` when it is adopted.
+
 ## Problem
 
 Describe the user problem addressed by this product direction.

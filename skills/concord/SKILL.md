@@ -1,46 +1,59 @@
 ---
 name: concord
-description: 在本地 Git 仓库中使用 Concord 维护产品 Spec、代码归属、测试注释与命令证据、工程 Memory、追踪关系和恢复流程；需要操作 Concord 文档或解释command 证据与高级原生治理边界时使用。
+description: 在本地 Git 仓库中使用 Concord 维护产品 Spec、代码与测试标记、Issue、工程 Memory、追踪关系与修复核验；需要读写 Concord 文档、关闭缺陷或解释检查结论时使用。
 ---
 
 # Concord
 
-Concord 把 Markdown Spec、测试源码里的 Concord 标记和工程 Memory 留在各自 owner 中，再动态推导关系。先遵守消费仓库的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
+Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与测试中的 Concord 标记、Issue 与 Memory 各自保存在自己的文件里，关系从中推导。先遵守消费仓库的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
 
-只在任务授权范围内执行写命令。`check`、`trace` 或命令收据不等于原生测试覆盖率，也不证明 原生 E2E 可靠性；提交、push、发布、部署和远端消息仍需独立授权。
+`docs/` 与 `memory/` 下的全部文件都可以直接编辑，包括 Issue 与 Memory 的状态和关系。具名命令是执行需要运行的步骤的助手，例如修复核验与 Design 裁决，它们把结果写进同一份文件；可信度由 `concord check --since <base>` 的门禁保证，CI 对每个变更运行它。
+
+只在任务授权范围内修改文件或运行写命令。`check`、`trace` 无 finding 不等于测试覆盖率；提交、push、发布、部署和远端消息仍需独立授权。
 
 ## 按需读取
 
-- 首次接入、runner 配置或模板：运行 `concord --skill init`。
-- Feature、Use Case、Research、Design、Roadmap、Engineering 与正文更新：运行 `concord --skill document`。
+- 首次接入、配置或模板：运行 `concord --skill init`。
+- Feature、Use Case、Engineering、Roadmap、Design、Research 的布局、写法与采用：运行 `concord --skill document`。
 - 整文件、函数和代码段的实现关联与位置查询：运行 `concord --skill code`。
-- 测试注释、执行和 command evidence：运行 `concord --skill test`。
-- Problem、Decision、Insight 与生命周期：运行 `concord --skill memory`。
-- 关系检查、审阅材料与交接：运行 `concord --skill trace`。
+- 测试标记、测试执行与修复核验：运行 `concord --skill test`。
+- Memory 的类型、状态与关系：运行 `concord --skill memory`。
+- Issue、缺陷修复流程与 GitHub / Linear 来源：运行 `concord --skill feedback`。
+- 检查、差异门禁、关系追踪与审阅：运行 `concord --skill trace`。
 - cache 或中断写入恢复：运行 `concord --skill recovery`。
 - Web 工作台、Git 面板、人机协作编辑与 Markdown p5 动画：运行 `concord --skill view`。
-- 本地反馈、GitHub / Linear 导入与处理：运行 `concord --skill feedback`。
-- `concord repo` 与通用模式差异：运行 `concord --skill repository`。
 - 只有确实需要完整离线资料时才运行 `concord --skill all`。
+
+## 布局
+
+| 路径 | 内容 |
+| --- | --- |
+| `docs/feature/<f>/` | Feature：README、`use-case/<u>.md`、`architecture.md`、`cli.md` 或 `library.md`，以及支持页面 |
+| `docs/engineering/<t>/` | Engineering，页面结构同 Feature |
+| `docs/roadmap/<r>/` | 尚未采用的方向，页面结构同 Feature |
+| `docs/design/<d>/`、`docs/research/<r>/` | Design 与 Research |
+| `docs/issues/<i>.md` | Issue：缺陷、请求与观察 |
+| `memory/<m>.md` | Memory：decision、insight、note |
+| `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 宪法、概念与写作政策 |
+
+仓库相对路径是文档的唯一身份，名称取自正文唯一的一级标题。目录名与文件名可以作短选择器，同类中有歧义时命令具名拒绝并要求写出路径。移动文件即改变身份，`check` 报告全部失效的精确引用。
 
 ## 为什么这样设计
 
 - Feature 与 Use Case 用使用者目标和可观察结果描述能力。人和 agent 读同一份文字就能判断需求、实现和测试是否一致，不需要先懂内部代码。
-- 行为与实现分页。Feature 的 README、Use Case、cli、library 页写外部可见行为；cli 页直接写命令、人读输出、`--json` 字段、退出码和错误。architecture 页写这个 Feature 怎么实现。
-- 实现会随功能演进而调整，行为 Spec 应保持稳定。只改实现的重构只改 architecture 页；行为改变时先改行为页。测试标记指向行为 Spec，因此不随重构失效。
-- Roadmap 与 Feature 同体裁，只是尚未采用：设计还不完整，或设计好但暂不实现。实现与测试不指向 Roadmap，准备实现时用 `roadmap adopt` 变成 Feature。Engineering 写仓库自己的测试与维护机制，读者是维护者，不写进 Feature。
-- 每项事实只有一个 owner，关系从源码标记推导。没有第二份登记表，关系就不会和代码脱节。
-- 过程写入 Memory 与 Issue，`docs/` 只保留当前声明。下一次会话读到的是现行约定，而不是旧的讨论。
-- 修复要有同一测试的 red 与 green 收据，"已修复"因此可以核验。
+- 行为与实现分页。README、Use Case、cli、library 页写外部可见行为，cli 页直接写命令、人读输出、`--json` 字段、退出码和错误；architecture 页写实现与资源生命周期。只改实现的重构只改 architecture 页，测试标记指向行为 Spec，因此不随重构失效。
+- Roadmap 与 Feature 同体裁，只是尚未采用。实现与测试不指向 Roadmap，准备实现时用 `roadmap adopt` 移入 `docs/feature/`。Engineering 写仓库自己的测试与维护机制，读者是维护者。
+- 能从路径、一级标题与 Git 推导的事实不写进文件，因此 Spec 没有 frontmatter；生命周期状态、带角色的关系、远端来源身份与关闭结论推导不出，写在 Issue、Memory 的 frontmatter，只在非空时出现。
+- 每项事实只有一个 owner，正向关系只保存一次，反向关系从源码标记与 frontmatter 推导，不另建登记表。
+- 过程写入 Memory 与 Issue，`docs/` 的 Spec 只保留当前声明。下一次会话读到的是现行约定。
+- 修复可以核验：先提交在缺陷上失败的回归测试，再提交修复，`issue close --fixed` 在两个提交上各运行一次，把结论写进 Issue，任何人都能重放。
 
-完整说明见随包 `docs/why-concord.md`。
+决策依据见随包 `docs/design/sdd-core-model/DECISION.md`，完整说明见随包 `docs/why-concord.md`。
 
 ## 工作原则
 
-先读取现有 owner 与关系，再决定应修改 Spec、测试源码还是 Memory。路径是 canonical identity；不要另建反向登记表或测试关系 JSON。文档变更先用 `--dry-run` 检查时，仍须以实际非 dry-run 结果作为完成依据。任何冲突、恢复要求或证据陈旧都应保留现场并处理具名错误，不得绕过 guard。
+先读取现有文件与关系，再决定应修改 Spec、测试源码、Issue 还是 Memory。直接编辑后运行 `concord check`；提交前运行 `concord check --since <base>`，处理每个具名 finding，不绕过门禁。冲突、恢复要求或核验失败时保留现场并处理具名错误。
 
-Spec 正文声明目标、行为、约束和验收条件；产品流程属于 Spec。开发日志、排障经过、实施进度与临时计划归工程 Memory，不写入 Spec 正文。观察归 Issue，调查与经验归 Memory，采用后的目标归 Feature。
+Spec 正文声明目标、行为、约束和验收条件；产品流程属于 Spec。开发日志、排障经过、实施进度与临时计划归 Memory，待调查的观察与缺陷归 Issue，采用后的目标归 Feature。
 
-Memory 与 Issue 必须通过 Concord 工具索引、检索、读取和修改。使用 `memory index/recall`、`issue index/recall` 发现当前内容，使用具名作者与生命周期命令更新；不要直接读写 owner 文件代替工具，不手工维护 INDEX.md、metadata、history 或反向关系。工具缺口先报告或补齐，不能手写文件绕过。
-
-领域术语通过 `concepts index/show/set` 管理，写作政策通过 `writing index/show/set/check` 管理。docs 下 `concepts.md` 与 `concord-writing.json` 的所在目录决定 scope；全项目视图只汇总来源，不复制局部定义到全局。concepts.md 在同一概念标题下拥有唯一写法、定义和解释；仅弃用名派生禁词。编辑使用工具与摘要，先读 `concord --skill document` 了解格式和迁移。
+索引与反向关系从文件派生：用 `concord list` 与 `concord show` 读取文档及其关系，不手工维护 INDEX 或反向列表。领域术语写在所在目录的 `concepts.md`，写作政策写在 `concord-writing.json`；所在目录决定作用域，`check` 校验结构、作用域与被引用的定义，全项目视图只汇总来源。格式见 `concord --skill document`。

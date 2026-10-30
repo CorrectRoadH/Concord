@@ -4,7 +4,9 @@
 
 Undecided.
 
-Replace this section with one explicit declaration: `Selected: [plan-slug](plans/plan-slug/README.md)` (or `选择 [plan-slug](plans/plan-slug/README.md)。`). Use the actual declared slug, not its position in a list. It must match the choice passed to `concord design decide` and the resulting owner metadata. Editing prose alone does not select a candidate.
+Replace this section with one explicit declaration: `Selected: [plan-slug](plans/plan-slug/README.md)` (or `选择 [plan-slug](plans/plan-slug/README.md)。`). Use the candidate's directory name under `plans/`.
+
+This line is the decision. `concord design decide` validates every candidate and Limit, then writes it; `concord check` applies the same rules to direct edits.
 
 ## Rationale
 

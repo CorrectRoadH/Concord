@@ -4,9 +4,9 @@
 
 启动输出分别列出实际 Host / Port、Local 与各网卡 Network URL。域名和 NAT 入口也可用；反向代理必须保留浏览器使用的外部 Host（含非默认端口），不依赖 forwarded headers 绕过检查。修改安装代码后需重启已有 view 进程才能生效。
 
-服务不做身份认证；任何能连接该端口的人都可以读取和修改仓库、修改配置并执行测试，拥有服务进程的代码执行权限。明文 HTTP 只用于可信网络；远程使用安全通道。首版不自动信任反向代理的转发头。
+服务不做身份认证；任何能连接该端口的人都可以读取和修改仓库、修改配置并执行测试，拥有服务进程的代码执行权限。明文 HTTP 只用于可信网络；远程使用安全通道。服务不自动信任反向代理的转发头。
 
-Feature、Engineering、Roadmap、Design、Research 是侧栏入口；Use Case 必须归属于 Feature，在 Feature 内创建和浏览。「文档」列出 `docs/` 下没有分类 owner 的项目文档和参考模板，例如架构与宪法。宪法只读，不能在工作台里改写成合规证据。正文用富文本编辑，元数据与生命周期由单独操作管理。未知 Markdown 可用源码视图，初始加载不会自动保存归一化内容。
+Feature、Engineering、Roadmap、Design、Research 是侧栏入口；Use Case 必须归属于 Feature，在 Feature 内创建和浏览。「文档」列出 `docs/` 下没有分类 owner 的项目文档和参考模板，例如架构与宪法。active 宪法的正文不在工作台里保存。正文用富文本编辑；Issue 与 Memory 的状态、关系与关闭结论不经正文保存写入，见下文的保存边界。未知 Markdown 可用源码视图，初始加载不会自动保存归一化内容。
 
 Markdown 的 `p5` 代码块在阅读与编辑页面自动加载运行，像动画图片一样直接展示，无需编译或播放操作。内联块可写 `p.setup`、`p.draw` 或默认导出实例函数。外部入口用 `src="./demo/main.ts"`，可用 `css="./demo/style.css"`；两者均相对 Markdown。
 
@@ -82,4 +82,4 @@ PR 只读预览使用 `concord view export --base <actual-base-commit> --head <h
 
 服务空闲时不持租约，CLI 可以正常协作。测试运行持租约至进程清理完成；取消后等任务终态再继续写改。`cleanup-failed` 必须保留现场，不用删锁来掩盖尚未确认退出的进程。
 
-证据、历史和身份字段通过受管操作维护，不能当普通 JSON 任意编辑。损坏的配置或 frontmatter 显示原文诊断，无法确认的身份与历史需本机修复。高级原生执行使用项目声明的能力，静态 Web 关系不能表述为原生执行证据。
+Web 保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界。保存不写入 Issue 与 Memory 的 status、relations 或 verification，不改写已裁决的 `Selected:` 行，也不修改 active 宪法的正文；这些变化直接编辑文件或使用对应命令，并由 `check --since <base>` 检查。损坏的配置或 frontmatter 显示原文诊断。静态 Web 关系不能表述为原生执行结果。

@@ -2,7 +2,7 @@
 
 Declare the required mechanism and observable behavior. Keep execution logs and delivery progress in Concord Memory rather than this contract.
 Define local terms in this directory's `concepts.md` and scoped writing policy in
-`concord-writing.json`, maintained through Concord tools.
+`concord-writing.json`; `concord check` validates both.
 
 ## Goal
 
@@ -15,9 +15,9 @@ Define the mechanism, its owners, and the boundaries it must preserve.
 ## Usage
 
 Show how maintainers use the mechanism, including inputs, commands, and observable results.
-Keep a small topic in this README. Split larger topics into pages such as usage.md,
-design.md, or validation.md and link them here. Choose the structure for this topic;
-engineering does not require the Feature page layout.
+Keep a small topic in this README. Engineering uses the Feature page layout: add
+use-case/, architecture.md, or cli.md pages when the topic needs them, plus supporting
+pages, and link them here.
 
 ## Acceptance
 
