@@ -25,7 +25,7 @@ Issue 的 `status` 为 open 或 closed。`relations` 中参与生命周期裁决
 
 ## Memory
 
-Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Design 的结论；缺陷由 Issue 跟踪。`status` 为 captured、current 或 superseded：captured 表示尚未确认，note 只能是 captured，superseded 带 `supersededBy` 或写明原因与来源的 `supersession`。`relations` 的 `supports` 指向它支持的 Spec，`amends` 指向宪法修订影响的条款与款。
+Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Design 的结论；缺陷由 Issue 跟踪。`status` 为 captured、current 或 superseded：captured 表示尚未确认，note 只能是 captured，superseded 带 `supersededBy` 或写明原因与来源的 `supersession`。`relations` 的 `supports` 指向它支持的 Spec，`amends` 指向宪法采用时的整份宪法，或修订影响的条款与款。
 
 ## 格式边界
 

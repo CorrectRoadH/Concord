@@ -63,7 +63,7 @@ supersededBy: memory/new.md
 
 - `type` 取 `decision`、`insight` 或 `note`。Memory 不重复 Design 的结论。
 - `status` 取 `captured`、`current` 或 `superseded`；note 只能是 captured。
-- `supports` 指向一条当前 Spec 或其锚点；`amends` 指向宪法的条款与款（`docs/constitution.md#c-NNN[-K]`）。
+- `supports` 指向一条当前 Spec 或其锚点；`amends` 指向整份宪法（`docs/constitution.md`，用于采用）或其条款与款（`docs/constitution.md#c-NNN[-K]`）。
 - 被替代时写 `supersededBy`；替代目标不在仓库中时写 `supersession`，说明原因与来源。
 
 ## 派生关系
