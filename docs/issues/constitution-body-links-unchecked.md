@@ -18,7 +18,7 @@ closure:
 
 ## 期望
 
-契约 [功能开发遵守并修订项目宪法](../docs/feature/project-onboarding/use-case/evolve-constitution.md) 要求宪法引用有稳定目标，删除或变更能被诊断。断开的链接应产生带路径与行号的 finding，`check` 退出 1。
+Spec [功能开发遵守并修订项目宪法](../docs/feature/project-onboarding/use-case/evolve-constitution.md) 要求宪法引用有稳定目标，删除或变更能被诊断。断开的链接应产生带路径与行号的 finding，`check` 退出 1。
 
 ## 影响范围
 

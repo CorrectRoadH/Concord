@@ -108,7 +108,7 @@
 
 宪法文件存在即启用其规则；不存在时 `doctor` 提示创建。init 默认生成 draft，正文说明尚未采用项目原则，非 TTY 同样如此。提供正文不会自动变为 active。
 
-宪法可以直接编辑，包括 status 与正文；`check --since <base>` 对照基线检查：active 宪法中改变的条款与款（由 draft 变为 active 时为全部条款）必须有本次变化中的 Decision Memory 以 `amends` 指向。draft 宪法的编辑不要求 Decision Memory。助手命令执行同样的检查并一次写入宪法与 Memory：
+宪法可以直接编辑，包括 status 与正文。`check --since <base>` 对照基线检查：active 宪法中改变的条款与款必须有本次变化中的 Decision Memory 以 `amends` 指向。由 draft 变为 active 时，这条 Memory 以 `amends` 指向整份 `docs/constitution.md`，覆盖全部条款。draft 宪法的编辑不要求 Decision Memory。助手命令执行同样的检查并一次写入宪法与 Memory：
 
 | 命令 | 前提 | 结果 |
 | --- | --- | --- |
@@ -132,7 +132,7 @@ adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 
 
 ## Web 修订
 
-Web 文档页可以进入宪法正文编辑，通过 `constitution.adopt` 与 `constitution.amend` action 提交正文、理由、影响、可选来源与当前摘要，状态与 Decision Memory 由这两个操作一并写入。通用保存修改 active 宪法正文时拒绝，规则见 [Web 工作台的保存](../../web-workbench/README.md#自动保存)。理由或影响未填时保留草稿，导航、外部改写和保存失败遵守草稿保护。
+Web 文档页可以进入宪法正文编辑，通过 `constitution.adopt` 与 `constitution.amend` action 提交正文、理由、影响、可选来源与当前摘要，状态与 Decision Memory 由这两个操作一并写入。修订表单是 Web 提供的交互，通用保存同样可以保存宪法正文，变化是否合法由 `check --since` 判断，保存规则见 [Web 工作台的保存](../../web-workbench/README.md#自动保存)。理由或影响未填时保留草稿，导航、外部改写和保存失败遵守草稿保护。
 
 CLI、Web 与 action 使用同一宪法 Schema，严格拒绝额外字段。读取不重写文件。
 

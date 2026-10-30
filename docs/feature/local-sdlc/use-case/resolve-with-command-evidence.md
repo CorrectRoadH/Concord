@@ -96,12 +96,12 @@ closure:
 | `FixVerificationFailed` | runner 在修复提交上以非零码结束 |
 | `PreimageChanged` | 核验期间 HEAD、工作树、配置或 Issue 被改动 |
 
-同一提交加入测试与修复时，错误提示用 `--defect` 指向修复前的提交。
+同一提交加入测试与修复时无法核验，错误提示先单独提交失败的回归测试。
 
 ```text
 ok: false
 error: FixUnverifiable
-message: Regression tests and the fix were added in the same commit; pass --defect <commit before the fix>
+message: Regression tests and the fix were added in the same commit; commit the failing regression test first, then the fix
 ```
 
 问题再次出现时运行 `concord issue reopen duplicate-sku`。`closure` 被删除，`status` 回到 open；再次关闭需要新的核验。

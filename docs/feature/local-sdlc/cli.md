@@ -195,7 +195,7 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 
 | 事件 | 检查 |
 | --- | --- |
-| Issue 新关闭为 fixed，或 closure 种类改为 fixed | 在记录的缺陷提交上重放回归测试并要求失败，在目标工作树上运行并要求通过；两端之间测试、runner 配置、`runner.sourceFiles` 与所指 Spec 不变，见[修复核验](use-case/resolve-with-command-evidence.md) |
+| Issue 新关闭为 fixed、closure 种类改为 fixed，或保持 fixed 而修改 `verification` | 在记录的缺陷提交上重放回归测试并要求失败，在目标工作树上运行并要求通过；两端之间测试、runner 配置、`runner.sourceFiles` 与所指 Spec 不变，见[修复核验](use-case/resolve-with-command-evidence.md)；失败或无法核验时不报告 `replayed` |
 | Issue 关闭、重开或改变 closure 种类 | 目标状态的全部关闭规则；改变种类按重开后再关闭处理 |
 | Issue 或 Memory 删除 | 没有其它 owner 或标记仍指向它 |
 | Memory 的 `status` 改变 | 转换合法：captured 到 current，current 到 superseded；note 保持 captured |
@@ -204,6 +204,7 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 | active 宪法改回 draft 或被删除 | 拒绝 |
 | 已裁决 Design 的候选、Goals、Limits 或 Cases 改变 | 拒绝；DECISION 的理由只能追加一节带日期与来源的更正 |
 | DECISION 的 `Selected:` 首次写入 | 按 `design decide` 的规则校验全部候选与 Limits |
+| 基线已裁决的 Design 改选候选或清空 `Selected:` | 拒绝；候选在单文件与目录形式之间调整时，指向同一候选的新入口不算改选 |
 | Roadmap 目录移入 `docs/feature/` | 链接改写与采用规则满足，见[采用 Roadmap](use-case/plan-and-adopt-contracts.md#结果) |
 
 `amends` 指向已删除条款的关系是历史引用，此后的 `check` 只校验其 ID 格式。

@@ -16,7 +16,7 @@ status: open
 
 ## 复现与测量
 
-在该仓库手动执行后台刷新进程使用的同一条扫描 `concord --json --fresh --dry-run trace gaps`：wall 177.7s，user 82.5s，system 100.4s，最终 `PreimageChanged`（`docs/feature/npc/视觉/本人观察表达.md` 在扫描期间被修改）。
+在该仓库手动执行后台刷新进程使用的同一条扫描 `concord --json --fresh --dry-run trace gaps`。耗时 wall 177.7s，user 82.5s，system 100.4s，最终 `PreimageChanged`（`docs/feature/npc/视觉/本人观察表达.md` 在扫描期间被修改）。
 
 ## 原因
 
@@ -29,7 +29,7 @@ system 时间占比约 55%，推测文件系统调用次数是主要成本，尚
 ## 后续
 
 - 用 `pnpm profile refresh --consumer scale` 或冻结的 rpg-game 副本定位耗时来源（测量路径见 docs/engineering/concord-self-hosting/performance.md）。
-- 用 `pnpm bench query --consumer scale` 检查刷新上限（契约见 query-asynchronous-projections 的“刷新上限”表）。
+- 用 `pnpm bench query --consumer scale` 检查刷新上限（Spec 见 query-asynchronous-projections 的“刷新上限”表）。
 - 超时需要具名错误并记录耗时。
 
 ## 原记录信息
