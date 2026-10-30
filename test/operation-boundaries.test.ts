@@ -145,6 +145,7 @@ test('read access refuses publication but permits a dry-run preview without writ
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
 test('read access cannot publish source or invalidate a run while another reader holds ownership', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
+  writeProjectConfig(root, { testRoots: ['test'] });
   write(root, 'test/source.ts', 'export const value = 1;\n');
   let runToken = '';
   withRepo(root, repo => { runToken = repo.snapshot(() => beginRun(root)).lease.owner.token; });
