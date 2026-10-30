@@ -195,7 +195,6 @@ test("governance configuration participates as a same-preimage guard without bec
     const receipt = repository.publish("guarded-write", [
       { path: "docs/feature/guard/README.md", before: "before\n", after: "after\n" },
       { path: "docs/feature/guard/architecture.md", before: "supporting guard\n", after: "supporting guard\n" },
-      { path: "concord.repository.json", before: null, after: null },
     ]);
     assert.deepEqual(receipt.changedPaths, ["docs/feature/guard/README.md", "docs/feature/guard/architecture.md"]);
     assert.equal(readFileSync(join(root, "docs", "feature", "guard", "README.md"), "utf8"), "after\n");

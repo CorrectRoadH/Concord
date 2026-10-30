@@ -6,10 +6,10 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { CodeDeclarationSchema } from '../dist/code.js';
-import { ProjectSchema } from '../dist/shared.js';
+import { CodeDeclarationSchema } from '../src/code.js';
+import { ProjectSchema } from '../src/shared.js';
 import { readProjectConfig, writeProjectConfig } from './support.js';
-import { caseDiscriminator, deriveTestReference } from '../dist/test-reference.js';
+import { caseDiscriminator, deriveTestReference } from '../src/test-reference.js';
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('packed CLI traces code scopes and preserves the original fixed evidence gate', () => Effect.runPromise(Effect.sync(() => {
@@ -128,12 +128,12 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     assert.deepEqual(call(['code', 'list'], codes).codes, []);
 
     // A code finding must not become an extra precondition for real red/green evidence.
-    call(['memory', 'add', 'wrong-result', '--kind', 'problem', '--title', 'Wrong result'], ack);
-    const problem = 'memory/wrong-result.md';
+    call(['new', 'issue', 'wrong-result', '--title', 'Wrong result'], ack);
+    const problem = 'docs/issues/wrong-result.md';
     writeProjectConfig(root, { ...config, testRoots: ['test'] });
     writeFileSync(join(root, 'test/result.test.mjs'), [
       "import test from 'node:test';", "import assert from 'node:assert/strict';", "import { result } from '../src/result.mjs';",
-      `// @use-case ${useCase}`, `// @regression ${problem}`,
+      `// @use-case ${useCase}`, `// @issue ${problem}`,
       "test('result', () => { assert.equal(result(), 2); });", '',
     ].join('\n'));
     const resultCase = deriveTestReference('test/result.test.mjs', 'test/result.test.mjs', caseDiscriminator(useCase, 0));
@@ -143,17 +143,10 @@ test('packed CLI traces code scopes and preserves the original fixed evidence ga
     assert.equal(call(['code', 'list'], error, 1).error, 'TraceInvalid');
     assert.equal(call(['test', 'list'], Schema.Struct({ cases: Schema.Array(Schema.Unknown) })).cases.length, 1);
     call(['test', 'show', resultCase], ack);
-    const receipt = Schema.Struct({ id: Schema.String, commandOutcome: Schema.String });
+    const receipt = Schema.Struct({ commandOutcome: Schema.String });
     const red = call(['test', 'run', resultCase], receipt, 1); assert.equal(red.commandOutcome, 'fail');
     writeFileSync(join(root, 'src/result.mjs'), product(2));
     const green = call(['test', 'run', resultCase], receipt); assert.equal(green.commandOutcome, 'pass');
-    assert.equal(call(['memory', 'resolve', 'wrong-result', '--kind', 'fixed', '--reason', 'fixed'], error, 1).error, 'EvidenceRequired');
-    const resolveArgs = ['memory', 'resolve', 'wrong-result', '--kind', 'fixed', '--reason', 'fixed result', '--red', red.id, '--green', green.id];
-    writeFileSync(join(root, 'src/result.mjs'), product(3));
-    call(resolveArgs, error, 1); // The original candidate/definition gate still rejects stale evidence.
-    writeFileSync(join(root, 'src/result.mjs'), product(2));
-    call(resolveArgs, ack);
-    assert.equal(call(['memory', 'show', 'wrong-result'], Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ resolution: Schema.Struct({ evidenceLevel: Schema.String }) }) }) })).document.metadata.resolution.evidenceLevel, 'command');
     const testFile = join(root, 'test/result.test.mjs');
     writeFileSync(testFile, readFileSync(testFile, 'utf8').replace(useCase, 'docs/feature/missing/README.md'));
     assert.equal(call(['test', 'list'], error, 1).error, 'TraceInvalid', 'original test reference validation remains enforced');

@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { LocalRepository, initialize } from '../dist/storage.js';
-import { cacheStatus, clearCache, scanAnnotations } from '../dist/annotations.js';
-import { openHawdb } from '../dist/hawdb-native.js';
+import { LocalRepository, initialize } from '../src/storage.js';
+import { cacheStatus, clearCache, scanAnnotations } from '../src/annotations.js';
+import { openHawdb } from '../src/hawdb-native.js';
 
 function consumer() {
   const root = mkdtempSync(join(tmpdir(), 'concord-annotations-'));
@@ -26,7 +26,7 @@ test('indexes real runner imports and safely rebuilds HawDB projections', () => 
   try {
     write(root, 'test/example.test.mjs', `import spec from 'node:test';
 // @feature docs/feature/parser/README.md
-// @regression docs/memory/parser-bug.md
+// @issue docs/issues/parser-bug.md
 spec('parses comments', () => {});
 // @feature docs/feature/parser/README.md
 // @status retired
@@ -37,7 +37,7 @@ const text = '// this is ordinary text, not a Concord annotation';
 const caseId = 'template-case';
 const contract = 'feature/template';
 const interpolatedFixture = \`// @feature \${contract}
-// @regression \${caseId}\`;
+// @issue \${caseId}\`;
 `);
     const cold = scan(root);
     assert.equal(cold.cache.status, 'miss'); assert.equal(cold.cases.length, 2);

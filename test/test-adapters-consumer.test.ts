@@ -1,16 +1,16 @@
 import assert from 'node:assert/strict';
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess } from '../dist/owned-process.js';
-import { ProjectSchema } from '../dist/shared.js';
-import { renderTypeScriptConfig, parseTypeScriptConfig } from '../dist/config.js';
-import { type TestAdapter } from '../dist/test-adapter-config.js';
-import { LocalRepository } from '../dist/storage.js';
-import { closeRepositoryCache, withPersistentCache } from '../dist/cache-store.js';
+import { OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess } from '../src/owned-process.js';
+import { ProjectSchema } from '../src/shared.js';
+import { renderTypeScriptConfig, parseTypeScriptConfig } from '../src/config.js';
+import { type TestAdapter } from '../src/test-adapter-config.js';
+import { LocalRepository } from '../src/storage.js';
+import { closeRepositoryCache, withPersistentCache } from '../src/cache-store.js';
 import { installConcord, packConcord } from './installed-package.js';
 
 const sourceRoot = fileURLToPath(new URL('..', import.meta.url));
@@ -22,7 +22,7 @@ const requireCommand = Effect.fn('adapterTest.command')(function* (argv: readonl
 });
 const parse = (source: string): Record<string, unknown> => Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Unknown))(JSON.parse(source));
 const CaseList = Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: Schema.String })) });
-const Receipt = Schema.Struct({ id: Schema.String, scope: Schema.String, commandOutcome: Schema.String, definitionDigest: Schema.String, requested: Schema.optional(Schema.Array(Schema.String)), gaps: Schema.optional(Schema.Array(Schema.String)), commandExecutionCount: Schema.optional(Schema.Int), versions: Schema.optional(Schema.Struct({ framework: Schema.String, runtime: Schema.String })) });
+const Receipt = Schema.Struct({ scope: Schema.String, commandOutcome: Schema.String, definitionDigest: Schema.optional(Schema.String), requested: Schema.optional(Schema.Array(Schema.String)), gaps: Schema.optional(Schema.Array(Schema.String)), commandExecutionCount: Schema.optional(Schema.Int), versions: Schema.optional(Schema.Struct({ framework: Schema.String, runtime: Schema.String })) });
 const setup = Effect.fn('adapterTest.pack')(function* (root: string, needsEffect = false) {
   return yield* Effect.sync(() => {
     const packed = packConcord(root); const tool = join(root, 'tool');
@@ -41,7 +41,7 @@ const prepare = Effect.fn('adapterTest.consumer')(function* (scratch: string, na
   const root = join(scratch, name); yield* Effect.sync(() => mkdirSync(root));
   yield* requireCommand(['git', 'init', '-q'], root);
   yield* requireCommand([process.execPath, cli, '--root', root, 'init', '--json'], root);
-  yield* requireCommand([process.execPath, cli, '--root', root, 'feature', 'create', 'example', '--title', 'Example', '--json'], root);
+  yield* requireCommand([process.execPath, cli, '--root', root, 'new', 'feature', 'example', '--title', 'Example', '--json'], root);
   yield* Effect.sync(() => {
     text(root, 'package.json', '{"private":true,"type":"module"}');
     symlinkSync(join(tool, 'node_modules'), join(root, 'node_modules'), 'dir');
@@ -50,8 +50,9 @@ const prepare = Effect.fn('adapterTest.consumer')(function* (scratch: string, na
   return root;
 });
 const configure = (root: string, adapters: readonly TestAdapter[], sourceIgnore: readonly string[] = []) => {
-  const config = parseTypeScriptConfig(readFileSync(join(root, 'concord.config.ts'), 'utf8'));
-  writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig(Schema.decodeUnknownSync(ProjectSchema)({ ...config, testAdapters: adapters, sourceIgnore })));
+  const configPath = join(root, 'concord.config.ts');
+  const config = existsSync(configPath) ? parseTypeScriptConfig(readFileSync(configPath, 'utf8')) : {};
+  writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig(Schema.decodeUnknownSync(ProjectSchema)({ ...config, runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 60000 }, testAdapters: adapters, sourceIgnore })));
 };
 const call = (root: string, cli: string, args: readonly string[]) => command([process.execPath, cli, '--root', root, '--json', ...args], root);
 const success = Effect.fn('adapterTest.cli')(function* (root: string, cli: string, args: readonly string[]) {
@@ -146,10 +147,10 @@ test('packed external adapter preserves static relations and rejects dishonest p
   yield* Effect.sync(() => {
     copyFileSync(join(sourceRoot, 'test/fixtures/process-adapter.ts'), join(consumer, 'adapter.ts'));
     text(consumer, 'fixture.txt', 'original'); text(consumer, 'fixture.lock', 'locked'); text(consumer, 'mode.txt', 'green');
-    text(consumer, 'test/sample.ts', '// @feature docs/feature/example/README.md\n// @name parameter-group\n// @regression memory/problem.md\n');
+    text(consumer, 'test/sample.ts', '// @feature docs/feature/example/README.md\n// @name parameter-group\n// @issue docs/issues/problem.md\n');
     configure(consumer, [{ id: 'external', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: ['fixture.lock'], envNames: ['NODE_OPTIONS', 'PATH'], collectTimeoutMs: 1000, budgets: { reportFileBytes: 128 } }]);
   });
-  yield* success(consumer, cli, ['memory', 'add', 'problem', '--kind', 'problem', '--title', 'Problem']);
+  yield* success(consumer, cli, ['new', 'issue', 'problem', '--title', 'Problem']);
   const id = yield* idFor(consumer, cli);
   const checkBefore = yield* success(consumer, cli, ['check']);
   const coldCases = Schema.decodeUnknownSync(CaseList)(JSON.parse((yield* success(consumer, cli, ['test', 'list'])).stdout)).cases;
@@ -208,7 +209,6 @@ test('packed external adapter preserves static relations and rejects dishonest p
   yield* Effect.sync(() => text(consumer, 'mode.txt', 'green'));
   const green = Schema.decodeUnknownSync(Receipt)(JSON.parse((yield* success(consumer, cli, ['test', 'run', id, '--require-native'])).stdout));
   assert.notEqual(red.definitionDigest, green.definitionDigest); assert.deepEqual(red.requested, green.requested); assert.ok(green.gaps?.includes('ExternalInputUnknown'));
-  yield* success(consumer, cli, ['memory', 'resolve', 'problem', '--kind', 'fixed', '--reason', 'Native red and green', '--red', red.id, '--green', green.id]);
   yield* success(consumer, cli, ['cache', 'clear']);
   assert.equal(yield* idFor(consumer, cli), id);
 })).pipe(Effect.provide(OwnedProcessLive))));

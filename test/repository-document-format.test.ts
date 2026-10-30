@@ -1,3 +1,5 @@
+import { authorDesignFixture } from './design-fixture.js';
+import { createConsumer } from './support/consumer.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, renameSync } from 'node:fs';
@@ -12,53 +14,28 @@ import { createFeatureAt, addFeaturePageAt, setFeaturePageAt } from '../reposito
 import { createUseCaseAt } from '../repository/docs/use-case/domain.js';
 import { decodeDesignReadme } from '../repository/docs/design/codec.js';
 import { readDesignPlanPaths } from '../src/document-layout.js';
-import { MemoryRepository } from '../repository/memory/repository.js';
-import { FeedbackRepository } from '../repository/feedback/repository.js';
 import { leafOwnerSelection, assertSameLeafSelection } from '../repository/document-owners.js';
 import { traceDigest } from '../repository/docs/trace/relation-mutation.js';
 import { templateBody } from '../src/templates.js';
 
 function write(root: string, path: string, source: string): void { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), source); }
 function fixture(): string {
-  const root = mkdtempSync(join(tmpdir(), 'concord-repository-document-format-'));
-  execFileSync('git', ['init', '-q', root]);
+  const root = createConsumer();
   for (const path of ['docs/issues', 'memory', 'e2e']) mkdirSync(join(root, path), { recursive: true });
-  write(root, 'concord.repository.json', JSON.stringify({ format: 'concord.repository/v2', suites: [{ id: 'suite', root: 'e2e' }], historyPath: 'test-history.ts', policy: 'concord.native-reliability/v1' }));
-  write(root, 'memory/insight.md', renderOwnerFixture({ id: 'insight', title: 'Knowledge', kind: 'memory', memoryKind: 'insight', state: 'current', epoch: 0, promotions: [], history: [] }));
-  write(root, 'docs/issues/issue.md', renderOwnerFixture({ id: 'issue', title: 'Issue', kind: 'issue', state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }));
+  write(root, 'memory/insight.md', renderOwnerFixture({ id: 'insight', title: 'Knowledge', kind: 'memory', type: 'insight', status: 'current', relations: [] }));
+  write(root, 'docs/issues/issue.md', renderOwnerFixture({ id: 'issue', title: 'Issue', kind: 'issue', status: 'open', relations: [] }));
   write(root, 'docs/feature/migrated/README.md', renderOwnerFixture({ id: 'migrated', title: 'Feature', kind: 'feature' }));
   write(root, 'docs/feature/migrated/use-case/README.md', '# Use Cases\n');
   write(root, 'docs/feature/migrated/use-case/flow.md', renderOwnerFixture({ id: 'flow', title: 'Flow', kind: 'use-case', feature: 'docs/feature/migrated/README.md' }));
   write(root, 'docs/design/storage/README.md', renderOwnerFixture({ id: 'storage', title: 'Storage', kind: 'design', alternatives: ['files', 'sqlite'] }));
   for (const plan of ['files', 'sqlite']) write(root, `docs/design/storage/plans/${plan}/README.md`, `# ${plan}\n`);
   write(root, 'docs/design/storage/DECISION.md', '# Decision\n\n## Decision\n\nSelected: [files](plans/files/README.md)\n\n## Rationale\n\nFiles preserve the source.\n');
+  authorDesignFixture(root, 'storage', ['files', 'sqlite'], 'files');
   execFileSync('git', ['-C', root, 'add', '.']);
   execFileSync('git', ['-C', root, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Fixture']);
   return root;
 }
 const run = <A, E>(effect: Effect.Effect<A, E, import('effect').FileSystem.FileSystem>): Promise<A> => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
-
-// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#路径与身份
-test('advanced repositories derive Unicode identities and guard the frozen physical selection', async () => {
-  const root = fixture();
-  try {
-    renameSync(join(root, 'docs/feature/migrated'), join(root, 'docs/feature/中文功能'));
-    renameSync(join(root, 'docs/feature/中文功能/use-case/flow.md'), join(root, 'docs/feature/中文功能/use-case/中文路径.md'));
-    renameSync(join(root, 'memory/insight.md'), join(root, 'memory/中文记忆.md'));
-    renameSync(join(root, 'docs/issues/issue.md'), join(root, 'docs/issues/中文观察.md'));
-    const snapshot = await run(compileTrace(root));
-    assert.equal(snapshot.nodes.find(node => node.id === '中文路径')?.path, 'docs/feature/中文功能/use-case/中文路径.md');
-    assert.deepEqual(snapshot.memory.map(owner => owner.path), ['memory/中文记忆.md']);
-    assert.equal(new MemoryRepository(root).read('中文记忆').metadata.id, '中文记忆');
-    assert.equal(new FeedbackRepository({ root }).ownerPath('中文观察'), 'docs/issues/中文观察.md');
-    await run(createUseCaseAt(root, { slug: '新增动作', parent: '中文功能', title: '新增动作', body: '# 新增动作\n', dryRun: false }));
-    assert.equal(readFileSync(join(root, 'docs/feature/中文功能/use-case/新增动作.md'), 'utf8').startsWith('---'), false);
-    const frozen = leafOwnerSelection(root, 'memory', '中文记忆');
-    renameSync(join(root, 'memory/中文记忆.md'), join(root, 'memory/新位置.md'));
-    assert.throws(() => assertSameLeafSelection(root, 'memory', '中文记忆', frozen), { code: 'PreimageChanged' });
-    assert.equal(new MemoryRepository(root).read('新位置').metadata.id, '新位置');
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
 test('advanced writing emits plain Spec pages and reads Design selection from DECISION', async () => {

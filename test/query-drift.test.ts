@@ -1,4 +1,4 @@
-import { initialConstitution } from '../dist/constitution.js';
+import { initialConstitution } from '../src/constitution.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -23,7 +23,7 @@ function candidate(at: number, paths: string[] = [], publicationChanged = false)
 }
 const fail = (at: number): QueryUpdate => ({ kind: 'failure', error: { failedAt: new Date(at).toISOString(), scannedAt: at, code: 'InvalidConfig', message: 'invalid' } });
 function trace(findings: Finding[]): ReturnType<typeof buildTrace> {
-  return { documents: [], constitutionReferences: [], annotations: { cases: [], findings: [], files: [], digest: '', cache: value.cache }, codeDeclarations: [], codeFiles: [], edges: [], findings, complete: findings.length === 0, inventoryComplete: true, advisories: [], memories: [], codeCache: undefined, codeRelationsUnknown: findings.some(f => f.code === 'CodeSourceChanged') };
+  return { documents: [], constitutionReferences: [], annotations: { cases: [], findings: [], files: [], digest: '', cache: value.cache }, codeDeclarations: [], codeFiles: [], edges: [], findings, complete: findings.length === 0, inventoryComplete: true, advisories: [], verifications: [], codeCache: undefined, codeRelationsUnknown: findings.some(f => f.code === 'CodeSourceChanged') };
 }
 const success = decodeQueryScanMessage({ format: 'concord.query-scan/v1', ok: true, scannedAt: 100, finishedAt: 110, value, complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } });
 function processResult(message: unknown = success, fields: Partial<OwnedProcessResult> = {}): OwnedProcessResult {
@@ -148,8 +148,8 @@ test('owner and remote bodies are stripped and restored only after safe matching
     const missing = hydrateQueryValue(root, stored);
     assert.deepEqual(missing.bodyUnavailable, [{ path, code: 'BodyUnavailable' }]);
     assert.throws(() => Schema.decodeUnknownSync(TraceShowValue, { onExcessProperty: 'error' })({ ...stored, subject: owner }));
-    const metadata = { format: 'concord.document/v1' as const, kind: 'issue' as const, id: 'remote', title: 'Remote', createdAt: '2026-10-06T00:00:00.000Z', state: 'draft' as const,
-      memoryRelations: [], adoptions: { current: [], history: [] }, history: [],
+    const metadata = { format: 'concord.document/v1' as const, kind: 'issue' as const, id: 'remote', title: 'Remote', createdAt: '2026-10-06T00:00:00.000Z', status: 'open' as const,
+      relations: [],
       source: { provider: 'github' as const, instance: 'https://api.github.com' as const, id: '123', url: 'https://github.com/example/example/issues/1', title: 'Remote', body: 'PRIVATE_REMOTE_BODY', state: 'open', updatedAt: '2026-10-06T00:00:00.000Z', connectionId: 'github', importedAt: '2026-10-06T00:00:00.000Z' } };
     const remoteSource = renderDocument(metadata, '# PRIVATE_ISSUE_BODY\n');
     const remote = stripQueryBodies({ operation: 'trace-show', subject: { path, metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });

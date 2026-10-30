@@ -4,23 +4,27 @@ import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, exists
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-import test from 'node:test';
+import test, { before, after } from 'node:test';
+import { installConcord, packConcord } from './installed-package.js';
 import { Effect, Schema } from 'effect';
-import { extractSteps } from '../dist/steps.js';
-import { formatUseCase, renameUseCaseStep, useCaseSteps } from '../dist/step-commands.js';
-import { planStepRename } from '../dist/step-rewrite.js';
-import { createDocument, loadDocuments, renderDocument } from '../dist/documents.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { buildTrace, renderReview, traceGaps, traceShow } from '../dist/trace.js';
-import { clearCache, parseTestDeclarations } from '../dist/annotations.js';
-import { digest } from '../dist/shared.js';
-import { genericPrivateDirectorySync } from '../dist/coordination.js';
-import { checkWriting } from '../dist/writing.js';
-import { runCase, verifyFixedEvidence } from '../dist/evidence.js';
-import { OwnedProcess, type OwnedProcessResult } from '../dist/owned-process.js';
+import { extractSteps } from '../src/steps.js';
+import { formatUseCase, renameUseCaseStep, useCaseSteps } from '../src/step-commands.js';
+import { planStepRename } from '../src/step-rewrite.js';
+import { createDocument, loadDocuments, renderDocument } from '../src/documents.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { buildTrace, renderReview, traceGaps, traceShow } from '../src/trace.js';
+import { clearCache, parseTestDeclarations } from '../src/annotations.js';
+import { digest } from '../src/shared.js';
+import { genericPrivateDirectorySync } from '../src/coordination.js';
+import { checkWriting } from '../src/writing.js';
+import { runCase } from '../src/evidence.js';
+import { OwnedProcess, type OwnedProcessResult } from '../src/owned-process.js';
 
 const path = 'docs/feature/sample/use-case/flow.md';
-const entry = resolve('dist/entry.js');
+const packedRoot = mkdtempSync(join(tmpdir(), 'concord-steps-packed-'));
+let entry: string;
+before(() => { const install = join(packedRoot, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true })); installConcord(install, packConcord(packedRoot)); entry = join(install, 'node_modules/concord-sdlc/dist/entry.js'); });
+after(() => rmSync(packedRoot, { recursive: true, force: true }));
 function document(body: string, kind: 'use-case' | 'feature' = 'use-case') {
   return renderDocument(kind === 'use-case' ? { format: 'concord.document/v1', kind, id: 'flow', title: 'Flow', feature: 'docs/feature/sample/README.md' } : { format: 'concord.document/v1', kind, id: 'sample', title: 'Sample' }, body);
 }
@@ -242,7 +246,7 @@ test('steps C20 Memory promotion references block rename with zero writes', () =
   createDocument(repo, 'memory', { id: 'promotion', title: 'Promotion', memoryKind: 'note' });
   const memory = loadDocuments(repo, ['memory'])[0]!;
   if (memory.metadata.kind !== 'memory') throw new Error('Expected Memory');
-  write(root, memory.path, renderDocument({ ...memory.metadata, promotions: [`${path}#old`] }, memory.body));
+  write(root, memory.path, renderDocument({ ...memory.metadata, relations: [{ role: 'supports', target: `${path}#old` }] }, memory.body));
   assert.throws(() => renameUseCaseStep(repo, path, 'old', 'new'), { code: 'ManagedReferenceBlocked' });
   assert.match(repo.read(path)!, /\{#old\}/u);
   assert.equal(existsSync(join(repo.privateDir, 'journal.json')), false);
@@ -260,46 +264,4 @@ test('steps writing ignores real terminal IDs in sentence and paragraph length b
   assert.ok(findings.some(finding => finding.rule === 'sentenceLength'));
   assert.ok(findings.some(finding => finding.rule === 'paragraphLength'));
   assert.ok(findings.some(finding => finding.rule === 'proceduralSentenceLength'));
-}))));
-
-// @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#link-declarations
-// @name steps-named-receipts-stale
-test('steps C9 a named relation keeps its v1 identity but issued command receipts become stale after retargeting to a step', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
-  const state = yield* Effect.acquireRelease(Effect.sync(() => {
-    const root = mkdtempSync(join(tmpdir(), 'concord-steps-evidence-'));
-    let repo: LocalRepository | undefined;
-    try {
-      execFileSync('git', ['init', '-q', root]);
-      repo = new LocalRepository(root, { initialize: true });
-      initialize(repo, false, { sourceRoots: [], testRoots: ['test'] });
-      createDocument(repo, 'feature', { id: 'sample', title: 'Sample', pages: [] });
-      createDocument(repo, 'use-case', { id: 'flow', title: 'Flow', feature: 'sample' });
-      createDocument(repo, 'memory', { id: 'regression', title: 'Regression', memoryKind: 'problem' });
-      write(root, path, document('1. A {#first}\n'));
-      write(root, 'test/flow.ts', `// @use-case ${path}\n// @name stable\n// @regression memory/regression.md\n`);
-      return { repo, root };
-    } catch (cause) { repo?.close(); rmSync(root, { recursive: true, force: true }); throw cause; }
-  }), ({ repo, root }) => Effect.sync(() => { repo.close(); rmSync(root, { recursive: true, force: true }); }));
-  const { repo, root } = state;
-  const results: OwnedProcessResult[] = [];
-  // Only the external runner boundary is simulated; issuance, identity and verification are real.
-  const runner = OwnedProcess.of({
-    run: command => Effect.sync(() => {
-      const fail = results.length === 0;
-      const result: OwnedProcessResult = { command, exitCode: fail ? 1 : 0, signal: null, timedOut: false, cancelled: false, outputLimitExceeded: false, stdout: `# tests 1\n# pass ${fail ? 0 : 1}\n# fail ${fail ? 1 : 0}\n# skipped 0\n# todo 0\n`, stderr: '', outputBytes: 64, processGroupOwned: true, groupCleanup: { owned: true, checked: true, aliveAfterLeaderClose: false, signalsSent: [], gone: true, detail: 'External runner fixture' } };
-      results.push(result); return result;
-    }),
-    requestStop: () => Effect.void, stop: () => Effect.void, forceKill: Effect.void, activeCount: Effect.succeed(0), awaitIdle: Effect.void, cleanupResults: Effect.sync(() => results),
-  });
-  const selected = yield* Effect.sync(() => parseTestDeclarations('test/flow.ts', repo.read('test/flow.ts')!).cases[0]!);
-  const red = yield* runCase(repo, selected, loadDocuments(repo)).pipe(Effect.provideService(OwnedProcess, runner));
-  const green = yield* runCase(repo, selected, loadDocuments(repo)).pipe(Effect.provideService(OwnedProcess, runner));
-  yield* Effect.sync(() => {
-    const documents = loadDocuments(repo), problem = documents.find(doc => doc.path === 'memory/regression.md')!;
-    assert.equal(verifyFixedEvidence(repo, documents, [selected], problem, red.id, green.id).selectedCaseId, selected.id);
-    write(root, 'test/flow.ts', repo.read('test/flow.ts')!.replace(`@use-case ${path}\n`, `@use-case ${path}#first\n`));
-    const retargeted = parseTestDeclarations('test/flow.ts', repo.read('test/flow.ts')!).cases[0]!;
-    assert.equal(retargeted.id, selected.id);
-    assert.throws(() => verifyFixedEvidence(repo, loadDocuments(repo), [retargeted], problem, red.id, green.id), { code: 'EvidenceStale' });
-  });
 }))));

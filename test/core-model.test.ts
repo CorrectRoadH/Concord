@@ -7,7 +7,7 @@ import test, { after } from 'node:test';
 import { Effect } from 'effect';
 import { parse } from 'yaml';
 import { decodeDocumentSource, renderDocument, researchSources } from '../src/document-codec.js';
-import { activateMemory, adoptRoadmap, checkDocuments, createDocument, decideDesign, deferDesign, findDocument, linkIssue, loadDocuments, promoteMemory, supersedeMemory, unlinkIssue } from '../src/documents.js';
+import { activateMemory, adoptRoadmap, checkDocuments, createDocument, decideDesign, deferDesign, findDocument, linkIssue, loadDocuments, linkMemory, supersedeMemory, unlinkIssue } from '../src/documents.js';
 import { LocalRepository, initialize } from '../src/storage.js';
 import type { DocumentMeta } from '../src/shared.js';
 import { authorDesignFixture } from './design-fixture.js';
@@ -15,8 +15,8 @@ import { renderMemorySource } from '../src/memory-write.js';
 import { withConsumer as consumer } from './support/consumer.js';
 
 const base = { format: 'concord.document/v1' as const, id: 'sample', title: '样例', createdAt: '2026-10-30' };
-const issue = { ...base, kind: 'issue' as const, state: 'draft' as const, memoryRelations: [], adoptions: { current: [], history: [] }, history: [] };
-const memory = { ...base, kind: 'memory' as const, memoryKind: 'insight' as const, state: 'captured' as const, epoch: 0, promotions: [], history: [] };
+const issue = { ...base, kind: 'issue' as const, status: 'open' as const, relations: [] };
+const memory = { ...base, kind: 'memory' as const, type: 'insight' as const, status: 'captured' as const, relations: [] };
 const frontmatter = (source: string): unknown => parse(/^---\n([\s\S]*?)\n---/u.exec(source)![1]!);
 const code = (name: string) => (cause: unknown): boolean => cause instanceof Error && 'code' in cause && cause.code === name;
 const write = (root: string, path: string, source: string): void => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), source); };
@@ -55,7 +55,7 @@ test('malformed owners and obsolete metadata are named invalid inputs', () => {
 test('Issue serializes only nonempty declarations and structurally validates fixed verification', () => {
   assert.deepEqual(frontmatter(renderDocument(issue, '# Issue\n')), { status: 'open' });
   const verification = { defect: 'a'.repeat(40), fix: 'b'.repeat(40), tests: ['neref_test'] as [string], runner: `sha256:${'c'.repeat(64)}`, concord: '0.4.0' };
-  const metadata: DocumentMeta = { ...issue, state: 'closed', closure: { kind: 'fixed', reason: '修正', verification } };
+  const metadata: DocumentMeta = { ...issue, status: 'closed', closure: { kind: 'fixed', reason: '修正', verification } };
   const source = renderDocument(metadata, '# Issue\n');
   assert.deepEqual(frontmatter(source), { status: 'closed', closure: { kind: 'fixed', reason: '修正', verification } });
   assert.deepEqual(decodeDocumentSource('docs/issues/a.md', source)?.metadata.kind, 'issue');
@@ -65,7 +65,7 @@ test('Issue serializes only nonempty declarations and structurally validates fix
 // @use-case docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 test('Memory writes type, status and relations without lifecycle history or derived identity', () => {
   assert.deepEqual(frontmatter(renderDocument(memory, '# Insight\n')), { type: 'insight', status: 'captured' });
-  const source = renderDocument({ ...memory, state: 'current', promotions: ['docs/feature/a/README.md'] }, '# Insight\n');
+  const source = renderDocument({ ...memory, status: 'current', relations: [{ role: 'supports', target: 'docs/feature/a/README.md' }] }, '# Insight\n');
   assert.deepEqual(frontmatter(source), { type: 'insight', status: 'current', relations: [{ role: 'supports', target: 'docs/feature/a/README.md' }] });
 });
 

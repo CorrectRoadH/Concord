@@ -46,25 +46,6 @@ test('every built and installed static receipt matches the complete CLI byte for
   } finally { yield* Effect.sync(() => rmSync(scratch, { recursive: true, force: true })); }
 })));
 
-// @use-case docs/feature/local-sdlc/use-case/load-compatible-repository-profile.md
-test('repository static help retains the Git worktree top-level precondition', () => Effect.runPromise(Effect.gen(function*() {
-  const scratch = yield* Effect.sync(() => mkdtempSync(join(tmpdir(), 'concord-repository-help-')));
-  try {
-    const root = join(scratch, 'consumer'), nested = join(root, 'nested');
-    yield* Effect.sync(() => {
-      mkdirSync(nested, { recursive: true });
-      assert.equal(spawnSync('git', ['init', '--quiet', root]).status, 0);
-    });
-    for (const cwd of [scratch, root, nested]) {
-      for (const args of [['repo', '--help'], ['repo', 'docs', '--help']]) {
-        const full = yield* invoke(resolve('dist/entry-full.js'), args, environment, cwd);
-        assert.equal(full.status, cwd === root ? 0 : 1);
-        assert.deepEqual(yield* invoke(resolve('dist/entry.js'), args, environment, cwd), full, `${cwd}: ${args.join(' ')}`);
-      }
-    }
-  } finally { yield* Effect.sync(() => rmSync(scratch, { recursive: true, force: true })); }
-})));
-
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('static help, version, default and repository help load no Effect, command or native code', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-startup-probe-'));

@@ -1,3 +1,4 @@
+import { createConsumer } from './support/consumer.js';
 import assert from 'node:assert/strict';
 import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
@@ -18,21 +19,12 @@ function write(root: string, path: string, source: string): void {
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
 for (const form of ['directory', 'file']) test(`repository Design ${form} shares content gates, guards dry-run inputs, and retains the complete plan projection`, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-repository-design-'));
+  const root = createConsumer();
   const run = <A, E>(effect: Effect.Effect<A, E, import('effect').FileSystem.FileSystem>) => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
   try {
     await Effect.runPromise(Effect.sync(() => {
-      execFileSync('git', ['init', '-q', root]);
-      mkdirSync(join(root, 'e2e')); mkdirSync(join(root, 'memory')); mkdirSync(join(root, 'feedback'));
+      mkdirSync(join(root, 'e2e')); mkdirSync(join(root, 'memory'), { recursive: true }); mkdirSync(join(root, 'feedback'));
       mkdirSync(join(root, 'docs/design'), { recursive: true });
-      write(root, 'concord.repository.json', JSON.stringify({ format: 'concord.repository/v2', suites: [{ id: 'suite', root: 'e2e' }], historyPath: 'test-history.ts', policy: 'concord.native-reliability/v1' }));
-      const feature = 'docs/_template/feature-design'; const design = 'docs/_template/design-decision';
-      const optional = { library: ['library.md'], cli: ['cli.md'], architecture: ['architecture.md'], lifecycle: ['lifecycle.md'], 'use-case': ['use-case/README.md'] };
-      write(root, `${feature}/manifest.json`, JSON.stringify({ format: 'concord.templates/v1', applicableKinds: ['feature', 'roadmap', 'design-plan'], requiredFiles: ['README.md'], optionalFiles: optional }));
-      write(root, `${feature}/README.md`, templateBody('feature', 'Example'));
-      for (const [name, paths] of Object.entries(optional)) for (const path of paths) write(root, `${feature}/${path}`, templateBody(name === 'use-case' ? 'use-case-index' : name, 'Example'));
-      write(root, `${design}/manifest.json`, JSON.stringify({ format: 'concord.templates/v1', applicableKinds: ['design'], requiredFiles: ['README.md', 'GOALS.md', 'LIMITS.md', 'DECISION.md'], optionalFiles: { cases: ['CASES.md'] } }));
-      for (const [path, name] of [['README.md', 'design'], ['GOALS.md', 'goals'], ['LIMITS.md', 'limits'], ['DECISION.md', 'decision-record'], ['CASES.md', 'cases']] as const) write(root, `${design}/${path}`, templateBody(name, 'Example'));
       execFileSync('git', ['-C', root, 'add', '.']);
       execFileSync('git', ['-C', root, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Fixture']);
     }));

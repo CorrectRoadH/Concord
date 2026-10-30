@@ -5,18 +5,18 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { getViewFile, getWorkspaceSnapshot } from '../dist/application.js';
-import { cacheStatus, scanAnnotations, clearCache } from '../dist/annotations.js';
-import { checkDocuments, closeIssue, createDocument, linkFeedbackFeature, loadDocuments, renderDocument, setAuthor, setDocumentMetadata } from '../dist/documents.js';
-import { mergeFeedbackCache, readFeedbackCache } from '../dist/feedback-cache.js';
-import { openHawdb } from '../dist/hawdb-native.js';
-import { listFeedback, syncFeedback } from '../dist/feedback.js';
-import type { RemoteFeedback } from '../dist/feedback-schema.js';
-import type { FeedbackTransport } from '../dist/feedback-providers.js';
-import { setConfig, showConfig } from '../dist/editing.js';
-import { ConcordError } from '../dist/shared.js';
-import { initialize, LocalRepository } from '../dist/storage.js';
-import { humanOutput } from '../dist/presentation.js';
+import { getViewFile, getWorkspaceSnapshot } from '../src/application.js';
+import { cacheStatus, scanAnnotations, clearCache } from '../src/annotations.js';
+import { checkDocuments, closeIssue, createDocument, linkFeedbackFeature, loadDocuments, renderDocument, setAuthor } from '../src/documents.js';
+import { mergeFeedbackCache, readFeedbackCache } from '../src/feedback-cache.js';
+import { openHawdb } from '../src/hawdb-native.js';
+import { listFeedback, syncFeedback } from '../src/feedback.js';
+import type { RemoteFeedback } from '../src/feedback-schema.js';
+import type { FeedbackTransport } from '../src/feedback-providers.js';
+import { setConfig, showConfig } from '../src/editing.js';
+import { ConcordError } from '../src/shared.js';
+import { initialize, LocalRepository } from '../src/storage.js';
+import { humanOutput } from '../src/presentation.js';
 import { projectConfigPath } from './support.js';
 
 const issue = (overrides: Record<string, unknown> = {}) => ({
@@ -138,7 +138,7 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
       assert.match(cacheStatus(repo).detail ?? '', /feedback_cache/u);
       const document = loadDocuments(repo).find(item => item.metadata.id === 'feedback-github-9001')!;
       assert.equal(document.metadata.kind === 'issue' ? document.metadata.source?.body : undefined, '');
-      setDocumentMetadata(repo, document.path, { title: 'Local title' }, document.digest);
+      setAuthor(repo, document.path, document.body.replace(/^# .+/mu, '# Local title'), document.digest);
       const edited = loadDocuments(repo).find(item => item.metadata.id === 'feedback-github-9001')!;
       setAuthor(repo, edited.path, '# Local investigation\n', edited.digest);
     });
@@ -152,7 +152,7 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
       assert.equal(item.document.metadata.title, 'Local title');
       assert.equal(item.document.body, '# Local investigation\n');
       assert.equal(item.document.metadata.source?.title, 'Remote report');
-      assert.equal(item.document.metadata.state, 'draft');
+      assert.equal(item.document.metadata.status, 'draft');
       assert.equal(item.remote?.title, 'Changed remote title');
       assert.equal(item.triage, 'pending');
       createDocument(repo, 'feature', { id: 'feedback-home', title: 'Feedback home' });
@@ -167,7 +167,7 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
     const afterClear = await Effect.runPromise(syncFeedback(root, 'github-main', { transport: githubTransport([issue({ state: 'open', updated_at: '2026-09-14T02:00:00Z' })]), credential: 'test-token' }));
     assert.equal(afterClear.imported, 0, 'cache clear must not erase durable source identity');
     open(root, repo => {
-      assert.equal(listFeedback(repo)[0]?.document.metadata.state, 'closed', 'remote open state must not reopen local feedback');
+      assert.equal(listFeedback(repo)[0]?.document.metadata.status, 'closed', 'remote open state must not reopen local feedback');
       const current = showConfig(repo);
       setConfig(repo, { ...current.config, feedbackConnections: [...(current.config.feedbackConnections ?? []), { id: 'github-copy', provider: 'github', credentialEnv: 'TEST_GITHUB_TOKEN', owner: 'acme', repo: 'project' }] }, current.digest);
     });

@@ -172,13 +172,6 @@ test('packed Issue workflow needs no provider, and deletion preserves linked or 
   const linked = 'docs/issues/linked.md';
   assert.equal(call(root, ['issue', 'remove', 'linked', '--expected-digest', digestFor(root, linked)], 1).error, 'IssueNotRemovable');
 
-  call(root, ['issue', 'create', 'historical', '--title', 'Historical']);
-  const historical = 'docs/issues/historical.md';
-  const parsed = parseDocumentRecord(historical, readFileSync(join(root, historical), 'utf8'));
-  assert.ok(parsed && parsed.metadata.kind === 'issue');
-  writeFileSync(join(root, historical), renderDocument({ ...parsed.metadata, history: [{ at: '2026-09-23T00:00:00Z', action: 'observed', reason: 'Retain' }] }, parsed.body));
-  assert.equal(call(root, ['issue', 'remove', 'historical', '--expected-digest', digestFor(root, historical)], 1).error, 'IssueNotRemovable');
-
   call(root, ['issue', 'create', 'sourced', '--title', 'Sourced']);
   const sourced = 'docs/issues/sourced.md';
   const remote = parseDocumentRecord(sourced, readFileSync(join(root, sourced), 'utf8'));
@@ -195,7 +188,7 @@ test('packed Issue workflow needs no provider, and deletion preserves linked or 
   const duplicate = 'docs/issues/duplicate.md';
   const referring = parseDocumentRecord(duplicate, readFileSync(join(root, duplicate), 'utf8'));
   assert.ok(referring && referring.metadata.kind === 'issue');
-  writeFileSync(join(root, duplicate), renderDocument({ ...referring.metadata, state: 'closed', closure: { kind: 'duplicate', canonical: 'docs/issues/canonical.md#anchor-heading' } }, referring.body));
+  writeFileSync(join(root, duplicate), renderDocument({ ...referring.metadata, status: 'closed', closure: { kind: 'duplicate', canonical: 'docs/issues/canonical.md#anchor-heading' } }, referring.body));
   assert.equal(call(root, ['issue', 'remove', 'canonical', '--expected-digest', digestFor(root, 'docs/issues/canonical.md')], 1).error, 'IssueNotRemovable');
 })));
 

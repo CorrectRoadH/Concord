@@ -2,7 +2,7 @@ import { renderOwnerFixture } from './owner-fixture.js';
 import { createConsumer } from './support/consumer.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, renameSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
@@ -18,23 +18,18 @@ import {
   decideDesign,
   findDocument,
   linkIssue,
+  linkMemory,
   loadDocuments,
   parseDocumentRecord,
-  promoteMemory,
-  reopenMemory,
-  resolveMemory,
   renderDocument,
   resolveReference,
-  retirePromotion,
   setAuthor,
   setPage,
   showPage,
   supersedeMemory,
 } from '../src/documents.js';
 import { LocalRepository, initialize } from '../src/storage.js';
-import { inspectResolutionEvidence } from '../src/evidence.js';
 import { inspectDocuments } from '../src/editing.js';
-import { MemorySchema, ResolutionSchema, decode, type Resolution } from '../src/shared.js';
 
 function useConsumer(run: (repo: LocalRepository, root: string) => void): void {
   const root = createConsumer();
@@ -165,20 +160,8 @@ test('creates captured typed memories and activates without persisting lifecycle
   createDocument(repo, 'memory', { id: 'captured-insight', title: 'Captured insight', memoryKind: 'insight' });
   activateMemory(repo, 'captured-insight', 'Confirmed');
   const active = findDocument(loadDocuments(repo), 'captured-insight', 'memory');
-  assert.equal(active.metadata.kind === 'memory' && active.metadata.state, 'current');
+  assert.equal(active.metadata.kind === 'memory' && active.metadata.status, 'current');
   assert.doesNotMatch(repo.read(active.path)!, /history:|createdAt:|format:|epoch:/u);
-}))));
-
-test('rejects superseded Problems from reopening while preserving their resolution history', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
-  createDocument(repo, 'memory', { id: 'old-problem', title: 'Old problem', memoryKind: 'problem' });
-  createDocument(repo, 'memory', { id: 'new-problem', title: 'New problem', memoryKind: 'problem' });
-  resolveMemory(repo, 'old-problem', 'not-a-bug', 'Historical conclusion');
-  supersedeMemory(repo, 'old-problem', 'new-problem', 'No longer applicable');
-  const old = findDocument(loadDocuments(repo), 'old-problem', 'memory');
-  assert.equal(old.metadata.kind === 'memory' && old.metadata.state, 'superseded');
-  assert.equal(old.metadata.kind === 'memory' && old.metadata.resolution, undefined);
-  assert.equal(old.metadata.kind === 'memory' && old.metadata.history.at(-1)?.resolution?.kind, 'not-a-bug');
-  throwsCode('InvalidMemoryState', () => reopenMemory(repo, 'old-problem', 'Try again'));
 }))));
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('adoption rebases supported links and rejects unsafe source packages without writing', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
@@ -245,33 +228,19 @@ test('adoption detects source bytes and destination conflicts before publishing'
   throwsCode('DocumentExists', () => adoptRoadmap(repo, 'conflict', 'conflicted'));
   assert.equal(repo.read('docs/feature/conflicted/README.md'), undefined);
 }))));
-// @use-case docs/feature/local-sdlc/use-case/recover-local-state.md
-test('interrupted adoption recovers the complete old package and preserves unknown edits', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#adopt
+test('adoption refuses an existing destination before changing the package or Memory declarations', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   createDocument(repo, 'roadmap', { id: 'recovery', title: 'Recovery', body: '# Recovery\n' });
   write(root, 'docs/roadmap/recovery/nested/guide.md', '# Guide\n');
   createDocument(repo, 'memory', { id: 'choice', title: 'Choice', memoryKind: 'decision' });
-  promoteMemory(repo, 'choice', 'docs/roadmap/recovery/README.md');
-  const blocked = join(root, 'docs/feature/recovered/nested');
-  mkdirSync(blocked, { recursive: true }); chmodSync(blocked, 0o555);
-  try { throwsCode('RecoveryRequired', () => adoptRoadmap(repo, 'recovery', 'recovered')); }
-  finally { chmodSync(blocked, 0o755); }
-  throwsCode('RecoveryRequired', () => repo.read('docs/feature/recovered/README.md'));
-  const planned = readFileSync(join(root, 'docs/feature/recovered/README.md'), 'utf8');
-  assert.ok(planned); repo.close();
-  const recovery = new LocalRepository(root, { recover: true });
-  try {
-    write(root, 'docs/feature/recovered/README.md', '# External edit\n');
-    throwsCode('RecoveryConflict', () => recovery.recover());
-    assert.equal(recovery.read('docs/feature/recovered/README.md'), '# External edit\n');
-    write(root, 'docs/feature/recovered/README.md', planned);
-    assert.equal(recovery.recover().status, 'rolled-back');
-    assert.equal(recovery.read('docs/feature/recovered/README.md'), undefined);
-    const recoveredRoadmap = findDocument(loadDocuments(recovery), 'recovery', 'roadmap');
-    assert.equal(recoveredRoadmap.metadata.kind === 'roadmap' && recoveredRoadmap.metadata.state, 'planned');
-    const recoveredMemory = findDocument(loadDocuments(recovery), 'choice', 'memory');
-    assert.deepEqual(recoveredMemory.metadata.kind === 'memory' && recoveredMemory.metadata.promotions, ['docs/roadmap/recovery/README.md']);
-    assert.equal(recovery.read('docs/roadmap/recovery/nested/guide.md'), '# Guide\n');
-  } finally { recovery.close(); }
+  const before = repo.read('memory/choice.md');
+  mkdirSync(join(root, 'docs/feature/recovered/nested'), { recursive: true });
+  throwsCode('DocumentExists', () => adoptRoadmap(repo, 'recovery', 'recovered'));
+  assert.equal(repo.read('docs/feature/recovered/README.md'), undefined);
+  assert.equal(repo.read('docs/roadmap/recovery/README.md'), '# Recovery\n');
+  assert.equal(repo.read('docs/roadmap/recovery/nested/guide.md'), '# Guide\n');
+  assert.equal(repo.read('memory/choice.md'), before);
+  assert.equal(existsSync(join(repo.privateDir, 'journal.json')), false);
 }))));
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
 test('adopts Roadmap by moving its package and preserving navigation from Memory', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
@@ -287,25 +256,6 @@ test('adopts Roadmap by moving its package and preserving navigation from Memory
   assert.deepEqual(checkDocuments(repo, documents), []);
   throwsCode('DocumentNotFound', () => adoptRoadmap(repo, 'offline', 'second-feature'));
 }))));
-
-// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
-test('enforces Problem epochs and preserves resolution history across reopen', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
-  createDocument(repo, 'memory', { id: 'token-race', title: 'Token race', body: '# Problem\n', memoryKind: 'problem' });
-  throwsCode('InvalidProof', () => resolveMemory(repo, 'token-race', 'fixed', 'Fixed lock ordering', { red: 'red-1', green: 'green-1', selectedCaseId: 'token-case', epoch: 1 }));
-  resolveMemory(repo, 'token-race', 'fixed', 'Fixed lock ordering', { red: 'red-1', green: 'green-1', selectedCaseId: 'token-case', epoch: 0 });
-  let problem = findDocument(loadDocuments(repo), 'token-race', 'memory');
-  assert.equal(problem.metadata.kind === 'memory' && problem.metadata.resolution?.evidenceLevel, 'command');
-  reopenMemory(repo, 'token-race', 'Regression returned');
-  problem = findDocument(loadDocuments(repo), 'token-race', 'memory');
-  assert.equal(problem.metadata.kind === 'memory' && problem.metadata.epoch, 1);
-  assert.equal(problem.metadata.kind === 'memory' && problem.metadata.resolution, undefined);
-  const reopened = problem.metadata.kind === 'memory' ? problem.metadata.history.at(-1)?.resolution : undefined;
-  assert.equal(reopened?.evidenceLevel === 'command' ? reopened.red : undefined, 'red-1');
-  resolveMemory(repo, 'token-race', 'not-a-bug', 'Expected upstream behavior');
-  problem = findDocument(loadDocuments(repo), 'token-race', 'memory');
-  assert.equal(problem.metadata.kind === 'memory' && problem.metadata.resolution?.evidenceLevel, 'author');
-  assert.equal(problem.metadata.kind === 'memory' && problem.metadata.resolution?.epoch, 1);
-}))));
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
 test('supersedes only current same-kind Memory and writes the canonical replacement', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
   createDocument(repo, 'feature', { id: 'cache', title: 'Cache', body: '# Cache\n' });
@@ -314,90 +264,22 @@ test('supersedes only current same-kind Memory and writes the canonical replacem
   createDocument(repo, 'memory', { id: 'cache-note', title: 'Cache note', body: '# Insight\n', memoryKind: 'insight' });
   activateMemory(repo, 'old-cache', 'Confirmed');
   activateMemory(repo, 'new-cache', 'Confirmed');
-  promoteMemory(repo, 'old-cache', 'docs/feature/cache/README.md');
+  linkMemory(repo, 'old-cache', 'docs/feature/cache/README.md');
   supersedeMemory(repo, 'old-cache', 'new-cache', 'Measurements changed');
   const old = findDocument(loadDocuments(repo), 'old-cache', 'memory');
-  assert.equal(old.metadata.kind === 'memory' && old.metadata.state, 'superseded');
+  assert.equal(old.metadata.kind === 'memory' && old.metadata.status, 'superseded');
   assert.equal(old.metadata.kind === 'memory' && old.metadata.supersededBy, 'memory/new-cache.md');
-  assert.deepEqual(old.metadata.kind === 'memory' && old.metadata.promotions, []);
+  assert.deepEqual(old.metadata.kind === 'memory' && old.metadata.relations.map(relation => relation.target), ['docs/feature/cache/README.md']);
   assert.doesNotMatch(repo.read(old.path)!, /history:/u);
-  throwsCode('InvalidMemoryState', () => promoteMemory(repo, 'old-cache', 'docs/feature/cache/README.md'));
+  throwsCode('DuplicateLink', () => linkMemory(repo, 'old-cache', 'docs/feature/cache/README.md'));
   throwsCode('InvalidMemoryState', () => supersedeMemory(repo, 'new-cache', 'cache-note', 'Wrong kind'));
 }))));
-// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
-test('retires an exact promotion and refuses to close an Issue linked to an open Problem', () => Effect.runPromise(Effect.sync(() => useConsumer(repo => {
-  createDocument(repo, 'feature', { id: 'checkout', title: 'Checkout', body: '# Checkout\n' });
-  createDocument(repo, 'memory', { id: 'checkout-fails', title: 'Checkout fails', body: '# Problem\n', memoryKind: 'problem' });
-  createDocument(repo, 'issue', { id: 'checkout-report', title: 'Checkout report', body: '# Observation\n' });
-  promoteMemory(repo, 'checkout-fails', 'docs/feature/checkout/README.md');
-  throwsCode('PromotionNotFound', () => retirePromotion(repo, 'checkout-fails', 'docs/feature/checkout/README.md#other', 'Wrong target'));
-  retirePromotion(repo, 'checkout-fails', 'docs/feature/checkout/README.md', 'No longer current');
-  linkIssue(repo, 'checkout-report', 'memory/checkout-fails.md');
-  throwsCode('OpenProblem', () => closeIssue(repo, 'checkout-report', 'Handled'));
-  resolveMemory(repo, 'checkout-fails', 'external-fixed', 'Upstream released a correction');
-  closeIssue(repo, 'checkout-report', 'The linked Problem is resolved');
-  let documents = loadDocuments(repo);
-  const issue = findDocument(documents, 'checkout-report', 'issue');
-  assert.equal(issue.metadata.kind === 'issue' && issue.metadata.state, 'closed');
-  assert.equal(issue.metadata.kind === 'issue' && issue.metadata.history.at(-1)?.action, 'close');
-  reopenMemory(repo, 'checkout-fails', 'A later regression reopened the engineering Problem');
-  documents = loadDocuments(repo);
-  const reopenedIssue = findDocument(documents, 'checkout-report', 'issue');
-  assert.equal(reopenedIssue.metadata.kind === 'issue' && reopenedIssue.metadata.state, 'closed');
-  const reopenedProblem = findDocument(documents, 'checkout-fails', 'memory');
-  assert.equal(reopenedProblem.metadata.kind === 'memory' && reopenedProblem.metadata.state, 'open');
-  assert.deepEqual(checkDocuments(repo, documents), []);
-}))));
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
-test('ignores ordinary Markdown frontmatter but rejects a broken declared Concord owner', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
+test('rejects frontmatter on Spec support pages and broken declared owners', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
   write(root, 'docs/research/ordinary.md', '---\ntitle: Ordinary page\n---\n\n# Notes\n');
-  assert.deepEqual(loadDocuments(repo), []);
+  throwsCode('InvalidData', () => loadDocuments(repo));
   write(root, 'docs/research/broken.md', '---\nformat: concord.document/v1\nid: Bad Id\nkind: research\n---\n');
   throwsCode('InvalidData', () => loadDocuments(repo));
-}))));
-
-test('historical attestations remain unverified and survive reopening without becoming new command proof', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
-  createDocument(repo, 'memory', { id: 'recorded-fix', title: 'Recorded fix', memoryKind: 'problem', body: '# Original author account\n' });
-  const record = findDocument(loadDocuments(repo), 'recorded-fix', 'memory');
-  const metadata = decode(MemorySchema, record.metadata, record.path);
-  const resolution = decode(ResolutionSchema, {
-    kind: 'fixed', evidenceLevel: 'attested', epoch: 0, at: '2026-09-14T00:00:00Z', reason: 'Preserved author declaration',
-    attestation: { statement: 'The original author reported this fixed.', proof: ['original proof description'], source: { path: 'memory/INDEX.md', commit: 'a'.repeat(40), digest: `sha256:${'b'.repeat(64)}` } },
-  }, 'attestation fixture');
-  write(root, record.path, renderDocument({ ...metadata, state: 'resolved', resolution }, record.body));
-  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
-  assert.match(JSON.stringify(inspectResolutionEvidence(repo, resolution)), /unverified/);
-  reopenMemory(repo, record.path, 'The observation returned');
-  const reopened = decode(MemorySchema, findDocument(loadDocuments(repo), record.path).metadata, record.path);
-  assert.equal(reopened.epoch, 1);
-  assert.equal(reopened.resolution, undefined);
-  assert.deepEqual(reopened.history.at(-1)?.resolution, resolution);
-  throwsCode('InvalidProof', () => resolveMemory(repo, record.path, 'fixed', 'Reusing the author account'));
-  throwsCode('InvalidData', () => decode(ResolutionSchema, { ...resolution, evidenceLevel: 'command', red: 'red', green: 'green', selectedCaseId: 'case' }, 'mixed proof'));
-}))));
-
-test('repository evidence is structurally readable without pretending formal owners are generic Feature documents', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
-  createDocument(repo, 'memory', { id: 'formal-fix', title: 'Formal fix', memoryKind: 'problem', body: '# Formal account\n' });
-  const record = findDocument(loadDocuments(repo), 'formal-fix', 'memory');
-  const metadata = decode(MemorySchema, record.metadata, record.path);
-  const file = (name: string) => ({ path: `case-evidence/${name}.json`, digest: `sha256:${'a'.repeat(64)}` });
-  const resolution = decode(ResolutionSchema, {
-    kind: 'fixed', evidenceLevel: 'repository', epoch: 0, at: '2026-09-14T00:00:00Z', reason: 'Profile bound formal evidence',
-    repositoryEvidence: { memory: record.path, epoch: 0, validatedAt: '2026-09-14T00:00:00Z', cases: [{
-      selector: 'e2e/sample/test.ts#case-one', caseId: 'case-one', binding: { kind: 'direct-contract', contractRef: 'docs/feature/sample/README.md', contractSha256: 'b'.repeat(64) },
-      sourceDigest: 'c'.repeat(64), candidateSha256: 'd'.repeat(64),
-      red: file('red'), green: file('green'), certificate: file('certificate'), inventory: file('inventory'),
-      reliability: Array.from({ length: 6 }, (_, index) => file(`reliability-${index}`)), invocationIds: Array.from({ length: 8 }, (_, index) => `invocation-${index}`),
-    }] },
-  }, 'repository fixture');
-  assert.equal(resolution.evidenceLevel, 'repository');
-  if (resolution.evidenceLevel !== 'repository') throw new Error('Expected repository evidence');
-  write(root, record.path, renderDocument({ ...metadata, state: 'resolved', resolution }, record.body));
-  assert.deepEqual(checkDocuments(repo, loadDocuments(repo)), []);
-  assert.deepEqual((inspectResolutionEvidence(repo, resolution) as { availability: string }).availability, 'unavailable');
-  const invalid = { ...resolution, repositoryEvidence: { ...resolution.repositoryEvidence, epoch: 1 } };
-  write(root, record.path, renderDocument({ ...metadata, state: 'resolved', resolution: invalid }, record.body));
-  assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => /epoch/.test(finding.message)));
 }))));
 
 test('Issue closure rejects missing references and duplicate cycles', () => Effect.runPromise(Effect.sync(() => useConsumer((repo, root) => {
@@ -406,12 +288,12 @@ test('Issue closure rejects missing references and duplicate cycles', () => Effe
   for (const [id, target] of [['first-observation', 'second-observation'], ['second-observation', 'first-observation']] as const) {
     const record = findDocument(records, id, 'issue');
     if (record.metadata.kind !== 'issue') throw new Error('Expected Issue');
-    write(root, record.path, renderDocument({ ...record.metadata, state: 'closed', closure: { kind: 'duplicate', canonical: `docs/issues/${target}.md` } }, record.body));
+    write(root, record.path, renderDocument({ ...record.metadata, status: 'closed', closure: { kind: 'duplicate', canonical: `docs/issues/${target}.md` } }, record.body));
   }
   assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => finding.code === 'ReferenceCycle'));
   const first = findDocument(records, 'first-observation', 'issue');
   if (first.metadata.kind !== 'issue') throw new Error('Expected Issue');
-  write(root, first.path, renderDocument({ ...first.metadata, state: 'closed', closure: { kind: 'fixed', reason: 'historical declaration' } }, first.body));
+  write(root, first.path, renderDocument({ ...first.metadata, status: 'closed', closure: { kind: 'fixed', reason: 'historical declaration' } }, first.body));
   assert.ok(checkDocuments(repo, loadDocuments(repo)).some(finding => finding.code === 'FixUnverifiable'));
 }))));
 
