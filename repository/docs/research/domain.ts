@@ -1,3 +1,4 @@
+import { decodeDocumentSource, renderResearchSources } from 'concord-sdlc/document-codec';
 import { renderDocsTraceError } from "../trace-command-presentation.js";
 import { isTraceError } from "../trace/errors.js";
 import { readdirSync } from "node:fs";
@@ -89,65 +90,21 @@ function markdown(title: string, body?: string): string {
   return `# ${title}${suffix}\n`;
 }
 
-function rootText(content: ResearchContent, path: string): string {
-  const metadata = [
-    `format: ${JSON.stringify(RESEARCH_FORMAT)}`,
-    `id: ${JSON.stringify(`research-${sha256(path).slice(-12)}`)}`,
-    `title: ${JSON.stringify(content.title)}`,
-    `createdAt: ${JSON.stringify(new Date().toISOString())}`,
-    "kind: research",
-    ...(content.observedAt === undefined
-      ? []
-      : [`observedAt: ${JSON.stringify(content.observedAt)}`]),
-    `sources: ${JSON.stringify(content.sources ?? [])}`,
-  ];
-  return `---\n${metadata.join("\n")}\n---\n\n${markdown(content.title, content.body)}`;
+function rootText(content: ResearchContent, _path: string): string {
+  return `${markdown(content.title, content.body)}${renderResearchSources(content.observedAt, content.sources ?? [])}`;
 }
 
-function parseDocument(
-  path: string,
-  source: string,
-): Effect.Effect<Frontmatter, ResearchFormatError | ResearchInputError> {
-  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
-  if (match === null) {
-    return Effect.fail(new ResearchFormatError({
-      path,
-      message: "Missing Concord Research document frontmatter.",
-    }));
-  }
-  return Effect.try({
-    try: () => {
-      const yaml = parseYaml(match[1]!, { uniqueKeys: true, merge: false });
-      if (yaml.errors.length > 0) throw yaml.errors[0]!;
-      return yaml.toJS({ maxAliasCount: 0 }) as unknown;
-    },
-    catch: cause => new ResearchFormatError({
-      path,
-      message: `Invalid Concord Research frontmatter: ${researchErrorMessage(cause)}`,
-    }),
-  }).pipe(Effect.flatMap(value => decodeUnknown(path, ResearchFrontmatterSchema, value)));
+function parseDocument(path: string, source: string): Effect.Effect<Frontmatter, ResearchFormatError | ResearchInputError> {
+  return Effect.try({ try: () => {
+    const record = decodeDocumentSource(path, source);
+    if (record?.metadata.kind !== 'research') throw new Error('Expected a Research README');
+    return record.metadata;
+  }, catch: cause => new ResearchFormatError({ path, message: researchErrorMessage(cause) }) });
 }
 
 function inspect(path: string, source: string): Effect.Effect<Inspection> {
-  const match = source.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/u);
-  if (match === null) return Effect.succeed({ kind: "unmanaged" });
-  try {
-    const yaml = parseYaml(match[1]!, { uniqueKeys: true, merge: false });
-    if (yaml.errors.length > 0) throw yaml.errors[0]!;
-    const value: unknown = yaml.toJS({ maxAliasCount: 0 });
-    if (
-      value === null ||
-      typeof value !== "object" ||
-      !("format" in value) ||
-      value.format !== RESEARCH_FORMAT
-    ) return Effect.succeed({ kind: "unmanaged" });
-  } catch (cause) {
-    return Effect.succeed({ kind: "invalid" as const, message: researchErrorMessage(cause) });
-  }
-  return parseDocument(path, source).pipe(
-    Effect.map(frontmatter => ({ kind: "document", frontmatter }) as Inspection),
-    Effect.catch(error => Effect.succeed({ kind: "invalid" as const, message: error.message })),
-  );
+  if (!path.endsWith('/README.md') && !/^---\r?\n/u.test(source)) return Effect.succeed({ kind: 'unmanaged' });
+  return parseDocument(path, source).pipe(Effect.map(frontmatter => ({ kind: 'document', frontmatter }) as Inspection), Effect.catch(error => Effect.succeed({ kind: 'invalid' as const, message: error.message })));
 }
 
 function checkFile(path: string, source: string): Effect.Effect<ResearchCheckFinding[]> {
@@ -193,9 +150,6 @@ function receipt(
   };
 }
 
-function isConcordFrontmatter(source: string): boolean {
-  return /^---\r?\n(?:format:\s*["']?concord\.document\/|[\s\S]*?\r?\nformat:\s*["']?concord\.document\/)/u.test(source);
-}
 
 function ancestorDirectories(path: string): readonly string[] {
   const parts = path.split("/");
@@ -211,7 +165,7 @@ function validatePackageAncestors(root: string, packagePath: string): Effect.Eff
     const ownerPath = `${directory}/README.md`;
     return readResearchFileIfPresent(root, ownerPath).pipe(
       Effect.flatMap(source => {
-        if (source === undefined || !isConcordFrontmatter(source)) return Effect.void;
+        if (source === undefined) return Effect.void;
         return parseDocument(ownerPath, source).pipe(
           Effect.catch(() => Effect.fail(new ResearchFormatError({
             path: ownerPath,
@@ -253,7 +207,7 @@ function nestedOwnerGuard(
     const candidate = `${base}/${parts.slice(0, index + 1).join("/")}/README.md`;
     return readResearchFileIfPresent(root, candidate).pipe(
       Effect.flatMap(source => {
-        if (source === undefined || !isConcordFrontmatter(source)) return Effect.void;
+        if (source === undefined) return Effect.void;
         return parseDocument(candidate, source).pipe(
           Effect.catch(() => Effect.fail(new ResearchFormatError({
             path: candidate,
@@ -354,7 +308,7 @@ function checkPackage(
     const checkedPaths = [target];
     for (const path of files.filter(file => file.endsWith("/README.md") && file !== target)) {
       const source = yield* readResearchFile(root, path);
-      if (!isConcordFrontmatter(source)) {
+      if (!path.endsWith("/README.md")) {
         checkedPaths.push(path);
         continue;
       }

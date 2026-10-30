@@ -151,7 +151,7 @@ export type HistoryEntry = typeof HistorySchema.Type;
 /** Declarative owners hold current declarations only; Git and record owners keep their history (C-012-11). */
 const Title = Text.check(Schema.isMaxLength(1024), Schema.isPattern(/^[^\r\n\u2028\u2029]+$/u));
 const declarative = { format: Schema.Literal('concord.document/v1'), id: DocumentName, title: Title, description: Schema.optional(Text) };
-const base = { ...declarative, createdAt: Text,
+const base = { ...declarative, createdAt: Schema.optional(Text),
   createdAtSource: Schema.optional(Schema.Struct({ kind: Schema.Literal('first-recorded'), path: Text, commit: GitCommit })),
 };
 export const FeatureSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('feature') });

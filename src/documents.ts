@@ -4,11 +4,13 @@ import { posix } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { Schema } from 'effect';
-import { stringify } from 'yaml';
-import { decodeDocumentSource as parseDocumentSource } from './document-codec.js';
+import { deriveDesignRecord, writeDesignDeclaration } from './design-state.js';
+import { fromMarkdown } from './markdown-parser.js';
+import { renderResearchSources } from './document-source.js';
+import { decodeDocumentSource as parseDocumentSource, renderDocument } from './document-codec.js';
+export { renderDocument } from './document-codec.js';
 import {
   ConcordError,
-  DocumentSchema,
   IssueClosureSchema,
   MEMORY_RELATION_KINDS,
   type IssueClosure,
@@ -54,7 +56,7 @@ export { DOCUMENT_ROOTS } from './document-layout.js';
 export function documentRoots(repo: Repository): readonly string[] {
   return inRepositorySnapshot(repo, () => { return [...DOCUMENT_ROOTS, ...(repo.config.memorySources ?? [{ path: 'memory' }]).map((source) => source.path)];   });
 }
-const CONTRACT_KINDS: readonly DocumentKind[] = ['feature', 'use-case', 'roadmap', 'engineering'];
+const CONTRACT_KINDS: readonly DocumentKind[] = ['feature', 'use-case', 'engineering'];
 const now = (): string => new Date().toISOString();
 
 // @concord-begin
@@ -84,10 +86,6 @@ export function inspectDocumentRecords(inputs: readonly { readonly path: string;
   });
 }
 
-export function renderDocument(metadata: DocumentMeta, body: string): string {
-  const valid = decode(DocumentSchema, metadata, `${metadata.kind}:${metadata.id}`);
-  return `---\n${stringify(valid, { lineWidth: 0, aliasDuplicateObjects: false }).trimEnd()}\n---\n\n${authorBody(body)}`;
-}
 // @concord-end
 
 // @concord-begin
@@ -153,7 +151,8 @@ function currentDocument(repo: Repository, record: DocumentRecord | undefined): 
 
 function loadDocumentsUnderSnapshot(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
   return inspectDocumentRecords(documentInputs(repo, kinds)).map(result => { if (!result.ok) throw result.cause; return result.value; })
-    .filter((record): record is DocumentRecord => currentDocument(repo, record) && (kinds === undefined || kinds.includes(record.metadata.kind)));
+    .filter((record): record is DocumentRecord => currentDocument(repo, record) && (kinds === undefined || kinds.includes(record.metadata.kind)))
+    .map(record => deriveDesignRecord(repo, record));
 }
 // @concord-end
 
@@ -177,9 +176,9 @@ export function diagnoseDocuments(repo: Repository): DocumentInventory {
         const result = results[index]!;
         if (!result.ok) throw result.cause;
         const record = result.value;
-        if (currentDocument(repo, record)) documents.push(record);
+        if (currentDocument(repo, record)) documents.push(deriveDesignRecord(repo, record));
       } catch (cause) {
-        if (!(cause instanceof ConcordError) || !['InvalidData', 'InvalidPlacement'].includes(cause.code)) throw cause;
+        if (!(cause instanceof ConcordError) || !['InvalidData', 'InvalidPlacement', 'InvalidPlan', 'DesignPlanNotFound', 'AmbiguousDesignPlan', 'DesignSelectionInvalid', 'DesignSelectionConflict'].includes(cause.code)) throw cause;
         findings.push({ code: cause.code, path: input.path, message: cause.message });
       }
     }
@@ -200,7 +199,7 @@ export function readDocumentReference(repo: Repository, reference: string, kinds
       const source = repo.read(path);
       const record = source === undefined ? undefined : parseDocumentRecord(path, source);
       if (record !== undefined && !currentDocument(repo, record)) throw new ConcordError('InvalidReferenceTarget', `${path} is not a current owner`);
-      return record;
+      return record === undefined ? undefined : deriveDesignRecord(repo, record);
     };
     let owner = read(parsed.path);
     if (owner === undefined) {
@@ -276,19 +275,19 @@ function checkRef(
 function checkIssueClosure(repo: Repository, documents: readonly DocumentRecord[], document: DocumentRecord): Finding[] {
   const findings: Finding[] = []; const metadata = document.metadata;
   if (metadata.kind !== 'issue') return findings;
-  if (metadata.closure?.kind === 'fixed' || metadata.closure?.kind === 'declined') {
+  if (metadata.closure?.kind === 'fixed' && metadata.closure.verification === undefined) finding(findings, 'FixUnverifiable', document.path, 'Fixed closure requires verification');
+  if (metadata.closure?.kind === 'declined') {
     const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
     if (closureMemory?.metadata.kind === 'memory') {
       const m = closureMemory.metadata;
-      if (metadata.closure.kind === 'fixed' && (m.memoryKind !== 'problem' || m.state !== 'resolved' || m.resolution?.kind !== 'fixed')) finding(findings, 'InvalidState', document.path, 'Fixed closure requires a Problem with a recorded fixed resolution');
       if (metadata.closure.kind === 'declined' && (m.memoryKind !== 'decision' || m.state !== 'current')) finding(findings, 'InvalidState', document.path, 'Declined closure requires a current Decision');
     }
   }
   if (metadata.closure?.kind === 'delivered') {
     const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
-    if (closureMemory?.metadata.kind === 'memory' && !(closureMemory.metadata.memoryKind === 'problem' && closureMemory.metadata.state === 'resolved' || closureMemory.metadata.memoryKind === 'decision' && closureMemory.metadata.state === 'current')) finding(findings, 'InvalidState', document.path, 'Delivery requires a resolved Problem or current Decision');
+    if (closureMemory?.metadata.kind === 'memory' && !(closureMemory.metadata.memoryKind === 'decision' && closureMemory.metadata.state === 'current')) finding(findings, 'InvalidState', document.path, 'Delivery requires a current Decision');
     checkRef(findings, repo, documents, document, metadata.closure.target, CONTRACT_KINDS, 'closure target');
-    if (![...metadata.adoptions.current, ...metadata.adoptions.history.map(entry => entry.target)].includes(metadata.closure.target)) finding(findings, 'InvalidState', document.path, 'Delivered target must occur in adoption current or history');
+    if (!metadata.adoptions.current.includes(metadata.closure.target)) finding(findings, 'InvalidState', document.path, 'Delivered target must be a current adopts relation');
   }
   if (metadata.closure?.kind === 'duplicate') checkRef(findings, repo, documents, document, metadata.closure.canonical, ['issue'], 'canonical Issue');
   if (metadata.closure !== undefined && ['duplicate', 'declined', 'invalid'].includes(metadata.closure.kind) && metadata.adoptions.current.length !== 0) finding(findings, 'InvalidState', document.path, 'This closure requires current adoptions to be retired explicitly');
@@ -306,7 +305,7 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
   const findings: Finding[] = [];
   const identities = new Map<string, DocumentRecord[]>();
   for (const document of documents) {
-    const key = document.metadata.kind === 'memory' ? `memory-path:${document.path}` : `${document.metadata.kind}:${document.metadata.id}`;
+    const key = document.path;
     identities.set(key, [...(identities.get(key) ?? []), document]);
     let featurePath: string | undefined;
     if (document.metadata.kind === 'use-case') {
@@ -323,10 +322,10 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       if (metadata.decision !== undefined && metadata.deferral !== undefined) finding(findings, 'InvalidState', document.path, 'Design cannot be selected and deferred at the same time');
       if (new Set(metadata.alternatives).size !== metadata.alternatives.length) finding(findings, 'InvalidState', document.path, 'Design alternatives must be unique');
       if (metadata.decision !== undefined) {
-        if (metadata.decision.at === undefined && metadata.decision.source === undefined) finding(findings, 'InvalidState', document.path, 'An undated historical decision must retain its source');
         if (!metadata.alternatives.includes(metadata.decision.selected)) finding(findings, 'InvalidState', document.path, 'Selected alternative is not declared');
         if (new Set(metadata.decision.targets).size !== metadata.decision.targets.length) finding(findings, 'InvalidState', document.path, 'Design decision targets must be unique');
         for (const target of metadata.decision.targets) checkRef(findings, repo, documents, document, target, CONTRACT_KINDS, 'decision target');
+        findings.push(...validateDesignContent(posix.dirname(document.path), metadata.alternatives, designSnapshot(repo, document), metadata.decision.selected).findings);
       }
     }
     if (metadata.kind === 'roadmap') {
@@ -339,7 +338,6 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
     if (metadata.kind === 'memory') {
       const problem = metadata.memoryKind === 'problem';
       if (metadata.memoryKind === 'note' && metadata.state !== 'captured') finding(findings, 'InvalidState', document.path, 'Note Memory must remain captured');
-      if (metadata.state === 'captured' && metadata.promotions.length !== 0) finding(findings, 'InvalidState', document.path, 'Captured Memory cannot have current promotions');
       if (metadata.state !== 'superseded' && (metadata.supersededBy !== undefined || metadata.supersession !== undefined)) finding(findings, 'InvalidState', document.path, 'Only superseded Memory may declare supersession');
       if (problem && metadata.state === 'open' && metadata.resolution !== undefined) finding(findings, 'InvalidState', document.path, 'Open Problem cannot have a current resolution');
       if (problem && (metadata.state !== 'captured' && metadata.state !== 'open' && metadata.state !== 'resolved' && metadata.state !== 'superseded')) finding(findings, 'InvalidState', document.path, 'Problem state must be captured, open, resolved, or superseded');
@@ -367,7 +365,6 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       if (metadata.state === 'captured' && metadata.resolution !== undefined) finding(findings, 'InvalidState', document.path, 'Captured Memory cannot have a resolution');
       if (!problem && metadata.state !== 'captured' && (metadata.state !== 'current' && metadata.state !== 'superseded')) finding(findings, 'InvalidState', document.path, 'Decision/Insight state must be captured, current, or superseded');
       if (!problem && metadata.state === 'current' && metadata.supersededBy !== undefined) finding(findings, 'InvalidState', document.path, 'Current Memory cannot have supersededBy');
-      if (metadata.state === 'superseded' && metadata.promotions.length > 0) finding(findings, 'InvalidState', document.path, 'Superseded Memory cannot retain current promotions');
       if (metadata.state === 'superseded' && metadata.resolution !== undefined) finding(findings, 'InvalidState', document.path, 'Superseded Memory cannot retain a current resolution');
       if (metadata.state === 'superseded' && metadata.supersededBy === undefined && metadata.supersession === undefined) finding(findings, 'InvalidState', document.path, 'Superseded Memory without a target must declare supersession statement and source');
       if (new Set(metadata.promotions).size !== metadata.promotions.length) finding(findings, 'InvalidState', document.path, 'Current promotions must be unique');
@@ -392,7 +389,11 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       const relations = metadata.memoryRelations;
       const relationKeys = relations.map((relation) => `${relation.kind}\u0000${relation.memory}`);
       if (new Set(relationKeys).size !== relationKeys.length) finding(findings, 'InvalidState', document.path, 'Issue Memory relations must be unique');
-      for (const relation of relations) checkRef(findings, repo, documents, document, relation.memory, ['memory'], `linked Memory (${relation.kind})`);
+      for (const relation of relations) {
+        const linked = checkRef(findings, repo, documents, document, relation.memory, relation.kind === 'related' ? ['issue'] : ['memory'], `relation (${relation.kind})`);
+        if (linked?.metadata.kind === 'memory' && !['current', 'superseded'].includes(linked.metadata.state)) finding(findings, 'InvalidState', document.path, `${relation.kind} requires current or superseded Memory`);
+        if (relation.kind === 'related' && linked?.path === document.path) finding(findings, 'InvalidState', document.path, 'related requires another Issue');
+      }
       if (new Set(metadata.adoptions.current).size !== metadata.adoptions.current.length) finding(findings, 'InvalidState', document.path, 'Issue adoptions must be unique');
       for (const target of metadata.adoptions.current) checkRef(findings, repo, documents, document, target, CONTRACT_KINDS, 'adopted contract');
     }
@@ -442,8 +443,8 @@ export interface CreateDocumentInput {
 // @concord-implements docs/feature/project-onboarding/use-case/inherit-template-defaults.md
 export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  const governance = kind === 'memory' && input.memoryKind === 'problem' ? problemPolicy(repo) : undefined;
   const id = decode(DocumentName, input.id, 'id');
+  if (['use-case', 'issue', 'memory'].includes(kind) && id.toLowerCase() === 'readme') throw new ConcordError('InvalidInput', 'README is reserved for navigation');
   const title = required(input.title, 'title');
   if (input.feature !== undefined && kind !== 'use-case') throw new ConcordError('InvalidInput', 'feature is only valid for use-case');
   if ((input.observedAt !== undefined || (input.sources?.length ?? 0) > 0) && kind !== 'research') throw new ConcordError('InvalidInput', 'observedAt and sources are only valid for research');
@@ -457,7 +458,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   const bodyFor = (name: string) => authorBody(input.body ?? templateBody(name, title, requested));
   const createdAt = now();
   const documents = kind === 'memory' ? [] : loadDocuments(repo, kind === 'issue' ? ['issue'] : undefined);
-  if (kind !== 'memory' && documents.some(document => document.metadata.kind === kind && document.metadata.id === id)) {
+  if (kind !== 'memory' && kind !== 'use-case' && documents.some(document => document.metadata.kind === kind && document.metadata.id === id)) {
     throw new ConcordError('DocumentExists', `${kind} id ${id} already exists; use its canonical path`);
   }
   let path: string;
@@ -485,15 +486,15 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     case 'memory': {
       const memoryKind = input.memoryKind;
       if (memoryKind === undefined) throw new ConcordError('InvalidInput', 'memoryKind is required');
+      if (memoryKind === 'problem') throw new ConcordError('InvalidInput', 'Defects belong to Issue; Memory type must be decision, insight, or note');
       path = `${memoryWriteDirectory(repo.config.memorySources, input.memorySource)}/${id}.md`;
       template = memoryKind;
-      metadata = { format: 'concord.document/v1', id, title, createdAt, kind, memoryKind, state: memoryKind === 'note' ? 'captured' : memoryKind === 'problem' ? 'open' : 'current', epoch: 0, promotions: [], history: [] };
+      metadata = { format: 'concord.document/v1', id, title, createdAt, kind, memoryKind, state: 'captured', epoch: 0, promotions: [], history: [] };
       break;
     }
     case 'issue': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'draft', memoryRelations: [], adoptions: { current: [], history: [] }, history: [] }; break;
   }
-  const body = bodyFor(template);
-  if (metadata.kind === 'memory' && metadata.memoryKind === 'problem') metadata = adoptMemoryEvidenceRequirement(metadata, governance!.policy);
+  const body = kind === 'research' && input.body === undefined ? `# ${title}\n` : bodyFor(template);
   if (kind === 'research' && repo.files(posix.dirname(path)).length > 0) throw new ConcordError('DocumentExists', `${posix.dirname(path)} already contains files; creating an owner would change their ownership`);
   const changes = [{ path, before: null, after: renderDocument(metadata, body) }];
   const allowed = kind === 'feature' || kind === 'roadmap';
@@ -510,7 +511,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
     }
   }
   for (const change of changes) if (repo.read(change.path) !== undefined) throw new ConcordError('DocumentExists', `${change.path} already exists`);
-  return repo.publish(`create-${kind}`, [...changes, ...(metadata.kind === 'memory' && metadata.memoryKind === 'problem' ? [governance!.guard] : [])], input.dryRun ?? false);
+  return repo.publish(`create-${kind}`, changes, input.dryRun ?? false);
   });
 }
 
@@ -548,11 +549,23 @@ export function setDocumentMetadata(
     throw new ConcordError('InvalidDocumentKind', 'observedAt and sources are only author fields on Research documents');
   }
   const title = fields.title === undefined ? record.metadata.title : required(fields.title, 'title');
-  if (record.metadata.kind !== 'research') return changed(repo, 'set-metadata', record, { ...record.metadata, title }, record.body, dryRun);
+  const heading = fromMarkdown(record.body).children.find(node => node.type === 'heading' && node.depth === 1);
+  if (heading === undefined) throw new ConcordError('InvalidData', 'Owner requires a level-one heading');
+  let body = fields.title === undefined ? record.body : `${record.body.slice(0, heading.position!.start.offset)}# ${title}${record.body.slice(heading.position!.end.offset)}`;
+  if (record.metadata.kind !== 'research') return changed(repo, 'set-metadata', record, { ...record.metadata, title }, body, dryRun);
   const observedAt = fields.observedAt === undefined ? record.metadata.observedAt : fields.observedAt === null ? undefined : required(fields.observedAt, 'observedAt');
   const sources = fields.sources === undefined ? record.metadata.sources : fields.sources.map((source, index) => required(source, `sources[${index}]`));
   const { observedAt: _previousObservation, ...metadata } = record.metadata;
-  return changed(repo, 'set-metadata', record, { ...metadata, title, ...(observedAt === undefined ? {} : { observedAt }), sources }, record.body, dryRun);
+  if (fields.observedAt !== undefined || fields.sources !== undefined) {
+    const nodes = fromMarkdown(body).children;
+    const section = nodes.findIndex(node => node.type === 'heading' && node.depth === 2 && node.children.some(child => child.type === 'text' && ['Sources', '来源'].includes(child.value)));
+    if (section >= 0) {
+      const start = nodes[section]!.position!.start.offset!;
+      const next = nodes.slice(section + 1).find(node => node.type === 'heading' && node.depth <= 2)?.position!.start.offset ?? body.length;
+      body = `${body.slice(0, start).trimEnd()}\n${renderResearchSources(observedAt, sources)}\n${body.slice(next)}`;
+    } else body = `${body.trimEnd()}\n${renderResearchSources(observedAt, sources)}`;
+  }
+  return changed(repo, 'set-metadata', record, { ...metadata, title, ...(observedAt === undefined ? {} : { observedAt }), sources }, body, dryRun);
   });
 }
 
@@ -569,11 +582,27 @@ export function decideDesign(repo: Repository, selector: string, selected: strin
   if (uniqueTargets.length !== targets.length) throw new ConcordError('InvalidDecision', 'Decision targets must be unique');
   for (const target of targets) resolveReference(repo, documents, target, CONTRACT_KINDS);
   const snapshot = designSnapshot(repo, record);
-  const assessment = validateDesignContent(posix.dirname(record.path), record.metadata.alternatives, snapshot, choice);
+  const decisionPath = `${posix.dirname(record.path)}/DECISION.md`;
+  const entries = readDesignPlanPaths(repo.root, posix.dirname(record.path), record.metadata.alternatives);
+  const decisionSource = snapshot.get(decisionPath);
+  if (decisionSource === undefined) throw new ConcordError('DesignDecisionIncomplete', `${decisionPath} is missing`);
+  const next = writeDesignDeclaration(decisionSource, `Selected: [${choice}](${posix.relative(posix.dirname(record.path), entries.get(choice)!)})`, required(reason, 'reason'));
+  const candidate = new Map(snapshot).set(decisionPath, next);
+  const assessment = validateDesignContent(posix.dirname(record.path), record.metadata.alternatives, candidate, choice);
   if (assessment.findings.length) throw new ConcordError('DesignDecisionIncomplete', assessment.findings.map(item => `${item.code}: ${item.path}: ${item.message}`).join('\n'));
-  const { deferral: _deferral, ...metadata } = record.metadata;
-  const next = renderDocument({ ...metadata, decision: { selected: choice, reason: required(reason, 'reason'), at: now(), targets } }, record.body);
-  return repo.publish('decide-design', [...snapshot].flatMap(([path, source]) => source === undefined ? [] : [{ path, before: source, after: path === record.path ? next : source }]), dryRun);
+  return repo.publish('decide-design', [...snapshot].flatMap(([path, source]) => source === undefined ? [] : [{ path, before: source, after: path === decisionPath ? next : source }]), dryRun);
+  });
+}
+
+export function deferDesign(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
+    const record = readDocumentSelector(repo, selector, 'design');
+    if (record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', selector);
+    if (record.metadata.decision !== undefined) throw new ConcordError('DecisionExists', 'A Design decision cannot be overwritten');
+    const path = `${posix.dirname(record.path)}/DECISION.md`;
+    const before = repo.read(path);
+    if (before === undefined) throw new ConcordError('DesignDecisionIncomplete', `${path} is missing`);
+    return repo.publish('defer-design', [{ path, before, after: writeDesignDeclaration(before, `Deferred: ${required(reason, 'reason')}`) }], dryRun);
   });
 }
 
@@ -675,53 +704,50 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   const id = decode(DocumentName, featureId, 'featureId'); const featurePath = defaultDocumentPath('feature', id);
   if (documents.some(document => document.metadata.kind === 'feature' && document.metadata.id === id)) throw new ConcordError('DocumentExists', `Feature id ${id} already exists`);
   if (repo.read(featurePath) !== undefined) throw new ConcordError('DocumentExists', `${featurePath} already exists`);
-  const at = now();
-  const feature: DocumentMeta = { format: 'concord.document/v1', id, title: roadmap.metadata.title, kind: 'feature' };
-  const adopted: DocumentMeta = { ...roadmap.metadata, state: 'adopted', adoptedAs: featurePath };
   const roadmapDirectory = posix.dirname(roadmap.path);
   const featureDirectory = posix.dirname(featurePath);
+  if (repo.files(featureDirectory).length > 0 || existsSync(repo.absolute(featureDirectory))) throw new ConcordError('DocumentExists', `${featureDirectory} already exists`);
   const sourcePaths = repo.files(roadmapDirectory).sort();
   const observed = new Map<string, string>();
+  const changes: import('./shared.js').Change[] = [];
   for (const sourcePath of sourcePaths) {
+    if (!sourcePath.endsWith('.md')) throw new ConcordError('UnsupportedAttachment', `Roadmap adoption only moves Markdown pages: ${sourcePath}`);
     const source = repo.read(sourcePath);
     if (source === undefined) throw new ConcordError('PreimageChanged', `${sourcePath} disappeared during adoption`);
     observed.set(sourcePath, source);
+    if (sourcePath !== roadmap.path && (/^(?:\uFEFF)?---(?:\r?\n|$)/u.test(source) || documents.some(document => document.path === sourcePath))) throw new ConcordError('NestedOwner', `Roadmap adoption refuses nested owners: ${sourcePath}`);
+    const destination = `${featureDirectory}/${sourcePath.slice(roadmapDirectory.length + 1)}`;
+    if (repo.read(destination) !== undefined) throw new ConcordError('DocumentExists', destination);
+    changes.push({ path: sourcePath, before: source, after: null }, { path: destination, before: null, after: rebaseAdoptedMarkdown(source, sourcePath, destination, roadmapDirectory) });
   }
   if (observed.get(roadmap.path) === undefined || digest(observed.get(roadmap.path)!) !== roadmap.digest) throw new ConcordError('PreimageChanged', 'Roadmap owner changed during adoption planning');
-  const supporting = sourcePaths.filter(path => path !== roadmap.path);
-  for (const sourcePath of supporting) {
-    if (!sourcePath.endsWith('.md')) throw new ConcordError('UnsupportedAttachment', `Roadmap adoption only copies Markdown pages: ${sourcePath}`);
-    const source = observed.get(sourcePath)!;
-    if (/^(?:\uFEFF)?---(?:\r?\n|$)/u.test(source)) throw new ConcordError('NestedOwner', `Roadmap adoption refuses nested owner-like Markdown: ${sourcePath}`);
-    if (documents.some(document => document.path === sourcePath)) throw new ConcordError('NestedOwner', `Roadmap adoption refuses nested Concord owner: ${sourcePath}`);
-    const destination = `${featureDirectory}/${sourcePath.slice(roadmapDirectory.length + 1)}`;
-    if (repo.read(destination) !== undefined) throw new ConcordError('DocumentExists', `${destination} already exists`);
-  }
-  const featureBody = rebaseAdoptedMarkdown(roadmap.body, roadmap.path, featurePath, roadmapDirectory);
-  const changes = [
-    { path: featurePath, before: null, after: renderDocument(feature, featureBody) },
-    { path: roadmap.path, before: observed.get(roadmap.path)!, after: renderDocument(adopted, roadmap.body) },
-  ];
-  for (const sourcePath of supporting) {
-    const source = observed.get(sourcePath)!;
-    const destination = `${featureDirectory}/${sourcePath.slice(roadmapDirectory.length + 1)}`;
-    // Same-content source writes preserve the observed preimage in the journal.
-    changes.push({ path: sourcePath, before: source, after: source });
-    changes.push({ path: destination, before: null, after: rebaseAdoptedMarkdown(source, sourcePath, destination, roadmapDirectory) });
-  }
-  for (const record of documents) {
-    if (record.metadata.kind !== 'memory') continue;
-    const matching = record.metadata.promotions.filter(target => parseReference(target).path === roadmap.path);
-    if (matching.length === 0) continue;
-    const replacements = matching.map(target => `${featurePath}${target.slice(roadmap.path.length)}`);
-    const retained = record.metadata.promotions.filter(target => !matching.includes(target));
-    if (replacements.some(target => retained.includes(target))) throw new ConcordError('DuplicatePromotion', `Adoption would duplicate a promotion in ${record.path}`);
-    const metadata: MemoryMeta = {
-      ...record.metadata,
-      promotions: [...retained, ...replacements],
-      history: [...record.metadata.history, ...matching.map((target, index) => lifecycleHistory('adopt-roadmap', `Roadmap adopted as ${featurePath}`, at, `${target} -> ${replacements[index]}`))],
+  const mapReference = (target: string): string => target === roadmapDirectory || target.startsWith(`${roadmapDirectory}/`) ? `${featureDirectory}${target.slice(roadmapDirectory.length)}` : target;
+  const byPath = new Map(documents.map(record => [record.path, record]));
+  const markdown = new Set([...repo.files('docs'), ...repo.files('memory')].filter(path => path.endsWith('.md') && !observed.has(path)));
+  for (const path of markdown) {
+    const before = repo.read(path);
+    if (before === undefined) continue;
+    const record = byPath.get(path);
+    let source = before;
+    if (record?.metadata.kind === 'memory') {
+      const promotions = record.metadata.promotions.map(mapReference);
+      if (JSON.stringify(promotions) !== JSON.stringify(record.metadata.promotions)) source = renderDocument({ ...record.metadata, promotions }, record.body);
+    }
+    if (record?.metadata.kind === 'issue') {
+      const adoptions = { ...record.metadata.adoptions, current: record.metadata.adoptions.current.map(mapReference) };
+      const closure = record.metadata.closure?.kind === 'delivered' ? { ...record.metadata.closure, target: mapReference(record.metadata.closure.target) } : record.metadata.closure;
+      if (JSON.stringify(adoptions.current) !== JSON.stringify(record.metadata.adoptions.current) || closure?.kind === 'delivered' && record.metadata.closure?.kind === 'delivered' && closure.target !== record.metadata.closure.target) source = renderDocument({ ...record.metadata, adoptions, ...(closure === undefined ? {} : { closure }) }, record.body);
+    }
+    // Only documents with an inbound Markdown link need the bounded link transform.
+    const links: { url: string }[] = [];
+    const visit = (node: import('mdast').Nodes): void => {
+      if (node.type === 'link' || node.type === 'image' || node.type === 'definition') links.push({ url: node.url });
+      if ('children' in node) node.children.forEach(visit);
     };
-    changes.push({ path: record.path, before: preimage(repo, record), after: renderDocument(metadata, record.body) });
+    visit(fromMarkdown(source.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/u, '')));
+    const inbound = links.some(link => !/^(?:[A-Za-z][A-Za-z0-9+.-]*:|[/#])/u.test(link.url) && mapReference(posix.normalize(posix.join(posix.dirname(path), link.url.split('#')[0]!))) !== posix.normalize(posix.join(posix.dirname(path), link.url.split('#')[0]!)));
+    if (inbound) source = rebaseAdoptedMarkdown(source, path, path, roadmapDirectory, featureDirectory);
+    if (source !== before) changes.push({ path, before, after: source });
   }
   // Recheck after the entire plan, including link transforms and promotions.
   const recaptured = repo.files(roadmapDirectory).sort();
@@ -755,14 +781,13 @@ export function resolveMemory(repo: Repository, selector: string, kind: Resoluti
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#lifecycle
 export function activateMemory(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  const governance = problemPolicy(repo);
-  const record = findDocument(loadDocuments(repo), selector, 'memory');
-  const metadata = adoptMemoryEvidenceRequirement(memory(record), governance.policy);
+  const record = readDocumentSelector(repo, selector, 'memory');
+  const metadata = memory(record);
   if (metadata.state !== 'captured') throw new ConcordError('InvalidMemoryState', 'Only captured Memory can be activated');
   if (metadata.memoryKind === 'note') throw new ConcordError('InvalidMemoryState', 'A note cannot be activated without explicit classification');
   const at = now();
-  const state = metadata.memoryKind === 'problem' ? 'open' : 'current';
-  return changedProblem(repo, 'activate-memory', record, { ...metadata, state, history: [...metadata.history, lifecycleHistory('activate', required(reason, 'reason'), at)] }, governance, dryRun);
+  required(reason, 'reason');
+  return changed(repo, 'activate-memory', record, { ...metadata, state: 'current' }, record.body, dryRun);
   });
 }
 
@@ -817,17 +842,47 @@ export function retirePromotion(repo: Repository, selector: string, target: stri
   });
 }
 
+/** Lifecycle-independent relation helper used by the current Memory command surface. */
+export function linkMemory(repo: Repository, selector: string, target: string, role: 'supports' | 'amends' = 'supports', dryRun = false): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
+    const record = readDocumentSelector(repo, selector, 'memory');
+    const metadata = memory(record);
+    const canonical = parseReference(target).ref;
+    if (role === 'amends') {
+      if (constitutionPromotion(repo, canonical) === undefined) throw new ConcordError('InvalidReferenceTarget', 'amends requires the constitution or one of its clauses');
+    } else readDocumentReference(repo, canonical, CONTRACT_KINDS);
+    if (metadata.promotions.includes(canonical)) throw new ConcordError('DuplicateLink', `${role}: ${canonical}`);
+    return changed(repo, 'link-memory', record, { ...metadata, promotions: [...metadata.promotions, canonical] }, record.body, dryRun);
+  });
+}
+
 // @concord-code
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
-export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false, kind: IssueMemoryRelation['kind'] = 'investigation'): MutationReceipt {
+export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false, kind: IssueMemoryRelation['kind'] | 'adopts' = 'investigation'): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
+  if (kind === 'adopts') return adoptIssue(repo, selector, memoryRef, dryRun);
+  const record = readDocumentSelector(repo, selector, 'issue');
   if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
   if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed Issue cannot gain links');
   decode(Schema.Literals(MEMORY_RELATION_KINDS), kind, 'relation kind');
-  const target = resolveReference(repo, documents, memoryRef, ['memory']); const canonical = target.path;
+  const target = readDocumentReference(repo, memoryRef, kind === 'related' ? ['issue'] : ['memory']); const canonical = parseReference(memoryRef).ref;
+  if (target.metadata.kind === 'memory' && !['current', 'superseded'].includes(target.metadata.state)) throw new ConcordError('InvalidMemoryState', 'Issue relations require current or superseded Memory');
+  if (kind === 'related' && target.path === record.path) throw new ConcordError('InvalidReferenceTarget', 'related requires another Issue');
   if (record.metadata.memoryRelations.some((relation) => relation.memory === canonical && relation.kind === kind)) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
   return changed(repo, 'link-issue', record, { ...record.metadata, memoryRelations: [...record.metadata.memoryRelations, { kind, memory: canonical }] }, record.body, dryRun);
+  });
+}
+
+export function unlinkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueMemoryRelation['kind'] | 'adopts' = 'investigation'): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
+    if (role === 'adopts') return retireIssue(repo, selector, reference, dryRun);
+    const record = readDocumentSelector(repo, selector, 'issue');
+    if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
+    if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed Issue must be reopened before unlinking');
+    const canonical = parseReference(reference).ref;
+    const relations = record.metadata.memoryRelations.filter(item => item.kind !== role || item.memory !== canonical);
+    if (relations.length === record.metadata.memoryRelations.length) throw new ConcordError('LinkNotFound', `${role}: ${canonical}`);
+    return changed(repo, 'unlink-issue', record, { ...record.metadata, memoryRelations: relations }, record.body, dryRun);
   });
 }
 
@@ -849,7 +904,7 @@ export function closeIssue(repo: Repository, selector: string, closureInput: str
   if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Issue is already closed');
   for (const relation of record.metadata.memoryRelations) {
     const ref = relation.memory;
-    const target = resolveReference(repo, documents, ref, ['memory']);
+    const target = resolveReference(repo, documents, ref, relation.kind === 'related' ? ['issue'] : ['memory']);
     if (target.metadata.kind === 'memory' && target.metadata.memoryKind === 'problem' && (target.metadata.state === 'captured' || target.metadata.state === 'open')) throw new ConcordError('OpenProblem', `Activate and resolve linked Problem ${ref} before closing the Issue`);
   }
   const closure = decode(IssueClosureSchema, typeof closureInput === 'string' ? { kind: 'closed', reason: closureInput } : closureInput, 'Issue closure');
@@ -870,7 +925,6 @@ export function adoptIssue(repo: Repository, selector: string, reference: string
     if (record.metadata.kind !== 'issue' || record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Only a draft Issue can adopt a contract');
     const parsed = parseReference(reference);
     const target = resolveReference(repo, documents, reference, CONTRACT_KINDS);
-    if (target.path !== parsed.path) throw new ConcordError('InvalidReferenceTarget', 'Adoption requires an exact contract owner');
     const canonical = parsed.ref;
     if (record.metadata.adoptions.current.includes(canonical)) throw new ConcordError('DuplicateLink', `${canonical} is already adopted`);
     return changed(repo, 'adopt-issue', record, { ...record.metadata, adoptions: { ...record.metadata.adoptions, current: [...record.metadata.adoptions.current, canonical] } }, record.body, dryRun);
@@ -885,10 +939,8 @@ export function retireIssue(repo: Repository, selector: string, reference: strin
     if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
     const canonical = parseReference(reference).ref;
     if (!record.metadata.adoptions.current.includes(canonical)) throw new ConcordError('InvalidIssueState', `${canonical} is not a current adoption`);
-    let commit: string;
-    try { commit = git(repo.root, ['rev-parse', '--verify', 'HEAD']); }
-    catch { throw new ConcordError('IssueRetireRequiresCommit', 'Issue retirement requires a current HEAD commit'); }
-    return changed(repo, 'retire-issue', record, { ...record.metadata, adoptions: { current: record.metadata.adoptions.current.filter(target => target !== canonical), history: [...record.metadata.adoptions.history, { target: canonical, commit }] } }, record.body, dryRun);
+    if (record.metadata.state !== 'draft') throw new ConcordError('InvalidIssueState', 'Closed Issue must be reopened before unlinking');
+    return changed(repo, 'retire-issue', record, { ...record.metadata, adoptions: { current: record.metadata.adoptions.current.filter(target => target !== canonical), history: [] } }, record.body, dryRun);
   });
 }
 

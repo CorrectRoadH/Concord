@@ -1,8 +1,7 @@
-import { stringify } from "yaml";
 import { type MemoryMeta } from "concord-sdlc/model";
 import { MemoryContentInvalid } from "./errors.js";
 import type { MemoryDocument } from "./schema.js";
-import { decodeDocumentSource } from 'concord-sdlc/document-codec';
+import { decodeDocumentSource, renderDocument } from 'concord-sdlc/document-codec';
 
 export function decodeMemoryDocument(path: string, _id: string, source: string): MemoryDocument {
   try {
@@ -15,5 +14,5 @@ export function decodeMemoryDocument(path: string, _id: string, source: string):
 }
 
 export function encodeMemoryDocument(metadata: MemoryMeta, body: string): string {
-  return `---\n${stringify(metadata, { lineWidth: 0, aliasDuplicateObjects: false }).trimEnd()}\n---\n${body}`;
+  return renderDocument(metadata, body);
 }

@@ -189,7 +189,7 @@ function source(template: LoadedTemplate, path: string): string {
 }
 
 function nodeFrontmatter(id: string, title: string, alternatives: readonly string[], createdAt: string): string {
-  return `---\n${stringify({ format: "concord.document/v1", id, title, createdAt, kind: "design", alternatives }).trimEnd()}\n---\n\n`;
+  return '';
 }
 
 function removeCasesNavigation(value: string): string {

@@ -95,7 +95,15 @@ export class FeedbackRepository {
     if ((issue.state === 'closed') !== (issue.closure !== undefined)) fail('state and closure disagree');
     const keys = issue.memoryRelations.map(relation => `${relation.kind}\0${relation.memory}`);
     if (new Set(keys).size !== keys.length) fail('duplicate Memory relations');
-    for (const relation of issue.memoryRelations) this.#readMemory(relation.memory);
+    for (const relation of issue.memoryRelations) {
+      if (relation.kind === 'related') {
+        if (relation.memory === this.ownerPath(issue.id)) fail('related requires another Issue');
+        this.read(relation.memory);
+      } else {
+        const memory = this.#readMemory(relation.memory);
+        if (!['current', 'superseded'].includes(memory.state)) fail('Memory relation requires current or superseded status');
+      }
+    }
     if (new Set(issue.adoptions.current).size !== issue.adoptions.current.length) fail('duplicate current adoptions');
     for (const target of issue.adoptions.current) {
       this.targetSource(target);
@@ -106,14 +114,14 @@ export class FeedbackRepository {
     if (['declined', 'invalid', 'duplicate'].includes(closure.kind) && issue.adoptions.current.length > 0) fail('retire current adoptions before closure');
     if ('memory' in closure) {
       const memory = this.#readMemory(closure.memory);
-      if (closure.kind === 'fixed' && !(memory.memoryKind === 'problem' && memory.state === 'resolved' && memory.resolution?.kind === 'fixed')) fail('fixed closure requires a resolved fixed Problem');
       if (closure.kind === 'declined' && !(memory.memoryKind === 'decision' && memory.state === 'current')) fail('declined closure requires a current Decision');
       if (closure.kind === 'delivered') {
-        if (!(memory.memoryKind === 'problem' && memory.state === 'resolved' || memory.memoryKind === 'decision' && memory.state === 'current')) fail('delivered closure requires a resolved Problem or current Decision');
-        if (!issue.adoptions.current.includes(closure.target) && !issue.adoptions.history.some(entry => entry.target === closure.target)) fail('delivered target is not adopted');
+        if (!(memory.memoryKind === 'decision' && memory.state === 'current')) fail('delivered closure requires a current Decision');
+        if (!issue.adoptions.current.includes(closure.target)) fail('delivered target is not adopted');
         this.targetSource(closure.target);
       }
     }
+    if (closure.kind === 'fixed' && closure.verification === undefined) fail('fixed closure requires verification');
     if (closure.kind === 'duplicate') {
       const seen = new Set([this.ownerPath(issue.id)]);
       let cursor: string | undefined = closure.canonical;

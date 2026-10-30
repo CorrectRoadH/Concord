@@ -57,12 +57,25 @@ export function deriveDesignRecord(repo: Pick<Repository, 'root' | 'read' | 'fil
 
 export function writeDesignDeclaration(source: string, declaration: string, reason?: string): string {
   const newline = source.includes('\r\n') ? '\r\n' : '\n';
-  let result = source.replace(/^(?:Selected|Deferred):[^\r\n]*(?:\r?\n)?/gmu, '');
-  if (/^## (?:Decision|定案)\s*$/mu.test(result)) result = result.replace(/^(## (?:Decision|定案)\s*)$/mu, `$1${newline}${newline}${declaration}`);
-  else result += `${newline}## Decision${newline}${newline}${declaration}${newline}`;
+  let section = '';
+  const removals: { start: number; end: number }[] = [];
+  for (const node of fromMarkdown(source).children) {
+    if (node.type === 'heading' && node.depth <= 2) section = node.depth === 2 ? node.children.map(child => child.type === 'text' ? child.value : '').join('') : '';
+    if (['Decision', '定案'].includes(section) && node.type === 'paragraph' && node.children[0]?.type === 'text' && /^(?:Selected|Deferred):/u.test(node.children[0].value)) removals.push({ start: node.position!.start.offset!, end: node.position!.end.offset! });
+  }
+  let result = source;
+  for (const range of removals.reverse()) result = `${result.slice(0, range.start)}${result.slice(range.end)}`;
+  const insert = (names: readonly string[], content: string): void => {
+    const heading = fromMarkdown(result).children.find(node => node.type === 'heading' && node.depth === 2 && names.includes(node.children.map(child => child.type === 'text' ? child.value : '').join('')));
+    if (heading === undefined) result += `${newline}## ${names[0]}${newline}${newline}${content}${newline}`;
+    else {
+      const end = heading.position!.end.offset!;
+      result = `${result.slice(0, end)}${newline}${newline}${content}${result.slice(end)}`;
+    }
+  };
+  insert(['Decision', '定案'], declaration);
   if (reason !== undefined && !result.includes(reason)) {
-    if (/^## (?:Rationale|依据)\s*$/mu.test(result)) result = result.replace(/^(## (?:Rationale|依据)\s*)$/mu, `$1${newline}${newline}${reason}`);
-    else result += `${newline}## Rationale${newline}${newline}${reason}${newline}`;
+    insert(['Rationale', '依据'], reason);
   }
   return result;
 }

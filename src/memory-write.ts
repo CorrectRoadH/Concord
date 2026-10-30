@@ -1,4 +1,4 @@
-import { stringify } from 'yaml';
+import { renderOwnerFrontmatter } from './owner-frontmatter.js';
 import { ConcordError, DocumentSchema, decode, type Change, type MemoryMeta, type ProjectConfig } from './shared.js';
 
 type MemorySources = NonNullable<ProjectConfig['memorySources']>;
@@ -17,7 +17,8 @@ export function memoryWriteDirectory(sources: MemorySources | undefined, selecto
 
 export function renderMemorySource(metadata: MemoryMeta, body: string): string {
   const valid = decode(DocumentSchema, metadata, `memory:${metadata.id}`);
-  return `---\n${stringify(valid, { lineWidth: 0, aliasDuplicateObjects: false }).trimEnd()}\n---\n\n${body.endsWith('\n') ? body : `${body}\n`}`;
+  const content = /^# /mu.test(body) ? body : `# ${valid.title}\n\n${body}`;
+  return `${renderOwnerFrontmatter(valid)}${content.endsWith('\n') ? content : `${content}\n`}`;
 }
 // @concord-end
 

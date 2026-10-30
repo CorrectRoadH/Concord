@@ -1,8 +1,9 @@
+import { writeDesignDeclaration } from 'concord-sdlc/document-codec';
 import { repositoryRoot } from "../../root.js";
 import { isDocumentName, designPlanName, readDesignPlanPaths } from 'concord-sdlc/document-layout';
 import { designContentPaths, validateDesignContent, type DesignContentResult } from "concord-sdlc/design-content";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
-import { basename, dirname, resolve, sep } from "node:path";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import * as FileSystem from "effect/FileSystem";
@@ -22,7 +23,7 @@ import {
   type TraceMutationPreparation,
   withTraceReadLease,
 } from "../trace/relation-mutation.js";
-import { decodeDesignReadme, encodeDecidedDesignReadme } from "./codec.js";
+import { decodeDesignReadme } from "./codec.js";
 import {
   DesignAlreadyDecided,
   DesignConflict,
@@ -151,9 +152,13 @@ function selectPlan(
     : Effect.succeed(match);
 }
 
+function readDecodedDesign(root: string, path: string, source: string) {
+  return decodeDesignReadme(path, source, readDesignPlanPaths(root, dirname(path)), readFileSync(resolve(root, dirname(path), 'DECISION.md'), 'utf8'));
+}
+
 function stateOf(root: string, design: TraceNode): Effect.Effect<DesignDecisionState, DesignIoError> {
   return Effect.try({
-    try: () => { const source = readFileSync(resolve(root, design.path), "utf8"); const decoded = decodeDesignReadme(design.path, source); return decodeDesignReadme(design.path, source, readDesignPlanPaths(root, dirname(design.path), decoded.alternatives)).state; },
+    try: () => { const source = readFileSync(resolve(root, design.path), "utf8"); return readDecodedDesign(root, design.path, source).state; },
     catch: cause => new DesignIoError({ operation: "read Design state", path: design.path, message: designErrorMessage(cause) }),
   });
 }
@@ -420,11 +425,12 @@ function checkDesignPackage(
   snapshot: TraceSnapshot,
   design: TraceNode,
   bundle: DesignTemplateBundle,
+  selected?: string,
 ): Effect.Effect<DesignCheckReceipt, DesignIoError> {
   return Effect.gen(function*() {
     const packageRoot = dirname(design.path);
     const readme = yield* readText(root, design.path);
-    const declared = decodeDesignReadme(design.path, readme).alternatives;
+    const declared = readDecodedDesign(root, design.path, readme).alternatives;
     const plans = [...directPlans(snapshot, design)].sort((left, right) => declared.indexOf(planSelector(left.path)) - declared.indexOf(planSelector(right.path)));
     const receipts = planReceipts(root, plans, bundle);
     const directoryPlans = yield* directoryPlanSelectors(root, packageRoot);
@@ -455,15 +461,8 @@ function checkDesignPackage(
     if (state._tag === "decided" && !plans.some((plan) => plan.path === state.selectedPlan)) {
       findings.push(finding("selected-plan-invalid", design.path, "decision.selected must be one declared Design alternative"));
     }
-    const expectedProjection = renderDesignProjection(receipts, state);
-    const actualProjection = extractDesignProjection(readme);
-    if (actualProjection === undefined) {
-      findings.push(finding("projection-missing", design.path, "Design README must contain exactly one generated docs index region"));
-    } else if (actualProjection !== expectedProjection) {
-      findings.push(finding("projection-stale", design.path, "generated docs index bytes do not match direct Plans and selectedPlan"));
-    }
     const files = yield* collectFiles(root, packageRoot);
-    const content = yield* captureDesignContent(root, design.path);
+    const content = yield* captureDesignContent(root, design.path, selected);
     findings.push(...content.assessment.findings);
     return {
       format: "concord.docs-design/check-v1",
@@ -481,7 +480,7 @@ function checkDesignPackage(
       snapshotDigest: snapshot.digest,
       generation: snapshot.generation,
       files,
-      projectionDigest: traceDigest(expectedProjection),
+      projectionDigest: traceDigest(renderDesignProjection(receipts, state)),
       findings: findings.sort((left, right) => `${left.path}\0${left.code}`.localeCompare(`${right.path}\0${right.code}`)),
     };
   });
@@ -544,12 +543,18 @@ function captureDesignContent(root: string, path: string, selected?: string): Ef
     try: () => {
       const owner = readDesignSource(root, path);
       if (owner === undefined) throw new Error("Design owner is missing");
-      const decoded = decodeDesignReadme(path, owner);
+      const decoded = readDecodedDesign(root, path, owner);
       const base = dirname(path);
       readDesignPlanPaths(root, base, decoded.alternatives);
       const paths = designMarkdownPaths(root, base);
       const sources = new Map([...new Set([...designContentPaths(base, decoded.alternatives), ...paths.filter(path => path.endsWith('.md'))])].map(candidate => [candidate, candidate === path ? owner : readDesignSource(root, candidate)]));
-      const assessment = validateDesignContent(base, decoded.alternatives, sources, selected ?? decoded.metadata.decision?.selected);
+      const assessmentSources = new Map(sources);
+      if (selected !== undefined) {
+        const entry = readDesignPlanPaths(root, base).get(selected);
+        if (entry === undefined) throw new Error(`Plan does not exist: ${selected}`);
+        assessmentSources.set(`${base}/DECISION.md`, writeDesignDeclaration(sources.get(`${base}/DECISION.md`) ?? '# Decision\n', `Selected: [${selected}](${slash(relative(base, entry))})`));
+      }
+      const assessment = validateDesignContent(base, decoded.alternatives, assessmentSources, selected ?? decoded.metadata.decision?.selected);
       return { sources: [...sources].flatMap(([file, content]) => content === undefined ? [] : [[file, content] as const]), assessment, base, paths };
     },
     catch: cause => new DesignIoError({ operation: "read Design content", path, message: designErrorMessage(cause) }),
@@ -596,7 +601,7 @@ function prepareDecision(
     }
     const plan = yield* selectPlan(snapshot, design, requestedPlan);
     const bundle = yield* loadDesignTemplates(root);
-    const packageCheck = yield* checkDesignPackage(root, snapshot, design, bundle);
+    const packageCheck = yield* checkDesignPackage(root, snapshot, design, bundle, planSelector(plan.path));
     if (!packageCheck.ok) {
       return yield* new DesignDecisionIncomplete({
         design: design.path,
@@ -607,7 +612,7 @@ function prepareDecision(
     }
     const content = yield* captureDesignContent(root, design.path, planSelector(plan.path));
     if (content.assessment.findings.length) return yield* new DesignDecisionIncomplete({ design: design.path, plan: plan.path, findings: content.assessment.findings.map(item => `${item.code}: ${item.path}: ${item.message}`), nextStep: "Complete all candidate responses and the explicit DECISION selection." });
-    const decoded = decodeDesignReadme(design.path, new Map(content.sources).get(design.path)!);
+    const decoded = readDecodedDesign(root, design.path, new Map(content.sources).get(design.path)!);
     if (decoded.alternatives.length !== packageCheck.plans.length || decoded.alternatives.some(selector => !packageCheck.plans.some(plan => plan.selector === selector))) {
       return yield* new DesignConflict({ operation: "decide", path: design.path, message: "Design alternatives changed while validating the package" });
     }
@@ -656,7 +661,7 @@ export function decideDesignAt(
     return yield* mutateTraceOwner<DecideValue, DecideChanges, DesignCommandError, FileSystem.FileSystem>({
     root,
     operation: "design-decide",
-    ownerPath: initial.path,
+    ownerPath: `${dirname(initial.path)}/DECISION.md`,
     dryRun,
     prepareUnderLease: Effect.gen(function*() {
       const snapshot = yield* compileTraceReportUnderLease(root).pipe(Effect.map(report => report.snapshot));
@@ -671,7 +676,8 @@ export function decideDesignAt(
       }
       const designPath = initial.path;
       if (source === undefined) return yield* new DesignConflict({ operation: "decide", path: designPath, message: "Design README disappeared" });
-      const decoded = decodeDesignReadme(designPath, source);
+      const ownerSource = yield* readText(root, designPath);
+      const decoded = readDecodedDesign(root, designPath, ownerSource);
       if (decoded.state._tag === "decided") {
         return yield* new DesignAlreadyDecided({
           design: designPath,
@@ -681,16 +687,12 @@ export function decideDesignAt(
         });
       }
       const prepared = preparation as DesignPreparation;
-      if (new Map(prepared.content.sources).get(designPath) !== source) return yield* new DesignConflict({ operation: "decide", path: designPath, message: "Design owner changed after validation" });
+      if (new Map(prepared.content.sources).get(`${dirname(designPath)}/DECISION.md`) !== source) return yield* new DesignConflict({ operation: "decide", path: designPath, message: "Design owner changed after validation" });
       const bundle = yield* loadDesignTemplates(root);
       const plans = prepared.plans;
       const state = { _tag: "decided" as const, selectedPlan: target.path };
       const projection = renderDesignProjection(plans, state);
-      const body = replaceDesignProjection(decoded.body, projection);
-      if (body === undefined) {
-        return yield* new DesignConflict({ operation: "decide", path: designPath, message: "Design README generated projection is missing or duplicated" });
-      }
-      const bytes = encodeDecidedDesignReadme(decoded, target.ref, body, prepared.content.assessment.rationale);
+      const bytes = writeDesignDeclaration(source, `Selected: [${planSelector(target.path)}](${slash(relative(dirname(designPath), target.path))})`, prepared.content.assessment.rationale);
       const title = /^#\s+(.+)$/mu.exec(decoded.body)?.[1]?.trim() ?? designSlug(designPath);
       yield* verifyDesignPreparation(root, prepared);
       return {
@@ -703,7 +705,7 @@ export function decideDesignAt(
           plans,
           manifestDigests: bundle.digests,
           projectionDigest: traceDigest(projection),
-          file: fileReceipt(designPath, bytes),
+          file: fileReceipt(`${dirname(designPath)}/DECISION.md`, bytes),
         },
         changes: { selectedPlan: target.path },
       };

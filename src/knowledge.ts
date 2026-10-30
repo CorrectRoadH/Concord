@@ -12,8 +12,8 @@ function ownerRecords(repo: Repository, kind: KnowledgeKind): readonly DocumentR
 
 function summary(record: DocumentRecord) {
   return { path: record.path, id: record.metadata.id, title: record.metadata.title, digest: record.digest,
-    ...(record.metadata.kind === 'memory' ? { memoryKind: record.metadata.memoryKind, state: record.metadata.state } :
-      record.metadata.kind === 'issue' ? { state: record.metadata.state, provider: record.metadata.source?.provider ?? 'local' as const } : {}) };
+    ...(record.metadata.kind === 'memory' ? { type: record.metadata.memoryKind, status: record.metadata.state } :
+      record.metadata.kind === 'issue' ? { status: record.metadata.state === 'draft' ? 'open' : 'closed', provider: record.metadata.source?.provider ?? 'local' as const } : {}) };
 }
 // @concord-end
 

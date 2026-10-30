@@ -7,8 +7,19 @@ import { IssueClosureSchema, IssueOriginSchema, SourceRecordSchema, Text, decode
 
 const NonEmpty = Text.check(Schema.isTrimmed());
 const Path = NonEmpty.check(Schema.isPattern(/^(?!\/)(?!.*\\)(?!.*(?:^|\/)\.{1,2}(?:\/|$))[^\r\n\0]+$/u));
-const Relation = Schema.Struct({ role: Schema.Literals(['investigation', 'root-cause', 'decision', 'adopts', 'related']), target: Path });
-const MemoryRelation = Schema.Struct({ role: Schema.Literals(['supports', 'amends']), target: Path });
+const Spec = Path.check(Schema.isPattern(/^docs\/(?:feature|engineering)\/.+\.md(?:#[^\s#]+)?$/u));
+const Memory = Path.check(Schema.isPattern(/^memory\/[^/#]+\.md$/u));
+const Issue = Path.check(Schema.isPattern(/^docs\/issues\/[^/#]+\.md$/u));
+const Constitution = Path.check(Schema.isPattern(/^docs\/constitution\.md(?:#c-(?!000)\d{3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)?$/u));
+const Relation = Schema.Union([
+  Schema.Struct({ role: Schema.Literals(['investigation', 'root-cause', 'decision']), target: Memory }),
+  Schema.Struct({ role: Schema.Literal('adopts'), target: Spec }),
+  Schema.Struct({ role: Schema.Literal('related'), target: Issue }),
+]);
+const MemoryRelation = Schema.Union([
+  Schema.Struct({ role: Schema.Literal('supports'), target: Spec }),
+  Schema.Struct({ role: Schema.Literal('amends'), target: Constitution }),
+]);
 const Relations = Schema.NonEmptyArray(Relation).check(Schema.makeFilter(values => new Set(values.map(value => `${value.role}\0${value.target}`)).size === values.length));
 const MemoryRelations = Schema.NonEmptyArray(MemoryRelation).check(Schema.makeFilter(values => new Set(values.map(value => `${value.role}\0${value.target}`)).size === values.length));
 
@@ -30,7 +41,7 @@ export function ownerFrontmatter(metadata: DocumentMeta): Record<string, unknown
   if (metadata.kind === 'memory') {
     return decode(MemoryFrontmatterSchema, {
       type: metadata.memoryKind, status: metadata.state,
-      ...(metadata.promotions.length === 0 ? {} : { relations: metadata.promotions.map(target => ({ role: target.startsWith('docs/constitution.md#') ? 'amends' : 'supports', target })) }),
+      ...(metadata.promotions.length === 0 ? {} : { relations: metadata.promotions.map(target => ({ role: target === 'docs/constitution.md' || target.startsWith('docs/constitution.md#') ? 'amends' : 'supports', target })) }),
       ...(metadata.supersededBy === undefined ? {} : { supersededBy: metadata.supersededBy }),
       ...(metadata.supersession === undefined ? {} : { supersession: metadata.supersession }),
     }, metadata.id);

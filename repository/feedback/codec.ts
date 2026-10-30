@@ -1,7 +1,6 @@
 import { Schema } from "effect";
 import { IssueSchema, type IssueMeta } from "concord-sdlc/model";
-import { stringify } from "yaml";
-import { decodeDocumentSource } from 'concord-sdlc/document-codec';
+import { decodeDocumentSource, renderDocument } from 'concord-sdlc/document-codec';
 import { FeedbackContentInvalid } from "./errors.js";
 import { documentPlacementError } from 'concord-sdlc/document-layout';
 
@@ -19,5 +18,5 @@ export function decodeFeedbackDocument(path: string, source: string): FeedbackDo
 
 export function encodeFeedbackDocument(document: FeedbackDocument): string {
   Schema.decodeUnknownSync(IssueSchema, { onExcessProperty: 'error' })(document.metadata);
-  return `---\n${stringify(document.metadata, { lineWidth: 0, aliasDuplicateObjects: false }).trimEnd()}\n---\n${document.body}`;
+  return renderDocument(document.metadata, document.body);
 }

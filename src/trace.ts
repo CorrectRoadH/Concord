@@ -50,10 +50,10 @@ function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'rebuild', 
       case 'use-case': add(m.feature, 'feature'); break;
       case 'roadmap': if (m.adoptedAs) add(m.adoptedAs, 'adopted-as'); break;
       case 'design': for (const ref of m.decision?.targets ?? []) add(ref, 'decides'); break;
-      case 'memory': for (const ref of m.promotions) add(ref, 'promotion'); if (m.supersededBy) add(m.supersededBy, 'superseded-by'); break;
+      case 'memory': for (const ref of m.promotions) add(ref, ref === 'docs/constitution.md' || ref.startsWith('docs/constitution.md#') ? 'amends' : 'supports'); if (m.supersededBy) add(m.supersededBy, 'superseded-by'); break;
       case 'issue': {
-        for (const relation of m.memoryRelations) add(relation.memory, `memory:${relation.kind}`);
-        for (const ref of m.adoptions.current) add(ref, 'adoption');
+        for (const relation of m.memoryRelations) add(relation.memory, relation.kind);
+        for (const ref of m.adoptions.current) add(ref, 'adopts');
         const closure = m.closure;
         if (closure !== undefined && 'memory' in closure) add(closure.memory, `closure:${closure.kind}`);
         if (closure?.kind === 'delivered') add(closure.target, 'closure:delivered-target');

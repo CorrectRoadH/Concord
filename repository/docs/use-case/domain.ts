@@ -125,7 +125,7 @@ function validateBody(body: string, title: string): string {
 }
 
 function renderLeaf(body: string, id: string, title: string, feature: string): string {
-  return `---\n${stringify({ format: "concord.document/v1", id, title, kind: "use-case", feature }).trimEnd()}\n---\n\n${body}\n`;
+  return `${body}\n`;
 }
 
 function escapeLinkTitle(title: string): string {

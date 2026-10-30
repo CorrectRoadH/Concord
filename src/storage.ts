@@ -848,7 +848,7 @@ export class LocalRepository implements Repository {
     } catch (cause) {
       throw new ConcordError('RecoveryRequired', `Publication stopped: ${cause instanceof Error ? cause.message : String(cause)}; run concord recover`);
     }
-    try { advancePublicationRevision(this.coordinationDirectory); rmSync(journalPath); syncDirectory(this.privateDir); }
+    try { this.pruneMovedRoadmap(journal); advancePublicationRevision(this.coordinationDirectory); rmSync(journalPath); syncDirectory(this.privateDir); }
     catch {
       if (journal.scope.kind === 'step-rename') throw new ConcordError('RecoveryRequired', 'Step rename committed but cleanup was interrupted; run concord recover');
       return { operation: journal.operation, dryRun: false, changedPaths, recoveryRequired: true };
@@ -1006,6 +1006,20 @@ export class LocalRepository implements Repository {
     else atomic(target, contents, mode);
     this.clearPathObservations();
   }
+  /** File images are committed first, so prepared recovery can restore every source. */
+  private pruneMovedRoadmap(journal: Journal): void {
+    if (journal.operation !== 'adopt-roadmap') return;
+    const directories = new Set<string>();
+    for (const change of journal.changes) {
+      if (change.after !== null || !/^docs\/roadmap\/[^/]+\//u.test(change.path)) continue;
+      for (let directory = dirname(change.path); directory !== 'docs/roadmap'; directory = dirname(directory)) directories.add(directory);
+    }
+    for (const directory of [...directories].sort((left, right) => right.length - left.length)) {
+      const target = this.absolute(directory);
+      if (!present(target)) continue;
+      rmdirSync(target); syncDirectory(dirname(target)); this.clearPathObservations();
+    }
+  }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#完整路径
   recover(): { operation: string; status: string; changedPaths: readonly string[] } {
@@ -1036,6 +1050,7 @@ export class LocalRepository implements Repository {
         if (present(target)) { try { rmdirSync(target); } catch (cause) { if (!errno(cause, 'ENOTEMPTY')) throw cause; } }
       }
     }
+    if (journal.phase === 'committed') this.pruneMovedRoadmap(journal);
     advancePublicationRevision(this.coordinationDirectory);
     rmSync(path); syncDirectory(this.privateDir);
     return { operation: 'recover', status: journal.phase === 'prepared' ? 'rolled-back' : 'committed', changedPaths: journal.changes.filter(change => change.path !== 'concord.repository.json' || change.before !== change.after).map(c => c.path) };

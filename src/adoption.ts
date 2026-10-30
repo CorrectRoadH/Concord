@@ -4,8 +4,8 @@ import { posix } from 'node:path';
 import { ConcordError } from './shared.js';
 
 /** A deliberately bounded Markdown link transform, never a best-effort rewrite. */
-export function rebaseAdoptedMarkdown(source: string, sourcePath: string, destinationPath: string, sourceDirectory: string): string {
-  const destinationDirectory = destinationPath.slice(0, -posix.relative(sourceDirectory, sourcePath).length - 1);
+export function rebaseAdoptedMarkdown(source: string, sourcePath: string, destinationPath: string, sourceDirectory: string, targetDirectory?: string): string {
+  const destinationDirectory = targetDirectory ?? destinationPath.slice(0, -posix.relative(sourceDirectory, sourcePath).length - 1);
   const unsupported = (detail: string): never => { throw new ConcordError('UnsupportedMarkdownLink', `${sourcePath}: ${detail}; adoption supports simple inline links and single-line reference definitions`); };
   const rewrite = (raw: string): string => {
     if (raw.startsWith('#') || raw.startsWith('/') || /^[A-Za-z][A-Za-z0-9+.-]*:/u.test(raw)) return raw;

@@ -5,7 +5,7 @@ import { Effect, Result, Schema, SchemaIssue } from "effect";
 import { parse } from "yaml";
 import { DocumentSchema } from 'concord-sdlc/model';
 import type { DocumentRecord } from 'concord-sdlc/model';
-import { decodeDocumentSource } from 'concord-sdlc/document-codec';
+import { decodeDocumentSource, deriveDesignRecord, documentTitle } from 'concord-sdlc/document-codec';
 import { documentDisposition, documentPlacementError, validPackagePath, validDesignPlanPath, readDesignPlanPaths } from 'concord-sdlc/document-layout';
 
 import { decodeFeedbackDocument } from "../../feedback/codec.js";
@@ -126,12 +126,8 @@ function deriveDesignPlans(nodes: readonly TraceNode[], documents: readonly (rea
     if (design.kind !== "design") return [];
     const source = sources.get(design.path);
     if (source === undefined) return [];
-    const parsed = parseFrontmatter(design.path, source);
-    if (parsed === undefined) return [];
-    const decoded = Schema.decodeUnknownResult(DocumentSchema, { errors: "all", onExcessProperty: "error" })(parsed.value);
-    if (Result.isFailure(decoded) || decoded.success.kind !== "design") return [];
-    const entries = readDesignPlanPaths(root, posix.dirname(design.path), decoded.success.alternatives);
-    return decoded.success.alternatives.flatMap((alternative): TraceNode[] => {
+    const entries = readDesignPlanPaths(root, posix.dirname(design.path));
+    return [...entries.keys()].flatMap((alternative): TraceNode[] => {
       const path = entries.get(alternative)!;
       const plan = sources.get(path);
       return plan === undefined ? [] : [{ kind: "design-plan", path, title: markdownTitle(path, plan), relations: {} }];
@@ -421,7 +417,7 @@ function validateFeedbackRelations(
       );
     }
     for (const relation of entry.memoryRelations) {
-      if (!memoryIds.has(relation.memory)) {
+      if (relation.kind === 'related' ? relation.memory === entry.path || !feedback.some(target => target.path === relation.memory) : !memoryIds.has(relation.memory)) {
         throw new TraceFormatError({
           path: entry.path,
           subject: "memory relation",
@@ -440,6 +436,12 @@ function validateMemoryPromotions(
   for (const entry of memory) {
     for (const promotion of entry.promotions) {
       for (const target of promotion.current) {
+        if (target === 'docs/constitution.md' || target.startsWith('docs/constitution.md#')) {
+          const source = documents.get('docs/constitution.md');
+          const anchor = target.split('#')[1];
+          if (source === undefined || anchor !== undefined && !source.split(/\r?\n/u).some(line => line.endsWith(`{#${anchor}}`))) throw new TraceFormatError({ path: entry.path, subject: 'amends', message: `Constitution target does not exist: ${target}` });
+          continue;
+        }
         validateScopedRepoRef(entry.path, "promotion", target, snapshot, documents, ADOPTABLE_DOCS_NODE_KINDS);
       }
     }
@@ -579,7 +581,8 @@ function compileTraceAtGeneration(
       documentSources,
       ([path, source]) => pure(path, "frontmatter", () => decodeDocumentSource(path, source)),
     );
-    const owners = ownerValues.filter((owner): owner is DocumentRecord => owner !== undefined && documentDisposition(owner.metadata.kind, owner.path, ['memory']) === 'current');
+    const ownerReader = { root, read: (path: string) => documentIndex.get(path), files: (directory: string) => documentSources.map(([path]) => path).filter(path => path.startsWith(`${directory}/`)) };
+    const owners = ownerValues.filter((owner): owner is DocumentRecord => owner !== undefined && documentDisposition(owner.metadata.kind, owner.path, ['memory']) === 'current').map(owner => deriveDesignRecord(ownerReader, owner));
     const identities = new Set<string>();
     for (const owner of owners) {
       if (owner.metadata.kind === 'memory') continue;
@@ -587,7 +590,7 @@ function compileTraceAtGeneration(
         const placement = documentPlacementError(owner.metadata.kind, owner.path);
         if (placement !== undefined) return yield* new TraceFormatError({ path: owner.path, subject: 'placement', message: placement });
       }
-      const identity = `${owner.metadata.kind}:${owner.metadata.id}`;
+      const identity = owner.path;
       if (identities.has(identity)) return yield* new TraceFormatError({ path: owner.path, subject: 'identity', message: `${identity} is not unique` });
       identities.add(identity);
     }

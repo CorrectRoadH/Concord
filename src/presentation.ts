@@ -69,7 +69,7 @@ export function humanOutput(value: unknown): string {
     const terms = value.query.trim().split(/\s+/u);
     return [label(value.operation), ...entries.filter(Predicate.isObject).flatMap(entry => [
       `${String(entry.path)} — ${String(entry.title ?? (Predicate.isObject(entry.metadata) ? entry.metadata.title : ''))}`,
-      `  ${String(entry.memoryKind ?? (Predicate.isObject(entry.metadata) ? entry.metadata.memoryKind : 'issue'))}: ${String(entry.state ?? (Predicate.isObject(entry.metadata) ? entry.metadata.state : 'unknown'))}`,
+      `  ${String(entry.type ?? entry.memoryKind ?? (Predicate.isObject(entry.metadata) ? entry.metadata.memoryKind : 'issue'))}: ${String(entry.status ?? entry.state ?? (Predicate.isObject(entry.metadata) ? entry.metadata.state : 'unknown'))}`,
       `  ${matchingSnippet(typeof entry.body === 'string' ? entry.body : '', terms)}`,
     ])].join('\n');
   }

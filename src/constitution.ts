@@ -344,7 +344,7 @@ function lifecycle(repo: Repository, operation: 'constitution-adopt' | 'constitu
   if (!adoption && current.metadata.status !== 'active') throw new ConcordError('ConstitutionNotActive', 'Adopt the draft constitution before amending it');
   const reason = required(input.reason, 'reason'), impact = required(input.impact, 'impact');
   const sources = input.sources.map(source => required(source, 'source'));
-  const after = render({ format: 'concord.constitution/v3', status: 'active' }, input.body);
+  const after = render({ status: 'active' }, input.body);
   guardReferences(repo, current, after);
   const decision = constitutionDecisionChange(repo.config.memorySources, path => repo.read(path) !== undefined, {
     adoption, reason, impact, sources, at: new Date().toISOString(),
@@ -376,7 +376,7 @@ export interface InitialConstitutionOptions {
 export function initialConstitution(options: InitialConstitutionOptions): { readonly source: string; readonly decision?: Change } {
   const active = options.active === true;
   if (active && (!options.reason || !options.impact)) throw new ConcordError('InvalidConstitution', 'Adopting the constitution requires a non-empty reason and impact');
-  const source = render({ format: 'concord.constitution/v3', status: active ? 'active' : 'draft' }, options.body);
+  const source = render({ status: active ? 'active' : 'draft' }, options.body);
   if (!active) return { source };
   const decision = constitutionDecisionChange(options.memorySources, options.exists ?? (() => false), {
     adoption: true, reason: required(options.reason!, 'reason'), impact: required(options.impact!, 'impact'),

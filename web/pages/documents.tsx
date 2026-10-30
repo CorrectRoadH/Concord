@@ -1083,8 +1083,8 @@ function Lifecycle({ document }: { document: WorkspaceDocument }) {
           <dl>
             {metadata.kind === "design" && !metadata.decision && !metadata.deferral && <Definition label="状态">待裁决</Definition>}
             {"state" in metadata && <Definition label="状态">{String(metadata.state)}</Definition>}
-            {metadata.kind === "roadmap" && metadata.cancellation && <><Definition label="取消理由">{metadata.cancellation.reason}</Definition><Definition label="原文来源">{metadata.cancellation.source.path}</Definition></>}
-            {metadata.kind === "design" && metadata.deferral && <><Definition label="状态">已暂缓</Definition><Definition label="暂缓理由">{metadata.deferral.reason}</Definition><Definition label="原文来源">{metadata.deferral.source.path}</Definition></>}
+            {metadata.kind === "roadmap" && metadata.cancellation && <><Definition label="取消理由">{metadata.cancellation.reason}</Definition>{metadata.cancellation.source && <Definition label="原文来源">{metadata.cancellation.source.path}</Definition>}</>}
+            {metadata.kind === "design" && metadata.deferral && <><Definition label="状态">已暂缓</Definition><Definition label="暂缓理由">{metadata.deferral.reason}</Definition>{metadata.deferral.source && <Definition label="原文来源">{metadata.deferral.source.path}</Definition>}</>}
             {metadata.kind === "design" && metadata.decision && <><Definition label="已选择">{metadata.decision.selected}</Definition><Definition label="裁决理由">{metadata.decision.reason}</Definition><Definition label="裁决时间">{metadata.decision.at ?? "原文未记载"}</Definition></>}
           </dl>
       </ContentSection>

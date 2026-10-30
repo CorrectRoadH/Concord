@@ -74,10 +74,10 @@ export function readDesignPlanPaths(root: string, base: string, alternatives?: r
   const names = new Set<string>();
   const discovered: string[] = [];
   for (const entry of directory(`${base}/plans`)) {
-    const key = entry.name.normalize('NFC').toLowerCase();
-    if (names.has(key)) throw new ConcordError('InvalidPlan', `Colliding Plan path: ${entry.name}`);
-    names.add(key);
     const name = entry.isDirectory() ? entry.name : entry.name.endsWith('.md') ? entry.name.slice(0, -3) : '';
+    const key = name.normalize('NFC').toLowerCase();
+    if (names.has(key) && !discovered.includes(name)) throw new ConcordError('InvalidPlan', `Colliding Plan name: ${entry.name}`);
+    names.add(key);
     if (entry.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symlink in plans: ${entry.name}`);
     if (!isDocumentName(name) || name.toLowerCase() === 'readme' || alternatives !== undefined && !alternatives.includes(name) || !entry.isDirectory() && !entry.isFile()) throw new ConcordError('InvalidPlan', `Invalid Plan member: ${base}/plans/${entry.name}`);
     discovered.push(name);

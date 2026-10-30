@@ -59,7 +59,7 @@ function template(root: string, path: string, operation: FeatureStructureError["
   return read(root, `${TEMPLATE}/${path}`, operation);
 }
 function frontmatter(id: string, title: string): string {
-  return `---\n${stringify({ format: "concord.document/v1", id, title, kind: "feature" }).trimEnd()}\n---\n\n`;
+  return '';
 }
 function render(source: string, title: string, root = false, id = ""): string {
   const body = source.replaceAll("<功能或候选名>", title).trimEnd();

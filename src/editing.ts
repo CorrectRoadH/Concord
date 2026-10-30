@@ -4,12 +4,12 @@ import { renderTypeScriptConfig } from './config.js';
 import { documentRoots, inspectDocumentRecords, parseDocumentRecord, setAuthor, setDocumentMetadata } from './documents.js';
 import type { LocalRepository } from './storage.js';
 import { documentDisposition } from './document-layout.js';
+import { deriveDesignRecord } from './design-state.js';
 import { existsSync } from 'node:fs';
 import type { ViewFile } from './view-contract.js';
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
 const sourceForbidden = (path: string): boolean => path.split('/').some(part => part === '.git' || part === 'node_modules');
-const claimsConcordOwner = (source: string): boolean => /(?:^|\n)\s*format\s*:[^\n]*concord\.document\//u.test(source.slice(0, 64 * 1024));
 const underRoot = (path: string, root: string): boolean => path === root || path.startsWith(`${root}/`);
 
 // @concord-begin
@@ -36,12 +36,11 @@ function inspectMarkdown(repo: Repository, path: string, captured?: { source: st
     const document = captured === undefined ? parseDocumentRecord(path, source) : captured.result.ok ? captured.result.value : undefined;
     if (document) {
       const disposition = documentDisposition(document.metadata.kind, path, (repo.config.memorySources ?? [{ path: 'memory' }]).map(source => source.path));
-      if (disposition === 'current') return { document };
+      if (disposition === 'current') return { document: deriveDesignRecord(repo, document) };
       return { page: projectPage(path, source) };
     }
     return { page: projectPage(path, source) };
   } catch (cause) {
-    if (!claimsConcordOwner(source)) return { page: { path, body: source, digest: digest(source) } };
     return {
       finding: { code: cause instanceof ConcordError ? cause.code : 'InvalidData', path, message: cause instanceof Error ? cause.message : String(cause) },
       page: projectPage(path, source),

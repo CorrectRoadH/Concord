@@ -6,6 +6,7 @@ const conflict = (operation: string, message: string): Result.Result<never, Feed
   Result.fail(new FeedbackReferenceConflict({ operation, message }));
 
 export function linkMemory(issue: IssueMeta, relation: IssueMemoryRelation): Result.Result<IssueMeta, FeedbackReferenceConflict> {
+  if (issue.state === 'closed') return conflict('link', 'closed Issue must be reopened before linking');
   if (issue.memoryRelations.some((item) => item.kind === relation.kind && item.memory === relation.memory)) return conflict("link", "memory relation already exists");
   return Result.succeed({ ...issue, memoryRelations: [...issue.memoryRelations, relation] });
 }
@@ -22,7 +23,7 @@ export function closeFeedback(issue: IssueMeta, closure: IssueClosure, at: strin
   if (issue.state === "closed") return conflict("close", "Issue is already closed");
   if (closure.kind === "duplicate" && closure.canonical === `docs/issues/${issue.id}.md`) return conflict("close", "Issue cannot duplicate itself");
   if ((closure.kind === "declined" || closure.kind === "invalid" || closure.kind === "duplicate") && issue.adoptions.current.length > 0) return conflict("close", "retire current adoptions before this closure");
-  if (closure.kind === "delivered" && !issue.adoptions.current.includes(closure.target) && !issue.adoptions.history.some((item) => item.target === closure.target)) return conflict("close", "delivered target is absent from adoption history");
+  if (closure.kind === "delivered" && !issue.adoptions.current.includes(closure.target)) return conflict("close", "delivered target is absent from current adopts");
   return Result.succeed({ ...issue, state: "closed", closure, history: [...issue.history, { action: "close", at, reason }] });
 }
 export function reopenFeedback(issue: IssueMeta, at: string, reason: string): Result.Result<IssueMeta, FeedbackReferenceConflict> {

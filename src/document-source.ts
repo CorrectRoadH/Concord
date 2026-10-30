@@ -106,7 +106,6 @@ export function decodeUncachedDocumentSource(path: string, source: string): Docu
   if (kind === 'roadmap') fields = { state: 'planned' };
   if (kind === 'research') fields = researchSources(body);
   // Projection-only fields remain until the retired evidence consumers are removed.
-  const metadata = decode(DocumentSchema, { format: 'concord.document/v1', id, title: documentTitle(path, body), kind,
-    ...(['memory', 'issue', 'research', 'design', 'roadmap'].includes(kind) ? { createdAt: 'git' } : {}), ...fields }, path);
+  const metadata = decode(DocumentSchema, { format: 'concord.document/v1', id, title: documentTitle(path, body), kind, ...fields }, path);
   return { path, metadata, body, digest: digest(source) };
 }
