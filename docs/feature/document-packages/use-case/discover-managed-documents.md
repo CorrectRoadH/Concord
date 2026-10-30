@@ -1,6 +1,6 @@
 ---
 format: concord.document/v1
-id: migrate-document-discovery
+id: discover-managed-documents
 title: 完整发现受管文档
 kind: use-case
 feature: docs/feature/document-packages/README.md
