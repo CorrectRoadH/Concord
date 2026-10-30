@@ -85,6 +85,7 @@ export function resolveReference(
     }
     const nestedOwner = documents.find(document =>
       document.path !== owner?.path &&
+      document.path.endsWith('/README.md') &&
       parsed.path.startsWith(`${posix.dirname(document.path)}/`) &&
       document.metadata.kind !== 'feature' && document.metadata.kind !== 'engineering' && document.metadata.kind !== 'research' && document.metadata.kind !== 'design');
     if (nestedOwner !== undefined) throw new ConcordError('InvalidReferenceTarget', `Supporting Markdown is inside ${nestedOwner.metadata.kind} ${nestedOwner.path}; reference its owner directly`);

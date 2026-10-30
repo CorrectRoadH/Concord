@@ -1,3 +1,4 @@
+import { renderOwnerFixture } from './owner-fixture.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -207,7 +208,7 @@ test('packed repository CLI binds process requests, rejects invalid responses an
     // relation or fixed conclusion is requested from these transport fixtures.
     rmSync(join(root, 'linked-receipt.json'));
     mkdirSync(join(root, 'docs/feature/fixture'), { recursive: true });
-    writeFileSync(join(root, 'docs/feature/fixture/README.md'), '---\nformat: concord.document/v1\nkind: feature\nid: fixture\ntitle: Fixture\n---\n# Fixture\n');
+    writeFileSync(join(root, 'docs/feature/fixture/README.md'), renderOwnerFixture({"kind":"feature","id":"fixture","title":"Fixture"}, "# Fixture\n"));
     writeFileSync(join(root, 'suite/guard.test.ts'), 'import {test} from "node:test";\n// @feature docs/feature/fixture/README.md\ntest("guard fixture",()=>{});\n');
     const engine = <A>(op: string, payload: object): A => {
       const output = spawnSync(process.execPath, [cli, 'repo', 'engine', '--json'], { cwd: root, encoding: 'utf8', timeout: 30_000, input: JSON.stringify({ format: 'concord.repository-engine/v1', requestId: 'fixture', op, payload }) });

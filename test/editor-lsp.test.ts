@@ -1,3 +1,4 @@
+import { renderOwnerFixture } from './owner-fixture.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -18,7 +19,7 @@ type Response = typeof Response.Type;
 type Diagnostics = typeof Diagnostics.Type['params'];
 const file = 'docs/feature/sample/use-case/flow.md';
 const reference = `${file}#new-step`;
-const source = (id: string) => `---\nformat: concord.document/v1\nid: flow\ntitle: Flow\nkind: use-case\nfeature: docs/feature/sample/README.md\n---\n\n# Flow\n\n1. Open 😀 buffer {#${id}}\n`;
+const source = (id: string) => renderOwnerFixture({ id: 'flow', title: 'Flow', kind: 'use-case', feature: 'docs/feature/sample/README.md' }, `# Flow\n\n1. Open 😀 buffer {#${id}}\n`);
 const stepLine = source('new-step').split('\n').findIndex(line => line.startsWith('1. '));
 const testText = (ref: string) => `// 😀 client buffer\n// @use-case ${ref}\n// @name editor-fixture\n`;
 const codeText = (ref: string) => `// @concord-file\n// @concord-implements ${ref}\nexport const flow = 1;\n`;

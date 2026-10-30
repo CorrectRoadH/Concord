@@ -1,3 +1,4 @@
+import { initialConstitution } from '../dist/constitution.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -154,7 +155,7 @@ test('owner and remote bodies are stripped and restored only after safe matching
     const remote = stripQueryBodies({ operation: 'trace-show', subject: { path, metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.doesNotMatch(JSON.stringify(remote), /PRIVATE_(REMOTE|ISSUE)_BODY/u);
     assert.match(JSON.stringify(hydrateQueryValue(root, remote, () => remoteSource).value), /PRIVATE_REMOTE_BODY/u);
-    const constitution = '---\nformat: concord.constitution/v3\nstatus: draft\n---\n# PRIVATE_CONSTITUTION_BODY\n';
+    const constitution = initialConstitution({ body: '# PRIVATE_CONSTITUTION_BODY\n' }).source;
     const matchedReview = hydrateQueryValue(root, { segments: [{ text: 'before\n' }, { constitution: { path, digest: digest(constitution) } }, { text: '\nafter' }] }, () => constitution).value;
     assert.ok('body' in matchedReview);
     assert.equal(matchedReview.body, 'before\n# PRIVATE_CONSTITUTION_BODY\nafter');

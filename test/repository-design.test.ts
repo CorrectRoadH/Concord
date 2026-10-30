@@ -38,19 +38,21 @@ for (const form of ['directory', 'file']) test(`repository Design ${form} shares
     }));
     await run(createDesignAt(root, { slug: 'storage', title: 'Storage', plans: 2, cases: false, pages: [], dryRun: false }));
     assert.match(readFileSync(join(root, 'docs/design/storage/plans/plan-1/README.md'), 'utf8'), /## Limits/u);
-    await assert.rejects(run(decideDesignAt(root, 'storage', 'plan-2', true)), /DesignDecisionIncomplete/u);
+    await assert.rejects(run(decideDesignAt(root, 'docs/design/storage/README.md', 'plan-2', true)), /DesignDecisionIncomplete/u);
     authorDesignFixture(root, 'storage', ['plan-1', 'plan-2'], 'plan-2');
     fs.renameSync(join(root, 'docs/design/storage'), join(root, 'docs/design/中文决策'));
+    const designRef = 'docs/design/中文决策/README.md';
     const decisionPath = join(root, 'docs/design/中文决策/DECISION.md');
     writeFileSync(decisionPath, readFileSync(decisionPath, 'utf8').replace('query the local store', 'query the `local` store'));
-    assert.equal((await run(checkDesignAt(root, 'storage'))).ok, true);
+    assert.equal((await run(checkDesignAt(root, designRef))).ok, true);
     if (form === 'file') {
       const base = join(root, 'docs/design/中文决策');
       writeFileSync(join(base, 'plans/plan-2.md'), readFileSync(join(base, 'plans/plan-2/README.md'), 'utf8').replaceAll('../../', '../'));
       rmSync(join(base, 'plans/plan-2'), { recursive: true });
       for (const page of ['README.md', 'DECISION.md']) writeFileSync(join(base, page), readFileSync(join(base, page), 'utf8').replaceAll('plans/plan-2/README.md', 'plans/plan-2.md'));
-      assert.equal((await run(checkDesignAt(root, 'storage'))).ok, true);
+      assert.equal((await run(checkDesignAt(root, designRef))).ok, true);
     }
+    writeFileSync(decisionPath, readFileSync(decisionPath, 'utf8').replace(/^Selected:.*\n/mu, ''));
     const ownerPath = join(root, 'docs/design/中文决策/README.md'); const owner = readFileSync(ownerPath, 'utf8');
     const goalsPath = join(root, 'docs/design/中文决策/GOALS.md'); const goals = readFileSync(goalsPath, 'utf8');
     const originalRead = fs.readFileSync;
@@ -62,21 +64,21 @@ for (const form of ['directory', 'file']) test(`repository Design ${form} shares
     }) as typeof readFileSync);
     syncBuiltinESMExports();
     try {
-      await run(decideDesignAt(root, 'storage', 'plan-2', true));
+      await run(decideDesignAt(root, designRef, 'plan-2', true));
       assert(reads >= 3);
       driftAt = reads - 1; reads = 0;
-      await assert.rejects(run(decideDesignAt(root, 'storage', 'plan-2', true)), /changed after validation/u);
+      await assert.rejects(run(decideDesignAt(root, designRef, 'plan-2', true)), /changed after validation/u);
       assert.equal(readFileSync(ownerPath, 'utf8'), owner);
     } finally { spy.mock.restore(); syncBuiltinESMExports(); writeFileSync(goalsPath, goals); }
-    const selected = await run(decideDesignAt(root, 'storage', 'plan-2', false));
+    const selected = await run(decideDesignAt(root, designRef, 'plan-2', false));
     assert.equal(selected.design.ref, 'docs/design/中文决策/README.md');
-    assert.equal(selected.design.slug, 'storage');
+    assert.equal(selected.design.slug, '中文决策');
     assert.deepEqual(selected.plans.map(plan => plan.selector), ['plan-1', 'plan-2']);
     const next = readFileSync(ownerPath, 'utf8');
-    assert.match(next, /\[plan-1\]\(plans\/plan-1\/README.md\)/u);
-    assert.match(next, /\[plan-2（已选择）\]/u);
-    assert.match(next, /reason: The selected candidate/u);
-    assert.match(next, /query the `local` store/u);
-    assert.equal((await run(checkDesignAt(root, 'storage'))).ok, true);
+    assert.equal(next, owner);
+    const decision = readFileSync(decisionPath, 'utf8');
+    assert.match(decision, /Selected: \[plan-2\]\(plans\/plan-2(?:\/README)?\.md\)/u);
+    assert.match(decision, /query the `local` store/u);
+    assert.equal((await run(checkDesignAt(root, designRef))).ok, true);
   } finally { await Effect.runPromise(Effect.sync(() => rmSync(root, { recursive: true, force: true }))); }
 });

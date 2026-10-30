@@ -1,3 +1,4 @@
+import { renderOwnerFixture } from './owner-fixture.js';
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -76,7 +77,7 @@ test("repository Memory list ignores navigation README", () => {
   try {
     mkdirSync(join(root, "memory"));
     writeFileSync(join(root, "memory", "README.md"), "navigation only\n");
-    writeFileSync(join(root, "memory", "kept.md"), "---\nformat: concord.document/v1\nid: kept\ntitle: Kept\ncreatedAt: 2026-09-14T00:00:00.000Z\nkind: memory\nmemoryKind: note\nstate: captured\nepoch: 0\npromotions: []\nhistory: []\n---\nbody\n");
+    writeFileSync(join(root, "memory", "kept.md"), renderOwnerFixture({"id":"kept","title":"Kept","createdAt":"2026-09-14T00:00:00.000Z","kind":"memory","memoryKind":"note","state":"captured","epoch":0,"promotions":[],"history":[]}, "body\n"));
     assert.deepEqual(new MemoryRepository(root).list().map((item) => item.metadata.id), ["kept"]);
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -102,7 +103,7 @@ test("repository Memory owner reads reject symlink owners", () => {
   const outside = mkdtempSync(join(tmpdir(), "concord-memory-owner-outside-"));
   try {
     mkdirSync(join(root, "memory"));
-    writeFileSync(join(outside, "source.md"), "---\nformat: concord.document/v1\nid: source\ntitle: Source\ncreatedAt: 2026-09-14T00:00:00.000Z\nkind: memory\nmemoryKind: note\nstate: captured\nepoch: 0\npromotions: []\nhistory: []\n---\n");
+    writeFileSync(join(outside, "source.md"), renderOwnerFixture({"id":"source","title":"Source","createdAt":"2026-09-14T00:00:00.000Z","kind":"memory","memoryKind":"note","state":"captured","epoch":0,"promotions":[],"history":[]}, "# Source\n"));
     symlinkSync(join(outside, "source.md"), join(root, "memory", "source.md"));
     assert.throws(() => new MemoryRepository(root).read("source"), /symlink/u);
     assert.equal(existsSync(join(root, "memory", "source.md")), true);
