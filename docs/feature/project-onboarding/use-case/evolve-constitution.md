@@ -86,7 +86,7 @@ feature: docs/feature/project-onboarding/README.md
 
 宪法的 frontmatter 只有 `format: concord.constitution/v3` 与 `status`（draft 或 active）。宪法是声明式的当前规则，不保存采用日期、修订日期或修订历史，不设语义版本号；整文件 digest 是并发前像。
 
-采用与每次修订各写入一条 Decision Memory：标题概括修订，正文写适用范围、理由与影响，来源列为仓库相对引用，状态直接为 current，并 promote 到受影响的条款或款（`docs/constitution.md#c-NNN-K`）。修订历史由 `concord memory list` 按这些 promotion 派生，逐字差异由 Git 提供。Memory 来源为 read-only 或没有可写来源时，adopt 与 amend 返回 `MemoryWriteUnavailable`，不改写宪法。
+采用与每次修订各写入一条 Decision Memory：标题概括修订，正文写适用范围、理由与影响，来源列为仓库相对引用，状态直接为 current，并 promote 到受影响的条款或款（`docs/constitution.md#c-NNN-K`）。修订历史由 `concord memory list` 按这些 promotion 派生，逐字差异由 Git 提供。Decision Memory 写入项目唯一的默认可写 Memory 来源（见[配置 Memory 来源](configure-memory-sources.md#规则)）。
 
 init 默认生成 draft，正文说明尚未采用项目原则，非 TTY 同样如此。提供正文不会自动变为 active。
 

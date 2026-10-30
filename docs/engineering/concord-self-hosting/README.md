@@ -38,7 +38,7 @@ kind: engineering
 
 其它入口不是检查：`vp build` 只构建，`vp dev` 只启动 Web 开发服务器，`pnpm concord` 运行源码 CLI。`vp run test:e2e:agent` 运行自然语言用例，使用环境中的模型配置，需要显式授权，不属于日常门禁。
 
-资源归属、并发、安装共享与失败诊断见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。
+测试的质量标准、分层、fixture 与成本上限见[测试架构](test-architecture.md)；资源归属、并发、安装共享与失败诊断见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。
 
 构建用固定版本的原生 tsc 做完整类型检查，并输出声明与 sourcemap，构建与运行时使用同一编译器版本。为保持启动性能，构建只改写生成的 JS：把 Effect namespace import 改为窄化导入，每处替换保持原换行数。sourcemap 先解码为绝对坐标，删除被改写行的映射后重新编码，保留其余映射。不改写源文件，不跳过声明检查（[决策依据](../../design/typescript-native/DECISION.md)）。
 
