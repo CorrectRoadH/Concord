@@ -40,7 +40,9 @@ flowchart LR
 
 ## Herdr 插件
 
-`herdr-plugin.toml` 声明一个 action 与一个受管 pane。action 读取调用时插件上下文中的 `focused_pane_cwd` 与 `focused_pane_id`，调用 `plugin.pane.open`，以 `direction: right`、`target_pane_id` 与该 cwd 打开受管 pane。pane 的命令是安装插件时写入的这份 Concord 入口的绝对路径加 `panel --root <cwd>`，不依赖 PATH。上下文没有 cwd 时以具名错误 `PanelWorktreeUnknown` 提示，不用插件目录或当前焦点代替。
+`herdr-plugin.toml` 声明一个 action 与一个受管 pane。action 读取调用时插件上下文中的 `focused_pane_cwd` 与 `focused_pane_id`，调用 `plugin.pane.open`，以 `direction: right`、`target_pane_id` 与该 cwd 打开受管 pane。manifest 中 pane 的命令固定为安装插件时写入的这份 Concord 入口的绝对路径加 `panel`，不依赖 PATH；action 在 `plugin.pane.open` 的 cwd 中传入已验证的工作目录，面板以进程工作目录所在的工作树为 root。
+
+上下文没有 cwd 时以具名错误 `PanelWorktreeUnknown` 提示，不用插件目录或当前焦点代替。
 
 面板启动的工作区服务运行在 Concord 安装目录中，不在插件目录中；插件的安装、链接与卸载不影响服务，服务按自身规则退出。
 

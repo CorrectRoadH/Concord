@@ -50,7 +50,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 | 实体 | 身份 | 拥有与生命周期 |
 | --- | --- | --- |
-| 服务主进程 | worktree 的 Git-private 目录 + 安装身份 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算，不持有 publication lease |
+| 服务主进程 | worktree 的 Git-private 目录 + 安装身份 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算；只在清理时、关闭持久库之后持有 publication lease |
 | 计算进程 | 由主进程经 `OwnedProcessService` 启动的长期子进程 | 持有内存解析缓存，执行刷新扫描与只读查询；不打开持久库；60 秒无响应或超出预算时整组终止并重启，缓存冷启动 |
 | 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动 | 执行现行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库；结束后退出 |
 | 服务锁 | `<privateDir>/server/lock`，原生排他文件锁，单链接普通文件，按 device/inode 校验 | 与数据库[协调锁](#协调锁)是两把锁；服务存活期间一直持有，清理期间也不释放；进程死亡时由操作系统释放 |
@@ -61,6 +61,8 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 `<runtime>` 依次取 `XDG_RUNTIME_DIR` 与 `os.tmpdir()`。目录必须属于当前 uid、权限 0700、不是符号链接，socket 路径不超过平台上限（Linux 107 字节），否则不创建服务并报告原因。
 
 主进程把需要的持久数据（远端反馈快照、诊断投影）随请求交给计算进程，计算进程把结果交回主进程写入；持久命名空间只在主进程读写。
+
+远端观察由发起同步的 CLI 或操作进程取得。它完成来源发布并释放 publication lease 后，以 `feedback-merge` 把完整批次交给服务；主进程严格解码，对当前持久行执行现行的单调时间戳与同版本冲突检查，在一个事务中合并并返回 warnings。该请求只更新可丢弃的远端观察缓存，不写来源。服务不存在、处于降级或合并失败时，按现行缓存更新失败处理：来源回执不变，结果带 warning，不重跑来源写入。没有服务时仍由本进程在释放 lease 后直接合并。
 
 ### 启动与裁决
 
@@ -80,14 +82,15 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 | --- | --- | --- |
 | opening | `hello`、订阅（推送 opening 状态） | 持久库打开成功进入 running，失败进入 degraded |
 | running | 全部请求 | clear、维护或 shutdown 进入 draining |
-| degraded | 全部请求；持久命名空间不可用，状态中给出原因 | 用户 clear 或下次重启 |
+| degraded | 全部请求；持久命名空间不可用，状态中给出原因，按原因映射 Web 的 unavailable:native 与 unavailable:corrupt | 原生产物按现行一秒退避重新验证后重新打开；损坏需用户 clear；安全失败不当作缓存缺失 |
 | draining | 新的相关请求排队，已受理的请求完成 | 进入 clearing、maintaining 或 stopping |
-| clearing / maintaining | 只读订阅与 `hello` | 完成后进入 opening |
+| clearing / maintaining | 只读订阅与 `hello` | 成功后进入 opening；部分删除、路径或身份异常、清理未确认时进入 blocked |
+| blocked | 只读订阅与 `hello`，状态给出具名原因 | 保留现场，不自动恢复或重开；用户处理后重启服务 |
 | stopping | 无新请求 | 进程退出 |
 
 clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发布与清理前核对服务锁路径的 device/inode 与自身持有的一致，监听事件后与每 5 秒也核对一次；不一致（例如 privateDir 被删除重建）时进入 stopping，不再发布，只删除仍与自身 token 和 inode 一致的 socket 与记录。
 
-服务在无客户端连接且 10 分钟无请求后退出；worktree 消失时 5 秒内退出；收到 `shutdown` 时退出。退出先停止受理新工作，向全部订阅者与 SSE 连接发送 `stopping` 事件并关闭长期订阅，再在 3 秒内完成或明确失败在途请求，然后停止计算进程，关闭 HTTP 与持久句柄，按 token 删除记录与 socket，最后释放服务锁。
+服务在无客户端连接且 10 分钟无请求后退出；worktree 消失时 5 秒内退出；收到 `shutdown` 时退出。退出先停止受理新工作，向全部订阅者与 SSE 连接发送 `stopping` 事件并关闭长期订阅，再在 3 秒内完成或明确失败在途请求。随后经 `OwnedProcessService` 收拢计算进程与全部操作进程，确认进程组清理，关闭 HTTP 与持久句柄，按 token 删除记录与 socket，最后释放服务锁。3 秒是请求与交接的等待上限，不授权跳过清理确认。来源提交结果无法确认的请求返回结果未知，不透明重跑，保留 journal 与未知现场；进程组清理无法确认时按 CleanupFailed 处理。
 
 ### 刷新与推送
 
@@ -97,7 +100,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 
 ### 协议
 
-本机 socket 上的长度前缀 JSON 帧，严格 Schema 解码，未知字段拒绝。数据请求带 `requestId` 与截止时间，可取消；结果按不超过 1 MiB 的块分帧，累计上限沿用对应公开读取的上限（例如定向文件读取 32 MiB），全部块到齐并校验后才交给调用者，超限返回具名失败，不截断。
+本机 socket 上的长度前缀 JSON 帧，严格 Schema 解码，未知字段拒绝。数据请求带 `requestId` 与截止时间，可取消；结果按不超过 1 MiB 的块分帧，逐块准入，不预先分配声明的长度；全部块到齐并严格解码后才交给调用者。来源大小上限按原始字节判定（例如定向文件读取 32 MiB）；单个结果的 wire 与解码后累计额度为 96 MiB，足以承载合法的最大定向读取。单个输入帧不超过 1 MiB，每个连接未完成的输入不超过 8 MiB。超限返回具名失败，不截断。
 
 | 请求 | 应答 |
 | --- | --- |
@@ -107,6 +110,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 | `query {name, input}` | 白名单只读查询的结果或具名错误，见 CLI 查询 |
 | `http {open \| close, host, port, lease?}` | 监听地址与租约 |
 | `cache-clear` | 按[清理](#清理)执行后应答 |
+| `feedback-merge {observations}` | 合并后的 warnings；见进程与资源 |
 
 每个服务最多 64 个连接，每个连接最多 8 个在途请求，全服务最多 256 个排队请求，待发送字节合计不超过 64 MiB；超限按请求或连接以 `WorkspaceServerBusy` 失败，其它连接不受影响。
 
@@ -120,7 +124,7 @@ CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`-
 
 1. 一个 worktree 任一时刻最多一个工作区服务，由服务锁裁决；服务锁在清理期间也不释放。
 2. 当前版本的 Concord 进程在发现运行中的服务后不打开该 worktree 的持久库；任一时刻最多一个打开者由数据库协调锁保证。
-3. 持有 publication lease 的进程不打开持久库；服务主进程不持有 publication lease，只在清理时持有，且此时已关闭持久库。
+3. 持有 publication lease 的进程不打开持久库；服务主进程只在清理时持有 publication lease，且此时已关闭持久库。
 4. 客户端不取得数据库句柄；经由服务的查询结果与本进程计算相同。
 5. 写入、发布、恢复与证据不依赖服务：服务不存在、崩溃或版本不同时，同一命令得到相同结果。
 

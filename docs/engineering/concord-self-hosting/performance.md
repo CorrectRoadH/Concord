@@ -105,6 +105,8 @@ profile 通过 `NODE_OPTIONS` 注入 `--cpu-prof` 与计数模块，因此 Conco
 
 省略 `--compare` 时只测候选产物，判定只包含样本有效性、刷新上限，以及声明 `--reference` 时的绝对预算。
 
+候选改变受管格式、基线产物无法解码同一冻结消费者时，同一消费者上的相对比较不成立。这次交付只按候选产物的绝对预算判定，交付说明与 Memory 记录断点提交；之后的交付以断点提交为基线恢复相对比较。基线不为此读取旧格式，也不改写冻结消费者（[C-009](../../constitution.md#c-009-1)）。
+
 ```mermaid
 flowchart LR
   Owners[Spec owner 预算表] --> Budgets[预算表解析]
