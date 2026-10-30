@@ -12,7 +12,7 @@ Concord 拥有路径身份推导、源码标记与测试支持文件映射、稳
 
 ## Trace 报告模式
 
-Trace 编译有严格与报告两种模式。报告模式返回 `{ snapshot, complete, findings }`，只隔离[可归因到单个测试源码文件](use-case/compose-repository-workflows.md#容错只读查询)的错误。snapshot digest 按剩余内容计算，只用于展示，不作为写入前像。依赖完整关系图的写入经过 `requireCompleteTrace`：报告模式存在 finding 即失败；通过后在同一 lease 内以严格模式编译并取得前像。只修改自身 owner 的写入在报告模式 snapshot 上校验被引用的 Markdown owner，前像取自被写 owner 自身的字节。
+关系编译只有一个实现，完整性与 finding 的规则见 [local SDLC 架构](../local-sdlc/architecture.md#完整性诊断)。
 
 ## 远端 Issue 写入
 

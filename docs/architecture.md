@@ -14,13 +14,73 @@ Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent �
 
 | 层 | 内容 | 依赖 |
 | --- | --- | --- |
-| 入口 | CLI 命令（`effect/unstable/cli`）、HTTP 路由（`unstable/http`）、RPC 处理（`unstable/rpc`）、终端面板 | 应用端口 |
+| 入口 | CLI 命令（`effect/unstable/cli`，`--version` 与各层 `--help` 由构建时从命令定义生成的静态数据输出）、HTTP 路由（`unstable/http`）、RPC 处理（`unstable/rpc`）、终端面板 | 应用端口 |
 | 应用 | 每个用户操作一个 `Effect.fn`，输入、结果与错误由 Schema 定义；CLI、HTTP、action 与 RPC 调用同一个操作。应用端口包括 Queries | 领域服务与基础服务 |
 | 领域服务 | Documents、Trace、Writing、Concepts、Issues、Memory、Designs、Tests、Code、Feedback；可以依赖其它领域服务，依赖关系无环，例如 Trace 依赖 Documents、Code 与 Tests | 领域服务、基础服务与模型 |
 | 基础服务 | Workspace、Sources、Publication、Cache、Git、OwnedProcess，以及 `effect` 的 FileSystem、Path 与 Clock（Node 实现来自 `@effect/platform-node`） | 平台 |
 | 模型 | Schema、纯函数与算法（解析、关系推导、写作规则），不依赖任何服务 | 无 |
 
 领域与应用代码不直接导入 `node:fs`、`node:child_process`，也不读写 `process` 的 cwd、env、argv 与标准流。
+
+### 模块布局
+
+源码按层分目录，每个目录是一个模块，入口文件 `index.ts` 是模块对外的唯一出口；模块之间只通过出口导入。`src/` 之外的其它源码树只有 `web/`（浏览器前端）与 `native/hawdb/`（原生绑定）。
+
+```text
+src/
+  model/        纯模型：Schema、Markdown 与 frontmatter 解析、文档身份推导、关系推导、写作规则、步骤、代码引用
+  base/         基础服务：workspace、sources、publication、cache、git、process
+  domain/       领域服务：documents、designs、trace、tests、code、issues、memory、constitution、writing、concepts、feedback、onboarding、docs-work
+  app/          应用操作、Queries 端口与 ViewAction
+  entry/        入口：cli、http（Web 工作台的服务端）、server（工作区服务的主进程、计算进程与操作进程）、lsp、panel
+web/            浏览器前端，只调用 HTTP 接口
+native/hawdb/   HawDB 的 N-API 绑定
+```
+
+每个 Feature 的实现落在以下模块中；Feature 的 architecture 页描述模块内部，本表是 Feature 与模块的唯一对照：
+
+| Feature | 模块 |
+| --- | --- |
+| [local-sdlc](feature/local-sdlc/README.md) | `domain/documents`、`domain/trace`、`domain/tests`、`domain/code`、`domain/issues`、`domain/memory`、`entry/cli`、`entry/lsp` |
+| [document-packages](feature/document-packages/README.md) | `domain/documents`、`domain/designs` |
+| [documentation-quality](feature/documentation-quality/README.md) | `domain/writing`、`domain/concepts`、`model` 的写作规则 |
+| [project-onboarding](feature/project-onboarding/README.md) | `domain/onboarding`、`domain/constitution` |
+| [feedback](feature/feedback/README.md) | `domain/feedback`、`domain/issues` |
+| [neutral-project-governance](feature/neutral-project-governance/README.md) | `domain/tests`（runner 与 adapter）、`domain/docs-work` |
+| [local-data-engine](feature/local-data-engine/README.md) | `base/cache`、`native/hawdb`、`entry/server` |
+| [portable-coordination](feature/portable-coordination/README.md) | `base/publication` |
+| [web-workbench](feature/web-workbench/README.md) | `entry/http`、`web/` |
+| [herdr-panel](feature/herdr-panel/README.md) | `entry/panel` |
+| [cross-platform-release](feature/cross-platform-release/README.md) | `scripts/` 与 `native/hawdb` 的发行构建 |
+
+同一职责只有一个实现：一个关系编译器、一个文档解码器、一个 publication 协议。
+
+### 依赖规则
+
+| 模块 | 可以导入 |
+| --- | --- |
+| `model` | 只有 `effect` 与其它 `model` 模块 |
+| `base` | `model`、平台层与 `native/hawdb` 的 TypeScript 绑定 |
+| `domain` | `model`、`base` 与其它 `domain` 模块；领域之间的依赖无环 |
+| `app` | `domain`、`base`、`model` |
+| `entry` | `app` 与 `model`；不直接导入 `domain` 或 `base` 的实现层，只在组合 Layer 时引用它们的 Layer |
+
+`node:fs`、`node:child_process`、`node:net` 与 `process` 的 cwd、env、argv、标准流只在 `base` 与 `entry` 中出现。一个架构测试从源码的导入图检查这些规则与领域依赖无环，违反即失败。
+
+### 公开接口
+
+安装包只导出四个子路径：
+
+- `concord-sdlc/config`：`concord.config.ts` 的类型；
+- `concord-sdlc/model`：文档 Schema 与模型类型；
+- `concord-sdlc/test-adapter-protocol`：原生测试 adapter 的协议；
+- `concord-sdlc/change-preview`：PR 静态预览产物的 Schema。
+
+其余模块是内部实现，不导出。CLI 入口是 `concord` bin。
+
+### 测试布局
+
+测试目录对应[测试架构](engineering/concord-self-hosting/test-architecture.md)的层：`test/model/` 与 `test/domain/` 从 `src/` 导入；`test/cli/` 与 `test/process/` 运行本次打包安装的 bin；`test/e2e/` 是浏览器测试；`test/architecture.test.ts` 检查依赖规则。测试不导入或运行 `dist/`。
 
 ### 基础服务
 

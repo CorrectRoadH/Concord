@@ -24,7 +24,6 @@ NiceEval 是实践来源与接入消费者。公开入口验收、候选与 Spec
 ## 用户路径
 
 - [按 Concord 规范接入软件项目](use-case/adopt-neutral-governance.md)
-- [组合仓库工作流命令](use-case/compose-repository-workflows.md)
 - [计划并执行一次远端 Issue 写入](use-case/mutate-remote-issue.md)
 - [并行切分文档工作](use-case/coordinate-docs-work.md)
 
