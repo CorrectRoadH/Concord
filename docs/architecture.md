@@ -91,7 +91,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 ### 测试布局
 
-测试目录对应[测试架构](engineering/concord-self-hosting/test-architecture.md)的层：`test/model/` 与 `test/domain/` 从 `src/` 导入；`test/cli/` 与 `test/process/` 运行本次打包安装的 bin；`test/e2e/` 是浏览器测试；`test/architecture.test.ts` 检查依赖规则。测试不导入或运行 `dist/`。
+测试目录对应[测试架构](engineering/concord-self-hosting/test-architecture.md)的层：`test/model/` 与 `test/domain/` 从 `src/` 导入；`test/cli/` 与 `test/process/` 运行本次打包安装的 bin，`test/process/` 中验证源码运行与原生构建的检查除外；`test/e2e/` 是浏览器测试；`test/architecture.test.ts` 检查依赖规则。测试不导入或运行 `dist/`。
 
 ### 基础服务
 
