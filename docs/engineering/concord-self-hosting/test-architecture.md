@@ -48,7 +48,7 @@ fake 只用于外部边界：GitHub 与其它远端服务、模型、系统浏�
 
 ## 可追溯
 
-测试与 Spec 的关系由测试标记拥有，`concord trace gaps` 从标记派生没有测试的 Use Case。本仓库的目标是零缺口：新增或修改 Use Case 的交付同时提交对应测试；尚未实现的 Use Case 留在缺口列表中，由 Issue 跟踪实现。测试不指向 Roadmap、Design 或已删除的行为；行为删除时，对应测试在同一次交付中删除。
+测试与 Spec 的关系由测试标记拥有，`concord trace gaps` 从标记派生没有测试的 Use Case。本仓库的目标是零缺口：新增或修改 Use Case 的交付同时提交对应测试；尚未实现的 Use Case 留在缺口列表中，由一个打开的 Issue 跟踪实现，该 Issue 链接这个 Use Case 或其所属 Feature。自举测试检查每个缺口都有这样的 Issue，而不要求尚未实现的 Use Case 已有测试或实现关联。测试不指向 Roadmap、Design 或已删除的行为；行为删除时，对应测试在同一次交付中删除。
 
 ## 成本与稳定
 

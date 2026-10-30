@@ -105,9 +105,9 @@ adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 
 | `AnchorNotFound` | 链接的 fragment 不是条款、款或总则的 ID |
 | `ConstitutionLinkInvalid` | 宪法链接带 query，或百分号编码无法解码 |
 | `ConstitutionClauseInvalid` | 宪法中条款或款缺少 ID、ID 格式不对、重复，或标签与 ID 不一致 |
-| `ConstitutionClauseReferenced` | `amend` 或 `adopt` 删除仍被链接的 ID；输出列出引用位置，不写入 |
+| `ConstitutionClauseReferenced` | `amend` 或 `adopt` 删除仍被链接、或仍被 current Memory promotion 指向的 ID；输出列出引用位置，不写入 |
 
-`amend` 按候选正文校验引用，同次删除一款及宪法内指向它的链接可以通过。要撤销一款时，先改写引用它的页面（Issue 用 `issue edit`），再删除该款。任何纳入范围的文件无法读取时，`check` 与 `constitution show` 返回 `complete: false`，`amend` 与 `adopt` 拒绝执行。
+`amend` 按候选正文校验引用，同次删除一款及宪法内指向它的链接可以通过。要撤销一款时，先改写引用它的页面（Issue 用 `issue edit`），并用 `memory retire` 退役指向它的 promotion，再删除该款。任何纳入范围的文件无法读取时，`check` 与 `constitution show` 返回 `complete: false`，`amend` 与 `adopt` 拒绝执行。
 
 `check` 只校验引用的结构，不判断语义是否合规。宪法中的列表 ID 不是 Use Case 步骤，不进入 `use-case steps` 与 `trace gaps`。
 
