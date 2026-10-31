@@ -122,6 +122,7 @@ test('a real thousand-file workspace scan leaves static and document HTTP reques
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+// @issue docs/issues/workspace-server-unimplemented.md
 test('view writes request failure codes without copying request targets or diagnostics into logs', async () => {
   const { root, webRoot } = fixture();
   let server: ViewServerHandle | undefined;
@@ -133,6 +134,7 @@ test('view writes request failure codes without copying request targets or diagn
     const result = await send(server, '/api/missing?token=private');
     assert.equal(result.status, 404);
     assert.equal(parsed(result).error, 'ApiNotFound');
+    await pollUntil(async () => logs.some(line => line.includes('ApiNotFound')) ? true : undefined, { description: 'the foreground service forwards its sanitized request failure log' });
     assert.equal(logs.length, 1);
     assert.match(logs[0]!, /"status":404,"code":"ApiNotFound"/u);
     assert.doesNotMatch(logs[0]!, /private|\/api\/missing|message|details|stack/u);
