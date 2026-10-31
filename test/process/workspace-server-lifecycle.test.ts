@@ -13,6 +13,29 @@ import { installConcord, packConcord } from '../support/installed-package.js';
 
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
 
+// @feature docs/feature/web-workbench/README.md
+// @issue docs/issues/workspace-server-unimplemented.md
+test('disconnecting a view client releases its HTTP lease while the service remains available', { timeout: 20_000 }, async () => {
+  const root = fixture();
+  try {
+    assert.equal((await command(root, ['server', 'start'])).status, 0);
+    const running = record(root), rpc = await rpcModule();
+    let address = '';
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
+      const lease = yield* rpc.requestWorkspace(connection, 'http', { action: 'open', host: '127.0.0.1', port: 0 });
+      address = Schema.decodeUnknownSync(Schema.Struct({ address: Schema.String }))(lease).address;
+      assert.ok((yield* Effect.promise(() => fetch(address))).ok);
+    })));
+    await pollUntil(async () => {
+      try { await fetch(address, { signal: AbortSignal.timeout(500) }); return undefined; }
+      catch { return true; }
+    }, { description: 'disconnected view releases its listener', timeoutMs: 1500 });
+    assert.equal((await command(root, ['server', 'status'])).status, 0);
+    assert.equal(record(root).token, running.token);
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
 test('a killed service releases persistent ownership and the next invocation can restart', { timeout: 30_000 }, async () => {
