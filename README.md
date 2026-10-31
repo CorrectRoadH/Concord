@@ -18,7 +18,9 @@ Concord asks for features written the way you would teach someone to use them: w
 
 **AI that uses words loosely.** An agent may rename the same thing in every session or switch between spellings, and readers are left guessing whether two words mean the same thing. In Concord each concept has one name and one definition in `concepts.md`, and `check` reports an old name wherever it appears.
 
-**AI that writes piles of useless tests.** Agents happily add a test for every function and branch until nobody can say which test guards which use, and reading the tests tells you nothing about how the product should behave. Concord asks every test to name the Use Case, or the step of one, that it verifies, so tests read along user journeys; tests that point at no Use Case are listed so you can decide whether to delete them.
+**AI that writes piles of useless tests.** Agents happily add a test for every function and branch. Soon nobody can say which test guards which use, and reading the tests tells you nothing about how the product should behave.
+
+Concord asks every test to name the Use Case, or the step of one, that it verifies, so tests read along user journeys. Tests that point at no Use Case are listed so you can decide whether to delete them.
 
 Around these problems sit the other complexities of building software with coding agents. Requirements live in chat threads and PR descriptions, and design tradeoffs live in someone's memory. Every agent session starts from zero and may re-decide settled semantics. A test claims to protect a feature, but nobody can tell which behavior it guards.
 

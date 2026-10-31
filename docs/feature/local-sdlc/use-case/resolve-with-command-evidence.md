@@ -56,7 +56,7 @@
    Put the lines above in your commit message.
    ```
 
-   核验通过后，命令删除 Issue 文件，输出的结论写进提交说明。
+   核验通过后，命令在同一次写入中删除 Issue 文件，并删掉回归测试里的 `@issue` 行（测试与它的 `@use-case` 标记保留），输出的结论写进提交说明。之后重放只按测试 ID 与两个提交进行，不依赖 `@issue`。
 
    修复提交默认是核验开始时的 HEAD；`--fix <commit>` 指定更早的修复提交，它必须是 HEAD 的 first-parent 祖先、并在缺陷提交之后。其他人在修复之后改动共享的测试设施时，用它指向实际的修复提交。缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；所有回归测试必须在同一提交中首次出现，否则用 `--defect <commit>` 指定，该提交必须是 HEAD 的 first-parent 祖先。runner 在缺陷提交上以非零码结束、在修复提交上以零结束时，核验成立。
 

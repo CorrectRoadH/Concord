@@ -21,7 +21,7 @@
    // @use-case docs/feature/cart/use-case/add-item.md
    ```
 
-   `--issue docs/issues/<i>.md` 追加 `@issue` 行，标明这条回归测试守护的 Issue。需要可读名称时，在标记块里手写 `@name <text>`。Spec 或 Issue 不存在时返回 `ReferenceNotFound`。
+   `--issue docs/issues/<i>.md` 追加 `@issue` 行，标明这条回归测试守护的 Issue；`issue close` 删除该 Issue 时一并删除这一行，所以 `@issue` 只出现在还要处理的 Issue 的回归测试里。需要可读名称时，在标记块里手写 `@name <text>`。Spec 或 Issue 不存在时返回 `ReferenceNotFound`。
 
 2. 把标记放在测试声明上方。注释前缀可以是 `//`、`#` 或 `--`。 {#place}
 
