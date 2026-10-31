@@ -26,7 +26,7 @@ relations:
 
 ## 适用范围
 
-Concord 自身与接入项目的 Spec 页面：Feature README、Use Case、cli 与 library 页、architecture 页、工程页与 docs 顶层页面。Design、Research、Issue 与 Memory 是记录，不受 C-016 约束。
+Concord 自身的 Spec 页面（C-016 未标明“接入项目”，不约束消费仓库）：Feature README、Use Case、cli 与 library 页、architecture 页、工程页与 docs 顶层页面。Design、Research、Issue 与 Memory 是记录，不受 C-016 约束。
 
 ## 理由
 
@@ -34,7 +34,7 @@ Concord 要解决两个问题：Spec 写完没人看得懂，AI 随意造词和�
 
 ## 影响
 
-- C-016-1 至 C-016-5：新增可读性、图解、术语与语言规则，适用于 Concord 自身与接入项目的 Spec 页面。
+- C-016-1 至 C-016-5：新增可读性、图解、术语与语言规则，适用于 Concord 自身的 Spec 页面；随包 skill 与模板向接入项目推荐同样写法。
 - C-010-3 与 C-012-10：聚合门禁的规则移到 documentation-quality 的支持页 `gate.md`，链接目标随之更新，规则不变。
 - 已有页面不自动满足新规则。local-sdlc 与 documentation-quality 的 README 先按新规则重写作为样板；其余页面的差距记录在 Issue `spec-readability-gaps`，未定义名词的检查方向记录在 Roadmap `terminology-coverage`。
 

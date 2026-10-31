@@ -12,7 +12,7 @@ status: open
   - cross-platform-release、document-packages、feedback
   - herdr-panel、local-data-engine、neutral-project-governance
   - portable-coordination、project-onboarding、web-workbench
-- Use Case 主路径混入恢复、并发与内部字段，例如[保护并恢复本地状态](../feature/local-sdlc/use-case/recover-local-state.md)的第 2 步解释 `reclaimedTokens` 与 `runner.status`。
+- 不同情形下的表现仍用规则列表枚举，没有拆成 Use Case（[C-016-2](../constitution.md#c-016-2)）。例如[保护并恢复本地状态](../feature/local-sdlc/use-case/recover-local-state.md)用一张表列出四种情形，local-sdlc 的[范围与验收](../feature/local-sdlc/scope.md)和 documentation-quality 的[聚合门禁](../feature/documentation-quality/gate.md)是成串的子规则。
 - 除上述两份 README 外，没有 p5 图解演示 Concord 自身的流程；唯一的其它 p5 图块用于演示[嵌入方式](../feature/web-workbench/use-case/embed-p5-sketch.md)。
 - 英文写成的 Spec 页：portable-coordination 的 README、architecture 与 Use Case，以及 cross-platform-release 的 `cli.md`。
 

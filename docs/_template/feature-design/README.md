@@ -2,7 +2,9 @@
 
 Before writing, read `docs/constitution.md` and link each applicable clause or paragraph ID next to the sentence that relies on it.
 
-Write this page for a reader who has never used the feature. Declare intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Concord Memory; product workflows belong in the contract.
+This README and the CLI or library page are the product guide: write them as a tutorial for a reader who has never used the feature. The architecture page holds the technical design, and Use Cases tie the feature to user journeys.
+
+Declare intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Concord Memory; product workflows belong in the contract.
 
 Open with two or three sentences: who uses the feature and what problem it solves for them.
 
@@ -22,11 +24,11 @@ A sketch only illustrates rules stated in prose, so keep the conclusion readable
 
 ## User Paths
 
-Link each Use Case, grouped by what the user is trying to do.
+Link each Use Case, grouped by what the user is trying to do. Each situation in which the feature behaves differently is its own Use Case.
 
 ## Details
 
-Put output fields, named errors, exit codes, failure semantics, scope boundaries, and performance budgets on the pages below, not in this README.
+Put output fields, named errors, and exit codes on the CLI or library page, and behavior under each situation in its own Use Case, not in this README.
 
 - [Library](library.md)
 - [CLI](cli.md)

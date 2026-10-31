@@ -54,6 +54,6 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 
 先读取现有文件与关系，再决定应修改 Spec、测试源码、Issue 还是 Memory。直接编辑后运行 `concord check`；提交前运行 `concord check --since <base>`，处理每个具名 finding，不绕过门禁。冲突、恢复要求或核验失败时保留现场并处理具名错误。
 
-Spec 正文声明目标、行为、约束和验收条件；产品流程属于 Spec。写 Feature README 或 Use Case 前先读 `concord --skill document` 的「让第一次读的人读懂」：README 给出能做什么和上手示例，Use Case 按教程写，复杂过程配 p5 图解，领域名词先进入 `concepts.md` 再使用。开发日志、排障经过、实施进度与临时计划归 Memory，待调查的观察与缺陷归 Issue，采用后的目标归 Feature。
+Spec 正文声明目标、行为、约束和验收条件；产品流程属于 Spec。写 Feature README 或 Use Case 前先读 `concord --skill document` 的「让第一次读的人读懂」。README 与 cli、library 页是产品功能，architecture 页是技术架构；功能在不同情形下的表现各写成一个 Use Case。复杂过程配 p5 图解，领域名词先进入 `concepts.md` 再使用。开发日志、排障经过、实施进度与临时计划归 Memory，待调查的观察与缺陷归 Issue，采用后的目标归 Feature。
 
 索引与反向关系从文件派生：用 `concord list` 与 `concord show` 读取文档及其关系，不手工维护 INDEX 或反向列表。领域术语写在所在目录的 `concepts.md`，写作政策写在 `concord-writing.json`；所在目录决定作用域，`check` 校验结构、作用域与被引用的定义，全项目视图只汇总来源。格式见 `concord --skill document`。
