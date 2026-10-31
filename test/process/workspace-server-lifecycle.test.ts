@@ -23,6 +23,10 @@ test('disconnecting a view client releases its HTTP lease while the service rema
     let address = '';
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
+      yield* Effect.promise(() => pollUntil(async () => {
+        const hello = await Effect.runPromise(connection.client.hello({ protocol: rpc.PROTOCOL, installation: running.installation }));
+        return ['running', 'degraded'].includes(hello.state) ? true : undefined;
+      }, { description: 'the real service admits HTTP leases after opening', timeoutMs: 10_000 }));
       const lease = yield* rpc.requestWorkspace(connection, 'http', { action: 'open', host: '127.0.0.1', port: 0 });
       address = Schema.decodeUnknownSync(Schema.Struct({ address: Schema.String }))(lease).address;
       assert.ok((yield* Effect.promise(() => fetch(address))).ok);

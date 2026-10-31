@@ -71,6 +71,10 @@ test('binary socket reads preserve a source larger than one frame and reject mis
     const running = record(root), rpc = await rpcModule();
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
+      yield* Effect.promise(() => pollUntil(async () => {
+        const hello = await Effect.runPromise(connection.client.hello({ protocol: rpc.PROTOCOL, installation: running.installation }));
+        return ['running', 'degraded'].includes(hello.state) ? true : undefined;
+      }, { description: 'the real service admits binary reads after opening', timeoutMs: 10_000 }));
       const read = yield* rpc.requestWorkspace(connection, 'read', { path: 'docs/feature/reader/large.md', expectedDigest: 'old-generation' });
       assert.equal(read.body, source);
       const rejected = yield* Effect.result(connection.client.hello({ protocol: 'concord.workspace/v1', installation: 'different-installation' }));
