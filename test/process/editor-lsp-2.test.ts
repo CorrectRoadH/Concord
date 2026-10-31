@@ -1,3 +1,4 @@
+import { pollUntil } from '../support/support.js';
 import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.js';
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
@@ -13,11 +14,22 @@ test('packed editor C9/C17 rereads disk configuration, policy, deletion and rena
   assert.ok((await c.diagnostic(file, 2, count)).diagnostics.some(item => item.code === 'bannedTerm'));
   c.close(policyPath);
   const configPath = join(root, 'concord.config.ts'), config = readProjectConfig(root);
+  await c.result('textDocument/hover', c.query('test/flow.ts', 1, 20));
+  writeFileSync(join(root, '.git/concord/editor-job-gate'), 'armed');
   const pending = c.request('textDocument/hover', c.query('test/flow.ts', 1, 20));
-  await new Promise<void>(resolve => setTimeout(resolve, 80));
-  writeProjectConfig(root, { ...config, sourceRoots: [] });
-  // A config byte edit invalidates the captured disk identity, even if semantically unrelated.
-  writeFileSync(configPath, readFileSync(configPath, 'utf8') + '\n');
+  const paused = join(root, '.git/concord/editor-job-gate.paused');
+  const worker = await pollUntil(async () => {
+    if (!existsSync(paused)) return undefined;
+    const pid = Schema.decodeUnknownSync(Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThan(0)))(readFileSync(paused, 'utf8'));
+    const state = process.platform === 'linux' ? readFileSync(`/proc/${pid}/stat`, 'utf8').split(') ')[1]!.split(' ')[0]!
+      : execFileSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).trim();
+    return state.startsWith('T') ? pid : undefined;
+  }, { timeoutMs: 12000, description: 'captured editor worker stopped by the OS' });
+  try {
+    writeProjectConfig(root, { ...config, sourceRoots: [] });
+    // A config byte edit invalidates the captured disk identity, even if semantically unrelated.
+    writeFileSync(configPath, readFileSync(configPath, 'utf8') + '\n');
+  } finally { process.kill(worker, 'SIGCONT'); rmSync(paused); }
   assert.equal((await pending.response).error?.code, -32801);
   const current = await c.result('textDocument/hover', c.query('test/flow.ts', 1, 20)); assert.match(JSON.stringify(current), /new-step/u);
   const reconfigured = Schema.decodeUnknownSync(Schema.Array(Location))(await c.result('textDocument/references', c.query(file, stepLine, 0, { includeDeclaration: false })));
@@ -45,7 +57,7 @@ test('packed editor C9/C17 rereads disk configuration, policy, deletion and rena
   c.change(newFile, newText, 2);
   assert.ok((await c.diagnostic(newFile, 2)).diagnostics.some(item => item.code === 'EditorInputsIncomplete'));
   assert.match(JSON.stringify(await c.result('textDocument/hover', c.query(newFile, 0, 20))), /new-step/u);
-}));
+}, true));
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 // @name editor-read-only-and-eof

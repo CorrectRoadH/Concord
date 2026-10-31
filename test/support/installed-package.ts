@@ -2,6 +2,7 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, 
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
+import { packageBin } from '../../scripts/package-location.js';
 
 export const distributionRoot = fileURLToPath(new URL('../..', import.meta.url));
 const Manifest = Schema.fromJsonString(Schema.Struct({ name: Schema.String, version: Schema.String, files: Schema.Array(Schema.String) }));
@@ -43,6 +44,10 @@ export function prepareBuiltConsumer(directory: string, artifact: BuiltConcord, 
       symlinkSync(join(distributionRoot, 'node_modules', name), path, 'junction');
     }
     if (dependencies.length) cpSync(join(distributionRoot, 'node_modules/.bin'), join(modules, '.bin'), { recursive: true });
+    mkdirSync(join(modules, '.bin'), { recursive: true });
+    const cli = packageBin(target);
+    if (process.platform === 'win32') writeFileSync(join(modules, '.bin/concord.cmd'), `@"${process.execPath}" "${cli}" %*\r\n`);
+    else symlinkSync(cli, join(modules, '.bin/concord'));
     const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(readFileSync(join(directory, 'package.json'), 'utf8'));
     writeFileSync(join(directory, 'package.json'), `${JSON.stringify({ ...manifest, dependencies: { [artifact.name]: `file:${distributionRoot}`, ...Object.fromEntries(dependencies.map(dependency => [dependency.slice(0, dependency.lastIndexOf('@')), dependency.slice(dependency.lastIndexOf('@') + 1)])) } }, null, 2)}\n`);
   }));

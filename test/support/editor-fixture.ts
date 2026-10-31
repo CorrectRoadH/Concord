@@ -63,8 +63,8 @@ class Client {
   private sequence = 0;
   stderr = '';
   readonly closed: Promise<number | null>;
-  constructor(readonly root: string, argv = [entry, '--root', root, 'lsp']) {
-    this.child = spawn(process.execPath, argv, { cwd: root, stdio: 'pipe' });
+  constructor(readonly root: string, argv = [entry, '--root', root, 'lsp'], env: NodeJS.ProcessEnv = process.env) {
+    this.child = spawn(process.execPath, argv, { cwd: root, stdio: 'pipe', env });
     this.closed = new Promise(resolve => this.child.once('close', code => { resolve(code); this.changed(); }));
     this.child.stderr.on('data', (chunk: Buffer) => { this.stderr += chunk.toString(); this.changed(); });
     this.child.stdout.on('data', (chunk: Buffer) => {
@@ -117,8 +117,8 @@ class Client {
   }
   async eof() { this.child.stdin.end(); assert.equal(await Promise.race([this.closed, new Promise<number>((_, reject) => setTimeout(() => reject(new Error('EOF cleanup timeout')), 6000).unref())]), 0, this.stderr); }
 }
-const run = (body: (client: Client, root: string) => Promise<void>) => Effect.runPromise(Effect.tryPromise({ try: async () => {
-  const root = consumer(), client = new Client(root);
+const run = (body: (client: Client, root: string) => Promise<void>, gateWorkers = false) => Effect.runPromise(Effect.tryPromise({ try: async () => {
+  const root = consumer(), client = gateWorkers ? new Client(root, undefined, { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${import.meta.resolve('tsx')} --import=${new URL('../fixtures/editor-job-gate.ts', import.meta.url).href}` }) : new Client(root);
   let failed = false;
   try { await client.initialize(); await body(client, root); }
   catch (cause) { failed = true; throw cause; }
