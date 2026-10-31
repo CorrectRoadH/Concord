@@ -9,16 +9,16 @@
 | 命令 | 作用 |
 | --- | --- |
 | `init` | 创建布局、`AGENTS.md` 区块与可选配置 |
-| `new <类别> <名称>` | 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Research、Issue 或 Memory |
+| `new <类别> <名称>` | 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Issue 或 Memory |
 | `show <路径或选择器>` | 一个文档及其关系、测试与实现 |
-| `list [类别]` | 列出文档；`--open` 列出打开的 Issue |
+| `list [类别]` | 列出文档 |
 | `check` | 放置、关系、概念、写作与修复核验记录 |
 | `trace` | 关系图与缺口 |
 | `test` | `list`、`show`、`discover`、`marker`、`run`、`verify <issue>` |
 | `code` | `marker`、`list`、`at`、`analyze`：实现与 Spec 的关联 |
 | `use-case` | `steps`、`format`、`rename-step`：Use Case 步骤 |
-| `issue` | `close`（fixed 时先核验）、`reopen`、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
-| `memory` | `confirm`、`replace`、`link`、`search`；摘要列表用 `list memory` |
+| `issue` | `close`（删除 Issue，fixed 时先核验）、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
+| `memory` | `link`、`search`；摘要列表用 `list memory` |
 | `design` | `decide`、`postpone`、`check`、`format` |
 | `roadmap` | `adopt`（移入 `docs/feature/`）；取消方向即删除目录，历史在 Git |
 | `taste` | 列出品味条目与依据它们的页面 |
@@ -83,7 +83,7 @@ Inspect configuration: concord doctor
 
 ## 创建与编辑文档
 
-`concord new <类别> <名称>` 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Research、Issue 或 Memory。`show <路径或选择器>` 返回一个文档及其关系、测试与实现，`list [类别]` 列出文档，`list --open` 列出打开的 Issue。以下为预期输出：
+`concord new <类别> <名称>` 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Issue 或 Memory。`show <路径或选择器>` 返回一个文档及其关系、测试与实现，`list [类别]` 列出文档，`list --open` 列出打开的 Issue。以下为预期输出：
 
 ```sh
 concord new feature cart --title "购物车" --pages cli,use-case

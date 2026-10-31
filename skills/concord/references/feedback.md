@@ -7,38 +7,23 @@ Issue 跟踪缺陷、请求与观察，每条是 `docs/issues/<id>.md` 一个文
 路径是身份，名称是正文唯一的一级标题。frontmatter 只保存推导不出的事实，字段只在非空时出现：
 
 ```yaml
-status: open                     # open 或 closed
 relations:
   - role: root-cause
     target: memory/token-race.md
 source: {...}                    # 导入时写入的远端来源
-closure:
-  kind: fixed
-  reason: 修正锁顺序
-  verification: {...}            # 仅 fixed，由修复核验写入
 ```
 
 | 角色 | 目标 | 含义 |
 | --- | --- | --- |
-| `investigation`、`root-cause`、`decision` | current 或 superseded 的 Memory | 调查记录、根因、所依据的决策 |
+| `investigation`、`root-cause` | Memory | 调查记录与根因 |
 | `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前由这条 Spec 承接；不再承接时删除这一项，历史在 Git |
 | `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
 `source` 保存远端对象的稳定身份、去重键与首次来源摘录；同一外部对象换连接或清空缓存后仍是同一 Issue。不要按标题自动合并，也不要用远端显示编号作为对象身份。
 
-关闭种类：
+## 编辑与关闭
 
-| kind | 要求 |
-| --- | --- |
-| `fixed` | 带修复核验写入的 `verification`，见下文 |
-| `delivered` | target 是当前 `adopts` 之一，并带 proof |
-| `external-fixed` | 带 dependency、version 与 proof |
-| `declined` | 先删除全部 `adopts`，指向 current 的 Decision Memory |
-| `duplicate`、`invalid` | 先删除全部 `adopts` |
-
-## 编辑
-
-直接编辑 Issue 文件，包括正文、状态、关系与关闭结论。`issue close`、`issue reopen`、`issue link`、`issue unlink` 是写入同样内容的助手；`reopen` 删除 `closure`，状态回到 open。用 `concord list issue --open --json` 列出打开的 Issue，`concord show <id> --json` 读取它及派生关系。`check` 检查关闭结论是否完整。
+直接编辑 Issue 文件的正文与关系。处理完运行 `concord issue close <id> --reason <text>`：命令删除 Issue，输出一段写进提交说明的结论；缺陷修好时用 `--fixed`，先核验再删除。仍有页面或其它 Issue 链接它时拒绝。用 `concord list issue --json` 列出 Issue，`concord show <id> --json` 读取它及派生关系。
 
 ## 修复缺陷
 

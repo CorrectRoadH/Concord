@@ -1,7 +1,3 @@
----
-status: open
----
-
 # 并行写入时 check --since 以 PreimageChanged 失败
 
 ## 现象

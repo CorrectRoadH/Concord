@@ -117,11 +117,11 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ### Issue
 
-Issue 打开时没有 `closure`，关闭时写入；fixed 的 `closure` 带[修复核验](#修复核验)的结论。reopen 删除 `closure`，状态回到 open，之前的结论只在 Git 历史中。`adopts` 只列当前承接的 Spec。
+Issue 只表示还要处理的问题；`issue close` 执行需要的步骤后删除文件，fixed 先经过[修复核验](#修复核验)。`adopts` 只列当前承接的 Spec。
 
 ### Memory
 
-Memory 从 captured 开始。decision 与 insight 经 activate 成为 current；note 保持 captured。被新记录替代时成为 superseded，并写 `supersededBy` 或 `supersession`。品味每次 adopt 与 amend 写一条 `type: decision`、current 的 Memory，以 `amends` 指向受影响的条款与款，见[演进品味](../project-onboarding/use-case/evolve-taste.md#amend)。
+Memory 没有生命周期状态，过时就改写或删除，历史在 Git。
 
 ### 退役与恢复
 
@@ -141,7 +141,7 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 | show 的 canonical path | 指定 owner | 乐观来源快照 | 目标或其必要依赖 |
 | show 的短选择器 | 相应类别的全部候选及唯一匹配 owner | 乐观来源快照 | 集合不完整或歧义 |
 | new | 目标路径与同类短选择器集合 | 独占 publication | 身份冲突、必要依赖或写入资源障碍 |
-| memory confirm、supersede、link；issue link、unlink、reopen | 指定 owner、当前摘要与关系目标 | 独占 publication | 目标或关系目标缺陷、写入资源障碍 |
+| memory link；issue link、unlink、close | 指定 owner、当前摘要与关系目标 | 独占 publication | 目标或关系目标缺陷、写入资源障碍 |
 | code/test marker | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源快照 | 指定依赖缺陷，不加载全局 Trace |
 | trace、review | 展示的关系图 | 乐观来源快照 | 输出 findings；需要完整图的结论拒绝不完整输入 |
 | check | 全仓库事实与关联；`--since` 另读基线差异 | 乐观来源快照 | 各 owner 解析错误累计为 findings，`ok: false` |

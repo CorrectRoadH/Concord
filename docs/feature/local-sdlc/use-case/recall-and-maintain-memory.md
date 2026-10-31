@@ -2,9 +2,9 @@
 
 ## 用户目标
 
-Agent 和维护者在开始工作前，要找到以前的调查结论、决策和经验，并在工作中更新它们。
+Agent 和维护者在开始工作前，要找到以前开发中积累的经验：测量结论、根因、踩过的坑和做过的取舍，并在经验过时时改写或删掉它。
 
-Memory 保存可复用知识与不需要 Design 的决策，Issue 跟踪缺陷与待调查的观察，Spec 声明目标、行为与约束。三者不复制同一事实。
+Memory 只保存可复用的经验，Issue 只保存还要处理的问题，Spec 声明目标、行为与约束。三者不复制同一事实，历史由 Git 保存。
 
 ## 起始状态
 
@@ -21,7 +21,7 @@ Memory 保存可复用知识与不需要 Design 的决策，Issue 跟踪缺陷�
    ```
 
    ```json
-   {"operation":"list","documents":[{"path":"memory/sku-merge.md","title":"按 SKU 合并购物车条目","digest":"sha256:28951a...","type":"insight","status":"current"}]}
+   {"operation":"list","documents":[{"path":"memory/sku-merge.md","title":"按 SKU 合并购物车条目","digest":"sha256:28951a..."}]}
    ```
 
 2. 按关键词检索。 {#recall}
@@ -33,43 +33,37 @@ Memory 保存可复用知识与不需要 Design 的决策，Issue 跟踪缺陷�
    ```text
    memory search
    memory/sku-merge.md — 按 SKU 合并购物车条目
-     insight: current
      同一 SKU 的条目在写入前合并，数量累加。
    ```
 
-   查询按空白拆成词项。每个词项不区分大小写地匹配标题或正文，全部词项都命中的记录才返回，词项顺序不影响结果。人读输出列出标题、类型、状态和含首个命中词项的正文片段。`--json` 返回完整正文与 `digest`。`issue search` 使用同一规则。
+   查询按空白拆成词项。每个词项不区分大小写地匹配标题或正文，全部词项都命中的记录才返回，词项顺序不影响结果。人读输出列出标题和含首个命中词项的正文片段。`--json` 返回完整正文与 `digest`。`issue search` 使用同一规则。
 
 3. 新建记录。 {#add}
 
    ```sh
-   concord new memory sku-merge --type insight
+   concord new memory sku-merge
    ```
 
-   命令按模板创建 `memory/sku-merge.md`，`status` 为 captured。也可以直接创建该文件，frontmatter 只写非空字段，正文以唯一的一级标题开头。
+   命令按模板创建 `memory/sku-merge.md`。也可以直接创建该文件，正文以唯一的一级标题开头。
 
 4. 修改正文与 frontmatter。 {#edit}
 
    直接编辑 `memory/sku-merge.md`。字段与取值见[领域与数据所有权](../library.md#memory)。
 
-5. 用命令执行生命周期变化。 {#lifecycle}
+5. 经验过时就改写或删除。 {#lifecycle}
 
-   - `memory confirm <m>` 把 captured 的 decision 或 insight 改为 current。
-   - `memory replace <m> --by <新记录>` 把记录改为 superseded 并写入 `supersededBy`。
-   - `memory link <m>` 增加 `supports` 或 `amends` 关系。
-
-   命令写入的内容与直接编辑相同，并在写入前校验转换与关系目标。
+   直接改写正文，或删除文件；以前的内容从 Git 历史查。`memory link <m> <spec>` 增加一条 `supports` 关系，等同于直接编辑 frontmatter。
 
 ## 结果
 
 `list memory` 与 `memory search` 只读，不写文件。`memory search` 返回记录原文与摘要。
 
-`check` 校验每条 Memory 的当前状态：`type` 与 `status` 取值合法，note 只能是 captured，`supports` 指向存在的当前 Spec 或锚点，`amends` 指向品味的条款与款，`supersededBy` 指向存在的 Memory。
+`check` 校验每条 Memory 的 `supports` 指向存在的 Spec 或锚点。
 
 | 错误 | 触发条件 |
 | --- | --- |
 | `InvalidInput` | 查询为空：`recall/search query must be non-empty` |
 | 具名拒绝 | 短选择器匹配多条记录，需要改用完整路径 |
-| 具名拒绝 | 命令要求的状态转换不合法，例如 activate 一条 note |
 
 `list memory` 与 `memory search` 读取 `memory/` 的全部记录。其中有坏记录或未完成的写入时，查询失败，不返回部分结果。
 
@@ -80,7 +74,7 @@ Memory 保存可复用知识与不需要 Design 的决策，Issue 跟踪缺陷�
 - `memory search` 是本地确定性的文本匹配，不调用模型或远端服务，不做向量或语义检索。
 - 按完整路径读取时，只检查目标记录。按短选择器读取时，先读取全部候选，唯一匹配才返回。集合不完整或有歧义时拒绝，这样不会漏看一个解码失败的同名记录。
 
-`init` 生成的 `AGENTS.md` 区块、`docs/concord.md` 与随包 skill 都把 Agent 引到这些命令。
+`init` 生成的 `AGENTS.md` 区块与随包 skill 都把 Agent 引到这些命令。
 
 ## Spec 来源
 

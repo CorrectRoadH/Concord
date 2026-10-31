@@ -1,7 +1,3 @@
----
-status: open
----
-
 # 命令输出完整 JSON 后进程偶发不退出
 
 并发门禁中多次观察到 CLI 子进程已向 stdout 写出完整的机器可读 JSON，却在 20 s 内没有退出（ETIMEDOUT），例如 `memory show native-recall`、`feedback show`、`design show storage`。另有 21 次超时 stdout 与 stderr 均为空。

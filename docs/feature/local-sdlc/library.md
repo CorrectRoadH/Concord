@@ -23,48 +23,36 @@
 - Feature 目录名、Use Case 文件名、Issue 与 Memory 文件名是短选择器。同一类别中歧义时具名拒绝，例如两个 Feature 都有 `use-case/create.md` 时，`show create` 要求写出路径。
 - 名称取自正文唯一的一级标题，可以与路径名不同。标题按 Markdown 语法树识别，代码块中的标题不计；名称保留 Unicode 原拼写与组合标记。
 - 普通正文链接只是导航。frontmatter 中的路径值一律是仓库相对路径，字段只在非空时出现。
-- Research 的观察日期与来源写在正文标题为 `## Sources` 或 `## 来源` 的小节，格式由写作模板固定。Design 的候选来自 `plans/` 的直接子项，裁决写在 DECISION 的 `Selected:` 行，见[逐项比较方案并明确裁决](use-case/compare-design-plans.md)。
-- 品味的 `status` 取 `draft` 或 `active`，是采用授权的边界，见[演进品味](../project-onboarding/use-case/evolve-taste.md)。
+- Design 是一页还没定下来的取舍，见[文档模型](../../document-model.md#design)。
 
 创建时间、采用来源与修订历史由 Git 提供（[只写当前声明](../../document-model.md#只写当前声明)）。测试源码拥有 case 身份和正向关系。
 
 ### Issue
 
 ```yaml
-status: open
 relations:
   - role: root-cause
     target: memory/token-race.md
 source: {...}
-closure:
-  kind: fixed
-  reason: 修正锁顺序
-  verification: {...}
 ```
 
 | 角色 | 目标 | 含义 |
 | --- | --- | --- |
-| `investigation`、`root-cause`、`decision` | current 或 superseded 的 Memory | 调查记录、根因、所依据的决策 |
+| `investigation`、`root-cause` | Memory | 调查记录与根因 |
 | `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前被这条 Spec 承接；不再承接时删除这一项 |
 | `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
-缺陷只在 Issue 中跟踪。`source` 是远端来源的稳定身份，字段见[反馈来源](../feedback/architecture.md)。`closure` 的种类与必需字段见[本地观察](../feedback/use-case/manage-local-observations.md)；fixed 的 `verification` 见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
+缺陷只在 Issue 中跟踪。`source` 是远端来源的稳定身份，字段见[反馈来源](../feedback/architecture.md)。Issue 处理完就删除，见[本地 Issue](../feedback/use-case/manage-local-observations.md#close)与[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 
 ### Memory
 
 ```yaml
-type: decision
-status: current
 relations:
   - role: supports
     target: docs/feature/login/README.md#token
-supersededBy: memory/new.md
 ```
 
-- `type` 取 `decision`、`insight` 或 `note`。Memory 不重复 Design 的结论。
-- `status` 取 `captured`、`current` 或 `superseded`；note 只能是 captured。
-- `supports` 指向一条当前 Spec 或其锚点；`amends` 指向整份品味（`docs/taste.md`，用于采用）或其条款与款（`docs/taste.md#c-NNN[-K]`）。
-- 被替代时写 `supersededBy`；替代目标不在仓库中时写 `supersession`，说明原因与来源。
+- `supports` 指向一条当前 Spec 或其锚点。Memory 只保存可复用的经验，过时就改写或删除。
 
 ## 派生关系
 

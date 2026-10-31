@@ -1,7 +1,3 @@
----
-status: open
----
-
 # 多个 agent 在同一 checkout 并行运行完整门禁
 
 目标：多个 agent 在同一 checkout 的 master 上开发，并能同时运行 `pnpm check` 而互不删除产物、互不制造负载失败。2026-10-29 两个完整门禁同时运行时 load 达 16，出现成批的超时与连接重置，空闲重跑全部通过。

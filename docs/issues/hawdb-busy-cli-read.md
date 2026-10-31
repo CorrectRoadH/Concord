@@ -1,7 +1,3 @@
----
-status: open
----
-
 # CLI 读命令把短暂的 HawdbBusy 直接返回给调用者
 
 多个 agent 在同一 worktree 并行运行 Concord 时，只读命令可能直接以 `HawdbBusy` 失败。2026-10-29 实测：`pnpm concord trace show` 第一次返回 HawdbBusy，立即重试通过。

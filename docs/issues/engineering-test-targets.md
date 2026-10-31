@@ -1,7 +1,3 @@
----
-status: open
----
-
 # 测试标记不能指向 Engineering
 
 ## 现象

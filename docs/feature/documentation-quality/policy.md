@@ -68,7 +68,7 @@ frontmatter 可选，存在时位于文件开头，严格解码，只接受 impo
 | `ConceptInUse` | 写入会删除或改名仍被其它 catalog 导入的 ID；消息列出引用者 |
 | `ConceptReferencesUnknown` | 另一 catalog 格式错误使反向引用无法确定时，写入删除目标中原本有效的定义 |
 
-正文可以链接到定义，例如 `反馈`。docs 下（排除 docs/_template）Markdown 正文中相对解析后指向已发现 catalog 的行内链接是术语链接，筛选与解码规则与[品味链接](../project-onboarding/use-case/evolve-taste.md#link-clause)相同。fragment 不是该 catalog 的概念 ID 时，`concord check` 报告 relation 类 `AnchorNotFound`，带路径与行号；不带 fragment 的链接指向整页，不产生 finding。链接文字等于 term 时照常计为使用，链接本身不计。正文链接不阻止删除定义；断开的链接由检查报告。
+正文可以链接到定义，例如 `[反馈](../payments/concepts.md#feedback)`。docs 下（排除 docs/_template）Markdown 正文中相对解析后指向已发现 catalog 的行内链接是术语链接，筛选与解码规则与[品味链接](../taste/format.md#链接)相同。fragment 不是该 catalog 的概念 ID 时，`concord check` 报告 relation 类 `AnchorNotFound`，带路径与行号；不带 fragment 的链接指向整页，不产生 finding。链接文字等于 term 时照常计为使用，链接本身不计。正文链接不阻止删除定义；断开的链接由检查报告。
 
 catalog 可以直接编辑，`concord check` 报告上表的结构、导入与歧义错误；`concepts set` 在写入前执行同一校验。位于 Feature 或 Engineering 包内的 concepts.md 是该目录的概念来源，不是该包的支持页面。
 

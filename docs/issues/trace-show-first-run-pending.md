@@ -1,7 +1,3 @@
----
-status: open
----
-
 # 首次运行 trace show 直接返回 QueryPending
 
 ## 观察

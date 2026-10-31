@@ -1,7 +1,3 @@
----
-status: open
----
-
 # 大仓库后台刷新超时导致诊断查询持续 QueryPending
 
 ## 现象

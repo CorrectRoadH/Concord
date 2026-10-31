@@ -86,9 +86,9 @@ p5 采用流程动作循环：分阶段自动推进，当前阶段高亮，沿�
 
 了解现行行为只读 Feature、Use Case、cli、library、architecture 与 engineering 页；Design 只在重新审视某项决策时读取。
 
-Design 目录有 README、GOALS、LIMITS、CASES、DECISION 与 `plans/<候选>/`；候选就是 `plans/` 下的子目录，每个候选是一个完整的 Feature 设计包。GOALS/LIMITS 用 `## G1: 标题`、`## L1: 标题` 定义稳定条目；每个候选 README 的 `## Goals`、`## Limits` 各用四列表格逐项写出要求链接、状态、机制/缺口和依据。状态支持 satisfied/not-satisfied/pending（满足/不满足/待验证），Goal 另支持 partial（部分满足）。链接例如 `L1`，必须指向实际标题。代码块、HTML 和引用式链接不作为要求回应。
+Design 目录有 README、GOALS、LIMITS、CASES、DECISION 与 `plans/<候选>/`；候选就是 `plans/` 下的子目录，每个候选是一个完整的 Feature 设计包。GOALS/LIMITS 用 `## G1: 标题`、`## L1: 标题` 定义稳定条目；每个候选 README 的 `## Goals`、`## Limits` 各用四列表格逐项写出要求链接、状态、机制/缺口和依据。状态支持 satisfied/not-satisfied/pending（满足/不满足/待验证），Goal 另支持 partial（部分满足）。链接例如 `[L1](../../LIMITS.md#l1-offline)`，必须指向实际标题。代码块、HTML 和引用式链接不作为要求回应。
 
-DECISION 的 `## Decision` 只放 `Selected: sqlite` 或 `选择 sqlite。`；`## Rationale`、`## Rejected Options`、`## Residual Risks` 写真实论证。每个非 satisfied 的已选 Goal 需在 Rationale 单独写 `G1: 接受缺口的理由`。全部候选必须完整回应，所选候选的所有 Limit 必须 satisfied。
+DECISION 的 `## Decision` 只放 `Selected: [sqlite](plans/sqlite/README.md)` 或 `选择 [sqlite](plans/sqlite/README.md)。`；`## Rationale`、`## Rejected Options`、`## Residual Risks` 写真实论证。每个非 satisfied 的已选 Goal 需在 Rationale 单独写 `G1: 接受缺口的理由`。全部候选必须完整回应，所选候选的所有 Limit 必须 satisfied。
 
 ```sh
 concord check --json

@@ -1,7 +1,3 @@
----
-status: open
----
-
 # 离线切换没有持有新旧锁的受管入口
 
 [治理边界](../feature/neutral-project-governance/architecture.md#离线切换)要求配置、依赖、旧入口与私有协调路径在停写窗口内切换：切换同时持有旧、新 exclusive 锁，先拒绝活跃 writer 与未完成 journal，保存完整前像与可恢复现场。

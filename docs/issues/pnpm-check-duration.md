@@ -1,5 +1,4 @@
 ---
-status: open
 relations:
   - role: decision
     target: memory/pnpm-check-performance.md

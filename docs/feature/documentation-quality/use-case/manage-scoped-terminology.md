@@ -15,7 +15,7 @@ concepts.md 可以直接编辑，`concord check` 校验结构、作用域与被�
 ## 验收
 
 - `docs/concepts.md` 定义 `## Issue {#issue}` 并弃用 `观察`：正文写「观察」时 `docs check` 报告禁词，建议 `Issue`，来源为 `docs/concepts.md#issue`；只写 `Issue` 计为使用，不报告 `unusedConcept`。
-- 正文 `Memory` 无 finding；fragment 改为 `#memo` 后 `check` 报告带路径与行号的 `AnchorNotFound`。删除仅被正文链接的概念可以写入，之后 `check` 报告断开的链接。
+- 正文 `[Memory](../../concepts.md#memory)` 无 finding；fragment 改为 `#memo` 后 `check` 报告带路径与行号的 `AnchorNotFound`。删除仅被正文链接的概念可以写入，之后 `check` 报告断开的链接。
 - 定义后的解释含链接与三级标题时结构合法，解释不计为使用，`show` 的 `definition` 只含定义段落；catalog 解释中写在行内代码里的弃用名不命中禁词。
 - 没有 frontmatter、只有一级标题和两个概念的文件合法，`imports` 与 `deprecated` 为空。
 - 以下输入各返回带行号与原因的 `InvalidConceptCatalog`：

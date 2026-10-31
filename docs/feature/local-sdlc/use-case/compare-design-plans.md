@@ -9,7 +9,7 @@
 1. `concord new design <名称>` 生成 GOALS、LIMITS、DECISION、CASES 和 `plans/` 下的候选 README；也可以直接创建这些文件。候选来自 `plans/` 的直接子项。
 2. GOALS 和 LIMITS 使用一个 H1 文件标题，每条要求为 H2 `G1：标题` 或 `L1：标题`；编号稳定且唯一。正文说明目标/约束、来源和判定条件。引用使用条目实际标题的 Markdown anchor。
 3. 每个候选入口的 `## Limits` 和 `## Goals` 各有一张四列表格：要求链接、结论、满足方式或缺口、依据。每条要求恰好回应一次，不能只列成功项。Limits 支持 satisfied/not-satisfied/pending（满足/不满足/待验证）；Goals 还支持 partial（部分满足）。依据可以是设计论证或实际验证材料，必须说明实际证明范围。
-4. DECISION 的 `## Decision` 以 `Selected:` 行声明一个直接候选入口链接，例如 `Selected: plan-2`；未选择时没有 `Selected:` 行。`## Rationale` 解释比较和接受的 Goal 缺口，`## Rejected Options` 说明否决原因，`## Residual Risks` 说明遗留风险。
+4. DECISION 的 `## Decision` 以 `Selected:` 行声明一个直接候选入口链接，例如 `Selected: [plan-2](plans/plan-2/README.md)`；未选择时没有 `Selected:` 行。`## Rationale` 解释比较和接受的 Goal 缺口，`## Rejected Options` 说明否决原因，`## Residual Risks` 说明遗留风险。
 5. `design check` 报告结构、遗漏、重复、引用、状态和选择冲突；`design decide` 在同一校验通过且所选候选每条 Limit 均满足后写入 `Selected:` 行。其他候选可以不满足约束。Goal 缺口必须显式出现在裁决依据中。`design postpone` 记录暂缓。
 6. 直接编辑 `Selected:` 行时，`check` 按 `design decide` 的同一规则校验全部候选与 Limits。已裁决后，`Selected:` 只能指向同一候选（候选在单文件与目录形式之间调整时指向新入口），理由的更正只能在 DECISION 末尾追加一节，写明日期与来源，原文保留；`check --since` 拒绝改选、清空裁决或改写原理由。
 7. `design format` 只规范已识别的 H2 标题和四列表格空白；支持 dry-run 和现有 publication 前像保护，不补选择、结论、理由或证据。保留原有换行风格、标题锚点和代码块，格式化成功不等于校验通过。
