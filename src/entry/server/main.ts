@@ -222,6 +222,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const stateContext = yield* Layer.build(WorkspaceState.layer(runtime.token));
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
+      health: cache.verify,
       context,
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources)),
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),

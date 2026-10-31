@@ -102,6 +102,8 @@ function loadArtifact(): NativeModule {
   rejected = undefined;
   return native;
 }
+/** Revalidate the installation even when an already loaded binding remains usable. */
+export function validateHawdbArtifact(): void { boundary(() => { loadArtifact(); }); }
 class Database implements HawdbDatabase {
   constructor(private readonly native: NativeBridge) {}
   get(namespace: HawdbNamespace, keys: readonly string[]): readonly HawdbEntry[] {

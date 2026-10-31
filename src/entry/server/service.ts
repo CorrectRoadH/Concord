@@ -8,6 +8,7 @@ import type { Computation } from './computation.js';
 
 export interface RuntimePorts {
   readonly verify: Effect.Effect<void, unknown>;
+  readonly health?: Effect.Effect<void, unknown>;
   readonly context: Effect.Effect<WorkspaceProjectionContext, unknown>;
   readonly ready: (context: WorkspaceProjectionContext) => Effect.Effect<void, unknown>;
   readonly restore: (context: WorkspaceProjectionContext) => Effect.Effect<WorkspaceProjection, unknown>;
@@ -105,6 +106,11 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() { if (!pending) yield* request; }), compensationRefresh).pipe(Effect.delay('30 seconds')));
   yield* Effect.forkScoped(Effect.repeat(maintenance.withPermit(Effect.gen(function*() {
     const current = yield* SubscriptionRef.get(state.value);
+    if (current.state === 'running' && ports.health) {
+      const health = yield* Effect.result(ports.health);
+      if (health._tag === 'Failure') { yield* ports.close; yield* fail(health.failure); yield* request; }
+      return;
+    }
     if (current.state !== 'degraded' || !current.error || !['HawdbUnavailable', 'HawdbBusy', 'HawdbClosed'].includes(current.error.code)) return;
     yield* ports.verify;
     yield* ports.open;

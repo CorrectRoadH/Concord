@@ -68,6 +68,26 @@ test('cache clear waits for accepted computation then closes ownership before de
 })).pipe(Effect.provide(stateLayer))));
 
 // @feature docs/feature/local-data-engine/README.md
+// @issue docs/issues/workspace-server-unimplemented.md
+test('runtime native health failure closes persistent ownership and retries repair on the Effect clock', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  let broken = false, closes = 0, opens = 0;
+  const service = yield* makeWorkspaceService(ports({
+    health: Effect.suspend(() => broken ? Effect.fail(new ConcordError('HawdbUnavailable', 'native artifact missing')) : Effect.void),
+    open: Effect.sync(() => { if (broken) throw new Error('open must wait for repair'); opens++; }),
+    close: Effect.sync(() => { closes++; }),
+  }));
+  yield* TestClock.adjust(0);
+  assert.equal(opens, 1);
+  broken = true; yield* TestClock.adjust(1000);
+  assert.equal((yield* SubscriptionRef.get(service.state.value)).state, 'degraded');
+  assert.equal(closes, 1);
+  broken = false; yield* TestClock.adjust(1000);
+  assert.equal((yield* SubscriptionRef.get(service.state.value)).state, 'running');
+  assert.equal(opens, 2);
+  yield* service.stop;
+})).pipe(Effect.provide(stateLayer))));
+
+// @feature docs/feature/local-data-engine/README.md
 test('stopping and blocked states cannot be revived by a late watcher callback', () => Effect.runPromise(Effect.gen(function*() {
   const state = yield* WorkspaceState;
   yield* state.transition('blocked', { code: 'CleanupFailed', message: 'unconfirmed' });
