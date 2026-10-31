@@ -16,3 +16,4 @@ export { makeComputationOwner, workspaceServerFailure } from './main.js';
 export type { WorkspaceConnection } from './client.js';
 export { readExistingWorkspaceProjection } from './main.js';
 export { clearExistingWorkspaceCache } from './main.js';
+export { makeHttpLeases } from './http-leases.js';

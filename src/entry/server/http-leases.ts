@@ -4,7 +4,7 @@ import { Clock, Effect, Semaphore } from 'effect';
 import { ConcordError } from '../../model/index.js';
 
 export interface HostedHttp { readonly host: string; readonly port: number; readonly address: string; close(): Promise<void> }
-interface Listener { readonly handle: HostedHttp; readonly leases: Map<string, boolean>; sse: number; idleSince: number }
+interface Listener { readonly handle: HostedHttp; readonly leases: Map<string, { readonly transient: boolean; readonly owner?: number }>; sse: number; idleSince: number }
 export const makeHttpLeases = Effect.fn('makeHttpLeases')(function*(token: string, start: (host: string, port: number, sse: (delta: number) => void) => Effect.Effect<HostedHttp, unknown>) {
   const mutex = yield* Semaphore.make(1);
   const listeners = new Map<string, Listener>();
@@ -13,7 +13,7 @@ export const makeHttpLeases = Effect.fn('makeHttpLeases')(function*(token: strin
       yield* Effect.tryPromise(() => listener.handle.close()); listeners.delete(key);
     }
   });
-  const open = (host: string, port: number, transient: boolean) => mutex.withPermit(Effect.gen(function*() {
+  const open = (host: string, port: number, transient: boolean, owner?: number) => mutex.withPermit(Effect.gen(function*() {
     const key = `${host}\0${port}`;
     let listener = listeners.get(key);
     if (!listener) {
@@ -29,7 +29,7 @@ export const makeHttpLeases = Effect.fn('makeHttpLeases')(function*(token: strin
       listeners.set(key, listener);
     }
     const lease = `${token}:${crypto.randomUUID()}`;
-    listener.leases.set(lease, transient);
+    listener.leases.set(lease, { transient, ...(transient || owner === undefined ? {} : { owner }) });
     return { host: listener.handle.host, port: listener.handle.port, address: listener.handle.address, lease, token };
   }));
   const close = (lease: string) => mutex.withPermit(Effect.gen(function*() {
@@ -39,11 +39,17 @@ export const makeHttpLeases = Effect.fn('makeHttpLeases')(function*(token: strin
   const tick = mutex.withPermit(Effect.gen(function*() {
     const now = yield* Clock.currentTimeMillis;
     for (const [key, listener] of listeners) {
-      if (listener.sse === 0 && now - listener.idleSince >= 600_000) for (const [lease, transient] of listener.leases) if (transient) listener.leases.delete(lease);
+      if (listener.sse === 0 && now - listener.idleSince >= 600_000) for (const [lease, value] of listener.leases) if (value.transient) listener.leases.delete(lease);
+      yield* closeUnused(key, listener);
+    }
+  }));
+  const disconnect = (owner: number) => mutex.withPermit(Effect.gen(function*() {
+    for (const [key, listener] of listeners) {
+      for (const [lease, value] of listener.leases) if (value.owner === owner) listener.leases.delete(lease);
       yield* closeUnused(key, listener);
     }
   }));
   const shutdown = mutex.withPermit(Effect.forEach(listeners.values(), listener => Effect.tryPromise(() => listener.handle.close()), { discard: true }).pipe(Effect.ensuring(Effect.sync(() => listeners.clear()))));
   yield* Effect.addFinalizer(() => shutdown.pipe(Effect.orDie));
-  return { open, close, tick };
+  return { open, close, tick, disconnect };
 });

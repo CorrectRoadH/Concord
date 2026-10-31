@@ -247,7 +247,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const jobs = new ServerJobs((caseId, signal) => runOperation({ kind: 'job', caseId }, signal), () => { notify(); Effect.runFork(service.request); });
     yield* Effect.addFinalizer(() => Effect.tryPromise(() => jobs.close()).pipe(Effect.orDie));
     const run = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(operation, { signal });
-    const readProjection = SubscriptionRef.get(service.state.value).pipe(Effect.flatMap(value => {
+    const readProjection = service.state.touch.pipe(Effect.andThen(SubscriptionRef.get(service.state.value)), Effect.flatMap(value => {
       if (value.workspace) return Effect.succeed(value.workspace);
       if (value.error?.code === 'RecoveryRequired') return Effect.fail(new ConcordError('RecoveryRequired', value.error.message));
       if (value.state === 'degraded' && value.error) return Effect.fail(new ConcordError('WorkspaceProjectionUnavailable', value.error.message, { reason: value.error.code }));
@@ -268,7 +268,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         },
         jobs, sse,
         subscribe: listener => {
-          const fiber = Effect.runFork(Stream.runForEach(event.pipe(Stream.takeUntil(value => value.state === 'stopping')), value => Effect.promise(() => Promise.resolve(listener(value)))));
+          const fiber = Effect.runFork(Effect.scoped(service.connect.pipe(Effect.andThen(Stream.runForEach(event.pipe(Stream.takeUntil(value => value.state === 'stopping')), value => Effect.promise(() => Promise.resolve(listener(value))))))));
           httpSubscriptions.add(fiber);
           return () => { httpSubscriptions.delete(fiber); Effect.runFork(Fiber.interrupt(fiber)); };
         },
@@ -317,12 +317,12 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       read: request => Stream.unwrap(authorize(request).pipe(Effect.andThen(service.execute({ kind: 'read-bytes', path: request.path })), Effect.map(value => output.bytes(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT)), Effect.mapError(asServerError))),
       'git-status': request => result(request, service.execute({ kind: 'git-status' })),
       'git-diff': request => result(request, service.execute({ kind: 'git-diff', path: request.path, area: request.area })),
-      http: (request, options) => result(request, request.action === 'open' ? hosted.open(request.host, request.port, subscribers.has(options.client.id)) : request.lease ? hosted.close(request.lease) : Effect.fail(new ConcordError('InvalidInput', 'HTTP close requires a lease'))),
+      http: (request, options) => result(request, request.action === 'open' ? hosted.open(request.host, request.port, subscribers.has(options.client.id), options.client.id) : request.lease ? hosted.close(request.lease) : Effect.fail(new ConcordError('InvalidInput', 'HTTP close requires a lease'))),
       'cache-clear': request => result(request, service.clear),
       'feedback-merge': (request, options) => result(request, feedback.apply(options.client.id, request, cache.mergeFeedback)),
     });
     const serialization = yield* Layer.build(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT }));
-    const protocol = yield* makeAdmittedProtocol(socketServer, service.connect, id => { feedback.disconnect(id); subscribers.delete(id); }).pipe(Effect.provideContext(serialization));
+    const protocol = yield* makeAdmittedProtocol(socketServer, service.connect, id => { feedback.disconnect(id); subscribers.delete(id); Effect.runFork(hosted.disconnect(id)); }).pipe(Effect.provideContext(serialization));
     yield* Effect.forkScoped(RpcServer.make(WorkspaceRpcs, { concurrency: 256 }).pipe(Effect.provide(handlers), Effect.provideService(RpcServer.Protocol, protocol)));
     yield* ready;
     yield* Deferred.succeed(protocolReady, undefined);
