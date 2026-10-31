@@ -15,7 +15,7 @@ import { mergeFeedbackCache } from "../../src/base/cache/index.js";
 import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 import { type FeedbackSource } from "../../src/model/index.js";
-import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support/support.js';
+import { projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('feedback browser separates remote observations from local editing and protects connection drafts', async ({ page }) => {
@@ -39,6 +39,7 @@ test('feedback browser separates remote observations from local editing and prot
       mergeFeedbackCache(repo,'fixture',[{...remote,title:'Updated remote title',body:'Updated remote body',state:'closed',updatedAt:'2026-09-14T00:00:00.000Z'}]);
     } finally {repo.close();}
     server=await startViewServer({root,host:'127.0.0.1',port:0,...(process.env.CONCORD_TEST_WEB_ROOT?{webRoot:process.env.CONCORD_TEST_WEB_ROOT}:{})});
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({width:1440,height:1000});
     const errors:string[]=[];
