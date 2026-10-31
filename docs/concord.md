@@ -100,7 +100,7 @@ concord new use-case expired-token --feature login --title "Reject expired token
 1. 把缺陷写成 Issue：`concord new issue <name>`，或直接创建 `docs/issues/<name>.md`。
 2. 提交会失败的回归测试，附 `@issue` 标记；只提交测试，不改产品代码。
 3. 单独提交修复，不改回归测试、runner 配置、`runner.sourceFiles` 与测试指向的 Spec。
-4. 在干净的工作树中运行 `concord issue close <name> --fixed --reason <text>`：回归测试在缺陷提交上失败、在当前 HEAD 上通过时，结论写进 Issue（[C-004-2](constitution.md#c-004-2)）。
+4. 运行 `concord issue close <name> --fixed --reason <text>`：回归测试在缺陷提交上失败、在当前 HEAD 上通过时，结论写进 Issue（[C-004-2](constitution.md#c-004-2)）。
 5. `concord test verify <name>` 按记录重放。
 
 完整路径与错误见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)。`concord review render` 生成本地审阅材料。

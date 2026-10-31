@@ -39,7 +39,7 @@
 
    修复提交不改回归测试、runner 配置、`runner.sourceFiles` 与测试指向的 Spec。
 
-4. 在干净的工作树中关闭 Issue。 {#close-fixed}
+4. 关闭 Issue。 {#close-fixed}
 
    ```sh
    concord issue close duplicate-sku --fixed --reason "addItem 累加已有数量"
@@ -55,6 +55,8 @@
    ```
 
    修复提交是当前 HEAD。缺陷提交默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；所有回归测试必须在同一提交中首次出现，否则用 `--defect <commit>` 指定，该提交必须是 HEAD 的 first-parent 祖先。runner 在缺陷提交上以非零码结束、在修复提交上以零结束时，核验成立。
+
+   两次运行都在各自提交的临时检出中执行，与当前工作树隔离：其它人尚未提交的改动不影响核验，核验期间其它人提交新的 HEAD 也不使已开始的核验失效，结论记录开始时的修复提交。只有该 Issue 文件必须没有未提交的改动，结论按它开始时的内容写入。
 
 5. 重放核验。 {#verify}
 
@@ -90,11 +92,11 @@ closure:
 
 | 错误 | 触发条件 |
 | --- | --- |
-| `FixUnverifiable` | 工作树不干净；缺少回归测试；回归测试不在同一提交中首次出现且未给出 `--defect`；`--defect` 不是 HEAD 的 first-parent 祖先；缺陷提交不存在，包括 shallow clone |
+| `FixUnverifiable` | Issue 文件有未提交的改动；缺少回归测试；回归测试不在同一提交中首次出现且未给出 `--defect`；`--defect` 不是 HEAD 的 first-parent 祖先；缺陷提交不存在，包括 shallow clone |
 | `FixUnverifiable` | 缺陷提交与 HEAD 之间含 merge 提交，或回归测试、runner 配置、`runner.sourceFiles`、测试指向的 Spec 字节有变化 |
 | `FixUnverifiable` | runner 在缺陷提交上以零结束，例如同一提交同时加入测试与修复；任一次运行超时或清理无法确认 |
 | `FixVerificationFailed` | runner 在修复提交上以非零码结束 |
-| `PreimageChanged` | 核验期间 HEAD、工作树、配置或 Issue 被改动 |
+| `PreimageChanged` | 核验期间 Issue 文件被改动 |
 
 同一提交加入测试与修复时无法核验，错误提示先单独提交失败的回归测试。
 
