@@ -54,7 +54,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 | --- | --- | --- |
 | 服务主进程 | worktree 的 Git-private 目录 + 安装身份 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算；只在清理时、关闭持久库之后持有发布租约 |
 | 计算进程 | 由主进程经 `OwnedProcessService` 启动的长期子进程 | 持有内存解析缓存，执行刷新扫描与只读查询；不打开持久库；60 秒无响应或超出预算时整组终止并重启，缓存冷启动 |
-| 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动 | 执行现行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库；结束后退出 |
+| 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动；主进程保持一个已就绪的空闲操作进程，请求到达时交给它，它执行完这一个请求后退出，主进程确认进程组清理并预热下一个 | 执行现行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库；结束后退出。空闲时不持有 lease、journal、来源快照或请求数据；服务进入 draining 或 stopping 时与其它操作进程一同回收 |
 | 服务锁 | `<privateDir>/server/lock`，原生排他文件锁，单链接普通文件，按 device/inode 校验 | 与数据库[协调锁](#协调锁)是两把锁；服务存活期间一直持有，清理期间也不释放；进程死亡时由操作系统释放 |
 | 运行记录 | `<privateDir>/server/current.json`：`{state, pid, startedAt, token, lock, installation, protocol, socket}`，严格解码 | 只由服务锁持有者在锁内原子写入与按 token 删除；`pid` 与 `startedAt` 只用于诊断，不参与裁决 |
 | socket | `<runtime>/concord-<uid>/<privateDir 的 sha256 前 32 位>.sock`，0600；Windows 为同名 named pipe | 只由服务锁持有者在锁内创建；删除前核对其 inode 与运行记录一致 |
