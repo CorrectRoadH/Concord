@@ -11,13 +11,13 @@
 | 读取文档 | `show <路径或选择器>`、`list [类别]` | 分类列表与详情 |
 | 正文与页面 | 直接编辑文件 | 富文本与源码编辑 |
 | 元数据、源码、配置 | 直接编辑文件，或 `action --input <file|->` | 详情、源码、设置表单 |
-| 生命周期 | `issue`、`memory`、`design decide/defer`、`roadmap adopt`、`constitution adopt/amend` | 对应记录的操作表单或结构化 action |
+| 生命周期 | `issue`、`memory`、`design decide/defer`、`roadmap start`、`constitution adopt/amend` | 对应记录的操作表单或结构化 action |
 | 测试与修复核验 | `test list/run/verify` | 测试与运行页 |
 | 声明辅助 | — | 代码与测试声明助手生成可粘贴的注释 |
 | Git 变化 | `git status`、`git diff <path> --area staged|unstaged|untracked` | Git 面板 |
 | 多来源反馈 | `feedback`、`issue link` | 反馈列表、来源、连接与本地笔记 |
 | 检查与恢复 | `check`、`doctor`、`cache`、`recover` | 检查与设置 |
-| 审阅 | `review render` | 审阅 |
+| 审阅 | `review` | 审阅 |
 
 结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新执行同一领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。`document.set` 拒绝的内容见[自动保存](README.md#自动保存)。
 

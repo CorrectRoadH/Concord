@@ -34,7 +34,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 | `docs/design/<d>/`、`docs/research/<r>/` | Design 与 Research |
 | `docs/issues/<i>.md` | Issue：缺陷、请求与观察 |
 | `memory/<m>.md` | Memory：decision、insight、note |
-| `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 宪法、概念与写作政策 |
+| `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 品味、概念与写作政策 |
 
 仓库相对路径是文档的唯一身份，名称取自正文唯一的一级标题。目录名与文件名可以作短选择器，同类中有歧义时命令具名拒绝并要求写出路径。移动文件即改变身份，`check` 报告全部失效的精确引用。
 
@@ -42,7 +42,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 
 - Feature 与 Use Case 用使用者目标和可观察结果描述能力。人和 agent 读同一份文字就能判断需求、实现和测试是否一致，不需要先懂内部代码。
 - 行为与实现分页。README、Use Case、cli、library 页写外部可见行为，cli 页直接写命令、人读输出、`--json` 字段、退出码和错误；architecture 页写实现与资源生命周期。只改实现的重构只改 architecture 页，测试标记指向行为 Spec，因此不随重构失效。
-- Roadmap 与 Feature 同体裁，只是尚未采用。实现与测试不指向 Roadmap，准备实现时用 `roadmap adopt` 移入 `docs/feature/`。Engineering 写仓库自己的测试与维护机制，读者是维护者。
+- Roadmap 与 Feature 同体裁，只是尚未采用。实现与测试不指向 Roadmap，准备实现时用 `roadmap start` 移入 `docs/feature/`。Engineering 写仓库自己的测试与维护机制，读者是维护者。
 - 能从路径、一级标题与 Git 推导的事实不写进文件，因此 Spec 没有 frontmatter；生命周期状态、带角色的关系、远端来源身份与关闭结论推导不出，写在 Issue、Memory 的 frontmatter，只在非空时出现。
 - 每项事实只有一个 owner，正向关系只保存一次，反向关系从源码标记与 frontmatter 推导，不另建登记表。
 - 过程写入 Memory 与 Issue，`docs/` 的 Spec 只保留当前声明。下一次会话读到的是现行约定。

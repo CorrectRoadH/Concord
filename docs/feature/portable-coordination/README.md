@@ -24,12 +24,12 @@ Git remains required for repository identity. Network and multi-host coordinatio
 
 [Coordinate local publications](use-case/coordinate-local-publications.md) defines the entry, failure and recovery behavior. Node file leases replace external lock programs so the packed CLI stays portable ([decision rationale](../../design/portable-publication/DECISION.md)).
 
-## Constitution
+## 依据的品味与底线
 
-- [C-019](../../constitution.md#c-019)
-- [C-002](../../constitution.md#c-002)
-- [C-003](../../constitution.md#c-003)
-- [C-021](../../constitution.md#c-021)
-- [C-005](../../constitution.md#c-005)
-- [C-006](../../constitution.md#c-006)
-- [C-007](../../constitution.md#c-007)
+- [一件事只写一次，其余推导](../../constitution.md#c-019)
+- [独立、本地、可安装](../../constitution.md#c-002)
+- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
+- [只声称证明过的](../../constitution.md#c-021)
+- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
+- [用产品自身管理和验收开发](../../constitution.md#c-006)
+- [尊重协作与外部操作授权](../../constitution.md#c-007)

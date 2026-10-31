@@ -14,7 +14,7 @@
 1. 生成标记。 {#annotate}
 
    ```sh
-   concord test annotate --contract docs/feature/cart/use-case/add-item.md
+   concord test marker --contract docs/feature/cart/use-case/add-item.md
    ```
 
    ```text

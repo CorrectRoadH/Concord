@@ -37,7 +37,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
 3. 生成审阅材料。 {#render}
 
    ```sh
-   concord --fresh review render
+   concord --fresh review
    ```
 
    ```markdown
@@ -65,7 +65,7 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
    - [重复加入覆盖数量](docs/issues/duplicate-sku.md) — open
    ```
 
-   `review render <feature>` 只生成一份 Feature 的材料。完整输出还包含宪法状态、Use Case 步骤分组与本地反馈。
+   `review <feature>` 只生成一份 Feature 的材料。完整输出还包含品味状态、Use Case 步骤分组与本地反馈。
 
 4. Reviewer 从材料中的链接回到 Spec 与源码，核对正文。 {#read-sources}
 

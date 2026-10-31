@@ -28,11 +28,11 @@ Concord 把审阅移到 Spec 上。Spec 是仓库中的 Markdown，代码与测�
 | 过程和时序用文字说不清 | Markdown 中的 `p5` 代码块在 Web 工作台里自动循环播放，静态结构用 Mermaid | 多方协作、状态迁移看一遍动画就懂；文字仍是规则本身，图解只演示 |
 | AI 和人对同一个东西用不同的词 | `concepts.md` 给每个概念一个名字和定义，按目录划分作用域；弃用名由 `check` 报告 | 读者不用猜两个词是不是一回事，agent 按字面读也不会读出第二种意思 |
 | 用词含糊、句子越写越长 | `concord-writing.json` 禁用 `helper`、`resolve` 这类不说明职责的词，并限制句长与段长，每条规则附替代写法和理由 | 实现者不必猜作者的意思 |
-| agent 每次从零开始，重新决定定过的事 | 跨 Feature 的规则写进宪法，方案取舍写进 Design，调查结论写进 Memory，都在仓库里 | 新会话读到的是现行约定和理由，不会推翻已经定下的语义 |
+| agent 每次从零开始，重新决定定过的事 | 跨 Feature 的规则写进品味，方案取舍写进 Design，调查结论写进 Memory，都在仓库里 | 新会话读到的是现行约定和理由，不会推翻已经定下的语义 |
 | 不知道一个测试守护哪条行为 | 测试用标记指向 Use Case 或其中一步，实现用代码声明指向 Spec；反向关系从源码推导 | 从 Spec 能查到守护它的测试和实现，关系随代码出现在同一个 diff 里，不会和代码脱节 |
 | 重构把 Spec 和测试一起搅乱 | 行为页（README、Use Case、cli、library）与 architecture 页分开 | 只改实现时只改 architecture 页，行为页和指向它们的测试保持稳定 |
 | 问题没有证据就被宣布修复 | 缺陷写成 Issue；回归测试先在缺陷提交上失败，再在修复提交上通过，`issue close --fixed` 核验两者并把结论写进 Issue | 修复可以被任何人重放，不靠口头保证 |
-| 直接编辑绕过流程 | CI 对每个变化运行 `concord check --since <base>`，检查状态转换、修复核验、宪法修订与 Design 裁决 | 人和 agent 可以直接改文件，变化是否合法由门禁判断 |
+| 直接编辑绕过流程 | CI 对每个变化运行 `concord check --since <base>`，检查状态转换、修复核验、品味修订与 Design 裁决 | 人和 agent 可以直接改文件，变化是否合法由门禁判断 |
 | 开发日志混进 Spec | 过程写进 Memory，待调查的问题写进 Issue，`docs/` 只保留当前声明 | Spec 始终描述系统现在必须怎样 |
 | 想法还没定，或者定了但暂不实现 | Roadmap 用 Feature 的写法保存方向，采用时移入 `docs/feature/`；Research 保存带日期和来源的外部事实 | 未定的方向不会被误当作现行要求 |
 
@@ -64,7 +64,7 @@ Concord 把审阅移到 Spec 上。Spec 是仓库中的 Markdown，代码与测�
 
 | 文件 | 是什么 | 谁在什么时候读 |
 | --- | --- | --- |
-| `docs/roadmap/<r>/` | 尚未采用的方向，写法同 Feature；实现与测试不指向它 | 讨论下一步做什么时读；采用时用 `roadmap adopt` 移入 `docs/feature/` |
+| `docs/roadmap/<r>/` | 尚未采用的方向，写法同 Feature；实现与测试不指向它 | 讨论下一步做什么时读；采用时用 `roadmap start` 移入 `docs/feature/` |
 | `docs/design/<d>/` | 一次方案比较：README 写问题，GOALS 与 LIMITS 写目标和约束，CASES 写场景，`plans/<候选>/` 是完整的候选设计，DECISION 写选择和理由 | 只在重新审视这项决策时读；现行规则以 Spec 为准 |
 | `docs/research/<r>/` | 带观察日期和来源的外部事实 | 做决策需要外部依据时读 |
 
@@ -73,7 +73,7 @@ Concord 把审阅移到 Spec 上。Spec 是仓库中的 Markdown，代码与测�
 | 文件 | 是什么 | 谁在什么时候读 |
 | --- | --- | --- |
 | `docs/issues/<i>.md` | 缺陷、请求或观察；frontmatter 记录状态与关联，修复关闭时写入核验结论 | 接手问题时读；关闭缺陷时由 `issue close` 写入 |
-| `memory/<m>.md` | 可复用的知识：decision、insight 或 note；宪法每次修订对应一条 decision | 开始相关工作前用 `concord memory recall` 检索 |
+| `memory/<m>.md` | 可复用的知识：decision、insight 或 note；品味每次修订对应一条 decision | 开始相关工作前用 `concord memory search` 检索 |
 
 **接入、源码与派生数据**
 
@@ -130,7 +130,7 @@ concord new feature greeting --title "Greeting" --pages use-case
 concord new use-case greet-name --feature greeting --title "Greet a name"
 ```
 
-Concord 默认发现 `src/`、`test/` 与 `tests/`，`concord.config.ts` 可以不存在。代码在其它位置时传 `--source-root` 或 `--test-root`，没有测试的仓库用 `--docs-only`。初始化会创建文档模板、项目宪法，并在 `AGENTS.md` 中维护 Agent 指引区块。
+Concord 默认发现 `src/`、`test/` 与 `tests/`，`concord.config.ts` 可以不存在。代码在其它位置时传 `--source-root` 或 `--test-root`，没有测试的仓库用 `--docs-only`。初始化会创建文档模板、项目品味，并在 `AGENTS.md` 中维护 Agent 指引区块。
 
 `new` 只按模板创建文件，也可以手工创建同样的文件。直接在其中写清目标行为：
 
@@ -197,7 +197,7 @@ concord --skill test
 concord --skill memory
 ```
 
-用 `concord <command> --help` 查看精确参数，`--json` 获取结构化结果，`--root /path/to/project` 指定其它工作树。Agent 直接编辑 Spec、Issue 与 Memory；`issue close --fixed`、`design decide`、`roadmap adopt` 等命令执行这些变化需要运行的步骤。
+用 `concord <command> --help` 查看精确参数，`--json` 获取结构化结果，`--root /path/to/project` 指定其它工作树。Agent 直接编辑 Spec、Issue 与 Memory；`issue close --fixed`、`design decide`、`roadmap start` 等命令执行这些变化需要运行的步骤。
 
 ## 深入使用
 
@@ -238,4 +238,4 @@ pnpm exec vp run check
 
 `vp run check` 是完整交付门禁。`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。测试使用 Node runner，每次调用共享一份打包产物，消费者独立安装。任务缓存关闭；局部检查不替代完整验收。
 
-参与开发前请阅读[开发规则](AGENTS.md)与[项目宪法](docs/constitution.md)。Concord 源自 NiceEval 的仓库工作流，运行时保持独立；抽取范围见[来源说明](docs/provenance.md)。
+参与开发前请阅读[开发规则](AGENTS.md)与[项目品味](docs/constitution.md)。Concord 源自 NiceEval 的仓库工作流，运行时保持独立；抽取范围见[来源说明](docs/provenance.md)。

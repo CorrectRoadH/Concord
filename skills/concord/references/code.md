@@ -9,16 +9,16 @@
 ## 声明与查询
 
 ```sh
-concord code annotate --scope node \
+concord code marker --scope node \
   --contract docs/feature/orders/use-case/create-order.md
 concord code list --json
-concord code locate src/orders.ts --line 12 --json
+concord code at src/orders.ts:12 --json
 concord trace show orders --json
-concord review render orders
+concord review orders
 concord check
 ```
 
-`annotate` 只生成经验证的片段，不编辑源文件，不接收或返回声明 ID。范围标记不带参数，`@concord-implements` 保留显式 Spec 关联。关联多个 Spec 时重复 `--contract`，或添加多条相邻 implements；重复 exactRef 拒绝。目标使用 canonical Feature / Use Case / Engineering 路径，也支持 Feature 或 Engineering supporting page 与有效 `#anchor`。不同 anchor 保留独立关联。
+`marker` 只生成经验证的片段，不编辑源文件，不接收或返回声明 ID。范围标记不带参数，`@concord-implements` 保留显式 Spec 关联。关联多个 Spec 时重复 `--contract`，或添加多条相邻 implements；重复 exactRef 拒绝。目标使用 canonical Feature / Use Case / Engineering 路径，也支持 Feature 或 Engineering supporting page 与有效 `#anchor`。不同 anchor 保留独立关联。
 
 ```ts
 // @concord-file
@@ -51,7 +51,7 @@ export function parseOrder(input: string) {
 - `node`：紧邻有函数体的函数声明、类声明、有函数体的方法（含对象方法），或仅绑定一个标识符且 initializer 直接为 arrow/function 的变量语句。包含 export / decorator。签名、重载签名、解构、多变量、匿名回调及任意表达式不支持；用完整语句的 region 表达其它代码段。
 - `region`：无参数的 begin / end 成对包住同一语句列表中连续、非空的完整语句，可以包含完整函数；不能嵌套 region、跨函数边界或截断表达式。
 
-每节点最多一份声明。file、node 和 region 可以完整包含；没有覆盖、继承或优先级规则。`locate` 使用 1-based 行号，返回所有包含该行的显式作用域；node/region 范围从实际代码首行到末行，含两端，排除外围标记行。同行其它表达式不作列级区分。
+每节点最多一份声明。file、node 和 region 可以完整包含；没有覆盖、继承或优先级规则。`code at` 使用 1-based 行号，返回所有包含该行的显式作用域；node/region 范围从实际代码首行到末行，含两端，排除外围标记行。同行其它表达式不作列级区分。
 
 仅使用独占一行的 `//` 标记。起始标记之后的 implements 必须连续且相邻，不能跨空行、其它 family 标签或注释寻找目标。目标之后可以有普通注释或空白，但不能跨另一代码标记或代码 token 绑定到更远节点。字符串、模板、正则、JSX 文本中的类似文字不会注册声明。
 
@@ -63,7 +63,7 @@ export function parseOrder(input: string) {
 
 ## 自动查询引用
 
-`list` 和图中的 `id` 是工具内部使用的 `code-…` 自动引用，来自版本、仓库相对源路径、scope 和 AST 结构位置；不写入源码或第二份登记表。按文件与行号使用 `locate` 查询声明；Web 直接显示符号、文件位置和关联 Spec。
+`list` 和图中的 `id` 是工具内部使用的 `code-…` 自动引用，来自版本、仓库相对源路径、scope 和 AST 结构位置；不写入源码或第二份登记表。按文件与行号使用 `code at` 查询声明；Web 直接显示符号、文件位置和关联 Spec。
 
 定位路径及同描述前序兄弟不变时，空白、行号、普通函数体与 implements 修改不改变 node 引用。同内容新进程或 clone 可重新得到相同引用。文件移动、改名、改变作用域，以及同描述兄弟或 region 次序变化可能改变引用；旧引用也可能成功指向另一声明，例如删除前方 region 标记后后方 region 接续其序号。
 

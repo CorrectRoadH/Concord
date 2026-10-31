@@ -7,7 +7,7 @@
 ## 主流程
 
 1. 在 `concord.config.ts` 的 `testAdapters` 中为测试目录声明内置或外部 adapter。每项声明唯一 `id`、按路径段匹配的 `include`、`builtin` 或 `argv`、`implementationFiles`、`inputRoots`、精确 `frameworkVersion`、`lockFiles` 和环境变量名白名单 `envNames`。目录必须处于 `testRoots` 内；匹配范围不得相交。未覆盖的文件继续使用原 `runner`。
-2. `concord test collect [<file>...]` 显式收集并在 HawDB 保存可丢弃的原生清单观察。`check`、`trace`、`test list` 与 `test show` 不运行收集；测试列表可展示带 `current`、`complete` 与 `gaps` 的观察。
+2. `concord test discover [<file>...]` 显式收集并在 HawDB 保存可丢弃的原生清单观察。`check`、`trace`、`test list` 与 `test show` 不运行收集；测试列表可展示带 `current`、`complete` 与 `gaps` 的观察。
 3. `concord test run <case-id>` 在执行前重新收集目标文件。优先根据 provider 的完整声明范围绑定参数组；缺少范围时可使用同一标记块的 `@native <native-id>`。显式选择与可验证的自动绑定不同则失败。`@native`、原生标签与清单不改变 v1 测试关联身份。
 4. 只有当前 provider 的收集范围完整且能力允许精确选择时才执行选中的原生 ID 集合。仓库外环境无法冻结时，观察保留 `ExternalInputUnknown`、`complete=false` 和版本；该环境 gap 不阻止原生选择与逐项结果。没有精确绑定时使用文件级 command scope；`--require-native` 或显式原生选择无法满足时返回 `NativeSelectionUnsupported`。
 5. 原生运行结果记录 requested、observed、各 Invocation 状态与分配、输入和计划摘要、能力及 gap。requested 非空、全部选中项各出现一次且通过、命令退出 0、清理完成时为 green；结果完整且至少一项失败、命令非零退出、清理完成时为 red；缺失、重复、额外、skip、协议和基础设施失败均为 invalid。

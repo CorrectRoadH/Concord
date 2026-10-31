@@ -22,7 +22,7 @@ concepts.md 可以直接编辑，`concord check` 校验结构、作用域与被�
   - 二级标题缺少 `{#id}`、标题含行内代码、标题后紧跟列表。
   - `deprecated` 指向不存在的 ID，或弃用名等于本文件 term。
   - frontmatter 含 `format` 或其它字段，以及无 `{#id}` 的二级标题。
-- `concepts set` 保存的字节与提交内容相同；两个写者基于同一 digest 先后 set，后者得到 `PreimageChanged`，Web 保留草稿。
+- `concepts set` 保存的字节与提交内容相同；两个写者基于同一 digest 先后 set，后者得到 `FileChangedSinceRead`，Web 保留草稿。
 - 经 `concepts set` 删除仍被其它 catalog 导入的概念返回 `ConceptInUse` 并列出引用者，不写入；直接编辑删除同一概念后，`check` 报告 `DanglingConceptImport` 并退出 1。
 - 直接编辑 concepts.md 写入缺少 `{#id}` 的二级标题后，`check` 报告带行号的 `InvalidConceptCatalog`；修正后通过。
 - 两个兄弟目录各定义 term 为 `Job` 的概念时无诊断；一方导入另一方后报告 `AmbiguousConceptName`。全局与某个 Feature 的局部概念共存，局部政策越出所在目录被拒绝。

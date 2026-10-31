@@ -17,14 +17,14 @@
 | `docs/research/<r>/` | Research：带来源与观察时间的研究输入 | 无 |
 | `docs/issues/<i>.md` | Issue：缺陷、请求与观察 | 见下文 |
 | `memory/<m>.md` | Memory：可复用知识与不需要 Design 的决策 | 见下文 |
-| `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 项目规则 | 宪法只有 `status` |
+| `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 项目规则 | 品味只有 `status` |
 
 - canonical 仓库相对路径是唯一身份。移动文件即改变身份，`check` 报告全部失效的精确引用。
 - Feature 目录名、Use Case 文件名、Issue 与 Memory 文件名是短选择器。同一类别中歧义时具名拒绝，例如两个 Feature 都有 `use-case/create.md` 时，`show create` 要求写出路径。
 - 名称取自正文唯一的一级标题，可以与路径名不同。标题按 Markdown 语法树识别，代码块中的标题不计；名称保留 Unicode 原拼写与组合标记。
 - 普通正文链接只是导航。frontmatter 中的路径值一律是仓库相对路径，字段只在非空时出现。
 - Research 的观察日期与来源写在正文标题为 `## Sources` 或 `## 来源` 的小节，格式由写作模板固定。Design 的候选来自 `plans/` 的直接子项，裁决写在 DECISION 的 `Selected:` 行，见[逐项比较方案并明确裁决](use-case/compare-design-plans.md)。
-- 宪法的 `status` 取 `draft` 或 `active`，是采用授权的边界，见[演进宪法](../project-onboarding/use-case/evolve-constitution.md)。
+- 品味的 `status` 取 `draft` 或 `active`，是采用授权的边界，见[演进品味](../project-onboarding/use-case/evolve-constitution.md)。
 
 创建时间、采用来源与修订历史由 Git 提供（[只写当前声明](../../document-model.md#只写当前声明)）。测试源码拥有 case 身份和正向关系。
 
@@ -63,7 +63,7 @@ supersededBy: memory/new.md
 
 - `type` 取 `decision`、`insight` 或 `note`。Memory 不重复 Design 的结论。
 - `status` 取 `captured`、`current` 或 `superseded`；note 只能是 captured。
-- `supports` 指向一条当前 Spec 或其锚点；`amends` 指向整份宪法（`docs/constitution.md`，用于采用）或其条款与款（`docs/constitution.md#c-NNN[-K]`）。
+- `supports` 指向一条当前 Spec 或其锚点；`amends` 指向整份品味（`docs/constitution.md`，用于采用）或其条款与款（`docs/constitution.md#c-NNN[-K]`）。
 - 被替代时写 `supersededBy`；替代目标不在仓库中时写 `supersession`，说明原因与来源。
 
 ## 派生关系
@@ -83,7 +83,7 @@ supersededBy: memory/new.md
 
 原生清单、依赖分析与相关性判定返回同一观察结构：`value`、`inputs`（全部实际输入的摘要，含实现与版本）、`complete`、`gaps`（`complete` 为 false 时的具名原因）、`observedAt` 与 `current`（输入摘要与当前源码一致）。
 
-- 只有 `test collect`、`code analyze` 与 `test run` 的执行前收集产生观察；其它命令与编辑器服务只读取。
+- 只有 `test discover`、`code analyze` 与 `test run` 的执行前收集产生观察；其它命令与编辑器服务只读取。
 - 观察可丢弃。`check` 的退出码、finding 与 `complete` 不读取观察，冷缓存、热缓存、缓存损坏与清空后结论相同。
 - `current` 为 false 的观察只作历史展示，带来源与时间，不用于选择执行或相关性判定。
 
@@ -106,7 +106,7 @@ Git-private 目录由 `git rev-parse --git-path concord` 定位，其中的 HawD
 
 ## 关联由源码声明拥有
 
-测试与实现的关联由源码中的标记和代码声明拥有，指向最小完整范围（[C-019](../../constitution.md#c-019)）。
+测试与实现的关联由源码中的标记和代码声明拥有，指向最小完整范围（[一件事只写一次，其余推导](../../constitution.md#c-019)）。
 
 1. 测试根中的 Concord 标记是测试关联的唯一正向来源，标记存在即关联存在。静态关联扫描不解析宿主语言的测试声明、框架绑定、回调或 `skip`/`todo`。执行时的原生收集、绑定与选择仅按 [关联由源码声明拥有](#关联由源码声明拥有) 进行，其观察结果不创建关联，也不授权静态关系检查成功。
 2. 实现关联的唯一正向来源是通过语法、作用域、位置与目标校验的显式代码声明。未通过校验的标记产生 finding，不建立关联。反向关系从测试标记与代码声明派生。

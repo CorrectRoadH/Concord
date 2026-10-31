@@ -13,13 +13,13 @@
 
 ## 完成条件
 
-当前 checkout 可由当前构建的项目本地 Concord 完成 `doctor`、`check`、`test list`、`trace show/check` 与 `review render`；TypeScript 类型检查和相关测试通过。
+当前 checkout 可由当前构建的项目本地 Concord 完成 `doctor`、`check`、`test list`、`trace show/check` 与 `review`；TypeScript 类型检查和相关测试通过。
 
 ## 构建与检查入口
 
 项目使用固定版本的 Vite+ 管理任务，依赖安装由 `vp install` 委托固定版本的 pnpm。未全局安装时以 `pnpm exec vp` 调用。
 
-`pnpm check`（等价于 `vp run check`）是唯一的检查入口，满足 [C-006](../../constitution.md#c-006)。默认运行完整门禁，日常开发和 CI 使用同一条命令，不提供只做部分检查的入口。
+`pnpm check`（等价于 `vp run check`）是唯一的检查入口，满足 [用产品自身管理和验收开发](../../constitution.md#c-006)。默认运行完整门禁，日常开发和 CI 使用同一条命令，不提供只做部分检查的入口。
 
 | 阶段 | 内容 |
 | --- | --- |

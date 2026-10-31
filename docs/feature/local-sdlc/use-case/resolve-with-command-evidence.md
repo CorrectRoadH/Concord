@@ -96,7 +96,7 @@ closure:
 | `FixUnverifiable` | 缺陷提交与修复提交之间含 merge 提交，或回归测试、runner 配置、`runner.sourceFiles`、测试指向的 Spec 字节有变化 |
 | `FixUnverifiable` | runner 在缺陷提交上以零结束，例如同一提交同时加入测试与修复；任一次运行超时或清理无法确认 |
 | `FixVerificationFailed` | runner 在修复提交上以非零码结束 |
-| `PreimageChanged` | 核验期间 Issue 文件被改动 |
+| `FileChangedSinceRead` | 核验期间 Issue 文件被改动 |
 
 同一提交加入测试与修复时无法核验，错误提示先单独提交失败的回归测试。
 

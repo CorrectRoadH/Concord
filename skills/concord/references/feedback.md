@@ -82,8 +82,8 @@ API 连接只存凭据环境变量名，省略 transport 仍为 API。GitHub 可
 
 远端写入仅支持已绑定 `repositoryId` 的 GitHub `gh` 连接，复用当前机器的 `gh auth login` 登录态，不改本地 Issue 文件。
 
-1. 先只读计划：`concord issue plan close 12 --connection product-gh --reason completed --json`。create、body-set、comment-add 用 `--body <file|->`，labels-add 用可重复的 `--label`，labels-remove 每个计划只接受一个 `--label`；reopen 只需编号和连接。
+1. 先只读计划：`concord issue remote preview close 12 --connection product-gh --reason completed --json`。create、body-set、comment-add 用 `--body <file|->`，labels-add 用可重复的 `--label`，labels-remove 每个计划只接受一个 `--label`；reopen 只需编号和连接。
 2. 把 plan 返回的 `authorize` 串（绑定动作、仓库、编号及 payload）交给用户确认。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传 `--authorize`；不得因 plan 成功、工具可用或权限宽松推断授权。
-3. 得到当次明确同意后执行：`concord issue execute <plan-id> --connection product-gh --authorize '<plan 返回的原串>' --json`。
+3. 得到当次明确同意后执行：`concord issue remote apply <plan-id> --connection product-gh --authorize '<plan 返回的原串>' --json`。
 
 计划有效期为五分钟、只能消费一次；前像变化会拒绝写入。`IssueMutationUncertain` 不自动重试：必须重新 plan，manual create 与评论先人工核对远端。多个标签的移除分别 plan、确认并 execute。

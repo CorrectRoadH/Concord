@@ -1,20 +1,20 @@
 
-# 渐进式项目初始化与宪法治理
+# 渐进式项目初始化与品味治理
 
 ## 问题与目标
 
-维护者在任意 Git worktree 中不写配置即可使用 Concord：文档布局、发现范围与 Memory 位置都由约定决定，配置只用于 runner 与可选覆盖（[决策依据](../../design/sdd-core-model/DECISION.md)）。项目宪法是功能规划、实施与审阅共同遵守的规则来源；功能开发发现的通用约束通过明确修订进入宪法。
+维护者在任意 Git worktree 中不写配置即可使用 Concord：文档布局、发现范围与 Memory 位置都由约定决定，配置只用于 runner 与可选覆盖（[决策依据](../../design/sdd-core-model/DECISION.md)）。项目品味是功能规划、实施与审阅共同遵守的规则来源；功能开发发现的通用约束通过明确修订进入品味。
 
 ## 已确认的需求
 
 - `concord.config.ts` 可以不存在；存在时是静态 TS 数据，运行时只读取它，不执行配置模块。配置项与默认值见[维护项目配置](use-case/maintain-project-config.md#配置项)。
-- 初始化提供渐进交互与等价的非交互输入，预览完整变更，取消不写入，保留已有文件。init 创建 draft 宪法 `docs/constitution.md`；根目录 `DESIGN.md` 是独立可选项。
-- 宪法文件存在即启用，`status` 决定是否已采用。
+- 初始化提供渐进交互与等价的非交互输入，预览完整变更，取消不写入，保留已有文件。init 创建 draft 品味 `docs/constitution.md`；根目录 `DESIGN.md` 是独立可选项。
+- 品味文件存在即启用，`status` 决定是否已采用。
 - 创建 Feature 时以参数选择页面：README 必需，其余页面可选。
 - 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，可信度由 `check --since <base>` 门禁保证。
 - 初始化在根 `AGENTS.md` 中维护有边界标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
 - Memory 固定位于 worktree 根的 `memory/`。
-- Feature 可以推动宪法新增、修订条款；理由、来源与影响记入以 `amends` 指向受影响条款的 Decision Memory，不把功能细节无限追加为全局规则。
+- Feature 可以推动品味新增、修订条款；理由、来源与影响记入以 `amends` 指向受影响条款的 Decision Memory，不把功能细节无限追加为全局规则。
 
 ## 边界
 
@@ -31,8 +31,8 @@
 | 场景 | 测量内容 | p50 预算 |
 | --- | --- | ---: |
 | `project-onboarding/config` | 读取配置 | 670ms |
-| `project-onboarding/constitution` | 读取宪法及引用 | 880ms |
-| `project-onboarding/constitution-server` | 经由运行中的工作区服务读取宪法及引用 | 880ms |
+| `project-onboarding/constitution` | 读取品味及引用 | 880ms |
+| `project-onboarding/constitution-server` | 经由运行中的工作区服务读取品味及引用 | 880ms |
 | `project-onboarding/doctor` | 接入诊断 | 5250ms |
 
 ## 接入项目采用的范式
@@ -46,13 +46,13 @@
 5. 关闭种类的要求是关闭结论的下限，不能通过换入口或删除配置绕过。修复核验由 Concord 统一执行；runner 与 adapter 负责真实执行与资源终结，范式不要求所有项目采用同一 runner。
 6. 政策变更与跨仓库切换必须保留历史原件、互斥和恢复边界，不得形成并行授权域或降低既有关闭要求。
 
-## Constitution
+## 依据的品味与底线
 
-- [C-019](../../constitution.md#c-019)
-- [C-003](../../constitution.md#c-003)
-- [C-021](../../constitution.md#c-021)
-- [C-005](../../constitution.md#c-005)
-- [C-006](../../constitution.md#c-006)
+- [一件事只写一次，其余推导](../../constitution.md#c-019)
+- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
+- [只声称证明过的](../../constitution.md#c-021)
+- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
+- [用产品自身管理和验收开发](../../constitution.md#c-006)
 - [总则](../../constitution.md#general-amend)
-- [C-020](../../constitution.md#c-020)
-- [C-002](../../constitution.md#c-002)
+- [写现在，不写过去](../../constitution.md#c-020)
+- [独立、本地、可安装](../../constitution.md#c-002)

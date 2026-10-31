@@ -74,13 +74,13 @@ p5 采用流程动作循环：分阶段自动推进，当前阶段高亮，沿�
 
 **语言。** Spec 使用项目文档的主语言。命令、字段、错误码和代码标识写在行内代码中，不翻译、不改写成正文名词。
 
-## 宪法
+## 品味
 
-依据宪法的句子旁写指向条款或款 ID 的行内链接，例如 `错误消息不含凭据（[C-007](../../constitution.md#c-007-4)）`，不用“第 N 款”这类序号文字。docs/ 下除 `docs/_template/` 与宪法本身外的所有 Markdown 都可以链接；图片、引用式链接、代码与注释中的链接不计入。`concord check` 对指向不存在 ID 的链接报告 `AnchorNotFound`，对带 query 或无法解码的宪法链接报告 `ConstitutionLinkInvalid`；`concord constitution show` 从这些链接派生反向视图，不声称语义合规。
+依据品味的句子旁写指向条款或款 ID 的行内链接，例如 `错误消息不含凭据（[C-007](../../constitution.md#c-007-4)）`，不用“第 N 款”这类序号文字。docs/ 下除 `docs/_template/` 与品味本身外的所有 Markdown 都可以链接；图片、引用式链接、代码与注释中的链接不计入。`concord check` 对指向不存在 ID 的链接报告 `AnchorNotFound`，对带 query 或无法解码的品味链接报告 `ConstitutionLinkInvalid`；`concord constitution show` 从这些链接派生反向视图，不声称语义合规。
 
-宪法条款写成 `## C-001 规则本身 {#c-001}`，款是条款下根有序列表项，第一段末尾写 ` {#c-001-1}`；总则用 `## 总则 {#general}`，其款用 `{#general-<name>}`。ID 一经采用不改名、不复用。每条款一项跨功能规则，标题就是规则；每款一项可审阅的义务、禁止或许可；条款写约束，不写达成约束的机制；用现行句式。
+品味条目写成 `## C-001 规则本身 {#c-001}`，款是条款下根有序列表项，第一段末尾写 ` {#c-001-1}`；总则用 `## 总则 {#general}`，其款用 `{#general-<name>}`。ID 一经采用不改名、不复用。每条款一项跨功能规则，标题就是规则；每款一项可审阅的义务、禁止或许可；条款写约束，不写达成约束的机制；用现行句式。
 
-宪法 frontmatter 只有 `status`（draft 或 active），它是采用授权的边界。宪法可以直接编辑，`constitution adopt` 与 `constitution amend` 是助手；每次采用或修订，同一变化中都要有一条 `type: decision` 的 Memory 以 `amends` 关系指向受影响的条款与款，正文写理由、来源与影响，`check --since` 检查这一点。按条款检索修订从这些关系派生。
+品味 frontmatter 只有 `status`（draft 或 active），它是采用授权的边界。品味可以直接编辑，`constitution adopt` 与 `constitution amend` 是助手；每次采用或修订，同一变化中都要有一条 `type: decision` 的 Memory 以 `amends` 关系指向受影响的条款与款，正文写理由、来源与影响，`check --since` 检查这一点。按条款检索修订从这些关系派生。
 
 ## Design 与采用
 
@@ -93,13 +93,13 @@ DECISION 的 `## Decision` 只放 `Selected: [sqlite](plans/sqlite/README.md)` �
 ```sh
 concord check --json
 concord design decide session-store --selected sqlite
-concord design defer session-store
-concord roadmap adopt sessions
+concord design postpone session-store
+concord roadmap start sessions
 ```
 
 `design decide` 校验全部候选与 Limits 后写入 `Selected:` 行；直接编辑这一行时，`check` 用同一规则校验。结构通过不代表真实验证。裁决之后，把选中候选中仍适用的规则写进 Feature 的行为页与 architecture 页，Spec 只把 Design 的 README 或 DECISION 链接为依据。链接到候选页、CASES、GOALS 或 LIMITS 时 `concord check` 报告 `SpecDependsOnDesignRecord`。
 
-`roadmap adopt` 把 Roadmap 目录移入 `docs/feature/`，同时改写指向它的链接；目标已存在或采用期间文件发生变化时拒绝。
+`roadmap start` 把 Roadmap 目录移入 `docs/feature/`，同时改写指向它的链接；目标已存在或采用期间文件发生变化时拒绝。
 
 ## 术语与写作政策
 

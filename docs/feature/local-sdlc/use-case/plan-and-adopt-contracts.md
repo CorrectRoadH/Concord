@@ -49,11 +49,11 @@
 4. 准备实现时采用 Roadmap。 {#adopt}
 
    ```sh
-   concord --json roadmap adopt checkout
+   concord --json roadmap start checkout
    ```
 
    ```json
-   {"operation":"adopt-roadmap","dryRun":false,"changedPaths":["docs/roadmap/checkout/README.md","docs/roadmap/checkout/use-case/README.md","docs/feature/checkout/README.md","docs/feature/checkout/use-case/README.md"]}
+   {"operation":"roadmap-start","dryRun":false,"changedPaths":["docs/roadmap/checkout/README.md","docs/roadmap/checkout/use-case/README.md","docs/feature/checkout/README.md","docs/feature/checkout/use-case/README.md"]}
    ```
 
 ## 结果

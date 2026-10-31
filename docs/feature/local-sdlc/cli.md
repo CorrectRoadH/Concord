@@ -14,12 +14,12 @@
 | `list [类别]` | 列出文档；`--open` 列出打开的 Issue |
 | `check` | 放置、关系、概念、写作与修复核验记录；`--since <base>` 另外检查本次变化 |
 | `trace` | 关系图与缺口 |
-| `test` | `list`、`show`、`collect`、`annotate`、`run`、`verify <issue>` |
-| `code` | `annotate`、`list`、`locate`、`analyze`：实现与 Spec 的关联 |
+| `test` | `list`、`show`、`discover`、`marker`、`run`、`verify <issue>` |
+| `code` | `marker`、`list`、`at`、`analyze`：实现与 Spec 的关联 |
 | `use-case` | `steps`、`format`、`rename-step`：Use Case 步骤 |
-| `issue` | `close`（fixed 时先核验）、`reopen`、`link`、`unlink`、`recall`；`plan` 与 `execute` 写入远端 |
-| `memory` | `activate`、`supersede`、`link`、`index`、`recall` |
-| `design` | `decide`、`defer`、`check`、`format` |
+| `issue` | `close`（fixed 时先核验）、`reopen`、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
+| `memory` | `confirm`、`replace`、`link`、`search`；摘要列表用 `list memory` |
+| `design` | `decide`、`postpone`、`check`、`format` |
 | `roadmap` | `adopt`（移入 `docs/feature/`）；取消方向即删除目录，历史在 Git |
 | `constitution` | `show`、`adopt`、`amend` |
 | `concepts`、`writing` | 概念与写作政策的查看与受管写入 |
@@ -108,14 +108,14 @@ concord --json new use-case add-item --feature cart --title "加入商品"
 
 路径已存在时返回 `DocumentExists`，退出 1，不改文件。短选择器在同一类别中匹配多个文档时返回具名错误，需要写出路径。路径、类别与名称的规则见[领域与数据所有权](library.md#owner)。
 
-创建之后直接编辑文件。Web 工作台的保存带整文件摘要；文件在读取后被外部改过时返回 `PreimageChanged`，需要重新读取并合并。摘要只防止覆盖并发编辑，不是授权边界。
+创建之后直接编辑文件。Web 工作台的保存带整文件摘要；文件在读取后被外部改过时返回 `FileChangedSinceRead`，需要重新读取并合并。摘要只防止覆盖并发编辑，不是授权边界。
 
 ## 关联源码
 
-`code annotate` 与 `test annotate` 只把校验过的标记写到 stdout，不改源码。引用的 Spec 不存在时返回 `ReferenceNotFound`。
+`code marker` 与 `test marker` 只把校验过的标记写到 stdout，不改源码。引用的 Spec 不存在时返回 `ReferenceNotFound`。
 
 ```sh
-concord code annotate --scope file --contract docs/feature/cart/README.md
+concord code marker --scope file --contract docs/feature/cart/README.md
 ```
 
 ```text
@@ -126,7 +126,7 @@ concord code annotate --scope file --contract docs/feature/cart/README.md
 `--scope node` 关联标记下方的一个声明，`--scope region` 关联一段代码。实现源码根由 `concord.config.ts` 的 `sourceRoots` 配置，`init --source-root src` 可在初始化时设置。
 
 ```sh
-concord test annotate --contract docs/feature/cart/use-case/add-item.md --issue docs/issues/duplicate-sku.md
+concord test marker --contract docs/feature/cart/use-case/add-item.md --issue docs/issues/duplicate-sku.md
 ```
 
 ```text
@@ -134,7 +134,7 @@ concord test annotate --contract docs/feature/cart/use-case/add-item.md --issue 
 // @issue docs/issues/duplicate-sku.md
 ```
 
-`--json` 返回 `{"operation":"test-annotate","snippet":"..."}`。`code list` 返回当前代码声明，`code locate <path> --line <n>` 返回包含该行的全部声明。代码声明只表示实现关联，不代替测试，也不证明 Spec 已完成。完整语法见 `concord --skill code`。
+`--json` 返回 `{"operation":"test-marker","snippet":"..."}`。`code list` 返回当前代码声明，`code at <path>:<n>` 返回包含该行的全部声明。代码声明只表示实现关联，不代替测试，也不证明 Spec 已完成。完整语法见 `concord --skill code`。
 
 ## 检查关系
 
@@ -200,9 +200,9 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 | Issue 关闭、重开或改变 closure 种类 | 目标状态的全部关闭规则；改变种类按重开后再关闭处理 |
 | Issue 或 Memory 删除 | 没有其它 owner 或标记仍指向它 |
 | Memory 的 `status` 改变 | 转换合法：captured 到 current，current 到 superseded；note 保持 captured |
-| 宪法从 draft 变为 active | 本次变化中新增一条 `type: decision` 的 Memory，以 `amends` 指向 `docs/constitution.md` |
-| active 宪法的条款或款新增、修改或删除 | 本次变化中新增一条 `type: decision` 的 Memory，以 `amends` 指向每个受影响的 ID（含已删除的 ID），正文含适用范围、理由、来源与影响四节 |
-| active 宪法改回 draft 或被删除 | 拒绝 |
+| 品味从 draft 变为 active | 本次变化中新增一条 `type: decision` 的 Memory，以 `amends` 指向 `docs/constitution.md` |
+| active 品味的条款或款新增、修改或删除 | 本次变化中新增一条 `type: decision` 的 Memory，以 `amends` 指向每个受影响的 ID（含已删除的 ID），正文含适用范围、理由、来源与影响四节 |
+| active 品味改回 draft 或被删除 | 拒绝 |
 | 已裁决 Design 的候选、Goals、Limits 或 Cases 改变 | 拒绝；DECISION 的理由只能追加一节带日期与来源的更正 |
 | DECISION 的 `Selected:` 首次写入 | 按 `design decide` 的规则校验全部候选与 Limits |
 | 基线已裁决的 Design 改选候选或清空 `Selected:` | 拒绝；候选在单文件与目录形式之间调整时，指向同一候选的新入口不算改选 |
@@ -226,7 +226,7 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 }
 ```
 
-`codeDeclarations` 为空表示没有代码直接声明实现这个 Use Case。示例中的代码声明指向 Feature README，在 Feature 的 `trace show` 中列出。`trace gaps --json` 列出缺少实现或测试关联的 Spec。`trace check` 只做关系检查。`review render` 生成审阅材料。这些命令都不运行测试。
+`codeDeclarations` 为空表示没有代码直接声明实现这个 Use Case。示例中的代码声明指向 Feature README，在 Feature 的 `trace show` 中列出。`trace gaps --json` 列出缺少实现或测试关联的 Spec。`trace check` 只做关系检查。`review` 生成审阅材料。这些命令都不运行测试。
 
 ## 测试与修复核验
 
@@ -260,7 +260,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 ## 读取错误
 
-- 读取过的文件在同一次命令内被按大小写改名时，命令结束时返回 `PreimageChanged`，`details` 为 `source-observation`。
+- 读取过的文件在同一次命令内被按大小写改名时，命令结束时返回 `FileChangedSinceRead`，`details` 为 `source-observation`。
 - 非普通文件在读取或扫描时返回 `InvalidFile`，在核验阶段返回 `UnsafePath`。symlink 与越出仓库的路径在任何阶段都返回 `UnsafePath`。
 - macOS 低于 11 时返回 `UnsupportedHost`。
 - 固定版本的 TypeScript 原生编译器不可用时，相关解析返回 `TypeScriptUnavailable`。编译器作用域违反同步生命周期约束时返回 `TypeScriptScopeViolation`。
@@ -297,7 +297,7 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 ## 原生测试 adapter
 
-`concord test collect [<file>...]` 显式运行配置的 adapter，保存可丢弃的原生清单观察。`test list/show` 只读展示 `current`、`complete` 与 `gaps`；`check` 与 `trace` 不运行收集、不依据观察改变关系结论。
+`concord test discover [<file>...]` 显式运行配置的 adapter，保存可丢弃的原生清单观察。`test list/show` 只读展示 `current`、`complete` 与 `gaps`；`check` 与 `trace` 不运行收集、不依据观察改变关系结论。
 
 `concord test run <case-id>` 重新收集并绑定当前原生集合；`--require-native` 要求精确原生选择。范围不足时可以在源码标记块添加 `@native <native-id>`；它不参与 v1 关联身份。无法精确绑定时执行范围为文件级 command；显式要求 native 时具名失败。
 

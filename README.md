@@ -38,7 +38,7 @@ Concord moves review to the spec. The spec is Markdown in the repository. Code a
 | Bugs are declared fixed without evidence | A defect becomes an Issue; the regression test fails on the defect commit and passes on the fix, and `issue close --fixed` verifies both and records the result | Anyone can replay the fix verification |
 | Direct edits bypass the process | CI runs `concord check --since <base>` on every change, checking status transitions, fix verifications, constitution amendments, and Design decisions | People and agents edit files directly, and the gate decides whether a change is legal |
 | Development logs leak into the spec | Process goes to Memory and open questions go to Issues; `docs/` keeps only current declarations | The spec always describes what the system must do now |
-| Ideas are not settled, or settled but not scheduled | Roadmap keeps a direction in Feature form until `roadmap adopt` moves it into `docs/feature/`; Research keeps dated external facts with sources | Unsettled directions are never mistaken for current requirements |
+| Ideas are not settled, or settled but not scheduled | Roadmap keeps a direction in Feature form until `roadmap start` moves it into `docs/feature/`; Research keeps dated external facts with sources | Unsettled directions are never mistaken for current requirements |
 
 ## Every file in a Concord repository
 
@@ -68,7 +68,7 @@ A file's location and its single top-level heading give it identity, kind, and n
 
 | File | What it is | Who reads it, and when |
 | --- | --- | --- |
-| `docs/roadmap/<r>/` | A direction not yet adopted, written like a Feature; code and tests do not point at it | When discussing what to build next; `roadmap adopt` moves it into `docs/feature/` |
+| `docs/roadmap/<r>/` | A direction not yet adopted, written like a Feature; code and tests do not point at it | When discussing what to build next; `roadmap start` moves it into `docs/feature/` |
 | `docs/design/<d>/` | One comparison of approaches: README states the question, GOALS and LIMITS the targets and constraints, CASES the scenarios, `plans/<candidate>/` each complete candidate, DECISION the choice and reason | Only when revisiting that decision; current rules live in the spec |
 | `docs/research/<r>/` | External facts with observation dates and sources | When a decision needs outside evidence |
 
@@ -77,7 +77,7 @@ A file's location and its single top-level heading give it identity, kind, and n
 | File | What it is | Who reads it, and when |
 | --- | --- | --- |
 | `docs/issues/<i>.md` | A defect, request, or observation; frontmatter holds status and relations, and a fixed closure records its verification | When picking up a problem; `issue close` writes the closure |
-| `memory/<m>.md` | Reusable knowledge as a decision, insight, or note; each constitution amendment has a decision | Before related work, found with `concord memory recall` |
+| `memory/<m>.md` | Reusable knowledge as a decision, insight, or note; each constitution amendment has a decision | Before related work, found with `concord memory search` |
 
 **Setup, source, and derived data**
 
@@ -201,7 +201,7 @@ concord --skill test
 concord --skill memory
 ```
 
-Use `concord <command> --help` for exact arguments, `--json` for structured results, and `--root /path/to/project` to target another worktree. Agents edit specs, Issues, and Memory directly; commands such as `issue close --fixed`, `design decide`, and `roadmap adopt` run the steps those changes require.
+Use `concord <command> --help` for exact arguments, `--json` for structured results, and `--root /path/to/project` to target another worktree. Agents edit specs, Issues, and Memory directly; commands such as `issue close --fixed`, `design decide`, and `roadmap start` run the steps those changes require.
 
 ## Go further
 

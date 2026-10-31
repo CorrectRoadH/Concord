@@ -24,7 +24,7 @@ deprecated:
 
 一项产品能力的 Spec，位于 `docs/feature/<id>/`，由 README、Use Case、cli 或 library 页和 architecture 页组成。
 
-README 告诉第一次读的人能做什么、怎么开始；字段、错误码与边界写在其它页面（[C-017](constitution.md#c-017)）。
+README 告诉第一次读的人能做什么、怎么开始；字段、错误码与边界写在其它页面（[读得懂胜过写得全](constitution.md#c-017)）。
 
 ## Use Case {#use-case}
 
@@ -38,9 +38,19 @@ README 告诉第一次读的人能做什么、怎么开始；字段、错误码�
 
 尚未采用的产品方向，按 Feature 的体裁书写；采用后移入 `docs/feature/`，实现与测试不指向它。
 
-## 宪法 {#constitution}
+## 品味 {#constitution}
 
-跨 Feature 长期有效的项目规则。每款有稳定 ID，依据它的句子旁链接该 ID，每次修订对应一条 Decision Memory。
+项目判断“什么是好的”的共同标准：一句话写清它偏好什么，说明它解决的问题，并给出好的样子与坏的样子。规则写不到的地方按品味选择，审阅时按品味判断好坏。
+
+品味与底线写在同一个文件里，每个条目有稳定 ID，依据它的句子旁链接该 ID，每次修改附一条记下理由的 Decision Memory（[总则](constitution.md#general-amend)）。
+
+## 底线 {#floor}
+
+不得违反的硬约束。每款是一项“必须”或“不得”，违反即阻止交付。
+
+## 条目 {#entry}
+
+品味文件中带 ID 的一条品味或一条底线。依据它的句子旁链接它的 ID。
 
 ## owner {#owner}
 

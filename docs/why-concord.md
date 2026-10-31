@@ -2,7 +2,7 @@
 
 Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致。
 
-本页说明 Concord 面向的问题、每个问题对应的机制，以及这些机制刻意不承担的责任。文档的分组与字段见[文档模型](document-model.md)，具体行为 Spec 见[架构](architecture.md)，跨功能规则见[宪法](constitution.md)。
+本页说明 Concord 面向的问题、每个问题对应的机制，以及这些机制刻意不承担的责任。文档的分组与字段见[文档模型](document-model.md)，具体行为 Spec 见[架构](architecture.md)，跨功能规则见[品味](constitution.md)。
 
 ## 问题
 
@@ -37,7 +37,7 @@ flowchart LR
   K[Memory] -->|supports| C
 ```
 
-文档按回答的问题分为六组：Spec（Feature 与 Engineering）、提案（Roadmap）、项目规则（宪法、术语与写作政策）、决策记录（Design 与 Research）、工作项（Issue）与知识（Memory）。
+文档按回答的问题分为六组：Spec（Feature 与 Engineering）、提案（Roadmap）、项目规则（品味、术语与写作政策）、决策记录（Design 与 Research）、工作项（Issue）与知识（Memory）。
 
 ### Spec 先于实现
 
@@ -63,7 +63,7 @@ architecture 页写实体归属、数据流、不变量和失败阶段。功能�
 
 ### Roadmap 与 Engineering
 
-Roadmap 和 Feature 使用同一种体裁，区别只在于是否已采用为当前 Spec。方向进入 Roadmap 有两种原因：设计还不完整，或者已经设计好但暂不安排实现。测试和实现不指向 Roadmap。准备实现时，`roadmap adopt` 把整个目录移入 `docs/feature/` 并改写指向它的链接；采用经过留在 Git 历史中。
+Roadmap 和 Feature 使用同一种体裁，区别只在于是否已采用为当前 Spec。方向进入 Roadmap 有两种原因：设计还不完整，或者已经设计好但暂不安排实现。测试和实现不指向 Roadmap。准备实现时，`roadmap start` 把整个目录移入 `docs/feature/` 并改写指向它的链接；采用经过留在 Git 历史中。
 
 这样做的好处是，未来方向可以提前用同样的语言写清楚，又不会被误读为已经承诺的行为。采用时不需要改写体裁。
 
@@ -105,9 +105,9 @@ Engineering 描述仓库自己的测试与维护机制，例如自举检查、�
 
 ### 直接编辑，门禁把关
 
-人和 agent 直接编辑全部文件，包括 Issue 的状态与关闭结论、Memory 的状态与关系、宪法正文。命令是执行需要运行的步骤的助手：修复核验、Design 裁决与 Roadmap 采用都要运行检查，命令替你运行并把结果写进文件。
+人和 agent 直接编辑全部文件，包括 Issue 的状态与关闭结论、Memory 的状态与关系、品味正文。命令是执行需要运行的步骤的助手：修复核验、Design 裁决与 Roadmap 采用都要运行检查，命令替你运行并把结果写进文件。
 
-可信度由门禁保证（[事实归属](document-model.md#事实归属)）。`concord check --since <base>` 对照基线检查本次变化：新写入的修复核验会被重放，状态转换必须合法，修改 active 宪法必须同时记录一条修订决策。CI 对每个变化运行它。
+可信度由门禁保证（[事实归属](document-model.md#事实归属)）。`concord check --since <base>` 对照基线检查本次变化：新写入的修复核验会被重放，状态转换必须合法，修改 active 品味必须同时记录一条修订决策。CI 对每个变化运行它。
 
 ### 写入可恢复
 
@@ -117,13 +117,13 @@ Concord 自己的写入（命令与 Web 工作台的保存）核对目标路径�
 
 ## 一次完整的变更
 
-1. 读取现状：`concord list feature`、`show <feature>`、`memory recall <query>`、`list --open`。
+1. 读取现状：`concord list feature`、`show <feature>`、`memory search <query>`、`list --open`。
 2. 方向未定时写 Design，比较候选后 `design decide`，把采用的规则写进 Spec。
 3. 写或修改 Feature 与 Use Case，声明行为与验收。
 4. 实现代码并加 `@concord-implements`，测试加 `@use-case`，每条验收至少一个测试。
 5. `concord check` 检查关系、生命周期与写作政策，`trace gaps` 的缺口都有打开的 Issue。
 6. 修复缺陷时先提交失败的回归测试，再提交修复，`issue close --fixed` 核验。
-7. `review render` 或 `concord view` 生成审阅材料，reviewer 从 Spec 的变化出发核对代码与测试；CI 运行 `check --since <base>`。
+7. `review` 或 `concord view` 生成审阅材料，reviewer 从 Spec 的变化出发核对代码与测试；CI 运行 `check --since <base>`。
 
 ## 不承担的责任
 

@@ -1,4 +1,4 @@
-# 渐进式项目初始化与宪法治理架构
+# 渐进式项目初始化与品味治理架构
 
 运行时只接受当前静态 TS 配置，避免并存多个授权模型（[决策依据](../../design/ts-only-runtime/DECISION.md)）。
 
@@ -27,10 +27,10 @@
 
 ## 初始化规划
 
-init 的配置路径与发现范围取自最终计划配置快照；新建目录只能是计划文件的必要祖先。发布与恢复检查 canonical 路径、symlink 与完整前像集合。预览采用乐观快照，并遵守未完成 journal 的障碍；确认后才取得独占所有权并重验全部前像，确认期间变化的创建或保留文件返回 `PreimageChanged`。
+init 的配置路径与发现范围取自最终计划配置快照；新建目录只能是计划文件的必要祖先。发布与恢复检查 canonical 路径、symlink 与完整前像集合。预览采用乐观快照，并遵守未完成 journal 的障碍；确认后才取得独占所有权并重验全部前像，确认期间变化的创建或保留文件返回 `FileChangedSinceRead`。
 
-## 宪法
+## 品味
 
-条款与款 ID 从 Markdown 语法树的标题与根有序列表项取得。引用扫描复用共享的链接提取与路径规范化，不另建索引。adopt 与 amend 把宪法与 Decision Memory 写入同一个 journal 后逐文件替换，`recover` 按前后像完成或回退，遇到未知编辑拒绝。
+条款与款 ID 从 Markdown 语法树的标题与根有序列表项取得。引用扫描复用共享的链接提取与路径规范化，不另建索引。adopt 与 amend 把品味与 Decision Memory 写入同一个 journal 后逐文件替换，`recover` 按前后像完成或回退，遇到未知编辑拒绝。
 
-`check --since <base>` 从基线提交与当前工作树分别取得宪法的 `status` 与条款、款的原文，按 ID 比较得出改变的条款与款，再在本次变化新增或修改的 Memory 中查找 `type: decision` 且以 `amends` 指向它们的记录。按条款检索修订时从全部 Memory 的 `amends` 关系派生，不另存修订索引。
+`check --since <base>` 从基线提交与当前工作树分别取得品味的 `status` 与条款、款的原文，按 ID 比较得出改变的条款与款，再在本次变化新增或修改的 Memory 中查找 `type: decision` 且以 `amends` 指向它们的记录。按条款检索修订时从全部 Memory 的 `amends` 关系派生，不另存修订索引。

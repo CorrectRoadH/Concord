@@ -8,7 +8,7 @@
 
 1. 作者按[步骤语法](#步骤语法)在主流程的根有序列表项第一段末尾写 `{#id}`，或运行 `concord use-case format <use-case>` 为已含 ID 的列表补齐缺失 ID。为未标记列表建立步骤时，先运行 `concord use-case steps <use-case>` 查看列表，再使用 `--seed --list <ordinal>` 显式选择一个列表。 {#declare-steps}
 2. 测试写 `@use-case <path>#<id>`，实现写 `@concord-implements <path>#<id>`。`concord check` 校验步骤位置、ID 命名空间与引用目标；已有标题 anchor 和整个 Use Case 的关联继续有效。 {#link-declarations}
-3. `concord use-case steps <use-case>`、`trace show` 与 `review render` 按步骤列出测试与代码声明，另列整个 Use Case 和非步骤 anchor 的关联。没有关联的步骤单独列出；`trace gaps` 提示含未标记项的根有序列表。 {#inspect-associations}
+3. `concord use-case steps <use-case>`、`trace show` 与 `review` 按步骤列出测试与代码声明，另列整个 Use Case 和非步骤 anchor 的关联。没有关联的步骤单独列出；`trace gaps` 提示含未标记项的根有序列表。 {#inspect-associations}
 4. 步骤改名使用 `concord use-case rename-step <use-case> <old-id> <new-id>`，在一个可恢复的变更集中改写正文、源码标记与 Markdown 链接。`--dry-run` 预览同一规划与校验；Issue 与 Memory 关系中的引用须先由作者修改。 {#rename-step}
 
 ## 步骤语法

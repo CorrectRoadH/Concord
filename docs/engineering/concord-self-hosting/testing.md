@@ -1,6 +1,6 @@
 # 测试执行与浏览器验收
 
-本页遵守 [C-002](../../constitution.md#c-002)、[C-021](../../constitution.md#c-021)、[C-005](../../constitution.md#c-005) 与 [C-006](../../constitution.md#c-006)，规定测试如何执行；测试应当怎样写见[测试架构](test-architecture.md)。
+本页遵守 [独立、本地、可安装](../../constitution.md#c-002)、[只声称证明过的](../../constitution.md#c-021)、[维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005) 与 [用产品自身管理和验收开发](../../constitution.md#c-006)，规定测试如何执行；测试应当怎样写见[测试架构](test-architecture.md)。
 
 ## 执行入口
 

@@ -21,7 +21,7 @@ flowchart LR
   Shell[任意终端] --> Panel
   Panel -->|hello、subscribe workspace| Server[工作区服务]
   Server -->|代次| Model[展示模型]
-  Panel -->|read path + expectedDigest| Server
+  Panel -->|read path + ifUnchanged| Server
   Model --> Render[终端渲染]
   Panel -->|o：http open| Server
   Server -->|地址| Browser[浏览器深链接]
@@ -29,7 +29,7 @@ flowchart LR
 
 1. 启动：按[启动与裁决](../local-data-engine/architecture.md#启动与裁决)连接或启动服务，订阅 `workspace`。先渲染服务的当前代次；服务尚无代次时显示构建中。
 2. 更新：每个新代次替换展示模型。选中项按条目路径保持；路径消失时选中所属条目，没有所属条目时选中列表首项。滚动位置按条目保留。
-3. 正文：打开条目时发送 `read {path, expectedDigest}`，期望摘要取自当前展示代次。实际摘要相同才与该代次的关系一起显示；不同时保留已匹配的旧正文或显示正在更新，等待下一个代次后重读，不把新正文拼进旧关系。结果按摘要缓存在进程内。
+3. 正文：打开条目时发送 `read {path, ifUnchanged}`，期望摘要取自当前展示代次。实际摘要相同才与该代次的关系一起显示；不同时保留已匹配的旧正文或显示正在更新，等待下一个代次后重读，不把新正文拼进旧关系。结果按摘要缓存在进程内。
 4. Web：`o` 发送 `http {open, host: 127.0.0.1, port: 4317}`，以返回的地址加条目深链接调用系统浏览器；没有可用浏览器时只显示地址。
 
 ## 渲染

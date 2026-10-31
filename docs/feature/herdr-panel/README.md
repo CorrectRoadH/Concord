@@ -22,11 +22,11 @@ Concord 提供一个 Herdr 插件，在终端 pane 中打开只读的 Spec 面�
 - [阅读 Use Case、测试与概念](use-case/read-spec-detail.md)
 - [在 Web 工作台继续](use-case/continue-in-web.md)
 
-## Constitution
+## 依据的品味与底线
 
-- [C-019](../../constitution.md#c-019)
-- [C-002](../../constitution.md#c-002)
-- [C-023](../../constitution.md#c-023)
+- [一件事只写一次，其余推导](../../constitution.md#c-019)
+- [独立、本地、可安装](../../constitution.md#c-002)
+- [快到每次都愿意跑](../../constitution.md#c-023)
 
 ## 性能预算
 

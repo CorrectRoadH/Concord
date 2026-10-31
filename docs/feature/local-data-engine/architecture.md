@@ -4,7 +4,7 @@
 
 ## 原生边界
 
-Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [C-005](../../constitution.md#c-005-3)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放，复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。关系缓存使用参数化 SQL。现有子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据（[决策依据](../../design/hawdb-data-engine/DECISION.md)）。
+Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005-3)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放，复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。关系缓存使用参数化 SQL。现有子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据（[决策依据](../../design/hawdb-data-engine/DECISION.md)）。
 
 桥接识别 typed `HawDBError::BranchBusy` 与固定版本的旧目录锁争用，该分类贯穿 schema 与事务准入；事务获取失败保留具名错误，真正的 schema 形状错误为 `HawdbIncompatible`。
 
@@ -12,7 +12,7 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 持久库位于 Git-private `cache.hawdb`，各类持久缓存以命名空间隔离。持久句柄只有一个所有者（[缓存与原生边界的约束](#缓存与原生边界的约束)）：该 worktree 的[工作区服务](#工作区服务)运行时由它长期持有；没有服务时由当前命令的最外层来源快照按需打开，嵌套调用只复用，快照结束时释放。
 
-持久库只在命令等待的路径之外创建与批量填充：工作区服务启动时、[异步诊断投影](use-case/query-asynchronous-projections.md)的后台刷新进程，或显式的 `cache rebuild`。显式启动外部进程并保存观察的命令 `test collect`、`test run` 与 `code analyze` 也可以创建持久库。其它命令在没有服务时只打开已经存在的持久库，不存在时使用本进程的内存缓存，不创建持久库。创建与首次填充需要数百次同步落盘，放在命令路径上会让一次只读命令被磁盘日志提交阻塞十余秒。只读句柄需要写入时，关闭后以写模式重开并重新竞争所有权。原生事务不跨调用逃逸。发布租约的持有者不持有持久句柄，存在独占提交时数据库先于租约释放。
+持久库只在命令等待的路径之外创建与批量填充：工作区服务启动时、[异步诊断投影](use-case/query-asynchronous-projections.md)的后台刷新进程，或显式的 `cache rebuild`。显式启动外部进程并保存观察的命令 `test discover`、`test run` 与 `code analyze` 也可以创建持久库。其它命令在没有服务时只打开已经存在的持久库，不存在时使用本进程的内存缓存，不创建持久库。创建与首次填充需要数百次同步落盘，放在命令路径上会让一次只读命令被磁盘日志提交阻塞十余秒。只读句柄需要写入时，关闭后以写模式重开并重新竞争所有权。原生事务不跨调用逃逸。发布租约的持有者不持有持久句柄，存在独占提交时数据库先于租约释放。
 
 持久句柄因协调锁被占用、或发现运行中的工作区服务而不打开时，可由当前来源完整重建的解析缓存（文档、配置、代码、测试标记与 Git 基线）改用本进程的内存缓存，命令照常完成，正确性仍由当前来源核验保证。缓存诊断保留 `HawdbBusy` 原因。远端反馈快照与诊断投影不是解析缓存：服务运行时经由服务读取，没有服务而库被占用时如实报告不可用，不把空内存实例当作已读取的快照，不自动联网。损坏、预算、路径安全与原生产物失败保留各自的具名失败。`cache status`、`cache clear` 与 `cache rebuild` 如实报告占用。
 
@@ -117,7 +117,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 | `workspace` | 内存中已接受的代次 |
 | `refresh` | 受理即应答，不等待刷新 |
 | `git-status`、`git-diff {path, area}` | 当前 Git 状态与定向 diff |
-| `read {path, expectedDigest?}` | 与 Web `/api/file` 相同的定向严格读取的原始字节与信封，另附实际摘要 |
+| `read {path, ifUnchanged?}` | 与 Web `/api/file` 相同的定向严格读取的原始字节与信封，另附实际摘要 |
 | `query {name, input}` | 白名单只读查询的结果或具名错误，见 CLI 查询 |
 | `http {open \| close, host, port, lease?}` | 监听地址与租约 |
 | `cache-clear` | 按[清理](#清理)执行后应答 |
@@ -127,7 +127,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 
 ### CLI 查询
 
-可经由服务的命令是固定白名单：各类 `list` 与 `show`、`trace check`、`check`、`docs check` 与 `memory index`。每项在计算进程中以一个新的乐观 Repository 快照执行与本进程相同的领域函数，返回前按该命令原有规则核验文件、缺失路径、目录集合、配置、路径安全、publication.revision 与恢复状态；服务只提供热的解析缓存，不提供结果。`trace show`、`trace gaps` 与 `review render` 的历史投影读取保留[异步诊断投影](use-case/query-asynchronous-projections.md)的语义，只是由服务读取投影。
+可经由服务的命令是固定白名单：各类 `list` 与 `show`、`trace check`、`check`、`docs check` 与 `list memory`。每项在计算进程中以一个新的乐观 Repository 快照执行与本进程相同的领域函数，返回前按该命令原有规则核验文件、缺失路径、目录集合、配置、路径安全、publication.revision 与恢复状态；服务只提供热的解析缓存，不提供结果。`trace show`、`trace gaps` 与 `review` 的历史投影读取保留[异步诊断投影](use-case/query-asynchronous-projections.md)的语义，只是由服务读取投影。
 
 CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`--dry-run` 不连接服务。查询在应答前断开时，CLI 以相同输入在本进程重新计算；服务已返回的领域错误原样输出，不重算。写命令、交互命令、`view`、`lsp` 与外部 runner 不经由服务。
 
@@ -202,7 +202,7 @@ type QueryScanMessage =
 2. 代码复核无法取得稳定结果时（复核读取失败、第三次读取与第二次不同或第三次读取失败），`scanCode` 返回内部标记 `relationsUnknown`，`unknown` 为 `['code']`。稳定扫描得到的空结果不是未知。
 3. 其余 findings 交给 `requireValidTrace`，非空时扫描返回 `ok: false`、`code: 'TraceInvalid'`。
 
-`complete = consistent && trace.complete`，`unknownRelations = !complete || unknown.length > 0`。测试文件在读取间消失的 `SourceChanged`、trace show 的 selector 文档消失的 `DocumentNotFound`，以及 details 为 `source-observation` 的 `PreimageChanged`，属于由漂移引起、无法形成结构的异常。
+`complete = consistent && trace.complete`，`unknownRelations = !complete || unknown.length > 0`。测试文件在读取间消失的 `SourceChanged`、trace show 的 selector 文档消失的 `DocumentNotFound`，以及 details 为 `source-observation` 的 `FileChangedSinceRead`，属于由漂移引起、无法形成结构的异常。
 
 ### 投影记录
 
@@ -261,11 +261,11 @@ type QueryCacheEnvelope = {
 
 持久值不含 owner 正文与远端 Issue 正文。trace show 服务时经 storage 的 `readRepositoryFileSync` 读取 `subject.path`，执行[路径安全](../local-sdlc/architecture.md#路径安全)、普通文件与 32 MiB（`MAX_BYTES`）检查，再按路径严格解码 owner。
 
-当前摘要等于记录的 `subject.digest` 时填回 `body`；摘要不同或读取失败时省略 `body`，路径列入 `bodyChanged` 或附错误码列入 `bodyUnavailable`。review render 对每个宪法片段做同样处理。前台只读取这些单个文件，不加载完整 Repository。`traceGaps`、`traceShow` 与 `renderReview` 各自拆出接收已分拣 trace、返回结构化值的函数，当前来源路径与历史投影共用。
+当前摘要等于记录的 `subject.digest` 时填回 `body`；摘要不同或读取失败时省略 `body`，路径列入 `bodyChanged` 或附错误码列入 `bodyUnavailable`。review 对每个品味片段做同样处理。前台只读取这些单个文件，不加载完整 Repository。`traceGaps`、`traceShow` 与 `renderReview` 各自拆出接收已分拣 trace、返回结构化值的函数，当前来源路径与历史投影共用。
 
 ## 缓存与原生边界的约束
 
-缓存只加速，原生引擎只承担桥接（[C-019](../../constitution.md#c-019)、[C-005](../../constitution.md#c-005)）。
+缓存只加速，原生引擎只承担桥接（[一件事只写一次，其余推导](../../constitution.md#c-019)、[维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)）。
 
 1. HawDB 只保存可重建投影与可丢弃缓存，短期解析使用同一引擎的内存实例。文件 owner、证据与发布日志不进入缓存。
 2. 桥接、引擎、Rust toolchain 与依赖精确固定。持久句柄由明确的唯一所有者管理，来源快照不拥有跨请求句柄；客户端的逻辑会话、事务、快照与清理的生命周期分别声明，内存句柄按进程管理。缓存不参与来源发布或证据裁决。发行包携带目标平台产物，消费者不需要 Rust、全局 HawDB 或数据库服务。锁协议与上游 revision 绑定，升级必须重新验证互斥与清理。

@@ -6,7 +6,7 @@
 
 服务不做身份认证；任何能连接该端口的人都可以读取和修改仓库、修改配置并执行测试，拥有服务进程的代码执行权限。明文 HTTP 只用于可信网络；远程使用安全通道。服务不自动信任反向代理的转发头。
 
-Feature、Engineering、Roadmap、Design、Research 是侧栏入口；Use Case 必须归属于 Feature，在 Feature 内创建和浏览。「文档」列出 `docs/` 下没有分类 owner 的项目文档和参考模板，例如架构与宪法。active 宪法的正文不在工作台里保存。正文用富文本编辑；Issue 与 Memory 的状态、关系与关闭结论不经正文保存写入，见下文的保存边界。未知 Markdown 可用源码视图，初始加载不会自动保存归一化内容。
+Feature、Engineering、Roadmap、Design、Research 是侧栏入口；Use Case 必须归属于 Feature，在 Feature 内创建和浏览。「文档」列出 `docs/` 下没有分类 owner 的项目文档和参考模板，例如架构与品味。active 品味的正文不在工作台里保存。正文用富文本编辑；Issue 与 Memory 的状态、关系与关闭结论不经正文保存写入，见下文的保存边界。未知 Markdown 可用源码视图，初始加载不会自动保存归一化内容。
 
 Markdown 的 `p5` 代码块在阅读与编辑页面自动加载运行，像动画图片一样直接展示，无需编译或播放操作。内联块可写 `p.setup`、`p.draw` 或默认导出实例函数。外部入口用 `src="./demo/main.ts"`，可用 `css="./demo/style.css"`；两者均相对 Markdown。
 
@@ -70,7 +70,7 @@ export default function (p: P5) {
 
 每个图块自动启动，在 opaque-origin 沙箱内执行完整固定版本 p5 核心；没有父 DOM、仓库 API、外网或设备权限。音频播放需要图块内用户手势，麦克风不可用。视口外或页面隐藏时暂停绘制，修改输入或离开文档时销毁图块；一般错误显示在图块中，同步死循环不保证可强制终止。运行不保存文档，编辑源码仍走正常自动保存。不要把第三方库全部描述为已兼容，也不要把动画运行当作产品验收。
 
-AI 继续优先使用已有 CLI 命令与 `--json`。新增结构化操作可由 `concord action --input <file|->` 调用，与 Web 共用校验。先读取当前摘要，再提交正文、源码或配置更新；`PreimageChanged` 表示文件被外部修改，重新读取、合并意图后重试，不能强行覆盖。
+AI 继续优先使用已有 CLI 命令与 `--json`。新增结构化操作可由 `concord action --input <file|->` 调用，与 Web 共用校验。先读取当前摘要，再提交正文、源码或配置更新；`FileChangedSinceRead` 表示文件被外部修改，重新读取、合并意图后重试，不能强行覆盖。
 
 Git 面板显示已暂存（HEAD 对 index）、未暂存（index 对工作区）与未跟踪文件。它与编辑器内未保存的差异不是同一比较。查看 Git 不隐含暂存、提交、回滚或 push 授权。
 
@@ -82,4 +82,4 @@ PR 只读预览使用 `concord view export --base <actual-base-commit> --head <h
 
 服务空闲时不持租约，CLI 可以正常协作。测试运行持租约至进程清理完成；取消后等任务终态再继续写改。`cleanup-failed` 必须保留现场，不用删锁来掩盖尚未确认退出的进程。
 
-Web 保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界。保存不写入 Issue 与 Memory 的 status、relations 或 verification，不改写已裁决的 `Selected:` 行，也不修改 active 宪法的正文；这些变化直接编辑文件或使用对应命令，并由 `check --since <base>` 检查。损坏的配置或 frontmatter 显示原文诊断。静态 Web 关系不能表述为原生执行结果。
+Web 保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界。保存不写入 Issue 与 Memory 的 status、relations 或 verification，不改写已裁决的 `Selected:` 行，也不修改 active 品味的正文；这些变化直接编辑文件或使用对应命令，并由 `check --since <base>` 检查。损坏的配置或 frontmatter 显示原文诊断。静态 Web 关系不能表述为原生执行结果。

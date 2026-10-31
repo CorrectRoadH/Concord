@@ -7,7 +7,7 @@ Concord 管理的文档按回答的问题分组。身份、类别、所属关系
 | Spec | Feature：README（能力）、`use-case/`（用户路径与验收）、`architecture.md`（实现）、`cli.md` 或 `library.md`（示例） | `docs/feature/<f>/` | 无 |
 | Spec | Engineering：本仓库自身维护机制，结构同 Feature | `docs/engineering/<t>/` | 无 |
 | 提案 | Roadmap：尚未采用的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
-| 项目规则 | 宪法、概念、写作政策 | `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 宪法只有 `status` |
+| 项目规则 | 品味、概念、写作政策 | `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 品味只有 `status` |
 | 决策记录 | Design：候选比较与正式选择 | `docs/design/<d>/` | 无；候选来自 `plans/`，选择来自 DECISION 的 `Selected:` 行 |
 | 决策记录 | Research：带来源与观察时间的研究输入 | `docs/research/<r>/` | 无；观察日期与来源在正文 |
 | 工作项 | Issue：缺陷、请求与观察 | `docs/issues/<i>.md` | `status`、`relations`、`source`、`closure` |
@@ -25,7 +25,7 @@ Issue 的 `status` 为 open 或 closed。`relations` 中参与生命周期裁决
 
 ## Memory
 
-Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Design 的结论；缺陷由 Issue 跟踪。`status` 为 captured、current 或 superseded：captured 表示尚未确认，note 只能是 captured，superseded 带 `supersededBy` 或写明原因与来源的 `supersession`。`relations` 的 `supports` 指向它支持的 Spec，`amends` 指向宪法采用时的整份宪法，或修订影响的条款与款。
+Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Design 的结论；缺陷由 Issue 跟踪。`status` 为 captured、current 或 superseded：captured 表示尚未确认，note 只能是 captured，superseded 带 `supersededBy` 或写明原因与来源的 `supersession`。`relations` 的 `supports` 指向它支持的 Spec，`amends` 指向品味采用时的整份品味，或修订影响的条款与款。
 
 ## 格式边界
 
@@ -37,7 +37,7 @@ Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Desi
 
 ## 事实归属
 
-每项事实只由自己的来源维护（[C-019](constitution.md#c-019)）。
+每项事实只由自己的来源维护（[一件事只写一次，其余推导](constitution.md#c-019)）。
 
 1. 每项事实只有一个 owner。Spec 正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作政策由同目录的 `concord-writing.json` 拥有；测试定义与正向关系由测试源码拥有。Issue 拥有工作项的状态、关系与关闭结论，Memory 拥有知识的正文、类型、状态与关系；生命周期的文本历史在 Git。
 2. 目录确定术语与政策的局部作用域，docs 根拥有全局定义。术语的定义与解释写在同一 `concepts.md`；其它 Markdown 链接到定义，不重复维护。
@@ -46,10 +46,10 @@ Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Desi
 
 ## 页面职责
 
-Feature 的页面按读者的问题分工（[C-017](constitution.md#c-017)）。
+Feature 的页面按读者的问题分工（[读得懂胜过写得全](constitution.md#c-017)）。
 
 1. 行为页（Feature README、Use Case、cli、library）用使用者的语言声明输入、可观察结果、错误与约束。公开的输入输出结构、协议、机器可读字段、具名错误码、退出码，以及使用者可观察的持久化与恢复保证，属于行为页。行为页不写内部模块、内部数据结构、调用链和引擎选型。
-2. 规范性陈述应能被测试断言。命令页给出完整调用、机器可读输出、退出码、具名错误与最小示例；API 页给出签名、返回值与失败。人读输出示例用于理解，可以规范化动态值，不保证逐字稳定（[C-015](constitution.md#c-015-3)）。实现之前的示例标为预期输出；交付验收核对实际运行，运行记录进入 Memory，示例不作为运行证据。同一输出或错误定义只在一个行为页维护，其它页面链接引用。
+2. 规范性陈述应能被测试断言。命令页给出完整调用、机器可读输出、退出码、具名错误与最小示例；API 页给出签名、返回值与失败。人读输出示例用于理解，可以规范化动态值，不保证逐字稳定（[机器可读输出是公开 Spec](constitution.md#c-015-3)）。实现之前的示例标为预期输出；交付验收核对实际运行，运行记录进入 Memory，示例不作为运行证据。同一输出或错误定义只在一个行为页维护，其它页面链接引用。
 3. architecture 与 lifecycle 页声明该 Feature 的内部实现：实体归属、数据流、不变量、失败阶段与资源生命周期。它们随实现修改，不重新定义行为。跨 Feature 的系统边界写在项目 `docs/architecture.md`。只改内部实现的修改不改行为页。
 4. Roadmap 与 Feature 同体裁，表示尚未采用的方向，其示例均为预期输出。实现与测试不指向 Roadmap。
 5. Feature 的页面分三类，各回答一个问题。README 与 cli、library 页是产品功能，像使用教程一样写谁用它、能做什么、怎么做；architecture 页是技术架构；Use Case 把功能连到用户旅程。README 给出用户价值、一个照着就能运行的上手示例和 Use Case 导航；输出字段、具名错误与退出码写在 cli 或 library 页，README 只链接它们。
@@ -58,11 +58,11 @@ Feature 的页面按读者的问题分工（[C-017](constitution.md#c-017)）。
 
 ## 只写当前声明
 
-声明式页面只写现在（[C-020](constitution.md#c-020)）。
+声明式页面只写现在（[写现在，不写过去](constitution.md#c-020)）。
 
 1. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。Design 的历史方案记录按裁决时的陈述理解，不因本款被解释为当前要求。
 2. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交收据和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。Research 的研究事实、Design 的候选与裁决，以及记录类 owner 由工具维护的生命周期元数据，由各自 owner 保留，不借此记录实施日志、审阅经过或交接。本规则不授权删除或改写既有证据、来源及生命周期历史；Design 记录与 Spec 的分工见 [Design 记录](#design-记录) 至 [Design 记录](#design-记录)。
-3. 声明式 owner（Feature、Use Case、Engineering、宪法、`concepts.md` 与写作政策）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git、Memory 或记录类 owner（Research、Design、Roadmap、Issue、Memory）保存，需要时派生。
+3. 声明式 owner（Feature、Use Case、Engineering、品味、`concepts.md` 与写作政策）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git、Memory 或记录类 owner（Research、Design、Roadmap、Issue、Memory）保存，需要时派生。
 
 ## Design 记录
 
@@ -75,7 +75,7 @@ Design 是裁决时的方案记录，现行规则由 Spec 维护。
 
 ## 术语与语言
 
-一个词一个意思（[C-018](constitution.md#c-018)）。
+一个词一个意思（[一个词一个意思](constitution.md#c-018)）。
 
 1. Spec 页面用到的领域名词由生效范围内的 `concepts.md` 定义。一个概念只用它的 term 一种写法，不在中英两种写法之间切换；新名词先进入 `concepts.md`，再进入 Spec。
 2. Spec 页面使用项目文档的主语言。命令、字段、错误码和代码标识写在行内代码中，不当作正文名词翻译或改写。

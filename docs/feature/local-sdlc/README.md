@@ -33,17 +33,17 @@
 
    打开 `docs/feature/cart/use-case/add-item.md`，按模板写下谁要做什么、每一步运行什么、看到什么结果。
 
-2. 让测试指向这个 Use Case。`test annotate` 生成可以直接粘贴的标记：
+2. 让测试指向这个 Use Case。`test marker` 生成可以直接粘贴的标记：
 
    ```sh
-   concord test annotate --contract docs/feature/cart/use-case/add-item.md
+   concord test marker --contract docs/feature/cart/use-case/add-item.md
    ```
 
    ```text
    // @use-case docs/feature/cart/use-case/add-item.md
    ```
 
-   把它放在 `test/cart.test.js` 顶部。实现文件用 `concord code annotate` 生成的 `@concord-implements` 标记指向 Feature。
+   把它放在 `test/cart.test.js` 顶部。实现文件用 `concord code marker` 生成的 `@concord-implements` 标记指向 Feature。
 
 3. 运行检查：
 
@@ -201,15 +201,15 @@ export default function (p: P5) {
 - [性能预算](performance.md)：高频命令的 p50 预算。
 - [实现](architecture.md)
 
-## Constitution
+## 依据的品味与底线
 
-- [C-019](../../constitution.md#c-019)
-- [C-003](../../constitution.md#c-003)
-- [C-021](../../constitution.md#c-021)
-- [C-005](../../constitution.md#c-005)
-- [C-006](../../constitution.md#c-006)
-- [C-007](../../constitution.md#c-007)
-- [C-020](../../constitution.md#c-020)
-- [C-023](../../constitution.md#c-023)
-- [C-002](../../constitution.md#c-002)
-- [C-017](../../constitution.md#c-017)
+- [一件事只写一次，其余推导](../../constitution.md#c-019)
+- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
+- [只声称证明过的](../../constitution.md#c-021)
+- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
+- [用产品自身管理和验收开发](../../constitution.md#c-006)
+- [尊重协作与外部操作授权](../../constitution.md#c-007)
+- [写现在，不写过去](../../constitution.md#c-020)
+- [快到每次都愿意跑](../../constitution.md#c-023)
+- [独立、本地、可安装](../../constitution.md#c-002)
+- [读得懂胜过写得全](../../constitution.md#c-017)

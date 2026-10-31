@@ -32,11 +32,11 @@ macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安
 
 消费者以 `--ignore-scripts` 安装，不需要 Rust 或 HawDB 服务。仅在本机构建的 Nix 产物只用于本地验证。
 
-## Constitution
+## 依据的品味与底线
 
-- [C-002](../../constitution.md#c-002)
-- [C-003](../../constitution.md#c-003)
-- [C-021](../../constitution.md#c-021)
-- [C-005](../../constitution.md#c-005)
-- [C-006](../../constitution.md#c-006)
-- [C-007](../../constitution.md#c-007)
+- [独立、本地、可安装](../../constitution.md#c-002)
+- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
+- [只声称证明过的](../../constitution.md#c-021)
+- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
+- [用产品自身管理和验收开发](../../constitution.md#c-006)
+- [尊重协作与外部操作授权](../../constitution.md#c-007)

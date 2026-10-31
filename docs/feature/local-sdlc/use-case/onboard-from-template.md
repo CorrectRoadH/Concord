@@ -43,7 +43,7 @@
 
    创建的内容：
 
-   - 宪法：`docs/constitution.md`，`status` 为 draft。
+   - 品味：`docs/constitution.md`，`status` 为 draft。
    - 配置：给出 `--test-root`、`--source-root` 或 `--docs-only` 时写入 `concord.config.ts`，只含这些项。
    - 入口与说明：`docs/concord.md`、`docs/README.md`、`docs/architecture.md`。
    - 术语与写作政策：随包空 catalog `docs/concepts.md`、预设的 `docs/concord-writing.json`。

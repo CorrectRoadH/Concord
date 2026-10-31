@@ -68,11 +68,10 @@ flowchart LR
 
 - [命令](cli.md)：`concord taste` 的输出与错误码。
 - [文件格式](format.md)：条目的写法与 ID 规则。
-- [术语](concepts.md)
 
-## Constitution
+## 依据的品味与底线
 
-- [C-017](../../constitution.md#c-017)
-- [C-018](../../constitution.md#c-018)
-- [C-022](../../constitution.md#c-022)
-- [C-024](../../constitution.md#c-024)
+- [读得懂胜过写得全](../../constitution.md#c-017)
+- [一个词一个意思](../../constitution.md#c-018)
+- [文件是界面，命令只是助手](../../constitution.md#c-022)
+- [规则少而硬，机制留给实现](../../constitution.md#c-024)

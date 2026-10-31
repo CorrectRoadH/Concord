@@ -6,7 +6,7 @@
 
 ## 完整路径
 
-1. 项目使用固定布局与默认发现范围，测试或实现不在默认位置时在配置中覆盖 `testRoots` 与 `sourceRoots`；需要运行测试时配置 `runner`。宪法文件存在即启用，其 `status` 决定是否采用。
+1. 项目使用固定布局与默认发现范围，测试或实现不在默认位置时在配置中覆盖 `testRoots` 与 `sourceRoots`；需要运行测试时配置 `runner`。品味文件存在即启用，其 `status` 决定是否采用。
 2. Feature / Use Case 定义目标与可观察验收；实现和真实测试用源码标记引用 canonical Spec。
 3. 查询、追踪与 Web 展示从权威源码派生关系，不因项目没有某个产品的通道、包名或 host 而失败，也不隐式运行测试。
 4. 通过项目的 runner 运行测试，结果只按 runner 退出码解释，不声称逐 case 覆盖或正式可靠性。
@@ -28,6 +28,6 @@
 
 - [统一项目治理](../README.md)
 - [治理边界](../architecture.md)
-- [宪法](../../../constitution.md)
+- [品味](../../../constitution.md)
 - [决策依据](../../../design/neutral-project-governance/DECISION.md)
 - [核心模型决策依据](../../../design/sdd-core-model/DECISION.md)

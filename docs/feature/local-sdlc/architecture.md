@@ -51,7 +51,7 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 `use-case format` 沿用正文编辑的前像与发布协议。`rename-step` 在唯一 journal 与发布租约下使用专用 `step-rename` 授权范围，不串联多次 `source.set` 或文档发布。该范围绑定项目、worktree、冻结配置、Use Case 路径、old-id、new-id、完整文件前后像、摘要与 mode，以及规划时观察的目录成员。
 
-规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[C-003](../../constitution.md#c-003)）。
+规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[写入遵守范围和恢复 Spec](../../constitution.md#c-003)）。
 
 ## 代码声明引用
 
@@ -65,14 +65,14 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ## 路径安全
 
-仓库路径解析分两个入口。写入、建目录与删除、原子替换、journal、发布 preflight 与 apply、恢复、`discoverRoot`、`init` 及构造期的 privateDir 与 journal 检查使用完整检查：从文件系统根逐级核对 Darwin 字节拼写并 `lstat` 拒绝 symlink，不读取任何复用信息。只读快照内的文件读取与目录扫描使用读取检查，写入前像同样经读取检查取得（[C-003](../../constitution.md#c-003-1)）。
+仓库路径解析分两个入口。写入、建目录与删除、原子替换、journal、发布 preflight 与 apply、恢复、`discoverRoot`、`init` 及构造期的 privateDir 与 journal 检查使用完整检查：从文件系统根逐级核对 Darwin 字节拼写并 `lstat` 拒绝 symlink，不读取任何复用信息。只读快照内的文件读取与目录扫描使用读取检查，写入前像同样经读取检查取得（[写入遵守范围和恢复 Spec](../../constitution.md#c-003-1)）。
 
 - 根锚点：仓库对象构造时对根做一次完整检查，记录从 `/` 到根每一级的 bigint `dev`/`ino`；快照深度 0→1 时打开根目录 fd 并与锚点比对，回到 0 时关闭。
 - 读取检查在读字节前完成：逐级 `lstat` 核对锚点 inode，不枚举仓库根之上的目录；仓库内组件先做拼写核对，再 `lstat` 拒绝 symlink。文件以不跟随 symlink 的方式打开：Darwin 用 `O_NOFOLLOW_ANY`（要求 macOS 11 及以上，否则构造以 `UnsupportedHost` 失败），Linux 用 `O_NOFOLLOW` 并以 `/proc/self/fd/<fd>` 比对期望路径，不可用时拒绝读取。打开后 `fstat` 须为普通文件；大小或 `dev`/`ino` 与最后一次 `lstat` 不一致时按来源变化报 `SourceChanged`，在投影刷新中是可重试漂移，不返回部分值。
 - 快照内目录列表：拼写核对复用本次快照的目录列表，并记录实际查过的 `dir/segment`；每次目录成员扫描都新鲜枚举，不复用拼写列表作为成员集合。列表不跨快照、不跨进程、不按时间失效，嵌套快照共享外层结构，任何自身写入开始前清空（[性能约束](../../engineering/concord-self-hosting/performance.md#性能约束)）。
-- 结束核验在当前快照核验、投影漂移收集和发布前观察校验三处执行，使用只供本次核验的新列表：重新核对锚点与根 fd，只复核查过的条目仍以原字节存在且无碰撞别名，再比对文件内容与目录观察。拼写不一致、别名、锚点或 `fstat` 不一致归为来源变化：当前查询与发布报 `PreimageChanged`（`source-observation`），投影把条目路径并入漂移，锚点变化记为 `.`。只有 symlink、`ELOOP` 与非普通文件报 `UnsafePath`。发布先核验后清空列表，写者自身提交不被判为变化。
+- 结束核验在当前快照核验、投影漂移收集和发布前观察校验三处执行，使用只供本次核验的新列表：重新核对锚点与根 fd，只复核查过的条目仍以原字节存在且无碰撞别名，再比对文件内容与目录观察。拼写不一致、别名、锚点或 `fstat` 不一致归为来源变化：当前查询与发布报 `FileChangedSinceRead`（`source-observation`），投影把条目路径并入漂移，锚点变化记为 `.`。只有 symlink、`ELOOP` 与非普通文件报 `UnsafePath`。发布先核验后清空列表，写者自身提交不被判为变化。
 
-验收在真实临时目录中进行。快照内祖先或仓库内目录被换成 symlink 或另一真实目录时，下一次读取在读字节前报 `UnsafePath`；叶子在检查与打开之间被换成 symlink 时同样报 `UnsafePath`。只被读取过的目录新增无关文件时，当前查询成功，被扫描过的目录新增成员时报 `PreimageChanged`；写者提交后的核验不报 `PreimageChanged`；Darwin 上发布新建目录成功。仓库根的父目录很宽时，构造之后对仓库根之上的 `readdirSync` 为 0，拼写检查每目录至多枚举一次，构造阶段次数单独计数。
+验收在真实临时目录中进行。快照内祖先或仓库内目录被换成 symlink 或另一真实目录时，下一次读取在读字节前报 `UnsafePath`；叶子在检查与打开之间被换成 symlink 时同样报 `UnsafePath`。只被读取过的目录新增无关文件时，当前查询成功，被扫描过的目录新增成员时报 `FileChangedSinceRead`；写者提交后的核验不报 `FileChangedSinceRead`；Darwin 上发布新建目录成功。仓库根的父目录很宽时，构造之后对仓库根之上的 `readdirSync` 为 0，拼写检查每目录至多枚举一次，构造阶段次数单独计数。
 
 指向仓库外的硬链接与覆盖仓库内目录的挂载不被拒绝；网络文件系统与 overlayfs 上不稳定的 inode 会导致拒绝（[决策依据](../../design/path-safety-cost/DECISION.md)）。
 
@@ -125,7 +125,7 @@ Issue 打开时没有 `closure`，关闭时写入；fixed 的 `closure` 带[修�
 
 ### Memory
 
-Memory 从 captured 开始。decision 与 insight 经 activate 成为 current；note 保持 captured。被新记录替代时成为 superseded，并写 `supersededBy` 或 `supersession`。宪法每次 adopt 与 amend 写一条 `type: decision`、current 的 Memory，以 `amends` 指向受影响的条款与款，见[演进宪法](../project-onboarding/use-case/evolve-constitution.md#amend)。
+Memory 从 captured 开始。decision 与 insight 经 activate 成为 current；note 保持 captured。被新记录替代时成为 superseded，并写 `supersededBy` 或 `supersession`。品味每次 adopt 与 amend 写一条 `type: decision`、current 的 Memory，以 `amends` 指向受影响的条款与款，见[演进品味](../project-onboarding/use-case/evolve-constitution.md#amend)。
 
 ### 退役与恢复
 
@@ -141,19 +141,19 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 
 | 操作 | 内容依赖 | 协调 | 失败范围 |
 | --- | --- | --- | --- |
-| memory/issue list、index、recall、search | 相应来源内全部候选 owner | 乐观来源快照 | 范围内坏记录、来源缺失、配置或事务障碍 |
+| list memory、list issue、memory search、issue search | 相应来源内全部候选 owner | 乐观来源快照 | 范围内坏记录、来源缺失、配置或事务障碍 |
 | show 的 canonical path | 指定 owner | 乐观来源快照 | 目标或其必要依赖 |
 | show 的短选择器 | 相应类别的全部候选及唯一匹配 owner | 乐观来源快照 | 集合不完整或歧义 |
 | new | 目标路径与同类短选择器集合 | 独占 publication | 身份冲突、必要依赖或写入资源障碍 |
-| memory activate、supersede、link；issue link、unlink、reopen | 指定 owner、当前摘要与关系目标 | 独占 publication | 目标或关系目标缺陷、写入资源障碍 |
-| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源快照 | 指定依赖缺陷，不加载全局 Trace |
+| memory confirm、supersede、link；issue link、unlink、reopen | 指定 owner、当前摘要与关系目标 | 独占 publication | 目标或关系目标缺陷、写入资源障碍 |
+| code/test marker | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源快照 | 指定依赖缺陷，不加载全局 Trace |
 | trace、review | 展示的关系图 | 乐观来源快照 | 输出 findings；需要完整图的结论拒绝不完整输入 |
 | check | 全仓库事实与关联；`--since` 另读基线差异 | 乐观来源快照 | 各 owner 解析错误累计为 findings，`ok: false` |
-| issue close、roadmap adopt、design decide | 核验与保证关系完整所需的集合 | 独占 publication；fixed 另持 runner 租约 | 保留严格身份、修复核验和逆向关系要求 |
+| issue close、roadmap start、design decide | 核验与保证关系完整所需的集合 | 独占 publication；fixed 另持 runner 租约 | 保留严格身份、修复核验和逆向关系要求 |
 
 集合查询先按类别的固定目录限定路径，再解码。Feature 与 Use Case 共用 `docs/feature/` 时，同根候选中的坏记录必须报错。Memory 精确路径不需要其它 Memory 内容有效。短选择器读取全部候选，避免隐藏未解码记录中的同名文件。来源扫描使用安全目录读取。
 
-精确引用读取目标和沿路径最近的 README owner 边界。类别由路径决定；Issue、Memory 与宪法的 frontmatter 按各自 Schema 严格解码，Spec 页面没有 frontmatter。缺少唯一一级标题的 owner 不能当作普通页面。最近 owner 的类别不支持附页时拒绝，不向更高祖先回退。精确目标验证类别目录与放置。Use Case 的所属 Feature 由路径推导，该 Feature 的 README 必须存在。`@issue` 目标必须为 Issue。路径安全、目标类型和 anchor 校验保留。
+精确引用读取目标和沿路径最近的 README owner 边界。类别由路径决定；Issue、Memory 与品味的 frontmatter 按各自 Schema 严格解码，Spec 页面没有 frontmatter。缺少唯一一级标题的 owner 不能当作普通页面。最近 owner 的类别不支持附页时拒绝，不向更高祖先回退。精确目标验证类别目录与放置。Use Case 的所属 Feature 由路径推导，该 Feature 的 README 必须存在。`@issue` 目标必须为 Issue。路径安全、目标类型和 anchor 校验保留。
 
 ## 完整性诊断
 

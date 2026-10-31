@@ -5,7 +5,7 @@
 Concord 从测试根里的 Concord 标记读取唯一正向关系，不解析宿主测试语法。标记存在即表示该测试关联存在。先让目标 Feature 或 Use Case 存在，再生成注释：
 
 ```sh
-concord test annotate --contract docs/feature/login/use-case/expired-token.md
+concord test marker --contract docs/feature/login/use-case/expired-token.md
 ```
 
 把输出放进测试文件；`//`、`#` 和 `--` 都是标记。回归测试在同一标记块加 `@issue docs/issues/<id>.md`，指向它守护的 Issue，可重复。没有 `@name` 时运行覆盖整个文件，不声称选中了某个原生用例。示意：
@@ -36,7 +36,7 @@ concord trace show docs/feature/login/use-case/expired-token.md --fresh
 
 `rename-step` 在一个 journal 中发布步骤标记、真实源码标记参数与 Markdown 链接的精确改写，代码示例不改。Memory 或 Issue 的 frontmatter 存在旧引用时返回 `ManagedReferenceBlocked`。中断后使用 `concord recover`；未知编辑保留现场。结果列出受影响测试关联：带 `@name` 的 ID 保持，未命名的 ID 随目标改变。
 
-`steps`、`trace show` 与 `review render` 区分步骤、整个 Use Case 与非步骤 anchor；未关联步骤和 `trace gaps` 的未标记列表提示不产生 finding，也不证明测试执行或覆盖率。没有分析器时，依赖交集只展示 `not-observed` 与 `NoAnalyzer`。
+`steps`、`trace show` 与 `review` 区分步骤、整个 Use Case 与非步骤 anchor；未关联步骤和 `trace gaps` 的未标记列表提示不产生 finding，也不证明测试执行或覆盖率。没有分析器时，依赖交集只展示 `not-observed` 与 `NoAnalyzer`。
 
 测试关联没有 `@concord-verifies` 标记。`@concord-implements` 声明实现归属，必须紧随 `@concord-file`、`@concord-code` 或 `@concord-begin`；不能用它代替测试关联。测试文件也可以显式声明实现归属，但只有测试根中的 `@feature` / `@use-case` 才建立测试关系。目标路径使用 owner 的实际文件名，中文名称与内部 ID 可以不同。
 
@@ -48,7 +48,7 @@ concord test list --json
 concord test show <derived-reference> --json
 ```
 
-`test run` 执行项目 runner 或匹配的 adapter，返回本次结果。`test collect` 也会显式启动 adapter 和框架收集进程：
+`test run` 执行项目 runner 或匹配的 adapter，返回本次结果。`test discover` 也会显式启动 adapter 和框架收集进程：
 
 ```sh
 concord test run <derived-reference> --json
@@ -80,7 +80,7 @@ testAdapters: [{
 内置名称为 `node-test`、`vitest`、`pytest`、`go`、`cargo`。固定框架版本必须与实际运行环境匹配；JVM 由外部 provider 提供。外部 adapter 用非空 `argv` 代替 `builtin`，并在 `implementationFiles` 列出执行脚本及其传递实现文件；`node adapter.ts` 不能只摘要 Node。`inputRoots` 应覆盖 fixture、导入支持文件和构建配置；锁文件由 `lockFiles` 声明。只把 `envNames` 中的环境变量传给进程，结果不记录环境值或原始计划参数。
 
 ```sh
-concord test collect test/python/test_login.py --json
+concord test discover test/python/test_login.py --json
 concord test list --json
 concord test run <derived-reference> --require-native --json
 ```

@@ -68,7 +68,7 @@ frontmatter 可选，存在时位于文件开头，严格解码，只接受 impo
 | `ConceptInUse` | 写入会删除或改名仍被其它 catalog 导入的 ID；消息列出引用者 |
 | `ConceptReferencesUnknown` | 另一 catalog 格式错误使反向引用无法确定时，写入删除目标中原本有效的定义 |
 
-正文可以链接到定义，例如 `[反馈](../payments/concepts.md#feedback)`。docs 下（排除 docs/_template）Markdown 正文中相对解析后指向已发现 catalog 的行内链接是术语链接，筛选与解码规则与[宪法链接](../project-onboarding/use-case/evolve-constitution.md#link-clause)相同。fragment 不是该 catalog 的概念 ID 时，`concord check` 报告 relation 类 `AnchorNotFound`，带路径与行号；不带 fragment 的链接指向整页，不产生 finding。链接文字等于 term 时照常计为使用，链接本身不计。正文链接不阻止删除定义；断开的链接由检查报告。
+正文可以链接到定义，例如 `[反馈](../payments/concepts.md#feedback)`。docs 下（排除 docs/_template）Markdown 正文中相对解析后指向已发现 catalog 的行内链接是术语链接，筛选与解码规则与[品味链接](../project-onboarding/use-case/evolve-constitution.md#link-clause)相同。fragment 不是该 catalog 的概念 ID 时，`concord check` 报告 relation 类 `AnchorNotFound`，带路径与行号；不带 fragment 的链接指向整页，不产生 finding。链接文字等于 term 时照常计为使用，链接本身不计。正文链接不阻止删除定义；断开的链接由检查报告。
 
 catalog 可以直接编辑，`concord check` 报告上表的结构、导入与歧义错误；`concepts set` 在写入前执行同一校验。位于 Feature 或 Engineering 包内的 concepts.md 是该目录的概念来源，不是该包的支持页面。
 
@@ -108,7 +108,7 @@ roots 可省略：全局默认为 docs，局部默认为所在目录。全局 ro
 
 来源可以直接编辑，也可以通过 writing 与 concepts 工具及 Web 编辑；工具与 Web 使用完整 owner 摘要保护修改，直接编辑的结果由 `concord check` 校验。公开 action 为 `writing.index/show/set/check` 与 `concepts.index/show/set`，path 默认全局。show 区分 missing/valid/invalid，返回原文与 digest，安全读取的无效原文可以显式修复；危险路径和读取失败不会伪装为空态。
 
-工具的正文输入可来自临时文件或 stdin。set 是整 owner CAS，新建时 digest 为 null，返回实际提交的来源、digest 与收据；同一 digest 的第二个写者得到 `PreimageChanged`。concepts set 按提交的字节保存 Markdown，不重新序列化。
+工具的正文输入可来自临时文件或 stdin。set 是整 owner CAS，新建时 digest 为 null，返回实际提交的来源、digest 与收据；同一 digest 的第二个写者得到 `FileChangedSinceRead`。concepts set 按提交的字节保存 Markdown，不重新序列化。
 
 concepts set 先严格解析目标，再检查其 imports 与其它 catalog 对它的导入。各无效 catalog 可逐项修复，修复后已知的有效导入者必须仍能解析；无关的格式错误或悬空 catalog 不阻止增量修复，但 check 与 index 不把它们报告为正常。设置 catalog 不需要解析写作政策。
 
@@ -136,15 +136,15 @@ concord writing show --path docs/feature/payments/concord-writing.json --json
 
 # 仅在目标缺失时使用 null；已有来源必须使用 show 返回的 digest。
 concord concepts set --path docs/feature/payments/concepts.md \
-  --body /tmp/reviewed-concepts.md --expected-digest null
+  --body /tmp/reviewed-concepts.md --if-unchanged null
 concord writing set --path docs/feature/payments/concord-writing.json \
-  --body /tmp/reviewed-policy.json --expected-digest null
+  --body /tmp/reviewed-policy.json --if-unchanged null
 concord docs check --rules docs/feature/payments/concord-writing.json --json
 ```
 
 `--body -` 接受 stdin；根命令的 `--dry-run` 验证同一规划但不保存来源。经工具删除条目通过带最新摘要的整份 catalog 更新完成，不能移除仍被其它 catalog 导入的定义；直接编辑删除这类定义时，`check` 报告 `DanglingConceptImport`。
 
-`concepts index` 返回全部 catalog、概念与诊断，每个概念为 `{ reference, path, scope, concept: { id, term, definition, deprecated } }`，没有弃用名时 `deprecated` 为空数组。`concepts show` 返回 `state`、`source`、`digest`、解析后的 `catalog`（`title`、`imports`、`deprecated`、`concepts`），以及当前目录的有效概念与诊断。结构化 action `concepts.set` 的输入为 `{ path, source, expectedDigest }`。
+`concepts index` 返回全部 catalog、概念与诊断，每个概念为 `{ reference, path, scope, concept: { id, term, definition, deprecated } }`，没有弃用名时 `deprecated` 为空数组。`concepts show` 返回 `state`、`source`、`digest`、解析后的 `catalog`（`title`、`imports`、`deprecated`、`concepts`），以及当前目录的有效概念与诊断。结构化 action `concepts.set` 的输入为 `{ path, source, ifUnchanged }`。
 
 init 在全局政策缺失时创建随包通用预设，并保留既有政策原文。初始化和恢复只允许精确的随包预设、全局路径及空前像；自定义政策直接编辑或通过 writing.set 保存。
 

@@ -4,11 +4,11 @@
 
 Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致（[为什么需要 Concord](why-concord.md)）。它是可安装到任意 Git 仓库的本地 CLI。
 
-文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter（[决策依据](design/sdd-core-model/DECISION.md)）。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check --since <base>` 检查变化是否合法。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[宪法](constitution.md)，Web 界面设计见根目录 `DESIGN.md`。
+文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter（[决策依据](design/sdd-core-model/DECISION.md)）。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check --since <base>` 检查变化是否合法。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](constitution.md)，Web 界面设计见根目录 `DESIGN.md`。
 
 ## 代码结构
 
-代码由 Effect 服务组成（[C-005](constitution.md#c-005-1)）。领域逻辑只依赖端口，文件、进程、时间、网络与缓存等副作用由基础服务提供；每种进程用一组 Layer 组合出自己被允许的能力。固定版本 Effect 已等价提供的能力直接使用，不重复实现；库未提供的保证（例如进程组清理确认、字节预算）由 Concord 的适配层补齐。
+代码由 Effect 服务组成（[维护代码采用严格 TypeScript 与 Effect](constitution.md#c-005-1)）。领域逻辑只依赖端口，文件、进程、时间、网络与缓存等副作用由基础服务提供；每种进程用一组 Layer 组合出自己被允许的能力。固定版本 Effect 已等价提供的能力直接使用，不重复实现；库未提供的保证（例如进程组清理确认、字节预算）由 Concord 的适配层补齐。
 
 ### 分层
 
@@ -161,13 +161,13 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 
 `concord.config.ts` 可以不存在；存在时运行时只读取这一个静态 TS 配置文件，不执行模块。配置项与默认值见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#配置项)，journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)。配置快照拥有原文前像、路径与摘要，写入与恢复使用同一协议。
 
-Memory 固定位于 worktree 根的 `memory/`。`docs/constitution.md` 存在即启用，`status` 为 draft 或 active；docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `constitution show` 派生。宪法不充当测试 Spec 或自动合规证据。根 `DESIGN.md` 可选。
+Memory 固定位于 worktree 根的 `memory/`。`docs/constitution.md` 存在即启用，`status` 为 draft 或 active；docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `constitution show` 派生。品味不充当测试 Spec 或自动合规证据。根 `DESIGN.md` 可选。
 
 ## 领域与 CLI
 
 `concord --root <repo>` 指定消费者，省略时取 cwd 所在 Git worktree 的顶层。命令面、调用、输出、退出码与错误由 [local SDLC 的 CLI 页](feature/local-sdlc/cli.md)拥有；命令是执行需要运行的步骤的助手，例如修复核验、Design 裁决与 Roadmap 采用。`--skill [topic]` 在任意 cwd 读取随包 Agent 指引，不加载 host、不写文件。
 
-只有 `test run`、`test verify` 与 `issue close --fixed` 启动仓库命令；`check` 不执行测试，`check --since` 在重放修复核验时执行。`review render` 生成本地审阅材料，不写 GitHub。`docs work` 见[并行切分文档工作](feature/neutral-project-governance/use-case/coordinate-docs-work.md)。
+只有 `test run`、`test verify` 与 `issue close --fixed` 启动仓库命令；`check` 不执行测试，`check --since` 在重放修复核验时执行。`review` 生成本地审阅材料，不写 GitHub。`docs work` 见[并行切分文档工作](feature/neutral-project-governance/use-case/coordinate-docs-work.md)。
 
 ## 存储 Spec
 
@@ -190,7 +190,7 @@ CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描�
 ```mermaid
 flowchart TD
   Check[CLI check / trace check / --fresh] --> Scan[公共扫描与关系校验]
-  Query[CLI trace show / gaps / review render] --> QueryCache[HawDB query_cache 诊断投影]
+  Query[CLI trace show / gaps / review] --> QueryCache[HawDB query_cache 诊断投影]
   Query -. 请求刷新 .-> QueryRefresh[后台刷新进程，每查询键一个 owner]
   QueryRefresh -->|内部 query-scan-worker| Scan
   QueryRefresh -->|一致结果，或无一致代次时标注漂移的结果| QueryCache
@@ -232,7 +232,7 @@ Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 work
 
 publication owner 通过临时目录 fsync 与 rename 公布，正常释放与死亡恢复只删除准确 token，不按年龄抢占，不递归删除租约目录。发布协调不持有持久缓存句柄；写入、发布与恢复不依赖工作区服务。不同协调协议的程序不得同时访问同一 worktree。
 
-trace show、trace gaps 与 review render 默认读取 HawDB 中已完成的诊断投影，并请求后台刷新。输出明确标记历史性、构建时间及刷新错误；首次无缓存返回 QueryPending。--fresh 等待当前来源结果。完整 Spec 见[异步诊断投影](feature/local-data-engine/use-case/query-asynchronous-projections.md)。check、trace check、当前来源检索及证据裁决不使用历史投影授权成功。
+trace show、trace gaps 与 review 默认读取 HawDB 中已完成的诊断投影，并请求后台刷新。输出明确标记历史性、构建时间及刷新错误；首次无缓存返回 QueryPending。--fresh 等待当前来源结果。完整 Spec 见[异步诊断投影](feature/local-data-engine/use-case/query-asynchronous-projections.md)。check、trace check、当前来源检索及证据裁决不使用历史投影授权成功。
 
 `concord recover` 先回收已死 token，再在独占保护下选择唯一的普通或 Trace journal。多 journal 冲突先于 runner 具名拒绝并保留现场。恢复入口获锁后重查类型和现场，只在内容符合 preimage 或 planned digest 时恢复。
 
@@ -296,7 +296,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 引用由 canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用。文件移动、改名、作用域和顺序变化可能使引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list 或 locate。派生算法见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)。
 
-`code annotate` 与对应 action 不接收或返回 ID，在乐观快照中验证指定 canonical reference、归属链、类型和 anchor。`code list` 与 `code locate` 提供声明查询。Web 以符号、位置和显式关联呈现实现。无效 begin 仍参与边界检查，普通扫描不写源码。
+`code marker` 与对应 action 不接收或返回 ID，在乐观快照中验证指定 canonical reference、归属链、类型和 anchor。`code list` 与 `code at` 提供声明查询。Web 以符号、位置和显式关联呈现实现。无效 begin 仍参与边界检查，普通扫描不写源码。
 
 代码错误阻断 code、check、trace、review 与 doctor。test list、show、run 与 verify 不包含代码投影，保留全部文档与测试关系校验；修复核验的输入不包含 code 引用。
 
@@ -328,11 +328,11 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 ## 当前格式
 
-只有当前格式，没有历史包袱（[C-020](constitution.md#c-020)）。
+只有当前格式，没有历史包袱（[写现在，不写过去](constitution.md#c-020)）。
 
 1. 配置、owner、journal、证据与缓存只有当前格式。运行时只按当前 Schema 严格解码，其它输入按无效输入返回具名解码错误；不识别旧版本，不提供迁移命令、兼容读取或双轨模型。无法解码的 journal 与锁保留现场并阻断写入，不被普通恢复删除。
 2. 格式变化时，Concord 自身仓库与接入项目把文件直接改写为当前格式，缓存与可重建投影直接丢弃重建。缺少当前绑定的证据必须重新取证，不补字段或重算摘要伪装为当前证明。
-3. 宪法、Spec 与指南只描述当前格式与行为，不描述格式如何变化，也不说明如何从旧格式过渡。
+3. 品味、Spec 与指南只描述当前格式与行为，不描述格式如何变化，也不说明如何从旧格式过渡。
 4. 本条约束格式边界，不改变领域数据的含义。
 
 ## 操作依赖与发布协调

@@ -20,7 +20,7 @@ Engineering 详情同样提供实现列表、添加关联与源码跳转，汇�
 
 ## 文档阅读与编辑
 
-支持页面从所属 Spec 的文件树进入。「文档」汇总 `docs/` 下尚未归属 Feature、Roadmap、Design、Research、Engineering 或 Issue 的 Markdown，包括架构、宪法、概念、索引、指南和 `_template` 参考模板；已有分类入口的 Spec 不在这里重复。点击条目只切换右侧预览。文档页面中的 Markdown 均可编辑，不按文件名、frontmatter 或解析结果设置只读限制；保存规则见[自动保存](#自动保存)。宪法在文档页使用同一原文编辑器。阅读或结构检查不是合规证据。
+支持页面从所属 Spec 的文件树进入。「文档」汇总 `docs/` 下尚未归属 Feature、Roadmap、Design、Research、Engineering 或 Issue 的 Markdown，包括架构、品味、概念、索引、指南和 `_template` 参考模板；已有分类入口的 Spec 不在这里重复。点击条目只切换右侧预览。文档页面中的 Markdown 均可编辑，不按文件名、frontmatter 或解析结果设置只读限制；保存规则见[自动保存](#自动保存)。品味在文档页使用同一原文编辑器。阅读或结构检查不是合规证据。
 
 正文使用 MDXEditor，基础交互使用 shadcn/ui。React Router 管理地址与导航，Vite 构建静态资源并随 CLI 包分发。仓库文件始终是事实来源，关系仍从源码和文档推导，不增加 Web 专属注册表。
 
@@ -35,7 +35,7 @@ Markdown 支持行内与独立数学公式、Mermaid 结构图与 p5 交互图�
 
 ## 范围
 
-覆盖 Concord 通用模式的正常数据操作。Issue、Memory、Design 与宪法的生命周期通过对应操作维护；无法解析的文档 frontmatter 可在原文编辑器修复；配置诊断与文档编辑分别处理。
+覆盖 Concord 通用模式的正常数据操作。Issue、Memory、Design 与品味的生命周期通过对应操作维护；无法解析的文档 frontmatter 可在原文编辑器修复；配置诊断与文档编辑分别处理。
 
 
 ## Web 组件组合
@@ -50,7 +50,7 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 
 正文、源码、元数据和项目设置共用 `useAutoSave`：停止输入 800ms 后保存，同一编辑器的请求串行执行；请求期间的新输入留给下一次保存。切换预览、页签、文件或关闭详情抽屉前主动 flush。创建、运行测试和生命周期裁决是显式操作。自动保存写入 Git 工作树，不执行暂存、提交或 push。
 
-保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界（[决策依据](../../design/sdd-core-model/DECISION.md)）；冲突保留草稿并展示差异。通用保存可以写入任何受管文件，包括 Issue 与 Memory 的状态与关系、DECISION 的 `Selected:` 行与宪法正文，与在工作台以外直接编辑相同，变化是否合法由 `check --since <base>` 的门禁判断。修复核验、Design 裁决与宪法[修订](../project-onboarding/use-case/evolve-constitution.md#web-修订)另有表单，执行需要运行的步骤并写入结果。
+保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界（[决策依据](../../design/sdd-core-model/DECISION.md)）；冲突保留草稿并展示差异。通用保存可以写入任何受管文件，包括 Issue 与 Memory 的状态与关系、DECISION 的 `Selected:` 行与品味正文，与在工作台以外直接编辑相同，变化是否合法由 `check --since <base>` 的门禁判断。修复核验、Design 裁决与品味[修订](../project-onboarding/use-case/evolve-constitution.md#web-修订)另有表单，执行需要运行的步骤并写入结果。
 
 ## 性能预算
 
@@ -68,13 +68,13 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 
 `GET /api/workspace` 的 warm p95 另不超过 600ms。就绪请求不含全量扫描；首次构建另报时长与状态，不计入 warm。jobs、file、document.set、action 与 git-status 的阈值为参照实测 p50 加约 20% 余量取整。
 
-## Constitution
+## 依据的品味与底线
 
-- [C-019](../../constitution.md#c-019)
-- [C-002](../../constitution.md#c-002)
-- [C-003](../../constitution.md#c-003)
-- [C-021](../../constitution.md#c-021)
-- [C-005](../../constitution.md#c-005)
-- [C-006](../../constitution.md#c-006)
-- [C-007](../../constitution.md#c-007)
-- [C-023](../../constitution.md#c-023)
+- [一件事只写一次，其余推导](../../constitution.md#c-019)
+- [独立、本地、可安装](../../constitution.md#c-002)
+- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
+- [只声称证明过的](../../constitution.md#c-021)
+- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
+- [用产品自身管理和验收开发](../../constitution.md#c-006)
+- [尊重协作与外部操作授权](../../constitution.md#c-007)
+- [快到每次都愿意跑](../../constitution.md#c-023)

@@ -66,7 +66,7 @@
    }
    ```
 
-   `source`、`metadata`、`body` 与 `digest` 随结果返回；`clauses` 按正文顺序列出，总则的 `id` 为 `general`。`references` 每次出现一项，按 `path`、`line` 排序。指向条款而非款时 `paragraph` 为 `null`，指向总则时 `clause` 为 `general`。`trace` 的 `constitution` 边从页面指向 `docs/constitution.md#<id>`；`review render` 按条款列出引用位置。
+   `source`、`metadata`、`body` 与 `digest` 随结果返回；`clauses` 按正文顺序列出，总则的 `id` 为 `general`。`references` 每次出现一项，按 `path`、`line` 排序。指向条款而非款时 `paragraph` 为 `null`，指向总则时 `clause` 为 `general`。`trace` 的 `constitution` 边从页面指向 `docs/constitution.md#<id>`；`review` 按条款列出引用位置。
 
 5. 修订宪法。 {#amend}
 
@@ -89,7 +89,7 @@
    也可以用助手命令一次写入二者：
 
    ```sh
-   concord constitution amend --body ./constitution.md --reason "..." --impact "..." --source docs/design/<id>/README.md --expected-digest sha256:...
+   concord constitution amend --body ./constitution.md --reason "..." --impact "..." --source docs/design/<id>/README.md --if-unchanged sha256:...
    ```
 
    正文只维护当前规则。助手把理由、来源与影响写入一条新的 Decision Memory，与正文在同一次发布中提交；输出的 `memory` 字段给出它的路径。
@@ -117,7 +117,7 @@
 | `constitution adopt` | draft，正文至少一个带 ID 的条款，理由与影响非空 | 变为 active，写入采用的 Decision Memory；已 active 返回 `ConstitutionAlreadyActive` |
 | `constitution amend` | active，理由与影响非空 | 改写正文，写入修订的 Decision Memory；draft 返回 `ConstitutionNotActive` |
 
-adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 `PreimageChanged`。宪法缺失或状态无效不阻碍 `recover`。结构合法不等于治理通过。
+adopt 与 amend 都要求 `--if-unchanged` 等于当前摘要，否则返回 `FileChangedSinceRead`。宪法缺失或状态无效不阻碍 `recover`。结构合法不等于治理通过。
 
 ## 结果
 

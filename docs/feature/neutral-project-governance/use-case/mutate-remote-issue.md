@@ -7,24 +7,24 @@
 ## 完整路径
 
 1. 项目已有 `transport: 'gh'` 且记录了 `repositoryId` 的 GitHub 连接，运行 Concord 的机器已完成 `gh auth login`。
-2. 运行 `concord issue plan close 12 --connection product-gh --reason completed --json`，得到 receipt 与 `authorize` 目标串，例如 `close:example/product#12@3f9a1c2b7d4e`。
+2. 运行 `concord issue remote preview close 12 --connection product-gh --reason completed --json`。输出 receipt 与 `authorize` 目标串，例如 `close:example/product#12@3f9a1c2b7d4e`。
 3. 维护者把 plan 结果交给有权限的人确认。授权不确定时到此为止。
-4. 取得当次授权后运行 `concord issue execute <receipt-id> --connection product-gh --authorize close:example/product#12@3f9a1c2b7d4e --json`，得到写入后的 Issue。
+4. 取得当次授权后运行 `concord issue remote apply <receipt-id> --connection product-gh --authorize close:example/product#12@3f9a1c2b7d4e --json`，得到写入后的 Issue。
 
 ## 命令
 
 ```text
-concord issue plan create   --connection <id> --title <text> --body <file|-> [--origin-key <key>]
-concord issue plan body-set <number> --connection <id> --body <file|->
-concord issue plan comment-add <number> --connection <id> --body <file|->
-concord issue plan labels-add <number> --connection <id> --label <name>...
-concord issue plan labels-remove <number> --connection <id> --label <name>
-concord issue plan close <number> --connection <id> [--reason completed|not_planned]
-concord issue plan reopen <number> --connection <id>
-concord issue execute <receipt-id> --connection <id> --authorize <target>
+concord issue remote preview create   --connection <id> --title <text> --body <file|-> [--origin-key <key>]
+concord issue remote preview body-set <number> --connection <id> --body <file|->
+concord issue remote preview comment-add <number> --connection <id> --body <file|->
+concord issue remote preview labels-add <number> --connection <id> --label <name>...
+concord issue remote preview labels-remove <number> --connection <id> --label <name>
+concord issue remote preview close <number> --connection <id> [--reason completed|not_planned]
+concord issue remote preview reopen <number> --connection <id>
+concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 ```
 
-只支持 github.com 的 `transport: 'gh'` 连接，凭据只来自 gh 登录态（[C-007](../../../constitution.md#c-007-4)）。远端写入由 `concord issue plan` 与 `concord issue execute` 提供，Web 与 action 不提供；本地 `docs/issues` 不因远端写入改变。
+只支持 github.com 的 `transport: 'gh'` 连接，凭据只来自 gh 登录态（[尊重协作与外部操作授权](../../../constitution.md#c-007-4)）。远端写入由 `concord issue remote preview` 与 `concord issue remote apply` 提供，Web 与 action 不提供；本地 `docs/issues` 不因远端写入改变。
 
 ## plan
 
@@ -36,7 +36,7 @@ concord issue execute <receipt-id> --connection <id> --authorize <target>
 
 ## 授权
 
-`--authorize` 是调用方声明的当次授权，不是凭据，Concord 不保存授权记录，也不证明授权真实存在。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传入，不得因 plan 成功、工具可用或权限宽松而推断授权（[C-007](../../../constitution.md#c-007-2)）。
+`--authorize` 是调用方声明的当次授权，不是凭据，Concord 不保存授权记录，也不证明授权真实存在。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传入，不得因 plan 成功、工具可用或权限宽松而推断授权（[尊重协作与外部操作授权](../../../constitution.md#c-007-2)）。
 
 ## execute
 
@@ -53,8 +53,8 @@ concord issue execute <receipt-id> --connection <id> --authorize <target>
 
 | 输出 | `--json` 字段 |
 | --- | --- |
-| `issue plan` | `operation: "issue-plan"`、`receiptId`、`connection`、`issueOperation`、`target`、`payloadDigest`、`remotePreimageDigest`、`expiresAt`（ISO 8601 UTC）、`authorize` |
-| `issue execute` | `operation: "issue-execute"`、`receiptId`、`issueOperation`、`issue`（`number`、`url`、`state`、`title`、`labels`） |
+| `issue remote preview` | `operation: "issue-plan"`、`receiptId`、`connection`、`issueOperation`、`target`、`payloadDigest`、`remotePreimageDigest`、`expiresAt`（ISO 8601 UTC）、`authorize` |
+| `issue remote apply` | `operation: "issue-execute"`、`receiptId`、`issueOperation`、`issue`（`number`、`url`、`state`、`title`、`labels`） |
 
 失败输出 `{ ok: false, error, message, details? }` 并退出 1。除上文错误码外，API token 连接返回 `IssueRemoteTransportUnsupported`，receipt 不存在或损坏返回 `IssuePlanNotPlanned` 或 `IssuePlanCorrupt`，gh 失败沿用 Feedback 读取的 `Gh*` 错误。
 
@@ -71,5 +71,5 @@ concord issue execute <receipt-id> --connection <id> --authorize <target>
 ## Spec 来源
 
 - [Feedback CLI 接入设计](../../feedback/cli-integration.md)
-- [宪法 C-007](../../../constitution.md#c-007)
+- [品味 C-007](../../../constitution.md#c-007)
 - [决策依据](../../../design/repository-workflows/DECISION.md)

@@ -4,7 +4,7 @@
 
 Concord 拥有路径身份推导、源码标记与测试支持文件映射、稳定 case 身份派生、trace、Issue 与 Memory 的字段与状态转换校验、[修复核验](../local-sdlc/scope.md#证据的范围)，以及 `check --since <base>` 门禁。CLI、Web 与 action 共用同一实现；入口和存储适配可以不同，生命周期与核验不变量只有一个解释。
 
-消费者拥有测试 runner、执行环境、候选产品的构建与安装，以及产品命令、Preview、示例同步、文档站与 PR 编辑格式。Concord 只通过配置的 runner 运行测试，按退出码解释结果，不签发原生 case 覆盖或正式可靠性结论（[决策依据](../../design/sdd-core-model/DECISION.md)）。Concord 的 `review render` 保留 Spec、测试、Issue 与 Memory 的审阅能力。依据：产品工具归消费者、治理归 Concord（[决策依据](../../design/neutral-project-governance/DECISION.md)）。
+消费者拥有测试 runner、执行环境、候选产品的构建与安装，以及产品命令、Preview、示例同步、文档站与 PR 编辑格式。Concord 只通过配置的 runner 运行测试，按退出码解释结果，不签发原生 case 覆盖或正式可靠性结论（[决策依据](../../design/sdd-core-model/DECISION.md)）。Concord 的 `review` 保留 Spec、测试、Issue 与 Memory 的审阅能力。依据：产品工具归消费者、治理归 Concord（[决策依据](../../design/neutral-project-governance/DECISION.md)）。
 
 ## 离线切换
 

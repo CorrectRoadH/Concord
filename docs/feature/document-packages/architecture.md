@@ -24,6 +24,6 @@ Design 外层的 page 操作不穿过 `plans` 边界；页面路径按[路径安
 
 目录观察记录路径、类型、大小与权限；扫描器可以按大小跳过文件，因此未读取文件的大小变化也参与观察。
 
-公共 check 的每次尝试创建新的 LocalRepository，完整执行关系与写作检查后验证同一快照，并在下一次尝试前关闭缓存句柄与快照。只有来源观察产生的 `PreimageChanged` 与 `SourceChanged` 属于可重试漂移，不按异常消息匹配。检查成功或产生 findings 后都验证快照，findings 中已确认的 `SourceChanged` 也触发重试；普通格式错误先验证已观察快照，确有漂移才重试，否则返回原错误。权限、`UnsafePath` 与 `RecoveryRequired` 不被漂移覆盖。
+公共 check 的每次尝试创建新的 LocalRepository，完整执行关系与写作检查后验证同一快照，并在下一次尝试前关闭缓存句柄与快照。只有来源观察产生的 `FileChangedSinceRead` 与 `SourceChanged` 属于可重试漂移，不按异常消息匹配。检查成功或产生 findings 后都验证快照，findings 中已确认的 `SourceChanged` 也触发重试；普通格式错误先验证已观察快照，确有漂移才重试，否则返回原错误。权限、`UnsafePath` 与 `RecoveryRequired` 不被漂移覆盖。
 
 快照核验先比较发布代次，再判断 journal；下一次尝试仍重新检查未完成 journal。新仓库遇到存活发布者的暂态现场时，只使用发布租约获取阶段的既有等待；无法证明有存活合作写者的 `RecoveryRequired` 立即失败。重试不用于写操作、runner、证据签发或 dry-run 写入。

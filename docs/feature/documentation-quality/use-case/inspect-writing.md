@@ -31,4 +31,4 @@
 
 文件、目录成员、类型、大小、权限或发布代次变化均须保持来源核验。已确认的来源漂移包括快照观察冲突与 SourceChanged finding。解析失败时先核验已观察输入，只有确有漂移才重试。未完成恢复现场、安全与权限错误不被跳过。
 
-耗尽后返回 `SourceChanged`、非零退出码及 `complete: false` 错误详情，表示未获得完整的当前输入，不能用于交付通过。写操作的 `PreimageChanged` 不重试。稳定的格式错误继续报告原诊断；历史投影不能替代当前 check。
+耗尽后返回 `SourceChanged`、非零退出码及 `complete: false` 错误详情，表示未获得完整的当前输入，不能用于交付通过。写操作的 `FileChangedSinceRead` 不重试。稳定的格式错误继续报告原诊断；历史投影不能替代当前 check。

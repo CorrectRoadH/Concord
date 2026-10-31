@@ -15,9 +15,9 @@
 1. 生成声明。 {#annotate}
 
    ```sh
-   concord code annotate --scope file --contract docs/feature/cart/README.md
-   concord code annotate --scope node --contract docs/feature/cart/use-case/add-item.md
-   concord code annotate --scope region --contract docs/feature/cart/README.md
+   concord code marker --scope file --contract docs/feature/cart/README.md
+   concord code marker --scope node --contract docs/feature/cart/use-case/add-item.md
+   concord code marker --scope region --contract docs/feature/cart/README.md
    ```
 
    ```text
@@ -74,11 +74,11 @@
 4. 从源码行查 Spec。 {#locate}
 
    ```sh
-   concord --json code locate src/total.js --line 10
+   concord --json code at src/total.js:10
    ```
 
    ```json
-   {"operation":"code-locate","file":"src/total.js","line":10,"codes":[{"id":"code-62419761eb6ed845430c217d274514ad","file":"src/total.js","line":9,"endLine":10,"scope":"region","contracts":["docs/feature/cart/README.md"]}]}
+   {"operation":"code-at","file":"src/total.js","line":10,"codes":[{"id":"code-62419761eb6ed845430c217d274514ad","file":"src/total.js","line":9,"endLine":10,"scope":"region","contracts":["docs/feature/cart/README.md"]}]}
    ```
 
    行号从 1 开始。结果包含所有覆盖这一行的声明。
@@ -89,7 +89,7 @@
    concord --fresh trace show docs/feature/cart/README.md
    ```
 
-   `codeDeclarations` 列出声明，`incoming` 中 `relation` 为 `implements` 的边指向这份 Spec。Feature 的结果包含其 Use Case 的声明。`review render` 分别列出代码与测试。
+   `codeDeclarations` 列出声明，`incoming` 中 `relation` 为 `implements` 的边指向这份 Spec。Feature 的结果包含其 Use Case 的声明。`review` 分别列出代码与测试。
 
 ## 结果
 
@@ -101,7 +101,7 @@
 - region 嵌套、跨越函数边界、截断表达式或为空。
 - 带声明的文件有语法错误。
 
-字符串、模板、正则和 JSX 文本中的标记文本不算声明。`trace show` 与 `review render` 返回所展示关系的 findings 与 `complete`。`complete` 为 false 或 findings 非空时，依赖完整关系的操作拒绝执行。代码声明错误不影响测试执行，也不改变修复核验。
+字符串、模板、正则和 JSX 文本中的标记文本不算声明。`trace show` 与 `review` 返回所展示关系的 findings 与 `complete`。`complete` 为 false 或 findings 非空时，依赖完整关系的操作拒绝执行。代码声明错误不影响测试执行，也不改变修复核验。
 
 全局 `check` 逐个文件保留 owner 的解析错误，把它们累计为 findings，返回 `ok: false` 与 `complete: false`。`documents` 数组本身不说明集合是否完整。把 Issue 关闭为 fixed 和迁移关系时同时检查 `complete` 与 findings。
 
@@ -118,7 +118,7 @@
 
 文件路径不变、前面同类兄弟不变时，空白、行号、函数体和 `@concord-implements` 的修改不改变 node 的引用。同一份内容在新进程或新 clone 中得到相同引用。
 
-引用表示当前位置，不是永久身份。移动、改名、改变作用域或改变同类兄弟的顺序，都可能让引用失效，或者让旧引用指到另一个声明。例如删除前一个 region 的标记后，后一个 region 会接续它的序号。自动化工具每次都要重新 `list` 或 `locate`，核对文件、符号与范围，不能把一次查询成功当作历史连续。引用的派生规则见[代码声明引用](../architecture.md#代码声明引用)。
+引用表示当前位置，不是永久身份。移动、改名、改变作用域或改变同类兄弟的顺序，都可能让引用失效，或者让旧引用指到另一个声明。例如删除前一个 region 的标记后，后一个 region 会接续它的序号。自动化工具每次都要重新 `list` 或 `code at`，核对文件、符号与范围，不能把一次查询成功当作历史连续。引用的派生规则见[代码声明引用](../architecture.md#代码声明引用)。
 
 ## Spec 来源
 

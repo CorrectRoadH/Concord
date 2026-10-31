@@ -28,7 +28,7 @@ concord check
 concord test list
 concord trace check
 concord show local-sdlc
-concord review render local-sdlc
+concord review local-sdlc
 ```
 
 `concord check` 汇总关系、生命周期和写作检查，均不执行 runner。仓库质量门是 `pnpm check`。测试运行与修复核验只按 runner 的退出码解释结果，不是正式 E2E，也不是逐 case 覆盖证明；项目与 Concord 在测试上的分工见[项目测试接入边界](repository-profile.md)。
@@ -37,7 +37,7 @@ concord review render local-sdlc
 
 `sourceRoots` 默认取存在的 `src/`，实现在其它位置时在 `concord.config.ts` 配置，或用 `--source-root` 初始化，选项可重复。运行 `concord --skill code` 查看文件、函数和语句区域声明。
 
-`code annotate` 生成注释，`code locate <path> --line <n>` 查看全部包含范围，`trace show` 反查 Spec。代码声明描述实现关联，不表示完成或测试覆盖。
+`code marker` 生成注释，`code at <path>:<n>` 查看全部包含范围，`trace show` 反查 Spec。代码声明描述实现关联，不表示完成或测试覆盖。
 
 ## 选择文档的分组
 
@@ -45,12 +45,12 @@ concord review render local-sdlc
 
 - Spec：[Feature](feature/README.md) 是已采用的产品 Spec，实现可以尚在追赶；[Engineering](engineering/README.md) 是本仓库的测试与维护机制。
 - 提案：[Roadmap](roadmap/README.md) 是与 Feature 同体裁、尚未采用的方向。
-- 项目规则：[宪法](constitution.md)、术语与写作政策。
+- 项目规则：[品味](constitution.md)、术语与写作政策。
 - 决策记录：[Design](design/README.md) 是目标、约束、自包含候选与裁决理由；[Research](research/README.md) 是决策所需的外部事实与来源。
 - 工作项：[Issue](issues/README.md) 是缺陷、请求与观察。
 - 知识：[Memory](../memory/README.md) 是可复用的知识与不需要 Design 的决策。
 
-`docs/` 只写声明：目标、行为、约束、使用方法与验收条件，产品流程属于 Spec。开发日志、排障经过与实施进度不进入 `docs/`。模板提供写作提示，不代表需求完成或证据。行为页与实现页的分工、关联范围的选择写在宪法 [关联由源码声明拥有](feature/local-sdlc/library.md#关联由源码声明拥有) 与 [页面职责](document-model.md#页面职责)，接入项目统一遵守（[决策依据](design/contract-writing/DECISION.md)）。
+`docs/` 只写声明：目标、行为、约束、使用方法与验收条件，产品流程属于 Spec。开发日志、排障经过与实施进度不进入 `docs/`。模板提供写作提示，不代表需求完成或证据。行为页与实现页的分工、关联范围的选择写在品味 [关联由源码声明拥有](feature/local-sdlc/library.md#关联由源码声明拥有) 与 [页面职责](document-model.md#页面职责)，接入项目统一遵守（[决策依据](design/contract-writing/DECISION.md)）。
 
 现行行为只读 Feature、Use Case、architecture 与 engineering 页。已裁决的 Design 是决策记录：裁决时把仍适用的规则写入这些页面，此后只在这里维护；Design 只在重新审视某项决策时读取（[Design 记录](document-model.md#design-记录)）。
 
@@ -60,11 +60,11 @@ init 建立全部分类目录、文档入口和完整的[模板参考](_template
 
 Feature、Roadmap 与每个 Design 候选必须有 README。`new` 的 `--pages` 从 `library`、`cli`、`architecture`、`use-case` 中选择其余页面，省略时只建 README。Design 外层页面总是创建，Engineering 从 README 开始按主题扩展。之后需要的页面直接创建，并在 README 中链接。
 
-## 项目宪法
+## 项目品味
 
-规划、实施或审阅功能前阅读[宪法](constitution.md)。依据某条规则的句子旁链接其条款或款的 ID，`concord check` 校验这些链接。
+规划、实施或审阅功能前阅读[品味](constitution.md)。依据某条规则的句子旁链接其条款或款的 ID，`concord check` 校验这些链接。
 
-宪法可以直接编辑。修订 active 宪法时，同一变化中写一条 decision 类型的 Memory，记录适用范围、理由、来源与影响，并以 `amends` 指向受影响的条款与款；宪法本身只声明当前规则（[总则](constitution.md#general-amend)）。`concord constitution show` 查看正文、条款与款，以及每处引用位置；`adopt` 与 `amend` 写入同样的内容。draft 模板不表示合规。
+品味可以直接编辑。修订 active 品味时，同一变化中写一条 decision 类型的 Memory，记录适用范围、理由、来源与影响，并以 `amends` 指向受影响的条款与款；品味本身只声明当前规则（[总则](constitution.md#general-amend)）。`concord constitution show` 查看正文、条款与款，以及每处引用位置；`adopt` 与 `amend` 写入同样的内容。draft 模板不表示合规。
 
 ## 第一个 Feature
 
@@ -103,7 +103,7 @@ concord new use-case expired-token --feature login --title "Reject expired token
 4. 运行 `concord issue close <name> --fixed --reason <text>`：回归测试在缺陷提交上失败、在当前 HEAD 上通过时，结论写进 Issue（[证据的范围](feature/local-sdlc/scope.md#证据的范围)）。
 5. `concord test verify <name>` 按记录重放。
 
-完整路径与错误见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)。`concord review render` 生成本地审阅材料。
+完整路径与错误见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)。`concord review` 生成本地审阅材料。
 
 ## 安全操作
 
@@ -113,7 +113,7 @@ concord new use-case expired-token --feature login --title "Reject expired token
 
 ## 工作项与知识
 
-Memory 用 `concord memory index` 与 `concord memory recall` 检索，Issue 用 `concord issue recall` 与 `concord list --open` 检索。两者都直接编辑；`memory activate`、`memory supersede` 与 `issue close` 等命令写入同样的内容。见[检索与维护工程知识](feature/local-sdlc/use-case/recall-and-maintain-memory.md)。
+Memory 用 `concord list memory` 与 `concord memory search` 检索，Issue 用 `concord issue search` 与 `concord list --open` 检索。两者都直接编辑；`memory confirm`、`memory replace` 与 `issue close` 等命令写入同样的内容。见[检索与维护工程知识](feature/local-sdlc/use-case/recall-and-maintain-memory.md)。
 
 Local、GitHub 与 Linear 统一作为反馈来源。本地 Issue 无需连接即可创建；远端接入只负责读取，本地状态由本地文件维护。见[本地观察](feature/feedback/use-case/manage-local-observations.md)。
 
