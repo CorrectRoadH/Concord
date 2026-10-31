@@ -2,7 +2,6 @@ import { assert, test, rmSync, refreshInstalled, packedEnvelope, installedCall, 
 import { queryFactsConsumer, ownerPath } from '../support/query-facts-fixture.js';
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-// @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#inspect-associations
 test('packed C7 worker publishes a readable body-free envelope and exits', async () => {
   const root = queryFactsConsumer();
   try {

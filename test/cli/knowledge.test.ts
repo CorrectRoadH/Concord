@@ -58,7 +58,6 @@ test('packed CLI parse errors preserve the input diagnostic and help remains suc
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
-// @use-case docs/feature/feedback/use-case/manage-local-observations.md
 test('packed knowledge commands preserve named failures, exits and body excerpts', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('boundary');
   const repo = new LocalRepository(root);

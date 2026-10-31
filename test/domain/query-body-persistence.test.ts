@@ -27,7 +27,6 @@ async function persist(root: string, query: Query) {
   return stored.record.value;
 }
 
-// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#inspect-associations
 // @name steps-historical-projections
 test('C7 persists no owner or remote bodies and hydrates byte-identical current output', async () => {
