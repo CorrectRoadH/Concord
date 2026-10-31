@@ -29,13 +29,13 @@ JSON 的 `projection` 对象如下（预期输出，时间为示例）：
 
 已知码有 `QueryRefreshTimedOut`、`QueryRefreshOutputLimit`、`QueryRefreshFailed`、`QueryRefreshCleanupUnconfirmed`，扫描的具名失败保留原码，例如 `TraceInvalid`、`InvalidConfig`。无投影时 QueryPending 的 `details.refresh` 为同一失败对象，尚无失败时为 `"requested"`。历史结果只回答构建时的诊断问题，不承诺当前文件有效。
 
-consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap 不表示没有缺口；unknown 非空时对应关系类别整体未知。消费者须检查 projection.consistent 后再使用列表。已有一致投影不被不一致结果替换，此后的不一致尝试只记录在 `lastAttempt`。check、trace check、Memory/Issue 检索、作者读取和证据裁决使用当前来源。
+consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap 不表示没有缺口；unknown 非空时对应关系类别整体未知。消费者须检查 `projection.consistent` 后再使用列表。已有一致投影不被不一致结果替换，此后的不一致尝试只记录在 `lastAttempt`。check、trace check、Memory/Issue 检索、作者读取和证据裁决使用当前来源。
 
 人类输出展示历史快照、一致性与刷新状态。`consistent: false` 时于结果前打印 `历史投影，构建期间来源变化（N 个路径），关系可能不完整；使用 --fresh 获取当前结果。`；已有一致投影且 `lastAttempt.complete` 为 false 时打印 `一致结果构建于 <builtAt>，此后的刷新在编辑中未能取得一致结果（最近 <lastAttempt.at>）。`
 
-投影不复用于不同的 worktree、命令参数、配置字节或安装；扫描期间这些身份变化时丢弃结果并按新身份刷新，不记为失败。恢复待处理、配置无效、路径安全失败和无法形成结构的扫描不发布投影。缓存严格解码失败报告 `QueryCacheInvalid`，数据库占用时报告暂不可用；两者都不在查询进程执行全量扫描。前台缓存读取暂不可用时最多重试 500ms，每次重新执行完整路径和 Schema 核验，仍不可读则具名报告；该等待不取得 publication lease，也不执行来源扫描。
+投影不复用于不同的 worktree、命令参数、配置字节或安装；扫描期间这些身份变化时丢弃结果并按新身份刷新，不记为失败。恢复待处理、配置无效、路径安全失败和无法形成结构的扫描不发布投影。缓存严格解码失败报告 `QueryCacheInvalid`，数据库占用时报告暂不可用；两者都不在查询进程执行全量扫描。前台缓存读取暂不可用时最多重试 500ms，每次重新执行完整路径和 Schema 核验，仍不可读则具名报告；该等待不取得发布租约，也不执行来源扫描。
 
-后台刷新合并同键请求，只合并开始于请求之后的扫描；等待同键刷新与来源扫描共用[刷新上限](#刷新上限)，超时不声明刷新成功。成功以事务替换完整结果，失败保留上一代，数据库可写时记录具名错误。进程在终端退出后可继续完成刷新，不持有文档 publication lease。发布阶段的数据库占用最多重试三秒，进程终止后的清理以清理宽限为界，二者不计入刷新上限。扫描消息输出上限为 4MiB。
+后台刷新合并同键请求，只合并开始于请求之后的扫描；等待同键刷新与来源扫描共用[刷新上限](#刷新上限)，超时不声明刷新成功。成功以事务替换完整结果，失败保留上一代，数据库可写时记录具名错误。进程在终端退出后可继续完成刷新，不持有文档发布租约。发布阶段的数据库占用最多重试三秒，进程终止后的清理以清理宽限为界，二者不计入刷新上限。扫描消息输出上限为 4MiB。
 
 投影不保存 owner 正文与远端 Issue 正文。trace show 与 review render 在服务时读取当前正文（单文件上限 32MiB）。摘要与投影记录一致时，输出排除 `projection` 与 `cache` 后与同源 `--fresh --dry-run` 逐字节相同。摘要变化时省略该正文并在 `projection.bodyChanged` 列出路径，读取失败时列入 `projection.bodyUnavailable` 并附错误码。review render 中变化的宪法片段输出 `(constitution changed since projection; use --fresh)`。
 

@@ -42,7 +42,7 @@ URI 只接受当前 worktree 的安全 file 路径，拒绝路径逃逸、符号
 - 保存不覆盖缓冲区；磁盘配置、政策、删除与重命名使受影响结果失效或明确不完整。
 - 服务只读，只提供文档生命周期、诊断和上述四种导航。编辑、格式化、codeAction、executeCommand 与 willRenameFiles 请求以 EditorMethodNotSupported 拒绝。
 - 服务不开网络端口，不启动 language server、测试收集器或 runner。stdout 只包含 framed JSON-RPC，stderr 用于具名诊断。
-- shutdown、exit、EOF 与 SIGINT 取消任务并释放会话资源，不持 publication lease 等待客户端。
+- shutdown、exit、EOF 与 SIGINT 取消任务并释放会话资源，不持发布租约等待客户端。
 
 - 同时未保存地修改步骤 ID 与测试引用时，引用新 ID 有效，不从旧磁盘图发出 `StepNotFound`；新版本确有缺失步骤而旧任务迟到时，旧结果被淘汰。
 

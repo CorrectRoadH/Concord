@@ -16,7 +16,7 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。HTTP �
 
 参考模板树从现有 inventory 的路径派生，由共享 ContentSidebar 渲染；不新增存储索引。树形导航采用 [WAI 折叠导航模式](https://www.w3.org/WAI/ARIA/apg/patterns/disclosure/examples/disclosure-navigation/) 的嵌套列表、aria-expanded 按钮和 aria-current 链接。目录展开是展示状态，文件选择由 URL 拥有；筛选和当前文件定位不建立另一份导航来源。
 
-每次领域操作独立取得、释放 LocalRepository；读取与规划不持锁，提交短暂取得独占 publication lease。写入、恢复与证据终结在服务拥有的操作进程中执行，HTTP handler 只转交严格解码的操作并返回回执。测试由服务拥有的单槽 job 管理，浏览器断开不取消任务。取消须确认子进程组退出，才能释放租约和运行槽，失败时保留租约并提供诊断。
+每次领域操作独立取得、释放 LocalRepository；读取与规划不持锁，提交短暂取得独占发布租约。写入、恢复与证据终结在服务拥有的操作进程中执行，HTTP handler 只转交严格解码的操作并返回回执。测试由服务拥有的单槽 job 管理，浏览器断开不取消任务。取消须确认子进程组退出，才能释放租约和运行槽，失败时保留租约并提供诊断。
 
 工作区导航读取[工作区投影](#工作区投影)，不在请求内扫描来源。
 
@@ -54,7 +54,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 独立 `workspace_projection` 命名空间只有 key 为 `workspace` 的一行，payload 格式为 `concord.workspace-projection/v1`。它含 `identity`、可选 `record`（构建区间、完整性字段与结构 `snapshot`）、`lastAttempt`（不含快照）与 `error`。一次 put 原子替换该行，新身份覆盖旧行；损坏记录不提供给前台，writer 可直接覆盖。身份由 worktree root、Git-private 目录、配置原文摘要（无配置为 absent，非法配置仍取安全读取的字节摘要）、安装目录全部 JS 与 native 产物摘要及类型 `workspace` 组成。读取前先验证原生模块，缺失为不可用而非尚无代次。
 
-snapshot 由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写都拒绝额外字段。它只含路径、摘要、metadata、单行 derivedTitle、关系、诊断、反馈分诊与概念目录；概念目录列出每个 `concepts.md` 的路径与其中每个概念的术语、锚点、弃用名与现行写法，定义与解释正文不进入。正文、`source.body`、远端 body、配置原文、证据与发布日志不进入 Schema。搜索只索引标题、ID、路径与 URL。
+快照由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写都拒绝额外字段。它只含路径、摘要、metadata、单行 derivedTitle、关系、诊断、反馈分诊与概念目录；概念目录列出每个 `concepts.md` 的路径与其中每个概念的术语、锚点、弃用名与现行写法，定义与解释正文不进入。正文、`source.body`、远端 body、配置原文、证据与发布日志不进入 Schema。搜索只索引标题、ID、路径与 URL。
 
 配额 1 行、8 MiB，计入命名空间、key 与完整 envelope；`query_cache` 写入不淘汰该行。超限报 `WorkspaceProjectionOutputLimit`，不截断、不回源；实测后只允许收紧。原生侧只提供命名空间与资源预算。
 
@@ -109,7 +109,7 @@ CSS 与静态资源进入当前图块的编译结果。项目配置的 `p5.libra
 
 扫描计时区分测试注释、文档关系、宪法、代码来源读取、缓存与解析、来源复核。日志分别记录测试和代码缓存的状态及命中数，不可用原因只输出允许的错误码。`cache status` 的 ready 不作为请求命中证据。公共扫描与缓存批处理见[架构流程图](../../architecture.md#存储-spec)；Web 复用该流程，不拥有另一套解析缓存。
 
-处理耗时从 HTTP handler 接纳请求开始；事件循环延迟为进程采样观察，不能作为该请求的精确排队时间。嵌套阶段时间包含子阶段，不能相加。客户端全程耗时应由独立进程测量。HTTP 200 只表示响应成功，列表须读取 projection.consistent、complete 和 findings；缓存不可用、扫描期间来源变化与孤立标注分别诊断。
+处理耗时从 HTTP handler 接纳请求开始；事件循环延迟为进程采样观察，不能作为该请求的精确排队时间。嵌套阶段时间包含子阶段，不能相加。客户端全程耗时应由独立进程测量。HTTP 200 只表示响应成功，列表须读取 `projection.consistent`、complete 和 findings；缓存不可用、扫描期间来源变化与孤立标注分别诊断。
 
 ## URL 与导航状态
 

@@ -1,14 +1,10 @@
 # 本地数据引擎术语
 
-本页定义统一数据引擎中的术语，并引用反馈功能的 Index 与 Recall。
+本页定义统一数据引擎中的术语，并引用反馈功能的 Index 与 Recall。[投影](../../concepts.md#projection)、[快照](../../concepts.md#snapshot)与[代次](../../concepts.md#generation)由全局术语定义。
 
 ## Cache {#cache}
 
 可丢弃的派生数据；其缺失或失效不改变事实 owner，复用前核对当前来源身份。
-
-## Projection {#projection}
-
-从权威输入生成的结构化表示，保留来源身份和代次，不拥有独立的领域事实或授权结论。
 
 ## Cache namespace {#cache-namespace}
 

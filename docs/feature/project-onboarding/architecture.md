@@ -17,7 +17,7 @@
 | journal、配置或 TS scope 不符合当前 Schema | `InvalidData`，保留现场并阻断写入 |
 | 摘要或前像冲突 | 恢复错误 |
 
-锁外识别只能拒绝，不授权读写；可继续者仍取得共享或独占 lease 并在锁内重验。拒绝路径不创建、删除、chmod 或改写配置、journal、通用锁、`publication.lock`、事务目标与临时文件。
+锁外识别只能拒绝，不授权读写；可继续者仍取得共享或独占租约并在锁内重验。拒绝路径不创建、删除、chmod 或改写配置、journal、通用锁、`publication.lock`、事务目标与临时文件。
 
 ## Journal 与恢复授权
 

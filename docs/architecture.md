@@ -210,7 +210,7 @@ flowchart TD
   Result --> Check
 ```
 
-cache clear 在独占 publication lease 下执行，锁、删除阶段与保留规则见[数据引擎架构](feature/local-data-engine/architecture.md#清理)。clear 只删除 cache.hawdb 内的缓存数据，不删除源 owner、journal 和 Memory。
+cache clear 在独占发布租约下执行，锁、删除阶段与保留规则见[数据引擎架构](feature/local-data-engine/architecture.md#清理)。clear 只删除 cache.hawdb 内的缓存数据，不删除源 owner、journal 和 Memory。
 
 init 作用于 Git worktree 顶层，子目录项目与 bare repo 明确拒绝。
 
@@ -226,11 +226,11 @@ Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 work
 
 支持同主机、同 PID 命名空间内的 Linux 与 macOS 本地工作树，不保证网络多机协调与 Windows 执行。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
 
-普通来源查询不取得 publication lease。读取记录文件前像、缺失路径和目录集合，返回前验证观察集合与 publication.revision；合作发布开始与结束均推进随机代次，变化返回 SourceChanged。未完成 journal 仍阻断当前事实结果。缓存快照查询不加载来源 Repository。
+普通来源查询不取得发布租约。读取记录文件前像、缺失路径和目录集合，返回前验证观察集合与 publication.revision；合作发布开始与结束均推进随机代次，变化返回 SourceChanged。未完成 journal 仍阻断当前事实结果。缓存快照查询不加载来源 Repository。
 
-普通文档写入的规划采用乐观读取，提交阶段才取得独占 publication lease，复核配置、全部观察与完整前像，写入 journal 后逐文件原子 rename。冲突拒绝覆盖；恢复与 Issue 关闭保持独占协调。显式低层写 snapshot 可保护必须串行化的状态转换，不能用于普通来源查询。
+普通文档写入的规划采用乐观读取，提交阶段才取得独占发布租约，复核配置、全部观察与完整前像，写入 journal 后逐文件原子 rename。冲突拒绝覆盖；恢复与 Issue 关闭保持独占协调。显式低层写快照可保护必须串行化的状态转换，不能用于普通来源查询。
 
-publication owner 通过临时目录 fsync 与 rename 公布，正常释放与死亡恢复只删除准确 token，不按年龄抢占，不递归删除 lease 目录。发布协调不持有持久缓存句柄；写入、发布与恢复不依赖工作区服务。不同协调协议的程序不得同时访问同一 worktree。
+publication owner 通过临时目录 fsync 与 rename 公布，正常释放与死亡恢复只删除准确 token，不按年龄抢占，不递归删除租约目录。发布协调不持有持久缓存句柄；写入、发布与恢复不依赖工作区服务。不同协调协议的程序不得同时访问同一 worktree。
 
 trace show、trace gaps 与 review render 默认读取 HawDB 中已完成的诊断投影，并请求后台刷新。输出明确标记历史性、构建时间及刷新错误；首次无缓存返回 QueryPending。--fresh 等待当前来源结果。完整 Spec 见[异步诊断投影](feature/local-data-engine/use-case/query-asynchronous-projections.md)。check、trace check、当前来源检索及证据裁决不使用历史投影授权成功。
 
@@ -240,7 +240,7 @@ trace show、trace gaps 与 review render 默认读取 HawDB 中已完成的诊�
 
 runner 为 blocked 时 CLI 失败退出，初次检查已 blocked 时不开始 journal 恢复。dry-run 执行同一规划校验，不发布 owner、journal 或缓存。短协调可能创建 Git-private 目录。`recover` 不接受 dry-run。
 
-CLI 与 Web 测试共用独立 `runner.lease`，长执行不占文档 lease。run 状态区分 running、finalizing、quarantined；只有同主机活进程的 running 允许发布，且发布前持久标记该 run 失效，A→B→A 与回滚不撤销失效标记。
+CLI 与 Web 测试共用独立 `runner.lease`，长执行不占文档租约。run 状态区分 running、finalizing、quarantined；只有同主机活进程的 running 允许发布，且发布前持久标记该 run 失效，A→B→A 与回滚不撤销失效标记。
 
 run 结束时在新快照中核对起止 candidate、配置、定义、Spec、失效与清理结果，再写入结果。父进程死亡不授权回收 runner，清理未知时保持阻断。最终快照无法取得时留下只收紧权限的 token-bound quarantine 标记。此协议不观察不合作编辑器的每次瞬时修改。
 
@@ -254,7 +254,7 @@ run 结束时在新快照中核对起止 candidate、配置、定义、Spec、�
 
 recover 返回 operation、journal 结果、changedPaths 和 coordination；publication 列出 reclaimedTokens。runner 状态为 absent、running 或 blocked，blocked 带具名原因。无事务且 runner 为 absent 或健康 running 时返回 clean。
 
-runner 不确定时返回 blocked，并保留 journal 的实际处理结果。初次检查已 blocked 时，journalStatus 为 pending 或 clean，changedPaths 为空。journal 恢复后 runner 变为 blocked 时，保留 journalStatus，总 status 为 blocked。recover 不删除 runner.lease、run state、证据或未知文件。
+runner 不确定时返回 blocked，并保留 journal 的实际处理结果。初次检查已 blocked 时，journalStatus 为 pending 或 clean，changedPaths 为空。journal 恢复后 runner 变为 blocked 时，保留 journalStatus，总 status 为 blocked。recover 不删除 `runner.lease`、run state、证据或未知文件。
 
 未完成的多文件 journal 阻断普通快照。来源扫描按当前配置和安全目录读取，文件名不推导作者 ID。协调细节见[可移植协调架构](feature/portable-coordination/architecture.md)，文档读取职责见[本地 SDLC 架构](feature/local-sdlc/architecture.md)，随包步骤由 `concord --skill recovery` 提供。
 
@@ -296,7 +296,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 引用由 canonical 源路径、scope 与完整 AST 结构位置派生，不含行号、函数体或关联目标。命名节点的定位路径与同描述前序兄弟不变时，普通编辑保持引用。文件移动、改名、作用域和顺序变化可能使引用失效或复用。引用不是永久身份、CAS 或授权，调用方须重新 list 或 locate。派生算法见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)。
 
-`code annotate` 与对应 action 不接收或返回 ID，在乐观 snapshot 中验证指定 canonical reference、归属链、类型和 anchor。`code list` 与 `code locate` 提供声明查询。Web 以符号、位置和显式关联呈现实现。无效 begin 仍参与边界检查，普通扫描不写源码。
+`code annotate` 与对应 action 不接收或返回 ID，在乐观快照中验证指定 canonical reference、归属链、类型和 anchor。`code list` 与 `code locate` 提供声明查询。Web 以符号、位置和显式关联呈现实现。无效 begin 仍参与边界检查，普通扫描不写源码。
 
 代码错误阻断 code、check、trace、review 与 doctor。test list、show、run 与 verify 不包含代码投影，保留全部文档与测试关系校验；修复核验的输入不包含 code 引用。
 

@@ -49,9 +49,9 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 ## 步骤改写的发布
 
-`use-case format` 沿用正文编辑的前像与发布协议。`rename-step` 在唯一 journal 与 publication lease 下使用专用 `step-rename` 授权范围，不串联多次 `source.set` 或文档发布。该范围绑定项目、worktree、冻结配置、Use Case 路径、old-id、new-id、完整文件前后像、摘要与 mode，以及规划时观察的目录成员。
+`use-case format` 沿用正文编辑的前像与发布协议。`rename-step` 在唯一 journal 与发布租约下使用专用 `step-rename` 授权范围，不串联多次 `source.set` 或文档发布。该范围绑定项目、worktree、冻结配置、Use Case 路径、old-id、new-id、完整文件前后像、摘要与 mode，以及规划时观察的目录成员。
 
-规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占 lease，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[C-003](../../constitution.md#c-003)）。
+规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[C-003](../../constitution.md#c-003)）。
 
 ## 代码声明引用
 
@@ -80,10 +80,10 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 解析、诊断与模块解析使用精确固定的 TypeScript 7.1 beta 原生编译器，构建与运行时同一版本，消费者无需全局编译器（[决策依据](../../design/typescript-native/DECISION.md)）。
 
-- `withTypeScript` 是同步词法作用域：按调用栈惰性创建一个 `typescript/sync` API，嵌套调用复用，最外层 finally 关闭。API、AST、snapshot 与 program 不逃逸作用域，不返回 Promise，违反时报 `TypeScriptScopeViolation`；缓存只保存转换后的领域值。纯 AST 操作从 `typescript/ast` 引入。
+- `withTypeScript` 是同步词法作用域：按调用栈惰性创建一个 `typescript/sync` API，嵌套调用复用，最外层 finally 关闭。API、AST、快照与 program 不逃逸作用域，不返回 Promise，违反时报 `TypeScriptScopeViolation`；缓存只保存转换后的领域值。纯 AST 操作从 `typescript/ast` 引入。
 - API 固定 `runExternalCode: false`，使用包内可执行文件，不接受项目路径覆盖；默认文件系统回调拒绝读写，允许的文件只来自完整的请求虚拟文件系统，不回落到宿主。项目配置与 MDX content mapper 不获得执行权限。
-- `withTypeScriptSource` 以只含当前文件的虚拟文件系统提供 SourceFile 与真实语法诊断，结束时先释放 snapshot。`withTypeScriptFiles` 只提供已捕获文件与派生目录，在捕获集合内解析 tsconfig（含 extends）并解析模块，失败保留既有缺口，不读取宿主 tsconfig 或 node_modules。
-- p5 在建立 snapshot 前递归捕获静态 import/export、import type、ImportTypeNode 与三斜线相对类型路径，经既有预算与路径校验后固定闭包，解析期间不修改虚拟文件系统；p5 lib 与声明来自固定编译器包与发行包。
+- `withTypeScriptSource` 以只含当前文件的虚拟文件系统提供 SourceFile 与真实语法诊断，结束时先释放快照。`withTypeScriptFiles` 只提供已捕获文件与派生目录，在捕获集合内解析 tsconfig（含 extends）并解析模块，失败保留既有缺口，不读取宿主 tsconfig 或 node_modules。
+- p5 在建立快照前递归捕获静态 import/export、import type、ImportTypeNode 与三斜线相对类型路径，经既有预算与路径校验后固定闭包，解析期间不修改虚拟文件系统；p5 lib 与声明来自固定编译器包与发行包。
 - 诊断映射回 `InvalidConfigSyntax`、`CodeParseError` 及依赖与 p5 的既有具名边界，编译器不可用统一为 `TypeScriptUnavailable`；位置按 UTF-16。
 
 ## 多语言分析
@@ -100,13 +100,13 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 `concord lsp` 为每个会话维护 URI 到文本、languageId、版本与打开代次的 overlay，未打开的依赖读取受校验磁盘快照，不把历史投影当作当前图。每次任务捕获会话代次、全部依赖的 URI、版本、打开代次与磁盘身份，发布或返回前再次核对，任一变化即丢弃结果并重排；步骤、标记、引用解析与写作检查使用同一版本集合。
 
-每个计算 Job 是包内 `editor-worker.js` 的 Node 子进程，固定 256 MiB heap 上限，由独立 OwnedProcess 进程组持有，原生编译器继承该进程组；项目配置不能替换可执行文件、入口或参数。Job 经 stdin 单个 JSON 输入、stdout 单个 JSON 返回，双方严格解码。每个 Job 有自己的 Scope，收尾后核验进程组归属、清理已检查且后代已消失；缺少清理记录视为未知。未知或失败的清理使会话永久保留 `EditorTaskFailed`，停止新计算，不发布该任务结果。取消的任务在清理结论取得前仍计入运行集合，shutdown、EOF 与 exit 等待全部收尾。Job 不获得来源写权限或 publication lease。
+每个计算 Job 是包内 `editor-worker.js` 的 Node 子进程，固定 256 MiB heap 上限，由独立 OwnedProcess 进程组持有，原生编译器继承该进程组；项目配置不能替换可执行文件、入口或参数。Job 经 stdin 单个 JSON 输入、stdout 单个 JSON 返回，双方严格解码。每个 Job 有自己的 Scope，收尾后核验进程组归属、清理已检查且后代已消失；缺少清理记录视为未知。未知或失败的清理使会话永久保留 `EditorTaskFailed`，停止新计算，不发布该任务结果。取消的任务在清理结论取得前仍计入运行集合，shutdown、EOF 与 exit 等待全部收尾。Job 不获得来源写权限或发布租约。
 
 ## 原生 adapter
 
 - 绑定：先按 provider 的 group key（项目、文件、声明范围与组身份）归并参数项，不凭同名合并。标记块从首个关联标记到连续元数据末行；自动绑定优先最内层包含标记的唯一 leaf 组，否则取紧随其后的唯一 leaf 组，中间只允许空白及 provider 明确覆盖的注释或装饰器。有普通语句、同深度重叠、缺范围或只有 suite 时不自动绑定。`@native` 与可验证的自动绑定不一致时 `NativeSelectorConflict`，歧义为 `AmbiguousNativeBinding`，二者都是执行前失败，不是 check finding。执行集按 native ID 去重，一次结果可投射到多个关联。
 - 输入身份：`inputs` 绑定项目与 root、测试与源码及配置成员集合和字节、fixture、导入支持文件、构建配置、conftest 与 lockfile。它还绑定框架与运行时版本、adapter 真实脚本及传递实现文件、选择能力、算法版本与选中组范围；`node adapter.js` 摘要 adapter.js 而非 node。
-- 协调：任何 adapter 进程启动前取得与 runner 相同的 run lease 与失效 epoch，捕获完整快照后关闭来源句柄再运行外部进程；run 所有权贯穿收集、选择、执行、报告与终结，短发布协调不跨外部调用。结束后重读全部输入与成员，有漂移、非零收集退出、截断、缺失调用或清理未知时不发布当前清单，旧清单只作历史展示。
+- 协调：任何 adapter 进程启动前取得与 runner 相同的运行租约与失效 epoch，捕获完整快照后关闭来源句柄再运行外部进程；run 所有权贯穿收集、选择、执行、报告与终结，短发布协调不跨外部调用。结束后重读全部输入与成员，有漂移、非零收集退出、截断、缺失调用或清理未知时不发布当前清单，旧清单只作历史展示。
 - 报告：每个 run 分配新报告目录，每个 Invocation 独占执行前为空的子目录，以安全目录句柄读取并复核文件身份，读取后变化也拒绝。拒绝 symlink、多重硬链接、特殊文件、目录逃逸与非本次产生的文件；XML 禁止 DTD 与外部实体。目录在最后一个使用者结束后清理，失败保留恢复信息且不发布有效原生结果。
 
 ## 文档身份
@@ -141,14 +141,14 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 
 | 操作 | 内容依赖 | 协调 | 失败范围 |
 | --- | --- | --- | --- |
-| memory/issue list、index、recall、search | 相应来源内全部候选 owner | 乐观来源 snapshot | 范围内坏记录、来源缺失、配置或事务障碍 |
-| show 的 canonical path | 指定 owner | 乐观来源 snapshot | 目标或其必要依赖 |
-| show 的短选择器 | 相应类别的全部候选及唯一匹配 owner | 乐观来源 snapshot | 集合不完整或歧义 |
+| memory/issue list、index、recall、search | 相应来源内全部候选 owner | 乐观来源快照 | 范围内坏记录、来源缺失、配置或事务障碍 |
+| show 的 canonical path | 指定 owner | 乐观来源快照 | 目标或其必要依赖 |
+| show 的短选择器 | 相应类别的全部候选及唯一匹配 owner | 乐观来源快照 | 集合不完整或歧义 |
 | new | 目标路径与同类短选择器集合 | 独占 publication | 身份冲突、必要依赖或写入资源障碍 |
 | memory activate、supersede、link；issue link、unlink、reopen | 指定 owner、当前摘要与关系目标 | 独占 publication | 目标或关系目标缺陷、写入资源障碍 |
-| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源 snapshot | 指定依赖缺陷，不加载全局 Trace |
-| trace、review | 展示的关系图 | 乐观来源 snapshot | 输出 findings；需要完整图的结论拒绝不完整输入 |
-| check | 全仓库事实与关联；`--since` 另读基线差异 | 乐观来源 snapshot | 各 owner 解析错误累计为 findings，`ok: false` |
+| code/test annotate | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源快照 | 指定依赖缺陷，不加载全局 Trace |
+| trace、review | 展示的关系图 | 乐观来源快照 | 输出 findings；需要完整图的结论拒绝不完整输入 |
+| check | 全仓库事实与关联；`--since` 另读基线差异 | 乐观来源快照 | 各 owner 解析错误累计为 findings，`ok: false` |
 | issue close、roadmap adopt、design decide | 核验与保证关系完整所需的集合 | 独占 publication；fixed 另持 runner 租约 | 保留严格身份、修复核验和逆向关系要求 |
 
 集合查询先按类别的固定目录限定路径，再解码。Feature 与 Use Case 共用 `docs/feature/` 时，同根候选中的坏记录必须报错。Memory 精确路径不需要其它 Memory 内容有效。短选择器读取全部候选，避免隐藏未解码记录中的同名文件。来源扫描使用安全目录读取。
@@ -159,4 +159,4 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 
 全局诊断 inventory 同时携带 documents、findings 与 complete。单独的 documents 数组不表示集合完整。逐文件收集解码错误，保留错误路径与具名代码，并传播 `complete: false`。关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断。有效记录不能单独证明集合完整。requireValidTrace 同时检查 complete 和 findings。部分图不能把 Issue 关闭为 fixed、采用 Roadmap 或批准关系迁移。
 
-未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有 publication lease，返回前校验来源观察与发布代次，并在未完成 journal 前停止。读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../constitution.md#c-013)。
+未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有发布租约，返回前校验来源观察与发布代次，并在未完成 journal 前停止。读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../constitution.md#c-013)。
