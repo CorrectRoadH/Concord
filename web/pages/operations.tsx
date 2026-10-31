@@ -67,15 +67,8 @@ export function OverviewPage() {
 
 function Metric({ label, value, icon, href }: { label: string; value: number; icon: React.ReactNode; href: string }) { return <Link to={href} className="metric"><div>{icon}</div><strong>{value}</strong><span>{label}</span></Link>; }
 
-// @concord-code
-// @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
-export function contractIdentities(snapshot: WorkspaceProjectionSnapshot, document: WorkspaceDocument): Set<string> {
-  const owners = new Set([document.path]);
-  if (document.metadata.kind === 'feature') {
-    for (const child of snapshot.documents) if (child.metadata.kind === 'use-case' && child.metadata.feature === document.path) owners.add(child.path);
-  }
-  return new Set([...owners, ...snapshot.pages.filter(page => page.documentPath && owners.has(page.documentPath)).map(page => page.path)]);
-}
+import { contractIdentities, relatedTests } from '../lib/workspace-display';
+export { contractIdentities } from '../lib/workspace-display';
 
 import { useSourceNavigation } from '../hooks/use-url-navigation';
 
@@ -84,8 +77,7 @@ import { useSourceNavigation } from '../hooks/use-url-navigation';
 export function TestingPanel({ document }: { document: WorkspaceDocument }) {
   const { snapshot, projection, jobs, runCase, cancelJob, busy, act } = useWorkspace(); const [result, setResult] = useState<unknown>(null); const sourceNavigation = useSourceNavigation(); const [annotate, setAnnotate] = useState(false); const [contract, setContract] = useState(document.path); const [regressions, setRegressions] = useState('');
   const conclusive = projectionIsConclusive(projection);
-  const identities = contractIdentities(snapshot, document);
-  const cases = snapshot.cases.filter(item => identities.has(item.contract.split('#')[0]!));
+  const cases = relatedTests(snapshot, document);
   const annotation = async (event: React.FormEvent) => { event.preventDefault(); const value = await act({ action: 'test.annotate', contract, issues: regressions.split('\n').filter(Boolean) }, '测试注释片段已生成。'); setResult(value); setAnnotate(false); };
   return <><PanelHeader title="测试" actions={<Button variant="outline" onClick={() => setAnnotate(true)}><Clipboard />生成注释</Button>} />{sourceNavigation.location && <Suspense fallback={null}><SourceDrawer location={sourceNavigation.location} onClose={sourceNavigation.close} /></Suspense>}<ScanNotice snapshot={snapshot} kind="tests" /><p className="muted">关联声明不代表测试已运行；命令收据不代表原生 case 覆盖。</p><RecordList>{cases.map(item => { const latest = jobs.find(job => job.caseId === item.id); const active = jobs.find(job => job.caseId === item.id && ['queued', 'running', 'cancelling'].includes(job.state)); return <RecordItem key={item.id}><div className="card-title-row"><div><strong>{item.name}</strong></div><div className="inline-badges"><Badge variant={item.status === 'active' ? 'default' : 'secondary'}>{item.status}</Badge>{item.skipped && <Badge variant="outline">skipped</Badge>}</div></div><PathContextMenu path={item.file}><Button className="h-auto max-w-full whitespace-normal text-left px-0" variant="link" aria-label="查看测试源码" onClick={() => sourceNavigation.open({ path: item.file, line: item.line, endLine: item.line })}>{item.file}:{item.line}</Button></PathContextMenu>{latest && <p className="muted" role="status">最近任务：{latest.state}{latest.error && ` · ${latest.error.code}: ${latest.error.message}`}</p>}<RecordDetails><dl><Definition label="Spec"><code>{item.contract}</code></Definition><Definition label="框架">{item.framework}</Definition>{item.issues.length > 0 && <Definition label="Issue">{item.issues.map(ref => <code key={ref}>{ref}</code>)}</Definition>}</dl></RecordDetails>{active ? <Button variant="destructive" onClick={() => void cancelJob(active.id)}><Square />{active.state === 'cancelling' ? '正在终止…' : '安全终止'}</Button> : <Button disabled={busy || item.status !== 'active' || item.skipped} onClick={() => void runCase(item.id)}><Play />运行声明命令</Button>}</RecordItem>; })}{conclusive && cases.length === 0 && scanFindings(snapshot, 'tests').length === 0 && (snapshot.project?.testRoots?.length ?? 0) > 0 && <li><PanelEmpty title="未发现当前 Spec 的关联测试" /></li>}</RecordList>{result !== null && <ResultCard title="生成结果" value={result} />}<Dialog open={annotate} onOpenChange={setAnnotate}><DialogContent><form onSubmit={event => settle(annotation(event))}><DialogHeader><DialogTitle>生成测试注释</DialogTitle><DialogDescription>生成供你粘贴到源码的注释片段，不会修改测试文件。</DialogDescription></DialogHeader><div className="form-grid"><Field label="Feature / Use Case 引用"><Input aria-label="测试 Spec 引用" value={contract} onChange={event => setContract(event.target.value)} required list="contract-references" /></Field><Field label="Issue" hint="每行一个引用"><Textarea aria-label="Issue 引用" value={regressions} onChange={event => setRegressions(event.target.value)} /></Field><datalist id="contract-references">{snapshot.documents.filter(doc => ['feature', 'use-case'].includes(doc.metadata.kind)).map(doc => <option key={doc.path} value={doc.path} />)}</datalist></div><DialogFooter><Button type="button" variant="outline" onClick={() => setAnnotate(false)}>取消</Button><Button type="submit">生成</Button></DialogFooter></form></DialogContent></Dialog></>;
 }

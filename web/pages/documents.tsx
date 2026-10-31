@@ -209,14 +209,7 @@ export function relativeMarkdownTarget(currentPath: string, href: string): { pat
   }
 }
 
-// @concord-code
-// @concord-implements docs/feature/web-workbench/architecture.md#项目测试只读投影
-function featureMatches(reference: string, feature: Pick<WorkspaceDocument, "path" | "metadata">): boolean {
-  return (
-    reference === feature.path ||
-    reference === feature.metadata.id
-  )
-}
+import { featureMatches, featureUseCases } from '../lib/workspace-display'
 
 function fire(task: Promise<unknown>): void {
   void task.catch(() => undefined)
@@ -514,11 +507,7 @@ export function FeatureDetailPage() {
       ? <Empty kind="missing" title="找不到 Feature">它可能已被移动或删除。</Empty>
       : <Empty title="当前代次未包含此 Feature">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
   }
-  const useCases = snapshot.documents.filter(
-    (document) =>
-      document.metadata.kind === "use-case" &&
-      featureMatches(document.metadata.feature, feature)
-  )
+  const useCases = featureUseCases(snapshot, feature)
   const nested = (
     <section className="feature-use-cases">
       <PanelHeader title="Use Cases" actions={<CreateDocument kind="use-case" feature={feature.path} />} />

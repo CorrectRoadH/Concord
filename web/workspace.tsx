@@ -237,7 +237,4 @@ export function useWorkspace(): WorkspaceValue {
   return value;
 }
 
-/** Whether this generation can support absence and relationship conclusions. */
-export function projectionIsConclusive(projection: WorkspaceProjectionStatus): boolean {
-  return projection.status === 'ready' && projection.consistent && projection.complete && !projection.unknownRelations;
-}
+export { projectionIsConclusive } from './lib/workspace-display';

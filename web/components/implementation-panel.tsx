@@ -1,3 +1,4 @@
+import { implementationGroups } from '../lib/workspace-display';
 import { PathContextMenu } from './path-context-menu';
 import { Clipboard, FileCode2 } from 'lucide-react';
 import { Suspense, lazy, useState } from 'react';
@@ -26,12 +27,9 @@ export function ImplementationPanel({ document }: { document: WorkspaceDocument 
   const [annotate, setAnnotate] = useState(false);
   const [scope, setScope] = useState<'file' | 'node' | 'region'>('node');
   const [contracts, setContracts] = useState(document.path);
-  const owners = [document, ...(document.metadata.kind === 'feature' ? snapshot.documents.filter(item => item.metadata.kind === 'use-case' && item.metadata.feature.split('#')[0] === document.path) : [])];
-  const references = owners.flatMap(owner => [owner.path, ...snapshot.pages.filter(page => page.documentPath === owner.path).map(page => page.path)]);
-  const groups = owners.map(owner => {
-    const references = new Set([owner.path, ...snapshot.pages.filter(page => page.documentPath === owner.path).map(page => page.path)]);
-    return { owner, codes: snapshot.codes.filter(code => code.contracts.some(ref => references.has(ref.split('#')[0]!))), references };
-  });
+  const groups = implementationGroups(snapshot, document);
+  const owners = groups.map(group => group.owner);
+  const references = groups.flatMap(group => [...group.references]);
   const hasImplementations = groups.some(group => group.codes.length > 0);
   const addAssociation = (path: string) => { setContracts(path); setAnnotate(true); };
   const annotation = async (event: React.FormEvent) => {

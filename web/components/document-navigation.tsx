@@ -9,15 +9,7 @@ import { ContentSidebar, type ContentSidebarGroup } from './content-sidebar';
 import { useSidebar } from './ui/sidebar';
 const CreateDocument = lazy(() => import('../pages/documents').then(module => ({ default: module.CreateDocument })));
 
-type NavigationKind = 'feature' | 'engineering' | 'roadmap' | 'design' | 'research' | 'memory';
-const sections: readonly { href: string; kind: NavigationKind; label: string }[] = [
-  { href: '/features', kind: 'feature', label: 'Feature' },
-  { href: '/engineering', kind: 'engineering', label: 'Engineering' },
-  { href: '/roadmap', kind: 'roadmap', label: 'Roadmap' },
-  { href: '/design', kind: 'design', label: 'Design' },
-  { href: '/research', kind: 'research', label: 'Research' },
-  { href: '/memory', kind: 'memory', label: 'Memory' },
-];
+import { documentCategories as sections, documentsInCategory } from '../lib/workspace-display';
 
 export function CloseMobileOnNavigate({ children, href, onClick, ...props }: Omit<React.ComponentProps<typeof Link>, 'to'> & { href: string }) {
   const { setOpenMobile } = useSidebar();
@@ -31,7 +23,7 @@ export function DocumentNavigation() {
   if (pathname === '/docs') return <ProjectDocNavigation search={search} />;
   const section = sections.find(item => pathname === item.href || pathname.startsWith(`${item.href}/`));
   if (!section) return null;
-  const documents = snapshot.documents.filter(document => document.metadata.kind === section.kind);
+  const documents = documentsInCategory(snapshot, section.kind);
   const selected = documents.find(document => { const href = documentHref(document, snapshot.documents); return pathname === href || pathname.startsWith(`${href}/`); });
   const groups: ContentSidebarGroup[] = [{
     id: 'documents', label: `${section.label} 列表`, emptyMessage: conclusive ? `暂无 ${section.label}` : `当前代次暂未显示 ${section.label}`,
