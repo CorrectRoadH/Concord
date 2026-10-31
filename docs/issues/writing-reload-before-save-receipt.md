@@ -1,5 +1,15 @@
 ---
-status: open
+status: closed
+closure:
+  kind: fixed
+  reason: 刷新前等待保存回执生效和未保存状态清除
+  verification:
+    defect: a93445c89d934886fc2e868d3d740f4f5af187ce
+    fix: da3ef251d2d4b594d7f8b88bc7a26d9793952c54
+    tests:
+      - neref_d67bd02939899320d5a5c8a35b026433
+    runner: sha256:db83e0ff88b65dcaaf52a8f69c6262dbd1b596991eee44d5fcf69e1a65b4e8e0
+    concord: dev
 ---
 
 # 写作页测试在保存回执前刷新页面
