@@ -1,3 +1,4 @@
+import { selectEffectiveConcepts, splitConceptReference } from '../../model/index.js';
 import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.js";
 import type { LocalRepository } from "../../base/workspace/index.js";
 import { fromMarkdown } from "../../model/index.js";
@@ -34,13 +35,9 @@ export function spellingPositions(text: string, spelling: string, allowIn: reado
   }).map(match => match.index);
 }
 export function splitReference(reference: string): { path: string; id: string } {
-  const at = reference.lastIndexOf('#');
-  if (at < 0) throw new ConcordError('InvalidConceptCatalog', `Expected catalog path#id: ${reference}`);
-  const path = reference.slice(0, at), id = reference.slice(at + 1);
-  scopeOf(path, 'catalog');
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/u.test(id)) throw new ConcordError('InvalidConceptCatalog', `Invalid concept reference: ${reference}`);
-  return { path, id };
+  return splitConceptReference(reference);
 }
+
 export function readConceptCatalog(source: string, path?: string): ConceptCatalog {
   try { return parseConceptCatalog(source, path === undefined ? fromMarkdown : () => documentMarkdown(path, source)); }
   catch (cause) { throw new ConcordError('InvalidConceptCatalog', cause instanceof Error ? cause.message : String(cause)); }
@@ -69,23 +66,9 @@ export function analyzeCatalogs(sources: Map<string, string>) {
   return { catalogs, diagnostics, byPath };
 }
 export function effectiveConcepts(file: string, catalogs: readonly CatalogRecord[]): { reference: string; path: string; scope: string; concept: ConceptDefinition }[] {
-  const byPath = new Map(catalogs.map(record => [record.path, record]));
-  const effective = new Map<string, { reference: string; path: string; scope: string; concept: ConceptDefinition }>();
-  for (const record of catalogs) {
-    if (record.scope !== 'docs' && !under(file, record.scope)) continue;
-    for (const concept of record.catalog.concepts) {
-      const reference = `${record.path}#${concept.id}`;
-      effective.set(reference, { reference, path: record.path, scope: record.scope, concept });
-    }
-    for (const reference of record.catalog.imports ?? []) {
-      const { path, id } = splitReference(reference);
-      const owner = byPath.get(path);
-      const concept = owner?.catalog.concepts.find(item => item.id === id);
-      if (owner && concept) effective.set(reference, { reference, path, scope: owner.scope, concept });
-    }
-  }
-  return [...effective.values()];
+  return selectEffectiveConcepts(file, catalogs);
 }
+
 function ambiguityDiagnostics(catalogs: readonly CatalogRecord[]): ConceptDiagnostic[] {
   const diagnostics: ConceptDiagnostic[] = [];
   const overlapSeen = new Set<string>();

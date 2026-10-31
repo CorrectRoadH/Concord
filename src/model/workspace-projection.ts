@@ -1,3 +1,4 @@
+import { WorkspaceConceptCatalogSchema } from './concept-directory.js';
 import { Schema } from "effect";
 import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, ResearchSchema, RoadmapSchema, UseCaseSchema } from "./shared.js";
 import { GitHubRemoteFeedbackSchema, LinearRemoteFeedbackSchema, FeedbackSourceSchema } from "./feedback-schema.js";
@@ -34,6 +35,7 @@ const Diagnostic = Schema.Union([
 ]);
 export const WorkspaceProjectionSnapshotSchema = Schema.Struct({
   complete: Schema.optional(Schema.Boolean), root: Schema.String, project: Schema.NullOr(ProjectSchema), configDigest: Schema.NullOr(Schema.String),
+  conceptCatalogs: Schema.Array(WorkspaceConceptCatalogSchema),
   documents: Schema.Array(Document),
   feedback: Schema.Array(Schema.Struct({ document: Schema.Struct({ path: Schema.String, digest: Schema.String, metadata: Issue }),
     provider: Schema.Literals(['local', 'github', 'linear']), triage: Schema.Literals(['pending', 'linked', 'closed']),

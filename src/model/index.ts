@@ -427,3 +427,6 @@ export { decodeWorkspaceProjectionRecord } from './workspace-projection.js';
 export { WorkspaceProjectionEnvelope } from './workspace-projection.js';
 export type { ParsedReference } from './reference.js';
 export { parseReference } from './reference.js';
+
+export { WorkspaceConceptSchema, WorkspaceConceptCatalogSchema, projectConceptCatalogs, selectEffectiveConcepts, splitConceptReference } from './concept-directory.js';
+export type { WorkspaceConcept, WorkspaceConceptCatalog } from './concept-directory.js';

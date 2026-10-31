@@ -6,6 +6,7 @@ export const feature: WorkspaceDocument = { path: featurePath, digest: 'feature-
 export const useCase: WorkspaceDocument = { path: useCasePath, digest: 'use-case-1', metadata: { format: 'concord.document/v1', kind: 'use-case', id: 'read', title: '阅读正文', feature: featurePath } };
 export const testCase: AnnotatedCase = { id: 'neref_00000000000000000000000000000001', name: 'reads body', file: 'test/reader.test.ts', line: 8, markerEndLine: 12, contract: `${supportPath}#阅读`, contractKind: 'feature', issues: [], status: 'active', framework: 'node:test', skipped: false };
 export const panelSnapshot: WorkspaceProjectionSnapshot = {
+  conceptCatalogs: [],
   complete: true, root: '/worktree', project: {}, configDigest: 'config-1', documents: [feature, useCase], feedback: [],
   pages: [{ path: featurePath, digest: feature.digest, documentPath: featurePath }, { path: supportPath, digest: 'support-1', documentPath: featurePath }, { path: 'docs/architecture.md', digest: 'root-1', derivedTitle: '总体架构' }, { path: 'docs/README.md', digest: 'index-1' }],
   cases: [testCase, { ...testCase, id: 'neref_00000000000000000000000000000002', file: 'test/use-case.test.ts', contract: useCasePath }],

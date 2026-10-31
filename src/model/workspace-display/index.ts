@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-panel/architecture.md#渲染
 import type { WorkspaceDocument, WorkspacePage, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../index.js';
-import { DOCUMENT_ROOTS } from '../index.js';
+import { DOCUMENT_ROOTS, selectEffectiveConcepts, scopeOf, fromMarkdown, markdownBody } from '../index.js';
 
 export const documentCategories = [
   { href: '/features', kind: 'feature', label: 'Feature' },
@@ -45,6 +45,15 @@ export function relatedTests(snapshot: WorkspaceProjectionSnapshot, document: Wo
 export function testGroups(snapshot: WorkspaceProjectionSnapshot, document: WorkspaceDocument) {
   return implementationGroups(snapshot, document).map(({ owner, references }) => ({ owner, cases: snapshot.cases.filter(item => references.has(item.contract.split('#')[0]!)) }));
 }
+export function testDeclarationSummary(snapshot: WorkspaceProjectionSnapshot, document: WorkspaceDocument) {
+  const cases = relatedTests(snapshot, document);
+  const useCases = document.metadata.kind === 'feature' ? featureUseCases(snapshot, document) : [];
+  return { count: new Set([...cases, ...useCases.flatMap(child => relatedTests(snapshot, child))].map(item => item.id)).size, untestedUseCases: useCases.filter(child => relatedTests(snapshot, child).length === 0) };
+}
+export function effectiveWorkspaceConcepts(snapshot: Pick<WorkspaceProjectionSnapshot, 'conceptCatalogs' | 'pages'>, path: string) {
+  return selectEffectiveConcepts(path, snapshot.conceptCatalogs.map(catalog => ({ path: catalog.path, scope: scopeOf(catalog.path, 'catalog'), catalog })))
+    .map(item => ({ ...item.concept, path: item.path, digest: snapshot.pages.find(page => page.path === item.path)?.digest ?? '', reference: item.reference }));
+}
 export function projectionIsConclusive(projection: WorkspaceProjectionStatus): boolean {
   return projection.status === 'ready' && projection.consistent && projection.complete && !projection.unknownRelations;
 }
@@ -70,8 +79,23 @@ export function workspaceDisplay(snapshot: WorkspaceProjectionSnapshot) {
   return {
     categories: documentCategories.map(category => ({ ...category, documents: documentsInCategory(snapshot, category.kind) })),
     features: featureTree(snapshot), pages: projectDocPages(snapshot), supportPages: snapshot.pages.filter(page => page.documentPath !== undefined),
+    conceptCatalogs: snapshot.conceptCatalogs,
     sources: snapshot.sources, findings: snapshot.findings,
-    documents: snapshot.documents.map(document => ({ document, implementations: implementationGroups(snapshot, document), tests: relatedTests(snapshot, document), testGroups: testGroups(snapshot, document) })),
+    documents: snapshot.documents.map(document => ({ document, implementations: implementationGroups(snapshot, document), tests: relatedTests(snapshot, document), testGroups: testGroups(snapshot, document), testSummary: testDeclarationSummary(snapshot, document), concepts: effectiveWorkspaceConcepts(snapshot, document.path) })),
   };
 }
 export type WorkspaceDisplay = ReturnType<typeof workspaceDisplay>;
+
+/** Read the selected H2 section, including its definition and explanation. */
+export function conceptBody(source: string, id: string): string | undefined {
+  const nodes = fromMarkdown(markdownBody(source)).children;
+  const index = nodes.findIndex(node => node.type === 'heading' && node.depth === 2 && node.children.every(child => child.type === 'text') && node.children.map(child => child.type === 'text' ? child.value : '').join('').endsWith(`{#${id}}`));
+  if (index < 0) return;
+  const start = nodes[index]!.position!.end.offset!;
+  const next = nodes.slice(index + 1).find(node => node.type === 'heading' && node.depth <= 2);
+  return source.slice(start, next?.position?.start.offset ?? source.length).trim();
+}
+
+export function displayConcepts(model: WorkspaceDisplay, path: string) {
+  return effectiveWorkspaceConcepts({ conceptCatalogs: model.conceptCatalogs, pages: [...model.pages, ...model.supportPages] }, path);
+}

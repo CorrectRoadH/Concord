@@ -1,3 +1,4 @@
+import type { WorkspaceConceptCatalog } from './concept-directory.js';
 import { Schema } from "effect";
 import { FeedbackFilterFields } from "./feedback-filter.js";
 import { TEMPLATE_PAGES } from "./template-pages.js";
@@ -84,6 +85,7 @@ export interface WorkspaceProjectionSnapshot {
   readonly root: string;
   readonly project: ProjectConfig | null;
   readonly configDigest: string | null;
+  readonly conceptCatalogs: readonly WorkspaceConceptCatalog[];
   readonly documents: readonly WorkspaceDocument[];
   readonly feedback: readonly WorkspaceFeedback[];
   readonly pages: readonly WorkspacePage[];

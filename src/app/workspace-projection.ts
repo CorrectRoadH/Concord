@@ -1,3 +1,4 @@
+import { projectConceptCatalogs } from '../model/index.js';
 import { WorkspaceProjectionEnvelope as Envelope } from "../model/index.js";
 import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -43,6 +44,8 @@ export function makeWorkspaceProjectionRecord(snapshot: WorkspaceSnapshot, drift
   const remote = <T extends { readonly body: string }>(value: T) => { const { body: _body, ...rest } = value; return rest; };
   const document = (value: WorkspaceSnapshot['documents'][number]) => ({ path: value.path, digest: value.digest,
     metadata: value.metadata.kind === 'issue' && value.metadata.source ? { ...value.metadata, source: remote(value.metadata.source) } : value.metadata });
+  const directory = projectConceptCatalogs(snapshot.pages);
+  const snapshotComplete = snapshot.complete === true && directory.findings.length === 0;
   const changedPaths = [...new Set([...drift.files, ...drift.directories, ...(drift.publicationChanged ? ['.'] : [])])].sort();
   const consistent = changedPaths.length === 0;
   const builtUntil = new Date().toISOString();
@@ -52,8 +55,8 @@ export function makeWorkspaceProjectionRecord(snapshot: WorkspaceSnapshot, drift
     ? { ...('ok' in diagnostics ? { ok: diagnostics.ok } : {}), error: diagnostics.error, message: 'message' in diagnostics ? diagnostics.message : '' }
     : diagnostics;
   return decodeWorkspaceProjectionRecord({ builtAt: builtUntil, builtFrom, builtUntil, consistent,
-    complete: consistent && snapshot.complete === true, changedPaths, unknownRelations: !consistent || snapshot.complete !== true,
-    snapshot: { ...snapshot, complete: consistent && snapshot.complete === true, diagnostics: diagnostic,
+    complete: consistent && snapshotComplete, changedPaths, unknownRelations: !consistent || !snapshotComplete,
+    snapshot: { ...snapshot, complete: consistent && snapshotComplete, diagnostics: diagnostic, conceptCatalogs: directory.catalogs, findings: [...snapshot.findings, ...directory.findings],
       documents: snapshot.documents.map(document),
       pages: snapshot.pages.map(page => ({ path: page.path, digest: page.digest, ...(page.documentPath ? { documentPath: page.documentPath } : {}),
         ...(page.body.match(/^#\s+(.+)$/mu)?.[1] ? { derivedTitle: page.body.match(/^#\s+(.+)$/mu)![1]!.trim() } : {}) })),
