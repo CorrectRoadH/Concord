@@ -1,5 +1,8 @@
 ---
-status: open
+status: closed
+closure:
+  kind: closed
+  reason: 不再适用：repository-profile 可靠性治理与 RepositoryAdapterUnsupportedPlatform 已退休。当前 src/domain/tests/test-adapters.ts 的 withSession/callProcess 不含 win32 启动前 CleanupUnknown 拒绝；src/base/process/owned-process.ts 在 win32 使用非 detached 子进程，未拥有的进程组不被误判为清理未知。src/base/sources/report-files.ts:10 按现行原生 adapter Spec 对非 Linux 报告读取返回 ReportUnsafe；Linux 上 win32 分支探测已确认该错误，未声称 Windows 实机验收。
 ---
 
 # 不支持的平台上 adapter 返回了清理未知的错误码
