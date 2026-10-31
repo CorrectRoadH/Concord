@@ -7,7 +7,7 @@ import { tmpdir } from '../support/temporary.js';
 import { before, after, test } from 'node:test';
 import { Schema } from 'effect';
 import { decode, FixVerificationSchema } from "../../src/model/index.js";
-import { createFixConsumer } from '../support/fix-consumer.js';
+import { createFixConsumer, gitCommand, gitCommit } from '../support/fix-consumer.js';
 import { packConcord, installConcord } from '../support/installed-package.js';
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-fix-cli-'));
@@ -51,18 +51,43 @@ test('packed close fixed records commits, verify replays without writing, and si
   assert.deepEqual(decode(ObjectSchema, cases[0], 'case').issues, ['docs/issues/sku.md']);
 });
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
-test('packed verification error codes preserve the Issue owner', async t => {
-  for (const [name, options, fix, expected] of [
-    ['green defect', { greenAtDefect: true }, false, 'FixUnverifiable'],
-    ['unfixed target', {}, false, 'FixVerificationFailed'],
-    ['changed HEAD', { runner: 'move-head' }, true, 'PreimageChanged'],
+test('packed verification rejects green defects and failing fix candidates without changing the Issue', async t => {
+  for (const [name, options, expected] of [
+    ['green defect', { greenAtDefect: true }, 'FixUnverifiable'],
+    ['unfixed target', {}, 'FixVerificationFailed'],
   ] as const) await t.test(name, () => {
     const f = createFixConsumer(options); try {
-      if (fix) f.fix(); const before = readFileSync(join(f.root, 'docs/issues/sku.md'), 'utf8');
+      writeFileSync(join(f.root, 'candidate.txt'), 'Candidate after the regression commit\n');
+      const candidate = gitCommit(f.root, 'candidate without a fix');
+      assert.equal(gitCommand(f.root, 'rev-parse', `${candidate}^`), f.defect);
+      const before = readFileSync(join(f.root, 'docs/issues/sku.md'), 'utf8');
       assert.equal(call(f.root, ['issue', 'close', 'sku', '--fixed', '--reason', 'Candidate'], 1).error, expected);
       assert.equal(readFileSync(join(f.root, 'docs/issues/sku.md'), 'utf8'), before);
     } finally { rmSync(f.root, { recursive: true, force: true }); }
   });
+});
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
+test('packed close fixed accepts a parallel commit and records the initially captured fix', t => {
+  const f = createFixConsumer({ runner: 'move-head' });
+  t.after(() => rmSync(f.root, { recursive: true, force: true }));
+  const fix = f.fix();
+  const closed = call(f.root, ['issue', 'close', 'sku', '--fixed', '--reason', 'Accumulate quantities']);
+  const verification = decode(FixVerificationSchema, closed.verification, 'verification');
+  assert.deepEqual({ defect: verification.defect, fix: verification.fix }, { defect: f.defect, fix });
+  assert.notEqual(gitCommand(f.root, 'rev-parse', 'HEAD'), fix);
+  assert.equal(gitCommand(f.root, 'rev-parse', 'HEAD^'), fix);
+  assert.equal(readFileSync(join(f.root, 'parallel.txt'), 'utf8'), 'Independent commit\n');
+  assert.deepEqual(call(f.root, ['check']).verifications, [{ path: 'docs/issues/sku.md', verified: 'recorded', verification }]);
+});
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
+test('packed close fixed returns PreimageChanged and preserves an Issue edited during verification', t => {
+  const f = createFixConsumer({ runner: 'edit-issue' });
+  t.after(() => rmSync(f.root, { recursive: true, force: true }));
+  f.fix();
+  const path = join(f.root, 'docs/issues/sku.md');
+  const before = readFileSync(path, 'utf8');
+  assert.equal(call(f.root, ['issue', 'close', 'sku', '--fixed', '--reason', 'Candidate'], 1).error, 'PreimageChanged');
+  assert.equal(readFileSync(path, 'utf8'), before + '\nConcurrent Issue note.\n');
 });
 // @feature docs/feature/local-sdlc/cli.md#检查本次变化
 test('packed since rejects an unavailable baseline as InvalidBase', t => {
