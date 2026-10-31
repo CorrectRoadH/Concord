@@ -237,7 +237,7 @@ type QueryCacheEnvelope = {
 6. 只有失败保留 record 与 lastAttempt 并写入 error。
 7. 漂移不在同一刷新内重扫。
 
-工作区投影采用相同语义；诊断投影的 `builtAt` 是发布时间，不等于 `builtUntil`。
+以上规则只适用于诊断投影：它是带漂移标注的历史结果，服务 trace gaps、trace show 与 review 的历史查询，没有一致结果时也发布，并用 `consistent`、`unknownRelations` 与 `changedPaths` 如实标注，避免 agent 持续写入时查询一直拿不到结果。工作区导航不同：它是给人看的当前工作区，只发布一致的结果，漂移的候选丢弃，见 [Web 工作台的读取与发布](../web-workbench/architecture.md#读取与发布)。诊断投影的 `builtAt` 是发布时间，不等于 `builtUntil`。
 
 ### 失败分类
 
