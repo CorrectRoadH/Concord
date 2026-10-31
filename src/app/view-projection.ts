@@ -2,7 +2,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 import { acquireFileLease, assertLeasePath, CoordinationError, ownerIsAlive, readLeaseOwner, recoverFileLease, releaseFileLease, type FileLease } from "../base/publication/index.js";
 import { PUBLICATION_LEASE } from "../base/publication/index.js";
-import { HawdbFailure, hawdbIdentity } from "../base/cache/index.js";
+import { HawdbFailure, hawdbIdentity, PersistentCache } from "../base/cache/index.js";
 import { ConcordError, failure } from "../model/index.js";
 import { Workspace, assertCurrentRuntimeFormat } from "../base/workspace/index.js";
 import { ViewScanManager } from "./view-scan.js";
@@ -32,16 +32,17 @@ export class ViewProjectionManager {
   private periodic: NodeJS.Timeout | undefined;
   private invalidation: NodeJS.Timeout | undefined;
   private invalidatedAt = 0;
-  private constructor(private readonly root: string, private readonly watch: SourceWatch, private readonly sources: Sources['Service'], private readonly workspace: Workspace['Service']) {
+  private constructor(private readonly root: string, private readonly watch: SourceWatch, private readonly sources: Sources['Service'], private readonly workspace: Workspace['Service'], private readonly cache: PersistentCache['Service']) {
     this.scans = new ViewScanManager(root);
   }
 
   static readonly make = Effect.fn('ViewProjectionManager.make')(function*(root: string) {
     const sources = yield* Sources;
     const workspace = yield* Workspace;
+    const cache = yield* PersistentCache;
     let manager: ViewProjectionManager;
     const watch = yield* sources.watch(root, () => manager.invalidate(), error => { manager.watchFailure = error; });
-    manager = new ViewProjectionManager(root, watch, sources, workspace);
+    manager = new ViewProjectionManager(root, watch, sources, workspace, cache);
     yield* Effect.addFinalizer(() => Effect.promise(() => manager.close()));
     return manager;
   });
@@ -91,7 +92,7 @@ export class ViewProjectionManager {
   private async readOnce(): Promise<WorkspaceProjection> {
     const context = await this.context();
     try {
-      const value = readWorkspaceProjection(context);
+      const value = await Effect.runPromise(readWorkspaceProjection(context).pipe(Effect.provideService(PersistentCache, this.cache)));
       if (this.watchFailure && value.projection.status === 'ready') return { ...value, projection: { ...value.projection, status: 'refresh-failed',
         lastError: { failedAt: Number.isFinite(this.lastStarted) ? new Date(this.lastStarted).toISOString() : value.projection.builtUntil,
           code: this.watchFailure.code, message: this.watchFailure.message.slice(0, 4096) } } };
@@ -172,7 +173,7 @@ export class ViewProjectionManager {
       await this.verify(context);
       if (candidate !== undefined) await this.ready(context);
       await this.verify(context);
-      try { storeWorkspaceProjection(context, candidate, error); return; }
+      try { await Effect.runPromise(storeWorkspaceProjection(context, candidate, error).pipe(Effect.provideService(PersistentCache, this.cache))); return; }
       catch (cause) {
         if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || performance.now() >= deadline) throw cause;
         // 候选已经完成扫描，缓存短暂占用不应丢弃它并等待下一轮扫描。

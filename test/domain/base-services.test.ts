@@ -3,13 +3,15 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
-import { Context, Effect, Fiber, Layer, Option } from 'effect';
+import { Context, Deferred, Effect, Fiber, Layer, Option } from 'effect';
+import { ChildProcessSpawner } from 'effect/unstable/process';
+import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService } from '../../src/base/process/index.js';
 import { TestClock } from 'effect/testing';
 import { Workspace } from '../../src/base/workspace/index.js';
 import { renderTypeScriptConfig } from '../../src/base/workspace/index.js';
 import { Sources } from '../../src/base/sources/index.js';
 import { createConsumer } from '../support/consumer.js';
-import { Cache, CacheSnapshot, HawdbFailure } from '../../src/base/cache/index.js';
+import { Cache, CacheSnapshot, HawdbFailure, cacheDatabasePath, openHawdb } from '../../src/base/cache/index.js';
 import { waitForPublication, acquireTraceLeaseSync, releaseTraceLeaseSync, Publication } from '../../src/base/publication/index.js';
 import { publicationLayer } from '../support/repository.js';
 import { cliLayer } from '../../src/entry/cli/index.js';
@@ -17,6 +19,28 @@ import { httpOperationLayer } from '../../src/entry/http/index.js';
 import { readerLayer, writerLayer, refreshLayer } from '../../src/entry/server/index.js';
 import { PersistentCache } from '../../src/base/cache/index.js';
 import { Git } from '../../src/base/git/index.js';
+
+// @feature docs/feature/local-sdlc/README.md
+test('OwnedProcess preserves cancellation received while the platform is acquiring a real child', async () => {
+  await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+    const platform = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const spawned = yield* Deferred.make<void>();
+    const proceed = yield* Deferred.make<void>();
+    // Only the external platform boundary is delayed; spawning and cleanup are real.
+    const owner = makeOwnedProcessService({ spawner: { ...platform, spawn: command => platform.spawn(command).pipe(
+      Effect.tap(() => Deferred.succeed(spawned, undefined)), Effect.tap(() => Deferred.await(proceed)),
+    ) } });
+    const fiber = yield* Effect.forkChild(Effect.scoped(owner.run([process.execPath, '-e', 'setInterval(() => {}, 1000)'], { cwd: process.cwd(), timeoutMs: 3000 })));
+    yield* Deferred.await(spawned);
+    yield* owner.requestStop('SIGTERM');
+    yield* Deferred.succeed(proceed, undefined);
+    const result = yield* Fiber.join(fiber);
+    assert.equal(result.cancelled, true);
+    assert.equal(result.timedOut, false);
+    assert.equal(hasConfirmedOwnedGroupCleanup(result), true);
+    assert.equal(yield* owner.activeCount, 0);
+  })).pipe(Effect.provide(NodeServices.layer)));
+});
 
 // @feature docs/feature/project-onboarding/README.md
 test('Workspace rereads configuration for each operation and Sources rejects a changed snapshot', async () => {
@@ -46,8 +70,8 @@ test('Workspace rereads configuration for each operation and Sources rejects a c
 test('entry layers build the declared reader and operation capabilities', async () => {
   for (const [name, layer, writes, persistent, git] of [
     ['CLI', cliLayer, true, true, true],
-    ['HTTP operation', httpOperationLayer, true, false, true],
-    ['reader worker', readerLayer, false, false, false],
+    ['HTTP operation', httpOperationLayer, true, true, true],
+    ['reader worker', readerLayer, false, true, false],
     ['cache maintenance worker', writerLayer, true, true, false],
   ] as const) {
     const context = await Effect.runPromise(Effect.scoped(Layer.build(layer)));
@@ -62,7 +86,29 @@ test('entry layers build the declared reader and operation capabilities', async 
   const refresh = await Effect.runPromise(Effect.scoped(Layer.build(refreshLayer)));
   assert.equal(Option.isSome(Context.getOption(refresh, Workspace)), true);
   assert.equal(Option.isSome(Context.getOption(refresh, Publication)), false);
-  assert.equal(Option.isSome(Context.getOption(refresh, PersistentCache)), false);
+  assert.equal(Option.isSome(Context.getOption(refresh, PersistentCache)), true);
+});
+
+// @feature docs/feature/local-data-engine/README.md
+test('PersistentCache reuses nested source ownership and releases the native handle at the outer boundary', async () => {
+  const root = createConsumer();
+  const live = Layer.mergeAll(Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provide(NodeServices.layer));
+  let captured: import('../../src/base/workspace/index.js').LocalRepository | undefined;
+  try {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const workspace = yield* Workspace, sources = yield* Sources;
+      const repo = yield* workspace.openRead(root, { access: 'read' }); captured = repo;
+      yield* sources.snapshot(repo, Effect.sync(() => {
+        PersistentCache.repository(repo).put('code_cache', [{ key: 'scope-test', payload: 'value' }]);
+        repo.snapshot(() => assert.deepEqual(PersistentCache.repository(repo).get('code_cache', ['scope-test']), [{ key: 'scope-test', payload: 'value' }]));
+        assert.throws(() => openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: true, create: false }), { code: 'HawdbBusy' });
+      }));
+      const database = openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: true, create: false });
+      try { assert.deepEqual(database.get('code_cache', ['scope-test']), [{ key: 'scope-test', payload: 'value' }]); }
+      finally { database.close(); }
+    })).pipe(Effect.provide(live)));
+    assert.deepEqual(PersistentCache.repository(captured!).get('code_cache', ['scope-test']), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 // @feature docs/feature/local-data-engine/README.md

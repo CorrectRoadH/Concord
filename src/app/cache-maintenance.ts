@@ -17,17 +17,17 @@ export const maintainCache = Effect.fn('maintainCache')(function*(root: string):
     const deferred = yield* Effect.scoped(Effect.gen(function*() {
       const database = yield* cache.open(privateDir);
       if (database === undefined) return true;
-      return yield* Effect.sync(() => database.reclaim().deferredForActiveLeases);
+      return yield* Effect.try({ try: () => database.reclaim().deferredForActiveLeases, catch: cause => cause });
     })).pipe(Effect.catch(() => Effect.succeed(true)));
     // A failed or budget-limited sweep is a deferral, never permission to clear.
     if (deferred) return 'deferred';
     if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed';
     return yield* Effect.scoped(Effect.gen(function*() {
       const repo = yield* openWriteRepository(root, { persistentCache: 'off', reclaimPublication: false });
-      return yield* Effect.sync(() => repo.snapshot(() => {
+      return yield* Effect.try({ try: () => repo.snapshot(() => {
         if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed' as const;
         return clearCache(repo, CACHE_PHYSICAL_LIMIT_BYTES).status === 'cleared' ? 'cleared' as const : 'reclaimed' as const;
-      }));
+      }), catch: cause => cause });
     })).pipe(Effect.catch(() => Effect.succeed('deferred' as const)));
   } catch { return 'deferred'; }
 });

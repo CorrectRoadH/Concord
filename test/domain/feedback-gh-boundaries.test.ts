@@ -124,9 +124,11 @@ async function child(scenario: Scenario): Promise<void> {
     const configPath = join(consumer, 'concord.config.ts');
     const originalConfig = readFileSync(configPath, 'utf8');
     const issuePath = join(consumer, 'docs', 'issues', 'feedback-github-1001.md');
+    const { OwnedProcess, makeOwnedProcessService } = await import('../../src/base/process/index.js');
+    const startupOwner = makeOwnedProcessService();
     if (scenario === 'trusted-path') process.env.PATH = [join(consumer, 'bin'), modules, gitBin].join(delimiter);
     if (scenario === 'trusted-path' || scenario === 'normal') {
-      const result = await runApplication(syncFeedback(consumer, connection.id));
+      const result = await runApplication(syncFeedback(consumer, connection.id).pipe(Effect.provideService(OwnedProcess, startupOwner)));
       assert.equal(result.connection.provider, 'github');
       assert.equal(result.connection.provider === 'github' ? result.connection.repositoryId : undefined, '42');
       if (scenario === 'normal') {

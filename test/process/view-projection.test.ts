@@ -1,3 +1,4 @@
+import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.js';
 import { createDocument, initialize } from '../support/operations.js';
 import { Workspace } from '../../src/base/workspace/index.js';
 import { NodeServices } from '@effect/platform-node';
@@ -21,7 +22,7 @@ import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
 
 import { type WorkspaceProjection } from "../../src/model/index.js";
-import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
+import { makeWorkspaceProjectionRecord, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';
@@ -341,6 +342,7 @@ test('an installation missing native artifacts reports unavailable instead of pe
     rmSync(installationResources(installed).native, { recursive: true });
     const result = spawnSync(process.execPath, [packageBin(installed), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });
     assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /^\{/u, result.stdout + result.stderr);
     const failure = JSON.parse(result.stderr) as { error: string; details: { reason: string } };
     assert.equal(failure.error, 'WorkspaceProjectionUnavailable', result.stderr);
     assert.equal(failure.details.reason, 'HawdbUnavailable');

@@ -12,7 +12,7 @@ import { resolveTrustedExecutable } from './trusted-executable.js';
 import { OwnedProcessError } from './owned-process-error.js';
 export { OwnedProcessError } from './owned-process-error.js';
 
-const startupEnvironment = Object.freeze({ env: Object.freeze({ ...process.env }), cwd: process.cwd() });
+const captureEnvironment = () => Object.freeze({ env: Object.freeze({ ...process.env }), cwd: process.cwd() });
 
 const OUTPUT_LIMIT = 4 * 1024 * 1024;
 export type OwnedTermination = 'timeout' | 'cancelled' | 'output-limit';
@@ -24,7 +24,7 @@ export interface OwnedProcessResult {
   readonly stdout: string; readonly stderr: string; readonly outputBytes: number; readonly error?: string; readonly processGroupOwned: boolean; readonly groupCleanup: OwnedProcessGroupCleanup;
 }
 export interface OwnedProcessService {
-  readonly environment: typeof startupEnvironment;
+  readonly environment: ReturnType<typeof captureEnvironment>;
   readonly resolveExecutable: typeof resolveTrustedExecutable;
   readonly run: (command: readonly string[], options: OwnedProcessOptions) => Effect.Effect<OwnedProcessResult, OwnedProcessError, Scope.Scope>;
   readonly requestStop: (signal: NodeJS.Signals) => Effect.Effect<void>;
@@ -190,6 +190,7 @@ const acquire = Effect.fn('OwnedProcess.acquire')(function*(command: readonly st
 });
 
 export function makeOwnedProcessService(options: { readonly graceMs?: number; readonly groupPresence?: GroupPresenceDependencies; readonly spawner?: ChildProcessSpawner.ChildProcessSpawner["Service"] } = {}): OwnedProcessService {
+  const environment = captureEnvironment();
   const graceMs = options.graceMs ?? 500;
   const active = new Set<Active>();
   const completed: OwnedProcessResult[] = [];
@@ -202,7 +203,7 @@ export function makeOwnedProcessService(options: { readonly graceMs?: number; re
     return result;
   });
   return {
-    environment: startupEnvironment,
+    environment,
     resolveExecutable: resolveTrustedExecutable,
     run: (command, processOptions) => Effect.suspend(() => {
       if (isolated) return Effect.fail(new OwnedProcessError({ operation: 'observe', detail: 'Owned process cleanup is unconfirmed; this owner is isolated' }));
@@ -210,7 +211,11 @@ export function makeOwnedProcessService(options: { readonly graceMs?: number; re
         return Effect.succeed({ command, exitCode: null, signal: stopping, timedOut: false, cancelled: true, outputLimitExceeded: false, stdout: '', stderr: '', outputBytes: 0, processGroupOwned: false, groupCleanup: none('runner cancellation was already requested') });
       }
       return Effect.acquireRelease(
-        acquire(command, processOptions, active, graceMs, options.spawner ?? nodeSpawner()).pipe(Effect.tap(entry => Effect.sync(() => { entry.groupPresence = options.groupPresence; }))),
+        acquire(command, processOptions, active, graceMs, options.spawner ?? nodeSpawner()).pipe(Effect.tap(entry => Effect.sync(() => {
+          entry.groupPresence = options.groupPresence;
+          // Cancellation may arrive while the platform is waiting for the spawn event.
+          if (stopping !== undefined) signal(entry, stopping, 'cancelled');
+        }))),
         (entry) => stop(entry, graceMs, 'cancelled').pipe(Effect.flatMap((result) => record(entry, result)), Effect.asVoid, Effect.ensuring(Effect.sync(() => active.delete(entry)))),
       ).pipe(Effect.flatMap((entry) => {
         const observedClose = Deferred.await(entry.closed).pipe(

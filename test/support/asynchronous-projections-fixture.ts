@@ -1,3 +1,4 @@
+import { readQuery, storeQuery } from './operations.js';
 import { initialize, createDocument } from './operations.js';
 import { Workspace } from '../../src/base/workspace/index.js';
 import { NodeServices } from '@effect/platform-node';
@@ -30,7 +31,7 @@ import { setAuthor } from "../../src/domain/documents/index.js";
 
 import { renderDocument } from "../../src/model/index.js";
 import { ConcordError, digest } from "../../src/model/index.js";
-import { QueryCacheEnvelope, queryContext as identifyQuery, readQuery, storeQuery, type Query } from "../../src/app/index.js";
+import { QueryCacheEnvelope, queryContext as identifyQuery, type Query } from "../../src/app/index.js";
 
 export const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
 export const candidate = (marker = 'original', scannedAt = Date.now()) => ({ kind: 'candidate' as const, message: { format: 'concord.query-scan/v1' as const, ok: true as const, scannedAt, finishedAt: Date.now(), value: gaps(marker), complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } } });

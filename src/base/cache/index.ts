@@ -12,7 +12,6 @@ export { requestCacheMaintenance } from './cache-maintenance.js';
 export { readCachePayloads } from './cache-query.js';
 export { writeCachePayloads } from './cache-query.js';
 export { closeRepositoryCache } from './cache-store.js';
-export { withPersistentCache } from './cache-store.js';
 export { readCodePayloads } from './code-cache.js';
 export { writeCodePayloads } from './code-cache.js';
 export { ContentCache } from './content-cache.js';
@@ -35,3 +34,5 @@ export type { HawdbReclamation } from './hawdb-native.js';
 export { openHawdb } from './hawdb-native.js';
 export { readWritingFindings } from './writing-cache.js';
 export { writeWritingFindings } from './writing-cache.js';
+
+export type { RepositoryCache } from './cache-store.js';

@@ -11,7 +11,7 @@ import { ProjectSchema } from "../../src/model/index.js";
 import { renderTypeScriptConfig, parseTypeScriptConfig } from "../../src/base/workspace/index.js";
 import { type test_adapter_config_TestAdapter as TestAdapter } from "../../src/model/index.js";
 import { LocalRepository } from "./repository.js";
-import { closeRepositoryCache, withPersistentCache } from "../../src/base/cache/index.js";
+import { closeRepositoryCache, PersistentCache, type RepositoryCache } from "../../src/base/cache/index.js";
 import { installConcord, packConcord } from './installed-package.js';
 
 export const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
@@ -90,6 +90,6 @@ export { parseTypeScriptConfig };
 export type { TestAdapter };
 export { LocalRepository };
 export { closeRepositoryCache };
-export { withPersistentCache };
+export const withPersistentCache = <A>(repo: import('../../src/model/index.js').Repository, _writable: boolean, use: (cache: RepositoryCache) => A): A => use(PersistentCache.repository(repo));
 export { installConcord };
 export { packConcord };

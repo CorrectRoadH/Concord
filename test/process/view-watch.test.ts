@@ -1,3 +1,4 @@
+import { readWorkspaceProjection } from '../support/operations.js';
 import { createDocument, initialize } from '../support/operations.js';
 import { Workspace } from '../../src/base/workspace/index.js';
 import { NodeServices } from '@effect/platform-node';
@@ -17,7 +18,7 @@ import { LocalRepository } from "../support/repository.js";
 
 import type { WorkspaceProjection } from "../../src/model/index.js";
 import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
-import { readWorkspaceProjection, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
+import { workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 const ownerPath = 'docs/feature/projected/README.md';

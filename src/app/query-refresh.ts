@@ -63,7 +63,7 @@ export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | 
   const before = yield* queryContext(context.root, query);
   // Queued old-identity owners abandon their request before starting another scan.
   if (before.key !== context.key) return;
-  const previous = yield* Effect.sync(() => readQuery(context));
+  const previous = yield* readQuery(context);
   if (queryRequestSatisfied(previous, requestedAt)) return;
   const scannedAt = Date.now();
   const service = makeOwnedProcessService();

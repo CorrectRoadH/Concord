@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 import { Schema } from "effect";
-import { withPersistentCache } from "./cache-store.js";
+import { repositoryCache } from "./cache-store.js";
 import { RemoteFeedbackSchema, feedbackIdentity, type RemoteFeedback } from "../../model/index.js";
 import { ConcordError, canonical, decode, inRepositorySnapshot, type Repository } from "../../model/index.js";
 
@@ -24,16 +24,19 @@ function decodedEntry(key: string, payload: string): CachedFeedback {
 }
 
 export function readFeedbackCache(repo: Repository): FeedbackCacheSnapshot {
-  return inRepositorySnapshot(repo, () => withPersistentCache(repo, false, database => {
+  return inRepositorySnapshot(repo, () => {
+    const database = repositoryCache(repo);
     const items = new Map<string, CachedFeedback>();
     for (const row of database?.scan('feedback_cache') ?? []) items.set(row.key, decodedEntry(row.key, row.payload));
     return { items, warnings: [] };
-  }));
+  });
 }
 
 /** One synchronous read/validate/merge/put under the same repository lease and engine handle. */
 export function mergeFeedbackCache(repo: Repository, connectionId: string, remoteItems: readonly RemoteFeedback[]): readonly string[] {
-  return inRepositorySnapshot(repo, () => withPersistentCache(repo, true, database => {
+  return inRepositorySnapshot(repo, () => {
+    const database = repositoryCache(repo);
+    database.prepareWrite();
     const incoming = remoteItems.map(remote => decode(RemoteFeedbackSchema, remote, 'feedback fetch'));
     const keys = [...new Set(incoming.map(feedbackIdentity))];
     if (keys.length > 1000) throw new ConcordError('HawdbLimit', 'A feedback fetch exceeds the atomic 1000-identity cache batch limit');
@@ -60,7 +63,7 @@ export function mergeFeedbackCache(repo: Repository, connectionId: string, remot
     }
     if (changes.size > 0) database!.put('feedback_cache', [...changes].map(([key, value]) => ({ key, payload: canonical(value) })));
     return warnings;
-  }));
+  });
 }
 
 function comparable(remote: RemoteFeedback): string {

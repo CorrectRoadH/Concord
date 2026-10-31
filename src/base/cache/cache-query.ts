@@ -3,7 +3,7 @@
 import type { HawdbDatabase, HawdbEntry, HawdbLimits, HawdbNamespace } from "./hawdb-native.js";
 
 /** Query-local selection only. The engine bounds namespace rows and bytes. */
-export function readCachePayloads(database: HawdbDatabase, namespace: HawdbNamespace, keys: readonly string[]): ReadonlyMap<string, string> {
+export function readCachePayloads(database: Pick<HawdbDatabase, 'get' | 'scan'>, namespace: HawdbNamespace, keys: readonly string[]): ReadonlyMap<string, string> {
   if (keys.length === 0) return new Map();
   const requested = new Set(keys);
   // The pinned bridge executes one SQL query per get key. A namespace scan
@@ -13,7 +13,7 @@ export function readCachePayloads(database: HawdbDatabase, namespace: HawdbNames
 }
 
 /** Respect both native batch limits; a large collection is not a cache failure. */
-export function writeCachePayloads(database: HawdbDatabase, namespace: HawdbNamespace, entries: readonly HawdbEntry[], limits?: HawdbLimits): void {
+export function writeCachePayloads(database: Pick<HawdbDatabase, 'put'>, namespace: HawdbNamespace, entries: readonly HawdbEntry[], limits?: HawdbLimits): void {
   let batch: HawdbEntry[] = [];
   let bytes = 0;
   const maxEntries = Math.min(1000, limits?.maxEntries ?? 1000);

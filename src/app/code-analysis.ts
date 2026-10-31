@@ -3,7 +3,7 @@ import { Effect } from "effect";
 import { buildTrace, requireValidTrace } from "../domain/trace/index.js";
 import { worktreeIdentity } from "../base/git/index.js";
 import { openReadRepository, type LocalRepository } from "../base/workspace/index.js";
-import { closeRepositoryCache, withPersistentCache } from "../base/cache/index.js";
+import { closeRepositoryCache, PersistentCache } from "../base/cache/index.js";
 import { readCachePayloads, writeCachePayloads } from "../base/cache/index.js";
 import { acquireTraceLeaseSync, readPublicationRevisionSync, releaseTraceLeaseSync } from "../base/publication/index.js";
 import { beginRun, finalizeRun, finishRun, quarantineRun } from "../base/publication/index.js";
@@ -85,7 +85,7 @@ function captureReader(reader: LocalRepository) {
   };
   try {
     const captured = reader.snapshot(() => {
-      try { return captureAnalysisInputs(source); }
+      try { return PersistentCache.withView(reader, source, () => captureAnalysisInputs(source)); }
       finally { closeRepositoryCache(source); }
     });
     return { ...captured, verifyFiles: () => reader.snapshot(() => {
@@ -110,7 +110,7 @@ const readCapture = Effect.fn('analysis.capture')(function*(root: string) {
 
 function publishObservations(repo: Repository, values: readonly AnalysisObservation[]): void {
   try {
-    withPersistentCache(repo, true, database => writeCachePayloads(database!, 'code_cache', values.map(value => ({ key: unitKey(repo, value.value.analyzer), payload: JSON.stringify(value) }))));
+    writeCachePayloads(PersistentCache.repository(repo), 'code_cache', values.map(value => ({ key: unitKey(repo, value.value.analyzer), payload: JSON.stringify(value) })));
   } catch { throw new ConcordError('LanguageServerFailed', 'Could not publish the analysis observation cache'); }
   finally { closeRepositoryCache(repo); }
 }
@@ -186,7 +186,7 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
 function readStoredAnalysisObservations(repo: Repository): readonly AnalysisObservation[] {
   const analyzers = ['typescript', ...(repo.config.languageServers ?? []).map(server => server.id)];
   let stored: ReadonlyMap<string, string>;
-  try { stored = withPersistentCache(repo, false, database => database === undefined ? new Map() : readCachePayloads(database, 'code_cache', analyzers.map(analyzer => unitKey(repo, analyzer)))); }
+  try { stored = readCachePayloads(PersistentCache.repository(repo), 'code_cache', analyzers.map(analyzer => unitKey(repo, analyzer))); }
   catch { return []; }
   const observations: AnalysisObservation[] = [];
   for (const analyzer of analyzers) {

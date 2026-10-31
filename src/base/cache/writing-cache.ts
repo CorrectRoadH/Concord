@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/policy.md#使用统计与输入快照
 import { Schema } from "effect";
-import { withPersistentCache } from "./cache-store.js";
+import { repositoryCache } from "./cache-store.js";
 import { readCachePayloads, writeCachePayloads } from "./cache-query.js";
 import { canonical, decode, Nat, objectDigest, type Repository } from "../../model/index.js";
 import type { WritingFinding } from "../../model/index.js";
@@ -19,13 +19,13 @@ const key = (inputDigest: string) => `writing:${objectDigest({ format: 'concord.
 
 export function readWritingFindings(repo: Repository, inputDigest: string): WritingFinding[] | undefined {
   try {
-    return withPersistentCache(repo, false, database => {
-      if (database === undefined) return undefined;
+    return (() => {
+      const database = repositoryCache(repo);
       const payload = readCachePayloads(database, 'query_cache', [key(inputDigest)]).get(key(inputDigest));
       if (payload === undefined) return undefined;
       const record = decode(Record, JSON.parse(payload), 'writing findings cache');
       return record.inputDigest === inputDigest && record.findingsDigest === objectDigest(record.findings) ? [...record.findings] : undefined;
-    });
+    })();
   } catch { return undefined; }
 }
 
@@ -34,6 +34,6 @@ export function writeWritingFindings(repo: Repository, inputDigest: string, find
     const record = decode(Record, { format: 'concord.writing-findings/v1', inputDigest, findingsDigest: objectDigest(findings), findings }, 'writing findings cache');
     const payload = canonical(record);
     if (Buffer.byteLength(payload) > 8 * 1024 * 1024) return;
-    withPersistentCache(repo, true, database => writeCachePayloads(database!, 'query_cache', [{ key: key(inputDigest), payload }]));
+    writeCachePayloads(repositoryCache(repo), 'query_cache', [{ key: key(inputDigest), payload }]);
   } catch { /* Current-source findings remain available when caching is unavailable. */ }
 }

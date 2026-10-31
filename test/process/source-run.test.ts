@@ -87,6 +87,7 @@ test('source commands explain missing native and built assets before starting wo
     for (const args of [['view'], ['view', 'export', '--base', 'missing', '--out', join(fixture.scratch, 'preview')]]) {
       const result = fixture.call('--json', ...args);
       assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr, /^\{/u, result.stdout + result.stderr);
       const error = decodeOutput(result.stderr);
       assert.equal(error.error, 'BuildRequired');
       assert.match(error.message!, /vp build/u);
@@ -97,6 +98,7 @@ test('source commands explain missing native and built assets before starting wo
     renameSync(fixture.native, join(fixture.tool, 'native-hidden'));
     const missing = fixture.call('--json', 'trace', 'gaps');
     assert.equal(missing.status, 1, missing.stdout + missing.stderr);
+    assert.match(missing.stderr, /^\{/u, missing.stdout + missing.stderr);
     const error = decodeOutput(missing.stderr);
     assert.equal(error.error, 'HawdbUnavailable');
     assert.match(error.message!, /pnpm exec vp run build:native/u);

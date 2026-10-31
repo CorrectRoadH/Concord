@@ -7,7 +7,7 @@ import { Effect } from "effect";
 import { genericPrivateDirectorySync } from "../base/publication/index.js";
 import { assertLeasePath, ownerIsAlive, readLeaseOwner } from "../base/publication/index.js";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.js";
-import { HawdbFailure, hawdbIdentity, openHawdb } from "../base/cache/index.js";
+import { HawdbFailure, hawdbIdentity, PersistentCache } from "../base/cache/index.js";
 import { workspaceInstallationIdentity } from "../base/installation/index.js";
 import { requestCacheMaintenance } from "../base/cache/index.js";
 import { ConcordError, digest, failure } from "../model/index.js";
@@ -21,7 +21,8 @@ import { type WorkspaceProjectionRecord, type WorkspaceProjectionContext, WORKSP
 export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext')(function*(input: string) {
   const workspace = yield* Workspace;
   const { root, privateDir, config } = yield* workspace.identify(input, true, true);
-  return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config ?? 'absent', 'workspace', workspaceInstallationIdentity()])) } satisfies WorkspaceProjectionContext;
+  const installation = yield* Effect.try({ try: workspaceInstallationIdentity, catch: failure });
+  return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config ?? 'absent', 'workspace', installation])) } satisfies WorkspaceProjectionContext;
 }, Effect.mapError(cause => new ConcordError('WorkspaceProjectionUnavailable', 'Cannot identify the workspace cache; repair the configuration path or installation and restart View', {
   reason: cause.code, message: cause.message,
 })));
@@ -54,33 +55,31 @@ export function makeWorkspaceProjectionRecord(snapshot: WorkspaceSnapshot, drift
 }
 
 
-function readEnvelope(context: WorkspaceProjectionContext): typeof Envelope.Type | undefined {
-  hawdbIdentity();
-  const path = cacheDatabasePath(context.privateDir);
-  assertLeasePath(path);
-  if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path)) return undefined;
-  const database = openHawdb(path, { readOnly: true, create: false });
-  try {
-    const payload = database.get('workspace_projection', [key])[0]?.payload;
+const readEnvelope = Effect.fn('workspaceProjection.readEnvelope')(function*(context: WorkspaceProjectionContext) {
+  yield* Effect.try({ try: hawdbIdentity, catch: cause => cause });
+  const cache = yield* PersistentCache;
+  const rows = yield* cache.read(context.privateDir, 'workspace_projection', [key]);
+  return yield* Effect.try({ try: () => {
+    const payload = rows[0]?.payload;
     if (payload === undefined) return undefined;
     if (Buffer.byteLength(payload) > WORKSPACE_PROJECTION_LIMIT) throw new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds 8 MiB');
     const envelope = decodeEnvelope(JSON.parse(payload));
     return envelope.identity === context.identity ? envelope : undefined;
-  } finally { database.close(); }
-}
+  }, catch: cause => cause });
+});
 export function workspaceRefreshOwner(context: WorkspaceProjectionContext): 'active' | 'none' {
   const owner = readLeaseOwner(join(context.privateDir, 'workspace-refresh', 'current'), 'workspace-read');
   if (!owner) return 'none';
   try { return ownerIsAlive(owner) ? 'active' : 'none'; } catch { return 'active'; }
 }
-export function readWorkspaceProjection(context: WorkspaceProjectionContext): WorkspaceProjection {
-  let envelope: typeof Envelope.Type | undefined;
-  let refreshOwner: 'active' | 'none';
-  try { envelope = readEnvelope(context); refreshOwner = workspaceRefreshOwner(context); }
-  catch (cause) {
+export const readWorkspaceProjection = Effect.fn('readWorkspaceProjection')(function*(context: WorkspaceProjectionContext) {
+  const unavailable = (cause: unknown) => {
     const error = failure(cause);
-    throw new ConcordError('WorkspaceProjectionUnavailable', 'Workspace cache is unavailable. Retry refresh; repair native installation or clear the cache if indicated, then restart View.', { reason: cause instanceof HawdbFailure ? cause.code : cause instanceof ConcordError ? cause.code : 'WorkspaceProjectionInvalid', message: error.message });
-  }
+    return new ConcordError('WorkspaceProjectionUnavailable', 'Workspace cache is unavailable. Retry refresh; repair native installation or clear the cache if indicated, then restart View.', { reason: cause instanceof HawdbFailure ? cause.code : cause instanceof ConcordError ? cause.code : 'WorkspaceProjectionInvalid', message: error.message });
+  };
+  const envelope = yield* readEnvelope(context).pipe(Effect.mapError(unavailable));
+  const refreshOwner = yield* Effect.try({ try: () => workspaceRefreshOwner(context), catch: unavailable });
+  return yield* Effect.try({ try: (): WorkspaceProjection => {
   if (!envelope?.record) {
     if (envelope?.error?.code === 'RecoveryRequired') throw new ConcordError('RecoveryRequired', envelope.error.message);
     throw new ConcordError('WorkspaceProjectionPending', 'No readable workspace projection. Start View and wait for the background build.', { refreshOwner, ...(envelope?.error ? { lastError: envelope.error } : {}) });
@@ -89,17 +88,16 @@ export function readWorkspaceProjection(context: WorkspaceProjectionContext): Wo
   return { snapshot, projection: { ...record, current: false, refreshOwner,
     status: envelope.error?.code === 'RecoveryRequired' ? 'blocked' : envelope.error ? 'refresh-failed' : 'ready',
     ...(envelope.error ? { lastError: envelope.error } : {}), ...(envelope.lastAttempt ? { lastAttempt: envelope.lastAttempt } : {}) } };
-}
+  }, catch: failure });
+});
+
 
 
 /** Called only by the refresh lease owner after candidate and identity validation. */
-export function storeWorkspaceProjection(context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionRecord, error?: ConcordError): void {
-  const path = cacheDatabasePath(context.privateDir);
-  assertLeasePath(path); assertCacheDatabaseSafe(path);
-  const database = openHawdb(path, { readOnly: false, create: true });
-  try {
+export const storeWorkspaceProjection = Effect.fn('storeWorkspaceProjection')(function*(context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionRecord, error?: ConcordError) {
+  const cache = yield* PersistentCache;
+  yield* cache.update(context.privateDir, 'workspace_projection', key, payload => {
     let prior: typeof Envelope.Type | undefined;
-    const payload = database.get('workspace_projection', [key])[0]?.payload;
     if (payload) { try { const parsed = decodeEnvelope(JSON.parse(payload)); if (parsed.identity === context.identity) prior = parsed; } catch { /* Invalid payload is replaced, never served. */ } }
     const next = candidate === undefined ? undefined : decodeWorkspaceProjectionRecord(candidate);
     const retain = next !== undefined && !next.consistent && prior?.record?.consistent === true;
@@ -111,6 +109,6 @@ export function storeWorkspaceProjection(context: WorkspaceProjectionContext, ca
       ...(error ? { error: { failedAt: new Date().toISOString(), code: error.code, message: error.message.slice(0, 4096) } } : {}) });
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) + Buffer.byteLength(key) + Buffer.byteLength('workspace_projection') > WORKSPACE_PROJECTION_LIMIT) throw new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds its 8 MiB budget');
-    database.put('workspace_projection', [{ key, payload: serialized }]);
-  } finally { database.close(); requestCacheMaintenance(context); }
-}
+    return serialized;
+  }).pipe(Effect.ensuring(Effect.sync(() => requestCacheMaintenance(context))));
+});

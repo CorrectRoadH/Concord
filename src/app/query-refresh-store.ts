@@ -17,7 +17,7 @@ export const persist = Effect.fn('persistQuery')(function*(context: QueryContext
   while (true) {
     const current = yield* queryContext(context.root, context.query);
     if (current.key !== context.key) { yield* requestNewIdentity(current); return; }
-    const result = yield* Effect.result(Effect.try({ try: () => storeQuery(context, update), catch: cause => cause }));
+    const result = yield* Effect.result(storeQuery(context, update));
     if (Result.isSuccess(result)) return;
     if (!(result.failure instanceof HawdbFailure) || !['HawdbBusy', 'UnsafePath'].includes(result.failure.code) || Date.now() >= deadline) return yield* Effect.fail(result.failure);
     yield* Effect.sleep('25 millis');

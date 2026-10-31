@@ -17,7 +17,7 @@ export function closeRepositoryCache(repo: Repository): void {
 }
 
 /** The outer LocalRepository snapshot closes the handle before its lease. Fake repositories get a short handle. */
-export function withPersistentCache<A>(repo: Repository, writable: boolean, use: (database: HawdbDatabase | undefined) => A): A {
+function withPersistentCache<A>(repo: Repository, writable: boolean, use: (database: HawdbDatabase | undefined) => A): A {
   if (repo.persistentCache === 'off') {
     if (writable) throw new HawdbFailure('HawdbUnavailable', 'Persistent cache access is disabled');
     return use(undefined);
@@ -43,4 +43,31 @@ export function withPersistentCache<A>(repo: Repository, writable: boolean, use:
   }
   try { return use(scope.database); }
   finally { if (repo.snapshot === undefined) closeRepositoryCache(repo); }
+}
+
+/** A scoped service value; callers cannot open or retain a native handle. */
+export interface RepositoryCache {
+  readonly prepareWrite: () => void;
+  readonly get: (namespace: import('./hawdb-native.js').HawdbNamespace, keys: readonly string[]) => readonly import('./hawdb-native.js').HawdbEntry[];
+  readonly scan: (namespace: import('./hawdb-native.js').HawdbNamespace) => readonly import('./hawdb-native.js').HawdbEntry[];
+  readonly put: (namespace: import('./hawdb-native.js').HawdbNamespace, rows: readonly import('./hawdb-native.js').HawdbEntry[]) => void;
+  readonly namespaces: () => readonly import('./hawdb-native.js').HawdbNamespace[];
+}
+const owners = new WeakMap<Repository, RepositoryCache>();
+const disabled = () => { throw new HawdbFailure('HawdbUnavailable', 'Persistent cache access is disabled'); };
+const unavailable: RepositoryCache = { get: () => [], scan: () => [], namespaces: () => [], put: disabled, prepareWrite: disabled };
+export const repositoryCache = (repo: Repository): RepositoryCache => owners.get(repo) ?? unavailable;
+export function bindRepositoryCache(repo: Repository, access: RepositoryCache): () => void {
+  if (owners.has(repo)) throw new HawdbFailure('HawdbBusy', 'Repository cache already has an owner');
+  owners.set(repo, access);
+  return () => { if (owners.get(repo) === access) { closeRepositoryCache(repo); owners.delete(repo); } };
+}
+export function nodeRepositoryCache(repo: Repository): RepositoryCache {
+  return {
+    prepareWrite: () => withPersistentCache(repo, true, () => {}),
+    get: (namespace, keys) => withPersistentCache(repo, false, database => database?.get(namespace, keys) ?? []),
+    scan: namespace => withPersistentCache(repo, false, database => database?.scan(namespace) ?? []),
+    put: (namespace, rows) => withPersistentCache(repo, true, database => database!.put(namespace, rows)),
+    namespaces: () => withPersistentCache(repo, false, database => database?.namespaces() ?? []),
+  };
 }

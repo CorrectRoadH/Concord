@@ -3,18 +3,21 @@ import test from 'node:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { makeOwnedProcessService } from "../../src/base/process/index.js";
-import { Effect } from 'effect';
+import { Deferred, Effect, Fiber } from 'effect';
+import { TestClock } from 'effect/testing';
 import { withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../../src/base/process/index.js";
 
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('owned editor job timeout releases its real native compiler group', { skip: process.platform !== 'linux', timeout: 15000 }, () => Effect.runPromise(Effect.gen(function*() {
   const owner = makeOwnedProcessService();
-  let ready = false;
-  const result = yield* Effect.scoped(owner.run([process.execPath, '--import', 'tsx', fileURLToPath(new URL('../fixtures/typescript-scope-worker.ts', import.meta.url))], {
+  const ready = yield* Deferred.make<void>();
+  const running = yield* Effect.forkChild(Effect.scoped(owner.run([process.execPath, '--import', 'tsx', fileURLToPath(new URL('../fixtures/typescript-scope-worker.ts', import.meta.url))], {
     cwd: process.cwd(), timeoutMs: 2500,
-    stream: { ready: (_write, end) => end(), stdout: chunk => { if (chunk.toString().includes('compiler-ready')) ready = true; } },
-  }));
-  assert.equal(ready, true, 'fixture must hold a real TypeScript scope before timeout');
+    stream: { ready: (_write, end) => end(), stdout: chunk => { if (chunk.toString().includes('compiler-ready')) Deferred.doneUnsafe(ready, Effect.void); } },
+  })));
+  yield* Deferred.await(ready);
+  yield* TestClock.adjust(5000);
+  const result = yield* Fiber.join(running);
   assert.equal(result.timedOut, true);
   assert.equal(result.processGroupOwned, true);
   assert.equal(result.groupCleanup.checked, true);
@@ -26,7 +29,7 @@ test('owned editor job timeout releases its real native compiler group', { skip:
     } catch { return []; }
   });
   assert.deepEqual(remaining, []);
-})));
+}).pipe(Effect.provide(TestClock.layer()))));
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('native compiler scopes isolate captured config inputs and preserve syntax diagnostics', () => Effect.runPromise(Effect.sync(() => {

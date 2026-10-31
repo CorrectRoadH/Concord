@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-data-engine/use-case/use-unified-cache.md
 import { Schema } from "effect";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../cache/index.js";
-import { withPersistentCache } from "../cache/index.js";
+import { PersistentCache } from "../cache/index.js";
 import { openHawdb } from "../cache/index.js";
 import { canonical, decode, objectDigest, ProjectSchema, type shared_ProjectConfig as ProjectConfig, type Repository } from "../../model/index.js";
 import { typescriptPackageVersion } from "../process/index.js";
@@ -33,6 +33,6 @@ export function persistNotedConfig(repo: Repository): void {
   if (source === '') return;
   const payload = canonical({ config, digest: objectDigest(config) });
   const key = cacheKey(repo.privateDir, digest);
-  if (withPersistentCache(repo, false, database => database?.get('config_cache', [key])[0]?.payload) === payload) return;
-  withPersistentCache(repo, true, database => database!.put('config_cache', [{ key, payload }]));
+  if (PersistentCache.repository(repo).get('config_cache', [key])[0]?.payload === payload) return;
+  PersistentCache.repository(repo).put('config_cache', [{ key, payload }]);
 }

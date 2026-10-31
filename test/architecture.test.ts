@@ -36,6 +36,13 @@ test('platform capability debt only decreases while services are migrated', () =
   }
 })));
 
+test('domain and application consumers cannot open persistent cache handles or select their own access mode', () => Effect.runSync(Effect.sync(() => {
+  const audit = inspectArchitecture(root);
+  assert.deepEqual(audit.edges.filter(edge => /^src\/(?:domain|app)\//u.test(edge.from)
+    && edge.to === 'src/base/cache/index.ts'
+    && edge.bindings.some(name => name === 'openHawdb' || name === 'withPersistentCache')), []);
+})));
+
 test('architecture audit sees type exports, finite dynamic imports and aliased process capabilities', () => Effect.runSync(Effect.sync(() => {
   const sources = new Map([
     ['src/model/index.ts', 'export type { Hidden } from "../domain/documents/index.js";'],

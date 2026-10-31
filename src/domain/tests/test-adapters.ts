@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { Clock, Effect, Schema } from "effect";
-import { closeRepositoryCache, withPersistentCache } from "../../base/cache/index.js";
+import { closeRepositoryCache, PersistentCache } from "../../base/cache/index.js";
 import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.js";
 import { hasConfirmedOwnedGroupCleanup, hasSuccessfulOwnedProcessResult, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.js";
 import { observation, observationSchema, type Observation } from "../../model/index.js";
@@ -200,11 +200,11 @@ export function readNativeObservations(repo: Repository): readonly { adapterId: 
   const results: { adapterId: string; observation: Observation<NativeManifest>; inputScope?: typeof InputScopeSchema.Type }[] = [];
   for (const adapter of repo.config.testAdapters ?? []) {
     try {
-      const item = withPersistentCache(repo, false, database => database?.get('annotation_cache', [`${CACHE_PREFIX}${adapter.id}`])[0]);
+      const item = PersistentCache.repository(repo).get('annotation_cache', [`${CACHE_PREFIX}${adapter.id}`])[0];
       if (!item) continue;
       const value = decode(ObservationSchema, protocolJson(item.payload), 'native manifest observation');
       const current = adapterInputSnapshot(repo, adapter).inputs === value.inputs;
-      const scope = withPersistentCache(repo, false, database => database?.get('annotation_cache', [`${INPUT_PREFIX}${adapter.id}`])[0]);
+      const scope = PersistentCache.repository(repo).get('annotation_cache', [`${INPUT_PREFIX}${adapter.id}`])[0];
       const inputScope = scope ? decode(InputScopeSchema, protocolJson(scope.payload), 'native input scope') : undefined;
       if (inputScope && inputScope.inputs !== value.inputs) continue;
       results.push({ adapterId: adapter.id, observation: { ...value, current }, ...(inputScope ? { inputScope } : {}) });
@@ -219,7 +219,7 @@ function publishObservations(repo: LocalRepository, results: readonly { adapter:
       const value = observation(item.manifest, item.before.inputs, item.manifest.completeness.gaps, true, new Date().toISOString());
       return { adapterId: item.adapter.id, observation: { ...value, complete: item.manifest.completeness.complete }, inputScope: { ...item.before, versions: item.versions } };
     });
-    withPersistentCache(repo, true, database => database!.put('annotation_cache', values.flatMap(value => [{ key: `${CACHE_PREFIX}${value.adapterId}`, payload: canonical(value.observation) }, { key: `${INPUT_PREFIX}${value.adapterId}`, payload: canonical(value.inputScope) }])));
+    PersistentCache.repository(repo).put('annotation_cache', values.flatMap(value => [{ key: `${CACHE_PREFIX}${value.adapterId}`, payload: canonical(value.observation) }, { key: `${INPUT_PREFIX}${value.adapterId}`, payload: canonical(value.inputScope) }]));
     closeRepositoryCache(repo);
     return values;
   });

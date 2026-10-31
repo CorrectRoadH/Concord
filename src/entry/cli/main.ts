@@ -24,7 +24,8 @@ const launchers = Layer.merge(
     const sources = yield* Sources;
     const workspace = yield* Workspace;
     const installation = yield* Installation;
-    return ViewLauncher.of({ serve: (options, ready) => serveViewServer(options, server => ready({ root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) })).pipe(Effect.provideService(Sources, sources), Effect.provideService(Workspace, workspace), Effect.provideService(Installation, installation)) });
+    const persistent = yield* PersistentCache;
+    return ViewLauncher.of({ serve: (options, ready) => serveViewServer(options, server => ready({ root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) })).pipe(Effect.provideService(Sources, sources), Effect.provideService(Workspace, workspace), Effect.provideService(Installation, installation), Effect.provideService(PersistentCache, persistent)) });
   })),
   Layer.succeed(LspLauncher, LspLauncher.of({ serve: root => serveEditor(root) })),
 );
@@ -34,7 +35,7 @@ const cliServices = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.
 );
 export const cliLayer = launchers.pipe(Layer.provideMerge(cliServices));
 
-export function runCli(command: Command.Command<any, any, any, any, Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
+export function runCli(command: Command.Command<any, any, any, any, PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
  command.pipe(Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(resourcePath('package.json'),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))

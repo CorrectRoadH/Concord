@@ -4,7 +4,7 @@ import { Workspace } from "../base/workspace/index.js";
 import { genericPrivateDirectorySync } from "../base/publication/index.js";
 import { assertLeasePath } from "../base/publication/index.js";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.js";
-import { HawdbFailure, openHawdb } from "../base/cache/index.js";
+import { HawdbFailure, PersistentCache } from "../base/cache/index.js";
 import { hydrateQueryValue } from "./query-values.js";
 import { TraceGapsValue, TraceShowValue, ReviewRenderValue, queryValueSchema } from "../model/index.js";
 import type { QueryScanMessage } from "../model/index.js";
@@ -71,7 +71,7 @@ export interface QueryContext { readonly root: string; readonly privateDir: stri
 export const queryContext = Effect.fn('queryContext')(function*(input: string | undefined, query: Query) {
   const workspace = yield* Workspace;
   const { root, privateDir, config } = yield* workspace.identify(input);
-  const installation = queryInstallationIdentity();
+  const installation = yield* Effect.try({ try: queryInstallationIdentity, catch: failure });
   const key = digest(JSON.stringify([root, privateDir, query, config, installation]));
   return { root, privateDir, key, query } satisfies QueryContext;
 });
@@ -84,47 +84,42 @@ function decodeForQuery(context: QueryContext, payload: string): QueryCacheEnvel
   if (envelope.record) Schema.decodeUnknownSync(queryValueSchema(context.query), { onExcessProperty: 'error' })(envelope.record.value);
   return envelope;
 }
-export function readQuery(context: QueryContext): { record?: typeof QueryRecord.Type; lastAttempt?: typeof Attempt.Type; error?: typeof RefreshFailure.Type; unavailable?: string; unavailableCode?: string } {
-  try {
-    const path = cacheDatabasePath(context.privateDir);
-    assertLeasePath(path);
-    if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path)) return {};
-    const database = openHawdb(path, { readOnly: true, create: false });
-    try {
-      const payload = database.get('query_cache', [context.key]).find(row => row.key === context.key)?.payload;
+export const readQuery = Effect.fn('readQuery')(function*(context: QueryContext): Effect.fn.Return<{ record?: typeof QueryRecord.Type; lastAttempt?: typeof Attempt.Type; error?: typeof RefreshFailure.Type; unavailable?: string; unavailableCode?: string }, never, PersistentCache> {
+  const cache = yield* PersistentCache;
+  return yield* cache.read(context.privateDir, 'query_cache', [context.key]).pipe(
+    Effect.flatMap(rows => Effect.try({ try: () => {
+      const payload = rows.find(row => row.key === context.key)?.payload;
       const envelope = payload === undefined ? undefined : decodeForQuery(context, payload);
       return { record: envelope?.record, lastAttempt: envelope?.lastAttempt, error: envelope?.error };
-    } finally { database.close(); }
-  } catch (cause) { return { unavailable: cause instanceof Error ? cause.message : String(cause), unavailableCode: cause instanceof HawdbFailure ? cause.code : 'QueryCacheInvalid' }; }
-}
-export function storeQuery(context: QueryContext, update: QueryUpdate): void {
-  const path = cacheDatabasePath(context.privateDir);
-  assertLeasePath(path); assertCacheDatabaseSafe(path);
-  const database = openHawdb(path, { readOnly: false, create: true });
-  try {
+    }, catch: cause => cause })),
+    Effect.catch(cause => Effect.succeed({ unavailable: cause instanceof Error ? cause.message : String(cause), unavailableCode: cause instanceof HawdbFailure ? cause.code : 'QueryCacheInvalid' })),
+  );
+});
+export const storeQuery = Effect.fn('storeQuery')(function*(context: QueryContext, update: QueryUpdate) {
+  const cache = yield* PersistentCache;
+  yield* cache.update(context.privateDir, 'query_cache', context.key, payload => {
     let prior: QueryCacheEnvelope | undefined;
-    const payload = database.get('query_cache', [context.key])[0]?.payload;
     if (payload !== undefined) { try { prior = decodeForQuery(context, payload); } catch { /* Rebuild corrupt disposable data. */ } }
     const envelope = replaceQueryEnvelope(context.key, prior, update);
     if (envelope.record) Schema.decodeUnknownSync(queryValueSchema(context.query), { onExcessProperty: 'error' })(envelope.record.value);
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) > 4 * 1024 * 1024) throw new ConcordError('QueryRefreshOutputLimit', 'Query envelope exceeds 4 MiB');
-    database.put('query_cache', [{ key: context.key, payload: serialized }]);
-  } finally { database.close(); requestCacheMaintenance(context); }
-}
+    return serialized;
+  }).pipe(Effect.ensuring(Effect.sync(() => requestCacheMaintenance(context))));
+});
 // @concord-end
 /** The detached supervisor owns the bounded scan, never a source publication. */
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | undefined, query: Query) {
   const context = yield* queryContext(input, query);
-  let observed = yield* Effect.sync(() => readQuery(context));
+  let observed = yield* readQuery(context);
   const deadline = Date.now() + 500;
   // The pinned engine can also observe a disappearing checkpoint file during
   // pre-open path inspection. Every retry repeats all path and Schema checks.
   while (observed.unavailable !== undefined && Date.now() < deadline) {
     yield* Effect.sleep('10 millis');
-    observed = yield* Effect.sync(() => readQuery(context));
+    observed = yield* readQuery(context);
   }
   const refresh = yield* Effect.result(launchDetachedWorker('query-refresh-worker', [context.root, JSON.stringify(query), String(Date.now())], context.root));
   if (observed.unavailable) return yield* Effect.fail(new ConcordError(observed.unavailableCode ?? 'QueryCacheInvalid', observed.unavailable));

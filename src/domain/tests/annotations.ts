@@ -2,7 +2,7 @@ import { snapshotMetadata } from '../../base/sources/index.js';
 import { Schema } from "effect";
 import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from "../../base/cache/index.js";
 import { CACHE_PHYSICAL_LIMIT_BYTES } from "../../base/installation/index.js";
-import { withPersistentCache, closeRepositoryCache } from "../../base/cache/index.js";
+import { PersistentCache, closeRepositoryCache } from "../../base/cache/index.js";
 import { acquireHawdbClearGuard, hawdbIdentity } from "../../base/cache/index.js";
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from "../../model/index.js";
 import { caseDiscriminator, deriveTestReference } from "../../model/index.js";
@@ -147,16 +147,17 @@ function cacheKey(repo: Repository, current: readonly Source[]): string {
   return objectDigest({ root: repo.root, privateDir: repo.privateDir, config: repo.config, parser: parserVersion(), files: current.map(source => ({ path: source.path, digest: source.digest })) });
 }
 function readCache(repo: Repository, key: string): CachedSnapshot | undefined {
-  return withPersistentCache(repo, false, db => {
+  return (() => {
+    const db = PersistentCache.repository(repo);
     const row = db?.get('annotation_cache', [key])[0];
     if (row === undefined) return undefined;
     const value = decode(CachedSnapshotSchema, JSON.parse(row.payload), 'annotation cache');
     if (value.digest !== objectDigest({ cases: value.cases, findings: value.findings, files: value.files })) throw new ConcordError('InvalidData', 'annotation cache digest does not match its payload');
     return value;
-  });
+  })();
 }
 function writeCache(repo: Repository, key: string, value: CachedSnapshot): void {
-  withPersistentCache(repo, true, db => db!.put('annotation_cache', [{ key, payload: canonical(value) }]));
+  PersistentCache.repository(repo).put('annotation_cache', [{ key, payload: canonical(value) }]);
 }
 function unchanged(repo: Repository, before: readonly Source[], mode: SourceMode): boolean {
   try { const after = sources(repo, mode); return after.length === before.length && after.every((source, index) => source.path === before[index]?.path && source.digest === before[index]?.digest); } catch { return false; }
@@ -241,11 +242,12 @@ function statusUnderSnapshot(repo: Repository): CacheStatus {
     hawdbIdentity();
     if (!inventory.existing || inventory.empty) return { status: 'empty', path };
     if (repo.persistentCache === 'off') return { status: 'unavailable', path, detail: 'Persistent cache access is disabled' };
-    return withPersistentCache(repo, false, db => {
+    return (() => {
+    const db = PersistentCache.repository(repo);
       const projections = db!.namespaces().filter(name => name.endsWith('_cache') || name === 'workspace_projection');
       for (const namespace of projections) db!.scan(namespace);
       return { status: projections.length === 0 ? 'empty' : 'ready', path, detail: `projections: ${projections.join(', ')}` };
-    });
+    })();
   } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; } };
   let report: ReturnType<typeof status>;
   try { report = status(); }
