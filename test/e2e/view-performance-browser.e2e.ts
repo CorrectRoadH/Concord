@@ -60,6 +60,7 @@ test('polling reads the workspace cache with jobs and serializes slow reads', as
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await page.clock.install({ time: 0 });
     await page.clock.pauseAt(1000);
+    await page.route('**/api/events', route => route.abort());
     let requests = 0, jobs = 0;
     page.on('request', request => { if (request.url().endsWith('/api/jobs')) jobs += 1; });
     await page.route('**/api/workspace', async route => {

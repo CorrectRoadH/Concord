@@ -56,6 +56,8 @@ test('browser opens and refreshes a deep link without credentials and retries in
       if (new URL(request.url()).pathname.startsWith('/api/')) authorizations.push(request.headers().authorization);
     });
     page.on('pageerror', error => errors.push(error.message));
+    // Exercise HTTP retry behavior with the push transport disconnected.
+    await page.route('**/api/events', route => route.abort());
     await page.route('**/api/workspace', route => route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ ok: false, error: 'WorkspaceProjectionUnavailable', message: '工作区暂时不可用' }) }));
     const url = `http://127.0.0.1:${server.port}/features/web`;
     await page.goto(url);

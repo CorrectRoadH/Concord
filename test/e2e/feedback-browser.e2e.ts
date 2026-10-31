@@ -79,6 +79,7 @@ test('feedback browser separates remote observations from local editing and prot
     await page.getByRole('button',{name:'添加',exact:true}).click();
     await expect(page.getByRole('dialog')).not.toBeVisible();
     await expect.poll(()=>readProjectConfig(root).feedbackConnections?.[0]?.id).toBe('browser-github');
+    await expect(page.getByRole('tabpanel',{name:'反馈来源'}).getByRole('status')).toHaveText('已自动保存');
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);
     await page.getByRole('button',{name:'同步',exact:true}).click();
     await expect(page.getByRole('alert').first()).toBeVisible();

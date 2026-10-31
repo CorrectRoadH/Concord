@@ -38,6 +38,8 @@ const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((page: Page, inco
     page.setDefaultTimeout(15_000);
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
+    // These HTTP-boundary fixtures verify polling while the push transport is unavailable.
+    await page.route('**/api/events', route => route.abort());
     await run(page, origin, value);
     assert.deepEqual(errors, []);
   } finally {
