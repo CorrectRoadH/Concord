@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,7 +9,7 @@ import { Effect, Schema } from 'effect';
 import { ViewScanManager } from "../../src/app/index.js";
 import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../src/base/publication/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 async function scanPid(root: string): Promise<number> {
   const deadline = performance.now() + 15000;

@@ -1,6 +1,4 @@
 import type { GitEntry, GitStatus, GitArea, GitDiff } from "../model/index.js";
-import { lstatSync, readFileSync } from "node:fs";
-import { join, resolve, sep } from "node:path";
 import { Effect, Schema } from "effect";
 import { parseTestDeclarations } from "../domain/tests/index.js";
 import { createMemoryHawdb, type HawdbDatabase } from "../base/cache/index.js";
@@ -9,6 +7,7 @@ import { typescriptPackageVersion } from "../base/process/index.js";
 import { OUTPUT_LIMIT } from "../base/git/index.js";
 import { runGit } from "../base/git/index.js";
 import type { Git } from '../base/git/index.js';
+import { Sources } from '../base/sources/index.js';
 export interface GitBaselineCache { database?: HawdbDatabase; }
 
 export const BaselineSchema = Schema.Struct({ root: Schema.String, revision: Schema.String, roots: Schema.String, parser: Schema.String, caseIds: Schema.Array(Schema.String) });
@@ -75,19 +74,12 @@ export const readTestBaseline = Effect.fn('view.readTestBaseline')(function*(roo
 });
 
 
-export function untrackedDiff(root: string, path: string): GitDiff {
-  const base = resolve(root), target = resolve(base, path);
+export function untrackedDiff(path: string, inspected: import('../base/sources/index.js').UntrackedFile): GitDiff {
   const empty = { path, area: 'untracked' as const, patch: '', binary: false, truncated: false };
-  if (!target.startsWith(base + sep) || path.split('/').some(segment => segment === '..' || segment === '.git')) throw new ConcordError('UnsafePath', 'The Git path is outside the working tree.');
-  let current = base;
-  for (const segment of path.split('/')) {
-    current = join(current, segment);
-    if (lstatSync(current).isSymbolicLink()) return { ...empty, message: 'Symbolic link: its target is not read.' };
-  }
-  const stat = lstatSync(target);
-  if (!stat.isFile()) return { ...empty, message: 'This entry is not a regular file.' };
-  if (stat.size > OUTPUT_LIMIT / 2) return { ...empty, truncated: true, message: 'New file exceeds the 1 MiB preview limit.' };
-  const bytes = readFileSync(target);
+  if (inspected.kind === 'symlink') return { ...empty, message: 'Symbolic link: its target is not read.' };
+  if (inspected.kind === 'other') return { ...empty, message: 'This entry is not a regular file.' };
+  if (inspected.kind === 'over-limit') return { ...empty, truncated: true, message: 'New file exceeds the 1 MiB preview limit.' };
+  const { bytes, mode } = inspected;
   let source: string;
   try { source = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
   catch { return { ...empty, binary: true, message: 'Binary or non-UTF-8 file.' }; }
@@ -96,15 +88,17 @@ export function untrackedDiff(root: string, path: string): GitDiff {
   if (source.endsWith('\n')) lines.pop();
   const label = (value: string) => /[\s"\\]/u.test(value) ? JSON.stringify(value) : value;
   const oldLabel = label(`a/${path}`), newLabel = label(`b/${path}`);
-  return { ...empty, patch: `diff --git ${oldLabel} ${newLabel}\nnew file mode ${(stat.mode & 0o111) ? '100755' : '100644'}\n--- /dev/null\n+++ ${newLabel}\n@@ -0,0 +1,${lines.length} @@\n${lines.map(line => `+${line}\n`).join('')}${source && !source.endsWith('\n') ? '\\ No newline at end of file\n' : ''}` };
+  return { ...empty, patch: `diff --git ${oldLabel} ${newLabel}\nnew file mode ${(mode & 0o111) ? '100755' : '100644'}\n--- /dev/null\n+++ ${newLabel}\n@@ -0,0 +1,${lines.length} @@\n${lines.map(line => `+${line}\n`).join('')}${source && !source.endsWith('\n') ? '\\ No newline at end of file\n' : ''}` };
 }
-export const getGitDiff = Effect.fn('view.getGitDiff')(function*(root: string, path: string, area: GitArea): Effect.fn.Return<GitDiff, ConcordError, Git> {
+export const getGitDiff = Effect.fn('view.getGitDiff')(function*(root: string, path: string, area: GitArea): Effect.fn.Return<GitDiff, ConcordError, Git | Sources> {
   const status = yield* getGitStatus(root);
   const entry = status.entries.find(item => item.path === path);
   if (!entry) return yield* Effect.fail(new ConcordError('GitChangeNotFound', 'This file no longer has Git changes; refresh the panel.'));
   if (area === 'untracked') {
     if (!entry.untracked) return yield* Effect.fail(new ConcordError('GitChangeNotFound', 'This file is already tracked.'));
-    return yield* Effect.try({ try: () => untrackedDiff(root, path), catch: cause => cause instanceof ConcordError ? cause : new ConcordError('GitReadFailed', 'The new file changed or cannot be read; refresh the panel.') });
+    const sources = yield* Sources;
+    const inspected = yield* sources.untrackedFile(root, path, OUTPUT_LIMIT / 2);
+    return untrackedDiff(path, inspected);
   }
   if (entry.untracked || (area === 'staged' ? entry.index : entry.worktree) === ' ') return yield* Effect.fail(new ConcordError('GitChangeNotFound', `There are no ${area} changes for this file.`));
   const paths = entry.previousPath ? [entry.previousPath, path] : [path];

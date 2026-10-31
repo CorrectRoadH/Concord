@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { installedConcordCli } from '../support/support.js';
 import { stringify } from 'yaml';
 import { EMPTY_CONCEPT_CATALOG } from "../../src/model/index.js";
@@ -9,7 +10,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
 import { digest } from "../../src/model/index.js";
 import { catalogDependencies, indexConcepts, readConceptCatalog, setConcepts, showConcepts } from "../../src/domain/concepts/index.js";

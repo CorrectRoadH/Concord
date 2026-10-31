@@ -1,3 +1,4 @@
+import { initialize, createDocument } from '../support/operations.js';
 import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.js';
 import { runApplication } from '../support/repository.js';
 import { createConsumer } from '../support/consumer.js';
@@ -15,12 +16,12 @@ import test, { type TestContext } from 'node:test';
 import { Effect, Schema } from 'effect';
 import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../../src/base/publication/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { beginRun, finalizeRun } from "../../src/base/publication/index.js";
 import { runCase } from "../../src/domain/tests/index.js";
 import { OwnedProcessLive } from "../../src/base/process/index.js";
 import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { type FileLease } from "../../src/base/publication/index.js";
 import { digest, failure } from "../../src/model/index.js";
 import { waitForPublication } from "../../src/base/publication/index.js";

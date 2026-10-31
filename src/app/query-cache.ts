@@ -1,8 +1,6 @@
 import { launchDetachedWorker } from '../base/process/index.js';
-import { lstatSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { Effect, Result, Schema } from "effect";
-import { discoverRoot } from "../base/workspace/index.js";
+import { Workspace } from "../base/workspace/index.js";
 import { genericPrivateDirectorySync } from "../base/publication/index.js";
 import { assertLeasePath } from "../base/publication/index.js";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.js";
@@ -70,18 +68,13 @@ export function queryRequestSatisfied(prior: Pick<QueryCacheEnvelope, 'record' |
 export interface QueryContext { readonly root: string; readonly privateDir: string; readonly key: string; readonly query: Query }
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-export function queryContext(input: string | undefined, query: Query): QueryContext {
-  const root = discoverRoot(input);
-  const privateDir = genericPrivateDirectorySync(root);
-  const config = join(root, 'concord.config.ts');
-  assertLeasePath(config);
-  const configStat = lstatSync(config, { throwIfNoEntry: false });
-  if (configStat !== undefined && configStat.size > 4 * 1024 * 1024) throw new ConcordError('InvalidConfig', 'Configuration exceeds 4 MiB');
-  // The installed build binds projections independently of the consumer cache.
+export const queryContext = Effect.fn('queryContext')(function*(input: string | undefined, query: Query) {
+  const workspace = yield* Workspace;
+  const { root, privateDir, config } = yield* workspace.identify(input);
   const installation = queryInstallationIdentity();
-  const key = digest(JSON.stringify([root, privateDir, query, configStat === undefined ? null : digest(readFileSync(config)), installation]));
-  return { root, privateDir, key, query };
-}
+  const key = digest(JSON.stringify([root, privateDir, query, config, installation]));
+  return { root, privateDir, key, query } satisfies QueryContext;
+});
 function decodeForQuery(context: QueryContext, payload: string): QueryCacheEnvelope | undefined {
   const header = Schema.decodeUnknownSync(Schema.Struct({ format: Schema.String }), { onExcessProperty: 'ignore' })(JSON.parse(payload));
   if (['concord.query-cache/v1', 'concord.query-cache/v2'].includes(header.format)) return undefined;
@@ -124,7 +117,7 @@ export function storeQuery(context: QueryContext, update: QueryUpdate): void {
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | undefined, query: Query) {
-  const context = yield* Effect.try({ try: () => queryContext(input, query), catch: failure });
+  const context = yield* queryContext(input, query);
   let observed = yield* Effect.sync(() => readQuery(context));
   const deadline = Date.now() + 500;
   // The pinned engine can also observe a disappearing checkpoint file during

@@ -1,3 +1,4 @@
+import { initialize, createDocument } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,9 +7,9 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { loadDocuments } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { renderDocument } from "../../src/model/index.js";
 import { mergeFeedbackCache } from "../../src/base/cache/index.js";
 import { type ViewServerHandle } from './server.js';

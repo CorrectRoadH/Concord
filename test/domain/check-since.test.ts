@@ -1,8 +1,9 @@
+import { createDocument } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import { createConsumer } from '../support/consumer.js';
 import { gitCommit } from '../support/fix-consumer.js';
 import { LocalRepository } from "../support/repository.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { OwnedProcessLive } from "../../src/base/process/index.js";
 import { checkSince } from "../../src/app/index.js";
 import { Effect } from 'effect';

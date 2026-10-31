@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import { createConsumer } from '../support/consumer.js';
 import assert from 'node:assert/strict';
@@ -10,7 +11,7 @@ import { Effect } from 'effect';
 import { getViewFile, getWorkspaceSnapshot } from "../../src/app/index.js";
 import { cacheStatus, scanAnnotations, clearCache } from "../../src/domain/tests/index.js";
 import { checkDocuments, loadDocuments, setAuthor } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { closeIssue, linkFeedbackFeature } from "../../src/domain/issues/index.js";
 import { renderDocument } from "../../src/model/index.js";
 import { mergeFeedbackCache, readFeedbackCache } from "../../src/base/cache/index.js";
@@ -21,7 +22,7 @@ import { type FeedbackTransport } from "../../src/domain/feedback/index.js";
 import { setConfig, showConfig } from "../../src/app/index.js";
 import { ConcordError } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { humanOutput } from "../../src/entry/cli/index.js";
 import { projectConfigPath } from '../support/support.js';
 

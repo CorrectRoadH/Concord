@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#创建与编辑文档
-import { Option } from "effect";
+import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { loadDocuments, readDocumentReference, findDocument } from "../../app/index.js";
 import { adoptRoadmap } from "../../app/index.js";
@@ -19,9 +19,9 @@ export const newDocument = Command.make('new', {
   category, name: Argument.string('name'), title: optional('title'), body: optional('body'),
   type: Flag.choice('type', ['decision', 'insight', 'note']).pipe(Flag.optional),
   feature: optional('feature'), pages: many('pages'), alternative: many('alternative'), observedAt: optional('observed-at'), source: many('source'),
-}, args => withRepo((repo, settings) => sync(() => {
-  if (args.category === 'memory' && Option.isNone(args.type)) throw new ConcordError('InvalidInput', 'Memory creation requires --type');
-  const receipt = createDocument(repo, args.category, {
+}, args => withRepo((repo, settings) => Effect.gen(function*() {
+  if (args.category === 'memory' && Option.isNone(args.type)) return yield* Effect.fail(new ConcordError('InvalidInput', 'Memory creation requires --type'));
+  const receipt = yield* createDocument(repo, args.category, {
     id: args.name, title: Option.getOrUndefined(args.title) ?? args.name,
     body: Option.isSome(args.body) ? body(args.body.value) : undefined,
     memoryKind: Option.getOrUndefined(args.type), feature: Option.getOrUndefined(args.feature),

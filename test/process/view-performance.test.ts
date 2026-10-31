@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import { installationResources } from "../../src/base/installation/index.js";
 import { installedConcordCli } from "../support/support.js";
@@ -12,10 +13,10 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { getWorkspaceSnapshot } from "../../src/app/index.js";
 import { recoverPublicationLeaseSync } from "../../src/base/publication/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from "../../src/app/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { startViewServer } from '../e2e/server.js';
 import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
 

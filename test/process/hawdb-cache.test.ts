@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import { installedConcordCli } from '../support/support.js';
 import assert from 'node:assert/strict';
@@ -13,7 +14,7 @@ import { acquireHawdbClearGuard, hawdbIdentity, openHawdb } from "../../src/base
 import { getWorkspaceSnapshot } from "../../src/app/index.js";
 import { deleteInspectedCache, inspectCacheClear } from "../../src/base/cache/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { ensureGenericPrivateDirectorySync } from "../../src/base/publication/index.js";
 
 const CacheReport = Schema.Struct({ status: Schema.String });

@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { packageBin } from '../../scripts/package-location.js';
 import { packConcord, installConcord } from '../support/installed-package.js';
 // @concord-file
@@ -10,7 +11,7 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { setConfig, showConfig } from "../../src/app/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('packed public CLI adds gh connection, checks scope, and executes shared feedback action offline', { skip: process.platform === 'win32' }, () => {

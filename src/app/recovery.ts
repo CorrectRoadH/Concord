@@ -1,20 +1,19 @@
 import { openWriteRepository } from "../base/workspace/index.js";
 import * as recovery from "../base/publication/index.js";
-import { lstatSync } from "node:fs";
+import { Sources } from '../base/sources/index.js';
 import { join } from "node:path";
 import { Effect } from "effect";
-import { acquireTraceLeaseSync, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync } from "../base/publication/index.js";
+import { genericPrivateDirectorySync, recoverPublicationLeaseSync, Publication } from "../base/publication/index.js";
 import { CoordinationError } from "../base/publication/index.js";
 import { ConcordError, failure } from "../model/index.js";
 import { assertCurrentRuntimeFormat, discoverRoot } from "../base/workspace/index.js";
 import { inspectRunner } from "../base/publication/index.js";
 
 
-export function pendingJournals(root: string): readonly string[] {
-  const privateDir = genericPrivateDirectorySync(root), traceDir = tracePrivateDirectorySync(root);
-  return [join(privateDir, 'journal.json'), join(traceDir, 'publication-journal.json'), join(traceDir, 'multi-file-publication-journal.json')]
-    .filter(path => lstatSync(path, { throwIfNoEntry: false }) !== undefined);
-}
+export const pendingJournals = Effect.fn('recovery.pendingJournals')(function*(root: string) {
+  const privateDir = yield* Effect.try({ try: () => genericPrivateDirectorySync(root), catch: recoveryFailure });
+  return yield* (yield* Sources).pendingPublications(privateDir, false).pipe(Effect.mapError(recoveryFailure));
+});
 
 
 export function recoveryFailure(cause: unknown): ConcordError {
@@ -32,18 +31,21 @@ export function recoveryFailure(cause: unknown): ConcordError {
 /** Reclaim once, then select and recheck journals under each short lease.
  * Engines must not silently reclaim an owner that arrived after dispatch. */
 export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?: string) {
-  const selected = yield* Effect.try({ try: () => {
+  const publication = yield* Publication;
+  const initial = yield* Effect.try({ try: () => {
     const root = discoverRoot(input);
     assertCurrentRuntimeFormat(root);
     const reclaimedTokens = recoverPublicationLeaseSync(root);
-    const lease = acquireTraceLeaseSync(root, 'exclusive', 'recover-dispatch')!;
-    try {
-      const privateDir = genericPrivateDirectorySync(root);
-      const pending = pendingJournals(root);
-      if (pending.length > 1) throw new ConcordError('RecoveryConflict', 'Multiple publication journals exist; preserve the conflicting recovery state');
-      return { root, trace: pending.length === 1 && pending[0] !== join(privateDir, 'journal.json'), pending: pending.length > 0, reclaimedTokens, runner: inspectRunner(root) };
-    } finally { releaseTraceLeaseSync(lease, 'recover-dispatch'); }
+    return { root, reclaimedTokens, privateDir: genericPrivateDirectorySync(root) };
   }, catch: recoveryFailure });
+  const selected = yield* Effect.scoped(Effect.gen(function*() {
+    yield* publication.lease(initial.root, 'recover-dispatch', true, false);
+    const pending = yield* pendingJournals(initial.root);
+    return yield* Effect.try({ try: () => {
+      if (pending.length > 1) throw new ConcordError('RecoveryConflict', 'Multiple publication journals exist; preserve the conflicting recovery state');
+      return { ...initial, trace: pending.length === 1 && pending[0] !== join(initial.privateDir, 'journal.json'), pending: pending.length > 0, runner: inspectRunner(initial.root) };
+    }, catch: recoveryFailure });
+  }));
   if (selected.runner.status === 'blocked') return {
     operation: 'recover', status: 'blocked', journalStatus: selected.pending ? 'pending' : 'clean', changedPaths: [],
     coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner: selected.runner },
@@ -59,14 +61,12 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
       repo => Effect.sync(() => repo.close()),
     ));
   });
-  const runner = yield* Effect.try({ try: () => {
-    const lease = acquireTraceLeaseSync(selected.root, 'exclusive', 'recover-verify')!;
-    try {
-      assertCurrentRuntimeFormat(selected.root);
-      if (pendingJournals(selected.root).length > 0) throw new ConcordError('RecoveryRequired', 'A publication journal remains after recovery; preserve it and retry recovery');
-      return inspectRunner(selected.root);
-    } finally { releaseTraceLeaseSync(lease, 'recover-verify'); }
-  }, catch: recoveryFailure });
+  const runner = yield* Effect.scoped(Effect.gen(function*() {
+    yield* publication.lease(selected.root, 'recover-verify', true, false);
+    yield* Effect.try({ try: () => assertCurrentRuntimeFormat(selected.root), catch: recoveryFailure });
+    if ((yield* pendingJournals(selected.root)).length > 0) return yield* Effect.fail(new ConcordError('RecoveryRequired', 'A publication journal remains after recovery; preserve it and retry recovery'));
+    return yield* Effect.try({ try: () => inspectRunner(selected.root), catch: recoveryFailure });
+  }));
   return { ...completion, status: runner.status === 'blocked' ? 'blocked' : completion.status, journalStatus: completion.status,
     coordination: { publication: { reclaimedTokens: selected.reclaimedTokens }, runner } };
 });

@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -5,10 +6,10 @@ import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from "../../src/app/index.js";
+
 import { parseTypeScriptConfig } from "../../src/base/workspace/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 function consumer(run: (root: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), 'concord-onboarding-'));

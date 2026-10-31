@@ -107,7 +107,6 @@ export { computeEditor } from './editor-compute.js';
 export { runEditorJob } from './editor-job.js';
 export { ViewProjectionManager } from './view-projection.js';
 export { ViewScanManager } from './view-scan.js';
-export { ViewSourceWatch } from './view-source-watch.js';
 export { workspaceProjectionContext } from './workspace-projection.js';
 export { makeWorkspaceProjectionRecord } from './workspace-projection.js';
 export { workspaceRefreshOwner } from './workspace-projection.js';

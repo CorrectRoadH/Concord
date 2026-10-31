@@ -1,9 +1,9 @@
 import { projectConceptCatalogs } from '../model/index.js';
 import { WorkspaceProjectionEnvelope as Envelope } from "../model/index.js";
-import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { discoverRoot } from "../base/workspace/index.js";
+import { Workspace } from "../base/workspace/index.js";
+import { Effect } from "effect";
 import { genericPrivateDirectorySync } from "../base/publication/index.js";
 import { assertLeasePath, ownerIsAlive, readLeaseOwner } from "../base/publication/index.js";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.js";
@@ -18,25 +18,13 @@ import type { WorkspaceProjection, WorkspaceSnapshot } from "../model/index.js";
 const key = 'workspace';
 import { type WorkspaceProjectionRecord, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord } from "../model/index.js";
 
-export function workspaceProjectionContext(input: string): WorkspaceProjectionContext {
-  try { return identifyWorkspaceProjection(input); }
-  catch (cause) {
-    throw new ConcordError('WorkspaceProjectionUnavailable', 'Cannot identify the workspace cache; repair the configuration path or installation and restart View', {
-      reason: cause instanceof ConcordError || cause instanceof HawdbFailure ? cause.code : 'WorkspaceProjectionIdentityUnavailable', message: cause instanceof Error ? cause.message : String(cause),
-    });
-  }
-}
-
-function identifyWorkspaceProjection(input: string): WorkspaceProjectionContext {
-  const root = discoverRoot(input, true);
-  const privateDir = genericPrivateDirectorySync(root);
-  const configPath = join(root, 'concord.config.ts');
-  assertLeasePath(configPath);
-  const stat = lstatSync(configPath, { throwIfNoEntry: false });
-  if (stat && (!stat.isFile() || stat.size > 4 * 1024 * 1024)) throw new ConcordError('InvalidConfig', 'Configuration must be a regular file within 4 MiB');
-  const config = stat === undefined ? 'absent' : digest(readFileSync(configPath));
-  return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config, 'workspace', workspaceInstallationIdentity()])) };
-}
+export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext')(function*(input: string) {
+  const workspace = yield* Workspace;
+  const { root, privateDir, config } = yield* workspace.identify(input, true, true);
+  return { root, privateDir, identity: digest(JSON.stringify([root, privateDir, config ?? 'absent', 'workspace', workspaceInstallationIdentity()])) } satisfies WorkspaceProjectionContext;
+}, Effect.mapError(cause => new ConcordError('WorkspaceProjectionUnavailable', 'Cannot identify the workspace cache; repair the configuration path or installation and restart View', {
+  reason: cause.code, message: cause.message,
+})));
 
 
 /** Explicit construction, followed by strict decoding, keeps source bodies out of persistent storage. */

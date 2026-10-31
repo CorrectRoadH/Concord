@@ -1,3 +1,4 @@
+import { initialize, createDocument, addPage } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,15 +7,15 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { EMPTY_CONCEPT_CATALOG } from "../../src/model/index.js";
 import { indexConcepts, readConceptCatalog, setConcepts, showConcepts } from "../../src/domain/concepts/index.js";
 import { checkWriting } from "../../src/domain/writing/index.js";
 import { setWriting, showWriting } from "../../src/domain/writing/index.js";
 import { checkProject } from "../../src/app/index.js";
 import { setAuthor } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
-import { addPage, setPage } from "../../src/domain/documents/index.js";
+
+import { setPage } from "../../src/domain/documents/index.js";
 import { setMarkdown } from "../../src/app/index.js";
 import { digest } from "../../src/model/index.js";
 

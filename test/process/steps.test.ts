@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import { packageBin } from '../../scripts/package-location.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -12,10 +13,10 @@ import { extractSteps } from "../../src/domain/documents/index.js";
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../src/app/index.js";
 import { planStepRename } from "../../src/app/index.js";
 import { loadDocuments } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { renderDocument } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { buildTrace } from "../../src/domain/trace/index.js";
 import { renderReview, traceGaps, traceShow } from "../../src/app/index.js";
 import { clearCache, parseTestDeclarations } from "../../src/domain/tests/index.js";

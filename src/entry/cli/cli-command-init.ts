@@ -25,10 +25,9 @@ const init = Command.make('init', {
     constitutionBody,
     adoptConstitution: args.adoptConstitution, constitutionReason: Option.getOrUndefined(args.constitutionReason), constitutionImpact: Option.getOrUndefined(args.constitutionImpact), constitutionSources: args.constitutionSource,
   } as const;
-  const { preview, preimages } = yield* sync(() => repo.snapshot(() => {
-    const preview = initialize(repo, true, options);
-    const preimages = [...preview.createdPaths, ...preview.preservedPaths].map(path => ({ path, source: repo.read(path) }));
-    return { preview, preimages };
+  const preview = yield* initialize(repo, true, options);
+  const preimages = yield* sync(() => repo.snapshot(() => {
+    return [...preview.createdPaths, ...preview.preservedPaths].map(path => ({ path, source: repo.read(path) }));
   }));
   if (s.dryRun) return preview;
   if (interactive) yield* Effect.sync(() => emit({ operation: 'init-preview', configuration: preview.config, create: preview.createdPaths, preserve: preview.preservedPaths }, s.json));
@@ -36,10 +35,11 @@ const init = Command.make('init', {
   if (!confirmed) return { operation: 'init-cancelled', cancelled: true, dryRun: true, changedPaths: [], plannedPaths: preview.changedPaths };
   yield* sync(() => repo.close());
   const writer = yield* Effect.acquireRelease(openWriteRepository(repo.root, { initialize: true }), (opened) => Effect.sync(() => opened.close()));
-  return yield* sync(() => writer.snapshot(() => {
+  yield* sync(() => writer.snapshot(() => {
     for (const preimage of preimages) if (writer.read(preimage.path) !== preimage.source) throw new ConcordError('PreimageChanged', `${preimage.path} changed since init preview; review a fresh preview`);
-    return initialize(writer, false, options);
+
   }));
+  return yield* initialize(writer, false, options);
 }), { initialize: true, readonly: true, unlocked: true })).pipe(Command.withDescription('Progressively initialize static TypeScript configuration, constitution, templates and optional configuration. Non-TTY uses deterministic defaults; --dry-run previews and an interactive rejection writes nothing.'));
 
 export { init };

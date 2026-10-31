@@ -1,8 +1,11 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { ViewProjectionManager, ViewScanManager, createDocument, initialize } from '../../src/app/index.js';
+import { Effect, Exit, Scope } from 'effect';
+import { runApplication } from '../support/repository.js';
+import { ViewProjectionManager, ViewScanManager } from '../../src/app/index.js';
 import { cacheDatabasePath, openHawdb } from '../../src/base/cache/index.js';
 import { genericPrivateDirectorySync } from '../../src/base/publication/index.js';
 import { ConcordError } from '../../src/model/index.js';
@@ -42,7 +45,8 @@ test('a completed workspace scan survives brief contention at publication', asyn
     }
     return reply;
   });
-  const manager = new ViewProjectionManager(root); manager.start();
+  const scope = await Effect.runPromise(Scope.make());
+  const manager = await runApplication(ViewProjectionManager.make(root).pipe(Scope.provide(scope))); manager.start();
   try {
     await pollUntil(async () => scans > 0 ? true : undefined, { description: 'real scan candidate' });
     const value = await pollUntil(async () => { try { const value = await manager.read(); return value.projection.status === 'ready' ? value : undefined; } catch (cause) { if (cause instanceof ConcordError && ['WorkspaceProjectionPending', 'WorkspaceProjectionUnavailable'].includes(cause.code)) return undefined; throw cause; } }, { timeoutMs: 10_000, description: 'published completed scan' });
@@ -53,6 +57,7 @@ test('a completed workspace scan survives brief contention at publication', asyn
     database?.close();
     resumeReconciliation();
     await manager.close();
+    await Effect.runPromise(Scope.close(scope, Exit.void));
     rmSync(root, { recursive: true, force: true });
   }
 });

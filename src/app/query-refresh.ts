@@ -40,7 +40,7 @@ export function classifyQueryRefresh(before: string, after: string, result: Owne
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#刷新上限
 export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | undefined, query: Query, requestedAt: number, limitMs = 120_000) {
   const started = Date.now(), deadline = started + limitMs;
-  const context = yield* Effect.try({ try: () => queryContext(input, query), catch: failure });
+  const context = yield* queryContext(input, query);
   const directory = join(context.privateDir, 'query-refresh');
   const acquire = Effect.try(() => {
     try { return acquireFileLease(context.root, directory, context.key, 'exclusive', 'query-refresh'); }
@@ -60,7 +60,7 @@ export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | 
     return undefined;
   }), lease => Effect.sync(() => { if (lease) releaseFileLease(lease, 'query-refresh'); }));
   if (!lease) return;
-  const before = yield* Effect.try({ try: () => queryContext(context.root, query), catch: failure });
+  const before = yield* queryContext(context.root, query);
   // Queued old-identity owners abandon their request before starting another scan.
   if (before.key !== context.key) return;
   const previous = yield* Effect.sync(() => readQuery(context));
@@ -69,7 +69,7 @@ export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | 
   const service = makeOwnedProcessService();
   const outcome = yield* Effect.result(service.run([process.execPath, ...workerEntryArgv('query-scan-worker'), context.root, JSON.stringify(query)],
     { cwd: context.root, timeoutMs: Math.max(1, deadline - Date.now()), outputLimitBytes: 4 * 1024 * 1024 }));
-  const after = yield* Effect.try({ try: () => queryContext(context.root, query), catch: failure });
+  const after = yield* queryContext(context.root, query);
   const update = Result.isSuccess(outcome) ? classifyQueryRefresh(context.key, after.key, outcome.success, scannedAt, Date.now() - started, limitMs)
     : after.key !== context.key ? { kind: 'identity-changed' as const } : { kind: 'failure' as const, error: { failedAt: new Date().toISOString(), scannedAt, code: 'QueryRefreshFailed', message: outcome.failure.message.slice(0, 4096) } };
   if (update.kind === 'identity-changed') { yield* requestNewIdentity(after); return; }

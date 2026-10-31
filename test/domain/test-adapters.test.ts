@@ -1,3 +1,4 @@
+import { runApplication } from '../support/repository.js';
 import assert from 'node:assert/strict';
 import { linkSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
@@ -80,25 +81,25 @@ test('native verdict rejects missing, duplicate, extra, skipped and infrastructu
 
 // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 // @name adapter-reports-c14
-test('report ownership rejects path escape, symlinks, hardlinks, old files and budgets (C14)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, () => Effect.runPromise(Effect.sync(() => {
+test('report ownership rejects path escape, symlinks, hardlinks, old files and budgets (C14)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-report-boundary-'));
   const decoded = protocolDecode(TestAdapterSchema, adapter);
   try {
     writeFileSync(join(root, 'new.json'), '{}');
-    assert.equal(readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 })[0]?.text, '{}');
-    assert.throws(() => readReports(root, ['../outside'], decoded, { files: 0, bytes: 0 }), { code: 'ReportUnsafe' });
-    assert.throws(() => readReports(root, ['new.json'], { ...decoded, budgets: { reportFileBytes: 1 } }, { files: 0, bytes: 0 }), { code: 'ReportUnsafe' });
+    assert.equal((await runApplication(readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 })))[0]?.text, '{}');
+    await assert.rejects(runApplication(readReports(root, ['../outside'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
+    await assert.rejects(runApplication(readReports(root, ['new.json'], { ...decoded, budgets: { reportFileBytes: 1 } }, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
     symlinkSync(join(root, 'new.json'), join(root, 'link.json'));
-    assert.throws(() => readReports(root, ['new.json', 'link.json'], decoded, { files: 0, bytes: 0 }), { code: 'ReportUnsafe' });
+    await assert.rejects(runApplication(readReports(root, ['new.json', 'link.json'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
     rmSync(join(root, 'link.json')); linkSync(join(root, 'new.json'), join(root, 'alias.json'));
-    assert.throws(() => readReports(root, ['new.json', 'alias.json'], decoded, { files: 0, bytes: 0 }), { code: 'ReportUnsafe' });
+    await assert.rejects(runApplication(readReports(root, ['new.json', 'alias.json'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
     rmSync(join(root, 'alias.json')); writeFileSync(join(root, 'old.json'), '{}');
-    assert.throws(() => readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 }), { code: 'ReportUnsafe' });
+    await assert.rejects(runApplication(readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
     rmSync(join(root, 'old.json')); writeFileSync(join(root, 'new.json'), '<!DOCTYPE x><x/>');
-    assert.throws(() => readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 }), { code: 'ReportUnsafe' });
+    await assert.rejects(runApplication(readReports(root, ['new.json'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
     mkdirSync(join(root, 'actual', 'invocation'), { recursive: true });
     writeFileSync(join(root, 'actual', 'invocation', 'result.json'), '{}');
     symlinkSync(join(root, 'actual'), join(root, 'alias'), 'dir');
-    assert.throws(() => readReports(join(root, 'alias', 'invocation'), ['result.json'], decoded, { files: 0, bytes: 0 }), { code: 'ReportUnsafe' });
+    await assert.rejects(runApplication(readReports(join(root, 'alias', 'invocation'), ['result.json'], decoded, { files: 0, bytes: 0 })), { code: 'ReportUnsafe' });
   } finally { rmSync(root, { recursive: true, force: true }); }
-})));
+});

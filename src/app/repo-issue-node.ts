@@ -2,6 +2,7 @@ import * as storage from '../base/workspace/index.js';
 import * as gh from '../domain/feedback/index.js';
 import { Sources } from '../base/sources/index.js';
 import type { Publication } from '../base/publication/index.js';
+import type { OwnedProcess } from '../base/process/index.js';
 import { Effect } from "effect";
 import { IssueProject } from "../domain/issues/index.js";
 import type { IssueCommandRunner } from "./issue-operations.js";
@@ -13,7 +14,7 @@ interface Connection { readonly id: string; readonly provider: string; readonly 
 interface Repository { readonly root: string; readonly config: { readonly feedbackConnections?: readonly Connection[] }; readonly close: () => void }
 interface StorageModule { readonly LocalRepository: new(root?: string, options?: { readonly access: "read"; readonly optimistic: boolean }) => Repository }
 interface GhModule { readonly withGhIssueTransport: <A, E>(root: string, connection: Connection, execute: boolean, use: (request: IssueGhRequest) => Effect.Effect<A, E>) => Effect.Effect<A, E | IssueGhError> }
-export const makeNodeIssueCommandRunner = (root: string | undefined): IssueCommandRunner<storage.Workspace | Sources | Publication> => (connectionId, execute, program) => Effect.gen(function*() {
+export const makeNodeIssueCommandRunner = (root: string | undefined): IssueCommandRunner<storage.Workspace | Sources | Publication | OwnedProcess> => (connectionId, execute, program) => Effect.gen(function*() {
   const sources = yield* Sources;
   const snapshot = yield* Effect.scoped(Effect.map(storage.openReadRepository(root, { access: 'read', optimistic: true }), repo => ({ root: repo.root, connections: repo.config.feedbackConnections ?? [] })));
   const connection = snapshot.connections.find(item => item.id === connectionId);

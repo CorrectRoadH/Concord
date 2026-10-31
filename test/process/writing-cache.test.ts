@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { installedConcordCli } from '../support/support.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -8,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { checkWriting } from "../../src/domain/writing/index.js";
 import { openHawdb } from "../../src/base/cache/index.js";
 

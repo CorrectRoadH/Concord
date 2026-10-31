@@ -1,5 +1,8 @@
+import { Publication } from '../../src/base/publication/index.js';
+import { createDocument, initialize } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import { openWriteRepository } from '../../src/base/workspace/index.js';
+import { Sources } from '../../src/base/sources/index.js';
 import { caseDiscriminator, deriveTestReference } from "../../src/model/index.js";
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -10,9 +13,9 @@ import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from "../../src/app/index.js";
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { ViewJobManager } from "../../src/app/index.js";
 import { formatViewAddress } from "../../src/entry/http/index.js";
 import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
@@ -417,7 +420,12 @@ test('view jobs preserve pre-spawn cancellation, serialize repository ownership,
   const root = initializedJobFixture();
   let held: LocalRepository | undefined;
   try {
-    const manager = new ViewJobManager(root, () => {}, (selected, use) => runApplication(Effect.scoped(Effect.flatMap(openWriteRepository(selected), repo => Effect.tryPromise({ try: () => use(repo), catch: cause => cause })))));
+    const manager = new ViewJobManager(root, () => {}, (selected, use) => runApplication(Effect.scoped(Effect.gen(function*() {
+      const sources = yield* Sources;
+      const publication = yield* Publication;
+      const repo = yield* openWriteRepository(selected);
+      return yield* Effect.tryPromise({ try: () => use(repo, sources, publication), catch: cause => cause });
+    }))));
     const beforeSpawn = manager.start(viewJobCase);
     assert.equal(manager.cancel(beforeSpawn.id).state, 'cancelling');
     assert.equal((await waitFor(manager, beforeSpawn.id, ['cancelled'])).state, 'cancelled');

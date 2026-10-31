@@ -1,11 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#修复核验
 // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md
-import { resourcePath } from "../../base/installation/index.js";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { Sources, snapshotBytes } from '../../base/sources/index.js';
+import { Publication } from '../../base/publication/index.js';
+import { Installation } from "../../base/installation/index.js";
 import { dirname, join } from "node:path";
 
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 import { scanAnnotations } from "./annotations.js";
 import { readDocumentSelector } from "../documents/index.js";
 import { closeIssue } from "../issues/index.js";
@@ -34,7 +35,7 @@ function frozenInputs(repo: Repository, tests: readonly AnnotatedCase[], commit?
   const paths = [...new Set([repo.configSnapshot.path, ...tests.map(test => test.file), ...requireRunner(repo).sourceFiles, ...tests.map(test => test.contract.split('#')[0]!)])].sort();
   return { runner: objectDigest(repo.config.runner), tests: tests.map(test => test.id), files: paths.map(path => {
     const source = repo.read(path); if (source === undefined) unavailable(`Frozen runner input is unavailable: ${path}`);
-    return { path, digest: digest(commit === undefined ? readFileSync(repo.absolute(path)) : gitBlobBytes(repo.root, commit, path)) };
+    return { path, digest: digest(commit === undefined ? snapshotBytes(repo, path)! : gitBlobBytes(repo.root, commit, path)) };
   }) };
 }
 function freeze(repo: LocalRepository, issue: string, defectInput: string | undefined, fix: string, recorded?: Verification) {
@@ -67,40 +68,29 @@ function freeze(repo: LocalRepository, issue: string, defectInput: string | unde
   }
   return { tests, inputs, defect, fix, runner: inputs.runner };
 }
-function version(): string {
-  const path = resourcePath('package.json');
-  return Schema.decodeUnknownSync(Schema.Struct({ version: Schema.NonEmptyString }), { onExcessProperty: 'ignore' })(JSON.parse(readFileSync(path, 'utf8')) as unknown).version;
-}
-
-const inWorktree = <A>(repo: LocalRepository, issue: string, commit: string, cleanupUnknown: () => void, run: (root: string) => Effect.Effect<A, ConcordError, OwnedProcess>): Effect.Effect<A, ConcordError, OwnedProcess> => Effect.scoped(Effect.gen(function* () {
+const inWorktree = <A>(repo: LocalRepository, issue: string, commit: string, cleanupUnknown: () => void, run: (root: string) => Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation>): Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation> => Effect.scoped(Effect.gen(function* () {
   const invoke = (args: readonly string[]) => runOwnedProcess(['git', '-C', repo.root, '-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo.root, env: safeRunnerEnvironment(), timeoutMs: 10000 }).pipe(Effect.scoped, Effect.mapError(failure), Effect.flatMap(result => sync(() => {
     if (!hasConfirmedOwnedGroupCleanup(result)) cleanupUnknown();
     if (result.exitCode !== 0 || result.timedOut || result.cancelled || result.signal !== null || result.error || !hasConfirmedOwnedGroupCleanup(result)) unavailable('Could not create or clean the verification worktree');
   })));
-  const root = yield* Effect.acquireRelease(sync(() => {
-    const directory = join(repo.privateDir, 'verify', issue.split('/').at(-1)!.replace(/\.md$/u, ''));
-    for (const path of [repo.privateDir, join(repo.privateDir, 'verify'), directory]) {
-      if (existsSync(path) && lstatSync(path).isSymbolicLink()) throw new ConcordError('UnsafePath', `Verification directory is a symlink: ${path}`);
-      mkdirSync(path, { recursive: true, mode: 0o700 });
-    }
-    return join(mkdtempSync(join(directory, 'run-')), 'worktree');
-  }), root => Effect.gen(function* () {
+  const publication = yield* Publication;
+  const scratch = yield* publication.scratchDirectory(repo.root, `verify/${issue.split('/').at(-1)!.replace(/\.md$/u, '')}`, 'run-');
+  const root = yield* Effect.acquireRelease(Effect.succeed(join(scratch.path, 'worktree')), root => Effect.gen(function* () {
     const registered = yield* sync(() => git(repo.root, ['worktree', 'list', '--porcelain']).split('\n').includes(`worktree ${root}`));
     if (registered) yield* invoke(['worktree', 'remove', '--force', root]);
-    yield* sync(() => rmSync(dirname(root), { recursive: true, force: true }));
-  }).pipe(Effect.catch(error => Effect.sync(() => { cleanupUnknown(); throw new ConcordError('FixUnverifiable', `Verification worktree cleanup is unconfirmed: ${root}`, error); })), Effect.orDie));
+    yield* scratch.remove;
+  }).pipe(Effect.catch(error => Effect.sync(() => { scratch.preserve(); cleanupUnknown(); throw new ConcordError('FixUnverifiable', `Verification worktree cleanup is unconfirmed: ${root}`, error); })), Effect.orDie));
   yield* invoke(['worktree', 'add', '--detach', root, commit]);
   return yield* run(root);
 }));
 
-function assertFrozenRoot(root: string, inputs: ReturnType<typeof frozenInputs>, code: string): void {
+const assertFrozenRoot = Effect.fn('fixVerification.assertFrozenRoot')(function*(root: string, inputs: ReturnType<typeof frozenInputs>, code: string) {
+  const sources = yield* Sources;
   for (const file of inputs.files) {
-    const parts = file.path.split('/');
-    for (let end = 1; end <= parts.length; end++) if (lstatSync(join(root, ...parts.slice(0, end)), { throwIfNoEntry: false })?.isSymbolicLink()) throw new ConcordError(code, `Frozen input became a symbolic link: ${file.path}`);
-    try { if (digest(readFileSync(join(root, file.path))) !== file.digest) throw new ConcordError(code, `Materialized frozen input changed: ${file.path}`); }
-    catch (cause) { if (cause instanceof ConcordError) throw cause; throw new ConcordError(code, `Materialized frozen input is unavailable: ${file.path}`); }
+    const bytes = yield* sources.readBytes(root, file.path).pipe(Effect.mapError(error => new ConcordError(code, error.message.includes('Symbolic') ? `Frozen input became a symbolic link: ${file.path}` : `Materialized frozen input is unavailable: ${file.path}`)));
+    if (bytes === undefined || digest(bytes) !== file.digest) return yield* Effect.fail(new ConcordError(code, `Materialized frozen input changed: ${file.path}`));
   }
-}
+});
 
 function assertOutcome(result: CommandEvidence, red: boolean): void {
   if (result.timedOut || !result.cleanupOk || result.cancelled || result.signal !== null || result.commandOutcome === 'invalid' || result.exitCode === null || result.execution === 'zero' || result.execution === 'skipped') unavailable('Runner execution timed out, was cancelled, skipped, empty, or cleanup is unconfirmed');
@@ -132,9 +122,9 @@ export const replayFix = (repo: LocalRepository, selector: string, options: { re
   });
   const run = (root: string, red: boolean) => Effect.gen(function* () {
     const code = root === repo.root ? 'PreimageChanged' : 'FixUnverifiable';
-    yield* sync(() => assertFrozenRoot(root, prepared.inputs, code));
+    yield* assertFrozenRoot(root, prepared.inputs, code);
     const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runner, test).pipe(Effect.tap(result => sync(() => assertOutcome(result, red)))));
-    yield* sync(() => assertFrozenRoot(root, prepared.inputs, code));
+    yield* assertFrozenRoot(root, prepared.inputs, code);
     return results;
   });
   const red = yield* inWorktree(repo, prepared.issue.path, prepared.recorded.defect, cleanupUnknown, root => run(root, true));
@@ -143,7 +133,7 @@ export const replayFix = (repo: LocalRepository, selector: string, options: { re
   return { operation: 'test-verify', issue: prepared.issue.path, verification: prepared.recorded, verified: 'replayed' as const, red, green };
 })).pipe(Effect.mapError(verificationFailure));
 
-export const closeFixedIssue = (repo: LocalRepository, selector: string, reason: string, defect?: string): Effect.Effect<object, ConcordError, OwnedProcess> => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
+export const closeFixedIssue = (repo: LocalRepository, selector: string, reason: string, defect?: string): Effect.Effect<object, ConcordError, OwnedProcess | Publication | Sources | Installation> => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
   const prepared = yield* sync(() => repo.snapshot(() => {
     if (git(repo.root, ['status', '--porcelain=v1', '--untracked-files=all'])) unavailable('Fix verification requires a clean working tree');
     const issue = readDocumentSelector(repo, selector, 'issue');
@@ -154,16 +144,18 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
   }));
   const run = (root: string, red: boolean) => Effect.gen(function* () {
     const code = root === repo.root ? 'PreimageChanged' : 'FixUnverifiable';
-    yield* sync(() => assertFrozenRoot(root, prepared.inputs, code));
+    yield* assertFrozenRoot(root, prepared.inputs, code);
     const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, requireRunner(repo), test).pipe(Effect.tap(result => sync(() => assertOutcome(result, red)))));
-    yield* sync(() => assertFrozenRoot(root, prepared.inputs, code));
+    yield* assertFrozenRoot(root, prepared.inputs, code);
     return results;
   });
   const red = yield* inWorktree(repo, prepared.issue.path, prepared.defect, cleanupUnknown, root => run(root, true));
   const green = yield* run(repo.root, false);
+  const installation = yield* Installation;
+  const concord = yield* installation.version;
   return yield* sync(() => repo.snapshot(() => {
     if (worktreeIdentity(repo) !== prepared.identity || repo.read(prepared.issue.path) === undefined || repo.read(repo.configSnapshot.path) !== repo.configSnapshot.source) throw new ConcordError('PreimageChanged', 'HEAD, working tree, configuration, or Issue changed during verification');
-    const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord: version() };
+    const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
     release();
     const receipt = closeIssue(repo, selector, { kind: 'fixed', reason, verification });
     return { ...receipt, verification, red, green };

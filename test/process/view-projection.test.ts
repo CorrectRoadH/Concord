@@ -1,3 +1,6 @@
+import { createDocument, initialize } from '../support/operations.js';
+import { Workspace } from '../../src/base/workspace/index.js';
+import { NodeServices } from '@effect/platform-node';
 import { runApplication } from '../support/repository.js';
 import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
 import { installationResources } from "../../src/base/installation/index.js";
@@ -12,13 +15,13 @@ import { Effect } from 'effect';
 import { getWorkspaceSnapshot } from "../../src/app/index.js";
 import { cacheDatabasePath } from "../../src/base/cache/index.js";
 import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from "../../src/base/publication/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { openHawdb } from "../../src/base/cache/index.js";
 import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { type WorkspaceProjection } from "../../src/model/index.js";
-import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from "../../src/app/index.js";
+import { makeWorkspaceProjectionRecord, readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';
@@ -457,3 +460,5 @@ test('closing a View server confirms scan-process cleanup and frees the worktree
   finally { reopened.close(); }
   rmSync(root, { recursive: true, force: true });
 });
+
+const workspaceProjectionContext = (...args: Parameters<typeof identifyProjection>) => Effect.runSync(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)));

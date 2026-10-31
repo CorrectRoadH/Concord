@@ -5,8 +5,9 @@ import type { CommandEvidence, NativeEvidence, Evidence } from "../../model/inde
 import { Effect } from "effect";
 import { ConcordError, failure, objectDigest, type AnnotatedCase, type DocumentRecord, type Repository, type shared_Runner as Runner } from "../../model/index.js";
 import { hasConfirmedOwnedGroupCleanup, OwnedProcess, runOwnedProcess, type OwnedProcessResult } from "../../base/process/index.js";
+import type { Sources } from '../../base/sources/index.js';
 import type { LocalRepository } from "../../base/workspace/index.js";
-import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.js";
+import { Publication, acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../base/publication/index.js";
 import { beginRun, finalizeRun, finishRun, quarantineRun } from "../../base/publication/index.js";
 import { adapterFor, executeNativeCase } from "./test-adapters.js";
 import { nativeVerdict } from "../../model/index.js";
@@ -37,7 +38,7 @@ export function commandObservation(result: OwnedProcessResult, runner: Runner): 
 }
 
 /** One runner owner spans all child scopes; unknown cleanup preserves quarantine. */
-export const withRunner = <A>(repo: LocalRepository, run: (release: () => void, cleanupUnknown: () => void) => Effect.Effect<A, ConcordError, OwnedProcess>): Effect.Effect<A, ConcordError, OwnedProcess> => Effect.scoped(Effect.gen(function* () {
+export const withRunner = <A, R>(repo: LocalRepository, run: (release: () => void, cleanupUnknown: () => void) => Effect.Effect<A, ConcordError, OwnedProcess | R>): Effect.Effect<A, ConcordError, OwnedProcess | R> => Effect.scoped(Effect.gen(function* () {
   const process = yield* OwnedProcess;
   let released = false;
   let cleanupUnknown = false;
@@ -74,7 +75,7 @@ export const runCommandCase = (repo: LocalRepository, selected: AnnotatedCase, _
   }), catch: failure });
 }));
 
-export const runCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[], options: { requireNative?: boolean } = {}): Effect.Effect<Evidence, ConcordError, OwnedProcess> => Effect.gen(function* () {
+export const runCase = (repo: LocalRepository, selected: AnnotatedCase, documents: readonly DocumentRecord[], options: { requireNative?: boolean } = {}): Effect.Effect<Evidence, ConcordError, OwnedProcess | Sources | Publication> => Effect.gen(function* () {
   if (!adapterFor(repo, selected.file)) {
     if (options.requireNative) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'No adapter covers this source marker'));
     return yield* runCommandCase(repo, selected, documents);

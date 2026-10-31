@@ -15,7 +15,7 @@ export const requestNewIdentity = Effect.fn('requestNewQueryIdentity')(function*
 export const persist = Effect.fn('persistQuery')(function*(context: QueryContext, update: QueryUpdate) {
   const deadline = Date.now() + 3000;
   while (true) {
-    const current = yield* Effect.try({ try: () => queryContext(context.root, context.query), catch: failure });
+    const current = yield* queryContext(context.root, context.query);
     if (current.key !== context.key) { yield* requestNewIdentity(current); return; }
     const result = yield* Effect.result(Effect.try({ try: () => storeQuery(context, update), catch: cause => cause }));
     if (Result.isSuccess(result)) return;

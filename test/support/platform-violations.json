@@ -1,31 +1,4 @@
 {
   "format": "concord.platform-debt/v1",
-  "violations": [
-    "src/app/application.ts#PlatformModule#import { existsSync, lstatSync, readFileSync } from \"node:fs\";",
-    "src/app/change-preview-export.ts#PlatformModule#import { lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from \"node:fs\";",
-    "src/app/code-analysis.ts#PlatformModule#import { readFileSync } from \"node:fs\";",
-    "src/app/editor-compute.ts#PlatformModule#import { lstatSync } from \"node:fs\";",
-    "src/app/git-view.ts#PlatformModule#import { lstatSync, readFileSync } from \"node:fs\";",
-    "src/app/p5-compiler.ts#PlatformModule#import { lstatSync, readFileSync } from \"node:fs\";",
-    "src/app/query-cache.ts#PlatformModule#import { lstatSync, readFileSync } from \"node:fs\";",
-    "src/app/recovery.ts#PlatformModule#import { lstatSync } from \"node:fs\";",
-    "src/app/view-projection.ts#PlatformModule#import { lstatSync } from \"node:fs\";",
-    "src/app/view-source-watch.ts#PlatformModule#import { watch, type FSWatcher } from \"node:fs\";",
-    "src/app/view-source-watch.ts#PlatformModule#import { lstat, readdir } from \"node:fs/promises\";",
-    "src/app/workspace-projection.ts#PlatformModule#import { lstatSync, readFileSync } from \"node:fs\";",
-    "src/domain/documents/repo-document-owners.ts#PlatformModule#import { existsSync, lstatSync, readFileSync, readdirSync } from \"node:fs\";",
-    "src/domain/documents/templates.ts#PlatformModule#import { readFileSync, readdirSync, type Dirent } from \"node:fs\";",
-    "src/domain/feedback/feedback-gh.ts#PlatformModule#import { accessSync, constants, mkdtempSync, realpathSync, rmSync } from \"node:fs\";",
-    "src/domain/feedback/feedback-gh.ts#ProcessCapability#process.env",
-    "src/domain/feedback/feedback-gh.ts#ProcessCapability#process.cwd",
-    "src/domain/tests/annotations.ts#PlatformModule#import { lstatSync } from \"node:fs\";",
-    "src/domain/tests/fix-verification.ts#PlatformModule#import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from \"node:fs\";",
-    "src/domain/tests/test-adapter-builtins.ts#PlatformModule#import { existsSync, readdirSync } from \"node:fs\";",
-    "src/domain/tests/test-adapter-reports.ts#PlatformModule#import { constants, closeSync, fstatSync, lstatSync, openSync, readSync, readdirSync, readlinkSync } from \"node:fs\";",
-    "src/domain/tests/test-adapters.ts#PlatformModule#import { constants, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, readlinkSync, rmSync } from \"node:fs\";",
-    "src/domain/tests/test-adapters.ts#ProcessCapability#process.env",
-    "src/domain/tests/test-adapters.ts#ProcessCapability#process.env",
-    "src/domain/tests/test-adapters.ts#ProcessCapability#process.env",
-    "src/domain/tests/test-adapters.ts#ProcessCapability#process.env"
-  ]
+  "violations": []
 }

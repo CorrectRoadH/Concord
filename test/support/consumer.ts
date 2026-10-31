@@ -1,10 +1,11 @@
+import { initialize } from './operations.js';
 import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from './temporary.js';
 import { join } from 'node:path';
 import { after, before } from 'node:test';
 import { LocalRepository } from "./repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 let temporary: string | undefined;
 let template: string | undefined;

@@ -1,5 +1,6 @@
+import { createDocument } from './operations.js';
 import { packageBin } from '../../scripts/package-location.js';
-import { createDocument } from "../../src/app/index.js";
+
 import { createConsumer } from './consumer.js';
 import { installedConcordCli } from './support.js';
 import assert from 'node:assert/strict';

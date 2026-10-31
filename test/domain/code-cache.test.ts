@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -10,9 +11,9 @@ import { Effect } from 'effect';
 import { cacheStatus, clearCache } from "../../src/domain/tests/index.js";
 import { scanCode } from "../../src/domain/code/index.js";
 import { openHawdb } from "../../src/base/cache/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { traceGaps } from "../../src/app/index.js";
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';

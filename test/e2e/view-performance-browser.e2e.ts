@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -6,9 +7,9 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { act } from './journey.js';
 import { expect } from '@playwright/test';
-import { createDocument } from "../../src/app/index.js";
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { startViewServer } from './server.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 

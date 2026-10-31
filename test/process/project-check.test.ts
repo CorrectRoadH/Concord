@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.js';
 import { installedConcordCli } from '../support/support.js';
 import { runApplication } from '../support/repository.js';
@@ -10,7 +11,7 @@ import test, { mock } from 'node:test';
 import { Effect } from 'effect';
 import { executeViewAction } from "../../src/app/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { checkProject } from "../../src/app/index.js";
 import { checkCurrentProject } from "../../src/app/index.js";
 import { ConcordError } from "../../src/model/index.js";

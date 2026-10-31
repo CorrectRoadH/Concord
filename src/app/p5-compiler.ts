@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
-import { lstatSync, readFileSync } from "node:fs";
-import { builtAssetRoot, requireBuiltAssets } from "../base/installation/index.js";
+import { snapshotBytes, snapshotMetadata } from '../base/sources/index.js';
+import { Installation, builtAssetRoot, requireBuiltAssets } from "../base/installation/index.js";
 import { dirname, extname, join, posix } from "node:path";
 import { Effect } from "effect";
 import { build, type Loader } from "esbuild";
@@ -43,7 +43,7 @@ function sketchSource(source: string, mode: 'instance' | 'global', inline: boole
 }
 
 /** Type checking reads only the captured graph and trusted compiler/p5 declarations. */
-function checkTypes(sources: Map<string, string>, resolutions: Map<string, string>, global: boolean, captureType: (specifier: string, importer: string) => { path: string; source: string }): void {
+function checkTypes(declarations: ReadonlyMap<string, string>, sources: Map<string, string>, resolutions: Map<string, string>, global: boolean, captureType: (specifier: string, importer: string) => { path: string; source: string }): void {
   const { DiagnosticCategory, ModuleKind, ModuleResolutionKind } = nativeTypeScript();
   const p5Types = join(builtAssetRoot('p5-types'), 'p5.d.ts').replaceAll('\\', '/');
   const globalTypes = join(dirname(p5Types), 'global.d.ts').replaceAll('\\', '/');
@@ -82,8 +82,8 @@ function checkTypes(sources: Map<string, string>, resolutions: Map<string, strin
   const ambient = '/__concord_p5_assets.d.ts';
   const virtual = new Map([...sources].map(([path, source]) => [`/${path}`, source]));
   virtual.set(ambient, Object.keys(loaders).filter(extension => !['.ts', '.js', '.mjs', '.json'].includes(extension)).map(extension => `declare module '*${extension}' { const value: string; export default value; }`).join('\n'));
-  virtual.set(p5Types, readFileSync(p5Types, 'utf8'));
-  if (global) virtual.set(globalTypes, readFileSync(globalTypes, 'utf8'));
+  virtual.set(p5Types, declarations.get('p5.d.ts')!);
+  if (global) virtual.set(globalTypes, declarations.get('global.d.ts')!);
   for (const [path, source] of typescriptLibraries()) virtual.set(path, source);
   const options: RawCompilerOptions = { strict: true, noEmit: true, skipLibCheck: true, allowJs: true, checkJs: false, allowUmdGlobalAccess: true, target: ts.ScriptTarget.ES2022, module: ModuleKind.ESNext, moduleResolution: ModuleResolutionKind.Bundler, allowImportingTsExtensions: true, resolveJsonModule: true, types: [], lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'] };
   // The API resolver receives a containing directory. Equal directory/specifier
@@ -111,6 +111,7 @@ function checkTypes(sources: Map<string, string>, resolutions: Map<string, strin
 
 export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, input: unknown) {
   yield* Effect.try({ try: requireBuiltAssets, catch: failure });
+  const installation = yield* Installation;
   const request = yield* Effect.try({ try: () => decode(P5RequestSchema, input, 'p5 request'), catch: failure });
   if (Buffer.byteLength(request.code) > 256 * 1024) return yield* Effect.fail(new ConcordError('P5BudgetExceeded', 'Inline sketch exceeds 256 KiB'));
   const document = yield* getViewFile(root, request.document);
@@ -127,11 +128,12 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
     if (observed.has(path)) return observed.get(path);
     if (observed.size >= MAX_FILES) throw new ConcordError('P5BudgetExceeded', `A sketch may reference at most ${MAX_FILES} files`);
     const value = repo.snapshot(() => {
-      const absolute = repo.absolute(path);
-      const stat = lstatSync(absolute, { throwIfNoEntry: false });
+      repo.absolute(path);
+      const stat = snapshotMetadata(repo, path);
       if (!stat) return undefined;
-      if (!stat.isFile() || stat.size > MAX_BYTES) throw new ConcordError('P5BudgetExceeded', 'Sketch inputs must be bounded regular files');
-      return readFileSync(absolute);
+      if (!stat.file || stat.size > MAX_BYTES) throw new ConcordError('P5BudgetExceeded', 'Sketch inputs must be bounded regular files');
+      const bytes = snapshotBytes(repo, path);
+      return bytes === undefined ? undefined : Buffer.from(bytes);
     });
     bytes += value?.byteLength ?? 0;
     if (bytes > MAX_BYTES) throw new ConcordError('P5BudgetExceeded', 'Sketch inputs exceed 8 MiB');
@@ -152,12 +154,19 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
   const entry = yield* Effect.try({ try: () => options.src ? resolveImport(options.src, document.path) : posix.join(posix.dirname(document.path), '__inline_p5__.ts'), catch: failure });
   if (!/\.(ts|js|mjs)$/u.test(entry)) return yield* Effect.fail(new ConcordError('P5EntryInvalid', 'Sketch entry must be TypeScript or JavaScript'));
   const source = yield* Effect.try({ try: () => sketchSource(options.src ? read(entry)!.toString('utf8') : request.code, mode, !options.src), catch: failure });
+  const bundled = new Map<string, string>();
+  for (const name of repo.config.p5?.libraries ?? []) if (Object.hasOwn(P5_LIBRARIES, name)) {
+    const library = P5_LIBRARIES[name as keyof typeof P5_LIBRARIES];
+    bundled.set(name, yield* installation.asset('web', `p5-libraries/${library.file}`));
+  }
+  const declarations = new Map<string, string>();
+  for (const name of ['p5.d.ts', ...(mode === 'global' ? ['global.d.ts'] : [])]) declarations.set(name, yield* installation.asset('p5-types', name));
   const libraries = yield* Effect.try({ try: () => {
     const names = repo.config.p5?.libraries ?? [];
     return names.map(name => {
       if (Object.hasOwn(P5_LIBRARIES, name)) {
         const library = P5_LIBRARIES[name as keyof typeof P5_LIBRARIES];
-        return { name: `${name}@${library.version}`, source: readFileSync(join(builtAssetRoot('web'), 'p5-libraries', library.file), 'utf8') };
+        return { name: `${name}@${library.version}`, source: bundled.get(name)! };
       }
       if (name.startsWith('./') || name.startsWith('../')) {
         const path = resolveImport(name, 'concord.config.ts');
@@ -186,15 +195,15 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
     } }],
   }), catch: cause => new ConcordError('P5CompileFailed', cause instanceof Error ? cause.message : String(cause)) });
   yield* Effect.try({ try: () => {
-    checkTypes(sources, resolutions, mode === 'global', (specifier, importer) => {
+    checkTypes(declarations, sources, resolutions, mode === 'global', (specifier, importer) => {
       const path = resolveImport(specifier, importer);
       return { path, source: read(path)!.toString('utf8') };
     });
     repo.snapshot(() => {
       for (const [path, before] of observed) {
-        const absolute = repo.absolute(path);
-        const stat = lstatSync(absolute, { throwIfNoEntry: false });
-        const after = stat?.isFile() && stat.size <= MAX_BYTES ? readFileSync(absolute) : undefined;
+        repo.absolute(path);
+        const stat = snapshotMetadata(repo, path);
+        const after = stat?.file && stat.size <= MAX_BYTES ? snapshotBytes(repo, path) : undefined;
         if (before === undefined ? stat !== undefined : after === undefined || !before.equals(after)) throw new ConcordError('P5SourceChanged', 'Sketch inputs changed during compilation; run again');
       }
     });

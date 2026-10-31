@@ -1,3 +1,4 @@
+import { initialize, createDocument, addPage } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -7,11 +8,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { loadDocuments } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { checkDesign, decideDesign } from "../../src/domain/designs/index.js";
-import { addPage, showPage, setPage } from "../../src/domain/documents/index.js";
+import { showPage, setPage } from "../../src/domain/documents/index.js";
 import { resolveReference } from "../../src/domain/documents/index.js";
 import { readDesignPlanPaths } from "../../src/base/sources/index.js";
 import { getWorkspaceSnapshot } from "../../src/app/index.js";

@@ -1,9 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#随包模板
-import { readFileSync, readdirSync, type Dirent } from "node:fs";
-import { resourcePath } from "../../base/installation/index.js";
-import { Schema } from "effect";
-import { ConcordError } from "../../model/index.js";
+import { Installation, type TemplateResources } from "../../base/installation/index.js";
+import { Effect, Schema } from "effect";
+import { ConcordError, failure } from "../../model/index.js";
 import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../model/index.js";
 
 
@@ -27,17 +26,15 @@ const ManifestSchema = Schema.Struct({
 type Manifest = typeof ManifestSchema.Type;
 type ManifestEntry = Manifest['templates'][number];
 
-const templatesDirectory = resourcePath('templates');
-const manifestPath = resourcePath('templates/manifest.json');
 
 function templateFailure(code: string, message: string, cause?: unknown): ConcordError {
   return new ConcordError(code, message, cause);
 }
 
-function readManifest(): Manifest {
+function readManifest(resources: TemplateResources): Manifest {
   let source: string;
   try {
-    source = readFileSync(manifestPath, 'utf8');
+    source = resources.manifest;
   } catch (cause) {
     throw templateFailure('TemplateManifestUnreadable', 'Cannot read the packaged template manifest', cause);
   }
@@ -67,15 +64,10 @@ function readManifest(): Manifest {
     if (entry.path !== `${entry.name}.md`) throw templateFailure('TemplateManifestInvalid', `Template ${entry.name} must use path ${entry.name}.md`);
   }
 
-  let entries: Dirent<string>[];
-  try {
-    entries = readdirSync(templatesDirectory, { withFileTypes: true, encoding: 'utf8' });
-  } catch (cause) {
-    throw templateFailure('TemplateInventoryUnreadable', 'Cannot inspect the packaged template inventory', cause);
-  }
+  const entries = resources.entries;
   const actual = entries.filter(entry => entry.name !== 'manifest.json').map(entry => entry.name).sort();
   const expected = [...paths].sort();
-  const unsupported = entries.filter(entry => entry.name !== 'manifest.json' && !entry.isFile()).map(entry => entry.name);
+  const unsupported = entries.filter(entry => entry.name !== 'manifest.json' && !entry.regular).map(entry => entry.name);
   const missingFiles = expected.filter(path => !actual.includes(path));
   const unexpectedFiles = actual.filter(path => !expected.includes(path));
   if (unsupported.length > 0 || missingFiles.length > 0 || unexpectedFiles.length > 0) {
@@ -89,33 +81,45 @@ function readManifest(): Manifest {
   return manifest;
 }
 
-function findTemplate(name: string): ManifestEntry {
-  const entry = readManifest().templates.find(candidate => candidate.name === name);
+function findTemplate(resources: TemplateResources, name: string): ManifestEntry {
+  const entry = readManifest(resources).templates.find(candidate => candidate.name === name);
   if (entry === undefined) throw templateFailure('TemplateNotFound', `Unknown template: ${name}`);
   return entry;
 }
 
-export function templateBody(name: string, title: string, pages: readonly TemplatePage[] = TEMPLATE_PAGES): string {
-  const entry = findTemplate(name);
+function renderTemplate(resources: TemplateResources, name: string, title: string, pages: readonly TemplatePage[] = TEMPLATE_PAGES): string {
+  const entry = findTemplate(resources, name);
   try {
     const entryPoints = pages.length === 0
       ? 'Add supporting pages when needed and link them here. Keep the problem, mental model, and scope in this README.'
       : pages.map(page => `- [${PAGE_DESCRIPTIONS[page].label}](${page === 'use-case' ? 'use-case/README.md' : `${page}.md`})`).join('\n');
-    return readFileSync(resourcePath(`templates/${entry.path}`), 'utf8')
+    return resources.read(entry.path)
       .replaceAll('{{entryPoints}}', () => entryPoints).replaceAll('{{title}}', () => title);
   } catch (cause) {
     throw templateFailure('TemplateUnreadable', `Cannot read packaged template ${entry.name}`, cause);
   }
 }
 
-export function listTemplates(): { name: string; description: string }[] {
-  return readManifest().templates.map(({ name, description }) => ({ name, description }));
-}
+export const templateBody = Effect.fn('templateBody')(function*(name: string, title: string, pages: readonly TemplatePage[] = TEMPLATE_PAGES) {
+  const installation = yield* Installation;
+  const resources = yield* installation.templates;
+  return yield* Effect.try({ try: () => renderTemplate(resources, name, title, pages), catch: failure });
+});
+export const templateCatalog = Effect.fn('templateCatalog')(function*() {
+  const installation = yield* Installation;
+  const resources = yield* installation.templates;
+  return yield* Effect.try({ try: () => {
+    const manifest = readManifest(resources);
+    return { list: manifest.templates.map(({ name, description }) => ({ name, description })),
+      render: (name: string, title: string, pages: readonly TemplatePage[] = TEMPLATE_PAGES) => renderTemplate(resources, name, title, pages) };
+  }, catch: failure });
+});
+export const listTemplates = Effect.fn('listTemplates')(function*() { return (yield* templateCatalog()).list; });
 
 /** A complete, readable reference set installed by init; not document owners. */
-export function projectTemplateFiles(): Record<string, string> {
+export function projectTemplateFiles(catalog: { readonly render: (name: string, title: string, pages?: readonly TemplatePage[]) => string }): Record<string, string> {
   const files: Record<string, string> = {};
-  const add = (path: string, name: string) => { files[`docs/_template/${path}`] = templateBody(name, 'Your title'); };
+  const add = (path: string, name: string) => { files[`docs/_template/${path}`] = catalog.render(name, 'Your title'); };
   const packageTemplates = [['feature-design', 'feature'], ['roadmap', 'roadmap']] as const;
   const addPackage = (directory: string, name: string) => {
     add(`${directory}/README.md`, name);

@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import fs, { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs';
@@ -9,7 +10,7 @@ import { Effect } from 'effect';
 import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 import { readRepositoryFileSync } from "../../src/base/workspace/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 function fixture(t: TestContext): { container: string; parent: string; root: string } {
   const container = realpathSync(mkdtempSync(join(tmpdir(), 'concord-path-cost-')));

@@ -1,6 +1,8 @@
 
 
 
+import { Effect } from 'effect';
+
 export type Observation = 'incomplete-scan' | 'source-changed' | 'orphan-annotation' | 'cache-unavailable' | 'native-artifact-mismatch';
 
 export interface Phase { name: string; ms: number; count: number }
@@ -23,6 +25,12 @@ export class RequestTiming {
   async async<A>(name: string, operation: () => Promise<A>): Promise<A> {
     const started = this.now();
     try { return await operation(); } finally { this.record(name, this.now() - started); }
+  }
+  effect<A, E, R>(name: string, operation: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+    return Effect.suspend(() => {
+      const started = this.now();
+      return operation.pipe(Effect.ensuring(Effect.sync(() => this.record(name, this.now() - started))));
+    });
   }
   record(name: string, ms: number): void {
     const key = /^[a-zA-Z.]{1,64}$/u.test(name) && (this.phases.has(name) || this.phases.size < 24) ? name : 'other';

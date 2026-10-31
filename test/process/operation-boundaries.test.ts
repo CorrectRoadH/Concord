@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import { createConsumer } from '../support/consumer.js';
 import { installedConcordCli } from '../support/support.js';
@@ -10,11 +11,11 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { getWorkspaceSnapshot } from "../../src/app/index.js";
 import { diagnoseDocuments, readDocumentReference, readDocumentSelector } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { renderDocument } from "../../src/model/index.js";
 import { editKnowledge } from "../../src/app/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../../src/base/publication/index.js";
 import { beginRun } from "../../src/base/publication/index.js";
 import { setSource } from "../../src/app/index.js";

@@ -1,3 +1,4 @@
+import { addPage, createDocument, initialize } from '../support/operations.js';
 import { Deferred, Effect } from 'effect';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -7,10 +8,10 @@ import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { act } from './journey.js';
 import { expect } from '@playwright/test';
-import { addPage } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 import { parseWorkspaceProjection, pollUntil, projectConfigPath, readProjectConfig, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';

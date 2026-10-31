@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { packageBin } from '../../scripts/package-location.js';
 import { packConcord, installConcord } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
@@ -10,7 +11,7 @@ import { Effect, Schema } from 'effect';
 import { parseTypeScriptConfig, renderTypeScriptConfig } from "../../src/base/workspace/index.js";
 import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 // @use-case docs/feature/project-onboarding/use-case/maintain-project-config.md
 test('packed config has usable type hints and rejects misspelled fields', () => Effect.runPromise(Effect.sync(() => {

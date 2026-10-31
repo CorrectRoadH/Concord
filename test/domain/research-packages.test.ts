@@ -1,13 +1,14 @@
+import { addPage, createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import test from 'node:test';
-import { addPage, loadDocuments, resolveReference, showPage } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+import { loadDocuments, resolveReference, showPage } from "../../src/domain/documents/index.js";
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 // @use-case docs/feature/document-packages/use-case/organize-freeform-research.md
 test('research starts without a questionnaire and supports nested freeform pages with strict owner boundaries', t => {

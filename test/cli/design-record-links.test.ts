@@ -166,8 +166,8 @@ test('packed CLI, structured action and Web project check return the same Design
   write(root, 'docs/links.md', '[record](design/store/CASES.md)\n');
   const expected = decodeCheck(call(root, ['check'], 1));
   assert.deepEqual(decodeCheck(call(root, ['action', '--input', '-'], 0, '{"action":"check"}')), expected);
-  const { startViewServer } = await import("../../src/entry/http/view-server.js");
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot: join(dirname(cli), 'web') });
+  const { startViewServer } = await import('../e2e/server.js');
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0, installedBin: cli });
   try {
     const body = await new Promise<string>((resolve, reject) => {
       const call = request({ hostname: '127.0.0.1', port: server.port, path: '/api/action', method: 'POST', agent: false, headers: { 'content-type': 'application/json' } }, response => {

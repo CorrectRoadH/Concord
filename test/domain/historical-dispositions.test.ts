@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -7,11 +8,11 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { authorDesignFixture } from '../support/design-fixture.js';
 import { checkDocuments, findDocument, loadDocuments } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { deferDesign, decideDesign } from "../../src/domain/designs/index.js";
 import { renderDocument } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 // @use-case docs/feature/document-packages/use-case/discover-managed-documents.md
 test('a Design decision replaces its current Deferred declaration', t => Effect.runPromise(Effect.sync(() => {

@@ -1,8 +1,9 @@
+import { createDocument } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { createDocument } from '../../src/app/index.js';
+
 import { checkDesign, decideDesign } from '../../src/domain/designs/index.js';
 import { loadDocuments } from '../../src/domain/documents/index.js';
 import { LocalRepository } from '../support/repository.js';

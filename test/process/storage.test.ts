@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { installedConcordCli } from '../support/support.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -7,7 +8,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
 import { digest } from "../../src/model/index.js";
 import { projectConfigPath, readProjectConfig } from '../support/support.js';

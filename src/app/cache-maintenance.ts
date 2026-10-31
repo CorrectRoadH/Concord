@@ -4,35 +4,36 @@ import { clearCache } from "../domain/tests/index.js";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cachePhysicalBytes, cacheRootOwnerOnly } from "../base/cache/index.js";
 import { genericPrivateDirectorySync } from "../base/publication/index.js";
 import { CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../base/installation/index.js";
-import { openHawdb } from "../base/cache/index.js";
-import { LocalRepository } from "../base/workspace/index.js";
+import { PersistentCache } from "../base/cache/index.js";
+import { openWriteRepository } from "../base/workspace/index.js";
 
 
 /** Best effort: reclaim first, then release every native lock before publication. */
-export function maintainCache(root: string, publication: Publication['Service']): 'below-threshold' | 'reclaimed' | 'cleared' | 'deferred' {
+export const maintainCache = Effect.fn('maintainCache')(function*(root: string): Effect.fn.Return<'below-threshold' | 'reclaimed' | 'cleared' | 'deferred', never, import('../base/workspace/index.js').Workspace | Publication | PersistentCache> {
   try {
     const privateDir = genericPrivateDirectorySync(root), path = cacheDatabasePath(privateDir);
     if (!assertCacheDatabaseSafe(path) || cacheRootOwnerOnly(path) || cachePhysicalBytes(privateDir) <= CACHE_MAINTENANCE_THRESHOLD_BYTES) return 'below-threshold';
-    const database = openHawdb(path, { readOnly: false, create: false });
-    let deferred: boolean;
-    try { deferred = database.reclaim().deferredForActiveLeases; }
-    finally { database.close(); }
+    const cache = yield* PersistentCache;
+    const deferred = yield* Effect.scoped(Effect.gen(function*() {
+      const database = yield* cache.open(privateDir);
+      if (database === undefined) return true;
+      return yield* Effect.sync(() => database.reclaim().deferredForActiveLeases);
+    })).pipe(Effect.catch(() => Effect.succeed(true)));
     // A failed or budget-limited sweep is a deferral, never permission to clear.
     if (deferred) return 'deferred';
     if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed';
-    const repo = new LocalRepository(root, { persistentCache: 'off', reclaimPublication: false }, publication.validation);
-    try {
-      return repo.snapshot(() => {
-        // clearCache obtains OwnerGuard and fully re-inspects before deleting.
-        if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed';
-        return clearCache(repo, CACHE_PHYSICAL_LIMIT_BYTES).status === 'cleared' ? 'cleared' : 'reclaimed';
-      });
-    } finally { repo.close(); }
+    return yield* Effect.scoped(Effect.gen(function*() {
+      const repo = yield* openWriteRepository(root, { persistentCache: 'off', reclaimPublication: false });
+      return yield* Effect.sync(() => repo.snapshot(() => {
+        if (cachePhysicalBytes(privateDir) <= CACHE_PHYSICAL_LIMIT_BYTES) return 'reclaimed' as const;
+        return clearCache(repo, CACHE_PHYSICAL_LIMIT_BYTES).status === 'cleared' ? 'cleared' as const : 'reclaimed' as const;
+      }));
+    })).pipe(Effect.catch(() => Effect.succeed('deferred' as const)));
   } catch { return 'deferred'; }
-}
+});
+
 
 export const runCacheMaintenance = Effect.fn('cache.maintain')(function*(root: string | undefined) {
   if (root === undefined) return;
-  const publication = yield* Publication;
-  return yield* Effect.sync(() => maintainCache(root, publication));
+  return yield* maintainCache(root);
 });

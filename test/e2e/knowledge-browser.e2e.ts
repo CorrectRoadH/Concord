@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -8,7 +9,7 @@ import { act } from './journey.js';
 import { Effect, Schema } from 'effect';
 import { expect } from '@playwright/test';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 import { pollUntil, waitForWorkspaceProjection } from '../support/support.js';

@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { installedConcordCli } from '../support/support.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -9,7 +10,7 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { snapshot } from "../../src/base/workspace/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { digest } from "../../src/model/index.js";
 
 const cli = installedConcordCli();

@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import { initialConstitution } from "../../src/domain/constitution/index.js";
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -7,7 +8,7 @@ import test from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { scanCode } from "../../src/domain/code/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { Effect, Schema } from 'effect';
 import { QueryCacheEnvelope, queryRequestSatisfied, replaceQueryEnvelope, type QueryUpdate } from "../../src/app/index.js";
 import { classifyQueryRefresh, classifyQueryScan } from "../../src/app/index.js";

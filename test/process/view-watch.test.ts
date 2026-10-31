@@ -1,3 +1,6 @@
+import { createDocument, initialize } from '../support/operations.js';
+import { Workspace } from '../../src/base/workspace/index.js';
+import { NodeServices } from '@effect/platform-node';
 import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
 import { genericPrivateDirectorySync } from '../../src/base/publication/index.js';
 import { spawnSync } from 'node:child_process';
@@ -8,13 +11,13 @@ import { tmpdir } from '../support/temporary.js';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
-import { createDocument } from "../../src/app/index.js";
+
 import { ConcordError, digest, failure } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import type { WorkspaceProjection } from "../../src/model/index.js";
 import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
-import { readWorkspaceProjection, workspaceProjectionContext } from "../../src/app/index.js";
+import { readWorkspaceProjection, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 const ownerPath = 'docs/feature/projected/README.md';
@@ -215,3 +218,5 @@ test('cache publication settles and closing View stops updates and releases its 
     yield* Effect.sleep(100);
   }
 }))));
+
+const workspaceProjectionContext = (...args: Parameters<typeof identifyProjection>) => Effect.runSync(identifyProjection(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)));

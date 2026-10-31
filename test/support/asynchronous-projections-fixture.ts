@@ -1,3 +1,6 @@
+import { initialize, createDocument } from './operations.js';
+import { Workspace } from '../../src/base/workspace/index.js';
+import { NodeServices } from '@effect/platform-node';
 import { makeOwnedProcessService } from '../../src/base/process/index.js';
 import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
 import { classifyQueryRefresh, persist } from '../../src/app/index.js';
@@ -22,12 +25,12 @@ import { cacheDatabasePath } from "../../src/base/cache/index.js";
 import { openHawdb } from "../../src/base/cache/index.js";
 import { readProjectConfig, writeProjectConfig } from './support.js';
 import { LocalRepository } from "./repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { setAuthor } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { renderDocument } from "../../src/model/index.js";
 import { ConcordError, digest } from "../../src/model/index.js";
-import { QueryCacheEnvelope, queryContext, readQuery, storeQuery, type Query } from "../../src/app/index.js";
+import { QueryCacheEnvelope, queryContext as identifyQuery, readQuery, storeQuery, type Query } from "../../src/app/index.js";
 
 export const gaps = (marker = 'original') => ({ operation: 'trace-gaps' as const, semantics: 'missing-explicit-relationships-not-coverage' as const, limitations: [marker], contracts: [], cliPages: [], unmarkedLists: [], cache: { status: 'off', hits: 0, misses: 0, path: 'cache' } });
 export const candidate = (marker = 'original', scannedAt = Date.now()) => ({ kind: 'candidate' as const, message: { format: 'concord.query-scan/v1' as const, ok: true as const, scannedAt, finishedAt: Date.now(), value: gaps(marker), complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } } });
@@ -170,7 +173,8 @@ export { renderDocument };
 export { ConcordError };
 export { digest };
 export { QueryCacheEnvelope };
-export { queryContext };
+export const queryContext = (...args: Parameters<typeof identifyQuery>) => Effect.runSync(identifyQuery(...args).pipe(Effect.provide(Workspace.layer), Effect.provide(NodeServices.layer)));
+
 export { readQuery };
 export { storeQuery };
 export type { Query };

@@ -1,3 +1,4 @@
+import { addPage, createDocument, initialize } from '../support/operations.js';
 import { renderOwnerFixture } from '../support/owner-fixture.js';
 import { createConsumer } from '../support/consumer.js';
 import assert from 'node:assert/strict';
@@ -8,16 +9,16 @@ import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { authorDesignFixture } from '../support/design-fixture.js';
-import { addPage, checkDocuments, findDocument, loadDocuments, parseDocumentRecord, resolveReference, setAuthor, setPage, showPage } from "../../src/domain/documents/index.js";
+import { checkDocuments, findDocument, loadDocuments, parseDocumentRecord, resolveReference, setAuthor, setPage, showPage } from "../../src/domain/documents/index.js";
 import { adoptRoadmap } from "../../src/app/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { closeIssue, linkIssue } from "../../src/domain/issues/index.js";
 import { linkMemory } from "../../src/app/index.js";
 import { activateMemory, supersedeMemory } from "../../src/domain/memory/index.js";
 import { decideDesign } from "../../src/domain/designs/index.js";
 import { renderDocument } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { inspectDocuments } from "../../src/app/index.js";
 
 function useConsumer(run: (repo: LocalRepository, root: string) => void): void {

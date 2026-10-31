@@ -22,7 +22,6 @@ export { readReports } from './test-adapter-reports.js';
 export type { ReportBudget } from './test-adapter-reports.js';
 export { reportPath } from './test-adapter-reports.js';
 export { adapterFor } from './test-adapters.js';
-export { adapterImplementation } from './test-adapters.js';
 export { adapterInputSnapshot } from './test-adapters.js';
 export { collectNativeTests } from './test-adapters.js';
 export { executeNativeCase } from './test-adapters.js';

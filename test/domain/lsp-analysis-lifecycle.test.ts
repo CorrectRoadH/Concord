@@ -1,3 +1,5 @@
+import { createDocument } from '../support/operations.js';
+import { runApplication } from '../support/repository.js';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,7 +9,7 @@ import { buildSync } from 'esbuild';
 import { readProjectConfig, writeProjectConfig, pollUntil } from '../support/support.js';
 import { createConsumer } from '../support/consumer.js';
 import { analyzeCode } from "../../src/app/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { LocalRepository } from "../support/repository.js";
 import { openHawdb } from "../../src/base/cache/index.js";
 import { ConcordError } from "../../src/model/index.js";
@@ -39,7 +41,7 @@ function consumer(): string {
 }
 async function analyze(root: string) {
   const repo = new LocalRepository(root, { optimistic: true });
-  try { return await Effect.runPromise(analyzeCode(repo).pipe(Effect.provide(OwnedProcessLive))); }
+  try { return await runApplication(analyzeCode(repo).pipe(Effect.provide(OwnedProcessLive))); }
   finally { repo.close(); }
 }
 async function blocked(root: string) {
@@ -108,7 +110,7 @@ test('analysis refuses ignored adapter inputs changed while its external server 
     writeProjectConfig(root, { ...readProjectConfig(root), testAdapters: [{ id: 'fixture', include: ['test/sample.py'], argv: [process.execPath, 'analysis-adapter.mjs'], implementationFiles: ['analysis-adapter.mjs'], inputRoots: ['fixtures'], lockFiles: [], frameworkVersion: 'fixture/v1', envNames: ['ANALYSIS_ADAPTER_STATE'] }] });
     process.env.ANALYSIS_ADAPTER_STATE = state;
     const repo = new LocalRepository(root);
-    try { await Effect.runPromise(collectNativeTests(repo, ['test/sample.py']).pipe(Effect.provide(OwnedProcessLive))); } finally { repo.close(); }
+    try { await runApplication(collectNativeTests(repo, ['test/sample.py']).pipe(Effect.provide(OwnedProcessLive))); } finally { repo.close(); }
     running = await blocked(root);
     const rejected = assert.rejects(running.result, error => error instanceof ConcordError && error.code === 'AnalysisSourceChanged');
     writeFileSync(state, 'changed'); running.release(); await rejected; clean(root);

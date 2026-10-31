@@ -1,3 +1,4 @@
+import { initialize, createDocument } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -7,8 +8,8 @@ import { test } from './fixtures.js';
 import { Effect } from 'effect';
 import { expect } from '@playwright/test';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
-import { createDocument } from "../../src/app/index.js";
+
+
 import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 

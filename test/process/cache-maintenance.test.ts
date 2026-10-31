@@ -1,3 +1,6 @@
+import { runApplication } from '../support/repository.js';
+import { PersistentCache } from '../../src/base/cache/index.js';
+import { initialize } from '../support/operations.js';
 import { installedConcordCli } from '../support/support.js';
 import { packageBin } from '../../scripts/package-location.js';
 import { publicationService } from '../support/repository.js';
@@ -11,7 +14,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { cachePhysicalBytes } from "../../src/base/cache/index.js";
 import { cacheStatus } from "../../src/domain/tests/index.js";
 import { openHawdb, createMemoryHawdb, HawdbFailure } from "../../src/base/cache/index.js";
@@ -130,7 +133,7 @@ test('publication contention defers discard after releasing native locks, and la
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('native sweep budget and I/O failures defer even an oversized cache and release the handle', () => Effect.runPromise(Effect.sync(() => {
+test('native sweep budget and I/O failures defer even an oversized cache and release the handle', async () => {
   const f = fixture();
   const db = openHawdb(f.path, { readOnly: false, create: false });
   const boundary = Object.getPrototypeOf(db) as { reclaim: typeof db.reclaim };
@@ -142,12 +145,12 @@ test('native sweep budget and I/O failures defer even an oversized cache and rel
     // the real database and must not turn either failure into discard authority.
     for (const code of ['HawdbLimit', 'HawdbUnavailable'] as const) {
       boundary.reclaim = () => { throw new HawdbFailure(code, 'injected sweep failure'); };
-      assert.equal(maintainCache(f.root, publicationService()), 'deferred');
+      assert.equal(await runApplication(maintainCache(f.root).pipe(Effect.provide(PersistentCache.layer))), 'deferred');
       assert.equal(existsSync(f.padding), true);
       assert.equal(read(f.path)[0]?.payload, 'a current logical value');
     }
   } finally { boundary.reclaim = reclaim; rmSync(f.root, { recursive: true, force: true }); }
-})));
+});
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('maintenance competing with another process holding and writing a handle exits without deletion', () => Effect.runPromise(Effect.tryPromise(async () => {

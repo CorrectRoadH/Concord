@@ -1,3 +1,4 @@
+import { addPage, createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -5,10 +6,10 @@ import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
-import { addPage } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { startViewServer } from './server.js';
 
 // @use-case docs/feature/document-packages/use-case/organize-freeform-research.md

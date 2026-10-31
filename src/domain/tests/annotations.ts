@@ -1,4 +1,4 @@
-import { lstatSync } from "node:fs";
+import { snapshotMetadata } from '../../base/sources/index.js';
 import { Schema } from "effect";
 import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from "../../base/cache/index.js";
 import { CACHE_PHYSICAL_LIMIT_BYTES } from "../../base/installation/index.js";
@@ -131,8 +131,8 @@ function sources(repo: Repository, mode: SourceMode): Source[] {
     const absolute = repo.absolute(path);
     if (mode === 'disk') {
       let stat;
-      try { stat = lstatSync(absolute); } catch { continue; }
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > TEXT_LIMIT) continue;
+      try { stat = snapshotMetadata(repo, path); } catch { continue; }
+      if (stat === undefined || !stat.file || stat.symbolicLink || stat.size > TEXT_LIMIT) continue;
     }
     const text = repo.read(path);
     if (text === undefined) throw new ConcordError('SourceChanged', `${path} disappeared while it was scanned`);

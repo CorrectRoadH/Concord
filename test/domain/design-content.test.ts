@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import { createConsumer } from '../support/consumer.js';
 import assert from 'node:assert/strict';
@@ -8,11 +9,11 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { checkDocuments, loadDocuments } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { checkDesign, decideDesign, formatDesign } from "../../src/domain/designs/index.js";
 import { formatDesignMarkdown } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { authorDesignFixture } from '../support/design-fixture.js';
 import { executeViewAction } from "../../src/app/index.js";
 

@@ -1,3 +1,4 @@
+import { initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -8,7 +9,7 @@ import test from 'node:test';
 import { Effect } from 'effect';
 import { scanCode } from "../../src/domain/code/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 function consumer(): string {

@@ -1,9 +1,10 @@
+import { Effect } from 'effect';
 import { canonicalPath } from "../model/index.js";
-import { ConcordError, ProjectSchema, decode, type Change, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.js";
+import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, decode, type Change, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.js";
 import { renderTypeScriptConfig } from "../base/workspace/index.js";
 import { initialConstitution } from "../domain/constitution/index.js";
 import { onboardingGuide } from "../domain/onboarding/index.js";
-import { projectTemplateFiles, templateBody } from "../domain/documents/index.js";
+import { projectTemplateFiles, templateCatalog } from "../domain/documents/index.js";
 import { defaultWritingSource } from "../model/index.js";
 import { EMPTY_CONCEPT_CATALOG } from "../model/index.js";
 import { forbiddenSourcePart } from "../base/workspace/index.js";
@@ -26,9 +27,11 @@ export function withAgentInstructions(source: string): string {
 export interface InitializeOptions { readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner']; readonly constitutionBody?: string; readonly adoptConstitution?: boolean; readonly constitutionReason?: string; readonly constitutionImpact?: string; readonly constitutionSources?: readonly string[] }
 export interface InitializationReceipt extends MutationReceipt { readonly config: ProjectConfig; readonly createdPaths: readonly string[]; readonly preservedPaths: readonly string[] }
 
-// @concord-code
+// @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
-export function initialize(repo: Repository, dryRun = false, options: InitializeOptions = {}): InitializationReceipt {
+export const initialize = Effect.fn('initialize')(function*(repo: Repository, dryRun = false, options: InitializeOptions = {}) {
+  const catalog = yield* templateCatalog();
+  return yield* Effect.try({ try: (): InitializationReceipt => inRepositorySnapshot(repo, () => {
   const config = decode(ProjectSchema, { ...(options.testRoots === undefined ? {} : { testRoots: options.testRoots }), ...(options.sourceRoots === undefined ? {} : { sourceRoots: options.sourceRoots }), ...(options.runner === undefined ? {} : { runner: options.runner }) }, 'init configuration');
   for (const root of [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])]) {
     canonicalPath(root);
@@ -37,11 +40,11 @@ export function initialize(repo: Repository, dryRun = false, options: Initialize
   }
   for (const path of config.runner?.sourceFiles ?? []) repo.absolute(path);
   const active = options.adoptConstitution === true;
-  const constitution = initialConstitution({ body: options.constitutionBody ?? templateBody('constitution', 'Project'), active, reason: options.constitutionReason, impact: options.constitutionImpact, sources: options.constitutionSources, exists: path => repo.read(path) !== undefined });
-  const paths: Record<string, string> = { ...(Object.keys(config).length === 0 ? {} : { 'concord.config.ts': renderTypeScriptConfig(config) }), 'docs/constitution.md': constitution.source, ...(constitution.decision === undefined ? {} : { [constitution.decision.path]: constitution.decision.after! }), 'docs/concord.md': onboardingGuide, ...projectTemplateFiles() };
+  const constitution = initialConstitution({ body: options.constitutionBody ?? catalog.render('constitution', 'Project'), active, reason: options.constitutionReason, impact: options.constitutionImpact, sources: options.constitutionSources, exists: path => repo.read(path) !== undefined });
+  const paths: Record<string, string> = { ...(Object.keys(config).length === 0 ? {} : { 'concord.config.ts': renderTypeScriptConfig(config) }), 'docs/constitution.md': constitution.source, ...(constitution.decision === undefined ? {} : { [constitution.decision.path]: constitution.decision.after! }), 'docs/concord.md': onboardingGuide, ...projectTemplateFiles(catalog) };
   const preservedPaths: string[] = [];
   for (const [path, name] of [['docs/README.md', 'project-index'], ['docs/concepts.md', 'concepts'], ['docs/architecture.md', 'project-architecture']] as const) {
-    if (repo.read(path) === undefined) paths[path] = name === 'concepts' ? EMPTY_CONCEPT_CATALOG : templateBody(name, 'Project');
+    if (repo.read(path) === undefined) paths[path] = name === 'concepts' ? EMPTY_CONCEPT_CATALOG : catalog.render(name, 'Project');
     else preservedPaths.push(path);
   }
   if (repo.read('docs/concord-writing.json') === undefined) paths['docs/concord-writing.json'] = defaultWritingSource;
@@ -63,4 +66,6 @@ export function initialize(repo: Repository, dryRun = false, options: Initialize
   if (agentBefore !== agentAfter) changes.push({ path: 'AGENTS.md', before: agentBefore, after: agentAfter });
   const receipt = repo.publish('init', changes, dryRun);
   return { ...receipt, config, createdPaths: receipt.changedPaths, preservedPaths };
-}
+  }), catch: failure });
+});
+// @concord-end

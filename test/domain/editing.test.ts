@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -5,11 +6,11 @@ import { tmpdir } from '../support/temporary.js';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { createDocument } from "../../src/app/index.js";
+
 import { inspectDocumentFile, inspectDocuments, listSources, readSource, setConfig, setMarkdown, setSource } from "../../src/app/index.js";
 import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { projectConfigPath, readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 function fixture(): string {

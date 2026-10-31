@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -6,9 +7,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { resolveReference } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { buildTrace, requireValidTrace } from "../../src/domain/trace/index.js";
 import { documentShow, renderReview, traceGaps, traceShow } from "../../src/app/index.js";
 import { referenceResolver } from "../../src/domain/documents/index.js";

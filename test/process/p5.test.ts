@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -8,9 +9,9 @@ import { Effect, Schema } from 'effect';
 import { P5BundleSchema } from '../../src/model/p5/index.js';
 import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
 import { fetchFresh } from '../support/support.js';
-import { createDocument } from "../../src/app/index.js";
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 // @use-case docs/feature/web-workbench/use-case/embed-p5-sketch.md

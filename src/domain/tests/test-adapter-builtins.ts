@@ -1,13 +1,13 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 import { workerEntryArgv } from "../../base/installation/index.js";
-import { existsSync, readdirSync } from "node:fs";
+import { Sources } from '../../base/sources/index.js';
 import { dirname, join, relative } from "node:path";
 
-import { Schema } from "effect";
-import { ConcordError, Text } from "../../model/index.js";
+import { Effect, Schema } from "effect";
+import { ConcordError, Text, failure } from "../../model/index.js";
 import type { test_adapter_config_TestAdapter as TestAdapter } from "../../model/index.js";
-import { type AdapterContext, type AdapterPlan, type AdapterReport, type Captured, type Capabilities, type NativeCase, type NativeManifest, test_adapter_protocol_PlanSchema as PlanSchema, protocolDecode, protocolJson } from "../../model/index.js";
+import { type AdapterContext, type AdapterPlan, type AdapterReport, type Captured, type Capabilities, type NativeCase, type NativeManifest, ManifestSchema, test_adapter_protocol_PlanSchema as PlanSchema, protocolDecode, protocolJson } from "../../model/index.js";
 
 const capabilities = (changes: Partial<Capabilities> = {}): Capabilities => ({ realCollection: true, leaf: true, parameterGroups: false, exactSelection: true, perItemReport: true, range: false, rangeTrivia: false, tags: false, skipVisibility: true, ...changes });
 const regex = (text: string) => text.replace(/[\\^$.*+?()[\]{}|]/gu, '\\$&');
@@ -28,17 +28,18 @@ export function builtinVersionCommand(adapter: TestAdapter): readonly string[] {
 function native(adapter: TestAdapter, file: string, name: string, project = 'default'): NativeCase {
   return { nativeId: `${adapter.builtin}:${adapter.id}:${project}:${adapter.builtin === 'pytest' ? name : `${file}:${name}`}`, file, project, kind: 'leaf', selection: { opaqueId: name, capabilityVersion: `${adapter.builtin}/${adapter.frameworkVersion}/v1` }, tags: {}, provenance: `${adapter.builtin}/${adapter.frameworkVersion}` };
 }
-function cargoTarget(root: string, file: string): { cwd: string; args: string[]; project: string } {
+const cargoTarget = Effect.fn('Tests.cargoTarget')(function*(root: string, file: string) {
+  const sources = yield* Sources;
   let directory = dirname(file);
-  while (directory !== '.' && !existsSync(join(root, directory, 'Cargo.toml'))) directory = dirname(directory);
-  if (!existsSync(join(root, directory, 'Cargo.toml'))) throw new ConcordError('NativeSelectionUnsupported', 'Cargo test file has no workspace manifest');
+  while (directory !== '.' && !(yield* sources.exists(join(root, directory, 'Cargo.toml')))) directory = dirname(directory);
+  if (!(yield* sources.exists(join(root, directory, 'Cargo.toml')))) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'Cargo test file has no workspace manifest'));
   const local = relative(directory, file);
   if (local === 'src/lib.rs') return { cwd: directory, args: ['--lib'], project: `${directory}:lib` };
   if (/^tests\/[^/]+\.rs$/u.test(local)) return { cwd: directory, args: ['--test', local.slice(6, -3)], project: `${directory}:test:${local.slice(6, -3)}` };
-  throw new ConcordError('NativeSelectionUnsupported', 'Builtin Cargo adapter supports an explicit library root or integration-test target; other file membership needs a provider');
-}
-export function builtinCollectPlan(adapter: TestAdapter, context: AdapterContext, files: readonly string[]): AdapterPlan {
-  const invocations = files.map((file, index) => {
+  return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'Builtin Cargo adapter supports an explicit library root or integration-test target; other file membership needs a provider'));
+});
+export const builtinCollectPlan = Effect.fn('Tests.builtinCollectPlan')(function*(adapter: TestAdapter, context: AdapterContext, files: readonly string[]) {
+  const invocations = yield* Effect.forEach(files, Effect.fn(function*(file, index) {
     const invocationId = `collect-${index}`;
     const base = { invocationId, cwd: '.', envNames: adapter.envNames, reports: [] as string[] };
     switch (adapter.builtin) {
@@ -46,13 +47,14 @@ export function builtinCollectPlan(adapter: TestAdapter, context: AdapterContext
       case 'vitest': return { ...base, argv: [process.execPath, ...workerEntryArgv('test-adapter-vitest'), context.root, file, join(context.reportDirectory, invocationId, 'manifest.json')] as [string, ...string[]], reports: ['manifest.json'] };
       case 'pytest': return { ...base, argv: [...PYTEST, '--rootdir', context.root, '--collect-only', '-q', '--color=no', '-o', 'addopts=', '-p', 'no:cacheprovider', file] as [string, ...string[]] };
       case 'go': return { ...base, cwd: dirname(file), argv: ['go', 'test', '-list', '^Test', '.'] as [string, ...string[]] };
-      case 'cargo': { const target = cargoTarget(context.root, file); return { ...base, cwd: target.cwd, argv: ['cargo', '+stable', 'test', '--offline', ...target.args, '--', '--list', '--format=terse'] as [string, ...string[]] }; }
+      case 'cargo': { const target = yield* cargoTarget(context.root, file); return { ...base, cwd: target.cwd, argv: ['cargo', '+stable', 'test', '--offline', ...target.args, '--', '--list', '--format=terse'] as [string, ...string[]] }; }
       default: throw new ConcordError('AdapterProtocolInvalid', 'Unknown builtin');
     }
-  });
+  }));
   return protocolDecode(PlanSchema, { invocations, planContext: { files } });
-}
-export function builtinCollectParse(adapter: TestAdapter, context: AdapterContext, files: readonly string[], captures: readonly Captured[]): NativeManifest {
+}, Effect.catchDefect(cause => Effect.fail(failure(cause))));
+export const builtinCollectParse = Effect.fn('Tests.builtinCollectParse')(function*(adapter: TestAdapter, context: AdapterContext, files: readonly string[], captures: readonly Captured[]) {
+  const sources = yield* Sources;
   const cases: NativeCase[] = []; const gaps: string[] = ['RangeUnavailable', 'ParameterGroupsUnavailable', 'TagsUnavailable'];
   for (const [index, captured] of captures.entries()) {
     const file = files[index]!;
@@ -71,13 +73,13 @@ export function builtinCollectParse(adapter: TestAdapter, context: AdapterContex
         for (const line of captured.stdout.split(/\r?\n/u)) if (line.startsWith(`${file}::`)) cases.push(native(adapter, file, line));
         break;
       case 'go':
-        if (!file.endsWith('_test.go') || readdirSync(join(context.root, dirname(file))).filter(path => path.endsWith('_test.go')).length !== 1) { gaps.push('GoFileMembershipUnknown'); break; }
+        if (!file.endsWith('_test.go') || (yield* sources.directoryEntries(join(context.root, dirname(file)))).filter(path => path.endsWith('_test.go')).length !== 1) { gaps.push('GoFileMembershipUnknown'); break; }
         for (const line of captured.stdout.split(/\r?\n/u)) if (/^Test\S*$/u.test(line)) cases.push(native(adapter, file, line, dirname(file)));
         // -list cannot observe dynamically registered subtests or skip behavior.
         gaps.push('GoDynamicSubtestsUnknown', 'SkipVisibilityUnavailable');
         break;
       case 'cargo': {
-        const target = cargoTarget(context.root, file);
+        const target = yield* cargoTarget(context.root, file);
         if (captured.stdout.split(/\r?\n/u).some(line => line.endsWith(': test') && line.slice(0, -6).includes('::'))) { gaps.push('CargoFileMembershipUnknown'); break; }
         for (const line of captured.stdout.split(/\r?\n/u)) if (line.endsWith(': test')) cases.push(native(adapter, file, line.slice(0, -6), target.project));
         break;
@@ -85,23 +87,23 @@ export function builtinCollectParse(adapter: TestAdapter, context: AdapterContex
     }
   }
   if (new Set(cases.map(item => item.nativeId)).size !== cases.length) throw new ConcordError('AmbiguousNativeBinding', 'Framework names collide within a project/file/target');
-  return { cases, capabilities: capabilities(adapter.builtin === 'node-test' ? { realCollection: false, leaf: false, exactSelection: false, perItemReport: false, skipVisibility: false } : adapter.builtin === 'go' ? { skipVisibility: false } : {}), completeness: { complete: adapter.builtin !== 'node-test' && !gaps.includes('GoFileMembershipUnknown') && !gaps.includes('CargoFileMembershipUnknown'), gaps } };
-}
-export function builtinSelectPlan(adapter: TestAdapter, context: AdapterContext, manifest: NativeManifest, requested: readonly string[]): AdapterPlan {
+  return protocolDecode(ManifestSchema, { cases, capabilities: capabilities(adapter.builtin === 'node-test' ? { realCollection: false, leaf: false, exactSelection: false, perItemReport: false, skipVisibility: false } : adapter.builtin === 'go' ? { skipVisibility: false } : {}), completeness: { complete: adapter.builtin !== 'node-test' && !gaps.includes('GoFileMembershipUnknown') && !gaps.includes('CargoFileMembershipUnknown'), gaps } });
+}, Effect.catchDefect(cause => Effect.fail(failure(cause))));
+export const builtinSelectPlan = Effect.fn('Tests.builtinSelectPlan')(function*(adapter: TestAdapter, context: AdapterContext, manifest: NativeManifest, requested: readonly string[]) {
   const selected = requested.map(id => manifest.cases.find(item => item.nativeId === id)!);
-  const invocations = selected.map((item, index) => {
+  const invocations = yield* Effect.forEach(selected, Effect.fn(function*(item, index) {
     const invocationId = `test-${index}`; const name = item.selection.opaqueId;
     const base = { invocationId, cwd: '.', envNames: adapter.envNames, reports: [] as string[], requested: [item.nativeId] };
     switch (adapter.builtin) {
       case 'vitest': return { ...base, argv: [process.execPath, 'node_modules/vitest/vitest.mjs', 'run', item.file, ...(item.project === 'default' ? [] : ['--project', item.project]), '-t', `^${regex(name)}$`, '--retry=0', '--reporter=json', '--outputFile', join(context.reportDirectory, invocationId, 'results.json'), '--no-color'] as [string, ...string[]], reports: ['results.json'] };
       case 'pytest': return { ...base, argv: [...PYTEST, '--rootdir', context.root, '--color=no', '-o', 'addopts=', '-p', 'no:cacheprovider', '-v', '--tb=no', name] as [string, ...string[]] };
       case 'go': return { ...base, cwd: dirname(item.file), argv: ['go', 'test', '-count=1', '-json', '-run', `^${regex(name)}$`, '.'] as [string, ...string[]] };
-      case 'cargo': { const target = cargoTarget(context.root, item.file); return { ...base, cwd: target.cwd, argv: ['cargo', '+stable', 'test', '--offline', ...target.args, '--', '--exact', name, '--format=pretty', '--color=never'] as [string, ...string[]] }; }
+      case 'cargo': { const target = yield* cargoTarget(context.root, item.file); return { ...base, cwd: target.cwd, argv: ['cargo', '+stable', 'test', '--offline', ...target.args, '--', '--exact', name, '--format=pretty', '--color=never'] as [string, ...string[]] }; }
       default: throw new ConcordError('NativeSelectionUnsupported', 'This builtin cannot make an exact native selection');
     }
-  });
+  }));
   return protocolDecode(PlanSchema, { invocations, planContext: { selected } });
-}
+}, Effect.catchDefect(cause => Effect.fail(failure(cause))));
 export function builtinReportParse(adapter: TestAdapter, selected: readonly NativeCase[], captures: readonly Captured[]): AdapterReport {
   const observed: AdapterReport['observed'][number][] = [];
   let complete = true;

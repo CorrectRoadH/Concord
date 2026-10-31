@@ -1,3 +1,4 @@
+import { createDocument } from '../support/operations.js';
 import { runApplication } from '../support/repository.js';
 import { createFixConsumer as fixture, gitCommand as git, gitCommit as commit } from '../support/fix-consumer.js';
 import assert from 'node:assert/strict';
@@ -9,7 +10,7 @@ import { Effect } from 'effect';
 import { createConsumer } from '../support/consumer.js';
 import { LocalRepository } from "../support/repository.js";
 import { readDocumentSelector } from "../../src/domain/documents/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
 import { closeFixedIssue, replayFix } from "../../src/domain/tests/index.js";
 import { OwnedProcessLive } from "../../src/base/process/index.js";

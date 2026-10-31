@@ -1,9 +1,9 @@
+import { Installation } from '../base/installation/index.js';
 import type { Publication } from "../base/publication/index.js";
-import { openReadRepository, openWriteRepository, type Workspace } from "../base/workspace/index.js";
+import { openReadRepository, openWriteRepository, Workspace } from "../base/workspace/index.js";
 import { Sources } from '../base/sources/index.js';
+import type { OwnedProcess } from '../base/process/index.js';
 import { checkCurrentProject } from "./check-current.js";
-import { existsSync, lstatSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { Effect, Result, Predicate } from "effect";
 import { recoverLocalState } from "./recovery.js";
 import { waitForPublication } from "../base/publication/index.js";
@@ -25,9 +25,8 @@ import { inspectDocuments, inspectDocumentFile, isSourcePath, readSource, setCon
 import { annotationSnippet } from "../domain/onboarding/index.js";
 import { doctor } from "./onboarding.js";
 import { ConcordError, IssueClosureSchema, decode, digest, failure } from "../model/index.js";
-import { assertCurrentRuntimeFormat, discoverRoot, git, LocalRepository } from "../base/workspace/index.js";
+import { discoverRoot, git, LocalRepository } from "../base/workspace/index.js";
 import { initialize } from "./initialize.js";
-import { snapshot as parseConfigSnapshot } from "../base/workspace/index.js";
 import { adoptConstitution, amendConstitution, initializeConstitution } from "../domain/constitution/index.js";
 import { listTemplates, templateBody } from "../domain/documents/index.js";
 import { buildTrace } from "../domain/trace/index.js";
@@ -125,49 +124,25 @@ function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefine
   return Effect.flatMap(Sources, sources => sources.snapshot(repo, measuredSync(timing)(name, evaluate)));
 }
 
-// @concord-code
+// @concord-begin
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-function directConfig(root: string): {
-  readonly project: WorkspaceSnapshot['project'];
-  readonly configDigest: string | null;
-  readonly source: string | undefined;
-  readonly path: 'concord.config.ts';
-  readonly diagnostic?: { readonly error: string; readonly message: string };
-} {
-  const relativePath = 'concord.config.ts';
-  const path = join(root, relativePath);
-  try { assertCurrentRuntimeFormat(root); }
-  catch (cause) {
-    const error = failure(cause);
-    return { project: null, configDigest: null, source: undefined, path: relativePath, diagnostic: { error: error.code, message: error.message } };
-  }
-  if (!existsSync(path)) return { project: {}, configDigest: digest(''), source: '', path: relativePath };
-  let source: string;
-  try {
-    const stat = lstatSync(path);
-    if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', `${relativePath} must not be a symbolic link`);
-    if (!stat.isFile() || stat.size > 4 * 1024 * 1024) throw new ConcordError('InvalidFile', `${relativePath} must be a small regular file`);
-    source = readFileSync(path, 'utf8');
-  } catch (cause) {
-    const error = failure(cause);
-    return { project: null, configDigest: null, source: undefined, path: relativePath, diagnostic: { error: error.code, message: error.message } };
-  }
-  try {
-    const parsed = parseConfigSnapshot(relativePath, source);
-    return { project: parsed.config, configDigest: parsed.digest, source, path: relativePath };
-  } catch (cause) {
-    const error = failure(cause);
-    return { project: null, configDigest: digest(source), source, path: relativePath, diagnostic: { error: error.code, message: error.message } };
-  }
-}
+const directConfig = Effect.fn('view.readConfig')(function*(root: string, timing?: RequestTiming) {
+  const workspace = yield* Workspace;
+  const operation = workspace.inspectConfiguration(root);
+  const current = yield* (timing === undefined ? operation : timing.effect('view.readConfig', operation));
+  return { project: current.snapshot?.config ?? null, configDigest: current.digest, source: current.source, path: current.path,
+    ...(current.diagnostic === undefined ? {} : { diagnostic: { error: current.diagnostic.code, message: current.diagnostic.message } }) };
+});
+// @concord-end
 
 /** Missing or malformed project configuration remains inspectable without manufacturing identity. */
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/architecture.md
-const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError, Workspace | Sources> {
+const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError, Workspace | Sources | Installation> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
-  const config = yield* sync('view.readConfig', () => directConfig(root));
+  const config = yield* directConfig(root, timing);
+  const templates = yield* listTemplates();
   if (config.project === null) {
     return {
       root,
@@ -183,7 +158,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       findings: [],
       sources: [],
       evidenceIds: [],
-      templates: listTemplates(),
+      templates,
       cache: { status: 'unavailable' },
       diagnostics: config.diagnostic,
     };
@@ -234,7 +209,7 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
       findings,
       sources: [...new Map([...cases.files, ...codeFiles].map(file => [file.path, file])).values()].sort((left, right) => left.path.localeCompare(right.path)),
       evidenceIds: [],
-      templates: listTemplates(),
+      templates,
       cache: cases.cache,
       diagnostics,
     };
@@ -259,7 +234,7 @@ export const observeWorkspaceProjection = Effect.fn('view.observeWorkspaceProjec
 // @concord-implements docs/feature/web-workbench/use-case/review-local-changes.md
 export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(rootInput: string, baselineCache?: GitBaselineCache) {
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
-  const config = directConfig(root);
+  const config = yield* directConfig(root);
   const testRoots = config.project === null ? [] : yield* withRepository(root,
     repo => Effect.succeed(repo.config.testRoots), { access: 'read' });
   return yield* getGitStatus(root, true, baselineCache, testRoots);
@@ -268,10 +243,10 @@ export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(roo
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
-export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string, timing?: RequestTiming): Effect.fn.Return<ViewFile, ConcordError, Workspace | Sources> {
+export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string, timing?: RequestTiming): Effect.fn.Return<ViewFile, ConcordError, Workspace | Sources | Installation> {
   const sync = measuredSync(timing);
   const validatedRoot = yield* sync('view.validateRoot', () => validateViewRoot(root));
-  const config = yield* sync('view.readConfig', () => directConfig(validatedRoot));
+  const config = yield* directConfig(validatedRoot, timing);
   if (config.project === null) {
     if (path !== config.path || config.source === undefined) return yield* Effect.fail(new ConcordError('FileNotFound', 'Only the malformed project configuration diagnostic is available until configuration is repaired'));
     return { path, body: config.source, digest: config.configDigest! };
@@ -326,7 +301,7 @@ export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string,
 function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { action: 'init' | 'recover' | 'template.show' | 'feedback.sync' | 'feedback.check' }>): unknown {
   const dryRun = 'dryRun' in action ? action.dryRun ?? false : false;
   switch (action.action) {
-    case 'document.create': return createDocument(repo, action.kind, { ...action, memoryKind: action.type, dryRun });
+    case 'document.create': throw new ConcordError('InvalidInput', 'Creation must run in its Effect scope');
     case 'memory.link': return linkMemory(repo, action.id, action.target, action.role, dryRun);
     case 'issue.unlink': return unlinkIssue(repo, action.id, action.memory, dryRun, action.role);
     case 'design.defer': return deferDesign(repo, action.id, action.reason, dryRun);
@@ -400,15 +375,16 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError, Publication | Workspace | Sources> {
+export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError, Publication | Workspace | Sources | OwnedProcess | Installation> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const action = yield* sync('view.decodeAction', () => decodeViewAction(input));
-  if (action.action === 'template.show') return yield* sync('view.template', () => ({ operation: 'template-show', name: action.name, body: templateBody(action.name, action.title ?? 'Your title') }));
+  if (action.action === 'template.show') return { operation: 'template-show', name: action.name, body: yield* templateBody(action.name, action.title ?? 'Your title') };
+  if (action.action === 'document.create') return yield* withRepository(root, repo => createDocument(repo, action.kind, { ...action, memoryKind: action.type, dryRun: action.dryRun ?? false }), { dryRun: action.dryRun }, timing);
   if (action.action === 'init') {
     if (action.docsOnly && (action.testRoots?.length ?? 0) > 0) return yield* Effect.fail(new ConcordError('ConflictingOptions', 'docsOnly cannot be combined with testRoots'));
     const dryRun = action.dryRun ?? false;
-    return yield* withRepository(root, (repo) => snapshotSync(repo, timing, 'view.initialize', () => repo.snapshot(() => initialize(repo, dryRun, {
+    return yield* withRepository(root, (repo) => initialize(repo, dryRun, {
       testRoots: action.docsOnly ? [] : action.testRoots,
       sourceRoots: action.sourceRoots,
       runner: action.runner,
@@ -417,7 +393,7 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
       constitutionReason: action.constitutionReason,
       constitutionImpact: action.constitutionImpact,
       constitutionSources: action.constitutionSources,
-    }))), { initialize: true, dryRun }, timing);
+    }), { initialize: true, dryRun }, timing);
   }
   if (action.action === 'check') return yield* checkCurrentProject(root);
   if (action.action === 'recover') return yield* recoverLocalState(root);

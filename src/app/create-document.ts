@@ -1,8 +1,8 @@
 import { posix } from "node:path";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 import { renderDocument } from "../model/index.js";
-import { ConcordError, DocumentName, decode, inRepositorySnapshot, type DocumentKind, type DocumentMeta, type MutationReceipt, type Repository } from "../model/index.js";
-import { templateBody } from "../domain/documents/index.js";
+import { ConcordError, failure, DocumentName, decode, inRepositorySnapshot, type DocumentKind, type DocumentMeta, type MutationReceipt, type Repository } from "../model/index.js";
+import { templateCatalog } from "../domain/documents/index.js";
 import { TEMPLATE_PAGES } from "../model/index.js";
 import { defaultDocumentPath, documentPlacementError } from "../model/index.js";
 import { now } from "../domain/documents/index.js";
@@ -26,13 +26,14 @@ export interface CreateDocumentInput {
 }
 
 
-// @concord-code
+// @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#roadmap
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#add
 // @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
-export function createDocument(repo: Repository, kind: DocumentKind, input: CreateDocumentInput): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export const createDocument = Effect.fn('createDocument')(function*(repo: Repository, kind: DocumentKind, input: CreateDocumentInput) {
+  const catalog = yield* templateCatalog();
+  return yield* Effect.try({ try: (): MutationReceipt => inRepositorySnapshot(repo, () => {
   const id = decode(DocumentName, input.id, 'id');
   if (['use-case', 'issue', 'memory'].includes(kind) && id.toLowerCase() === 'readme') throw new ConcordError('InvalidInput', 'README is reserved for navigation');
   const title = required(input.title, 'title');
@@ -44,7 +45,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   const selected = decode(Schema.Array(Schema.Literals(TEMPLATE_PAGES)), input.pages ?? [], 'pages');
   if (new Set(selected).size !== selected.length) throw new ConcordError('InvalidInput', 'pages must be unique');
   const requested = TEMPLATE_PAGES.filter(page => selected.includes(page));
-  const bodyFor = (name: string) => authorBody(input.body ?? templateBody(name, title, requested));
+  const bodyFor = (name: string) => authorBody(input.body ?? catalog.render(name, title, requested));
   const createdAt = now();
   const documents = kind === 'memory' ? [] : loadDocuments(repo, kind === 'issue' ? ['issue'] : undefined);
   if (kind !== 'memory' && kind !== 'use-case' && documents.some(document => document.metadata.kind === kind && document.metadata.id === id)) {
@@ -86,7 +87,7 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   if (kind === 'research' && repo.files(posix.dirname(path)).length > 0) throw new ConcordError('DocumentExists', `${posix.dirname(path)} already contains files; creating an owner would change their ownership`);
   const changes = [{ path, before: null, after: renderDocument(metadata, body) }];
   const allowed = kind === 'feature' || kind === 'roadmap';
-  const add = (pagePath: string, name: string) => changes.push({ path: pagePath, before: null, after: authorBody(templateBody(name, title, requested)) });
+  const add = (pagePath: string, name: string) => changes.push({ path: pagePath, before: null, after: authorBody(catalog.render(name, title, requested)) });
   if (allowed) for (const page of requested) add(`${posix.dirname(path)}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
   if (kind === 'design') {
     add(`docs/design/${id}/GOALS.md`, 'goals'); add(`docs/design/${id}/LIMITS.md`, 'limits'); add(`docs/design/${id}/DECISION.md`, 'decision-record');
@@ -100,5 +101,6 @@ export function createDocument(repo: Repository, kind: DocumentKind, input: Crea
   }
   for (const change of changes) if (repo.read(change.path) !== undefined) throw new ConcordError('DocumentExists', `${change.path} already exists`);
   return repo.publish(`create-${kind}`, changes, input.dryRun ?? false);
-  });
-}
+  }), catch: failure });
+});
+// @concord-end

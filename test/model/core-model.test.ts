@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -11,13 +12,13 @@ import { renderDocument } from "../../src/model/index.js";
 import { researchSources } from "../../src/model/index.js";
 import { checkDocuments, findDocument, loadDocuments } from "../../src/domain/documents/index.js";
 import { adoptRoadmap } from "../../src/app/index.js";
-import { createDocument } from "../../src/app/index.js";
+
 import { linkIssue, unlinkIssue } from "../../src/domain/issues/index.js";
 import { linkMemory } from "../../src/app/index.js";
 import { activateMemory, supersedeMemory } from "../../src/domain/memory/index.js";
 import { decideDesign, deferDesign } from "../../src/domain/designs/index.js";
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { type DocumentMeta } from "../../src/model/index.js";
 import { authorDesignFixture } from '../support/design-fixture.js';
 import { renderMemorySource } from "../../src/model/index.js";

@@ -43,3 +43,5 @@ export { memory } from './documents.js';
 export { checkIssueClosure } from './documents.js';
 export { authorBody } from './documents.js';
 export { validateDesignContent } from './design-content.js';
+
+export { templateCatalog } from './templates.js';

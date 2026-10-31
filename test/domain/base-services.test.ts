@@ -14,7 +14,7 @@ import { waitForPublication, acquireTraceLeaseSync, releaseTraceLeaseSync, Publi
 import { publicationLayer } from '../support/repository.js';
 import { cliLayer } from '../../src/entry/cli/index.js';
 import { httpOperationLayer } from '../../src/entry/http/index.js';
-import { readerLayer } from '../../src/entry/server/index.js';
+import { readerLayer, writerLayer, refreshLayer } from '../../src/entry/server/index.js';
 import { PersistentCache } from '../../src/base/cache/index.js';
 import { Git } from '../../src/base/git/index.js';
 
@@ -44,10 +44,11 @@ test('Workspace rereads configuration for each operation and Sources rejects a c
 
 // @feature docs/feature/local-data-engine/README.md
 test('entry layers build the declared reader and operation capabilities', async () => {
-  for (const [name, layer, writes, persistent] of [
-    ['CLI', cliLayer, true, true],
-    ['HTTP operation', httpOperationLayer, true, false],
-    ['reader worker', readerLayer, false, false],
+  for (const [name, layer, writes, persistent, git] of [
+    ['CLI', cliLayer, true, true, true],
+    ['HTTP operation', httpOperationLayer, true, false, true],
+    ['reader worker', readerLayer, false, false, false],
+    ['cache maintenance worker', writerLayer, true, true, false],
   ] as const) {
     const context = await Effect.runPromise(Effect.scoped(Layer.build(layer)));
     assert.equal(Option.isSome(Context.getOption(context, Workspace)), true, name);
@@ -55,9 +56,34 @@ test('entry layers build the declared reader and operation capabilities', async 
     assert.equal(Option.isSome(Context.getOption(context, Cache)), true, name);
     assert.equal(Option.isSome(Context.getOption(context, CacheSnapshot)), true, name);
     assert.equal(Option.isSome(Context.getOption(context, Publication)), writes, name);
-    assert.equal(Option.isSome(Context.getOption(context, Git)), writes, name);
+    assert.equal(Option.isSome(Context.getOption(context, Git)), git, name);
     assert.equal(Option.isSome(Context.getOption(context, PersistentCache)), persistent, name);
   }
+  const refresh = await Effect.runPromise(Effect.scoped(Layer.build(refreshLayer)));
+  assert.equal(Option.isSome(Context.getOption(refresh, Workspace)), true);
+  assert.equal(Option.isSome(Context.getOption(refresh, Publication)), false);
+  assert.equal(Option.isSome(Context.getOption(refresh, PersistentCache)), false);
+});
+
+// @feature docs/feature/local-data-engine/README.md
+test('Sources snapshots verify raw bytes and isolate caller mutations', async () => {
+  const root = createConsumer();
+  const path = 'binary-input.bin';
+  writeFileSync(join(root, path), Buffer.from([0xff, 0, 0x80]));
+  const live = Layer.merge(Workspace.layer, Sources.layer).pipe(Layer.provide(NodeServices.layer));
+  try {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const workspace = yield* Workspace, sources = yield* Sources;
+      const repo = yield* workspace.openRead(root, { access: 'read', persistentCache: 'off' });
+      yield* sources.snapshot(repo, Effect.sync(() => { repo.readBytes(path)![0] = 0; }));
+      const result = yield* Effect.result(sources.snapshot(repo, Effect.sync(() => {
+        assert.deepEqual([...repo.readBytes(path)!], [0xff, 0, 0x80]);
+        writeFileSync(join(root, path), Buffer.from([0xfe, 0, 0x80]));
+      })));
+      assert.equal(result._tag, 'Failure');
+      if (result._tag === 'Failure') assert.equal(result.failure.code, 'PreimageChanged');
+    })).pipe(Effect.provide(live)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });
 
 // @feature docs/feature/local-data-engine/README.md

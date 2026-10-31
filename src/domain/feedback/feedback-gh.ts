@@ -1,15 +1,12 @@
-import { accessSync, constants, mkdtempSync, realpathSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { delimiter, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { DateTime, Effect, Schema } from "effect";
+import { isAbsolute, resolve } from "node:path";
+import { Sources } from '../../base/sources/index.js';
+import { Clock, DateTime, Effect, Schema } from "effect";
 import { fetchFeedback, type FeedbackFetch, type FeedbackTransport } from "./feedback-providers.js";
 import type { feedback_schema_FeedbackConnection as FeedbackConnection } from "../../model/index.js";
-import { hasConfirmedOwnedGroupCleanup, makeOwnedProcessService } from "../../base/process/index.js";
+import { hasConfirmedOwnedGroupCleanup, OwnedProcess } from "../../base/process/index.js";
 import { ConcordError } from "../../model/index.js";
 
 type GhConnection = Extract<FeedbackConnection, { provider: 'github'; transport: 'gh' }>;
-const START_ENV = { ...process.env };
-const START_CWD = process.cwd();
 const PER_CALL = 2 * 1024 * 1024;
 const TOTAL = 16 * 1024 * 1024;
 const DEADLINE_MS = 30_000;
@@ -17,34 +14,11 @@ let occupied = false;
 let poisoned = false;
 
 const error = (code: string, message: string): ConcordError => new ConcordError(code, message);
-const within = (path: string, root: string): boolean => path === root || (!relative(root, path).startsWith(`..${sep}`) && relative(root, path) !== '..' && !isAbsolute(relative(root, path)));
-const packagePath = (path: string): boolean => path.split(sep).includes('node_modules');
-
 // @concord-begin
 // @concord-implements docs/feature/feedback/architecture.md
-function trustedExecutable(root: string): { readonly executable: string; readonly path: string } {
-  const repository = realpathSync(root);
-  const candidates = (START_ENV.PATH ?? '').split(delimiter).filter((part) => part.length > 0 && isAbsolute(part) && !packagePath(part) && !within(part, repository));
-  const trusted: string[] = [];
-  for (const entry of candidates) {
-    let directory: string;
-    try { directory = realpathSync(entry); } catch { continue; }
-    if (packagePath(directory) || within(directory, repository)) continue;
-    if (!trusted.includes(directory)) trusted.push(directory);
-  }
-  for (const directory of trusted) {
-    const candidate = join(directory, 'gh');
-    try {
-      const executable = realpathSync(candidate);
-      if (packagePath(executable) || within(executable, repository)) continue;
-      accessSync(executable, constants.X_OK);
-      return { executable, path: trusted.join(delimiter) };
-    } catch { /* try next trusted PATH entry */ }
-  }
-  throw error('GhUnavailable', 'A trusted GitHub CLI executable is unavailable');
-}
-
-function ghEnvironment(path: string): NodeJS.ProcessEnv {
+function ghEnvironment(path: string, startup: OwnedProcess['Service']['environment']): NodeJS.ProcessEnv {
+  const START_ENV = startup.env;
+  const START_CWD = startup.cwd;
   const env: NodeJS.ProcessEnv = { PATH: path, GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', GH_NO_EXTENSION_UPDATE_NOTIFIER: '1', NO_COLOR: '1', CLICOLOR: '0', GH_TELEMETRY: 'false' };
   for (const name of ['HOME', 'GH_CONFIG_DIR', 'XDG_CONFIG_HOME'] as const) {
     const value = START_ENV[name];
@@ -98,7 +72,7 @@ function classifyExit(stderr: string): ConcordError {
   return error('GhRequestFailed', 'GitHub CLI could not read the configured repository');
 }
 
-function ghTraversal<A, E>(root: string, use: (run: (args: readonly string[], stdin?: string, beforeSpawn?: () => void) => Effect.Effect<{ readonly stdout: string; readonly stderr: string; readonly status: number }, ConcordError>) => Effect.Effect<A, E>, budgets: { readonly total: number; readonly deadline: number; readonly issue?: boolean } = { total: TOTAL, deadline: DEADLINE_MS }): Effect.Effect<A, E | ConcordError> {
+function ghTraversal<A, E>(root: string, use: (run: (args: readonly string[], stdin?: string, beforeSpawn?: () => void) => Effect.Effect<{ readonly stdout: string; readonly stderr: string; readonly status: number }, ConcordError>) => Effect.Effect<A, E>, budgets: { readonly total: number; readonly deadline: number; readonly issue?: boolean } = { total: TOTAL, deadline: DEADLINE_MS }): Effect.Effect<A, E | ConcordError, OwnedProcess | Sources> {
   return Effect.scoped(Effect.gen(function* () {
     if (process.platform === 'win32') return yield* Effect.fail(error('GhPlatformUnsupported', 'GitHub CLI feedback requires POSIX process groups'));
     yield* Effect.acquireRelease(Effect.try({
@@ -109,24 +83,27 @@ function ghTraversal<A, E>(root: string, use: (run: (args: readonly string[], st
       },
       catch: (cause) => cause instanceof ConcordError ? cause : error('GhUnavailable', 'Could not acquire the GitHub CLI read slot'),
     }), () => Effect.sync(() => { occupied = false; }));
-    const processService = makeOwnedProcessService({ graceMs: 500 });
-    const directory = yield* Effect.acquireRelease(
-      Effect.try({ try: () => mkdtempSync(join(tmpdir(), 'concord-gh-')), catch: () => error('GhUnavailable', 'Could not create an isolated GitHub CLI directory') }),
-      (path) => Effect.gen(function* () {
-        yield* processService.awaitIdle;
-        const results = yield* processService.cleanupResults;
-        const count = yield* processService.activeCount;
-        if (count !== 0 || results.some((result) => !hasConfirmedOwnedGroupCleanup(result))) poisoned = true;
-        yield* Effect.sync(() => { try { rmSync(path, { recursive: true, force: true }); } catch { poisoned = true; } });
-      }),
+    const processService = yield* OwnedProcess;
+    const sources = yield* Sources;
+    const directory = yield* sources.temporaryDirectory('concord-gh-', () => { poisoned = true; }).pipe(
+      Effect.mapError(() => error('GhUnavailable', 'Could not create an isolated GitHub CLI directory')),
     );
-    const trusted = yield* Effect.try({ try: () => trustedExecutable(root), catch: (cause) => cause instanceof ConcordError ? cause : error('GhUnavailable', 'Could not resolve a trusted GitHub CLI executable') });
-    const env = ghEnvironment(trusted.path);
+    yield* Effect.addFinalizer(() => Effect.gen(function*() {
+      yield* processService.awaitIdle;
+      const results = yield* processService.cleanupResults;
+      const count = yield* processService.activeCount;
+      if (count !== 0 || results.some(result => !hasConfirmedOwnedGroupCleanup(result))) poisoned = true;
+    }));
+    const trusted = yield* processService.resolveExecutable(root, 'gh', processService.environment.env.PATH ?? '').pipe(
+      Effect.mapError(() => error('GhUnavailable', 'Could not resolve a trusted GitHub CLI executable')),
+    );
+    if (trusted === undefined) return yield* Effect.fail(error('GhUnavailable', 'A trusted GitHub CLI executable is unavailable'));
+    const env = ghEnvironment(trusted.path, processService.environment);
     let spent = 0;
-    const deadline = Date.now() + budgets.deadline;
+    const deadline = (yield* Clock.currentTimeMillis) + budgets.deadline;
     const run = (args: readonly string[], stdin?: string, beforeSpawn?: () => void): Effect.Effect<{ readonly stdout: string; readonly stderr: string; readonly status: number }, ConcordError> => Effect.gen(function* () {
       const remaining = Math.min(PER_CALL, budgets.total - spent);
-      const time = deadline - Date.now();
+      const time = deadline - (yield* Clock.currentTimeMillis);
       if (remaining < 1) return yield* Effect.fail(error(budgets.issue ? 'IssueRemoteBudgetExceeded' : 'GhLimitExceeded', 'GitHub CLI feedback exceeded its total output budget'));
       if (time < 1) return yield* Effect.fail(error('GhTimeout', 'GitHub CLI feedback read timed out'));
       if (beforeSpawn !== undefined) yield* Effect.sync(beforeSpawn);
@@ -136,7 +113,7 @@ function ghTraversal<A, E>(root: string, use: (run: (args: readonly string[], st
       spent += result.outputBytes;
       if (!hasConfirmedOwnedGroupCleanup(result)) { poisoned = true; return yield* Effect.fail(error('GhCleanupUnconfirmed', 'GitHub CLI process cleanup could not be confirmed')); }
       if (result.outputLimitExceeded || spent > budgets.total) return yield* Effect.fail(error(budgets.issue ? 'IssueRemoteBudgetExceeded' : 'GhLimitExceeded', 'GitHub CLI feedback exceeded its output budget'));
-      if (result.timedOut || Date.now() > deadline) return yield* Effect.fail(error('GhTimeout', 'GitHub CLI feedback read timed out'));
+      if (result.timedOut || (yield* Clock.currentTimeMillis) > deadline) return yield* Effect.fail(error('GhTimeout', 'GitHub CLI feedback read timed out'));
       if (result.cancelled) return yield* Effect.fail(error('GhCancelled', 'GitHub CLI feedback read was cancelled'));
       if (result.error !== undefined) return yield* Effect.fail(error('GhUnavailable', 'Could not run GitHub CLI'));
       if (result.exitCode !== 0 && args[0] !== 'api') return yield* Effect.fail(error('GhProtocolInvalid', 'GitHub CLI does not support the required API command'));
@@ -179,7 +156,7 @@ function transportFor(run: (args: readonly string[]) => Effect.Effect<{ readonly
 
 // @concord-code
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#主流程
-export function fetchGhFeedback(root: string, connection: GhConnection, url?: string): Effect.Effect<FeedbackFetch, ConcordError> {
+export function fetchGhFeedback(root: string, connection: GhConnection, url?: string): Effect.Effect<FeedbackFetch, ConcordError, OwnedProcess | Sources> {
   return ghTraversal(root, (run) => fetchFeedback(connection, { transport: transportFor(run), ...(url === undefined ? {} : { url }) })).pipe(
     Effect.timeoutOrElse({ duration: '30 seconds', orElse: () => Effect.fail(error('GhTimeout', 'GitHub CLI feedback read timed out')) }),
   );
@@ -187,7 +164,7 @@ export function fetchGhFeedback(root: string, connection: GhConnection, url?: st
 
 // @concord-code
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
-export function checkGhConnection(root: string, connection: GhConnection): Effect.Effect<{ readonly connectionId: string; readonly provider: 'github'; readonly transport: 'gh'; readonly target: string; readonly checkedAt: string }, ConcordError> {
+export function checkGhConnection(root: string, connection: GhConnection): Effect.Effect<{ readonly connectionId: string; readonly provider: 'github'; readonly transport: 'gh'; readonly target: string; readonly checkedAt: string }, ConcordError, OwnedProcess | Sources> {
   return ghTraversal(root, (run) => Effect.gen(function* () {
     const endpoint = `https://api.github.com/repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}`;
     const response = yield* transportFor(run)({ url: endpoint, method: 'GET', headers: {} });
@@ -203,7 +180,7 @@ export function checkGhConnection(root: string, connection: GhConnection): Effec
 /** Issue-only traversal: writes are available solely to execute callers. */
 // @concord-begin
 // @concord-implements docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-export function withGhIssueTransport<A, E>(root: string, connection: GhConnection, execute: boolean, use: (request: (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, payload?: unknown) => Effect.Effect<{ readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: unknown }, ConcordError>) => Effect.Effect<A, E>): Effect.Effect<A, E | ConcordError> {
+export function withGhIssueTransport<A, E>(root: string, connection: GhConnection, execute: boolean, use: (request: (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, payload?: unknown) => Effect.Effect<{ readonly status: number; readonly headers: Readonly<Record<string, string>>; readonly body: unknown }, ConcordError>) => Effect.Effect<A, E>): Effect.Effect<A, E | ConcordError, OwnedProcess | Sources> {
   return ghTraversal(root, run => {
     const prefix = `repos/${encodeURIComponent(connection.owner)}/${encodeURIComponent(connection.repo)}`;
     const request = (method: 'GET' | 'POST' | 'PATCH' | 'DELETE', path: string, payload?: unknown) => Effect.gen(function*() {

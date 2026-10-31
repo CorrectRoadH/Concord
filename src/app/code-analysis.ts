@@ -1,8 +1,8 @@
-import { readFileSync } from "node:fs";
+import { snapshotBytes } from '../base/sources/index.js';
 import { Effect } from "effect";
 import { buildTrace, requireValidTrace } from "../domain/trace/index.js";
 import { worktreeIdentity } from "../base/git/index.js";
-import { LocalRepository } from "../base/workspace/index.js";
+import { openReadRepository, type LocalRepository } from "../base/workspace/index.js";
 import { closeRepositoryCache, withPersistentCache } from "../base/cache/index.js";
 import { readCachePayloads, writeCachePayloads } from "../base/cache/index.js";
 import { acquireTraceLeaseSync, readPublicationRevisionSync, releaseTraceLeaseSync } from "../base/publication/index.js";
@@ -46,7 +46,7 @@ export function captureAnalysisInputs(repo: Repository) {
   const files = new Map<string, string>(), identities: { path: string; digest: string | null }[] = [];
   for (const path of members) {
     const text = repo.read(path);
-    identities.push({ path, digest: text === undefined ? null : digest(readFileSync(repo.absolute(path))) });
+    identities.push({ path, digest: text === undefined ? null : digest(snapshotBytes(repo, path)!) });
     if (text !== undefined) files.set(path, text);
   }
   // Domain readers own contract decoding and provenance, including supporting pages.
@@ -60,8 +60,7 @@ export function captureAnalysisInputs(repo: Repository) {
   return { identity, inputs, files, trace, native, revision: readPublicationRevisionSync(repo.root) };
 }
 
-function readCapture(root: string) {
-  const reader = new LocalRepository(root, { access: 'read' });
+function captureReader(reader: LocalRepository) {
   const reads = new Map<string, string | null>();
   const listings = new Map<string, { prefix: string; scope?: 'source'; paths: string[] }>();
   // Freeze primitive source preimages, including reads made by native binding capture.
@@ -69,11 +68,12 @@ function readCapture(root: string) {
   const source: Repository = {
     access: 'read', root: reader.root, privateDir: reader.privateDir,
     config: reader.config, configSnapshot: reader.configSnapshot,
+    readBytes: path => reader.readBytes(path), inspect: path => reader.inspect(path), rootFiles: () => reader.rootFiles(), environment: names => reader.environment(names), runtimeInputs: (command, names) => reader.runtimeInputs(command, names),
     absolute: path => reader.absolute(path),
     snapshot: read => reader.snapshot(read),
     read: path => {
       const value = reader.read(path);
-      reads.set(path, value === undefined ? null : digest(readFileSync(reader.absolute(path))));
+      reads.set(path, value === undefined ? null : digest(snapshotBytes(reader, path)!));
       return value;
     },
     files: (prefix, scope) => {
@@ -91,7 +91,7 @@ function readCapture(root: string) {
     return { ...captured, verifyFiles: () => reader.snapshot(() => {
       for (const [path, expected] of reads) {
         const value = reader.read(path);
-        if ((value === undefined ? null : digest(readFileSync(reader.absolute(path)))) !== expected) throw new ConcordError('AnalysisSourceChanged', `Analysis input changed: ${path}`);
+        if ((value === undefined ? null : digest(snapshotBytes(reader, path)!)) !== expected) throw new ConcordError('AnalysisSourceChanged', `Analysis input changed: ${path}`);
       }
       for (const { prefix, scope, paths } of listings.values()) {
         if (objectDigest(reader.files(prefix, scope)) !== objectDigest(paths)) throw new ConcordError('AnalysisSourceChanged', `Analysis membership changed: ${prefix}`);
@@ -102,6 +102,11 @@ function readCapture(root: string) {
   }
   finally { reader.close(); }
 }
+
+const readCapture = Effect.fn('analysis.capture')(function*(root: string) {
+  const reader = yield* openReadRepository(root, { access: 'read' });
+  return yield* sync(() => captureReader(reader));
+});
 
 function publishObservations(repo: Repository, values: readonly AnalysisObservation[]): void {
   try {
@@ -138,7 +143,7 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
     });
   }));
   // Runner cleanup is registered before capturing, so capture failure releases ownership.
-  const captured = yield* sync(() => readCapture(repo.root));
+  const captured = yield* readCapture(repo.root);
   if (captured.identity.config !== repo.configSnapshot.digest) return yield* Effect.fail(new ConcordError('AnalysisSourceChanged', 'Analysis configuration changed before capture'));
   yield* sync(() => {
     let previous;
@@ -154,10 +159,7 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
   const results = yield* owned.cleanupResults;
   if (!idle || !results.every(hasConfirmedOwnedGroupCleanup)) return yield* Effect.fail(new ConcordError('AnalysisCleanupUnknown', 'Analysis process group or output pipes remain unconfirmed; runner is quarantined'));
   // Step 5 closes all source and HawDB handles before the short publication section.
-  const after = yield* sync(() => {
-    try { return readCapture(repo.root); }
-    catch { throw new ConcordError('AnalysisSourceChanged', 'Analysis inputs changed before final verification'); }
-  });
+  const after = yield* readCapture(repo.root).pipe(Effect.mapError(() => new ConcordError('AnalysisSourceChanged', 'Analysis inputs changed before final verification')));
   if (after.inputs !== captured.inputs || after.revision !== captured.revision) return yield* Effect.fail(new ConcordError('AnalysisSourceChanged', 'Analysis inputs or publication revision changed', { changed: Object.keys(captured.identity).filter(key => objectDigest(Reflect.get(captured.identity,key)) !== objectDigest(Reflect.get(after.identity,key))), revision: [captured.revision, after.revision] }));
   return yield* sync(() => {
     if (readPublicationRevisionSync(repo.root) !== after.revision) throw new ConcordError('AnalysisSourceChanged', 'Publication changed after analysis verification');

@@ -372,13 +372,12 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 // @concord-implements docs/feature/web-workbench/architecture.md
-export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
+async function startViewServer(options: ViewServerOptions, scans: ViewProjectionManager): Promise<ViewServerHandle> {
   const root = validateViewRoot(options.root);
   const host = options.host ?? '127.0.0.1';
   const requestedPort = options.port ?? 4317;
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? builtAssetRoot('web');
-  const scans = new ViewProjectionManager(root);
   const jobs = new ViewJobManager(root, () => scans.request(true), withHttpWriter);
   const baselineCache: GitBaselineCache = {};
   const requestLog = new ViewRequestLog();
@@ -458,7 +457,11 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md
-export const serveViewServer = (options: ViewServerOptions, ready: (server: ViewServerHandle) => void): Effect.Effect<never, ConcordError> => Effect.acquireRelease(
-  Effect.tryPromise({ try: () => startViewServer(options), catch: failure }),
+export const serveViewServer = (options: ViewServerOptions, ready: (server: ViewServerHandle) => void) => Effect.scoped(Effect.gen(function*() {
+  const root = yield* Effect.try({ try: () => validateViewRoot(options.root), catch: failure });
+  const scans = yield* ViewProjectionManager.make(root);
+  return yield* Effect.acquireRelease(
+  Effect.tryPromise({ try: () => startViewServer(options, scans), catch: failure }),
   (server) => Effect.tryPromise({ try: () => server.close(), catch: failure }).pipe(Effect.orDie),
-).pipe(Effect.tap((server) => Effect.sync(() => ready(server))), Effect.flatMap(() => Effect.never), Effect.scoped);
+).pipe(Effect.tap((server) => Effect.sync(() => ready(server))), Effect.flatMap(() => Effect.never));
+}));

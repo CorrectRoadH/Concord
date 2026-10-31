@@ -1,13 +1,12 @@
 import { join } from "node:path";
-import { lstatSync } from "node:fs";
 import { Effect } from "effect";
 import { acquireFileLease, assertLeasePath, CoordinationError, ownerIsAlive, readLeaseOwner, recoverFileLease, releaseFileLease, type FileLease } from "../base/publication/index.js";
 import { PUBLICATION_LEASE } from "../base/publication/index.js";
 import { HawdbFailure, hawdbIdentity } from "../base/cache/index.js";
 import { ConcordError, failure } from "../model/index.js";
-import { assertCurrentRuntimeFormat } from "../base/workspace/index.js";
+import { Workspace, assertCurrentRuntimeFormat } from "../base/workspace/index.js";
 import { ViewScanManager } from "./view-scan.js";
-import { ViewSourceWatch } from "./view-source-watch.js";
+import { Sources, type SourceWatch } from '../base/sources/index.js';
 import { readWorkspaceProjection, storeWorkspaceProjection, workspaceProjectionContext } from "./workspace-projection.js";
 import { decodeWorkspaceProjectionRecord, type WorkspaceProjectionContext, type WorkspaceProjectionRecord } from "../model/index.js";
 import type { WorkspaceProjection } from "../model/index.js";
@@ -28,16 +27,24 @@ export class ViewProjectionManager {
   private lastStarted = -Infinity;
   private retryAfter = 0;
   private lastFailure: ConcordError | undefined;
-  private readonly watch: ViewSourceWatch;
   private watchFailure: ConcordError | undefined;
   private watchSetup: Promise<void> | undefined;
   private periodic: NodeJS.Timeout | undefined;
   private invalidation: NodeJS.Timeout | undefined;
   private invalidatedAt = 0;
-  constructor(private readonly root: string) {
+  private constructor(private readonly root: string, private readonly watch: SourceWatch, private readonly sources: Sources['Service'], private readonly workspace: Workspace['Service']) {
     this.scans = new ViewScanManager(root);
-    this.watch = new ViewSourceWatch(root, () => this.invalidate(), error => { this.watchFailure = error; });
   }
+
+  static readonly make = Effect.fn('ViewProjectionManager.make')(function*(root: string) {
+    const sources = yield* Sources;
+    const workspace = yield* Workspace;
+    let manager: ViewProjectionManager;
+    const watch = yield* sources.watch(root, () => manager.invalidate(), error => { manager.watchFailure = error; });
+    manager = new ViewProjectionManager(root, watch, sources, workspace);
+    yield* Effect.addFinalizer(() => Effect.promise(() => manager.close()));
+    return manager;
+  });
 
   /** Server-owned refresh continues even when no browser is connected. */
   start(): void {
@@ -47,7 +54,7 @@ export class ViewProjectionManager {
       if (!this.active && !this.scheduled) this.request(true);
     }, 30_000);
     this.periodic.unref();
-    this.watchSetup = this.watch.reconcile(null).then(() => undefined, cause => { this.watchFailure = projectionFailure(cause); });
+    this.watchSetup = Effect.runPromise(this.watch.reconcile(null)).then(() => undefined, cause => { this.watchFailure = projectionFailure(cause); });
     void this.watchSetup.then(() => this.request(true));
   }
 
@@ -66,7 +73,7 @@ export class ViewProjectionManager {
   async read(): Promise<WorkspaceProjection> {
     const deadline = performance.now() + 500;
     while (true) {
-      try { return this.readOnce(); }
+      try { return await this.readOnce(); }
       catch (cause) {
         if (!(cause instanceof ConcordError) || cause.code !== 'WorkspaceProjectionUnavailable'
           || typeof cause.details !== 'object' || cause.details === null || !('reason' in cause.details)
@@ -77,8 +84,12 @@ export class ViewProjectionManager {
     }
   }
 
-  private readOnce(): WorkspaceProjection {
-    const context = workspaceProjectionContext(this.root);
+  private context(): Promise<WorkspaceProjectionContext> {
+    return Effect.runPromise(workspaceProjectionContext(this.root).pipe(Effect.provideService(Workspace, this.workspace)));
+  }
+
+  private async readOnce(): Promise<WorkspaceProjection> {
+    const context = await this.context();
     try {
       const value = readWorkspaceProjection(context);
       if (this.watchFailure && value.projection.status === 'ready') return { ...value, projection: { ...value.projection, status: 'refresh-failed',
@@ -132,23 +143,20 @@ export class ViewProjectionManager {
     }
   }
 
-  private verify(context: WorkspaceProjectionContext): void {
+  private async verify(context: WorkspaceProjectionContext): Promise<void> {
     const owner = this.lease && readLeaseOwner(this.lease.path, 'workspace-refresh-publish');
     if (!owner || owner.token !== this.lease?.owner.token || owner.pid !== process.pid) throw new ConcordError('WorkspaceRefreshOwnershipLost', 'Workspace refresh lease changed; candidate discarded');
-    if (workspaceProjectionContext(this.root).identity !== context.identity) throw new ConcordError('WorkspaceProjectionIdentityChanged', 'Workspace configuration or installation changed; candidate discarded');
+    if ((await this.context()).identity !== context.identity) throw new ConcordError('WorkspaceProjectionIdentityChanged', 'Workspace configuration or installation changed; candidate discarded');
   }
 
-  private ready(context: WorkspaceProjectionContext): void {
+  private async ready(context: WorkspaceProjectionContext): Promise<void> {
     assertCurrentRuntimeFormat(context.root, context.privateDir);
-    for (const relative of ['journal.json', 'trace/publication-journal.json', 'trace/multi-file-publication-journal.json']) {
-      const path = join(context.privateDir, relative);
-      assertLeasePath(path);
-      if (lstatSync(path, { throwIfNoEntry: false })) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
-    }
+    const pending = await Effect.runPromise(this.sources.pendingPublications(context.privateDir));
+    if (pending.length > 0) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
   }
 
-  private shouldRetryPublication(context: WorkspaceProjectionContext): boolean {
-    try { this.ready(context); return true; }
+  private async shouldRetryPublication(context: WorkspaceProjectionContext): Promise<boolean> {
+    try { await this.ready(context); return true; }
     catch (cause) {
       if (!(cause instanceof ConcordError) || cause.code !== 'RecoveryRequired') throw cause;
     }
@@ -161,8 +169,9 @@ export class ViewProjectionManager {
   private async persist(context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionRecord, error?: ConcordError): Promise<void> {
     const deadline = performance.now() + 3000;
     while (!this.stopping) {
-      this.verify(context);
-      if (candidate !== undefined) this.ready(context);
+      await this.verify(context);
+      if (candidate !== undefined) await this.ready(context);
+      await this.verify(context);
       try { storeWorkspaceProjection(context, candidate, error); return; }
       catch (cause) {
         if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || performance.now() >= deadline) throw cause;
@@ -174,18 +183,18 @@ export class ViewProjectionManager {
   }
 
   private async refresh(): Promise<void> {
-    const context = workspaceProjectionContext(this.root);
+    const context = await this.context();
     hawdbIdentity();
     const lease = this.acquire(context);
     if (!lease) return;
     this.lease = lease;
     try {
-      this.ready(context);
+      await this.ready(context);
       const reply = await this.scans.scan();
       if (this.stopping) return;
       const candidate = decodeWorkspaceProjectionRecord(JSON.parse(reply.body));
       try {
-        if (await this.watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources)) this.pending = true;
+        if (await Effect.runPromise(this.watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources))) this.pending = true;
         this.watchFailure = undefined;
       } catch (cause) { this.watchFailure = projectionFailure(cause); }
       if (this.stopping) return;
@@ -194,7 +203,7 @@ export class ViewProjectionManager {
       this.lastFailure = undefined;
     } catch (cause) {
       const error = projectionFailure(cause);
-      if (error.code === 'RecoveryRequired' && this.shouldRetryPublication(context)) {
+      if (error.code === 'RecoveryRequired' && await this.shouldRetryPublication(context)) {
         // A live writer's journal, or one already removed, is not an interrupted publication.
         // Discard this attempt and retry; every candidate still passes ready() before publication.
         this.lastFailure = undefined;

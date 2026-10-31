@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
+import { Installation } from '../../base/installation/index.js';
 import { LspLauncher, ViewLauncher } from "./launchers.js";
 import { serveViewServer, viewAddresses } from "../http/index.js";
 import { serveEditor } from "../lsp/index.js";
@@ -19,15 +20,21 @@ import { Sources } from '../../base/sources/index.js';
 import { Cache, CacheSnapshot, PersistentCache } from '../../base/cache/index.js';
 
 const launchers = Layer.merge(
-  Layer.succeed(ViewLauncher, ViewLauncher.of({ serve: (options, ready) => serveViewServer(options, server => ready({ root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) })) })),
+  Layer.effect(ViewLauncher, Effect.gen(function*() {
+    const sources = yield* Sources;
+    const workspace = yield* Workspace;
+    const installation = yield* Installation;
+    return ViewLauncher.of({ serve: (options, ready) => serveViewServer(options, server => ready({ root: server.root, host: server.host, port: server.port, address: server.address, ...viewAddresses(server.host, server.port) })).pipe(Effect.provideService(Sources, sources), Effect.provideService(Workspace, workspace), Effect.provideService(Installation, installation)) });
+  })),
   Layer.succeed(LspLauncher, LspLauncher.of({ serve: root => serveEditor(root) })),
 );
 
-export const cliLayer = Layer.mergeAll(Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(), PersistentCache.layer, Publication.layer.pipe(Layer.provide(PublicationValidationLive))).pipe(
-  Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer), Layer.merge(launchers),
+const cliServices = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(), PersistentCache.layer, Publication.layer.pipe(Layer.provide(PublicationValidationLive))).pipe(
+  Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer),
 );
+export const cliLayer = launchers.pipe(Layer.provideMerge(cliServices));
 
-export function runCli(command: Command.Command<any, any, any, any, Workspace | Sources | Git | LspLauncher | ViewLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
+export function runCli(command: Command.Command<any, any, any, any, Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
  command.pipe(Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(resourcePath('package.json'),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))

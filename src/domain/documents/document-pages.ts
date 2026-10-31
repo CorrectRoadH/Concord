@@ -1,9 +1,10 @@
+import { Effect } from 'effect';
 import { posix } from "node:path";
-import { ConcordError, digest, decode, DocumentName, inRepositorySnapshot, type DocumentKind, type MutationReceipt, type Repository } from "../../model/index.js";
+import { ConcordError, failure, digest, decode, DocumentName, inRepositorySnapshot, type DocumentKind, type MutationReceipt, type Repository } from "../../model/index.js";
 import { documentPlacementError, isDocumentName } from "../../model/index.js";
 import { readDesignPlanPaths } from "../../base/sources/index.js";
 import { findDocument, loadDocuments, setAuthor } from "./documents.js";
-import { templateBody } from "./templates.js";
+import { templateCatalog } from "./templates.js";
 import { TEMPLATE_PAGES } from "../../model/index.js";
 import { canonicalPath } from "../../model/index.js";
 
@@ -95,18 +96,20 @@ function template(page: DocumentPage): string | undefined {
 }
 // @concord-end
 
-// @concord-code
+// @concord-begin
 // @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
-export function addPage(repo: Repository, kind: DocumentKind, selector: string, page: string, dryRun = false, plan?: string): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
+export const addPage = Effect.fn('addPage')(function*(repo: Repository, kind: DocumentKind, selector: string, page: string, dryRun = false, plan?: string) {
+  const catalog = yield* templateCatalog();
+  return yield* Effect.try({ try: (): MutationReceipt => inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan, true);
   if (repo.read(target.path) !== undefined) throw new ConcordError('PageExists', `${target.path} already exists`);
   if (kind === 'research') return repo.publish('add-page', [{ path: target.path, before: null, after: `# ${posix.basename(target.path, '.md')}\n` }], dryRun);
   const name = plan !== undefined && (page === 'README' || page === 'readme' || page === 'README.md') ? 'design-plan' : template(kind === 'design' ? page : checkedPage(page));
-  const content = name === undefined ? `# ${target.title}: ${page}\n\nDescribe this topic and link to the package contract.\n` : templateBody(name, target.title, []);
+  const content = name === undefined ? `# ${target.title}: ${page}\n\nDescribe this topic and link to the package contract.\n` : catalog.render(name, target.title, []);
   return repo.publish('add-page', [{ path: target.path, before: null, after: body(content) }], dryRun);
-  });
-}
+  }), catch: failure });
+});
+// @concord-end
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#edit-page

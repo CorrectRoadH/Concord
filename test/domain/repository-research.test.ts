@@ -1,9 +1,10 @@
+import { createDocument, addPage } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
-import { createDocument, inspectDocuments } from '../../src/app/index.js';
-import { addPage, setPage, showPage, loadDocuments, resolveReference } from '../../src/domain/documents/index.js';
+import { inspectDocuments } from '../../src/app/index.js';
+import { setPage, showPage, loadDocuments, resolveReference } from '../../src/domain/documents/index.js';
 import { tracePrivateDirectorySync } from '../../src/base/publication/index.js';
 import { renderDocument, digest } from '../../src/model/index.js';
 import { LocalRepository } from '../support/repository.js';

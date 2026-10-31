@@ -1,3 +1,4 @@
+import { createDocument, initialize } from '../support/operations.js';
 import { packageBin } from '../../scripts/package-location.js';
 import { packConcord, installConcord } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
@@ -8,9 +9,9 @@ import { dirname, join, resolve } from 'node:path';
 import { test } from './fixtures.js';
 import { expect } from '@playwright/test';
 import { Effect, Schema } from 'effect';
-import { createDocument } from "../../src/app/index.js";
+
 import { LocalRepository } from "../support/repository.js";
-import { initialize } from "../../src/app/index.js";
+
 import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 const inline = `let label: import('p5').default.Element;

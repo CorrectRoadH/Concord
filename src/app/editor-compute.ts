@@ -1,5 +1,4 @@
 import { pathToFileURL } from "node:url";
-import { lstatSync } from "node:fs";
 import { Effect } from "effect";
 import { openReadRepository } from "../base/workspace/index.js";
 import { readPublicationRevisionSync } from "../base/publication/index.js";
@@ -40,14 +39,15 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
         if (!reads.has(path)) {
           bytes += text === undefined ? 0 : Buffer.byteLength(text);
           if (bytes > editorLimits.input || reads.size >= editorLimits.files) throw new ConcordError('EditorBudgetExceeded', 'Source input limit');
-          const stat = text === undefined ? undefined : lstatSync(local.absolute(path), { bigint: true });
-          reads.set(path, [text === undefined ? null : digest(text), stat === undefined ? null : `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`]);
+          const stat = text === undefined ? undefined : local.inspect(path);
+          reads.set(path, [text === undefined ? null : digest(text), stat?.identity ?? null]);
         }
         return text;
       };
       disk('concord.config.ts');
       const repo: Repository = {
         root: local.root, privateDir: local.privateDir, access: 'read', persistentCache: 'off', config: local.config, configSnapshot: local.configSnapshot,
+        readBytes: path => local.readBytes(path), inspect: path => local.inspect(path), rootFiles: () => local.rootFiles(), environment: names => local.environment(names), runtimeInputs: (command, names) => local.runtimeInputs(command, names),
         absolute: path => local.absolute(path),
         read: path => {
           const source = disk(path);
