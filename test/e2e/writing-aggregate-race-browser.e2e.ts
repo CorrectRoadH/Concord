@@ -12,7 +12,6 @@ import { tmpdir } from '../support/temporary.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 import { setConcepts, showConcepts } from '../../src/domain/concepts/index.js';
 
-// @issue docs/issues/writing-late-aggregate-clears-report.md
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('a late successful concepts index preserves the newer writing report', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-aggregate-race-'));

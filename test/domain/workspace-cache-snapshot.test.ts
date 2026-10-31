@@ -8,7 +8,6 @@ import { createConsumer } from '../support/consumer.js';
 import { rmSync } from 'node:fs';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('an unavailable owner snapshot reports persistent data unavailable while collecting detached derivations', async () => {
   const root = createConsumer();
   const snapshot = { feedback_cache: [], unavailable: { code: 'HawdbUnavailable' as const, message: 'owner cannot open the persistent database' } };

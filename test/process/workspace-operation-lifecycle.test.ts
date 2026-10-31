@@ -20,7 +20,6 @@ const idle = (pid: number, excluded: readonly number[] = []) => pollUntil(async 
 }, { description: 'one independent idle operation process is ready to accept a request', timeoutMs: 5000 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('each Web write consumes a different idle process and stopped services reclaim the replacement', { skip: process.platform === 'win32', timeout: 25_000 }, async () => {
   const root = createConsumer();
   writeProjectConfig(root, { sourceRoots: ['src'] });
@@ -47,7 +46,6 @@ test('each Web write consumes a different idle process and stopped services recl
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('killing an unused operation process preserves the next write and produces a new idle process', { skip: process.platform === 'win32', timeout: 20_000 }, async () => {
   const root = createConsumer();
   writeProjectConfig(root, { sourceRoots: ['src'] });

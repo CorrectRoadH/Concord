@@ -8,7 +8,6 @@ import { pollUntil, fetchFresh, waitForWorkspaceProjection } from '../support/su
 import { startViewServer } from '../e2e/server.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('a native Web job returns derived observations to the persistent workspace owner', { timeout: 30_000 }, () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const { consumer, cli, id } = yield* externalCase();
   const server = yield* Effect.acquireRelease(Effect.promise(() => startViewServer({ root: consumer, installedBin: cli })), value => Effect.promise(() => value.close()));

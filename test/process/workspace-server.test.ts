@@ -14,7 +14,6 @@ import { installConcord, packConcord } from '../support/installed-package.js';
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('workspace server status observes absence without starting a service', () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-server-'));
   try {
@@ -26,7 +25,6 @@ test('workspace server status observes absence without starting a service', () =
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('workspace service publishes its initial computation and serves the accepted projection to CLI readers', { timeout: 25_000 }, async () => {
   const root = fixture();
   try {
@@ -44,7 +42,6 @@ test('workspace service publishes its initial computation and serves the accepte
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('concurrent starters share one real service and shutdown removes its record and socket', { timeout: 30_000 }, async () => {
   const root = fixture();
   try {
@@ -61,7 +58,6 @@ test('concurrent starters share one real service and shutdown removes its record
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('binary socket reads preserve a source larger than one frame and reject mismatched instance tokens', { timeout: 30_000 }, async () => {
   const root = fixture();
   const source = `# Reader\n\n${'raw bytes 原文 '.repeat(90_000)}\n`;

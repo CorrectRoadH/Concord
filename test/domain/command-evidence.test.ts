@@ -12,7 +12,6 @@ const counts = (tests: number, pass: number, fail: number, skipped = 0, todo = 0
   `# tests ${tests}\n# pass ${pass}\n# fail ${fail}\n# skipped ${skipped}\n# todo ${todo}\n`;
 
 // @feature docs/feature/local-sdlc/cli.md#测试与修复核验
-// @issue docs/issues/evidence-execution-naming.md
 test('command execution counts use ran and none independently of the exit code', () => {
   const runner = { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } as const;
   for (const [output, exitCode, execution, commandOutcome] of [

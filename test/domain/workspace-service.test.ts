@@ -10,7 +10,6 @@ import { panelSnapshot } from '../support/panel-fixture.js';
 import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.js';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('service expiry uses the Effect clock and a connected client prevents idle shutdown', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const service = yield* makeWorkspaceService(ports({ compute: () => Effect.never }));
   const connection = yield* Effect.forkScoped(Effect.scoped(service.connect.pipe(Effect.andThen(Effect.never))));
@@ -23,7 +22,6 @@ test('service expiry uses the Effect clock and a connected client prevents idle 
 })).pipe(Effect.provide(stateLayer))));
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('watch invalidations debounce on the Effect clock and persistent edits cannot postpone beyond two seconds', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   let scans = 0;
   const service = yield* makeWorkspaceService(ports({ compute: () => Effect.sync(() => { scans++; return record; }) }));
@@ -38,7 +36,6 @@ test('watch invalidations debounce on the Effect clock and persistent edits cann
 })).pipe(Effect.provide(stateLayer))));
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('cache clear waits for accepted computation then closes ownership before deleting', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const started = yield* Deferred.make<void>(), finish = yield* Deferred.make<unknown>();
   const order: string[] = [];
@@ -60,7 +57,6 @@ test('cache clear waits for accepted computation then closes ownership before de
 })).pipe(Effect.provide(stateLayer))));
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('runtime native health failure closes persistent ownership and retries repair on the Effect clock', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   let broken = false, closes = 0, opens = 0;
   const service = yield* makeWorkspaceService(ports({
@@ -92,7 +88,6 @@ test('stopping and blocked states cannot be revived by a late watcher callback',
 }).pipe(Effect.provide(stateLayer))));
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('service startup waits ten seconds on the Effect clock and cancels an unresponsive handshake', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const started = yield* Deferred.make<void>();
   const waiting = yield* Effect.forkScoped(Effect.result(waitForServerHandshake(Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)))));

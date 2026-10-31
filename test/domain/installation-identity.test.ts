@@ -7,7 +7,6 @@ import { installationIdentity } from '../../src/base/installation/identity-cache
 import { tmpdir } from '../support/temporary.js';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('installation fingerprints reuse verified bytes and detect ctime, inode, membership and native replacement', t => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-identity-')), root = join(scratch, 'package');
   const previous = process.env.XDG_CACHE_HOME;

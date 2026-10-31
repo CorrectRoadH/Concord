@@ -9,7 +9,6 @@ import { LocalRepository } from "../support/repository.js";
 import { checkProject } from "../../src/app/index.js";
 
 // @use-case docs/feature/taste/use-case/cite-taste.md
-// @issue docs/issues/taste-body-links-unchecked.md
 test('check reports a body link to a missing taste clause with its path and line', () => {
   const root = createConsumer(); const repo = new LocalRepository(root);
   try {

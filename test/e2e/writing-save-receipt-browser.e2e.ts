@@ -12,7 +12,6 @@ import { tmpdir } from '../support/temporary.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
 import { waitForWritingSave } from '../support/writing-save.js';
 
-// @issue docs/issues/writing-reload-before-save-receipt.md
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('writing save wait keeps reload behind the successful HTTP receipt', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-save-receipt-'));

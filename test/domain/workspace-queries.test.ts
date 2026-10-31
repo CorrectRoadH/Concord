@@ -12,7 +12,6 @@ import { createDocument } from '../support/operations.js';
 import { LocalRepository, runApplication } from '../support/repository.js';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('fresh computation requests retain the annotation parser cache owned by the long-lived process', async () => {
   const root = createConsumer();
   const repo = new LocalRepository(root);
@@ -39,7 +38,6 @@ test('fresh computation requests retain the annotation parser cache owned by the
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('current query operations on read-only computation capabilities match cache-disabled source results', async t => {
   const root = createConsumer();
   const repository = new LocalRepository(root);

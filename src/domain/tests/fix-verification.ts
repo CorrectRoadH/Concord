@@ -150,7 +150,9 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
     const targetRepo = commitRepository(repo, fix);
     const issueDigest = digest(snapshotBytes(repo, issue.path)!);
     if (issueDigest !== digest(gitBlobBytes(repo.root, head, issue.path))) unavailable('Issue file differs from the captured HEAD');
-    return { issue, ...freeze(targetRepo, issue.path, defect, fix), runnerConfig: requireRunner(targetRepo), preparation: commitRepository(repo, head).config.runner, issueDigest };
+    const frozen = freeze(targetRepo, issue.path, defect, fix);
+    const testPreimages = [...new Set(frozen.tests.map(test => test.file))].map(path => ({ path, source: repo.read(path) }));
+    return { issue, ...frozen, testPreimages, runnerConfig: requireRunner(targetRepo), preparation: commitRepository(repo, head).config.runner, issueDigest };
   }));
   const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
@@ -171,6 +173,7 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
     try { return publisher.snapshot(() => {
       const issueBytes = snapshotBytes(publisher, prepared.issue.path);
       if (issueBytes === undefined || digest(issueBytes) !== prepared.issueDigest) throw new ConcordError('FileChangedSinceRead', 'Issue changed during verification');
+      for (const file of prepared.testPreimages) if (publisher.read(file.path) !== file.source) throw new ConcordError('FileChangedSinceRead', `${file.path} changed during verification`);
       const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
       release();
       const receipt = closeIssue(publisher, prepared.issue.path, reason);

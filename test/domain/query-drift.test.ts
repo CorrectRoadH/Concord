@@ -174,7 +174,6 @@ test('owner and remote bodies are stripped and restored only after safe matching
 
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-// @issue docs/issues/stale-read-observation-reuse.md
 test('real code scanner distinguishes unstable recompilation from stable deletion of every file', () => Effect.runPromise(Effect.sync(() => {
   for (const unstable of [false, true]) {
     const root = realpathSync(mkdtempSync(join(tmpdir(), 'concord-code-unknown-')));

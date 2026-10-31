@@ -142,6 +142,7 @@ const JournalChangeSchema = Schema.Struct({ path: Text, before: Schema.NullOr(Sc
 const JournalScopeSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('documents'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text }),
   Schema.Struct({ kind: Schema.Literal('source'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text }),
+  Schema.Struct({ kind: Schema.Literal('issue-close'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text, issue: Text, inputsDigest: Text, testFiles: Schema.Array(Text) }),
   Schema.Struct({ kind: Schema.Literal('step-rename'), configPath: Schema.Literal('concord.config.ts'), configSource: Schema.String, configDigest: Text, useCase: Text, oldId: Text, newId: Text, inputsDigest: Text, memberships: Schema.Array(Schema.Struct({ path: Text, scope: Schema.optional(Schema.Literal('source')), observation: Schema.String })) }),
 ]);
 const JournalSchema = Schema.Struct({
@@ -152,7 +153,8 @@ const JournalSchema = Schema.Struct({
 type Journal = typeof JournalSchema.Type;
 
 function currentJournal(path: string): Journal {
-  return jsonFile(path, JournalSchema);
+  try { return jsonFile(path, JournalSchema); }
+  catch (cause) { throw new ConcordError('RecoveryRequired', 'Cannot decode the publication journal; preserve it for recovery', cause); }
 }
 // @concord-end
 
@@ -510,8 +512,11 @@ export class LocalRepository implements Repository {
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   verifySnapshot(): void {
     if (!this.optimistic || this.snapshotDepth === 0) return;
-    this.validateObservations();
-    this.assertReady();
+    try { this.validateObservations(); this.assertReady(); }
+    catch (cause) {
+      if (cause instanceof ConcordError && cause.code === 'FileChangedSinceRead') throw new ConcordError('SourceChanged', 'Sources changed during the snapshot; retry the query', cause.details);
+      throw cause;
+    }
   }
   // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
@@ -703,6 +708,22 @@ export class LocalRepository implements Repository {
     return this.publishJournal(journal, dryRun);
   }
   // @concord-code
+  // @concord-implements docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
+  publishIssueClose(issue: string, dryRun = false): MutationReceipt {
+    if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
+    const frozen = this.currentSnapshot();
+    const plan = this.validation!.planIssueClose(this, { issue });
+    const changes = plan.changes.map(change => {
+      this.absolute(change.path);
+      if (change.before === null || (this.read(change.path) ?? null) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before Issue closure`);
+      const stat = lstatSync(this.absolute(change.path));
+      if (!stat.isFile()) throw new ConcordError('InvalidChange', 'Issue closure requires existing regular files');
+      return { ...change, beforeDigest: digest(change.before), afterDigest: change.after === null ? null : digest(change.after), mode: stat.mode & 0o777 };
+    });
+    return this.publishJournal({ format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation: 'close-issue', phase: 'prepared', directories: [], changes,
+      scope: { kind: 'issue-close', configPath: frozen.path, configSource: frozen.source, configDigest: frozen.digest, issue: plan.issue, inputsDigest: plan.inputsDigest, testFiles: plan.testFiles } }, dryRun);
+  }
+  // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/link-tests-to-steps.md#主流程
   publishStepRename(request: StepRename, dryRun = false): MutationReceipt {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
@@ -772,21 +793,21 @@ export class LocalRepository implements Repository {
       this.preflight(journal);
       for (const dir of journal.directories) { const target = this.absolute(dir); mkdirSync(target, { recursive: true }); syncDirectory(dirname(target)); this.clearPathObservations(); }
       for (const change of journal.changes) {
-        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename') {
+        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
           const current = this.currentSnapshot();
           if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('FileChangedSinceRead', 'Project configuration changed before source replacement');
         }
         if ((this.read(change.path) ?? null) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before replacement`);
         this.apply(change.path, change.after, change.mode);
       }
-      if (journal.scope.kind === 'step-rename') this.preflight(journal, true);
+      if (journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') this.preflight(journal, true);
       atomic(journalPath, `${canonical({ ...journal, phase: 'committed' })}\n`);
     } catch (cause) {
       throw new ConcordError('RecoveryRequired', `Publication stopped: ${cause instanceof Error ? cause.message : String(cause)}; run concord recover`);
     }
     try { this.pruneMovedRoadmap(journal); rmSync(journalPath); syncDirectory(this.privateDir); }
     catch {
-      if (journal.scope.kind === 'step-rename') throw new ConcordError('RecoveryRequired', 'Step rename committed but cleanup was interrupted; run concord recover');
+      if (journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') throw new ConcordError('RecoveryRequired', 'Step rename committed but cleanup was interrupted; run concord recover');
       return { operation: journal.operation, dryRun: false, changedPaths, recoveryRequired: true };
     }
     return { operation: journal.operation, dryRun: false, changedPaths };
@@ -794,10 +815,11 @@ export class LocalRepository implements Repository {
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#写入保护
   private preflight(journal: Journal, recovering = false): void {
-    const fail = (message: string): never => { throw new ConcordError(recovering ? 'RecoveryConflict' : 'FileChangedSinceRead', message); };
+    const fail = (message: string): never => { throw new ConcordError(recovering ? journal.scope.kind === 'issue-close' ? 'RecoveryRequired' : 'RecoveryConflict' : 'FileChangedSinceRead', message); };
     if (journal.root !== this.root || journal.privateDir !== this.privateDir) fail('Publication belongs to a different worktree');
     if (new Set(journal.changes.map(change => change.path)).size !== journal.changes.length || journal.changes.length === 0) fail('Journal must contain unique changes');
     if (new Set(journal.directories).size !== journal.directories.length) fail('Journal contains duplicate directories');
+    if (journal.operation === 'close-issue' && journal.scope.kind !== 'issue-close') fail('Issue closure requires its dedicated publication scope');
     if (journal.operation === 'rename-step' && journal.scope.kind !== 'step-rename') fail('Step rename requires its dedicated publication scope');
     const policyChanges = journal.changes.filter(change => change.path.endsWith(`/${policyName}`));
     const catalogChanges = journal.changes.filter(change => change.path.endsWith(`/${catalogName}`) && !change.path.split('/').some(part => part === '_template' || part === '.git' || part === 'node_modules'));
@@ -813,7 +835,26 @@ export class LocalRepository implements Repository {
     this.validation!.validateCatalog(this, journal, fail);
     if (journal.operation !== 'set-concepts' && journal.catalogDependencies !== undefined) fail('Unexpected catalog dependency guard');
     assertDarwinPublicationPaths([...journal.changes.map((change) => change.path), ...journal.directories]);
-    if (journal.scope.kind === 'step-rename') {
+    if (journal.scope.kind === 'issue-close') {
+      const scope = journal.scope;
+      if (journal.operation !== 'close-issue' || journal.directories.length !== 0 || journal.catalogDependencies !== undefined) fail('Issue closure has an unauthorized operation or directory write');
+      const current = this.currentSnapshot();
+      if (digest(scope.configSource) !== scope.configDigest || current.path !== scope.configPath || current.digest !== scope.configDigest) fail('Issue closure project configuration changed');
+      const before = new Map(journal.changes.map(change => [change.path, change.before]));
+      const reader: Repository = { root: this.root, privateDir: this.privateDir, config: resolveProjectConfig(this.root, current.config), configSnapshot: current,
+        read: path => before.has(path) ? before.get(path) ?? undefined : this.read(path), files: (path, scope) => this.files(path, scope), absolute: path => this.absolute(path), publish: () => { throw new ConcordError('InvalidChange', 'Recovery recomputation cannot publish'); } };
+      try {
+        const plan = this.validation!.planIssueClose(reader, scope);
+        if (plan.inputsDigest !== scope.inputsDigest || canonical(plan.testFiles) !== canonical(scope.testFiles) || canonical(plan.changes) !== canonical(journal.changes.map(({ path, before, after }) => ({ path, before, after })))) fail('Issue closure inputs or allowed rewrite differ from the journal');
+        for (const change of journal.changes) {
+          if (change.before === null || change.before === change.after || (change.path === scope.issue ? change.after !== null : change.after === null)) fail('Invalid Issue closure file images');
+          const target = this.absolute(change.path);
+          if (!present(target)) { if (!recovering || change.path !== scope.issue || change.after !== null) fail(`${change.path} disappeared`); continue; }
+          const stat = lstatSync(target);
+          if (!stat.isFile() || (stat.mode & 0o777) !== change.mode) fail(`${change.path} type or mode changed`);
+        }
+      } catch (cause) { fail(`Issue closure authorization failed: ${cause instanceof Error ? cause.message : String(cause)}`); }
+    } else if (journal.scope.kind === 'step-rename') {
       const scope = journal.scope;
       if (journal.operation !== 'rename-step' || journal.directories.length !== 0 || journal.catalogDependencies !== undefined) fail('Step rename cannot create directories or use another operation');
       const current = this.currentSnapshot();
@@ -940,7 +981,7 @@ export class LocalRepository implements Repository {
     if (journal.phase === 'prepared') {
       invalidateActiveRun(this.root);
       for (const change of [...journal.changes].reverse()) {
-        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename') {
+        if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename' || journal.scope.kind === 'issue-close') {
           const current = this.currentSnapshot();
           if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('RecoveryConflict', 'Project configuration changed during source recovery');
         }

@@ -118,7 +118,6 @@ test('partial derived relationships retain healthy endpoints and reject malforme
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
-// @issue docs/issues/stale-read-observation-reuse.md
 test('memoized owners retain target-kind and anchor gates, and a rewrite during reading is found as SourceChanged', () => Effect.runPromise(Effect.sync(() => withTraceConsumer((repo, root) => {
   const trace = buildTrace(repo, 'off');
   const path = 'docs/feature/shared/architecture.md';

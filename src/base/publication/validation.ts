@@ -17,9 +17,16 @@ export interface StepRenamePlan extends StepRename {
   readonly affectedCases: readonly { readonly before: string; readonly after: string; readonly file: string; readonly named: boolean }[];
   readonly inputsDigest: string;
 }
+export interface IssueClosePlan {
+  readonly issue: string;
+  readonly changes: readonly Change[];
+  readonly testFiles: readonly string[];
+  readonly inputsDigest: string;
+}
 export class PublicationValidation extends Context.Service<PublicationValidation, {
   readonly validateWriting: (source: string, path: string) => void;
   readonly validateCatalog: (repo: Repository, journal: PublicationCatalog, fail: (message: string) => never) => void;
+  readonly planIssueClose: (repo: Repository, request: { readonly issue: string }) => IssueClosePlan;
   readonly planStepRename: (repo: Repository, request: StepRename) => StepRenamePlan;
 }>()('concord/PublicationValidation') {}
 

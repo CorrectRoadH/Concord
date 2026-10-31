@@ -14,7 +14,6 @@ import { installConcord, packConcord } from '../support/installed-package.js';
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
 
 // @feature docs/feature/web-workbench/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('disconnecting a view client releases its HTTP lease while the service remains available', { timeout: 20_000 }, async () => {
   const root = fixture();
   try {
@@ -41,7 +40,6 @@ test('disconnecting a view client releases its HTTP lease while the service rema
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('a killed service releases persistent ownership and the next invocation can restart', { timeout: 30_000 }, async () => {
   const root = fixture();
   try {
@@ -54,7 +52,6 @@ test('a killed service releases persistent ownership and the next invocation can
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('C22 deleting the Git-private directory stops the service and removes its exact socket', { timeout: 20_000 }, async () => {
   const root = fixture();
   let running: ReturnType<typeof record> | undefined;
@@ -73,7 +70,6 @@ test('C22 deleting the Git-private directory stops the service and removes its e
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('C23 another installation waits for native ownership handoff and the old Web connection receives stopping', { timeout: 30_000 }, async () => {
   const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-server-handoff-'));
   const old = await startViewServer({ root, host: '127.0.0.1', port: 0 });

@@ -78,6 +78,19 @@ export function parseTestDeclarations(path: string, text: string): { readonly ca
   return parseSource({ path, text, digest: digest(text) });
 }
 
+/** Locate exact whole-line Issue markers through the same real-comment parser as discovery. */
+export function issueMarkerLines(path: string, text: string, issue: string): readonly number[] {
+  const comments = realCommentLines(path, text);
+  const lines = text.split(/\r?\n/u).flatMap((line, index) => {
+    const value = COMMENT_LINE.exec(line)?.[1];
+    return value !== undefined && /^@issue\s+(.+?)\s*$/u.exec(value)?.[1] === issue && (comments === undefined || comments.has(index + 1)) ? [index + 1] : [];
+  });
+  if (!lines.length) return [];
+  const parsed = parseTestDeclarations(path, text);
+  if (parsed.findings.length || !parsed.cases.some(item => item.issues.includes(issue))) throw new ConcordError('InvalidAnnotation', `Cannot safely remove Issue markers from ${path}`, parsed.findings);
+  return lines;
+}
+
 function parseSource(input: Source): Parsed {
   if (!hasTestMarker(input.text)) return { cases: [], findings: [] };
   const comments = realCommentLines(input.path, input.text);

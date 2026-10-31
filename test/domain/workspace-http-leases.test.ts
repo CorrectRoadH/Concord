@@ -5,7 +5,6 @@ import { TestClock } from 'effect/testing';
 import { makeHttpLeases } from '../../src/entry/server/http-leases.js';
 
 // @feature docs/feature/web-workbench/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('HTTP leases share a listener, retain SSE across owner disconnect and close after the last connection', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   let started = 0, closed = 0;
   let sse: (delta: number) => void = () => {};

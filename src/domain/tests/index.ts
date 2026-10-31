@@ -27,3 +27,4 @@ export { collectNativeTests } from './test-adapters.js';
 export { executeNativeCase } from './test-adapters.js';
 export type { NativeExecution } from './test-adapters.js';
 export { readNativeObservations } from './test-adapters.js';
+export { issueMarkerLines } from './annotations.js';

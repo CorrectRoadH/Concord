@@ -9,7 +9,6 @@ import { fetchFresh, waitForWorkspaceProjection, writeProjectConfig } from '../s
 import { startViewServer } from '../e2e/server.js';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/http-write-skips-server-lock-check.md
 test('HTTP operations verify the held server lock before handing a write to the idle process', { timeout: 15_000 }, async () => {
   const root = createConsumer();
   writeProjectConfig(root, { sourceRoots: ['src'] });

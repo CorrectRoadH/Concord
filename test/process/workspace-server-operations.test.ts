@@ -14,7 +14,6 @@ import { installConcord, packConcord } from '../support/installed-package.js';
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('CLI cache clear drains the running persistent owner and publishes a new generation under the same service token', { timeout: 25_000 }, async () => {
   const root = fixture();
   try {
@@ -37,7 +36,6 @@ test('CLI cache clear drains the running persistent owner and publishes a new ge
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('C21 current query commands and a local writer share the persistent owner without busy failures', { timeout: 45_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-server-queries-'));
   execFileSync('git', ['init', '-q', root]);
@@ -59,7 +57,6 @@ test('C21 current query commands and a local writer share the persistent owner w
 });
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('HTTP cache status and forced rebuild use the persistent workspace owner', { timeout: 30_000 }, async () => {
   const root = fixture();
   try {

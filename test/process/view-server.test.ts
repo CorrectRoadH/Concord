@@ -59,7 +59,6 @@ test('a real thousand-file workspace scan leaves static and document HTTP reques
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('view writes request failure codes without copying request targets or diagnostics into logs', async () => {
   const { root, webRoot } = fixture();
   let server: ViewServerHandle | undefined;

@@ -8,7 +8,6 @@ import { ConcordError } from '../../src/model/index.js';
 import { ports, stateLayer } from '../support/workspace-service-fixture.js';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/draining-rejects-queued-writes.md
 test('draining waits for accepted operations and queues later writes until maintenance releases', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   let closes = 0, queuedRuns = 0;
   const service = yield* makeWorkspaceService(ports({ close: Effect.sync(() => { closes++; }) }));
@@ -38,7 +37,6 @@ test('draining waits for accepted operations and queues later writes until maint
 })).pipe(Effect.provide(stateLayer))));
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/draining-rejects-queued-writes.md
 test('HTTP operation admission shares the RPC pool and releases cancelled queued reservations', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const service = yield* makeWorkspaceService(ports());
   yield* TestClock.adjust(0);

@@ -1,3 +1,4 @@
+import type { LocalRepository } from '../../base/workspace/index.js';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
 import { posix } from 'node:path';
@@ -57,7 +58,7 @@ export function issueReferences(repo: Repository, target: string): readonly { pa
   }
   return references;
 }
-export function closeIssue(repo: Repository, selector: string, reason = 'Handled', dryRun = false) {
+export function closeIssue(repo: LocalRepository, selector: string, reason = 'Handled', dryRun = false) {
   return inRepositorySnapshot(repo, () => {
     const record = readDocumentSelector(repo, selector, 'issue');
     const references = issueReferences(repo, record.path);
@@ -65,6 +66,6 @@ export function closeIssue(repo: Repository, selector: string, reason = 'Handled
     const before = repo.read(record.path);
     if (before === undefined || digest(before) !== record.digest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; reload and retry`);
     const conclusion = `Closed ${record.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
-    return { ...repo.publish('close-issue', [{ path: record.path, before, after: null }], dryRun), conclusion };
+    return { ...repo.publishIssueClose(record.path, dryRun), conclusion };
   });
 }

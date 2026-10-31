@@ -10,7 +10,6 @@ import { tmpdir } from '../support/temporary.js';
 import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.js';
 
 // @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('runtime native validation degrades the locked service and a repaired artifact reopens its persistent owner', { timeout: 30_000 }, async () => {
   const root = fixture(), install = mkdtempSync(join(tmpdir(), 'concord-server-native-'));
   let metadata = '', hidden = '';
