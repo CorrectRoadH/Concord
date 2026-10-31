@@ -4,6 +4,7 @@ import { createMemoryHawdb, openHawdb, HawdbFailure, type HawdbDatabase, type Ha
 import { bindRepositoryCache, nodeRepositoryCache, repositoryCache, type RepositoryCache } from './cache-store.js';
 import { ConcordError, type Repository } from '../../model/index.js';
 import { assertLeasePath } from '../publication/index.js';
+import { makePersistentCacheOwner } from './owner.js';
 
 export type ReadonlyCacheSnapshot = Readonly<Partial<Record<HawdbNamespace, readonly HawdbEntry[]>>>;
 export interface CacheService {
@@ -46,6 +47,7 @@ export class CacheSnapshot extends Context.Service<CacheSnapshot, {
 
 /** Native ownership is authoritative. Contention falls back to memory at callers. */
 export class PersistentCache extends Context.Service<PersistentCache, PersistentCacheService>()('concord/base/cache/PersistentCache') {
+  static owner(privateDir: string) { return makePersistentCacheOwner(privateDir); }
   static readonly repository = repositoryCache;
   static withView<A>(owner: Repository, view: Repository, use: () => A): A {
     const release = bindRepositoryCache(view, repositoryCache(owner));

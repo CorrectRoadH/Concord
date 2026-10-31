@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { ConcordError, failure } from '../../model/index.js';
 import { packageRoot } from './location.js';
+import { workerEntryArgv, workspaceInstallationIdentity } from './index.js';
 
 export interface TemplateResources {
   readonly manifest: string;
@@ -11,11 +12,15 @@ export interface TemplateResources {
 }
 
 export class Installation extends Context.Service<Installation, {
+  readonly worker: typeof workerEntryArgv;
+  readonly identity: typeof workspaceInstallationIdentity;
+  readonly cwd: string;
   readonly version: Effect.Effect<string, ConcordError>;
   readonly templates: Effect.Effect<TemplateResources, ConcordError>;
   readonly asset: (directory: 'p5-types' | 'web', path: string) => Effect.Effect<string, ConcordError>;
 }>()('concord/base/installation/Installation') {
   static readonly layer = Layer.succeed(Installation, Installation.of({
+    worker: (...args) => workerEntryArgv(...args), identity: () => workspaceInstallationIdentity(), cwd: packageRoot,
     version: Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ version: Schema.NonEmptyString })), { onExcessProperty: 'ignore' })(readFileSync(join(packageRoot, 'package.json'), 'utf8')).version, catch: failure }),
     templates: Effect.try({ try: () => {
       const directory = join(packageRoot, 'templates');

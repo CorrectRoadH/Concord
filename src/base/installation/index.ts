@@ -16,7 +16,7 @@ export const resourcePath = (path: string): string => join(packageRoot, path);
 export const helpManifestPath = join(distribution, 'startup-data.js');
 
 /** Resolve the loader at the installation, independently of a consumer's cwd. */
-export function workerEntryArgv(name: 'test-adapter-vitest' | 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'cache-maintenance-worker', nodeOptions: readonly string[] = []): string[] {
+export function workerEntryArgv(name: 'test-adapter-vitest' | 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'cache-maintenance-worker' | 'compute-worker' | 'workspace-server' | 'operation-worker', nodeOptions: readonly string[] = []): string[] {
   return [...nodeOptions, ...(sourceInstallation ? ['--import', import.meta.resolve('tsx')] : []), join(directory, 'entry/server', `${name}.${sourceInstallation ? 'ts' : 'js'}`)];
 }
 

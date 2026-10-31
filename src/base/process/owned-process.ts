@@ -6,6 +6,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { Cause, Context, Deferred, Effect, Fiber, Layer, Option, Queue, Result, Scope, Stream } from "effect";
 import { NodeServices } from '@effect/platform-node';
+import { launchDetachedWorker } from './worker.js';
 import { ChildProcess as ProcessCommand, ChildProcessSpawner } from 'effect/unstable/process';
 import type { ChildProcessHandle } from 'effect/unstable/process/ChildProcessSpawner';
 import { resolveTrustedExecutable } from './trusted-executable.js';
@@ -16,7 +17,7 @@ const captureEnvironment = () => Object.freeze({ env: Object.freeze({ ...process
 
 const OUTPUT_LIMIT = 4 * 1024 * 1024;
 export type OwnedTermination = 'timeout' | 'cancelled' | 'output-limit';
-export interface OwnedProcessOptions { readonly stdin?: string; readonly stream?: { readonly ready: (write: (bytes: string) => void, end: () => void, identity: { readonly pid: number | undefined; readonly groupId: number | undefined }) => void; readonly stdout: (chunk: Buffer) => void }; readonly cwd: string; readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number; readonly outputLimitBytes?: number; readonly stdoutLimitBytes?: number; readonly stderrLimitBytes?: number; readonly ipc?: { readonly ready: (send: (message: unknown) => Promise<void>) => void; readonly message: (message: unknown) => void }; }
+export interface OwnedProcessOptions { readonly stdin?: string; readonly stream?: { readonly ready: (write: (bytes: string | Uint8Array) => void, end: () => void, identity: { readonly pid: number | undefined; readonly groupId: number | undefined }) => void; readonly stdout: (chunk: Buffer) => void }; readonly cwd: string; readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number; readonly outputLimitBytes?: number; readonly stdoutLimitBytes?: number; readonly stderrLimitBytes?: number; readonly ipc?: { readonly ready: (send: (message: unknown) => Promise<void>) => void; readonly message: (message: unknown) => void }; }
 export interface OwnedProcessGroupCleanup { readonly owned: boolean; readonly checked: boolean; readonly aliveAfterLeaderClose: boolean | null; readonly groupId?: number; readonly signalsSent: readonly NodeJS.Signals[]; readonly gone: boolean | null; readonly detail: string; }
 export interface OwnedProcessResult {
   readonly command: readonly string[]; readonly exitCode: number | null; readonly signal: NodeJS.Signals | null;
@@ -32,7 +33,9 @@ export interface OwnedProcessService {
   readonly forceKill: Effect.Effect<void>; readonly activeCount: Effect.Effect<number>; readonly awaitIdle: Effect.Effect<void>;
   readonly cleanupResults: Effect.Effect<readonly OwnedProcessResult[]>;
 }
-export class OwnedProcess extends Context.Service<OwnedProcess, OwnedProcessService>()('concord/OwnedProcess') {}
+export class OwnedProcess extends Context.Service<OwnedProcess, OwnedProcessService>()('concord/OwnedProcess') {
+  static launch(...args: Parameters<typeof launchDetachedWorker>) { return launchDetachedWorker(...args); }
+}
 export const runOwnedProcess = (command: readonly string[], options: OwnedProcessOptions) => Effect.flatMap(OwnedProcess, (service) => service.run(command, options));
 export const hasConfirmedOwnedGroupCleanup = (result: Pick<OwnedProcessResult, 'processGroupOwned' | 'groupCleanup'>): boolean => !result.processGroupOwned || result.groupCleanup.gone === true;
 export const hasSuccessfulOwnedProcessResult = (result: Pick<OwnedProcessResult, 'exitCode' | 'signal' | 'timedOut' | 'cancelled' | 'outputLimitExceeded' | 'error' | 'processGroupOwned' | 'groupCleanup'>): boolean => result.exitCode === 0 && result.signal === null && !result.timedOut && !result.cancelled && !result.outputLimitExceeded && result.error === undefined && hasConfirmedOwnedGroupCleanup(result);

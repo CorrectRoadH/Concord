@@ -7,7 +7,7 @@ import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
 import { HAWDB_ABI, HAWDB_REVISION, decodeNativeArtifact, hawdbTarget, nativeArtifactRoot, sourceInstallation, verifySourceNativeArtifact } from '../installation/index.js';
 import type { NativeServerLock, ServerLockBinding } from './native.js';
-export { acquireServerRuntime, readServerRecord, serverInstallation, serverCwd, ServerRecord } from './runtime.js';
+export { acquireServerRuntime, readServerRecord, serverInstallation, serverCwd, ServerRecord, ServerRuntime } from './runtime.js';
 
 const Reason = Schema.Literals(['permission', 'io', 'type', 'identity', 'closed', 'native']);
 export class ServerLockUnavailable extends Schema.TaggedError<ServerLockUnavailable>()('ServerLockUnavailable', {

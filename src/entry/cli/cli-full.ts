@@ -26,5 +26,6 @@ import { action } from "./cli-command-action.js";
 import { workspace } from "./cli-command-workspace.js";
 import { gitView } from "./cli-command-git.js";
 import { view } from "./cli-command-view.js";
+import { server } from './cli-command-server.js';
 
-export const fullCommand = root.pipe(Command.withSubcommands([init,newDocument,showDocument,listDocuments,recover,config,constitution,...(['use-case','design','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,Command.make('panel').pipe(Command.withDescription('Terminal panel (implementation tracked by workspace-server-unimplemented).'))]));
+export const fullCommand = root.pipe(Command.withSubcommands([init,newDocument,showDocument,listDocuments,recover,config,constitution,...(['use-case','design','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,Command.make('panel').pipe(Command.withDescription('Terminal panel (implementation tracked by workspace-server-unimplemented).'))]));

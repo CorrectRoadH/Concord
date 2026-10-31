@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { chmodSync, lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Effect, Schema } from 'effect';
+import { Context, Effect, Layer, Schema } from 'effect';
 import { ConcordError, digest, failure } from '../../model/index.js';
 import { workspaceInstallationIdentity, packageRoot } from '../installation/index.js';
 import { ensureGenericPrivateDirectorySync } from '../publication/index.js';
@@ -88,3 +88,11 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
   }));
   return { token, socketPath, publish, verify: lock.verify };
 });
+export class ServerRuntime extends Context.Service<ServerRuntime, {
+  readonly acquire: typeof acquireServerRuntime;
+  readonly read: typeof readServerRecord;
+  readonly installation: typeof serverInstallation;
+  readonly cwd: string;
+}>()('concord/base/server-lock/ServerRuntime') {
+  static readonly layer = Layer.succeed(ServerRuntime, { acquire: acquireServerRuntime, read: readServerRecord, installation: serverInstallation, cwd: serverCwd });
+}

@@ -35,6 +35,7 @@ const loaders = {
   workspace: () => import("./cli-command-workspace.js").then(m => m.workspace),
   git: () => import("./cli-command-git.js").then(m => m.gitView),
   view: () => import("./cli-command-view.js").then(m => m.view),
+  server: () => import('./cli-command-server.js').then(m => m.server),
 };
 
 export async function loadCommand(group: string, data: StartupData): Promise<() => void> {

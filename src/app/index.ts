@@ -181,3 +181,4 @@ export { uriPath } from './entry-operations.js';
 export { readPublicationRevisionSync } from './entry-operations.js';
 export { makeOwnedProcessService } from './entry-operations.js';
 export { createReadRepository } from './entry-operations.js';
+export { Queries, QueryRequest, QueryReply, executeQuery } from './queries.js';
