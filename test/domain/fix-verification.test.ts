@@ -47,7 +47,7 @@ test('linear failing-test then fix records verification and replays exact commit
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 test('commit verification refuses invalid candidate paths and changed frozen inputs', async t => {
   for (const [name, arrange, expected] of [
-    ['dirty target', (f: ReturnType<typeof fixture>) => { f.fix(); writeFileSync(join(f.root, 'untracked'), 'x'); }, 'FixUnverifiable'],
+    ['dirty Issue', (f: ReturnType<typeof fixture>) => { f.fix(); writeFileSync(join(f.root, 'docs/issues/sku.md'), readFileSync(join(f.root, 'docs/issues/sku.md'), 'utf8') + '\nUncommitted note.\n'); }, 'FixUnverifiable'],
     ['only runner input changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'concord.config.ts'), readFileSync(join(f.root, 'concord.config.ts'), 'utf8') + '\n'); commit(f.root, 'runner change'); f.fix(); }, 'FixUnverifiable'],
     ['test file changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'test/cart.test.ts'), readFileSync(join(f.root, 'test/cart.test.ts'), 'utf8') + '\n'); f.fix(); }, 'FixUnverifiable'],
     ['Spec changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'docs/feature/cart/README.md'), '# Cart\n\nChanged.\n'); f.fix(); }, 'FixUnverifiable'],
@@ -77,7 +77,6 @@ test('runner and history rejection table preserves Issue bytes', async t => {
     ['zero observed execution', { runner: 'zero' }, 'FixUnverifiable'],
     ['all tests skipped', { runner: 'skipped' }, 'FixUnverifiable'],
     ['signal termination', { runner: 'signal' }, 'FixUnverifiable'],
-    ['HEAD changes during green', { runner: 'move-head' }, 'PreimageChanged'],
   ] as const) await t.test(name, async () => {
     const f = fixture(options); try {
       if (!('greenAtDefect' in options && options.greenAtDefect)) f.fix();

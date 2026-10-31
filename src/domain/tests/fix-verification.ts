@@ -38,10 +38,10 @@ function frozenInputs(repo: Repository, tests: readonly AnnotatedCase[], commit?
     return { path, digest: digest(commit === undefined ? snapshotBytes(repo, path)! : gitBlobBytes(repo.root, commit, path)) };
   }) };
 }
-function freeze(repo: LocalRepository, issue: string, defectInput: string | undefined, fix: string, recorded?: Verification) {
+function freeze(repo: Repository, issue: string, defectInput: string | undefined, fix: string, recorded?: Verification) {
   const tests = selectedTests(repo, issue);
   if (recorded && canonical(recorded.tests.slice().sort()) !== canonical(tests.map(test => test.id))) unavailable('Recorded tests no longer exactly match the Issue markers');
-  const inputs = frozenInputs(repo, tests);
+  const inputs = frozenInputs(repo, tests, fix);
   if (recorded && recorded.runner !== inputs.runner) unavailable('Recorded runner configuration no longer matches');
   let defect: string;
   if (defectInput) defect = resolveCommit(repo.root, defectInput);
@@ -135,29 +135,37 @@ export const replayFix = (repo: LocalRepository, selector: string, options: { re
 
 export const closeFixedIssue = (repo: LocalRepository, selector: string, reason: string, defect?: string): Effect.Effect<object, ConcordError, OwnedProcess | Publication | Sources | Installation> => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
   const prepared = yield* sync(() => repo.snapshot(() => {
-    if (git(repo.root, ['status', '--porcelain=v1', '--untracked-files=all'])) unavailable('Fix verification requires a clean working tree');
+    const fix = resolveCommit(repo.root, 'HEAD');
     const issue = readDocumentSelector(repo, selector, 'issue');
     if (issue.metadata.kind !== 'issue') unavailable('Expected an Issue');
     if (issue.metadata.status !== 'open' && !(issue.metadata.closure?.kind === 'fixed' && !issue.metadata.closure.verification)) throw new ConcordError('InvalidIssueState', 'Issue is already closed');
-    const fix = resolveCommit(repo.root, 'HEAD');
-    return { issue, ...freeze(repo, issue.path, defect, fix), identity: worktreeIdentity(repo) };
+    if (git(repo.root, ['status', '--porcelain=v1', '--untracked-files=all', '--', issue.path])) unavailable('Fix verification requires the Issue file to have no uncommitted changes');
+    const targetRepo = commitRepository(repo, fix);
+    const issueDigest = digest(snapshotBytes(repo, issue.path)!);
+    if (issueDigest !== digest(gitBlobBytes(repo.root, fix, issue.path))) unavailable('Issue file differs from the captured fix commit');
+    return { issue, ...freeze(targetRepo, issue.path, defect, fix), runnerConfig: requireRunner(targetRepo), issueDigest };
   }));
   const run = (root: string, red: boolean) => Effect.gen(function* () {
-    const code = root === repo.root ? 'PreimageChanged' : 'FixUnverifiable';
-    yield* assertFrozenRoot(root, prepared.inputs, code);
-    const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, requireRunner(repo), test).pipe(Effect.tap(result => sync(() => assertOutcome(result, red)))));
-    yield* assertFrozenRoot(root, prepared.inputs, code);
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
+    const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runnerConfig, test).pipe(Effect.tap(result => sync(() => assertOutcome(result, red)))));
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     return results;
   });
   const red = yield* inWorktree(repo, prepared.issue.path, prepared.defect, cleanupUnknown, root => run(root, true));
-  const green = yield* run(repo.root, false);
+  const green = yield* inWorktree(repo, prepared.issue.path, prepared.fix, cleanupUnknown, root => run(root, false));
   const installation = yield* Installation;
   const concord = yield* installation.version;
-  return yield* sync(() => repo.snapshot(() => {
-    if (worktreeIdentity(repo) !== prepared.identity || repo.read(prepared.issue.path) === undefined || repo.read(repo.configSnapshot.path) !== repo.configSnapshot.source) throw new ConcordError('PreimageChanged', 'HEAD, working tree, configuration, or Issue changed during verification');
-    const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
-    release();
-    const receipt = closeIssue(repo, selector, { kind: 'fixed', reason, verification });
-    return { ...receipt, verification, red, green };
-  }));
+  const publication = yield* Publication;
+  return yield* sync(() => {
+    // Publication uses current configuration; runner inputs belong to the captured commit.
+    const publisher = new LocalRepository(repo.root, { persistentCache: 'off' }, publication.validation);
+    try { return publisher.snapshot(() => {
+      const issueBytes = snapshotBytes(publisher, prepared.issue.path);
+      if (issueBytes === undefined || digest(issueBytes) !== prepared.issueDigest) throw new ConcordError('PreimageChanged', 'Issue changed during verification');
+      const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
+      release();
+      const receipt = closeIssue(publisher, prepared.issue.path, { kind: 'fixed', reason, verification });
+      return { ...receipt, verification, red, green };
+    }); } finally { publisher.close(); }
+  });
 })).pipe(Effect.mapError(verificationFailure));
