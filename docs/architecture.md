@@ -63,7 +63,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | `base` | `model`、平台层与 `native/hawdb` 的 TypeScript 绑定；不导入领域或应用 |
 | `domain` | `model`、`base` 与下表中排在它之前的 `domain` 模块 |
 | `app` | `domain`、`base`、`model` |
-| `entry` | `app` 与 `model`；只有各入口的组合根 `entry/<入口>/main.ts` 可以导入 `domain` 与 `base` 的 Layer 以及其它入口模块的出口；入口的其它文件互不导入 |
+| `entry` | `app` 与 `model`；只有各入口的组合根 `entry/<入口>/main.ts` 与同一入口下各进程的组合根 `entry/<入口>/<进程>/main.ts`（例如工作区服务的计算进程与操作进程）可以导入 `domain` 与 `base` 的 Layer 以及其它入口模块的出口；入口的其它文件互不导入 |
 
 领域之间的依赖按以下层级，只能依赖排在前面层级的模块；同一层级的领域互不依赖，需要同层能力时由 `app` 编排或提取共享的纯模型：
 
