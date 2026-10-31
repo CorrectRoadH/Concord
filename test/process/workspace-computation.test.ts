@@ -12,7 +12,7 @@ import { tmpdir } from '../support/temporary.js';
 const installed = async () => {
   const root = installationRootForBin(installedConcordCli());
   return {
-    server: await import(pathToFileURL(join(root, 'dist/entry/server/index.js')).href) as typeof import('../../src/entry/server/index.js'),
+    server: await import(pathToFileURL(join(root, 'dist/entry/server/main.js')).href) as typeof import('../../src/entry/server/main.js'),
     publication: await import(pathToFileURL(join(root, 'dist/base/publication/index.js')).href) as typeof import('../../src/base/publication/index.js'),
     cache: await import(pathToFileURL(join(root, 'dist/base/cache/index.js')).href) as typeof import('../../src/base/cache/index.js'),
     app: await import(pathToFileURL(join(root, 'dist/app/index.js')).href) as typeof import('../../src/app/index.js'),

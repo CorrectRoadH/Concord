@@ -139,7 +139,8 @@ export function dependencyViolations(audit: Audit): Violation[] {
     const fail = (code: string) => result.push(plain(edge.from, edge.line, code, `${edge.kind}${edge.typeOnly ? ' type' : ''}: ${edge.specifier}`));
     if (!['model', 'base', 'domain', 'app', 'entry'].includes(from)) { fail('UnclassifiedSource'); continue; }
     if (edge.to) {
-      if (moduleOf(edge.from) !== moduleOf(edge.to) && !edge.to.endsWith('/index.ts')) fail('ModuleExit');
+      const serviceStartup = edge.from === 'src/entry/cli/main.ts' && edge.to === 'src/entry/server/main.ts' && edge.kind === 'dynamic';
+      if (moduleOf(edge.from) !== moduleOf(edge.to) && !edge.to.endsWith('/index.ts') && !serviceStartup) fail('ModuleExit');
       if (edge.kind === 'export' && moduleOf(edge.from) !== moduleOf(edge.to)) fail('ForeignReexport');
       const root = /^src\/entry\/[^/]+\/main\.ts$/u.test(edge.from);
       if (from === 'model' && to !== 'model' || from === 'base' && !['model', 'base'].includes(to!)

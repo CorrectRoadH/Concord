@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Deferred, Effect, Fiber, Layer, SubscriptionRef } from 'effect';
 import { TestClock } from 'effect/testing';
-import { WorkspaceState, waitForServerHandshake, makeWorkspaceService, type RuntimePorts } from '../../src/entry/server/index.js';
+import { WorkspaceState, waitForServerHandshake } from '../../src/entry/server/state.js';
+import { makeWorkspaceService, type RuntimePorts } from '../../src/entry/server/service.js';
 import { ConcordError, type WorkspaceProjection, type WorkspaceProjectionRecord } from '../../src/model/index.js';
 import { panelSnapshot } from '../support/panel-fixture.js';
 

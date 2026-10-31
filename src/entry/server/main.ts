@@ -19,16 +19,15 @@ import { Git } from '../../base/git/index.js';
 import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { Queries, QueryReply, executeQuery, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
-import { CacheSnapshotUnavailable, ConcordError, failure, WorkspaceProjectionSchema } from '../../model/index.js';
-import { builtAssetRoot } from '../../app/index.js';
-import { Computation, ComputationReply, ComputeRpcs, collectPackets, collectBytes } from './computation.js';
-import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission } from './protocol.js';
+import { executeQuery, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
+import { CacheSnapshotUnavailable, ConcordError, failure } from '../../model/index.js';
+import { Computation, ComputationReply, ComputeRpcs } from './computation.js';
+import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.js';
 import { makeAdmittedProtocol } from './admission.js';
 import { getWorkspaceRead } from '../../app/index.js';
 import { QueryRefreshRequest, queryContext, storeQuery, scanQueryProcess } from '../../app/index.js';
 import { decodeQueryScanMessage } from '../../model/index.js';
-import { WorkspaceState, waitForServerHandshake, serviceHeartbeat as importServiceHeartbeat } from './state.js';
+import { WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.js';
 import { makeWorkspaceService } from './service.js';
 import { FeedbackSessions } from './feedback-session.js';
 import { ServerJobs } from './jobs.js';
@@ -90,7 +89,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     })).pipe(Effect.onExit(() => inspect(owner).pipe(Effect.orDie)));
   }) };
 });
-import { connectWorkspaceSocket, requestWorkspace } from './client.js';
+import { connectWorkspaceSocket, requestWorkspace, submitFeedback } from './client.js';
 
 export function workspaceServerFailure(cause: unknown): ConcordError {
   if (cause instanceof ConcordError) return cause;
@@ -362,37 +361,6 @@ export const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: 
   if (connection.hello.installation !== record.installation || connection.hello.protocol !== record.protocol) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Handshake differs from the running record'));
   return connection;
 });
-export const workspaceServerStatus = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.map(connection => connection ? { operation: 'server-status', ...connection.hello } : { operation: 'server-status', state: 'absent' }), Effect.catch(() => Effect.succeed({ operation: 'server-status', state: 'absent' }))));
-export const readExistingWorkspaceProjection = (root: string) => Effect.scoped(Effect.gen(function*() {
-  const runtime = yield* ServerRuntime;
-  const connection = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
-  if (!connection || connection.hello.installation !== runtime.installation() || connection.hello.protocol !== PROTOCOL) return undefined;
-  if (connection.hello.state === 'opening') return yield* Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is opening'));
-  return yield* requestWorkspace(connection, 'workspace', {}).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(WorkspaceProjectionSchema, { onExcessProperty: 'error' })(value)), Effect.mapError(workspaceServerFailure));
-}));
-export const clearExistingWorkspaceCache = (root: string) => Effect.scoped(Effect.gen(function*() {
-  const runtime = yield* ServerRuntime;
-  const connection = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
-  if (!connection || connection.hello.installation !== runtime.installation() || connection.hello.protocol !== PROTOCOL) return undefined;
-  return yield* requestWorkspace(connection, 'cache-clear', {}).pipe(Effect.mapError(workspaceServerFailure));
-}));
-export const remoteQueriesLayer = Layer.unwrap(Effect.gen(function*() {
-  const workspace = yield* Workspace;
-  const runtime = yield* ServerRuntime;
-  return Queries.Remote((root, request, cache = 'use') => Effect.scoped(Effect.gen(function*() {
-    if (cache === 'off') return yield* executeQuery(root, request, cache);
-    const identified = yield* workspace.identify(root, true);
-    const remote = yield* Effect.result(existingWorkspace(identified.root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime)));
-    if (remote._tag === 'Failure' || !remote.success || remote.success.hello.installation !== runtime.installation() || remote.success.hello.protocol !== PROTOCOL) return yield* executeQuery(root, request, cache);
-    const reply = yield* Effect.result(requestWorkspace(remote.success, 'query', request));
-    if (reply._tag === 'Failure') {
-      const cause = reply.failure;
-      if (cause instanceof WorkspaceServerError && !cause.code.startsWith('WorkspaceServer') && !cause.code.startsWith('WorkspaceCompute')) return yield* Effect.fail(new ConcordError(cause.code, cause.message, cause.details));
-      return yield* executeQuery(root, request, cache);
-    }
-    return yield* Schema.decodeUnknownEffect(QueryReply, { onExcessProperty: 'error' })(reply.success).pipe(Effect.mapError(failure));
-  })));
-}));
 export const feedbackWriterLayer = Layer.effect(FeedbackCacheWriter, Effect.gen(function*() {
   const workspace = yield* Workspace;
   const runtime = yield* ServerRuntime;
@@ -403,76 +371,6 @@ export const feedbackWriterLayer = Layer.effect(FeedbackCacheWriter, Effect.gen(
     return yield* submitFeedback(connection, connectionId, items);
   })) });
 }));
-const submitFeedback = Effect.fn('submitFeedback')(function*(connection: import('./client.js').WorkspaceConnection, connectionId: string, items: readonly RemoteFeedback[]) {
-  const session = crypto.randomUUID();
-  yield* requestWorkspace(connection, 'feedback-merge', { action: 'begin', session, connectionId });
-  let batch: RemoteFeedback[] = [], bytes = 2;
-  for (const item of items) {
-    const size = Buffer.byteLength(JSON.stringify(item)) + 1;
-    if (size > FRAME_LIMIT - 8192) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'One feedback item exceeds a frame'));
-    if (bytes + size > FRAME_LIMIT - 8192) {
-      yield* requestWorkspace(connection, 'feedback-merge', { action: 'append', session, items: JSON.parse(JSON.stringify(batch)) });
-      batch = []; bytes = 2;
-    }
-    batch.push(item); bytes += size;
-  }
-  if (batch.length > 0) yield* requestWorkspace(connection, 'feedback-merge', { action: 'append', session, items: JSON.parse(JSON.stringify(batch)) });
-  const reply = yield* requestWorkspace(connection, 'feedback-merge', { action: 'commit', session });
-  const decoded = yield* Schema.decodeUnknownEffect(Schema.Struct({ warnings: Schema.Array(Schema.String) }), { onExcessProperty: 'error' })(reply);
-  return decoded.warnings;
-});
-export const connectOrStartWorkspace = Effect.fn('connectOrStartWorkspace')(function*(root: string) {
-  let current = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
-  const platform = yield* ServerRuntime;
-  const installation = platform.installation();
-  if (current && current.hello.installation === installation && current.hello.protocol === PROTOCOL) return current;
-  if (current) {
-    const { privateDir } = yield* (yield* Workspace).locate(root, true);
-    const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
-    yield* current.client.shutdown({ token: current.hello.token }).pipe(Effect.mapError(asServerError));
-    const deadline = (yield* Clock.currentTimeMillis) + 3000;
-    let released = false;
-    while ((yield* Clock.currentTimeMillis) < deadline) {
-      released = yield* platform.released(privateDir);
-      if (released) break;
-      yield* Effect.sleep('20 millis');
-    }
-    if (!released) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'The previous service has not released its native service lock', { pid: record?.pid, installation: current.hello.installation }));
-    current = undefined;
-  }
-  yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
-  return yield* waitForServerHandshake(existingWorkspace(root).pipe(Effect.map(connection => connection?.hello.installation === installation && connection.hello.protocol === PROTOCOL ? connection : undefined)));
-});
-export const startWorkspaceServer = (root: string) => Effect.scoped(connectOrStartWorkspace(root).pipe(Effect.map(connection => ({ operation: 'server-start', ...connection.hello }))));
-export const stopWorkspaceServer = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.flatMap(connection => connection ? connection.client.shutdown({ token: connection.hello.token }) : Effect.void), Effect.as({ operation: 'server-stop' }), Effect.mapError(asServerError)));
-const HttpLease = Schema.Struct({ host: Schema.String, port: Schema.Int, address: Schema.String, lease: Schema.String, token: Schema.String });
-export const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => void) {
-  yield* Effect.try({ try: () => builtAssetRoot('web'), catch: failure });
-  return yield* Effect.scoped(Effect.gen(function*() {
-    let inProcess: Fiber.Fiber<unknown, unknown> | undefined;
-    if (options.inProcess) {
-      const opened = yield* Deferred.make<void>();
-      inProcess = yield* Effect.forkScoped(serveWorkspace(options.root, Deferred.succeed(opened, undefined).pipe(Effect.asVoid)));
-      yield* Effect.raceFirst(Deferred.await(opened), Fiber.join(inProcess));
-    }
-    const connection = options.inProcess ? yield* existingWorkspace(options.root) : yield* connectOrStartWorkspace(options.root);
-    if (!connection) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'The in-process workspace service did not open its socket'));
-    const deadline = (yield* Clock.currentTimeMillis) + 60_000;
-    let input: unknown;
-    for (;;) {
-      const attempt = yield* Effect.result(requestWorkspace(connection, 'http', { action: 'open', host: options.host, port: options.port }));
-      if (attempt._tag === 'Success') { input = attempt.success; break; }
-      if (!(attempt.failure instanceof WorkspaceServerError) || attempt.failure.code !== 'WorkspaceServerBusy' || (yield* Clock.currentTimeMillis) >= deadline) return yield* Effect.fail(attempt.failure);
-      yield* Effect.sleep('10 millis');
-    }
-    const lease = yield* Schema.decodeUnknownEffect(HttpLease, { onExcessProperty: 'error' })(input);
-    yield* Effect.addFinalizer(() => requestWorkspace(connection, 'http', { action: 'close', host: lease.host, port: lease.port, lease: lease.lease }).pipe(Effect.ignore));
-    yield* Effect.sync(() => ready({ root: options.root, host: lease.host, port: lease.port, address: lease.address }));
-    if (inProcess) return yield* Fiber.join(inProcess);
-    return yield* Effect.never;
-  }));
-}, Effect.mapError(workspaceServerFailure));
-
 export const refreshLayer = Layer.merge(Workspace.layer, PersistentCache.layer).pipe(Layer.provideMerge(NodeServices.layer));
 export const runRefreshMain = <A, E>(operation: Effect.Effect<A, E, ChildProcessSpawner.ChildProcessSpawner | Workspace | PersistentCache>): void => {
   NodeRuntime.runMain(operation.pipe(Effect.provide(refreshLayer)));

@@ -6,7 +6,7 @@ import { Effect, Layer, Schema } from 'effect';
 import { executeQuery, type QueryRequest } from '../../src/app/index.js';
 import { CacheSnapshot, CacheDerivations, PersistentCache } from '../../src/base/cache/index.js';
 import { genericPrivateDirectorySync } from '../../src/base/publication/index.js';
-import { computationLayer } from '../../src/entry/server/index.js';
+import { computationLayer } from '../../src/entry/server/main.js';
 import { createConsumer } from '../support/consumer.js';
 import { createDocument } from '../support/operations.js';
 import { LocalRepository, runApplication } from '../support/repository.js';

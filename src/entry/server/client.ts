@@ -4,8 +4,9 @@ import { NodeSocket } from '@effect/platform-node';
 import { Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
 import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
 import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.js';
-import { collectPackets, collectBytes } from './computation.js';
-import { decodeWorkspaceRead } from '../../model/index.js';
+import { collectPackets, collectBytes } from './protocol.js';
+import { ConcordError, decodeWorkspaceRead } from '../../model/index.js';
+import type { RemoteFeedback } from '../../model/index.js';
 
 export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string) {
   const opened = yield* Deferred.make<void, WorkspaceServerError>();
@@ -40,3 +41,32 @@ export const subscribeWorkspace = (connection: WorkspaceConnection) => Stream.ca
     yield* Queue.offer(queue, value);
   })).pipe(Effect.catch(cause => Queue.fail(queue, cause)), Effect.andThen(Queue.end(queue))));
 }));
+
+export const submitFeedback = Effect.fn('submitFeedback')(function*(connection: import('./client.js').WorkspaceConnection, connectionId: string, items: readonly RemoteFeedback[]) {
+  const session = crypto.randomUUID();
+  yield* requestWorkspace(connection, 'feedback-merge', { action: 'begin', session, connectionId });
+  let batch: RemoteFeedback[] = [], bytes = 2;
+  for (const item of items) {
+    const size = Buffer.byteLength(JSON.stringify(item)) + 1;
+    if (size > FRAME_LIMIT - 8192) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'One feedback item exceeds a frame'));
+    if (bytes + size > FRAME_LIMIT - 8192) {
+      yield* requestWorkspace(connection, 'feedback-merge', { action: 'append', session, items: JSON.parse(JSON.stringify(batch)) });
+      batch = []; bytes = 2;
+    }
+    batch.push(item); bytes += size;
+  }
+  if (batch.length > 0) yield* requestWorkspace(connection, 'feedback-merge', { action: 'append', session, items: JSON.parse(JSON.stringify(batch)) });
+  const reply = yield* requestWorkspace(connection, 'feedback-merge', { action: 'commit', session });
+  const decoded = yield* Schema.decodeUnknownEffect(Schema.Struct({ warnings: Schema.Array(Schema.String) }), { onExcessProperty: 'error' })(reply);
+  return decoded.warnings;
+});
+
+export const serverStartupWait = '10 seconds' as const;
+/** Startup may load an installation; existing-service handshakes retain their own one-second bound. */
+export const waitForServerHandshake = <A, E, R>(attempt: Effect.Effect<A | undefined, E, R>) => Effect.gen(function*() {
+  for (;;) {
+    const value = yield* attempt.pipe(Effect.catch(() => Effect.succeed(undefined)));
+    if (value !== undefined) return value;
+    yield* Effect.sleep('10 millis');
+  }
+}).pipe(Effect.timeout(serverStartupWait), Effect.mapError(() => new ConcordError('WorkspaceServerUnavailable', 'No workspace service completed a handshake within ten seconds')));

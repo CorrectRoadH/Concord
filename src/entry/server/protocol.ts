@@ -38,6 +38,20 @@ export const WorkspaceRpcs = RpcGroup.make(
 );
 export type WorkspaceClient = import('effect/unstable/rpc/RpcClient').RpcClient<RpcGroup.Rpcs<typeof WorkspaceRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>;
 
+export const collectBytes = <E, R>(stream: Stream.Stream<typeof Packet.Type, E, R>, limit = RESULT_LIMIT) => Effect.gen(function*() {
+  const chunks: Uint8Array[] = [];
+  let size = 0, ended = false;
+  yield* Stream.runForEach(stream, part => Effect.try({ try: () => {
+    if (ended || part.data.byteLength > FRAME_LIMIT) throw new WorkspaceServerError({ code: 'WorkspaceServerProtocol', message: 'Invalid result chunk' });
+    size += part.data.byteLength;
+    if (size > limit) throw new WorkspaceServerError({ code: 'WorkspaceServerOutputLimit', message: 'Result exceeds its byte allowance' });
+    chunks.push(part.data); ended = part.last;
+  }, catch: cause => cause }));
+  if (!ended) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerProtocol', message: 'Incomplete result' }));
+  return Buffer.concat(chunks);
+});
+export const collectPackets = <E, R>(stream: Stream.Stream<typeof Packet.Type, E, R>) => collectBytes(stream).pipe(Effect.flatMap(bytes => Effect.try({ try: () => JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)), catch: cause => cause })));
+
 /** Leave space for the binary RPC envelope; never allocate from a peer's length. */
 export function packets(data: Uint8Array, limit = RESULT_LIMIT) {
   if (data.byteLength > limit) throw new WorkspaceServerError({ code: 'WorkspaceServerOutputLimit', message: 'Result exceeds its byte allowance' });

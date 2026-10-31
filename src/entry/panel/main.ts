@@ -4,7 +4,7 @@ import { Effect, Fiber, Schema, Stream, type Scope } from 'effect';
 import type { WorkspaceDisplay } from '../../model/workspace-display/index.js';
 import { documentCategories, displayConcepts, workspaceDisplay, workspacePathHref } from '../../model/workspace-display/index.js';
 import { WorkspaceServerEvent, type WorkspaceProjectionSnapshot } from '../../model/index.js';
-import { connectOrStartWorkspace, requestWorkspace, subscribeWorkspace, type WorkspaceConnection } from '../server/index.js';
+import { requestWorkspace, subscribeWorkspace, type WorkspaceConnection } from '../server/index.js';
 import { OwnedProcess } from '../../base/process/index.js';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { PanelView, panelDetail, type BoundPanelBody } from './view.js';
@@ -141,11 +141,11 @@ export const renderPanel = Effect.fn('renderPanel')(function*(ports: PanelPorts,
 });
 
 const Lease = Schema.Struct({ address: Schema.String, host: Schema.String, port: Schema.Int, lease: Schema.String, token: Schema.String });
-export const serveWorkspacePanel = Effect.fn('serveWorkspacePanel')(function*(root: string) {
+export const serveWorkspacePanel = Effect.fn('serveWorkspacePanel')(function*(root: string, connect: (root: string) => Effect.Effect<WorkspaceConnection, unknown, Scope.Scope>) {
   return yield* Effect.scoped(Effect.gen(function*() {
     const owner = yield* OwnedProcess;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    let connection: WorkspaceConnection | undefined = yield* connectOrStartWorkspace(root);
+    let connection: WorkspaceConnection | undefined = yield* connect(root);
     let initialConnection: WorkspaceConnection | undefined = connection;
     let snapshot: WorkspaceProjectionSnapshot | undefined;
     const connected = () => {
@@ -166,7 +166,7 @@ export const serveWorkspacePanel = Effect.fn('serveWorkspacePanel')(function*(ro
     };
     const session = yield* renderPanel(ports);
     const watch = Effect.forever(Effect.scoped(Effect.gen(function*() {
-      connection = initialConnection ?? (yield* connectOrStartWorkspace(root));
+      connection = initialConnection ?? (yield* connect(root));
       initialConnection = undefined;
       yield* Stream.runForEach(subscribeWorkspace(connection), input => Effect.gen(function*() {
         const event = yield* Schema.decodeUnknownEffect(WorkspaceServerEvent, { onExcessProperty: 'error' })(input);

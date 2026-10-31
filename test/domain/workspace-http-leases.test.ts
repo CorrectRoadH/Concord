@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
 import { TestClock } from 'effect/testing';
-import { makeHttpLeases } from '../../src/entry/server/index.js';
+import { makeHttpLeases } from '../../src/entry/server/http-leases.js';
 
 // @feature docs/feature/web-workbench/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
