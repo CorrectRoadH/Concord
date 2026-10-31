@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { launchDetachedWorker } from '../base/process/index.js';
 import { lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Effect, Result, Schema } from "effect";
@@ -133,13 +133,7 @@ export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | un
     yield* Effect.sleep('10 millis');
     observed = yield* Effect.sync(() => readQuery(context));
   }
-  const refresh = yield* Effect.result(Effect.tryPromise({
-    try: () => new Promise<void>((resolve, reject) => {
-      const child = spawn(process.execPath, [...workerEntryArgv('query-refresh-worker'), context.root, JSON.stringify(query), String(Date.now())], { detached: true, stdio: 'ignore', cwd: context.root });
-      child.once('error', reject);
-      child.once('spawn', () => { child.unref(); resolve(); });
-    }), catch: failure,
-  }));
+  const refresh = yield* Effect.result(launchDetachedWorker('query-refresh-worker', [context.root, JSON.stringify(query), String(Date.now())], context.root));
   if (observed.unavailable) return yield* Effect.fail(new ConcordError(observed.unavailableCode ?? 'QueryCacheInvalid', observed.unavailable));
   if (Result.isFailure(refresh) && !observed.record) return yield* Effect.fail(refresh.failure);
   if (!observed.record) return yield* Effect.fail(new ConcordError('QueryPending', 'No readable diagnostic snapshot; background refresh requested. Use --fresh to wait for current sources.', { refresh: observed.error ?? observed.unavailable ?? 'requested' }));

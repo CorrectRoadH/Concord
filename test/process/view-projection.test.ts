@@ -1,3 +1,4 @@
+import { runApplication } from '../support/repository.js';
 import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
 import { installationResources } from "../../src/base/installation/index.js";
 import { packageBin } from '../../scripts/package-location.js';
@@ -158,7 +159,7 @@ test('/api/file resolves directed current owners without a workspace-wide scan',
 test('current-source queries and cached projection queries remain separate', async () => {
   const root = fixture();
   try {
-    const shown = await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));
+    const shown = await runApplication(getWorkspaceSnapshot(root, 'off'));
     assert.equal(shown.root, root);
     assert.ok(shown.documents.length > 0);
     assert.equal('projection' in shown, false);
@@ -207,7 +208,7 @@ test('a corrupt workspace row is reported unavailable without falling back to a 
   finally { database.close(); }
   assert.throws(() => readWorkspaceProjection(workspaceProjectionContext(root)), { code: 'WorkspaceProjectionUnavailable' });
   // The current-source entry point still works; unavailability never authorizes a scan to satisfy navigation.
-  assert.ok((await Effect.runPromise(getWorkspaceSnapshot(root, 'off'))).documents.length > 0);
+  assert.ok((await runApplication(getWorkspaceSnapshot(root, 'off'))).documents.length > 0);
   rmSync(root, { recursive: true, force: true });
 });
 
@@ -227,7 +228,7 @@ test('a live publication keeps the first workspace generation pending and refres
       const body = await response.text();
       assert.equal(response.status, 202, body);
       assert.equal(parseWorkspaceHttpResponse(response.status, body), undefined);
-      await Effect.runPromise(Effect.sleep('50 millis'));
+      await runApplication(Effect.sleep('50 millis'));
     } while (Date.now() < until);
     rmSync(join(genericPrivateDirectorySync(root), 'journal.json'));
     releaseTraceLeaseSync(lease, 'projection-test-publication-complete');
@@ -406,7 +407,7 @@ test('a new consistent generation with findings replaces the previous healthy ge
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a drifted candidate retains the last consistent generation and reports the attempt without failing', async () => {
   const root = fixture();
-  const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));
+  const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
   const context = workspaceProjectionContext(root);
   try {
     storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date(Date.now() - 1000).toISOString()));

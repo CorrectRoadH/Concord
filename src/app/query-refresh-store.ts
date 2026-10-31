@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { launchDetachedWorker } from '../base/process/index.js';
 import { Effect, Result } from "effect";
 import { HawdbFailure } from "../base/cache/index.js";
 import { queryContext, storeQuery, type QueryContext, type QueryUpdate } from "./query-cache.js";
@@ -9,10 +9,7 @@ import { workerEntryArgv } from "../base/installation/index.js";
 // @concord-begin
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export const requestNewIdentity = Effect.fn('requestNewQueryIdentity')(function*(context: QueryContext) {
-  yield* Effect.tryPromise({ try: () => new Promise<void>((resolve, reject) => {
-    const child = spawn(process.execPath, [...workerEntryArgv('query-refresh-worker'), context.root, JSON.stringify(context.query), String(Date.now())], { detached: true, stdio: 'ignore', cwd: context.root });
-    child.once('error', reject); child.once('spawn', () => { child.unref(); resolve(); });
-  }), catch: failure });
+  yield* launchDetachedWorker('query-refresh-worker', [context.root, JSON.stringify(context.query), String(Date.now())], context.root);
 });
 // @concord-end
 export const persist = Effect.fn('persistQuery')(function*(context: QueryContext, update: QueryUpdate) {

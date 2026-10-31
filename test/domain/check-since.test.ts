@@ -1,3 +1,4 @@
+import { runApplication } from '../support/repository.js';
 import { createConsumer } from '../support/consumer.js';
 import { gitCommit } from '../support/fix-consumer.js';
 import { LocalRepository } from "../support/repository.js";
@@ -115,7 +116,7 @@ test('since accepts an ancestor with no optional project configuration', async (
     const base = gitCommit(root, 'baseline without config');
     const repo = new LocalRepository(root);
     try { createDocument(repo, 'feature', { id: 'scope', title: 'Scope' }); } finally { repo.close(); }
-    const result = await Effect.runPromise(checkSince(root, base).pipe(Effect.provide(OwnedProcessLive)));
+    const result = await runApplication(checkSince(root, base).pipe(Effect.provide(OwnedProcessLive)));
     assert.equal(result.ok, true, JSON.stringify(result)); assert.equal(result.complete, true); assert.deepEqual(result.findings, []);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

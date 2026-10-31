@@ -1,3 +1,4 @@
+import { runApplication } from '../support/repository.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -22,7 +23,7 @@ test('file and directory Plans share gates, nested editing, reference ownership 
   execFileSync('git', ['init', '-q', root]);
   const repo = new LocalRepository(root, { initialize: true });
   try {
-    await Effect.runPromise(Effect.sync(() => {
+    await runApplication(Effect.sync(() => {
       initialize(repo, false, { testRoots: [] });
       createDocument(repo, 'design', { id: 'storage', title: 'Storage', alternatives: ['local', 'remote'] });
       authorDesignFixture(root, 'storage', ['local', 'remote'], 'local');
@@ -50,7 +51,7 @@ test('file and directory Plans share gates, nested editing, reference ownership 
       assert.throws(() => readDesignPlanPaths(root, base, ['local', 'remote']), { code: 'AmbiguousDesignPlan' });
       rmSync(join(root, base, 'plans/local'), { recursive: true });
     }));
-    const workspace = await Effect.runPromise(getWorkspaceSnapshot(root));
+    const workspace = await runApplication(getWorkspaceSnapshot(root));
     assert(JSON.stringify(workspace).includes('docs/design/storage/plans/local.md'));
     assert(JSON.stringify(workspace).includes('docs/design/storage/plans/remote/存储/快照.md'));
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }

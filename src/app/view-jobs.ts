@@ -50,7 +50,7 @@ export class ViewJobManager {
   private active: JobRecord | undefined;
   private stopped = false;
 
-  constructor(readonly root: string, private readonly onEvidencePublished: () => void, private readonly openWriter: (root: string) => Promise<LocalRepository>) {}
+  constructor(readonly root: string, private readonly onEvidencePublished: () => void, private readonly withWriter: <A>(root: string, use: (repo: LocalRepository) => Promise<A>) => Promise<A>) {}
 
   list(): readonly ViewJob[] {
     return [...this.jobs.values()].map(publicJob).reverse();
@@ -98,17 +98,16 @@ export class ViewJobManager {
   }
 
   private async execute(job: JobRecord): Promise<void> {
-    let repo: LocalRepository | undefined;
     try {
       if (job.cancelRequested) {
         job.state = 'cancelled';
         job.finishedAt = now();
         return;
       }
-      repo = await this.openWriter(this.root);
+      await this.withWriter(this.root, async repo => {
       if (job.cancelRequested) await Effect.runPromise(job.process.requestStop('SIGTERM'));
       job.state = job.cancelRequested ? 'cancelling' : 'running';
-      const trace = repo.snapshot(() => buildTrace(repo!, 'off', { includeCode: false }));
+      const trace = repo.snapshot(() => buildTrace(repo, 'off', { includeCode: false }));
       requireValidTrace(trace);
       const selected = selectCase(trace.annotations.cases, job.caseId);
       const exit = await Effect.runPromiseExit(runCase(repo, selected, trace.documents).pipe(Effect.provideService(OwnedProcess, job.process)));
@@ -126,6 +125,7 @@ export class ViewJobManager {
         job.error = { code: error.code, message: error.message };
         job.state = job.cancelRequested ? 'cancelled' : 'failed';
       }
+      });
     } catch (cause) {
       const results = await Effect.runPromise(job.process.cleanupResults);
       const idle = (await Effect.runPromise(job.process.activeCount)) === 0;
@@ -138,7 +138,6 @@ export class ViewJobManager {
         job.state = job.cancelRequested ? 'cancelled' : 'failed';
       }
     } finally {
-      repo?.close();
       if (job.evidence !== undefined) this.onEvidencePublished();
       job.finishedAt ??= now();
       if (job.state !== 'cleanup-failed' && this.active === job) this.active = undefined;

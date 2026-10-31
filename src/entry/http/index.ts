@@ -6,3 +6,4 @@ export { startViewServer } from './view-server.js';
 export type { ViewServerHandle } from './view-server.js';
 export type { ViewServerOptions } from './view-server.js';
 export { runOperation } from './main.js';
+export { httpOperationLayer } from './main.js';

@@ -2,7 +2,8 @@
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的聚合检查
 import { Effect, Result } from "effect";
 import { ConcordError, failure } from "../model/index.js";
-import { LocalRepository } from "../base/workspace/index.js";
+import { openReadRepository } from "../base/workspace/index.js";
+import { Sources } from '../base/sources/index.js';
 import { checkProject } from "./project-check.js";
 import { waitForPublication } from "../base/publication/index.js";
 
@@ -12,15 +13,9 @@ const sync = <A>(run: () => A) => Effect.try({ try: run, catch: failure });
 export const checkCurrentProject = Effect.fn('checkCurrentProject')(function*(root?: string, cache: 'use' | 'off' = 'use') {
   for (let attempt = 1; attempt <= 3; attempt++) {
     const result = yield* Effect.result(Effect.gen(function*() {
-      const repo = yield* Effect.acquireRelease(
-        waitForPublication(reclaimPublication => sync(() => new LocalRepository(root, { access: 'read', persistentCache: cache, reclaimPublication }))),
-        repo => Effect.sync(() => repo.close()),
-      );
-      yield* Effect.acquireRelease(
-        waitForPublication(reclaimDead => sync(() => repo.beginSnapshot(reclaimDead))),
-        () => Effect.sync(() => repo.endSnapshot()),
-      );
-      return yield* sync(() => {
+      const repo = yield* waitForPublication(reclaimPublication => openReadRepository(root, { access: 'read', persistentCache: cache, reclaimPublication }));
+      const sources = yield* Sources;
+      return yield* sources.snapshot(repo, sync(() => {
         let report: ReturnType<typeof checkProject>;
         try { report = checkProject(repo, cache); }
         catch (cause) {
@@ -31,7 +26,7 @@ export const checkCurrentProject = Effect.fn('checkCurrentProject')(function*(ro
         repo.verifySnapshot();
         if (report.findings.some(finding => finding.code === 'SourceChanged')) throw new ConcordError('SourceChanged', 'A reference changed during check');
         return report;
-      });
+      }));
     }).pipe(Effect.scoped));
     if (Result.isSuccess(result)) return result.success;
     const error = result.failure;

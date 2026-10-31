@@ -1,3 +1,4 @@
+import { runApplication } from '../support/repository.js';
 import { installedConcordCli } from '../support/support.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -45,7 +46,7 @@ function cacheDiskSnapshot(path: string) {
 }
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh dry-run and cache-off processes never touch an existing complete cache', () => Effect.runPromise(Effect.sync(() => {
+test('fresh dry-run and cache-off processes never touch an existing complete cache', () => runApplication(Effect.sync(() => {
   const root = freshConsumer();
   try {
     const rebuilt = cli(root, 'cache', 'rebuild');
@@ -114,7 +115,7 @@ test('clear unlinks internal aliases before native locks and can retry after det
 });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh Git consumers create a private cache on check and hit it on the next command', () => Effect.runPromise(Effect.sync(() => {
+test('fresh Git consumers create a private cache on check and hit it on the next command', () => runApplication(Effect.sync(() => {
   const root = freshConsumer();
   try {
     const cold = cli(root, 'check');
@@ -133,7 +134,7 @@ test('fresh Git consumers create a private cache on check and hit it on the next
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh cache rebuild produces ready projections and reports busy rebuilds as named failures', () => Effect.runPromise(Effect.sync(() => {
+test('fresh cache rebuild produces ready projections and reports busy rebuilds as named failures', () => runApplication(Effect.sync(() => {
   const root = freshConsumer();
   try {
     const rebuilt = cli(root, 'cache', 'rebuild');
@@ -154,7 +155,7 @@ test('fresh cache rebuild produces ready projections and reports busy rebuilds a
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh status, cache-off checks and dry-run previews leave Git-private state absent', () => Effect.runPromise(Effect.sync(() => {
+test('fresh status, cache-off checks and dry-run previews leave Git-private state absent', () => runApplication(Effect.sync(() => {
   const root = freshConsumer();
   try {
     for (const args of [['cache', 'status'], ['--dry-run', 'check'], ['--dry-run', 'docs', 'check'], ['--dry-run', 'writing', 'check'], ['--dry-run', 'cache', 'clear'], ['--dry-run', 'cache', 'rebuild']]) {
@@ -173,7 +174,7 @@ test('fresh status, cache-off checks and dry-run previews leave Git-private stat
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('cache initialization refuses symlinked private directories and directories outside Git', () => Effect.runPromise(Effect.sync(() => {
+test('cache initialization refuses symlinked private directories and directories outside Git', () => runApplication(Effect.sync(() => {
   const root = freshConsumer();
   const outside = mkdtempSync(join(tmpdir(), 'concord-cache-outside-'));
   try {
@@ -201,12 +202,12 @@ test('cache-enabled workspace recovers an interrupted WAL without clearing commi
     const child = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), 'test/fixtures/hawdb-interrupted.ts', path], { encoding: 'utf8', timeout: 15000 });
     assert.equal(child.signal, 'SIGKILL', child.stderr);
     const interrupted = cacheDiskSnapshot(path);
-    await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));
+    await runApplication(getWorkspaceSnapshot(root, 'off'));
     assert.deepEqual(cacheDiskSnapshot(path), interrupted, 'cache-off must not touch the interrupted database');
     const readOnly = openHawdb(path, { readOnly: true, create: false });
     try { assert.deepEqual(readOnly.get('config_cache', ['interrupted']), [{ key: 'interrupted', payload: 'committed' }]); }
     finally { readOnly.close(); }
-    const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
+    const snapshot = await runApplication(getWorkspaceSnapshot(root, 'use'));
     assert.equal(snapshot.complete, true);
     const recovered = openHawdb(path, { readOnly: true, create: false });
     try { assert.deepEqual(recovered.get('config_cache', ['interrupted']), [{ key: 'interrupted', payload: 'committed' }]); }
@@ -316,7 +317,7 @@ test('failed native close still releases the outer repository lease', () => {
 });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('identity mismatch is unavailable for reads and the next writable rebuild discards and recreates under the same owner lock', () => Effect.runPromise(Effect.sync(() => {
+test('identity mismatch is unavailable for reads and the next writable rebuild discards and recreates under the same owner lock', () => runApplication(Effect.sync(() => {
   const root = freshConsumer();
   try {
     const directory = join(root, '.git/concord');

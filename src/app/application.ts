@@ -1,5 +1,6 @@
 import type { Publication } from "../base/publication/index.js";
-import { openReadRepository, openWriteRepository } from "../base/workspace/index.js";
+import { openReadRepository, openWriteRepository, type Workspace } from "../base/workspace/index.js";
+import { Sources } from '../base/sources/index.js';
 import { checkCurrentProject } from "./check-current.js";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -108,25 +109,20 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 type OpenOptions = { readonly initialize?: boolean; readonly recover?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off' };
 // @concord-end
-function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options: OpenOptions & { readonly access: 'read' }, timing?: RequestTiming): Effect.Effect<A, ConcordError, R>;
-function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options?: OpenOptions, timing?: RequestTiming): Effect.Effect<A, ConcordError, R | Publication>;
-function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options: OpenOptions = {}, timing?: RequestTiming): Effect.Effect<A, ConcordError, R | Publication> {
-  return Effect.acquireRelease(
+function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options: OpenOptions & { readonly access: 'read' }, timing?: RequestTiming): Effect.Effect<A, ConcordError, R | Workspace>;
+function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options?: OpenOptions, timing?: RequestTiming): Effect.Effect<A, ConcordError, R | Workspace | Publication>;
+function withRepository<A, R>(root: string, operation: (repo: LocalRepository) => Effect.Effect<A, ConcordError, R>, options: OpenOptions = {}, timing?: RequestTiming): Effect.Effect<A, ConcordError, R | Workspace | Publication> {
+  return Effect.scoped(
     waitForPublication(reclaimPublication => options.access === 'read'
       ? openReadRepository(root, { optimistic: true, ...options, access: 'read', reclaimPublication })
-      : openWriteRepository(root, { optimistic: true, ...options, reclaimPublication })),
-    repo => Effect.sync(() => timing === undefined ? repo.close() : timing.sync('view.closeRepository', () => repo.close())),
-  ).pipe(Effect.flatMap(operation), Effect.scoped);
+      : openWriteRepository(root, { optimistic: true, ...options, reclaimPublication })).pipe(Effect.flatMap(operation)),
+  );
 }
 
 // @concord-code
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
-function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefined, name: string, evaluate: () => A): Effect.Effect<A, ConcordError> {
-  return Effect.acquireUseRelease(
-    waitForPublication(reclaimDead => sync(`${name}.acquire`, () => repo.beginSnapshot(reclaimDead))),
-    () => measuredSync(timing)(name, () => { const value = evaluate(); repo.verifySnapshot(); return value; }),
-    () => Effect.sync(() => repo.endSnapshot()),
-  );
+function snapshotSync<A>(repo: LocalRepository, timing: RequestTiming | undefined, name: string, evaluate: () => A): Effect.Effect<A, ConcordError, Sources> {
+  return Effect.flatMap(Sources, sources => sources.snapshot(repo, measuredSync(timing)(name, evaluate)));
 }
 
 // @concord-code
@@ -168,7 +164,7 @@ function directConfig(root: string): {
 /** Missing or malformed project configuration remains inspectable without manufacturing identity. */
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/architecture.md
-const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError> {
+const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput: string, cache: 'use' | 'off', timing?: RequestTiming, observe?: (drift: { files: string[]; directories: string[]; publicationChanged: boolean }) => void): Effect.fn.Return<WorkspaceSnapshot, ConcordError, Workspace | Sources> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const config = yield* sync('view.readConfig', () => directConfig(root));
@@ -272,7 +268,7 @@ export const getViewGitStatus = Effect.fn('view.getViewGitStatus')(function*(roo
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
-export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string, timing?: RequestTiming): Effect.fn.Return<ViewFile, ConcordError> {
+export const getViewFile = Effect.fn('view.getViewFile')(function*(root: string, path: string, timing?: RequestTiming): Effect.fn.Return<ViewFile, ConcordError, Workspace | Sources> {
   const sync = measuredSync(timing);
   const validatedRoot = yield* sync('view.validateRoot', () => validateViewRoot(root));
   const config = yield* sync('view.readConfig', () => directConfig(validatedRoot));
@@ -404,7 +400,7 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
 
 // @concord-begin
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError, Publication> {
+export const executeViewAction = Effect.fn('view.executeAction')(function*(rootInput: string, input: unknown, signal?: AbortSignal, timing?: RequestTiming): Effect.fn.Return<unknown, ConcordError, Publication | Workspace | Sources> {
   const sync = measuredSync(timing);
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const action = yield* sync('view.decodeAction', () => decodeViewAction(input));

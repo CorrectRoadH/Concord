@@ -53,11 +53,11 @@ export const recoverLocalState = Effect.fn('recoverLocalState')(function*(input?
       const receipt = yield* (recovery.recoverTrace(selected.root, { reclaimPublication: false }) as Effect.Effect<unknown, unknown>).pipe(Effect.mapError(recoveryFailure));
       return { operation: 'recover', status: 'trace-recovered', receipt };
     }
-    return yield* Effect.acquireUseRelease(
+    return yield* Effect.scoped(Effect.acquireUseRelease(
       openWriteRepository(selected.root, { recover: true, reclaimPublication: false }),
       repo => Effect.try({ try: () => repo.recover(), catch: failure }),
       repo => Effect.sync(() => repo.close()),
-    );
+    ));
   });
   const runner = yield* Effect.try({ try: () => {
     const lease = acquireTraceLeaseSync(selected.root, 'exclusive', 'recover-verify')!;

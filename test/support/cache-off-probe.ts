@@ -1,3 +1,4 @@
+import { runApplication } from './repository.js';
 import { Effect, Schema } from 'effect';
 import { getWorkspaceSnapshot } from "../../src/app/index.js";
 import { setConfig, showConfig } from "../../src/app/index.js";
@@ -5,8 +6,8 @@ import { listFeedback } from "../../src/domain/feedback/index.js";
 import { LocalRepository } from "./repository.js";
 
 const [root, mode] = Schema.decodeUnknownSync(Schema.Tuple([Schema.String, Schema.Literals(['workspace', 'config-preview', 'feedback'])]))(process.argv.slice(2));
-if (mode === 'workspace') await Effect.runPromise(getWorkspaceSnapshot(root, 'off'));
-else await Effect.runPromise(Effect.sync(() => {
+if (mode === 'workspace') await runApplication(getWorkspaceSnapshot(root, 'off'));
+else await runApplication(Effect.sync(() => {
   const repo = new LocalRepository(root, { access: 'read', persistentCache: 'off' });
   try {
     if (mode === 'feedback') listFeedback(repo);

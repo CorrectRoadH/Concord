@@ -1,3 +1,4 @@
+import { runApplication } from '../support/repository.js';
 import { installationResources } from "../../src/base/installation/index.js";
 import { installedConcordCli } from "../support/support.js";
 import { dirname } from "node:path";
@@ -66,7 +67,7 @@ test('HTTP projection retains orphan annotation incompleteness and observes its 
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('direct file reads preserve owner diagnostics and inspect only the target and ancestors', () => Effect.runPromise(Effect.sync(() => {
+test('direct file reads preserve owner diagnostics and inspect only the target and ancestors', () => runApplication(Effect.sync(() => {
   const root = fixture();
   const repo = new LocalRepository(root);
   try {
@@ -105,8 +106,8 @@ test('direct file reads preserve owner diagnostics and inspect only the target a
 test('warm workspace caches observe changed bytes with unchanged timestamps and removed paths', async () => {
   const root = fixture();
   try {
-    await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
-    const warm = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
+    await runApplication(getWorkspaceSnapshot(root, 'use'));
+    const warm = await runApplication(getWorkspaceSnapshot(root, 'use'));
     assert.ok(warm.cache && typeof warm.cache === 'object' && 'status' in warm.cache);
     assert.equal(warm.cache.status, 'hit');
     assert.equal(warm.documents.find(document => document.metadata.id === 'cached')?.metadata.title, 'Cached');
@@ -121,7 +122,7 @@ test('warm workspace caches observe changed bytes with unchanged timestamps and 
       writeFileSync(absolute, readFileSync(absolute, 'utf8').replaceAll(before, after));
       utimesSync(absolute, stat.atime, stat.mtime);
     }
-    const edited = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
+    const edited = await runApplication(getWorkspaceSnapshot(root, 'use'));
     assert.equal(edited.documents.find(document => document.metadata.id === 'cached')?.metadata.title, 'Edited');
     assert.equal(edited.codes[0]?.symbol, 'editedCode');
     assert.match(edited.codes[0]?.id ?? '', /^code-[0-9a-f]{32}$/u);
@@ -129,7 +130,7 @@ test('warm workspace caches observe changed bytes with unchanged timestamps and 
     assert.equal(warm.documents.find(document => document.metadata.id === 'cached')?.metadata.title, 'Cached', 'cached objects do not alias earlier snapshots');
     rmSync(join(root, 'src/main.ts'));
     rmSync(join(root, 'docs/feature/cached/architecture.md'));
-    const removed = await Effect.runPromise(getWorkspaceSnapshot(root, 'use'));
+    const removed = await runApplication(getWorkspaceSnapshot(root, 'use'));
     assert.deepEqual(removed.codes, []);
     assert.deepEqual(removed.sources, []);
     assert.ok(!removed.pages.some(page => page.path === 'docs/feature/cached/architecture.md'));
@@ -234,7 +235,7 @@ test('recovery removes dead owners while optimistic readers remain unregistered'
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('supporting-page saves avoid inventory scans and preserve conflict checks', () => Effect.runPromise(Effect.sync(() => {
+test('supporting-page saves avoid inventory scans and preserve conflict checks', () => runApplication(Effect.sync(() => {
   const root = fixture();
   const repo = new LocalRepository(root);
   try {

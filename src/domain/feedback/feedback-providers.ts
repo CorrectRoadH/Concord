@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/feedback/architecture.md
-import { DateTime, Effect, Predicate, Schema } from "effect";
+import { Config, DateTime, Effect, Option, Predicate, Schema } from "effect";
 import { RemoteFeedbackSchema, type feedback_schema_FeedbackConnection as FeedbackConnection, type RemoteFeedback } from "../../model/index.js";
 import { ConcordError, canonical } from "../../model/index.js";
 
@@ -246,7 +246,7 @@ const send = Effect.fn('feedback.send')(function*(transport: FeedbackTransport, 
 
 function credentialFor(connection: FeedbackConnection, override?: string): string {
   if (connection.provider === 'github' && connection.transport === 'gh') return '';
-  const credential = override ?? process.env[connection.credentialEnv];
+  const credential = override;
   if (credential === undefined || credential.length === 0) {
     throw providerError('CredentialMissing', `Credential environment variable ${connection.credentialEnv} is not set`);
   }
@@ -565,7 +565,10 @@ const fetchFeedbackInternal = Effect.fn('feedback.fetchFeedback')(function*(
   options: FeedbackFetchOptions = {},
 ): Effect.fn.Return<FeedbackFetch, ConcordError> {
   const fetchStartedAt = DateTime.formatIso(yield* DateTime.now);
-  const credential = credentialFor(connection, options.credential);
+  const configured = options.credential === undefined && !(connection.provider === 'github' && connection.transport === 'gh')
+    ? Option.getOrUndefined(yield* Config.option(Config.string(connection.credentialEnv)).pipe(Effect.mapError(() => providerError('CredentialMissing', `Credential environment variable ${connection.credentialEnv} is not set`))))
+    : options.credential;
+  const credential = credentialFor(connection, configured);
   const transport = options.transport ?? defaultTransport;
   const budget: FetchBudget = { pages: 0, items: 0, bytes: 0 };
   const result = connection.provider === 'github'

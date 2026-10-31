@@ -9,7 +9,7 @@ import * as ts from 'typescript/ast';
 import type { RawCompilerOptions } from "typescript/sync";
 import { createFileSystem } from "typescript/fs";
 import { nativeTypeScript, typescriptLibraries, typescriptRequest, withTypeScript, withTypeScriptFiles, withTypeScriptSource } from "../base/process/index.js";
-import { LocalRepository } from "../base/workspace/index.js";
+import { openReadRepository } from "../base/workspace/index.js";
 import { getViewFile } from "./application.js";
 import { ConcordError, decode, failure } from "../model/index.js";
 import { P5_LIBRARIES, P5RequestSchema, parseP5Options, type P5Bundle } from "../model/p5/index.js";
@@ -117,7 +117,7 @@ export const compileP5 = Effect.fn('view.compileP5')(function*(root: string, inp
   if (!/\.md$/iu.test(document.path)) return yield* Effect.fail(new ConcordError('P5DocumentRequired', 'p5 sketches must belong to a readable Markdown document'));
   const options = yield* Effect.try({ try: () => parseP5Options(request.meta), catch: cause => new ConcordError('P5MetadataInvalid', String(cause)) });
   if (options.src && request.code.trim()) return yield* Effect.fail(new ConcordError('P5AmbiguousSource', 'A p5 block must use either src or inline code, not both'));
-  const repo = yield* Effect.acquireRelease(Effect.try({ try: () => new LocalRepository(root, { access: 'read' }), catch: failure }), repo => Effect.sync(() => repo.close()));
+  const repo = yield* openReadRepository(root, { access: 'read' });
   const observed = new Map<string, Buffer | undefined>();
   const sources = new Map<string, string>();
   const resolutions = new Map<string, string>();

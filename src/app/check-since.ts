@@ -11,7 +11,7 @@ import { validateDesignContent } from "../domain/documents/index.js";
 import { parseConstitution, trailingId, markdownLinks, relativeMarkdownLink } from "../domain/constitution/index.js";
 import { replayFix } from "../domain/tests/index.js";
 import { checkCurrentProject } from "./check-current.js";
-import { LocalRepository, git } from "../base/workspace/index.js";
+import { type LocalRepository, openReadRepository, git } from "../base/workspace/index.js";
 import { commitRepository, resolveCommit, worktreeIdentity } from "../base/git/index.js";
 import { ConcordError, canonical, failure, type DocumentRecord, type Finding, type Repository } from "../model/index.js";
 
@@ -141,7 +141,7 @@ export function inspectEndpointEvents(beforeRepo: Repository, afterRepo: Reposit
 }
 
 export const checkSince = (root: string | undefined, baseInput: string, cache: 'use' | 'off' = 'off') => Effect.scoped(Effect.gen(function* () {
-  const repo = yield* Effect.acquireRelease(sync(() => new LocalRepository(root, { access: 'read', persistentCache: 'off', optimistic: true })), repo => Effect.sync(() => repo.close()));
+  const repo = yield* openReadRepository(root, { access: 'read', persistentCache: 'off', optimistic: true });
   const base = yield* sync(() => {
     const commit = resolveCommit(repo.root, baseInput, 'InvalidBase');
     try { git(repo.root, ['merge-base', '--is-ancestor', commit, 'HEAD']); } catch { throw new ConcordError('InvalidBase', 'Baseline must be an ancestor of HEAD'); }

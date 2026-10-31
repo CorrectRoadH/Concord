@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/architecture.md
 import { NodeRuntime } from "@effect/platform-node";
+import { runReaderMain } from './main.js';
 import { Effect, Queue, Schema } from "effect";
 import { observeWorkspaceProjection } from "../../app/index.js";
 import { makeWorkspaceProjectionRecord } from "../../app/index.js";
@@ -41,4 +42,4 @@ const main = Effect.gen(function*() {
   }
 }).pipe(Effect.scoped);
 
-NodeRuntime.runMain(main);
+runReaderMain(main);

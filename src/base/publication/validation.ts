@@ -2,6 +2,7 @@ import { Context, Effect, Layer, type Scope } from "effect";
 import type { Change, Repository, StepRename } from "../../model/index.js";
 import { failure, ConcordError } from "../../model/index.js";
 import { acquireTraceLease, releaseTraceLease, type TraceLease } from './coordination.js';
+import { makePublicationReceiptStore } from './issue-receipts.js';
 
 export interface PublicationCatalog {
   readonly operation: string;
@@ -23,6 +24,7 @@ export class PublicationValidation extends Context.Service<PublicationValidation
 /** A writer can only be constructed from a Publication layer with validation. */
 export class Publication extends Context.Service<Publication, {
   readonly validation: PublicationValidation['Service'];
+  readonly receiptStore: typeof makePublicationReceiptStore;
   readonly lease: (root: string, operation: string, create?: boolean) => Effect.Effect<TraceLease | undefined, ConcordError, Scope.Scope>;
   readonly publish: (repo: Repository, operation: string, changes: readonly Change[], dryRun?: boolean) => Effect.Effect<ReturnType<Repository['publish']>, ConcordError>;
 }>()('concord/Publication') {
@@ -30,6 +32,7 @@ export class Publication extends Context.Service<Publication, {
     const validation = yield* PublicationValidation;
     return Publication.of({
       validation,
+      receiptStore: makePublicationReceiptStore,
       lease: Effect.fn('Publication.lease')(function*(root: string, operation: string, create = true) {
         return yield* Effect.acquireRelease(
           acquireTraceLease(root, 'exclusive', operation, create, true).pipe(Effect.mapError(cause => new ConcordError(cause.message.includes('busy') ? 'RepositoryBusy' : 'CoordinationFailed', cause.message, { operation: cause.operation, path: cause.path, phase: cause.phase }))),

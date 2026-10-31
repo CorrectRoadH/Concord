@@ -21,7 +21,9 @@ test('packed adapters collect and select real Vitest pytest Go Cargo and report 
     }
     // Cargo's explicit +stable selector follows the installed stable toolchain.
     // Pin the consumer to that observed version, not the developer machine's version.
-    const adapter = spec.name === 'cargo'
+    const adapter = spec.name === 'go'
+      ? { ...spec.adapter, frameworkVersion: /^go version (go\d+\.\d+\.\d+)\b/u.exec(available.stdout)?.[1] ?? '' }
+      : spec.name === 'cargo'
       ? { ...spec.adapter, frameworkVersion: /^cargo (\d+\.\d+\.\d+)\b/u.exec(available.stdout)?.[1] ?? '' }
       : spec.adapter;
     assert.notEqual(adapter.frameworkVersion, '', 'the installed framework version must be identifiable');

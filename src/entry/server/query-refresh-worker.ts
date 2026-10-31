@@ -4,6 +4,7 @@ import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 import { NodeRuntime } from "@effect/platform-node";
+import { runRefreshMain } from './main.js';
 import { Effect, Schema } from "effect";
 
 
@@ -14,7 +15,7 @@ import { Query } from "../../app/index.js";
 
 
 if (process.argv[1] !== undefined && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  NodeRuntime.runMain(Effect.gen(function*() {
+  runRefreshMain(Effect.gen(function*() {
     const query = yield* Schema.decodeUnknownEffect(Query)(JSON.parse(process.argv[3] ?? 'null'));
     const positive = Schema.Number.check(Schema.isGreaterThan(0));
     const requestedAt = yield* Schema.decodeUnknownEffect(positive)(Number(process.argv[4]));

@@ -7,7 +7,7 @@ import { builtAssetRoot, requireBuiltAssets } from "../base/installation/index.j
 import { Effect, Schema } from "effect";
 import { ConcordError, failure } from "../model/index.js";
 import { decodeChangePreview, PREVIEW_DATA_LIMIT, PREVIEW_ENTRY_LIMIT, type ChangePreviewEntry, type PreviewSide } from "../model/index.js";
-import { previewGit, previewGitEnvironment } from "./change-preview-git.js";
+import { previewGit, previewGitEnvironment } from "../base/git/index.js";
 
 const MiB = 1024 * 1024;
 const utf8 = new TextDecoder('utf-8', { fatal: true });

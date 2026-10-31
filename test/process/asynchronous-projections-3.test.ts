@@ -1,8 +1,9 @@
+import { runApplication } from '../support/repository.js';
 import { makeOwnedProcessService, installationResources, installationRootForBin, classifyQueryRefresh, persist, pathToFileURL, packageBin, createConsumer, genericPrivateDirectorySync, refreshQuery, pollUntil, decodeDocumentSource, workerEntryArgv, installedConcordCli, assert, execFileSync, spawn, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, tmpdir, join, resolve, test, before, after, Effect, Schema, packConcord, installConcord, cacheDatabasePath, openHawdb, readProjectConfig, writeProjectConfig, LocalRepository, initialize, setAuthor, createDocument, renderDocument, ConcordError, digest, QueryCacheEnvelope, queryContext, readQuery, storeQuery, type Query, gaps, candidate, consumer, cli, call, historicalCall, waitForRefreshExit, packageScratch, installedCli, installedCall, packedConsumer, packedEnvelope, refreshInstalled, editing } from '../support/asynchronous-projections-fixture.js';
 
 
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-test('a newly stored snapshot from an older scan does not consume a later refresh request', () => Effect.runPromise(Effect.sync(() => {
+test('a newly stored snapshot from an older scan does not consume a later refresh request', () => runApplication(Effect.sync(() => {
   const root = consumer();
   try {
     const context = queryContext(root, ['trace', 'gaps']);
@@ -18,7 +19,7 @@ test('a newly stored snapshot from an older scan does not consume a later refres
 
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('directory observations detect a size change even when an oversized file was not read', () => Effect.runPromise(Effect.sync(() => {
+test('directory observations detect a size change even when an oversized file was not read', () => runApplication(Effect.sync(() => {
   const root = consumer();
   mkdirSync(join(root, 'src'));
   writeFileSync(join(root, 'src', 'large.ts'), 'x'.repeat(1024 * 1024 + 1));
@@ -32,7 +33,7 @@ test('directory observations detect a size change even when an oversized file wa
 
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('concurrent optimistic plans reject the losing writer without overwriting the winner', () => Effect.runPromise(Effect.sync(() => {
+test('concurrent optimistic plans reject the losing writer without overwriting the winner', () => runApplication(Effect.sync(() => {
   const root = consumer();
   const first = new LocalRepository(root, { optimistic: true });
   const second = new LocalRepository(root, { optimistic: true });
@@ -80,15 +81,15 @@ test('C3 internal short deadline preserves timeout details with and without a ge
     const root = packedConsumer();
     try {
       const context = queryContext(root, ['trace', 'gaps']);
-      if (warm) await Effect.runPromise(refreshQuery(root, ['trace', 'gaps'], Date.now()).pipe(Effect.scoped));
+      if (warm) await runApplication(refreshQuery(root, ['trace', 'gaps'], Date.now()).pipe(Effect.scoped));
       const previous = readQuery(context).record;
       const scannedAt = Date.now(), started = performance.now();
-      const result = await Effect.runPromise(makeOwnedProcessService().run([process.execPath, '--import', import.meta.resolve('tsx'), '--import', pathToFileURL(resolve('test/fixtures/stall-process.ts')).href,
+      const result = await runApplication(makeOwnedProcessService().run([process.execPath, '--import', import.meta.resolve('tsx'), '--import', pathToFileURL(resolve('test/fixtures/stall-process.ts')).href,
         installationResources(installationRootForBin(installedCli)).worker('query-scan-worker'), root, JSON.stringify(['trace', 'gaps'])],
         { cwd: root, timeoutMs: 100, outputLimitBytes: 4 * 1024 * 1024 }).pipe(Effect.scoped));
       const update = classifyQueryRefresh(context.key, queryContext(root, ['trace', 'gaps']).key, result, scannedAt, performance.now() - started, 100);
       if (update.kind === 'identity-changed') assert.fail('Fixture installation changed during the stopped scan');
-      await Effect.runPromise(persist(context, update));
+      await runApplication(persist(context, update));
       const timedOut = readQuery(context);
       assert.equal(timedOut.error?.code, 'QueryRefreshTimedOut', JSON.stringify(timedOut));
       assert.equal(timedOut.error.limitMs, 100);
@@ -105,7 +106,7 @@ test('diagnostic refresh accepts absent configuration and binds its later appear
   try {
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);
     const missing = queryContext(root, ['trace', 'gaps']);
-    await Effect.runPromise(refreshQuery(root, missing.query, Date.now()).pipe(Effect.scoped));
+    await runApplication(refreshQuery(root, missing.query, Date.now()).pipe(Effect.scoped));
     const refreshed = readQuery(missing);
     assert.equal(refreshed.record?.complete, true, JSON.stringify(refreshed));
     assert.equal(refreshed.error, undefined);

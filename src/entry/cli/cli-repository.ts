@@ -1,9 +1,10 @@
 // @concord-file
 // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-import { waitForPublication } from "../../app/index.js";
+import { waitForPublication, withSourceSnapshot } from "../../app/index.js";
 import { cachedQuery, type Query } from "../../app/index.js";
-import { Effect, Option } from "effect";
+import { Effect, Option, Result } from "effect";
+import { ConcordError } from '../../model/index.js';
 import { type LocalRepository, openWriteRepository, openReadRepository } from "../../app/index.js";
 
 import { root, emit, sync } from "./cli-base.js";
@@ -20,8 +21,8 @@ function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: 
       }),
       repo => Effect.sync(() => repo.close()),
     );
-    if (!options.unlocked) yield* Effect.acquireRelease(waitForPublication(reclaimDead => sync(() => repo.beginSnapshot(reclaimDead))), () => Effect.sync(() => repo.endSnapshot()));
-    return yield* operation(repo, settings).pipe(Effect.tap(() => sync(() => repo.verifySnapshot())), Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
+    const run = operation(repo, settings);
+    return yield* (options.unlocked ? run : withSourceSnapshot(repo, run)).pipe(Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
   }).pipe(Effect.scoped);
 }
 
@@ -33,7 +34,13 @@ function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { js
       yield* Effect.sync(() => emit(value, settings.json));
       return value;
     }
-    return yield* withRepo(operation, { readonly: true });
+    for (let attempt = 1; ; attempt++) {
+      const result = yield* Effect.result(withRepo(operation, { readonly: true }));
+      if (Result.isSuccess(result)) return result.success;
+      const error = result.failure;
+      if (attempt >= 3 || !(error instanceof ConcordError) || !(error.code === 'SourceChanged' || error.code === 'PreimageChanged' && error.details === 'source-observation')) return yield* Effect.fail(error);
+      yield* Effect.sleep('50 millis');
+    }
   });
 }
 

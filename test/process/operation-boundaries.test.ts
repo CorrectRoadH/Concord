@@ -1,3 +1,4 @@
+import { runApplication } from '../support/repository.js';
 import { createConsumer } from '../support/consumer.js';
 import { installedConcordCli } from '../support/support.js';
 import assert from 'node:assert/strict';
@@ -58,7 +59,7 @@ function call(root: string, args: readonly string[], status: number, input = '')
 }
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('exact references derive identity from paths and reject malformed owners', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
+test('exact references derive identity from paths and reject malformed owners', () => runApplication(Effect.sync(() => withConsumer(root => {
   withRepo(root, repo => {
     createDocument(repo, 'feature', { id: 'alpha', title: 'Alpha', pages: [] });
     createDocument(repo, 'feature', { id: 'beta', title: 'Beta', pages: [] });
@@ -83,7 +84,7 @@ test('exact references derive identity from paths and reject malformed owners', 
 }))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('canonical Issue edit ignores a malformed sibling while short IDs still require an unambiguous inventory', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
+test('canonical Issue edit ignores a malformed sibling while short IDs still require an unambiguous inventory', () => runApplication(Effect.sync(() => withConsumer(root => {
   withRepo(root, repo => {
     createDocument(repo, 'issue', { id: 'target', title: 'Target' });
     const path = 'docs/issues/target.md';
@@ -102,7 +103,7 @@ test('canonical Issue edit ignores a malformed sibling while short IDs still req
 }))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('CLI and action preserve partial inventory diagnostics and healthy documents', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
+test('CLI and action preserve partial inventory diagnostics and healthy documents', () => runApplication(Effect.sync(() => withConsumer(root => {
     withRepo(root, repo => createDocument(repo, 'feature', { id: 'healthy', title: 'Healthy', pages: [] }));
     const bad = 'docs/feature/broken/README.md';
     write(root, bad, '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
@@ -128,14 +129,14 @@ test('Web workspace retains complete=false, valid documents, and malformed owner
     withRepo(root, repo => createDocument(repo, 'feature', { id: 'healthy', title: 'Healthy', pages: [] }));
     const bad = 'docs/feature/broken/README.md';
     write(root, bad, '---\nformat: concord.document/v1\nkind: feature\n---\n# Broken\n');
-    const snapshot = await Effect.runPromise(getWorkspaceSnapshot(root));
+    const snapshot = await runApplication(getWorkspaceSnapshot(root));
     assert.equal(snapshot.complete, false);
     assert.ok(snapshot.documents.some(document => document.path === 'docs/feature/healthy/README.md'));
     assert.ok(snapshot.findings.some(finding => finding.path === bad && finding.code === 'InvalidData'));
   }));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('read access refuses publication but permits a dry-run preview without writing', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
+test('read access refuses publication but permits a dry-run preview without writing', () => runApplication(Effect.sync(() => withConsumer(root => {
   withRepo(root, repo => {
     throwsCode('ReadOnlyRepository', () => createDocument(repo, 'feature', { id: 'blocked', title: 'Blocked', pages: [] }));
     assert.equal(existsSync(join(root, 'docs/feature/blocked')), false);
@@ -147,7 +148,7 @@ test('read access refuses publication but permits a dry-run preview without writ
 }))));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('read access cannot publish source or invalidate a run while another reader holds ownership', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
+test('read access cannot publish source or invalidate a run while another reader holds ownership', () => runApplication(Effect.sync(() => withConsumer(root => {
   writeProjectConfig(root, { testRoots: ['test'] });
   write(root, 'test/source.ts', 'export const value = 1;\n');
   let runToken = '';
@@ -181,7 +182,7 @@ test('partial relationships never assign a malformed nested owner page to its he
   assert.equal(show.complete, false);
   assert.deepEqual(show.codeDeclarations, []);
   assert.deepEqual(show.incoming, []);
-  const workspace = await Effect.runPromise(getWorkspaceSnapshot(root));
+  const workspace = await runApplication(getWorkspaceSnapshot(root));
   assert.equal(workspace.complete, false);
   assert.ok(workspace.documents.some(document => document.path === 'docs/feature/parent/README.md'));
   assert.ok(workspace.findings.some(finding => finding.path === 'src/declared.ts'));
@@ -189,7 +190,7 @@ test('partial relationships never assign a malformed nested owner page to its he
 }));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('feedback show carries complete for healthy and partial relationships', () => Effect.runPromise(Effect.sync(() => withConsumer(root => {
+test('feedback show carries complete for healthy and partial relationships', () => runApplication(Effect.sync(() => withConsumer(root => {
   withRepo(root, repo => createDocument(repo, 'issue', { id: 'feedback', title: 'Feedback' }));
   const healthy = JSON.parse(call(root, ['feedback', 'show', 'feedback'], 0).stdout) as { complete: boolean };
   assert.equal(healthy.complete, true);

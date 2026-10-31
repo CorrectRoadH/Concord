@@ -8,13 +8,14 @@ import { ConcordError, decode, objectDigest } from "../model/index.js";
 import { typescriptPackageVersion } from "../base/process/index.js";
 import { OUTPUT_LIMIT } from "../base/git/index.js";
 import { runGit } from "../base/git/index.js";
+import type { Git } from '../base/git/index.js';
 export interface GitBaselineCache { database?: HawdbDatabase; }
 
 export const BaselineSchema = Schema.Struct({ root: Schema.String, revision: Schema.String, roots: Schema.String, parser: Schema.String, caseIds: Schema.Array(Schema.String) });
 
 export const BASELINE_PARSER = `typescript-ast/${typescriptPackageVersion()}/concord-marker-baseline/v4`;
 export function closeGitBaselineCache(cache: GitBaselineCache): void { cache.database?.close(); cache.database = undefined; }
-export const getGitStatus = Effect.fn('view.getGitStatus')(function*(root: string, includeTestBaseline = false, baselineCache?: GitBaselineCache, testRoots?: readonly string[]): Effect.fn.Return<GitStatus, ConcordError> {
+export const getGitStatus = Effect.fn('view.getGitStatus')(function*(root: string, includeTestBaseline = false, baselineCache?: GitBaselineCache, testRoots?: readonly string[]): Effect.fn.Return<GitStatus, ConcordError, Git> {
   const result = yield* runGit(root, ['status', '--porcelain=v1', '-z', '--untracked-files=all']);
   if (result.truncated) return yield* Effect.fail(new ConcordError('GitOutputLimit', 'Git status exceeds 2 MiB; narrow the working tree changes before inspecting them.'));
   const records = result.stdout.split('\0');
@@ -97,7 +98,7 @@ export function untrackedDiff(root: string, path: string): GitDiff {
   const oldLabel = label(`a/${path}`), newLabel = label(`b/${path}`);
   return { ...empty, patch: `diff --git ${oldLabel} ${newLabel}\nnew file mode ${(stat.mode & 0o111) ? '100755' : '100644'}\n--- /dev/null\n+++ ${newLabel}\n@@ -0,0 +1,${lines.length} @@\n${lines.map(line => `+${line}\n`).join('')}${source && !source.endsWith('\n') ? '\\ No newline at end of file\n' : ''}` };
 }
-export const getGitDiff = Effect.fn('view.getGitDiff')(function*(root: string, path: string, area: GitArea): Effect.fn.Return<GitDiff, ConcordError> {
+export const getGitDiff = Effect.fn('view.getGitDiff')(function*(root: string, path: string, area: GitArea): Effect.fn.Return<GitDiff, ConcordError, Git> {
   const status = yield* getGitStatus(root);
   const entry = status.entries.find(item => item.path === path);
   if (!entry) return yield* Effect.fail(new ConcordError('GitChangeNotFound', 'This file no longer has Git changes; refresh the panel.'));

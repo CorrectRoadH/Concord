@@ -3,7 +3,7 @@ import { rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
-import { Effect, Fiber, Layer } from 'effect';
+import { Context, Effect, Fiber, Layer, Option } from 'effect';
 import { TestClock } from 'effect/testing';
 import { Workspace } from '../../src/base/workspace/index.js';
 import { renderTypeScriptConfig } from '../../src/base/workspace/index.js';
@@ -12,6 +12,11 @@ import { createConsumer } from '../support/consumer.js';
 import { Cache, CacheSnapshot, HawdbFailure } from '../../src/base/cache/index.js';
 import { waitForPublication, acquireTraceLeaseSync, releaseTraceLeaseSync, Publication } from '../../src/base/publication/index.js';
 import { publicationLayer } from '../support/repository.js';
+import { cliLayer } from '../../src/entry/cli/index.js';
+import { httpOperationLayer } from '../../src/entry/http/index.js';
+import { readerLayer } from '../../src/entry/server/index.js';
+import { PersistentCache } from '../../src/base/cache/index.js';
+import { Git } from '../../src/base/git/index.js';
 
 // @feature docs/feature/project-onboarding/README.md
 test('Workspace rereads configuration for each operation and Sources rejects a changed snapshot', async () => {
@@ -35,6 +40,24 @@ test('Workspace rereads configuration for each operation and Sources rejects a c
       if (result._tag === 'Failure') assert.equal(result.failure.code, 'PreimageChanged');
     }).pipe(Effect.scoped, Effect.provide(live)));
   } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/README.md
+test('entry layers build the declared reader and operation capabilities', async () => {
+  for (const [name, layer, writes, persistent] of [
+    ['CLI', cliLayer, true, true],
+    ['HTTP operation', httpOperationLayer, true, false],
+    ['reader worker', readerLayer, false, false],
+  ] as const) {
+    const context = await Effect.runPromise(Effect.scoped(Layer.build(layer)));
+    assert.equal(Option.isSome(Context.getOption(context, Workspace)), true, name);
+    assert.equal(Option.isSome(Context.getOption(context, Sources)), true, name);
+    assert.equal(Option.isSome(Context.getOption(context, Cache)), true, name);
+    assert.equal(Option.isSome(Context.getOption(context, CacheSnapshot)), true, name);
+    assert.equal(Option.isSome(Context.getOption(context, Publication)), writes, name);
+    assert.equal(Option.isSome(Context.getOption(context, Git)), writes, name);
+    assert.equal(Option.isSome(Context.getOption(context, PersistentCache)), persistent, name);
+  }
 });
 
 // @feature docs/feature/local-data-engine/README.md

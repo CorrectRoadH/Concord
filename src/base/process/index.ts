@@ -27,6 +27,7 @@ export { uriPath } from './source-uri.js';
 export { javascript } from './mdx-parser.js';
 export { mdxProse } from './mdx-parser.js';
 export { safeRunnerEnvironment } from './runner-environment.js';
+export { launchDetachedWorker } from './worker.js';
 export { id } from './lsp-protocol.js';
 export { response } from './lsp-protocol.js';
 export { request } from './lsp-protocol.js';

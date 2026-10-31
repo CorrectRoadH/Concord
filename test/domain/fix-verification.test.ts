@@ -1,3 +1,4 @@
+import { runApplication } from '../support/repository.js';
 import { createFixConsumer as fixture, gitCommand as git, gitCommit as commit } from '../support/fix-consumer.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -16,7 +17,7 @@ import { inspectEndpointEvents, checkSince } from "../../src/app/index.js";
 
 async function verify(root: string, defect?: string) {
   const repo = new LocalRepository(root, { optimistic: true });
-  try { return await Effect.runPromise(closeFixedIssue(repo, 'sku', 'Accumulate quantity', defect).pipe(Effect.provide(OwnedProcessLive))); }
+  try { return await runApplication(closeFixedIssue(repo, 'sku', 'Accumulate quantity', defect).pipe(Effect.provide(OwnedProcessLive))); }
   finally { repo.close(); }
 }
 const code = (expected: string) => (cause: unknown) => { assert.equal((cause as { code: string }).code, expected); return true; };
@@ -32,11 +33,11 @@ test('linear failing-test then fix records verification and replays exact commit
       if (issue.metadata.kind !== 'issue' || issue.metadata.closure?.kind !== 'fixed') assert.fail('Expected fixed Issue');
       assert.deepEqual({ defect: issue.metadata.closure.verification?.defect, fix: issue.metadata.closure.verification?.fix }, { defect: f.defect, fix });
       const source = readFileSync(join(f.root, issue.path), 'utf8');
-      const replay = await Effect.runPromise(replayFix(repo, 'sku').pipe(Effect.provide(OwnedProcessLive)));
+      const replay = await runApplication(replayFix(repo, 'sku').pipe(Effect.provide(OwnedProcessLive)));
       assert.equal(replay.verified, 'replayed'); assert.equal(readFileSync(join(f.root, issue.path), 'utf8'), source);
       assert.equal(git(f.root, 'worktree', 'list', '--porcelain').split('\n').filter(line => line.startsWith('worktree ')).length, 1);
     } finally { repo.close(); }
-    const checked = await Effect.runPromise(checkSince(f.root, f.defect).pipe(Effect.provide(OwnedProcessLive)));
+    const checked = await runApplication(checkSince(f.root, f.defect).pipe(Effect.provide(OwnedProcessLive)));
     assert.deepEqual(checked.since, { base: f.defect, target: 'worktree', scope: 'endpoints' });
     assert.equal(checked.verifications[0]?.verified, 'replayed');
   } finally { rmSync(f.root, { recursive: true, force: true }); }

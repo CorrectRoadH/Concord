@@ -61,3 +61,4 @@ export type { TerminalDeliverySink } from './delivery.js';
 export { CliInputError } from './input.js';
 export { readText } from './input.js';
 export { readJson } from './input.js';
+export { cliLayer } from './main.js';

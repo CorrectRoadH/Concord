@@ -1,7 +1,7 @@
 import { pathToFileURL } from "node:url";
 import { lstatSync } from "node:fs";
 import { Effect } from "effect";
-import { LocalRepository } from "../base/workspace/index.js";
+import { openReadRepository } from "../base/workspace/index.js";
 import { readPublicationRevisionSync } from "../base/publication/index.js";
 import { scanAnnotations } from "../domain/tests/index.js";
 import { diagnoseDocuments } from "../domain/documents/index.js";
@@ -25,7 +25,7 @@ const referenceTokens: (path: string, text: string, languageServers?: Repository
 /** One disposable thread owns domain parser caches and exactly one optimistic source snapshot. */
 export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
   return yield* Effect.acquireUseRelease(
-    Effect.try({ try: () => new LocalRepository(job.root, { access: 'read', optimistic: true, persistentCache: 'off' }), catch: failure }),
+    openReadRepository(job.root, { access: 'read', optimistic: true, persistentCache: 'off' }),
     local => Effect.try({ try: (): Computed => local.snapshot(() => {
       const revision = readPublicationRevisionSync(local.root);
       if (local.configSnapshot.digest !== job.config || revision !== job.revision) throw new ConcordError('ContentModified', 'Configuration or publication changed before computation');
@@ -183,5 +183,5 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
       return { generation: job.generation, revision, config: local.configSnapshot.digest, complete: gaps.size === 0, gaps: [...gaps], value, diagnostics, reads: [...reads].map(([path, values]) => [path, ...values] as const), listings: [...listings.values()] };
     }), catch: failure }),
     local => Effect.sync(() => local.close()),
-  );
+  ).pipe(Effect.scoped);
 });

@@ -1,4 +1,4 @@
-import { runOperation, openHttpWriter } from "./main.js";
+import { runOperation, withHttpWriter } from "./main.js";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
@@ -323,14 +323,14 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   }
   if (method === 'GET' && url.pathname === '/api/file') {
     exactQuery(url, ['path']);
-    return respond(await timing.async('http.file', () => Effect.runPromise(getViewFile(root, url.searchParams.get('path')!, timing))));
+    return respond(await timing.async('http.file', () => runOperation(getViewFile(root, url.searchParams.get('path')!, timing))));
   }
   if (method === 'POST' && url.pathname === '/api/p5/compile') {
     exactQuery(url, []);
     mutationJson(request);
     const input = await readJson(request);
     const { compileP5 } = await import("../../app/index.js");
-    return respond(await Effect.runPromise(compileP5(root, input)));
+    return respond(await runOperation(compileP5(root, input)));
   }
   if (method === 'POST' && url.pathname === '/api/action') {
     exactQuery(url, []);
@@ -358,13 +358,13 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   }
   if (method === 'GET' && url.pathname === '/api/git') {
     exactQuery(url, []);
-    return respond(await timing.async('http.git', () => Effect.runPromise(getViewGitStatus(root, baselineCache))));
+    return respond(await timing.async('http.git', () => runOperation(getViewGitStatus(root, baselineCache))));
   }
   if (method === 'GET' && url.pathname === '/api/git/diff') {
     exactQuery(url, ['path', 'area']);
     const area = url.searchParams.get('area');
     if (area !== 'staged' && area !== 'unstaged' && area !== 'untracked') throw new ConcordError('InvalidInput', 'area must be staged, unstaged, or untracked');
-    return respond(await timing.async('http.gitDiff', () => Effect.runPromise(getGitDiff(root, url.searchParams.get('path')!, area satisfies GitArea))));
+    return respond(await timing.async('http.gitDiff', () => runOperation(getGitDiff(root, url.searchParams.get('path')!, area satisfies GitArea))));
   }
   throw new ConcordError('ApiNotFound', 'Unknown API endpoint');
 }
@@ -379,7 +379,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? builtAssetRoot('web');
   const scans = new ViewProjectionManager(root);
-  const jobs = new ViewJobManager(root, () => scans.request(true), openHttpWriter);
+  const jobs = new ViewJobManager(root, () => scans.request(true), withHttpWriter);
   const baselineCache: GitBaselineCache = {};
   const requestLog = new ViewRequestLog();
   let stopping = false;

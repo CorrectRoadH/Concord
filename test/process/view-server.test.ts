@@ -417,7 +417,7 @@ test('view jobs preserve pre-spawn cancellation, serialize repository ownership,
   const root = initializedJobFixture();
   let held: LocalRepository | undefined;
   try {
-    const manager = new ViewJobManager(root, () => {}, selected => runApplication(openWriteRepository(selected)));
+    const manager = new ViewJobManager(root, () => {}, (selected, use) => runApplication(Effect.scoped(Effect.flatMap(openWriteRepository(selected), repo => Effect.tryPromise({ try: () => use(repo), catch: cause => cause })))));
     const beforeSpawn = manager.start(viewJobCase);
     assert.equal(manager.cancel(beforeSpawn.id).state, 'cancelling');
     assert.equal((await waitFor(manager, beforeSpawn.id, ['cancelled'])).state, 'cancelled');
