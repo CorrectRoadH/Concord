@@ -80,7 +80,7 @@ test('packed knowledge commands preserve named failures, exits and body excerpts
   assert.match(issueRecall.stdout, /HawDB observation[\s\S]*issue: open[\s\S]*HawDB cache has a symptom/u);
   assert.equal(call(root, ['memory', 'recall', ' \t '], 1).error, 'InvalidInput');
   assert.equal(call(root, ['issue', 'recall', '  '], 1).error, 'InvalidInput');
-  assert.equal(saveBody(root, 'memory/cache.md', 'stale\n', 'missing-digest', 1).error, 'PreimageChanged');
+  assert.equal(saveBody(root, 'memory/cache.md', 'stale\n', 'missing-digest', 1).error, 'FileChangedSinceRead');
   assert.equal(call(root, ['action', '--input', '-'], 1, JSON.stringify({ action: 'issue.remove', id: 'linked', expectedDigest: digestFor(root, 'docs/issues/linked.md') })).error, 'IssueNotRemovable');
   assert.equal(call(root, ['recover']).operation, 'recover');
 })));

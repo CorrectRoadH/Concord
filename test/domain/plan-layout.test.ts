@@ -41,7 +41,7 @@ test('file and directory Plans share gates, nested editing, reference ownership 
       addPage(repo, 'design', 'storage', '存储/快照.md', false, 'remote');
       const page = showPage(repo, 'design', 'storage', '存储/快照.md', 'remote');
       setPage(repo, 'design', 'storage', '存储/快照.md', '# 快照\n\n## 边界\n\n本地读取。\n', page.digest, false, 'remote');
-      assert.throws(() => setPage(repo, 'design', 'storage', '存储/快照.md', '# stale', page.digest, false, 'remote'), { code: 'PreimageChanged' });
+      assert.throws(() => setPage(repo, 'design', 'storage', '存储/快照.md', '# stale', page.digest, false, 'remote'), { code: 'FileChangedSinceRead' });
       assert.equal(resolveReference(repo, loadDocuments(repo), `${page.path}#边界`).path, `${base}/README.md`);
       assert.throws(() => addPage(repo, 'design', 'storage', 'plans/remote/bypass'), { code: 'InvalidPage' });
       assert.throws(() => addPage(repo, 'design', 'storage', '../escape', false, 'remote'));

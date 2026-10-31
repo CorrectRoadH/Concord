@@ -165,7 +165,7 @@ test('steps C19 precommit drift writes nothing and interrupted publication retur
     const plan = planStepRename(repo, { useCase: path, oldId: 'old', newId: 'new' });
     write(root, 'test/flow.ts', `// @use-case ${path}#old\n// external edit\n`);
     repo.publishStepRename(plan);
-  }), { code: 'PreimageChanged' });
+  }), { code: 'FileChangedSinceRead' });
   assert.equal(repo.read(path), original);
   assert.equal(existsSync(join(repo.privateDir, 'journal.json')), false);
   const rename = fs.renameSync;

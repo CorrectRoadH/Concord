@@ -175,7 +175,7 @@ test('catalog publication protects imports, malformed dependency uncertainty, CA
     assert.equal(readFileSync(join(root, target), 'utf8'), created.source);
     write(root, importer, json(catalog([], [`${target}#item`])));
     assert.throws(() => withRepo(root, repo => setConcepts(repo, catalog([]), created.digest, false, target)), { code: 'ConceptInUse' });
-    assert.throws(() => withRepo(root, repo => setConcepts(repo, original, null, false, target)), { code: 'PreimageChanged' });
+    assert.throws(() => withRepo(root, repo => setConcepts(repo, original, null, false, target)), { code: 'FileChangedSinceRead' });
     write(root, target, '{ invalid owner');
     const repair = withRepo(root, repo => setConcepts(repo, original, digest('{ invalid owner'), false, target));
     assert.equal(repair.catalog.concepts.length, 1);
@@ -283,8 +283,8 @@ test('invalid policies can be replaced through the public CLI with explicit owne
     writeFileSync(catalogBody, json(catalog([concept('term', 'Term')])));
     writeFileSync(policyBody, json(policy()));
     const catalogShow = JSON.parse(call('concepts', 'show').stdout) as { digest: string };
-    assert.equal(call('concepts', 'set', '--body', catalogBody, '--expected-digest', catalogShow.digest).status, 0);
-    assert.equal(call('writing', 'set', '--body', policyBody, '--expected-digest', oldShow.digest).status, 0);
+    assert.equal(call('concepts', 'set', '--body', catalogBody, '--if-unchanged', catalogShow.digest).status, 0);
+    assert.equal(call('writing', 'set', '--body', policyBody, '--if-unchanged', oldShow.digest).status, 0);
     assert.equal(call('docs', 'check').status, 0);
     assert.equal(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), catalog([concept('term', 'Term')]));
     assert.equal(existsSync(join(root, 'docs/concepts.json')), false);

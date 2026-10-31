@@ -32,7 +32,7 @@ test('C10 C22 C24 C25: packed invalid policy rejection and controlled checks kee
  assert.equal(readFileSync(join(root, path), 'utf8'), shown.source);
  const policy = { ...original, format: 'concord.writing/v3', controlled: { language: 'en', procedural: { singleInstruction: true, verbs: { en: [{ lemma: 'read' }] } }, passiveVoice: { en: true, participles: ['cleared'] } } };
  const current = call(root, ['writing', 'show'], DigestOutput);
- call(root, ['writing', 'set', '--body', '-', '--expected-digest', current.digest], Ack, JSON.stringify(policy));
+ call(root, ['writing', 'set', '--body', '-', '--if-unchanged', current.digest], Ack, JSON.stringify(policy));
  const Report = Schema.Struct({ complete: Schema.Boolean, findings: Schema.Array(Schema.Unknown), inputDigest: Schema.String });
  call(root, ['cache', 'clear'], Ack);
  const cold = call(root, ['docs', 'check'], Report, '', 1);
@@ -49,7 +49,7 @@ test('C10 C22 C24 C25: packed invalid policy rejection and controlled checks kee
  assert.deepEqual(call(root, ['docs', 'check', '--rules', 'profile.json'], Schema.Struct({ findings: Schema.Array(Schema.Unknown) }), '', 1).findings.map(value => { const finding = value as { source?: unknown; sources?: unknown }; return { ...finding, source: undefined, sources: undefined }; }), cold.findings.map(value => { const finding = value as { source?: unknown; sources?: unknown }; return { ...finding, source: undefined, sources: undefined }; }));
  const saved = call(root, ['writing', 'show'], DigestOutput);
  const invalid = { ...policy, controlled: { sentence: { en: { procedural: 0 } } } };
- assert.equal(call(root, ['writing', 'set', '--body', '-', '--expected-digest', saved.digest], ErrorOutput, JSON.stringify(invalid), 1).error, 'InvalidWritingPolicy');
+ assert.equal(call(root, ['writing', 'set', '--body', '-', '--if-unchanged', saved.digest], ErrorOutput, JSON.stringify(invalid), 1).error, 'InvalidWritingPolicy');
  write(root, 'profile.json', JSON.stringify(invalid));
  assert.equal(call(root, ['docs', 'check', '--rules', 'profile.json'], ErrorOutput, '', 1).error, 'InvalidWritingPolicy');
  write(root, 'profile.json', JSON.stringify({ ...policy, controlled: { approvedWords: { en: Array(4097).fill('word') } } }));

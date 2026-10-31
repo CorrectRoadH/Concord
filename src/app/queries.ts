@@ -107,7 +107,7 @@ export const executeQuery = Effect.fn('Queries.Local.execute')(function*(root: s
       const sources = yield* Sources;
       const repo = yield* waitForPublication(reclaimPublication => workspace.openRead(root, { access: 'read', optimistic: true, persistentCache: cache, reclaimPublication }));
       return yield* sources.snapshot(repo, Effect.try({ try: () => queryValue(repo, request, cache), catch: failure }));
-    })).pipe(Effect.retry({ times: 2, schedule: Schedule.spaced('50 millis'), while: error => error.code === 'SourceChanged' || error.code === 'PreimageChanged' && error.details === 'source-observation' }));
+    })).pipe(Effect.retry({ times: 2, schedule: Schedule.spaced('50 millis'), while: error => error.code === 'SourceChanged' || error.code === 'FileChangedSinceRead' && error.details === 'source-observation' }));
   return yield* Effect.try({ try: () => {
     const json = Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
     const failed = ['check', 'trace.check', 'docs.check'].includes(request.name) && typeof value === 'object' && value !== null && 'ok' in value && value.ok === false;

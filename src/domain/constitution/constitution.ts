@@ -341,7 +341,7 @@ interface LifecycleInput { readonly body: string; readonly reason: string; reado
 
 function lifecycle(repo: Repository, operation: 'constitution-adopt' | 'constitution-amend', input: LifecycleInput, dryRun: boolean): ConstitutionReceipt {
   const current = showConstitution(repo);
-  if (current.digest !== input.expectedDigest) throw new ConcordError('PreimageChanged', 'docs/constitution.md changed; reload it and retry');
+  if (current.digest !== input.expectedDigest) throw new ConcordError('FileChangedSinceRead', 'docs/constitution.md changed; reload it and retry');
   const adoption = operation === 'constitution-adopt';
   if (adoption && current.metadata.status !== 'draft') throw new ConcordError('ConstitutionAlreadyActive', 'Use constitution amend for an active constitution');
   if (!adoption && current.metadata.status !== 'active') throw new ConcordError('ConstitutionNotActive', 'Adopt the draft constitution before amending it');

@@ -57,7 +57,7 @@ export const withRunner = <A, R>(repo: LocalRepository, run: (release: () => voi
     }),
   );
   return yield* run(() => {
-    if (finalizeRun(repo.root, lease, true)) throw new ConcordError('PreimageChanged', 'Publication invalidated the running verification');
+    if (finalizeRun(repo.root, lease, true)) throw new ConcordError('FileChangedSinceRead', 'Publication invalidated the running verification');
     if (cleanupUnknown) throw new ConcordError('FixUnverifiable', 'Runner worktree cleanup is unconfirmed');
     finishRun(repo.root, lease); released = true;
   }, () => { cleanupUnknown = true; quarantineRun(repo.root, lease); });

@@ -139,7 +139,7 @@ export function isSourcePath(repo: Repository, path: string): boolean {
 export function setSource(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const source = readSource(repo, path);
-  if (source.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; use its current digest`);
+  if (source.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${path} changed; use its current digest`);
   return repo.publishSource(path, source.body, body, dryRun);
   });
 }
@@ -158,7 +158,7 @@ export function showConfig(repo: LocalRepository): { operation: string; config: 
 export function setConfig(repo: LocalRepository, config: ProjectConfig, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const current = showConfig(repo);
-  if (current.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${repo.configSnapshot.path} changed; use its current digest`);
+  if (current.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${repo.configSnapshot.path} changed; use its current digest`);
   const next = decode(ProjectSchema, config, 'configuration');
   for (const path of [...(next.testRoots ?? []), ...(next.sourceRoots ?? []), ...(next.runner?.sourceFiles ?? [])]) repo.absolute(path);
   for (const root of [...(next.testRoots ?? []), ...(next.sourceRoots ?? [])]) if (sourceForbidden(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot or testRoot: ${root}`);
@@ -173,7 +173,7 @@ export function setMarkdown(repo: LocalRepository, path: string, body: string, e
   return inRepositorySnapshot(repo, () => {
   const page = inspectDocumentFile(repo, path);
   if (page === undefined) throw new ConcordError('FileNotFound', 'Markdown editing is limited to the Concord document and supporting-page inventory');
-  if (page.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; use its current digest`);
+  if (page.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${path} changed; use its current digest`);
   const before = repo.read(path);
   if (before === undefined) throw new ConcordError('FileNotFound', `${path} disappeared before publication`);
   return repo.publish('set-markdown', [{ path, before, after: body }], dryRun);

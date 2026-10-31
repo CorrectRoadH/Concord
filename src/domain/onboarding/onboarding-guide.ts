@@ -73,7 +73,7 @@ Fill in the generated author prose. Use \`concord template list\` and \`concord 
 
 \`--body <file>\` supplies your own prose; \`--body -\` reads stdin.
 
-\`page show\` returns the current digest; \`page set --expected-digest\` checks it before replacing a page.
+\`page show\` returns the current digest; \`page set --if-unchanged\` checks it before replacing a page.
 Lifecycle metadata remains owned by the corresponding Concord commands.
 
 ## Connect a real test

@@ -68,7 +68,7 @@ export function changed(repo: Repository, operation: string, record: DocumentRec
 
 function preimage(repo: Repository, record: DocumentRecord): string {
   const source = repo.read(record.path);
-  if (source === undefined || digest(source) !== record.digest) throw new ConcordError('PreimageChanged', `${record.path} changed; reload the document and retry`);
+  if (source === undefined || digest(source) !== record.digest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; reload the document and retry`);
   return source;
 }
 
@@ -340,7 +340,7 @@ export function setAuthor(repo: Repository, ref: string, body: string, expectedD
   return inRepositorySnapshot(repo, () => {
   const record = readDocumentReference(repo, ref);
   if (record.path !== parseReference(ref).path) throw new ConcordError('InvalidReferenceTarget', 'Author body belongs to an exact Concord owner, not supporting Markdown');
-  if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);
+  if (record.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; use its current digest`);
   return changed(repo, 'set-author', record, record.metadata, authorBody(body), dryRun);
   });
 }

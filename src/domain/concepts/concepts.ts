@@ -119,7 +119,7 @@ export function setConcepts(repo: LocalRepository, source: string, expectedDiges
   return inRepositorySnapshot(repo, () => {
     const scope = scopeOf(path, 'catalog');
     const before = repo.read(path) ?? null;
-    if ((before === null ? null : digest(before)) !== expectedDigest) throw new ConcordError('PreimageChanged', `${path} changed; retain the draft and reload`);
+    if ((before === null ? null : digest(before)) !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${path} changed; retain the draft and reload`);
     const after = source;
     const validated = readConceptCatalog(after, path);
     const sources = catalogSources(repo);

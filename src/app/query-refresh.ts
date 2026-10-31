@@ -23,7 +23,7 @@ export function classifyQueryScan(result: OwnedProcessResult, scannedAt: number,
   if (result.exitCode !== 0 || result.signal !== null || result.error !== undefined || result.cancelled) return failed('QueryRefreshFailed', result.stderr || result.error || 'Scan process exited abnormally');
   if (!hasConfirmedOwnedGroupCleanup(result)) return failed('QueryRefreshCleanupUnconfirmed', 'Scan process group cleanup could not be confirmed');
   if (message.ok) return { kind: 'candidate', message };
-  if (message.code === 'SourceChanged' || message.code === 'DocumentNotFound' || message.code === 'PreimageChanged' && message.details === 'source-observation') {
+  if (message.code === 'SourceChanged' || message.code === 'DocumentNotFound' || message.code === 'FileChangedSinceRead' && message.details === 'source-observation') {
     return { kind: 'drift', scannedAt: message.scannedAt, at: new Date().toISOString(), changedPaths: ['.'] };
   }
   return { kind: 'failure', error: { failedAt: new Date().toISOString(), scannedAt: message.scannedAt, code: message.code, message: message.message.slice(0, 4096) } };

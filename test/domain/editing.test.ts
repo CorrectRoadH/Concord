@@ -87,7 +87,7 @@ test('project documents under docs are readable without becoming category owners
   setMarkdown(repo, extra!.path, '---\ntitle: Changed\n---\n# Changed\n', extra!.digest);
   assert.equal(readFileSync(join(root, 'docs/notes/extra.md'), 'utf8'), '---\ntitle: Changed\n---\n# Changed\n');
   const updated = inspectDocumentFile(repo, extra!.path)!;
-  throwsCode('PreimageChanged', () => setMarkdown(repo, updated.path, '# Stale\n', extra!.digest));
+  throwsCode('FileChangedSinceRead', () => setMarkdown(repo, updated.path, '# Stale\n', extra!.digest));
   setMarkdown(repo, updated.path, '', updated.digest);
   assert.equal(readFileSync(join(root, updated.path), 'utf8'), '');
 }))));
@@ -169,7 +169,7 @@ test('Markdown save publishes the complete owner and catalog bytes using only th
   const after = before.replace('status: open', 'status: closed\nclosure:\n  kind: closed\n  reason: Resolved locally');
   setMarkdown(repo, issue.path, after, issue.digest);
   assert.equal(readFileSync(join(root, issue.path), 'utf8'), after);
-  throwsCode('PreimageChanged', () => setMarkdown(repo, issue.path, before, issue.digest));
+  throwsCode('FileChangedSinceRead', () => setMarkdown(repo, issue.path, before, issue.digest));
   const catalog = inspectDocumentFile(repo, 'docs/concepts.md')!;
   const invalid = '# Editing in progress\n\nThis will be validated by check.\n';
   setMarkdown(repo, catalog.path, invalid, catalog.digest);

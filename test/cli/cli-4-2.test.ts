@@ -49,9 +49,9 @@ test('packed writing checks consumer policy, readable prose and safe input bound
  const obsolete = call(root, ['writing', 'show'], Schema.Struct({ state: Schema.String, digest: Schema.String, source: Schema.String }));
  assert.equal(obsolete.state, 'invalid');
  writeFileSync(join(root, 'clean-policy.json'), JSON.stringify(policy));
- call(root, ['--dry-run', 'writing', 'set', '--body', join(root, 'clean-policy.json'), '--expected-digest', obsolete.digest], DryRunOutput);
+ call(root, ['--dry-run', 'writing', 'set', '--body', join(root, 'clean-policy.json'), '--if-unchanged', obsolete.digest], DryRunOutput);
  assert.equal(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'), obsolete.source);
- call(root, ['writing', 'set', '--body', join(root, 'clean-policy.json'), '--expected-digest', obsolete.digest], Ack);
+ call(root, ['writing', 'set', '--body', join(root, 'clean-policy.json'), '--if-unchanged', obsolete.digest], Ack);
  assert.deepEqual(JSON.parse(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')), policy);
  writeFileSync(join(root, 'svg-action.json'), JSON.stringify({ action: 'writing.set', policy: { ...policy, svgTerms: false }, expectedDigest: obsolete.digest }));
  call(root, ['action', '--input', join(root, 'svg-action.json')], ErrorOutput, '', 1);
@@ -73,10 +73,10 @@ test('packed scoped owner commands use path, Markdown catalog body, null creatio
  const ownerPath = 'docs/feature/sample/concord-writing.json';
  const catalogPath = 'docs/feature/sample/concepts.md';
  assert.equal(call(root, ['writing', 'show', '--path', ownerPath], Schema.Struct({ state: Schema.String })).state, 'missing');
- assert.equal(call(root, ['--dry-run', 'writing', 'set', '--path', ownerPath, '--body', join(root, 'policy.json'), '--expected-digest', 'null'], DryRunOutput).dryRun, true);
+ assert.equal(call(root, ['--dry-run', 'writing', 'set', '--path', ownerPath, '--body', join(root, 'policy.json'), '--if-unchanged', 'null'], DryRunOutput).dryRun, true);
  assert.equal(existsSync(join(root, ownerPath)), false);
- call(root, ['writing', 'set', '--path', ownerPath, '--body', join(root, 'policy.json'), '--expected-digest', 'null'], DigestOutput);
- call(root, ['concepts', 'set', '--path', catalogPath, '--body', join(root, 'catalog.md'), '--expected-digest', 'null'], DigestOutput);
+ call(root, ['writing', 'set', '--path', ownerPath, '--body', join(root, 'policy.json'), '--if-unchanged', 'null'], DigestOutput);
+ call(root, ['concepts', 'set', '--path', catalogPath, '--body', join(root, 'catalog.md'), '--if-unchanged', 'null'], DigestOutput);
  assert.equal(call(root, ['concepts', 'show', '--path', catalogPath], Schema.Struct({ state: Schema.String })).state, 'valid');
  assert(call(root, ['writing', 'index'], Schema.Struct({ scopes: Schema.Array(Schema.Struct({ scope: Schema.String })) })).scopes.some(item => item.scope === 'docs/feature/sample'));
  assert(call(root, ['concepts', 'index'], Schema.Struct({ concepts: Schema.Array(Schema.Struct({ reference: Schema.String })) })).concepts.some(item => item.reference === catalogPath + '#feedback'));

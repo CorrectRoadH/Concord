@@ -68,7 +68,7 @@ test('installed config.set creates optional configuration and rejects retired fi
   action(root, { action: 'config.set', config: { testRoots: [] }, expectedDigest: current.digest });
   const source = readFileSync(join(root, 'concord.config.ts'), 'utf8');
   assert.doesNotMatch(source, /projectId|concord.project|memorySources/u);
-  assert.equal(action(root, { action: 'config.set', config: {}, expectedDigest: current.digest }, 1).error, 'PreimageChanged');
+  assert.equal(action(root, { action: 'config.set', config: {}, expectedDigest: current.digest }, 1).error, 'FileChangedSinceRead');
   const next = run(root, ['config', 'show']);
   assert.equal(action(root, { action: 'config.set', config: { projectId: 'legacy' }, expectedDigest: next.digest }, 1).error, 'InvalidData');
   assert.equal(readFileSync(join(root, 'concord.config.ts'), 'utf8'), source);

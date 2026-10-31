@@ -104,10 +104,10 @@ test('scannedAt merges record, structural attempt, and named error only after th
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('every failure table row retains its meaning, including identity change before errors', () => Effect.runPromise(Effect.sync(() => {
   assert.deepEqual(classifyQueryRefresh('old', 'new', processResult(undefined, { timedOut: true }), 50, 101, 100), { kind: 'identity-changed' });
-  for (const [code, details] of [['SourceChanged', undefined], ['DocumentNotFound', undefined], ['PreimageChanged', 'source-observation']] as const) {
+  for (const [code, details] of [['SourceChanged', undefined], ['DocumentNotFound', undefined], ['FileChangedSinceRead', 'source-observation']] as const) {
     assert.equal(classifyQueryScan(processResult({ format: 'concord.query-scan/v1', ok: false, scannedAt: 100, code, message: 'changed', ...(details ? { details } : {}) }), 50, 101, 100).kind, 'drift');
   }
-  for (const code of ['TraceInvalid', 'RecoveryRequired', 'InvalidConfig', 'UnsafePath', 'PreimageChanged']) {
+  for (const code of ['TraceInvalid', 'RecoveryRequired', 'InvalidConfig', 'UnsafePath', 'FileChangedSinceRead']) {
     const update = classifyQueryScan(processResult({ format: 'concord.query-scan/v1', ok: false, scannedAt: 100, code, message: 'original message' }), 50, 101, 100);
     assert.equal(update.kind, 'failure');
     if (update.kind === 'failure') { assert.equal(update.error.code, code); assert.equal(update.error.message, 'original message'); }

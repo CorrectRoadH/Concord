@@ -27,7 +27,7 @@ test('directory observations detect a size change even when an oversized file wa
   try {
     reader.beginSnapshot(); reader.files('src');
     writeFileSync(join(root, 'src', 'large.ts'), '// @feature docs/feature/sample/README.md\n');
-    assert.throws(() => reader.verifySnapshot(), { code: 'PreimageChanged' });
+    assert.throws(() => reader.verifySnapshot(), { code: 'FileChangedSinceRead' });
   } finally { reader.close(); rmSync(root, { recursive: true, force: true }); }
 })));
 
@@ -43,7 +43,7 @@ test('concurrent optimistic plans reject the losing writer without overwriting t
     first.beginSnapshot(); second.beginSnapshot();
     const before = first.read(path)!; second.read(path);
     setAuthor(first, path, '# First\n', digest(before));
-    assert.throws(() => setAuthor(second, path, '# Second\n', digest(before)), { code: 'PreimageChanged' });
+    assert.throws(() => setAuthor(second, path, '# Second\n', digest(before)), { code: 'FileChangedSinceRead' });
     assert.match(readFileSync(join(root, path), 'utf8'), /First/);
     assert.equal(existsSync(join(root, '.git/concord/journal.json')), false);
   } finally { first.close(); second.close(); rmSync(root, { recursive: true, force: true }); }

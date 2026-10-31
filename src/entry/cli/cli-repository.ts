@@ -51,7 +51,7 @@ function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { js
       const result = yield* Effect.result(withRepo(operation, { readonly: true }));
       if (Result.isSuccess(result)) return result.success;
       const error = result.failure;
-      if (attempt >= 3 || !(error instanceof ConcordError) || !(error.code === 'SourceChanged' || error.code === 'PreimageChanged' && error.details === 'source-observation')) return yield* Effect.fail(error);
+      if (attempt >= 3 || !(error instanceof ConcordError) || !(error.code === 'SourceChanged' || error.code === 'FileChangedSinceRead' && error.details === 'source-observation')) return yield* Effect.fail(error);
       yield* Effect.sleep('50 millis');
     }
   });

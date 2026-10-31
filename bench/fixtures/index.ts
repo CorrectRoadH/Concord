@@ -50,7 +50,7 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
         passiveVoice: { zh: true, en: true, participles: ['measured'] },
       },
     })));
-    yield* cli('writing', 'set', '--body', input, '--expected-digest', digest);
+    yield* cli('writing', 'set', '--body', input, '--if-unchanged', digest);
   }
   yield* git('add', '.');
   yield* git('-c', 'user.name=Concord bench', '-c', 'user.email=bench@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Frozen benchmark fixture');
@@ -78,7 +78,7 @@ const writingSelfConsumer = Effect.fn('bench.writingSelfConsumer')(function*(ent
     controlled: { language: 'auto', sentence: { zh: { procedural: 100000, descriptive: 100000 }, en: { procedural: 100000, descriptive: 100000 } },
       paragraphSentences: 100000, passiveVoice: { en: true, participles: ['benchparticiple'] } },
   })));
-  yield* cli('writing', 'set', '--body', input, '--expected-digest', previous.digest);
+  yield* cli('writing', 'set', '--body', input, '--if-unchanged', previous.digest);
   yield* git('add', 'docs/concord-writing.json');
   yield* git('-c', 'user.name=Concord bench', '-c', 'user.email=bench@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Frozen controlled writing self consumer');
   const commit = (yield* git('rev-parse', 'HEAD')).stdout.trim();

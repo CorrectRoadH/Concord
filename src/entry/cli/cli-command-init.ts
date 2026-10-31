@@ -37,7 +37,7 @@ const init = Command.make('init', {
   yield* sync(() => repo.close());
   const writer = yield* Effect.acquireRelease(openWriteRepository(repo.root, { initialize: true }), (opened) => Effect.sync(() => opened.close()));
   yield* sync(() => writer.snapshot(() => {
-    for (const preimage of preimages) if (writer.read(preimage.path) !== preimage.source) throw new ConcordError('PreimageChanged', `${preimage.path} changed since init preview; review a fresh preview`);
+    for (const preimage of preimages) if (writer.read(preimage.path) !== preimage.source) throw new ConcordError('FileChangedSinceRead', `${preimage.path} changed since init preview; review a fresh preview`);
 
   }));
   return yield* initialize(writer, false, options);

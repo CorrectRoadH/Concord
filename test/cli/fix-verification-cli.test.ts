@@ -80,13 +80,13 @@ test('packed close fixed accepts a parallel commit and records the initially cap
   assert.deepEqual(call(f.root, ['check']).verifications, [{ path: 'docs/issues/sku.md', verified: 'recorded', verification }]);
 });
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
-test('packed close fixed returns PreimageChanged and preserves an Issue edited during verification', t => {
+test('packed close fixed returns FileChangedSinceRead and preserves an Issue edited during verification', t => {
   const f = createFixConsumer({ runner: 'edit-issue' });
   t.after(() => rmSync(f.root, { recursive: true, force: true }));
   f.fix();
   const path = join(f.root, 'docs/issues/sku.md');
   const before = readFileSync(path, 'utf8');
-  assert.equal(call(f.root, ['issue', 'close', 'sku', '--fixed', '--reason', 'Candidate'], 1).error, 'PreimageChanged');
+  assert.equal(call(f.root, ['issue', 'close', 'sku', '--fixed', '--reason', 'Candidate'], 1).error, 'FileChangedSinceRead');
   assert.equal(readFileSync(path, 'utf8'), before + '\nConcurrent Issue note.\n');
 });
 // @feature docs/feature/local-sdlc/cli.md#检查本次变化

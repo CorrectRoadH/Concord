@@ -41,7 +41,7 @@ test('packed Memory index and recall return current owner text and digest; edit 
   saveBody(root, path, '# Updated\n\nAnother term.\n', first);
   assert.equal(recall(root, 'memory', 'another').documents?.[0]?.digest, digestFor(root, path));
   assert.deepEqual(recall(root, 'memory', 'needle').documents, []);
-  assert.equal(saveBody(root, path, 'stale\n', first, 1).error, 'PreimageChanged');
+  assert.equal(saveBody(root, path, 'stale\n', first, 1).error, 'FileChangedSinceRead');
 
 
 })));
@@ -82,7 +82,7 @@ test('packed Issue workflow needs no provider, and deletion preserves linked or 
   assert.equal(recall(root, 'issue', 'symptom').documents?.[0]?.body, '# Local observation\n\nA local symptom.\n');
   saveBody(root, path, '# Local observation\n\nUpdated symptom.\n', first);
   const current = digestFor(root, path);
-  assert.equal(remove(root, 'draft-one', first, 1, false).error, 'PreimageChanged');
+  assert.equal(remove(root, 'draft-one', first, 1, false).error, 'FileChangedSinceRead');
   remove(root, 'draft-one', current, 0, true);
   assert.equal(existsSync(join(root, path)), true);
   remove(root, 'draft-one', current, 0, false);

@@ -59,7 +59,7 @@ test('fresh dry-run and cache-off processes never touch an existing complete cac
     writeFileSync(input, JSON.stringify({ ...config.config, sourceRoots: [...config.config.sourceRoots, 'extra-src'] }));
     const path = join(root, '.git/concord/cache.hawdb');
     const before = cacheDiskSnapshot(path);
-    for (const args of [['check'], ['docs', 'check'], ['writing', 'check'], ['cache', 'status'], ['cache', 'clear'], ['feedback', 'list'], ['config', 'set', '--input', input, '--expected-digest', config.digest]]) {
+    for (const args of [['check'], ['docs', 'check'], ['writing', 'check'], ['cache', 'status'], ['cache', 'clear'], ['feedback', 'list'], ['config', 'set', '--input', input, '--if-unchanged', config.digest]]) {
       const result = cli(root, '--dry-run', ...args);
       assert.equal(result.signal, null, result.stdout + result.stderr);
       assert.ok(result.status === 0 || result.status === 1, result.stdout + result.stderr);

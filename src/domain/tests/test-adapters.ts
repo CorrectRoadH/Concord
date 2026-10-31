@@ -96,7 +96,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
     });
   });
   return value;
-}).pipe(Effect.scoped, Effect.mapError(error => ['PreimageChanged', 'SourceChanged'].includes(error.code) ? new ConcordError('InputChanged', error.message) : error), Effect.catchDefect(cause => Effect.fail(failure(cause))));
+}).pipe(Effect.scoped, Effect.mapError(error => ['FileChangedSinceRead', 'SourceChanged'].includes(error.code) ? new ConcordError('InputChanged', error.message) : error), Effect.catchDefect(cause => Effect.fail(failure(cause))));
 
 const callProcess = Effect.fn('testAdapter.process')(function* (repo: Repository, adapter: TestAdapter, session: Session, argv: readonly string[], options: { cwd?: string; stdin?: string; timeout?: number; envNames?: readonly string[] } = {}) {
   const remaining = session.deadline - (yield* Clock.currentTimeMillis);

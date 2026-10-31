@@ -52,7 +52,7 @@ for (const form of ['directory', 'file']) test(`repository Design ${form} shares
       repo.beginSnapshot();
       const path = 'docs/design/中文决策/GOALS.md', before = repo.read(path)!;
       writeFileSync(join(root, path), `${before}\nConcurrent edit.\n`);
-      assert.throws(() => repo.publish('check-design-preimage', [{ path, before, after: before }]), { code: 'PreimageChanged' });
+      assert.throws(() => repo.publish('check-design-preimage', [{ path, before, after: before }]), { code: 'FileChangedSinceRead' });
     } finally { repo.close(); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

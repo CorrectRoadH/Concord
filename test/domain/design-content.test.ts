@@ -118,7 +118,7 @@ test('Design publication binds all validated bytes even for dry-run', () => runA
       writeFileSync(join(base, 'plans/remote/README.md'), '# Concurrent edit\n');
       return publish(operation, changes, dry);
     };
-    assert.throws(() => decideDesign(repo, 'storage', 'local', [], 'Reason', dryRun), { code: 'PreimageChanged' });
+    assert.throws(() => decideDesign(repo, 'storage', 'local', [], 'Reason', dryRun), { code: 'FileChangedSinceRead' });
     assert.equal(readFileSync(join(base, 'README.md'), 'utf8'), owner);
     assert.equal(readFileSync(join(base, 'plans/remote/README.md'), 'utf8'), '# Concurrent edit\n');
   });

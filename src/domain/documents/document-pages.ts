@@ -131,7 +131,7 @@ export function setPage(repo: Repository, kind: DocumentKind, selector: string, 
   return inRepositorySnapshot(repo, () => {
   const target = pagePath(repo, kind, selector, page, plan); const source = repo.read(target.path);
   if (source === undefined) throw new ConcordError('PageNotFound', `${target.path} does not exist`);
-  if (digest(source) !== expectedDigest) throw new ConcordError('PreimageChanged', `${target.path} changed; use its current digest`);
+  if (digest(source) !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${target.path} changed; use its current digest`);
   if ((page === 'README' || page === 'readme' || (kind === 'research' || kind === 'design') && page === 'README.md') && plan === undefined) return setAuthor(repo, target.path, next, expectedDigest, dryRun);
   return repo.publish('set-page', [{ path: target.path, before: source, after: body(next) }], dryRun);
   });

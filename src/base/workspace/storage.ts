@@ -31,7 +31,7 @@ const MAX_BYTES = 32 * 1024 * 1024;
 const MAX_TRANSACTION_BYTES = 64 * 1024 * 1024;
 type RootAnchor = { readonly path: string; readonly dev: bigint; readonly ino: bigint };
 class ObservationChanged extends ConcordError {
-  constructor(readonly path: string) { super('PreimageChanged', `${path} changed after planning; take a fresh snapshot`, 'source-observation'); }
+  constructor(readonly path: string) { super('FileChangedSinceRead', `${path} changed after planning; take a fresh snapshot`, 'source-observation'); }
 }
 const errno = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code;
 function storageCoordinationFailure(cause: unknown): ConcordError {
@@ -561,7 +561,7 @@ export class LocalRepository implements Repository {
     const pending = ['publication-journal.json', 'multi-file-publication-journal.json'].filter(name => present(join(directory, name)));
     if (pending.length > 0) throw new ConcordError('RecoveryRequired', 'An interrupted Trace publication exists; run concord recover');
     if (!this.recovering && present(join(this.privateDir, 'journal.json'))) throw new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover');
-    if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('PreimageChanged', 'Project configuration changed; open a fresh repository snapshot', 'source-observation');
+    if (!this.recovering && this.configSnapshot !== undefined && this.readCurrent('concord.config.ts') !== (this.configSnapshot.source === '' ? undefined : this.configSnapshot.source)) throw new ConcordError('FileChangedSinceRead', 'Project configuration changed; open a fresh repository snapshot', 'source-observation');
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#忽略路径
@@ -609,7 +609,7 @@ export class LocalRepository implements Repository {
         if (errno(cause, 'ELOOP')) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
         if (cause instanceof ConcordError && cause.code === 'UnsafePath') throw cause;
         const changed = cause instanceof ObservationChanged ? cause.path : path;
-        if (cause instanceof ConcordError && cause.code !== 'PreimageChanged' && cause.code !== 'SourceChanged') throw cause;
+        if (cause instanceof ConcordError && cause.code !== 'FileChangedSinceRead' && cause.code !== 'SourceChanged') throw cause;
         if (!collect) throw new ObservationChanged(changed);
         target.add(changed);
       }
@@ -665,7 +665,7 @@ export class LocalRepository implements Repository {
       this.absolute(c.path);
       if (!this.allowedOwner(c.path, authorizationConfig) && !(operation === 'set-concepts' && managedWritingOwner(c.path)) && !(operation === 'set-writing-policy' && managedWritingOwner(c.path)) && !(operation === 'init' && c.path === 'docs/concepts.md')) throw new ConcordError('InvalidChange', `Not a Concord document owner: ${c.path}`);
       const current = this.read(c.path) ?? null;
-      if (current !== c.before) throw new ConcordError('PreimageChanged', `${c.path} changed; read its current digest and retry`);
+      if (current !== c.before) throw new ConcordError('FileChangedSinceRead', `${c.path} changed; read its current digest and retry`);
       if (c.before === null && c.after === null) throw new ConcordError('InvalidChange', 'An absent preimage cannot guard an absent target');
       return { ...c, beforeDigest: c.before === null ? null : digest(c.before), afterDigest: c.after === null ? null : digest(c.after), mode: current === null ? 0o644 : lstatSync(this.absolute(c.path)).mode & 0o777 };
     });
@@ -694,7 +694,7 @@ export class LocalRepository implements Repository {
     const stat = lstatSync(target);
     if (!stat.isFile()) throw new ConcordError('InvalidSourcePath', `Source must be an existing regular file: ${path}`);
     const current = this.read(path);
-    if (current === undefined || current !== before) throw new ConcordError('PreimageChanged', `${path} changed; read its current digest and retry`);
+    if (current === undefined || current !== before) throw new ConcordError('FileChangedSinceRead', `${path} changed; read its current digest and retry`);
     if (after === before) return { operation: 'set-source', dryRun: dryRun || this.noWrite, changedPaths: [] };
     const change = { path, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: stat.mode & 0o777 };
     const journal: Journal = {
@@ -712,7 +712,7 @@ export class LocalRepository implements Repository {
     const plan = this.validation!.planStepRename(this, request);
     const changes = plan.changes.map(change => {
       this.absolute(change.path);
-      if (change.before === null || change.after === null || this.read(change.path) !== change.before) throw new ConcordError('PreimageChanged', `${change.path} changed before step rename`);
+      if (change.before === null || change.after === null || this.read(change.path) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before step rename`);
       const stat = lstatSync(this.absolute(change.path));
       if (!stat.isFile()) throw new ConcordError('InvalidChange', 'Step rename can only replace existing files');
       return { ...change, beforeDigest: digest(change.before), afterDigest: digest(change.after), mode: stat.mode & 0o777 };
@@ -777,9 +777,9 @@ export class LocalRepository implements Repository {
       for (const change of journal.changes) {
         if (journal.scope.kind === 'source' || journal.scope.kind === 'step-rename') {
           const current = this.currentSnapshot();
-          if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('PreimageChanged', 'Project configuration changed before source replacement');
+          if (current.path !== journal.scope.configPath || current.digest !== journal.scope.configDigest) throw new ConcordError('FileChangedSinceRead', 'Project configuration changed before source replacement');
         }
-        if ((this.read(change.path) ?? null) !== change.before) throw new ConcordError('PreimageChanged', `${change.path} changed before replacement`);
+        if ((this.read(change.path) ?? null) !== change.before) throw new ConcordError('FileChangedSinceRead', `${change.path} changed before replacement`);
         this.apply(change.path, change.after, change.mode);
       }
       if (journal.scope.kind === 'step-rename') this.preflight(journal, true);
@@ -797,7 +797,7 @@ export class LocalRepository implements Repository {
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/use-case/recover-local-state.md#写入保护
   private preflight(journal: Journal, recovering = false): void {
-    const fail = (message: string): never => { throw new ConcordError(recovering ? 'RecoveryConflict' : 'PreimageChanged', message); };
+    const fail = (message: string): never => { throw new ConcordError(recovering ? 'RecoveryConflict' : 'FileChangedSinceRead', message); };
     if (journal.root !== this.root || journal.privateDir !== this.privateDir) fail('Publication belongs to a different worktree');
     if (new Set(journal.changes.map(change => change.path)).size !== journal.changes.length || journal.changes.length === 0) fail('Journal must contain unique changes');
     if (new Set(journal.directories).size !== journal.directories.length) fail('Journal contains duplicate directories');

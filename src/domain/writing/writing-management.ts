@@ -43,7 +43,7 @@ export function setWriting(repo: LocalRepository, policy: WritingPolicy, expecte
   return inRepositorySnapshot(repo, () => {
     const scope = scopeOf(path, 'policy');
     const before = repo.read(path) ?? null;
-    if ((before === null ? null : digest(before)) !== expectedDigest) throw new ConcordError('PreimageChanged', 'Writing policy changed; retain the draft and reload before retrying');
+    if ((before === null ? null : digest(before)) !== expectedDigest) throw new ConcordError('FileChangedSinceRead', 'Writing policy changed; retain the draft and reload before retrying');
     const after = `${JSON.stringify(policy, null, 2)}\n`;
     const validated = readWritingPolicy(after, path);
     const receipt = repo.publish('set-writing-policy', [{ path, before, after }], dryRun);

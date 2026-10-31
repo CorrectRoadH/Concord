@@ -27,14 +27,14 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   for (const sourcePath of sourcePaths) {
     if (!sourcePath.endsWith('.md')) throw new ConcordError('UnsupportedAttachment', `Roadmap adoption only moves Markdown pages: ${sourcePath}`);
     const source = repo.read(sourcePath);
-    if (source === undefined) throw new ConcordError('PreimageChanged', `${sourcePath} disappeared during adoption`);
+    if (source === undefined) throw new ConcordError('FileChangedSinceRead', `${sourcePath} disappeared during adoption`);
     observed.set(sourcePath, source);
     if (sourcePath !== roadmap.path && (/^(?:\uFEFF)?---(?:\r?\n|$)/u.test(source) || documents.some(document => document.path === sourcePath))) throw new ConcordError('NestedOwner', `Roadmap adoption refuses nested owners: ${sourcePath}`);
     const destination = `${featureDirectory}/${sourcePath.slice(roadmapDirectory.length + 1)}`;
     if (repo.read(destination) !== undefined) throw new ConcordError('DocumentExists', destination);
     changes.push({ path: sourcePath, before: source, after: null }, { path: destination, before: null, after: rebaseAdoptedMarkdown(source, sourcePath, destination, roadmapDirectory) });
   }
-  if (observed.get(roadmap.path) === undefined || digest(observed.get(roadmap.path)!) !== roadmap.digest) throw new ConcordError('PreimageChanged', 'Roadmap owner changed during adoption planning');
+  if (observed.get(roadmap.path) === undefined || digest(observed.get(roadmap.path)!) !== roadmap.digest) throw new ConcordError('FileChangedSinceRead', 'Roadmap owner changed during adoption planning');
   const mapReference = (target: string): string => target === roadmapDirectory || target.startsWith(`${roadmapDirectory}/`) ? `${featureDirectory}${target.slice(roadmapDirectory.length)}` : target;
   const byPath = new Map(documents.map(record => [record.path, record]));
   const markdown = new Set([...repo.files('docs'), ...repo.files('memory')].filter(path => path.endsWith('.md') && !observed.has(path)));
@@ -64,8 +64,8 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   }
   // Recheck after the entire plan, including link transforms and promotions.
   const recaptured = repo.files(roadmapDirectory).sort();
-  if (recaptured.length !== sourcePaths.length || recaptured.some((path, index) => path !== sourcePaths[index])) throw new ConcordError('PreimageChanged', 'Roadmap source collection changed during adoption planning');
-  for (const sourcePath of sourcePaths) if (repo.read(sourcePath) !== observed.get(sourcePath)) throw new ConcordError('PreimageChanged', `${sourcePath} changed during adoption planning`);
+  if (recaptured.length !== sourcePaths.length || recaptured.some((path, index) => path !== sourcePaths[index])) throw new ConcordError('FileChangedSinceRead', 'Roadmap source collection changed during adoption planning');
+  for (const sourcePath of sourcePaths) if (repo.read(sourcePath) !== observed.get(sourcePath)) throw new ConcordError('FileChangedSinceRead', `${sourcePath} changed during adoption planning`);
   return repo.publish('adopt-roadmap', changes, dryRun);
   });
 }

@@ -207,7 +207,7 @@ test('dry-run and failed or stale fetches write neither documents nor cache', as
       setConfig(repo, { ...current.config, sourceRoots: ['src'] }, current.digest);
     });
     release();
-    await assert.rejects(running, error => errorCode(error, 'PreimageChanged'));
+    await assert.rejects(running, error => errorCode(error, 'FileChangedSinceRead'));
     assert.equal(existsSync(join(root, 'docs/issues/feedback-github-9001.md')), false);
     assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
 

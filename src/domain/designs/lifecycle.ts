@@ -55,7 +55,7 @@ export function checkDesign(repo: Repository, selector: string) {
   if (record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', record.path);
   const snapshot = designSnapshot(repo, record);
   const result = validateDesignContent(posix.dirname(record.path), record.metadata.alternatives, snapshot, record.metadata.decision?.selected);
-  for (const [path, source] of snapshot) if (repo.read(path) !== source) throw new ConcordError('PreimageChanged', `${path} changed while checking Design`);
+  for (const [path, source] of snapshot) if (repo.read(path) !== source) throw new ConcordError('FileChangedSinceRead', `${path} changed while checking Design`);
   return { operation: 'design-check', path: record.path, ok: result.findings.length === 0, ...result };
   });
 }

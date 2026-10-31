@@ -89,7 +89,7 @@ test('source discovery excludes environment entries before path checks and keeps
   assert.throws(() => repo.snapshot(() => {
     repo.files('src', 'source');
     writeFileSync(join(root, 'src/new.ts'), 'new source');
-  }), { code: 'PreimageChanged' });
+  }), { code: 'FileChangedSinceRead' });
 
   mkdirSync(join(root, 'mixed'));
   writeFileSync(join(root, 'mixed/.env'), 'before');
@@ -97,7 +97,7 @@ test('source discovery excludes environment entries before path checks and keeps
     assert.throws(() => repo.snapshot(() => {
       for (const scope of scopes) repo.files('mixed', scope);
       fs.appendFileSync(join(root, 'mixed/.env'), 'after');
-    }), { code: 'PreimageChanged' });
+    }), { code: 'FileChangedSinceRead' });
   }
 })));
 
@@ -127,7 +127,7 @@ test('configured discovery exclusions preserve explicit reads, root overrides an
   assert.throws(() => repo.snapshot(() => {
     repo.files('src', 'source');
     writeProjectConfig(root, config);
-  }), { code: 'PreimageChanged' });
+  }), { code: 'FileChangedSinceRead' });
   const unfiltered = reader(t, root);
   assert.throws(() => unfiltered.files('src', 'source'), { code: 'UnsafePath' });
 })));
@@ -207,7 +207,7 @@ test('C3/C3b: Darwin case rename rejects current reads and publication and repor
   const lower = join(root, 'docs/feature.md');
   writeFileSync(upper, 'original');
   const repo = reader(t, root);
-  assert.throws(() => repo.snapshot(() => { repo.read('docs/Feature.md'); renameSync(upper, lower); assert.equal(repo.read('docs/Feature.md'), 'original'); }), { code: 'PreimageChanged', details: 'source-observation' });
+  assert.throws(() => repo.snapshot(() => { repo.read('docs/Feature.md'); renameSync(upper, lower); assert.equal(repo.read('docs/Feature.md'), 'original'); }), { code: 'FileChangedSinceRead', details: 'source-observation' });
   renameSync(lower, upper);
   const projection = repo.observeProjection(() => { repo.read('docs/Feature.md'); renameSync(upper, lower); return 'value'; });
   assert.deepEqual(projection.drift.files, ['docs/Feature.md']);
@@ -221,7 +221,7 @@ test('C3/C3b: Darwin case rename rejects current reads and publication and repor
     assert.throws(() => writer.snapshot(() => {
       writer.read('docs/Feature.md'); renameSync(upper, lower);
       writer.publish('edit', [{ path: 'docs/other.md', before: null, after: 'new' }]);
-    }), { code: 'PreimageChanged', details: 'source-observation' });
+    }), { code: 'FileChangedSinceRead', details: 'source-observation' });
     assert.equal(existsSync(join(root, 'docs/other.md')), false);
     assert.equal(existsSync(join(writer.privateDir, 'journal.json')), false);
   } finally { writer.close(); }
@@ -331,7 +331,7 @@ test('C8/C9: unscanned sibling additions are harmless and scanned membership add
   repo.snapshot(() => { repo.read('src/a.ts'); writeFileSync(join(root, 'src/unrelated.ts'), 'x'); });
   const projection = repo.observeProjection(() => { repo.read('src/a.ts'); writeFileSync(join(root, 'src/other.ts'), 'x'); return 'value'; });
   assert.deepEqual(projection.drift.files, []); assert.deepEqual(projection.drift.directories, []);
-  assert.throws(() => repo.snapshot(() => { repo.files('src'); writeFileSync(join(root, 'src/added.ts'), 'x'); }), { code: 'PreimageChanged', details: 'source-observation' });
+  assert.throws(() => repo.snapshot(() => { repo.files('src'); writeFileSync(join(root, 'src/added.ts'), 'x'); }), { code: 'FileChangedSinceRead', details: 'source-observation' });
 })));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md

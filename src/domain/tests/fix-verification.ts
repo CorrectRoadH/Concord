@@ -152,7 +152,7 @@ export const replayFix = (repo: LocalRepository, selector: string) => withRunner
   const red = yield* inWorktree(repo, prepared.recorded.defect, cleanupUnknown, (root, preserve) => run(root, true, preserve));
   const green = yield* inWorktree(repo, prepared.recorded.fix, cleanupUnknown, (root, preserve) => run(root, false, preserve));
   const current = yield* (yield* Sources).readBytes(repo.root, prepared.issue.path);
-  if (current === undefined || digest(current) !== prepared.issueDigest) return yield* Effect.fail(new ConcordError('PreimageChanged', 'Issue changed during verification'));
+  if (current === undefined || digest(current) !== prepared.issueDigest) return yield* Effect.fail(new ConcordError('FileChangedSinceRead', 'Issue changed during verification'));
   yield* sync(release);
   return { operation: 'test-verify', issue: prepared.issue.path, verification: prepared.recorded, verified: 'replayed' as const, red, green };
 })).pipe(Effect.mapError(verificationFailure));
@@ -189,7 +189,7 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
     const publisher = new LocalRepository(repo.root, { persistentCache: 'off' }, publication.validation);
     try { return publisher.snapshot(() => {
       const issueBytes = snapshotBytes(publisher, prepared.issue.path);
-      if (issueBytes === undefined || digest(issueBytes) !== prepared.issueDigest) throw new ConcordError('PreimageChanged', 'Issue changed during verification');
+      if (issueBytes === undefined || digest(issueBytes) !== prepared.issueDigest) throw new ConcordError('FileChangedSinceRead', 'Issue changed during verification');
       const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
       release();
       const receipt = closeIssue(publisher, prepared.issue.path, { kind: 'fixed', reason, verification });

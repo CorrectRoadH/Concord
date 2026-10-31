@@ -124,7 +124,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
       }, cause => {
         if (!tasks.has(task) || ended) return;
         const error = failure(cause); log(error);
-        if (id !== undefined) reject(id, ['SourceChanged', 'PreimageChanged', 'ContentModified'].includes(error.code) ? -32801 : -32603, error.code, error.message);
+        if (id !== undefined) reject(id, ['SourceChanged', 'FileChangedSinceRead', 'ContentModified'].includes(error.code) ? -32801 : -32603, error.code, error.message);
         else for (const document of overlays.values()) if (document.valid) send({ jsonrpc: '2.0', method: 'textDocument/publishDiagnostics', params: { uri: document.uri, version: document.version, diagnostics: [{ range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } }, severity: 2, source: 'concord', code: 'EditorInputsIncomplete', message: `${error.code}: ${error.message}. No complete-project conclusion is available.` }] } });
       }).finally(() => { tasks.delete(task); running.delete(task); });
     };

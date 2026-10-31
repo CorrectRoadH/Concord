@@ -68,14 +68,14 @@ test('runner configuration changed during isolated verification is preserved and
 });
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
-test('an Issue edited during verification is preserved and closing returns PreimageChanged', async () => {
+test('an Issue edited during verification is preserved and closing returns FileChangedSinceRead', async () => {
   const f = createFixConsumer({ runner: 'edit-issue' });
   try {
     f.fix();
     const path = join(f.root, 'docs/issues/sku.md');
     const before = readFileSync(path, 'utf8');
     await assert.rejects(verify(f.root), cause => {
-      assert.equal((cause as { code: string }).code, 'PreimageChanged');
+      assert.equal((cause as { code: string }).code, 'FileChangedSinceRead');
       return true;
     });
     assert.equal(readFileSync(path, 'utf8'), before + '\nConcurrent Issue note.\n');

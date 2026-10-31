@@ -355,14 +355,14 @@ test('wait for editor', async () => {
       editor.publish('revert-edit', [{ path, before: `${original}\nTransient edit\n`, after: original }]);
     } finally { editor.close(); }
     writeFileSync(join(root, '.git/concord/test-continue'), 'continue');
-    await assert.rejects(result, { code: 'PreimageChanged' });
+    await assert.rejects(result, { code: 'FileChangedSinceRead' });
     assert.equal(existsSync(join(root, '.git/concord/runner.lease')), false);
     // A changed configuration can reject receipt validation, but cannot keep a
     // successfully cleaned-up process group locked forever.
     rmSync(join(root, '.git/concord/test-ready'));
     rmSync(join(root, '.git/concord/test-continue'));
     const changedConfigRun = runApplication(runCase(repo, trace.annotations.cases[0]!, trace.documents).pipe(Effect.provide(OwnedProcessLive)));
-    const rejected = assert.rejects(changedConfigRun, { code: 'PreimageChanged' });
+    const rejected = assert.rejects(changedConfigRun, { code: 'FileChangedSinceRead' });
     const configDeadline = Date.now() + 15000;
     try {
       while (!existsSync(join(root, '.git/concord/test-ready'))) {

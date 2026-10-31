@@ -163,6 +163,6 @@ export const checkSince = (root: string | undefined, baseInput: string, cache: '
     }
   }
   const stable = yield* Effect.result(sync(() => worktreeIdentity(repo)));
-  if (stable._tag === 'Failure' || stable.success !== identity) { complete = false; findings.push({ category: 'relation', path: '.', code: 'PreimageChanged', message: 'Target worktree changed during endpoint checks' }); }
+  if (stable._tag === 'Failure' || stable.success !== identity) { complete = false; findings.push({ category: 'relation', path: '.', code: 'FileChangedSinceRead', message: 'Target worktree changed during endpoint checks' }); }
   return { ...current, since, complete, ok: complete && findings.length === 0, findings, verifications: current.verifications.map(item => ({ ...item, verified: replays.has(item.path) ? 'replayed' as const : 'recorded' as const })) };
 }));

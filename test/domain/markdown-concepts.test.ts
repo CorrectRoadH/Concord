@@ -111,9 +111,9 @@ test('Markdown publication preserves exact bytes and CAS, guards imports, and is
     const saved = withRepo(root, repo => setConcepts(repo, source, null, false, a));
     assert.equal(saved.source, source);
     assert.equal(readFileSync(join(root, a), 'utf8'), source);
-    assert.throws(() => withRepo(root, repo => setConcepts(repo, term('job', 'Work'), null, false, a)), { code: 'PreimageChanged' });
+    assert.throws(() => withRepo(root, repo => setConcepts(repo, term('job', 'Work'), null, false, a)), { code: 'FileChangedSinceRead' });
     const next = withRepo(root, repo => setConcepts(repo, source + '\r\n', saved.digest, false, a));
-    assert.throws(() => withRepo(root, repo => setConcepts(repo, source, saved.digest, false, a)), { code: 'PreimageChanged' });
+    assert.throws(() => withRepo(root, repo => setConcepts(repo, source, saved.digest, false, a)), { code: 'FileChangedSinceRead' });
     withRepo(root, repo => setConcepts(repo, term('other-job', 'Job'), null, false, b));
     assert.equal(withRepo(root, indexConcepts).diagnostics.length, 0);
     const before = withRepo(root, repo => showConcepts(repo, b));
@@ -168,7 +168,7 @@ test('generic saves permit direct catalog editing and JSON files stay outside te
     write(root, path, term('local', 'Local'));
     withRepo(root, repo => setMarkdown(repo, path, term('local', 'Changed'), digest(term('local', 'Local'))));
     assert.equal(readFileSync(join(root, path), 'utf8'), term('local', 'Changed'));
-    assert.throws(() => withRepo(root, repo => setMarkdown(repo, path, '# Stale\n', digest(term('local', 'Local')))), { code: 'PreimageChanged' });
+    assert.throws(() => withRepo(root, repo => setMarkdown(repo, path, '# Stale\n', digest(term('local', 'Local')))), { code: 'FileChangedSinceRead' });
     const template = 'docs/_template/concepts.md';
     write(root, template, '# Template\n\n## Outline\n');
     withRepo(root, repo => setMarkdown(repo, template, '# Updated reference\n', digest('# Template\n\n## Outline\n')));

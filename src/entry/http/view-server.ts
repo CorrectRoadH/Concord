@@ -121,7 +121,7 @@ function statusFor(error: ConcordError, workspace: boolean): number {
   if (workspace && error.code === 'RecoveryRequired') return 503;
   if (error.code === 'ForbiddenAuthority') return 403;
   if (error.code === 'BodyTooLarge') return 413;
-  if (['RepositoryBusy', 'RecoveryRequired', 'RecoveryConflict', 'PreimageChanged', 'ProjectExists', 'DocumentExists', 'DecisionExists', 'DecisionSourceUncommitted', 'DuplicatePromotion', 'DuplicateLink', 'InvalidMemoryState', 'InvalidRoadmapState', 'InvalidIssueState', 'OpenProblem', 'JobBusy', 'CleanupFailed', 'ServerStopping', 'CodeSourceChanged'].includes(error.code)) return 409;
+  if (['RepositoryBusy', 'RecoveryRequired', 'RecoveryConflict', 'FileChangedSinceRead', 'ProjectExists', 'DocumentExists', 'DecisionExists', 'DecisionSourceUncommitted', 'DuplicatePromotion', 'DuplicateLink', 'InvalidMemoryState', 'InvalidRoadmapState', 'InvalidIssueState', 'OpenProblem', 'JobBusy', 'CleanupFailed', 'ServerStopping', 'CodeSourceChanged'].includes(error.code)) return 409;
   if (error.code === 'FileNotFound' || error.code === 'JobNotFound' || error.code === 'GitChangeNotFound' || error.code === 'ApiNotFound') return 404;
   return 400;
 }

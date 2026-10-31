@@ -33,7 +33,7 @@ test('publication rejects changed read dependencies, missing reads and directory
     try {
       repo.snapshot(() => kind === 'directory' ? repo.files('memory') : repo.read(`memory/${kind}-dependency.md`));
       writeFileSync(dependency, 'changed');
-      assert.throws(() => repo.publish('stale', [{ path: `memory/${kind}-target.md`, before: null, after: 'must not appear' }]), { code: 'PreimageChanged' });
+      assert.throws(() => repo.publish('stale', [{ path: `memory/${kind}-target.md`, before: null, after: 'must not appear' }]), { code: 'FileChangedSinceRead' });
       assert.equal(existsSync(join(root, `memory/${kind}-target.md`)), false);
       assert.equal(existsSync(join(root, '.git/concord/journal.json')), false);
     } finally { repo.close(); }

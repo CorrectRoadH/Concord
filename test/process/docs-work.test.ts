@@ -111,13 +111,13 @@ test('config set/show round-trip docsWork and reject malformed commands without 
     const source = readFileSync(join(root, 'concord.config.ts'), 'utf8');
     for (const docsWork of [{ checks: { invalid: { argv: [] } } }, { finalizer: { argv: [process.execPath], timeoutMs: 0 } }, { unsupported: true }]) {
       writeFileSync(input, JSON.stringify({ ...current.config, docsWork }));
-      const rejected = spawnSync(process.execPath, [cli, '--root', root, '--json', 'config', 'set', '--input', input, '--expected-digest', current.digest], { cwd: root, encoding: 'utf8', timeout: 30000 });
+      const rejected = spawnSync(process.execPath, [cli, '--root', root, '--json', 'config', 'set', '--input', input, '--if-unchanged', current.digest], { cwd: root, encoding: 'utf8', timeout: 30000 });
       assert.equal(rejected.status, 1, rejected.stdout + rejected.stderr); assert.equal((JSON.parse(rejected.stderr) as Output).error, 'InvalidData');
       assert.equal(readFileSync(join(root, 'concord.config.ts'), 'utf8'), source);
     }
     const configured = { ...custom, sharedPaths: ['docs/README.md'], finalizer: { ...custom.finalizer, timeoutMs: 2000 } };
     writeFileSync(input, JSON.stringify({ ...current.config, docsWork: configured }));
-    const saved = spawnSync(process.execPath, [cli, '--root', root, '--json', 'config', 'set', '--input', input, '--expected-digest', current.digest], { cwd: root, encoding: 'utf8', timeout: 30000 });
+    const saved = spawnSync(process.execPath, [cli, '--root', root, '--json', 'config', 'set', '--input', input, '--if-unchanged', current.digest], { cwd: root, encoding: 'utf8', timeout: 30000 });
     assert.equal(saved.status, 0, saved.stderr); assert.deepEqual(show().config.docsWork, configured);
   } finally { rmSync(input, { force: true }); rmSync(root, { recursive: true, force: true }); }
 })));

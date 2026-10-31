@@ -95,7 +95,7 @@ export function removeIssue(repo: Repository, selector: string, expectedDigest: 
     const trace = buildTrace(repo, 'off', { includeCode: false });
     requireValidTrace(trace);
     const record = findDocument(trace.documents, selector, 'issue');
-    if (record.digest !== expectedDigest) throw new ConcordError('PreimageChanged', `${record.path} changed; use its current digest`);
+    if (record.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; use its current digest`);
     if (!isUnlinkedDraft(record)) throw new ConcordError('IssueNotRemovable', `${record.path} has a source, relationship, or lifecycle history`);
     for (const edge of trace.edges) {
       if (edge.from === record.path) continue;
@@ -103,7 +103,7 @@ export function removeIssue(repo: Repository, selector: string, expectedDigest: 
       if (target === record.path || target === record.metadata.id) throw new ConcordError('IssueNotRemovable', `${record.path} has an incoming Trace relationship`);
     }
     const before = repo.read(record.path);
-    if (before === undefined || digest(before) !== record.digest) throw new ConcordError('PreimageChanged', `${record.path} changed; reload and retry`);
+    if (before === undefined || digest(before) !== record.digest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; reload and retry`);
     return repo.publish('remove-issue', [{ path: record.path, before, after: null }], dryRun);
   });
 }

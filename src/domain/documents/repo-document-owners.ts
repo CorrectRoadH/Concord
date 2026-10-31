@@ -34,5 +34,5 @@ export function leafOwnerSelection(repo: Repository, kind: LeafOwnerKind, select
 
 export function assertSameLeafSelection(repo: Repository, kind: LeafOwnerKind, selector: string, frozen: ReturnType<typeof leafOwnerSelection>): void {
   const current = leafOwnerSelection(repo, kind, selector);
-  if (current.path !== frozen.path || current.record?.metadata.id !== frozen.record?.metadata.id || current.record?.digest !== frozen.record?.digest) throw new ConcordError('PreimageChanged', `${selector} changed identity, path, or content after selection`);
+  if (current.path !== frozen.path || current.record?.metadata.id !== frozen.record?.metadata.id || current.record?.digest !== frozen.record?.digest) throw new ConcordError('FileChangedSinceRead', `${selector} changed identity, path, or content after selection`);
 }

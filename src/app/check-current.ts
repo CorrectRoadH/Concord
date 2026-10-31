@@ -30,7 +30,7 @@ export const checkCurrentProject = Effect.fn('checkCurrentProject')(function*(ro
     }).pipe(Effect.scoped));
     if (Result.isSuccess(result)) return result.success;
     const error = result.failure;
-    if (error.code !== 'SourceChanged' && !(error.code === 'PreimageChanged' && error.details === 'source-observation')) return yield* Effect.fail(error);
+    if (error.code !== 'SourceChanged' && !(error.code === 'FileChangedSinceRead' && error.details === 'source-observation')) return yield* Effect.fail(error);
     if (attempt === 3) return yield* Effect.fail(new ConcordError('SourceChanged', 'Check could not obtain stable current inputs after 3 attempts; editing is still in progress. Retry when the files settle.', { attempts: 3, complete: false }));
     yield* Effect.sleep('50 millis');
   }

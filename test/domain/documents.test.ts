@@ -76,7 +76,7 @@ test('creates strict owners, resolves feature supporting pages, and only replace
   const revised = findDocument(documents, 'login', 'feature');
   assert.match(revised.body, /Revised behavior/u);
   assert.deepEqual(revised.metadata, feature.metadata);
-  throwsCode('PreimageChanged', () => setAuthor(repo, revised.path, '# Wrong preimage\n', feature.digest));
+  throwsCode('FileChangedSinceRead', () => setAuthor(repo, revised.path, '# Wrong preimage\n', feature.digest));
   throwsCode('InvalidAuthorBody', () => setAuthor(repo, revised.path, '---\ntitle: override\n---\n', revised.digest));
   assert.deepEqual(checkDocuments(repo, documents), []);
 }))));
@@ -128,7 +128,7 @@ test('creates template packages and protects supporting page preimages', () => E
   const page = showPage(repo, 'engineering', 'ci', 'cli');
   assert.equal(page.path, 'docs/engineering/ci/cli.md');
   setPage(repo, 'engineering', 'ci', 'cli', '# CI command\n', page.digest);
-  throwsCode('PreimageChanged', () => setPage(repo, 'engineering', 'ci', 'cli', '# stale\n', page.digest));
+  throwsCode('FileChangedSinceRead', () => setPage(repo, 'engineering', 'ci', 'cli', '# stale\n', page.digest));
   throwsCode('InvalidPlan', () => addPage(repo, 'engineering', 'ci', 'library', false, 'sqlite'));
   const owner = showPage(repo, 'engineering', 'ci', 'readme');
   assert.match(owner.body, /## Goal/u);
@@ -193,7 +193,7 @@ test('adoption detects a source-set change before publishing', () => Effect.runP
       return paths;
     };
   }});
-  throwsCode('PreimageChanged', () => adoptRoadmap(unstable, 'drift', 'drift-feature'));
+  throwsCode('FileChangedSinceRead', () => adoptRoadmap(unstable, 'drift', 'drift-feature'));
   assert.equal(repo.read('docs/feature/drift-feature/README.md'), undefined);
 }))));
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
@@ -210,7 +210,7 @@ test('adoption detects source bytes and destination conflicts before publishing'
     };
     return Reflect.get(target, key, receiver);
   }});
-  throwsCode('PreimageChanged', () => adoptRoadmap(unstable, 'bytes', 'bytes-feature'));
+  throwsCode('FileChangedSinceRead', () => adoptRoadmap(unstable, 'bytes', 'bytes-feature'));
   assert.equal(repo.read('docs/feature/bytes-feature/README.md'), undefined);
   createDocument(repo, 'roadmap', { id: 'conflict', title: 'Conflict', body: '# Conflict\n' });
   write(root, 'docs/roadmap/conflict/guide.md', '# Guide\n');
@@ -348,7 +348,7 @@ test('Unicode document names retain identity through pages, references, adoption
   assert.equal(findDocument(documents, '扩展NPC动作').path, 'docs/feature/角色NPC/use-case/扩展NPC动作.md');
   assert.equal(resolveReference(repo, documents, 'docs/feature/角色NPC/认知与执行.md#动作').metadata.id, '角色NPC');
   throwsCode('DocumentExists', () => createDocument(repo, 'feature', { id: '角色NPC', title: '重复' }));
-  throwsCode('PreimageChanged', () => setPage(repo, 'feature', '角色NPC', '认知与执行', '# stale\n', topic.digest));
+  throwsCode('FileChangedSinceRead', () => setPage(repo, 'feature', '角色NPC', '认知与执行', '# stale\n', topic.digest));
   for (const id of ['δοκιμή', 'नमस्ते', 'cafe\u0301', '日本語-１２３']) {
     createDocument(repo, 'engineering', { id, title: id });
     assert.equal(findDocument(loadDocuments(repo), id).metadata.id, id);

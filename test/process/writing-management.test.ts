@@ -39,7 +39,7 @@ test('writing show preserves invalid and v1 bytes for explicit CAS repair', () =
     const old = withRepo(root, showWriting);
     assert.equal(old.state, 'invalid');
     assert.throws(() => withRepo(root, checkWriting), { code: 'InvalidWritingPolicy' });
-    assert.throws(() => withRepo(root, repo => setWriting(repo, policy, null)), { code: 'PreimageChanged' });
+    assert.throws(() => withRepo(root, repo => setWriting(repo, policy, null)), { code: 'FileChangedSinceRead' });
     const saved = withRepo(root, repo => setWriting(repo, policy, old.digest));
     assert.equal(saved.digest, digest(saved.source));
     assert.equal(withRepo(root, showWriting).state, 'valid');
@@ -98,7 +98,7 @@ test('public CLI writing action validates strict v3 and creation CAS', () => Eff
     assert.equal(JSON.parse(readFileSync(join(root, policyPath), 'utf8')).format, 'concord.writing/v3');
     const conflict = spawnSync(process.execPath, [cli, '--root', root, '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 15_000 });
     assert.notEqual(conflict.status, 0);
-    assert.match(`${conflict.stdout}${conflict.stderr}`, /PreimageChanged/);
+    assert.match(`${conflict.stdout}${conflict.stderr}`, /FileChangedSinceRead/);
     assert.equal(existsSync(join(root, 'docs/concepts.md')), true);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
@@ -118,7 +118,7 @@ test('removed SVG fields reject every value and explicit CAS cleanup preserves t
         assert.equal(shown.state, 'invalid');
         assert.equal(shown.source, before);
         assert.equal(shown.digest, digest(before));
-        assert.throws(() => withRepo(root, repo => setWriting(repo, clean, null, false, path)), { code: 'PreimageChanged' });
+        assert.throws(() => withRepo(root, repo => setWriting(repo, clean, null, false, path)), { code: 'FileChangedSinceRead' });
         withRepo(root, repo => setWriting(repo, clean, shown.digest, true, path));
         assert.equal(readFileSync(join(root, path), 'utf8'), before);
         withRepo(root, repo => setWriting(repo, clean, shown.digest, false, path));
@@ -143,7 +143,7 @@ test('C23: policy replacement refuses edited preimages and preserves invalid rec
       }
     }
     const repo = new ConcurrentRepository(root);
-    try { assert.throws(() => setWriting(repo, policy, digest(old)), { code: 'PreimageChanged' }); }
+    try { assert.throws(() => setWriting(repo, policy, digest(old)), { code: 'FileChangedSinceRead' }); }
     finally { repo.close(); }
     assert.equal(readFileSync(join(root, policyPath), 'utf8'), `${old} `);
     write(root, policyPath, old);

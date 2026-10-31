@@ -251,7 +251,7 @@ test('supporting-page saves avoid inventory scans and preserve conflict checks',
     setMarkdown(repo, path, '# Saved\n', page.digest);
     assert.equal(readFileSync(join(root, path), 'utf8'), '# Saved\n');
     assert.equal(walks, 0, 'saving one supporting page must not enumerate unrelated documents');
-    assert.throws(() => setMarkdown(repo, path, '# Stale\n', page.digest), { code: 'PreimageChanged' });
+    assert.throws(() => setMarkdown(repo, path, '# Stale\n', page.digest), { code: 'FileChangedSinceRead' });
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
 })));
 

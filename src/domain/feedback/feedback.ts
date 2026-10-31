@@ -171,7 +171,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
 
   const receipt = yield* withRepository(root, (repo) => attempt('feedback.publish', () => {
     const current = configSnapshot(repo, connectionId);
-    if (current.digest !== observed.digest) throw new ConcordError('PreimageChanged', `${repo.configSnapshot.path} changed while remote feedback was fetched; retry with the current configuration`);
+    if (current.digest !== observed.digest) throw new ConcordError('FileChangedSinceRead', `${repo.configSnapshot.path} changed while remote feedback was fetched; retry with the current configuration`);
     assertReturnedConnection(current.connection, bound);
     const documents = loadDocuments(repo);
     const existingSources = new Map<string, string>();

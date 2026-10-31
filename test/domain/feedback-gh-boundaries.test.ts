@@ -160,7 +160,7 @@ async function child(scenario: Scenario): Promise<void> {
           setConfig(repo, { ...current.config, sourceRoots: ['src'] }, current.digest);
         });
       } finally { writeFileSync(releasePath, 'release'); }
-      await assert.rejects(running, cause => expectCode(cause, 'PreimageChanged'));
+      await assert.rejects(running, cause => expectCode(cause, 'FileChangedSinceRead'));
       assert.notEqual(readFileSync(configPath, 'utf8'), originalConfig);
       assert.equal(existsSync(issuePath), false);
       assert.equal(withRepo(repo => repo.config.feedbackConnections?.[0]?.provider === 'github' ? repo.config.feedbackConnections[0].repositoryId : undefined), undefined);

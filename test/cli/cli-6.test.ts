@@ -82,7 +82,7 @@ test('installed onboarding creates editable packages and connects supporting-pag
  call(root, ['new', 'engineering', 'ci', '--title', 'Continuous integration'], Ack);
  const page = readPage(root, 'docs/feature/accounts/cli.md');
  savePage(root, 'docs/feature/accounts/cli.md', '# Accounts CLI\n\n## Sign in\n\nReject expired tokens.\n', page.digest);
- assert.equal(savePage(root, 'docs/feature/accounts/cli.md', '# Stale\n', page.digest, 1).error, 'PreimageChanged');
+ assert.equal(savePage(root, 'docs/feature/accounts/cli.md', '# Stale\n', page.digest, 1).error, 'FileChangedSinceRead');
  const ownerBefore = call(root, ['show', 'accounts'], OwnerOutput).document;
  const readme = readPage(root, 'docs/feature/accounts/README.md');
  assert.ok(!readme.body.startsWith('---'));

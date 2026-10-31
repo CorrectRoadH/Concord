@@ -21,13 +21,13 @@ test('packed concepts actions preserve Markdown and allow generic whole-file sav
  const path = 'docs/feature/catalog/concepts.md';
  const source = '# Terms\r\n\r\n## Memory {#memory}\r\n\r\nA durable finding.\r\n\r\n<!-- Author spacing -->\r\n';
  const receiptSchema = Schema.Struct({ source: Schema.String, digest: Schema.String });
- const created = call(root, ['concepts', 'set', '--path', path, '--body', '-', '--expected-digest', 'null'], receiptSchema, source);
+ const created = call(root, ['concepts', 'set', '--path', path, '--body', '-', '--if-unchanged', 'null'], receiptSchema, source);
  assert.equal(created.source, source);
  assert.equal(readFileSync(join(root, path), 'utf8'), source);
  const updated = source + '\r\n';
  const saved = call(root, ['action', '--input', '-'], receiptSchema, JSON.stringify({ action: 'concepts.set', path, source: updated, expectedDigest: created.digest }));
  assert.equal(saved.source, updated);
- assert.equal(call(root, ['concepts', 'set', '--path', path, '--body', '-', '--expected-digest', created.digest], ErrorOutput, source, 1).error, 'PreimageChanged');
+ assert.equal(call(root, ['concepts', 'set', '--path', path, '--body', '-', '--if-unchanged', created.digest], ErrorOutput, source, 1).error, 'FileChangedSinceRead');
  call(root, ['action', '--input', '-'], Ack, JSON.stringify({ action: 'document.set', path, body: source, expectedDigest: saved.digest }));
  assert.equal(readFileSync(join(root, path), 'utf8'), source);
  write(root, 'docs/ignored/concepts.json', 'not parsed or reported');
