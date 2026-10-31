@@ -106,3 +106,19 @@ test('an observed ABA drift has no result identity, preserves building, and retr
   assert.equal((yield* SubscriptionRef.get(service.state.value)).sourceDigest, record.sourceDigest);
   yield* service.stop;
 })).pipe(Effect.provide(stateLayer))));
+
+// @feature docs/feature/local-data-engine/README.md
+test('a changed configuration identity hides the previous accepted workspace before its next refresh', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  let identity = 'first';
+  const service = yield* makeWorkspaceService(ports({
+    context: Effect.sync(() => ({ root: '/fixture', privateDir: '/fixture/private', identity })),
+    compute: () => Effect.never,
+  }));
+  yield* TestClock.adjust(0);
+  assert.equal((yield* service.current).sourceDigest, record.sourceDigest);
+  identity = 'second';
+  const changed = yield* service.current;
+  assert.equal(changed.sourceDigest, null);
+  assert.equal(changed.workspace, undefined);
+  yield* service.stop;
+})).pipe(Effect.provide(stateLayer))));

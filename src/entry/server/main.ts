@@ -321,7 +321,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     yield* Effect.addFinalizer(() => Effect.tryPromise(() => jobs.close()).pipe(Effect.orDie));
     const run = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(operation, { signal });
     const runAdmitted = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(admission.withSlot(operation).pipe(Effect.mapError(workspaceServerFailure)), { signal });
-    const readProjection = service.state.touch.pipe(Effect.andThen(SubscriptionRef.get(service.state.value)), Effect.flatMap(value => {
+    const readProjection = service.state.touch.pipe(Effect.andThen(service.current), Effect.flatMap(value => {
       if (value.workspace) return Effect.succeed(value.workspace);
       if (value.error?.code === 'RecoveryRequired') return Effect.fail(new ConcordError('RecoveryRequired', value.error.message));
       if (value.state === 'degraded' && value.error) return Effect.fail(new ConcordError('WorkspaceProjectionUnavailable', value.error.message, { reason: value.error.code }));

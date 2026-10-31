@@ -38,6 +38,17 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   const operationsDrained = Effect.suspend(() => Deferred.await(operationIdle));
   let stopping = false, connections = 0, lastInvalidation = -Infinity, firstInvalidation = -Infinity;
   let pending = false;
+  let identity: string | undefined;
+  const synchronizeIdentity = (context: WorkspaceProjectionContext) => Effect.gen(function*() {
+    if (identity === context.identity) return;
+    identity = context.identity;
+    yield* state.reset;
+  });
+  const current = Effect.gen(function*() {
+    const context = yield* ports.context;
+    if (identity !== context.identity) { yield* synchronizeIdentity(context); yield* request; }
+    return yield* SubscriptionRef.get(state.value);
+  });
   const request = Effect.suspend(() => {
     if (stopping) return Effect.void;
     pending = true;
@@ -54,6 +65,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     return state.transition(['CleanupFailed', 'UnsafePath', 'ServerLockUnavailable'].includes(error.code) ? 'blocked' : 'degraded', { code: error.code, message: error.message });
   };
   const discard = (context: WorkspaceProjectionContext, changedPaths: readonly string[]) => Effect.gen(function*() {
+    yield* synchronizeIdentity(context);
     const attempt = { at: new Date(yield* Clock.currentTimeMillis).toISOString(), complete: false, changedPaths };
     yield* ports.persist(context, undefined, undefined, attempt);
     yield* ports.restore(context).pipe(Effect.flatMap(state.accept), Effect.ignore);
@@ -65,13 +77,15 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     if (stopping || status.state === 'blocked') return;
     yield* ports.verify;
     const context = yield* ports.context;
+    yield* synchronizeIdentity(context);
     yield* ports.ready(context);
     const sourceDigest = yield* ports.sourceDigest;
     const value = yield* ports.compute({ kind: 'scan' });
     const candidate = yield* Effect.try({ try: () => decodeWorkspaceProjectionCandidate(value), catch: failure });
     if (ports.reconcile && (yield* ports.reconcile(candidate))) yield* request;
     yield* ports.verify;
-    if ((yield* ports.context).identity !== context.identity) { yield* request; return; }
+    const after = yield* ports.context;
+    if (after.identity !== context.identity) { yield* synchronizeIdentity(after); yield* request; return; }
     yield* ports.ready(context);
     if (stopping) return;
     if (candidate.sourceDigest === undefined) { yield* discard(context, candidate.changedPaths); return; }
@@ -91,6 +105,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     }
     const context = yield* Effect.result(ports.context);
     if (context._tag === 'Success') {
+      yield* synchronizeIdentity(context.success);
       yield* ports.persist(context.success, undefined, error).pipe(Effect.ignore);
       yield* ports.restore(context.success).pipe(Effect.flatMap(state.accept), Effect.ignore);
     }
@@ -106,6 +121,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   const startup = Effect.gen(function*() {
     yield* ports.open;
     const context = yield* ports.context;
+    yield* synchronizeIdentity(context);
     yield* ports.restore(context).pipe(Effect.flatMap(state.accept), Effect.ignore);
     yield* state.transition('running');
   }).pipe(Effect.catch(fail), Effect.andThen(request));
@@ -180,7 +196,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     operations--;
     return operations === 0 ? Deferred.succeed(operationIdle, undefined).pipe(Effect.asVoid) : Effect.void;
   }))).pipe(Effect.andThen(operation)));
-  return { state, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
+  return { state, current, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
     maintain, operate,
     drain: maintenance.withPermit(operationsDrained),
     connect: Effect.acquireRelease(Effect.sync(() => { connections++; }), () => Effect.sync(() => { connections--; })),
