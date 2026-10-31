@@ -51,7 +51,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | [local-data-engine](feature/local-data-engine/README.md) | `base/cache`、`native/hawdb`、`entry/server` |
 | [portable-coordination](feature/portable-coordination/README.md) | `base/publication` |
 | [web-workbench](feature/web-workbench/README.md) | `entry/http`、`web/` |
-| [herdr-panel](feature/herdr-panel/README.md) | `entry/panel` |
+| [herdr-mod](feature/herdr-mod/README.md) | `herdr/`（随包 mod） |
 | [cross-platform-release](feature/cross-platform-release/README.md) | `base/installation`、`scripts/` 与 `native/hawdb` 的发行构建 |
 
 同一职责只有一个实现：一个关系编译器、一个文档解码器、一个 publication 协议。
@@ -180,7 +180,7 @@ HawDB 位于 Git-private `cache.hawdb`，只拥有可重建缓存。查询核对
 
 缓存只保存解析结果和投影，不缓存授权或修复核验的判定。一次事务更新同一代投影；源文件不在事务内，通过前后摘要检测读取漂移。状态检查、clear 与 dry-run 的行为由[统一缓存 Use Case](feature/local-data-engine/use-case/use-unified-cache.md)拥有。
 
-HawDB 句柄的所有权、只读与可写打开、dry-run 与 cache-off 的行为见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。每个 worktree 最多一个[工作区服务](feature/local-data-engine/architecture.md#工作区服务)长期持有持久缓存、刷新工作区投影并向 Herdr 面板、Web 与 CLI 提供领域结果；持久缓存被占用时，可重建的解析缓存改用内存缓存，命令照常完成。
+HawDB 句柄的所有权、只读与可写打开、dry-run 与 cache-off 的行为见[数据引擎架构](feature/local-data-engine/architecture.md#句柄与打开模式)。每个 worktree 最多一个[工作区服务](feature/local-data-engine/architecture.md#工作区服务)长期持有持久缓存、刷新工作区投影并向 Web 与 CLI 提供领域结果；持久缓存被占用时，可重建的解析缓存改用内存缓存，命令照常完成。
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。每篇文档每个进程最多解析一次，元数据、标题锚点、steps 与链接事实取自同一棵语法树。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
@@ -197,7 +197,7 @@ flowchart TD
   QueryRefresh -->|一致结果，或无一致代次时标注漂移的结果| QueryCache
   Web[Web workspace] --> WorkspaceCache[HawDB workspace_projection 结构投影]
   WorkspaceRefresh[工作区服务，每 worktree 一个] --> Scan
-  WorkspaceRefresh -->|推送代次| Panel[Herdr 面板与 Web]
+  WorkspaceRefresh -->|推送代次| Clients[Web 与 CLI]
   WorkspaceRefresh -->|一致或标注漂移的代次| WorkspaceCache
   Scan --> Sources[当前目录集合与安全文件读取]
   Sources --> Keys[原文摘要与解析器身份]
@@ -305,9 +305,9 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 测试执行归项目：Concord 只通过配置的 runner 与可选 adapter 运行测试并做修复核验，所有权见[治理边界](feature/neutral-project-governance/architecture.md)，接入边界见[项目测试接入边界](feature/local-sdlc/test-boundary.md)。消费者拥有 runner、执行副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
 
-## Web 工作台与 Herdr 面板
+## Web 工作台与 Herdr mod
 
-`concord view` 提供随包分发的 React 工作台，`concord panel` 在终端中提供只读的 [Herdr 面板](feature/herdr-panel/README.md)，两者都是工作区服务的客户端。Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见根目录 `DESIGN.md`。
+`concord view` 提供随包分发的 React 工作台，是工作区服务的客户端。[Herdr mod](feature/herdr-mod/README.md) 在 Herdr 中提供完整的阅读、初始化与编辑，只通过公开 CLI 取数据。Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见根目录 `DESIGN.md`。
 
 ## 文档写作检查
 

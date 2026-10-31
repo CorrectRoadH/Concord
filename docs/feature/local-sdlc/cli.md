@@ -24,7 +24,8 @@
 | `concepts`、`writing` | 概念与写作政策的查看与受管写入 |
 | `docs` | `docs check` 与 `docs work` |
 | `feedback` | 外部来源的同步与导入 |
-| `view`、`panel` | Web 工作台与终端面板 |
+| `view` | Web 工作台 |
+| `herdr` | `install`、`uninstall`：安装 [Herdr mod](../herdr-mod/README.md) |
 | `workspace`、`git` | 工作区的当前扫描与历史投影、只读 Git 状态与差异，见 [Web 工作台 CLI](../web-workbench/cli.md) |
 | `config`、`template` | 查看与替换配置；查看随包模板 |
 | `cache`、`recover`、`doctor`、`lsp`、`review`、`action` | 维护与集成 |

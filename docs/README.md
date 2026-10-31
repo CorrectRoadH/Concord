@@ -10,7 +10,7 @@
 - [文档目录与完整发现](feature/document-packages/README.md)
 - [文档写作与领域术语](feature/documentation-quality/README.md)
 - [多来源反馈与本地处理](feature/feedback/README.md)
-- [在 Herdr 面板中查看 Spec](feature/herdr-panel/README.md)
+- [在 Herdr 里使用 Concord](feature/herdr-mod/README.md)
 - [统一的本地缓存与检索引擎](feature/local-data-engine/README.md)
 - [本地 SDLC 闭环](feature/local-sdlc/README.md)
 - [统一项目治理与中立测试接入](feature/neutral-project-governance/README.md)

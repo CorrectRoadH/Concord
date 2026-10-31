@@ -46,7 +46,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 ## 工作区服务
 
-每个 worktree 最多一个工作区服务。它长期持有该 worktree 的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Herdr 面板](../herdr-panel/README.md)、[Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。HawDB 规定一个目录由一个进程长期持有，服务按此持有缓存。
+每个 worktree 最多一个工作区服务。它长期持有该 worktree 的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。HawDB 规定一个目录由一个进程长期持有，服务按此持有缓存。
 
 ### 进程与资源
 
@@ -68,7 +68,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 ### 启动与裁决
 
-只有 `concord panel`、`concord view` 与 `concord server start` 启动服务；其它 CLI 命令只使用已有服务。`view --in-process` 在本进程运行同一服务，同样先取得服务锁。
+只有 `concord view` 与 `concord server start` 启动服务；其它 CLI 命令只使用已有服务。`view --in-process` 在本进程运行同一服务，同样先取得服务锁。
 
 1. 启动者读取运行记录，核对 worktree、privateDir 与安装身份，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
