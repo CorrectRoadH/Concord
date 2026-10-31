@@ -47,13 +47,19 @@ mod 不保存任何事实。它用 `concord --json` 取得文档列表、关系�
 
 | 场景 | 测量内容 | p50 预算 |
 | --- | --- | ---: |
-| `herdr-mod/first-screen` | 已初始化的仓库，从打开 mod 到 Feature 列表可读 | 300ms |
+| `herdr-mod/first-screen` | 已初始化的仓库，从加载 mod 到 Feature 的可读描述就绪 | 300ms |
 
 ## 刷新上限
 
+两项都用实际构建的 mod 与真实的公开 CLI 测量，只把 Herdr 的界面层换成测试替身，因此不包含真实主机上的绘制时间。
+
 | 场景 | 测量内容 | 上限 |
 | --- | --- | ---: |
-| `herdr-mod/push` | 文件写入停止到 mod 显示新内容 | 1000ms |
+| `herdr-mod/push` | 文件写入停止到刷新后的可读描述就绪 | 1000ms |
+
+## 在真实主机上验收
+
+在装有 Herdr 的机器上，用 `herdr-app check <mod 目录>` 加载随包 mod，用 `herdr-app shot` 截图核对界面。
 
 ## 依据的品味
 
