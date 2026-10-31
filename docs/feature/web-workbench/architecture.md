@@ -54,7 +54,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 独立 `workspace_projection` 命名空间只有 key 为 `workspace` 的一行，payload 格式为 `concord.workspace-projection/v1`。它含 `identity`、可选 `record`（构建区间、完整性字段与结构 `snapshot`）、`lastAttempt`（不含快照）与 `error`。一次 put 原子替换该行，新身份覆盖旧行；损坏记录不提供给前台，writer 可直接覆盖。身份由 worktree root、Git-private 目录、配置原文摘要（无配置为 absent，非法配置仍取安全读取的字节摘要）、安装目录全部 JS 与 native 产物摘要及类型 `workspace` 组成。读取前先验证原生模块，缺失为不可用而非尚无代次。
 
-snapshot 由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写都拒绝额外字段。它只含路径、摘要、metadata、单行 derivedTitle、关系、诊断与反馈分诊；正文、`source.body`、远端 body、配置原文、证据与发布日志不进入 Schema。搜索只索引标题、ID、路径与 URL。
+snapshot 由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写都拒绝额外字段。它只含路径、摘要、metadata、单行 derivedTitle、关系、诊断、反馈分诊与概念目录；概念目录列出每个 `concepts.md` 的路径与其中每个概念的术语、锚点、弃用名与现行写法，定义与解释正文不进入。正文、`source.body`、远端 body、配置原文、证据与发布日志不进入 Schema。搜索只索引标题、ID、路径与 URL。
 
 配额 1 行、8 MiB，计入命名空间、key 与完整 envelope；`query_cache` 写入不淘汰该行。超限报 `WorkspaceProjectionOutputLimit`，不截断、不回源；实测后只允许收紧。原生侧只提供命名空间与资源预算。
 
