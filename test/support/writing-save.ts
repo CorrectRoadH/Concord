@@ -3,7 +3,9 @@ import { expect, type Page } from '@playwright/test';
 import { Effect } from 'effect';
 
 /** Wait for the saved policy before a browser reload. */
-export const waitForWritingSave = (_page: Page, path: string, replacement: string): Promise<void> =>
+export const waitForWritingSave = (page: Page, path: string, replacement: string): Promise<void> =>
   Effect.runPromise(Effect.tryPromise(async () => {
+    await expect(page.getByRole('region', { name: '写作规则编辑' }).getByRole('status')).toHaveText('写作规则已保存。');
+    await expect(page.getByText('有未保存更改', { exact: true })).toHaveCount(0);
     await expect.poll(() => (JSON.parse(readFileSync(path, 'utf8')) as { bannedTerms: { use?: string }[] }).bannedTerms.at(-1)?.use).toBe(replacement);
   }));

@@ -14,6 +14,7 @@ import { startViewServer } from './server.js';
 import { defaultWritingPolicy } from "../../src/model/index.js";
 import { showWriting, setWriting } from "../../src/domain/writing/index.js";
 import { waitForWorkspaceProjection } from '../support/support.js';
+import { waitForWritingSave } from '../support/writing-save.js';
 
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 test('C24: browser preserves invalid controlled drafts across an in-flight save and checks the saved policy', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
@@ -107,7 +108,7 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
     await first.getByLabel(`替换建议 ${rule}`).fill('Newer');
     await expect(first.getByText(/某次快照的检查结果/)).toHaveCount(0);
     await first.getByRole('button', { name: '保存规则' }).click();
-    await expect.poll(() => JSON.parse(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')).bannedTerms.at(-1)?.use).toBe('Newer');
+    await waitForWritingSave(first, join(root, 'docs/concord-writing.json'), 'Newer');
     await first.reload();
     await first.getByRole('link', { name: '写作', exact: true }).click();
     await expect(first.getByLabel(`替换建议 ${rule}`)).toHaveValue('Newer');
@@ -156,6 +157,7 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
     await first.getByRole('button', { name: `删除规则 ${rule}` }).click();
     await first.getByRole('button', { name: '保存规则' }).click();
     await expect.poll(() => JSON.parse(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')).bannedTerms.length).toBe(rule - 1);
+    await expect(first.getByRole('region', { name: '写作规则编辑' }).getByRole('status')).toHaveText('写作规则已保存。');
     await first.reload();
     await first.getByRole('link', { name: '写作', exact: true }).click();
     await expect(first.getByLabel(`禁用写法 ${rule}`)).toHaveCount(0);
