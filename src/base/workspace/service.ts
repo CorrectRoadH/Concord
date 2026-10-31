@@ -2,8 +2,9 @@ import { Context, Effect, Layer, Option, Path, type Scope } from 'effect';
 import { CacheSnapshot, PersistentCache } from '../cache/index.js';
 import { failure, type ConcordError } from '../../model/index.js';
 import { Publication } from '../publication/index.js';
-import { LocalRepository, type ReadRepositoryOptions, type RepositoryOptions } from './storage.js';
-import { inspectConfiguration, identifyWorkspace, locateWorkspace } from './config-inspection.js';
+import type { LocalRepository, ReadRepositoryOptions, RepositoryOptions } from './storage.js';
+import type { inspectConfiguration } from './config-inspection.js';
+import { identifyWorkspace, locateWorkspace } from './identity.js';
 
 const attachCache = Effect.fn('Workspace.attachCache')(function*(repo: LocalRepository) {
   const persistent = yield* Effect.serviceOption(PersistentCache);
@@ -25,6 +26,7 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
   static readonly layer = Layer.effect(Workspace, Effect.gen(function*() {
     const path = yield* Path.Path;
     const openRead = Effect.fn('Workspace.openRead')(function*(root: string | undefined, options: ReadRepositoryOptions) {
+      const { LocalRepository } = yield* Effect.tryPromise(() => import('./storage.js')).pipe(Effect.mapError(failure));
       const persistent = yield* Effect.serviceOption(PersistentCache);
       const selected = Option.isSome(persistent) ? options : { ...options, persistentCache: 'off' as const };
       const repo = yield* Effect.acquireRelease(
@@ -35,6 +37,7 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
       return repo;
     });
     const openWrite = Effect.fn('Workspace.openWrite')(function*(root: string | undefined, options: RepositoryOptions = {}) {
+      const { LocalRepository } = yield* Effect.tryPromise(() => import('./storage.js')).pipe(Effect.mapError(failure));
       const publication = yield* Publication;
       const persistent = yield* Effect.serviceOption(PersistentCache);
       const selected = Option.isSome(persistent) ? options : { ...options, persistentCache: 'off' as const };
@@ -45,6 +48,6 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
       yield* attachCache(repo);
       return repo;
     });
-    return Workspace.of({ openRead, openWrite, inspectConfiguration, identify: identifyWorkspace, locate: locateWorkspace });
+    return Workspace.of({ openRead, openWrite, inspectConfiguration: (...args) => Effect.tryPromise(() => import('./config-inspection.js')).pipe(Effect.flatMap(module => module.inspectConfiguration(...args)), Effect.mapError(failure)), identify: identifyWorkspace, locate: locateWorkspace });
   }));
 }
