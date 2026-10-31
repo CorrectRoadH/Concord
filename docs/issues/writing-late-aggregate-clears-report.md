@@ -1,5 +1,15 @@
 ---
-status: open
+status: closed
+closure:
+  kind: fixed
+  reason: 迟到聚合响应按请求代次丢弃，保留更新的检查报告
+  verification:
+    defect: 16e8e3bb101b38ea30e03170421733c430073697
+    fix: cbbd73948894f0aeb852b2e4d5dbcff3b07b2a18
+    tests:
+      - neref_0d9d4378ce70ab6874a5953e8e8b8ded
+    runner: sha256:db83e0ff88b65dcaaf52a8f69c6262dbd1b596991eee44d5fcf69e1a65b4e8e0
+    concord: dev
 ---
 
 # 迟到的术语聚合响应清除较新的检查结果
