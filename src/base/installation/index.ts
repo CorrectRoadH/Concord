@@ -6,6 +6,7 @@ import { packageRoot } from "./location.js";
 export { packageRoot } from "./location.js";
 import { hawdbTarget } from "./hawdb-native-contract.js";
 import { ConcordError, digest } from "../../model/index.js";
+import { installationIdentity } from './identity-cache.js';
 
 export const sourceInstallation = import.meta.url.endsWith('.ts');
 const directory = join(packageRoot, sourceInstallation ? 'src' : 'dist');
@@ -71,15 +72,12 @@ export function queryInstallationIdentity(): InstallationFiles {
   return files;
 }
 
-let workspaceIdentity: string | undefined;
-/** Built workspace identity stays fixed for the process, as its executable does. */
+/** Metadata fingerprints avoid rehashing an unchanged installation across processes. */
 export function workspaceInstallationIdentity(): string {
-  if (workspaceIdentity !== undefined) return workspaceIdentity;
-  if (sourceInstallation) { workspaceIdentity = digest(JSON.stringify(sourceIdentity())); return workspaceIdentity; }
-  const files = collectFiles(directory, '', (name, relative) => name.endsWith('.js') || relative.startsWith('native/'));
   requireNativeArtifacts();
-  workspaceIdentity = digest(JSON.stringify(files));
-  return workspaceIdentity;
+  return sourceInstallation
+    ? installationIdentity(directory, [{ root: directory, prefix: 'src', accept: name => /\.(?:[cm]?ts)$/u.test(name) }, { root: nativeArtifactRoot, prefix: 'native', accept: () => true }], [['mode', 'source']])
+    : installationIdentity(directory, [{ root: directory, prefix: '', accept: (name, relative) => name.endsWith('.js') || relative.startsWith('native/') }]);
 }
 export * from './hawdb-native-contract.js';
 export { nativeSourceDigest, nativeCacheRoot, nativeSourceFiles, nativeLockDigest } from './native-artifact.js';
