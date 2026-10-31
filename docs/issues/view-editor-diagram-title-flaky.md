@@ -6,7 +6,11 @@ status: open
 
 ## 现象
 
-`test/e2e/view-editor-browser.e2e.ts` 的「long documents remain reachable and code blocks follow theme without changing Markdown」在完整门禁中两次失败：在 5 秒内等不到名为 Architecture diagram 的图片带有 title「System architecture」。最近一次（1d91538，完整门禁 371 s，Node 并发 8、浏览器 4）失败时的 DOM 已含该图，trace 见 `.test-results/run-dYiSdX/e2e/results/view-editor-browser-long-documents-remain-reachable-3267aec1bb911a59/trace.md`；同一提交在空闲机器上单独复跑通过（10.6 s）。更早一次同一用例在 P2 阶段的门禁中失败，当时归因于失败后关闭服务造成的连接拒绝。
+`test/e2e/view-editor-browser.e2e.ts` 的「long documents remain reachable and code blocks follow theme without changing Markdown」在完整门禁中两次失败。它在 5 秒内等不到名为 Architecture diagram 的图片带有 title「System architecture」。
+
+最近一次在 1d91538 的完整门禁中（371 s，Node 并发 8、浏览器 4）。失败时的 DOM 已含该图，trace 见 `.test-results/run-dYiSdX/e2e/results/view-editor-browser-long-documents-remain-reachable-3267aec1bb911a59/trace.md`。同一提交在空闲机器上单独复跑通过（10.6 s）。
+
+更早一次失败发生在 P2 阶段的门禁中，当时归因于失败后关闭服务造成的连接拒绝。
 
 ## 期望
 
