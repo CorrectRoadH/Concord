@@ -75,4 +75,5 @@ export { detail } from './repo-issue-plan-store.js';
 export { isCode } from './repo-issue-plan-store.js';
 export { gitDirectory } from './repo-issue-plan-store.js';
 export { Publication, PublicationValidation } from './validation.js';
+export { inspectPendingJournals } from './journal-state.js';
 export type { PublicationCatalog, StepRenamePlan } from './validation.js';

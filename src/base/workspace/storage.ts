@@ -1,3 +1,4 @@
+import { adapterRuntimeInputs } from '../process/index.js';
 import type { PublicationValidation } from "../publication/index.js";
 import type { StepRename } from "../../model/index.js";
 
@@ -87,7 +88,7 @@ function assertReadHost(): void {
   if (process.platform === 'darwin' && Number(release().split('.')[0]) < 20) throw new ConcordError('UnsupportedHost', 'Concord requires macOS 11 or later for O_NOFOLLOW_ANY');
 }
 
-function readCheckedFile(target: string, path: string, stat: BigIntStats, verifying = false): string {
+function readCheckedBytes(target: string, path: string, stat: BigIntStats, verifying = false): Buffer {
   if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
   if (!stat.isFile()) throw new ConcordError(verifying ? 'UnsafePath' : 'InvalidFile', `${path} must be a regular file`);
   let fd: number | undefined;
@@ -113,7 +114,7 @@ function readCheckedFile(target: string, path: string, stat: BigIntStats, verify
       if (verifying) throw new ObservationChanged(path);
       throw new ConcordError('InvalidFile', `${path} exceeds ${MAX_BYTES} bytes`);
     }
-    return readFileSync(fd, 'utf8');
+    return readFileSync(fd);
   } catch (cause) {
     if (errno(cause, 'ELOOP')) throw new ConcordError('UnsafePath', `Symbolic links are not permitted: ${path}`);
     if (cause instanceof ConcordError) throw cause;
@@ -121,6 +122,9 @@ function readCheckedFile(target: string, path: string, stat: BigIntStats, verify
     if (errno(cause, 'ENOENT')) throw new ConcordError('SourceChanged', `${path} disappeared while opening; retry the query`);
     throw cause;
   } finally { if (fd !== undefined) closeSync(fd); }
+}
+function readCheckedFile(target: string, path: string, stat: BigIntStats, verifying = false): string {
+  return readCheckedBytes(target, path, stat, verifying).toString('utf8');
 }
 
 /** Standalone reads keep the full path guard and never reuse snapshot listings. */
@@ -248,6 +252,35 @@ export interface ReadRepositoryOptions extends RepositoryOptions { readonly acce
 export class LocalRepository implements Repository {
   readonly runtimeVersion = process.version;
   exists(path: string): boolean { return this.inspectComponents(path).stat !== undefined; }
+  runtimeInputs(command: string, envNames: readonly string[]) { return adapterRuntimeInputs(this.root, command, envNames); }
+  environment(names: readonly string[]): Readonly<Record<string, string | undefined>> { return Object.fromEntries(names.map(name => [name, process.env[name]])); }
+  inspect(path: string): ReturnType<NonNullable<Repository['inspect']>> {
+    const read = () => {
+      const stat = this.inspectComponents(path).stat;
+      return stat === undefined ? undefined : { file: stat.isFile(), directory: stat.isDirectory(), symbolicLink: stat.isSymbolicLink(), size: Number(stat.size), mode: Number(stat.mode), identity: `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}` };
+    };
+    return this.snapshotDepth === 0 ? this.underLease(read) : read();
+  }
+  readBytes(path: string): Uint8Array | undefined {
+    const read = () => {
+      const source = this.readCurrentBytes(path);
+      if (this.observing && !this.observedBytes.has(path)) this.observedBytes.set(path, source === undefined ? undefined : Buffer.from(source));
+      return source;
+    };
+    return this.snapshotDepth === 0 ? this.underLease(read) : read();
+  }
+  rootFiles(): readonly string[] {
+    const read = () => {
+      const paths = this.currentRootFiles();
+      this.observedRootFiles ??= JSON.stringify(paths);
+      return paths;
+    };
+    return this.snapshotDepth === 0 ? this.underLease(read) : read();
+  }
+  private currentRootFiles(): string[] {
+    this.checkRoot();
+    return readdirSync(this.root).filter(path => lstatSync(join(this.root, path)).isFile()).sort();
+  }
   readonly access: 'read' | 'write';
   readonly persistentCache: 'use' | 'off';
   readonly root: string;
@@ -264,6 +297,8 @@ export class LocalRepository implements Repository {
   private readonly optimistic: boolean;
   private revision = '';
   private readonly observedFiles = new Map<string, string | undefined>();
+  private readonly observedBytes = new Map<string, Buffer | undefined>();
+  private observedRootFiles: string | undefined;
   private readonly observedDirectories = new Map<string, { path: string; scope: 'source' | undefined; observation: string }>();
   private readonly rootAnchor: readonly RootAnchor[];
   private rootFd: number | undefined;
@@ -440,6 +475,10 @@ export class LocalRepository implements Repository {
     const { target, stat } = this.readablePath(path);
     return stat === undefined ? undefined : readCheckedFile(target, path, stat, this.verifyListings !== undefined);
   }
+  private readCurrentBytes(path: string): Buffer | undefined {
+    const { target, stat } = this.readablePath(path);
+    return stat === undefined ? undefined : readCheckedBytes(target, path, stat, this.verifyListings !== undefined);
+  }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
   files(prefix: string, scope?: 'source'): string[] {
@@ -487,7 +526,7 @@ export class LocalRepository implements Repository {
   // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   snapshot<A>(read: () => A): A {
-    if (this.snapshotDepth === 0) { this.observedFiles.clear(); this.observedDirectories.clear(); }
+    if (this.snapshotDepth === 0) { this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear(); }
     return this.underLease(read);
   }
   /** Historical navigation only. Current queries and publications still verify strictly. */
@@ -495,7 +534,7 @@ export class LocalRepository implements Repository {
   // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
   observeProjection<A>(read: () => A): { value: A; drift: { files: string[]; directories: string[]; publicationChanged: boolean } } {
     if (this.snapshotDepth !== 0 || !this.optimistic) throw new ConcordError('InvalidProjectionRead', 'Projection observation requires an independent optimistic snapshot');
-    this.observedFiles.clear(); this.observedDirectories.clear();
+    this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear();
     this.beginSnapshot();
     try {
       const value = read();
@@ -629,6 +668,11 @@ export class LocalRepository implements Repository {
       });
       verify('concord.config.ts', files, () => this.assertReady());
       for (const [path, source] of this.observedFiles) verify(path, files, () => { if (this.readCurrent(path) !== source) throw new ObservationChanged(path); });
+      for (const [path, source] of this.observedBytes) verify(path, files, () => {
+        const current = this.readCurrentBytes(path);
+        if (source === undefined ? current !== undefined : current === undefined || !source.equals(current)) throw new ObservationChanged(path);
+      });
+      if (this.observedRootFiles !== undefined) verify('.', directories, () => { if (JSON.stringify(this.currentRootFiles()) !== this.observedRootFiles) throw new ObservationChanged('.'); });
       for (const { path, scope, observation } of this.observedDirectories.values()) verify(path, directories, () => { if (this.scanDirectory(path, scope).observation !== observation) throw new ObservationChanged(path); });
       return { files: [...files].sort(), directories: [...directories].sort() };
     } finally { this.verifyListings = undefined; }
@@ -959,4 +1003,9 @@ export class LocalRepository implements Repository {
     rmSync(path); syncDirectory(this.privateDir);
     return { operation: 'recover', status: journal.phase === 'prepared' ? 'rolled-back' : 'committed', changedPaths: journal.changes.map(c => c.path) };
   }
+}
+
+export function readRepositoryBytesSync(root: string, path: string): Uint8Array | undefined {
+  const repo = new LocalRepository(root, { access: 'read', optimistic: true });
+  try { return repo.snapshot(() => repo.readBytes(path)); } finally { repo.close(); }
 }

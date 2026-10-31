@@ -34,3 +34,4 @@ export { request } from './lsp-protocol.js';
 export { progress } from './lsp-protocol.js';
 export type { Pending } from './lsp-protocol.js';
 export { LspConnection } from './lsp-protocol.js';
+export { adapterRuntimeInputs } from './runtime-inputs.js';

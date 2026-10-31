@@ -3,6 +3,8 @@ import type { Change, Repository, StepRename } from "../../model/index.js";
 import { failure, ConcordError } from "../../model/index.js";
 import { acquireTraceLease, releaseTraceLease, type TraceLease } from './coordination.js';
 import { makePublicationReceiptStore } from './issue-receipts.js';
+import { inspectExportAncestors, publishExport } from './preview-tree.js';
+import { scratchDirectory } from './scratch.js';
 
 export interface PublicationCatalog {
   readonly operation: string;
@@ -23,19 +25,25 @@ export class PublicationValidation extends Context.Service<PublicationValidation
 
 /** A writer can only be constructed from a Publication layer with validation. */
 export class Publication extends Context.Service<Publication, {
+  readonly scratchDirectory: typeof scratchDirectory;
   readonly validation: PublicationValidation['Service'];
   readonly receiptStore: typeof makePublicationReceiptStore;
-  readonly lease: (root: string, operation: string, create?: boolean) => Effect.Effect<TraceLease | undefined, ConcordError, Scope.Scope>;
+  readonly inspectExportAncestors: typeof inspectExportAncestors;
+  readonly publishExport: typeof publishExport;
+  readonly lease: (root: string, operation: string, create?: boolean, reclaimDead?: boolean) => Effect.Effect<TraceLease | undefined, ConcordError, Scope.Scope>;
   readonly publish: (repo: Repository, operation: string, changes: readonly Change[], dryRun?: boolean) => Effect.Effect<ReturnType<Repository['publish']>, ConcordError>;
 }>()('concord/Publication') {
   static readonly layer = Layer.effect(Publication, Effect.gen(function*() {
     const validation = yield* PublicationValidation;
     return Publication.of({
+      scratchDirectory,
       validation,
       receiptStore: makePublicationReceiptStore,
-      lease: Effect.fn('Publication.lease')(function*(root: string, operation: string, create = true) {
+      inspectExportAncestors,
+      publishExport,
+      lease: Effect.fn('Publication.lease')(function*(root: string, operation: string, create = true, reclaimDead = true) {
         return yield* Effect.acquireRelease(
-          acquireTraceLease(root, 'exclusive', operation, create, true).pipe(Effect.mapError(cause => new ConcordError(cause.message.includes('busy') ? 'RepositoryBusy' : 'CoordinationFailed', cause.message, { operation: cause.operation, path: cause.path, phase: cause.phase }))),
+          acquireTraceLease(root, 'exclusive', operation, create, reclaimDead).pipe(Effect.mapError(cause => new ConcordError(cause.message.includes('busy') ? 'RepositoryBusy' : 'CoordinationFailed', cause.message, { operation: cause.operation, path: cause.path, phase: cause.phase }))),
           lease => lease === undefined ? Effect.void : releaseTraceLease(lease, operation).pipe(Effect.orDie),
         );
       }),

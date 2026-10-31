@@ -2,8 +2,11 @@ import { Context, Effect, Layer, Path, type Scope } from 'effect';
 import { failure, type ConcordError } from '../../model/index.js';
 import { Publication } from '../publication/index.js';
 import { LocalRepository, type ReadRepositoryOptions, type RepositoryOptions } from './storage.js';
+import { inspectConfiguration, identifyWorkspace } from './config-inspection.js';
 
 export interface WorkspaceService {
+  readonly identify: typeof identifyWorkspace;
+  readonly inspectConfiguration: typeof inspectConfiguration;
   readonly openRead: (root: string | undefined, options: ReadRepositoryOptions) => Effect.Effect<LocalRepository, ConcordError, Scope.Scope>;
   readonly openWrite: (root: string | undefined, options?: RepositoryOptions) => Effect.Effect<LocalRepository, ConcordError, Publication | Scope.Scope>;
 }
@@ -25,6 +28,6 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
         repo => Effect.sync(() => repo.close()),
       );
     });
-    return Workspace.of({ openRead, openWrite });
+    return Workspace.of({ openRead, openWrite, inspectConfiguration, identify: identifyWorkspace });
   }));
 }

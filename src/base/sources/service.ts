@@ -1,11 +1,24 @@
-import { Context, Effect, FileSystem, Layer, Path, Stdio, Stream } from 'effect';
+import { Context, Effect, FileSystem, Layer, Path, Stdio, Stream, type Scope } from 'effect';
 import { failure, ConcordError } from '../../model/index.js';
-import { waitForPublication } from '../publication/index.js';
-import { readRepositoryFileSync, type LocalRepository } from '../workspace/index.js';
+import { inspectPendingJournals, waitForPublication } from '../publication/index.js';
+import { readRepositoryBytesSync, readRepositoryFileSync, type LocalRepository } from '../workspace/index.js';
+import { NodeSourceWatch } from './source-watch.js';
+import { readReportFiles } from './report-files.js';
+import { untrackedFile } from './untracked-file.js';
+export type SourceWatch = Pick<NodeSourceWatch, 'reconcile' | 'close'>;
 
 export interface SourcesService {
+  readonly createReportDirectory: (path: string) => Effect.Effect<void, ConcordError>;
+  readonly readBytes: (root: string, path: string) => Effect.Effect<Uint8Array | undefined, ConcordError>;
+  readonly untrackedFile: typeof untrackedFile;
   readonly read: (root: string, path: string) => Effect.Effect<string | undefined, ConcordError>;
   readonly authorBody: (path: string) => Effect.Effect<string, ConcordError>;
+  readonly watch: (root: string, changed: () => void, failed: (error: ConcordError) => void) => Effect.Effect<SourceWatch, never, Scope.Scope>;
+  readonly pendingPublications: typeof inspectPendingJournals;
+  readonly readReportFiles: typeof readReportFiles;
+  readonly exists: (path: string) => Effect.Effect<boolean, ConcordError>;
+  readonly directoryEntries: (path: string) => Effect.Effect<readonly string[], ConcordError>;
+  readonly temporaryDirectory: (prefix: string, cleanupFailed?: (error: ConcordError) => void) => Effect.Effect<string, ConcordError, Scope.Scope>;
   readonly snapshot: <A, E, R>(repo: LocalRepository, operation: Effect.Effect<A, E, R>) => Effect.Effect<A, E | ConcordError, R>;
 }
 
@@ -16,6 +29,21 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
     const path = yield* Path.Path;
     const stdio = yield* Stdio.Stdio;
     return Sources.of({
+      untrackedFile,
+      createReportDirectory: path => fs.makeDirectory(path, { mode: 0o700 }).pipe(Effect.mapError(failure)),
+      readBytes: (root, relative) => Effect.try({ try: () => readRepositoryBytesSync(path.resolve(root), relative), catch: failure }),
+      temporaryDirectory: Effect.fn('Sources.temporaryDirectory')((prefix: string, cleanupFailed?: (error: ConcordError) => void) => Effect.acquireRelease(
+        fs.makeTempDirectory({ prefix }).pipe(Effect.mapError(failure)),
+        directory => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.catch(cause => cleanupFailed === undefined ? Effect.die(failure(cause)) : Effect.sync(() => cleanupFailed(failure(cause))))),
+      )),
+      pendingPublications: inspectPendingJournals,
+      readReportFiles,
+      exists: path => fs.exists(path).pipe(Effect.mapError(failure)),
+      directoryEntries: path => fs.readDirectory(path).pipe(Effect.mapError(failure)),
+      watch: Effect.fn('Sources.watch')((root: string, changed: () => void, failed: (error: ConcordError) => void) => Effect.acquireRelease(
+        Effect.sync(() => new NodeSourceWatch(root, changed, failed)),
+        watcher => Effect.sync(() => watcher.close()),
+      )),
       read: Effect.fn('Sources.read')((root: string, relative: string) => Effect.try({ try: () => readRepositoryFileSync(path.resolve(root), relative), catch: failure })),
       authorBody: Effect.fn('Sources.authorBody')(function*(path: string) {
         if (path !== '-') {
