@@ -12,12 +12,12 @@ import { annotationSnippet } from "../../app/index.js";
 import { analysisView } from "../../app/index.js";
 import { scanCode } from "../../app/index.js";
 import { text, many, id, sync, cached } from "./cli-base.js";
-import { withRepo, withReadRepo } from "./cli-repository.js";
+import { withRepo, withReadRepo, withQuery } from "./cli-repository.js";
 
 const test = Command.make('test').pipe(Command.withDescription('Discover source annotations and run explicit command verification.'), Command.withSubcommands([
   Command.make('annotate', { contract: text('contract'), issue: many('issue') }, args => withReadRepo(repo => sync(() => annotationSnippet(repo, args.contract, args.issue)))).pipe(Command.withDescription('Print @feature or @use-case markers for a test file. Does not edit or run tests.')),
-  Command.make('list', {}, () => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);return {operation:'test-list',cases:t.annotations.cases,cache:t.annotations.cache,observations:readNativeObservations(repo)};}))),
-  Command.make('show', { id }, args => withReadRepo((repo,s) => sync(() => {const t=buildTrace(repo,cached(s.dryRun),{includeCode:false});requireValidTrace(t);const selected=selectCase(t.annotations.cases,args.id);let codes: ReturnType<typeof scanCode>['codes']=[];try{codes=scanCode(repo,{cache:'off'}).codes;}catch{/* Optional observations do not block test inspection. */}return {operation:'test-show',case:selected,evidenceScope:'command',analysis:analysisView(repo,[selected],codes,t.documents),observations:readNativeObservations(repo)};}))),
+  Command.make('list', {}, () => withQuery({ name: 'test.list', input: {} })),
+  Command.make('show', { id }, args => withQuery({ name: 'test.show', input: { id: args.id } })),
   Command.make('collect', { files: Argument.string('file').pipe(Argument.variadic()) }, args => withRepo((repo,s) => s.dryRun ? Effect.fail(new ConcordError('InvalidOption','test collect does not accept --dry-run')) : collectNativeTests(repo,args.files), { unlocked:true })),
   Command.make('run', { id, requireNative: Flag.boolean('require-native').pipe(Flag.withDefault(false)) }, args => withRepo((repo,s) => Effect.gen(function*(){
     if(s.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption','test run does not accept --dry-run; use test show to inspect the declaration'));

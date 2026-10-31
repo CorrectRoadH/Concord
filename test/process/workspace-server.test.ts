@@ -86,6 +86,37 @@ test('CLI cache clear drains the running persistent owner and publishes a new ge
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
+test('C21 current query commands and a local writer share the persistent owner without busy failures', { timeout: 45_000 }, async () => {
+  const root = mkdtempSync(join(tmpdir(), 'concord-server-queries-'));
+  execFileSync('git', ['init', '-q', root]);
+  try {
+    const initialized = await command(root, ['init', '--docs-only']);
+    assert.equal(initialized.status, 0, initialized.stderr);
+    assert.equal((await command(root, ['server', 'start'])).status, 0);
+    const simultaneous = await Promise.all([
+      command(root, ['list', 'feature']), command(root, ['config', 'show']),
+      command(root, ['constitution', 'show']), command(root, ['test', 'list']),
+      command(root, ['new', 'feature', 'service-query', '--title', 'Service query']),
+    ]);
+    for (const reply of simultaneous) assert.equal(reply.status, 0, reply.stderr);
+    const queries = [
+      ['list', 'feature'], ['show', 'service-query'], ['config', 'show'],
+      ['constitution', 'show'], ['test', 'list'], ['code', 'list'], ['trace', 'check'], ['check'],
+      ['docs', 'check'], ['memory', 'index'], ['memory', 'recall', 'query'], ['issue', 'recall', 'query'],
+      ['feedback', 'list', '--provider', 'local'], ['feedback', 'connection', 'list'],
+    ];
+    const comparable = (text: string) => JSON.parse(text, (key, value) => key === 'cache' || key === 'codeCache' ? undefined : value);
+    for (const args of queries) {
+      const remote = await command(root, args), local = await command(root, ['--dry-run', ...args]);
+      assert.equal(remote.status, local.status, `${args.join(' ')}: ${remote.stderr}\n${local.stderr}`);
+      assert.deepEqual(comparable(remote.stdout), comparable(local.stdout), args.join(' '));
+      assert.doesNotMatch(remote.stderr, /HawdbBusy/u);
+    }
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/README.md
+// @issue docs/issues/workspace-server-unimplemented.md
 test('concurrent starters share one real service and shutdown removes its record and socket', { timeout: 30_000 }, async () => {
   const root = fixture();
   try {

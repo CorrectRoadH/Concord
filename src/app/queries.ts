@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
 import { Context, Effect, Layer, Schedule, Schema } from 'effect';
-import { ConcordError, failure } from '../model/index.js';
+import { ConcordError, failure, FeedbackFilterSchema } from '../model/index.js';
 import { Workspace } from '../base/workspace/index.js';
 import { Sources } from '../base/sources/index.js';
 import { waitForPublication } from '../base/publication/index.js';
@@ -20,6 +20,7 @@ import { showConfig } from './editing.js';
 import { documentShow, traceShow, traceGaps, renderReview } from './trace-queries.js';
 import { analysisView } from './analysis-view.js';
 import { Query, cachedQuery } from './query-cache.js';
+import { getWorkspaceSnapshot } from './application.js';
 
 const strict = <S extends Schema.Top>(schema: S): S['Rebuild'] => schema.annotate({ parseOptions: { onExcessProperty: 'error' } });
 const operation = <const N extends string, F extends Schema.Struct.Fields>(name: N, fields: F) => strict(Schema.Struct({ name: Schema.Literal(name), input: strict(Schema.Struct(fields)) }));
@@ -31,13 +32,15 @@ export const QueryRequest = Schema.Union([
   operation('review.render', { reference: Schema.optional(Schema.String) }),
   operation('docs.check', { path: Schema.optional(Schema.String) }),
   empty('constitution.show'), empty('config.show'),
+  empty('workspace.show'),
   operation('documents.list', { kind: Schema.optional(DocumentKindSchema), open: Schema.Boolean }),
   operation('documents.show', { id: Schema.String, kind: Schema.optional(DocumentKindSchema) }),
   empty('memory.index'), operation('memory.recall', { query: Schema.String }), operation('issue.recall', { query: Schema.String }),
   empty('code.list'), empty('test.list'), operation('test.show', { id: Schema.String }),
   operation('writing.show', { path: Schema.optional(Schema.String) }), empty('writing.index'),
   operation('concepts.show', { path: Schema.optional(Schema.String) }), empty('concepts.index'),
-  empty('feedback.list'),
+  operation('feedback.list', { filter: Schema.optional(FeedbackFilterSchema) }),
+  operation('feedback.show', { id: Schema.String }), empty('feedback.connection.list'),
   operation('historical', { query: Query }),
 ]);
 export type QueryRequest = typeof QueryRequest.Type;
@@ -79,14 +82,25 @@ const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, 
     case 'writing.index': return writingIndex(repo);
     case 'concepts.show': return showConcepts(repo, request.input.path);
     case 'concepts.index': return indexConcepts(repo);
-    case 'feedback.list': return { operation: 'feedback-list', feedback: listFeedback(repo) };
+    case 'feedback.list': return { operation: 'feedback-list', feedback: listFeedback(repo, undefined, request.input.filter) };
+    case 'feedback.show': {
+      const item = listFeedback(repo).find(candidate => candidate.document.metadata.id === request.input.id);
+      if (!item) throw new ConcordError('DocumentNotFound', `No feedback matches ${request.input.id}`);
+      const relations = documentShow(repo, item.document.path, 'issue', cache);
+      return { operation: 'feedback-show', feedback: { ...item, document: relations.document }, incoming: relations.incoming, outgoing: relations.outgoing, complete: relations.complete, findings: relations.findings };
+    }
+    case 'feedback.connection.list': return { operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] };
     case 'check': throw new ConcordError('InvalidInput', 'Check requires its Effect operation');
+    case 'workspace.show': throw new ConcordError('InvalidInput', 'Workspace inspection requires its Effect operation');
     case 'historical': throw new ConcordError('InvalidInput', 'Historical queries require their Effect operation');
   }
 };
 export const executeQuery = Effect.fn('Queries.Local.execute')(function*(root: string | undefined, input: QueryRequest, cache: 'use' | 'off' = 'use') {
   const request = yield* Schema.decodeUnknownEffect(QueryRequest, { onExcessProperty: 'error' })(input).pipe(Effect.mapError(failure));
-  const value = yield* request.name === 'historical' ? cachedQuery(root, request.input.query) : request.name === 'check'
+  const value = yield* request.name === 'historical' ? cachedQuery(root, request.input.query) : request.name === 'workspace.show' ? Effect.gen(function*() {
+    const location = yield* (yield* Workspace).locate(root, true);
+    return yield* getWorkspaceSnapshot(location.root, cache);
+  }) : request.name === 'check'
     ? checkCurrentProject(root, cache)
     : Effect.scoped(Effect.gen(function*() {
       const workspace = yield* Workspace;

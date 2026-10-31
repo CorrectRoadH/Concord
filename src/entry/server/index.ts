@@ -14,3 +14,4 @@ export { computationLayer, operationLayer } from './main.js';
 export { makeComputationOwner, workspaceServerFailure } from './main.js';
 export type { WorkspaceConnection } from './client.js';
 export { readExistingWorkspaceProjection } from './main.js';
+export { clearExistingWorkspaceCache } from './main.js';

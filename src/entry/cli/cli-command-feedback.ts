@@ -9,13 +9,13 @@ import { documentShow } from "../../app/index.js";
 import { ConcordError, decode } from "../../model/index.js";
 import { executeViewAction } from "../../app/index.js";
 import { root, text, optional, id, emit, sync, cached, viewRoot } from "./cli-base.js";
-import { withRepo, withReadRepo } from "./cli-repository.js";
+import { withRepo, withQuery } from "./cli-repository.js";
 import { feedbackFilters, selectedFeedbackFilters } from "./cli-feedback-flags.js";
 
 const retiredFeedback = (name: string, replacement: string) => Command.make(name, {}, () => sync(() => { throw new ConcordError('CommandRetired', `Use ${replacement}`, { command: `concord feedback ${name}`, replacement }); })).pipe(Command.withDescription(`Use ${replacement} to maintain an Issue.`));
 
 const feedbackConnection = Command.make('connection').pipe(Command.withDescription('Configure feedback providers; GitHub CLI mode reuses the server machine login.'), Command.withSubcommands([
-  Command.make('list', {}, () => withReadRepo(repo => sync(() => ({ operation: 'feedback-connection-list', connections: repo.config.feedbackConnections ?? [] })))),
+  Command.make('list', {}, () => withQuery({ name: 'feedback.connection.list', input: {} })),
   Command.make('add', {
     id: text('id'),
     provider: Flag.choice('provider', ['github', 'linear']),
@@ -67,13 +67,8 @@ const feedbackImport = Command.make('import', { url: Argument.string('url'), con
 }));
 
 const feedback = Command.make('feedback').pipe(Command.withDescription('Connect external feedback sources and import observations as local Issues.'), Command.withSubcommands([
-  Command.make('list', feedbackFilters, args => withReadRepo(repo => sync(() => ({ operation: 'feedback-list', feedback: listFeedback(repo, undefined, selectedFeedbackFilters(args)) })))),
-  Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => {
-    const item = listFeedback(repo).find(candidate => candidate.document.metadata.id === args.id);
-    if (!item) throw new ConcordError('DocumentNotFound', `No feedback matches ${args.id}`);
-    const relations = documentShow(repo, item.document.path, 'issue', cached(settings.dryRun));
-    return { operation: 'feedback-show', feedback: { ...item, document: relations.document }, incoming: relations.incoming, outgoing: relations.outgoing, complete: relations.complete, findings: relations.findings };
-  }))),
+  Command.make('list', feedbackFilters, args => withQuery({ name: 'feedback.list', input: { filter: selectedFeedbackFilters(args) } })),
+  Command.make('show', { id }, args => withQuery({ name: 'feedback.show', input: { id: args.id } })),
   feedbackSync,
   feedbackImport,
   feedbackConnection,

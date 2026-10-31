@@ -11,7 +11,7 @@ import { knowledgeRecall } from "../../app/index.js";
 
 import { ConcordError, IssueClosureSchema, MEMORY_RELATION_KINDS, decode } from "../../model/index.js";
 import { root, text, optional, many, id, sync } from "./cli-base.js";
-import { withRepo } from "./cli-repository.js";
+import { withRepo, withQuery } from "./cli-repository.js";
 
 const closureFlags = { kind: Flag.choice('kind', ['fixed', 'delivered', 'duplicate', 'declined', 'invalid', 'external-fixed', 'closed']).pipe(Flag.withDefault('closed')), memory: optional('memory'), target: optional('target'), proof: many('proof'), canonical: optional('canonical'), evidence: many('evidence'), dependency: optional('dependency'), version: optional('version'), reason: optional('reason') };
 
@@ -34,7 +34,7 @@ const issueRemoteCommands = issueRemoteContribution.makeIssueRemoteSubcommands(
 
 const issue = Command.make('issue').pipe(Command.withDescription('Maintain local Issue owners; remote GitHub writes only through plan and execute.'), Command.withSubcommands([
   ...issueRemoteCommands,
-  Command.make('recall', { query: Argument.string('query') }, args => withRepo(repo => sync(() => knowledgeRecall(repo, 'issue', args.query)), { readonly: true })).pipe(Command.withDescription('Recall local Issues.')),
+  Command.make('recall', { query: Argument.string('query') }, args => withQuery({ name: 'issue.recall', input: { query: args.query } })).pipe(Command.withDescription('Recall local Issues.')),
   Command.make('link', { id, target: Argument.string('target'), role: Flag.choice('role', [...MEMORY_RELATION_KINDS, 'adopts']).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(() => linkIssue(repo,args.id,args.target,s.dryRun,args.role)))).pipe(Command.withDescription('Relate an Issue to Memory or Spec.')),
   Command.make('unlink', { id, target: Argument.string('target'), role: Flag.choice('role', [...MEMORY_RELATION_KINDS, 'adopts']).pipe(Flag.withDefault('investigation')) }, args => withRepo((repo,s) => sync(() => unlinkIssue(repo,args.id,args.target,s.dryRun,args.role)))),
   Command.make('reopen', { id, reason: text('reason') }, args => withRepo((repo,s) => sync(() => reopenIssue(repo,args.id,args.reason,s.dryRun)))).pipe(Command.withDescription('Reopen a closed Issue with a reason.')),
