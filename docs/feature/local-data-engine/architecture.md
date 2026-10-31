@@ -72,7 +72,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
 3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者；权限、I/O、类型或身份失败分别以具名错误 `ServerLockUnavailable` 报告。服务锁由原生绑定提供，原生产物缺失或无法加载时同样报告 `ServerLockUnavailable`（原因 native），服务不启动；面板与 `view` 报 `WorkspaceServerUnavailable`，CLI 在本进程计算。
 4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`，然后打开持久库、读取已有代次并启动计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务并在状态中报告原因。
-5. 启动者等待可握手的服务最多 1 秒；`opening` 已可握手，不必等待打开持久库。
+5. 启动者等待自己拉起或竞争中胜出的服务完成握手，最多 10 秒，覆盖新进程在负载下的冷启动；`opening` 已可握手，不必等待打开持久库。连接已在运行的服务时握手最多 1 秒，CLI 超时后在本进程计算。
 
 `hello` 与 `shutdown` 是控制帧，结构由本页固定：`hello {protocol, installation}` 返回 `{protocol, installation, token, state, generation}`；安装身份或协议不同时只回应这两种控制帧。启动者遇到不同身份的服务时发送带对方 token 的 `shutdown`，等待其释放服务锁（上限 3 秒），超时返回 `WorkspaceServerBusy` 并在 details 中给出对方 pid 与安装身份。CLI 只读命令遇到不同身份的服务时在本进程计算，不接管。
 
@@ -139,7 +139,8 @@ CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`-
 
 | 失败 | 结果 |
 | --- | --- |
-| 1 秒内没有可握手的服务 | 面板与 `view` 报 `WorkspaceServerUnavailable` 并以非零码退出；CLI 在本进程计算 |
+| 拉起的服务 10 秒内没有完成握手 | 面板、`view` 与 `server start` 报 `WorkspaceServerUnavailable` 并以非零码退出 |
+| 已运行的服务 1 秒内没有完成握手 | CLI 在本进程计算 |
 | 服务锁无法取得（非 WouldBlock） | `ServerLockUnavailable`，details 给出原因 |
 | 运行目录不符合要求 | 不创建服务，报告原因 |
 | 不同身份的服务 3 秒内未退出 | `WorkspaceServerBusy`，details 给出对方 pid 与安装身份 |
