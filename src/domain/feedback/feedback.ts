@@ -4,7 +4,7 @@ import type { Sources } from '../../base/sources/index.js';
 import type { OwnedProcess } from '../../base/process/index.js';
 import type { Publication } from "../../base/publication/index.js";
 import { Effect } from "effect";
-import { readFeedbackCache, mergeFeedbackCache } from "../../base/cache/index.js";
+import { FeedbackCacheWriter, readFeedbackCache, mergeFeedbackCache } from "../../base/cache/index.js";
 import { FeedbackConnectionSchema, FeedbackSourceSchema, RemoteFeedbackSchema, feedbackIdentity, type feedback_schema_FeedbackConnection as FeedbackConnection, type FeedbackItem, type FeedbackSource, type RemoteFeedback } from "../../model/index.js";
 import { loadDocuments } from "../documents/index.js";
 import { renderDocument } from "../../model/index.js";
@@ -169,7 +169,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
 
   if (options.signal?.aborted) return yield* Effect.fail(new ConcordError('GhCancelled', 'Feedback read was cancelled before publication'));
 
-  return yield* withRepository(root, (repo) => attempt('feedback.publish', () => {
+  const receipt = yield* withRepository(root, (repo) => attempt('feedback.publish', () => {
     const current = configSnapshot(repo, connectionId);
     if (current.digest !== observed.digest) throw new ConcordError('PreimageChanged', `${repo.configSnapshot.path} changed while remote feedback was fetched; retry with the current configuration`);
     assertReturnedConnection(current.connection, bound);
@@ -209,14 +209,19 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
       ? { operation: options.url === undefined ? 'feedback-sync' : 'feedback-import', dryRun, changedPaths: [] }
       : repo.publish(options.url === undefined ? 'feedback-sync' : 'feedback-import', changes, dryRun);
     const warnings = [...remote.warnings];
-    if (!dryRun) {
-      try { warnings.push(...mergeFeedbackCache(repo, connectionId, remote.items)); }
-      catch (cause) { warnings.push(`Documents were committed but the private feedback cache could not be updated: ${cause instanceof Error ? cause.message : String(cause)}`); }
-    }
     return { ...receipt, connection: bound, fetched: fetched.items.length, imported: changes.filter((change) => change.path.startsWith('docs/issues/')).length, warnings };
   }), dryRun);
+  if (dryRun) return receipt;
+  const writer = yield* Effect.serviceOption(FeedbackCacheWriter);
+  const merged = yield* Effect.result(writer._tag === 'Some'
+    ? writer.value.merge(root, connectionId, remote.items)
+    : mergeLocalFeedbackObservation(root, connectionId, remote.items));
+  return { ...receipt, warnings: [...receipt.warnings, ...(merged._tag === 'Success' ? merged.success : [`Documents were committed but the private feedback cache could not be updated: ${merged.failure instanceof Error ? merged.failure.message : String(merged.failure)}`])] };
 });
 // @concord-end
+
+export const mergeLocalFeedbackObservation = Effect.fn('feedback.mergeLocalObservation')((root: string, connectionId: string, items: readonly RemoteFeedback[]) =>
+  Effect.scoped(openReadRepository(root, { access: 'read', optimistic: true }).pipe(Effect.flatMap(repo => attempt('feedback.mergeCache', () => repo.snapshot(() => mergeFeedbackCache(repo, connectionId, items)))))));
 
 // @concord-begin
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收

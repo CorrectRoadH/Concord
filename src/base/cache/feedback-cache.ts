@@ -37,6 +37,11 @@ export function mergeFeedbackCache(repo: Repository, connectionId: string, remot
   return inRepositorySnapshot(repo, () => {
     const database = repositoryCache(repo);
     database.prepareWrite();
+    return mergeFeedbackRows(database, connectionId, remoteItems);
+  });
+}
+/** The handle owner validates and writes the entire accepted batch atomically. */
+export function mergeFeedbackRows(database: Pick<import('./hawdb-native.js').HawdbDatabase, 'get' | 'put'>, connectionId: string, remoteItems: readonly RemoteFeedback[]): readonly string[] {
     const incoming = remoteItems.map(remote => decode(RemoteFeedbackSchema, remote, 'feedback fetch'));
     const keys = [...new Set(incoming.map(feedbackIdentity))];
     if (keys.length > 1000) throw new ConcordError('HawdbLimit', 'A feedback fetch exceeds the atomic 1000-identity cache batch limit');
@@ -63,7 +68,6 @@ export function mergeFeedbackCache(repo: Repository, connectionId: string, remot
     }
     if (changes.size > 0) database!.put('feedback_cache', [...changes].map(([key, value]) => ({ key, payload: canonical(value) })));
     return warnings;
-  });
 }
 
 function comparable(remote: RemoteFeedback): string {

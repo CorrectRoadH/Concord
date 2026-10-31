@@ -4,6 +4,8 @@ import { Effect, Exit, Scope } from 'effect';
 import { ConcordError } from '../../model/index.js';
 import { PersistentCache, type PersistentCacheService, type ReadonlyCacheSnapshot } from './service.js';
 import { HawdbFailure, type HawdbDatabase } from './hawdb-native.js';
+import { mergeFeedbackRows } from './feedback-cache.js';
+import type { RemoteFeedback } from '../../model/index.js';
 
 /** One scoped owner, with an explicit close/reopen boundary for maintenance. */
 export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(function*(privateDir: string) {
@@ -32,5 +34,5 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     update: (_directory, namespace, key, update) => use(db => db.put(namespace, [{ key, payload: update(db.get(namespace, [key])[0]?.payload) }])),
   };
   const snapshot = use(db => Object.fromEntries(['feedback_cache', 'query_cache', 'workspace_projection'].map(namespace => [namespace, db.scan(namespace as 'feedback_cache' | 'query_cache' | 'workspace_projection')])) as ReadonlyCacheSnapshot);
-  return { open, close, service, snapshot };
+  return { open, close, service, snapshot, mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use(db => mergeFeedbackRows(db, connectionId, items)) };
 });

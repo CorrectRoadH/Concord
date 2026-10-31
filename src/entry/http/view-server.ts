@@ -15,6 +15,27 @@ import { ViewJobManager } from "../../app/index.js";
 import type { ViewFailure, ViewResponse } from "../../model/index.js";
 import { ViewRequestLog } from "./view-request-log.js";
 import type { RequestTiming } from "../../app/index.js";
+import type { ViewFile, WorkspaceProjection, ViewJob } from '../../model/index.js';
+
+export interface HostedViewPorts {
+  readonly workspace: () => Promise<WorkspaceProjection>;
+  readonly refresh: () => void;
+  readonly read: (path: string) => Promise<ViewFile>;
+  readonly git: () => Promise<unknown>;
+  readonly diff: (path: string, area: GitArea) => Promise<unknown>;
+  readonly compile: (input: unknown) => Promise<unknown>;
+  readonly action: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
+  readonly jobs: { list(): readonly ViewJob[]; start(caseId: string): ViewJob; cancel(id: string): ViewJob; close(): Promise<void> };
+  readonly subscribe: (listener: (event: unknown) => void) => () => void;
+  readonly sse: (delta: number) => void;
+}
+interface ProjectionPort {
+  read(): Promise<WorkspaceProjection>;
+  retry(): void;
+  request(explicit?: boolean): void;
+  start(): void;
+  close(): Promise<void>;
+}
 
 const BODY_LIMIT = 4 * 1024 * 1024;
 const STATIC_LIMIT = 16 * 1024 * 1024;
@@ -49,7 +70,7 @@ export interface ViewServerHandle {
   readonly port: number;
   readonly address: string;
   readonly server: Server;
-  readonly jobs: ViewJobManager;
+  readonly jobs: HostedViewPorts['jobs'];
   close(): Promise<void>;
 }
 
@@ -288,9 +309,28 @@ function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoo
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
-async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: ViewJobManager, baselineCache: GitBaselineCache, scans: ViewProjectionManager, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming): Promise<void> {
+async function api(request: IncomingMessage, response: ServerResponse, url: URL, root: string, jobs: HostedViewPorts['jobs'], baselineCache: GitBaselineCache, scans: ProjectionPort, runAction: (input: unknown, response: ServerResponse, timing: RequestTiming) => Promise<unknown>, timing: RequestTiming, hosted?: HostedViewPorts): Promise<void> {
   const method = request.method ?? 'GET';
   const respond = (value: unknown, status = 200) => timing.sync('http.response', () => success(response, value, status));
+  if (method === 'GET' && url.pathname === '/api/events' && hosted) {
+    exactQuery(url, []); securityHeaders(response);
+    response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    response.setHeader('Connection', 'keep-alive'); response.flushHeaders();
+    let pending: string | undefined, blocked = false;
+    const send = (event: unknown) => {
+      const stopping = typeof event === 'object' && event !== null && 'state' in event && event.state === 'stopping';
+      const body = `event: ${stopping ? 'stopping' : 'workspace'}\ndata: ${JSON.stringify(event)}\n\n`;
+      if (stopping) { response.end(body); return; }
+      if (blocked) { pending = body; return; }
+      blocked = !response.write(body);
+    };
+    const drain = () => { blocked = false; if (pending) { const body = pending; pending = undefined; blocked = !response.write(body); } };
+    response.on('drain', drain);
+    hosted.sse(1);
+    const unsubscribe = hosted.subscribe(send);
+    response.once('close', () => { pending = undefined; response.off('drain', drain); unsubscribe(); hosted.sse(-1); });
+    return;
+  }
   if (method === 'GET' && url.pathname === '/api/workspace') {
     exactQuery(url, []);
     let value;
@@ -323,14 +363,14 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   }
   if (method === 'GET' && url.pathname === '/api/file') {
     exactQuery(url, ['path']);
-    return respond(await timing.async('http.file', () => runOperation(getViewFile(root, url.searchParams.get('path')!, timing))));
+    return respond(await timing.async('http.file', () => hosted ? hosted.read(url.searchParams.get('path')!) : runOperation(getViewFile(root, url.searchParams.get('path')!, timing))));
   }
   if (method === 'POST' && url.pathname === '/api/p5/compile') {
     exactQuery(url, []);
     mutationJson(request);
     const input = await readJson(request);
     const { compileP5 } = await import("../../app/index.js");
-    return respond(await runOperation(compileP5(root, input)));
+    return respond(await (hosted ? hosted.compile(input) : runOperation(compileP5(root, input))));
   }
   if (method === 'POST' && url.pathname === '/api/action') {
     exactQuery(url, []);
@@ -358,13 +398,13 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
   }
   if (method === 'GET' && url.pathname === '/api/git') {
     exactQuery(url, []);
-    return respond(await timing.async('http.git', () => runOperation(getViewGitStatus(root, baselineCache))));
+    return respond(await timing.async('http.git', () => hosted ? hosted.git() : runOperation(getViewGitStatus(root, baselineCache))));
   }
   if (method === 'GET' && url.pathname === '/api/git/diff') {
     exactQuery(url, ['path', 'area']);
     const area = url.searchParams.get('area');
     if (area !== 'staged' && area !== 'unstaged' && area !== 'untracked') throw new ConcordError('InvalidInput', 'area must be staged, unstaged, or untracked');
-    return respond(await timing.async('http.gitDiff', () => runOperation(getGitDiff(root, url.searchParams.get('path')!, area satisfies GitArea))));
+    return respond(await timing.async('http.gitDiff', () => hosted ? hosted.diff(url.searchParams.get('path')!, area) : runOperation(getGitDiff(root, url.searchParams.get('path')!, area satisfies GitArea))));
   }
   throw new ConcordError('ApiNotFound', 'Unknown API endpoint');
 }
@@ -372,13 +412,13 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#主流程
 // @concord-implements docs/feature/web-workbench/architecture.md
-async function startViewServer(options: ViewServerOptions, scans: ViewProjectionManager): Promise<ViewServerHandle> {
+async function startViewServer(options: ViewServerOptions, scans: ProjectionPort, hosted?: HostedViewPorts): Promise<ViewServerHandle> {
   const root = validateViewRoot(options.root);
   const host = options.host ?? '127.0.0.1';
   const requestedPort = options.port ?? 4317;
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? builtAssetRoot('web');
-  const jobs = new ViewJobManager(root, () => scans.request(true), withHttpWriter);
+  const jobs = hosted?.jobs ?? new ViewJobManager(root, () => scans.request(true), withHttpWriter);
   const baselineCache: GitBaselineCache = {};
   const requestLog = new ViewRequestLog();
   let stopping = false;
@@ -387,13 +427,13 @@ async function startViewServer(options: ViewServerOptions, scans: ViewProjection
   const runAction = (input: unknown, response: ServerResponse, timing: RequestTiming): Promise<unknown> => {
     if (stopping) throw new ConcordError('ServerStopping', 'The workbench is shutting down');
     const action = input !== null && typeof input === 'object' && 'action' in input ? input.action : undefined;
-    if (action !== 'feedback.sync' && action !== 'feedback.check') return runOperation(executeViewAction(root, input, undefined, timing));
+    if (action !== 'feedback.sync' && action !== 'feedback.check') return hosted ? hosted.action(input) : runOperation(executeViewAction(root, input, undefined, timing));
     const controller = new AbortController();
     feedbackControllers.add(controller);
     const onClose = () => { if (!response.writableFinished) controller.abort(); };
     response.once('close', onClose);
     if (response.destroyed) controller.abort();
-    const task = runOperation(executeViewAction(root, input, controller.signal, timing), { signal: controller.signal });
+    const task = hosted ? hosted.action(input, controller.signal) : runOperation(executeViewAction(root, input, controller.signal, timing), { signal: controller.signal });
     feedbackTasks.add(task);
     void task.finally(() => { feedbackTasks.delete(task); feedbackControllers.delete(controller); response.off('close', onClose); }).catch(() => {});
     return task;
@@ -409,7 +449,7 @@ async function startViewServer(options: ViewServerOptions, scans: ViewProjection
           exactQuery(url, []);
           serveP5Frame(request, response, webRoot);
         } else if (url.pathname.startsWith('/api/')) {
-          await api(request, response, url, root, jobs, baselineCache, scans, runAction, timing);
+          await api(request, response, url, root, jobs, baselineCache, scans, runAction, timing, hosted);
         } else if (request.method === 'GET') {
           timing.sync('http.static', () => serveStatic(request, response, url.pathname, webRoot));
         } else {
@@ -447,13 +487,17 @@ async function startViewServer(options: ViewServerOptions, scans: ViewProjection
       for (const controller of feedbackControllers) controller.abort();
       const closed = new Promise<void>((resolveClosed, reject) => server.close((cause) => cause ? reject(failure(cause)) : resolveClosed()));
       server.closeAllConnections();
-      try { await Promise.allSettled([...feedbackTasks]); await Promise.all([scans.close(), jobs.close(), closed]); }
+      try { await Promise.allSettled([...feedbackTasks]); await Promise.all([scans.close(), ...(hosted ? [] : [jobs.close()]), closed]); }
       finally { requestLog.close(); closeGitBaselineCache(baselineCache); }
     })(),
   };
   scans.start();
   return handle;
 }
+
+export const startHostedViewServer = (options: ViewServerOptions, ports: HostedViewPorts) => startViewServer(options, {
+  read: ports.workspace, request: ports.refresh, retry: ports.refresh, start: () => {}, close: async () => {},
+}, ports);
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md

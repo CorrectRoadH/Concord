@@ -37,3 +37,4 @@ export { writeWritingFindings } from './writing-cache.js';
 
 export type { RepositoryCache } from './cache-store.js';
 export { makePersistentCacheOwner } from './owner.js';
+export { FeedbackCacheWriter } from './feedback-writer.js';

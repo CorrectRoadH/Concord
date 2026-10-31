@@ -10,3 +10,4 @@ export type { FeedbackSyncOptions } from './feedback.js';
 export type { FeedbackSyncReceipt } from './feedback.js';
 export { listFeedback } from './feedback.js';
 export { syncFeedback } from './feedback.js';
+export { mergeLocalFeedbackObservation } from './feedback.js';

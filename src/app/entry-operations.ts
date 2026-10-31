@@ -40,6 +40,7 @@ export const deferDesign: typeof Module7.deferDesign = (...args) => Module7.defe
 export const formatDesign: typeof Module7.formatDesign = (...args) => Module7.formatDesign(...args);
 export const listFeedback: typeof Module8.listFeedback = (...args) => Module8.listFeedback(...args);
 export const syncFeedback: typeof Module8.syncFeedback = (...args) => Module8.syncFeedback(...args);
+export const mergeLocalFeedbackObservation: typeof Module8.mergeLocalFeedbackObservation = (...args) => Module8.mergeLocalFeedbackObservation(...args);
 export const openWriteRepository: typeof Module0.openWriteRepository = (...args) => Module0.openWriteRepository(...args);
 export const reopenIssue: typeof Module9.reopenIssue = (...args) => Module9.reopenIssue(...args);
 export const closeIssue: typeof Module9.closeIssue = (...args) => Module9.closeIssue(...args);

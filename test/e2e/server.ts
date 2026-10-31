@@ -32,7 +32,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       rmSync(resources.web, { recursive: true, force: true });
       cpSync(options.webRoot, resources.web, { recursive: true });
     }
-    child = spawn(process.execPath, [resources.bin, '--root', options.root, '--json', 'view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, [resources.bin, '--root', options.root, '--json', 'view', '--in-process', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
     const processHandle = child;
     let diagnostics = '';
     processHandle.stderr!.on('data', (chunk: Buffer) => { diagnostics += chunk.toString(); process.stderr.write(chunk); });

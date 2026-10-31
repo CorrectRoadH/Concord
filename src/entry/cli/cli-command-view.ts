@@ -11,11 +11,12 @@ import { root, optional, emit, sync, viewRoot } from "./cli-base.js";
 const view = Command.make('view', {
   host: Flag.string('host').pipe(Flag.withDefault('127.0.0.1')),
   port: Flag.integer('port').pipe(Flag.withDefault(4317)),
+  inProcess: Flag.boolean('in-process').pipe(Flag.withDefault(false)),
 }, args => Effect.gen(function*() {
   const settings = yield* root;
   if (settings.dryRun) return yield* Effect.fail(new ConcordError('InvalidOption', 'view does not accept --dry-run'));
   const launcher = yield* ViewLauncher;
-  return yield* launcher.serve({ root: viewRoot(settings), host: args.host, port: args.port }, (server) => emit({ operation: 'view', ...server }, settings.json));
+  return yield* launcher.serve({ root: viewRoot(settings), host: args.host, port: args.port, inProcess: args.inProcess }, (server) => emit({ operation: 'view', ...server }, settings.json));
 })).pipe(Command.withDescription('Review local changes, or export a static committed comparison.'), Command.withSubcommands([
   Command.make('export', {
     base: Flag.string('base'), head: Flag.string('head').pipe(Flag.withDefault('HEAD')),

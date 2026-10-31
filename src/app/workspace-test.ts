@@ -1,0 +1,17 @@
+// @concord-file
+// @concord-implements docs/feature/web-workbench/architecture.md#服务托管
+import { Effect } from 'effect';
+import { Workspace } from '../base/workspace/index.js';
+import { buildTrace, requireValidTrace, selectCase } from '../domain/trace/index.js';
+import { runCase } from '../domain/tests/index.js';
+import { failure } from '../model/index.js';
+
+export const runWorkspaceTest = Effect.fn('runWorkspaceTest')(function*(root: string, caseId: string) {
+  return yield* Effect.scoped(Effect.gen(function*() {
+    const repo = yield* (yield* Workspace).openWrite(root);
+    const trace = yield* Effect.try({ try: () => repo.snapshot(() => buildTrace(repo, 'off', { includeCode: false })), catch: failure });
+    yield* Effect.try({ try: () => requireValidTrace(trace), catch: failure });
+    const selected = yield* Effect.try({ try: () => selectCase(trace.annotations.cases, caseId), catch: failure });
+    return yield* runCase(repo, selected, trace.documents);
+  }));
+});

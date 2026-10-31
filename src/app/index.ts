@@ -182,3 +182,6 @@ export { readPublicationRevisionSync } from './entry-operations.js';
 export { makeOwnedProcessService } from './entry-operations.js';
 export { createReadRepository } from './entry-operations.js';
 export { Queries, QueryRequest, QueryReply, executeQuery } from './queries.js';
+export { mergeLocalFeedbackObservation } from './entry-operations.js';
+export { runWorkspaceTest } from './workspace-test.js';
+export { clearWorkspaceCache } from './workspace-cache.js';
