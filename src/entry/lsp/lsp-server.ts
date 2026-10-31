@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { Effect, Schema } from "effect";
 import { discoverRoot, readRepositoryFileSync } from "../../app/index.js";
 import { uriPath } from "../../app/index.js";
-import { readPublicationRevisionSync } from "../../app/index.js";
+import { randomUUID } from "node:crypto";
 import { ConcordError, decode, digest, failure } from "../../model/index.js";
 import * as P from '../../model/editor/index.js';
 import { runEditorJob } from "../../app/index.js";
@@ -14,7 +14,7 @@ import { makeOwnedProcessService } from "../../app/index.js";
 
 interface Task {
   readonly id?: P.RpcId;
-  readonly generation: number;
+  readonly session: string;
   readonly controller: AbortController;
   promise: Promise<void>;
 }
@@ -24,7 +24,7 @@ function verify(root: string, result: P.Computed): void {
   const repo = createReadRepository(root, { access: 'read', optimistic: true, persistentCache: 'off' });
   try {
     repo.snapshot(() => {
-      if (repo.configSnapshot.digest !== result.config || readPublicationRevisionSync(root) !== result.revision) throw new ConcordError('ContentModified', 'Configuration or publication changed');
+      if (repo.configSnapshot.digest !== result.config) throw new ConcordError('ContentModified', 'Configuration changed');
       for (const [path, before, identity] of result.reads) {
         const current = repo.read(path);
         if ((current === undefined ? null : digest(current)) !== before) throw new ConcordError('ContentModified', `${path} changed`);
@@ -45,7 +45,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
     const overlays = new Map<string, P.Overlay>();
     const tasks = new Set<Task>();
     const running = new Set<Task>();
-    let generation = 0, opened = 0;
+    let session = randomUUID();
     let state: 'new' | 'initializing' | 'ready' | 'shutdown' = 'new';
     let ended = false;
     let cleanupFailure: ConcordError | undefined;
@@ -92,7 +92,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
       timer = setTimeout(() => { timer = undefined; start('diagnostics'); }, 25);
     };
     const invalidate = () => {
-      generation++;
+      session = randomUUID();
       for (const task of [...tasks]) stopTask(task, 'ContentModified');
       schedule();
     };
@@ -101,18 +101,18 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
       if (running.size >= P.editorLimits.tasks) { if (id !== undefined) reject(id, -32000, 'EditorBudgetExceeded', 'Concurrent task limit'); else schedule(); return; }
       const duplicate = id === undefined ? undefined : [...tasks].find(task => task.id === id);
       if (duplicate !== undefined && id !== undefined) { tasks.delete(duplicate); duplicate.controller.abort(); reject(id, -32600, 'DuplicateRequest'); return; }
-      const task: Task = { id, generation, controller: new AbortController(), promise: Promise.resolve() };
+      const task: Task = { id, session, controller: new AbortController(), promise: Promise.resolve() };
       tasks.add(task);
       running.add(task);
       const work = Effect.try({ try: (): P.Job => {
         const config = readRepositoryFileSync(root, 'concord.config.ts');
         if (config === undefined) throw new ConcordError('ProjectNotFound', 'Project configuration is missing');
-        return { root, generation, config: digest(config), revision: readPublicationRevisionSync(root), overlays: [...overlays.values()], method, ...(params === undefined ? {} : { params }) };
+        return { root, session, config: digest(config), overlays: [...overlays.values()], method, ...(params === undefined ? {} : { params }) };
       }, catch: failure }).pipe(Effect.flatMap(job => runEditorJob(job, recordCleanupFailure, createProcessService())));
       task.promise = Effect.runPromise(work, { signal: task.controller.signal }).then(result => {
         if (!tasks.has(task) || ended) return;
         if (cleanupFailure !== undefined) { if (id !== undefined) reject(id, -32603, cleanupFailure.code, cleanupFailure.message); return; }
-        if (result.generation !== generation || task.generation !== generation) { stopTask(task, 'ContentModified'); return; }
+        if (result.session !== session || task.session !== session) { stopTask(task, 'ContentModified'); return; }
         try { verify(root, result); }
         catch { stopTask(task, 'ContentModified'); schedule(); return; }
         if (id !== undefined) respond(id, result.value);
@@ -201,7 +201,7 @@ export const serveEditor = Effect.fn('editor.serve')(function*(rootInput?: strin
           if (overlays.has(safe.uri)) throw new ConcordError('DocumentAlreadyOpen', safe.path);
           if (overlays.size >= P.editorLimits.documents) throw new ConcordError('EditorBudgetExceeded', 'Open document limit');
           capacity(document.text);
-          overlays.set(safe.uri, { ...document, ...safe, opened: ++opened, valid: true }); invalidate();
+          overlays.set(safe.uri, { ...document, ...safe, opened: randomUUID(), valid: true }); invalidate();
         } else if (method === 'textDocument/didChange') {
           const change = decode(P.Change, params, method), document = existing(change.textDocument.uri);
           if (!document.valid || change.textDocument.version <= document.version) throw new ConcordError('InvalidDocumentVersion', 'Versions must increase; close and reopen');

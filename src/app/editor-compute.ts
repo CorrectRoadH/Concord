@@ -1,7 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { Effect } from "effect";
 import { openReadRepository } from "../base/workspace/index.js";
-import { readPublicationRevisionSync } from "../base/publication/index.js";
 import { scanAnnotations } from "../domain/tests/index.js";
 import { diagnoseDocuments } from "../domain/documents/index.js";
 import { codeReferenceTokens, scanCode } from "../domain/code/index.js";
@@ -26,8 +25,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
   return yield* Effect.acquireUseRelease(
     openReadRepository(job.root, { access: 'read', optimistic: true, persistentCache: 'off' }),
     local => Effect.try({ try: (): Computed => local.snapshot(() => {
-      const revision = readPublicationRevisionSync(local.root);
-      if (local.configSnapshot.digest !== job.config || revision !== job.revision) throw new ConcordError('ContentModified', 'Configuration or publication changed before computation');
+      if (local.configSnapshot.digest !== job.config) throw new ConcordError('ContentModified', 'Configuration changed before computation');
       const reads = new Map<string, readonly [string | null, string | null]>();
       const listings = new Map<string, Computed['listings'][number]>();
       const overlays = new Map(job.overlays.map(document => [document.path, document]));
@@ -180,7 +178,7 @@ export const computeEditor = Effect.fn('editor.compute')(function*(job: Job) {
         ...findings.filter(finding => finding.path === document.path).map(finding => ({ range: range(finding.line ?? 1), severity: 1, code: finding.code === 'StepNotFound' && gaps.size > 0 ? 'AnchorNotFound' : finding.code, source: 'concord' as const, message: finding.message })),
         ...([...gaps].length ? [{ range: range(1), severity: 2, code: 'EditorInputsIncomplete', source: 'concord' as const, message: `Input incomplete: ${[...gaps].join(', ')}. No complete-project conclusion is available.` }] : []),
       ] }));
-      return { generation: job.generation, revision, config: local.configSnapshot.digest, complete: gaps.size === 0, gaps: [...gaps], value, diagnostics, reads: [...reads].map(([path, values]) => [path, ...values] as const), listings: [...listings.values()] };
+      return { session: job.session, config: local.configSnapshot.digest, complete: gaps.size === 0, gaps: [...gaps], value, diagnostics, reads: [...reads].map(([path, values]) => [path, ...values] as const), listings: [...listings.values()] };
     }), catch: failure }),
     local => Effect.sync(() => local.close()),
   ).pipe(Effect.scoped);

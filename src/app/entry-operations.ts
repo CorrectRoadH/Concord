@@ -63,7 +63,6 @@ export function uriPath(repo: import('../model/index.js').Repository, uri: strin
 export function uriPath(repo: import('../model/index.js').Repository, uri: string, allowExternal = false): string | undefined {
   return allowExternal ? Module15.uriPath(repo, uri, true) : Module15.uriPath(repo, uri);
 }
-export const readPublicationRevisionSync: typeof Module13.readPublicationRevisionSync = (...args) => Module13.readPublicationRevisionSync(...args);
 export const makeOwnedProcessService: typeof Module15.makeOwnedProcessService = (...args) => Module15.makeOwnedProcessService(...args);
 
 export function createReadRepository(root: string | undefined, options: import('../base/workspace/index.js').ReadRepositoryOptions) {

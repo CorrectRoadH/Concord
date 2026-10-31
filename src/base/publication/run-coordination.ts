@@ -12,10 +12,10 @@ const RunState = Schema.Struct({
   format: Schema.Literal('concord.run-state/v1'),
   token: Schema.String,
   phase: Schema.Literals(['running', 'finalizing', 'quarantined']),
-  invalidated: Schema.Boolean,
+  invalidation: Schema.String,
 });
 type RunState = typeof RunState.Type;
-export interface RunLease { readonly lease: FileLease; }
+export interface RunLease { readonly lease: FileLease; readonly invalidation: string; }
 export type RunnerStatus = { readonly status: 'absent' } | { readonly status: 'running'; readonly token: string } | { readonly status: 'blocked'; readonly code: 'CleanupFailed'; readonly message: string };
 const location = (root: string) => genericPrivateDirectorySync(root);
 const statePath = (root: string, owner: LeaseOwner) => join(location(root), `run-${owner.token}.json`);
@@ -73,8 +73,9 @@ export function beginRun(root: string): RunLease {
   }
   // If this fails, the complete runner owner remains and its absent state blocks
   // publication. Do not guess whether a process was started by another entry.
-  writeState(root, lease.owner, { format: 'concord.run-state/v1', token: lease.owner.token, phase: 'running', invalidated: false });
-  return { lease };
+  const invalidation = randomUUID();
+  writeState(root, lease.owner, { format: 'concord.run-state/v1', token: lease.owner.token, phase: 'running', invalidation });
+  return { lease, invalidation };
 }
 
 /** Called before any generic or Trace source mutation, including rollback. */
@@ -85,13 +86,13 @@ export function invalidateActiveRun(root: string): void {
   let alive: boolean;
   try { alive = ownerIsAlive(owner); } catch { alive = false; }
   if (!alive || state.phase !== 'running' || lstatSync(quarantinePath(root, owner), { throwIfNoEntry: false }) !== undefined) throw new ConcordError('CleanupFailed', 'A runner has unconfirmed process cleanup; preserve runner.lease and its run state. Confirm child-process cleanup before further publication.');
-  if (!state.invalidated) writeState(root, owner, { ...state, invalidated: true });
+  writeState(root, owner, { ...state, invalidation: randomUUID() });
 }
 
 export function finalizeRun(root: string, run: RunLease, cleanupOk: boolean): boolean {
   const state = readState(root, run.lease.owner);
   writeState(root, run.lease.owner, { ...state, phase: cleanupOk ? 'finalizing' : 'quarantined' });
-  return state.invalidated;
+  return state.invalidation !== run.invalidation;
 }
 
 export function finishRun(root: string, run: RunLease): void {

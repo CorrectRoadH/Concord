@@ -22,14 +22,14 @@ export const Cancel = Schema.Struct({ id: RpcId });
 export const Deleted = Schema.Struct({ files: Schema.Array(Schema.Struct({ uri: Text })) });
 export const Renamed = Schema.Struct({ files: Schema.Array(Schema.Struct({ oldUri: Text, newUri: Text })) });
 export const Watched = Schema.Struct({ changes: Schema.Array(Schema.Struct({ uri: Text, type: Schema.Literals([1, 2, 3]) })) });
-export const Overlay = Schema.Struct({ uri: Text, path: Text, languageId: Text, version, opened: Nat, text: Schema.String, valid: Schema.Boolean, existed: Schema.Boolean });
+export const Overlay = Schema.Struct({ uri: Text, path: Text, languageId: Text, version, opened: Text, text: Schema.String, valid: Schema.Boolean, existed: Schema.Boolean });
 export type Overlay = typeof Overlay.Type;
-export const Job = Schema.Struct({ root: Text, generation: Nat, config: Text, revision: Schema.String, overlays: Schema.Array(Overlay), method: Schema.String, params: Schema.optional(Query) });
+export const Job = Schema.Struct({ root: Text, session: Text, config: Text, overlays: Schema.Array(Overlay), method: Schema.String, params: Schema.optional(Query) });
 export type Job = typeof Job.Type;
 
 const diagnostic = Schema.Struct({ range: RangeSchema, severity: Schema.Int, code: Text, source: Schema.Literal('concord'), message: Schema.String });
 export const Computed = Schema.Struct({
-  generation: Nat, revision: Schema.String, config: Text, complete: Schema.Boolean, gaps: Schema.Array(Text), value: Schema.Unknown,
+  session: Text, config: Text, complete: Schema.Boolean, gaps: Schema.Array(Text), value: Schema.Unknown,
   diagnostics: Schema.Array(Schema.Struct({ uri: Text, version, diagnostics: Schema.Array(diagnostic) })),
   reads: Schema.Array(Schema.Tuple([Text, Schema.NullOr(Text), Schema.NullOr(Text)])),
   listings: Schema.Array(Schema.Struct({ prefix: Text, source: Schema.Boolean, paths: Schema.Array(Text) })),

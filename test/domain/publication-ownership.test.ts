@@ -18,7 +18,7 @@ test('repository construction releases ownership; snapshots and commits use one 
     b.snapshot(() => assert.ok(b.read('concord.config.ts')));
     a.publish('independent', [{ path: 'memory/one.md', before: null, after: 'one' }]);
     b.publish('independent', [{ path: 'memory/two.md', before: null, after: 'two' }]);
-    assert.deepEqual(readdirSync(tracePrivateDirectorySync(root)), ['publication.revision']);
+    assert.deepEqual(readdirSync(tracePrivateDirectorySync(root)), []);
   } finally { a.close(); b.close(); }
 });
 

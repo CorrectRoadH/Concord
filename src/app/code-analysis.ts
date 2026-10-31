@@ -5,7 +5,7 @@ import { worktreeIdentity } from "../base/git/index.js";
 import { openReadRepository, type LocalRepository } from "../base/workspace/index.js";
 import { closeRepositoryCache, PersistentCache } from "../base/cache/index.js";
 import { readCachePayloads, writeCachePayloads } from "../base/cache/index.js";
-import { acquireTraceLeaseSync, readPublicationRevisionSync, releaseTraceLeaseSync } from "../base/publication/index.js";
+import { acquireTraceLeaseSync, releaseTraceLeaseSync } from "../base/publication/index.js";
 import { beginRun, finalizeRun, finishRun, quarantineRun } from "../base/publication/index.js";
 import { hasConfirmedOwnedGroupCleanup, OwnedProcess } from "../base/process/index.js";
 import { ConcordError, decode, digest, failure, objectDigest, type Repository } from "../model/index.js";
@@ -57,7 +57,7 @@ export function captureAnalysisInputs(repo: Repository) {
   const native = captureNativeAnalysis(repo, trace.annotations.cases);
   const identity = { algorithm: ALGORITHM, compiler: typescriptPackageVersion(), root: repo.root, privateDir: repo.privateDir, config: repo.configSnapshot.digest, candidate: worktreeIdentity(repo, true), members: identities, contracts, budgets: ANALYSIS_LIMITS, native: { observations: native.identity, bindings: [...native.scopes], gaps: [...native.gaps] } };
   const inputs = objectDigest(identity);
-  return { identity, inputs, files, trace, native, revision: readPublicationRevisionSync(repo.root) };
+  return { identity, inputs, files, trace, native };
 }
 
 function captureReader(reader: LocalRepository) {
@@ -161,9 +161,8 @@ export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
   if (!idle || !results.every(hasConfirmedOwnedGroupCleanup)) return yield* Effect.fail(new ConcordError('AnalysisCleanupUnknown', 'Analysis process group or output pipes remain unconfirmed; runner is quarantined'));
   // Step 5 closes all source and HawDB handles before the short publication section.
   const after = yield* readCapture(repo.root).pipe(Effect.mapError(() => new ConcordError('AnalysisSourceChanged', 'Analysis inputs changed before final verification')));
-  if (after.inputs !== captured.inputs || after.revision !== captured.revision) return yield* Effect.fail(new ConcordError('AnalysisSourceChanged', 'Analysis inputs or publication revision changed', { changed: Object.keys(captured.identity).filter(key => objectDigest(Reflect.get(captured.identity,key)) !== objectDigest(Reflect.get(after.identity,key))), revision: [captured.revision, after.revision] }));
+  if (after.inputs !== captured.inputs) return yield* Effect.fail(new ConcordError('AnalysisSourceChanged', 'Analysis inputs changed', { changed: Object.keys(captured.identity).filter(key => objectDigest(Reflect.get(captured.identity,key)) !== objectDigest(Reflect.get(after.identity,key))) }));
   return yield* sync(() => {
-    if (readPublicationRevisionSync(repo.root) !== after.revision) throw new ConcordError('AnalysisSourceChanged', 'Publication changed after analysis verification');
     const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'analysis-publish')!;
     try {
       // Full native/domain capture has closed. Under ownership, replay only its

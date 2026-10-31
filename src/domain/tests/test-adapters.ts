@@ -91,7 +91,7 @@ const withSession = <A>(repo: LocalRepository, adapters: readonly TestAdapter[],
     if (finishedAt > owned.session.deadline) throw new ConcordError('CollectFailed', 'Adapter run exceeded its wall time budget');
     repo.snapshot(() => {
       const invalidated = finalizeRun(repo.root, owned.run, owned.session.cleanupKnown);
-      if (invalidated) throw new ConcordError('InputChanged', 'The run epoch was invalidated during adapter execution');
+      if (invalidated) throw new ConcordError('InputChanged', 'The run was invalidated during adapter execution');
       publish?.(value);
     });
   });

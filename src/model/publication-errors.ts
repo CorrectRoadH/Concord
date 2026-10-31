@@ -9,7 +9,6 @@ export class TraceMutationError extends Data.TaggedError("TraceMutationError")<{
     | "lock"
     | "preimage"
     | "publish"
-    | "generation"
     | "rollback"
     | "journal"
     | "cleanup"

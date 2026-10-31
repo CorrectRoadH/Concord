@@ -16,7 +16,7 @@ import { ConcordError, Text, canonical, decode, digest, type Change, type Config
 import { snapshot } from "./config.js";
 import { closeRepositoryCache } from "../cache/index.js";
 import { invalidateActiveRun } from "../publication/index.js";
-import { acquireFileLease, acquireRecoverablePublicationLease, advancePublicationRevision, publicationRevision } from "../publication/index.js";
+import { acquireFileLease, acquireRecoverablePublicationLease } from "../publication/index.js";
 
 
 
@@ -251,7 +251,6 @@ export class LocalRepository implements Repository {
   private readonly recovering: boolean;
   private observing = true;
   private readonly optimistic: boolean;
-  private revision = '';
   private readonly observedFiles = new Map<string, string | undefined>();
   private readonly observedBytes = new Map<string, Buffer | undefined>();
   private observedRootFiles: string | undefined;
@@ -301,7 +300,6 @@ export class LocalRepository implements Repository {
       if (options.recover && options.reclaimPublication !== false) recoverPublicationLeaseSync(this.root);
       try {
         if (!this.optimistic) this.traceLease = acquireTraceLeaseSync(this.root, 'exclusive', options.recover ? 'recover' : 'repository', !emptyPreview, !options.recover && options.reclaimPublication !== false);
-        this.revision = publicationRevision(this.coordinationDirectory);
       }
       catch (cause) { throw storageCoordinationFailure(cause); }
       assertCurrentRuntimeFormat(this.root);
@@ -498,7 +496,8 @@ export class LocalRepository implements Repository {
       // The candidate owns decoded values now; drift collection needs no cache handle.
       closeRepositoryCache(this);
       const { files, directories } = this.verifyObservations(true);
-      const publicationChanged = publicationRevision(this.coordinationDirectory) !== this.revision;
+      this.assertReady();
+      const publicationChanged = false;
       return { value, drift: { files, directories, publicationChanged } };
     } finally { this.endSnapshot(); }
   }
@@ -511,8 +510,8 @@ export class LocalRepository implements Repository {
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   verifySnapshot(): void {
     if (!this.optimistic || this.snapshotDepth === 0) return;
-    if (publicationRevision(this.coordinationDirectory) !== this.revision) throw new ConcordError('SourceChanged', 'Publication changed during the source snapshot; retry the query');
     this.validateObservations();
+    this.assertReady();
   }
   // @concord-code
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
@@ -522,7 +521,6 @@ export class LocalRepository implements Repository {
     try {
       const acquire = this.recovering || !reclaimDead ? acquireFileLease : acquireRecoverablePublicationLease;
       if (!this.optimistic) this.traceLease = acquire(this.root, this.coordinationDirectory, PUBLICATION_LEASE, 'exclusive', 'snapshot', !this.previewWithoutState);
-      this.revision = publicationRevision(this.coordinationDirectory);
       this.openRoot();
       this.snapshotDepth = 1;
       this.assertReady();
@@ -750,7 +748,6 @@ export class LocalRepository implements Repository {
           finally {
             this.traceLease = undefined;
             releaseTraceLeaseSync(commitLease, 'publication');
-            this.revision = publicationRevision(this.coordinationDirectory);
           }
         }
       }
@@ -787,7 +784,7 @@ export class LocalRepository implements Repository {
     } catch (cause) {
       throw new ConcordError('RecoveryRequired', `Publication stopped: ${cause instanceof Error ? cause.message : String(cause)}; run concord recover`);
     }
-    try { this.pruneMovedRoadmap(journal); advancePublicationRevision(this.coordinationDirectory); rmSync(journalPath); syncDirectory(this.privateDir); }
+    try { this.pruneMovedRoadmap(journal); rmSync(journalPath); syncDirectory(this.privateDir); }
     catch {
       if (journal.scope.kind === 'step-rename') throw new ConcordError('RecoveryRequired', 'Step rename committed but cleanup was interrupted; run concord recover');
       return { operation: journal.operation, dryRun: false, changedPaths, recoveryRequired: true };
@@ -957,7 +954,6 @@ export class LocalRepository implements Repository {
       }
     }
     if (journal.phase === 'committed') this.pruneMovedRoadmap(journal);
-    advancePublicationRevision(this.coordinationDirectory);
     rmSync(path); syncDirectory(this.privateDir);
     return { operation: 'recover', status: journal.phase === 'prepared' ? 'rolled-back' : 'committed', changedPaths: journal.changes.map(c => c.path) };
   }

@@ -68,10 +68,10 @@ test("multi-file deletion journals and recovers an interrupted Unicode path with
   repository.close();
 });
 
-test("generation-committed recovery verifies the planned deletion and is repeatable", async (t) => {
+test("committed recovery verifies the planned deletion and is repeatable", async (t) => {
   const root = isolatedRepository(t);
   writeFileSync(join(root, "docs.md"), "before\n");
-  await assert.rejects(Effect.runPromise(mutateTraceFiles({ root, operation: "delete-after-generation", changes: [{ path: "docs.md", bytes: null, expectedDigest: traceDigest("before\n") }], injectFailureAfterGeneration: true })), /injected interruption/);
+  await assert.rejects(Effect.runPromise(mutateTraceFiles({ root, operation: "delete-after-commit", changes: [{ path: "docs.md", bytes: null, expectedDigest: traceDigest("before\n") }], injectFailureAfterCommit: true })), /injected interruption/);
   assert.throws(() => readFileSync(join(root, "docs.md"), "utf8"), /ENOENT/);
   assert.equal((await Effect.runPromise(recoverTrace(root))).recovered, true);
   assert.throws(() => readFileSync(join(root, "docs.md"), "utf8"), /ENOENT/);
@@ -111,24 +111,24 @@ test("a mixed write/delete transaction validates every temp before rolling back 
   assert.equal(readFileSync(join(root, "delete.md"), "utf8"), "before\n");
 });
 
-test("v2 journal path, temporary, digest, and generation tampering is rejected before recovery", async (t) => {
+test("v2 journal path, temporary, digest, and phase tampering is rejected before recovery", async (t) => {
   const root = isolatedRepository(t);
   writeFileSync(join(root, "journal.md"), "before\n");
   await assert.rejects(Effect.runPromise(mutateTraceFiles({ root, operation: "journal-tamper", changes: [{ path: "journal.md", bytes: "after\n" }], injectFailureAfterRename: 1 })), /injected interruption/);
   const journalPath = join(tracePrivateDirectorySync(root), "multi-file-publication-journal.json");
-  const original = JSON.parse(readFileSync(journalPath, "utf8")) as { newGeneration: number; files: Array<{ path: string; temporary: string; preimage: { kind: string; digest?: string } }> };
+  const original = JSON.parse(readFileSync(journalPath, "utf8")) as { phase: string; files: Array<{ path: string; temporary: string; preimage: { kind: string; digest?: string } }> };
   const variants = [
     (value: typeof original) => { value.files[0]!.temporary = "journal.md.wrong.tmp"; },
     (value: typeof original) => { value.files[0]!.path = "../outside.md"; },
     (value: typeof original) => { value.files[0]!.preimage.digest = "sha256:" + "0".repeat(64); },
     (value: typeof original) => { (value.files[0]!.preimage as { kind: string; bytesBase64?: string }).bytesBase64 = "AAAA garbage"; },
-    (value: typeof original) => { value.newGeneration += 2; },
+    (value: typeof original) => { value.phase = "unknown"; },
   ];
   for (const mutate of variants) {
     const candidate = structuredClone(original);
     mutate(candidate);
     writeFileSync(journalPath, JSON.stringify(candidate));
-    await assert.rejects(Effect.runPromise(recoverTrace(root)), /temporary path|unsafe|index entries and files differ|preimage does not match|generations are not consecutive/);
+    await assert.rejects(Effect.runPromise(recoverTrace(root)), /temporary path|unsafe|index entries and files differ|preimage does not match|phase/);
     writeFileSync(journalPath, JSON.stringify(original));
   }
   assert.equal(readFileSync(join(root, "journal.md"), "utf8"), "after\n");

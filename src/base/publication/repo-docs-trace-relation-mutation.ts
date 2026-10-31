@@ -9,13 +9,11 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { Cause, Effect, Exit, Result, Schema, SchemaIssue } from "effect";
 
 import { acquireTraceLease, genericJournalPath, recoverPublicationLeaseSync, releaseTraceLease, tracePrivateDirectorySync, type TraceLease } from "./coordination.js";
-import { advancePublicationRevision } from "./file-lease.js";
 import { invalidateActiveRun } from "./run-coordination.js";
 
 import { TraceRecoveryConflict, TraceRecoveryRequired } from "../../model/index.js";
 
 
-const GENERATION_FILE = "generation";
 const COORDINATION_ID_FILE = "coordination-id";
 const JOURNAL_FILE = "publication-journal.json";
 const MAXIMUM_OWNER_BYTES = 32 * 1024 * 1024;
@@ -36,7 +34,6 @@ export interface TraceRecoveryReceipt {
   readonly recovered: boolean;
   readonly action: "none" | "discarded-unpublished" | "rolled-back" | "completed" | "finished-discard";
   readonly owner?: string;
-  readonly generation: number;
 }
 
 interface FileSnapshotAbsent { readonly kind: "absent" }
@@ -52,7 +49,6 @@ type FileSnapshot = FileSnapshotAbsent | FileSnapshotPresent;
 const NonEmptyTrimmedString = Schema.String.check(Schema.isTrimmed(), Schema.isMinLength(1));
 const DigestSchema = Schema.String.check(Schema.isPattern(/^sha256:[0-9a-f]{64}$/u));
 const ModeSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
-const GenerationSchema = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
 const IdentityPartSchema = Schema.Struct({ path: Schema.String, device: Schema.String, inode: Schema.String });
 const WorktreeIdentitySchema = Schema.Struct({
   root: IdentityPartSchema,
@@ -75,8 +71,6 @@ const JournalCommon = {
   token: Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/u)),
   operation: NonEmptyTrimmedString,
   owner: NonEmptyTrimmedString,
-  oldGeneration: GenerationSchema,
-  newGeneration: GenerationSchema,
   snapshotDigest: DigestSchema,
   headCommit: NonEmptyTrimmedString,
   indexEntry: Schema.NullOr(Schema.String),
@@ -87,6 +81,7 @@ const JournalCommon = {
 const FileJournalSchema = Schema.Struct({
   ...JournalCommon,
   publication: Schema.Literal("file-replace"),
+  phase: Schema.Literals(["prepared", "committed"]),
   temporary: NonEmptyTrimmedString,
   preimage: Schema.Union([
     Schema.Struct({ kind: Schema.Literal("absent") }),
@@ -103,7 +98,7 @@ const FileJournalSchema = Schema.Struct({
 const DirectoryJournalSchema = Schema.Struct({
   ...JournalCommon,
   publication: Schema.Literals(["new-feedback-directory", "new-docs-directory"]),
-  phase: Schema.Literals(["prepared", "discarding-stage"]),
+  phase: Schema.Literals(["prepared", "committed", "discarding-stage"]),
   stage: NonEmptyTrimmedString,
   target: NonEmptyTrimmedString,
   manifest: Schema.Array(ManifestEntrySchema).pipe(Schema.check(Schema.isMinLength(1))),
@@ -146,15 +141,6 @@ function gitOutput(root: string, operation: string, args: readonly string[]): st
       cwd: resolve(root), encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 128 * 1024 * 1024,
     }).trimEnd();
   } catch (cause) { throw mutationFailure(operation, "git-private", cause, args.join(" ")); }
-}
-
-function readGenerationPath(path: string): number {
-  if (!existsSync(path)) return 0;
-  const source = readFileSync(path, "utf8").trim();
-  if (!/^(?:0|[1-9]\d*)$/u.test(source)) throw new Error(`invalid Trace generation ${JSON.stringify(source)}`);
-  const generation = Number(source);
-  if (!Number.isSafeInteger(generation)) throw new Error("Trace generation exceeds the safe integer range");
-  return generation;
 }
 
 function fsyncDirectory(path: string): void {
@@ -330,7 +316,6 @@ function validateJournal(root: string, directory: string, input: unknown): Publi
   const decoded = Schema.decodeUnknownResult(JournalSchema, { errors: "all", onExcessProperty: "error" })(input);
   if (Result.isFailure(decoded)) throw new TraceRecoveryConflict({ path: journalPath(directory), message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue) });
   const journal = decoded.success;
-  if (journal.newGeneration !== journal.oldGeneration + 1) throw new TraceRecoveryConflict({ path: journalPath(directory), message: "journal generations are not consecutive" });
   repositoryPath(root, journal.owner, "recover");
   if (journal.publication === "file-replace") {
     repositoryPath(root, journal.temporary, "recover");
@@ -375,7 +360,7 @@ function readJournal(root: string, directory: string): PublicationJournal | unde
   }
 }
 function writeJournal(directory: string, journal: PublicationJournal): void { durableReplace(journalPath(directory), `${JSON.stringify(journal, null, 2)}\n`, 0o600); }
-function removeJournal(directory: string): void { advancePublicationRevision(directory); rmSync(journalPath(directory), { force: true }); fsyncDirectory(directory); }
+function removeJournal(directory: string): void { rmSync(journalPath(directory), { force: true }); fsyncDirectory(directory); }
 
 function removeExactFile(path: string, expected: FileJournal["planned"], operation: string): void {
   const current = readFileSnapshot(path, operation);
@@ -459,56 +444,50 @@ function verifyRecoveryGit(root: string, journal: PublicationJournal): void {
 
 function recoverFileJournal(root: string, directory: string, journal: FileJournal): TraceRecoveryReceipt {
   verifyRecoveryIdentity(root, directory, journal);
-  const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
+  verifyRecoveryGit(root, journal);
   const owner = repositoryPath(root, journal.owner, "recover");
   const temporary = repositoryPath(root, journal.temporary, "recover");
   const ownerState = readFileSnapshot(owner, "recover");
   const temporaryState = readFileSnapshot(temporary, "recover");
-  if (generation === journal.newGeneration) {
+  if (journal.phase === "committed") {
     if (!fileSnapshotMatches(ownerState, journal.planned) || temporaryState.kind !== "absent") throw new TraceRecoveryConflict({ path: journal.owner, message: "committed file publication no longer matches its journal" });
     removeJournal(directory);
-    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner };
   }
-  if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither the journal old nor new value" });
-  verifyRecoveryGit(root, journal);
   if (fileSnapshotMatches(ownerState, journal.preimage)) {
     if (temporaryState.kind !== "absent") removeExactFile(temporary, journal.planned, "recover");
     removeJournal(directory);
-    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner };
   }
   if (fileSnapshotMatches(ownerState, journal.planned) && temporaryState.kind === "absent") {
     restoreFile(root, journal);
     removeJournal(directory);
-    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner };
   }
   throw new TraceRecoveryConflict({ path: journal.owner, message: "file publication state does not match a safe recovery transition" });
 }
 
 function recoverDirectoryJournal(root: string, directory: string, journal: DirectoryJournal): TraceRecoveryReceipt {
   verifyRecoveryIdentity(root, directory, journal);
-  const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
+  verifyRecoveryGit(root, journal);
   const stage = repositoryPath(root, journal.stage, "recover");
   const target = repositoryPath(root, journal.target, "recover");
   if (journal.phase === "discarding-stage") {
-    if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "discard phase requires the old generation" });
-    verifyRecoveryGit(root, journal);
-    discardStage(root, directory, journal);
-    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "finished-discard", owner: journal.owner, generation };
+      discardStage(root, directory, journal);
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "finished-discard", owner: journal.owner };
   }
   const stageManifest = manifest(stage, "recover");
   const targetManifest = manifest(target, "recover");
-  if (generation === journal.newGeneration) {
+  if (journal.phase === "committed") {
     if (stageManifest !== undefined || !sameManifest(targetManifest, journal.manifest)) throw new TraceRecoveryConflict({ path: journal.target, message: "committed directory publication no longer matches its journal" });
     removeJournal(directory);
-    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", owner: journal.owner };
   }
-  if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither the journal old nor new value" });
-  verifyRecoveryGit(root, journal);
   if (sameManifest(stageManifest, journal.manifest) && targetManifest === undefined) {
     const discarding = { ...journal, phase: "discarding-stage" as const };
     writeJournal(directory, discarding);
     discardStage(root, directory, discarding);
-    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "discarded-unpublished", owner: journal.owner };
   }
   if (stageManifest === undefined && sameManifest(targetManifest, journal.manifest)) {
     if (existsSync(stage)) throw new TraceRecoveryConflict({ path: journal.stage, message: "stage appeared immediately before rollback" });
@@ -517,15 +496,14 @@ function recoverDirectoryJournal(root: string, directory: string, journal: Direc
     const discarding = { ...journal, phase: "discarding-stage" as const };
     writeJournal(directory, discarding);
     discardStage(root, directory, discarding);
-    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner, generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", owner: journal.owner };
   }
   throw new TraceRecoveryConflict({ path: journal.target, message: "directory publication state does not match a safe recovery transition" });
 }
 
 function recoverUnderLease(root: string, directory: string): TraceRecoveryReceipt {
   const journal = readJournal(root, directory);
-  const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
-  if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none", generation };
+  if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none" };
   invalidateActiveRun(root);
   return journal.publication === "file-replace" ? recoverFileJournal(root, directory, journal) : recoverDirectoryJournal(root, directory, journal);
 }
@@ -545,11 +523,6 @@ export function recoverTrace(root: string, options: { readonly reclaimPublicatio
   }), options.reclaimPublication !== false);
 }
 
-function writeGeneration(directory: string, generation: number, operation: string): void {
-  try { durableReplace(resolve(directory, GENERATION_FILE), `${generation}\n`, 0o600); }
-  catch (cause) { throw mutationFailure(operation, "generation", cause, GENERATION_FILE); }
-}
-
 const MULTI_FILE_JOURNAL = "multi-file-publication-journal.json";
 
 export interface TraceMultiFileChange {
@@ -561,8 +534,6 @@ export interface TraceMultiFileChange {
 export interface TraceMultiFileReceipt {
   readonly format: "concord.docs-trace/multi-file-mutation/v1";
   readonly transactionId: string;
-  readonly generationBefore: number;
-  readonly generationAfter: number;
   readonly preimages: readonly { readonly path: string; readonly digest: string | null }[];
   readonly plannedDigests: readonly { readonly path: string; readonly digest: string | null }[];
   readonly committed: true;
@@ -579,7 +550,7 @@ export interface TraceMultiFileOptions<E = never, R = never> {
   readonly prepareUnderLease?: Effect.Effect<readonly TraceMultiFileChange[], E, R>;
   readonly changes?: readonly TraceMultiFileChange[];
   readonly injectFailureAfterRename?: number;
-  readonly injectFailureAfterGeneration?: boolean;
+  readonly injectFailureAfterCommit?: boolean;
 }
 interface MultiFileJournalEntry {
   readonly path: string;
@@ -589,11 +560,9 @@ interface MultiFileJournalEntry {
 }
 interface MultiFileJournalV2 {
   readonly format: "concord.trace/multi-file-publication-journal/v1";
-  readonly phase: "prepared" | "publishing" | "generation-committed" | "cleanup";
+  readonly phase: "prepared" | "publishing" | "committed" | "cleanup";
   readonly transactionId: string;
   readonly operation: string;
-  readonly oldGeneration: number;
-  readonly newGeneration: number;
   readonly headCommit: string;
   readonly indexEntries: Readonly<Record<string, string | null>>;
   readonly identity: WorktreeIdentity;
@@ -611,9 +580,9 @@ const MultiPlannedSchema = Schema.Union([
 const MultiFileEntrySchema = Schema.Struct({ path: NonEmptyTrimmedString, temporary: NonEmptyTrimmedString, preimage: MultiPreimageSchema, planned: MultiPlannedSchema });
 const MultiJournalSchema = Schema.Struct({
   format: Schema.Literal("concord.trace/multi-file-publication-journal/v1"),
-  phase: Schema.Literals(["prepared", "publishing", "generation-committed", "cleanup"]),
+  phase: Schema.Literals(["prepared", "publishing", "committed", "cleanup"]),
   transactionId: Schema.String.check(Schema.isPattern(/^netxn_[0-9a-f]+$/u)), operation: NonEmptyTrimmedString,
-  oldGeneration: GenerationSchema, newGeneration: GenerationSchema, headCommit: NonEmptyTrimmedString,
+  headCommit: NonEmptyTrimmedString,
   indexEntries: Schema.Record(Schema.String, Schema.NullOr(Schema.String)), identity: WorktreeIdentitySchema,
   files: Schema.Array(MultiFileEntrySchema).pipe(Schema.check(Schema.isMinLength(1))),
 });
@@ -624,7 +593,6 @@ function validateMultiJournal(root: string, directory: string, input: unknown): 
   const decoded = Schema.decodeUnknownResult(MultiJournalSchema, { errors: "all", onExcessProperty: "error" })(input);
   if (Result.isFailure(decoded)) throw new TraceRecoveryConflict({ path, message: SchemaIssue.makeFormatterDefault()(decoded.failure.issue) });
   const journal = decoded.success;
-  if (journal.newGeneration !== journal.oldGeneration + 1) throw new TraceRecoveryConflict({ path, message: "journal generations are not consecutive" });
   const keys = Object.keys(journal.indexEntries);
   const paths = journal.files.map((file) => file.path);
   if (new Set(paths).size !== paths.length || keys.length !== paths.length || keys.some((key) => !paths.includes(key))) throw new TraceRecoveryConflict({ path, message: "journal index entries and files differ" });
@@ -659,7 +627,7 @@ function readMultiJournal(root: string, directory: string): MultiFileJournalV2 |
   catch (cause) { throw new TraceRecoveryConflict({ path, message: `invalid multi-file journal: ${message(cause)}` }); }
   return validateMultiJournal(root, directory, value);
 }
-function removeMultiJournal(directory: string): void { advancePublicationRevision(directory); rmSync(multiJournalPath(directory), { force: true }); fsyncDirectory(directory); }
+function removeMultiJournal(directory: string): void { rmSync(multiJournalPath(directory), { force: true }); fsyncDirectory(directory); }
 function assertMultiGit(root: string, journal: MultiFileJournalV2): void {
   if (headCommit(root, "multi-file-recover") !== journal.headCommit || journal.files.some((file) => indexEntry(root, file.path, "multi-file-recover") !== journal.indexEntries[file.path])) {
     throw new TraceRecoveryConflict({ path: multiJournalPath(root), message: "HEAD or Git index changed while multi-file journal was active" });
@@ -692,23 +660,21 @@ function restoreMultiPreimages(root: string, journal: MultiFileJournalV2): void 
 }
 function recoverMultiUnderLease(root: string, directory: string): TraceRecoveryReceipt {
   const journal = readMultiJournal(root, directory);
-  const generation = readGenerationPath(resolve(directory, GENERATION_FILE));
-  if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none", generation };
+  if (journal === undefined) return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: false, action: "none" };
   if (!sameIdentity(worktreeIdentity(root, directory, false, "multi-file-recover"), journal.identity)) throw new TraceRecoveryConflict({ path: multiJournalPath(directory), message: "worktree identity changed" });
-  if (generation === journal.newGeneration) {
+  assertMultiGit(root, journal);
+  if (journal.phase === "committed" || journal.phase === "cleanup") {
     for (const file of journal.files) {
       if (!fileSnapshotMatches(readFileSnapshot(repositoryPath(root, file.path, journal.operation), journal.operation), file.planned)) throw new TraceRecoveryConflict({ path: file.path, message: "committed planned digest changed" });
       if (existsSync(repositoryPath(root, file.temporary, journal.operation))) throw new TraceRecoveryConflict({ path: file.temporary, message: "committed temporary file remains" });
     }
     removeMultiJournal(directory);
-    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed", generation };
+    return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "completed" };
   }
-  if (generation !== journal.oldGeneration) throw new TraceRecoveryConflict({ path: GENERATION_FILE, message: "generation is neither old nor new" });
-  assertMultiGit(root, journal);
   invalidateActiveRun(root);
   restoreMultiPreimages(root, journal);
   removeMultiJournal(directory);
-  return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back", generation };
+  return { format: "concord.docs-trace/recovery/v1", operation: "trace-recover", recovered: true, action: "rolled-back" };
 }
 
 export function recoverTraceMultiFile(root: string): Effect.Effect<TraceRecoveryReceipt, TraceCoordinationError> {
@@ -733,7 +699,6 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
       invalidateActiveRun(options.root);
       const changes = options.prepareUnderLease === undefined ? options.changes : yield* options.prepareUnderLease;
       if (changes === undefined || changes.length === 0 || new Set(changes.map((change) => change.path)).size !== changes.length) throw mutationFailure(options.operation, "preimage", "changes must be non-empty and path-unique");
-      const generation = readGenerationPath(resolve(lease.directory, GENERATION_FILE));
       const head = headCommit(options.root, options.operation);
       const token = `netxn_${randomUUID().replaceAll("-", "")}`;
       const files = changes.map((change): MultiFileJournalEntry => {
@@ -745,7 +710,7 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
         const temporary = slash(relative(resolve(options.root), resolve(dirname(target), `.${basename(target)}.concord-${token}.tmp`)));
         return { path: change.path, temporary, preimage: preimageForJournal(source), planned: bytes === null ? { kind: "absent" as const } : { kind: "file" as const, digest: traceDigest(bytes), byteLength: bytes.byteLength, mode: change.mode ?? (source.kind === "file" ? source.mode : 0o644) } };
       });
-      const journal: MultiFileJournalV2 = { format: "concord.trace/multi-file-publication-journal/v1", phase: "prepared", transactionId: token, operation: options.operation, oldGeneration: generation, newGeneration: generation + 1, headCommit: head, indexEntries: Object.fromEntries(files.map((file) => [file.path, indexEntry(options.root, file.path, options.operation)])), identity: worktreeIdentity(options.root, lease.directory, true, options.operation), files };
+      const journal: MultiFileJournalV2 = { format: "concord.trace/multi-file-publication-journal/v1", phase: "prepared", transactionId: token, operation: options.operation, headCommit: head, indexEntries: Object.fromEntries(files.map((file) => [file.path, indexEntry(options.root, file.path, options.operation)])), identity: worktreeIdentity(options.root, lease.directory, true, options.operation), files };
       invalidateActiveRun(options.root);
       writeMultiJournal(options.root, lease.directory, journal);
       files.forEach((file, index) => {
@@ -769,12 +734,11 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
         }
         if (options.injectFailureAfterRename === index + 1) throw mutationFailure(options.operation, "publish", "injected interruption", file.path);
       });
-      writeGeneration(lease.directory, generation + 1, options.operation);
-      writeMultiJournal(options.root, lease.directory, { ...journal, phase: "generation-committed" });
-      if (options.injectFailureAfterGeneration === true) throw mutationFailure(options.operation, "cleanup", "injected interruption");
+      writeMultiJournal(options.root, lease.directory, { ...journal, phase: "committed" });
+      if (options.injectFailureAfterCommit === true) throw mutationFailure(options.operation, "cleanup", "injected interruption");
       writeMultiJournal(options.root, lease.directory, { ...journal, phase: "cleanup" });
       removeMultiJournal(lease.directory);
-      return { format: "concord.docs-trace/multi-file-mutation/v1", transactionId: token, generationBefore: generation, generationAfter: generation + 1, preimages: files.map((file) => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map((file) => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
+      return { format: "concord.docs-trace/multi-file-mutation/v1", transactionId: token, preimages: files.map((file) => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map((file) => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
     } catch (cause) {
       return yield* Effect.fail(cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(options.operation, "publish", cause));
     }

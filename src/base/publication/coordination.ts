@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { lstatSync, mkdirSync } from "node:fs";
 import { resolve, join, sep } from "node:path";
 import { Effect } from "effect";
-import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, errno, publicationRevision, recoverFileLease, releaseFileLease, type FileLease } from "./file-lease.js";
+import { acquireFileLease, acquireRecoverablePublicationLease, assertLeasePath, CoordinationError, errno, recoverFileLease, releaseFileLease, type FileLease } from "./file-lease.js";
 
 
 
@@ -30,9 +30,6 @@ function gitPath(root: string, name: string): string {
 }
 
 export function tracePrivateDirectorySync(root: string): string { return gitPath(root, TRACE_PRIVATE_PATH); }
-export function readPublicationRevisionSync(root: string): string {
-  return publicationRevision(tracePrivateDirectorySync(root));
-}
 export function genericPrivateDirectorySync(root: string): string { return gitPath(root, "concord"); }
 
 /** Explicit cache writers may create this Git-owned child; readers never call this. */

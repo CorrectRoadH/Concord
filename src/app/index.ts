@@ -164,7 +164,6 @@ export { resourcePath } from './entry-operations.js';
 export { builtAssetRoot } from './entry-operations.js';
 export { readRepositoryFileSync } from './entry-operations.js';
 export { uriPath } from './entry-operations.js';
-export { readPublicationRevisionSync } from './entry-operations.js';
 export { makeOwnedProcessService } from './entry-operations.js';
 export { createReadRepository } from './entry-operations.js';
 export { Queries, QueryReply } from './query-port.js';
