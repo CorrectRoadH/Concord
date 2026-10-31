@@ -2,6 +2,7 @@ import { packageBin, createDocument, createConsumer, installedConcordCli, assert
 
 
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
+// @issue docs/issues/test-architecture-gaps.md
 // CASES lsp-integration C1-C5, C10, C12-C16, C18; test-journey-steps C6-C8, C13.
 test('LSP observations retain marker identity, traverse test helpers, and never govern check', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
