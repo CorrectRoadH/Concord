@@ -25,7 +25,7 @@ docs/feature/cart/README.md:12 [undefinedTerm] handoff appears 5 times in select
 ## 怎样工作
 
 - 候选名词：Spec 页面正文中、行内代码与代码块以外的 ASCII 单词和混合大小写词，出现次数达到政策阈值，且不是任何生效概念的 term。中文名词的切分不可靠，中文只通过弃用名约束。
-- 允许清单与阈值写在 `concord-writing.json`，按目录合成，与禁词相同。
+- 允许清单与阈值写在 `writing.md`，按目录合成，与禁词相同。
 - 弃用名可以带 `roots` 与 `exempt`，含义与禁词的同名字段相同。
 - Design、Research、Issue 与 Memory 是记录，不参与候选名词统计。
 

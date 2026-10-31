@@ -32,7 +32,7 @@ docsWork?: {
 
 - argv 不经过 shell，cwd 为仓库根；恰为 `{paths}` 的元素展开为对应 item 当前 write 集合的文件列表。展开后超过 128 KiB 返回 `DocsWorkArgvTooLong`，不截断路径。`timeoutMs` 默认 600000；退出码 0 为 passed，其它退出码、超时或信号为 failed。
 - 省略时内建检查 `writing` 对 write 路径运行 `concord docs check` 默认规则，内建 finalizer 运行 `concord check`。
-- `sharedPaths` 默认为 `docs/README.md` 及存在的 `docs/concepts.md`、`docs/concord-writing.json`；项目配置文件始终是共享路径。
+- `sharedPaths` 默认为 `docs/README.md` 及存在的 `docs/concepts.md`、`docs/writing.md`；项目配置文件始终是共享路径。
 - prepare 记录配置文件与 `docsWork` 解析结果的 `configDigest`；之后 check、verify 与 finalize 发现不一致时返回 `DocsWorkConfigChanged`，不运行检查。item 不能通过修改配置替换自己的检查。
 
 ## 计划与规划校验

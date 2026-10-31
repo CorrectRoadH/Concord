@@ -1,34 +1,54 @@
+# 检查正文与术语
 
-# 检查文档写作与术语一致性
+## 用户目标
 
-## 主流程
+作者写完一页 Spec，想知道有没有用错词、句子是否太长、定义过的术语有没有被用上，并在交付前确认整个仓库没有问题。
 
-1. 维护者在目录所属的 concepts.md 定义概念，在 concord-writing.json 定义写作政策，选择禁用表达、替换理由，以及所需的长度与概念检查。
-2. 运行 `concord docs check --json`，或通过 `--rules` 选择另一份规则。Concord 严格解码规则，在同一仓库读取快照内扫描文件。
-3. 作者按诊断逐处修改正文，再运行同一命令。CLI 不自动替换上下文用词，不保存第二份命中清单。
-4. 交付前运行 `concord check`，关系、生命周期与写作检查全部通过才算通过。
+## 起始状态
 
-## 验收
+- `docs/concepts.md` 定义了“订单”，旧写法为“单子”。
+- `docs/writing.md` 限制句子不超过 140 个字符。
 
-- 打包安装后的公开 CLI 可在隔离 Git 消费者中运行，既不加载 NiceEval checkout，也不加载产品 runner。
-- 同一文件命中重叠根时只检查一次。缺失规则、空扫描根与错误规则均返回具名错误，不能静默通过。
-- 禁词按字面量匹配，ASCII 忽略大小写并限制词边界；中文按子串匹配。`allowIn` 只豁免包含该词的更长写法。路径范围按完整目录边界判断。
-- Markdown 的 frontmatter、代码块、行内代码、链接地址和 HTML 注释不参与禁词检查。链接文字与图片替代文字参与；行内代码参与长度计算。MDX 组件标签、属性、单行 import/export 与显式生成区块不参与正文检查，容器中的 Markdown 仍检查。
-- 长度忽略空白，软换行不能规避句段上限。标题、表格不计句段长度。分号与破折号不拆句。诊断至少定位到对应正文块的起始行。
-- 领域定义只读 scoped concepts.md；deprecated 派生禁词，只有 term 算合法使用。按 canonical 概念与有效范围统计，不用兄弟同名概念或 catalog 自身证明使用；导入和汇总均派生。指向 `concepts.md#id` 的正文链接 fragment 不存在时，`concord check` 报告 `AnchorNotFound`。
-- 路径逃逸与 symlink 拒绝。规则、正文、配置在读取过程中发生变化时，遵守现有仓库快照的一致性错误；不发布部分检查结果。
-- 发现问题返回完整 findings 和非零退出码；清零后通过。静态写作检查不能变成测试覆盖率或实现合规证明。
-- `concord check` 在只有写作违规、只有关系违规、两类同时违规时都返回退出码 1，finding 的 `category` 与 `checks` 分项正确标明来源；修复后返回 0。
-- 政策缺失或无效时，`concord check` 返回 `complete: false` 与具名 code 并退出 1；保存有效政策后通过。
-- `docs check --rules` 使用独立 profile 通过时，`concord check` 仍按默认范围判定。CLI、结构化 action 与 Web 的项目检查结果一致。
-- 聚合门禁失败时，`docs check`、`writing`、`concepts`、直接编辑与局部读取命令照常工作。
+## 完整路径
 
-扫描集合、祖先合成、显式 --rules 模式与冲突去重见[写作政策](../policy.md#写作政策)，输入摘要见[使用统计与输入快照](../policy.md#使用统计与输入快照)。
+1. 运行写作检查。 {#run}
 
-## 编辑期间的聚合检查
+   ```sh
+   concord docs check
+   ```
 
-公共 `concord check` 和结构化 check action 在来源漂移时重新执行完整检查，最多三次，每次重试前等待 50 毫秒。每次尝试关闭缓存和快照后重新打开仓库；只输出最终结果，并只据最终结果设置退出码。稳定输入仅运行一次。
+   ```text
+   Documentation writing: failed (47 files)
+   docs/feature/cart/README.md:27 [bannedTerm] 单子: use 订单; docs/concepts.md#order
+   ```
 
-文件、目录成员、类型、大小、权限或发布代次变化均须保持来源核验。已确认的来源漂移包括快照观察冲突与 SourceChanged finding。解析失败时先核验已观察输入，只有确有漂移才重试。未完成恢复现场、安全与权限错误不被跳过。
+2. 按提示改正文，再运行一次。 {#fix}
 
-耗尽后返回 `SourceChanged`、非零退出码及 `complete: false` 错误详情，表示未获得完整的当前输入，不能用于交付通过。写操作的 `FileChangedSinceRead` 不重试。稳定的格式错误继续报告原诊断；历史投影不能替代当前 check。
+   ```text
+   Documentation writing: passed (47 files)
+   ```
+
+   检查不自动改正文，每处都由作者看上下文后修改。
+
+3. 交付前运行合并检查。 {#check}
+
+   ```sh
+   concord check
+   ```
+
+   写作与关系都没有问题时退出 0，见[合并检查](../gate.md)。
+
+## 结果
+
+| 情形 | 结果 |
+| --- | --- |
+| 句子超过上限 | `sentenceLength`，带行号与字符数 |
+| 定义了概念却没用到 | `unusedConcept`，指向 `concepts.md` 里的定义 |
+| `writing.md` 或 `concepts.md` 格式不对 | `InvalidWritingPolicy` 或 `InvalidConceptCatalog`，带行号与原因 |
+| 检查期间文件被改动 | 自动重新检查，最多三次，每次间隔 50 毫秒；仍在变化时返回 `SourceChanged`，`complete` 为 false |
+
+匹配规则与生效范围见[文件格式](../format.md)。
+
+## 编辑期间的合并检查
+
+`concord check` 和结构化 check action 在来源变化时重新执行完整检查，最多三次，只输出最后一次的结果并据此设置退出码。稳定的输入只运行一次；格式错误不重试，直接报告。

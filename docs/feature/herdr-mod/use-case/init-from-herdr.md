@@ -23,7 +23,7 @@
    docs/README.md
    docs/taste.md
    docs/concepts.md
-   docs/concord-writing.json
+   docs/writing.md
    memory/README.md
    AGENTS.md
    ```

@@ -7,7 +7,7 @@ Concord 管理的文档按回答的问题分组。身份、类别、所属关系
 | Spec | Feature：README（产品功能，像使用教程）、`use-case/`（不同情形下的用户旅程）、`architecture.md`（技术架构）、`cli.md` 或 `library.md`（调用与输出） | `docs/feature/<f>/` | 无 |
 | Spec | Engineering：开发 Concord 本身的构建、测试与发布，结构同 Feature | `docs/engineering/<t>/` | 无 |
 | 提案 | Roadmap：还没开始实现的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
-| 项目规则 | 品味、术语、写作政策 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 无 |
+| 项目规则 | 品味、术语、写作政策 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 无 |
 | 待定的取舍 | Design：一个还没定下来的取舍，列出几种做法和各自的代价 | `docs/design/<d>.md` | 无 |
 | 待处理 | Issue：还要处理的缺陷、请求或观察 | `docs/issues/<i>.md` | `relations`、`source` |
 | 经验 | Memory：开发中可复用的经验 | `memory/<m>.md` | `relations` |
@@ -44,7 +44,7 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 
 每项事实只由自己的来源维护（[一件事只写一次，其余推导](taste.md#t-3)）。
 
-1. 每项事实只有一个 owner。Spec 正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作政策由同目录的 `concord-writing.json` 拥有；测试定义与正向关系由测试源码拥有。Issue 拥有还要处理的问题的正文与关系，Memory 拥有经验的正文与关系；历史在 Git。
+1. 每项事实只有一个 owner。Spec 正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作政策由同目录的 `writing.md` 拥有；测试定义与正向关系由测试源码拥有。Issue 拥有还要处理的问题的正文与关系，Memory 拥有经验的正文与关系；历史在 Git。
 2. 目录确定术语与政策的局部作用域，docs 根拥有全局定义。术语的定义与解释写在同一 `concepts.md`；其它 Markdown 链接到定义，不重复维护。
 3. 反向关系、聚合索引与引用反查从来源派生，不维护第二份登记表。
 4. 人与 Agent 直接编辑 `docs/` 与 `memory/` 下的文件，包括 Memory 与 Issue；索引、检索与反向关系由 Concord 从文件派生，不维护人工 INDEX。关系由 `concord check` 检查，Concord 命令是执行需要运行的步骤的助手。

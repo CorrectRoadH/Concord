@@ -52,7 +52,7 @@
 ```text
   docs/README.md
   docs/concepts.md
-  docs/concord-writing.json
+  docs/writing.md
   ...
   memory/README.md
   AGENTS.md

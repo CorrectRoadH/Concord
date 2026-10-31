@@ -33,7 +33,7 @@ Concord moves review to the spec. The spec is Markdown in the repository. Code a
 | Specs are unreadable, so review is a formality | Feature pages come in three kinds. The README and CLI page are the product guide, written as a tutorial; the architecture page is the technical design; Use Cases are user journeys, one per situation in which the feature behaves differently, with real output | A first-time reader can say what the feature does and how to start, and a reviewer can see how the intent changed |
 | Processes and timing are hard to explain in prose | A `p5` fence in Markdown plays as a looping animation in the web workspace; Mermaid covers static structure | One loop of an animation shows a multi-party flow or a state change; the prose stays the rule and the sketch only illustrates it |
 | People and agents use different words for one thing | `concepts.md` gives each concept one name and a definition, scoped by directory; `check` reports deprecated names | Readers do not guess whether two words mean the same thing, and an agent reading literally finds only one meaning |
-| Vague words and ever-longer sentences | `concord-writing.json` bans words such as `helper` or `resolve` that hide responsibility and limits sentence and paragraph length; each rule gives a replacement and a reason | Implementers do not have to guess what the author meant |
+| Vague words and ever-longer sentences | `writing.md` bans words such as `helper` or `resolve` that hide responsibility and limits sentence and paragraph length; each rule gives a replacement and a reason | Implementers do not have to guess what the author meant |
 | Every agent session starts from zero and re-decides settled questions | Cross-feature preferences live in the taste file, tradeoffs in Design records, and findings in Memory, all in the repository | A new session reads the current rules and their reasons instead of overturning them |
 | Nobody knows which behavior a test guards | Tests point to a Use Case or one of its steps through an annotation; code points to the spec through a declaration; reverse links are derived from source | From a spec you can find the tests and code behind it, and the links appear in the same diff as the code |
 | Refactors churn the spec and the tests | Behavior pages (README, Use Case, CLI, library) are separate from the architecture page | A behavior-preserving refactor changes only the architecture page, so behavior pages and the tests pointing at them stay stable |
@@ -64,7 +64,7 @@ A file's location and its single top-level heading give it identity, kind, and n
 | --- | --- | --- |
 | `docs/taste.md` | Long-lived cross-feature rules with stable clause IDs; sentences that rely on a rule link its ID | Before planning, implementing, or reviewing any feature |
 | `docs/concepts.md`, `docs/**/concepts.md` | Glossary: each second-level heading is one concept, the heading is its only spelling, and the first paragraph is its definition; frontmatter lists deprecated names | Before writing a domain term; the directory sets the scope |
-| `docs/concord-writing.json`, `docs/**/concord-writing.json` | Writing policy: banned words with replacements and reasons, sentence and paragraph limits | Enforced by `check`; writers read the reason when reported |
+| `docs/writing.md`, `docs/**/writing.md` | Writing policy: banned words with replacements and reasons, sentence and paragraph limits | Enforced by `check`; writers read the reason when reported |
 
 **Proposals and decision records: why it was designed this way**
 
@@ -95,7 +95,7 @@ A file's location and its single top-level heading give it identity, kind, and n
 - **Find the implementation.** Follow a spec to its annotated files, functions, code regions, and tests. Reverse links are derived from source.
 - **Prove fixes.** Record a defect as an Issue, commit a failing regression test, commit the fix, and close the Issue with a verified, replayable result.
 - **Explain mechanisms with diagrams.** Write a `p5` fence in a spec and the web workspace plays it as a loop, showing multi-party flows and state changes.
-- **Keep one word per concept.** Define concepts in `concepts.md` and banned words in `concord-writing.json`; `check` reports old names and vague words with their replacements.
+- **Keep one word per concept.** Define concepts in `concepts.md` and banned words in `writing.md`; `check` reports old names and vague words with their replacements.
 - **Review in context.** Inspect specs, source, tests, Issues, feedback, and Git changes in the web workspace, or generate local review material from the CLI.
 
 Concord adopts a spec-first workflow while leaving your language, package manager, and test runner to your project. An annotation declares a relationship, and a test run reports one execution. Neither is a claim of complete test coverage.

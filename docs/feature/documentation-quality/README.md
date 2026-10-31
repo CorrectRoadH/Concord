@@ -5,25 +5,20 @@
 ## 你可以做什么
 
 - 在 `concepts.md` 里给每个领域概念定一个名字和一段定义。概念改名后，旧名字会被检查报告出来，并给出新名字。
-- 在 `concord-writing.json` 里列出不该用的词，每条附上替换写法和理由；也可以限制句子与段落的长度。
+- 在 `writing.md` 里用一张表列出不该用的词，每条附上替换写法和理由；也可以限制句子与段落的长度。
 - 按目录划分术语：全局概念对整个 `docs/` 生效，Feature 目录里的概念只在该 Feature 内生效，不同 Feature 可以用同一个词表示不同的东西。
 - 在 Web 工作台查看全项目术语、编辑规则，并看到每条问题出现在哪一行。
 
 ## 上手：让旧名字无处可藏
 
-假设项目把“订单”定为正式名称，不再用“单子”。在 `docs/concepts.md` 写下定义，并把旧名字列为弃用名：
+假设项目把“订单”定为正式名称，不再用“单子”。在 `docs/concepts.md` 写下定义，并在定义下面写上旧写法：
 
 ```markdown
----
-deprecated:
-  order: [单子]
----
-
-# Project concepts
-
 ## 订单 {#order}
 
 顾客提交的一次购买，包含商品、数量和收货地址。
+
+旧写法：`单子`
 ```
 
 某页正文写了“顾客确认单子后，系统锁定库存。”，运行检查：
@@ -99,21 +94,20 @@ export default function (p: P5) {
 }
 ```
 
-## 聚合门禁
+## 合并检查
 
-`concord check` 把写作检查和关系检查合成一次结果，作为每次交付必须通过的门禁；有问题时退出码为 1。必查范围、必需规则、JSON 结果与退出码见[聚合门禁规则](gate.md)。
+`concord check` 把写作检查和关系检查合成一次结果，作为交付前的检查；有问题时退出码为 1。JSON 结果与退出码见[合并检查](gate.md)。
 
 ## 用户路径
 
 - [检查正文与术语](use-case/inspect-writing.md)
-- [按目录管理结构化术语与写作规则](use-case/manage-scoped-terminology.md)
-- [应用受控写作规则](use-case/apply-controlled-writing.md)
-- [在 Web 管理写作规则与术语](use-case/manage-writing.md)
+- [按目录定义术语](use-case/manage-scoped-terminology.md)
+- [在 Web 里编辑写作规则与术语](use-case/manage-writing.md)
 
 ## 细节
 
-- [文件格式与作用域](policy.md)：`concepts.md` 与 `concord-writing.json` 的结构、目录合成、匹配方式、工具写入与恢复。
-- [聚合门禁](gate.md)：`concord check` 的必查范围、必需规则、JSON 结果与退出码。
+- [文件格式](format.md)：`concepts.md` 与 `writing.md` 的写法、生效范围与匹配方式。
+- [合并检查](gate.md)：`concord check` 的结果与退出码。
 - [实现](architecture.md)
 
 ## 依据的品味

@@ -17,7 +17,7 @@
 | `docs/research/<r>/` | Research：带来源与观察时间的研究输入 | 无 |
 | `docs/issues/<i>.md` | Issue：缺陷、请求与观察 | 见下文 |
 | `memory/<m>.md` | Memory：可复用知识与不需要 Design 的决策 | 见下文 |
-| `docs/taste.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 项目规则 | 品味只有 `status` |
+| `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 项目规则 | 无 |
 
 - canonical 仓库相对路径是唯一身份。移动文件即改变身份，`check` 报告全部失效的精确引用。
 - Feature 目录名、Use Case 文件名、Issue 与 Memory 文件名是短选择器。同一类别中歧义时具名拒绝，例如两个 Feature 都有 `use-case/create.md` 时，`show create` 要求写出路径。

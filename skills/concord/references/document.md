@@ -90,18 +90,12 @@ Design 只用于真正难以取舍的问题，一页 `docs/design/<d>.md`：写�
 
 `roadmap start` 把 Roadmap 目录移入 `docs/feature/`，同时改写指向它的链接；目标已存在或采用期间文件发生变化时拒绝。
 
-## 术语与写作政策
+## 术语与写作规则
 
-全局定义在 `docs/concepts.md`；Feature、Engineering 或其它 docs 子目录可分别放 `concepts.md` 和 `concord-writing.json`。精确文件名与目录决定作用域，`docs/_template` 排除，局部 roots 不得越界。两类文件都可以直接编辑，`check` 校验结构、作用域与被引用的定义；`concepts`、`writing` 命令提供查看与受管写入。
+术语写在 `concepts.md`，写作规则写在 `writing.md`，都是普通 Markdown，放在哪个目录就对那个目录及其子目录生效；全局的放在 `docs/`。
 
-concepts.md 不设版本字段。正文恰好一个一级标题，位于所有概念之前；每个二级标题为 `term {#id}`，term 是唯一纯文本写法，后面的第一个段落是定义，其余是解释。可选 YAML frontmatter 严格只接受直接 imports 和按本文件 ID 分组的 deprecated；只有弃用名派生禁词并建议改为 term。catalog 整份不计为使用，但仍参与写作检查；解释中提及弃用名时放在行内代码里。全项目术语表只读汇总，不写第二份词库。
+`concepts.md` 的每个二级标题是一个概念：`## 订单 {#order}`，标题文字是唯一写法，下面第一段是定义；定义后以“旧写法：”开头的一段列出弃用写法，写在行内代码里，例如“旧写法：`单子`”。其余段落是解释。
 
-结构错误为 `InvalidConceptCatalog`，消息带行号；导入悬空为 `DanglingConceptImport`，有效范围同名为 `AmbiguousConceptName`。被其它 catalog imports 引用的定义不能删除或改名。正文可以链接到 `concepts.md#id`；缺失 ID 由 check 报告 relation 类 `AnchorNotFound`。
+`writing.md` 第一段写长度上限，例如“句子不超过 140 个字符，段落不超过 320 个字符”；“不用的词”是一张表：词、改成、为什么、只在哪些目录、例外；全局文件还可以有“检查范围”列表。
 
-政策使用 `concord.writing/v3`。根集合用于选文件，祖先规则仍按有效范围应用；省略阈值表示继承，null 表示清除，布尔 false 表示关闭。同名概念和规则冲突保留全部来源，不默默覆盖。作用域、语料与恢复的精确定义见随包 docs/feature/documentation-quality/policy.md。
-
-`concord docs check --json` 自动发现政策与概念；`--rules <path>` 选择受管政策的扫描根，或使用外部只读 profile。报告说明实际范围与输入快照。发现问题退出 1，逐处核对上下文，不机械全仓替换；这不是测试覆盖率或实现证明。
-
-受控规则在 `controlled` 中按叶子合成，null 清除子树，每种语言的词表和 allowIn 整表替换。数值开启长度检查；词法开关默认 false。程序性动作词开关需要有效非空 verbs 表（auto 要求 zh/en）；英文被动候选需要显式 participles。字符长度与受控 token 长度可同时生效。精确抽取、计数、语言与资源上限见随包 docs/feature/documentation-quality/policy.md 的「受控写作规则」与「写作 JSON 结果」。
-
-其它格式的政策是无效输入，返回 `InvalidWritingPolicy`；无法解码的 journal 保持阻断。`WritingBudgetExceeded` 的 complete 为 false，不把截断报告当成功。词法 finding 陈述词面观察，不宣称符合 ASD-STE100，也不分发其原文或词典。
+`concord docs check` 报告用错的词、超长的句子和没被用到的概念，逐处看上下文修改，不要机械全仓替换。精确格式见随包 docs/feature/documentation-quality/format.md。

@@ -311,7 +311,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 ## 文档写作检查
 
-写作政策、术语作用域与聚合门禁由[文档写作 Spec](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/policy.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
+写作政策、术语作用域与聚合门禁由[文档写作 Spec](feature/documentation-quality/README.md)拥有，规则格式见 [policy](feature/documentation-quality/format.md)。CLI 与 Web 共用领域操作，静态命中不作为执行证据。
 
 ## 工程知识与本地观察
 
