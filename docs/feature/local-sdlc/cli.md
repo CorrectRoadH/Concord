@@ -241,12 +241,12 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 ```text
 Command fail — neref_854212737ecad7effc4666629752cb98
 Scope: command (does not prove native case coverage)
-Execution: nonzero; exit: 1; cleanup: true
+Execution: ran; exit: 1; cleanup: true
 Timeout: false; cancelled: false; signal: null
 Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 ```
 
-测试通过时首行为 `Command pass`，退出 0；测试失败时退出 1。运行结果不保存。`--json` 输出 `commandOutcome`、`execution`、`exitCode`、`timedOut`、`cleanupOk` 与 `arguments`。`commandOutcome` 取 `pass`、`fail` 或 `invalid`。`execution` 取 `nonzero`、`zero`、`skipped` 或 `unknown`，分别表示执行的测试数大于 0、等于 0、全部跳过或无法判断。
+测试通过时首行为 `Command pass`，退出 0；测试失败时退出 1。运行结果不保存。`--json` 输出 `commandOutcome`、`execution`、`exitCode`、`timedOut`、`cleanupOk` 与 `arguments`。`commandOutcome` 取 `pass`、`fail` 或 `invalid`。`execution` 只描述执行的测试数量，与退出码无关：取 `ran`、`none`、`skipped` 或 `unknown`，分别表示执行的测试数大于 0、等于 0、全部跳过或无法判断。
 
 `issue close <issue> --fixed --reason <text> [--defect <commit>]` 先核验回归测试在缺陷提交上失败、在当前 HEAD 上通过，再把结论写进 Issue。`test verify <issue>` 按 Issue 中的记录重放核验，不改变结论。完整路径、输出与错误码见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 

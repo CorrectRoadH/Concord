@@ -10,9 +10,9 @@ status: open
 
 人和 agent 读到 nonzero 时会先联想到非零退出码，于是判断这份通过收据自相矛盾。`commandOutcome` 与 `exitCode` 已经表达退出结果，`execution` 需要一个只描述执行数量的取值名。
 
-## 影响
+## 决定
 
-`execution` 是 `concord.command-evidence/v1` 的公开 JSON 字段。改名会影响已保存的收据与读取它们的消费者，需要先写方案并经独立审查。
+`execution` 的取值改为 `ran`、`none`、`skipped` 与 `unknown`，见 [CLI 页](../feature/local-sdlc/cli.md)。`test run` 的结果不保存，修复核验记录在 Issue 中，没有需要迁移的已保存收据。
 
 ## 复现
 
