@@ -69,5 +69,10 @@ process.stdout.write(JSON.stringify({ format: 'concord.test-adapter/v1', op: req
     // Remove the marker from a current file: its old inventory remains visible.
     writeFileSync(join(root, 'test/explicit.ts'), 'const noRange = true;\n');
     assert(gaps().unlinkedTests?.tests.some(item => item.path === 'test/explicit.ts' && item.line === undefined && item.nativeId === 'fixture:explicit'));
+    writeProjectConfig(root, { ...readProjectConfig(root), testAdapters: [{ id: 'node', include: ['test'], builtin: 'node-test', implementationFiles: [], inputRoots: [], frameworkVersion: process.versions.node, lockFiles: [], envNames: [] }] });
+    const unsupported = new LocalRepository(root);
+    try { await runApplication(collectNativeTests(unsupported)); } finally { unsupported.close(); }
+    assert.equal(Object.hasOwn(gaps(), 'unlinkedTests'), false);
+    assert(gaps().limitations.some(value => value.includes('did not collect a real')));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
