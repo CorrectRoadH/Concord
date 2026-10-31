@@ -17,6 +17,7 @@ export class ServerLauncher extends Context.Service<ServerLauncher, {
   readonly start: (root: string) => Effect.Effect<unknown, unknown>;
   readonly stop: (root: string) => Effect.Effect<unknown, unknown>;
   readonly status: (root: string) => Effect.Effect<unknown, unknown>;
+  readonly projection: (root: string) => Effect.Effect<import('../../model/index.js').WorkspaceProjection | undefined, unknown>;
 }>()('concord/cli/ServerLauncher') {}
 export class PanelLauncher extends Context.Service<PanelLauncher, {
   readonly serve: (root: string) => Effect.Effect<void, unknown>;

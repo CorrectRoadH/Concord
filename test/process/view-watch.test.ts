@@ -177,7 +177,9 @@ test('cache publication settles and closing View stops updates and releases its 
   let previousBuiltAt: string | undefined;
   let quietSince = performance.now();
   yield* waitForPublished(root, 'idle initial generation', value => {
-    if (value.projection.refreshOwner !== 'none' || value.projection.builtAt !== previousBuiltAt) {
+    // The running workspace service owns refresh for its lifetime; quiescence is
+    // observed from accepted generations rather than release of the old lease.
+    if (value.projection.builtAt !== previousBuiltAt) {
       previousBuiltAt = value.projection.builtAt;
       quietSince = performance.now();
     }

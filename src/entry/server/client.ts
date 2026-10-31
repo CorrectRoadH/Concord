@@ -8,11 +8,11 @@ import { collectPackets, collectBytes } from './computation.js';
 import { decodeWorkspaceRead } from '../../model/index.js';
 
 export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string) {
-  const opened = yield* Deferred.make<void>();
+  const opened = yield* Deferred.make<void, WorkspaceServerError>();
   const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(
     Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })),
     Layer.provide(NodeSocket.layerNet({ path })),
-    Layer.provide(Layer.succeed(RpcClient.ConnectionHooks, { onConnect: Deferred.succeed(opened, undefined).pipe(Effect.asVoid), onDisconnect: Effect.void })),
+    Layer.provide(Layer.succeed(RpcClient.ConnectionHooks, { onConnect: Deferred.succeed(opened, undefined).pipe(Effect.asVoid), onDisconnect: Deferred.fail(opened, new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Socket closed before opening' })).pipe(Effect.asVoid) })),
   );
   const context = yield* Layer.build(protocol);
   const client = yield* RpcClient.make(WorkspaceRpcs).pipe(Effect.provideContext(context));
@@ -24,7 +24,7 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
 export type WorkspaceConnection = Effect.Success<ReturnType<typeof connectWorkspaceSocket>>;
 export const requestWorkspace = <N extends Exclude<keyof WorkspaceClient, 'hello' | 'shutdown' | 'subscribe'>>(connection: WorkspaceConnection, name: N, input: Omit<Parameters<WorkspaceClient[N]>[0], 'token' | 'installation' | 'requestId' | 'deadline'>) => {
   const call = connection.client[name] as (input: unknown) => Stream.Stream<typeof Packet.Type, unknown>;
-  const stream = call({ ...input, ...connection.identity() });
+  const stream = call({ ...(name === 'query' ? JSON.parse(JSON.stringify(input)) : input), ...connection.identity() });
   return name === 'read' ? collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes)), Effect.map(decodeWorkspaceRead)) : collectPackets(stream);
 };
 

@@ -10,4 +10,7 @@ export { makeWorkspaceService } from './service.js';
 export type { RuntimePorts } from './service.js';
 export { WorkspaceRpcs, ReadCodec, FRAME_LIMIT, packets } from './protocol.js';
 export { connectWorkspaceSocket } from './client.js';
+export { computationLayer, operationLayer } from './main.js';
+export { makeComputationOwner, workspaceServerFailure } from './main.js';
 export type { WorkspaceConnection } from './client.js';
+export { readExistingWorkspaceProjection } from './main.js';

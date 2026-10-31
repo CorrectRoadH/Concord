@@ -35,6 +35,7 @@ export interface OwnedProcessService {
 }
 export class OwnedProcess extends Context.Service<OwnedProcess, OwnedProcessService>()('concord/OwnedProcess') {
   static launch(...args: Parameters<typeof launchDetachedWorker>) { return launchDetachedWorker(...args); }
+  static confirmed(result: OwnedProcessResult) { return hasConfirmedOwnedGroupCleanup(result); }
 }
 export const runOwnedProcess = (command: readonly string[], options: OwnedProcessOptions) => Effect.flatMap(OwnedProcess, (service) => service.run(command, options));
 export const hasConfirmedOwnedGroupCleanup = (result: Pick<OwnedProcessResult, 'processGroupOwned' | 'groupCleanup'>): boolean => !result.processGroupOwned || result.groupCleanup.gone === true;

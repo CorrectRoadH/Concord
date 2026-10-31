@@ -45,6 +45,24 @@ const stop = async (root: string) => {
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
+test('workspace service publishes its initial computation and serves the accepted projection to CLI readers', { timeout: 25_000 }, async () => {
+  const root = fixture();
+  try {
+    const started = await command(root, ['server', 'start']);
+    assert.equal(started.status, 0, started.stderr);
+    const projection = await pollUntil(async () => {
+      const result = await command(root, ['workspace', 'projection']);
+      if (result.status !== 0) return undefined;
+      const value = JSON.parse(result.stdout);
+      return value.projection.status === 'ready' && value.projection.consistent ? value : undefined;
+    }, { description: 'initial computation accepted by the persistent owner and readable through CLI', timeoutMs: 10_000 });
+    assert.equal(projection.operation, 'workspace-projection');
+    assert.equal(projection.projection.refreshOwner, 'active');
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/README.md
+// @issue docs/issues/workspace-server-unimplemented.md
 test('concurrent starters share one real service and shutdown removes its record and socket', { timeout: 30_000 }, async () => {
   const root = fixture();
   try {

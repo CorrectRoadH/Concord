@@ -2,8 +2,8 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 import { Installation } from '../../base/installation/index.js';
 import { LspLauncher, ViewLauncher, ServerLauncher, PanelLauncher } from "./launchers.js";
-import { serveWorkspace, startWorkspaceServer, stopWorkspaceServer, workspaceServerStatus, remoteQueriesLayer, feedbackWriterLayer, serveWorkspaceView } from '../server/index.js';
-import { serveViewServer, viewAddresses } from "../http/index.js";
+import { serveWorkspace, startWorkspaceServer, stopWorkspaceServer, workspaceServerStatus, remoteQueriesLayer, feedbackWriterLayer, serveWorkspaceView, readExistingWorkspaceProjection } from '../server/index.js';
+import { viewAddresses } from "../http/index.js";
 import { serveEditor } from "../lsp/index.js";
 import { Publication } from "../../base/publication/index.js";
 import { PublicationValidationLive, Queries } from "../../app/index.js";
@@ -28,7 +28,7 @@ const launchers = Layer.mergeAll(
   })),
   Layer.effect(ServerLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices>();
-    return ServerLauncher.of({ run: root => serveWorkspace(root).pipe(Effect.provideContext(context)), start: root => startWorkspaceServer(root).pipe(Effect.provideContext(context)), stop: root => stopWorkspaceServer(root).pipe(Effect.provideContext(context)), status: root => workspaceServerStatus(root).pipe(Effect.provideContext(context)) });
+    return ServerLauncher.of({ run: root => serveWorkspace(root).pipe(Effect.provideContext(context)), start: root => startWorkspaceServer(root).pipe(Effect.provideContext(context)), stop: root => stopWorkspaceServer(root).pipe(Effect.provideContext(context)), status: root => workspaceServerStatus(root).pipe(Effect.provideContext(context)), projection: root => readExistingWorkspaceProjection(root).pipe(Effect.provideContext(context)) });
   })),
   Layer.effect(ViewLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices>();

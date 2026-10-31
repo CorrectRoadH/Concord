@@ -116,8 +116,10 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     if (valid._tag === 'Failure' || !(yield* ports.exists) || connections === 0 && (yield* state.expired)) yield* stop;
   }).pipe(Effect.catch(() => stop)), serviceHeartbeat));
   const clear = maintenance.withPermit(Effect.gen(function*() {
+    yield* ports.verify;
     yield* state.transition('draining');
     yield* ports.close;
+    yield* ports.verify;
     yield* state.transition('clearing');
     const outcome = yield* Effect.result(ports.clear);
     if (outcome._tag === 'Failure') {
@@ -138,7 +140,14 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   }));
   yield* Effect.addFinalizer(() => stop.pipe(Effect.andThen(Fiber.interrupt(refreshFiber)), Effect.andThen(ports.close), Effect.orDie));
   return { state, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
+    drain: maintenance.withPermit(Effect.void),
     connect: Effect.acquireRelease(Effect.sync(() => { connections++; }), () => Effect.sync(() => { connections--; })),
-    execute: (operation: Computation) => maintenance.withPermit(ports.verify.pipe(Effect.andThen(state.touch), Effect.andThen(ports.compute(operation)))),
+    execute: (operation: Computation) => maintenance.withPermit(Effect.gen(function*() {
+      yield* ports.verify;
+      const current = yield* SubscriptionRef.get(state.value);
+      if (!['running', 'degraded'].includes(current.state)) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', `Service is ${current.state}`));
+      yield* state.touch;
+      return yield* ports.compute(operation);
+    })),
   };
 });

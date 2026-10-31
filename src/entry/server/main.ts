@@ -8,7 +8,7 @@ import { Sources, type SourceWatch } from '../../base/sources/index.js';
 import { Cache, CacheSnapshot, PersistentCache } from '../../base/cache/index.js';
 import type { ChildProcessSpawner } from 'effect/unstable/process';
 import { NodeSocketServer } from '@effect/platform-node';
-import { Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Stream, SubscriptionRef } from 'effect';
+import { Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { RpcClient, RpcSerialization, RpcServer } from 'effect/unstable/rpc';
 import { Socket, SocketServer } from 'effect/unstable/socket';
 import { makeOwnedProcessService } from '../../app/index.js';
@@ -18,8 +18,8 @@ import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Queries, QueryReply, executeQuery, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
-import { ConcordError, failure } from '../../model/index.js';
-import { ComputeRpcs, collectPackets, collectBytes, type Computation } from './computation.js';
+import { ConcordError, failure, WorkspaceProjectionSchema } from '../../model/index.js';
+import { Computation, ComputeRpcs, collectPackets, collectBytes } from './computation.js';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission } from './protocol.js';
 import { makeAdmittedProtocol } from './admission.js';
 import { getWorkspaceRead } from '../../app/index.js';
@@ -42,6 +42,7 @@ const OperationRequest = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('action'), root: Schema.String, input: ViewActionSchema, snapshot: Snapshot }),
   Schema.Struct({ kind: Schema.Literal('job'), root: Schema.String, caseId: Schema.String, snapshot: Snapshot }),
 ]);
+export const operationLayer = (snapshot: Parameters<typeof CacheSnapshot.layer>[0] = {}) => Layer.mergeAll(Installation.layer, ServerRuntime.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(snapshot), Publication.layer.pipe(Layer.provide(PublicationValidationLive))).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
 export const runOperationMain = (): void => {
   const program = Effect.tryPromise({ try: async () => {
     const chunks: Buffer[] = []; let size = 0;
@@ -52,7 +53,7 @@ export const runOperationMain = (): void => {
     }
     return Schema.decodeUnknownSync(Schema.fromJsonString(OperationRequest), { onExcessProperty: 'error' })(new TextDecoder('utf8', { fatal: true }).decode(Buffer.concat(chunks)));
   }, catch: failure }).pipe(Effect.flatMap(request => {
-    const layers = Layer.mergeAll(Installation.layer, ServerRuntime.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(request.snapshot), Publication.layer.pipe(Layer.provide(PublicationValidationLive))).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
+    const layers = operationLayer(request.snapshot);
     const operation = request.kind === 'action' ? executeViewAction(request.root, request.input) : runWorkspaceTest(request.root, request.caseId);
     return operation.pipe(Effect.provide(feedbackWriterLayer.pipe(Layer.provideMerge(layers))));
   }), Effect.match({ onSuccess: value => ({ ok: true, value }), onFailure: cause => { const error = failure(cause); return { ok: false, code: error.code, message: error.message, details: error.details }; } }), Effect.flatMap(reply => Effect.sync(() => { process.stdout.write(JSON.stringify(reply)); })));
@@ -62,24 +63,44 @@ const OperationReply = Schema.Union([Schema.Struct({ ok: Schema.Literal(true), v
 const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: string, snapshot: Effect.Effect<import('../../base/cache/index.js').ReadonlyCacheSnapshot, unknown>) {
   const installation = yield* Installation;
   const owners = new Set<ReturnType<typeof makeOwnedProcessService>>();
-  const close = Effect.forEach(owners, owner => owner.awaitIdle.pipe(Effect.andThen(owner.cleanupResults), Effect.flatMap(results => results.some(result => result.processGroupOwned && result.groupCleanup.gone !== true) ? Effect.fail(new ConcordError('CleanupFailed', 'Operation process cleanup is unconfirmed')) : Effect.void)), { discard: true });
+  let unconfirmed = false;
+  const ensureClean = Effect.suspend(() => unconfirmed ? Effect.fail(new ConcordError('CleanupFailed', 'Operation process cleanup is unconfirmed')) : Effect.void);
+  const inspect = (owner: ReturnType<typeof makeOwnedProcessService>) => owner.cleanupResults.pipe(Effect.flatMap(results => {
+    if (results.some(result => !OwnedProcess.confirmed(result))) { unconfirmed = true; return ensureClean; }
+    owners.delete(owner); return Effect.void;
+  }));
+  const close = Effect.forEach(owners, owner => owner.awaitIdle.pipe(Effect.andThen(inspect(owner))), { discard: true }).pipe(Effect.andThen(ensureClean));
+  const drain = Effect.gen(function*() { while (owners.size > 0) yield* Effect.sleep('10 millis'); });
   yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
-  return { close, run: (input: { readonly kind: 'action'; readonly input: unknown } | { readonly kind: 'job'; readonly caseId: string }) => Effect.scoped(Effect.gen(function*() {
+  return { close, drain, ensureClean, run: (input: { readonly kind: 'action'; readonly input: unknown } | { readonly kind: 'job'; readonly caseId: string }) => Effect.gen(function*() {
+    yield* ensureClean;
     const owner = makeOwnedProcessService(); owners.add(owner);
+    return yield* Effect.scoped(Effect.gen(function*() {
     const rows = yield* snapshot.pipe(Effect.catch(() => Effect.succeed({})));
     const result = yield* owner.run([process.execPath, ...installation.worker('operation-worker')], { cwd: installation.cwd, stdin: JSON.stringify({ root, snapshot: rows, ...input }), outputLimitBytes: 32 * FRAME_LIMIT });
-    if (result.processGroupOwned && result.groupCleanup.gone !== true) return yield* Effect.fail(new ConcordError('CleanupFailed', 'Operation process cleanup is unconfirmed'));
-    owners.delete(owner);
+    if (!OwnedProcess.confirmed(result)) { unconfirmed = true; return yield* ensureClean; }
     if (result.exitCode !== 0 || result.cancelled || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('OperationResultUnknown', 'Operation process ended without a confirmed receipt; inspect recovery state', { stderr: result.stderr.slice(-4096) }));
     const reply = yield* Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(OperationReply), { onExcessProperty: 'error' })(result.stdout), catch: () => new ConcordError('OperationResultUnknown', 'Operation did not return a valid receipt; inspect recovery state') });
     if (!reply.ok) return yield* Effect.fail(new ConcordError(reply.code, reply.message, reply.details));
     return reply.value;
-  })) };
+    })).pipe(Effect.onExit(() => inspect(owner).pipe(Effect.orDie)));
+  }) };
 });
 import { connectWorkspaceSocket, requestWorkspace } from './client.js';
 
-const asServerError = (cause: unknown) => cause instanceof WorkspaceServerError ? cause : new WorkspaceServerError({ code: cause instanceof ConcordError ? cause.code : 'WorkspaceServerUnavailable', message: cause instanceof Error ? cause.message : String(cause) });
-const computationLayer = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
+export function workspaceServerFailure(cause: unknown): ConcordError {
+  if (cause instanceof ConcordError) return cause;
+  const decoded = Schema.decodeUnknownExit(Schema.Struct({ code: Schema.optional(Schema.String), _tag: Schema.optional(Schema.String), message: Schema.String, details: Schema.optional(Schema.Unknown), reason: Schema.optional(Schema.String) }))(cause);
+  if (decoded._tag === 'Failure') return new ConcordError('WorkspaceServerUnavailable', String(cause));
+  const value = decoded.value;
+  return new ConcordError(value.code ?? (value._tag === 'ServerLockUnavailable' ? 'ServerLockUnavailable' : 'WorkspaceServerUnavailable'), value.message, value.details ?? (value.reason ? { reason: value.reason } : undefined));
+}
+const asServerError = (cause: unknown) => {
+  if (cause instanceof WorkspaceServerError) return cause;
+  const error = workspaceServerFailure(cause), details = Schema.decodeUnknownExit(Schema.Json)(error.details);
+  return new WorkspaceServerError({ code: error.code, message: error.message, ...(details._tag === 'Success' ? { details: details.value } : {}) });
+};
+export const computationLayer = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
 const compute = Effect.fn('workspace.compute')(function*(root: string, operation: Computation) {
   switch (operation.kind) {
     case 'query': return yield* executeQuery(root, operation.request);
@@ -112,33 +133,38 @@ export const runComputeMain = (root: string | undefined): void => {
         snapshotId = request.id; pendingId = undefined; chunks = []; size = 0;
       }
     }, catch: asServerError }),
-    execute: request => Stream.unwrap(
-    (request.snapshotId !== snapshotId ? Effect.fail(new ConcordError('WorkspaceServerProtocol', 'Snapshot is incomplete')) :
-    (root === undefined ? Effect.fail(new ConcordError('InvalidInput', 'Missing compute root')) : compute(root, request.operation)).pipe(
-      Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context),
-    )).pipe(Effect.map(value => request.operation.kind === 'read-bytes' ? packets(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT) : jsonPackets(value)), Effect.mapError(asServerError)),
-  ) });
+    execute: request => Stream.unwrap(Effect.gen(function*() {
+      const operation = yield* Schema.decodeUnknownEffect(Computation, { onExcessProperty: 'error' })(request.operation);
+      if (request.snapshotId !== snapshotId) return yield* Effect.fail(new ConcordError('WorkspaceServerProtocol', 'Snapshot is incomplete'));
+      if (root === undefined) return yield* Effect.fail(new ConcordError('InvalidInput', 'Missing compute root'));
+      const value = yield* compute(root, operation).pipe(Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context));
+      return operation.kind === 'read-bytes' ? packets(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT) : jsonPackets(value);
+    }).pipe(Effect.mapError(asServerError))),
+  });
   const protocol = RpcServer.layerProtocolStdio.pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(NodeServices.layer));
   yield* RpcServer.make(ComputeRpcs, { concurrency: 1 }).pipe(Effect.provide(handlers), Effect.provide(protocol));
   }));
   NodeRuntime.runMain(program);
 };
 
-const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string) {
+export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string) {
   const installation = yield* Installation;
+  const mutex = yield* Semaphore.make(1);
   let active: { scope: Scope.Closeable; client: RpcClient.RpcClient<import('effect/unstable/rpc/RpcGroup').Rpcs<typeof ComputeRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>; owner: ReturnType<typeof makeOwnedProcessService> } | undefined;
+  let starting: { scope: Scope.Closeable; owner: ReturnType<typeof makeOwnedProcessService> } | undefined;
   const close = Effect.gen(function*() {
-    const worker = active; active = undefined;
+    const worker = active ?? starting; active = undefined; starting = undefined;
     if (!worker) return;
     yield* Scope.close(worker.scope, Exit.void);
     const cleanup = yield* worker.owner.cleanupResults;
-    if (cleanup.some(result => result.processGroupOwned && result.groupCleanup.gone !== true)) return yield* Effect.fail(new ConcordError('CleanupFailed', 'Computation process group cleanup is unconfirmed'));
+    if (cleanup.some(result => !OwnedProcess.confirmed(result))) return yield* Effect.fail(new ConcordError('CleanupFailed', 'Computation process group cleanup is unconfirmed'));
   });
   const start = Effect.gen(function*() {
     const scope = yield* Scope.make();
     const owner = makeOwnedProcessService();
+    starting = { scope, owner };
     const ready = yield* Deferred.make<(bytes: string | Uint8Array) => void, WorkspaceServerError>();
-    const opened = yield* Deferred.make<void>();
+    const opened = yield* Deferred.make<void, WorkspaceServerError>();
     const output = yield* Queue.unbounded<Uint8Array, WorkspaceServerError>();
     yield* Effect.forkIn(owner.run([process.execPath, ...installation.worker('compute-worker'), root], {
       cwd: installation.cwd, outputLimitBytes: 128 * 1024 * 1024,
@@ -151,32 +177,33 @@ const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: s
       runRaw: (handler, options) => Deferred.await(ready).pipe(Effect.andThen(options?.onOpen ?? Effect.void), Effect.andThen(Stream.runForEach(Stream.fromQueue(output), chunk => handler(chunk) ?? Effect.void)), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketReadError({ cause: error }) }))),
       writer: Effect.succeed(chunk => Deferred.await(ready).pipe(Effect.flatMap(write => Effect.sync(() => { if (!(chunk instanceof Socket.CloseEvent)) write(chunk); })), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketWriteError({ cause: error }) })))),
     });
-    const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(Layer.succeed(Socket.Socket, socket)), Layer.provide(Layer.succeed(RpcClient.ConnectionHooks, { onConnect: Deferred.succeed(opened, undefined).pipe(Effect.asVoid), onDisconnect: Effect.void })));
+    const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(Layer.succeed(Socket.Socket, socket)), Layer.provide(Layer.succeed(RpcClient.ConnectionHooks, { onConnect: Deferred.succeed(opened, undefined).pipe(Effect.asVoid), onDisconnect: Deferred.fail(opened, new WorkspaceServerError({ code: 'WorkspaceComputeExited', message: 'Computation transport closed' })).pipe(Effect.asVoid) })));
     const protocolContext = yield* Layer.build(protocol).pipe(Effect.provideService(Scope.Scope, scope));
     const client = yield* RpcClient.make(ComputeRpcs).pipe(Effect.provideContext(protocolContext), Effect.provideService(Scope.Scope, scope));
     yield* Deferred.await(opened).pipe(Effect.timeout('60 seconds'));
     active = { scope, owner, client };
+    starting = undefined;
     return active;
   });
   yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
-  return { close, run: (operation: Computation, snapshot: Parameters<typeof CacheSnapshot.layer>[0]) => Effect.gen(function*() {
+  return { close, run: (operation: Computation, snapshot: Parameters<typeof CacheSnapshot.layer>[0] = {}) => mutex.withPermit(Effect.gen(function*() {
     const worker = active ?? (yield* start);
     const id = crypto.randomUUID(), bytes = new TextEncoder().encode(JSON.stringify(snapshot ?? {}));
     if (bytes.byteLength > 32 * FRAME_LIMIT) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Cache snapshot exceeds 32 MiB'));
     const chunkSize = FRAME_LIMIT - 4096;
     return yield* Effect.gen(function*() {
       for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) yield* worker.client.snapshot({ id, data: bytes.subarray(offset, offset + chunkSize), last: offset + chunkSize >= bytes.byteLength });
-      const stream = worker.client.execute({ operation, snapshotId: id });
+      const stream = worker.client.execute({ operation: JSON.parse(JSON.stringify(operation)), snapshotId: id });
       return yield* operation.kind === 'read-bytes' ? collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes))) : collectPackets(stream);
-    }).pipe(Effect.timeout('60 seconds'), Effect.onError(() => close.pipe(Effect.orDie)));
-  }) };
+    });
+  }).pipe(Effect.timeout('60 seconds'), Effect.onError(() => close.pipe(Effect.orDie)))) };
 });
 
 const serverServices = Layer.mergeAll(Installation.layer, ServerRuntime.layer, Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provideMerge(NodeServices.layer));
 export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: string, ready: Effect.Effect<void> = Effect.void) {
   return yield* Effect.scoped(Effect.gen(function*() {
     const workspace = yield* Workspace;
-    const { root, privateDir } = yield* workspace.identify(input, true, true);
+    const { root, privateDir } = yield* workspace.locate(input, true);
     const platform = yield* ServerRuntime;
     const installation = platform.installation();
     const runtime = yield* platform.acquire(root, privateDir);
@@ -194,7 +221,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       verify: runtime.verify,
       context,
       ready: ctx => sources.pendingPublications(ctx.privateDir).pipe(Effect.flatMap(pending => pending.length > 0 ? Effect.fail(new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover')) : Effect.void)),
-      restore: ctx => owned(readWorkspaceProjection(ctx)),
+      restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),
       persist: (ctx, candidate, error) => owned(storeWorkspaceProjection(ctx, candidate, error)),
       compute: operation => cache.snapshot.pipe(Effect.catch(() => Effect.succeed({})), Effect.flatMap(snapshot => computation.run(operation, snapshot))),
       open: cache.open,
@@ -206,7 +233,14 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const serverScope = yield* Effect.scope;
     const event = SubscriptionRef.changes(service.state.value).pipe(Stream.buffer({ capacity: 1, strategy: 'sliding' }));
     const notify = () => { Effect.runFork(SubscriptionRef.update(service.state.value, value => ({ ...value }))); };
-    const jobs = new ServerJobs((caseId, signal) => Effect.runPromise(operations.run({ kind: 'job', caseId }), { signal }), () => { notify(); Effect.runFork(service.request); });
+    const runOperation = async (input: Parameters<typeof operations.run>[0], signal?: AbortSignal) => {
+      try { return await Effect.runPromise(operations.run(input), { signal }); }
+      finally {
+        const clean = await Effect.runPromise(Effect.result(operations.ensureClean));
+        if (clean._tag === 'Failure') { await Effect.runPromise(service.state.transition('blocked', { code: 'CleanupFailed', message: clean.failure.message })); throw clean.failure; }
+      }
+    };
+    const jobs = new ServerJobs((caseId, signal) => runOperation({ kind: 'job', caseId }, signal), () => { notify(); Effect.runFork(service.request); });
     yield* Effect.addFinalizer(() => Effect.tryPromise(() => jobs.close()).pipe(Effect.orDie));
     const run = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(operation, { signal });
     const hosted = yield* makeHttpLeases(runtime.token, (host, port, sse) => Effect.tryPromise({ try: () => {
@@ -219,7 +253,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         compile: input => run(service.execute({ kind: 'p5-compile', input: Schema.decodeUnknownSync(Schema.Json)(input) })),
         action: async (input, signal) => {
           const action = decodeViewAction(input);
-          const value = await run(action.action === 'cache.clear' && !action.dryRun ? service.clear : operations.run({ kind: 'action', input: action }), signal);
+          const value = action.action === 'cache.clear' && !action.dryRun ? await run(service.clear, signal) : await runOperation({ kind: 'action', input: action }, signal);
           await run(service.request); return value;
         },
         jobs, sse,
@@ -281,6 +315,8 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     yield* Effect.forkScoped(RpcServer.make(WorkspaceRpcs, { concurrency: 256 }).pipe(Effect.provide(handlers), Effect.provideService(RpcServer.Protocol, protocol)));
     yield* ready;
     yield* service.stopped;
+    yield* Effect.all([service.drain, operations.drain], { concurrency: 'unbounded' }).pipe(Effect.timeout('3 seconds'), Effect.ignore);
+    yield* operations.close;
   }));
 });
 import { QueryRequest as importedQueryRequest } from '../../app/index.js';
@@ -288,7 +324,7 @@ export const runWorkspaceMain = (root: string) => NodeRuntime.runMain(serveWorks
 
 export const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: string) {
   const platform = yield* ServerRuntime;
-  const { privateDir } = yield* (yield* Workspace).identify(root, true);
+  const { privateDir } = yield* (yield* Workspace).locate(root, true);
   const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
   if (!record) return undefined;
   const connection = yield* connectWorkspaceSocket(record.socket.path, platform.installation(), record.token);
@@ -296,6 +332,12 @@ export const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: 
   return connection;
 });
 export const workspaceServerStatus = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.map(connection => connection ? { operation: 'server-status', ...connection.hello } : { operation: 'server-status', state: 'absent' }), Effect.catch(() => Effect.succeed({ operation: 'server-status', state: 'absent' }))));
+export const readExistingWorkspaceProjection = (root: string) => Effect.scoped(Effect.gen(function*() {
+  const runtime = yield* ServerRuntime;
+  const connection = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  if (!connection || connection.hello.installation !== runtime.installation() || connection.hello.protocol !== PROTOCOL) return undefined;
+  return yield* requestWorkspace(connection, 'workspace', {}).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(WorkspaceProjectionSchema, { onExcessProperty: 'error' })(value)), Effect.mapError(workspaceServerFailure));
+}));
 export const remoteQueriesLayer = Layer.unwrap(Effect.gen(function*() {
   const workspace = yield* Workspace;
   const runtime = yield* ServerRuntime;
@@ -384,14 +426,14 @@ export const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(opti
     if (inProcess) return yield* Fiber.join(inProcess);
     return yield* Effect.never;
   }));
-}, Effect.mapError(failure));
+}, Effect.mapError(workspaceServerFailure));
 
 export const refreshLayer = Layer.merge(Workspace.layer, PersistentCache.layer).pipe(Layer.provideMerge(NodeServices.layer));
 export const runRefreshMain = <A, E>(operation: Effect.Effect<A, E, ChildProcessSpawner.ChildProcessSpawner | Workspace | PersistentCache>): void => {
   NodeRuntime.runMain(operation.pipe(Effect.provide(refreshLayer)));
 };
 
-export const readerLayer = Layer.mergeAll(PersistentCache.layer, Installation.layer, Workspace.layer, Sources.layer, Cache.layer, CacheSnapshot.layer()).pipe(Layer.provide(NodeServices.layer));
+export const readerLayer = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Cache.layer, CacheSnapshot.layer()).pipe(Layer.provide(NodeServices.layer));
 export const runReaderMain = <A, E>(operation: Effect.Effect<A, E, Installation | Workspace | Sources | Cache | CacheSnapshot>): void => {
   NodeRuntime.runMain(operation.pipe(Effect.provide(readerLayer)));
 };

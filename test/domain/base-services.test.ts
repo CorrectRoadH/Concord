@@ -15,8 +15,7 @@ import { Cache, CacheSnapshot, HawdbFailure, cacheDatabasePath, openHawdb } from
 import { waitForPublication, acquireTraceLeaseSync, releaseTraceLeaseSync, Publication } from '../../src/base/publication/index.js';
 import { publicationLayer } from '../support/repository.js';
 import { cliLayer } from '../../src/entry/cli/index.js';
-import { httpOperationLayer } from '../../src/entry/http/index.js';
-import { readerLayer, writerLayer, refreshLayer } from '../../src/entry/server/index.js';
+import { operationLayer, readerLayer, writerLayer, refreshLayer } from '../../src/entry/server/index.js';
 import { PersistentCache } from '../../src/base/cache/index.js';
 import { Git } from '../../src/base/git/index.js';
 
@@ -70,8 +69,8 @@ test('Workspace rereads configuration for each operation and Sources rejects a c
 test('entry layers build the declared reader and operation capabilities', async () => {
   for (const [name, layer, writes, persistent, git] of [
     ['CLI', cliLayer, true, true, true],
-    ['HTTP operation', httpOperationLayer, true, true, true],
-    ['reader worker', readerLayer, false, true, false],
+    ['HTTP operation process', operationLayer(), true, false, true],
+    ['reader worker', readerLayer, false, false, false],
     ['cache maintenance worker', writerLayer, true, true, false],
   ] as const) {
     const context = await Effect.runPromise(Effect.scoped(Layer.build(layer)));

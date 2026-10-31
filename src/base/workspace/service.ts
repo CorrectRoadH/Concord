@@ -3,7 +3,7 @@ import { CacheSnapshot, PersistentCache } from '../cache/index.js';
 import { failure, type ConcordError } from '../../model/index.js';
 import { Publication } from '../publication/index.js';
 import { LocalRepository, type ReadRepositoryOptions, type RepositoryOptions } from './storage.js';
-import { inspectConfiguration, identifyWorkspace } from './config-inspection.js';
+import { inspectConfiguration, identifyWorkspace, locateWorkspace } from './config-inspection.js';
 
 const attachCache = Effect.fn('Workspace.attachCache')(function*(repo: LocalRepository) {
   const persistent = yield* Effect.serviceOption(PersistentCache);
@@ -13,6 +13,7 @@ const attachCache = Effect.fn('Workspace.attachCache')(function*(repo: LocalRepo
 });
 
 export interface WorkspaceService {
+  readonly locate: typeof locateWorkspace;
   readonly identify: typeof identifyWorkspace;
   readonly inspectConfiguration: typeof inspectConfiguration;
   readonly openRead: (root: string | undefined, options: ReadRepositoryOptions) => Effect.Effect<LocalRepository, ConcordError, Scope.Scope>;
@@ -44,6 +45,6 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
       yield* attachCache(repo);
       return repo;
     });
-    return Workspace.of({ openRead, openWrite, inspectConfiguration, identify: identifyWorkspace });
+    return Workspace.of({ openRead, openWrite, inspectConfiguration, identify: identifyWorkspace, locate: locateWorkspace });
   }));
 }

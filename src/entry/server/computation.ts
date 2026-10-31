@@ -25,7 +25,7 @@ export type Computation = typeof Computation.Type;
 export const ComputeRpcs = RpcGroup.make(Rpc.make('snapshot', {
   payload: strict(Schema.Struct({ id: Schema.String, data: Schema.Uint8Array, last: Schema.Boolean })), success: Schema.Void, error: WorkspaceServerError,
 }), Rpc.make('execute', {
-  payload: strict(Schema.Struct({ operation: Computation, snapshotId: Schema.String })),
+  payload: strict(Schema.Struct({ operation: Schema.Json, snapshotId: Schema.String })),
   success: Packet, error: WorkspaceServerError, stream: true,
 }));
 
