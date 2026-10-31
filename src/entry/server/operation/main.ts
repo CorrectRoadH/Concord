@@ -28,7 +28,10 @@ const feedbackWriter = Layer.effect(FeedbackCacheWriter, Effect.gen(function*() 
 }));
 
 export const runOperationMain = (): void => {
-  const program = Effect.tryPromise({ try: async () => {
+  const program = Effect.scoped(Effect.gen(function*() {
+  const context = yield* Layer.build(feedbackWriter.pipe(Layer.provideMerge(operationLayer())));
+  yield* Effect.sync(() => { process.stdout.write('{"ready":true}\n'); });
+  const request = yield* Effect.tryPromise({ try: async () => {
     const chunks: Buffer[] = []; let size = 0;
     for await (const chunk of process.stdin) {
       const bytes = Buffer.from(chunk); size += bytes.byteLength;
@@ -36,11 +39,12 @@ export const runOperationMain = (): void => {
       chunks.push(bytes);
     }
     return Schema.decodeUnknownSync(Schema.fromJsonString(OperationRequest), { onExcessProperty: 'error' })(new TextDecoder('utf8', { fatal: true }).decode(Buffer.concat(chunks)));
-  }, catch: failure }).pipe(Effect.flatMap(request => {
-    const derived = CacheDerivations.make();
-    const operation = request.kind === 'action' ? executeViewAction(request.root, request.input) : runWorkspaceTest(request.root, request.caseId);
-    return operation.pipe(Effect.provide(feedbackWriter.pipe(Layer.provideMerge(operationLayer(request.snapshot)))), Effect.provideService(CacheDerivations, derived), Effect.map(value => ({ ok: true as const, value, derived: derived.batches() })));
-  }), Effect.catch(cause => { const error = failure(cause); return Effect.succeed({ ok: false as const, code: error.code, message: error.message, details: error.details }); }), Effect.flatMap(reply => Effect.sync(() => { process.stdout.write(JSON.stringify(reply)); })));
+  }, catch: failure });
+  const derived = CacheDerivations.make();
+  const operation = request.kind === 'action' ? executeViewAction(request.root, request.input) : runWorkspaceTest(request.root, request.caseId);
+  const value = yield* operation.pipe(Effect.provide(CacheSnapshot.layer(request.snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideContext(context));
+  return { ok: true as const, value, derived: derived.batches() };
+  })).pipe(Effect.catch(cause => { const error = failure(cause); return Effect.succeed({ ok: false as const, code: error.code, message: error.message, details: error.details }); }), Effect.flatMap(reply => Effect.sync(() => { process.stdout.write(JSON.stringify(reply)); })));
   NodeRuntime.runMain(program);
 };
 

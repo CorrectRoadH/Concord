@@ -41,32 +41,101 @@ import { Snapshot } from './computation.js';
 import { assertWorkspacePublicationReady } from '../../app/index.js';
 import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.js';
 
-import { OperationReply } from './operation-protocol.js';
+import { OperationReply, OperationReady } from './operation-protocol.js';
 const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: string, snapshot: Effect.Effect<import('../../base/cache/index.js').ReadonlyCacheSnapshot, unknown>, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown>) {
   const installation = yield* Installation;
-  const owners = new Set<ReturnType<typeof makeOwnedProcessService>>();
-  let unconfirmed = false;
+  const scope = yield* Effect.scope;
+  const selection = yield* Semaphore.make(1);
+  type Worker = {
+    readonly owner: ReturnType<typeof makeOwnedProcessService>;
+    readonly ready: Deferred.Deferred<void, ConcordError>;
+    readonly input: Deferred.Deferred<{ write: (bytes: string | Uint8Array) => void; end: () => void }>;
+    readonly result: Deferred.Deferred<import('../../base/process/index.js').OwnedProcessResult, ConcordError>;
+    header: string;
+    used: boolean;
+  };
+  const workers = new Set<Worker>();
+  let idle: Worker | undefined, enabled = false, unconfirmed = false;
   const ensureClean = Effect.suspend(() => unconfirmed ? Effect.fail(new ConcordError('CleanupFailed', 'Operation process cleanup is unconfirmed')) : Effect.void);
-  const inspect = (owner: ReturnType<typeof makeOwnedProcessService>) => owner.cleanupResults.pipe(Effect.flatMap(results => {
+  const inspect = (worker: Worker) => worker.owner.cleanupResults.pipe(Effect.flatMap(results => {
     if (results.some(result => !OwnedProcess.confirmed(result))) { unconfirmed = true; return ensureClean; }
-    owners.delete(owner); return Effect.void;
+    workers.delete(worker); return Effect.void;
   }));
-  const close = Effect.forEach(owners, owner => owner.awaitIdle.pipe(Effect.andThen(inspect(owner))), { discard: true }).pipe(Effect.andThen(ensureClean));
-  const drain = Effect.gen(function*() { while (owners.size > 0) yield* Effect.sleep('10 millis'); });
-  yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
-  return { close, drain, ensureClean, run: (input: { readonly kind: 'action'; readonly input: unknown } | { readonly kind: 'job'; readonly caseId: string }) => Effect.gen(function*() {
+  const stopWorker = (worker: Worker) => worker.owner.requestStop('SIGTERM').pipe(Effect.andThen(Deferred.await(worker.result).pipe(Effect.ignore)), Effect.andThen(inspect(worker)));
+  const start: Effect.Effect<Worker, ConcordError> = Effect.gen(function*() {
     yield* ensureClean;
-    const owner = makeOwnedProcessService(); owners.add(owner);
-    return yield* Effect.scoped(Effect.gen(function*() {
+    const worker: Worker = { owner: makeOwnedProcessService(), ready: yield* Deferred.make<void, ConcordError>(), input: yield* Deferred.make<{ write: (bytes: string | Uint8Array) => void; end: () => void }>(), result: yield* Deferred.make<import('../../base/process/index.js').OwnedProcessResult, ConcordError>(), header: '', used: false };
+    workers.add(worker);
+    let buffered = '', received = false;
+    const exited = new ConcordError('OperationResultUnknown', 'Operation process ended before accepting a request');
+    yield* Effect.forkIn(Effect.scoped(worker.owner.run([process.execPath, ...installation.worker('operation-worker')], {
+      cwd: installation.cwd, outputLimitBytes: 32 * FRAME_LIMIT,
+      stream: {
+        ready: (write, end) => { Deferred.doneUnsafe(worker.input, Effect.succeed({ write, end })); },
+        stdout: chunk => {
+          if (received) return;
+          buffered += chunk.toString('utf8');
+          const newline = buffered.indexOf('\n');
+          if (newline < 0 && Buffer.byteLength(buffered) <= 4096) return;
+          received = true;
+          try {
+            if (newline < 0 || newline > 4096) throw new Error('Operation readiness exceeds its frame limit');
+            const header = buffered.slice(0, newline);
+            Schema.decodeUnknownSync(Schema.fromJsonString(OperationReady), { onExcessProperty: 'error' })(header);
+            worker.header = `${header}\n`;
+            Deferred.doneUnsafe(worker.ready, Effect.void);
+          } catch { Deferred.doneUnsafe(worker.ready, Effect.fail(new ConcordError('WorkspaceServerProtocol', 'Operation did not send a valid readiness frame'))); }
+        },
+      },
+    })).pipe(Effect.matchEffect({
+      onFailure: cause => Deferred.fail(worker.result, new ConcordError('OperationResultUnknown', 'Operation transport failed', { message: String(cause) })),
+      onSuccess: result => Deferred.succeed(worker.result, result),
+    }), Effect.ensuring(Effect.gen(function*() {
+      yield* Deferred.fail(worker.ready, exited);
+      yield* inspect(worker).pipe(Effect.orDie);
+      if (idle === worker) idle = undefined;
+      if (enabled) yield* Effect.forkIn(Effect.sleep('1 second').pipe(Effect.andThen(warm), Effect.ignore), scope);
+    }))), scope);
+    return worker;
+  });
+  const warm: Effect.Effect<void, ConcordError> = selection.withPermit(Effect.suspend(() => enabled && !idle && !unconfirmed ? start.pipe(Effect.map(worker => { idle = worker; })) : Effect.void));
+  const pause = selection.withPermit(Effect.suspend(() => {
+    enabled = false;
+    const worker = idle; idle = undefined;
+    return worker ? stopWorker(worker) : Effect.void;
+  }));
+  const close = pause.pipe(Effect.andThen(Effect.suspend(() => Effect.forEach([...workers], stopWorker, { discard: true }))), Effect.andThen(ensureClean));
+  const drain = Effect.gen(function*() { while ([...workers].some(worker => worker.used)) yield* Effect.sleep('10 millis'); });
+  const resume = Effect.gen(function*() {
+    enabled = true;
+    yield* warm;
+    if (idle) yield* Deferred.await(idle.ready).pipe(Effect.timeout('60 seconds'));
+  });
+  yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
+  const take = selection.withPermit(Effect.gen(function*() {
+    if (!enabled) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'Operations are draining'));
+    let worker = idle; idle = undefined;
+    if (worker && Deferred.isDoneUnsafe(worker.result)) { yield* stopWorker(worker); worker = undefined; }
+    worker ??= yield* start;
+    worker.used = true;
+    return worker;
+  }));
+  return { close, pause, resume, drain, ensureClean, run: (input: { readonly kind: 'action'; readonly input: unknown } | { readonly kind: 'job'; readonly caseId: string }) => Effect.gen(function*() {
+    yield* ensureClean;
+    const worker = yield* take.pipe(Effect.onError(() => warm.pipe(Effect.ignore)));
+    return yield* Effect.gen(function*() {
+    yield* Deferred.await(worker.ready).pipe(Effect.timeout('60 seconds'));
     const rows = yield* snapshot;
-    const result = yield* owner.run([process.execPath, ...installation.worker('operation-worker')], { cwd: installation.cwd, stdin: JSON.stringify({ root, snapshot: rows, ...input }), outputLimitBytes: 32 * FRAME_LIMIT });
+    const transport = yield* Deferred.await(worker.input);
+    yield* Effect.sync(() => { transport.write(JSON.stringify({ root, snapshot: rows, ...input })); transport.end(); });
+    const result = yield* Deferred.await(worker.result);
     if (!OwnedProcess.confirmed(result)) { unconfirmed = true; return yield* ensureClean; }
     if (result.exitCode !== 0 || result.cancelled || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('OperationResultUnknown', 'Operation process ended without a confirmed receipt; inspect recovery state', { stderr: result.stderr.slice(-4096) }));
-    const reply = yield* Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(OperationReply), { onExcessProperty: 'error' })(result.stdout), catch: () => new ConcordError('OperationResultUnknown', 'Operation did not return a valid receipt; inspect recovery state') });
+    const reply = yield* Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(OperationReply), { onExcessProperty: 'error' })(result.stdout.slice(worker.header.length)), catch: () => new ConcordError('OperationResultUnknown', 'Operation did not return a valid receipt; inspect recovery state') });
     if (!reply.ok) return yield* Effect.fail(new ConcordError(reply.code, reply.message, reply.details));
     yield* acceptDerived(reply.derived);
     return reply.value;
-    })).pipe(Effect.onExit(() => inspect(owner).pipe(Effect.orDie)));
+    }).pipe(Effect.ensuring(stopWorker(worker).pipe(Effect.orDie)), Effect.ensuring(warm.pipe(Effect.orDie)));
   }) };
 });
 import { connectWorkspaceSocket, requestWorkspace, submitFeedback } from './client.js';
@@ -227,8 +296,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),
       persist: (ctx, candidate, error) => owned(storeWorkspaceProjection(ctx, candidate, error)),
       compute: operation => cacheSnapshot.pipe(Effect.flatMap(snapshot => computation.run(operation, snapshot))),
-      open: Deferred.await(protocolReady).pipe(Effect.andThen(cache.open)),
-      close: computation.close.pipe(Effect.andThen(cache.close)),
+      open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open)),
+      close: SubscriptionRef.get(Context.get(stateContext, WorkspaceState).value).pipe(Effect.flatMap(value => value.state === 'stopping'
+        ? operations.close : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(cache.close)),
       clear: clearWorkspaceCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive)))),
       exists: Effect.sync(() => existsSync(root) && existsSync(privateDir)),
       reconcile: candidate => watch ? watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources) : Effect.succeed(false),
@@ -333,6 +403,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     yield* ready;
     yield* Deferred.succeed(protocolReady, undefined);
     yield* service.stopped;
+    yield* operations.pause;
     yield* Effect.all([service.drain, operations.drain, ...[...httpSubscriptions].map(Fiber.await)], { concurrency: 'unbounded' }).pipe(Effect.timeout('3 seconds'), Effect.ignore);
     yield* operations.close;
   }));

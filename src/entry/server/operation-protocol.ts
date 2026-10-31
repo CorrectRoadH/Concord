@@ -22,3 +22,4 @@ export const OperationReply = Schema.Union([
   strict(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json, derived: Schema.Array(CacheDerivationBatch) })),
   strict(Schema.Struct({ ok: Schema.Literal(false), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) })),
 ]);
+export const OperationReady = strict(Schema.Struct({ ready: Schema.Literal(true) }));
