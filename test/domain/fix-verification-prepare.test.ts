@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, sep } from 'node:path';
+import { userInfo } from 'node:os';
+import { Schema } from 'effect';
 import test from 'node:test';
 import { closeFixedIssue, replayFix, runCommandCase, scanAnnotations } from '../../src/domain/tests/index.js';
 import { readDocumentSelector } from '../../src/domain/documents/index.js';
@@ -28,6 +30,28 @@ test('static configuration accepts prepare argv lists and rejects empty commands
   for (const prepare of ['node build', ['node build'], [[]], [['']], [['node', 3]]]) {
     assert.throws(() => parseTypeScriptConfig(`export default ${JSON.stringify({ runner: { ...runner, prepare } })};`), { code: 'InvalidData' });
   }
+});
+
+// @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
+test('verification checkouts use an owned private temporary root outside the repository tree', async () => {
+  const f = createFixConsumer();
+  try {
+    const log = join(f.root, 'checkout-locations.jsonl');
+    setPrepare(f.root, [[process.execPath, '-e', `const fs = require('node:fs'); const parent = require('node:path').dirname(process.cwd()); const stat = fs.lstatSync(parent); fs.appendFileSync(${JSON.stringify(log)}, JSON.stringify({ root: process.cwd(), uid: stat.uid, mode: stat.mode & 511, symbolicLink: stat.isSymbolicLink() }) + '\\n');`]]);
+    f.fix();
+    await verify(f.root, f.defect);
+    const observation = Schema.fromJsonString(Schema.Struct({ root: Schema.String, uid: Schema.Number, mode: Schema.Number, symbolicLink: Schema.Boolean }));
+    const locations = readFileSync(log, 'utf8').trim().split('\n').map(line => Schema.decodeUnknownSync(observation)(line));
+    assert.equal(locations.length, 2);
+    for (const location of locations) {
+      assert.notEqual(location.root, f.root);
+      assert.equal(location.root.startsWith(f.root + sep), false, location.root);
+      assert.equal(location.uid, userInfo().uid);
+      assert.equal(location.mode, 0o700);
+      assert.equal(location.symbolicLink, false);
+      assert.equal(existsSync(location.root), false, 'Scope removes each checkout');
+    }
+  } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed

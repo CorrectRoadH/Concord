@@ -73,20 +73,23 @@ function freeze(repo: Repository, issue: string, defectInput: string | undefined
   }
   return { tests, inputs, defect, fix, runner: inputs.runner };
 }
-const inWorktree = <A>(repo: LocalRepository, issue: string, commit: string, cleanupUnknown: () => void, run: (root: string) => Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation>): Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation> => Effect.scoped(Effect.gen(function* () {
+const inWorktree = <A>(repo: LocalRepository, commit: string, cleanupUnknown: () => void, run: (root: string, preserve: () => void) => Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation>): Effect.Effect<A, ConcordError, OwnedProcess | Publication | Sources | Installation> => Effect.scoped(Effect.gen(function* () {
   const invoke = (args: readonly string[]) => runOwnedProcess(['git', '-C', repo.root, '-c', 'core.hooksPath=/dev/null', ...args], { cwd: repo.root, env: safeRunnerEnvironment(), timeoutMs: 10000 }).pipe(Effect.scoped, Effect.mapError(failure), Effect.flatMap(result => sync(() => {
-    if (!hasConfirmedOwnedGroupCleanup(result)) cleanupUnknown();
+    if (!hasConfirmedOwnedGroupCleanup(result)) preserve();
     if (result.exitCode !== 0 || result.timedOut || result.cancelled || result.signal !== null || result.error || !hasConfirmedOwnedGroupCleanup(result)) unavailable('Could not create or clean the verification worktree');
   })));
   const publication = yield* Publication;
-  const scratch = yield* publication.scratchDirectory(repo.root, `verify/${issue.split('/').at(-1)!.replace(/\.md$/u, '')}`, 'run-');
+  const scratch = yield* publication.scratchDirectory(repo.root, '', 'concord-verify-', 'temporary');
+  let preserved = false;
+  const preserve = () => { if (!preserved) { preserved = true; scratch.preserve(); cleanupUnknown(); } };
   const root = yield* Effect.acquireRelease(Effect.succeed(join(scratch.path, 'worktree')), root => Effect.gen(function* () {
+    if (preserved) return;
     const registered = yield* sync(() => git(repo.root, ['worktree', 'list', '--porcelain']).split('\n').includes(`worktree ${root}`));
     if (registered) yield* invoke(['worktree', 'remove', '--force', root]);
     yield* scratch.remove;
-  }).pipe(Effect.catch(error => Effect.sync(() => { scratch.preserve(); cleanupUnknown(); throw new ConcordError('FixUnverifiable', `Verification worktree cleanup is unconfirmed: ${root}`, error); })), Effect.orDie));
+  }).pipe(Effect.catch(error => Effect.sync(() => { preserve(); throw new ConcordError('FixUnverifiable', `Verification worktree cleanup is unconfirmed: ${root}`, error); })), Effect.orDie));
   yield* invoke(['worktree', 'add', '--detach', root, commit]);
-  return yield* run(root);
+  return yield* run(root, preserve);
 }));
 
 const assertFrozenRoot = Effect.fn('fixVerification.assertFrozenRoot')(function*(root: string, inputs: ReturnType<typeof frozenInputs>, code: string) {
@@ -137,19 +140,19 @@ export const replayFix = (repo: LocalRepository, selector: string, options: { re
     }
     return { issue, recorded, tests, inputs, runner: requireRunner(targetRepo), preparation: requireRunner(commitRepository(repo, fix)), identity: worktreeIdentity(repo) };
   });
-  const run = (root: string, red: boolean) => Effect.gen(function* () {
+  const run = (root: string, red: boolean, preserve = cleanupUnknown) => Effect.gen(function* () {
     const code = root === repo.root ? 'PreimageChanged' : 'FixUnverifiable';
     yield* assertFrozenRoot(root, prepared.inputs, code);
     if (root !== repo.root) {
-      yield* prepareCheckout(root, prepared.preparation, cleanupUnknown);
+      yield* prepareCheckout(root, prepared.preparation, preserve);
       yield* assertFrozenRoot(root, prepared.inputs, code);
     }
-    const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runner, test).pipe(Effect.tap(result => sync(() => assertOutcome(result, red)))));
+    const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runner, test).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red); }))));
     yield* assertFrozenRoot(root, prepared.inputs, code);
     return results;
   });
-  const red = yield* inWorktree(repo, prepared.issue.path, prepared.recorded.defect, cleanupUnknown, root => run(root, true));
-  const green = yield* (options.worktree ? run(repo.root, false) : inWorktree(repo, prepared.issue.path, prepared.recorded.fix, cleanupUnknown, root => run(root, false)));
+  const red = yield* inWorktree(repo, prepared.recorded.defect, cleanupUnknown, (root, preserve) => run(root, true, preserve));
+  const green = yield* (options.worktree ? run(repo.root, false) : inWorktree(repo, prepared.recorded.fix, cleanupUnknown, (root, preserve) => run(root, false, preserve)));
   yield* sync(() => repo.snapshot(() => { if (worktreeIdentity(repo) !== prepared.identity) throw new ConcordError('PreimageChanged', 'Working tree or HEAD changed during verification'); release(); }));
   return { operation: 'test-verify', issue: prepared.issue.path, verification: prepared.recorded, verified: 'replayed' as const, red, green };
 })).pipe(Effect.mapError(verificationFailure));
@@ -166,16 +169,16 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
     if (issueDigest !== digest(gitBlobBytes(repo.root, fix, issue.path))) unavailable('Issue file differs from the captured fix commit');
     return { issue, ...freeze(targetRepo, issue.path, defect, fix), runnerConfig: requireRunner(targetRepo), issueDigest };
   }));
-  const run = (root: string, red: boolean) => Effect.gen(function* () {
+  const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    yield* prepareCheckout(root, prepared.runnerConfig, cleanupUnknown);
+    yield* prepareCheckout(root, prepared.runnerConfig, preserve);
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
-    const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runnerConfig, test).pipe(Effect.tap(result => sync(() => assertOutcome(result, red)))));
+    const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runnerConfig, test).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red); }))));
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     return results;
   });
-  const red = yield* inWorktree(repo, prepared.issue.path, prepared.defect, cleanupUnknown, root => run(root, true));
-  const green = yield* inWorktree(repo, prepared.issue.path, prepared.fix, cleanupUnknown, root => run(root, false));
+  const red = yield* inWorktree(repo, prepared.defect, cleanupUnknown, (root, preserve) => run(root, true, preserve));
+  const green = yield* inWorktree(repo, prepared.fix, cleanupUnknown, (root, preserve) => run(root, false, preserve));
   const installation = yield* Installation;
   const concord = yield* installation.version;
   const publication = yield* Publication;
