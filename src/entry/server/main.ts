@@ -24,6 +24,7 @@ import { CacheSnapshotUnavailable, ConcordError, failure } from '../../model/ind
 import { Computation, ComputationReply, ComputeRpcs } from './computation.js';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.js';
 import { makeAdmittedProtocol } from './admission.js';
+import { makeRequestAdmission } from './request-admission.js';
 import { getWorkspaceRead } from '../../app/index.js';
 import { QueryRefreshRequest, queryContext, storeQuery, scanQueryProcess } from '../../app/index.js';
 import { decodeQueryScanMessage } from '../../model/index.js';
@@ -268,6 +269,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const platform = yield* ServerRuntime;
     const installation = platform.installation();
     const runtime = yield* platform.acquire(root, privateDir);
+    const admission = makeRequestAdmission();
     const socketServer = yield* NodeSocketServer.make({ path: runtime.socketPath });
     yield* runtime.publish('opening');
     const cache = yield* PersistentCache.owner(privateDir);
@@ -308,7 +310,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const httpSubscriptions = new Set<Fiber.Fiber<unknown, unknown>>();
     const notify = () => { Effect.runFork(SubscriptionRef.update(service.state.value, value => ({ ...value }))); };
     const runOperation = async (input: Parameters<typeof operations.run>[0], signal?: AbortSignal) => {
-      try { return await Effect.runPromise(runtime.verify.pipe(Effect.mapError(workspaceServerFailure), Effect.andThen(service.state.touch), Effect.andThen(operations.run(input))), { signal }); }
+      try { return await Effect.runPromise(admission.withSlot(service.operate(operations.run(input))).pipe(Effect.mapError(workspaceServerFailure)), { signal }); }
       finally {
         const clean = await Effect.runPromise(Effect.result(operations.ensureClean));
         if (clean._tag === 'Failure') { await Effect.runPromise(service.state.transition('blocked', { code: 'CleanupFailed', message: clean.failure.message })); throw clean.failure; }
@@ -317,6 +319,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const jobs = new ServerJobs((caseId, signal) => runOperation({ kind: 'job', caseId }, signal), () => { notify(); Effect.runFork(service.request); });
     yield* Effect.addFinalizer(() => Effect.tryPromise(() => jobs.close()).pipe(Effect.orDie));
     const run = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(operation, { signal });
+    const runAdmitted = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(admission.withSlot(operation).pipe(Effect.mapError(workspaceServerFailure)), { signal });
     const readProjection = service.state.touch.pipe(Effect.andThen(SubscriptionRef.get(service.state.value)), Effect.flatMap(value => {
       if (value.workspace) return Effect.succeed(value.workspace);
       if (value.error?.code === 'RecoveryRequired') return Effect.fail(new ConcordError('RecoveryRequired', value.error.message));
@@ -326,12 +329,12 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const hosted = yield* makeHttpLeases(runtime.token, (host, port, sse) => Effect.tryPromise({ try: () => {
       const ports: HostedViewPorts = {
         verify: () => run(runtime.verify.pipe(Effect.mapError(workspaceServerFailure), Effect.andThen(service.state.touch))),
-        workspace: () => run(readProjection),
+        workspace: () => runAdmitted(readProjection),
         refresh: () => { Effect.runFork(service.request); },
-        read: path => run(service.execute({ kind: 'read', path })) as Promise<import('../../model/index.js').ViewFile>,
-        git: () => run(service.execute({ kind: 'git-status' })),
-        diff: (path, area) => run(service.execute({ kind: 'git-diff', path, area })),
-        compile: input => run(service.execute({ kind: 'p5-compile', input: Schema.decodeUnknownSync(Schema.Json)(input) })),
+        read: path => runAdmitted(service.execute({ kind: 'read', path })) as Promise<import('../../model/index.js').ViewFile>,
+        git: () => runAdmitted(service.execute({ kind: 'git-status' })),
+        diff: (path, area) => runAdmitted(service.execute({ kind: 'git-diff', path, area })),
+        compile: input => runAdmitted(service.execute({ kind: 'p5-compile', input: Schema.decodeUnknownSync(Schema.Json)(input) })),
         action: async (input, signal) => {
           const action = decodeViewAction(input);
           const maintenance: Effect.Effect<unknown, unknown> | undefined = action.action === 'cache.status' ? service.maintain(cache.status)
@@ -340,7 +343,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
               const status = yield* cache.status;
               return yield* Effect.try({ try: () => finishCacheRebuild(value, status), catch: failure });
             })) : undefined;
-          const value = action.action === 'cache.clear' && !action.dryRun ? await run(service.clear, signal) : maintenance ? await run(maintenance, signal) : await runOperation({ kind: 'action', input: action }, signal);
+          const value = action.action === 'cache.clear' && !action.dryRun ? await runAdmitted(service.clear, signal) : maintenance ? await runAdmitted(maintenance, signal) : await runOperation({ kind: 'action', input: action }, signal);
           await run(service.request); return value;
         },
         jobs, sse,
@@ -399,7 +402,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       'feedback-merge': (request, options) => result(request, feedback.apply(options.client.id, request, cache.mergeFeedback)),
     });
     const serialization = yield* Layer.build(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT }));
-    const protocol = yield* makeAdmittedProtocol(socketServer, service.connect, id => { feedback.disconnect(id); subscribers.delete(id); Effect.runFork(hosted.disconnect(id)); }).pipe(Effect.provideContext(serialization));
+    const protocol = yield* makeAdmittedProtocol(socketServer, service.connect, id => { feedback.disconnect(id); subscribers.delete(id); Effect.runFork(hosted.disconnect(id)); }, admission).pipe(Effect.provideContext(serialization));
     yield* Effect.forkScoped(RpcServer.make(WorkspaceRpcs, { concurrency: 256 }).pipe(Effect.provide(handlers), Effect.provideService(RpcServer.Protocol, protocol)));
     yield* ready;
     yield* Deferred.succeed(protocolReady, undefined);

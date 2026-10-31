@@ -31,6 +31,10 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   const stopped = yield* Deferred.make<void>();
   const invalidations = yield* Queue.sliding<void>(1);
   const maintenance = yield* Semaphore.make(1);
+  let operations = 0;
+  let operationIdle = yield* Deferred.make<void>();
+  yield* Deferred.succeed(operationIdle, undefined);
+  const operationsDrained = Effect.suspend(() => Deferred.await(operationIdle));
   let stopping = false, connections = 0, lastInvalidation = -Infinity, firstInvalidation = -Infinity;
   let pending = false;
   const request = Effect.suspend(() => {
@@ -124,6 +128,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
   const clear = maintenance.withPermit(Effect.gen(function*() {
     yield* ports.verify;
     yield* state.transition('draining');
+    yield* operationsDrained;
     yield* ports.close;
     yield* ports.verify;
     yield* state.transition('clearing');
@@ -152,9 +157,16 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* state.touch;
     return yield* operation;
   }));
+  const operate = <A, E, R>(operation: Effect.Effect<A, E, R>) => Effect.scoped(maintain(Effect.acquireRelease(Effect.gen(function*() {
+    if (operations === 0) operationIdle = yield* Deferred.make<void>();
+    operations++;
+  }), () => Effect.suspend(() => {
+    operations--;
+    return operations === 0 ? Deferred.succeed(operationIdle, undefined).pipe(Effect.asVoid) : Effect.void;
+  }))).pipe(Effect.andThen(operation)));
   return { state, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
-    maintain,
-    drain: maintenance.withPermit(Effect.void),
+    maintain, operate,
+    drain: maintenance.withPermit(operationsDrained),
     connect: Effect.acquireRelease(Effect.sync(() => { connections++; }), () => Effect.sync(() => { connections--; })),
     execute: (operation: Computation) => maintain(ports.compute(operation)),
   };
