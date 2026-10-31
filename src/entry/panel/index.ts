@@ -8,4 +8,4 @@ export { markdownToTerminal, localTarget, terminalText, wrapTerminalLine, sliceC
 export type { PanelConcept, TerminalMarkdown, TerminalLine, PanelLink } from './markdown.js';
 export { renderPanel } from './main.js';
 export type { PanelPorts, PanelGeneration, PanelReadResult, PanelSession } from './main.js';
-export { PanelWorktreeUnknown, PanelHerdrUnavailable, panelWorktree, panelOpenRequest, openHerdrPanel, bindHerdrManifest } from './herdr.js';
+export { PanelWorktreeUnknown, PanelHerdrUnavailable, panelWorktree, panelOpenCommand, openHerdrPanel, bindHerdrManifest, pluginDestinationAllowed } from './herdr.js';

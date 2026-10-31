@@ -1,10 +1,16 @@
-# Bound to the installing Concord package by its postinstall entry.
+# Herdr installs a private copy of this directory.
+# At installation set CONCORD_INSTALLATION to this Concord package root.
+# Node is discovered only during installation; bound runtime commands are absolute.
 id = "concord"
 name = "Concord Spec"
 version = "1.0.0"
 description = "Read this worktree's Spec beside the current terminal."
 min_herdr_version = "0.7.3"
 platforms = ["linux", "macos"]
+
+[[build]]
+platforms = ["linux", "macos"]
+command = ["/bin/sh", "-c", 'exec node "${CONCORD_INSTALLATION:?Set CONCORD_INSTALLATION to the Concord package root}/dist/entry/panel/install-herdr.js" --plugin-dir "$PWD"']
 
 [[actions]]
 id = "open-spec"
