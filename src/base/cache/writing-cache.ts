@@ -7,12 +7,9 @@ import { canonical, decode, Nat, objectDigest, type Repository } from "../../mod
 import type { WritingFinding } from "../../model/index.js";
 
 const Source = Schema.Struct({ path: Schema.String, pointer: Schema.optional(Schema.String), line: Schema.optional(Nat), entry: Schema.optional(Nat), column: Schema.optional(Schema.String), ref: Schema.optional(Schema.String) });
-const Position = Schema.Struct({ line: Nat, column: Nat });
 const Findings = Schema.Array(Schema.Struct({
   file: Schema.String, line: Nat, column: Schema.optional(Nat), rule: Schema.String, message: Schema.String, context: Schema.String,
-  source: Schema.optional(Source), sources: Schema.optional(Schema.Array(Source)), actual: Schema.optional(Schema.Number), limit: Schema.optional(Schema.Number),
-  language: Schema.optional(Schema.Literals(['zh', 'en'])), languagePolicy: Schema.optional(Schema.Literals(['auto', 'zh', 'en'])),
-  matches: Schema.optional(Schema.Array(Schema.Struct({ text: Schema.String, start: Position, end: Position }))),
+  source: Schema.optional(Source), sources: Schema.optional(Schema.Array(Source)),
 })).check(Schema.isMaxLength(10000));
 const Record = Schema.Struct({ format: Schema.Literal('concord.writing-findings/v1'), inputDigest: Schema.String, findingsDigest: Schema.String, findings: Findings });
 const key = (inputDigest: string) => `writing:${objectDigest({ format: 'concord.writing-findings/v1', inputDigest })}`;
