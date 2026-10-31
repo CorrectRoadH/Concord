@@ -1,5 +1,15 @@
 ---
-status: open
+status: closed
+closure:
+  kind: fixed
+  reason: HTTP 受理与操作交接前核对服务锁 device/inode；替换锁后拒绝发布，冻结回归在缺陷提交失败并在修复提交通过。
+  verification:
+    defect: f782884122dde4ccdff52f4b40652862c35da944
+    fix: 77f6309ce30ec6ffc4ce28af6f7fdfd706349d46
+    tests:
+      - neref_f4784e5a792a81cd0b9c93c6e3c0814c
+    runner: sha256:db83e0ff88b65dcaaf52a8f69c6262dbd1b596991eee44d5fcf69e1a65b4e8e0
+    concord: dev
 ---
 
 # HTTP 写入没有核对服务锁
