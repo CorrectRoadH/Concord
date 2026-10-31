@@ -25,8 +25,8 @@
     "build": "vp build",
     "check": "node --import tsx scripts/check.ts",
     "concord": "node --import tsx src/entry/cli/entry.ts",
-    "bench": "vp build 1>&2 && node --import tsx scripts/bench.ts",
-    "bench:profile": "vp build 1>&2 && node --import tsx scripts/profile.ts",
+    "bench": "node --import tsx scripts/bench.ts",
+    "bench:profile": "node --import tsx scripts/profile.ts",
     "test:e2e:agent": "node --import tsx scripts/test-built.ts --suite=agent",
     "build:native": "node --import tsx scripts/build-native.ts --output dist/native --reuse"
   },

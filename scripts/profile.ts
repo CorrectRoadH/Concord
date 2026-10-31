@@ -12,6 +12,7 @@ import { combineProfiles, CpuProfile, hotSpots } from './perf/cpu-profile.js';
 import { io, PerfError, timedRun } from './perf/process.js';
 import { executeScenario, loadScenarios, makeContext, runArguments, cliCommand } from './perf/scenario.js';
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.js';
+import { buildForMeasurement } from './measurement-build.js';
 
 const usage = 'Usage: vp run bench:profile <scenario ID> [--warm] [--out <dir>] [--keep]\n       vp run bench:profile cli [options] -- <concord arguments>';
 const NonNegative = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));
@@ -37,8 +38,11 @@ const main = Effect.gen(function*() {
   if (positionals.length !== 1 || (path !== 'cli' && (!scenario || passthrough.length)) || (path === 'cli' && !passthrough.length)) return yield* new PerfError({ message: usage });
   const args = scenario ? runArguments(scenario.run) : passthrough;
   const scale = yield* io('Parse scale', () => parseScale(values.scale));
-  const candidate = yield* loadArtifact('candidate', '.');
   const workDir = yield* workDirectory('concord-profile-', values.keep);
+  const runs = join(workDir, 'runs');
+  yield* io('Create run directory', () => mkdirSync(runs));
+  yield* buildForMeasurement(resolve('.'), runs);
+  const candidate = yield* loadArtifact('candidate', '.');
   const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
   // Output artifacts intentionally survive; only the work directory is disposable.
   const out = yield* io('Create profile output', () => {
@@ -47,8 +51,6 @@ const main = Effect.gen(function*() {
     return realpathSync(dir);
   });
   const previous = yield* io('Inventory profile output', () => new Set(readdirSync(out)));
-  const runs = join(workDir, 'runs');
-  yield* io('Create run directory', () => mkdirSync(runs));
   const command = cliCommand(candidate, consumer.root, args);
   const counter = join(workDir, 'fs-counter.mjs');
   yield* Effect.tryPromise({

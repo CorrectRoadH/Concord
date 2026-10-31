@@ -11,6 +11,7 @@ import { executeScenario, loadScenarios, makeContext, runArguments, type BenchCo
 import { io, mustRun, PerfError } from './perf/process.js';
 import { judge, measurementPass, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.js';
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.js';
+import { buildForMeasurement } from './measurement-build.js';
 
 /** Normalize flags with optional values without consuming the following selection. */
 function optionalRevisions(argv: readonly string[]): string[] {
@@ -37,6 +38,7 @@ const main = Effect.gen(function*() {
   const root = resolve('.');
   const workDir = yield* workDirectory('concord-bench-', values.keep), outputDir = join(workDir, 'runs');
   yield* io('Create run directory', () => mkdirSync(outputDir));
+  yield* buildForMeasurement(root, outputDir);
   const candidate = yield* loadArtifact('candidate', root);
   const base = values.changed !== undefined || values.compare !== undefined ? (values.changed !== undefined ? values.changed || (yield* defaultBase(root, outputDir)) : values.compare || (yield* defaultBase(root, outputDir))) : undefined;
   const scenarios = yield* loadScenarios(root), budgets = yield* loadBudgets(root);
