@@ -1,29 +1,85 @@
 {
   "format": "concord.templates/v1",
   "templates": [
-    { "name": "project-index", "description": "Project documentation entry point and ownership rules.", "path": "project-index.md" },
-    { "name": "concepts", "description": "Shared project language and concept relationships.", "path": "concepts.md" },
-    { "name": "project-architecture", "description": "System-wide boundaries, flow, and invariants.", "path": "project-architecture.md" },
-    { "name": "constitution", "description": "Project constitution draft and clause-authoring guidance.", "path": "constitution.md" },
-    { "name": "project-design", "description": "Optional root project design context.", "path": "project-design.md" },
-    { "name": "feature", "description": "Current feature contract overview.", "path": "feature.md" },
-    { "name": "roadmap", "description": "Adoptable product direction overview.", "path": "roadmap.md" },
-    { "name": "design", "description": "Design decision overview and candidate comparison.", "path": "design.md" },
-    { "name": "design-plan", "description": "Design candidate with complete Goals and Limits responses.", "path": "design-plan.md" },
-    { "name": "engineering", "description": "Repository engineering mechanism.", "path": "engineering.md" },
-    { "name": "use-case", "description": "Complete path for one user goal.", "path": "use-case.md" },
-    { "name": "research", "description": "Freeform research topic; no preset sections or pages.", "path": "research.md" },
-    { "name": "decision", "description": "Decision memory rationale prompt.", "path": "decision.md" },
-    { "name": "insight", "description": "Reusable engineering insight prompt.", "path": "insight.md" },
-    { "name": "note", "description": "Captured memory note awaiting explicit classification.", "path": "note.md" },
-    { "name": "issue", "description": "Defect, request, or observation.", "path": "issue.md" },
-    { "name": "library", "description": "Public library contract page.", "path": "library.md" },
-    { "name": "cli", "description": "Command-line contract page.", "path": "cli.md" },
-    { "name": "architecture", "description": "Internal ownership and data-flow page.", "path": "architecture.md" },
-    { "name": "use-case-index", "description": "Index of user-goal paths.", "path": "use-case-index.md" },
-    { "name": "goals", "description": "Design decision goals and criteria.", "path": "goals.md" },
-    { "name": "limits", "description": "Design decision constraints and candidates.", "path": "limits.md" },
-    { "name": "decision-record", "description": "Design decision outcome and rationale.", "path": "decision-record.md" },
-    { "name": "cases", "description": "Neutral design comparison scenarios.", "path": "cases.md" }
+    {
+      "name": "project-index",
+      "description": "Project documentation entry point and ownership rules.",
+      "path": "project-index.md"
+    },
+    {
+      "name": "concepts",
+      "description": "Shared project language and concept relationships.",
+      "path": "concepts.md"
+    },
+    {
+      "name": "project-architecture",
+      "description": "System-wide boundaries, flow, and invariants.",
+      "path": "project-architecture.md"
+    },
+    {
+      "name": "taste",
+      "description": "Project taste: judgment entries T-1, T-2 ... with good and bad examples.",
+      "path": "taste.md"
+    },
+    {
+      "name": "project-design",
+      "description": "Optional root project design context.",
+      "path": "project-design.md"
+    },
+    {
+      "name": "feature",
+      "description": "Current feature contract overview.",
+      "path": "feature.md"
+    },
+    {
+      "name": "roadmap",
+      "description": "Product direction not yet started.",
+      "path": "roadmap.md"
+    },
+    {
+      "name": "design",
+      "description": "One page for a hard choice still being discussed; deleted once decided.",
+      "path": "design.md"
+    },
+    {
+      "name": "engineering",
+      "description": "Repository engineering mechanism.",
+      "path": "engineering.md"
+    },
+    {
+      "name": "use-case",
+      "description": "Complete path for one user goal.",
+      "path": "use-case.md"
+    },
+    {
+      "name": "memory",
+      "description": "One reusable lesson from development.",
+      "path": "memory.md"
+    },
+    {
+      "name": "issue",
+      "description": "Defect, request, or observation.",
+      "path": "issue.md"
+    },
+    {
+      "name": "library",
+      "description": "Public library contract page.",
+      "path": "library.md"
+    },
+    {
+      "name": "cli",
+      "description": "Command-line contract page.",
+      "path": "cli.md"
+    },
+    {
+      "name": "architecture",
+      "description": "Internal ownership and data-flow page.",
+      "path": "architecture.md"
+    },
+    {
+      "name": "use-case-index",
+      "description": "Index of user-goal paths.",
+      "path": "use-case-index.md"
+    }
   ]
 }

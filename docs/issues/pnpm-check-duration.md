@@ -1,6 +1,6 @@
 ---
 relations:
-  - role: decision
+  - role: investigation
     target: memory/pnpm-check-performance.md
 ---
 
