@@ -3,10 +3,10 @@
 import { Installation } from '../../base/installation/index.js';
 import { LspLauncher, ViewLauncher, ServerLauncher, PanelLauncher } from "./launchers.js";
 import { Publication } from "../../base/publication/index.js";
-import { Queries, QueryReply } from "../../app/index.js";
+import type { Queries } from "../../app/index.js";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Clock, Effect, Fiber, Layer, Schema } from "effect";
-import { Command, CliError } from "effect/unstable/cli";
+import type { Command } from "effect/unstable/cli";
 import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.js";
 import { humanOutput } from "./presentation.js";
 import { OwnedProcess, OwnedProcessLive } from "../../base/process/index.js";
@@ -25,9 +25,9 @@ const loadApp = () => Effect.tryPromise(() => import('../../app/index.js'));
 const executeQuery: typeof import('../../app/index.js').executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
 const mergeLocalFeedbackObservation: typeof import('../../app/index.js').mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
 const builtAssetRoot = (name: 'web') => loadApp().pipe(Effect.flatMap(app => Effect.try({ try: () => app.builtAssetRoot(name), catch: failure })), Effect.mapError(failure));
-const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: string, installation?: string) {
+const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string) {
   const platform = yield* ServerRuntime;
-  const { privateDir } = yield* (yield* Workspace).locate(root, true);
+  const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
   const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
   if (!record) return undefined;
   const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? platform.installation(), record.token);
@@ -48,10 +48,10 @@ const clearExistingWorkspaceCache = (root: string) => Effect.scoped(Effect.gen(f
   if (!connection || connection.hello.installation !== runtime.installation() || connection.hello.protocol !== PROTOCOL) return undefined;
   return yield* requestWorkspace(connection, 'cache-clear', {}).pipe(Effect.mapError(workspaceServerFailure));
 }));
-const connectOrStartWorkspace = Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false) {
+const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false, identifiedPrivateDir?: string) {
   const platform = yield* ServerRuntime;
   const installation = platform.installation();
-  let current = yield* existingWorkspace(root, installation).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  let current = yield* existingWorkspace(root, installation, identifiedPrivateDir).pipe(Effect.catch(() => Effect.succeed(undefined)));
   if (current && current.hello.installation === installation && current.hello.protocol === PROTOCOL) return current;
   if (current) {
     const { privateDir } = yield* (yield* Workspace).locate(root, true);
@@ -77,7 +77,7 @@ const startWorkspaceServer = (root: string) => Effect.scoped(connectOrStartWorks
 const stopWorkspaceServer = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.flatMap(connection => connection ? connection.client.shutdown({ token: connection.hello.token }) : Effect.void), Effect.as({ operation: 'server-stop' }), Effect.mapError(asServerError)));
 
 const HttpLease = Schema.Struct({ host: Schema.String, port: Schema.Int, address: Schema.String, lease: Schema.String, token: Schema.String });
-const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => void) {
+function makeWorkspaceView() { return Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => void) {
   yield* builtAssetRoot('web');
   return yield* Effect.scoped(Effect.gen(function*() {
     const connection = yield* connectOrStartWorkspace(options.root, options.inProcess === true);
@@ -94,7 +94,8 @@ const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(options: { 
     yield* Effect.sync(() => ready({ root: options.root, host: lease.host, port: lease.port, address: lease.address }));
     return yield* Effect.never;
   }));
-}, Effect.mapError(workspaceServerFailure));
+}, Effect.mapError(workspaceServerFailure)); }
+const serveWorkspaceView = /*#__PURE__*/ makeWorkspaceView();
 
 
 // Discovery needs only the base ports. Commands without an owner avoid loading
@@ -105,11 +106,12 @@ const panelLauncher = Layer.effect(PanelLauncher, Effect.gen(function*() {
     return PanelLauncher.of({ serve: root => Effect.scoped(Effect.gen(function*() {
       const location = yield* workspace.identify(root, false, true).pipe(Effect.mapError(error => /not a git repository/iu.test(error.message) ? new ConcordError(error.code, `${error.message}; run concord init in a Git worktree`, error.details) : error));
       if (location.config === null) return yield* Effect.fail(new ConcordError('ProjectNotFound', 'No Concord configuration; run concord init in this Git worktree'));
-      const panel = yield* Effect.tryPromise(() => import('../panel/index.js'));
-      return yield* panel.serveWorkspacePanel(root, path => connectOrStartWorkspace(path).pipe(Effect.provideContext(context)));
+      const [panel, connection] = yield* Effect.all([Effect.tryPromise(() => import('../panel/index.js')), connectOrStartWorkspace(location.root, false, location.privateDir)], { concurrency: 'unbounded' });
+      return yield* panel.serveWorkspacePanel(location.root, path => connectOrStartWorkspace(path).pipe(Effect.provideContext(context)), connection);
     })).pipe(Effect.provideContext(context)) });
   }));
 function makeCliLayer() {
+return Layer.unwrap(loadApp().pipe(Effect.map(({ Queries, QueryReply }) => {
 const querySelection = Layer.unwrap(Effect.gen(function*() {
   const workspace = yield* Workspace;
   const runtime = yield* ServerRuntime;
@@ -168,22 +170,26 @@ const cliServices = Layer.mergeAll(ServerRuntime.layer, Installation.layer, Work
   Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer),
 );
 return launchers.pipe(Layer.merge(querySelection), Layer.merge(feedbackSelection), Layer.provideMerge(cliServices));
-
+})));
 }
 export const cliLayer = /*#__PURE__*/ makeCliLayer();
 
-const cliFailure = (cause: unknown) => Effect.sync(() => {
+const cliFailure = (cause: unknown) => Effect.tryPromise(() => import('effect/unstable/cli/CliError')).pipe(Effect.flatMap(CliError => Effect.sync(() => {
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))
     : failure(cause);
   const result = {ok:false,error:error.code,message:error.message,...(error.code === 'WritingBudgetExceeded' ? {complete:false} : {}),...(error.details===undefined?{}:{details:error.details})};
   process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;
-});
+})));
 const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effect.gen(function*() {
+  const Command = yield* Effect.tryPromise(() => import('effect/unstable/cli/Command'));
   const version = yield* (yield* Installation).version;
   return yield* command.pipe(Command.run({ version, renderErrors: !process.argv.includes('--json') }));
 }).pipe(Effect.catch(cliFailure));
 const panelCliLayer = panelLauncher.pipe(Layer.provideMerge(Layer.mergeAll(ServerRuntime.layer, Installation.layer, Workspace.layer)), Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
+export function runPanelInvocation(root: string | undefined): void {
+  Effect.gen(function*() { yield* (yield* PanelLauncher).serve(root); }).pipe(Effect.catch(cliFailure), Effect.provide(panelCliLayer), NodeRuntime.runMain);
+}
 export function runPanelCli(command: Command.Command<any, any, any, any, PanelLauncher>): void {
   runCommand(command).pipe(Effect.provide(panelCliLayer), NodeRuntime.runMain);
 }

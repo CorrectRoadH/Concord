@@ -4,6 +4,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
+import { NodeServices } from '@effect/platform-node';
+import { Command } from 'effect/unstable/cli';
 import { build } from 'esbuild';
 import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
@@ -16,6 +18,7 @@ const Data = Schema.Struct({
   format: Schema.Literal('concord.startup/v1'), packageDigest: Schema.String, dataDigest: Schema.String,
   files: Schema.Record(Schema.String, Schema.String), sourceFiles: Schema.Record(Schema.String, Schema.String),
   receipts: Schema.Record(Schema.String, Receipt), groups: Schema.Array(Group),
+  panelStarts: Schema.Array(Schema.Array(Schema.String)),
 });
 interface Definition { readonly name: string; readonly description?: string; readonly subcommands: readonly { readonly commands: readonly Definition[] }[] }
 const digest = (path: string): string => createHash('sha256').update(readFileSync(path)).digest('hex');
@@ -33,13 +36,13 @@ const capture = (args: readonly string[]) => Effect.tryPromise({
 });
 
 /** Keep the source module's resource and identity owner after code splitting. */
-async function bundleCommands(entries: readonly string[], splitting = true, entryNames = '[name]', chunkNames = 'runtime-[hash]'): Promise<void> {
+async function bundleCommands(entries: readonly string[], splitting = true, entryNames = '[name]', chunkNames = 'runtime-[hash]', write = true) {
   const output = resolve('dist/entry/cli'), model = resolve('dist/model');
   const libraries = ['model', 'base', 'domain', 'app'].map(layer => resolve('dist', layer) + '/');
   const parser = resolve(model, 'markdown-parser.js');
   const api = new API({ runExternalCode: false });
   try {
-    await build({ entryPoints: [...entries], outdir: output, entryNames, chunkNames,
+    const result = await build({ entryPoints: [...entries], outdir: output, entryNames, chunkNames, write,
       bundle: true, splitting, packages: 'external', platform: 'node', format: 'esm', target: 'node24',
       allowOverwrite: true, sourcemap: true, metafile: true, plugins: [{ name: 'source-module-owners', setup(builder) {
         builder.onResolve({ filter: /^\./ }, args => {
@@ -73,6 +76,7 @@ async function bundleCommands(entries: readonly string[], splitting = true, entr
           return { contents, loader: 'js' };
         });
       } }] });
+    return result.outputFiles;
   } finally { api.close(); }
 }
 
@@ -85,13 +89,33 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
   // Package dependencies remain external to preserve Effect service identity with
   // repository contributions and all public exports. Installation resources resolve their package owner independently of bundle depth.
   const closure = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/cli-fallback.js'], outfile: 'dist/entry/cli/cli-fallback-bundle.js', metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
-  const roots = ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js', 'dist/entry/cli/panel-cli.js'];
+  // Capture the panel from original modules. Command bundling overwrites the
+  // selected command files, whose generated shared chunks include other roots.
+  const panels = ['dist/entry/cli/panel-start.js'];
+  const panelOutput = yield* Effect.tryPromise(() => bundleCommands(panels, true, '[name]', 'panel-runtime-[hash]', false));
+  const roots = ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js', ...panels];
   const bootstrap = yield* Effect.tryPromise(() => build({ entryPoints: roots, outdir: 'dist/startup-graph', write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
   const definitions = yield* Effect.tryPromise(async () => {
     const file = './dist/entry/cli/cli-full.js';
     const { fullCommand } = await import(pathToFileURL(resolve(file)).href) as { fullCommand: Definition };
-    return { fullCommand };
+    const root = await import(pathToFileURL(resolve('dist/entry/cli/cli-base.js')).href) as typeof import('../src/entry/cli/cli-base.js');
+    const panel = await import(pathToFileURL(resolve('dist/entry/cli/cli-command-panel.js')).href) as typeof import('../src/entry/cli/cli-command-panel.js');
+    const ports = await import(pathToFileURL(resolve('dist/entry/cli/launchers.js')).href) as typeof import('../src/entry/cli/launchers.js');
+    return { fullCommand, root: root.root, panel: panel.panel, PanelLauncher: ports.PanelLauncher };
   });
+  const panelStarts: string[][] = [];
+  if (definitions.fullCommand.subcommands.some(group => group.commands.some(command => command.name === definitions.panel.name))) {
+    const probe = definitions.root.pipe(Command.withSubcommands([definitions.panel]));
+    for (const form of [[definitions.panel.name], ['--root', '<root>', definitions.panel.name]]) {
+      let selected: string | undefined, called = false;
+      yield* Command.runWith(probe, { version: 'build', renderErrors: false })(form.map(value => value === '<root>' ? resolve('.') : value)).pipe(
+        Effect.provideService(definitions.PanelLauncher, { serve: root => Effect.sync(() => { selected = root; called = true; }) }),
+        Effect.provide(NodeServices.layer),
+      );
+      if (!called || selected !== (form.includes('<root>') ? resolve('.') : undefined)) return yield* new StartupBuildFailed({ message: 'Panel startup spelling differs from the actual command definition' });
+      panelStarts.push(form);
+    }
+  }
   const paths: string[][] = [];
   const visit = (command: Definition, path: string[]): void => {
     paths.push(path);
@@ -106,10 +130,9 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
     .filter(item => item.kind === 'dynamic-import' && item.path.startsWith('dist/entry/cli/')).map(item => item.path))];
   yield* Effect.tryPromise({ try: async () => {
     const skill = 'dist/entry/cli/skill.js';
-    const panel = 'dist/entry/cli/panel-cli.js';
-    await bundleCommands(commands.filter(file => file !== skill && file !== panel));
+    await bundleCommands(commands.filter(file => file !== skill && !panels.includes(file)));
     // A separate entry set can remove services only used by ordinary commands.
-    await bundleCommands([panel], true, '[name]', 'panel-runtime-[hash]');
+    for (const file of panelOutput ?? []) writeFileSync(file.path, file.contents);
     await bundleCommands([skill], false);
   }, catch: cause => new StartupBuildFailed({ message: `Bundle command closure: ${String(cause)}` }) });
   const production = yield* Effect.tryPromise(() => build({ entryPoints: [...roots, 'dist/entry/cli/cli-fallback-bundle.js'], outdir: 'dist/startup-graph', write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
@@ -128,6 +151,7 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
       format: 'concord.startup/v1', packageDigest: digest('package.json'), files, sourceFiles,
       receipts: Object.fromEntries(receipts),
       groups: definitions.fullCommand.subcommands.flatMap(group => group.commands.map(command => ({ name: command.name, ...(command.description === undefined ? {} : { description: command.description }) }))),
+      panelStarts,
     };
     const data: StartupData = Schema.decodeUnknownSync(Data, { onExcessProperty: 'error' })({ ...payload, dataDigest: createHash('sha256').update(JSON.stringify(payload)).digest('hex') });
     writeFileSync('dist/startup-data.js', `// Generated from the complete CLI. Do not edit.\nexport default ${JSON.stringify(data)};\n`);

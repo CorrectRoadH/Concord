@@ -14,4 +14,5 @@ export interface StartupData {
   readonly sourceFiles: Readonly<Record<string, string>>;
   readonly receipts: Readonly<Record<string, StartupReceipt>>;
   readonly groups: readonly { readonly name: string; readonly description?: string }[];
+  readonly panelStarts?: readonly (readonly string[])[];
 }

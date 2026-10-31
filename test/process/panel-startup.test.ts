@@ -45,7 +45,16 @@ test('generated panel startup and the complete CLI preserve root errors, path sa
     const nested = join(root, 'nested'); mkdirSync(nested);
     const observer = join(scratch, 'observe-parser.mjs'), observed = join(scratch, 'parser-loaded');
     writeFileSync(observer, `import { registerHooks } from 'node:module'; import { writeFileSync } from 'node:fs'; registerHooks({ load(url, context, next) { if(url.endsWith('/effect/dist/unstable/cli/Command.js')) writeFileSync(${JSON.stringify(observed)}, 'loaded'); return next(url, context); } });`);
-    const firstFrame = async (args: readonly string[], parsed: boolean) => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+    const firstFrame = async (args: readonly string[], parsed: boolean) => {
+      const started = await command(root, ['server', 'start'], resources.bin);
+      assert.equal(started.status, 0, started.stderr);
+      await pollUntil(async () => {
+        const result = await command(root, ['workspace', 'projection'], resources.bin);
+        if (result.status !== 0) return undefined;
+        const value = JSON.parse(result.stdout) as { snapshot?: { documents: { path: string }[] } };
+        return value.snapshot?.documents.some(document => document.path === 'docs/feature/reader/README.md') ? true : undefined;
+      }, { description: 'this installation has accepted the Reader generation before comparing startup paths', timeoutMs: 10_000 });
+      return Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       rmSync(observed, { force: true });
       const terminal = yield* openTerminal([process.execPath, '--import', observer, resources.bin, ...args], nested, environment);
       yield* terminal.waitFor('数字+Enter 链接 · c数字+Enter 概念 · o 在 Web 中打开');
@@ -54,7 +63,8 @@ test('generated panel startup and the complete CLI preserve root errors, path sa
       assert.equal(existsSync(observed), parsed, 'only the complete fallback loads the general command parser');
       yield* terminal.send('q');
       return text.slice(0, end).split('\n').map(line => line.trimEnd()).join('\n');
-    })));
+      })));
+    };
     for (const args of [['panel'], ['--root', root, 'panel']]) {
       const expected = await firstFrame(args, false);
       renameSync(manifest, saved);

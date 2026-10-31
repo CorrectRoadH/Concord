@@ -21,5 +21,5 @@ export class ServerLauncher extends Context.Service<ServerLauncher, {
   readonly clear: (root: string) => Effect.Effect<unknown, unknown>;
 }>()('concord/cli/ServerLauncher') {}
 export class PanelLauncher extends Context.Service<PanelLauncher, {
-  readonly serve: (root: string) => Effect.Effect<void, unknown>;
+  readonly serve: (root: string | undefined) => Effect.Effect<void, unknown>;
 }>()('concord/cli/PanelLauncher') {}

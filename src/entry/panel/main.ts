@@ -6,7 +6,7 @@ import { requestWorkspace, subscribeWorkspace, type WorkspaceConnection } from '
 import { OwnedProcess } from '../../base/process/index.js';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { plainPanelFrame, type BoundPanelBody } from './layout.js';
-import { initialPanelState, reconcilePanelState, panelItems } from './state.js';
+import { initialPanelState, reconcilePanelState } from './state.js';
 import type { PanelGeneration, PanelPorts, PanelFirstFrame } from './ports.js';
 const BodyRead = Schema.Struct({ path: Schema.String, digest: Schema.String, body: Schema.String });
 export const renderPanel = (ports: PanelPorts, initial?: PanelGeneration, options?: RenderOptions, frame?: PanelFirstFrame) => Effect.tryPromise(() => import('./renderer.js')).pipe(Effect.flatMap(renderer => renderer.renderPanel(ports, initial, options, frame, Object.hasOwn(process.env, 'NO_COLOR'))));
@@ -55,11 +55,6 @@ export const serveWorkspacePanel = Effect.fn('serveWorkspacePanel')(function*(ro
     const generation = snapshot ? { model: workspaceDisplay(snapshot) } : undefined;
     const state = generation ? reconcilePanelState(initialPanelState, undefined, generation.model) : initialPanelState;
     const bodies = new Map<string, BoundPanelBody>();
-    const selected = generation && panelItems(generation.model).find(item => item.path === state.selected);
-    if (selected?.digest && generation) {
-      const body = yield* ports.read({ path: selected.sourcePath ?? selected.path, expectedDigest: selected.digest }).pipe(Effect.catch(() => Effect.succeed(undefined)));
-      if (body?.digest === selected.digest) bodies.set(selected.path, { ...body, path: selected.path, model: generation.model });
-    }
     const text = plainPanelFrame({ model: generation?.model, state, bodies, columns: process.stdout.columns || 80, rows: process.stdout.rows || 24, noColor: Object.hasOwn(process.env, 'NO_COLOR') });
     yield* Effect.sync(() => process.stdout.write(text));
     // Importing Ink is intentionally after the first readable frame.

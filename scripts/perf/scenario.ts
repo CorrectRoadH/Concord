@@ -133,7 +133,9 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
   let result: TimedRun;
   if ('terminal' in run) {
     const panel = yield* openTerminal(cliCommand(context.artifact, context.consumer.root, ['panel']), context.consumer.root, context.env).pipe(Effect.mapError(cause => new PerfError({ message: String(cause) })));
-    const readableAt = yield* panel.waitFor('PANEL_READABLE.').pipe(Effect.mapError(cause => new PerfError({ message: String(cause) })));
+    // The accepted generation's list and relations form the first readable
+    // screen; selected source bytes are fetched afterward by expected digest.
+    const readableAt = yield* panel.waitFor(run.terminal === 'first-screen' ? '测试声明：1 项' : 'PANEL_READABLE.').pipe(Effect.mapError(cause => new PerfError({ message: String(cause) })));
     let started = panel.startedAt, ended = readableAt;
     if (run.terminal === 'push') {
       const path = join(context.consumer.root, 'docs/feature/local-sdlc/README.md');

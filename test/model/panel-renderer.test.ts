@@ -7,6 +7,7 @@ import stringWidth from 'string-width';
 import { workspaceDisplay } from '../../src/model/workspace-display/index.js';
 import { panelDetail, plainPanelFrame, markdownToTerminal, initialPanelState, reconcilePanelState, navigatePanel, panelItems, wrapTerminalLine, sliceColumns, panelWorktree, type PanelState, type BoundPanelBody } from '../../src/entry/panel/index.js';
 import { PanelView } from '../../src/entry/panel/view.js';
+import { stringWidth as panelWidth } from '../../src/entry/panel/terminal-width.js';
 import { panelSnapshot, panelBody, featurePath, useCasePath } from '../support/panel-fixture.js';
 const model = workspaceDisplay(panelSnapshot);
 const concept = { id: 'spec', term: 'Spec', digest: 'catalog-1', deprecated: ['旧规范'], path: 'docs/feature/reader/concepts.md' };
@@ -14,6 +15,11 @@ const accepted: BoundPanelBody = { path: featurePath, digest: 'feature-1', body:
 const bodies = new Map([[featurePath, accepted]]);
 const state: PanelState = { ...initialPanelState, category: 'feature', selected: featurePath, focus: 'body' };
 const props = { model, state, bodies, columns: 100, rows: 26, noColor: true };
+
+// @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
+test('first-frame width measurement agrees with the renderer for CJK, combining marks and emoji graphemes', () => {
+  for (const value of ['Reader', '› 中文：全角！', '● 已连接 · 导航', '正文正在更新…', '漢\u302a', '\u302a', 'e\u0301', '👩‍👩‍👦', '1️⃣', '✈️', '\u001b[31m中文\u001b[0m', 'ﾊﾟ', '가']) assert.equal(panelWidth(value), stringWidth(value), value);
+});
 
 // @use-case docs/feature/herdr-panel/use-case/open-side-panel.md
 test('plain and Ink first frames share body, navigation, wrapping and narrow layouts', () => {
@@ -46,7 +52,8 @@ test('body digest mismatch retains a previously matched body with its old relati
   assert.match(retained.lines.map(line => line.text).join('\n'), /保留上次匹配的正文与关系/u);
   assert.match(retained.lines.map(line => line.text).join('\n'), /readBody/u);
   const waiting = panelDetail({ ...props, model: newer, bodies: new Map() });
-  assert.deepEqual(waiting.lines.map(line => line.text), ['阅读 Spec', '正文正在更新…']);
+  assert.deepEqual(waiting.lines.slice(0, 2).map(line => line.text), ['阅读 Spec', '正文正在更新…']);
+  assert.match(waiting.lines.map(line => line.text).join('\n'), /测试声明：0 项/u);
   const fresh = panelDetail({ ...props, model: newer, bodies: new Map([[featurePath, { ...accepted, digest: 'feature-2', model: newer }]]) });
   assert.doesNotMatch(fresh.lines.map(line => line.text).join('\n'), /src\/reader\.ts/u);
 })));

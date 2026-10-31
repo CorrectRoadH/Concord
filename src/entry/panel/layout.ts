@@ -30,22 +30,23 @@ export function panelDetail(props: PanelViewProps) {
   }
   if (!selected) return { lines: [{ text: props.model ? '选择条目阅读' : '正在构建工作区投影…' }], links: [], concepts: [] };
   const diagnostics = props.model!.findings.filter(item => item.path === selected.path).map(finding => ({ text: `诊断 ${finding.code}：${finding.message}` }));
-  if (!accepted) return { lines: [{ text: selected.title }, ...diagnostics, ...(selected.kind === 'diagnostic' ? [] : [{ text: selected.digest ? '正文正在更新…' : '当前正文摘要不可用，等待更新。' }])], links: [], concepts: [] };
   lines.push(...diagnostics);
-  const displayed = panelItems(accepted.model).find(item => item.path === selected.path) ?? selected;
-  if (!matched) lines.push({ text: '正在更新：保留上次匹配的正文与关系' });
-  const paths = new Set(panelItems(accepted.model).map(item => item.path));
-  const source = displayed.kind === 'code' || displayed.kind === 'test'
+  const model = accepted?.model ?? props.model!;
+  const displayed = panelItems(model).find(item => item.path === selected.path) ?? selected;
+  if (accepted && !matched) lines.push({ text: '正在更新：保留上次匹配的正文与关系' });
+  const paths = new Set(panelItems(model).map(item => item.path));
+  const source = accepted && (displayed.kind === 'code' || displayed.kind === 'test')
     ? accepted.body.split('\n').slice((displayed.line ?? 1) - 1, displayed.endLine).map((text, index) => ({ text: `${(displayed.line ?? 1) + index}  ${terminalText(text)}`, literal: true })) : undefined;
-  const markdown = source ? { lines: [{ text: `${displayed.title} · ${displayed.sourcePath}:${displayed.line}–${displayed.endLine}` }, ...source], links: [], concepts: [] }
-    : markdownToTerminal(accepted.body, selected.path, paths, displayConcepts(accepted.model, selected.path));
+  const markdown = !accepted ? { lines: [{ text: selected.title }, ...(selected.kind === 'diagnostic' ? [] : [{ text: selected.digest ? '正文正在更新…' : '当前正文摘要不可用，等待更新。' }])], links: [], concepts: [] }
+    : source ? { lines: [{ text: `${displayed.title} · ${displayed.sourcePath}:${displayed.line}–${displayed.endLine}` }, ...source], links: [], concepts: [] }
+    : markdownToTerminal(accepted.body, selected.path, paths, displayConcepts(model, selected.path));
   const links = [...markdown.links];
   lines.push(...markdown.lines);
-  const detail = accepted.model.documents.find(item => item.document.path === selected.path);
+  const detail = model.documents.find(item => item.document.path === selected.path);
   if (detail) {
     if (detail.document.metadata.kind === 'use-case') lines.push({ text: `所属 Feature：${detail.document.metadata.feature}` });
-    for (const page of accepted.model.supportPages.filter(page => page.documentPath === selected.path && page.path !== selected.path)) { links.push({ label: page.derivedTitle ?? page.path, target: page.path }); lines.push({ text: `支持页面：${page.derivedTitle ?? page.path} [${links.length}]` }); }
-    const children = accepted.model.features.find(item => item.feature.path === selected.path)?.useCases ?? [];
+    for (const page of model.supportPages.filter(page => page.documentPath === selected.path && page.path !== selected.path)) { links.push({ label: page.derivedTitle ?? page.path, target: page.path }); lines.push({ text: `支持页面：${page.derivedTitle ?? page.path} [${links.length}]` }); }
+    const children = model.features.find(item => item.feature.path === selected.path)?.useCases ?? [];
     for (const child of children) { links.push({ label: child.metadata.title, target: child.path }); lines.push({ text: `Use Case：${child.metadata.title} [${links.length}]` }); }
     for (const group of detail.implementations) if (group.codes.length) {
       lines.push({ text: `实现 · ${group.owner.metadata.title}` });
