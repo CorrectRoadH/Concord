@@ -51,7 +51,7 @@ test('commit verification refuses invalid candidate paths and changed frozen inp
     ['runner timeout changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'concord.config.ts'), readFileSync(join(f.root, 'concord.config.ts'), 'utf8').replace('"timeoutMs": 5000', '"timeoutMs": 5001')); commit(f.root, 'runner change'); f.fix(); }, 'FixUnverifiable'],
     ['test file changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'test/cart.test.ts'), readFileSync(join(f.root, 'test/cart.test.ts'), 'utf8') + '\n'); f.fix(); }, 'FixUnverifiable'],
     ['Spec changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'docs/feature/cart/README.md'), '# Cart\n\nChanged.\n'); f.fix(); }, 'FixUnverifiable'],
-    ['unfixed green candidate', (_f: ReturnType<typeof fixture>) => {}, 'FixVerificationFailed'],
+    ['unfixed green candidate', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'candidate'), 'Still unfixed\n'); commit(f.root, 'unfixed candidate'); }, 'FixVerificationFailed'],
     ['merge interval', (f: ReturnType<typeof fixture>) => { git(f.root, 'branch', 'side'); f.fix(); git(f.root, 'switch', '-q', 'side'); writeFileSync(join(f.root, 'other'), 'x'); commit(f.root, 'side'); git(f.root, 'switch', '-q', 'master'); git(f.root, 'merge', '--no-ff', '-qm', 'merge', 'side'); }, 'FixUnverifiable'],
   ] as const) await t.test(name, async () => {
     const f = fixture(); try { arrange(f); await assert.rejects(verify(f.root), code(expected)); assert.equal(readDocumentSelector(new LocalRepository(f.root), 'sku', 'issue').metadata.kind, 'issue'); }

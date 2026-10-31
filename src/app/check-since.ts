@@ -157,7 +157,7 @@ export const checkSince = (root: string | undefined, baseInput: string, cache: '
   else {
     findings.push(...eventResult.success.findings.map(finding => ({ ...finding, category: 'relation' as const })));
     for (const issue of eventResult.success.replays) {
-      const result = yield* Effect.result(replayFix(repo, issue, { worktree: true }));
+      const result = yield* Effect.result(replayFix(repo, issue));
       if (result._tag === 'Failure') { complete = false; findings.push({ category: 'relation', path: issue, code: result.failure.code, message: result.failure.message }); }
       else replays.add(issue);
     }
