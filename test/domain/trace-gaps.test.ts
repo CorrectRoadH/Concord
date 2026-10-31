@@ -92,9 +92,11 @@ test('every derived trace reuses repeated exact references and releases its memo
   let reads = 0;
   repo.read = file => { if (file === path) reads++; return read(file); };
   const operations = [() => traceGaps(repo, 'off'), () => traceShow(repo, 'shared', 'off'), () => documentShow(repo, 'shared', 'feature', 'off'), () => renderReview(repo, 'shared', 'off')];
-  for (const operation of operations) {
+  for (const [index, operation] of operations.entries()) {
     reads = 0; operation();
-    assert.ok(reads <= 5, `shared target had ${reads} reads for 120 references`);
+    // Final reference verification reads once; show also reads each listed page's title.
+    const limit = index === 2 ? 6 : 5;
+    assert.ok(reads <= limit, `shared target had ${reads} reads for 120 references (limit ${limit})`);
     assert.ok(reads > 0, 'each invocation must read its own sources');
   }
   writeFileSync(join(root, path), '# Architecture\n');

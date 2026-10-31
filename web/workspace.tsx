@@ -190,6 +190,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     let serverStopped = false;
     let connected = false;
     let timer: number | undefined;
+    let firstEvent = true;
     const events = new EventSource('/api/events');
     events.onopen = () => { connected = true; };
     events.onerror = () => {
@@ -204,7 +205,10 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
         const problem = { code: 'WorkspaceServerStopped', message: '服务已停止，请重新运行 concord view。' };
         workspaceProblemRef.current = problem; setWorkspaceProblem(problem); return;
       }
-      void refresh({ includeWorkspace: true, includeGit: false, includeJobs: true });
+      const sameInitial = firstEvent && event.sourceDigest === initial.projection.sourceDigest
+        && event.error === undefined && JSON.stringify(event.workspace?.projection ?? event.projection) === JSON.stringify(initial.projection);
+      firstEvent = false;
+      if (!sameInitial) void refresh({ includeWorkspace: true, includeGit: false, includeJobs: true });
     };
     events.addEventListener('workspace', onEvent);
     events.addEventListener('stopping', onEvent);

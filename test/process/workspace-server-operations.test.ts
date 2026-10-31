@@ -74,8 +74,10 @@ test('HTTP cache status and forced rebuild use the persistent workspace owner', 
         assert.equal(response.status, 200, JSON.stringify(body));
         return body;
       }, catch: cause => cause });
-      const status = Schema.decodeUnknownSync(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Struct({ status: Schema.Literal('ready') }) }))(yield* action('cache.status'));
+      const status = Schema.decodeUnknownSync(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Struct({ status: Schema.Literal('ready'), sourceDigest: Schema.String }) }))(yield* action('cache.status'));
       assert.equal(status.value.status, 'ready');
+      const accepted = Schema.decodeUnknownSync(Schema.Struct({ projection: Schema.Struct({ sourceDigest: Schema.String }) }))(yield* rpc.requestWorkspace(connection, 'workspace', {}));
+      assert.equal(status.value.sourceDigest, accepted.projection.sourceDigest);
       const rebuilt = Schema.decodeUnknownSync(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Struct({ cache: Schema.Struct({ status: Schema.Literal('miss') }), codeCache: Schema.Struct({ status: Schema.Literals(['miss', 'hit']) }), cacheStatus: Schema.Struct({ status: Schema.Literal('ready') }) }) }))(yield* action('cache.rebuild'));
       assert.equal(rebuilt.value.cache.status, 'miss', 'an explicit rebuild recomputes even an already accepted annotation generation');
       assert.equal(record(root).token, running.token);
