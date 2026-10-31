@@ -6,7 +6,7 @@ status: open
 
 ## 现象
 
-多个 agent 在同一 checkout 并行开发时，`concord check --since <base>` 读取工作树期间其它 agent 写入文件，命令以 `PreimageChanged: Target worktree changed during endpoint checks` 退出 1；关系与写作子检查本身通过。交付前的检查因此只能等工作树停稳后重跑，且结果包含他人尚未提交的改动。
+多个 agent 在同一 checkout 并行开发时，`concord check --since <base>` 读取工作树期间可能有其它 agent 写入文件。此时命令以 `PreimageChanged` 退出 1，关系与写作子检查本身通过。交付前的检查因此只能等工作树停稳后重跑，且结果包含他人尚未提交的改动。
 
 ## 待决
 
