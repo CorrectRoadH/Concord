@@ -7,16 +7,7 @@ import { makeWorkspaceService, type RuntimePorts } from '../../src/entry/server/
 import { ConcordError, type WorkspaceProjection, type WorkspaceProjectionRecord } from '../../src/model/index.js';
 import { panelSnapshot } from '../support/panel-fixture.js';
 
-const record: WorkspaceProjectionRecord = { builtAt: '2026-10-30T00:00:00.000Z', builtFrom: '2026-10-30T00:00:00.000Z', builtUntil: '2026-10-30T00:00:00.000Z', complete: true, consistent: true, changedPaths: [], unknownRelations: false, snapshot: { ...panelSnapshot, cache: { status: 'ready' }, diagnostics: { operation: 'doctor', ok: true, root: '/worktree', node: 'test', configuration: {}, missingTestRoots: [], missingSourceRoots: [], codeDeclarations: 1, documents: 2, cases: 2, findings: [], nextSteps: [] } } };
-const { snapshot, ...status } = record;
-const projection: WorkspaceProjection = { snapshot, projection: { ...status, status: 'ready', current: false, refreshOwner: 'active' } };
-const ports = (overrides: Partial<RuntimePorts> = {}): RuntimePorts => ({
-  verify: Effect.void, context: Effect.succeed({ root: '/fixture', privateDir: '/fixture/private', identity: 'fixture' }),
-  ready: () => Effect.void, restore: () => Effect.succeed(projection), persist: () => Effect.void,
-  compute: () => Effect.succeed(record), open: Effect.void, close: Effect.void,
-  clear: Effect.succeed({ status: 'cleared' }), exists: Effect.succeed(true), ...overrides,
-});
-const stateLayer = WorkspaceState.layer('test-instance').pipe(Layer.provideMerge(TestClock.layer()));
+import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.js';
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
