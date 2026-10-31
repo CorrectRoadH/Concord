@@ -1,5 +1,16 @@
 ---
-status: open
+status: closed
+closure:
+  kind: fixed
+  reason: 排空等待已受理操作完成，后续写入排队至维护释放。RPC 与 HTTP 共用 256 个未应答请求额度，取消时释放额度。
+  verification:
+    defect: fc571213206ddcbebfc2b4b5843d41890fde4f3a
+    fix: 137ed8fafa065b39340fecb2962f3be55b2b0b00
+    tests:
+      - neref_3a4256921608cae9dcf474a4d0c6a513
+      - neref_b12df9bcad491eeee386dfe489406a61
+    runner: sha256:db83e0ff88b65dcaaf52a8f69c6262dbd1b596991eee44d5fcf69e1a65b4e8e0
+    concord: dev
 ---
 
 # 维护排空期间的写入被直接拒绝而不排队
