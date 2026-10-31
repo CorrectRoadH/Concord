@@ -74,6 +74,7 @@ test('runtime native health failure closes persistent ownership and retries repa
   let broken = false, closes = 0, opens = 0;
   const service = yield* makeWorkspaceService(ports({
     health: Effect.suspend(() => broken ? Effect.fail(new ConcordError('HawdbUnavailable', 'native artifact missing')) : Effect.void),
+    context: Effect.suspend(() => broken ? Effect.fail(new ConcordError('WorkspaceProjectionUnavailable', 'installation cannot identify the projection')) : Effect.succeed({ root: '/fixture', privateDir: '/fixture/private', identity: 'fixture' })),
     open: Effect.sync(() => { if (broken) throw new Error('open must wait for repair'); opens++; }),
     close: Effect.sync(() => { closes++; }),
   }));
@@ -81,6 +82,7 @@ test('runtime native health failure closes persistent ownership and retries repa
   assert.equal(opens, 1);
   broken = true; yield* TestClock.adjust(1000);
   assert.equal((yield* SubscriptionRef.get(service.state.value)).state, 'degraded');
+  assert.equal((yield* SubscriptionRef.get(service.state.value)).error?.code, 'HawdbUnavailable');
   assert.equal(closes, 1);
   broken = false; yield* TestClock.adjust(1000);
   assert.equal((yield* SubscriptionRef.get(service.state.value)).state, 'running');
