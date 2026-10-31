@@ -26,12 +26,12 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 只支持线性路径：先提交会失败的回归测试，再提交修复（[决策依据](../../design/sdd-core-model/DECISION.md)）。可观察行为见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 
-1. 回归测试由 `@issue` 标记选出。`issue close --fixed` 要求工作树干净，修复候选即当前 HEAD。
+1. 回归测试由 `@issue` 标记选出。修复候选是核验开始时的 HEAD；工作树中他人的未提交改动不参与核验，只要求该 Issue 文件没有未提交改动。
 2. 缺陷候选默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
 3. 从缺陷候选到 HEAD 之间，测试文件、runner 配置、`runner.sourceFiles` 与测试指向的 Spec 字节不变；区间中有 merge 提交时不支持。
-4. 在 Git-private 目录 `verify/<i>/` 下以 detached worktree 检出缺陷候选，在主工作树运行修复候选。两次运行都在 runner 租约与 OwnedProcess 下执行，结束后删除临时 worktree；清理无法确认时按 runner 阻断处理。
+4. 在 Git-private 目录 `verify/<i>/` 下以 detached worktree 分别检出缺陷候选与修复候选。每个检出先依次执行 `runner.prepare` 的命令（例如安装依赖与构建），再运行 runner；准备命令以非零码结束、超时或清理未知时核验报 `FixUnverifiable`，不计为 red。全部命令在 runner 租约与 OwnedProcess 下执行，结束后删除临时 worktree；清理无法确认时按 runner 阻断处理。
 5. 缺陷候选上同一冻结命令以非零码结束，修复候选上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果；runner 结果判定为零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
-6. 发布前重新核对 HEAD、工作树、配置与 Issue 前像，变化则拒绝。写入的 `verification` 包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本。
+6. 发布前重新核对 Issue 文件的前像，变化则拒绝。写入的 `verification` 包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本。
 
 `verification.fix` 是实际验证的提交 F，承载关闭记录的提交通常在 F 之后。`test verify` 在记录的缺陷提交与 F 上重放；`check --since` 的重放在记录的缺陷提交与目标工作树上运行，因此验证的是被接受的快照，而不只是 F。已经关闭的记录不随后续变化重放，之后的回归由完整测试发现。提交、依赖或运行环境不可获得时报告无法重放，不改变已记录的结论。reopen 删除 `closure`。
 
