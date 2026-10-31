@@ -3,18 +3,19 @@
 import { Effect, Scope } from 'effect';
 import { RpcServer } from 'effect/unstable/rpc';
 import { Socket, SocketServer } from 'effect/unstable/socket';
+import { makeRequestAdmission, type RequestAdmission } from './request-admission.js';
 
 /** Connection and request admission surrounds the actual Effect RPC protocol. */
-export const makeAdmittedProtocol = Effect.fn('makeAdmittedProtocol')(function*(server: SocketServer.SocketServer['Service'], connected: Effect.Effect<unknown, never, Scope.Scope>, disconnected: (client: number) => void) {
-  const requests = new Map<number, Set<string>>();
+export const makeAdmittedProtocol = Effect.fn('makeAdmittedProtocol')(function*(server: SocketServer.SocketServer['Service'], connected: Effect.Effect<unknown, never, Scope.Scope>, disconnected: (client: number) => void, admission: RequestAdmission = makeRequestAdmission()) {
+  const requests = new Map<number, Map<string, () => void>>();
   const close = new Map<number, Effect.Effect<void>>();
-  let connections = 0, nextId = 0, queued = 0, sending = 0;
+  let connections = 0, nextId = 0, sending = 0;
   const sockets: SocketServer.SocketServer['Service'] = { ...server, run: handler => server.run(socket => Effect.scoped(Effect.gen(function*() {
     const write = yield* socket.writer;
     const busy = write(new Socket.CloseEvent(1013, 'WorkspaceServerBusy')).pipe(Effect.ignore);
     if (connections >= 64) { yield* busy; return; }
     const id = nextId++; connections++; close.set(id, busy);
-    yield* Effect.addFinalizer(() => Effect.sync(() => { connections--; close.delete(id); queued -= requests.get(id)?.size ?? 0; requests.delete(id); disconnected(id); }));
+    yield* Effect.addFinalizer(() => Effect.sync(() => { connections--; close.delete(id); for (const release of requests.get(id)?.values() ?? []) release(); requests.delete(id); disconnected(id); }));
     yield* connected;
     const bounded = Socket.make({ ...socket,
       writer: Effect.succeed(chunk => Effect.suspend(() => {
@@ -31,14 +32,19 @@ export const makeAdmittedProtocol = Effect.fn('makeAdmittedProtocol')(function*(
     ...protocol,
     run: dispatch => protocol.run((id, message) => {
       if (message._tag === 'Request') {
-        const pending = requests.get(id) ?? new Set<string>();
-        if (pending.size >= 8 || queued >= 256 || pending.has(String(message.id))) return close.get(id) ?? Effect.void;
-        pending.add(String(message.id)); requests.set(id, pending); queued++;
+        const pending = requests.get(id) ?? new Map<string, () => void>();
+        if (pending.size >= 8 || pending.has(String(message.id))) return close.get(id) ?? Effect.void;
+        const release = admission.reserve();
+        if (!release) return close.get(id) ?? Effect.void;
+        pending.set(String(message.id), release); requests.set(id, pending);
       }
       return dispatch(id, message);
     }),
     send: (id, message, transferables) => {
-      if (message._tag === 'Exit' && requests.get(id)?.delete(String(message.requestId))) queued--;
+      if (message._tag === 'Exit') {
+        requests.get(id)?.get(String(message.requestId))?.();
+        requests.get(id)?.delete(String(message.requestId));
+      }
       return protocol.send(id, message, transferables);
     },
   } satisfies RpcServer.Protocol['Service'];
