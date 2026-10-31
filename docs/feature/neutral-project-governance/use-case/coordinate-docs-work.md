@@ -105,4 +105,3 @@ verified 只说明声明范围内的内容通过了声明的检查（[证据的�
 
 ## Spec 来源
 
-- [决策依据](../../../design/repository-workflows/DECISION.md)

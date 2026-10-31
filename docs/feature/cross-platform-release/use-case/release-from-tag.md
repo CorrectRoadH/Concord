@@ -23,7 +23,7 @@
 - [CLI](../cli.md)
 - [架构](../architecture.md)
 - [生命周期](../architecture.md)
-- [可移植发布协调设计](../../../design/portable-publication/README.md)
+- 可移植发布协调设计
 
 ## 渠道通知与恢复
 

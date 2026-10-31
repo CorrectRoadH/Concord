@@ -4,7 +4,7 @@
 
 ## 原生边界
 
-Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [技术栈](../../engineering/concord-self-hosting/README.md#技术栈)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放，复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。关系缓存使用参数化 SQL。现有子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据（[决策依据](../../design/hawdb-data-engine/DECISION.md)）。
+Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [技术栈](../../engineering/concord-self-hosting/README.md#技术栈)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放，复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。关系缓存使用参数化 SQL。现有子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据。
 
 桥接识别 typed `HawDBError::BranchBusy` 与固定版本的旧目录锁争用，该分类贯穿 schema 与事务准入；事务获取失败保留具名错误，真正的 schema 形状错误为 `HawdbIncompatible`。
 
@@ -46,7 +46,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 ## 工作区服务
 
-每个 worktree 最多一个工作区服务。它长期持有该 worktree 的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Herdr 面板](../herdr-panel/README.md)、[Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。HawDB 规定一个目录由一个进程长期持有，服务按此持有缓存（[决策依据](../../design/cli-hot-path/DECISION.md)）。
+每个 worktree 最多一个工作区服务。它长期持有该 worktree 的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Herdr 面板](../herdr-panel/README.md)、[Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。HawDB 规定一个目录由一个进程长期持有，服务按此持有缓存。
 
 ### 进程与资源
 
@@ -96,7 +96,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 
 ### 刷新与推送
 
-服务是该 worktree 唯一的工作区投影刷新者。监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。刷新在计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)；主进程确认结果、身份与无待恢复 journal 后接受该代次：在内存中替换当前代次，并写入 `workspace_projection` 作为服务重启后的首个代次与无服务时的历史读取。订阅、`GET /api/workspace` 与经服务的 `workspace projection` 从内存返回，不读持久库（[决策依据](../../design/workspace-runtime/DECISION.md)）。
+服务是该 worktree 唯一的工作区投影刷新者。监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。刷新在计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)；主进程确认结果、身份与无待恢复 journal 后接受该代次：在内存中替换当前代次，并写入 `workspace_projection` 作为服务重启后的首个代次与无服务时的历史读取。订阅、`GET /api/workspace` 与经服务的 `workspace projection` 从内存返回，不读持久库。
 
 订阅以 `(token, generation)` 识别代次。首次订阅与重连先发送完整状态；之后代次、`lastAttempt`、错误、状态与任务变化都发送事件，即使没有新代次。同一连接上未发送的旧事件被新的完整状态替换，不排队。
 
@@ -176,7 +176,7 @@ CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`-
 
 ## 诊断投影
 
-诊断投影只服务[异步查询](use-case/query-asynchronous-projections.md)（[决策依据](../../design/asynchronous-projections/DECISION.md)、[漂移发布依据](../../design/diagnostic-projection-drift/DECISION.md)）。缓存命中不加载 Repository，不等待发布租约。check、trace check、Memory 与 Issue 检索、作者读取、写入、恢复与证据裁决不读取 `query_cache`；`--fresh` 与 `--dry-run` 走当前来源扫描。
+诊断投影只服务[异步查询](use-case/query-asynchronous-projections.md)。缓存命中不加载 Repository，不等待发布租约。check、trace check、Memory 与 Issue 检索、作者读取、写入、恢复与证据裁决不读取 `query_cache`；`--fresh` 与 `--dry-run` 走当前来源扫描。
 
 ### 刷新
 

@@ -6,7 +6,7 @@
 
 ## 配置项
 
-`concord.config.ts` 可以不存在，此时全部配置项取默认值（[决策依据](../../../design/sdd-core-model/DECISION.md)）。
+`concord.config.ts` 可以不存在，此时全部配置项取默认值。
 
 | 项 | 默认 | 何时配置 |
 | --- | --- | --- |
@@ -49,4 +49,4 @@
 
 ## Spec 来源
 
-[目标与范围](../README.md)；实现边界见[架构](../architecture.md)。配置采用不执行消费者代码的静态 TS 数据（[决策依据](../../../design/onboarding-contracts/DECISION.md)）。
+[目标与范围](../README.md)；实现边界见[架构](../architecture.md)。配置采用不执行消费者代码的静态 TS 数据。

@@ -4,7 +4,7 @@
 
 Agent 和维护者在开始工作前，要找到以前的调查结论、决策和经验，并在工作中更新它们。
 
-Memory 保存可复用知识与不需要 Design 的决策，Issue 跟踪缺陷与待调查的观察，Spec 声明目标、行为与约束。三者不复制同一事实（[决策依据](../../../design/sdd-core-model/DECISION.md)）。
+Memory 保存可复用知识与不需要 Design 的决策，Issue 跟踪缺陷与待调查的观察，Spec 声明目标、行为与约束。三者不复制同一事实。
 
 ## 起始状态
 
@@ -63,7 +63,7 @@ Memory 保存可复用知识与不需要 Design 的决策，Issue 跟踪缺陷�
 
 `list memory` 与 `memory search` 只读，不写文件。`memory search` 返回记录原文与摘要。
 
-`check` 校验每条 Memory 的当前状态：`type` 与 `status` 取值合法，note 只能是 captured，`supports` 指向存在的当前 Spec 或锚点，`amends` 指向品味的条款与款，`supersededBy` 指向存在的 Memory。`check --since <base>` 另外校验本次变化中的状态转换，见[检查本次变化](../cli.md#检查本次变化)。
+`check` 校验每条 Memory 的当前状态：`type` 与 `status` 取值合法，note 只能是 captured，`supports` 指向存在的当前 Spec 或锚点，`amends` 指向品味的条款与款，`supersededBy` 指向存在的 Memory。
 
 | 错误 | 触发条件 |
 | --- | --- |

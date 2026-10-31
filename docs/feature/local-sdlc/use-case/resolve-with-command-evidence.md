@@ -2,7 +2,7 @@
 
 ## 用户目标
 
-修复缺陷的工程师要证明修复确实生效：回归测试在修复之前的提交上失败，在修复之后的提交上通过。Concord 在关闭 Issue 之前执行这次核验，把缺陷提交、修复提交与测试写进 Issue。审阅者不必相信“已修复”这句话，可以在任何具备依赖的 clone 中重放核验（[决策依据](../../../design/sdd-core-model/DECISION.md)）。
+修复缺陷的工程师要证明修复确实生效：回归测试在修复之前的提交上失败，在修复之后的提交上通过。Concord 在关闭 Issue 之前执行这次核验，把缺陷提交、修复提交与测试写进 Issue。审阅者不必相信“已修复”这句话，可以在任何具备依赖的 clone 中重放核验。
 
 ## 起始状态
 
@@ -86,7 +86,7 @@ closure:
 
 `verification` 记录缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行核验的 Concord 版本。
 
-不经 `issue close` 直接写入或修改的 `verification`，由 `check --since <base>` 按记录重放核验，见[检查本次变化](../cli.md#检查本次变化)。`check` 在以下情况报告 finding：fixed 没有 `verification`、记录的提交不存在、记录的测试在记录的修复提交上不存在或没有用 `@issue` 指向该 Issue。修复提交之后测试被移动或删除不使记录失效。
+`check` 在以下情况报告 finding：fixed 没有 `verification`、记录的提交不存在、记录的测试在记录的修复提交上不存在或没有用 `@issue` 指向该 Issue。修复提交之后测试被移动或删除不使记录失效。
 
 `issue close --fixed` 拒绝时退出 1，不修改 Issue：
 

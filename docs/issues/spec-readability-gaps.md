@@ -55,3 +55,15 @@ status: open
 ## 期望
 
 每个 Feature README 满足 [页面职责](../document-model.md#页面职责)，每个 Use Case 满足 [页面职责](../document-model.md#页面职责)，上述歧义各自定为一个概念并写入 `concepts.md`。
+
+## 精简后待跟进的 Spec
+
+文档模型已改为只描述现在：Design 只放未定的取舍，Issue 处理完删除，Memory 只放可复用经验，历史交给 Git，不再有变化门禁。以下页面仍按旧模型书写，需要按新模型改写：
+
+- Issue 生命周期：feedback 的“本地观察”与 local-sdlc 的“核验修复并关闭缺陷”仍写 `status`、`closure` 与关闭种类；改为处理完删除，fixed 在删除前核验并输出结论。
+- Memory 生命周期：`memory confirm`、`memory replace` 与 captured、current、superseded 状态不再需要。
+- Design：“逐项比较方案并明确裁决” Use Case 与 `design decide`、`design postpone`、`design check` 仍按 Design 包书写；改为单页取舍。
+- 代次：异步投影、工作区服务与发布协调中的代次（generation、epoch）概念与功能去掉。
+- Herdr：herdr-panel 改为 Herdr mod，在 mod 内完成初始化空仓库与阅读全部文档等完整功能，不依赖外部 Web app。
+- 没用的测试：`trace gaps` 列出没有关联 Use Case 的测试，需写入 local-sdlc 的 cli 页与 Use Case。
+- 文件格式：写作政策 JSON、frontmatter YAML 与配置的形式可以重新设计。

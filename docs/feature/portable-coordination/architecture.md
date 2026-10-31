@@ -2,7 +2,7 @@
 
 Concord coordinates one worktree with Node file leases. HawDB remains a disposable cache. This page owns optimistic source access, exclusive commit, and recovery results. The user path is [Coordinate local publications](use-case/coordinate-local-publications.md).
 
-The per-operation dependency matrix is in the [local SDLC architecture](../local-sdlc/architecture.md#操作依赖). Runner leases and evidence finalization are in the [project architecture](../../architecture.md#发布协调). Rationale: [operation boundaries](../../design/operation-boundaries/DECISION.md).
+The per-operation dependency matrix is in the [local SDLC architecture](../local-sdlc/architecture.md#操作依赖). Runner leases and evidence finalization are in the [project architecture](../../architecture.md#发布协调). Rationale: operation boundaries.
 
 ## Entity ownership
 

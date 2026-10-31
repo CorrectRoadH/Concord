@@ -2,7 +2,7 @@
 
 本页按日常顺序列出命令、实际输出、退出码与错误。示例来自一个只有 `src/cart.js` 与 `test/cart.test.js` 的消费仓库。摘要和时间戳因运行而异，其余字段与真实输出一致；标为预期输出的示例尚待实现核对。实现方式见[架构](architecture.md)。
 
-全部文件都可以直接编辑。命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用，并把结果写进文件；可信度由 `check --since <base>` 保证（[决策依据](../../design/sdd-core-model/DECISION.md)）。
+全部文件都可以直接编辑。命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用，并把结果写进文件；`check` 检查结果是否一致。
 
 ## 命令面
 
@@ -12,7 +12,7 @@
 | `new <类别> <名称>` | 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Research、Issue 或 Memory |
 | `show <路径或选择器>` | 一个文档及其关系、测试与实现 |
 | `list [类别]` | 列出文档；`--open` 列出打开的 Issue |
-| `check` | 放置、关系、概念、写作与修复核验记录；`--since <base>` 另外检查本次变化 |
+| `check` | 放置、关系、概念、写作与修复核验记录 |
 | `trace` | 关系图与缺口 |
 | `test` | `list`、`show`、`discover`、`marker`、`run`、`verify <issue>` |
 | `code` | `marker`、`list`、`at`、`analyze`：实现与 Spec 的关联 |
@@ -181,34 +181,6 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 适用范围与规则见[聚合门禁](../documentation-quality/gate.md)。
 
 `ok` 为 false 表示发现违规。`complete` 为 false 表示有必需输入没能读取，结论不完整。`advisories` 是提示，不影响退出码。
-
-### 检查本次变化
-
-`concord check --since <base>` 在当前状态检查之外，比较基线与目标两个端点，检查本次变化。
-
-- 基线 `<base>` 必须解析为一个提交，且是 HEAD 的祖先；否则返回具名错误 `InvalidBase`，退出 1。CI 在 PR 上取目标分支与 PR 的 merge-base，在默认分支上取上一次通过门禁的提交。
-- 目标是当前工作树：已提交、已暂存、未暂存与未被忽略的未跟踪文件，与 `check` 读取的范围相同。
-- 只比较两个端点，不检查范围内的中间提交；squash 掉的中间状态不在门禁范围内。
-- 基线对象缺失（例如 shallow clone）、基线或目标中的 owner 无法解码、检查期间目标文件变化时，`complete` 为 false 并以非零码退出，不报告通过。
-- `--json` 结果带 `since: {"base": "<提交>", "target": "worktree", "scope": "endpoints"}`。不带 `--since` 的 `check` 只证明当前结构合法；`closure: fixed` 在其结果中显示 `verified: "recorded"`，只有本次变化中经过重放的才显示 `verified: "replayed"`。
-
-门禁按 before 与 after 的领域差异识别事件，检查每种事件的全部规则；普通正文编辑不触发额外检查：
-
-| 事件 | 检查 |
-| --- | --- |
-| Issue 新关闭为 fixed、closure 种类改为 fixed，或保持 fixed 而修改 `verification` | 在记录的缺陷提交上重放回归测试并要求失败，在记录的修复提交上重放并要求通过，两次都在临时检出中运行；两端之间测试、runner 配置、`runner.sourceFiles` 与所指 Spec 不变，见[修复核验](use-case/resolve-with-command-evidence.md)；失败或无法核验时不报告 `replayed` |
-| Issue 关闭、重开或改变 closure 种类 | 目标状态的全部关闭规则；改变种类按重开后再关闭处理 |
-| Issue 或 Memory 删除 | 没有其它 owner 或标记仍指向它 |
-| Memory 的 `status` 改变 | 转换合法：captured 到 current，current 到 superseded；note 保持 captured |
-| 品味从 draft 变为 active | 本次变化中新增一条 `type: decision` 的 Memory，以 `amends` 指向 `docs/constitution.md` |
-| active 品味的条款或款新增、修改或删除 | 本次变化中新增一条 `type: decision` 的 Memory，以 `amends` 指向每个受影响的 ID（含已删除的 ID），正文含适用范围、理由、来源与影响四节 |
-| active 品味改回 draft 或被删除 | 拒绝 |
-| 已裁决 Design 的候选、Goals、Limits 或 Cases 改变 | 拒绝；DECISION 的理由只能追加一节带日期与来源的更正 |
-| DECISION 的 `Selected:` 首次写入 | 按 `design decide` 的规则校验全部候选与 Limits |
-| 基线已裁决的 Design 改选候选或清空 `Selected:` | 拒绝；候选在单文件与目录形式之间调整时，指向同一候选的新入口不算改选 |
-| Roadmap 目录移入 `docs/feature/` | 链接改写与采用规则满足，见[采用 Roadmap](use-case/plan-and-adopt-contracts.md#结果) |
-
-`amends` 指向已删除条款的关系是历史引用，此后的 `check` 只校验其 ID 格式。
 
 ## 追踪关系
 

@@ -28,7 +28,7 @@ closure:
 
 `source` 是 FeedbackSource：GitHub 与 Linear 各一个分支，包含首次导入时的远端对象身份（见下文的去重键）、来源摘录、远端状态与时间，以及 `connectionId` 与 `importedAt`。没有 `source` 的 Issue 是 Local 来源。
 
-Issue 文件可以直接编辑，`concord issue` 是写入同样内容并执行必要步骤的助手。`concord check` 校验当前字段，`concord check --since <base>` 另外校验本次变化中的状态转换、关闭结论与修复核验记录（[决策依据](../../design/sdd-core-model/DECISION.md)）。
+Issue 文件可以直接编辑，`concord issue` 是写入同样内容并执行必要步骤的助手。`concord check` 校验当前字段与关闭结论。
 
 ## 远端来源
 

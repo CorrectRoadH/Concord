@@ -11,7 +11,7 @@ Local、GitHub、Linear 在同一反馈列表中作为三个来源呈现。Local
 ## 操作 Spec
 
 - `concord new issue <名称>` 按模板创建 `status: open` 的本地 Issue；也可以直接创建文件。
-- Issue 的正文与 frontmatter 可以直接编辑。`concord check` 校验当前字段；`concord check --since <base>` 校验本次变化中的状态转换：closed 必须带完整的关闭结论，新增或修改的 `verification` 按记录重放（[决策依据](../../../design/sdd-core-model/DECISION.md)）。Web 保存使用整文件摘要，只防止覆盖并发的外部编辑。
+- Issue 的正文与 frontmatter 可以直接编辑。`concord check` 校验当前字段：closed 必须带完整的关闭结论。Web 保存使用整文件摘要，只防止覆盖并发的外部编辑。
 - `feedback list` 接受 `--status open|closed`、`--provider local|github|linear`、`--triage pending|linked|closed` 及 `--query`。筛选相交，空结果返回空列表；query 不区分大小写，匹配路径、名称、正文与已保存来源。`feedback.list` 受管操作使用相同筛选；Web 来源与处理状态筛选复用同一规则。筛选不读取远端网络，也不依赖无关 Spec 可解析。
 - `list issue` 列出从当前 Issue 派生的[索引](../concepts.md#index)，`issue search <query>` [检索](../concepts.md#recall)匹配的 Issue 并返回原文与摘要。
 - `issue link <id> --role <role> <target>` 按[角色表](../architecture.md#issue-字段)校验目标类型，省略 `--role` 时为 investigation；同一角色与目标去重，只接受 open Issue。adopts 的锚点使用 `check` 的同一校验。重复关系只由 duplicate 关闭的 `canonical` 写入。
@@ -34,6 +34,6 @@ Local、GitHub、Linear 在同一反馈列表中作为三个来源呈现。Local
 
 打包公开 CLI 在无任何 provider 配置的 Git 消费者中完成创建、筛选、直接编辑、link、unlink、全部关闭种类与 reopen，`concord check` 无 finding；dry-run 不改文件。
 
-直接写入的 closed 缺少必需字段、delivered 的 target 不在 adopts、duplicate 成环、declined 指向非 current 的 decision Memory、fixed 没有 `verification`，分别由 `check` 报告。`check --since <base>` 报告非法状态转换与无法重放的 `verification`。
+直接写入的 closed 缺少必需字段、delivered 的 target 不在 adopts、duplicate 成环、declined 指向非 current 的 decision Memory、fixed 没有 `verification`，分别由 `check` 报告。
 
 Web 删除时，关系、关闭结论、远端来源、入边引用与陈旧摘要分别拒绝；删除的 prepared 与 committed 恢复分别保留前像与已提交结果，未知编辑拒绝。HTTP 与真实浏览器验证本地来源与删除反馈；GitHub/Linear 保持只读接入。

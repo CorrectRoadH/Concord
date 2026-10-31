@@ -1,17 +1,18 @@
 # 文档模型
 
-Concord 管理的文档按回答的问题分组。身份、类别、所属关系与名称由位置和一级标题决定；只有推导不出的语义写在 frontmatter，字段只在非空时出现。全部文件都可以直接编辑，Concord 从文件派生索引与反向关系，`concord check --since <base>` 检查变化是否合法（[事实归属](#事实归属)，[决策依据](design/sdd-core-model/DECISION.md)）。
+Concord 管理的文档按回答的问题分组。身份、类别、所属关系与名称由位置和一级标题决定；只有推导不出的语义写在 frontmatter，字段只在非空时出现。全部文件都可以直接编辑，Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致（[事实归属](#事实归属)）。
 
 | 分组 | 文档 | 位置 | frontmatter |
 | --- | --- | --- | --- |
-| Spec | Feature：README（能力）、`use-case/`（用户路径与验收）、`architecture.md`（实现）、`cli.md` 或 `library.md`（示例） | `docs/feature/<f>/` | 无 |
-| Spec | Engineering：本仓库自身维护机制，结构同 Feature | `docs/engineering/<t>/` | 无 |
-| 提案 | Roadmap：尚未采用的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
-| 项目规则 | 品味、概念、写作政策 | `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 品味只有 `status` |
-| 决策记录 | Design：候选比较与正式选择 | `docs/design/<d>/` | 无；候选来自 `plans/`，选择来自 DECISION 的 `Selected:` 行 |
-| 决策记录 | Research：带来源与观察时间的研究输入 | `docs/research/<r>/` | 无；观察日期与来源在正文 |
-| 工作项 | Issue：缺陷、请求与观察 | `docs/issues/<i>.md` | `status`、`relations`、`source`、`closure` |
-| 知识 | Memory：decision、insight 与 note | `memory/<m>.md` | `type`、`status`、`relations`、`supersededBy` |
+| Spec | Feature：README（产品功能，像使用教程）、`use-case/`（不同情形下的用户旅程）、`architecture.md`（技术架构）、`cli.md` 或 `library.md`（调用与输出） | `docs/feature/<f>/` | 无 |
+| Spec | Engineering：开发 Concord 本身的构建、测试与发布，结构同 Feature | `docs/engineering/<t>/` | 无 |
+| 提案 | Roadmap：还没开始实现的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
+| 项目规则 | 品味、术语、写作政策 | `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 无 |
+| 待定的取舍 | Design：一个还没定下来的取舍，列出几种做法和各自的代价 | `docs/design/<d>.md` | 无 |
+| 待处理 | Issue：还要处理的缺陷、请求或观察 | `docs/issues/<i>.md` | `relations`、`source` |
+| 经验 | Memory：开发中可复用的经验 | `memory/<m>.md` | `relations` |
+
+文档只描述现在。修改历史、为什么改、谁在什么时候处理完了什么，都由 Git 保存，Concord 不另存版本、修订记录或状态历史。
 
 `docs/` 下其它 Markdown 是普通文档，不是 owner。
 
@@ -21,11 +22,15 @@ canonical 仓库相对路径是唯一身份。目录名与文件名是同类别�
 
 ## Issue
 
-Issue 的 `status` 为 open 或 closed。`relations` 中参与生命周期裁决的关系带角色：`investigation`、`root-cause` 与 `decision` 指向 Memory，`adopts` 指向承接它的 Spec，`related` 指向另一个 Issue；重复关系只由 duplicate 关闭的 `canonical` 表达。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。`closure` 的种类与必需字段见[本地观察](feature/feedback/use-case/manage-local-observations.md)；fixed 的修复核验见[修复缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)。普通正文链接只是导航。
+Issue 只表示还要处理的问题。处理完就删除文件：`issue close` 先执行需要的步骤，例如 fixed 时核验回归测试，再删除 Issue，并输出可写进提交说明的结论。`relations` 带角色：`investigation` 与 `root-cause` 指向 Memory，`adopts` 指向承接它的 Spec，`related` 指向另一个 Issue。远端来源的 `source` 保存 provider 的稳定身份与首次来源摘录，见 [Feedback](feature/feedback/architecture.md)。
 
 ## Memory
 
-Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Design 的结论；缺陷由 Issue 跟踪。`status` 为 captured、current 或 superseded：captured 表示尚未确认，note 只能是 captured，superseded 带 `supersededBy` 或写明原因与来源的 `supersession`。`relations` 的 `supports` 指向它支持的 Spec，`amends` 指向品味采用时的整份品味，或修订影响的条款与款。
+Memory 只保存开发中可复用的经验：测量结论、根因、踩过的坑和做过的取舍。经验过时就改写或删除，不保留状态与替代关系；过程日志、验收记录和修改记录不写进 Memory。`relations` 的 `supports` 指向它支持的 Spec。
+
+## Design
+
+Design 只用于真正难以取舍的问题，例如一个 API 有几种可行的形状。一页写清要决定什么、几种做法和各自的代价。定下来后把采用的规则写进 Spec，删除这一页。
 
 ## 格式边界
 
@@ -42,7 +47,7 @@ Memory 只保存可复用的知识与不需要 Design 的决策，不重复 Desi
 1. 每项事实只有一个 owner。Spec 正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作政策由同目录的 `concord-writing.json` 拥有；测试定义与正向关系由测试源码拥有。Issue 拥有工作项的状态、关系与关闭结论，Memory 拥有知识的正文、类型、状态与关系；生命周期的文本历史在 Git。
 2. 目录确定术语与政策的局部作用域，docs 根拥有全局定义。术语的定义与解释写在同一 `concepts.md`；其它 Markdown 链接到定义，不重复维护。
 3. 反向关系、聚合索引与引用反查从来源派生，不维护第二份登记表。
-4. 人与 Agent 直接编辑 `docs/` 与 `memory/` 下的文件，包括 Memory 与 Issue；索引、检索与反向关系由 Concord 从文件派生，不维护人工 INDEX。状态、关系与关闭结论的合法性由 `concord check --since <base>` 门禁检查，Concord 命令是执行需要运行的步骤的助手。
+4. 人与 Agent 直接编辑 `docs/` 与 `memory/` 下的文件，包括 Memory 与 Issue；索引、检索与反向关系由 Concord 从文件派生，不维护人工 INDEX。状态、关系与关闭结论由 `concord check` 检查，Concord 命令是执行需要运行的步骤的助手。
 
 ## 页面职责
 
@@ -60,18 +65,9 @@ Feature 的页面按读者的问题分工（[读得懂胜过写得全](constitut
 
 声明式页面只写现在（[写现在，不写过去](constitution.md#c-020)）。
 
-1. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。Design 的历史方案记录按裁决时的陈述理解，不因本款被解释为当前要求。
-2. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交收据和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。Research 的研究事实、Design 的候选与裁决，以及记录类 owner 由工具维护的生命周期元数据，由各自 owner 保留，不借此记录实施日志、审阅经过或交接。本规则不授权删除或改写既有证据、来源及生命周期历史；Design 记录与 Spec 的分工见 [Design 记录](#design-记录) 至 [Design 记录](#design-记录)。
-3. 声明式 owner（Feature、Use Case、Engineering、品味、`concepts.md` 与写作政策）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git、Memory 或记录类 owner（Research、Design、Roadmap、Issue、Memory）保存，需要时派生。
-
-## Design 记录
-
-Design 是裁决时的方案记录，现行规则由 Spec 维护。
-
-1. 已裁决 Design 的候选、共同约束、验收与裁决正文是裁决时的方案记录，不作为现行 Spec 的 owner。
-2. 裁决时，选中方案中仍适用的要求完整写入相应的行为页、architecture 页或工程页；此后这些要求在 Spec 中维护，不因实现尚未满足而丢弃。
-3. Design 不为追随实现改写历史方案。经授权的理由更正与内容组织调整，仍遵守已有的来源保留、身份与生命周期规则。
-4. Spec 对 Design 的引用只用于导航或说明决策依据；链接目标的检查范围由 [documentation-quality 的聚合门禁](feature/documentation-quality/gate.md)声明。
+1. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。
+2. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交收据和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。
+3. 声明式 owner（Feature、Use Case、Engineering、品味、`concepts.md` 与写作政策）只保存当前声明，不保存创建时间、采用来源、修订日期或修订历史。这些事实由 Git 保存。
 
 ## 术语与语言
 

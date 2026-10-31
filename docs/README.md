@@ -1,23 +1,35 @@
-# Concord 项目文档
+# Concord 文档
 
-从[为什么需要 Concord](why-concord.md)、[本仓库 Concord 工作流](concord.md)、[本地 SDLC 闭环](feature/local-sdlc/README.md)和[自举维护](engineering/concord-self-hosting/README.md)开始。[_template](_template/README.md) 只提供写作参考，不表示需求已经完成或测试已经覆盖。
+先读仓库根目录的 [README](../README.md)，了解 Concord 能帮你做什么、怎样上手。本目录是 Concord 自己的 Spec，按你要回答的问题选择入口。
 
-项目级说明：
+## 这个产品能做什么
 
-- [为什么需要 Concord：问题与机制](why-concord.md)
-- [文档模型：分组、位置与字段](document-model.md)
-- [项目品味：规划、实施与审阅的规则](constitution.md)
-- [架构：操作依赖、事实来源与恢复边界](architecture.md)
-- [工作台 UI 设计](../DESIGN.md)
-- [Agent 工作入口](agent-workflow.md)
-- [项目测试接入边界](repository-profile.md)
-- [来源与抽取边界](provenance.md)
+每个 Feature 的 README 是一份使用教程，Use Case 展示它在不同情形下的表现。
 
-文档按回答的问题分组（[文档模型](document-model.md)）：
+- [跨平台标签发布](feature/cross-platform-release/README.md)
+- [文档目录与完整发现](feature/document-packages/README.md)
+- [文档写作与领域术语](feature/documentation-quality/README.md)
+- [多来源反馈与本地处理](feature/feedback/README.md)
+- [在 Herdr 面板中查看 Spec](feature/herdr-panel/README.md)
+- [统一的本地缓存与检索引擎](feature/local-data-engine/README.md)
+- [本地 SDLC 闭环](feature/local-sdlc/README.md)
+- [统一项目治理与中立测试接入](feature/neutral-project-governance/README.md)
+- [Portable coordination with short publication leases](feature/portable-coordination/README.md)
+- [渐进式项目初始化与品味治理](feature/project-onboarding/README.md)
+- [面向人的项目工作台](feature/web-workbench/README.md)
 
-- Spec：[Feature](feature/README.md) 是当前产品行为，[Engineering](engineering/README.md) 是本仓库的测试与维护机制。
-- 提案：[Roadmap](roadmap/README.md) 是尚未采用的方向。
-- 项目规则：[品味](constitution.md)、[术语](concepts.md)与写作政策。
-- 决策记录：[Design](design/README.md) 是候选与裁决，[Research](research/README.md) 是决策输入。
-- 工作项：[Issue](issues/README.md) 是缺陷、请求与观察。
-- 知识：[Memory](../memory/README.md) 是可复用的知识与不需要 Design 的决策。
+## 这个项目看重什么
+
+- [品味](constitution.md)：判断“什么是好的”的共同标准。
+- [术语](concepts.md)：每个名词只有一个写法和一个定义。
+- [文档模型](document-model.md)：每类页面写什么、放在哪里。
+
+## 它是怎么搭起来的
+
+- [架构](architecture.md)：跨 Feature 的系统结构。
+- [工程指南](engineering/concord-self-hosting/README.md)：开发、测试与发布 Concord 本身。
+
+## 还在路上的
+
+- [Roadmap](roadmap/README.md)：还没开始实现的方向。
+- [Issue](issues/README.md)：待处理的问题与请求。

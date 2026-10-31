@@ -76,19 +76,19 @@ p5 采用流程动作循环：分阶段自动推进，当前阶段高亮，沿�
 
 ## 品味
 
-依据品味的句子旁写指向条款或款 ID 的行内链接，例如 `错误消息不含凭据（[C-007](../../constitution.md#c-007-4)）`，不用“第 N 款”这类序号文字。docs/ 下除 `docs/_template/` 与品味本身外的所有 Markdown 都可以链接；图片、引用式链接、代码与注释中的链接不计入。`concord check` 对指向不存在 ID 的链接报告 `AnchorNotFound`，对带 query 或无法解码的品味链接报告 `ConstitutionLinkInvalid`；`concord constitution show` 从这些链接派生反向视图，不声称语义合规。
+品味是项目判断“什么是好的”的共同标准。每条品味一句话作标题，正文写它解决的问题，再给出好的样子与坏的样子；不写机制，也不写产品规则，产品规则写在 Feature，仓库自身的工程规则写在工程页。
 
-品味条目写成 `## C-001 规则本身 {#c-001}`，款是条款下根有序列表项，第一段末尾写 ` {#c-001-1}`；总则用 `## 总则 {#general}`，其款用 `{#general-<name>}`。ID 一经采用不改名、不复用。每条款一项跨功能规则，标题就是规则；每款一项可审阅的义务、禁止或许可；条款写约束，不写达成约束的机制；用现行句式。
+品味条目写成 `## C-017 标题 {#c-017}`；总则用 `## 总则 {#general}`，其款用 `{#general-<name>}`。ID 一经采用不改名、不复用。依据某条品味的句子旁写指向其 ID 的行内链接，不用“第 N 款”这类序号文字；`concord check` 对指向不存在 ID 的链接报告 `AnchorNotFound`。
 
-品味 frontmatter 只有 `status`（draft 或 active），它是采用授权的边界。品味可以直接编辑，`constitution adopt` 与 `constitution amend` 是助手；每次采用或修订，同一变化中都要有一条 `type: decision` 的 Memory 以 `amends` 关系指向受影响的条款与款，正文写理由、来源与影响，`check --since` 检查这一点。按条款检索修订从这些关系派生。
+品味可以直接编辑，修改历史由 Git 保存。
 
 ## Design 与采用
 
 了解现行行为只读 Feature、Use Case、cli、library、architecture 与 engineering 页；Design 只在重新审视某项决策时读取。
 
-Design 目录有 README、GOALS、LIMITS、CASES、DECISION 与 `plans/<候选>/`；候选就是 `plans/` 下的子目录，每个候选是一个完整的 Feature 设计包。GOALS/LIMITS 用 `## G1: 标题`、`## L1: 标题` 定义稳定条目；每个候选 README 的 `## Goals`、`## Limits` 各用四列表格逐项写出要求链接、状态、机制/缺口和依据。状态支持 satisfied/not-satisfied/pending（满足/不满足/待验证），Goal 另支持 partial（部分满足）。链接例如 `[L1](../../LIMITS.md#l1-offline)`，必须指向实际标题。代码块、HTML 和引用式链接不作为要求回应。
+Design 目录有 README、GOALS、LIMITS、CASES、DECISION 与 `plans/<候选>/`；候选就是 `plans/` 下的子目录，每个候选是一个完整的 Feature 设计包。GOALS/LIMITS 用 `## G1: 标题`、`## L1: 标题` 定义稳定条目；每个候选 README 的 `## Goals`、`## Limits` 各用四列表格逐项写出要求链接、状态、机制/缺口和依据。状态支持 satisfied/not-satisfied/pending（满足/不满足/待验证），Goal 另支持 partial（部分满足）。链接例如 `L1`，必须指向实际标题。代码块、HTML 和引用式链接不作为要求回应。
 
-DECISION 的 `## Decision` 只放 `Selected: [sqlite](plans/sqlite/README.md)` 或 `选择 [sqlite](plans/sqlite/README.md)。`；`## Rationale`、`## Rejected Options`、`## Residual Risks` 写真实论证。每个非 satisfied 的已选 Goal 需在 Rationale 单独写 `G1: 接受缺口的理由`。全部候选必须完整回应，所选候选的所有 Limit 必须 satisfied。
+DECISION 的 `## Decision` 只放 `Selected: sqlite` 或 `选择 sqlite。`；`## Rationale`、`## Rejected Options`、`## Residual Risks` 写真实论证。每个非 satisfied 的已选 Goal 需在 Rationale 单独写 `G1: 接受缺口的理由`。全部候选必须完整回应，所选候选的所有 Limit 必须 satisfied。
 
 ```sh
 concord check --json

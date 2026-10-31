@@ -2,7 +2,7 @@
 
 ## Owner
 
-文档按回答的问题与生命周期分为下列类别，身份、类别、所属关系与名称由路径和一级标题推导，只有推导不出的语义保存在 frontmatter（[决策依据](../../design/sdd-core-model/DECISION.md)）。
+文档按回答的问题与生命周期分为下列类别，身份、类别、所属关系与名称由路径和一级标题推导，只有推导不出的语义保存在 frontmatter。
 
 | 路径 | 类别 | frontmatter |
 | --- | --- | --- |
@@ -68,7 +68,7 @@ supersededBy: memory/new.md
 
 ## 派生关系
 
-`@feature` 或 `@use-case` 用 canonical 路径指向对应 Spec，`@issue` 可重复指向回归测试守护的 Issue。每个标记块恰有一个 Spec 目标，同一 Spec 可有多个测试。执行引用由文件路径与测试名称自动派生，测试名称只描述行为，不携带机器 ID；不提供人工分配 ID 或先分配再关联的步骤（[决策依据](../../design/annotation-case-identity/DECISION.md)）。Spec 不反写测试列表，trace 每次从 owner 和源码重新编译反向关系。Issue 与 Memory 的正向关系只保存一次，反向关系派生。
+`@feature` 或 `@use-case` 用 canonical 路径指向对应 Spec，`@issue` 可重复指向回归测试守护的 Issue。每个标记块恰有一个 Spec 目标，同一 Spec 可有多个测试。执行引用由文件路径与测试名称自动派生，测试名称只描述行为，不携带机器 ID；不提供人工分配 ID 或先分配再关联的步骤。Spec 不反写测试列表，trace 每次从 owner 和源码重新编译反向关系。Issue 与 Memory 的正向关系只保存一次，反向关系派生。
 
 ## 关联身份与观察
 
@@ -94,7 +94,7 @@ supersededBy: memory/new.md
 | `observed` | 测试依赖中观察到声明实现目标的代码，带 `level`：`step`、`use-case` 或 `feature`；文件范围的结果同时带 `FileScope` |
 | `not-observed` | 未观察到这样的代码，总带 `gaps`，例如 `FileScope`、`DepthLimit`、`NoSourceImports`、`SubprocessBoundary`、`NoAnalyzer`、`SnapshotNotCurrent` |
 
-`not-observed` 不表示测试与 Spec 无关；CLI、review 与工作台写作“未观察到交集”并列出原因。只观察到其它 Feature 或同 Feature 另一 Use Case 的实现也不推出无关。判定不产生 finding，不改变退出码，关联与观察都不证明执行、断言正确或覆盖率，不用于修复核验。文件级 import 只能证明文件中的声明交集，不证明该文件每个 case 都调用了实现（[决策依据](../../design/test-journey-steps/DECISION.md)）。
+`not-observed` 不表示测试与 Spec 无关；CLI、review 与工作台写作“未观察到交集”并列出原因。只观察到其它 Feature 或同 Feature 另一 Use Case 的实现也不推出无关。判定不产生 finding，不改变退出码，关联与观察都不证明执行、断言正确或覆盖率，不用于修复核验。文件级 import 只能证明文件中的声明交集，不证明该文件每个 case 都调用了实现。
 
 ## 私有状态
 

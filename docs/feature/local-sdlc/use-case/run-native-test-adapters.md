@@ -48,4 +48,4 @@
 - 原生项含 `nativeId`、`project`、`file`、`kind`（leaf 或 suite）、`group`、`range`、`selection` 与 `tags`。`nativeId` 含 provider 命名空间；range 为以 1 起计、两端包含的行号加源码摘要。同一 group 共享声明范围与 project。`complete` 为 false 时 `gaps` 非空；为 true 只表示 provider 声明的收集范围完整。
 - 硬上限：响应 8 MiB，每调用 stdout 与 stderr 合计 16 MiB，原生项 100000，Invocation 128，报告文件 64 个、单个 8 MiB、合计 32 MiB。
 
-`collect-plan` 之前取得 run 所有权，见[原生 adapter](../architecture.md#原生-adapter)（[决策依据](../../../design/test-adapters/DECISION.md)）。
+`collect-plan` 之前取得 run 所有权，见[原生 adapter](../architecture.md#原生-adapter)。

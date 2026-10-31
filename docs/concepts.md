@@ -70,7 +70,7 @@ README 告诉第一次读的人能做什么、怎么开始；字段、错误码�
 
 ## 门禁 {#gate}
 
-交付前必须全部通过的检查。Concord 的聚合门禁是 `concord check`，CI 对每次变化另外运行 `concord check --since <base>`。
+交付前必须全部通过的检查。Concord 的聚合门禁是 `concord check`。
 
 ## 投影 {#projection}
 

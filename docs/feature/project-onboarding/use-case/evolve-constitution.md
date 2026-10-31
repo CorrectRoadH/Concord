@@ -28,7 +28,7 @@
 2. 在依据规则的句子旁链接它。 {#link-clause}
 
    ```markdown
-   错误消息不含凭据与环境变量值（[C-007](../../constitution.md#c-007-4)）。
+   错误消息不含凭据与环境变量值。
    ```
 
    `docs/` 下除 `docs/_template/` 与宪法本身外的所有 Markdown 正文都可以链接，包括附页、Issue 与 Research；Memory 不计入。只计入行内链接；图片、引用式链接、HTML、代码与注释中的链接不计入。“第 N 款”这类文字不建立关系。
@@ -106,7 +106,7 @@
 
 宪法的 frontmatter 只有 `status`（draft 或 active）；status 是采用授权的边界。宪法是声明式的当前规则，不保存采用日期、修订日期或修订历史，不设语义版本号（[只写当前声明](../../../document-model.md#只写当前声明)）；整文件 digest 是并发前像。
 
-采用与每次修订各对应一条 Decision Memory：`type: decision`、`status: current`，以 `amends` 关系指向受影响的条款或款（`docs/constitution.md#c-NNN-K`）；标题概括修订，正文写适用范围、理由与影响，来源列为仓库相对引用。Memory 位于 `memory/`。按条款检索修订从这些 `amends` 关系派生，逐字差异由 Git 提供（[决策依据](../../../design/sdd-core-model/DECISION.md)）。
+采用与每次修订各对应一条 Decision Memory：`type: decision`、`status: current`，以 `amends` 关系指向受影响的条款或款（`docs/constitution.md#c-NNN-K`）；标题概括修订，正文写适用范围、理由与影响，来源列为仓库相对引用。Memory 位于 `memory/`。按条款检索修订从这些 `amends` 关系派生，逐字差异由 Git 提供。
 
 宪法文件存在即启用其规则；不存在时 `doctor` 提示创建。init 默认生成 draft，正文说明尚未采用项目原则，非 TTY 同样如此。提供正文不会自动变为 active。
 
@@ -150,5 +150,5 @@ CLI、Web 与 action 使用同一宪法 Schema，严格拒绝额外字段。读�
 ## Spec 来源
 
 - 条款写法：`docs/constitution.md` 的总则
-- 依据关系写在依据它的句子旁，附页同样可以声明（[决策依据](../../../design/constitution-structure/DECISION.md)）
+- 依据关系写在依据它的句子旁，附页同样可以声明
 - 实现边界：[架构](../architecture.md#宪法)

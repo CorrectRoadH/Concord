@@ -82,4 +82,4 @@ PR 只读预览使用 `concord view export --base <actual-base-commit> --head <h
 
 服务空闲时不持租约，CLI 可以正常协作。测试运行持租约至进程清理完成；取消后等任务终态再继续写改。`cleanup-failed` 必须保留现场，不用删锁来掩盖尚未确认退出的进程。
 
-Web 保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界。保存不写入 Issue 与 Memory 的 status、relations 或 verification，不改写已裁决的 `Selected:` 行，也不修改 active 品味的正文；这些变化直接编辑文件或使用对应命令，并由 `check --since <base>` 检查。损坏的配置或 frontmatter 显示原文诊断。静态 Web 关系不能表述为原生执行结果。
+Web 保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界。保存不写入 Issue 与 Memory 的 status、relations 或 verification，不改写已裁决的 `Selected:` 行，也不修改 active 品味的正文；这些变化直接编辑文件或使用对应命令。损坏的配置或 frontmatter 显示原文诊断。静态 Web 关系不能表述为原生执行结果。

@@ -11,7 +11,7 @@
 
 ## 验收
 
-Schema、目录合成、抽取、分句、计数、词表匹配与错误见[受控写作规则](../policy.md#受控写作规则)。词法规则默认关闭；finding 只陈述观察到的词面。Concord 不分发 ASD-STE100 原文或词典，不宣称符合该规范，见 [Research](../../../research/ste-writing-rules/README.md)。
+Schema、目录合成、抽取、分句、计数、词表匹配与错误见[受控写作规则](../policy.md#受控写作规则)。词法规则默认关闭；finding 只陈述观察到的词面。Concord 不分发 ASD-STE100 原文或词典，不宣称符合该规范，见 Research。
 
 以下场景使用构建、打包后安装到隔离 Git 消费者的公开 CLI；测试不复制抽取与合成算法，词法场景显式开启对应开关。
 

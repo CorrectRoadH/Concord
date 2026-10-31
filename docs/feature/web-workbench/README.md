@@ -40,7 +40,7 @@ Markdown 支持行内与独立数学公式、Mermaid 结构图与 p5 交互图�
 
 ## Web 组件组合
 
-通用组件只负责展示：`ContentSidebar` 统一桌面侧栏与移动抽屉，`DetailDrawer` 统一右侧详情，`RecordList`、`RecordLink` 与 `PanelEmpty` 统一记录和空状态。领域页面负责查询数据、生成导航模型、解释 URL 和关闭行为；通用组件不读取 Workspace，也不识别 Feature 或 Use Case。视觉层级、版式和组件选用规则见根目录 [DESIGN.md](../../../DESIGN.md)，URL 与草稿保护见[工作台架构](architecture.md#url-与导航状态)。
+通用组件只负责展示：`ContentSidebar` 统一桌面侧栏与移动抽屉，`DetailDrawer` 统一右侧详情，`RecordList`、`RecordLink` 与 `PanelEmpty` 统一记录和空状态。领域页面负责查询数据、生成导航模型、解释 URL 和关闭行为；通用组件不读取 Workspace，也不识别 Feature 或 Use Case。视觉层级、版式和组件选用规则见根目录 DESIGN.md，URL 与草稿保护见[工作台架构](architecture.md#url-与导航状态)。
 
 文档、写作、术语、反馈与 Git 复用同一个内容导航。反馈的第一入口是反馈条目，Git 的第一入口是变更文件。写作与术语先选择适用范围，再显示该范围的规则或术语；主导航不藏进设置折叠项或额外管理入口。
 
@@ -50,7 +50,7 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 
 正文、源码、元数据和项目设置共用 `useAutoSave`：停止输入 800ms 后保存，同一编辑器的请求串行执行；请求期间的新输入留给下一次保存。切换预览、页签、文件或关闭详情抽屉前主动 flush。创建、运行测试和生命周期裁决是显式操作。自动保存写入 Git 工作树，不执行暂存、提交或 push。
 
-保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界（[决策依据](../../design/sdd-core-model/DECISION.md)）；冲突保留草稿并展示差异。通用保存可以写入任何受管文件，包括 Issue 与 Memory 的状态与关系、DECISION 的 `Selected:` 行与品味正文，与在工作台以外直接编辑相同，变化是否合法由 `check --since <base>` 的门禁判断。修复核验、Design 裁决与品味[修订](../project-onboarding/use-case/evolve-constitution.md#web-修订)另有表单，执行需要运行的步骤并写入结果。
+保存使用整文件摘要，只用于防止覆盖并发的外部编辑，不是授权边界；冲突保留草稿并展示差异。通用保存可以写入任何受管文件，包括 Issue 与 Memory 的状态与关系、DECISION 的 `Selected:` 行与品味正文，与在工作台以外直接编辑相同，变化是否合法由 `check --since <base>` 的门禁判断。修复核验、Design 裁决与品味[修订](../project-onboarding/use-case/evolve-constitution.md#web-修订)另有表单，执行需要运行的步骤并写入结果。
 
 ## 性能预算
 

@@ -19,20 +19,6 @@ concord review
 
 不要把“无 finding”、命令成功或审阅材料表述成完整覆盖、native case passed 或原生 E2E 可靠性证明。
 
-## 差异门禁
-
-`concord check --since <base>` 在当前检查之外，对照基线提交检查本次变化。直接编辑的可信度由它保证，CI 对每个变更运行它：
-
-| 变化 | 检查 |
-| --- | --- |
-| Issue 新增或修改 fixed 的 `verification` | 按记录重放修复核验，失败或无法重放即报告 |
-| Issue、Memory 的状态改变 | 转换合法，例如 note 不能成为 current，closed 必须带完整的关闭结论 |
-| active 品味的条款或款改变 | 本次变化中有一条 `type: decision` 的 Memory 以 `amends` 指向它们 |
-| DECISION 的 `Selected:` 改变 | 按 `design decide` 的规则校验全部候选与 Limits |
-| Roadmap 移入 `docs/feature/` | 链接改写与采用规则满足 |
-
-只在本地运行 `check` 时不重放修复核验；提交前对目标分支运行一次 `check --since`。
-
 ## Diagnostic freshness
 
 `trace show`, `trace gaps` and `review` read completed historical projections and request background refresh. Their output includes the snapshot time and refresh status. A cold cache reports `QueryPending`; use `--fresh` to wait for current sources. Use `check` or `trace check` for current validation. Historical projections cannot authorize writes or fix verification.

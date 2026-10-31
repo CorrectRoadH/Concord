@@ -60,7 +60,7 @@
 
 采用把 `docs/roadmap/checkout/` 整个目录移为 `docs/feature/checkout/`，新 Feature 成为当前 Spec。目录内的相对链接保持指向移动后的页面，目录外的链接保持原目标，仓库中指向原路径的链接与关系改指新路径。采用历史由 Git 保存。
 
-以下情况拒绝，不留下部分写入：目标目录已存在、嵌套 owner、非 Markdown 附件、symlink、无法安全改写的链接，以及采用过程中源文件被修改。直接移动目录时，`check --since <base>` 检查同样的链接与采用规则，见[检查本次变化](../cli.md#检查本次变化)。
+以下情况拒绝，不留下部分写入：目标目录已存在、嵌套 owner、非 Markdown 附件、symlink、无法安全改写的链接，以及采用过程中源文件被修改。直接移动目录时，`check` 报告断开的链接。
 
 Design 只允许一次裁决，裁决方式见[逐项比较方案并明确裁决](compare-design-plans.md)。
 

@@ -11,7 +11,7 @@
 3. 查询、追踪与 Web 展示从权威源码派生关系，不因项目没有某个产品的通道、包名或 host 而失败，也不隐式运行测试。
 4. 通过项目的 runner 运行测试，结果只按 runner 退出码解释，不声称逐 case 覆盖或正式可靠性。
 5. 缺陷记为 Issue；先提交会失败的回归测试，再提交修复，以 fixed 关闭前通过[修复核验](../../local-sdlc/scope.md#证据的范围)。缺测试、缺提交、区间含 merge 或 shallow clone 时具名返回 `FixUnverifiable`。
-6. CI 对每个变更运行 `concord check --since <base>`；用打包后 Concord 与真实消费仓库验证接入，保留未完成事务及未知编辑。
+6. 用打包后 Concord 与真实消费仓库验证接入，保留未完成事务及未知编辑。
 
 ## 验收
 
@@ -20,7 +20,7 @@
 - 没有 NiceEval/Nx 产品配置、通道或执行器分类的软件项目完成 Spec→实现/测试关联→执行→Issue 修复核验→审阅闭环；源码声明不被显示为执行通过。
 - 没有 `concord.config.ts` 的项目可以使用静态查询、trace 与 Web；缺少 `runner` 只阻断测试运行与修复核验。
 - 测试位于默认根之外时，经 `testRoots` 覆盖后可以静态查询。
-- 任一入口写入的 fixed 关闭都带核验结论；不经命令直接写入的 `verification` 由 `check --since <base>` 重放，删除 runner 配置不能使没有核验的 fixed 通过检查。
+- 任一入口写入的 fixed 关闭都带核验结论；删除 runner 配置不能使没有核验的 fixed 通过检查。
 - 活跃锁、pending journal 与未知前像不能被新入口绕过。
 - 原有 Web 未提交编辑保留；验收不 push、不发布、不做远端写入或付费调用。
 
@@ -29,5 +29,3 @@
 - [统一项目治理](../README.md)
 - [治理边界](../architecture.md)
 - [品味](../../../constitution.md)
-- [决策依据](../../../design/neutral-project-governance/DECISION.md)
-- [核心模型决策依据](../../../design/sdd-core-model/DECISION.md)

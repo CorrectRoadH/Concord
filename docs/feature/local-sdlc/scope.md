@@ -16,7 +16,6 @@ Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码
 - 从整文件、函数和完整代码段旁的注释反查 Feature / Use Case / Engineering 实现关联，支持按源码行定位；查询引用自动派生，无需手写声明 ID。
 - 从测试根里的 Concord 标记发现 case，不解析宿主测试语法。缓存损坏或删除时从源码重新计算。
 - 运行项目声明的 argv；把 Issue 关闭为 fixed 前，核验回归测试在缺陷提交上失败、在修复提交上通过，并把结论写进 Issue（[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)）。
-- `check --since <base>` 对照基线检查本次变化，使直接编辑与命令写入受同一门禁约束（[检查本次变化](cli.md#检查本次变化)）。
 - 写入不越出 worktree，不覆盖未知改动，中断后可以恢复。
 - 从 owner 动态编译 trace，并渲染本地 review 材料。
 
@@ -28,7 +27,7 @@ Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal
 
 各 Use Case 均有带 `@use-case` 标记的测试。`concord check` 与 `trace check` 必须验证引用完整性；定向 `trace show` 与 `review` 必须能从当前 owner 分别反查代码声明和测试。代码声明表示实现关联，不证明 Spec 完成。
 
-局部命令只依赖自己的输入（[决策依据](../../design/operation-boundaries/DECISION.md)）：
+局部命令只依赖自己的输入：
 
 - 一个 Feature 的 README 损坏时，Memory 的 list、search 与 confirm 照常工作，为另一 Feature 生成注释照常工作，全局 check 报告该损坏。
 - 目标 owner、其归属链或显式 `@issue` 目标损坏时，局部命令失败，不退回祖先 owner。

@@ -3,7 +3,7 @@
 
 ## 问题与目标
 
-维护者在任意 Git worktree 中不写配置即可使用 Concord：文档布局、发现范围与 Memory 位置都由约定决定，配置只用于 runner 与可选覆盖（[决策依据](../../design/sdd-core-model/DECISION.md)）。项目品味是功能规划、实施与审阅共同遵守的规则来源；功能开发发现的通用约束通过明确修订进入品味。
+维护者在任意 Git worktree 中不写配置即可使用 Concord：文档布局、发现范围与 Memory 位置都由约定决定，配置只用于 runner 与可选覆盖。项目品味是功能规划、实施与审阅共同遵守的规则来源；功能开发发现的通用约束通过明确修订进入品味。
 
 ## 已确认的需求
 
@@ -11,7 +11,7 @@
 - 初始化提供渐进交互与等价的非交互输入，预览完整变更，取消不写入，保留已有文件。init 创建 draft 品味 `docs/constitution.md`；根目录 `DESIGN.md` 是独立可选项。
 - 品味文件存在即启用，`status` 决定是否已采用。
 - 创建 Feature 时以参数选择页面：README 必需，其余页面可选。
-- 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，可信度由 `check --since <base>` 门禁保证。
+- 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，`check` 检查结果是否一致。
 - 初始化在根 `AGENTS.md` 中维护有边界标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
 - Memory 固定位于 worktree 根的 `memory/`。
 - Feature 可以推动品味新增、修订条款；理由、来源与影响记入以 `amends` 指向受影响条款的 Decision Memory，不把功能细节无限追加为全局规则。

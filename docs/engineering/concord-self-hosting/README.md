@@ -15,6 +15,33 @@
 
 当前 checkout 可由当前构建的项目本地 Concord 完成 `doctor`、`check`、`test list`、`trace show/check` 与 `review`；TypeScript 类型检查和相关测试通过。
 
+
+## 开始开发
+
+源码构建需要 Node.js 24.15+、pnpm 11.18.0、Git、Rust 1.97.1 和本机 C 链接工具链。
+
+```sh
+git clone https://github.com/CorrectRoadH/Concord.git
+cd Concord
+pnpm install --frozen-lockfile # 安装项目固定版本的 vp
+rustup toolchain install 1.97.1 --profile minimal
+pnpm exec vp build
+pnpm exec vp run concord --help
+pnpm exec vp run check
+```
+
+`pnpm check`（也可通过 `vp run check` 调用）是唯一的检查入口。它先构建 CLI 与 Web 工作台并复用已校验的原生产物，再并行做 repository、测试和脚本的类型检查以及当前 checkout 的 Spec 检查，最后在隔离 Git 消费者中并发运行打包 CLI 的 Node 与浏览器测试。
+
+运行 `pnpm concord trace show local-sdlc` 可从源码查看关联。
+
+没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。
+
+`pnpm check test/writing-cache.test.ts` 在完整构建和静态检查之后只运行指定文件；用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。只跑部分测试不能代替完整检查。
+
+`vp run check` 是完整的交付检查。`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。测试使用 Node runner，每次调用共享一份打包产物，消费者独立安装。任务缓存关闭；局部检查不替代完整验收。
+
+参与开发前请阅读[开发规则](../../../AGENTS.md)与[项目品味](../../constitution.md)。
+
 ## 构建与检查入口
 
 项目使用固定版本的 Vite+ 管理任务，依赖安装由 `vp install` 委托固定版本的 pnpm。未全局安装时以 `pnpm exec vp` 调用。
@@ -35,7 +62,7 @@
 
 测试的质量标准、分层、fixture 与成本上限见[测试架构](test-architecture.md)；资源归属、并发、安装共享与失败诊断见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。
 
-构建用固定版本的原生 tsc 做完整类型检查，并输出声明与 sourcemap，构建与运行时使用同一编译器版本。为保持启动性能，构建只改写生成的 JS：把 Effect namespace import 改为窄化导入，每处替换保持原换行数。sourcemap 先解码为绝对坐标，删除被改写行的映射后重新编码，保留其余映射。不改写源文件，不跳过声明检查（[决策依据](../../design/typescript-native/DECISION.md)）。
+构建用固定版本的原生 tsc 做完整类型检查，并输出声明与 sourcemap，构建与运行时使用同一编译器版本。为保持启动性能，构建只改写生成的 JS：把 Effect namespace import 改为窄化导入，每处替换保持原换行数。sourcemap 先解码为绝对坐标，删除被改写行的映射后重新编码，保留其余映射。不改写源文件，不跳过声明检查。
 
 ### 原生绑定复用
 

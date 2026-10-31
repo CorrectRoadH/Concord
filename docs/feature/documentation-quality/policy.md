@@ -12,7 +12,7 @@ docs/
     concepts.md                    # build 的局部概念
 ```
 
-Concord 识别 docs 下精确命名的 concepts.md 与 concord-writing.json，排除 docs/_template 及任何 .git、node_modules 路径段。目录决定作用域，不在来源中重复保存 scope。docs 以外的文件和其它文件名不获得这两类写入授权；聚合从来源派生，不回写全局文件。全局概念与局部概念均有来源路径，局部定义不会自动升级为全局。目录缺失、路径不安全或来源格式错误返回具名错误，不静默跳过。目录归属让局部事实留在使用它的目录，全项目视图只派生（[决策依据](../../design/scoped-terminology/DECISION.md)）。
+Concord 识别 docs 下精确命名的 concepts.md 与 concord-writing.json，排除 docs/_template 及任何 .git、node_modules 路径段。目录决定作用域，不在来源中重复保存 scope。docs 以外的文件和其它文件名不获得这两类写入授权；聚合从来源派生，不回写全局文件。全局概念与局部概念均有来源路径，局部定义不会自动升级为全局。目录缺失、路径不安全或来源格式错误返回具名错误，不静默跳过。目录归属让局部事实留在使用它的目录，全项目视图只派生。
 
 ## 来源、合成与检查报告
 
@@ -20,7 +20,7 @@ Concord 识别 docs 下精确命名的 concepts.md 与 concord-writing.json，�
 
 写作规则使用 concord.writing/v3；术语使用 concepts.md 的标题结构，不设版本字段。祖先规则按范围合成，局部来源不能扩大目录或静默覆盖定义。同名不同义按作用域区分；弃用名称派生禁词并建议改为该概念的写法。正文可以链接到 `concepts.md#id`，断开的链接由检查报告。
 
-concepts.md 与 concord-writing.json 可以直接编辑；结构、作用域与被引用的定义由 `concord check` 校验，`concepts` 与 `writing` 工具是在写入前执行同一校验的助手（[决策依据](../../design/sdd-core-model/DECISION.md)）。工具写入使用严格 Schema、整文件 CAS 与可恢复事务，show 支持无效来源显式修复。Web 草稿和异步请求绑定具体 owner，保存一份来源不能把另一份草稿标成已保存。
+concepts.md 与 concord-writing.json 可以直接编辑；结构、作用域与被引用的定义由 `concord check` 校验，`concepts` 与 `writing` 工具是在写入前执行同一校验的助手。工具写入使用严格 Schema、整文件 CAS 与可恢复事务，show 支持无效来源显式修复。Web 草稿和异步请求绑定具体 owner，保存一份来源不能把另一份草稿标成已保存。
 
 检查报告表达某次已保存输入快照，包括禁词、字符长度、受控 token 长度、显式启用的词法规则与术语使用。检查不自动修改正文，不声称实现合规、功能完成或测试覆盖。Concord 不内置产品专属词库、目录或 API 语义。
 
@@ -45,7 +45,7 @@ deprecated:
 反馈关闭后，关联的 [Memory](../../concepts.md#memory) 仍保留调查结论。旧称 `工单` 只在行内代码中出现。
 ```
 
-每个概念只有一个写法，定义与解释同在一页，正文可以链接到定义（[决策依据](../../design/markdown-terminology/DECISION.md)）。catalog 结构如下：
+每个概念只有一个写法，定义与解释同在一页，正文可以链接到定义。catalog 结构如下：
 
 1. 正文恰好一个一级标题，位于所有二级标题之前；两者之间是页面引言，可写任意 Markdown。没有二级标题的文件是合法的空 catalog。
 2. 每个二级标题是一个概念，以 ` {#id}` 结尾，id 匹配 `^[a-z0-9]+(?:-[a-z0-9]+)*$`，在文件内唯一；完整身份为 canonical catalog path#id。
@@ -68,7 +68,7 @@ frontmatter 可选，存在时位于文件开头，严格解码，只接受 impo
 | `ConceptInUse` | 写入会删除或改名仍被其它 catalog 导入的 ID；消息列出引用者 |
 | `ConceptReferencesUnknown` | 另一 catalog 格式错误使反向引用无法确定时，写入删除目标中原本有效的定义 |
 
-正文可以链接到定义，例如 `[反馈](../payments/concepts.md#feedback)`。docs 下（排除 docs/_template）Markdown 正文中相对解析后指向已发现 catalog 的行内链接是术语链接，筛选与解码规则与[品味链接](../project-onboarding/use-case/evolve-constitution.md#link-clause)相同。fragment 不是该 catalog 的概念 ID 时，`concord check` 报告 relation 类 `AnchorNotFound`，带路径与行号；不带 fragment 的链接指向整页，不产生 finding。链接文字等于 term 时照常计为使用，链接本身不计。正文链接不阻止删除定义；断开的链接由检查报告。
+正文可以链接到定义，例如 `反馈`。docs 下（排除 docs/_template）Markdown 正文中相对解析后指向已发现 catalog 的行内链接是术语链接，筛选与解码规则与[品味链接](../project-onboarding/use-case/evolve-constitution.md#link-clause)相同。fragment 不是该 catalog 的概念 ID 时，`concord check` 报告 relation 类 `AnchorNotFound`，带路径与行号；不带 fragment 的链接指向整页，不产生 finding。链接文字等于 term 时照常计为使用，链接本身不计。正文链接不阻止删除定义；断开的链接由检查报告。
 
 catalog 可以直接编辑，`concord check` 报告上表的结构、导入与歧义错误；`concepts set` 在写入前执行同一校验。位于 Feature 或 Engineering 包内的 concepts.md 是该目录的概念来源，不是该包的支持页面。
 
@@ -156,7 +156,7 @@ legacy 长度路径取 paragraph 文本：包含行内代码内容、链接显�
 
 ## 受控写作规则
 
-`concord.writing/v3` 的 `controlled` 按叶子递归合成。省略和空对象保留祖先叶子，null 清除子树并保留清除来源；更深目录可重新声明，不重新取得清除前的祖先值。数值阈值独立开启长度检查，布尔开关默认 false；每种语言的词表、forms 与豁免数组整表替换，空数组为显式空表。有效叶子包含值、来源路径和 JSON pointer；默认值没有 owner。字符长度与受控 token 长度两条路径可同时生效，两类阈值互不约束。规则内置于政策，门禁只读当前来源快照，不运行外部命令、网络或模型（[决策依据](../../design/controlled-writing/DECISION.md)）。
+`concord.writing/v3` 的 `controlled` 按叶子递归合成。省略和空对象保留祖先叶子，null 清除子树并保留清除来源；更深目录可重新声明，不重新取得清除前的祖先值。数值阈值独立开启长度检查，布尔开关默认 false；每种语言的词表、forms 与豁免数组整表替换，空数组为显式空表。有效叶子包含值、来源路径和 JSON pointer；默认值没有 owner。字符长度与受控 token 长度两条路径可同时生效，两类阈值互不约束。规则内置于政策，门禁只读当前来源快照，不运行外部命令、网络或模型。
 
 ```json
 {

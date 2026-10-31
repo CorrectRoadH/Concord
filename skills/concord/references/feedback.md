@@ -38,7 +38,7 @@ closure:
 
 ## 编辑
 
-直接编辑 Issue 文件，包括正文、状态、关系与关闭结论。`issue close`、`issue reopen`、`issue link`、`issue unlink` 是写入同样内容的助手；`reopen` 删除 `closure`，状态回到 open。用 `concord list issue --open --json` 列出打开的 Issue，`concord show <id> --json` 读取它及派生关系。`check --since <base>` 检查状态转换与关闭结论是否完整。
+直接编辑 Issue 文件，包括正文、状态、关系与关闭结论。`issue close`、`issue reopen`、`issue link`、`issue unlink` 是写入同样内容的助手；`reopen` 删除 `closure`，状态回到 open。用 `concord list issue --open --json` 列出打开的 Issue，`concord show <id> --json` 读取它及派生关系。`check` 检查关闭结论是否完整。
 
 ## 修复缺陷
 
@@ -57,7 +57,7 @@ concord test verify expired-token-accepted --json
 
 缺陷候选默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交，所有回归测试必须在同一提交中首次出现，否则用 `--defect` 指定 HEAD 的 first-parent 祖先。命令在临时 worktree 中运行缺陷候选、在当前工作树运行 HEAD：前者以非零码结束、后者以零结束才写入 `verification`，内容是两个提交、回归测试、runner 配置摘要与 Concord 版本。
 
-同一提交同时加入测试与修复、缺少测试或提交（包括 shallow clone）、区间含 merge 提交、超时，都返回 `FixUnverifiable`；command runner 不区分断言失败与构建失败。直接写入的 `verification` 由 `check --since` 按记录重放。`test verify` 在两个提交上重放已记录的结论，提交、依赖或运行环境不可获得时报告无法重放，不改变结论。
+同一提交同时加入测试与修复、缺少测试或提交（包括 shallow clone）、区间含 merge 提交、超时，都返回 `FixUnverifiable`；command runner 不区分断言失败与构建失败。`test verify` 在两个提交上重放已记录的结论，提交、依赖或运行环境不可获得时报告无法重放，不改变结论。
 
 远端 Closed / Done 不证明本地修复；fixed 始终经过这条核验。
 

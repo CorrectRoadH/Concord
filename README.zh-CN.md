@@ -6,17 +6,19 @@
 
 Concord 是面向开发者和 coding agent 的本地 Spec 驱动开发工具。Spec 是软件必须做什么的唯一事实来源。人审阅 Spec 的变化；agent 按 Spec 实现，并用测试证明；Concord 检查 Spec、实现与测试是否仍然一致。CLI 和随包提供的 Web 工作台操作同一份仓库文件。
 
-所有内容都是 Git worktree 中的普通文件，人和 agent 直接编辑全部文件。Concord 命令执行变化需要运行的步骤，例如修复核验。CI 中的 `concord check --since <base>` 检查每次变化是否合法。核心流程不需要账号、模型 API 或云服务。
+所有内容都是 Git worktree 中的普通文件，人和 agent 直接编辑全部文件。Concord 命令执行变化需要运行的步骤，例如修复核验。`concord check` 检查 Spec、测试与实现是否仍然一致。核心流程不需要账号、模型 API 或云服务。
 
 ## 解决什么问题
 
-Concord 首先解决两个问题。
+Concord 首先解决三个问题。
 
 **Spec 写完没人看得懂。** 规格写成一长串约束、字段和边界，作者以外的人读完也说不出功能能做什么、第一步该运行什么；看不懂的 Spec 不会被认真审阅，也就没人维护。Concord 要求 Feature 像教使用者上手一样写：先讲能做什么，再给一个照着就能运行的例子；Use Case 按教程一步一步写；文字难以说清的过程配 p5 动画。
 
 **AI 随意用词。** agent 每次对话都可能给同一个东西换个名字，或者把中英文写法混着用，读者只好猜两个词是不是一回事。Concord 让每个概念在 `concepts.md` 里只有一个名字和一段定义，旧名字一出现，`check` 就报告。
 
-围绕这两点，还有几类和 agent 一起开发时常见的复杂性：需求散在聊天记录和 PR 描述里，设计取舍只在某个人的记忆里；agent 每次从零开始，会重新决定已经定过的语义；测试声称保护某个功能，但没人能确认它保护的是哪一条行为；问题在没有证据时就被宣布修复。审阅几千行生成的代码，也比审阅背后几句意图难得多。
+**AI 写一大堆没用的测试。** agent 很容易为每个函数、每个分支补测试，测试越来越多，却没人说得清哪个测试在守护哪种用法，读测试也看不出产品该怎样表现。Concord 要求每个测试标注它验证的 Use Case 或其中一步，测试因此能按用户旅程来读；没有关联任何 Use Case 的测试会被列出来，供你判断是否删除。
+
+围绕这三点，还有几类和 agent 一起开发时常见的复杂性：需求散在聊天记录和 PR 描述里，设计取舍只在某个人的记忆里；agent 每次从零开始，会重新决定已经定过的语义；测试声称保护某个功能，但没人能确认它保护的是哪一条行为；问题在没有证据时就被宣布修复。审阅几千行生成的代码，也比审阅背后几句意图难得多。
 
 Concord 把审阅移到 Spec 上。Spec 是仓库中的 Markdown，代码与测试用源码标记指向 Spec，反向关系由工具从源码推导。审阅者读 Spec 怎样变化，`concord check` 检查实现、测试与记录是否仍与 Spec 一致。
 
@@ -32,9 +34,9 @@ Concord 把审阅移到 Spec 上。Spec 是仓库中的 Markdown，代码与测�
 | 不知道一个测试守护哪条行为 | 测试用标记指向 Use Case 或其中一步，实现用代码声明指向 Spec；反向关系从源码推导 | 从 Spec 能查到守护它的测试和实现，关系随代码出现在同一个 diff 里，不会和代码脱节 |
 | 重构把 Spec 和测试一起搅乱 | 行为页（README、Use Case、cli、library）与 architecture 页分开 | 只改实现时只改 architecture 页，行为页和指向它们的测试保持稳定 |
 | 问题没有证据就被宣布修复 | 缺陷写成 Issue；回归测试先在缺陷提交上失败，再在修复提交上通过，`issue close --fixed` 核验两者并把结论写进 Issue | 修复可以被任何人重放，不靠口头保证 |
-| 直接编辑绕过流程 | CI 对每个变化运行 `concord check --since <base>`，检查状态转换、修复核验、品味修订与 Design 裁决 | 人和 agent 可以直接改文件，变化是否合法由门禁判断 |
+| 改着改着，Spec、测试和实现对不上了 | `concord check` 报告断开的链接、指向不存在 Spec 的标记和用错的词 | 人和 agent 直接改文件，出错时马上知道 |
 | 开发日志混进 Spec | 过程写进 Memory，待调查的问题写进 Issue，`docs/` 只保留当前声明 | Spec 始终描述系统现在必须怎样 |
-| 想法还没定，或者定了但暂不实现 | Roadmap 用 Feature 的写法保存方向，采用时移入 `docs/feature/`；Research 保存带日期和来源的外部事实 | 未定的方向不会被误当作现行要求 |
+| 想法还没定，或者定了但暂不实现 | Roadmap 用 Feature 的写法保存方向，采用时移入 `docs/feature/` | 未定的方向不会被误当作现行要求 |
 
 ## 仓库里的每个文件
 
@@ -65,15 +67,14 @@ Concord 把审阅移到 Spec 上。Spec 是仓库中的 Markdown，代码与测�
 | 文件 | 是什么 | 谁在什么时候读 |
 | --- | --- | --- |
 | `docs/roadmap/<r>/` | 尚未采用的方向，写法同 Feature；实现与测试不指向它 | 讨论下一步做什么时读；采用时用 `roadmap start` 移入 `docs/feature/` |
-| `docs/design/<d>/` | 一次方案比较：README 写问题，GOALS 与 LIMITS 写目标和约束，CASES 写场景，`plans/<候选>/` 是完整的候选设计，DECISION 写选择和理由 | 只在重新审视这项决策时读；现行规则以 Spec 为准 |
-| `docs/research/<r>/` | 带观察日期和来源的外部事实 | 做决策需要外部依据时读 |
+| `docs/design/<d>.md` | 一个还没定下来的取舍：几种做法和各自的代价；定下来后把规则写进 Spec，删掉这一页 | 讨论这项取舍时读 |
 
 **工作项与知识：哪里不对、学到了什么**
 
 | 文件 | 是什么 | 谁在什么时候读 |
 | --- | --- | --- |
-| `docs/issues/<i>.md` | 缺陷、请求或观察；frontmatter 记录状态与关联，修复关闭时写入核验结论 | 接手问题时读；关闭缺陷时由 `issue close` 写入 |
-| `memory/<m>.md` | 可复用的知识：decision、insight 或 note；品味每次修订对应一条 decision | 开始相关工作前用 `concord memory search` 检索 |
+| `docs/issues/<i>.md` | 还要处理的缺陷、请求或观察；处理完就删除，结论写进提交说明 | 接手问题时读 |
+| `memory/<m>.md` | 开发中可复用的经验：测量结论、根因、做过的取舍；过时就改写或删除 | 开始相关工作前用 `concord memory search` 查 |
 
 **接入、源码与派生数据**
 
@@ -81,7 +82,6 @@ Concord 把审阅移到 Spec 上。Spec 是仓库中的 Markdown，代码与测�
 | --- | --- | --- |
 | `AGENTS.md` 中的 Concord 区块 | 告诉 agent 先读 Concord 的指引、交付前运行检查 | agent 每次进入仓库时读 |
 | `concord.config.ts` | 可选配置：源码根、测试根、测试 runner、p5 扩展库 | 默认约定不适用时才需要 |
-| `docs/_template/` | `concord init` 安装的完整参考模板 | 不确定一类页面怎么写时参照 |
 | 源码与测试中的标记 | 测试顶部的 `// @use-case <path>`，实现旁的 `// @concord-implements <path>` | 由 `check` 和 `trace` 读取，生成反向关系 |
 | Git 私有目录下的 `concord/` | 每个 worktree 独立的缓存、写入恢复记录与租约 | 不需要读；缓存可以用 `concord cache clear` 删除，结论不变；恢复记录由 `concord recover` 处理，不要手工删除 |
 
@@ -112,13 +112,7 @@ nix profile install 'git+https://github.com/CorrectRoadH/homebrew-tap?ref=main#c
 concord --help
 ```
 
-运行需要 Node.js 24.15+ 和 Git，Repository 工具还使用 `ripgrep`。发行包自带原生缓存引擎，安装使用不需要 Rust 或数据库服务。
-
-发行包的原生目标为 Linux x64/glibc 与 macOS arm64，macOS 最低部署目标为 15。
-
-源码发布必须通过完整测试集和最终归档的冻结生产安装检查；Homebrew 与 Nix 渠道更新另需通过各自的安装检查。
-
-允许在 macOS 27 安装，但尚未由 CI 实测。Windows 执行与网络多机协调不在兼容声明范围内。详见[发行 Spec](docs/feature/cross-platform-release/README.md)。
+运行需要 Node.js 24.15+ 和 Git，支持 Linux x64 与 Apple Silicon macOS；不支持 Windows。
 
 ## 快速上手
 
@@ -173,7 +167,7 @@ concord show greeting
 3. 提交修复，不改动该测试、runner 配置与测试指向的 Spec。
 4. 运行 `concord issue close duplicate-sku --fixed --reason "..."`。Concord 在缺陷提交与 HEAD 上分别运行测试，把核验结论写进 Issue。
 
-`concord test verify duplicate-sku` 重放已记录的核验。CI 中的 `concord check --since <base>` 重放本次变化新增的核验。见[核验修复并关闭缺陷](docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md)。
+`concord test verify duplicate-sku` 重放已记录的核验。见[核验修复并关闭缺陷](docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md)。
 
 ## 打开 Web 工作台
 
@@ -203,39 +197,15 @@ concord --skill memory
 
 | 想做的事 | 阅读入口 |
 | --- | --- |
-| 理解工作流与事实归属 | [为什么需要 Concord](docs/why-concord.md) · [文档模型](docs/document-model.md) · [架构](docs/architecture.md) · [Agent 工作流](docs/agent-workflow.md) |
+| 理解工作流与事实归属 | [为什么需要 Concord](README.md) · [文档模型](docs/document-model.md) · [架构](docs/architecture.md) · [Agent 工作流](skills/concord/SKILL.md) |
 | 查阅命令与输出 | [CLI](docs/feature/local-sdlc/cli.md) |
 | 标注文件、函数和代码段 | [代码指引](skills/concord/references/code.md) |
 | 运行测试与核验修复 | [测试指引](skills/concord/references/test.md) |
 | 记录可复用的知识 | [Memory 指引](skills/concord/references/memory.md) |
 | 将 GitHub、Linear 反馈与本地 Issue 一起查看 | [反馈命令](docs/feature/feedback/cli.md) |
-| 确定项目在测试上自己负责什么 | [项目测试接入边界](docs/repository-profile.md) |
+| 确定项目在测试上自己负责什么 | [项目测试接入边界](docs/feature/local-sdlc/test-boundary.md) |
 | 浏览产品 Spec | [文档目录](docs/README.md) |
 
 链接中的详细指引与 Spec 以中文为主。两份 README 提供内容对应的产品介绍和入门流程。
 
-## 开发 Concord
-
-源码构建需要 Node.js 24.15+、pnpm 11.18.0、Git、Rust 1.97.1 和本机 C 链接工具链。
-
-```sh
-git clone https://github.com/CorrectRoadH/Concord.git
-cd Concord
-pnpm install --frozen-lockfile # 安装项目固定版本的 vp
-rustup toolchain install 1.97.1 --profile minimal
-pnpm exec vp build
-pnpm exec vp run concord --help
-pnpm exec vp run check
-```
-
-`pnpm check`（也可通过 `vp run check` 调用）是唯一的检查入口。它先构建 CLI 与 Web 工作台并复用已校验的原生产物，再并行做 repository、测试和脚本的类型检查以及当前 checkout 的 Spec 检查，最后在隔离 Git 消费者中并发运行打包 CLI 的 Node 与浏览器测试。
-
-运行 `pnpm concord trace show local-sdlc` 可从源码查看关联。
-
-没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。
-
-`pnpm check test/writing-cache.test.ts` 在完整构建和静态检查之后只运行指定文件；用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。只跑部分测试不能代替完整门禁。
-
-`vp run check` 是完整交付门禁。`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。测试使用 Node runner，每次调用共享一份打包产物，消费者独立安装。任务缓存关闭；局部检查不替代完整验收。
-
-参与开发前请阅读[开发规则](AGENTS.md)与[项目品味](docs/constitution.md)。Concord 源自 NiceEval 的仓库工作流，运行时保持独立；抽取范围见[来源说明](docs/provenance.md)。
+参与开发 Concord 本身，见[工程指南](docs/engineering/concord-self-hosting/README.md)。

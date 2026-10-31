@@ -16,7 +16,7 @@ CLI 和 Web 使用同一文档发现规则。验收核对主题数量、原文�
 
 Research 主题是决策输入，不因创建或结构检查而成为已采用 Spec 或执行证据。
 
-Design 候选按内容规模使用 `plans/<name>.md` 或 `plans/<name>/README.md`，候选名称是唯一身份（[决策依据](../../design/plan-content/DECISION.md)）。目录归属与入口解析见[架构](architecture.md)。
+Design 候选按内容规模使用 `plans/<name>.md` 或 `plans/<name>/README.md`，候选名称是唯一身份。目录归属与入口解析见[架构](architecture.md)。
 
 ## 依据的品味
 

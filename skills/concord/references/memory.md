@@ -32,4 +32,4 @@ concord show token-format-v2 --json
 
 `memory link` 写入 `relations`。参数以各命令的 `--help` 为准。`list` 与 `show` 从当前文件派生索引与反向关系，不手工维护 INDEX。
 
-`concord check` 校验字段与关系目标；`concord check --since <base>` 另外检查状态转换是否合法，例如 note 不能成为 current，品味修订是否附带 `amends` 的 Decision。
+`concord check` 校验字段与关系目标。

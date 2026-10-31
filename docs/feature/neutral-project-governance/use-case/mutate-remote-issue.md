@@ -72,4 +72,3 @@ concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 
 - [Feedback CLI 接入设计](../../feedback/cli-integration.md)
 - [品味 C-007](../../../engineering/concord-self-hosting/README.md#协作与授权)
-- [决策依据](../../../design/repository-workflows/DECISION.md)

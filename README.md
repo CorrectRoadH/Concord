@@ -6,11 +6,11 @@ English · [简体中文](README.zh-CN.md)
 
 Concord is a local spec-driven development tool for developers and coding agents. The spec is the single source of truth for what the software must do. People review changes to the spec; agents implement the spec and prove it with tests; Concord checks that the spec, the implementation, and the tests still agree. A CLI and a bundled web workspace work with the same repository files.
 
-Everything is a plain file in your Git worktree, and people and agents edit all of them directly. Concord commands run the steps a change requires, such as verifying a fix. In CI, `concord check --since <base>` checks that every change is legal. The core workflow needs no account, model API, or cloud service.
+Everything is a plain file in your Git worktree, and people and agents edit all of them directly. Concord commands run the steps a change requires, such as verifying a fix. `concord check` verifies that specs, tests, and code still agree. The core workflow needs no account, model API, or cloud service.
 
 ## The problem Concord solves
 
-Concord starts from two problems.
+Concord starts from three problems.
 
 **Specs that nobody can read.** A spec written as a long list of constraints, fields, and edge cases leaves readers unable to say what the feature does or what to run first. A spec nobody understands is not really reviewed, so nobody maintains it.
 
@@ -18,7 +18,9 @@ Concord asks for features written the way you would teach someone to use them: w
 
 **AI that uses words loosely.** An agent may rename the same thing in every session or switch between spellings, and readers are left guessing whether two words mean the same thing. In Concord each concept has one name and one definition in `concepts.md`, and `check` reports an old name wherever it appears.
 
-Around these two problems sit the other complexities of building software with coding agents. Requirements live in chat threads and PR descriptions, and design tradeoffs live in someone's memory. Every agent session starts from zero and may re-decide settled semantics. A test claims to protect a feature, but nobody can tell which behavior it guards.
+**AI that writes piles of useless tests.** Agents happily add a test for every function and branch until nobody can say which test guards which use, and reading the tests tells you nothing about how the product should behave. Concord asks every test to name the Use Case, or the step of one, that it verifies, so tests read along user journeys; tests that point at no Use Case are listed so you can decide whether to delete them.
+
+Around these problems sit the other complexities of building software with coding agents. Requirements live in chat threads and PR descriptions, and design tradeoffs live in someone's memory. Every agent session starts from zero and may re-decide settled semantics. A test claims to protect a feature, but nobody can tell which behavior it guards.
 
 Bugs are declared fixed without evidence. Reviewing thousands of generated lines is also harder than reviewing the few sentences of intent behind them.
 
@@ -36,9 +38,9 @@ Concord moves review to the spec. The spec is Markdown in the repository. Code a
 | Nobody knows which behavior a test guards | Tests point to a Use Case or one of its steps through an annotation; code points to the spec through a declaration; reverse links are derived from source | From a spec you can find the tests and code behind it, and the links appear in the same diff as the code |
 | Refactors churn the spec and the tests | Behavior pages (README, Use Case, CLI, library) are separate from the architecture page | A behavior-preserving refactor changes only the architecture page, so behavior pages and the tests pointing at them stay stable |
 | Bugs are declared fixed without evidence | A defect becomes an Issue; the regression test fails on the defect commit and passes on the fix, and `issue close --fixed` verifies both and records the result | Anyone can replay the fix verification |
-| Direct edits bypass the process | CI runs `concord check --since <base>` on every change, checking status transitions, fix verifications, constitution amendments, and Design decisions | People and agents edit files directly, and the gate decides whether a change is legal |
+| Specs, tests, and code drift apart | `concord check` reports broken links, markers that point at missing specs, and misused words | People and agents edit files directly and learn about mistakes right away |
 | Development logs leak into the spec | Process goes to Memory and open questions go to Issues; `docs/` keeps only current declarations | The spec always describes what the system must do now |
-| Ideas are not settled, or settled but not scheduled | Roadmap keeps a direction in Feature form until `roadmap start` moves it into `docs/feature/`; Research keeps dated external facts with sources | Unsettled directions are never mistaken for current requirements |
+| Ideas are not settled, or settled but not scheduled | Roadmap keeps a direction in Feature form until `roadmap start` moves it into `docs/feature/` | Unsettled directions are never mistaken for current requirements |
 
 ## Every file in a Concord repository
 
@@ -69,15 +71,14 @@ A file's location and its single top-level heading give it identity, kind, and n
 | File | What it is | Who reads it, and when |
 | --- | --- | --- |
 | `docs/roadmap/<r>/` | A direction not yet adopted, written like a Feature; code and tests do not point at it | When discussing what to build next; `roadmap start` moves it into `docs/feature/` |
-| `docs/design/<d>/` | One comparison of approaches: README states the question, GOALS and LIMITS the targets and constraints, CASES the scenarios, `plans/<candidate>/` each complete candidate, DECISION the choice and reason | Only when revisiting that decision; current rules live in the spec |
-| `docs/research/<r>/` | External facts with observation dates and sources | When a decision needs outside evidence |
+| `docs/design/<d>.md` | One open tradeoff: the options and what each costs; once decided, the rule moves into the spec and the page is deleted | When discussing that tradeoff |
 
 **Work items and knowledge: what is wrong and what was learned**
 
 | File | What it is | Who reads it, and when |
 | --- | --- | --- |
-| `docs/issues/<i>.md` | A defect, request, or observation; frontmatter holds status and relations, and a fixed closure records its verification | When picking up a problem; `issue close` writes the closure |
-| `memory/<m>.md` | Reusable knowledge as a decision, insight, or note; each constitution amendment has a decision | Before related work, found with `concord memory search` |
+| `docs/issues/<i>.md` | A defect, request, or observation still to handle; deleted once handled, with the result in the commit message | When picking up a problem |
+| `memory/<m>.md` | Reusable lessons from development: measurements, root causes, tradeoffs made; rewritten or deleted when outdated | Before related work, found with `concord memory search` |
 
 **Setup, source, and derived data**
 
@@ -85,7 +86,6 @@ A file's location and its single top-level heading give it identity, kind, and n
 | --- | --- | --- |
 | The Concord block in `AGENTS.md` | Tells agents to read the Concord guidance and run the check before delivery | Agents, every time they enter the repository |
 | `concord.config.ts` | Optional configuration: source roots, test roots, test runner, p5 libraries | Only when the defaults do not fit |
-| `docs/_template/` | Complete reference templates installed by `concord init` | When unsure how to write a kind of page |
 | Annotations in source and tests | `// @use-case <path>` at the top of a test, `// @concord-implements <path>` next to code | Read by `check` and `trace` to derive reverse links |
 | `concord/` in the Git private directory | Per-worktree cache, write recovery records, and leases | Not for reading; `concord cache clear` removes the cache without changing results, while recovery records are handled by `concord recover` and must not be deleted by hand |
 
@@ -116,13 +116,7 @@ nix profile install 'git+https://github.com/CorrectRoadH/homebrew-tap?ref=main#c
 concord --help
 ```
 
-The runtime requires Node.js 24.15+ and Git; repository tools also use `ripgrep`. Release packages include the native cache engine, so consumers do not need Rust or a database service.
-
-Packaged native targets are Linux x64/glibc and macOS arm64, with macOS 15 as the minimum deployment target.
-
-Source releases require the complete test suite and a frozen production installation check of the final archive. Homebrew and Nix channel updates require their own installation checks.
-
-macOS 27 is permitted but has not been verified in CI. Windows execution and coordination across multiple networked machines are outside the compatibility statement. See the [release spec](docs/feature/cross-platform-release/README.md) for details.
+Concord needs Node.js 24.15+ and Git, and runs on Linux x64 and Apple Silicon macOS. Windows is not supported.
 
 ## Quick start
 
@@ -177,7 +171,7 @@ concord show greeting
 3. Commit the fix without changing the test, the runner configuration, or the spec it points to.
 4. Run `concord issue close duplicate-sku --fixed --reason "..."`. Concord runs the test on the defect commit and on HEAD, and writes the verification into the Issue.
 
-`concord test verify duplicate-sku` replays the recorded verification. In CI, `concord check --since <base>` replays any verification a change adds. See [verify a fix and close a defect](docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md).
+`concord test verify duplicate-sku` replays the recorded verification. See [verify a fix and close a defect](docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md).
 
 ## Open the web workspace
 
@@ -207,39 +201,15 @@ Use `concord <command> --help` for exact arguments, `--json` for structured resu
 
 | Task | Guide |
 | --- | --- |
-| Understand the workflow and data ownership | [Why Concord](docs/why-concord.md) · [Document model](docs/document-model.md) · [Architecture](docs/architecture.md) · [Agent workflow](docs/agent-workflow.md) |
+| Understand the workflow and data ownership | [Why Concord](README.md) · [Document model](docs/document-model.md) · [Architecture](docs/architecture.md) · [Agent workflow](skills/concord/SKILL.md) |
 | Look up commands and outputs | [CLI](docs/feature/local-sdlc/cli.md) |
 | Annotate files, functions, and code regions | [Code guide](skills/concord/references/code.md) |
 | Run tests and verify fixes | [Test guide](skills/concord/references/test.md) |
 | Record reusable knowledge | [Memory guide](skills/concord/references/memory.md) |
 | Read GitHub and Linear feedback alongside local Issues | [Feedback commands](docs/feature/feedback/cli.md) |
-| Decide what your project owns in testing | [Project test boundary](docs/repository-profile.md) |
+| Decide what your project owns in testing | [Project test boundary](docs/feature/local-sdlc/test-boundary.md) |
 | Explore the product specs | [Documentation](docs/README.md) |
 
 The linked guides and specs are primarily in Chinese. These two README files cover the same introduction and getting-started workflow.
 
-## Develop Concord
-
-Source builds require Node.js 24.15+, pnpm 11.18.0, Git, Rust 1.97.1, and a native C linker toolchain.
-
-```sh
-git clone https://github.com/CorrectRoadH/Concord.git
-cd Concord
-pnpm install --frozen-lockfile # bootstrap the pinned local vp
-rustup toolchain install 1.97.1 --profile minimal
-pnpm exec vp build
-pnpm exec vp run concord --help
-pnpm exec vp run check
-```
-
-`pnpm check` (also available as `vp run check`) is the only check entry. It first builds the CLI and web workspace, reusing validated native artifacts. It then type-checks repository, test, and script sources and checks the current checkout's specs in parallel. Finally, it runs the packed CLI's Node and browser suites concurrently in isolated Git consumers.
-
-Run `pnpm concord trace show local-sdlc` to inspect relationships from source.
-
-When Vite+ is not installed globally, use `pnpm exec vp`. The `vp install` command manages dependencies through the pinned pnpm version.
-
-The command `pnpm check test/writing-cache.test.ts` runs selected files after the complete build and static checks. Pass `--test-name-pattern=...` to select cases or `--test-shard=1/4` to split the complete suite. Selected tests never replace the full gate.
-
-`vp run check` is the full delivery gate. The `vp build` production hooks prepare the complete distribution. Vite+'s built-in `vp check` and `vp test` do not invoke the project's scripts. Tests use Node's runner, share one packed artifact per invocation, and install isolated consumers. Task caching is disabled; partial checks do not replace full acceptance.
-
-Read the [development rules](AGENTS.md) and [constitution](docs/constitution.md) before contributing. Concord originated in NiceEval's repository workflows and runs independently; the [provenance document](docs/provenance.md) describes the extraction boundaries.
+To work on Concord itself, see the [engineering guide](docs/engineering/concord-self-hosting/README.md).

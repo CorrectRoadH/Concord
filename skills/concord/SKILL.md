@@ -7,7 +7,7 @@ description: 在本地 Git 仓库中使用 Concord 维护产品 Spec、代码与
 
 Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与测试中的 Concord 标记、Issue 与 Memory 各自保存在自己的文件里，关系从中推导。先遵守消费仓库的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
 
-`docs/` 与 `memory/` 下的全部文件都可以直接编辑，包括 Issue 与 Memory 的状态和关系。具名命令是执行需要运行的步骤的助手，例如修复核验与 Design 裁决，它们把结果写进同一份文件；可信度由 `concord check --since <base>` 的门禁保证，CI 对每个变更运行它。
+`docs/` 与 `memory/` 下的全部文件都可以直接编辑，包括 Issue 与 Memory 的状态和关系。具名命令是执行需要运行的步骤的助手，例如修复核验与 Design 裁决，它们把结果写进同一份文件；`concord check` 检查结果是否一致。
 
 只在任务授权范围内修改文件或运行写命令。`check`、`trace` 无 finding 不等于测试覆盖率；提交、push、发布、部署和远端消息仍需独立授权。
 
@@ -19,7 +19,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 - 测试标记、测试执行与修复核验：运行 `concord --skill test`。
 - Memory 的类型、状态与关系：运行 `concord --skill memory`。
 - Issue、缺陷修复流程与 GitHub / Linear 来源：运行 `concord --skill feedback`。
-- 检查、差异门禁、关系追踪与审阅：运行 `concord --skill trace`。
+- 检查、关系追踪与审阅：运行 `concord --skill trace`。
 - cache 或中断写入恢复：运行 `concord --skill recovery`。
 - Web 工作台、Git 面板、人机协作编辑与 Markdown p5 动画：运行 `concord --skill view`。
 - 只有确实需要完整离线资料时才运行 `concord --skill all`。
@@ -52,7 +52,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 
 ## 工作原则
 
-先读取现有文件与关系，再决定应修改 Spec、测试源码、Issue 还是 Memory。直接编辑后运行 `concord check`；提交前运行 `concord check --since <base>`，处理每个具名 finding，不绕过门禁。冲突、恢复要求或核验失败时保留现场并处理具名错误。
+先读取现有文件与关系，再决定应修改 Spec、测试源码、Issue 还是 Memory。直接编辑后运行 `concord check`；处理每个具名 finding。冲突、恢复要求或核验失败时保留现场并处理具名错误。
 
 Spec 正文声明目标、行为、约束和验收条件；产品流程属于 Spec。写 Feature README 或 Use Case 前先读 `concord --skill document` 的「让第一次读的人读懂」。README 与 cli、library 页是产品功能，architecture 页是技术架构；功能在不同情形下的表现各写成一个 Use Case。复杂过程配 p5 图解，领域名词先进入 `concepts.md` 再使用。开发日志、排障经过、实施进度与临时计划归 Memory，待调查的观察与缺陷归 Issue，采用后的目标归 Feature。
 

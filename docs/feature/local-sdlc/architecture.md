@@ -26,7 +26,7 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 ## 修复核验
 
-只支持线性路径：先提交会失败的回归测试，再提交修复（[决策依据](../../design/sdd-core-model/DECISION.md)）。可观察行为见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
+只支持线性路径：先提交会失败的回归测试，再提交修复。可观察行为见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 
 1. 回归测试由 `@issue` 标记选出。修复候选默认是核验开始时的 HEAD，`--fix` 可以指定其 first-parent 历史中缺陷候选之后的提交；工作树中他人的未提交改动不参与核验，只要求该 Issue 文件没有未提交改动。
 2. 缺陷候选默认是 HEAD 的 first-parent 历史中最早出现这些回归测试的提交；`--defect` 必须是 HEAD 的 first-parent 祖先。
@@ -37,15 +37,11 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 5. 缺陷候选上同一冻结命令以非零码结束，修复候选上以零结束。command runner 不区分断言失败与构建失败，red 只表示该命令的非零结果；runner 结果判定为零执行、全部跳过、取消、信号终止或清理未知的运行不计为 red 或 green。缺测试、缺提交（含 shallow clone）与超时是 `FixUnverifiable`。
 6. 发布前重新核对 Issue 文件的前像，变化则拒绝。写入的 `verification` 包含缺陷与修复提交、按测试关联 ID 列出的回归测试、runner 配置摘要与执行它的 Concord 版本。
 
-`verification.fix` 是实际验证的提交 F，承载关闭记录的提交通常在 F 之后。`test verify` 与 `check --since` 都在记录的缺陷提交与 F 的临时检出上重放，核对的是记录本身的主张：回归测试在缺陷提交上失败、在 F 上通过。之后的提交改动测试、runner 输入或 Spec 不使记录失效；已经关闭的记录不随后续变化重放，之后的回归由完整测试发现。提交、依赖或运行环境不可获得时报告无法重放，不改变已记录的结论。reopen 删除 `closure`。
+`verification.fix` 是实际验证的提交 F，承载关闭记录的提交通常在 F 之后。`test verify` 在记录的缺陷提交与 F 的临时检出上重放，核对的是记录本身的主张：回归测试在缺陷提交上失败、在 F 上通过。之后的提交改动测试、runner 输入或 Spec 不使记录失效；已经关闭的记录不随后续变化重放，之后的回归由完整测试发现。提交、依赖或运行环境不可获得时报告无法重放，不改变已记录的结论。reopen 删除 `closure`。
 
 ## 写入管线
 
 文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整 preimage，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配 preimage 也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由[差异门禁](#差异门禁)检查。
-
-## 差异门禁
-
-`check --since <base>` 先完成当前状态检查，再用 Git 读取 `<base>` 与当前之间变化的文件，对每个变化按 [CLI](cli.md#检查本次变化) 的表格检查。Issue 与 Memory 的状态转换比较基线与当前的 frontmatter。`verification` 的重放复用[修复核验](#修复核验)。`Selected:` 的校验复用 `design decide` 的同一规则。Roadmap 移动复用采用命令的链接规则。无法读取基线或差异时传播 `complete: false`，不退回只检查当前状态。
 
 ## 步骤改写的发布
 
@@ -61,7 +57,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 - node 的 locator 从 SourceFile 的子节点到绑定节点，每层为 `[SyntaxKind 字符串, staticName 或 null, 同描述直接兄弟的零基序号]`；直接子节点完整枚举，包含未标注节点。staticName 只取 Identifier、PrivateIdentifier、StringLiteral、NumericLiteral 的文本，ComputedPropertyName 与无名节点为 null，不读取或求值表达式；单变量语句取唯一变量声明的简单标识符。
 - region 的 locator 为 `[statementListLocator, validRegionOrdinal]`，SourceFile 的列表路径为空，序号按该列表内合法 region 的源码顺序从零开始。
 
-其它语言的声明引用由 `concord.code-marker/v1`、canonical 路径与文件内标记块序号派生。改变派生语义必须升级版本。稳定边界见[引用的稳定性](use-case/trace-code-ownership.md#引用的稳定性)（[决策依据](../../design/derived-code-reference/DECISION.md)）。
+其它语言的声明引用由 `concord.code-marker/v1`、canonical 路径与文件内标记块序号派生。改变派生语义必须升级版本。稳定边界见[引用的稳定性](use-case/trace-code-ownership.md#引用的稳定性)。
 
 ## 路径安全
 
@@ -74,11 +70,11 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 验收在真实临时目录中进行。快照内祖先或仓库内目录被换成 symlink 或另一真实目录时，下一次读取在读字节前报 `UnsafePath`；叶子在检查与打开之间被换成 symlink 时同样报 `UnsafePath`。只被读取过的目录新增无关文件时，当前查询成功，被扫描过的目录新增成员时报 `FileChangedSinceRead`；写者提交后的核验不报 `FileChangedSinceRead`；Darwin 上发布新建目录成功。仓库根的父目录很宽时，构造之后对仓库根之上的 `readdirSync` 为 0，拼写检查每目录至多枚举一次，构造阶段次数单独计数。
 
-指向仓库外的硬链接与覆盖仓库内目录的挂载不被拒绝；网络文件系统与 overlayfs 上不稳定的 inode 会导致拒绝（[决策依据](../../design/path-safety-cost/DECISION.md)）。
+指向仓库外的硬链接与覆盖仓库内目录的挂载不被拒绝；网络文件系统与 overlayfs 上不稳定的 inode 会导致拒绝。
 
 ## TypeScript 编译器
 
-解析、诊断与模块解析使用精确固定的 TypeScript 7.1 beta 原生编译器，构建与运行时同一版本，消费者无需全局编译器（[决策依据](../../design/typescript-native/DECISION.md)）。
+解析、诊断与模块解析使用精确固定的 TypeScript 7.1 beta 原生编译器，构建与运行时同一版本，消费者无需全局编译器。
 
 - `withTypeScript` 是同步词法作用域：按调用栈惰性创建一个 `typescript/sync` API，嵌套调用复用，最外层 finally 关闭。API、AST、快照与 program 不逃逸作用域，不返回 Promise，违反时报 `TypeScriptScopeViolation`；缓存只保存转换后的领域值。纯 AST 操作从 `typescript/ast` 引入。
 - API 固定 `runExternalCode: false`，使用包内可执行文件，不接受项目路径覆盖；默认文件系统回调拒绝读写，允许的文件只来自完整的请求虚拟文件系统，不回落到宿主。项目配置与 MDX content mapper 不获得执行权限。
@@ -88,7 +84,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ## 多语言分析
 
-非 JS/TS 声明从配置范围内独立注释行的标记重建，扫描不声称识别所有语言的字符串语法，也不由符号是否存在决定关系是否存在。符号定位记录安全路径、`range`、`selectionRange`、名称与 profile，是可选观察值，不是关联 ID；缺失或歧义时记 `UnsupportedSymbolBinding` 并定位到标记行（[决策依据](../../design/lsp-integration/DECISION.md)）。
+非 JS/TS 声明从配置范围内独立注释行的标记重建，扫描不声称识别所有语言的字符串语法，也不由符号是否存在决定关系是否存在。符号定位记录安全路径、`range`、`selectionRange`、名称与 profile，是可选观察值，不是关联 ID；缺失或歧义时记 `UnsupportedSymbolBinding` 并定位到标记行。
 
 - 绑定：握手与能力核验后按协商编码换算位置。层级 `DocumentSymbol[]`、扁平 `SymbolInformation[]` 与 `null` 分开处理，扁平结果不推导层级。范围须有序、位于当前文本内，`selectionRange` 含于 `range`，子范围含于父范围。从标记块结束处按 profile 跳过允许的空白与前置内容，先选最近起点再选最深声明；仍占同一位置或无法验证时记歧义缺口，不按序号强绑。
 - 调用观察：有当前原生绑定与有效范围时从范围内全部可调用声明出发，否则使用文件级并带 `FileScope`。沿安全仓库路径请求 `prepareCallHierarchy` 与 `outgoingCalls`，允许穿过 testRoots 中的转调函数，只在映射实现声明时筛选 sourceRoots；仓库外与不支持文件不展开并记边界缺口。观察总带 `OpenWorldCalls`；空数组、`null` 或全部请求成功都不推导未调用。预算耗尽分别记 `DepthLimit`、`NodeLimit`、`RequestLimit`，非故障截断可发布已有正向观察。
@@ -111,7 +107,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ## 文档身份
 
-名称语法、分类根、package 与 leaf 布局及短选择器由同一政策模块定义，严格解析共用 codec。类别由路径决定，名称取正文唯一的一级标题，按 Markdown 语法树识别，代码块中的标题不计；大小写与 Unicode 规范化碰撞按[路径安全](#路径安全)保护。CLI、Web 与页面编辑把选择器解析到实际路径后，冻结路径、类别与完整前像，在租约内重新核对映射，漂移即拒绝；各入口保留自己的错误协议、租约与发布日志，恢复只使用日志中的实际路径（[决策依据](../../design/document-identity/DECISION.md)）。
+名称语法、分类根、package 与 leaf 布局及短选择器由同一政策模块定义，严格解析共用 codec。类别由路径决定，名称取正文唯一的一级标题，按 Markdown 语法树识别，代码块中的标题不计；大小写与 Unicode 规范化碰撞按[路径安全](#路径安全)保护。CLI、Web 与页面编辑把选择器解析到实际路径后，冻结路径、类别与完整前像，在租约内重新核对映射，漂移即拒绝；各入口保留自己的错误协议、租约与发布日志，恢复只使用日志中的实际路径。
 
 ## 生命周期
 

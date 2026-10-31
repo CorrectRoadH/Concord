@@ -47,22 +47,22 @@ Reviewer 要从一份 Feature 或整个项目出发，看到 Spec、附页、Use
 
    ## Contracts and decisions
 
-   - [购物车](docs/feature/cart/README.md) — feature
-   - [加入商品](docs/feature/cart/use-case/add-item.md) — use-case
+   - 购物车 — feature
+   - 加入商品 — use-case
 
    ## Code declarations
 
-   - **src/cart.js:1–6** — [src/cart.js:1–6](src/cart.js#L1); file
-     - Implements: [docs/feature/cart/README.md](docs/feature/cart/README.md)
+   - **src/cart.js:1–6** — src/cart.js:1–6; file
+     - Implements: docs/feature/cart/README.md
 
    ## Test declarations
 
-   - **neref_854212737ecad7effc4666629752cb98** — [test/cart.test.js:5](test/cart.test.js#L5); active; contract: [docs/feature/cart/use-case/add-item.md](docs/feature/cart/use-case/add-item.md)
-     - Issue: [docs/issues/duplicate-sku.md](docs/issues/duplicate-sku.md)
+   - **neref_854212737ecad7effc4666629752cb98** — test/cart.test.js:5; active; contract: docs/feature/cart/use-case/add-item.md
+     - Issue: docs/issues/duplicate-sku.md
 
    ## Issues
 
-   - [重复加入覆盖数量](docs/issues/duplicate-sku.md) — open
+   - 重复加入覆盖数量 — open
    ```
 
    `review <feature>` 只生成一份 Feature 的材料。完整输出还包含品味状态、Use Case 步骤分组与本地反馈。

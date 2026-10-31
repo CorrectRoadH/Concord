@@ -47,7 +47,7 @@ concord template show feature --title "登录"
 
 模板中的图示提示保留 Mermaid，并允许用 p5 表达动态过程；不要为每篇文档自动添加动画。p5 核心随安装包提供，扩展库按需在 `concord.config.ts` 的 `p5.libraries` 配置，初始化无需安装浏览器 CDN。运行 `concord --skill view` 获取内联、外部入口与项目配置示例。
 
-init 的 AGENTS 托管区与 docs/concord.md 必须把 Agent 引到当前安装版本的 skill：Spec 声明目标，开发过程与经验归 Memory，缺陷与观察归 Issue；全部文件可以直接编辑，提交前运行 `check --since <base>`。检查生成指引时保留 AGENTS 托管区外内容。升级安装包不改写已有文档；运行 `concord --skill` 读取当前规则。
+init 的 AGENTS 托管区与 docs/concord.md 必须把 Agent 引到当前安装版本的 skill：Spec 声明目标，开发过程与经验归 Memory，缺陷与观察归 Issue；全部文件可以直接编辑，提交前运行 `concord check`。检查生成指引时保留 AGENTS 托管区外内容。升级安装包不改写已有文档；运行 `concord --skill` 读取当前规则。
 
 概念由全局或局部 concepts.md 拥有，唯一写法、定义和解释写在同一页；concepts 命令提供派生汇总。init 只在缺失时写入随包空 catalog，保留既有内容的全部字节。局部 concord-writing.json 的目录决定 scope，不能用 roots 扩大局部范围。init 不从既有文档猜测概念定义或弃用词。
 

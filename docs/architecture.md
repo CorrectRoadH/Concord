@@ -2,9 +2,9 @@
 
 ## 目标与原则
 
-Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致（[为什么需要 Concord](why-concord.md)）。它是可安装到任意 Git 仓库的本地 CLI。
+Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致（[为什么需要 Concord](../README.md)）。它是可安装到任意 Git 仓库的本地 CLI。
 
-文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter（[决策依据](design/sdd-core-model/DECISION.md)）。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check --since <base>` 检查变化是否合法。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](constitution.md)，Web 界面设计见根目录 `DESIGN.md`。
+文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](constitution.md)，Web 界面设计见根目录 `DESIGN.md`。
 
 ## 代码结构
 
@@ -111,7 +111,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 
 ### 服务操作
 
-工作区服务的每个应用操作只定义一次：名称、输入、结果与错误 Schema、准入与取消、执行位置、当前或历史语义，以及发布后是否申请刷新。RPC 与 HTTP 是适配层：RPC 负责二进制序列化与帧准入，HTTP 负责 Host/Origin 校验、请求体上限、状态码、ETag 与安全头；SSE 是 `subscribe` 的 HTTP 编码，保留慢消费者合并与 `stopping` 事件。静态资源、p5 frame 与 SPA 页面只属于 HTTP（[决策依据](design/workspace-runtime/DECISION.md)）。
+工作区服务的每个应用操作只定义一次：名称、输入、结果与错误 Schema、准入与取消、执行位置、当前或历史语义，以及发布后是否申请刷新。RPC 与 HTTP 是适配层：RPC 负责二进制序列化与帧准入，HTTP 负责 Host/Origin 校验、请求体上限、状态码、ETag 与安全头；SSE 是 `subscribe` 的 HTTP 编码，保留慢消费者合并与 `stopping` 事件。静态资源、p5 frame 与 SPA 页面只属于 HTTP。
 
 | 操作 | 执行位置 | 语义 | HTTP | RPC |
 | --- | --- | --- | --- | --- |
@@ -167,7 +167,7 @@ Memory 固定位于 worktree 根的 `memory/`。`docs/constitution.md` 存在即
 
 `concord --root <repo>` 指定消费者，省略时取 cwd 所在 Git worktree 的顶层。命令面、调用、输出、退出码与错误由 [local SDLC 的 CLI 页](feature/local-sdlc/cli.md)拥有；命令是执行需要运行的步骤的助手，例如修复核验、Design 裁决与 Roadmap 采用。`--skill [topic]` 在任意 cwd 读取随包 Agent 指引，不加载 host、不写文件。
 
-只有 `test run`、`test verify` 与 `issue close --fixed` 启动仓库命令；`check` 不执行测试，`check --since` 在重放修复核验时执行。`review` 生成本地审阅材料，不写 GitHub。`docs work` 见[并行切分文档工作](feature/neutral-project-governance/use-case/coordinate-docs-work.md)。
+只有 `test run`、`test verify` 与 `issue close --fixed` 启动仓库命令；`check` 不执行测试。`review` 生成本地审阅材料，不写 GitHub。`docs work` 见[并行切分文档工作](feature/neutral-project-governance/use-case/coordinate-docs-work.md)。
 
 ## 存储 Spec
 
@@ -222,7 +222,7 @@ Trace 与定向 Review 按 owner 汇总 Feature supporting page 与 Use Case 的
 
 ## 发布协调
 
-Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 root 与 privateDir。发布协调只使用 Node 文件 API，见[可移植协调架构](feature/portable-coordination/architecture.md)（[决策依据](design/portable-publication/DECISION.md)）。
+Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 worktree 独立；journal 绑定 root 与 privateDir。发布协调只使用 Node 文件 API，见[可移植协调架构](feature/portable-coordination/architecture.md)。
 
 支持同主机、同 PID 命名空间内的 Linux 与 macOS 本地工作树，不保证网络多机协调与 Windows 执行。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
 
@@ -260,7 +260,7 @@ runner 不确定时返回 blocked，并保留 journal 的实际处理结果。�
 
 ## Design 逐项比较与裁决
 
-候选比较、裁决与暂缓的行为见[逐项比较方案并明确裁决](feature/local-sdlc/use-case/compare-design-plans.md)。候选来自 `plans/` 的直接子项，裁决是 DECISION 中的 `Selected:` 行；可以直接编辑，`design decide` 与 `check --since` 用同一规则校验。已裁决的 Design 是决策记录（[Design 记录](document-model.md#design-记录)）。
+候选比较、裁决与暂缓的行为见[逐项比较方案并明确裁决](feature/local-sdlc/use-case/compare-design-plans.md)。候选来自 `plans/` 的直接子项，裁决是 DECISION 中的 `Selected:` 行；可以直接编辑，`design decide` 与 `check` 用同一规则校验。已裁决的 Design 是决策记录（[Design 记录](document-model.md#design)）。
 
 ## 测试执行与修复核验
 
@@ -278,7 +278,7 @@ Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature
 
 ## 代码归属声明
 
-Code Declaration 是维护者对实现与 Spec 关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或修复核验的依据。查询引用的派生规则见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)（[决策依据](design/derived-code-reference/DECISION.md)）。
+Code Declaration 是维护者对实现与 Spec 关系的显式声明，源文件是唯一 owner。`implements` 边不成为测试声明、覆盖率、完成状态或修复核验的依据。查询引用的派生规则见[代码声明引用](feature/local-sdlc/architecture.md#代码声明引用)。
 
 `sourceIgnore` 按[发现 Spec](feature/local-sdlc/use-case/discover-annotated-tests.md)缩小源码与测试自动发现范围；配置参与快照身份，扫描、复核与监听共用同一匹配规则。
 
@@ -302,11 +302,11 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 ## 测试接入边界
 
-测试执行归项目：Concord 只通过配置的 runner 与可选 adapter 运行测试并做修复核验，所有权见[治理边界](feature/neutral-project-governance/architecture.md)，接入边界见[项目测试接入边界](repository-profile.md)（[决策依据](design/sdd-core-model/DECISION.md)）。消费者拥有 runner、执行副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
+测试执行归项目：Concord 只通过配置的 runner 与可选 adapter 运行测试并做修复核验，所有权见[治理边界](feature/neutral-project-governance/architecture.md)，接入边界见[项目测试接入边界](feature/local-sdlc/test-boundary.md)。消费者拥有 runner、执行副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
 
 ## Web 工作台与 Herdr 面板
 
-`concord view` 提供随包分发的 React 工作台，`concord panel` 在终端中提供只读的 [Herdr 面板](feature/herdr-panel/README.md)，两者都是工作区服务的客户端。Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑，变化是否合法由差异门禁判断。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见根目录 `DESIGN.md`。
+`concord view` 提供随包分发的 React 工作台，`concord panel` 在终端中提供只读的 [Herdr 面板](feature/herdr-panel/README.md)，两者都是工作区服务的客户端。Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见根目录 `DESIGN.md`。
 
 ## 文档写作检查
 
@@ -320,7 +320,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 独立安装包不含 `workspace:*`、外部仓库路径或运行时 import。构建产物是带 shebang 的 Node CLI，pack 为 tarball，在仓库外临时消费者安装后使用其 bin。
 
-真实闭环：init → 写 Feature 与 Use Case → 写 Issue → 提交带 `@issue` 的失败回归测试并配置 runner → 提交修复 → `issue close --fixed` → `check --since` → trace 与 review。另覆盖错误引用、未核验的 fixed、伪造的 verification、测试源码变化、重开、退役、缓存删除与损坏、注释变化后的缓存失效、悬空与重复标注、跨 cwd 与 root、路径穿越、写冲突、并发写、journal 恢复、超时清理和独立安装。
+真实闭环：init → 写 Feature 与 Use Case → 写 Issue → 提交带 `@issue` 的失败回归测试并配置 runner → 提交修复 → `issue close --fixed` → trace 与 review。另覆盖错误引用、未核验的 fixed、伪造的 verification、测试源码变化、重开、退役、缓存删除与损坏、注释变化后的缓存失效、悬空与重复标注、跨 cwd 与 root、路径穿越、写冲突、并发写、journal 恢复、超时清理和独立安装。
 
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。发行 tgz 携带 Linux x64/glibc 与 macOS arm64 原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一打包，在目标平台安装同一份包验收。
 
