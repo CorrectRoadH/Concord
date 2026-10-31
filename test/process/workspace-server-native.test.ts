@@ -3,7 +3,7 @@ import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readdirSync } from 'node:fs';
 import test from 'node:test';
-import { Effect } from 'effect';
+import { Effect, Schema, Stream } from 'effect';
 import { installConcord, packConcord } from '../support/installed-package.js';
 import { pollUntil } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
@@ -25,6 +25,10 @@ test('runtime native validation degrades the locked service and a repaired artif
     const running = record(root), rpc = await rpcModule();
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
+      let last: unknown;
+      yield* Effect.forkScoped(Stream.runForEach(rpc.subscribeWorkspace(connection), value => Effect.sync(() => {
+        last = Schema.decodeUnknownSync(Schema.Struct({ state: Schema.String, error: Schema.optional(Schema.Struct({ code: Schema.String, message: Schema.String })) }))(value);
+      })));
       const hello = () => Effect.runPromise(connection.client.hello({ protocol: 'concord.workspace/v1', installation: running.installation }));
       yield* Effect.promise(() => pollUntil(async () => (await hello()).state === 'running' ? true : undefined, { description: 'initial native owner opens', timeoutMs: 5000 }));
       renameSync(metadata, hidden);
@@ -32,7 +36,7 @@ test('runtime native validation degrades the locked service and a repaired artif
         yield* Effect.promise(() => pollUntil(async () => (await hello()).state === 'degraded' ? true : undefined, { description: 'native artifact is revalidated after service startup', timeoutMs: 3500 }));
         assert.equal(record(root).token, running.token);
       } finally { renameSync(hidden, metadata); }
-      yield* Effect.promise(() => pollUntil(async () => (await hello()).state === 'running' ? true : undefined, { description: 'repaired artifact reopens the same service', timeoutMs: 5000 }));
+      yield* Effect.tryPromise({ try: () => pollUntil(async () => (await hello()).state === 'running' ? true : undefined, { description: 'repaired artifact reopens the same service', timeoutMs: 5000 }), catch: cause => new Error(`${String(cause)}; last state: ${JSON.stringify(last)}`) });
       assert.equal(record(root).token, running.token);
     })));
   } finally {

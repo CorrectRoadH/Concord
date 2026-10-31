@@ -76,7 +76,7 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     }
     const prior = yield* SubscriptionRef.get(state.value);
     if (error.code === 'CleanupFailed') yield* state.transition('blocked', { code: error.code, message: error.message });
-    else yield* state.transition(prior.state === 'degraded' ? 'degraded' : 'running', { code: error.code, message: error.message });
+    else yield* state.transition(prior.state === 'degraded' ? 'degraded' : 'running', prior.state === 'degraded' && prior.error ? prior.error : { code: error.code, message: error.message });
   })));
   const stop = Effect.suspend(() => {
     if (stopping) return Effect.void;
