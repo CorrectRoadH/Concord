@@ -136,7 +136,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | --- | --- | --- |
 | CLI | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存；无服务时持久）、Queries（Remote 或 Local） | — |
 | 工作区服务主进程 | Workspace、Git、Cache 的持久独占写入、工作区投影、RPC 与 HTTP 服务、计算与操作进程的监督；Publication 只在清理作用域中、关闭持久库之后提供 | 领域计算 |
-| 计算进程 | Workspace、Sources、Cache（内存解析与主进程交来的只读快照）、Queries.Local；RPC 经标准输入输出，日志只写标准错误 | Publication、持久 Cache、OwnedProcess 之外的子进程 |
+| 计算进程 | Workspace、Sources、Cache（内存解析与主进程交来的只读快照）、Queries.Local；RPC 经标准输入输出，结构以 JSON 编码、入口按计算请求 Schema 严格解码，来源原文以二进制字节帧传输；日志只写标准错误 | Publication、持久 Cache、OwnedProcess 之外的子进程 |
 | 操作进程 | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存）、远端读取；发布后经 `feedback-merge` 更新远端观察 | 持久 Cache |
 | 面板 | RPC 客户端与终端渲染 | 文件与缓存 |
 
@@ -147,7 +147,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | 需要 | Effect 能力 | Concord 补齐 |
 | --- | --- | --- |
 | 资源生命周期 | Scope、`Effect.acquireRelease`、`Layer.effect` | — |
-| 工作区服务协议 | `unstable/rpc`（请求关联、具名错误、取消、结果流）经 `unstable/socket` | 序列化采用 `RpcSerialization.layerSchemaBinary`，字节字段以原生二进制传输，由真实往返与边界大小测试验收，不接受 Base64；领域 Schema 显式拒绝额外字段；单帧、累计、连接、在途与发送字节的准入由传输适配层执行，`maxBufferSize` 只限不完整消息；`feedback-merge` 以 begin、append 与 commit 分块提交，commit 原子生效 |
+| 工作区服务协议 | `unstable/rpc`（请求关联、具名错误、取消、结果流）经 `unstable/socket` | 客户端协议的序列化采用 `RpcSerialization.layerSchemaBinary`（计算进程的内部 RPC 除外：固定版本的 SchemaBinary 无法编译含共享字面量前缀的元组联合，结构改用 JSON），字节字段以原生二进制传输，由真实往返与边界大小测试验收，不接受 Base64；领域 Schema 显式拒绝额外字段；单帧、累计、连接、在途与发送字节的准入由传输适配层执行，`maxBufferSize` 只限不完整消息；`feedback-merge` 以 begin、append 与 commit 分块提交，commit 原子生效 |
 | 当前状态与订阅 | SubscriptionRef | 每个订阅只保留最新状态，慢订阅的旧状态被替换，计入发送预算 |
 | 合并监听事件与补偿刷新 | Stream 与 Schedule | 去抖有最长等待（两秒），扫描期间只合并一次后续刷新 |
 | 串行维护 | Semaphore | 只在进程内互斥；服务锁、publication 与超时各自裁决 |
