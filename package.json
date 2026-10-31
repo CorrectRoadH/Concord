@@ -34,7 +34,10 @@
     "@effect/platform-node-shared": "4.0.0-rc.112",
     "effect": "4.0.0-rc.112",
     "esbuild": "0.28.2",
+    "ink": "8.0.0",
     "mdast-util-from-markdown": "2.0.3",
+    "react": "19.3.0",
+    "string-width": "8.3.0",
     "tsx": "4.23.12",
     "typescript": "7.1.0-beta",
     "yaml": "2.9.0"
@@ -71,7 +74,6 @@
     "p5.brush": "2.2.3",
     "p5.sound": "0.4.1",
     "radix-ui": "1.6.7",
-    "react": "19.3.0",
     "react-diff-view": "3.3.3",
     "react-dom": "19.3.0",
     "react-grab": "0.2.0",
