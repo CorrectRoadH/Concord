@@ -1,13 +1,35 @@
 import assert from 'node:assert/strict';
-import { rmSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import test from 'node:test';
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Schema } from 'effect';
 import { executeQuery, type QueryRequest } from '../../src/app/index.js';
 import { CacheSnapshot } from '../../src/base/cache/index.js';
 import { computationLayer } from '../../src/entry/server/index.js';
 import { createConsumer } from '../support/consumer.js';
 import { createDocument } from '../support/operations.js';
 import { LocalRepository, runApplication } from '../support/repository.js';
+
+// @feature docs/feature/local-data-engine/README.md
+// @issue docs/issues/workspace-server-unimplemented.md
+test('fresh computation requests retain the annotation parser cache owned by the long-lived process', async () => {
+  const root = createConsumer();
+  const repo = new LocalRepository(root);
+  try { createDocument(repo, 'feature', { id: 'local-sdlc', title: 'Local SDLC' }); }
+  finally { repo.close(); }
+  mkdirSync(join(root, 'test'), { recursive: true });
+  writeFileSync(join(root, 'test/case.test.ts'), '// @feature docs/feature/local-sdlc/README.md\nexport {};\n');
+  const status = Schema.Struct({ value: Schema.Struct({ cache: Schema.Struct({ status: Schema.String }) }) });
+  try {
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const context = yield* Layer.build(computationLayer);
+      const query = () => executeQuery(root, { name: 'test.list', input: {} }).pipe(Effect.provide(CacheSnapshot.layer()), Effect.provideContext(context));
+      yield* query();
+      const second = yield* query();
+      assert.equal(Schema.decodeUnknownSync(status)(second).value.cache.status, 'hit');
+    })));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
