@@ -7,8 +7,10 @@ import type { AnnotatedCase, Repository } from '../model/index.js';
 export function unlinkedTests(repo: Repository, markers: readonly AnnotatedCase[]) {
   const limitations: string[] = [];
   if (!repo.config.testAdapters?.length) return { limitations: ['Run test discover with a configured adapter before inspecting unlinked native tests.'] };
-  const observations = readNativeObservations(repo);
-  if (!observations.length) return { limitations: ['Run test discover to collect the native test inventory before inspecting unlinked tests.'] };
+  const observed = readNativeObservations(repo);
+  const observations = observed.filter(item => item.observation.value.capabilities.realCollection);
+  for (const item of observed.filter(item => !item.observation.value.capabilities.realCollection)) limitations.push(`${item.adapterId}: the adapter did not collect a real native test inventory.`);
+  if (!observations.length) return { limitations: [...limitations, 'Run test discover with a capable adapter to collect the native test inventory before inspecting unlinked tests.'] };
   const missing = repo.config.testAdapters.filter(adapter => !observations.some(item => item.adapterId === adapter.id));
   if (missing.length) limitations.push(`Run test discover to collect missing adapter inventories: ${missing.map(adapter => adapter.id).join(', ')}.`);
   const stale = observations.some(item => !item.observation.current);
@@ -16,7 +18,6 @@ export function unlinkedTests(repo: Repository, markers: readonly AnnotatedCase[
   const tests: { path: string; nativeId: string; line?: number }[] = [];
   for (const { adapterId, observation } of observations) {
     const manifest = observation.value;
-    if (!manifest.capabilities.realCollection) limitations.push(`${adapterId}: the adapter did not collect a real native test inventory.`);
     const covered = new Set<string>();
     if (observation.current) {
       for (const marker of markers) {

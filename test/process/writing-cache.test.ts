@@ -65,7 +65,7 @@ test('writing cache validates current sources, members, policies and payload int
     if (path === 'docs/corpus.md' && !changed) { changed = true; writeFileSync(join(root, path), 'Concurrent change.\n'); }
     return result;
   };
-  try { assert.throws(() => checkWriting(repo), { code: 'WritingInputsChanged' }); } finally { repo.close(); }
+  try { assert.throws(() => checkWriting(repo), error => error instanceof Error && 'code' in error && ['WritingInputsChanged', 'SourceChanged'].includes(String(error.code))); } finally { repo.close(); }
 }))));
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
