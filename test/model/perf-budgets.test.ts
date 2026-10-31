@@ -39,7 +39,7 @@ test('median handles unsorted odd and even samples without mutating input', () =
 })));
 
 // @feature docs/feature/local-sdlc/README.md
-test('samples above twice p50 invalidate candidate and baseline verdicts', () => Effect.runPromise(Effect.sync(() => {
+test('samples above twice p50 and at least twenty milliseconds above it invalidate candidate and baseline verdicts', () => Effect.runPromise(Effect.sync(() => {
   const samples = [100, 201, 100];
   const candidate = summarize(samples);
   assert.deepEqual(candidate, { samples, p50: 100, max: 201, valid: false });
@@ -54,6 +54,15 @@ test('samples above twice p50 invalidate candidate and baseline verdicts', () =>
   const invalidBaseline = judge({ command: 'concord check', candidate: boundary, baseline: candidate, reference: false });
   assert.equal(invalidBaseline.pass, false);
   assert.ok(invalidBaseline.reasons.length > 0);
+})));
+
+// @feature docs/feature/local-sdlc/README.md
+test('millisecond jitter stays valid while larger outliers and the twenty millisecond boundary fail', () => Effect.runPromise(Effect.sync(() => {
+  assert.deepEqual(summarize([3, 3, 19]), { samples: [3, 3, 19], p50: 3, max: 19, valid: true });
+  assert.equal(judge({ command: 'millisecond-response', candidate: summarize([3, 3, 19]), reference: false }).pass, true);
+  assert.equal(summarize([100, 100, 250]).valid, false);
+  assert.equal(summarize([3, 3, 23]).valid, false, 'a twenty millisecond excess is inclusive');
+  assert.equal(summarize([3, 3, 22.999]).valid, true);
 })));
 
 // @feature docs/feature/local-sdlc/README.md

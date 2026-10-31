@@ -13,15 +13,15 @@ export function median(samples: readonly number[]): number {
 }
 export function summarize(samples: readonly number[]): GroupStats {
   const p50 = median(samples), max = Math.max(...samples);
-  return { samples: [...samples], p50, max, valid: max <= 2 * p50 };
+  return { samples: [...samples], p50, max, valid: max <= 2 * p50 || max - p50 < 20 };
 }
 export function judge(input: {
   readonly command: string; readonly candidate: GroupStats; readonly baseline?: GroupStats;
   readonly limitMs?: number; readonly limitKind?: 'p50' | 'max'; readonly reference: boolean;
 }): GroupVerdict {
   const reasons: string[] = [];
-  if (!input.candidate.valid) reasons.push('candidate samples invalid: max exceeds 2x p50');
-  if (input.baseline && !input.baseline.valid) reasons.push('baseline samples invalid: max exceeds 2x p50');
+  if (!input.candidate.valid) reasons.push('candidate samples invalid: max exceeds 2x p50 and exceeds p50 by at least 20ms');
+  if (input.baseline && !input.baseline.valid) reasons.push('baseline samples invalid: max exceeds 2x p50 and exceeds p50 by at least 20ms');
   const rawRegression = input.baseline ? (input.baseline.p50 === 0 ? (input.candidate.p50 === 0 ? 0 : Infinity) : input.candidate.p50 / input.baseline.p50 - 1) : undefined;
   const regression = rawRegression === undefined || !Number.isFinite(rawRegression) ? undefined : Math.round(rawRegression * 100) / 100;
   if (input.baseline && input.candidate.p50 > input.baseline.p50 * 1.2) reasons.push(`p50 regressed ${Math.round(rawRegression! * 100)}% against baseline`);
