@@ -49,7 +49,7 @@
 - 不同语言章节下带 `{#reject-token}` 的顶层有序项可导航；整个 Use Case 与已有标题的关联保留并分组展示；缺失 ID 报告引用 finding。
 - 改步骤文字、插入或移动其它项，步骤引用不变，只有 ordinal 变化。三个步骤两个有测试时列出未关联步骤，`check` 不失败；没有步骤的 Use Case 不产生 finding。
 - 无序项、嵌套项、附页中的步骤语法报告 `InvalidStepPosition`，代码示例中的 `{#id}` 不生成步骤；未标记的验收列表不进入步骤视图。
-- 直接调用样本观察到同一步骤声明时为 `observed`、level 为 `step`；另一 case 导入的声明、辅助函数转调或只有其它 Feature 声明时不冒充该 case 的行为证明；打包 CLI 子进程、HTTP 边界、没有分析器或达到闭包上限时为 `not-observed` 并给出原因。
+- 直接调用样本观察到同一步骤声明时为 `observed`、level 为 `step`；另一 case 导入的声明、辅助函数转调或只有其它 Feature 声明时不冒充该 case 的行为证明；构建 CLI 子进程、HTTP 边界、没有分析器或达到闭包上限时为 `not-observed` 并给出原因。
 - 冷、热、损坏与清空缓存时 `check` 的当前关系、finding、退出码与 `complete` 一致。错误原生标签且没有 Concord 标记时不产生关联。
 - 带 `@name` 的标记从文件改为步骤目标时 ID 保持。
 - `format` 只给缺失项补 `step-N`；删除最大序号后不分配被标题或旧引用占用的值。`rename-step` 改写测试、代码与文档链接并列出受影响 case；规划后修改任一输入时零写入；在首个文件发布后和 committed journal 持久化后中断，由第二个 CLI 恢复时分别回滚与保留；受管引用阻断时零写入。

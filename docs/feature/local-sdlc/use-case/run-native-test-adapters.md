@@ -30,7 +30,7 @@
 - 部分缺失、跳过、待办、未运行、重复或额外 ID 为 invalid；fixture、parser 与基础设施失败不是 red。重试同一项、JUnit 名称碰撞或只有退出码时不压缩成单次 passed。
 - Go 列举只作顶层发现，动态子项需要真实运行观察，执行使用 `-count=1`。跨 Cargo binary 或测试项目的参数组拆成多个 Invocation，ID 含 package、target 与 binary。
 - 收集中修改 fixture、配置、lockfile 或增加测试成员时不发布当前清单；`node adapter.js` 的脚本变化使旧观察不能用于选择。超时后进程残留、取消或输出截断为 invalid，清理未知阻断发布。symlink、特殊文件、目录逃逸、旧报告或超预算报告以 `ReportUnsafe` 拒绝。
-- 对固定版本的真实框架，在隔离 Git 消费者中验证打包 CLI 的收集、选择、逐项报告和进程终结，只对外部程序边界使用 fake。未经固定版本验收的框架组合不宣称支持，能力显示 false 与具名 gap。
+- 对固定版本的真实框架，在隔离 Git 消费者中验证构建 CLI 的收集、选择、逐项报告和进程终结，只对外部程序边界使用 fake。未经固定版本验收的框架组合不宣称支持，能力显示 false 与具名 gap。
 
 ## 协议
 
