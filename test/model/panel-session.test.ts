@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-verifies docs/feature/herdr-panel/architecture.md#invariants
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PassThrough } from 'node:stream';
@@ -25,6 +23,7 @@ function terminal() {
 }
 const generation: PanelGeneration = { model: workspaceDisplay(panelSnapshot), concepts: new Map() };
 
+// @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
 test('actual panel keyboard session reads by expected digest, resizes, opens a port, and removes input/resize listeners', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const tty = terminal();
   const baseline = { input: tty.input.listenerCount('readable'), resize: tty.output.listenerCount('resize') };
@@ -54,6 +53,7 @@ test('actual panel keyboard session reads by expected digest, resizes, opens a p
   assert.equal(tty.input.isRaw, false);
 }))));
 
+// @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
 test('panel scope interrupts pending read and browser effects and releases rendering resources', { timeout: 10000 }, () => Effect.runPromise(Effect.gen(function*() {
   const tty = terminal(); let readStopped = false, openStopped = false;
   let readReady!: () => void, openReady!: () => void;
@@ -79,6 +79,7 @@ test('panel scope interrupts pending read and browser effects and releases rende
   assert.equal(tty.output.listenerCount('resize'), 0);
 })));
 
+// @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
 test('real read port rejects mismatched body and reuses path/digest cache across generation updates', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const tty = terminal(), reads: string[] = [];
   let readReady!: () => void;

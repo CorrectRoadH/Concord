@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-verifies docs/feature/herdr-panel/architecture.md#渲染
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Effect } from 'effect';
@@ -8,6 +6,7 @@ import * as webDisplay from '../../web/lib/workspace-display.js';
 import { projectDocPages } from '../../web/lib/project-docs.js';
 import { panelSnapshot, feature, featurePath, useCasePath, supportPath } from '../support/panel-fixture.js';
 
+// @feature docs/feature/herdr-panel/README.md
 test('Web and panel derive the same fixed generation, preserving ordered relation groups', () => Effect.runSync(Effect.sync(() => {
   const model = workspaceDisplay(panelSnapshot);
   assert.deepEqual(model, webDisplay.workspaceDisplay(panelSnapshot));
@@ -25,6 +24,7 @@ test('Web and panel derive the same fixed generation, preserving ordered relatio
   assert.deepEqual(model.pages.map(page => page.path), ['docs/README.md', 'docs/architecture.md']);
 })));
 
+// @feature docs/feature/herdr-panel/README.md
 test('extraction preserves Web relation variants rather than broadening matches', () => Effect.runSync(Effect.sync(() => {
   const child = panelSnapshot.documents[1]!;
   assert.equal(child.metadata.kind, 'use-case');

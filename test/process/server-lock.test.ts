@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-verifies docs/feature/local-data-engine/architecture.md#启动与裁决
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { chmodSync, linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
@@ -41,6 +39,7 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited = once(child, 'exit'); child.kill(signal); await exited;
   }
+  // @feature docs/feature/local-data-engine/README.md
   test('two real processes contend; OS releases service lock after owner death', () => Effect.runPromise(Effect.tryPromise(async () => {
     const f = fixture(); let child: ChildProcess | undefined;
     try {
@@ -55,6 +54,7 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
       assert.equal((await Effect.runPromise(acquired.verify.pipe(Effect.flip))).reason, 'closed');
     } finally { if (child) await stop(child, 'SIGKILL'); f.cleanup(); }
   })));
+  // @feature docs/feature/local-data-engine/README.md
   test('deleting and rebuilding server directory invalidates held device/inode', () => Effect.runPromise(Effect.tryPromise(async () => {
     const f = fixture();
     try {
@@ -65,6 +65,7 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
       } finally { await Effect.runPromise(held.close); }
     } finally { f.cleanup(); }
   })));
+  // @feature docs/feature/local-data-engine/README.md
   test('lock replacement, symlinks and multiple links never masquerade as contention', () => Effect.runPromise(Effect.tryPromise(async () => {
     const f = fixture(); const path = join(f.server, 'lock');
     try {
@@ -81,6 +82,7 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
       assert.equal(error._tag, 'ServerLockUnavailable'); if (error._tag === 'ServerLockUnavailable') assert.equal(error.reason, 'type');
     } finally { f.cleanup(); }
   })));
+  // @feature docs/feature/local-data-engine/README.md
   test('permission and I/O errors are distinct; scoped ownership releases on failure', () => Effect.runPromise(Effect.tryPromise(async () => {
     const f = fixture();
     try {

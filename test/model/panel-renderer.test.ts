@@ -1,6 +1,3 @@
-// @concord-file
-// @concord-verifies docs/feature/herdr-panel/use-case/open-side-panel.md#验收
-// @concord-verifies docs/feature/herdr-panel/use-case/read-spec-detail.md#验收
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createElement } from 'react';
@@ -17,6 +14,7 @@ const bodies = new Map([[featurePath, accepted]]);
 const state: PanelState = { ...initialPanelState, category: 'feature', selected: featurePath, focus: 'body' };
 const props = { model, state, bodies, columns: 100, rows: 26, noColor: true };
 
+// @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
 test('real React terminal renderer changes from two columns at 60 to one at 59 and respects NO_COLOR', () => Effect.runSync(Effect.sync(() => {
   const wide = renderToString(createElement(PanelView, { ...props, columns: 60 }), { columns: 60 });
   const narrow = renderToString(createElement(PanelView, { ...props, columns: 59 }), { columns: 59 });
@@ -31,6 +29,7 @@ test('real React terminal renderer changes from two columns at 60 to one at 59 a
   assert.match(pending, /构建中/u);
 })));
 
+// @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
 test('body digest mismatch retains a previously matched body with its old relationships', () => Effect.runSync(Effect.sync(() => {
   const newer = workspaceDisplay({ ...panelSnapshot, documents: panelSnapshot.documents.map(document => document.path === featurePath ? { ...document, digest: 'feature-2' } : document), codes: [], cases: [] });
   const retained = panelDetail({ ...props, model: newer });
@@ -42,6 +41,7 @@ test('body digest mismatch retains a previously matched body with its old relati
   assert.doesNotMatch(fresh.lines.map(line => line.text).join('\n'), /src\/reader\.ts/u);
 })));
 
+// @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
 test('generation replacement preserves selected paths and per-item scroll, then falls back to owner or first item', () => Effect.runSync(Effect.sync(() => {
   const selected: PanelState = { ...state, selected: useCasePath, scroll: { [useCasePath]: { row: 19, column: 8 } } };
   assert.equal(reconcilePanelState(selected, model, workspaceDisplay(panelSnapshot)), selected);
@@ -54,6 +54,7 @@ test('generation replacement preserves selected paths and per-item scroll, then 
   assert.equal(followed.history.at(-1)?.selected, useCasePath); assert.deepEqual(followed.scroll, selected.scroll);
 })));
 
+// @use-case docs/feature/herdr-panel/use-case/read-spec-detail.md#验收
 test('Markdown AST renders headings, lists, tables, safe links, code and scoped concepts without executing diagrams', () => Effect.runSync(Effect.sync(() => {
   const markdown = markdownToTerminal(panelBody + '\n\n旧规范 specs\n\n[失效](missing.md) [外部](https://example.com)\n\n\u001b[31munsafe', featurePath, new Set(panelItems(model).map(item => item.path)), [concept]);
   const text = markdown.lines.map(line => line.text).join('\n');
@@ -75,6 +76,7 @@ test('Markdown AST renders headings, lists, tables, safe links, code and scoped 
   assert.equal(sliceColumns('😀中文', 2, 4), '中文');
 })));
 
+// @use-case docs/feature/herdr-panel/use-case/read-spec-detail.md#验收
 test('support pages and source ranges remain navigable, diagnostics stay local, missing Herdr cwd is named', () => Effect.runSync(Effect.sync(() => {
   assert.ok(panelItems(model).some(item => item.path === 'docs/feature/reader/architecture.md' && item.parent === featurePath));
   const sourcePath = 'src/reader.ts#L2';
