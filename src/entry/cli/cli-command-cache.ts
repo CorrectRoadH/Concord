@@ -3,6 +3,7 @@
 import { Command } from "effect/unstable/cli";
 import { Effect } from 'effect';
 import { ServerLauncher } from './launchers.js';
+import { rebuildCache } from '../../app/index.js';
 import { cacheStatus, clearCache, previewCacheClear, scanAnnotations } from "../../app/index.js";
 import { ConcordError } from "../../model/index.js";
 import { scanCode } from "../../app/index.js";
@@ -19,13 +20,7 @@ const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear
   })),
   Command.make('rebuild',{},()=>withRepo((repo,s)=>sync(()=>{
     if(s.dryRun) throw new ConcordError('InvalidOption','cache rebuild does not accept --dry-run');
-    const annotations=scanAnnotations(repo,{cache:'rebuild'});
-    const code=scanCode(repo,{cache:'rebuild'});
-    const status=cacheStatus(repo);
-    if(annotations.cache.status !== 'miss' || !['miss','hit'].includes(code.cache.status) || status.status !== 'ready') {
-      throw new ConcordError('CacheRebuildUnavailable','Cache rebuild did not produce readable current projections',{cache:annotations.cache,codeCache:code.cache,cacheStatus:status});
-    }
-    return {...annotations,codeCache:code.cache,cacheStatus:status};
+    return rebuildCache(repo);
   }))),
 ]));
 

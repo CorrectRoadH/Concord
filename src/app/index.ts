@@ -186,3 +186,4 @@ export { runWorkspaceTest } from './workspace-test.js';
 export { clearWorkspaceCache } from './workspace-cache.js';
 export { getWorkspaceRead } from './workspace-read.js';
 export { QueryRefreshRequest } from './query-cache.js';
+export { rebuildCache } from './cache-rebuild.js';

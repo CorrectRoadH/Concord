@@ -8,7 +8,7 @@ import { setConcepts } from '../../src/domain/concepts/index.js';
 import { digest } from '../../src/model/index.js';
 import { checkProject, knowledgeIndex } from '../../src/app/index.js';
 import { checkWriting } from '../../src/domain/writing/index.js';
-import { openHawdb } from '../../src/base/cache/index.js';
+import { openHawdb, PersistentCache } from '../../src/base/cache/index.js';
 import { LocalRepository } from '../support/repository.js';
 import { writeProjectConfig, readProjectConfig } from '../support/support.js';
 import { fixture, useCasePath, researchPath } from '../support/document-cache-fixture.js';
@@ -24,10 +24,15 @@ function cli(root: string, dryRun: boolean, args = ['check']) {
 function parity(root: string) {
   for (const args of [['check'], ['docs', 'check'], ['memory', 'index']]) assert.deepEqual(cli(root, false, args), cli(root, true, args), args.join(' '));
 }
+function existingCacheFixture(): string {
+  const root = fixture(), repo = new LocalRepository(root);
+  try { PersistentCache.repository(repo).prepareWrite({ create: true }); } finally { repo.close(); }
+  return root;
+}
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('volatile document projections preserve current CLI facts across edits, paths and policy inputs', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
+  const root = existingCacheFixture();
   try {
     parity(root); parity(root);
     const before = cli(root, false);
@@ -59,7 +64,7 @@ test('volatile document projections preserve current CLI facts across edits, pat
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
 test('damaged persistent auxiliary caches do not change authoritative document facts', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
+  const root = existingCacheFixture();
   try {
     const expected = cli(root, false);
     const db = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: false });

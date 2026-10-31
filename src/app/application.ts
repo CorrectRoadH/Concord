@@ -19,6 +19,7 @@ import { activateMemory, supersedeMemory } from "../domain/memory/index.js";
 import { decideDesign, checkDesign, formatDesign, deferDesign } from "../domain/designs/index.js";
 import { checkFeedbackConnection, listFeedback, syncFeedback } from "../domain/feedback/index.js";
 import { readFeedbackCache } from "../base/cache/index.js";
+import { rebuildCache } from './cache-rebuild.js';
 import { HawdbFailure } from "../base/cache/index.js";
 import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from "./knowledge.js";
 import { inspectDocuments, inspectDocumentFile, isSourcePath, readSource, setConfig, setMarkdown, setSource } from "./editing.js";
@@ -341,11 +342,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'test.annotate': return annotationSnippet(repo, action.contract, action.issues);
     case 'cache.status': return cacheStatus(repo);
     case 'cache.clear': return dryRun ? previewCacheClear(repo) : clearCache(repo);
-    case 'cache.rebuild': {
-      const annotations = scanAnnotations(repo, { cache: 'rebuild' });
-      const code = scanCode(repo, { cache: 'rebuild' });
-      return { ...annotations, codeCache: code.cache };
-    }
+    case 'cache.rebuild': return rebuildCache(repo);
     case 'check': {
       return checkProject(repo);
     }

@@ -231,6 +231,10 @@ export const collectNativeTests = Effect.fn('collectNativeTests')(function* (rep
   const adapters = repo.config.testAdapters ?? [];
   const files = yield* sync(() => repo.snapshot(() => requestedFiles.length ? [...new Set(requestedFiles)] : [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].filter(file => adapterFor(repo, file) !== undefined && /(?:\.(?:[cm]?[jt]sx?|py|go|rs))$/u.test(file))));
   yield* sync(() => { for (const file of files) { repo.absolute(file); if (!adapterFor(repo, file)) throw new ConcordError('NativeSelectionUnsupported', `No adapter covers ${file}`); } });
+  yield* sync(() => {
+    PersistentCache.repository(repo).prepareWrite({ create: true });
+    closeRepositoryCache(repo);
+  });
   const results = yield* withSession(repo, adapters, session => Effect.gen(function* () {
     return yield* Effect.forEach(adapters.filter(adapter => files.some(file => adapter.include.some(root => inPath(file, root)))), adapter => collectOne(repo, adapter, files.filter(file => adapter.include.some(root => inPath(file, root))), session), { concurrency: 1 });
   }), results => { publishObservations(repo, results); });

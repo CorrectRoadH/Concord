@@ -17,22 +17,23 @@ export function closeRepositoryCache(repo: Repository): void {
 }
 
 /** The outer LocalRepository snapshot closes the handle before its lease. Fake repositories get a short handle. */
-function withPersistentCache<A>(repo: Repository, writable: boolean, use: (database: HawdbDatabase | undefined) => A): A {
+function withPersistentCache<A>(repo: Repository, writable: boolean, use: (database: HawdbDatabase | undefined) => A, create = false): A {
   if (repo.persistentCache === 'off') {
     if (writable) throw new HawdbFailure('HawdbUnavailable', 'Persistent cache access is disabled');
     return use(undefined);
   }
   const path = cacheDatabasePath(repo.privateDir);
   const existing = assertCacheDatabaseSafe(path);
+  if (!existing && !create) return use(undefined);
   if (!writable && (!existing || cacheRootOwnerOnly(path))) return use(undefined);
   let scope = scopes.get(repo);
   if (scope !== undefined && writable && !scope.writable) { closeRepositoryCache(repo); scope = undefined; }
   if (scope === undefined) {
-    if (writable) ensureGenericPrivateDirectorySync(repo.root, repo.privateDir);
+    if (create) ensureGenericPrivateDirectorySync(repo.root, repo.privateDir);
     let database: HawdbDatabase;
-    try { database = openHawdb(path, { readOnly: !writable, create: writable }); }
+    try { database = openHawdb(path, { readOnly: !writable, create }); }
     catch (cause) {
-      if (!writable || !(cause instanceof HawdbFailure) || cause.code !== 'HawdbIncompatible') throw cause;
+      if (!create || !(cause instanceof HawdbFailure) || cause.code !== 'HawdbIncompatible') throw cause;
       const guard = acquireHawdbClearGuard(path);
       try { deleteInspectedCache(inspectCacheClear(repo.privateDir), () => guard.verify()); }
       finally { guard.close(); }
@@ -48,7 +49,7 @@ function withPersistentCache<A>(repo: Repository, writable: boolean, use: (datab
 /** A scoped service value; callers cannot open or retain a native handle. */
 export interface RepositoryCache {
   readonly diagnostic?: () => string | undefined;
-  readonly prepareWrite: () => void;
+  readonly prepareWrite: (options?: { readonly create: boolean }) => void;
   readonly get: (namespace: import('./hawdb-native.js').HawdbNamespace, keys: readonly string[]) => readonly import('./hawdb-native.js').HawdbEntry[];
   readonly scan: (namespace: import('./hawdb-native.js').HawdbNamespace) => readonly import('./hawdb-native.js').HawdbEntry[];
   readonly put: (namespace: import('./hawdb-native.js').HawdbNamespace, rows: readonly import('./hawdb-native.js').HawdbEntry[]) => void;
@@ -65,13 +66,15 @@ export function bindRepositoryCache(repo: Repository, access: RepositoryCache): 
 }
 export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase): RepositoryCache {
   let diagnostic: string | undefined;
+  const missing = () => new HawdbFailure('HawdbUnavailable', 'Persistent cache is absent; start the workspace service or run cache rebuild');
+  const parseNamespace = (namespace: import('./hawdb-native.js').HawdbNamespace) => ['document_parse', 'code_parse', 'git_baseline'].includes(namespace);
   const rebuildable = (namespace: import('./hawdb-native.js').HawdbNamespace, keys?: readonly string[]) => !['feedback_cache', 'query_cache', 'workspace_projection'].includes(namespace) || namespace === 'query_cache' && keys !== undefined && keys.every(key => key.startsWith('writing:'));
   const use = <A>(namespace: import('./hawdb-native.js').HawdbNamespace, keys: readonly string[] | undefined, writable: boolean, operation: (database: HawdbDatabase | undefined) => A): A => {
-    try { return withPersistentCache(repo, writable, operation); }
+    try { return withPersistentCache(repo, writable, database => operation(database ?? (parseNamespace(namespace) ? memory : undefined))); }
     catch (cause) {
       if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || !rebuildable(namespace, keys)) throw cause;
       diagnostic = `HawdbBusy: ${cause.message}`;
-      if (memory && ['document_parse', 'code_parse', 'git_baseline'].includes(namespace)) return operation(memory);
+      if (memory && parseNamespace(namespace)) return operation(memory);
       // Derived rows have no memory table. Their existing unavailable-cache
       // path recomputes from source while retaining the busy diagnostic.
       throw cause;
@@ -79,10 +82,10 @@ export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase): R
   };
   return {
     diagnostic: () => diagnostic,
-    prepareWrite: () => withPersistentCache(repo, true, () => {}),
+    prepareWrite: options => withPersistentCache(repo, true, database => { if (!database) throw missing(); }, options?.create),
     get: (namespace, keys) => use(namespace, keys, false, database => database?.get(namespace, keys) ?? []),
     scan: namespace => use(namespace, undefined, false, database => database?.scan(namespace) ?? []),
-    put: (namespace, rows) => use(namespace, rows.map(row => row.key), true, database => database!.put(namespace, rows)),
+    put: (namespace, rows) => use(namespace, rows.map(row => row.key), true, database => { if (!database) throw missing(); database.put(namespace, rows); }),
     namespaces: () => withPersistentCache(repo, false, database => database?.namespaces() ?? []),
   };
 }

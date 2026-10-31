@@ -10,7 +10,7 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.js";
-import { acquireHawdbClearGuard, hawdbIdentity, openHawdb } from "../../src/base/cache/index.js";
+import { acquireHawdbClearGuard, hawdbIdentity, openHawdb, PersistentCache } from "../../src/base/cache/index.js";
 import { getWorkspaceSnapshot } from "../../src/app/index.js";
 import { deleteInspectedCache, inspectCacheClear } from "../../src/base/cache/index.js";
 import { LocalRepository } from "../support/repository.js";
@@ -116,14 +116,17 @@ test('clear unlinks internal aliases before native locks and can retry after det
 });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh Git consumers create a private cache on check and hit it on the next command', () => runApplication(Effect.sync(() => {
+test('fresh Git consumers check without creating a cache and explicit rebuild enables persistent hits', () => runApplication(Effect.sync(() => {
   const root = freshConsumer();
   try {
     const cold = cli(root, 'check');
     const first = Schema.decodeUnknownSync(Schema.fromJsonString(ScanReport))(cold.stdout);
-    assert.equal(first.cache.status, 'miss', cold.stdout + cold.stderr);
-    assert.equal(first.codeCache.status, 'miss');
+    assert.equal(first.cache.status, 'unavailable', cold.stdout + cold.stderr);
+    assert.equal(first.codeCache.status, 'unavailable');
     const directory = join(root, '.git/concord');
+    assert.equal(existsSync(join(directory, 'cache.hawdb')), false);
+    const rebuilt = cli(root, 'cache', 'rebuild');
+    assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     assert.equal(statSync(directory).mode & 0o777, 0o700);
     assert.equal(existsSync(join(directory, 'cache.hawdb/owner.hawdb.lock')), true);
     const warm = cli(root, 'check');
@@ -199,7 +202,7 @@ test('cache-enabled workspace recovers an interrupted WAL without clearing commi
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
     const path = join(repo.privateDir, 'cache.hawdb');
-    try { initialize(repo, false, { testRoots: [] }); scanAnnotations(repo); } finally { repo.close(); }
+    try { initialize(repo, false, { testRoots: [] }); PersistentCache.repository(repo).prepareWrite({ create: true }); scanAnnotations(repo); } finally { repo.close(); }
     const child = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), 'test/fixtures/hawdb-interrupted.ts', path], { encoding: 'utf8', timeout: 15000 });
     assert.equal(child.signal, 'SIGKILL', child.stderr);
     const interrupted = cacheDiskSnapshot(path);
@@ -225,6 +228,7 @@ test('large cache directories remain readable and clearable without deleting the
     const repo = new LocalRepository(root, { initialize: true });
     try {
       initialize(repo);
+      PersistentCache.repository(repo).prepareWrite({ create: true });
       assert.equal(scanAnnotations(repo).cache.status, 'miss');
       const path = join(repo.privateDir, 'cache.hawdb');
       const inode = statSync(join(path, 'owner.hawdb.lock')).ino;
@@ -236,6 +240,7 @@ test('large cache directories remain readable and clearable without deleting the
       assert.notEqual(cacheStatus(repo).status, 'unavailable');
       assert.equal(clearCache(repo).status, 'cleared');
       assert.equal(statSync(join(path, 'owner.hawdb.lock')).ino, inode);
+      PersistentCache.repository(repo).prepareWrite({ create: true });
       assert.equal(scanAnnotations(repo).cache.status, 'miss');
       assert.equal(scanAnnotations(repo).cache.status, 'hit');
     } finally { repo.close(); }
@@ -255,6 +260,7 @@ test('clear keeps the HawDB lock inode and removes only HawDB cache data', () =>
       const path = join(repo.privateDir, 'cache.hawdb');
       assert.equal(cacheStatus(repo).status, 'empty');
       assert.equal(existsSync(path), false);
+      PersistentCache.repository(repo).prepareWrite({ create: true });
       assert.equal(scanAnnotations(repo).cache.status, 'miss');
       const lock = join(path, 'owner.hawdb.lock');
       const inode = statSync(lock).ino;
@@ -306,6 +312,7 @@ test('failed native close still releases the outer repository lease', () => {
     const unsafe = join(repo.privateDir, 'cache.hawdb', 'unexpected-link');
     try {
       assert.throws(() => repo.snapshot(() => {
+        PersistentCache.repository(repo).prepareWrite({ create: true });
         scanAnnotations(repo);
         symlinkSync(join(root, 'absent'), unsafe);
       }), /UnsafePath|symlink/u);

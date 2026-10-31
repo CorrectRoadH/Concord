@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { Effect } from 'effect';
 import { cacheStatus, clearCache } from "../../src/domain/tests/index.js";
 import { scanCode } from "../../src/domain/code/index.js";
-import { openHawdb } from "../../src/base/cache/index.js";
+import { openHawdb, PersistentCache } from "../../src/base/cache/index.js";
 
 import { LocalRepository } from "../support/repository.js";
 
@@ -18,13 +18,13 @@ import { traceGaps } from "../../src/app/index.js";
 
 const contract = 'docs/feature/local-sdlc/use-case/trace-code-ownership.md';
 
-function consumer(): string {
+function consumer(existingCache = true): string {
   const root = mkdtempSync(join(tmpdir(), 'concord-code-cache-'));
   execFileSync('git', ['init', '-q', root]);
   execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
   execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord test']);
   const initial = new LocalRepository(root, { initialize: true });
-  try { initialize(initial, false, { sourceRoots: ['src'] }); } finally { initial.close(); }
+  try { initialize(initial, false, { sourceRoots: ['src'] }); if (existingCache) PersistentCache.repository(initial).prepareWrite({ create: true }); } finally { initial.close(); }
   return root;
 }
 function write(root: string, path: string, contents: string): void {
@@ -35,7 +35,7 @@ function marked(symbol: string): string {
 }
 function scan(root: string, options?: Parameters<typeof scanCode>[1]) {
   const repo = new LocalRepository(root);
-  try { return options === undefined ? scanCode(repo) : scanCode(repo, options); }
+  try { if (options?.cache === 'rebuild') PersistentCache.repository(repo).prepareWrite({ create: true }); return options === undefined ? scanCode(repo) : scanCode(repo, options); }
   finally { repo.close(); }
 }
 function open<A>(root: string, use: (repo: LocalRepository) => A): A {
@@ -94,7 +94,7 @@ test('caches code declaration parses per file and repairs a corrupt row', () => 
 
 // @use-case docs/feature/local-sdlc/use-case/trace-code-ownership.md
 test('cache off does not create the code projection, and rebuild rewrites it', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
+  const root = consumer(false);
   try {
     write(root, 'src/alpha.ts', marked('alpha'));
     const disabled = scan(root, { cache: 'off' });

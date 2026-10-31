@@ -9,14 +9,14 @@ import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.js";
 
 import { cacheStatus, clearCache, scanAnnotations } from "../../src/domain/tests/index.js";
-import { openHawdb } from "../../src/base/cache/index.js";
+import { openHawdb, PersistentCache } from "../../src/base/cache/index.js";
 
 function consumer() {
   const root = mkdtempSync(join(tmpdir(), 'concord-annotations-'));
   execFileSync('git', ['init', '-q', root]);
   execFileSync('git', ['-C', root, 'config', 'user.email', 'test@example.invalid']);
   execFileSync('git', ['-C', root, 'config', 'user.name', 'Concord test']);
-  const initial = new LocalRepository(root, { initialize: true }); initialize(initial); initial.close();
+  const initial = new LocalRepository(root, { initialize: true }); initialize(initial); PersistentCache.repository(initial).prepareWrite({ create: true }); initial.close();
   return root;
 }
 function write(root: string, relative: string, contents: string) { const path = join(root, relative); mkdirSync(join(path, ".."), { recursive: true }); writeFileSync(path, contents); }
@@ -116,6 +116,8 @@ const fake = ` + '`ordinary text: @feature template-fake`' + `;
     assert.equal(recovered.cache.status, 'unavailable');
     assert.equal(recovered.cases.length, 3);
     rmSync(path);
+    const rebuild = new LocalRepository(root);
+    try { PersistentCache.repository(rebuild).prepareWrite({ create: true }); } finally { rebuild.close(); }
     const source = `import { test } from 'node:test';\n// @feature docs/feature/a/README.md\ntest('valid', () => {});\n`;
     write(root, 'test/findings.test.ts', source);
     const seeded = scan(root); assert.equal(seeded.cases.length, 1);

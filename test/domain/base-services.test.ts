@@ -121,6 +121,7 @@ test('PersistentCache reuses nested source ownership and releases the native han
       const workspace = yield* Workspace, sources = yield* Sources;
       const repo = yield* workspace.openRead(root, { access: 'read' }); captured = repo;
       yield* sources.snapshot(repo, Effect.sync(() => {
+        PersistentCache.repository(repo).prepareWrite({ create: true });
         PersistentCache.repository(repo).put('code_cache', [{ key: 'scope-test', payload: 'value' }]);
         repo.snapshot(() => assert.deepEqual(PersistentCache.repository(repo).get('code_cache', ['scope-test']), [{ key: 'scope-test', payload: 'value' }]));
         assert.throws(() => openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: true, create: false }), { code: 'HawdbBusy' });

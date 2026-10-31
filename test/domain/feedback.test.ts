@@ -14,7 +14,7 @@ import { checkDocuments, loadDocuments, setAuthor } from "../../src/domain/docum
 
 import { closeIssue, linkFeedbackFeature } from "../../src/domain/issues/index.js";
 import { renderDocument } from "../../src/model/index.js";
-import { mergeFeedbackCache, readFeedbackCache } from "../../src/base/cache/index.js";
+import { mergeFeedbackCache, readFeedbackCache, PersistentCache } from "../../src/base/cache/index.js";
 import { openHawdb } from "../../src/base/cache/index.js";
 import { listFeedback, syncFeedback } from "../../src/domain/feedback/index.js";
 import { type RemoteFeedback } from "../../src/model/index.js";
@@ -37,12 +37,13 @@ const issue = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 });
 
-function fixture(): string {
+function fixture(existingCache = true): string {
   const root = createConsumer();
   const repo = new LocalRepository(root);
   try {
     const current = showConfig(repo);
     setConfig(repo, { ...current.config, feedbackConnections: [{ id: 'github-main', provider: 'github', credentialEnv: 'TEST_GITHUB_TOKEN', owner: 'acme', repo: 'project' }] }, current.digest);
+    if (existingCache) PersistentCache.repository(repo).prepareWrite({ create: true });
   } finally { repo.close(); }
   return root;
 }
@@ -101,7 +102,7 @@ test('directed feedback reads recover from a brief cache writer and keep source 
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('feedback workspace stays tolerant and readonly when its cache table or unrelated owners are unavailable', async () => {
-  const root = fixture();
+  const root = fixture(false);
   const uninitialized = mkdtempSync(join(tmpdir(), 'concord-feedback-uninitialized-'));
   try {
     execFileSync('git', ['init', '-q', uninitialized]);
@@ -116,7 +117,7 @@ test('feedback workspace stays tolerant and readonly when its cache table or unr
     assert.equal(existsSync(cache), false, 'workspace polling must not create a feedback cache');
     rmSync(join(root, 'memory', 'broken.md'));
 
-    open(root, repo => scanAnnotations(repo, { cache: 'rebuild' }));
+    open(root, repo => { PersistentCache.repository(repo).prepareWrite({ create: true }); scanAnnotations(repo, { cache: 'rebuild' }); });
     const before = readdirSync(cache).sort();
     open(root, repo => assert.deepEqual(listFeedback(repo).map(item => item.document.metadata.id), ['local-note']));
     assert.deepEqual(readdirSync(cache).sort(), before, 'reading a database without feedback_cache must stay readonly');
@@ -183,7 +184,7 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
 
 // @use-case docs/feature/feedback/use-case/triage-feedback.md
 test('dry-run and failed or stale fetches write neither documents nor cache', async () => {
-  const root = fixture();
+  const root = fixture(false);
   try {
     const configPath = projectConfigPath(root);
     const before = readFileSync(join(root, configPath), 'utf8');

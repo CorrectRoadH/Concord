@@ -123,6 +123,7 @@ function publishObservations(repo: Repository, values: readonly AnalysisObservat
 export const analyzeCode = (repo: LocalRepository) => Effect.gen(function* () {
   const owned = yield* OwnedProcess;
   const run = yield* Effect.acquireRelease(sync(() => {
+    PersistentCache.repository(repo).prepareWrite({ create: true });
     closeRepositoryCache(repo);
     const lease = acquireTraceLeaseSync(repo.root, 'exclusive', 'analysis-start')!;
     try { return beginRun(repo.root); }
