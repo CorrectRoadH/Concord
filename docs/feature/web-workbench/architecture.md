@@ -48,7 +48,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 刷新开始与写入前都重算身份，不一致时丢弃候选并立即以新身份刷新，不记为失败。安装身份在进程内首次计算后不变，配置字节每次重读。
 
-一次刷新最多 60 秒，漂移时不重扫，首次即可发布 `consistent:false` 的结果。`complete = consistent && 扫描完整`，`unknownRelations = !complete`。`buildTrace` 异常仍能形成安全结构与具名 finding 时发布不完整的结果，无结构时不发布。替换遵守[替换规则](../local-data-engine/architecture.md#替换规则)：新的一致结果即使含 finding 也替换旧结果，不一致的候选不替换已有一致结果，只更新 `lastAttempt`。
+一次刷新最多 60 秒，漂移时不重扫。刷新期间观察到来源变化（漂移）的候选一律丢弃：不发布，不标为任何 `sourceDigest`，只更新 `lastAttempt`，一秒后再申请一次刷新。刷新前后摘要相同、但期间观察到变化（`changedPaths` 非空）也算漂移，因为候选可能混合了不同时刻的来源。尚无已接受的结果时，状态保持 building，直到第一次一致的刷新完成；监听最多合并两秒的持续写入，所以总会出现能完成一致刷新的静默窗口。`complete` 表示扫描完整，`unknownRelations = !complete`。`buildTrace` 异常仍能形成安全结构与具名 finding 时发布不完整的结果，无结构时不发布。替换遵守[替换规则](../local-data-engine/architecture.md#替换规则)：新的一致结果即使含 finding 也替换旧结果，不一致的候选不替换已有一致结果，只更新 `lastAttempt`。
 
 ### 持久记录
 
@@ -60,7 +60,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 ### 刷新所有权
 
-`ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移的结果发布后一秒再申请一次。刷新失败不改变已完成写入的回执。
+`ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移的候选被丢弃后一秒再申请一次。刷新失败不改变已完成写入的回执。
 
 服务锁保证每个 worktree 只有一个刷新者。扫描在服务的计算进程中执行，60 秒上限与超时整组终止沿用 `ViewScanManager` 的规则，计算进程只返回候选；主进程确认回复、身份与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
 

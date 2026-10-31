@@ -32,8 +32,7 @@
 | `status` | `ready`、`refresh-failed`（最近刷新失败，展示上一份结果）或 `blocked`（最近刷新因 RecoveryRequired 阻断） |
 | `current` | 恒为 `false`；结果不表示当前来源有效，不授权写入、check、fixed、恢复或证据裁决 |
 | `builtAt`、`builtFrom`、`builtUntil` | 构建区间 |
-| `consistent` | 构建期间来源无漂移 |
-| `complete` | `consistent` 且扫描完整、无 finding |
+| `complete` | 扫描完整、无 finding |
 | `changedPaths` | 构建期间变化的文件或目录，排序去重；`.` 表示影响范围未知 |
 | `unknownRelations` | 等于 `!complete`；为 true 时缺失关系、零 finding 都表示未知，不表示无问题 |
 | `refreshOwner` | `active` 或 `none`；没有 View 服务时为 `none` |

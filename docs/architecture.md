@@ -198,7 +198,7 @@ flowchart TD
   Web[Web workspace] --> WorkspaceCache[HawDB workspace_projection 结构投影]
   WorkspaceRefresh[工作区服务，每 worktree 一个] --> Scan
   WorkspaceRefresh -->|推送结果变化| Clients[Web 与 CLI]
-  WorkspaceRefresh -->|一致或标注漂移的结果| WorkspaceCache
+  WorkspaceRefresh -->|一致的结果| WorkspaceCache
   Scan --> Sources[当前目录集合与安全文件读取]
   Sources --> Keys[原文摘要与解析器身份]
   Keys --> Cache[有界 HawDB 批量查询]
