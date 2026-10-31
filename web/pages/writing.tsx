@@ -166,10 +166,11 @@ export function WritingPage() {
   }, [api]);
   const loadAggregate = useCallback(async () => {
     const ticket = ++aggregateGeneration.current;
+    const reportTicket = reportGeneration.current;
     try {
       const result = await api.action(action({ action: 'concepts.index' })) as Aggregate;
       if (aggregateGeneration.current !== ticket) return;
-      if (aggregateCurrent.current && aggregateCurrent.current.inputDigest !== result.inputDigest) {
+      if (reportGeneration.current === reportTicket && aggregateCurrent.current && aggregateCurrent.current.inputDigest !== result.inputDigest) {
         setSourceWarning('术语来源已变化；旧检查结果只代表先前输入快照。请审阅来源并重新检查。');
         reportGeneration.current++;
         setReport(null);
