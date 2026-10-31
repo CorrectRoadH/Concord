@@ -9,8 +9,8 @@ export const WorkspaceResponse = Schema.Struct({ ok: Schema.Literal(true), value
   snapshot: Schema.Record(Schema.String, Schema.Json),
   projection: Schema.Struct({
     status: Schema.Literals(['ready', 'refresh-failed', 'blocked']), current: Schema.Literal(false),
-    refreshOwner: Schema.Literals(['active', 'none']), builtAt: Text, builtFrom: Text, builtUntil: Text,
-    consistent: Schema.Boolean, complete: Schema.Boolean, changedPaths: Schema.Array(Text), unknownRelations: Schema.Boolean,
+    sourceDigest: Text, refreshOwner: Schema.Literals(['active', 'none']), builtAt: Text, builtFrom: Text, builtUntil: Text,
+    complete: Schema.Boolean, changedPaths: Schema.Array(Text), unknownRelations: Schema.Boolean,
     lastError: Schema.optionalKey(ProjectionError),
     lastAttempt: Schema.optionalKey(Schema.Struct({ at: Text, complete: Schema.Boolean, changedPaths: Schema.Array(Text) })),
   }),

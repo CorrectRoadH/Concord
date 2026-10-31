@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
+import { WorkspaceResponse } from '../../bench/fixtures/view.js';
 import { loadBudgets, missingOwner, parseBudgetTable } from '../../scripts/perf/budgets.js';
 import { judge, median, summarize } from '../../scripts/perf/stats.js';
 
@@ -115,3 +116,18 @@ test('budget discovery ignores fenced examples and rejects duplicate headings', 
   assert.throws(() => parseBudgetTable(`${table}\n${table}`, '性能预算'));
   assert.throws(() => parseBudgetTable(table.replace('350ms', '999999999999999999999ms'), '性能预算'));
 })));
+
+const decode = Schema.decodeUnknownSync(WorkspaceResponse, { onExcessProperty: 'error' });
+const response = { ok: true, value: { snapshot: {}, projection: {
+  sourceDigest: 'sha256:fixture', status: 'ready', current: false, refreshOwner: 'active',
+  builtAt: '2026-10-31T00:00:00.000Z', builtFrom: '2026-10-31T00:00:00.000Z', builtUntil: '2026-10-31T00:00:00.000Z',
+  complete: true, changedPaths: [], unknownRelations: false,
+} } };
+
+// @feature docs/feature/web-workbench/README.md
+test('performance workspace response requires the current source identity and rejects retired consistency fields', () => {
+  assert.equal(decode(response).value.projection.sourceDigest, 'sha256:fixture');
+  const { sourceDigest: _sourceDigest, ...missingIdentity } = response.value.projection;
+  assert.throws(() => decode({ ...response, value: { ...response.value, projection: missingIdentity } }));
+  assert.throws(() => decode({ ...response, value: { ...response.value, projection: { ...response.value.projection, consistent: true } } }));
+});
