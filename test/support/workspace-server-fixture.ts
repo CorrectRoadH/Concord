@@ -1,15 +1,9 @@
-import assert from 'node:assert/strict';
-import { execFileSync, spawn, spawnSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { pathToFileURL } from 'node:url';
-import test from 'node:test';
-import { Effect, Schema, Stream } from 'effect';
-import { installationRootForBin } from '../../src/base/installation/index.js';
+import { Schema } from 'effect';
 import { installedConcordCli, pollUntil } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
-import { startViewServer } from '../e2e/server.js';
-import { installConcord, packConcord } from '../support/installed-package.js';
 
 const Record = Schema.Struct({ token: Schema.String, pid: Schema.Int, installation: Schema.String, socket: Schema.Struct({ path: Schema.String }) });
 export const recordPath = (root: string) => join(root, '.git/concord/server/current.json');
@@ -27,7 +21,8 @@ export const command = (root: string, args: readonly string[], entry = installed
   child.stdout.on('data', data => { stdout += String(data); }); child.stderr.on('data', data => { stderr += String(data); });
   child.once('error', reject); child.once('close', status => resolve({ status, stdout, stderr }));
 });
-export const rpcModule = async () => await import(pathToFileURL(join(installationRootForBin(installedConcordCli()), 'dist/entry/server/index.js')).href) as typeof import('../../src/entry/server/index.js');
+// The peer uses the source protocol; the system under test is the installed service.
+export const rpcModule = () => import('../../src/entry/server/index.js');
 export const stop = async (root: string) => {
   if (existsSync(recordPath(root))) await command(root, ['server', 'stop']);
   await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'service record removed after confirmed cleanup', timeoutMs: 8000 });

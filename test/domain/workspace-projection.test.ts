@@ -29,6 +29,29 @@ import { installConcord, packConcord } from '../support/installed-package.js';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.js';
+import { PersistentCache } from '../../src/base/cache/index.js';
+import { storeWorkspaceProjection as publishProjection, readWorkspaceProjection as readPublishedProjection } from '../../src/app/index.js';
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('a completed workspace scan survives brief contention at publication', async () => {
+  const root = fixture();
+  try {
+    const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
+    const candidate = makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString());
+    const context = workspaceProjectionContext(root);
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const owner = yield* PersistentCache.owner(context.privateDir);
+      yield* owner.open;
+      assert.throws(() => openHawdb(cacheDatabasePath(context.privateDir), { readOnly: false, create: true }), { code: 'HawdbBusy' });
+      let writes = 0;
+      const service = { ...owner.service, update: (...args: Parameters<typeof owner.service.update>) => { writes++; return owner.service.update(...args); } };
+      yield* publishProjection(context, candidate).pipe(Effect.provideService(PersistentCache, service));
+      const published = yield* readPublishedProjection(context).pipe(Effect.provideService(PersistentCache, owner.service));
+      assert.equal(published.projection.builtAt, candidate.builtAt);
+      assert.equal(writes, 1, 'the persistent owner publishes the completed candidate exactly once');
+    })).pipe(Effect.provide(PersistentCache.layer)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a drifted candidate retains the last consistent generation and reports the attempt without failing', async () => {
