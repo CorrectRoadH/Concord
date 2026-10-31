@@ -5,7 +5,7 @@ import type { Consumer } from '../../scripts/perf/consumer.js';
 import { io, mustRun, PerfError } from '../../scripts/perf/process.js';
 
 export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name: string, entry: string, workDir: string, smoke = false, source?: { readonly repository: string; readonly commit: string }) {
-  if (!['minimal', 'smoke', 'web', 'writing', 'writing-scale', 'panel'].includes(name)) return yield* new PerfError({ message: `Unknown fixture: ${name}` });
+  if (!['minimal', 'smoke', 'web', 'writing', 'writing-scale', 'mod'].includes(name)) return yield* new PerfError({ message: `Unknown fixture: ${name}` });
   if (name === 'writing' && !smoke && source) return yield* writingSelfConsumer(entry, workDir, source);
   const root = join(workDir, name);
   yield* io('Create fixture', () => mkdirSync(root));
@@ -18,7 +18,7 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
   const sources = name === 'web' && !smoke ? 1112 : 1;
   const pages = smoke ? 1 : name === 'web' ? 110 : name === 'writing-scale' ? 1000 : 1;
   const fixtureStats = yield* io('Populate fixture', () => {
-    if (name === 'panel' || name === 'smoke') writeFileSync(join(root, 'docs/feature/local-sdlc/README.md'), '# local-sdlc\n\nPANEL_READABLE.\n');
+    if (name === 'smoke') writeFileSync(join(root, 'docs/feature/local-sdlc/README.md'), '# local-sdlc\n\nMOD_READABLE.\n');
     mkdirSync(join(root, 'src'), { recursive: true }); mkdirSync(join(root, 'test'), { recursive: true });
     for (let i = 0; i < sources; i++) writeFileSync(join(root, `src/file-${i}.ts`), `// @concord-file\n// @concord-implements docs/feature/measured/README.md\nexport const value${i} = ${i};\n`);
     writeFileSync(join(root, 'test/read.test.ts'), "// @use-case docs/feature/local-sdlc/use-case/read.md\nimport test from 'node:test';\ntest('read', () => {});\n");

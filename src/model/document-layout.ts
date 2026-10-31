@@ -14,7 +14,7 @@ export type PackageKind = 'feature' | 'roadmap' | 'engineering';
 export function defaultDocumentPath(kind: Exclude<DocumentKind, 'memory'>, name: string, featurePath?: string): string {
   if (!isDocumentName(name)) throw new Error(`Unsafe document name: ${name}`);
   if (kind === 'use-case') {
-    if (featurePath === undefined || !validPackagePath('feature', featurePath)) throw new Error('Expected a Feature owner path');
+    if (featurePath === undefined || (!validPackagePath('feature', featurePath) && !validPackagePath('engineering', featurePath))) throw new Error('Expected a Feature or Engineering owner path');
     return `${featurePath.slice(0, -'README.md'.length)}use-case/${name}.md`;
   }
   return kind === 'issue' || kind === 'design' ? `docs/${kind === 'issue' ? 'issues' : 'design'}/${name}.md` : `docs/${kind}/${name}/README.md`;
@@ -34,7 +34,7 @@ export function validLeafPath(root: string, path: string): boolean {
 export function documentPlacementError(kind: DocumentKind, path: string, featurePath?: string): string | undefined {
   if (kind === 'memory') return undefined;
   if (kind === 'use-case') {
-    if (featurePath === undefined || !validPackagePath('feature', featurePath)) return 'Use Case requires an existing canonical Feature owner';
+    if (featurePath === undefined || (!validPackagePath('feature', featurePath) && !validPackagePath('engineering', featurePath))) return 'Use Case requires an existing canonical Feature or Engineering owner';
     const root = `${featurePath.slice(0, -'/README.md'.length)}/use-case`;
     return validLeafPath(root, path) ? undefined : `Expected a safe Unicode .md filename directly below ${root}; the filename is independent of the document ID`;
   }

@@ -79,8 +79,8 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
     for (const [target, relation] of [[item.contract, 'contract'], ...item.issues.map(r => [r, 'issue'])] as const) {
       if (target === undefined || relation === undefined) continue;
       try {
-        const owner = references.resolve(target, relation === 'contract' ? ['feature', 'use-case'] : ['issue']);
-        if (relation === 'contract' && owner.metadata.kind !== item.contractKind) throw new ConcordError('ContractKindMismatch', `@${item.contractKind} must point to a ${item.contractKind} contract`);
+        const owner = references.resolve(target, relation === 'contract' ? ['feature', 'use-case', 'engineering'] : ['issue']);
+        if (relation === 'contract' && (item.contractKind === 'feature' ? !['feature', 'engineering'].includes(owner.metadata.kind) : owner.metadata.kind !== 'use-case')) throw new ConcordError('ContractKindMismatch', `@${item.contractKind} must point to a ${item.contractKind} contract`);
         if (item.status === 'active') edges.push({ from: source, to: target, relation });
       } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
     }

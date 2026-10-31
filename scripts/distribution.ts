@@ -119,6 +119,9 @@ const prepare = Effect.gen(function*() {
   })), { concurrency: 'unbounded' });
   yield* narrowGeneratedImports();
   yield* buildStartup();
+  yield* Effect.tryPromise(() => bundle({ entryPoints: ['src/entry/herdr-mod/main.ts'], outfile: 'dist/herdr-mod/main.js', bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', external: ['gpui-kit', 'gpui-base', 'herdr'], minify: true }));
+  yield* fs.writeFileString('dist/herdr-mod/mod.json', JSON.stringify({ place: 'right', size: 760 }) + '\n');
+  yield* fs.writeFileString('dist/herdr-mod/NOTICE.txt', `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);
 });
 
 const finish = Effect.gen(function*() {

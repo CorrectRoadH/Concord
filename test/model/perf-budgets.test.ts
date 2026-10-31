@@ -12,7 +12,7 @@ test('budget discovery scans Feature owners and preserves scenario identities', 
   assert.ok(rows.length > 0);
   assert.ok(rows.every(row => row.owner.startsWith('docs/feature/') && row.scenarios.length > 0));
   const refresh = rows.filter(row => row.heading === '刷新上限');
-  assert.ok(refresh.some(row => row.scenarios.includes('herdr-panel/push')));
+  assert.ok(refresh.some(row => row.scenarios.includes('herdr-mod/push')));
   for (const row of refresh) {
     const declared = parseBudgetTable(readFileSync(join(resolve('.'), row.owner), 'utf8'), row.heading);
     assert.ok(declared.some(value => value.limitMs === row.limitMs && value.scenarios.some(id => row.scenarios.includes(id))));

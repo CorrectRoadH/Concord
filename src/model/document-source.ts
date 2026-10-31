@@ -27,7 +27,7 @@ export function documentTitle(path: string, body: string, tree: Root = fromMarkd
 export function ownerKind(path: string): DocumentKind | undefined {
   if (/^memory\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'memory';
   if (/^docs\/issues\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'issue';
-  if (/^docs\/feature\/[^/]+\/use-case\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'use-case';
+  if (/^docs\/(?:feature|engineering)\/[^/]+\/use-case\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'use-case';
   const match = /^docs\/(feature|engineering|roadmap)\/[^/]+\/README\.md$/u.exec(path);
   if (match !== null) return match[1] as DocumentKind;
   if (/^docs\/design\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'design';

@@ -12,6 +12,7 @@ export function installationResources(root: string) {
     help: join(distribution, 'startup-data.js'),
     native: join(distribution, 'native'),
     web: join(distribution, 'web'),
+    herdrMod: join(distribution, 'herdr-mod'),
     command: (group: string) => join(distribution, 'entry/cli', `cli-command-${group}.js`),
     fallback: join(distribution, 'entry/cli/cli-fallback-bundle.js'),
     skill: join(distribution, 'entry/cli/skill.js'),

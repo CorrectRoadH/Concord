@@ -10,6 +10,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const baselinePath = 'test/support/platform-violations.json';
 const Baseline = Schema.fromJsonString(Schema.Struct({ format: Schema.Literal('concord.platform-debt/v1'), violations: Schema.Array(Schema.String) }));
 
+// @feature docs/engineering/concord-self-hosting/README.md#技术栈
 test('source import and export graphs obey module exits, layers, domain order and composition roots', () => Effect.runSync(Effect.sync(() => {
   const audit = inspectArchitecture(root);
   assert.deepEqual(dependencyViolations(audit), []);
@@ -17,6 +18,7 @@ test('source import and export graphs obey module exits, layers, domain order an
   assert.deepEqual(domainCycles(audit, true), [], 'type dependencies must be acyclic');
 })));
 
+// @feature docs/engineering/concord-self-hosting/README.md#技术栈
 test('platform capability debt only decreases while services are migrated', () => Effect.runSync(Effect.sync(() => {
   const baseline = Schema.decodeUnknownSync(Baseline, { onExcessProperty: 'error' })(readFileSync(`${root}/${baselinePath}`, 'utf8'));
   const current = inspectArchitecture(root).platform.map(violationKey);
@@ -36,6 +38,7 @@ test('platform capability debt only decreases while services are migrated', () =
   }
 })));
 
+// @feature docs/engineering/concord-self-hosting/README.md#技术栈
 test('domain and application consumers cannot open persistent cache handles or select their own access mode', () => Effect.runSync(Effect.sync(() => {
   const audit = inspectArchitecture(root);
   assert.deepEqual(audit.edges.filter(edge => /^src\/(?:domain|app)\//u.test(edge.from)
@@ -43,6 +46,7 @@ test('domain and application consumers cannot open persistent cache handles or s
     && edge.bindings.some(name => name === 'openHawdb' || name === 'withPersistentCache')), []);
 })));
 
+// @feature docs/engineering/concord-self-hosting/README.md#技术栈
 test('architecture audit sees type exports, finite dynamic imports and aliased process capabilities', () => Effect.runSync(Effect.sync(() => {
   const sources = new Map([
     ['src/model/index.ts', 'export type { Hidden } from "../domain/documents/index.js";'],

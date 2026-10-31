@@ -84,7 +84,7 @@ function documentInputs(repo: Repository, kinds?: readonly DocumentKind[], findi
   const paths = new Set<string>();
   const roots = kinds === undefined ? documentRoots(repo) : [...new Set(kinds.flatMap(kind => kind === 'memory'
     ? ['memory']
-    : [kind === 'use-case' ? 'docs/feature' : kind === 'issue' ? 'docs/issues' : `docs/${kind}`]))];
+    : kind === 'use-case' ? ['docs/feature', 'docs/engineering'] : [kind === 'issue' ? 'docs/issues' : `docs/${kind}`]))];
   for (const root of roots) {
     for (const path of repo.files(root)) if (path.endsWith('.md')) paths.add(path);
   }
@@ -167,8 +167,8 @@ export function readDocumentReference(repo: Repository, reference: string, kinds
       records.push(owner);
       let featurePath: string | undefined;
       if (owner.metadata.kind === 'use-case') {
-        const feature = readDocumentReference(repo, owner.metadata.feature, ['feature']);
-        if (feature.path !== owner.metadata.feature) throw new ConcordError('InvalidPlacement', 'Use Case requires an exact Feature owner');
+        const feature = readDocumentReference(repo, owner.metadata.feature, ['feature', 'engineering']);
+        if (feature.path !== owner.metadata.feature) throw new ConcordError('InvalidPlacement', 'Use Case requires an exact Feature or Engineering owner');
         featurePath = feature.path;
       }
       const placement = documentPlacementError(owner.metadata.kind, owner.path, featurePath);
@@ -225,13 +225,13 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
     identities.set(key, [...(identities.get(key) ?? []), document]);
     let featurePath: string | undefined;
     if (document.metadata.kind === 'use-case') {
-      try { featurePath = findDocument(documents, document.metadata.feature, 'feature').path; } catch { /* Report placement and relation below. */ }
+      try { featurePath = findDocument(documents.filter(candidate => ['feature', 'engineering'].includes(candidate.metadata.kind)), document.metadata.feature).path; } catch { /* Report placement and relation below. */ }
     }
     const placement = documentPlacementError(document.metadata.kind, document.path, featurePath);
     if (placement !== undefined) finding(findings, 'InvalidPlacement', document.path, placement);
 
     const metadata = document.metadata;
-    if (metadata.kind === 'use-case') checkRef(findings, repo, documents, document, metadata.feature, ['feature'], 'feature');
+    if (metadata.kind === 'use-case') checkRef(findings, repo, documents, document, metadata.feature, ['feature', 'engineering'], 'feature');
     if (metadata.kind === 'roadmap') {
       if (metadata.state !== 'adopted' && metadata.adoptedAs !== undefined) finding(findings, 'InvalidState', document.path, 'Only an adopted Roadmap can have adoptedAs');
       if (metadata.state === 'cancelled' && metadata.cancellation === undefined) finding(findings, 'InvalidState', document.path, 'Cancelled Roadmap must retain its cancellation reason and source');
