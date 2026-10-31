@@ -123,7 +123,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 | `cache-clear` | 按[清理](#清理)执行后应答 |
 | `feedback-merge begin \| append \| commit` | commit 返回合并后的 warnings；见进程与资源 |
 
-每个服务最多 64 个连接，每个连接最多 8 个在途请求，全服务最多 256 个排队请求，待发送字节合计不超过 64 MiB；超限按请求或连接以 `WorkspaceServerBusy` 失败，其它连接不受影响。
+每个服务最多 64 个连接，每个连接最多 8 个在途请求，全服务最多 256 个尚未应答的请求（含正在执行的；RPC 与 HTTP 共用这一计数），待发送字节合计不超过 64 MiB；超限按请求或连接以 `WorkspaceServerBusy` 失败，其它连接不受影响。
 
 ### CLI 查询
 
