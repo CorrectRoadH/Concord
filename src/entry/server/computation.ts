@@ -19,6 +19,7 @@ export const Snapshot = strict(Schema.Struct({
 export const ComputationReply = strict(Schema.Struct({ value: Schema.Json, derived: Schema.Array(CacheDerivationBatch) }));
 export const Computation = Schema.Union([
   strict(Schema.Struct({ kind: Schema.Literal('scan') })),
+  strict(Schema.Struct({ kind: Schema.Literal('cache-rebuild') })),
   strict(Schema.Struct({ kind: Schema.Literal('query-scan'), query: Query })),
   strict(Schema.Struct({ kind: Schema.Literal('query'), request: QueryRequest })),
   strict(Schema.Struct({ kind: Schema.Literal('read'), path: Schema.String })),

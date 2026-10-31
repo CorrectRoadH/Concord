@@ -1,7 +1,7 @@
 import { snapshotMetadata } from '../../base/sources/index.js';
 import { Schema } from "effect";
 import { cacheDatabasePath, inspectCacheClear, deleteInspectedCache, cachePhysicalBytes } from "../../base/cache/index.js";
-import { CACHE_PHYSICAL_LIMIT_BYTES } from "../../base/installation/index.js";
+import { inspectCacheStatus, type CacheStatus } from "../../base/cache/index.js";
 import { PersistentCache, closeRepositoryCache } from "../../base/cache/index.js";
 import { acquireHawdbClearGuard, hawdbIdentity } from "../../base/cache/index.js";
 import { AnnotatedCaseSchema, ConcordError, canonical, decode, digest, objectDigest, type AnnotatedCase, type AnnotationSnapshot, type Finding, type Repository } from "../../model/index.js";
@@ -235,29 +235,8 @@ function clearUnderSnapshot(repo: Repository, onlyAboveBytes?: number): { readon
   finally { guard.close(); }
   return { status: inventory.empty ? 'empty' : 'cleared', path: inventory.path };
 }
-interface CacheStatus { readonly status: string; readonly path: string; readonly detail?: string; readonly physicalBytes: number | null; readonly physicalLimitBytes: number }
 export function cacheStatus(repo: Repository): CacheStatus {
-  return repo.snapshot === undefined ? statusUnderSnapshot(repo) : repo.snapshot(() => statusUnderSnapshot(repo));
-}
-function statusUnderSnapshot(repo: Repository): CacheStatus {
-  const path = cachePath(repo);
-  const status = (): { readonly status: string; readonly path: string; readonly detail?: string } => { try {
-    const inventory = inspectCacheClear(repo.privateDir);
-    hawdbIdentity();
-    if (!inventory.existing || inventory.empty) return { status: 'empty', path };
-    if (repo.persistentCache === 'off') return { status: 'unavailable', path, detail: 'Persistent cache access is disabled' };
-    return (() => {
-    const db = PersistentCache.repository(repo);
-      const projections = db!.namespaces().filter(name => name.endsWith('_cache') || name === 'workspace_projection');
-      for (const namespace of projections) db!.scan(namespace);
-      return { status: projections.length === 0 ? 'empty' : 'ready', path, detail: `projections: ${projections.join(', ')}` };
-    })();
-  } catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause) }; } };
-  let report: ReturnType<typeof status>;
-  try { report = status(); }
-  finally { closeRepositoryCache(repo); }
-  // Runtime files and ownership records can change on open and close.
-  try { return { ...report, physicalBytes: cachePhysicalBytes(repo.privateDir), physicalLimitBytes: CACHE_PHYSICAL_LIMIT_BYTES }; }
-  catch (cause) { return { status: 'unavailable', path, detail: cause instanceof Error ? cause.message : String(cause), physicalBytes: null, physicalLimitBytes: CACHE_PHYSICAL_LIMIT_BYTES }; }
+  const inspect = () => inspectCacheStatus(repo.privateDir, repo.persistentCache !== 'off', () => PersistentCache.repository(repo), () => closeRepositoryCache(repo));
+  return repo.snapshot === undefined ? inspect() : repo.snapshot(inspect);
 }
 // @concord-end

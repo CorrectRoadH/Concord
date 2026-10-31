@@ -9,6 +9,7 @@ import { Schema } from 'effect';
 import { writeCachePayloads } from './cache-query.js';
 import { mergeFeedbackRows } from './feedback-cache.js';
 import type { RemoteFeedback } from '../../model/index.js';
+import { inspectCacheStatus } from './cache-status.js';
 
 /** One scoped owner, with an explicit close/reopen boundary for maintenance. */
 export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(function*(privateDir: string) {
@@ -62,7 +63,11 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
       finally { snapshots.delete(batch.namespace); }
     }
   });
-  return { open, close, verify, service, snapshot, mergeDerived,
+  const status = Effect.sync(() => inspectCacheStatus(privateDir, true, () => {
+    if (!database) throw new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');
+    return database;
+  }));
+  return { open, close, verify, service, snapshot, mergeDerived, status,
     mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use(db => { const warnings = mergeFeedbackRows(db, connectionId, items); snapshots.delete('feedback_cache'); return warnings; }),
   };
 });

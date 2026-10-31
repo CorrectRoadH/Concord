@@ -40,6 +40,7 @@ import { executeViewAction, runWorkspaceTest, clearWorkspaceCache, decodeViewAct
 import { ViewActionSchema } from '../../model/index.js';
 import { Snapshot } from './computation.js';
 import { assertWorkspacePublicationReady } from '../../app/index.js';
+import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.js';
 
 const OperationRequest = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('action'), root: Schema.String, input: ViewActionSchema, snapshot: Snapshot }),
@@ -106,6 +107,7 @@ const asServerError = (cause: unknown) => {
 export const computationLayer = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
 const compute = Effect.fn('workspace.compute')(function*(root: string, operation: Computation) {
   switch (operation.kind) {
+    case 'cache-rebuild': return yield* computeCacheRebuild(root);
     case 'query': return yield* executeQuery(root, operation.request);
     case 'query-scan': return yield* scanQueryProcess(root, JSON.stringify(operation.query));
     case 'scan': {
@@ -281,7 +283,13 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         compile: input => run(service.execute({ kind: 'p5-compile', input: Schema.decodeUnknownSync(Schema.Json)(input) })),
         action: async (input, signal) => {
           const action = decodeViewAction(input);
-          const value = action.action === 'cache.clear' && !action.dryRun ? await run(service.clear, signal) : await runOperation({ kind: 'action', input: action }, signal);
+          const maintenance: Effect.Effect<unknown, unknown> | undefined = action.action === 'cache.status' ? service.maintain(cache.status)
+            : action.action === 'cache.rebuild' ? service.maintain(Effect.gen(function*() {
+              const value = yield* cacheSnapshot.pipe(Effect.flatMap(snapshot => computation.run({ kind: 'cache-rebuild' }, snapshot)));
+              const status = yield* cache.status;
+              return yield* Effect.try({ try: () => finishCacheRebuild(value, status), catch: failure });
+            })) : undefined;
+          const value = action.action === 'cache.clear' && !action.dryRun ? await run(service.clear, signal) : maintenance ? await run(maintenance, signal) : await runOperation({ kind: 'action', input: action }, signal);
           await run(service.request); return value;
         },
         jobs, sse,

@@ -145,15 +145,17 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     return outcome.success;
   }));
   yield* Effect.addFinalizer(() => stop.pipe(Effect.andThen(Fiber.interrupt(refreshFiber)), Effect.andThen(ports.close), Effect.orDie));
+  const maintain = <A, E, R>(operation: Effect.Effect<A, E, R>) => maintenance.withPermit(Effect.gen(function*() {
+    yield* ports.verify;
+    const current = yield* SubscriptionRef.get(state.value);
+    if (!['running', 'degraded'].includes(current.state)) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', `Service is ${current.state}`));
+    yield* state.touch;
+    return yield* operation;
+  }));
   return { state, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
+    maintain,
     drain: maintenance.withPermit(Effect.void),
     connect: Effect.acquireRelease(Effect.sync(() => { connections++; }), () => Effect.sync(() => { connections--; })),
-    execute: (operation: Computation) => maintenance.withPermit(Effect.gen(function*() {
-      yield* ports.verify;
-      const current = yield* SubscriptionRef.get(state.value);
-      if (!['running', 'degraded'].includes(current.state)) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', `Service is ${current.state}`));
-      yield* state.touch;
-      return yield* ports.compute(operation);
-    })),
+    execute: (operation: Computation) => maintain(ports.compute(operation)),
   };
 });
