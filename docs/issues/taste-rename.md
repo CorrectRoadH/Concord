@@ -2,33 +2,27 @@
 status: open
 ---
 
-# 宪法改名为品味，并重组为品味与底线
+# 实现品味功能，替换宪法
 
 ## 请求
 
-维护者决定把宪法功能改名为品味，并把内容重组为品味与底线。现行[宪法](../constitution.md)多数条款在规定机制，只说不准做什么，没有说清这个项目认为什么是好的。
+维护者决定把宪法功能改为品味。内容重组已经完成：[宪法](../constitution.md)现在由 8 条品味与 6 条底线组成，机制条款已移入所属页面。名称与命令尚未改变。
 
-## 已定的 Spec
+## 目标行为
 
-- 名称：功能、文件、命令、action、错误码与术语统一为品味（taste）。
-- 入口：文件为 `docs/taste.md`，命令为 `concord taste show|adopt|amend`，action 为 `taste.show`、`taste.adopt`、`taste.amend`。
-- 错误码：`Constitution` 前缀改为 `Taste`，例如 `TasteDecisionRequired`、`TasteLinkInvalid`。
-- 条目错误：`ConstitutionClauseInvalid` 改为 `TasteEntryInvalid`，`ConstitutionClauseReferenced` 改为 `TasteEntryReferenced`。
-- 结构：总则（`general-*`）、品味 `T-1` 至 `T-8`、底线 `B-1` 起。品味写它解决的问题与好坏对照，没有款；底线每款一项“必须 / 不得”。
-- 品味：读得懂胜过写得全；一个词一个意思；一件事只写一次，其余推导；写现在，不写过去；只声称证明过的；文件是界面，命令只是助手；快到每次都愿意跑；规则少而硬，机制留给实现。
-- 底线：现行 C-002、C-003、C-005（不含第 4 款）、C-006、C-007 与 C-015。
-- 移出的条款原文进入所属页面的小节：
-  - `docs/document-model.md`：事实归属、页面职责、只写当前声明、Design 记录、术语与语言。
-  - `docs/architecture.md`：当前格式、操作依赖与发布协调。
-  - local-sdlc：源码关联进入 `library.md`，证据范围进入 `scope.md`。
-  - local-data-engine 的 architecture 页：缓存与原生边界。
-  - project-onboarding 的 README：接入项目的范式。
-  - 工程页 `performance.md`：性能约束。
+目标行为写在 [Roadmap：写下项目的品味](../roadmap/taste/README.md)，要点：
 
-## 需要的工具规则
+- 文件为 `docs/taste.md`，没有 frontmatter，也没有草稿与生效两种状态。
+- 只有一个只读命令 `concord taste`，列出条目和依据它们的页面；取消 `adopt` 与 `amend`，修改就是直接编辑。
+- 修改记录的关系角色由 `amends` 改为 `changes`。
+- 条目 ID 为品味 `T-n` 与底线 `B-n`；错误码见 Roadmap 的命令页。
 
-已裁决的 Design，以及 Research、Issue 与 Memory 这些记录，可以保留指向已移除品味条目或旧文件的链接与 `amends` 关系，按记录时的含义理解，`check` 不报告。Spec 页面中的这类链接仍报告 `AnchorNotFound`。没有这条规则，约 30 个已裁决 Design 中的 260 处链接会阻止条款移出与改名。
+## 迁移本仓库
 
-## 顺序
+实现与迁移在同一变化中完成，然后用 `concord roadmap adopt taste` 把 Roadmap 移入 `docs/feature/`，替换 project-onboarding 的“功能开发遵守并修订项目宪法” Use Case。
 
-P3 验收后分派实现：先实现改名与上述工具规则，再在同一变化中迁移本仓库的文件、链接与旧修订记录的关系目标。重写正文与可重放的迁移脚本已在本机准备，交付时随实现一起提交。
+- `docs/constitution.md` 改名为 `docs/taste.md`，去掉 frontmatter。
+- C-017 至 C-024 改为 T-1 至 T-8。
+- C-002、C-003、C-007、C-005、C-006、C-015 依次改为 B-1 至 B-6。
+- Spec 页面与 Issue 的链接随之改写；Design 与 Research 是记录，保留原链接。
+- 修改记录 Memory 的 `amends` 改为 `changes`，目标按上面的对照改写。
