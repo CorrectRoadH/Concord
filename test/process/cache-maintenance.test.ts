@@ -183,13 +183,18 @@ test('maintenance competing with another process holding and writing a handle ex
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('a packed public command launches detached maintenance and the next process rebuilds cold', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('a packed public command launches detached maintenance and an explicit rebuild restores the cache', () => Effect.runPromise(Effect.tryPromise(async () => {
   const f = fixture(), install = join(f.root, 'installation');
   try {
     mkdirSync(install);
     writeFileSync(join(install, 'package.json'), JSON.stringify({ name: 'maintenance-consumer', private: true, type: 'module' }));
     installConcord(install, packConcord(f.root));
     const entry = packageBin(join(install, 'node_modules/concord-sdlc'));
+    const rebuild = () => {
+      const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'cache', 'rebuild'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    };
+    rebuild();
     pad(f.padding, CACHE_PHYSICAL_LIMIT_BYTES + 1);
     const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -198,6 +203,7 @@ test('a packed public command launches detached maintenance and the next process
     await pollUntil(async () => existsSync(f.padding) ? undefined : true, { description: 'oversized cache to be discarded' });
     await settle(f.root);
     assert.deepEqual(readdirSync(f.path), ['owner.hawdb.lock']);
+    rebuild();
     const rebuilt = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     assert.deepEqual(JSON.parse(rebuilt.stdout), JSON.parse(result.stdout));

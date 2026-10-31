@@ -16,6 +16,7 @@ import { recoverPublicationLeaseSync } from "../../src/base/publication/index.js
 
 import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from "../../src/app/index.js";
 import { LocalRepository } from "../support/repository.js";
+import { openHawdb } from '../../src/base/cache/index.js';
 
 import { startViewServer } from '../e2e/server.js';
 import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
@@ -107,6 +108,7 @@ test('direct file reads preserve owner diagnostics and inspect only the target a
 test('warm workspace caches observe changed bytes with unchanged timestamps and removed paths', async () => {
   const root = fixture();
   try {
+    openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }).close();
     await runApplication(getWorkspaceSnapshot(root, 'use'));
     const warm = await runApplication(getWorkspaceSnapshot(root, 'use'));
     assert.ok(warm.cache && typeof warm.cache === 'object' && 'status' in warm.cache);

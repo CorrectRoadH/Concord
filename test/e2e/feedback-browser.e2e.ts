@@ -11,7 +11,7 @@ import { LocalRepository } from "../support/repository.js";
 import { loadDocuments } from "../../src/domain/documents/index.js";
 
 import { renderDocument } from "../../src/model/index.js";
-import { mergeFeedbackCache } from "../../src/base/cache/index.js";
+import { mergeFeedbackCache, openHawdb, cacheDatabasePath } from "../../src/base/cache/index.js";
 import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 import { type FeedbackSource } from "../../src/model/index.js";
@@ -29,6 +29,7 @@ test('feedback browser separates remote observations from local editing and prot
     const repo=new LocalRepository(root,{initialize:true});
     try {
       initialize(repo,false,{testRoots:[]});
+      openHawdb(cacheDatabasePath(repo.privateDir), { readOnly: false, create: true }).close();
       createDocument(repo,'feature',{id:'target',title:'Feedback target'});
       createDocument(repo,'issue',{id:'remote-observation',title:'Local title retained',body:'Local notes retained.'});
       const document=loadDocuments(repo).find(item=>item.metadata.id==='remote-observation');

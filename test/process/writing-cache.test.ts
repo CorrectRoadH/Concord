@@ -21,6 +21,7 @@ function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeo
   try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
   writeFileSync(join(root, 'docs/concord-writing.json'), policy);
   writeFileSync(join(root, 'docs/corpus.md'), 'One two three.\n');
+  openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }).close();
   const scan = (cache = true) => {
     const repo = new LocalRepository(root, { access: 'read' });
     try { return checkWriting(repo, undefined, cache); } finally { repo.close(); }

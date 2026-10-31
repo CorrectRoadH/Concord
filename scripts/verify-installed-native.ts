@@ -74,7 +74,7 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
       assert.equal(absentPreview.existing, false);
       assert.deepEqual(absentPreview.remove, []);
       assert.equal(existsSync(absentPreview.path), false, 'preview must not create the cache');
-      const cold = call(['test', 'list'], CacheResult);
+      const cold = call(['cache', 'rebuild'], CacheResult);
       const warm = call(['test', 'list'], CacheResult);
       assert.equal(cold.cache.status, 'miss', 'a fallback parse does not prove HawDB installation');
       assert.equal(warm.cache.status, 'hit', 'installed HawDB must persist between CLI processes');
@@ -100,7 +100,7 @@ export const verifyInstalledNative = (packageRoot: string) => Effect.try({
       assert.equal(call(['memory', 'recall', 'current-native-projection-token'], Recall).documents.length, 1);
       assert.equal(call(['show', 'native-recall'], Memory).document.digest, currentDigest);
       call(['cache', 'clear'], Ack);
-      assert.equal(call(['test', 'list'], CacheResult).cache.status, 'miss');
+      assert.equal(call(['cache', 'rebuild'], CacheResult).cache.status, 'miss');
       assert.equal(call(['test', 'list'], CacheResult).cache.status, 'hit');
       const cachePath = warm.cache.path;
       const beforePreview = readdirSync(cachePath).sort();
