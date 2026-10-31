@@ -1,19 +1,12 @@
 import { packageBin, assert, existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, join, tmpdir, fileURLToPath, test, Effect, Schema, OwnedProcessLive, hasSuccessfulOwnedProcessResult, runOwnedProcess, ProjectSchema, renderTypeScriptConfig, parseTypeScriptConfig, type TestAdapter, LocalRepository, closeRepositoryCache, withPersistentCache, installConcord, packConcord, sourceRoot, text, scratch, command, requireCommand, parse, CaseList, Receipt, setup, prepare, configure, call, success, idFor, environment, builtin } from '../support/test-adapters-consumer-fixture.js';
 
 
+import { externalCase } from '../support/external-adapter-fixture.js';
+
 // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 // @name packed-external-adapter-boundaries
 test('packed external adapter preserves static relations and rejects dishonest protocol/report outcomes (C1-C5 C7-C16)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
-  const root = yield* scratch; const { cli, tool } = yield* setup(root, true);
-  const consumer = yield* prepare(root, 'external', cli, tool);
-  yield* Effect.sync(() => {
-    copyFileSync(join(sourceRoot, 'test/fixtures/process-adapter.ts'), join(consumer, 'adapter.ts'));
-    text(consumer, 'fixture.txt', 'original'); text(consumer, 'fixture.lock', 'locked'); text(consumer, 'mode.txt', 'green');
-    text(consumer, 'test/sample.ts', '// @feature docs/feature/example/README.md\n// @name parameter-group\n// @issue docs/issues/problem.md\n');
-    configure(consumer, [{ id: 'external', include: ['test'], argv: [process.execPath, 'adapter.ts'], implementationFiles: ['adapter.ts'], inputRoots: [], frameworkVersion: 'fixture/v1', lockFiles: ['fixture.lock'], envNames: ['NODE_OPTIONS', 'PATH'], collectTimeoutMs: 1000, budgets: { reportFileBytes: 128 } }]);
-  });
-  yield* success(consumer, cli, ['new', 'issue', 'problem', '--title', 'Problem']);
-  const id = yield* idFor(consumer, cli);
+  const { consumer, cli, id } = yield* externalCase();
   const checkBefore = yield* success(consumer, cli, ['check']);
   const coldCases = Schema.decodeUnknownSync(CaseList)(JSON.parse((yield* success(consumer, cli, ['test', 'list'])).stdout)).cases;
   yield* success(consumer, cli, ['test', 'collect']);
@@ -53,24 +46,4 @@ test('packed external adapter preserves static relations and rejects dishonest p
   yield* success(consumer, cli, ['test', 'collect']);
   const scriptAfter = observationState((yield* success(consumer, cli, ['test', 'list'])).stdout);
   assert.equal(scriptAfter.current, true); assert.notEqual(scriptBefore.inputs, scriptAfter.inputs);
-  for (const mode of ['green', 'split', 'missing', 'duplicate', 'extra', 'skip', 'parser-failed', 'symlink', 'unexpected-report', 'large-report']) {
-    yield* Effect.sync(() => text(consumer, 'mode.txt', mode));
-    const run = yield* call(consumer, cli, ['test', 'run', id, '--require-native']);
-    const receipt = Schema.decodeUnknownSync(Receipt)(JSON.parse(run.stdout));
-    assert.equal(receipt.commandOutcome, ['green', 'split'].includes(mode) ? 'green' : 'invalid', `${mode}: ${run.stderr}\n${run.stdout}`);
-    assert.equal(receipt.requested?.length, 2);
-    if (mode === 'split') assert.equal(receipt.commandExecutionCount, 2);
-  }
-  for (const mode of ['wrong-echo', 'extra-envelope', 'duplicate-key', 'nonfinite', 'timeout', 'escape-report', 'drift', 'drift-config', 'drift-lock', 'drift-member']) {
-    yield* Effect.sync(() => text(consumer, 'mode.txt', mode));
-    const run = yield* call(consumer, cli, ['test', 'run', id, '--require-native']);
-    assert.equal(run.exitCode, 1, mode); assert.match(run.stderr, /AdapterProtocolInvalid|ReportUnsafe|InputChanged/, mode);
-  }
-  yield* Effect.sync(() => { text(consumer, 'mode.txt', 'red'); text(consumer, 'fixture.txt', 'original'); });
-  const red = Schema.decodeUnknownSync(Receipt)(JSON.parse((yield* call(consumer, cli, ['test', 'run', id, '--require-native'])).stdout)); assert.equal(red.commandOutcome, 'red');
-  yield* Effect.sync(() => text(consumer, 'mode.txt', 'green'));
-  const green = Schema.decodeUnknownSync(Receipt)(JSON.parse((yield* success(consumer, cli, ['test', 'run', id, '--require-native'])).stdout));
-  assert.notEqual(red.definitionDigest, green.definitionDigest); assert.deepEqual(red.requested, green.requested); assert.ok(green.gaps?.includes('ExternalInputUnknown'));
-  yield* success(consumer, cli, ['cache', 'clear']);
-  assert.equal(yield* idFor(consumer, cli), id);
 })).pipe(Effect.provide(OwnedProcessLive))));
