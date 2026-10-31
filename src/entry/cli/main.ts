@@ -99,6 +99,17 @@ const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(options: { 
 
 // Discovery needs only the base ports. Commands without an owner avoid loading
 // the service's RPC, HTTP and computation entrypoints into their short lifetime.
+const panelLauncher = Layer.effect(PanelLauncher, Effect.gen(function*() {
+    const context = yield* Effect.context<ServerRuntime | Installation | Workspace | NodeServices.NodeServices | OwnedProcess>();
+    const workspace = yield* Workspace;
+    return PanelLauncher.of({ serve: root => Effect.scoped(Effect.gen(function*() {
+      const location = yield* workspace.identify(root, false, true).pipe(Effect.mapError(error => /not a git repository/iu.test(error.message) ? new ConcordError(error.code, `${error.message}; run concord init in a Git worktree`, error.details) : error));
+      if (location.config === null) return yield* Effect.fail(new ConcordError('ProjectNotFound', 'No Concord configuration; run concord init in this Git worktree'));
+      const panel = yield* Effect.tryPromise(() => import('../panel/index.js'));
+      return yield* panel.serveWorkspacePanel(root, path => connectOrStartWorkspace(path).pipe(Effect.provideContext(context)));
+    })).pipe(Effect.provideContext(context)) });
+  }));
+function makeCliLayer() {
 const querySelection = Layer.unwrap(Effect.gen(function*() {
   const workspace = yield* Workspace;
   const runtime = yield* ServerRuntime;
@@ -128,16 +139,6 @@ const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*
   })) });
 }));
 
-const panelLauncher = Layer.effect(PanelLauncher, Effect.gen(function*() {
-    const context = yield* Effect.context<ServerRuntime | Installation | Workspace | NodeServices.NodeServices | OwnedProcess>();
-    const workspace = yield* Workspace;
-    return PanelLauncher.of({ serve: root => Effect.scoped(Effect.gen(function*() {
-      const location = yield* workspace.identify(root, false, true).pipe(Effect.mapError(error => /not a git repository/iu.test(error.message) ? new ConcordError(error.code, `${error.message}; run concord init in a Git worktree`, error.details) : error));
-      if (location.config === null) return yield* Effect.fail(new ConcordError('ProjectNotFound', 'No Concord configuration; run concord init in this Git worktree'));
-      const panel = yield* Effect.tryPromise(() => import('../panel/index.js'));
-      return yield* panel.serveWorkspacePanel(root, path => connectOrStartWorkspace(path).pipe(Effect.provideContext(context)));
-    })).pipe(Effect.provideContext(context)) });
-  }));
 const launchers = Layer.mergeAll(
   panelLauncher,
   Layer.effect(ServerLauncher, Effect.gen(function*() {
@@ -166,7 +167,10 @@ const validation = Layer.unwrap(loadApp().pipe(Effect.map(app => app.Publication
 const cliServices = Layer.mergeAll(ServerRuntime.layer, Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(), PersistentCache.layer, Publication.layer.pipe(Layer.provide(validation))).pipe(
   Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer),
 );
-export const cliLayer = launchers.pipe(Layer.merge(querySelection), Layer.merge(feedbackSelection), Layer.provideMerge(cliServices));
+return launchers.pipe(Layer.merge(querySelection), Layer.merge(feedbackSelection), Layer.provideMerge(cliServices));
+
+}
+export const cliLayer = /*#__PURE__*/ makeCliLayer();
 
 const cliFailure = (cause: unknown) => Effect.sync(() => {
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0

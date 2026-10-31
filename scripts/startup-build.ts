@@ -33,13 +33,13 @@ const capture = (args: readonly string[]) => Effect.tryPromise({
 });
 
 /** Keep the source module's resource and identity owner after code splitting. */
-async function bundleCommands(entries: readonly string[], splitting = true): Promise<void> {
+async function bundleCommands(entries: readonly string[], splitting = true, entryNames = '[name]', chunkNames = 'runtime-[hash]'): Promise<void> {
   const output = resolve('dist/entry/cli'), model = resolve('dist/model');
   const libraries = ['model', 'base', 'domain', 'app'].map(layer => resolve('dist', layer) + '/');
   const parser = resolve(model, 'markdown-parser.js');
   const api = new API({ runExternalCode: false });
   try {
-    await build({ entryPoints: [...entries], outdir: output, entryNames: '[name]', chunkNames: 'runtime-[hash]',
+    await build({ entryPoints: [...entries], outdir: output, entryNames, chunkNames,
       bundle: true, splitting, packages: 'external', platform: 'node', format: 'esm', target: 'node24',
       allowOverwrite: true, sourcemap: true, metafile: true, plugins: [{ name: 'source-module-owners', setup(builder) {
         builder.onResolve({ filter: /^\./ }, args => {
@@ -77,11 +77,15 @@ async function bundleCommands(entries: readonly string[], splitting = true): Pro
 }
 
 export const buildStartup = Effect.fn('build.startup')(function*() {
+  // Pure parser and terminal dependencies have no Effect service identities.
+  // Keep their module boundaries for source execution and parser probes while
+  // avoiding a module-resolution waterfall before the first terminal frame.
+  yield* Effect.tryPromise(() => build({ entryPoints: ['dist/model/markdown-dependencies.js', 'dist/entry/panel/terminal-width.js'], outdir: 'dist', outbase: 'dist', bundle: true, packages: 'bundle', external: ['effect', 'effect/*', '@effect/*'], platform: 'node', format: 'esm', target: 'node24', allowOverwrite: true, sourcemap: true, legalComments: 'linked', banner: { js: "import { createRequire as createDependencyRequire } from 'node:module'; const require = createDependencyRequire(import.meta.url);" } }));
   // Keep a self-contained application fallback, independent of command chunks.
   // Package dependencies remain external to preserve Effect service identity with
   // repository contributions and all public exports. Installation resources resolve their package owner independently of bundle depth.
   const closure = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/cli-fallback.js'], outfile: 'dist/entry/cli/cli-fallback-bundle.js', metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
-  const roots = ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js'];
+  const roots = ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js', 'dist/entry/cli/panel-cli.js'];
   const bootstrap = yield* Effect.tryPromise(() => build({ entryPoints: roots, outdir: 'dist/startup-graph', write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
   const definitions = yield* Effect.tryPromise(async () => {
     const file = './dist/entry/cli/cli-full.js';
@@ -102,7 +106,10 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
     .filter(item => item.kind === 'dynamic-import' && item.path.startsWith('dist/entry/cli/')).map(item => item.path))];
   yield* Effect.tryPromise({ try: async () => {
     const skill = 'dist/entry/cli/skill.js';
-    await bundleCommands(commands.filter(file => file !== skill));
+    const panel = 'dist/entry/cli/panel-cli.js';
+    await bundleCommands(commands.filter(file => file !== skill && file !== panel));
+    // A separate entry set can remove services only used by ordinary commands.
+    await bundleCommands([panel], true, '[name]', 'panel-runtime-[hash]');
     await bundleCommands([skill], false);
   }, catch: cause => new StartupBuildFailed({ message: `Bundle command closure: ${String(cause)}` }) });
   const production = yield* Effect.tryPromise(() => build({ entryPoints: [...roots, 'dist/entry/cli/cli-fallback-bundle.js'], outdir: 'dist/startup-graph', write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));

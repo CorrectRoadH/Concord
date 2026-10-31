@@ -5,7 +5,8 @@ import { renderToString } from 'ink';
 import { Effect } from 'effect';
 import stringWidth from 'string-width';
 import { workspaceDisplay } from '../../src/model/workspace-display/index.js';
-import { PanelView, panelDetail, markdownToTerminal, initialPanelState, reconcilePanelState, navigatePanel, panelItems, wrapTerminalLine, sliceColumns, panelWorktree, type PanelState, type BoundPanelBody } from '../../src/entry/panel/index.js';
+import { panelDetail, plainPanelFrame, markdownToTerminal, initialPanelState, reconcilePanelState, navigatePanel, panelItems, wrapTerminalLine, sliceColumns, panelWorktree, type PanelState, type BoundPanelBody } from '../../src/entry/panel/index.js';
+import { PanelView } from '../../src/entry/panel/view.js';
 import { panelSnapshot, panelBody, featurePath, useCasePath } from '../support/panel-fixture.js';
 const model = workspaceDisplay(panelSnapshot);
 const concept = { id: 'spec', term: 'Spec', digest: 'catalog-1', deprecated: ['旧规范'], path: 'docs/feature/reader/concepts.md' };
@@ -13,6 +14,15 @@ const accepted: BoundPanelBody = { path: featurePath, digest: 'feature-1', body:
 const bodies = new Map([[featurePath, accepted]]);
 const state: PanelState = { ...initialPanelState, category: 'feature', selected: featurePath, focus: 'body' };
 const props = { model, state, bodies, columns: 100, rows: 26, noColor: true };
+
+// @use-case docs/feature/herdr-panel/use-case/open-side-panel.md
+test('plain and Ink first frames share body, navigation, wrapping and narrow layouts', () => {
+  const normalize = (text: string) => text.split('\n').map(line => line.trimEnd()).join('\n').trimEnd();
+  for (const columns of [100, 59, 36]) for (const focus of ['navigation', 'body'] as const) {
+    const frame = { ...props, columns, state: { ...state, focus } };
+    assert.equal(normalize(plainPanelFrame(frame)), normalize(renderToString(createElement(PanelView, frame), { columns })));
+  }
+});
 
 // @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
 test('real React terminal renderer changes from two columns at 60 to one at 59 and respects NO_COLOR', () => Effect.runSync(Effect.sync(() => {

@@ -1,5 +1,5 @@
 import type { Nodes } from 'mdast';
-import stringWidth from 'string-width';
+import { stringWidth } from './terminal-width.js';
 import { fromMarkdown, markdownBody, conceptSpellingKey, type WorkspaceConcept } from '../../model/index.js';
 
 export interface PanelConcept extends WorkspaceConcept { readonly path: string; readonly digest: string }

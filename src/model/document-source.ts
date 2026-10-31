@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
-import { parseDocument } from "yaml";
+import { parseDocument } from './markdown-dependencies.js';
 import type { Nodes, Root } from "mdast";
 import { fromMarkdown } from "./markdown-parser.js";
 import { IssueFrontmatterSchema, MemoryFrontmatterSchema } from "./owner-frontmatter.js";

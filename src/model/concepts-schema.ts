@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/policy.md#概念定义
 import { Schema } from "effect";
-import { parseDocument } from "yaml";
+import { parseDocument } from './markdown-dependencies.js';
 import type { Nodes, Root } from "mdast";
 
 const Nonblank = Schema.String.check(Schema.isPattern(/\S/u));

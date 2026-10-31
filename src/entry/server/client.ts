@@ -2,7 +2,8 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import { NodeSocket } from '@effect/platform-node';
 import { Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
-import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
+import * as RpcClient from 'effect/unstable/rpc/RpcClient';
+import * as RpcSerialization from 'effect/unstable/rpc/RpcSerialization';
 import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.js';
 import { collectPackets, collectBytes } from './protocol.js';
 import { ConcordError, decodeWorkspaceRead } from '../../model/index.js';

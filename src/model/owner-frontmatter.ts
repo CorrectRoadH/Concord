@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/library.md#owner
 import { Schema } from "effect";
-import { stringify } from "yaml";
+import { stringify } from './markdown-dependencies.js';
 import { FeedbackSourceSchema } from "./feedback-schema.js";
 import { IssueClosureSchema, IssueOriginSchema, SourceRecordSchema, Text, decode, type DocumentMeta } from "./shared.js";
 

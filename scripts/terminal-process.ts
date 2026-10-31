@@ -14,6 +14,7 @@ export const openTerminal = Effect.fn('openTerminal')(function*(argv: readonly s
     let output = '', ended = false;
     const listeners = new Set<() => void>();
     const notify = () => { for (const listener of listeners) listener(); };
+    child.stdin.on('error', (cause: NodeJS.ErrnoException) => { if (cause.code !== 'EPIPE') { output += String(cause); notify(); } });
     child.stdout.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-2 * 1024 * 1024); notify(); });
     child.stderr.on('data', (chunk: Buffer) => { output = (output + chunk.toString()).slice(-2 * 1024 * 1024); notify(); });
     const exited = new Promise<void>(resolve => child.once('close', () => { ended = true; notify(); resolve(); }));

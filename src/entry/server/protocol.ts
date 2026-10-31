@@ -1,8 +1,9 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import { Effect, Schema, Stream } from 'effect';
-import { Rpc, RpcGroup } from 'effect/unstable/rpc';
-import { SchemaBinary } from 'effect/unstable/encoding';
+import * as Rpc from 'effect/unstable/rpc/Rpc';
+import * as RpcGroup from 'effect/unstable/rpc/RpcGroup';
+import * as SchemaBinary from 'effect/unstable/encoding/SchemaBinary';
 import { WorkspaceRead } from '../../model/index.js';
 
 export const PROTOCOL = 'concord.workspace/v1';

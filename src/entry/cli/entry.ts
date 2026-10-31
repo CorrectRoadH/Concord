@@ -47,7 +47,11 @@ try {
       const group = data === undefined ? undefined : selectedGroup(data);
       let run: (() => void) | undefined;
       if (group !== undefined && data !== undefined) {
-        try { run = await (await import("./cli.js")).loadCommand(group, data); }
+        try {
+          if (group === 'panel') {
+            run = (await import('./panel-cli.js')).loadPanel(data);
+          } else run = await (await import("./cli.js")).loadCommand(group, data);
+        }
         catch { /* Missing or mismatched command code uses the complete bundle. */ }
       }
       if (run === undefined) await import("./entry-full.js");
