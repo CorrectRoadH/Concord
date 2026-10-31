@@ -30,4 +30,4 @@ export { linkFeedbackFeature } from './lifecycle.js';
 export { closeIssue } from './lifecycle.js';
 export { adoptIssue } from './lifecycle.js';
 export { retireIssue } from './lifecycle.js';
-export { reopenIssue } from './lifecycle.js';
+export { issueReferences } from './lifecycle.js';

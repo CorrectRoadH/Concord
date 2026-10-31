@@ -5,10 +5,10 @@ import { ConcordError, type DocumentKind } from "./shared.js";
 
 
 
-export const DOCUMENT_ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/research', 'docs/engineering', 'docs/issues'] as const;
+export const DOCUMENT_ROOTS = ['docs/feature', 'docs/roadmap', 'docs/design', 'docs/engineering', 'docs/issues'] as const;
 export const isDocumentName = (name: string): boolean => DOCUMENT_NAME_PATTERN.test(name);
 export const inDocumentRoot = (path: string, root: string): boolean => path.startsWith(`${root}/`);
-export type PackageKind = 'feature' | 'roadmap' | 'design' | 'engineering';
+export type PackageKind = 'feature' | 'roadmap' | 'engineering';
 
 /** Defaults for new owners only. Existing owners are always located by their source path. */
 export function defaultDocumentPath(kind: Exclude<DocumentKind, 'memory'>, name: string, featurePath?: string): string {
@@ -17,7 +17,7 @@ export function defaultDocumentPath(kind: Exclude<DocumentKind, 'memory'>, name:
     if (featurePath === undefined || !validPackagePath('feature', featurePath)) throw new Error('Expected a Feature owner path');
     return `${featurePath.slice(0, -'README.md'.length)}use-case/${name}.md`;
   }
-  return kind === 'issue' ? `docs/issues/${name}.md` : `docs/${kind}/${name}/README.md`;
+  return kind === 'issue' || kind === 'design' ? `docs/${kind === 'issue' ? 'issues' : 'design'}/${name}.md` : `docs/${kind}/${name}/README.md`;
 }
 
 export function validPackagePath(kind: PackageKind, path: string): boolean {
@@ -31,41 +31,15 @@ export function validLeafPath(root: string, path: string): boolean {
   return leaf.endsWith('.md') && isDocumentName(leaf.slice(0, -3));
 }
 
-export function validDesignPlanPath(path: string): boolean {
-  const parts = path.split('/');
-  return validPackagePath('design', `${parts.slice(0, 3).join('/')}/README.md`) && parts[3] === 'plans' &&
-    (parts.length === 6 && isDocumentName(parts[4]!) && parts[5] === 'README.md' || parts.length === 5 && parts[4]!.endsWith('.md') && isDocumentName(parts[4]!.slice(0, -3)));
-}
-
-export function designPlanName(path: string): string {
-  if (!validDesignPlanPath(path)) throw new ConcordError('InvalidPlan', `Invalid Plan entry: ${path}`);
-  return path.endsWith('/README.md') ? path.split('/').at(-2)! : path.split('/').at(-1)!.slice(0, -3);
-}
-
-export function designPlanCandidates(base: string, name: string): readonly [string, string] {
-  return [`${base}/plans/${name}.md`, `${base}/plans/${name}/README.md`];
-}
-
-/** Presence comes from exact directory names, never case-insensitive path lookup. */
-export function resolveDesignPlanPath(base: string, name: string, present: (path: string) => boolean): string {
-  if (!isDocumentName(name) || name.toLowerCase() === 'readme') throw new ConcordError('InvalidPlan', `Invalid or reserved Plan name: ${name}`);
-  const [file, readme] = designPlanCandidates(base, name);
-  if (present(file) && (present(`${base}/plans/${name}`) || present(readme))) throw new ConcordError('AmbiguousDesignPlan', `${name} has both file and directory forms`);
-  if (present(file)) return file;
-  if (present(readme)) return readme;
-  throw new ConcordError('DesignPlanNotFound', `${name} requires ${file} or ${readme}`);
-}
-
 export function documentPlacementError(kind: DocumentKind, path: string, featurePath?: string): string | undefined {
   if (kind === 'memory') return undefined;
-  if (kind === 'research') return /^docs\/research(?:\/[^/]+)+\/README\.md$/u.test(path) && !path.includes('..') ? undefined : 'Research owners must retain a safe topic path below docs/research with README.md';
   if (kind === 'use-case') {
     if (featurePath === undefined || !validPackagePath('feature', featurePath)) return 'Use Case requires an existing canonical Feature owner';
     const root = `${featurePath.slice(0, -'/README.md'.length)}/use-case`;
     return validLeafPath(root, path) ? undefined : `Expected a safe Unicode .md filename directly below ${root}; the filename is independent of the document ID`;
   }
-  const valid = kind === 'issue' ? validLeafPath('docs/issues', path) : validPackagePath(kind, path);
-  return valid ? undefined : `Expected ${kind === 'issue' ? 'docs/issues/<name>.md' : `docs/${kind}/<name>/README.md`}, with a safe Unicode name independent of the document ID`;
+  const valid = kind === 'issue' || kind === 'design' ? validLeafPath(kind === 'issue' ? 'docs/issues' : 'docs/design', path) : validPackagePath(kind, path);
+  return valid ? undefined : `Expected ${kind === 'issue' || kind === 'design' ? `docs/${kind === 'issue' ? 'issues' : 'design'}/<name>.md` : `docs/${kind}/<name>/README.md`}, with a safe Unicode name independent of the document ID`;
 }
 
 export function documentDisposition(kind: DocumentKind, path: string, memoryRoots: readonly string[]): 'current' | 'historical' | 'unmanaged' {

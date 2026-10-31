@@ -2,7 +2,6 @@ import { Effect } from 'effect';
 import { canonicalPath } from "../model/index.js";
 import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, decode, type Change, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.js";
 import { renderTypeScriptConfig } from "../base/workspace/index.js";
-import { initialConstitution } from "../domain/constitution/index.js";
 import { onboardingGuide } from "../domain/onboarding/index.js";
 import { projectTemplateFiles, templateCatalog } from "../domain/documents/index.js";
 import { defaultWritingSource } from "../model/index.js";
@@ -24,7 +23,7 @@ export function withAgentInstructions(source: string): string {
   if (source.trim() === '') return `${block}\n`;
   return `${source.replace(/\n*$/u, '')}\n\n${block}\n`;
 }
-export interface InitializeOptions { readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner']; readonly constitutionBody?: string; readonly adoptConstitution?: boolean; readonly constitutionReason?: string; readonly constitutionImpact?: string; readonly constitutionSources?: readonly string[] }
+export interface InitializeOptions { readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner'] }
 export interface InitializationReceipt extends MutationReceipt { readonly config: ProjectConfig; readonly createdPaths: readonly string[]; readonly preservedPaths: readonly string[] }
 
 // @concord-begin
@@ -39,9 +38,7 @@ export const initialize = Effect.fn('initialize')(function*(repo: Repository, dr
     repo.absolute(root);
   }
   for (const path of config.runner?.sourceFiles ?? []) repo.absolute(path);
-  const active = options.adoptConstitution === true;
-  const constitution = initialConstitution({ body: options.constitutionBody ?? catalog.render('constitution', 'Project'), active, reason: options.constitutionReason, impact: options.constitutionImpact, sources: options.constitutionSources, exists: path => repo.read(path) !== undefined });
-  const paths: Record<string, string> = { ...(Object.keys(config).length === 0 ? {} : { 'concord.config.ts': renderTypeScriptConfig(config) }), 'docs/constitution.md': constitution.source, ...(constitution.decision === undefined ? {} : { [constitution.decision.path]: constitution.decision.after! }), 'docs/concord.md': onboardingGuide, ...projectTemplateFiles(catalog) };
+  const paths: Record<string, string> = { ...(Object.keys(config).length === 0 ? {} : { 'concord.config.ts': renderTypeScriptConfig(config) }), 'docs/taste.md': catalog.render('taste', 'Project'), 'docs/concord.md': onboardingGuide, ...projectTemplateFiles(catalog) };
   const preservedPaths: string[] = [];
   for (const [path, name] of [['docs/README.md', 'project-index'], ['docs/concepts.md', 'concepts'], ['docs/architecture.md', 'project-architecture']] as const) {
     if (repo.read(path) === undefined) paths[path] = name === 'concepts' ? EMPTY_CONCEPT_CATALOG : catalog.render(name, 'Project');
@@ -52,9 +49,8 @@ export const initialize = Effect.fn('initialize')(function*(repo: Repository, dr
   const sections: Record<string, [string, string, string]> = {
     'docs/feature/README.md': ['Features', 'Adopted product contracts. Write the target behavior and link complete user paths.', 'new feature'],
     'docs/roadmap/README.md': ['Roadmap', 'Settled directions awaiting adoption as current Feature contracts.', 'new roadmap'],
-    'docs/design/README.md': ['Design decisions', 'Compare self-contained candidates against shared goals and constraints. Record selection with design decide.', 'new design'],
+    'docs/design/README.md': ['Design decisions', 'Write one open tradeoff in one file; adopt its rule in Spec and delete the Design once decided.', 'new design'],
     'docs/engineering/README.md': ['Engineering', 'Repository testing and maintenance mechanisms, their usage and acceptance requirements.', 'new engineering'],
-    'docs/research/README.md': ['Research', 'Dated external facts and primary sources informing decisions.', 'new research'],
     'docs/issues/README.md': ['Local feedback and observations', 'Editable local feedback, imported source snapshots, and investigation links. Concord reads configured providers only during explicit sync/import and never mutates remote issues.', 'new issue'],
   };
   sections['memory/README.md'] = ['Engineering memory', 'Decisions, insights and notes. Edit files directly and validate with concord check.', 'new memory'];

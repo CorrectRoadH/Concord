@@ -5,7 +5,7 @@ import { Effect } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import { collectNativeTests, readNativeObservations } from "../../app/index.js";
 import { runCase } from "../../app/index.js";
-import { replayFix } from "../../app/index.js";
+import { verifyTest } from "../../app/index.js";
 import { buildTrace, requireValidTrace, selectCase } from "../../app/index.js";
 import { ConcordError } from "../../model/index.js";
 import { annotationSnippet } from "../../app/index.js";
@@ -27,7 +27,7 @@ const test = Command.make('test').pipe(Command.withDescription('Discover source 
     if(evidence.commandOutcome!=='pass' && evidence.commandOutcome!=='green') yield* Effect.sync(()=>{process.exitCode=1;});
     return evidence;
   }), { unlocked: true })),
-  Command.make('verify', { id }, args => withRepo((repo,s) => s.dryRun ? Effect.fail(new ConcordError('InvalidOption', 'test verify does not accept --dry-run')) : replayFix(repo,args.id), { unlocked:true, readonly:true })),
+  Command.make('verify', { id, defect: text('defect'), fix: text('fix') }, args => withRepo((repo,s) => s.dryRun ? Effect.fail(new ConcordError('InvalidOption', 'test verify does not accept --dry-run')) : verifyTest(repo,args.id,args.defect,args.fix), { unlocked:true, readonly:true })),
 ]));
 
 export { test };

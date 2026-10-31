@@ -1,6 +1,6 @@
 import { WorkspaceConceptCatalogSchema } from './concept-directory.js';
 import { Schema } from "effect";
-import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, ResearchSchema, RoadmapSchema, UseCaseSchema } from "./shared.js";
+import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ProjectSchema, RoadmapSchema, UseCaseSchema } from "./shared.js";
 import { GitHubRemoteFeedbackSchema, LinearRemoteFeedbackSchema, FeedbackSourceSchema } from "./feedback-schema.js";
 import { CodeDeclarationSchema } from "./code-declaration.js";
 const { body: _githubBody, ...githubFields } = GitHubRemoteFeedbackSchema.fields;
@@ -16,7 +16,7 @@ const Source = Schema.Union([
 
 const Issue = Schema.Struct({ ...IssueSchema.fields, source: Schema.optional(Source) });
 
-const Metadata = Schema.Union([FeatureSchema, UseCaseSchema, ResearchSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, Issue]);
+const Metadata = Schema.Union([FeatureSchema, UseCaseSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, Issue]);
 
 const Document = Schema.Struct({ path: Schema.String, digest: Schema.String, metadata: Metadata });
 
@@ -38,7 +38,7 @@ export const WorkspaceProjectionSnapshotSchema = Schema.Struct({
   conceptCatalogs: Schema.Array(WorkspaceConceptCatalogSchema),
   documents: Schema.Array(Document),
   feedback: Schema.Array(Schema.Struct({ document: Schema.Struct({ path: Schema.String, digest: Schema.String, metadata: Issue }),
-    provider: Schema.Literals(['local', 'github', 'linear']), triage: Schema.Literals(['pending', 'linked', 'closed']),
+    provider: Schema.Literals(['local', 'github', 'linear']), triage: Schema.Literals(['pending', 'linked']),
     availability: Schema.Literals(['local', 'cached', 'unavailable']), warnings: Schema.Array(Schema.String), remote: Schema.NullOr(Remote) })),
   pages: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String, documentPath: Schema.optional(Schema.String), derivedTitle: Schema.optional(Schema.String) })),
   cases: Schema.Array(AnnotatedCaseSchema), codes: Schema.Array(CodeDeclarationSchema),

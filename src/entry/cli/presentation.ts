@@ -28,6 +28,14 @@ export function humanOutput(value: unknown): string {
     const { projection, ...result } = value;
     return `Diagnostic snapshot: ${String(projection.builtAt)} (historical; refresh ${String(projection.refresh)})\n${projection.lastError ? `Last refresh failed: ${JSON.stringify(projection.lastError)}\n` : ''}${humanOutput(result.operation === 'cached-query' ? result.body : result)}`;
   }
+  if (value.operation === 'taste' && Array.isArray(value.entries) && Array.isArray(value.references)) {
+    const references = value.references.filter(Predicate.isObject);
+    return value.entries.filter(Predicate.isObject).flatMap(entry => {
+      const hits = references.filter(ref => ref.entry === entry.id || typeof ref.entry === 'string' && ref.entry.startsWith(`${String(entry.id)}-`));
+      return [`${entry.id === 'general' ? '' : `${String(entry.id).toUpperCase()} `}${String(entry.title)}`, ...(hits.length ? hits.map(ref => `  ${String(ref.path)}:${String(ref.line)}`) : ['  (没有页面依据这一条)'])];
+    }).join('\n');
+  }
+  if (typeof value.conclusion === 'string') return `${value.dryRun ? 'Would close Issue\n' : ''}${value.conclusion}`;
   if (value.operation === 'docs-check' && Array.isArray(value.findings)) {
     return [
       `Documentation writing: ${value.ok ? 'passed' : 'failed'} (${String(value.files)} files)`,
@@ -61,13 +69,12 @@ export function humanOutput(value: unknown): string {
       `Runner: ${String(runner.status ?? 'unknown')}`, ...(typeof runner.message === 'string' ? [runner.message] : []),
       ...(Array.isArray(value.changedPaths) ? value.changedPaths.map(path => `  ${String(path)}`) : [])].join('\n');
   }
-  if ((value.operation === 'memory-recall' || value.operation === 'issue-recall' || value.operation === 'memory-search') && typeof value.query === 'string') {
-    const entries = value.operation === 'memory-search' ? value.memories : value.documents;
+  if ((value.operation === 'memory-search' || value.operation === 'issue-search') && typeof value.query === 'string') {
+    const entries = value.documents;
     if (!Array.isArray(entries) || entries.length === 0) return `${label(value.operation)}\nNone.`;
     const terms = value.query.trim().split(/\s+/u);
     return [label(value.operation), ...entries.filter(Predicate.isObject).flatMap(entry => [
       `${String(entry.path)} — ${String(entry.title ?? (Predicate.isObject(entry.metadata) ? entry.metadata.title : ''))}`,
-      `  ${String(entry.type ?? (Predicate.isObject(entry.metadata) ? entry.metadata.type : 'issue'))}: ${String(entry.status ?? (Predicate.isObject(entry.metadata) ? entry.metadata.status : 'unknown'))}`,
       `  ${matchingSnippet(typeof entry.body === 'string' ? entry.body : '', terms)}`,
     ])].join('\n');
   }

@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # 并行 worker 共享 dist 的构建窗口
 
 多个 worker 在同一工作树并行开发时，任一 worker 运行 `pnpm build` 或 `pnpm check` 都会先清空 `dist/`。其它 worker 正在运行的公开 CLI 测试因此报 `MODULE_NOT_FOUND`，全局 `concord`（链接到 `dist/entry.js`）也暂时不可用。

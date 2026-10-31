@@ -33,15 +33,11 @@ export { templateBody } from './templates.js';
 export { headingAnchors } from './steps.js';
 export { inspectSteps } from './steps.js';
 export { extractSteps } from './steps.js';
-export { deriveDesignRecord } from './design-record.js';
 export { CONTRACT_KINDS } from './documents.js';
 export { required } from './documents.js';
-export { designSnapshot } from './documents.js';
 export { now } from './documents.js';
 export { changed } from './documents.js';
 export { memory } from './documents.js';
-export { checkIssueClosure } from './documents.js';
 export { authorBody } from './documents.js';
-export { validateDesignContent } from './design-content.js';
 
 export { templateCatalog } from './templates.js';

@@ -7,7 +7,7 @@ import { ConcordError, digest } from "../model/index.js";
 
 import { readRepositoryFileSync } from "../base/workspace/index.js";
 import { decodeDocumentSource } from "../domain/documents/index.js";
-import { parseConstitution } from "../domain/constitution/index.js";
+import { parseTaste } from "../domain/taste/index.js";
 
 import type { QueryValue } from "../model/index.js";
 
@@ -19,11 +19,11 @@ export function readQueryBody(root: string, path: string): string {
 }
 export function hydrateQueryValue(root: string, value: QueryValue, read = readQueryBody) {
   const bodyChanged: string[] = [], bodyUnavailable: { path: string; code: string }[] = [];
-  const body = (path: string, expected: string, constitution: boolean) => {
+  const body = (path: string, expected: string, taste: boolean) => {
     try {
       const source = read(root, path);
       if (digest(source) !== expected) { bodyChanged.push(path); return undefined; }
-      const owner = constitution ? parseConstitution(source) : decodeDocumentSource(path, source);
+      const owner = taste ? parseTaste(source) : decodeDocumentSource(path, source);
       if (!owner) throw new ConcordError('InvalidData', 'Expected a Concord owner');
       return owner;
     } catch (cause) {
@@ -31,7 +31,7 @@ export function hydrateQueryValue(root: string, value: QueryValue, read = readQu
       return undefined;
     }
   };
-  const output = 'segments' in value ? { operation: 'cached-query', body: value.segments.map(segment => 'text' in segment ? segment.text : body(segment.constitution.path, segment.constitution.digest, true)?.body.trimEnd() ?? '(constitution changed since projection; use --fresh)').join('') }
+  const output = 'segments' in value ? { operation: 'cached-query', body: value.segments.map(segment => 'text' in segment ? segment.text : body(segment.taste.path, segment.taste.digest, true)?.body.trimEnd() ?? '(taste changed since projection; use --fresh)').join('') }
     : value.operation === 'trace-show' ? (() => {
       const restored = body(value.subject.path, value.subject.digest, false);
       const analysis = value.analysis === undefined ? undefined : historicalAnalysis(value.analysis);
@@ -39,7 +39,7 @@ export function hydrateQueryValue(root: string, value: QueryValue, read = readQu
         const historical = <T extends typeof group.wholeUseCase>(item: T): T => ({ ...item, relevance: item.relevance.map(row => analysis.relevance.find(current => current.testId === row.testId) ?? row) });
         return { ...group, steps: group.steps.map(historical), wholeUseCase: historical(group.wholeUseCase), nonStepAnchors: group.nonStepAnchors.map(historical), observation: { result: 'not-observed' as const, gaps: ['SnapshotNotCurrent'] } };
       });
-      return { ...value, stepGroups: staleGroups, ...(analysis === undefined ? {} : { analysis }), subject: restored === undefined ? value.subject : { path: value.subject.path, metadata: restored.metadata, body: restored.body, digest: value.subject.digest } };
+      return { ...value, stepGroups: staleGroups, ...(analysis === undefined ? {} : { analysis }), subject: restored === undefined ? value.subject : { path: value.subject.path, metadata: 'metadata' in restored ? restored.metadata : value.subject.metadata, body: restored.body, digest: value.subject.digest } };
     })() : value;
   return { value: output, bodyChanged: [...new Set(bodyChanged)].sort(), bodyUnavailable };
 }

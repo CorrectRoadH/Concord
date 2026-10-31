@@ -15,7 +15,7 @@ const loaders = {
   init: () => import("./cli-command-init.js").then(m => m.init),
   recover: () => import("./cli-command-recover.js").then(m => m.recover),
   config: () => import("./cli-command-config.js").then(m => m.config),
-  constitution: () => import("./cli-command-constitution.js").then(m => m.constitution),
+  taste: () => import("./cli-command-taste.js").then(m => m.taste),
   memory: () => import("./cli-command-memory.js").then(m => m.memory),
   issue: () => import("./cli-command-issue.js").then(m => m.issue),
   feedback: () => import("./cli-command-feedback.js").then(m => m.feedback),
@@ -46,7 +46,7 @@ export async function loadCommand(group: string, data: StartupData): Promise<() 
     const command = root.pipe(Command.withSubcommands(commands));
     return () => runPanelCli(command);
   }
-  const documentKinds = ['use-case', 'design', 'roadmap'] as const;
+  const documentKinds = ['use-case', 'roadmap'] as const;
   const kind = documentKinds.find(name => name === group);
   const selected = kind === undefined ? await loaders[group as keyof typeof loaders]() : (await import("./cli-command-documents.js")).docsGroup(kind);
   // Preserve parent usage and error suggestions. Built-ins and ambiguous routing

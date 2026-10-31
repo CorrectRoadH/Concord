@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # CLI 启动性能测量（启动优化）
 
 参照：commit 6346f4cf78bc3553448a0119443f8f2ec681f5d5 的独立 clone；AMD Ryzen 7 5800X，Linux x64，Node v24.19.0；warm cache；新旧产物交错各 6 次，取 p50。样本数少于性能验收要求的 7 次，属于探索性数据。

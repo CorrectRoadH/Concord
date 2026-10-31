@@ -29,7 +29,7 @@ export function makeIssueRemoteSubcommands<R = never>(deliver: TerminalDeliveryS
     return yield* planRemoteIssue(args.connection, args.number, { operation, body });
   }), process.argv.includes("--json"))).pipe(Command.withDescription(`Plan one Issue ${operation} write.`));
   return [
-    Command.make("plan").pipe(Command.withDescription("Read remote Issues and prepare one explicitly authorized write."), Command.withSubcommands([
+    Command.make("preview").pipe(Command.withDescription("Read remote Issues and prepare one explicitly authorized write."), Command.withSubcommands([
       Command.make("create", { connection, ...jsonConfig, title: Flag.string("title"), body: Flag.string("body"), originKey: Flag.string("origin-key").pipe(Flag.optional) }, args => handle(args.connection, false, Effect.gen(function*() {
         const body = yield* readRemoteIssueBody(args.body);
         return yield* planRemoteIssue(args.connection, undefined, { operation: "create", title: args.title, body }, Option.getOrUndefined(args.originKey));
@@ -40,6 +40,6 @@ export function makeIssueRemoteSubcommands<R = never>(deliver: TerminalDeliveryS
       Command.make("close", { number, connection, ...jsonConfig, reason: Flag.choice("reason", ["completed", "not_planned"]).pipe(Flag.optional) }, args => handle(args.connection, false, planRemoteIssue(args.connection, args.number, { operation: "close", ...(Option.isSome(args.reason) ? { reason: args.reason.value } : {}) }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan closing one Issue.")),
       Command.make("reopen", { number, connection, ...jsonConfig }, args => handle(args.connection, false, planRemoteIssue(args.connection, args.number, { operation: "reopen" }), process.argv.includes("--json"))).pipe(Command.withDescription("Plan reopening one Issue.")),
     ])),
-    Command.make("execute", { receiptId: Argument.string("receipt-id"), connection, authorize: Flag.string("authorize"), ...jsonConfig }, args => handle(args.connection, true, executeRemoteIssue(args.connection, args.receiptId, args.authorize), process.argv.includes("--json"))).pipe(Command.withDescription("Execute one Issue plan after explicit user authorization.")),
+    Command.make("apply", { receiptId: Argument.string("receipt-id"), connection, authorize: Flag.string("authorize"), ...jsonConfig }, args => handle(args.connection, true, executeRemoteIssue(args.connection, args.receiptId, args.authorize), process.argv.includes("--json"))).pipe(Command.withDescription("Execute one Issue plan after explicit user authorization.")),
   ] as const;
 }

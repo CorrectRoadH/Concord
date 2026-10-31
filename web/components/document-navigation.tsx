@@ -1,7 +1,6 @@
 import { FileText, Folder } from 'lucide-react';
 import { Suspense, lazy } from 'react';
 import { projectDocHref, projectDocPages, projectDocTitle } from '../lib/project-docs';
-import { researchTopicDirectory, researchTopics } from '../lib/research-topics';
 import { documentHref } from '../lib/document-routing';
 import { Link, useLocation } from 'react-router-dom';
 import { projectionIsConclusive, useWorkspace } from '../workspace';
@@ -28,11 +27,7 @@ export function DocumentNavigation() {
   const groups: ContentSidebarGroup[] = [{
     id: 'documents', label: `${section.label} 列表`, emptyMessage: conclusive ? `暂无 ${section.label}` : `当前代次暂未显示 ${section.label}`,
     filterEmptyMessage: conclusive ? `没有匹配的 ${section.label}` : `当前代次未显示匹配项，列表可能不完整`,
-    items: section.kind === 'research' ? researchTopics(documents).map(topic => ({
-      id: topic.directory, path: topic.directory, href: `${section.href}/${encodeURIComponent(topic.document.metadata.id)}`,
-      title: topic.title, active: selected !== undefined && researchTopicDirectory(selected.path) === topic.directory,
-      icon: <Folder size={16} />,
-    })) : documents.map(document => ({
+    items: documents.map(document => ({
       id: document.path, path: document.path, href: documentHref(document, snapshot.documents),
       title: document.metadata.title, active: selected?.path === document.path, icon: <FileText size={16} />,
     })),

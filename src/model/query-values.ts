@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, ResearchSchema, RoadmapSchema, UseCaseSchema } from "./shared.js";
+import { AnnotatedCaseSchema, DesignSchema, EngineeringSchema, FeatureSchema, IssueSchema, MemorySchema, RoadmapSchema, UseCaseSchema } from "./shared.js";
 import { FeedbackSourceSchema } from "./feedback-schema.js";
 import { CodeDeclarationSchema } from "./code-declaration.js";
 import { AnalysisViewSchema, TestRelevanceSchema } from "./analysis-view.js";
@@ -9,7 +9,7 @@ const sourceWithoutBody = Schema.Union(FeedbackSourceSchema.members.map(member =
   return Schema.Struct(fields);
 }));
 const Issue = Schema.Struct({ ...IssueSchema.fields, source: Schema.optional(sourceWithoutBody) });
-const Metadata = Schema.Union([FeatureSchema, UseCaseSchema, ResearchSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, Issue]);
+const Metadata = Schema.Union([FeatureSchema, UseCaseSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, Issue]);
 const Cache = Schema.Struct({ status: Schema.String, hits: Schema.Number, misses: Schema.Number, path: Schema.String, detail: Schema.optional(Schema.String) });
 const Edge = Schema.Struct({ from: Schema.String, to: Schema.String, relation: Schema.String });
 const Relationship = Schema.Literals(['code', 'test']);
@@ -36,7 +36,7 @@ export const TraceShowValue = Schema.Struct({
   analysis: Schema.optional(AnalysisViewSchema),
 });
 export const ReviewRenderValue = Schema.Struct({ segments: Schema.Array(Schema.Union([
-  Schema.Struct({ text: Schema.String }), Schema.Struct({ constitution: Schema.Struct({ path: Schema.String, digest: Schema.String }) }),
+  Schema.Struct({ text: Schema.String }), Schema.Struct({ taste: Schema.Struct({ path: Schema.String, digest: Schema.String }) }),
 ])) });
 export type TraceGapsValue = typeof TraceGapsValue.Type;
 export type TraceShowValue = typeof TraceShowValue.Type;

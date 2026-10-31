@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # 工作区刷新误报“最近刷新失败”
 
 现象：编辑仓库期间，工作台持续提示“最近刷新失败，当前来源状态未知”，偶发 503 `WorkspaceProjectionUnavailable`。

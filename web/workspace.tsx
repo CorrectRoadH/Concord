@@ -70,11 +70,10 @@ function retryableProjection(issue: WorkspaceIssue | null): boolean {
 const mutatingActions: ReadonlySet<ViewAction['action']> = new Set([
   'init', 'recover',
   'document.create', 'document.set',
-  'roadmap.start', 'design.decide', 'design.defer', 'design.format',
-  'memory.activate', 'memory.supersede', 'memory.link',
-  'issue.unlink', 'issue.reopen', 'issue.link', 'issue.edit', 'issue.remove', 'issue.close',
+  'roadmap.start',
+  'memory.link',
+  'issue.unlink', 'issue.link', 'issue.edit', 'issue.remove', 'issue.close',
   'feedback.sync', 'feedback.link', 'source.set', 'writing.set', 'concepts.set', 'config.set',
-  'constitution.initialize', 'constitution.adopt', 'constitution.amend',
 ]);
 
 export function WorkspaceProvider({ initial, api, children }: { initial: WorkspaceProjection; api: ConcordApi; children: ReactNode }) {

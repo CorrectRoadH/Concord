@@ -7,9 +7,9 @@ import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../mode
 
 
 const TEMPLATE_NAMES = [
-  'feature', 'roadmap', 'design', 'design-plan', 'engineering', 'use-case', 'research', 'decision', 'insight', 'note', 'issue',
-  'library', 'cli', 'architecture', 'use-case-index', 'goals', 'limits', 'decision-record', 'cases',
-  'project-index', 'concepts', 'project-architecture', 'constitution', 'project-design',
+  'feature', 'roadmap', 'design', 'engineering', 'use-case', 'memory', 'issue',
+  'library', 'cli', 'architecture', 'use-case-index',
+  'project-index', 'concepts', 'project-architecture', 'taste', 'project-design',
 ] as const;
 
 const TemplateNameSchema = Schema.Literals(TEMPLATE_NAMES);
@@ -127,13 +127,8 @@ export function projectTemplateFiles(catalog: { readonly render: (name: string, 
   };
   for (const [directory, name] of packageTemplates) addPackage(directory, name);
   add('engineering/README.md', 'engineering');
-  add('design-decision/README.md', 'design');
-  for (const [file, name] of [['GOALS', 'goals'], ['LIMITS', 'limits'], ['DECISION', 'decision-record'], ['CASES', 'cases']]) add(`design-decision/${file}.md`, name!);
-  addPackage('design-decision/plans/plan-1', 'design-plan');
-  addPackage('design-decision/plans/plan-2', 'design-plan');
-  for (const name of ['research', 'use-case', 'issue']) add(`${name}/README.md`, name);
-  for (const name of ['decision', 'insight', 'note']) add(`memory/${name}.md`, name);
-  add('constitution.md', 'constitution');
+  for (const name of ['design', 'use-case', 'issue', 'memory']) add(`${name}/README.md`, name);
+  add('taste.md', 'taste');
   add('project-DESIGN.md', 'project-design');
   files['docs/_template/README.md'] = "# Concord writing templates\n\nThis complete reference set is installed by concord init. `concord new` uses the bundled templates, not this directory. These examples are not adopted contracts or test evidence.\n\nA document's path is its identity and its single top-level heading is its name, so templates carry no frontmatter. Issue and Memory frontmatter holds only lifecycle facts, and only when they are non-empty.\n\nFeature, Roadmap, Engineering, and Design candidates require README only; choose the other pages when creating them. Design always includes its decision wrapper.\n\n| Optional page | Use when |\n| --- | --- |\n| library | A public programming interface needs exact shapes and examples |\n| cli | Public commands need inputs, outputs, and errors |\n| architecture | Internal entities, boundaries, invariants, and resource lifecycles need explanation |\n| use-case | User goals need an index of complete paths; create actual cases separately |\n\n" + Object.keys(files).map(path => `- [${path.slice('docs/_template/'.length)}](${path.slice('docs/_template/'.length)})`).join('\n') + '\n';
   return files;

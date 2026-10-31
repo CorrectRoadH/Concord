@@ -63,7 +63,6 @@ import { ContentSection, PanelHeader, PanelEmpty, RecordList, RecordItem, Record
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { humanKind } from "@/lib/utils"
-import { researchTopicDirectory } from "@/lib/research-topics"
 import { projectionIsConclusive, useWorkspace } from "@/workspace"
 
 import { contractIdentities, ImplementationPanel, TestingPanel } from './operations'
@@ -73,7 +72,6 @@ const descriptions: Record<string, string> = {
   engineering: "测试、构建与维护机制的工程 Spec。",
   roadmap: "尚未采用的方向与演进计划。",
   design: "备选方案、约束和已作出的技术裁决。",
-  research: "按主题目录自由组织研究正文与资料。",
   memory: "Decision、Insight 与 Note 的工程记忆。",
   issue: "仅本地的观察草稿，不代表远端 Issue 状态。",
 }
@@ -217,7 +215,6 @@ function fire(task: Promise<unknown>): void {
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
-// @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
 export function CreateDocument({
   kind,
   feature,
@@ -230,15 +227,8 @@ export function CreateDocument({
   const [id, setId] = React.useState("")
   const [title, setTitle] = React.useState("")
   const [body, setBody] = React.useState("")
-  const [observedAt, setObservedAt] = React.useState("")
-  const [sources, setSources] = React.useState("")
-  const [alternatives, setAlternatives] = React.useState("")
   const [pages, setPages] = React.useState<TemplatePage[]>([])
-  const selectablePages = kind === "feature" || kind === "roadmap" || kind === "design"
-  const [memoryKind, setMemoryKind] = React.useState<
-    "decision" | "insight" | "note"
-  >("note")
-
+  const selectablePages = kind === "feature" || kind === "roadmap"
   async function submit(event: React.FormEvent): Promise<void> {
     event.preventDefault()
     const action: ViewAction = {
@@ -249,24 +239,6 @@ export function CreateDocument({
       ...(selectablePages ? { pages } : {}),
       ...(body ? { body } : {}),
       ...(feature ? { feature } : {}),
-      ...(kind === "research"
-        ? {
-            ...(observedAt.trim() ? { observedAt: observedAt.trim() } : {}),
-            sources: sources
-              .split("\n")
-              .map((value) => value.trim())
-              .filter(Boolean),
-          }
-        : {}),
-      ...(kind === "design"
-        ? {
-            alternatives: alternatives
-              .split(",")
-              .map((value) => value.trim())
-              .filter(Boolean),
-          }
-        : {}),
-      ...(kind === "memory" ? { type: memoryKind } : {}),
     }
     await act(action, `${humanKind(kind)} 已创建。`)
     setOpen(false)
@@ -311,58 +283,10 @@ export function CreateDocument({
                 required
               />
             </Field>
-            {kind === "memory" && (
-              <Field label="记忆类型">
-                <Select
-                  value={memoryKind}
-                  onValueChange={(value) =>
-                    setMemoryKind(value as typeof memoryKind)
-                  }
-                >
-                  <SelectTrigger aria-label="Memory 类型">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="note">Note</SelectItem>
-                    <SelectItem value="decision">Decision</SelectItem>
-                    <SelectItem value="insight">Insight</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-            )}
-            {kind === "research" && (
-              <>
-                <Field label="观察日期（可选）">
-                  <Input
-                    aria-label="观察日期"
-                    type="date"
-                    value={observedAt}
-                    onChange={(event) => setObservedAt(event.target.value)}
-                  />
-                </Field>
-                <Field label="来源（可选）" hint="每行一个来源">
-                  <Textarea
-                    aria-label="Research 来源"
-                    value={sources}
-                    onChange={(event) => setSources(event.target.value)}
-                  />
-                </Field>
-              </>
-            )}
-            {kind === "design" && (
-              <Field label="备选方案" hint="用逗号分隔">
-                <Input
-                  aria-label="Design 备选方案"
-                  value={alternatives}
-                  onChange={(event) => setAlternatives(event.target.value)}
-                  required
-                />
-              </Field>
-            )}
             {selectablePages && (
               <fieldset className="space-y-2">
                 <legend className="text-sm font-medium">页面模板</legend>
-                <p className="text-sm text-muted-foreground">README 必需。其余按需选择，之后也可添加。{kind === "design" && "所选页面用于每个候选；决策外层文件始终创建。"}</p>
+                <p className="text-sm text-muted-foreground">README 必需。其余按需选择，之后也可添加。</p>
                 {TEMPLATE_PAGES.map((page) => (
                   <label key={page} className="flex items-start gap-2 text-sm">
                     <input type="checkbox" className="mt-1" aria-label={PAGE_DESCRIPTIONS[page].label} checked={pages.includes(page)} onChange={(event) => setPages((current) => event.target.checked ? [...current, page] : current.filter((value) => value !== page))} />
@@ -410,7 +334,7 @@ export function DocumentsListPage({
         .toLocaleLowerCase()
         .includes(filter.toLocaleLowerCase())
   )
-  if (["feature", "engineering", "roadmap", "design", "research", "memory"].includes(kind)) {
+  if (["feature", "engineering", "roadmap", "design", "memory"].includes(kind)) {
     const first = snapshot.documents.find(document => document.metadata.kind === kind)
     if (first) return dirty ? null : <Navigate to={documentHref(first, snapshot.documents)} replace />
   }
@@ -420,7 +344,7 @@ export function DocumentsListPage({
       <PageHeader
         title={humanKind(kind)}
         description={descriptions[kind]}
-        actions={!["feature", "engineering", "roadmap", "design", "research", "memory"].includes(kind) ? <CreateDocument kind={kind} /> : undefined}
+        actions={!["feature", "engineering", "roadmap", "design", "memory"].includes(kind) ? <CreateDocument kind={kind} /> : undefined}
       />
       <div className="list-toolbar">
         <Input
@@ -464,29 +388,6 @@ function DocumentSummary({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   if (metadata.kind === "roadmap") {
     return <Badge variant="secondary">{metadata.state}</Badge>
-  }
-  if (metadata.kind === "design") {
-    return (
-      <p>
-        {metadata.decision
-          ? `已选择 ${metadata.decision.selected}`
-          : metadata.deferral ? "已暂缓" : `${metadata.alternatives.length} 个备选方案`}
-      </p>
-    )
-  }
-  if (metadata.kind === "research") {
-    return <p>{[metadata.observedAt, metadata.sources.length ? `${metadata.sources.length} 个来源` : undefined].filter(Boolean).join(" · ")}</p>
-  }
-  if (metadata.kind === "memory") {
-    return (
-      <div className="inline-badges">
-        <Badge>{metadata.type}</Badge>
-        <Badge variant="secondary">{metadata.status}</Badge>
-      </div>
-    )
-  }
-  if (metadata.kind === "issue") {
-    return <Badge variant="outline">{metadata.status}</Badge>
   }
   return null
 }
@@ -593,7 +494,7 @@ export function DocumentDetailPage({ kind, relatedContent }: { kind: DocumentKin
       </Link>
     )
   }
-  const layoutKey = kind === "research" ? researchTopicDirectory(document.path) : document.path
+  const layoutKey = document.path
   return <>{back}<DocumentLayout key={layoutKey} document={document} relatedContent={relatedContent} /></>
 }
 
@@ -612,7 +513,7 @@ function DocumentLayout({
 }) {
   const { snapshot } = useWorkspace()
   const { params, update } = useUrlNavigation()
-  const showsLifecycle = ["roadmap", "design", "memory", "issue"].includes(document.metadata.kind)
+  const showsLifecycle = ["roadmap", "memory", "issue"].includes(document.metadata.kind)
   const requested = background && extra ? "use-cases" : params.get("tab") === "pages" ? "body" : params.get("tab") ?? "body"
   const requestedTab = requested === "actions" && !showsLifecycle ? "metadata" : requested
   const [editorToolbar, setEditorToolbar] = React.useState<HTMLDivElement | null>(null)
@@ -680,10 +581,7 @@ function DocumentFiles({
   const { act, api, snapshot } = useWorkspace()
   const navigate = useNavigate()
   const { params, update } = useUrlNavigation()
-  const topicDirectory = document.metadata.kind === "research" ? researchTopicDirectory(document.path) : undefined
-  const topicDocuments = topicDirectory ? snapshot.documents.filter(item => item.metadata.kind === "research" && item.path.startsWith(topicDirectory)) : []
-  const topicPages = topicDirectory ? snapshot.pages.filter(item => item.path.startsWith(topicDirectory)) : pages
-  const files = [...new Map([{ path: document.path }, ...topicDocuments.map(item => ({ path: item.path })), ...topicPages].map(item => [item.path, item])).values()]
+  const files = [{ path: document.path }, ...pages];
   const requestedFile = params.get("file")
   const selectedPath = requestedFile && files.some(file => file.path === requestedFile) ? requestedFile : document.path
   const layoutRef = React.useRef<HTMLDivElement>(null)
@@ -699,9 +597,7 @@ function DocumentFiles({
       // Reset only the distance already scrolled past the tree's visible top.
       viewport.scrollTo({ top: Math.max(0, viewport.scrollTop + layout.getBoundingClientRect().top - tree.getBoundingClientRect().top), behavior: 'instant' })
     }
-    const owner = topicDocuments.filter(item => path === item.path || path.startsWith(item.path.slice(0, -"README.md".length))).sort((a, b) => b.path.length - a.path.length)[0]
-    if (owner && owner.path !== document.path) navigate(`/research/${encodeURIComponent(owner.metadata.id)}?file=${encodeURIComponent(path)}`)
-    else update({ file: path })
+    update({ file: path })
   }
   const followMarkdownLink = (href: string) => {
     const target = relativeMarkdownTarget(selectedPath, href)
@@ -736,7 +632,7 @@ function DocumentFiles({
     })
     return () => controller.abort()
   }, [api, selectedPath, fileAttempt])
-  const ownerDirectory = topicDirectory ?? document.path.slice(0, document.path.lastIndexOf("/") + 1)
+  const ownerDirectory = document.path.slice(0, document.path.lastIndexOf("/") + 1)
   const tree = React.useMemo(() => buildFileTree(files, ownerDirectory), [files, ownerDirectory])
   const manualExpansion = React.useRef({ ownerDirectory, paths: new Set<string>() })
   const [expanded, setExpanded] = React.useState<ReadonlySet<string>>(() => new Set(treeDirectoryPaths(selectedPath, ownerDirectory)))
@@ -745,7 +641,7 @@ function DocumentFiles({
     setExpanded(new Set([...manualExpansion.current.paths, ...treeDirectoryPaths(selectedPath, ownerDirectory)]))
     setFileListOpen(false)
   }, [ownerDirectory, selectedPath])
-  const allowed = ["feature", "roadmap", "design", "engineering", "research"].includes(
+  const allowed = ["feature", "roadmap", "design", "engineering"].includes(
     document.metadata.kind
   )
   const showPathList = allowed || pages.length > 0
@@ -904,7 +800,6 @@ function MetadataForm({ document }: { document: WorkspaceDocument }) {
   return <><PanelHeader title="文档信息" /><ContentSection title="来源"><dl>
     <Definition label="类型">{humanKind(metadata.kind)}</Definition>
     <Definition label="路径"><code>{document.path}</code></Definition>
-    {metadata.kind === "research" && <><Definition label="观察日期">{metadata.observedAt ?? "未填写"}</Definition><Definition label="来源">{metadata.sources.join("\n")}</Definition></>}
   </dl></ContentSection>{metadata.kind !== "memory" && metadata.kind !== "issue" && <HeadingEditor key={document.path} path={document.path} />}</>
 }
 
@@ -951,13 +846,9 @@ function Lifecycle({ document }: { document: WorkspaceDocument }) {
     <><PanelHeader title="生命周期" /><div className="lifecycle-grid">
       <ContentSection title="当前状态">
           <dl>
-            {metadata.kind === "design" && !metadata.decision && !metadata.deferral && <Definition label="状态">待裁决</Definition>}
-            {"status" in metadata && <Definition label="状态">{metadata.status}</Definition>}
             {metadata.kind === "roadmap" && <Definition label="状态">{metadata.state}</Definition>}
             {(metadata.kind === "memory" || metadata.kind === "issue") && (metadata.relations ?? []).map(relation => <Definition key={`${relation.role}:${relation.target}`} label={relation.role}>{relation.target}</Definition>)}
             {metadata.kind === "roadmap" && metadata.cancellation && <><Definition label="取消理由">{metadata.cancellation.reason}</Definition>{metadata.cancellation.source && <Definition label="原文来源">{metadata.cancellation.source.path}</Definition>}</>}
-            {metadata.kind === "design" && metadata.deferral && <><Definition label="状态">已暂缓</Definition><Definition label="暂缓理由">{metadata.deferral.reason}</Definition>{metadata.deferral.source && <Definition label="原文来源">{metadata.deferral.source.path}</Definition>}</>}
-            {metadata.kind === "design" && metadata.decision && <><Definition label="已选择">{metadata.decision.selected}</Definition><Definition label="裁决理由">{metadata.decision.reason}</Definition><Definition label="裁决时间">{metadata.decision.at ?? "原文未记载"}</Definition></>}
           </dl>
       </ContentSection>
       <LifecycleActions document={document} />
@@ -975,28 +866,21 @@ function LifecycleActions({ document }: { document: WorkspaceDocument }) {
   function invoke(action: ViewAction, text: string): void {
     fire(act(action, text).then(() => setReason("")))
   }
-  if (!["roadmap", "design", "memory", "issue"].includes(metadata.kind)) {
+  if (!["roadmap", "memory", "issue"].includes(metadata.kind)) {
     return null
   }
-  if (metadata.kind === "roadmap" && metadata.state !== "planned" || metadata.kind === "design" && metadata.decision || metadata.kind === "issue" && metadata.status !== "open") return null
   return (
     <ContentSection title="可用操作" className="form-section">
       <div className="form-grid">
         {metadata.kind === "roadmap" && metadata.state === "planned" && (
           <><Field label="采用为 Feature ID"><Input aria-label="采用为 Feature ID" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button onClick={() => invoke({ action: "roadmap.start", id: metadata.id, ...(target ? { feature: target } : {}) }, "Roadmap 已采用为 Feature。")}>采用 Roadmap</Button></>
         )}
-        {metadata.kind === "design" && !metadata.decision && (
-          <><Field label="选定方案"><Select value={selected} onValueChange={setSelected}><SelectTrigger aria-label="选定设计方案"><SelectValue placeholder="选择方案" /></SelectTrigger><SelectContent>{metadata.alternatives.map((item) => <SelectItem value={item} key={item}>{item}</SelectItem>)}</SelectContent></Select></Field><Field label="关联目标" hint="每行一个引用"><Textarea aria-label="设计关联目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Field label="裁决理由"><Textarea aria-label="设计裁决理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "design.decide", id: metadata.id, selected, targets: target.split("\n").filter(Boolean), reason }, "设计裁决已记录。")}>记录裁决</Button><Button variant="outline" onClick={() => invoke({ action: "design.defer", id: document.path, reason }, "设计已暂缓。")}>暂缓设计</Button></>
-        )}
         {metadata.kind === "memory" && (
           <>
-            {metadata.status === "captured" && metadata.type !== "note" && <><Field label="激活理由"><Textarea aria-label="Memory 激活理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "memory.activate", id: document.path, reason }, "Memory 已激活。")}>激活 Memory</Button></>}
-            <Field label="目标或替代 Memory"><Input aria-label="Memory 目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field>
-            <Field label="理由"><Textarea aria-label="Memory 理由" value={reason} onChange={event => setReason(event.target.value)} /></Field>
-            <div className="button-row"><Button variant="outline" onClick={() => invoke({ action: "memory.link", id: document.path, target, role: "supports" }, "Memory 已关联。")}>关联 Spec</Button><Button variant="outline" onClick={() => invoke({ action: "memory.supersede", id: document.path, replacement: target, reason }, "Memory 已被替代。")}>标记替代</Button></div>
+            <Field label="Spec 目标"><Input aria-label="Memory 目标" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "memory.link", id: document.path, target }, "Memory 已关联。")}>关联 Spec</Button>
           </>
         )}
-        {metadata.kind === "issue" && metadata.status === "open" && (
+        {metadata.kind === "issue" && (
           <><Field label="关联 Memory"><Input aria-label="关联 Memory" value={target} onChange={(event) => setTarget(event.target.value)} /></Field><Button variant="outline" onClick={() => invoke({ action: "issue.link", id: metadata.id, memory: target }, "Issue 已关联 Memory。") }><Link2 /> 关联 Memory</Button><Field label="关闭理由"><Textarea aria-label="Issue 关闭理由" value={reason} onChange={(event) => setReason(event.target.value)} /></Field><Button onClick={() => invoke({ action: "issue.close", id: metadata.id, reason }, "Issue 已关闭。")}>关闭草稿</Button></>
         )}
       </div>

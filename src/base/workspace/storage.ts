@@ -199,7 +199,7 @@ Before planning, implementing, or reviewing governed work:
 - Local issues work without GitHub, Linear, credentials, or connections. Use \`concord new issue\` for local observations; local operations never authorize remote mutations.
 - Directly edit directory-scoped \`concepts.md\` and \`concord-writing.json\`; \`concord check\` validates them. Keep each concept's term, definition and explanation together; only deprecated names become terminology bans.
 
-Follow the returned instructions and the repository's current \`docs/constitution.md\`. A gap result means an explicit Concord relationship is absent; it is not code coverage, and undocumented CLI commands require the product's own inventory. Do not infer completion or test coverage from document structure or command receipts alone.`;
+Follow the returned instructions and the repository's current \`docs/taste.md\`. A gap result means an explicit Concord relationship is absent; it is not code coverage, and undocumented CLI commands require the product's own inventory. Do not infer completion or test coverage from document structure or command receipts alone.`;
 // @concord-end
 
 export interface RepositoryOptions { readonly initialize?: boolean; readonly recover?: boolean; readonly reclaimPublication?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off'; readonly optimistic?: boolean }

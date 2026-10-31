@@ -113,41 +113,25 @@ const base = { ...declarative, createdAt: Schema.optional(Text),
 };
 export const FeatureSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('feature') });
 export const UseCaseSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('use-case'), feature: Text });
-export const ResearchSchema = Schema.Struct({ ...base, kind: Schema.Literal('research'), observedAt: Schema.optional(Text), sources: Strings });
 export const HistoricalDispositionSchema = Schema.Struct({ reason: Text, source: Schema.optional(SourceRecordSchema), eventAt: Schema.optional(Text) });
-export const DesignSchema = Schema.Struct({ ...base, kind: Schema.Literal('design'), alternatives: Schema.Array(DocumentName), decision: Schema.optional(Schema.Struct({ selected: DocumentName, reason: Text, at: Schema.optional(Text), targets: Strings, source: Schema.optional(SourceRecordSchema) })), deferral: Schema.optional(HistoricalDispositionSchema) });
+export const DesignSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('design') });
 export const RoadmapSchema = Schema.Struct({ ...base, kind: Schema.Literal('roadmap'), state: Schema.Literals(['planned', 'adopted', 'cancelled']), adoptedAs: Schema.optional(Text), cancellation: Schema.optional(HistoricalDispositionSchema) });
 export const EngineeringSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('engineering') });
-export const MemoryRelationSchema = Schema.Struct({ role: Schema.Literals(['supports', 'amends']), target: Text });
-export const MemorySchema = Schema.Struct({ ...base, kind: Schema.Literal('memory'), type: Schema.Literals(['decision', 'insight', 'note']), status: Schema.Literals(['captured', 'current', 'superseded']), relations: Schema.Array(MemoryRelationSchema), supersededBy: Schema.optional(Text), supersession: Schema.optional(Schema.Struct({ statement: Text, source: SourceRecordSchema })) });
+export const MemoryRelationSchema = Schema.Struct({ role: Schema.Literal('supports'), target: Text });
+export const MemorySchema = Schema.Struct({ ...declarative, kind: Schema.Literal('memory'), relations: Schema.Array(MemoryRelationSchema) });
 export type MemoryMeta = typeof MemorySchema.Type;
-export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'decision', 'related'] as const;
+export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'related'] as const;
 export const IssueRelationSchema = Schema.Struct({ role: Schema.Literals([...MEMORY_RELATION_KINDS, 'adopts']), target: Text });
 export type IssueRelation = typeof IssueRelationSchema.Type;
 export const FixVerificationSchema = Schema.Struct({ defect: GitCommit, fix: GitCommit, tests: Schema.NonEmptyArray(Text).check(Schema.makeFilter(values => new Set(values).size === values.length)), runner: Sha256, concord: Text });
-export const IssueClosureSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('fixed'), reason: Text, verification: Schema.optional(FixVerificationSchema) }),
-  Schema.Struct({ kind: Schema.Literal('delivered'), memory: Text, target: Text, proof: Schema.NonEmptyArray(Text) }),
-  Schema.Struct({ kind: Schema.Literal('duplicate'), canonical: Text }),
-  Schema.Struct({ kind: Schema.Literal('declined'), memory: Text }),
-  Schema.Struct({ kind: Schema.Literal('invalid'), evidence: Schema.NonEmptyArray(Text) }),
-  Schema.Struct({ kind: Schema.Literal('external-fixed'), dependency: Text, version: Text, proof: Schema.NonEmptyArray(Text) }),
-  Schema.Struct({ kind: Schema.Literal('closed'), reason: Text }),
-]);
-export type IssueClosure = typeof IssueClosureSchema.Type;
 export const IssueOriginSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('dev'), repository: Text, commit: Schema.optional(Text) }),
   Schema.Struct({ kind: Schema.Literal('dogfood'), repository: Text, originId: Text, commit: Text }),
   Schema.Struct({ kind: Schema.Literal('issue'), repository: Text, number: Nat, url: Text }),
 ]);
-export const IssueSchema = Schema.Struct({ ...base, kind: Schema.Literal('issue'), status: Schema.Literals(['open', 'closed']),
-  relations: Schema.Array(IssueRelationSchema), closure: Schema.optional(IssueClosureSchema),
-  source: Schema.optional(FeedbackSourceSchema), origin: Schema.optional(IssueOriginSchema),
-  subject: Schema.optional(Schema.Literals(['product', 'repository', 'dependency'])), claim: Schema.optional(Schema.Literals(['defect', 'friction', 'request'])),
-  observation: Schema.optional(Text), impact: Schema.optional(Text),
-});
+export const IssueSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('issue'), relations: Schema.Array(IssueRelationSchema), source: Schema.optional(FeedbackSourceSchema) });
 export type IssueMeta = typeof IssueSchema.Type;
-export const DocumentSchema = Schema.Union([FeatureSchema, UseCaseSchema, ResearchSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, IssueSchema]);
+export const DocumentSchema = Schema.Union([FeatureSchema, UseCaseSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, IssueSchema]);
 export type DocumentMeta = typeof DocumentSchema.Type;
 export type DocumentKind = DocumentMeta['kind'];
 export interface DocumentRecord { readonly path: string; readonly metadata: DocumentMeta; readonly body: string; readonly digest: string }

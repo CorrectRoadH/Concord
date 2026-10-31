@@ -3,7 +3,6 @@ import { renderTypeScriptConfig } from "../base/workspace/index.js";
 import { documentRoots, inspectDocumentRecords, parseDocumentRecord } from "../domain/documents/index.js";
 import type { LocalRepository } from "../base/workspace/index.js";
 import { documentDisposition } from "../model/index.js";
-import { deriveDesignRecord } from "../domain/documents/index.js";
 import type { ViewFile } from "../model/index.js";
 
 const SOURCE_EXTENSION = /\.(?:[cm]?[jt]sx?)$/u;
@@ -34,7 +33,7 @@ function inspectMarkdown(repo: Repository, path: string, captured?: { source: st
     const document = captured === undefined ? parseDocumentRecord(path, source) : captured.result.ok ? captured.result.value : undefined;
     if (document) {
       const disposition = documentDisposition(document.metadata.kind, path, ['memory']);
-      if (disposition === 'current') return { document: deriveDesignRecord(repo, document) };
+      if (disposition === 'current') return { document: document };
       return { page: projectPage(path, source) };
     }
     return { page: projectPage(path, source) };

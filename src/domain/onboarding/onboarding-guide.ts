@@ -16,9 +16,8 @@ Code declarations describe implementation associations, not completion or test c
 
 - [Feature](feature/README.md): the adopted product contract, even when implementation is still catching up.
 - [Roadmap](roadmap/README.md): a product direction in the same genre as Feature that has not been adopted yet. Its design is incomplete, or it is designed but not scheduled.
-- [Design](design/README.md): goals, constraints, self-contained alternatives, and the reason for a decision.
+- Design: one open tradeoff in docs/design/<name>.md; write the adopted rule in Spec and delete the Design when decided.
 - [Engineering](engineering/README.md): how this repository is tested and maintained.
-- [Research](research/README.md): freeform research topics and supporting materials.
 - [Memory](../memory/README.md): decisions, insights, and notes.
 - [Issues](issues/README.md): local observations awaiting investigation.
 
@@ -27,13 +26,13 @@ Write contracts as declarations of intended behavior, constraints, and acceptanc
 Behavior pages (Feature README, Use Case, cli, library) state commands, real human and JSON output, exit codes, and named errors. The architecture page states how the Feature is implemented. Run \`concord --skill document\` for the full rules.
 
 Templates provide writing prompts, not completed requirements or evidence.
-Read docs/constitution.md before creating or revising Feature and Design owners. Link each applicable clause or paragraph ID next to the sentence that relies on it. The check command validates every constitution link under docs. Use \`concord constitution show\` to list where each rule is referenced.
+Read docs/taste.md before creating or revising Feature and Design owners. Link each applicable clause or paragraph ID next to the sentence that relies on it. The check command validates every taste link under docs. Use \`concord taste\` to list where each rule is referenced.
 
 ## Recall and maintain local knowledge
 
-Use \`concord memory recall "query" --json\` and \`concord issue recall "query" --json\` to search current knowledge. Indexes and reverse relations are derived; do not maintain a manual INDEX.
+Use \`concord memory search "query" --json\` and \`concord issue search "query" --json\` to search current knowledge. Indexes and reverse relations are derived; do not maintain a manual INDEX.
 
-Every file under docs/ and memory/ can be edited directly, including status and relations. Create scaffolds with \`concord new memory <name> --type decision\` or \`concord new issue <name>\`. Commands run required steps such as fix verification. Run \`concord check --since <base>\` before delivery.
+Every file under docs/ and memory/ can be edited directly, including relations. Create scaffolds with \`concord new memory <name>\` or \`concord new issue <name>\`. Commands run required steps such as fix verification. Run \`concord check\` before delivery.
 
 Local issues require no external account or connection. Local changes never authorize remote writes.
 
@@ -117,7 +116,7 @@ Close a defect through a reproducible regression:
 1. Add a failing regression test marked with \`@issue docs/issues/<id>.md\` and commit it.
 2. Commit the product fix while keeping the test, runner inputs and referenced Spec unchanged.
 3. Run \`concord issue close <id> --fixed\` to verify the frozen command against the defect and fixed snapshots and record the result in the Issue.
-4. Run \`concord check --since <base>\` before delivery.
+4. Run \`concord check\` before delivery.
 
 Use \`concord test verify <issue>\` to replay a recorded fix. Verification proves that one frozen command failed on the defect and passed on the accepted snapshot; it does not establish native case coverage. Use \`concord review\` for local review material.
 

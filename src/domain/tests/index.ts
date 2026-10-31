@@ -11,7 +11,7 @@ export { runCommandCase } from './evidence.js';
 export { runnerArguments } from './evidence.js';
 export { withRunner } from './evidence.js';
 export { closeFixedIssue } from './fix-verification.js';
-export { replayFix } from './fix-verification.js';
+export { verifyTest } from './fix-verification.js';
 export { bindNative } from './test-adapter-binding.js';
 export { builtinCollectParse } from './test-adapter-builtins.js';
 export { builtinCollectPlan } from './test-adapter-builtins.js';

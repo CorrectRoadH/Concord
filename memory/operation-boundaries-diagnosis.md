@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # 操作依赖、完整性与恢复回执的边界
 
 调查来源：GitHub issue #1（https://github.com/CorrectRoadH/Concord/issues/1）。该观察描述 macOS 安装中的死发布锁与恢复结果不一致。当前 Linux 环境复现了死 owner 阻断普通命令，但显式 recover 能回收；因此没有证据认定原 macOS 现场根因已经复现。

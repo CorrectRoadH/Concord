@@ -44,7 +44,7 @@ function matchesProjectedFeedback(item: WorkspaceFeedback, filter: { readonly qu
   return query.length === 0 || searchText(item).includes(query)
 }
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 function CreateLocalFeedback() {
   const { act, busy } = useWorkspace()
   const [open, setOpen] = React.useState(false)
@@ -96,7 +96,7 @@ function FeedbackSources({ connections, onReceipt }: { connections: readonly Fee
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 export function FeedbackNavigation() {
   const { snapshot, projection } = useWorkspace()
   const conclusive = projectionIsConclusive(projection)
@@ -117,13 +117,13 @@ export function FeedbackNavigation() {
     })), filterable: false, emptyMessage: filtered
       ? conclusive ? '没有匹配的反馈' : '当前代次未显示匹配反馈；列表可能不完整'
       : feedback.length ? '没有匹配的反馈' : conclusive ? '还没有反馈' : '当前代次未显示反馈；列表可能不完整',
-    actions: feedback.length > 0 ? <div className="feedback-toolbar"><Select value={provider} onValueChange={(value) => setProvider(value as ProviderFilter)}><SelectTrigger aria-label="按来源筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部来源</SelectItem><SelectItem value="local">仅本地</SelectItem><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select><Select value={triage} onValueChange={(value) => setTriage(value as TriageFilter)}><SelectTrigger aria-label="按处理状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="pending">待处理</SelectItem><SelectItem value="linked">已关联</SelectItem><SelectItem value="closed">已关闭</SelectItem></SelectContent></Select></div> : undefined,
+    actions: feedback.length > 0 ? <div className="feedback-toolbar"><Select value={provider} onValueChange={(value) => setProvider(value as ProviderFilter)}><SelectTrigger aria-label="按来源筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部来源</SelectItem><SelectItem value="local">仅本地</SelectItem><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select><Select value={triage} onValueChange={(value) => setTriage(value as TriageFilter)}><SelectTrigger aria-label="按处理状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="pending">待处理</SelectItem><SelectItem value="linked">已关联</SelectItem></SelectContent></Select></div> : undefined,
     }],
   }} />
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 export function FeedbackPage() {
   const { snapshot, projection } = useWorkspace()
   const conclusive = projectionIsConclusive(projection)
@@ -175,18 +175,18 @@ function SourcePanel({ item }: { item: WorkspaceFeedback }) {
 function SourceFacts({ item }: { item: FeedbackItem }) {
   const source = item.document.metadata.kind === "issue" ? item.document.metadata.source : undefined; const remote = item.remote
   if (!source) return <Card className="feedback-source-card"><CardHeader><CardTitle>来源</CardTitle><CardDescription>这是本地创建的反馈，没有远端来源快照。</CardDescription></CardHeader></Card>
-  return <Card className="feedback-source-card"><CardHeader><div className="card-title-row"><div><CardTitle>远端来源（只读）</CardTitle><CardDescription>“上次观察缓存”来自最近一次成功同步，不代表远端实时最新；页面只展示已保存的信息。</CardDescription></div><Button asChild size="sm" variant="outline"><a href={source.url} target="_blank" rel="noreferrer"><ExternalLink /> 打开远端</a></Button></div></CardHeader><CardContent><div className="feedback-source-facts"><Definition label="来源">{feedbackProviderLabel(source.provider)}</Definition><Definition label="连接"><code>{source.connectionId}</code></Definition><Definition label="远端 ID"><code>{source.id}</code></Definition><Definition label="本地状态"><Badge variant="outline">{item.document.metadata.status}</Badge></Definition><Definition label="可用性">{availabilityLabel(item.availability)}</Definition></div><div className="feedback-source-snapshots"><section><div className="feedback-snapshot-heading"><div><strong>首次导入快照</strong><small>永久保留，不被刷新替换</small></div><span>{dateTime(source.updatedAt)}</span></div><Badge variant="outline">远端状态：{source.state}</Badge><article className="feedback-source-markdown"><h3>{source.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{source.body}</ReactMarkdown></article><small>导入于 {dateTime(source.importedAt)}</small></section><section><div className="feedback-snapshot-heading"><div><strong>上次观察缓存</strong><small>非实时；只表示最近成功观察</small></div><span>{remote ? dateTime(remote.updatedAt) : "不可用"}</span></div>{remote ? <><Badge variant="secondary">远端状态：{remote.state}</Badge><article className="feedback-source-markdown"><h3>{remote.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{remote.body}</ReactMarkdown></article></> : <p className="muted">当前没有可读的远端缓存；首次导入快照仍可用。</p>}</section></div></CardContent></Card>
+  return <Card className="feedback-source-card"><CardHeader><div className="card-title-row"><div><CardTitle>远端来源（只读）</CardTitle><CardDescription>“上次观察缓存”来自最近一次成功同步，不代表远端实时最新；页面只展示已保存的信息。</CardDescription></div><Button asChild size="sm" variant="outline"><a href={source.url} target="_blank" rel="noreferrer"><ExternalLink /> 打开远端</a></Button></div></CardHeader><CardContent><div className="feedback-source-facts"><Definition label="来源">{feedbackProviderLabel(source.provider)}</Definition><Definition label="连接"><code>{source.connectionId}</code></Definition><Definition label="远端 ID"><code>{source.id}</code></Definition><Definition label="本地状态"><Badge variant="outline">待处理</Badge></Definition><Definition label="可用性">{availabilityLabel(item.availability)}</Definition></div><div className="feedback-source-snapshots"><section><div className="feedback-snapshot-heading"><div><strong>首次导入快照</strong><small>永久保留，不被刷新替换</small></div><span>{dateTime(source.updatedAt)}</span></div><Badge variant="outline">远端状态：{source.state}</Badge><article className="feedback-source-markdown"><h3>{source.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{source.body}</ReactMarkdown></article><small>导入于 {dateTime(source.importedAt)}</small></section><section><div className="feedback-snapshot-heading"><div><strong>上次观察缓存</strong><small>非实时；只表示最近成功观察</small></div><span>{remote ? dateTime(remote.updatedAt) : "不可用"}</span></div>{remote ? <><Badge variant="secondary">远端状态：{remote.state}</Badge><article className="feedback-source-markdown"><h3>{remote.title}</h3><ReactMarkdown remarkPlugins={[remarkGfm]}>{remote.body}</ReactMarkdown></article></> : <p className="muted">当前没有可读的远端缓存；首次导入快照仍可用。</p>}</section></div></CardContent></Card>
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 function RemoveLocalDraft({ item }: { item: WorkspaceFeedback }) {
   const { snapshot, projection, act, busy } = useWorkspace()
   const navigate = useNavigate()
   const [open, setOpen] = React.useState(false)
   const [error, setError] = React.useState("")
   const metadata = item.document.metadata
-  const candidate = item.provider === "local" && metadata.status === "open" && metadata.source === undefined && metadata.origin === undefined && metadata.closure === undefined && (metadata.relations?.length ?? 0) === 0
+  const candidate = item.provider === "local" && metadata.source === undefined && (metadata.relations?.length ?? 0) === 0
   const incoming = snapshot.edges.some((edge) => edge.from !== item.document.path && [item.document.path, metadata.id].includes(edge.to.split("#")[0] ?? ""))
   if (!projectionIsConclusive(projection) || !candidate || incoming || snapshot.findings.length > 0) return null
   async function remove(): Promise<void> {
@@ -220,7 +220,7 @@ function FeatureLinker({ item }: { item: WorkspaceFeedback }) {
 }
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 export function FeedbackDetailPage() {
   const { id = "" } = useParams(); const { snapshot, projection } = useWorkspace()

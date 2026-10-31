@@ -1,19 +1,17 @@
 // @concord-file
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 import { Schema } from "effect";
 import type { FeedbackItem } from "./feedback-schema.js";
 
 export const FeedbackFilterFields = {
-  state: Schema.optional(Schema.Literals(['open', 'closed'])),
   provider: Schema.optional(Schema.Literals(['local', 'github', 'linear'])),
-  triage: Schema.optional(Schema.Literals(['pending', 'linked', 'closed'])),
+  triage: Schema.optional(Schema.Literals(['pending', 'linked'])),
   query: Schema.optional(Schema.String),
 };
 export const FeedbackFilterSchema = Schema.Struct(FeedbackFilterFields);
 export type FeedbackFilter = typeof FeedbackFilterSchema.Type;
 
 export function matchesFeedback(item: FeedbackItem, filter: FeedbackFilter): boolean {
-  if (filter.state !== undefined && item.document.metadata.status !== filter.state) return false;
   if (filter.provider !== undefined && item.provider !== filter.provider) return false;
   if (filter.triage !== undefined && item.triage !== filter.triage) return false;
   const query = filter.query?.trim().toLocaleLowerCase();

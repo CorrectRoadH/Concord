@@ -1,6 +1,4 @@
 ---
-type: decision
-status: current
 relations:
   - role: supports
     target: docs/feature/local-data-engine/architecture.md

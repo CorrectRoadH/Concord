@@ -1,7 +1,5 @@
-import { readDesignPlanPaths } from "../../base/sources/index.js";
 import { posix } from "node:path";
 
-import { deriveDesignRecord } from "./design-record.js";
 
 
 
@@ -17,8 +15,6 @@ import { parseReference } from "../../model/index.js";
 
 
 import { inspectDocumentProjections, projectionRecord } from "./document-projection.js";
-import { designContentPaths } from "../../model/index.js";
-import { validateDesignContent } from "./design-content.js";
 
 import { DOCUMENT_ROOTS, documentDisposition, documentPlacementError, matchingOwners } from "../../model/index.js";
 
@@ -108,7 +104,7 @@ function currentDocument(repo: Repository, record: DocumentRecord | undefined): 
 function loadDocumentsUnderSnapshot(repo: Repository, kinds?: readonly DocumentKind[]): DocumentRecord[] {
   return inspectDocumentRecords(documentInputs(repo, kinds)).map(result => { if (!result.ok) throw result.cause; return result.value; })
     .filter((record): record is DocumentRecord => currentDocument(repo, record) && (kinds === undefined || kinds.includes(record.metadata.kind)))
-    .map(record => deriveDesignRecord(repo, record));
+    ;
 }
 // @concord-end
 
@@ -132,7 +128,7 @@ export function diagnoseDocuments(repo: Repository): DocumentInventory {
         const result = results[index]!;
         if (!result.ok) throw result.cause;
         const record = result.value;
-        if (currentDocument(repo, record)) documents.push(deriveDesignRecord(repo, record));
+        if (currentDocument(repo, record)) documents.push(record);
       } catch (cause) {
         if (!(cause instanceof ConcordError) || !['InvalidData', 'InvalidPlacement', 'InvalidPlan', 'DesignPlanNotFound', 'AmbiguousDesignPlan', 'DesignSelectionInvalid', 'DesignSelectionConflict'].includes(cause.code)) throw cause;
         findings.push({ code: cause.code, path: input.path, message: cause.message });
@@ -155,7 +151,7 @@ export function readDocumentReference(repo: Repository, reference: string, kinds
       const source = repo.read(path);
       const record = source === undefined ? undefined : parseDocumentRecord(path, source);
       if (record !== undefined && !currentDocument(repo, record)) throw new ConcordError('InvalidReferenceTarget', `${path} is not a current owner`);
-      return record === undefined ? undefined : deriveDesignRecord(repo, record);
+      return record;
     };
     let owner = read(parsed.path);
     if (owner === undefined) {
@@ -220,34 +216,6 @@ function checkRef(
   catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidReference', owner.path, `${label}: ${cause instanceof Error ? cause.message : String(cause)}`); return undefined; }
 }
 
-export function checkIssueClosure(repo: Repository, documents: readonly DocumentRecord[], document: DocumentRecord): Finding[] {
-  const findings: Finding[] = []; const metadata = document.metadata;
-  if (metadata.kind !== 'issue') return findings;
-  if (metadata.closure?.kind === 'fixed' && metadata.closure.verification === undefined) finding(findings, 'FixUnverifiable', document.path, 'Fixed closure requires verification');
-  if (metadata.closure?.kind === 'declined') {
-    const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
-    if (closureMemory?.metadata.kind === 'memory') {
-      const m = closureMemory.metadata;
-      if (metadata.closure.kind === 'declined' && (m.type !== 'decision' || m.status !== 'current')) finding(findings, 'InvalidState', document.path, 'Declined closure requires a current Decision');
-    }
-  }
-  if (metadata.closure?.kind === 'delivered') {
-    const closureMemory = checkRef(findings, repo, documents, document, metadata.closure.memory, ['memory'], 'closure Memory');
-    if (closureMemory?.metadata.kind === 'memory' && !(closureMemory.metadata.type === 'decision' && closureMemory.metadata.status === 'current')) finding(findings, 'InvalidState', document.path, 'Delivery requires a current Decision');
-    checkRef(findings, repo, documents, document, metadata.closure.target, CONTRACT_KINDS, 'closure target');
-    if (!metadata.relations.some(relation => relation.role === 'adopts' && metadata.closure?.kind === 'delivered' && relation.target === metadata.closure.target)) finding(findings, 'InvalidState', document.path, 'Delivered target must be a current adopts relation');
-  }
-  if (metadata.closure?.kind === 'duplicate') checkRef(findings, repo, documents, document, metadata.closure.canonical, ['issue'], 'canonical Issue');
-  if (metadata.closure !== undefined && ['duplicate', 'declined', 'invalid'].includes(metadata.closure.kind) && metadata.relations.some(relation => relation.role === 'adopts')) finding(findings, 'InvalidState', document.path, 'This closure requires current adoptions to be retired explicitly');
-  const seen = new Set<string>(); let cursor: DocumentRecord | undefined = document;
-  while (cursor?.metadata.kind === 'issue' && cursor.metadata.closure?.kind === 'duplicate') {
-    if (seen.has(cursor.path)) { finding(findings, 'ReferenceCycle', document.path, 'Issue duplicate closure contains a cycle'); break; }
-    seen.add(cursor.path);
-    try { cursor = resolveReference(repo, documents, cursor.metadata.closure.canonical, ['issue']); } catch { break; }
-  }
-  return findings;
-}
-
 export function checkDocuments(repo: Repository, documents: readonly DocumentRecord[]): Finding[] {
   return inRepositorySnapshot(repo, () => {
   const findings: Finding[] = [];
@@ -264,18 +232,6 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
 
     const metadata = document.metadata;
     if (metadata.kind === 'use-case') checkRef(findings, repo, documents, document, metadata.feature, ['feature'], 'feature');
-    if (metadata.kind === 'design') {
-      try { repo.files(`${posix.dirname(document.path)}/plans`); readDesignPlanPaths(repo.root, posix.dirname(document.path), metadata.alternatives); }
-      catch (cause) { finding(findings, cause instanceof ConcordError ? cause.code : 'InvalidPlan', document.path, String(cause)); }
-      if (metadata.decision !== undefined && metadata.deferral !== undefined) finding(findings, 'InvalidState', document.path, 'Design cannot be selected and deferred at the same time');
-      if (new Set(metadata.alternatives).size !== metadata.alternatives.length) finding(findings, 'InvalidState', document.path, 'Design alternatives must be unique');
-      if (metadata.decision !== undefined) {
-        if (!metadata.alternatives.includes(metadata.decision.selected)) finding(findings, 'InvalidState', document.path, 'Selected alternative is not declared');
-        if (new Set(metadata.decision.targets).size !== metadata.decision.targets.length) finding(findings, 'InvalidState', document.path, 'Design decision targets must be unique');
-        for (const target of metadata.decision.targets) checkRef(findings, repo, documents, document, target, CONTRACT_KINDS, 'decision target');
-        findings.push(...validateDesignContent(posix.dirname(document.path), metadata.alternatives, designSnapshot(repo, document), metadata.decision.selected).findings);
-      }
-    }
     if (metadata.kind === 'roadmap') {
       if (metadata.state !== 'adopted' && metadata.adoptedAs !== undefined) finding(findings, 'InvalidState', document.path, 'Only an adopted Roadmap can have adoptedAs');
       if (metadata.state === 'cancelled' && metadata.cancellation === undefined) finding(findings, 'InvalidState', document.path, 'Cancelled Roadmap must retain its cancellation reason and source');
@@ -283,28 +239,10 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
       if (metadata.state === 'adopted' && metadata.adoptedAs === undefined) finding(findings, 'InvalidState', document.path, 'Adopted Roadmap must identify its Feature');
       if (metadata.adoptedAs !== undefined) checkRef(findings, repo, documents, document, metadata.adoptedAs, ['feature'], 'adoptedAs');
     }
-    if (metadata.kind === 'memory') {
-      if (metadata.type === 'note' && metadata.status !== 'captured') finding(findings, 'InvalidState', document.path, 'Note Memory must remain captured');
-      if (metadata.status !== 'superseded' && (metadata.supersededBy !== undefined || metadata.supersession !== undefined)) finding(findings, 'InvalidState', document.path, 'Only superseded Memory may declare supersession');
-      if (metadata.status === 'superseded' && metadata.supersededBy === undefined && metadata.supersession === undefined) finding(findings, 'InvalidState', document.path, 'Superseded Memory requires a replacement or supersession source');
-      for (const relation of metadata.relations) {
-        if (relation.role === 'amends') {
-          if (metadata.type !== 'decision') finding(findings, 'InvalidState', document.path, 'Only a Decision can amend the constitution');
-          if (!/^docs\/constitution\.md(?:#c-(?!000)\d{3}(?:-[a-z0-9]+(?:-[a-z0-9]+)*)?)?$/u.test(relation.target)) finding(findings, 'InvalidReference', document.path, 'amends requires a constitution ID');
-        } else checkRef(findings, repo, documents, document, relation.target, CONTRACT_KINDS, 'supports');
-      }
-      if (metadata.supersededBy !== undefined) {
-        const replacement = checkRef(findings, repo, documents, document, metadata.supersededBy, ['memory'], 'supersededBy');
-        if (replacement?.metadata.kind === 'memory' && replacement.metadata.type !== metadata.type) finding(findings, 'InvalidState', document.path, 'Replacement Memory must have the same type');
-      }
-    }
+    if (metadata.kind === 'memory') for (const relation of metadata.relations) checkRef(findings, repo, documents, document, relation.target, CONTRACT_KINDS, 'supports');
     if (metadata.kind === 'issue') {
-      if (metadata.status === 'closed' && metadata.closure === undefined) finding(findings, 'InvalidState', document.path, 'Closed Issue must declare closure');
-      if (metadata.status === 'open' && metadata.closure !== undefined) finding(findings, 'InvalidState', document.path, 'Open Issue cannot declare closure');
-      findings.push(...checkIssueClosure(repo, documents, document));
       for (const relation of metadata.relations) {
         const linked = checkRef(findings, repo, documents, document, relation.target, relation.role === 'related' ? ['issue'] : relation.role === 'adopts' ? CONTRACT_KINDS : ['memory'], `relation (${relation.role})`);
-        if (linked?.metadata.kind === 'memory' && !['current', 'superseded'].includes(linked.metadata.status)) finding(findings, 'InvalidState', document.path, `${relation.role} requires current or superseded Memory`);
         if (relation.role === 'related' && linked?.path === document.path) finding(findings, 'InvalidState', document.path, 'related requires another Issue');
       }
     }
@@ -319,14 +257,6 @@ export function checkDocuments(repo: Repository, documents: readonly DocumentRec
   }
   for (const [identity, matches] of identities) if (matches.length > 1) for (const match of matches) finding(findings, 'DuplicateIdentity', match.path, `${identity} is not unique`);
 
-  for (const start of documents.filter(document => document.metadata.kind === 'memory')) {
-    const seen = new Set<string>(); let cursor: DocumentRecord | undefined = start;
-    while (cursor?.metadata.kind === 'memory' && cursor.metadata.supersededBy !== undefined) {
-      if (seen.has(cursor.path)) { finding(findings, 'ReferenceCycle', start.path, 'Memory supersession contains a cycle'); break; }
-      seen.add(cursor.path);
-      try { cursor = resolveReference(repo, documents, cursor.metadata.supersededBy, ['memory']); } catch { break; }
-    }
-  }
   return findings.sort((left, right) => left.path.localeCompare(right.path) || left.code.localeCompare(right.code));
   });
 }
@@ -343,14 +273,4 @@ export function setAuthor(repo: Repository, ref: string, body: string, expectedD
   if (record.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; use its current digest`);
   return changed(repo, 'set-author', record, record.metadata, authorBody(body), dryRun);
   });
-}
-
-export function designSnapshot(repo: Repository, record: DocumentRecord): Map<string, string | undefined> {
-  if (record.metadata.kind !== 'design') throw new ConcordError('InvalidDocumentKind', record.path);
-  const base = posix.dirname(record.path);
-  const supporting = repo.files(base).filter(path => path.endsWith('.md'));
-  readDesignPlanPaths(repo.root, base, record.metadata.alternatives);
-  const paths = [...new Set([...designContentPaths(base, record.metadata.alternatives), ...supporting])];
-  const snapshot = new Map(paths.map(path => [path, path === record.path ? preimage(repo, record) : repo.read(path)]));
-  return snapshot;
 }

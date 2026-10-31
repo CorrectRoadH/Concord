@@ -89,7 +89,7 @@ export const FeedbackSourceSchema = Schema.Union([
 ]);
 export type FeedbackSource = typeof FeedbackSourceSchema.Type;
 
-export type FeedbackTriage = 'pending' | 'linked' | 'closed';
+export type FeedbackTriage = 'pending' | 'linked';
 export type FeedbackAvailability = 'local' | 'cached' | 'unavailable';
 
 export type FeedbackIssueRecord = Omit<DocumentRecord, 'metadata'> & {

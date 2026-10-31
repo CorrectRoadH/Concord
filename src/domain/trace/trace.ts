@@ -6,7 +6,7 @@ import { scanCode } from "../code/index.js";
 import type { CodeDeclaration } from "../../model/index.js";
 import { checkDocuments, diagnoseDocuments, inspectDocumentRecords, type DocumentInventory } from "../documents/index.js";
 import { ConcordError, type AnnotatedCase, type Finding, type Repository } from "../../model/index.js";
-import { CONSTITUTION_PATH, inspectConstitution } from "../constitution/index.js";
+import { TASTE_PATH, inspectTaste } from "../taste/index.js";
 import { measureScan, type ScanTiming } from "../../base/sources/index.js";
 import { referenceResolver } from "../documents/index.js";
 import { resolveCommit } from "../../base/git/index.js";
@@ -24,7 +24,7 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
   const inventory = options.inventory ?? diagnoseDocuments(repo);
   const documents = inventory.documents;
   const annotations = measureScan(options.timing, 'trace.annotations', () => scanAnnotations(repo, { cache, sourceMode: options.annotationSourceMode }));
-  // Steps and constitution links share one read of each docs page.
+  // Steps and taste links share one read of each docs page.
   const pages = new Map<string, { readonly source?: string; readonly cause?: unknown }>();
   const readPage = (path: string): string | undefined => {
     if (!pages.has(path)) { try { pages.set(path, { source: repo.read(path) }); } catch (cause) { pages.set(path, { cause }); } }
@@ -41,12 +41,12 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
   // Managed owners and supporting pages share one bounded memory-cache batch.
   // This also covers root pages and templates outside the owner inventory.
   inspectDocumentRecords(markdown, true);
-  const constitution = measureScan(options.timing, 'trace.constitution', () => inspectConstitution(repo, readPage));
-  const constitutionFindings = constitution.findings;
-  const advisories = constitutionFindings.filter((finding) => finding.code === 'ConstitutionDraft');
-  const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents)), ...annotations.findings, ...constitutionFindings.filter((finding) => finding.code !== 'ConstitutionDraft')];
-  // Constitution list IDs are paragraphs, not Use Case steps.
-  for (const path of docPaths.filter(path => path !== CONSTITUTION_PATH)) {
+  const taste = measureScan(options.timing, 'trace.taste', () => inspectTaste(repo, readPage));
+  const tasteFindings = taste.findings;
+  const advisories = tasteFindings.filter((finding) => finding.code === 'TasteMissing');
+  const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents)), ...annotations.findings, ...tasteFindings.filter((finding) => finding.code !== 'TasteMissing')];
+  // Taste list IDs are paragraphs, not Use Case steps.
+  for (const path of docPaths.filter(path => path !== TASTE_PATH)) {
     try { const source = readPage(path); if (source !== undefined) findings.push(...extractSteps(path, source).findings); }
     catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidSteps', path, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
@@ -59,24 +59,20 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
     switch (m.kind) {
       case 'use-case': add(m.feature, 'feature'); break;
       case 'roadmap': if (m.adoptedAs) add(m.adoptedAs, 'adopted-as'); break;
-      case 'design': for (const ref of m.decision?.targets ?? []) add(ref, 'decides'); break;
-      case 'memory': for (const relation of m.relations) add(relation.target, relation.role); if (m.supersededBy) add(m.supersededBy, 'superseded-by'); break;
+      case 'design': break;
+      case 'memory': for (const relation of m.relations) add(relation.target, relation.role); break;
       case 'issue': {
         for (const relation of m.relations) add(relation.target, relation.role);
-        const closure = m.closure;
-        if (closure !== undefined && 'memory' in closure) add(closure.memory, `closure:${closure.kind}`);
-        if (closure?.kind === 'delivered') add(closure.target, 'closure:delivered-target');
-        if (closure?.kind === 'duplicate') add(closure.canonical, 'closure:duplicate');
         break;
       }
     }
   }
-  const constitutionEdges = new Set<string>();
-  for (const reference of constitution.references) {
-    const to = `${CONSTITUTION_PATH}#${reference.target}`;
-    if (constitutionEdges.has(`${reference.path}\0${to}`)) continue;
-    constitutionEdges.add(`${reference.path}\0${to}`);
-    edges.push({ from: reference.path, to, relation: 'constitution' });
+  const tasteEdges = new Set<string>();
+  for (const reference of taste.references) {
+    const to = `${TASTE_PATH}#${reference.target}`;
+    if (tasteEdges.has(`${reference.path}\0${to}`)) continue;
+    tasteEdges.add(`${reference.path}\0${to}`);
+    edges.push({ from: reference.path, to, relation: 'taste' });
   }
   for (const item of annotations.cases) {
     const source = `case:${item.id}`;
@@ -100,15 +96,8 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
     } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
   findings.push(...measureScan(options.timing, 'trace.verifyReferences', () => references.verify()));
-  for (const document of documents) if (document.metadata.kind === 'issue' && document.metadata.closure?.kind === 'fixed' && document.metadata.closure.verification) {
-    const verification = document.metadata.closure.verification;
-    try {
-      resolveCommit(repo.root, verification.defect); resolveCommit(repo.root, verification.fix);
-      // Recorded test bindings belong to F and are validated by replay; these annotations own only current trace edges.
-    } catch (cause) { findings.push({ code: 'FixUnverifiable', path: document.path, message: cause instanceof Error ? cause.message : String(cause) }); }
-  }
-  const verifications = documents.flatMap(doc => doc.metadata.kind === 'issue' && doc.metadata.closure?.kind === 'fixed' && doc.metadata.closure.verification ? [{ path: doc.path, verified: 'recorded' as const, verification: doc.metadata.closure.verification }] : []);
-  const trace = { documents, annotations, constitutionReferences: constitution.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, inventoryComplete: inventory.complete, advisories, verifications, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
+  const verifications: readonly never[] = [];
+  const trace = { documents, annotations, tasteReferences: taste.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, inventoryComplete: inventory.complete, advisories, verifications, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
   return { trace, references };
 }
 export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {

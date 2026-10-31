@@ -5,7 +5,7 @@ import { root } from "./cli-base.js";
 import { init } from "./cli-command-init.js";
 import { recover } from "./cli-command-recover.js";
 import { config } from "./cli-command-config.js";
-import { constitution } from "./cli-command-constitution.js";
+import { taste } from "./cli-command-taste.js";
 import { docsGroup, newDocument, showDocument, listDocuments } from "./cli-command-documents.js";
 import { memory } from "./cli-command-memory.js";
 import { issue } from "./cli-command-issue.js";
@@ -29,4 +29,4 @@ import { view } from "./cli-command-view.js";
 import { server } from './cli-command-server.js';
 import { panel } from './cli-command-panel.js';
 
-export const fullCommand = root.pipe(Command.withSubcommands([init,newDocument,showDocument,listDocuments,recover,config,constitution,...(['use-case','design','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,panel]));
+export const fullCommand = root.pipe(Command.withSubcommands([init,newDocument,showDocument,listDocuments,recover,config,taste,...(['use-case','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,panel]));

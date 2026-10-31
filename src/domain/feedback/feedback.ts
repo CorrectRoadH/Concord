@@ -104,7 +104,7 @@ function importedId(remote: RemoteFeedback): string {
 // @concord-end
 
 // @concord-begin
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md#验收
 function issueRecord(record: DocumentRecord): FeedbackItem['document'] {
   if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', `${record.path} is not feedback`);
@@ -134,9 +134,7 @@ export function listFeedback(repo: LocalRepository, inspectedDocuments?: readonl
       if (cacheWarning !== undefined) warnings.push(cacheWarning);
     }
     const features = document.metadata.relations.filter(relation => relation.role === 'adopts');
-    const triage: FeedbackItem['triage'] = document.metadata.status === 'closed'
-      ? 'closed'
-      : features.length > 0 || document.metadata.relations.length > 0 ? 'linked' : 'pending';
+    const triage: FeedbackItem['triage'] = features.length > 0 || document.metadata.relations.length > 0 ? 'linked' : 'pending';
     return { document: issueRecord(document), provider: source?.provider ?? 'local', triage, remote, availability, warnings };
   }).filter(item => matchesFeedback(item, selected));
 }
@@ -198,7 +196,7 @@ export const syncFeedback = Effect.fn('feedback.sync')(function*(
       const path = `docs/issues/${id}.md`;
       const source: FeedbackSource = decode(FeedbackSourceSchema, { ...item, connectionId, importedAt }, `feedback source ${identity}`);
       const metadata: DocumentMeta = {
-        format: 'concord.document/v1', id, title: item.title, createdAt: importedAt, kind: 'issue', status: 'open', relations: [], source,
+        format: 'concord.document/v1', id, title: item.title, kind: 'issue', relations: [], source,
       };
       const body = item.body.trim().length > 0 ? item.body : `Imported feedback: ${item.url}`;
       changes.push({ path, before: null, after: renderDocument(metadata, body) });

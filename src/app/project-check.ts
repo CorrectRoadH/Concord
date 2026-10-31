@@ -1,57 +1,16 @@
 import { ConcordError, type Finding, type Repository } from "../model/index.js";
 import { buildTrace } from "../domain/trace/index.js";
 import { indexConcepts } from "../domain/concepts/index.js";
-import { inlineLinks, markdownLinks, relativeMarkdownLink, relativeMarkdownLinkTarget } from "../domain/constitution/index.js";
+import { inlineLinks, markdownLinks, relativeMarkdownLink, relativeMarkdownLinkTarget } from "../domain/taste/index.js";
 import { checkWriting } from "../domain/writing/index.js";
 import { canonicalPath } from "../model/index.js";
-
-// @concord-code
-// @concord-implements docs/feature/documentation-quality/README.md#聚合门禁
-function checkDesignRecordLinks(repo: Repository) {
-  const findings: (Finding & { category: 'relation' })[] = [];
-  let complete = true;
-  const memoryRoots = ['memory'];
-  const sources = repo.files('docs').filter(path => /\.(?:md|mdx)$/u.test(path) &&
-    (/^docs\/[^/]+$/u.test(path) || path.startsWith('docs/feature/') || path.startsWith('docs/engineering/')) &&
-    !memoryRoots.some(root => path === root || path.startsWith(`${root}/`))).sort();
-  for (const path of sources) {
-    let reading = true;
-    try {
-      const source = repo.read(path);
-      if (source === undefined) throw new ConcordError('SourceChanged', 'File disappeared while Design record links were read');
-      reading = false;
-      for (const link of markdownLinks(source, { references: true, mdx: path.endsWith('.mdx') })) {
-        const target = relativeMarkdownLink(path, link.url);
-        if (target === undefined) continue;
-        if (target.kind === 'invalid') {
-          complete = false;
-          findings.push({ category: 'relation', code: 'DesignRecordLinkInvalid', path, line: link.line, message: target.message });
-          continue;
-        }
-        try { canonicalPath(target.path); }
-        catch (cause) {
-          complete = false;
-          findings.push({ category: 'relation', code: 'UnsafePath', path, line: link.line, message: cause instanceof Error ? cause.message : String(cause) });
-          continue;
-        }
-        if (!/^docs\/design\/[^/]+\/.+/u.test(target.path) || /^docs\/design\/[^/]+\/(?:README|DECISION)\.md$/u.test(target.path)) continue;
-        findings.push({ category: 'relation', code: 'SpecDependsOnDesignRecord', path, line: link.line, message: `Spec links to a Design record page: ${target.path}` });
-      }
-    } catch (cause) {
-      complete = false;
-      findings.push({ category: 'relation', code: cause instanceof ConcordError ? cause.code : reading ? 'SourceReadFailed' : 'InvalidMarkdownSource', path, message: cause instanceof Error ? cause.message : String(cause) });
-    }
-  }
-  return { findings, complete };
-}
 
 // @concord-code
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的聚合检查
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
 export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
   const trace = buildTrace(repo, cache);
-  const designRecordLinks = checkDesignRecordLinks(repo);
-  const unreadablePaths = new Set(designRecordLinks.findings.filter(finding => finding.code === 'SourceReadFailed').map(finding => finding.path));
+  const unreadablePaths = new Set<string>();
   const conceptLinks: { code: string; path: string; line: number; message: string; category: 'relation' }[] = [];
   let conceptLinksComplete = true;
   const catalogs = indexConcepts(repo).catalogs;
@@ -70,7 +29,7 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
     }
   }
   // A stable I/O failure is incomplete input, rather than an edit to retry.
-  // Keep the constitution scan's own semantics unchanged outside this aggregate.
+  // Keep the taste scan's own semantics unchanged outside this aggregate.
   const relationFindings = trace.findings.map(finding => ({ ...finding,
     code: finding.code === 'SourceChanged' && unreadablePaths.has(finding.path) ? 'SourceReadFailed' : finding.code,
     category: 'relation' as const,
@@ -88,12 +47,12 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
     writingComplete = false;
     writingFindings = [{ category: 'writing', code: error.code, path: 'docs', message: error.message }];
   }
-  const complete = trace.complete && conceptLinksComplete && designRecordLinks.complete && writingComplete;
-  const findings = [...relationFindings, ...conceptLinks, ...designRecordLinks.findings, ...writingFindings];
+  const complete = trace.complete && conceptLinksComplete && writingComplete;
+  const findings = [...relationFindings, ...conceptLinks, ...writingFindings];
   return {
     operation: 'check', ok: complete && findings.length === 0, complete, findings,
     checks: {
-      relations: { ok: trace.complete && conceptLinksComplete && conceptLinks.length === 0 && designRecordLinks.complete && designRecordLinks.findings.length === 0, complete: trace.complete && conceptLinksComplete && designRecordLinks.complete },
+      relations: { ok: trace.complete && conceptLinksComplete && conceptLinks.length === 0, complete: trace.complete && conceptLinksComplete },
       writing: { ok: writingComplete && writingFindings.length === 0, complete: writingComplete },
     },
     advisories: trace.advisories, documents: trace.documents.length,

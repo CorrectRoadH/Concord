@@ -12,7 +12,7 @@ import { headingAnchorsFromTree, inlineLinksFromTree, inspectTreeSteps } from ".
 import { ConcordError, decode, DocumentSchema } from "../../model/index.js";
 
 /** Bump when Markdown/YAML parsers, schemas, masking, or path rules change. */
-export const DOCUMENT_PARSER_VERSION = 'concord-document-memory/v7:shared-h1-tree:mdast-2.0.3:yaml-2.9.0';
+export const DOCUMENT_PARSER_VERSION = 'concord-document-memory/v8:current-owner-fields:mdast-2.0.3:yaml-2.9.0';
 const Record = Schema.Struct({ path: Schema.String, metadata: DocumentSchema, body: Schema.String, digest: Schema.String });
 const Marker = Schema.Struct({ line: Schema.Int, startColumn: Schema.Int, endColumn: Schema.Int });
 const Steps = Schema.Struct({
@@ -71,6 +71,5 @@ export function documentMarkdown(path: string, source: string): Root {
 export function projectionRecord(path: string, projection: Projection) {
   if (projection.error !== undefined) throw new ConcordError(projection.error.code, projection.error.message);
   const record = projection.record;
-  if (record?.metadata.kind === 'research' && !path.endsWith('/README.md')) throw new ConcordError('InvalidPlacement', `${path}: Research owners must use a topic directory with README.md`);
   return record;
 }

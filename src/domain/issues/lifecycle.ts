@@ -1,112 +1,70 @@
-import { Schema } from "effect";
-import { ConcordError, IssueClosureSchema, MEMORY_RELATION_KINDS, type IssueClosure, type IssueRelation, decode, inRepositorySnapshot, type MutationReceipt, type Repository } from "../../model/index.js";
-import { resolveReference } from "../documents/index.js";
-import { parseReference } from "../../model/index.js";
-import { CONTRACT_KINDS } from "../documents/index.js";
-import { now } from "../documents/index.js";
-import { required } from "../documents/index.js";
-import { changed } from "../documents/index.js";
-import { loadDocuments } from "../documents/index.js";
-import { readDocumentReference } from "../documents/index.js";
-import { readDocumentSelector } from "../documents/index.js";
-import { findDocument } from "../documents/index.js";
-import { checkIssueClosure } from "../documents/index.js";
+// @concord-file
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
+import { posix } from 'node:path';
+import { fromMarkdown, markdownBody, ConcordError, parseReference, digest, inRepositorySnapshot, type IssueRelation, type MutationReceipt, type Repository } from '../../model/index.js';
+import { CONTRACT_KINDS, changed, loadDocuments, readDocumentReference, readDocumentSelector } from '../documents/index.js';
+import type { Nodes } from 'mdast';
 
-
-// @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
-export function linkIssue(repo: Repository, selector: string, memoryRef: string, dryRun = false, kind: Exclude<IssueRelation['role'], 'adopts'> | 'adopts' = 'investigation'): MutationReceipt {
+export function linkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueRelation['role'] = 'investigation'): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
-  if (kind === 'adopts') return adoptIssue(repo, selector, memoryRef, dryRun);
-  const record = readDocumentSelector(repo, selector, 'issue');
-  if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-  if (record.metadata.status !== 'open') throw new ConcordError('InvalidIssueState', 'Closed Issue cannot gain links');
-  decode(Schema.Literals(MEMORY_RELATION_KINDS), kind, 'relation kind');
-  const target = readDocumentReference(repo, memoryRef, kind === 'related' ? ['issue'] : ['memory']); const canonical = parseReference(memoryRef).ref;
-  if (target.metadata.kind === 'memory' && !['current', 'superseded'].includes(target.metadata.status)) throw new ConcordError('InvalidMemoryState', 'Issue relations require current or superseded Memory');
-  if (kind === 'related' && target.path === record.path) throw new ConcordError('InvalidReferenceTarget', 'related requires another Issue');
-  if (record.metadata.relations.some((relation) => relation.target === canonical && relation.role === kind)) throw new ConcordError('DuplicateLink', `${canonical} is already linked`);
-  return changed(repo, 'link-issue', record, { ...record.metadata, relations: [...record.metadata.relations, { role: kind, target: canonical }] }, record.body, dryRun);
-  });
-}
-export function unlinkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: Exclude<IssueRelation['role'], 'adopts'> | 'adopts' = 'investigation'): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-    if (role === 'adopts') return retireIssue(repo, selector, reference, dryRun);
     const record = readDocumentSelector(repo, selector, 'issue');
     if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-    if (record.metadata.status !== 'open') throw new ConcordError('InvalidIssueState', 'Closed Issue must be reopened before unlinking');
+    const target = readDocumentReference(repo, reference, role === 'related' ? ['issue'] : role === 'adopts' ? CONTRACT_KINDS : ['memory']);
+    if (role === 'related' && target.path === record.path) throw new ConcordError('InvalidReferenceTarget', 'related requires another Issue');
+    const canonical = parseReference(reference).ref;
+    if (record.metadata.relations.some(item => item.role === role && item.target === canonical)) throw new ConcordError('DuplicateLink', `${role}: ${canonical}`);
+    return changed(repo, 'link-issue', record, { ...record.metadata, relations: [...record.metadata.relations, { role, target: canonical }] }, record.body, dryRun);
+  });
+}
+export function unlinkIssue(repo: Repository, selector: string, reference: string, dryRun = false, role: IssueRelation['role'] = 'investigation'): MutationReceipt {
+  return inRepositorySnapshot(repo, () => {
+    const record = readDocumentSelector(repo, selector, 'issue');
+    if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
     const canonical = parseReference(reference).ref;
     const relations = record.metadata.relations.filter(item => item.role !== role || item.target !== canonical);
     if (relations.length === record.metadata.relations.length) throw new ConcordError('LinkNotFound', `${role}: ${canonical}`);
-    return changed(repo, 'unlink-issue', record, { ...record.metadata, relations: relations }, record.body, dryRun);
+    return changed(repo, 'unlink-issue', record, { ...record.metadata, relations }, record.body, dryRun);
   });
 }
+export function adoptIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt { return linkIssue(repo, selector, reference, dryRun, 'adopts'); }
+export function retireIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt { return unlinkIssue(repo, selector, reference, dryRun, 'adopts'); }
+export function linkFeedbackFeature(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt { return adoptIssue(repo, selector, reference, dryRun); }
 
-
-// @concord-code
-// @concord-implements docs/feature/feedback/use-case/triage-feedback.md
-export function linkFeedbackFeature(repo: Repository, selector: string, featureRef: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-    const target = findDocument(loadDocuments(repo), featureRef, 'feature');
-    return adoptIssue(repo, selector, target.path, dryRun);
-  });
+/** Only authored links and owner relations retain an Issue; regression markers retain historical evidence. */
+export function issueReferences(repo: Repository, target: string): readonly { path: string; line?: number }[] {
+  const references: { path: string; line?: number }[] = [];
+  for (const owner of loadDocuments(repo)) {
+    if (owner.path === target || owner.metadata.kind !== 'issue' && owner.metadata.kind !== 'memory') continue;
+    if (owner.metadata.relations.some(relation => parseReference(relation.target).path === target)) references.push({ path: owner.path });
+  }
+  for (const path of [...repo.files('docs'), ...repo.files('memory')].filter(path => /\.mdx?$/u.test(path) && path !== target && !path.startsWith('docs/_template/')).sort()) {
+    const source = repo.read(path);
+    if (source === undefined) throw new ConcordError('SourceChanged', `${path} disappeared while Issue references were read`);
+    const tree = fromMarkdown(markdownBody(source));
+    const definitions = new Map<string, string>();
+    const index = (node: Nodes): void => { if (node.type === 'definition') definitions.set(node.identifier, node.url); if ('children' in node) node.children.forEach(index); };
+    index(tree);
+    const visit = (node: Nodes): void => {
+      const url = node.type === 'link' ? node.url : node.type === 'linkReference' ? definitions.get(node.identifier) : undefined;
+      if (url !== undefined && !/^(?:[a-z][a-z0-9+.-]*:|\/)/iu.test(url)) {
+        let location: string;
+        try { location = decodeURIComponent(url.split(/[?#]/u, 1)[0]!); } catch { throw new ConcordError('InvalidReference', `${path}: invalid link encoding`); }
+        if ((location === '' ? path : posix.normalize(posix.join(posix.dirname(path), location))) === target) references.push({ path, line: node.position?.start.line ?? 1 });
+      }
+      if ('children' in node) node.children.forEach(visit);
+    };
+    visit(tree);
+  }
+  return references;
 }
-
-
-// @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
-export function closeIssue(repo: Repository, selector: string, closureInput: string | IssueClosure, dryRun = false): MutationReceipt {
+export function closeIssue(repo: Repository, selector: string, reason = 'Handled', dryRun = false) {
   return inRepositorySnapshot(repo, () => {
-  const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
-  if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-  if (record.metadata.status !== 'open' && !(record.metadata.closure?.kind === 'fixed' && record.metadata.closure.verification === undefined)) throw new ConcordError('InvalidIssueState', 'Issue is already closed');
-  const closure = decode(IssueClosureSchema, typeof closureInput === 'string' ? { kind: 'closed', reason: closureInput } : closureInput, 'Issue closure');
-  const at = now(); const why = closure.kind === 'closed' ? closure.reason : closure.kind;
-  const metadata = { ...record.metadata, status: 'closed' as const, closure };
-  const candidate = { ...record, metadata };
-  const findings = checkIssueClosure(repo, documents.map(document => document.path === record.path ? candidate : document), candidate);
-  if (findings.length > 0) throw new ConcordError(findings[0]!.code, findings[0]!.message, { findings });
-  return changed(repo, 'close-issue', record, metadata, record.body, dryRun);
-  });
-}
-
-
-// @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
-export function adoptIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-    const documents = loadDocuments(repo); const record = findDocument(documents, selector, 'issue');
-    if (record.metadata.kind !== 'issue' || record.metadata.status !== 'open') throw new ConcordError('InvalidIssueState', 'Only a draft Issue can adopt a contract');
-    const parsed = parseReference(reference);
-    const target = resolveReference(repo, documents, reference, CONTRACT_KINDS);
-    const canonical = parsed.ref;
-    if (record.metadata.relations.some(relation => relation.role === 'adopts' && relation.target === canonical)) throw new ConcordError('DuplicateLink', `${canonical} is already adopted`);
-    return changed(repo, 'adopt-issue', record, { ...record.metadata, relations: [...record.metadata.relations, { role: 'adopts', target: canonical }] }, record.body, dryRun);
-  });
-}
-
-
-// @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
-export function retireIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-    const record = findDocument(loadDocuments(repo), selector, 'issue');
-    if (record.metadata.kind !== 'issue') throw new ConcordError('InvalidDocumentKind', selector);
-    const canonical = parseReference(reference).ref;
-    if (!record.metadata.relations.some(relation => relation.role === 'adopts' && relation.target === canonical)) throw new ConcordError('InvalidIssueState', `${canonical} is not a current adoption`);
-    if (record.metadata.status !== 'open') throw new ConcordError('InvalidIssueState', 'Closed Issue must be reopened before unlinking');
-    return changed(repo, 'retire-issue', record, { ...record.metadata, relations: record.metadata.relations.filter(relation => relation.role !== 'adopts' || relation.target !== canonical) }, record.body, dryRun);
-  });
-}
-
-
-// @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
-export function reopenIssue(repo: Repository, selector: string, reason: string, dryRun = false): MutationReceipt {
-  return inRepositorySnapshot(repo, () => {
-    const record = findDocument(loadDocuments(repo), selector, 'issue');
-    if (record.metadata.kind !== 'issue' || record.metadata.status !== 'closed') throw new ConcordError('InvalidIssueState', 'Only a closed Issue can reopen');
-    const why = required(reason, 'reason'); const { closure: _, ...metadata } = record.metadata;
-    return changed(repo, 'reopen-issue', record, { ...metadata, status: 'open' }, record.body, dryRun);
+    const record = readDocumentSelector(repo, selector, 'issue');
+    const references = issueReferences(repo, record.path);
+    if (references.length) throw new ConcordError('IssueReferenced', `${record.path} is still linked`, { references });
+    const before = repo.read(record.path);
+    if (before === undefined || digest(before) !== record.digest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; reload and retry`);
+    const conclusion = `Closed ${record.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
+    return { ...repo.publish('close-issue', [{ path: record.path, before, after: null }], dryRun), conclusion };
   });
 }

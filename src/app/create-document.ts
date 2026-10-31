@@ -17,11 +17,7 @@ export interface CreateDocumentInput {
   readonly title: string;
   readonly body?: string;
   readonly feature?: string;
-  readonly observedAt?: string;
-  readonly sources?: readonly string[];
-  readonly alternatives?: readonly string[];
   readonly pages?: readonly string[];
-  readonly memoryKind?: 'decision' | 'insight' | 'note';
   readonly dryRun?: boolean;
 }
 
@@ -30,7 +26,6 @@ export interface CreateDocumentInput {
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#roadmap
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#add
-// @concord-implements docs/feature/document-packages/use-case/organize-freeform-research.md
 export const createDocument = Effect.fn('createDocument')(function*(repo: Repository, kind: DocumentKind, input: CreateDocumentInput) {
   const catalog = yield* templateCatalog();
   return yield* Effect.try({ try: (): MutationReceipt => inRepositorySnapshot(repo, () => {
@@ -38,10 +33,7 @@ export const createDocument = Effect.fn('createDocument')(function*(repo: Reposi
   if (['use-case', 'issue', 'memory'].includes(kind) && id.toLowerCase() === 'readme') throw new ConcordError('InvalidInput', 'README is reserved for navigation');
   const title = required(input.title, 'title');
   if (input.feature !== undefined && kind !== 'use-case') throw new ConcordError('InvalidInput', 'feature is only valid for use-case');
-  if ((input.observedAt !== undefined || (input.sources?.length ?? 0) > 0) && kind !== 'research') throw new ConcordError('InvalidInput', 'observedAt and sources are only valid for research');
-  if ((input.alternatives?.length ?? 0) > 0 && kind !== 'design') throw new ConcordError('InvalidInput', 'alternatives are only valid for design');
-  if (input.memoryKind !== undefined && kind !== 'memory') throw new ConcordError('InvalidInput', 'memoryKind is only valid for memory');
-  if (input.pages !== undefined && !['feature', 'roadmap', 'design'].includes(kind)) throw new ConcordError('InvalidInput', 'pages is only valid for feature, roadmap, and design');
+  if (input.pages !== undefined && !['feature', 'roadmap'].includes(kind)) throw new ConcordError('InvalidInput', 'pages is only valid for feature and roadmap');
   const selected = decode(Schema.Array(Schema.Literals(TEMPLATE_PAGES)), input.pages ?? [], 'pages');
   if (new Set(selected).size !== selected.length) throw new ConcordError('InvalidInput', 'pages must be unique');
   const requested = TEMPLATE_PAGES.filter(page => selected.includes(page));
@@ -65,40 +57,16 @@ export const createDocument = Effect.fn('createDocument')(function*(repo: Reposi
       break;
     }
     case 'roadmap': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, state: 'planned' }; break;
-    case 'design': {
-      const alternatives = input.alternatives?.map(value => decode(DocumentName, value, 'alternative')) ?? [];
-      if (alternatives.length === 0 || alternatives.some(name => name.toLowerCase() === 'readme') || new Set(alternatives).size !== alternatives.length) throw new ConcordError('InvalidInput', 'Design requires unique non-empty alternatives');
-      path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, alternatives: alternatives as [string, ...string[]] };
-      break;
-    }
+    case 'design': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, kind }; break;
     case 'engineering': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, kind }; break;
-    case 'research': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, ...(input.observedAt === undefined ? {} : { observedAt: required(input.observedAt, 'observedAt') }), sources: input.sources ?? [] }; break;
-    case 'memory': {
-      const memoryKind = input.memoryKind;
-      if (memoryKind === undefined) throw new ConcordError('InvalidInput', 'memoryKind is required');
-      path = `memory/${id}.md`;
-      template = memoryKind;
-      metadata = { format: 'concord.document/v1', id, title, createdAt, kind, type: memoryKind, status: 'captured', relations: [] };
-      break;
-    }
-    case 'issue': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, createdAt, kind, status: 'open', relations: [] }; break;
+    case 'memory': path = `memory/${id}.md`; metadata = { format: 'concord.document/v1', id, title, kind, relations: [] }; break;
+    case 'issue': path = defaultDocumentPath(kind, id); metadata = { format: 'concord.document/v1', id, title, kind, relations: [] }; break;
   }
-  const body = kind === 'research' && input.body === undefined ? `# ${title}\n` : bodyFor(template);
-  if (kind === 'research' && repo.files(posix.dirname(path)).length > 0) throw new ConcordError('DocumentExists', `${posix.dirname(path)} already contains files; creating an owner would change their ownership`);
+  const body = bodyFor(template);
   const changes = [{ path, before: null, after: renderDocument(metadata, body) }];
   const allowed = kind === 'feature' || kind === 'roadmap';
   const add = (pagePath: string, name: string) => changes.push({ path: pagePath, before: null, after: authorBody(catalog.render(name, title, requested)) });
   if (allowed) for (const page of requested) add(`${posix.dirname(path)}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
-  if (kind === 'design') {
-    add(`docs/design/${id}/GOALS.md`, 'goals'); add(`docs/design/${id}/LIMITS.md`, 'limits'); add(`docs/design/${id}/DECISION.md`, 'decision-record');
-    add(`docs/design/${id}/CASES.md`, 'cases');
-    const alternatives = metadata.kind === 'design' ? metadata.alternatives : [];
-    for (const alternative of alternatives) {
-      const base = `docs/design/${id}/plans/${alternative}`;
-      add(`${base}/README.md`, 'design-plan');
-      for (const page of requested) add(`${base}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
-    }
-  }
   for (const change of changes) if (repo.read(change.path) !== undefined) throw new ConcordError('DocumentExists', `${change.path} already exists`);
   return repo.publish(`create-${kind}`, changes, input.dryRun ?? false);
   }), catch: failure });

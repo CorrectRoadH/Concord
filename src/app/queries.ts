@@ -9,14 +9,14 @@ import { Sources } from '../base/sources/index.js';
 import { waitForPublication } from '../base/publication/index.js';
 import { buildTrace, requireValidTrace, selectCase } from '../domain/trace/index.js';
 import { loadDocuments, readDocumentReference, findDocument } from '../domain/documents/index.js';
-import { constitutionShow } from '../domain/constitution/index.js';
+import { tasteShow } from '../domain/taste/index.js';
 import { showWriting, checkWriting, writingIndex } from '../domain/writing/index.js';
 import { showConcepts, indexConcepts } from '../domain/concepts/index.js';
 import { listFeedback } from '../domain/feedback/index.js';
 import { readNativeObservations } from '../domain/tests/index.js';
 import { scanCode } from '../domain/code/index.js';
 import { checkCurrentProject } from './check-current.js';
-import { knowledgeIndex, knowledgeRecall } from './knowledge.js';
+import { knowledgeIndex, knowledgeSearchRecords } from './knowledge.js';
 import { listCode } from './code-commands.js';
 import { showConfig } from './editing.js';
 import { documentShow, traceShow, traceGaps, renderReview } from './trace-queries.js';
@@ -27,17 +27,17 @@ import { getWorkspaceSnapshot } from './application.js';
 const strict = <S extends Schema.Top>(schema: S): S['Rebuild'] => schema.annotate({ parseOptions: { onExcessProperty: 'error' } });
 const operation = <const N extends string, F extends Schema.Struct.Fields>(name: N, fields: F) => strict(Schema.Struct({ name: Schema.Literal(name), input: strict(Schema.Struct(fields)) }));
 const empty = <const N extends string>(name: N) => operation(name, {});
-const DocumentKindSchema = Schema.Literals(['feature', 'use-case', 'research', 'design', 'roadmap', 'engineering', 'issue', 'memory']);
+const DocumentKindSchema = Schema.Literals(['feature', 'use-case', 'design', 'roadmap', 'engineering', 'issue', 'memory']);
 export const QueryRequest = Schema.Union([
   empty('check'),
   empty('trace.check'), operation('trace.show', { reference: Schema.String }), empty('trace.gaps'),
   operation('review', { reference: Schema.optional(Schema.String) }),
   operation('docs.check', { path: Schema.optional(Schema.String) }),
-  empty('constitution.show'), empty('config.show'),
+  empty('taste'), empty('config.show'),
   empty('workspace.show'),
   operation('documents.list', { kind: Schema.optional(DocumentKindSchema) }),
   operation('documents.show', { id: Schema.String, kind: Schema.optional(DocumentKindSchema) }),
-  empty('memory.index'), operation('memory.recall', { query: Schema.String }), operation('issue.recall', { query: Schema.String }),
+  empty('memory.index'), operation('memory.search', { query: Schema.String }), operation('issue.search', { query: Schema.String }),
   empty('code.list'), empty('test.list'), operation('test.show', { id: Schema.String }),
   operation('writing.show', { path: Schema.optional(Schema.String) }), empty('writing.index'),
   operation('concepts.show', { path: Schema.optional(Schema.String) }), empty('concepts.index'),
@@ -53,7 +53,7 @@ const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, 
     case 'trace.show': return traceShow(repo, request.input.reference, cache);
     case 'trace.gaps': return traceGaps(repo, cache);
     case 'review': return renderReview(repo, request.input.reference, cache);
-    case 'constitution.show': return constitutionShow(repo);
+    case 'taste': return tasteShow(repo);
     case 'config.show': return { ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source };
     case 'docs.check': return checkWriting(repo, request.input.path, cache !== 'off');
     case 'documents.list': {
@@ -66,8 +66,8 @@ const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, 
       return { ...documentShow(repo, id, kind ?? selected.metadata.kind, cache), operation: 'show' };
     }
     case 'memory.index': return knowledgeIndex(repo, 'memory');
-    case 'memory.recall': return knowledgeRecall(repo, 'memory', request.input.query);
-    case 'issue.recall': return knowledgeRecall(repo, 'issue', request.input.query);
+    case 'memory.search': return knowledgeSearchRecords(repo, 'memory', request.input.query);
+    case 'issue.search': return knowledgeSearchRecords(repo, 'issue', request.input.query);
     case 'code.list': return listCode(repo);
     case 'test.list': { const t = buildTrace(repo, cache, { includeCode: false }); requireValidTrace(t); return { operation: 'test-list', cases: t.annotations.cases, cache: t.annotations.cache, observations: readNativeObservations(repo) }; }
     case 'test.show': {

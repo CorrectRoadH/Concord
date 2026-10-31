@@ -19,7 +19,7 @@ export { check } from './cli-command-check.js';
 export { code } from './cli-command-code.js';
 export { concepts } from './cli-command-concepts.js';
 export { config } from './cli-command-config.js';
-export { constitution } from './cli-command-constitution.js';
+export { taste } from './cli-command-taste.js';
 export { docs } from './cli-command-docs.js';
 export { diagnose } from './cli-command-doctor.js';
 export { docsGroup } from './cli-command-documents.js';

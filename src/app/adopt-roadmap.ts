@@ -46,10 +46,7 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId?: str
     if (record?.metadata.kind === 'memory' || record?.metadata.kind === 'issue') {
       const relations = record.metadata.relations.map(relation => ({ ...relation, target: mapReference(relation.target) }));
       if (JSON.stringify(relations) !== JSON.stringify(record.metadata.relations)) source = renderDocument({ ...record.metadata, relations } as DocumentMeta, record.body);
-      if (record.metadata.kind === 'issue' && record.metadata.closure?.kind === 'delivered') {
-        const closure = { ...record.metadata.closure, target: mapReference(record.metadata.closure.target) };
-        if (closure.target !== record.metadata.closure.target) source = renderDocument({ ...record.metadata, relations: relations as import("../model/index.js").IssueMeta['relations'], closure }, record.body);
-      }
+
     }
     // Only documents with an inbound Markdown link need the bounded link transform.
     const links: { url: string }[] = [];

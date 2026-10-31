@@ -24,10 +24,10 @@ function unavailable(message: string): never { throw new ConcordError('FixUnveri
 
 const verificationFailure = (error: ConcordError): ConcordError => ['InvalidData', 'GitFailed', 'InvalidFile', 'OperationFailed', 'InvalidRunner', 'CleanupFailed', 'CleanupUnknown'].includes(error.code) ? new ConcordError('FixUnverifiable', error.message) : error;
 
-function selectedTests(repo: Repository, issue: string): readonly AnnotatedCase[] {
+function selectedTests(repo: Repository, issue: string, testId?: string): readonly AnnotatedCase[] {
   const scan = scanAnnotations(repo, { cache: 'off', sourceMode: 'overlay' });
   if (scan.findings.length) unavailable('Test markers cannot be decoded');
-  const tests = scan.cases.filter(test => test.status === 'active' && !test.skipped && test.issues.includes(issue)).sort((a, b) => a.id.localeCompare(b.id));
+  const tests = scan.cases.filter(test => test.status === 'active' && !test.skipped && (testId === undefined ? test.issues.includes(issue) : test.id === testId)).sort((a, b) => a.id.localeCompare(b.id));
   if (!tests.length) unavailable(`No runnable @issue markers reference ${issue}`);
   return tests;
 }
@@ -43,11 +43,9 @@ function frozenInputs(repo: Repository, tests: readonly AnnotatedCase[], commit?
     return { path, digest: digest(commit === undefined ? snapshotBytes(repo, path)! : gitBlobBytes(repo.root, commit, path)) };
   }) };
 }
-function freeze(repo: Repository, issue: string, defectInput: string | undefined, fix: string, recorded?: Verification) {
-  const tests = selectedTests(repo, issue);
-  if (recorded && canonical(recorded.tests.slice().sort()) !== canonical(tests.map(test => test.id))) unavailable('Recorded tests no longer exactly match the Issue markers');
+function freeze(repo: Repository, issue: string, defectInput: string | undefined, fix: string, testId?: string) {
+  const tests = selectedTests(repo, issue, testId);
   const inputs = frozenInputs(repo, tests, fix);
-  if (recorded && recorded.runner !== inputs.runner) unavailable('Recorded runner configuration no longer matches');
   let defect: string;
   if (defectInput) defect = resolveCommit(repo.root, defectInput);
   else {
@@ -69,7 +67,7 @@ function freeze(repo: Repository, issue: string, defectInput: string | undefined
   if (interval.length < 2) unavailable('Fix must be after the defect commit');
   for (const commit of interval) {
     const historical = commitRepository(repo, commit);
-    const historicTests = selectedTests(historical, issue);
+    const historicTests = selectedTests(historical, issue, testId);
     if (canonical(frozenInputs(historical, historicTests, commit)) !== canonical(inputs)) unavailable(`Frozen tests, runner inputs, or referenced Spec changed in ${commit}`);
   }
   return { tests, inputs, defect, fix, runner: inputs.runner };
@@ -120,51 +118,34 @@ function assertOutcome(result: CommandEvidence, red: boolean): void {
   if (!red && result.exitCode !== 0) throw new ConcordError('FixVerificationFailed', 'Runner failed on the accepted fix snapshot');
 }
 
-/** Both public replay entrypoints verify the recorded D/F claim, without writing. */
-export const replayFix = (repo: LocalRepository, selector: string) => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
+/** Reproduce one frozen runner command from the commits supplied by the caller. */
+export const verifyTest = (repo: LocalRepository, testId: string, defectInput: string, fixInput: string) => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
   const prepared = yield* sync(() => repo.snapshot(() => {
-    const runtimeHead = resolveCommit(repo.root, 'HEAD');
-    const issue = readDocumentSelector(repo, selector, 'issue');
-    if (issue.metadata.kind !== 'issue' || issue.metadata.closure?.kind !== 'fixed' || !issue.metadata.closure.verification) unavailable('Issue has no recorded fix verification');
-    const recorded = issue.metadata.closure.verification;
-    const fix = resolveCommit(repo.root, recorded.fix);
-    const targetRepo = commitRepository(repo, fix);
-    const tests = selectedTests(targetRepo, issue.path);
-    if (canonical(tests.map(test => test.id)) !== canonical(recorded.tests.slice().sort()) || objectDigest(configurationWithoutPreparation(targetRepo.configSnapshot.config)) !== recorded.runner) unavailable('Recorded tests or project configuration changed');
-    const defect = resolveCommit(repo.root, recorded.defect);
-    const inputs = frozenInputs(targetRepo, tests, fix);
-    for (const commit of firstParentPath(repo.root, defect, fix)) {
-      const historical = commitRepository(repo, commit);
-      if (canonical(frozenInputs(historical, selectedTests(historical, issue.path), commit)) !== canonical(inputs)) unavailable('Frozen runner inputs or referenced Spec changed');
-    }
-    const head = commitRepository(repo, runtimeHead);
-    return { issue, recorded, tests, inputs, runner: requireRunner(targetRepo), preparation: head.config.runner, issueDigest: digest(snapshotBytes(repo, issue.path)!) };
+    const fix = resolveCommit(repo.root, fixInput);
+    const target = commitRepository(repo, fix);
+    return { ...freeze(target, '', defectInput, fix, testId), runnerConfig: requireRunner(target), preparation: commitRepository(repo, resolveCommit(repo.root, 'HEAD')).config.runner };
   }));
   const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
-    const code = 'FixUnverifiable';
-    yield* assertFrozenRoot(root, prepared.inputs, code);
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     yield* prepareCheckout(root, prepared.preparation, preserve);
-    yield* assertFrozenRoot(root, prepared.inputs, code);
-    const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runner, test).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red); }))));
-    yield* assertFrozenRoot(root, prepared.inputs, code);
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
+    const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runnerConfig, test).pipe(Effect.tap(result => sync(() => { if (!result.cleanupOk) preserve(); assertOutcome(result, red); }))));
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     return results;
   });
-  const red = yield* inWorktree(repo, prepared.recorded.defect, cleanupUnknown, (root, preserve) => run(root, true, preserve));
-  const green = yield* inWorktree(repo, prepared.recorded.fix, cleanupUnknown, (root, preserve) => run(root, false, preserve));
-  const current = yield* (yield* Sources).readBytes(repo.root, prepared.issue.path);
-  if (current === undefined || digest(current) !== prepared.issueDigest) return yield* Effect.fail(new ConcordError('FileChangedSinceRead', 'Issue changed during verification'));
+  const red = yield* inWorktree(repo, prepared.defect, cleanupUnknown, (root, preserve) => run(root, true, preserve));
+  const green = yield* inWorktree(repo, prepared.fix, cleanupUnknown, (root, preserve) => run(root, false, preserve));
   yield* sync(release);
-  return { operation: 'test-verify', issue: prepared.issue.path, verification: prepared.recorded, verified: 'replayed' as const, red, green };
+  return { operation: 'test-verify', defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id), runner: prepared.runner, verified: 'replayed' as const, red, green };
 })).pipe(Effect.mapError(verificationFailure));
 
-export const closeFixedIssue = (repo: LocalRepository, selector: string, reason: string, defect?: string, fixInput?: string): Effect.Effect<object, ConcordError, OwnedProcess | Publication | Sources | Installation> => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
+export const closeFixedIssue = (repo: LocalRepository, selector: string, reason: string, defect?: string, fixInput?: string) => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
   const prepared = yield* sync(() => repo.snapshot(() => {
     const head = resolveCommit(repo.root, 'HEAD');
     const fix = fixInput === undefined ? head : resolveCommit(repo.root, fixInput);
     if (fixInput !== undefined && !git(repo.root, ['rev-list', '--first-parent', head]).split('\n').includes(fix)) unavailable('Fix must be a first-parent ancestor of HEAD');
     const issue = readDocumentSelector(repo, selector, 'issue');
     if (issue.metadata.kind !== 'issue') unavailable('Expected an Issue');
-    if (issue.metadata.status !== 'open' && !(issue.metadata.closure?.kind === 'fixed' && !issue.metadata.closure.verification)) throw new ConcordError('InvalidIssueState', 'Issue is already closed');
     if (git(repo.root, ['status', '--porcelain=v1', '--untracked-files=all', '--', issue.path])) unavailable('Fix verification requires the Issue file to have no uncommitted changes');
     const targetRepo = commitRepository(repo, fix);
     const issueDigest = digest(snapshotBytes(repo, issue.path)!);
@@ -192,8 +173,9 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
       if (issueBytes === undefined || digest(issueBytes) !== prepared.issueDigest) throw new ConcordError('FileChangedSinceRead', 'Issue changed during verification');
       const verification: Verification = { defect: prepared.defect, fix: prepared.fix, tests: prepared.tests.map(test => test.id) as [string, ...string[]], runner: prepared.runner, concord };
       release();
-      const receipt = closeIssue(publisher, prepared.issue.path, { kind: 'fixed', reason, verification });
-      return { ...receipt, verification, red, green };
+      const receipt = closeIssue(publisher, prepared.issue.path, reason);
+      const conclusion = `Verified fix — ${prepared.issue.path}\nDefect: ${verification.defect} (runner exit ${red[0]?.exitCode})\nFix: ${verification.fix} (runner exit 0)\nTests: ${verification.tests.join(', ')}\nRunner: ${verification.runner}\nClosed ${prepared.issue.path}\nReason: ${reason}\n\nPut the lines above in your commit message.`;
+      return { ...receipt, conclusion, verification, red, green };
     }); } finally { publisher.close(); }
   });
 })).pipe(Effect.mapError(verificationFailure));

@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # 缓存占用与浏览器验收
 
 已加载工作台收到 WorkspaceProjectionUnavailable/HawdbBusy 时，原先仅按普通轮询间隔重读缓存。短暂句柄占用因此使工作台长时间停在不可用提示。现与首次加载一致，每两秒重试缓存 GET，保留草稿，不额外请求扫描或回源。

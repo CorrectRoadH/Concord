@@ -28,61 +28,24 @@ export function ownerKind(path: string): DocumentKind | undefined {
   if (/^memory\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'memory';
   if (/^docs\/issues\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'issue';
   if (/^docs\/feature\/[^/]+\/use-case\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'use-case';
-  const match = /^docs\/(feature|engineering|roadmap|design)\/[^/]+\/README\.md$/u.exec(path);
+  const match = /^docs\/(feature|engineering|roadmap)\/[^/]+\/README\.md$/u.exec(path);
   if (match !== null) return match[1] as DocumentKind;
-  if (/^docs\/research\/(?:[^/]+\/)+README\.md$/u.test(path)) return 'research';
+  if (/^docs\/design\/(?!README\.md$)[^/]+\.md$/u.test(path)) return 'design';
   return undefined;
-}
-
-/** Read the template's Sources section through the Markdown tree. */
-export function researchSources(body: string, tree: Root = fromMarkdown(body)): { observedAt?: string; sources: string[] } {
-  const nodes = tree.children;
-  const sections = nodes.flatMap((node, index) => node.type === 'heading' && node.depth === 2 && ['Sources', '来源'].includes(text(node)) ? [index] : []);
-  if (sections.length > 1) throw new ConcordError('InvalidData', 'Research has more than one Sources section');
-  if (sections.length === 0) return { sources: [] };
-  const selected: Nodes[] = [];
-  for (const node of nodes.slice(sections[0]! + 1)) {
-    if (node.type === 'heading' && node.depth <= 2) break;
-    selected.push(node);
-  }
-  let observedAt: string | undefined;
-  const sources: string[] = [];
-  const visit = (node: Nodes): void => {
-    if (node.type === 'paragraph') {
-      const value = text(node);
-      const observed = /^(?:Observed at|观察日期|观察时间):\s*(.+)$/u.exec(value);
-      const source = /^(?:Source|来源):\s*(.+)$/u.exec(value);
-      if (observed !== null) {
-        if (observedAt !== undefined) throw new ConcordError('InvalidData', 'Research has duplicate observed dates');
-        observedAt = observed[1]!;
-      }
-      if (source !== null) {
-        const link = node.children.find(child => child.type === 'link');
-        sources.push(link?.type === 'link' ? link.url : source[1]!);
-      }
-    }
-    if ('children' in node && node.type !== 'paragraph') node.children.forEach(visit);
-  };
-  selected.forEach(visit);
-  return { ...(observedAt === undefined ? {} : { observedAt }), sources };
-}
-
-export function renderResearchSources(observedAt: string | undefined, sources: readonly string[]): string {
-  if (observedAt === undefined && sources.length === 0) return '';
-  return `\n## Sources\n\n${observedAt === undefined ? '' : `- Observed at: ${observedAt}\n`}${sources.map(source => `- Source: ${source}\n`).join('')}`;
 }
 
 /** Current files only. Derivable metadata cannot authorize an old format. */
 export function decodeUncachedDocumentSource(path: string, source: string, tree?: Root): DocumentRecord | undefined {
   const kind = ownerKind(path);
-  const specPage = /^docs\/(?:feature|engineering|roadmap|design|research)\//u.test(path) && path.endsWith('.md');
+  const specPage = /^docs\/(?:feature|engineering|roadmap|design)\//u.test(path) && path.endsWith('.md');
   if (specPage && /^(?:\uFEFF)?---\r?\n/u.test(source)) throw new ConcordError('InvalidData', `${path}: this document must not have frontmatter`);
   if (kind === undefined) return undefined;
   let body = source;
   let fields: object = {};
   if (kind === 'memory' || kind === 'issue') {
     const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/u.exec(source);
-    if (match === null) throw new ConcordError('InvalidData', `${path}: expected closed ${kind} frontmatter`);
+    if (match === null && /^---(?:\r?\n|$)/u.test(source)) throw new ConcordError('InvalidData', `${path}: expected closed ${kind} frontmatter`);
+    if (match !== null) {
     const yaml = parseDocument(match[1]!, { uniqueKeys: true, merge: false });
     if (yaml.errors.length > 0) throw new ConcordError('InvalidData', `${path}: ${yaml.errors.map(error => error.message).join('; ')}`);
     let value: unknown;
@@ -96,12 +59,11 @@ export function decodeUncachedDocumentSource(path: string, source: string, tree?
       const metadata = decode(IssueFrontmatterSchema, value, path);
       fields = { ...metadata, relations: metadata.relations ?? [] };
     }
+    } else fields = { relations: [] };
   }
-  const id = kind === 'use-case' || kind === 'issue' || kind === 'memory' ? path.split('/').at(-1)!.slice(0, -3) : path.split('/').at(-2)!;
+  const id = kind === 'use-case' || kind === 'issue' || kind === 'memory' || kind === 'design' ? path.split('/').at(-1)!.slice(0, -3) : path.split('/').at(-2)!;
   if (kind === 'use-case') fields = { feature: `${path.split('/').slice(0, 3).join('/')}/README.md` };
-  if (kind === 'design') fields = { alternatives: [] };
   if (kind === 'roadmap') fields = { state: 'planned' };
-  if (kind === 'research') fields = researchSources(body, tree);
   const metadata = decode(DocumentSchema, { format: 'concord.document/v1', id, title: documentTitle(path, body, tree), kind, ...fields }, path);
   return { path, metadata, body, digest: digest(source) };
 }

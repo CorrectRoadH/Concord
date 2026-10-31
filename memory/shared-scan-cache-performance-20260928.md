@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # 共享扫描与缓存性能复测
 
 本轮针对 Web workspace 持续 13–17 秒及缓存 ready 仍慢的观察，修正公共扫描层；没有消费者 macOS/rpg-game 的实际复现材料，不宣称该现场已完成验收。旧日志的 cache-unavailable 缺少具体原因，不能据此判为某种锁或安装故障。

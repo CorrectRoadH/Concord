@@ -15,15 +15,14 @@ function ownerRecords(repo: Repository, kind: KnowledgeKind): readonly DocumentR
 
 function summary(record: DocumentRecord) {
   return { path: record.path, id: record.metadata.id, title: record.metadata.title, digest: record.digest,
-    ...(record.metadata.kind === 'memory' ? { type: record.metadata.type, status: record.metadata.status } :
-      record.metadata.kind === 'issue' ? { status: record.metadata.status, provider: record.metadata.source?.provider ?? 'local' as const } : {}) };
+    ...(record.metadata.kind === 'issue' ? { provider: record.metadata.source?.provider ?? 'local' as const } : {}) };
 }
 
 // @concord-end
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#index
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 // @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
 export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
   return inRepositorySnapshot(repo, () => ({ operation: `${kind}-index`, documents: ownerRecords(repo, kind).map(summary) }));
@@ -34,7 +33,7 @@ export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
 function queryTerms(query: string): readonly string[] {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-  if (terms.length === 0) throw new ConcordError('InvalidInput', 'recall/search query must be non-empty');
+  if (terms.length === 0) throw new ConcordError('InvalidInput', 'search query must be non-empty');
   return terms;
 }
 
@@ -50,13 +49,13 @@ function matchingRecords(records: readonly DocumentRecord[], terms: readonly str
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 // @concord-implements docs/feature/local-data-engine/use-case/query-current-projections.md
-export function knowledgeRecall(repo: Repository, kind: KnowledgeKind, query: string) {
+export function knowledgeSearchRecords(repo: Repository, kind: KnowledgeKind, query: string) {
   return inRepositorySnapshot(repo, () => {
     const terms = queryTerms(query);
     const documents = matchingRecords(ownerRecords(repo, kind), terms);
-    return { operation: `${kind}-recall`, query, documents: documents.map(record => ({ ...summary(record), body: record.body })) };
+    return { operation: `${kind}-search`, query, documents: documents.map(record => ({ ...summary(record), body: record.body })) };
   });
 }
 
@@ -73,7 +72,7 @@ export function knowledgeSearch(repo: Repository, query: string) {
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#edit
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const record = readDocumentSelector(repo, selector, kind);
@@ -83,24 +82,17 @@ export function editKnowledge(repo: Repository, kind: KnowledgeKind, selector: s
 
 
 // @concord-code
-// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#操作-spec
-function isUnlinkedDraft(record: DocumentRecord): boolean {
-  if (record.metadata.kind !== 'issue') return false;
-  const issue = record.metadata;
-  return issue.status === 'open' && issue.source === undefined && issue.origin === undefined && issue.closure === undefined &&
-    issue.relations.length === 0;
-}
+// @concord-implements docs/feature/feedback/use-case/manage-local-observations.md#link
 export function removeIssue(repo: Repository, selector: string, expectedDigest: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
     const trace = buildTrace(repo, 'off', { includeCode: false });
     requireValidTrace(trace);
     const record = findDocument(trace.documents, selector, 'issue');
     if (record.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; use its current digest`);
-    if (!isUnlinkedDraft(record)) throw new ConcordError('IssueNotRemovable', `${record.path} has a source, relationship, or lifecycle history`);
     for (const edge of trace.edges) {
       if (edge.from === record.path) continue;
       const target = edge.to.split('#', 1)[0]!;
-      if (target === record.path || target === record.metadata.id) throw new ConcordError('IssueNotRemovable', `${record.path} has an incoming Trace relationship`);
+      if (target === record.path || target === record.metadata.id) throw new ConcordError('IssueReferenced', `${record.path} has an incoming Trace relationship`);
     }
     const before = repo.read(record.path);
     if (before === undefined || digest(before) !== record.digest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; reload and retry`);

@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # pnpm check 的性能测量与隔离
 
 ## 范围与方法

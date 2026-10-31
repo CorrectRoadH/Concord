@@ -7,24 +7,19 @@ import { Command, Flag, Prompt } from "effect/unstable/cli";
 
 import { initialize } from "../../app/index.js";
 import { ConcordError, RunnerSchema } from "../../model/index.js";
-import { adoptConstitution } from "../../app/index.js";
 import { root, optional, many, body, jsonBody, emit, sync } from "./cli-base.js";
 import { withRepo } from "./cli-repository.js";
 
 const init = Command.make('init', {
   testRoot: many('test-root'), sourceRoot: many('source-root'), docsOnly: Flag.boolean('docs-only').pipe(Flag.withDefault(false)), runnerConfig: optional('runner-config'),
-  constitutionBody: optional('constitution-body'), adoptConstitution: Flag.boolean('adopt-constitution').pipe(Flag.withDefault(false)),
-  constitutionReason: optional('constitution-reason'), constitutionImpact: optional('constitution-impact'), constitutionSource: many('constitution-source'), yes: Flag.boolean('yes').pipe(Flag.withDefault(false)),
+  yes: Flag.boolean('yes').pipe(Flag.withDefault(false)),
 }, args => withRepo((repo, s) => Effect.gen(function*() {
   if (args.docsOnly && args.testRoot.length) return yield* Effect.fail(new ConcordError('ConflictingOptions', '--docs-only cannot be combined with --test-root'));
   const configFile = Option.getOrUndefined(args.runnerConfig);
   const runner = yield* sync(() => configFile === undefined ? undefined : jsonBody(configFile, RunnerSchema, 'runner configuration'));
   const interactive = process.stdin.isTTY === true && process.stdout.isTTY === true;
-  const constitutionBody = yield* sync(() => Option.isSome(args.constitutionBody) ? body(args.constitutionBody.value) : undefined);
   const options = {
     testRoots: args.docsOnly ? [] : args.testRoot.length ? args.testRoot : undefined, sourceRoots: args.sourceRoot.length ? args.sourceRoot : undefined, runner,
-    constitutionBody,
-    adoptConstitution: args.adoptConstitution, constitutionReason: Option.getOrUndefined(args.constitutionReason), constitutionImpact: Option.getOrUndefined(args.constitutionImpact), constitutionSources: args.constitutionSource,
   } as const;
   const preview = yield* initialize(repo, true, options);
   const preimages = yield* sync(() => repo.snapshot(() => {
@@ -41,6 +36,6 @@ const init = Command.make('init', {
 
   }));
   return yield* initialize(writer, false, options);
-}), { initialize: true, readonly: true, unlocked: true })).pipe(Command.withDescription('Progressively initialize static TypeScript configuration, constitution, templates and optional configuration. Non-TTY uses deterministic defaults; --dry-run previews and an interactive rejection writes nothing.'));
+}), { initialize: true, readonly: true, unlocked: true })).pipe(Command.withDescription('Progressively initialize static TypeScript configuration, taste, templates and optional configuration. Non-TTY uses deterministic defaults; --dry-run previews and an interactive rejection writes nothing.'));
 
 export { init };

@@ -2,7 +2,7 @@ import { analysisView } from "./analysis-view.js";
 import type { AnalysisView } from "../model/index.js";
 import { findDocument } from "../domain/documents/index.js";
 import { ConcordError, type DocumentRecord, type Repository } from "../model/index.js";
-import { CONSTITUTION_PATH, showConstitution } from "../domain/constitution/index.js";
+import { TASTE_PATH, showTaste } from "../domain/taste/index.js";
 import { referenceResolver } from "../domain/documents/index.js";
 import { extractSteps } from "../domain/documents/index.js";
 import { buildTrace } from "../domain/trace/index.js";
@@ -45,7 +45,7 @@ export function pageOwner(references: ReturnType<typeof referenceResolver>, page
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 export function belongsTo(references: ReturnType<typeof referenceResolver>, trace: ReturnType<typeof buildTrace>, selectedPaths: ReadonlySet<string>, ref: string): boolean {
-  if (pathOf(ref) === CONSTITUTION_PATH) return selectedPaths.has(CONSTITUTION_PATH);
+  if (pathOf(ref) === TASTE_PATH) return selectedPaths.has(TASTE_PATH);
   try {
     const owner = references.resolve(ref);
     return selectedPaths.has(owner.path) || (owner.metadata.kind === 'use-case' && selectedPaths.has(owner.metadata.feature));
@@ -70,9 +70,9 @@ export function traceShowValue(repo: Repository, trace: ReturnType<typeof buildT
     const document = findTraced(trace, selector);
     const relatedPaths = new Set([document.path]);
     if (document.metadata.kind === 'feature') for (const doc of trace.documents) if (doc.metadata.kind === 'use-case' && pathOf(doc.metadata.feature) === document.path) relatedPaths.add(doc.path);
-    const incoming = trace.edges.filter(e => e.relation !== 'constitution' && belongsTo(references, trace, relatedPaths, e.to));
+    const incoming = trace.edges.filter(e => e.relation !== 'taste' && belongsTo(references, trace, relatedPaths, e.to));
     for (const edge of incoming) relatedPaths.add(pathOf(edge.to));
-    const outgoing = trace.edges.filter(e => relatedPaths.has(e.from) || (e.relation === 'constitution' && relatedPaths.has(pageOwner(references, e.from) ?? '')));
+    const outgoing = trace.edges.filter(e => relatedPaths.has(e.from) || (e.relation === 'taste' && relatedPaths.has(pageOwner(references, e.from) ?? '')));
     const ids = new Set(incoming.filter(e => e.from.startsWith('case:')).map(e => e.from.slice(5)));
     const codeIds = new Set(incoming.filter(e => e.from.startsWith('code:')).map(e => e.from.slice(5)));
     const codeDeclarations = trace.codeDeclarations.filter(c => codeIds.has(c.id)).map(c => ({ ...c, matchedContracts: c.contracts.filter(ref => belongsTo(references, trace, relatedPaths, ref)) }));
@@ -170,10 +170,10 @@ export function documentShow(repo: Repository, selector: string, kind: DocumentR
     const document = findTraced(trace, selector, kind);
     const useCases = kind === 'feature' ? trace.documents.filter(candidate => candidate.metadata.kind === 'use-case' && pathOf(candidate.metadata.feature) === document.path) : [];
     const relatedPaths = new Set([document.path, ...useCases.map(candidate => candidate.path)]);
-    const incoming = trace.edges.filter(edge => edge.relation !== 'constitution' && belongsTo(references, trace, relatedPaths, edge.to));
+    const incoming = trace.edges.filter(edge => edge.relation !== 'taste' && belongsTo(references, trace, relatedPaths, edge.to));
     const testIds = new Set(incoming.filter(edge => edge.from.startsWith('case:')).map(edge => edge.from.slice(5)));
     const codeIds = new Set(incoming.filter(edge => edge.from.startsWith('code:')).map(edge => edge.from.slice(5)));
-    const outgoing = trace.edges.filter(edge => relatedPaths.has(edge.from) || (edge.relation === 'constitution' && relatedPaths.has(pageOwner(references, edge.from) ?? '')));
+    const outgoing = trace.edges.filter(edge => relatedPaths.has(edge.from) || (edge.relation === 'taste' && relatedPaths.has(pageOwner(references, edge.from) ?? '')));
     return { trace, document, useCases, incoming, outgoing, testIds, codeIds };
   });
   return {
@@ -192,7 +192,7 @@ export function documentShow(repo: Repository, selector: string, kind: DocumentR
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#render
 export function renderReview(repo: Repository, selector: string | undefined, cache: 'use' | 'off' = 'use'): string {
-  return deriveTrace(repo, cache, true, (trace, references) => renderReviewValue(repo, trace, references, selector).segments.map(segment => 'text' in segment ? segment.text : showConstitution(repo).body.trimEnd()).join(''));
+  return deriveTrace(repo, cache, true, (trace, references) => renderReviewValue(repo, trace, references, selector).segments.map(segment => 'text' in segment ? segment.text : showTaste(repo).body.trimEnd()).join(''));
 }
 
 
@@ -203,20 +203,20 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
     const selectedPaths = new Set(docs.map(d => d.path));
     const cases = selector ? trace.annotations.cases.filter(c => belongsTo(references, trace, selectedPaths, c.contract) || c.issues.some(r => belongsTo(references, trace, selectedPaths, r))) : trace.annotations.cases;
     const codes = selector ? trace.codeDeclarations.filter(c => c.contracts.some(ref => belongsTo(references, trace, selectedPaths, ref))) : trace.codeDeclarations;
-    const segments: ({ text: string } | { constitution: { path: string; digest: string } })[] = [];
-    const lines = ['# Concord review', '', 'This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe ownership; command evidence does not prove native case coverage.', '', '## Constitution', ''];
-    if (repo.read('docs/constitution.md') === undefined) lines.push('- Not configured. Create docs/constitution.md to enable constitution checks.');
+    const segments: ({ text: string } | { taste: { path: string; digest: string } })[] = [];
+    const lines = ['# Concord review', '', 'This is local review material. Code declarations describe implementation associations, not completion or test coverage. Test annotations describe ownership; command evidence does not prove native case coverage.', '', '## Taste', ''];
+    if (repo.read('docs/taste.md') === undefined) lines.push('- Not configured. Create docs/taste.md to enable taste checks.');
     else {
-      const constitution = showConstitution(repo);
-      lines.push(`- ${constitution.metadata.status}, digest ${constitution.digest}. Structural validity is not semantic compliance.`, '');
-      segments.push({ text: `${lines.join('\n')}\n` }, { constitution: { path: constitution.path, digest: constitution.digest } });
+      const taste = showTaste(repo);
+      lines.push(`- ${taste.digest}. Structural validity is not semantic compliance.`, '');
+      segments.push({ text: `${lines.join('\n')}\n` }, { taste: { path: taste.path, digest: taste.digest } });
       lines.length = 0;
       lines.push('');
-      const clauses = new Map(constitution.clauses.map(clause => [clause.id, clause.title]));
-      const selected = trace.constitutionReferences.filter(reference => !selector || selectedPaths.has(reference.path) || selectedPaths.has(pageOwner(references, reference.path) ?? ''));
-      for (const clause of [...new Set(selected.map(reference => reference.clause))]) {
+      const clauses = new Map(taste.entries.map(clause => [clause.id, clause.title]));
+      const selected = trace.tasteReferences.filter(reference => !selector || selectedPaths.has(reference.path) || selectedPaths.has(pageOwner(references, reference.path) ?? ''));
+      for (const clause of [...new Set(selected.map(reference => reference.entry))]) {
         lines.push(`- ${clause === 'general' ? clauses.get(clause) ?? 'general' : clause.toUpperCase()} ${clause === 'general' ? '' : clauses.get(clause) ?? ''}`.trimEnd());
-        for (const reference of selected.filter(item => item.clause === clause)) lines.push(`  - [${reference.path}:${reference.line}](${reference.path}#L${reference.line}) → [${reference.paragraph ?? reference.clause}](${CONSTITUTION_PATH}#${reference.paragraph ?? reference.clause})`);
+        for (const reference of selected.filter(item => item.entry === clause)) lines.push(`  - [${reference.path}:${reference.line}](${reference.path}#L${reference.line}) → [${reference.entry}](${TASTE_PATH}#${reference.entry})`);
       }
     }
     lines.push('', '## Contracts and decisions', '');
@@ -241,10 +241,10 @@ export function renderReviewValue(repo: Repository, trace: ReturnType<typeof bui
     const memoryPaths = new Set(cases.flatMap(c => c.issues.map(pathOf)));
     for (const d of trace.documents) if (d.metadata.kind === 'memory' && (!selector || selectedPaths.has(d.path) || memoryPaths.has(d.path))) {
       const m = d.metadata;
-      lines.push(`- [${m.title}](${d.path}) — ${m.type}, ${m.status}`);
+      lines.push(`- [${m.title}](${d.path})`);
     }
     lines.push('', '## Local feedback and observations', '');
-    for (const d of docs) if (d.metadata.kind === 'issue') lines.push(`- [${d.metadata.title}](${d.path}) — ${d.metadata.status} (local document; Concord never mutates the remote provider)`);
+    for (const d of docs) if (d.metadata.kind === 'issue') lines.push(`- [${d.metadata.title}](${d.path}) — pending (local document; Concord never mutates the remote provider)`);
     segments.push({ text: `${lines.join('\n')}\n` });
     return { segments };
 }

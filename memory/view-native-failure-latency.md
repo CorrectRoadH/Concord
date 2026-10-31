@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # View 慢请求与原生产物加载失败
 
 ## 结论

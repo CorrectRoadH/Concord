@@ -1,7 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 import { parseReference } from "../../model/index.js";
-import { resolveDesignPlanPath } from "../../model/index.js";
 import { posix } from "node:path";
 import { ConcordError, type DocumentKind, type DocumentRecord, type Finding, type Repository } from "../../model/index.js";
 import { decodeDocumentSource } from "./document-codec.js";
@@ -18,7 +17,7 @@ function hasAnchor(source: string, expected: string): boolean {
 
 /**
  * Resolves exact Concord owners and supporting Markdown inside the deepest
- * Feature, Engineering, or Research package. Derived from NiceEval's docs/trace/ref.ts; its formats and
+ * Feature or Engineering package. Derived from NiceEval's docs/trace/ref.ts; its formats and
  * runtime-specific Result errors intentionally do not cross this boundary.
  */
 export function resolveReference(
@@ -40,21 +39,10 @@ export function resolveReference(
     // Its bytes still define a boundary; never reinterpret it as an ancestor's page.
     if (decodeDocumentSource(parsed.path, source) !== undefined) throw new ConcordError('ReferenceNotFound', `Reference owner is absent from the current inventory: ${input}`);
     owner = documents
-      .filter(document => document.metadata.kind === 'feature' || document.metadata.kind === 'engineering' || document.metadata.kind === 'research' || document.metadata.kind === 'design')
+      .filter(document => document.metadata.kind === 'feature' || document.metadata.kind === 'engineering')
       .filter(document => parsed.path.startsWith(`${posix.dirname(document.path)}/`))
       .sort((left, right) => right.path.length - left.path.length)[0];
-    if (owner === undefined) throw new ConcordError('ReferenceNotFound', `Supporting Markdown is outside a Feature, Engineering, or Research package: ${input}`);
-    if (owner.metadata.kind === 'design') {
-      const base = posix.dirname(owner.path);
-      const relative = parsed.path.slice(base.length + 1);
-      if (relative.startsWith('plans/')) {
-        const part = relative.split('/')[1]!;
-        const name = relative.split('/').length === 2 && part.endsWith('.md') ? part.slice(0, -3) : part;
-        if (!owner.metadata.alternatives.includes(name)) throw new ConcordError('InvalidPlan', `Undeclared candidate: ${name}`);
-        const entry = resolveDesignPlanPath(base, name, path => path.endsWith('.md') && repo.read(path) !== undefined);
-        if (!entry.endsWith('/README.md') && parsed.path !== entry) throw new ConcordError('InvalidReferenceTarget', 'Single-file Plans have no supporting pages');
-      }
-    }
+    if (owner === undefined) throw new ConcordError('ReferenceNotFound', `Supporting Markdown is outside a Feature or Engineering package: ${input}`);
     for (let directory = posix.dirname(parsed.path); directory !== posix.dirname(owner.path); directory = posix.dirname(directory)) {
       const boundary = `${directory}/README.md`;
       if (boundary === parsed.path) continue;
@@ -65,7 +53,7 @@ export function resolveReference(
       document.path !== owner?.path &&
       document.path.endsWith('/README.md') &&
       parsed.path.startsWith(`${posix.dirname(document.path)}/`) &&
-      document.metadata.kind !== 'feature' && document.metadata.kind !== 'engineering' && document.metadata.kind !== 'research' && document.metadata.kind !== 'design');
+      document.metadata.kind !== 'feature' && document.metadata.kind !== 'engineering');
     if (nestedOwner !== undefined) throw new ConcordError('InvalidReferenceTarget', `Supporting Markdown is inside ${nestedOwner.metadata.kind} ${nestedOwner.path}; reference its owner directly`);
   }
   if (allowedKinds !== undefined && !allowedKinds.includes(owner.metadata.kind)) {

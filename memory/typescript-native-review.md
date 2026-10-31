@@ -1,8 +1,3 @@
----
-type: decision
-status: current
----
-
 # TypeScript 原生 API 的输入和生命周期裁决
 
 原生 Codex / GPT-6.1 Sol 对 docs/design/typescript-native 的七页具体方案与 TypeScript 7.1.0-beta API 声明进行了只读独立挑战，结论无剩余阻断项。初稿的 p5 动态捕获与完整 VFS 矛盾，已通过 snapshot 前固定类型闭包消除；依赖配置 API 无 snapshot 参数，已采用专用 captured-host API。

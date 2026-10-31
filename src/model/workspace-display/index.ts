@@ -8,7 +8,6 @@ export const documentCategories = [
   { href: '/engineering', kind: 'engineering', label: 'Engineering' },
   { href: '/roadmap', kind: 'roadmap', label: 'Roadmap' },
   { href: '/design', kind: 'design', label: 'Design' },
-  { href: '/research', kind: 'research', label: 'Research' },
   { href: '/memory', kind: 'memory', label: 'Memory' },
 ] as const;
 export function documentsInCategory(snapshot: WorkspaceProjectionSnapshot, kind: string): readonly WorkspaceDocument[] {
@@ -57,7 +56,7 @@ export function effectiveWorkspaceConcepts(snapshot: Pick<WorkspaceProjectionSna
 export function projectionIsConclusive(projection: WorkspaceProjectionStatus): boolean {
   return projection.status === 'ready' && projection.consistent && projection.complete && !projection.unknownRelations;
 }
-const ROOT_RANK = ['docs/README.md', 'docs/architecture.md', 'docs/constitution.md', 'docs/concepts.md', 'docs/concord.md'];
+const ROOT_RANK = ['docs/README.md', 'docs/architecture.md', 'docs/taste.md', 'docs/concepts.md', 'docs/concord.md'];
 function under(path: string, root: string): boolean { return path === root || path.startsWith(`${root}/`); }
 function projectDocSort(path: string): string {
   const rank = ROOT_RANK.indexOf(path);
@@ -93,7 +92,7 @@ export function workspaceDocumentHref(document: Pick<WorkspaceDocument, 'path' |
     if (owner.length !== 1) return '/features';
     return `/features/${encodeURIComponent(owner[0]!.metadata.id)}/use-cases/${encodeURIComponent(document.metadata.id)}`;
   }
-  const sections = { feature: 'features', engineering: 'engineering', roadmap: 'roadmap', design: 'design', research: 'research', memory: 'memory', issue: 'feedback' };
+  const sections = { feature: 'features', engineering: 'engineering', roadmap: 'roadmap', design: 'design', memory: 'memory', issue: 'feedback' };
   return `/${sections[document.metadata.kind]}/${encodeURIComponent(document.metadata.kind === 'memory' ? document.path : document.metadata.id)}`;
 }
 export function workspacePathHref(snapshot: WorkspaceProjectionSnapshot, reference: string): string {

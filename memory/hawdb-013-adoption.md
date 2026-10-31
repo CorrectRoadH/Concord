@@ -1,8 +1,3 @@
----
-type: insight
-status: current
----
-
 # HawDB 0.13 采用与发行验收
 
 用户在初次升级调查阻塞后明确要求「开工升级发新版」，授权适配所有权和只读契约并发行。实现目标为 HawDB 0.13.0，固定 revision `91aec4960ed27516962cf1dc918307f57faef15d`；原桥接基线为 Concord `1a16741`、HawDB 0.3.0。0.13 在本次工作期间成为上游稳定发行。

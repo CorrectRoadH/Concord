@@ -13,22 +13,19 @@ import { codeSnippet, locateCode } from "./code-commands.js";
 import { scanCode } from "../domain/code/index.js";
 import { adoptRoadmap } from "./adopt-roadmap.js";
 import { createDocument } from "./create-document.js";
-import { reopenIssue, closeIssue, linkIssue, unlinkIssue } from "../domain/issues/index.js";
+import { closeIssue, linkIssue, unlinkIssue } from "../domain/issues/index.js";
 import { linkMemory } from "./memory-relations.js";
-import { activateMemory, supersedeMemory } from "../domain/memory/index.js";
-import { decideDesign, checkDesign, formatDesign, deferDesign } from "../domain/designs/index.js";
 import { checkFeedbackConnection, listFeedback, syncFeedback } from "../domain/feedback/index.js";
 import { readFeedbackCache } from "../base/cache/index.js";
 import { rebuildCache } from './cache-rebuild.js';
 import { HawdbFailure } from "../base/cache/index.js";
-import { editKnowledge, knowledgeIndex, knowledgeRecall, removeIssue } from "./knowledge.js";
+import { editKnowledge, knowledgeIndex, knowledgeSearchRecords, removeIssue } from "./knowledge.js";
 import { inspectDocuments, inspectDocumentFile, isSourcePath, readSource, setConfig, setMarkdown, setSource } from "./editing.js";
 import { annotationSnippet } from "../domain/onboarding/index.js";
 import { doctor } from "./onboarding.js";
-import { ConcordError, IssueClosureSchema, decode, digest, failure } from "../model/index.js";
+import { ConcordError, decode, digest, failure } from "../model/index.js";
 import { discoverRoot, git, LocalRepository } from "../base/workspace/index.js";
 import { initialize } from "./initialize.js";
-import { adoptConstitution, amendConstitution, initializeConstitution } from "../domain/constitution/index.js";
 import { listTemplates, templateBody } from "../domain/documents/index.js";
 import { buildTrace } from "../domain/trace/index.js";
 import { renderReview, traceShow } from "./trace-queries.js";
@@ -78,13 +75,7 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'document.set':
     case 'memory.link':
     case 'issue.unlink':
-    case 'design.defer':
     case 'roadmap.start':
-    case 'design.decide':
-    case 'design.format':
-    case 'memory.activate':
-    case 'memory.supersede':
-    case 'issue.reopen':
     case 'issue.link':
     case 'issue.edit':
     case 'issue.remove':
@@ -95,9 +86,6 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'writing.set':
     case 'concepts.set':
     case 'config.set':
-    case 'constitution.initialize':
-    case 'constitution.adopt':
-    case 'constitution.amend':
     case 'cache.clear':
       return { ...action, dryRun: true };
     default:
@@ -305,25 +293,18 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'document.create': throw new ConcordError('InvalidInput', 'Creation must run in its Effect scope');
     case 'memory.link': return linkMemory(repo, action.id, action.target, action.role, dryRun);
     case 'issue.unlink': return unlinkIssue(repo, action.id, action.memory, dryRun, action.role);
-    case 'design.defer': return deferDesign(repo, action.id, action.reason, dryRun);
     case 'document.set': return setMarkdown(repo, action.path, action.body, action.expectedDigest, dryRun);
     case 'roadmap.start': return adoptRoadmap(repo, action.id, action.feature, dryRun);
-    case 'design.decide': return decideDesign(repo, action.id, action.selected, action.targets, action.reason, dryRun);
-    case 'design.check': return checkDesign(repo, action.id);
-    case 'design.format': return formatDesign(repo, action.id, dryRun);
     case 'memory.index': return knowledgeIndex(repo, 'memory');
-    case 'memory.recall': return knowledgeRecall(repo, 'memory', action.query);
-    case 'memory.activate': return activateMemory(repo, action.id, action.reason, dryRun);
-    case 'memory.supersede': return supersedeMemory(repo, action.id, action.replacement, action.reason, dryRun);
+    case 'memory.search': return knowledgeSearchRecords(repo, 'memory', action.query);
     case 'issue.link': return linkIssue(repo, action.id, action.memory, dryRun, action.role);
     case 'issue.list': { const { action: _, ...filter } = action; return { operation: 'issue-list', drafts: listFeedback(repo, undefined, filter).map(item => item.document) }; }
     case 'feedback.list': { const { action: _, ...filter } = action; return { operation: 'feedback-list', feedback: listFeedback(repo, undefined, filter) }; }
     case 'issue.index': return knowledgeIndex(repo, 'issue');
-    case 'issue.recall': return knowledgeRecall(repo, 'issue', action.query);
+    case 'issue.search': return knowledgeSearchRecords(repo, 'issue', action.query);
     case 'issue.edit': return editKnowledge(repo, 'issue', action.id, action.body, action.expectedDigest, dryRun);
     case 'issue.remove': return removeIssue(repo, action.id, action.expectedDigest, dryRun);
-    case 'issue.reopen': return reopenIssue(repo, action.id, action.reason, dryRun);
-    case 'issue.close': { const { action: _, id, dryRun: __, ...closure } = action; return closeIssue(repo, id, decode(IssueClosureSchema, { ...closure, kind: closure.kind ?? 'closed' }, 'Issue closure'), dryRun); }
+    case 'issue.close': return closeIssue(repo, action.id, action.reason, dryRun);
     case 'feedback.link': throw new ConcordError('CommandRetired', 'Use concord issue adopt --to', { command: 'concord feedback link', replacement: 'concord issue adopt --to' });
     case 'source.set': return setSource(repo, action.path, action.body, action.expectedDigest, dryRun);
     case 'writing.index': return writingIndex(repo);
@@ -334,9 +315,6 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'concepts.show': return showConcepts(repo, action.path);
     case 'concepts.set': return setConcepts(repo, action.source, action.expectedDigest, dryRun, action.path);
     case 'config.set': return setConfig(repo, action.config, action.expectedDigest, dryRun);
-    case 'constitution.initialize': return initializeConstitution(repo, dryRun);
-    case 'constitution.adopt': return adoptConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
-    case 'constitution.amend': return amendConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
     case 'code.marker': return codeSnippet(repo, action.scope, action.contracts);
     case 'code.at': return locateCode(repo, action.path, action.line);
     case 'test.marker': return annotationSnippet(repo, action.contract, action.issues);
@@ -361,7 +339,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
 // @concord-implements docs/feature/portable-coordination/architecture.md#invariants
 function actionAccess(action: ViewAction['action']): 'read' | 'write' {
   switch (action) {
-    case 'design.check': case 'memory.index': case 'memory.recall': case 'issue.index': case 'issue.recall': case 'issue.list': case 'feedback.list':
+    case 'memory.index': case 'memory.search': case 'issue.index': case 'issue.search': case 'issue.list': case 'feedback.list':
     case 'writing.index': case 'writing.show': case 'writing.check': case 'concepts.index': case 'concepts.show':
     case 'code.marker': case 'code.at': case 'test.marker': case 'cache.status':
     case 'check': case 'trace.check': case 'trace.show': case 'review': case 'doctor': case 'template.show':
@@ -377,7 +355,7 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
   const root = yield* sync('view.validateRoot', () => validateViewRoot(rootInput));
   const action = yield* sync('view.decodeAction', () => decodeViewAction(input));
   if (action.action === 'template.show') return { operation: 'template-show', name: action.name, body: yield* templateBody(action.name, action.title ?? 'Your title') };
-  if (action.action === 'document.create') return yield* withRepository(root, repo => createDocument(repo, action.kind, { ...action, memoryKind: action.type, dryRun: action.dryRun ?? false }), { dryRun: action.dryRun }, timing);
+  if (action.action === 'document.create') return yield* withRepository(root, repo => createDocument(repo, action.kind, { ...action, dryRun: action.dryRun ?? false }), { dryRun: action.dryRun }, timing);
   if (action.action === 'init') {
     if (action.docsOnly && (action.testRoots?.length ?? 0) > 0) return yield* Effect.fail(new ConcordError('ConflictingOptions', 'docsOnly cannot be combined with testRoots'));
     const dryRun = action.dryRun ?? false;
@@ -385,11 +363,6 @@ export const executeViewAction = Effect.fn('view.executeAction')(function*(rootI
       testRoots: action.docsOnly ? [] : action.testRoots,
       sourceRoots: action.sourceRoots,
       runner: action.runner,
-      constitutionBody: action.constitutionBody,
-      adoptConstitution: action.adoptConstitution,
-      constitutionReason: action.constitutionReason,
-      constitutionImpact: action.constitutionImpact,
-      constitutionSources: action.constitutionSources,
     }), { initialize: true, dryRun }, timing);
   }
   if (action.action === 'check') return yield* checkCurrentProject(root);
