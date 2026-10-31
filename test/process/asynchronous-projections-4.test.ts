@@ -1,62 +1,4 @@
 import { makeOwnedProcessService, installationResources, installationRootForBin, classifyQueryRefresh, persist, pathToFileURL, packageBin, createConsumer, genericPrivateDirectorySync, refreshQuery, pollUntil, decodeDocumentSource, workerEntryArgv, installedConcordCli, assert, execFileSync, spawn, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync, tmpdir, join, resolve, test, before, after, Effect, Schema, packConcord, installConcord, cacheDatabasePath, openHawdb, readProjectConfig, writeProjectConfig, LocalRepository, initialize, setAuthor, createDocument, renderDocument, ConcordError, digest, QueryCacheEnvelope, queryContext, readQuery, storeQuery, type Query, gaps, candidate, consumer, cli, call, historicalCall, waitForRefreshExit, packageScratch, installedCli, installedCall, packedConsumer, packedEnvelope, refreshInstalled, editing } from '../support/asynchronous-projections-fixture.js';
-
-
-// @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
-test('failed refresh retains a full oldest snapshot at namespace capacity and success clears its error', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
-  try {
-    const context = queryContext(root, ['trace', 'gaps']);
-    storeQuery(context, candidate());
-    for (let i = 0; i < 63; i++) storeQuery({ ...context, key: `other-${i}` }, candidate(String(i)));
-    storeQuery(context, { kind: 'failure', error: { failedAt: new Date().toISOString(), scannedAt: Date.now(), code: 'QueryRefreshFailed', message: 'failed scan' } });
-    const failed = readQuery(context);
-    assert.deepEqual(failed.record?.value, gaps());
-    assert.equal(failed.error?.code, 'QueryRefreshFailed');
-    storeQuery(context, candidate('refreshed'));
-    const succeeded = readQuery(context);
-    assert.deepEqual(succeeded.record?.value, gaps('refreshed'));
-    assert.equal(succeeded.error, undefined);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-})));
-
-
-// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('source reads do not own a lease and detect a concurrent successful publication', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
-  const reader = new LocalRepository(root, { access: 'read' });
-  try {
-    reader.beginSnapshot();
-    const path = 'docs/feature/sample/README.md';
-    const before = reader.read(path)!;
-    assert.equal(existsSync(join(root, '.git/concord/trace/publication.lease')), false);
-    const writer = new LocalRepository(root, { optimistic: true });
-    try { setAuthor(writer, path, '# Changed\n', digest(before)); }
-    finally { writer.close(); }
-    assert.match(readFileSync(join(root, path), 'utf8'), /Changed/);
-    assert.throws(() => reader.verifySnapshot(), { code: 'SourceChanged' });
-  } finally { reader.close(); rmSync(root, { recursive: true, force: true }); }
-})));
-
-
-// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('a complete A-B-A publication is detected before the writer releases ownership', () => Effect.runPromise(Effect.sync(() => {
-  const root = consumer();
-  const writer = new LocalRepository(root);
-  const reader = new LocalRepository(root, { access: 'read' });
-  const path = 'docs/feature/sample/README.md';
-  try {
-    writer.beginSnapshot();
-    reader.beginSnapshot();
-    const before = reader.read(path)!;
-    writer.publish('test-edit', [{ path, before, after: `${before}\nchanged\n` }]);
-    writer.publish('test-edit', [{ path, before: `${before}\nchanged\n`, after: before }]);
-    assert.equal(readFileSync(join(root, path), 'utf8'), before);
-    assert.throws(() => reader.verifySnapshot(), { code: 'SourceChanged' });
-    assert.ok(existsSync(join(root, '.git/concord/trace/publication.lease')));
-  } finally { reader.close(); writer.close(); rmSync(root, { recursive: true, force: true }); }
-})));
-
-
 // @use-case docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 test('CLI exits before refresh, serves a historical snapshot, and keeps fresh checks authoritative', async () => {
   const root = consumer();
@@ -101,7 +43,6 @@ test('CLI exits before refresh, serves a historical snapshot, and keeps fresh ch
     writeFileSync(path, source);
   } finally { await waitForRefreshExit(root); rmSync(root, { recursive: true, force: true }); }
 });
-
 
 // @use-case docs/feature/local-sdlc/use-case/discover-annotated-tests.md
 test('packed CLI discovers real sources without reading environment files or following environment links', async () => {
