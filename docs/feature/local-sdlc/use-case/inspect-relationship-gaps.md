@@ -23,7 +23,8 @@
      "limitations": ["Only documented CLI pages are discoverable; undocumented commands require a product-owned inventory."],
      "contracts": [{"path": "docs/feature/cart/use-case/add-item.md", "kind": "use-case", "title": "加入商品", "missing": ["code"], "relationships": {"code": 0, "test": 1}}],
      "cliPages": [{"path": "docs/feature/cart/cli.md", "feature": "docs/feature/cart/README.md", "title": "购物车", "missing": ["code", "test"], "relationships": {"code": 0, "test": 0}}],
-     "unmarkedLists": []
+     "unmarkedLists": [],
+     "unlinkedTests": []
    }
    ```
 
@@ -41,6 +42,7 @@
 - Feature 的计数包含自身、附页与所属 Use Case。Use Case 只计自身。CLI 页面只计直接指向该页面或其 anchor 的关系，指向 Feature 的关系不算。
 - 退役（`@status retired`）的测试不算测试关系。无效的 owner 或标记先由 `check` 的 finding 报告。
 - `unmarkedLists` 列出 Use Case 中含未标记步骤的有序列表。
+- `unlinkedTests` 列出原生测试清单里没有任何标记覆盖的测试，见[找出没有关联 Use Case 的测试](find-unlinked-tests.md)。
 
 ## 边界
 

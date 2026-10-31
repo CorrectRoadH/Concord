@@ -8,7 +8,7 @@
 
 - **先写 Spec 再动手。** 用 Feature 描述能力，用 Use Case 一步一步写出使用者的路径；方案有争议时，先比较候选方案再裁决。
 - **把测试和代码连到 Spec。** 在测试或实现文件里写一行标记，Concord 从源码反查出某个 Use Case 由哪些测试守护、由哪些代码实现。
-- **找出没用的测试。** 每个测试标注它验证的 Use Case 或其中一步；`concord trace gaps` 列出没有关联任何 Use Case 的测试，你可以逐个判断是补上关联还是删掉。
+- **找出没用的测试。** 每个测试标注它验证的 Use Case 或其中一步；`concord test discover` 收集测试运行器认识的全部测试后，`concord trace gaps` 列出没有关联任何 Use Case 的测试，你可以逐个判断是补上关联还是删掉。
 - **让 check 守住一致性。** Spec 被删除、改名或标记写错时，`concord check` 指出出错的文件和行。
 - **用证据关闭缺陷。** 缺陷记为 Issue。回归测试在缺陷提交上失败、在修复提交上通过，Concord 核验这两点后才把 Issue 关为已修复。
 - **积累工程知识。** 调查结论、根因和裁决写成 Memory，之后可以按关键词检索。
@@ -182,6 +182,7 @@ export default function (p: P5) {
 检查与审阅：
 
 - [检查 Spec 与 CLI 页面的实现和测试关系缺口](use-case/inspect-relationship-gaps.md)
+- [找出没有关联 Use Case 的测试](use-case/find-unlinked-tests.md)
 - [追踪 Spec 并生成审阅材料](use-case/review-traceability.md)
 - [在编辑器中查看 Concord 关系](use-case/use-editor-service.md)
 
