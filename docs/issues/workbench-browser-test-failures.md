@@ -1,5 +1,8 @@
 ---
-status: open
+status: closed
+closure:
+  kind: closed
+  reason: 当前 master 定向复核旧记录五项均通过（5/5），未复现。命令：pnpm check test/e2e/operation-boundaries-browser.e2e.ts test/e2e/view-browser.e2e.ts test/e2e/workspace-watch-browser.e2e.ts test/process/asynchronous-projections-2.test.ts test/process/view-performance.test.ts；使用名称筛选逐项执行原记录场景。日志 /tmp/web-races-red.log；浏览器报告 .test-results/run-GzxFDr/e2e/summary.md。
 ---
 
 # 两个工作台浏览器测试在 master 上稳定失败
