@@ -69,7 +69,12 @@ export function readPage(root: string, path: string) { const body = readFileSync
 export function savePage(root: string, path: string, body: string, expectedDigest: string, status = 0) {
  return call(root, ['action', '--input', '-'], status === 0 ? Ack : ErrorOutput, JSON.stringify({ action: 'document.set', path, body, expectedDigest }), status) as { error?: string };
 }
-export function consumer(name: string){const root=join(scratch,name);cpSync(createConsumer(),root,{recursive:true});writeProjectConfig(root,{testRoots:['test','tests']});return root;}
+export function consumer(name: string){
+ const root=join(scratch,name);cpSync(createConsumer(),root,{recursive:true});
+ writeProjectConfig(root,{testRoots:['test','tests']});
+ openHawdb(join(root,'.git/concord/cache.hawdb'),{readOnly:false,create:true}).close();
+ return root;
+}
 export function write(root: string,path: string,source: string){mkdirSync(join(root,path,".."),{recursive:true});writeFileSync(join(root,path),source);}
 
 export { createRequire };
