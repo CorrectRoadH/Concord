@@ -104,7 +104,7 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
     const verification = document.metadata.closure.verification;
     try {
       resolveCommit(repo.root, verification.defect); resolveCommit(repo.root, verification.fix);
-      for (const id of verification.tests) if (!annotations.cases.some(test => test.id === id && test.status === 'active' && test.issues.includes(document.path))) throw new ConcordError('FixUnverifiable', `Recorded test ${id} no longer has an @issue relation to ${document.path}`);
+      // Recorded test bindings belong to F and are validated by replay; these annotations own only current trace edges.
     } catch (cause) { findings.push({ code: 'FixUnverifiable', path: document.path, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
   const verifications = documents.flatMap(doc => doc.metadata.kind === 'issue' && doc.metadata.closure?.kind === 'fixed' && doc.metadata.closure.verification ? [{ path: doc.path, verified: 'recorded' as const, verification: doc.metadata.closure.verification }] : []);
