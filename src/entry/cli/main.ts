@@ -54,7 +54,15 @@ const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*
 const launchers = Layer.mergeAll(
   Layer.effect(PanelLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Workspace | NodeServices.NodeServices | import('../../base/process/index.js').OwnedProcess>();
-    return PanelLauncher.of({ serve: root => Effect.tryPromise(() => import('../panel/index.js')).pipe(Effect.flatMap(module => module.serveWorkspacePanel(root)), Effect.provideContext(context)) });
+    const workspace = yield* Workspace;
+    return PanelLauncher.of({ serve: root => Effect.gen(function*() {
+      const location = yield* workspace.identify(root, false, true).pipe(Effect.mapError(error => new ConcordError(error.code, `${error.message}; run concord init in a Git worktree`, error.details)));
+      if (location.config === null) return yield* Effect.fail(new ConcordError('ProjectNotFound', 'No Concord configuration; run concord init in this Git worktree'));
+      const config = yield* workspace.inspectConfiguration(location.root);
+      if (config.diagnostic) return yield* Effect.fail(config.diagnostic);
+      const panel = yield* Effect.tryPromise(() => import('../panel/index.js'));
+      return yield* panel.serveWorkspacePanel(root);
+    }).pipe(Effect.provideContext(context)) });
   })),
   Layer.effect(ServerLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices>();
