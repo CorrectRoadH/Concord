@@ -1,5 +1,8 @@
 ---
-status: open
+status: closed
+closure:
+  kind: closed
+  reason: 170eca9 修复；回归测试 43c6dcf 保留在测试集中并通过。缺陷提交的 runner.sourceFiles 含目录，早于文件级冻结，无法按修复核验重放，故不记 fixed。
 ---
 
 # 关闭 view 服务时未发请求的连接使其挂起
