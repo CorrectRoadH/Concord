@@ -173,3 +173,4 @@ export { getWorkspaceRead } from './workspace-read.js';
 export { QueryRefreshRequest } from './query-cache.js';
 export { rebuildCache, computeCacheRebuild, finishCacheRebuild } from './cache-rebuild.js';
 export { workspaceSourceDigest } from './workspace-source.js';
+export { manageHerdrMod } from './herdr-mod.js';

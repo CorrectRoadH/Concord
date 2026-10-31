@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/herdr-panel/architecture.md#渲染
 import { Schema } from 'effect';
 import { ConcordError, type Finding } from './shared.js';
 import { parseConceptCatalog, ConceptDefinitionSchema } from './concepts-schema.js';

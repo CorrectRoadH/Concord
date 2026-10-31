@@ -1,5 +1,3 @@
-// @concord-file
-// @concord-implements docs/feature/herdr-panel/architecture.md#渲染
 import type { WorkspaceDocument, WorkspacePage, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../index.js';
 import { DOCUMENT_ROOTS, selectEffectiveConcepts, scopeOf, fromMarkdown, markdownBody } from '../index.js';
 

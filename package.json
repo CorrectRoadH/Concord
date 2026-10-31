@@ -14,8 +14,7 @@
     "NOTICE.md",
     "pnpm-workspace.yaml",
     "templates",
-    "skills",
-    "herdr"
+    "skills"
   ],
   "engines": {
     "node": ">=24.15.0"

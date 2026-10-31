@@ -1,9 +1,11 @@
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { homedir } from 'node:os';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { ConcordError, failure } from '../../model/index.js';
 import { packageRoot } from './location.js';
 import { workerEntryArgv, workspaceInstallationIdentity } from './index.js';
+import { manageHerdrMod } from './herdr-mod.js';
 
 export interface TemplateResources {
   readonly manifest: string;
@@ -17,10 +19,12 @@ export class Installation extends Context.Service<Installation, {
   readonly cwd: string;
   readonly version: Effect.Effect<string, ConcordError>;
   readonly templates: Effect.Effect<TemplateResources, ConcordError>;
+  readonly herdrMod: (operation: 'install' | 'uninstall', dryRun: boolean) => ReturnType<typeof manageHerdrMod>;
   readonly asset: (directory: 'p5-types' | 'web', path: string) => Effect.Effect<string, ConcordError>;
 }>()('concord/base/installation/Installation') {
   static readonly layer = Layer.succeed(Installation, Installation.of({
     worker: (...args) => workerEntryArgv(...args), identity: () => workspaceInstallationIdentity(), cwd: packageRoot,
+    herdrMod: (operation, dryRun) => manageHerdrMod(operation, process.env.HERDR_APP_HOME || join(homedir(), '.config/herdr-app'), join(packageRoot, 'dist/herdr-mod'), dryRun),
     version: Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ version: Schema.NonEmptyString })), { onExcessProperty: 'ignore' })(readFileSync(join(packageRoot, 'package.json'), 'utf8')).version, catch: failure }),
     templates: Effect.try({ try: () => {
       const directory = join(packageRoot, 'templates');

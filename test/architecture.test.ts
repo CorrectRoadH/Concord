@@ -10,19 +10,6 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const baselinePath = 'test/support/platform-violations.json';
 const Baseline = Schema.fromJsonString(Schema.Struct({ format: Schema.Literal('concord.platform-debt/v1'), violations: Schema.Array(Schema.String) }));
 
-// @feature docs/feature/herdr-panel/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
-test('the panel protocol client closure cannot reach the service composition root or application implementations', () => {
-  const audit = inspectArchitecture(root), visited = new Set<string>();
-  const visit = (file: string): void => {
-    if (visited.has(file)) return;
-    visited.add(file);
-    for (const edge of audit.edges) if (edge.from === file && edge.to && !edge.typeOnly) visit(edge.to);
-  };
-  visit('src/entry/panel/index.ts');
-  assert.deepEqual([...visited].filter(file => file === 'src/entry/server/main.ts' || file.startsWith('src/app/')), []);
-});
-
 test('source import and export graphs obey module exits, layers, domain order and composition roots', () => Effect.runSync(Effect.sync(() => {
   const audit = inspectArchitecture(root);
   assert.deepEqual(dependencyViolations(audit), []);

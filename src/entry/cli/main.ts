@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 import { Installation } from '../../base/installation/index.js';
-import { LspLauncher, ViewLauncher, ServerLauncher, PanelLauncher } from "./launchers.js";
+import { LspLauncher, ViewLauncher, ServerLauncher } from "./launchers.js";
 import { Publication } from "../../base/publication/index.js";
 import type { Queries } from "../../app/index.js";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
@@ -109,16 +109,6 @@ const serveWorkspaceView = /*#__PURE__*/ makeWorkspaceView();
 
 // Discovery needs only the base ports. Commands without an owner avoid loading
 // the service's RPC, HTTP and computation entrypoints into their short lifetime.
-const panelLauncher = Layer.effect(PanelLauncher, Effect.gen(function*() {
-    const context = yield* Effect.context<ServerRuntime | Installation | Workspace | NodeServices.NodeServices | OwnedProcess>();
-    const workspace = yield* Workspace;
-    return PanelLauncher.of({ serve: root => Effect.scoped(Effect.gen(function*() {
-      const location = yield* workspace.identify(root, false, true).pipe(Effect.mapError(error => /not a git repository/iu.test(error.message) ? new ConcordError(error.code, `${error.message}; run concord init in a Git worktree`, error.details) : error));
-      if (location.config === null) return yield* Effect.fail(new ConcordError('ProjectNotFound', 'No Concord configuration; run concord init in this Git worktree'));
-      const [panel, connection] = yield* Effect.all([Effect.tryPromise(() => import('../panel/index.js')), connectOrStartWorkspace(location.root, false, location.privateDir)], { concurrency: 'unbounded' });
-      return yield* panel.serveWorkspacePanel(location.root, path => connectOrStartWorkspace(path).pipe(Effect.provideContext(context)), connection);
-    })).pipe(Effect.provideContext(context)) });
-  }));
 function makeCliLayer() {
 return Layer.unwrap(loadApp().pipe(Effect.map(({ Queries, QueryReply }) => {
 const querySelection = Layer.unwrap(Effect.gen(function*() {
@@ -152,7 +142,6 @@ const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*
 }));
 
 const launchers = Layer.mergeAll(
-  panelLauncher,
   Layer.effect(ServerLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
     return ServerLauncher.of({
@@ -196,13 +185,6 @@ const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effec
   const version = yield* (yield* Installation).version;
   return yield* command.pipe(Command.run({ version, renderErrors: !process.argv.includes('--json') }));
 }).pipe(Effect.catch(cliFailure));
-const panelCliLayer = panelLauncher.pipe(Layer.provideMerge(Layer.mergeAll(ServerRuntime.layer, Installation.layer, Workspace.layer)), Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
-export function runPanelInvocation(root: string | undefined): void {
-  Effect.gen(function*() { yield* (yield* PanelLauncher).serve(root); }).pipe(Effect.catch(cliFailure), Effect.provide(panelCliLayer), NodeRuntime.runMain);
-}
-export function runPanelCli(command: Command.Command<any, any, any, any, PanelLauncher>): void {
-  runCommand(command).pipe(Effect.provide(panelCliLayer), NodeRuntime.runMain);
-}
-export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | PanelLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
+export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
   runCommand(command).pipe(Effect.provide(cliLayer), NodeRuntime.runMain);
 }

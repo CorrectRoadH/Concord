@@ -13,13 +13,6 @@ enableCompileCache(process.env.NODE_COMPILE_CACHE ?? join(process.env.XDG_CACHE_
 
 const args = process.argv.slice(2);
 
-function exactPanelInvocation(data: StartupData): { root: string | undefined } | undefined {
-  for (const form of data.panelStarts ?? []) {
-    if (form.length !== args.length) continue;
-    if (form.every((token, index) => token === '<root>' ? !!args[index] && !args[index]!.startsWith('-') : args[index] === token)) return { root: form.includes('<root>') ? args[form.indexOf('<root>')] : undefined };
-  }
-}
-
 function selectedGroup(data: StartupData): string | undefined {
   // Let Effect own parsing. This conservative scan only chooses a module graph;
   // values, aliases, built-ins, unknown flags and -- still use the original parser.
@@ -55,10 +48,7 @@ try {
       let run: (() => void) | undefined;
       if (group !== undefined && data !== undefined) {
         try {
-          if (group === 'panel') {
-            const exact = exactPanelInvocation(data);
-            if (exact) run = (await import('./panel-start.js')).loadPanelInvocation(exact.root);
-          } else run = await (await import("./cli.js")).loadCommand(group, data);
+          run = await (await import("./cli.js")).loadCommand(group, data);
         }
         catch { /* Missing or mismatched command code uses the complete bundle. */ }
       }

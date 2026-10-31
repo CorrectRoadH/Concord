@@ -5,7 +5,7 @@ import { Command } from "effect/unstable/cli";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { root } from "./cli-base.js";
-import { runCli, runPanelCli } from "./main.js";
+import { runCli } from "./main.js";
 import type { StartupData } from "../../model/index.js";
 
 const loaders = {
@@ -36,16 +36,10 @@ const loaders = {
   git: () => import("./cli-command-git.js").then(m => m.gitView),
   view: () => import("./cli-command-view.js").then(m => m.view),
   server: () => import('./cli-command-server.js').then(m => m.server),
-  panel: () => import('./cli-command-panel.js').then(m => m.panel),
+  herdr: () => import('./cli-command-herdr.js').then(m => m.herdr),
 };
 
 export async function loadCommand(group: string, data: StartupData): Promise<() => void> {
-  if (group === 'panel') {
-    const selected = (await import('./cli-command-panel.js')).panel;
-    const commands = data.groups.map(item => item.name === group ? selected : Command.make(item.name).pipe(Command.withDescription(item.description ?? '')));
-    const command = root.pipe(Command.withSubcommands(commands));
-    return () => runPanelCli(command);
-  }
   const documentKinds = ['use-case', 'roadmap'] as const;
   const kind = documentKinds.find(name => name === group);
   const selected = kind === undefined ? await loaders[group as keyof typeof loaders]() : (await import("./cli-command-documents.js")).docsGroup(kind);

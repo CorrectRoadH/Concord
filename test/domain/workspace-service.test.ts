@@ -5,7 +5,7 @@ import { TestClock } from 'effect/testing';
 import { WorkspaceState, waitForServerHandshake } from '../../src/entry/server/state.js';
 import { makeWorkspaceService, type RuntimePorts } from '../../src/entry/server/service.js';
 import { ConcordError, type WorkspaceProjection, type WorkspaceProjectionRecord } from '../../src/model/index.js';
-import { panelSnapshot } from '../support/panel-fixture.js';
+import { displaySnapshot } from '../support/workspace-display-fixture.js';
 
 import { record, projection, ports, stateLayer } from '../support/workspace-service-fixture.js';
 
