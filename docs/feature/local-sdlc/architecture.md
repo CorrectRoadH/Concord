@@ -12,6 +12,8 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 其它调用按顶层命令组加载：入口只导入被调用命令组的模块图，不静态导入全部命令。静态数据或命令模块缺失、与安装身份不符时，入口回退到完整 CLI，结果与回退前相同。源码运行（`pnpm concord`）使用同一入口逻辑。
 
+`concord panel` 与 `concord --root <路径> panel` 两种形式由入口直接启动面板，不加载通用参数解析器。可识别的形式由构建时从实际命令定义生成，与静态帮助一样绑定命令定义摘要；其余参数形式、摘要不符或数据缺失时交给完整 CLI 解析。两条路径对同一输入得到相同的根目录定位、安全检查与结果。
+
 入口在加载任何命令模块之前启用 Node 编译缓存，目录为 `${XDG_CACHE_HOME:-~/.cache}/concord/node-compile-cache`，遵守 `NODE_COMPILE_CACHE` 与 `NODE_DISABLE_COMPILE_CACHE`。目录不可写或被禁用时照常加载，不改变命令结果。
 
 ## 自举
