@@ -9,6 +9,7 @@ import type { Computation } from './computation.js';
 export interface RuntimePorts {
   readonly verify: Effect.Effect<void, unknown>;
   readonly health?: Effect.Effect<void, unknown>;
+  readonly sourceDigest: Effect.Effect<string, unknown>;
   readonly context: Effect.Effect<WorkspaceProjectionContext, unknown>;
   readonly ready: (context: WorkspaceProjectionContext) => Effect.Effect<void, unknown>;
   readonly restore: (context: WorkspaceProjectionContext) => Effect.Effect<WorkspaceProjection, unknown>;
@@ -58,10 +59,12 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* ports.verify;
     const context = yield* ports.context;
     yield* ports.ready(context);
+    const sourceDigest = yield* ports.sourceDigest;
     const value = yield* ports.compute({ kind: 'scan' });
     const candidate = yield* Effect.try({ try: () => decodeWorkspaceProjectionRecord(value), catch: failure });
     if (ports.reconcile && (yield* ports.reconcile(candidate))) yield* request;
     yield* ports.verify;
+    if (candidate.sourceDigest !== sourceDigest || (yield* ports.sourceDigest) !== sourceDigest) { yield* request; return; }
     if ((yield* ports.context).identity !== context.identity) { yield* request; return; }
     yield* ports.ready(context);
     if (stopping) return;

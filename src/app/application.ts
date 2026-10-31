@@ -1,3 +1,4 @@
+import { workspaceSourceDigest } from './workspace-source.js';
 import { Installation } from '../base/installation/index.js';
 import type { Publication } from "../base/publication/index.js";
 import { openReadRepository, openWriteRepository, Workspace } from "../base/workspace/index.js";
@@ -213,8 +214,10 @@ const compileWorkspace = Effect.fn('view.compileWorkspace')(function*(rootInput:
 export const getWorkspaceSnapshot = (root: string, cache: 'use' | 'off' = 'off', timing?: RequestTiming) => compileWorkspace(root, cache, timing);
 export const observeWorkspaceProjection = Effect.fn('view.observeWorkspaceProjection')(function*(root: string, timing?: RequestTiming) {
   let drift = { files: [] as string[], directories: [] as string[], publicationChanged: false };
+  const sourceDigest = yield* workspaceSourceDigest(root);
   const snapshot = yield* compileWorkspace(root, 'off', timing, value => { drift = value; });
-  return { snapshot, drift };
+  if ((yield* workspaceSourceDigest(root)) !== sourceDigest) return yield* Effect.fail(new ConcordError('SourceChanged', 'Workspace sources changed during refresh'));
+  return { snapshot, drift, sourceDigest };
 });
 // @concord-end
 

@@ -19,7 +19,7 @@ import { Git } from '../../base/git/index.js';
 import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { executeQuery, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
+import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
 import { CacheSnapshotUnavailable, ConcordError, failure } from '../../model/index.js';
 import { Computation, ComputationReply, ComputeRpcs } from './computation.js';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.js';
@@ -28,7 +28,7 @@ import { makeRequestAdmission } from './request-admission.js';
 import { getWorkspaceRead } from '../../app/index.js';
 import { QueryRefreshRequest, queryContext, storeQuery, scanQueryProcess } from '../../app/index.js';
 import { decodeQueryScanMessage } from '../../model/index.js';
-import { WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.js';
+import { workspaceEvents, WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.js';
 import { makeWorkspaceService } from './service.js';
 import { FeedbackSessions } from './feedback-session.js';
 import { ServerJobs } from './jobs.js';
@@ -161,8 +161,8 @@ const compute = Effect.fn('workspace.compute')(function*(root: string, operation
     case 'query-scan': return yield* scanQueryProcess(root, JSON.stringify(operation.query));
     case 'scan': {
       const builtFrom = new Date(yield* Clock.currentTimeMillis).toISOString();
-      const { snapshot, drift } = yield* observeWorkspaceProjection(root);
-      return yield* Effect.try({ try: () => makeWorkspaceProjectionRecord(snapshot, drift, builtFrom), catch: failure });
+      const { snapshot, drift, sourceDigest } = yield* observeWorkspaceProjection(root);
+      return yield* Effect.try({ try: () => makeWorkspaceProjectionRecord(snapshot, drift, builtFrom, sourceDigest), catch: failure });
     }
     case 'read': return yield* getViewFile(root, operation.path);
     case 'read-bytes': return yield* getWorkspaceRead(root, operation.path);
@@ -294,6 +294,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       verify: runtime.verify,
       health: cache.verify,
       context,
+      sourceDigest: workspaceSourceDigest(root).pipe(Effect.provideService(Workspace, workspace)),
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources)),
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),
       persist: (ctx, candidate, error) => owned(storeWorkspaceProjection(ctx, candidate, error)),
@@ -348,7 +349,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         },
         jobs, sse,
         subscribe: listener => {
-          const fiber = Effect.runFork(Effect.scoped(service.connect.pipe(Effect.andThen(Stream.runForEach(event.pipe(Stream.takeUntil(value => value.state === 'stopping')), value => Effect.promise(() => Promise.resolve(listener(value))))))));
+          const fiber = Effect.runFork(Effect.scoped(service.connect.pipe(Effect.andThen(Stream.runForEach(workspaceEvents(event).pipe(Stream.takeUntil(value => value.state === 'stopping')), value => Effect.promise(() => Promise.resolve(listener(value))))))));
           httpSubscriptions.add(fiber);
           return () => { httpSubscriptions.delete(fiber); Effect.runFork(Fiber.interrupt(fiber)); };
         },
@@ -385,9 +386,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       }).pipe(Effect.ensuring(Effect.sync(() => { refreshing.delete(key); })), Effect.ignore), serverScope);
     });
     const handlers = WorkspaceRpcs.toLayer({
-      hello: () => SubscriptionRef.get(service.state.value).pipe(Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, generation: value.generation }))),
+      hello: () => SubscriptionRef.get(service.state.value).pipe(Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, sourceDigest: value.sourceDigest }))),
       shutdown: request => request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : Effect.forkIn(Effect.sleep('10 millis').pipe(Effect.andThen(service.stop)), serverScope).pipe(Effect.asVoid),
-      subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(event.pipe(Stream.takeUntil(value => value.state === 'stopping')), output.json)))),
+      subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(workspaceEvents(event).pipe(Stream.takeUntil(value => value.state === 'stopping')), output.json)))),
       workspace: request => result(request, readProjection),
       refresh: request => result(request, service.request.pipe(Effect.as({ status: 'requested' }))),
       query: request => result(request, Effect.gen(function*() {

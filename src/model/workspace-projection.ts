@@ -49,7 +49,7 @@ export const WorkspaceProjectionSnapshotSchema = Schema.Struct({
   diagnostics: Diagnostic,
 });
 export const WorkspaceProjectionRecordSchema = Schema.Struct({
-  builtAt: Instant, builtFrom: Instant, builtUntil: Instant,
+  sourceDigest: Schema.String, builtAt: Instant, builtFrom: Instant, builtUntil: Instant,
   consistent: Schema.Boolean, complete: Schema.Boolean, changedPaths: Schema.Array(Schema.String), unknownRelations: Schema.Boolean,
   snapshot: WorkspaceProjectionSnapshotSchema,
 }).check(Schema.makeFilter(value => value.consistent === (value.changedPaths.length === 0)
@@ -68,9 +68,9 @@ export const WorkspaceProjectionSchema = Schema.Struct({ snapshot: WorkspaceProj
   status: Schema.Literals(['ready', 'refresh-failed', 'blocked']), current: Schema.Literal(false), refreshOwner: Schema.Literals(['active', 'none']),
   lastAttempt: Schema.optional(Attempt), lastError: Schema.optional(RefreshError),
 }) });
-export const WorkspaceServerEvent = Schema.Struct({ token: Schema.String, generation: Schema.Int,
+export const WorkspaceServerEvent = Schema.Struct({ token: Schema.String, sourceDigest: Schema.NullOr(Schema.String),
   state: Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']),
-  workspace: Schema.optional(WorkspaceProjectionSchema), error: Schema.optional(Schema.Struct(ErrorFields)),
+  workspace: Schema.optional(WorkspaceProjectionSchema), projection: Schema.optional(WorkspaceProjectionSchema.fields.projection), error: Schema.optional(Schema.Struct(ErrorFields)),
 }).annotate({ parseOptions: { onExcessProperty: 'error' } });
 export type WorkspaceProjectionRecord = typeof WorkspaceProjectionRecordSchema.Type;
 export interface WorkspaceProjectionContext { readonly root: string; readonly privateDir: string; readonly identity: string }

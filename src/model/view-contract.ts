@@ -104,6 +104,7 @@ export interface WorkspaceProjectionRefreshError { readonly failedAt: string; re
 export interface WorkspaceProjectionAttempt { readonly at: string; readonly complete: boolean; readonly changedPaths: readonly string[] }
 /** `consistent` marks a drift-free build; `complete` keeps the scan/finding semantics. Never current facts. */
 export interface WorkspaceProjectionStatus {
+  readonly sourceDigest: string;
   readonly status: 'ready' | 'refresh-failed' | 'blocked';
   readonly current: false;
   readonly refreshOwner: 'active' | 'none';

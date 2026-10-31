@@ -103,6 +103,7 @@ export const pollUntil = <T>(attempt: (signal: AbortSignal) => Promise<T | undef
 };
 
 const WorkspaceProjectionStatusSchema = Schema.Struct({
+  sourceDigest: Schema.String,
   status: Schema.Literals(['ready', 'refresh-failed', 'blocked']),
   current: Schema.Literal(false),
   refreshOwner: Schema.Literals(['active', 'none']),

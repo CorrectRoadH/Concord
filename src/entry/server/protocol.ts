@@ -17,7 +17,7 @@ export class WorkspaceServerError extends Schema.TaggedError<WorkspaceServerErro
   code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json),
 }) {}
 export const HelloInput = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String }));
-export const Hello = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, token: Schema.String, state: ServerState, generation: Schema.Int }));
+export const Hello = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, token: Schema.String, state: ServerState, sourceDigest: Schema.NullOr(Schema.String) }));
 export const Identity = { token: Schema.String, installation: Schema.String, requestId: Schema.String, deadline: Schema.Number };
 export const Packet = strict(Schema.Struct({ data: Schema.Uint8Array, last: Schema.Boolean }));
 export const QueryInput = strict(Schema.Struct({ name: Schema.String, input: Schema.Json }));

@@ -38,7 +38,7 @@ test('a completed workspace scan survives brief contention at publication', asyn
   const root = fixture();
   try {
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
-    const candidate = makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString());
+    const candidate = makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
     const context = workspaceProjectionContext(root);
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const owner = yield* PersistentCache.owner(context.privateDir);
@@ -59,7 +59,7 @@ test('a recovery failure preserves the exact previously accepted persistent gene
   const root = fixture();
   try {
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
-    const candidate = makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString());
+    const candidate = makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
     const context = workspaceProjectionContext(root);
     storeWorkspaceProjection(context, candidate);
     const previous = readWorkspaceProjection(context);
@@ -77,10 +77,10 @@ test('a drifted candidate retains the last consistent generation and reports the
   const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
   const context = workspaceProjectionContext(root);
   try {
-    storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date(Date.now() - 1000).toISOString()));
+    storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date(Date.now() - 1000).toISOString(), 'fixture-sources'));
     const healthy = readWorkspaceProjection(context);
     assert.equal(healthy.projection.status, 'ready');
-    storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: ['src/main.ts'], directories: [], publicationChanged: false }, new Date().toISOString()));
+    storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: ['src/main.ts'], directories: [], publicationChanged: false }, new Date().toISOString(), 'drifted-sources'));
     const retained = readWorkspaceProjection(context);
     assert.equal(retained.projection.status, 'ready', 'source drift during editing is not a refresh failure');
     assert.equal(retained.projection.consistent, true, 'the last consistent generation stays the navigation result');

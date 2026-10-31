@@ -39,7 +39,7 @@ export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext'
 
 
 /** Explicit construction, followed by strict decoding, keeps source bodies out of persistent storage. */
-export function makeWorkspaceProjectionRecord(snapshot: WorkspaceSnapshot, drift: { files: readonly string[]; directories: readonly string[]; publicationChanged: boolean }, builtFrom: string): WorkspaceProjectionRecord {
+export function makeWorkspaceProjectionRecord(snapshot: WorkspaceSnapshot, drift: { files: readonly string[]; directories: readonly string[]; publicationChanged: boolean }, builtFrom: string, sourceDigest: string): WorkspaceProjectionRecord {
   const remote = <T extends { readonly body: string }>(value: T) => { const { body: _body, ...rest } = value; return rest; };
   const document = (value: WorkspaceSnapshot['documents'][number]) => ({ path: value.path, digest: value.digest,
     metadata: value.metadata.kind === 'issue' && value.metadata.source ? { ...value.metadata, source: remote(value.metadata.source) } : value.metadata });
@@ -53,7 +53,7 @@ export function makeWorkspaceProjectionRecord(snapshot: WorkspaceSnapshot, drift
   const diagnostic = typeof diagnostics === 'object' && diagnostics !== null && 'error' in diagnostics
     ? { ...('ok' in diagnostics ? { ok: diagnostics.ok } : {}), error: diagnostics.error, message: 'message' in diagnostics ? diagnostics.message : '' }
     : diagnostics;
-  return decodeWorkspaceProjectionRecord({ builtAt: builtUntil, builtFrom, builtUntil, consistent,
+  return decodeWorkspaceProjectionRecord({ sourceDigest, builtAt: builtUntil, builtFrom, builtUntil, consistent,
     complete: consistent && snapshotComplete, changedPaths, unknownRelations: !consistent || !snapshotComplete,
     snapshot: { ...snapshot, complete: consistent && snapshotComplete, diagnostics: diagnostic, conceptCatalogs: directory.catalogs, findings: [...snapshot.findings, ...directory.findings],
       documents: snapshot.documents.map(document),
@@ -108,7 +108,7 @@ export const storeWorkspaceProjection = Effect.fn('storeWorkspaceProjection')(fu
     const retain = next !== undefined && !next.consistent && prior?.record?.consistent === true;
     const record = retain || next === undefined ? prior?.record : next;
     const lastAttempt = next ? { at: next.builtUntil, complete: next.complete, changedPaths: next.changedPaths } : prior?.lastAttempt;
-    // A drifted attempt that keeps the last consistent generation is reported through lastAttempt, not as a failure.
+    // A drifted attempt that keeps the last consistent result is reported through lastAttempt, not as a failure.
     const envelope = decodeEnvelope({ format: 'concord.workspace-projection/v1', identity: context.identity,
       ...(record ? { record } : {}), ...(lastAttempt ? { lastAttempt } : {}),
       ...(error ? { error: { failedAt: new Date().toISOString(), code: error.code, message: error.message.slice(0, 4096) } } : {}) });
