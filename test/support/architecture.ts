@@ -142,7 +142,7 @@ export function dependencyViolations(audit: Audit): Violation[] {
       const serviceStartup = edge.from === 'src/entry/cli/main.ts' && edge.to === 'src/entry/server/main.ts' && edge.kind === 'dynamic';
       if (moduleOf(edge.from) !== moduleOf(edge.to) && !edge.to.endsWith('/index.ts') && !serviceStartup) fail('ModuleExit');
       if (edge.kind === 'export' && moduleOf(edge.from) !== moduleOf(edge.to)) fail('ForeignReexport');
-      const root = /^src\/entry\/[^/]+\/main\.ts$/u.test(edge.from);
+      const root = /^src\/entry\/[^/]+\/(?:[^/]+\/)?main\.ts$/u.test(edge.from);
       if (from === 'model' && to !== 'model' || from === 'base' && !['model', 'base'].includes(to!)
         || from === 'domain' && !['model', 'base', 'domain'].includes(to!) || from === 'app' && to === 'entry'
         || from === 'entry' && to !== 'model' && to !== 'app' && moduleOf(edge.from) !== moduleOf(edge.to) && !root) fail('LayerDirection');

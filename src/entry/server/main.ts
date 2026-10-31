@@ -7,7 +7,7 @@ import { Workspace } from '../../base/workspace/index.js';
 import { Sources, type SourceWatch } from '../../base/sources/index.js';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../base/cache/index.js';
 import type { ReadonlyCacheSnapshot } from '../../base/cache/index.js';
-import type { CacheDerivationBatch } from '../../model/index.js';
+import { CacheDerivationBatch } from '../../model/index.js';
 import type { ChildProcessSpawner } from 'effect/unstable/process';
 import { NodeSocketServer } from '@effect/platform-node';
 import { Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Semaphore, Stream, SubscriptionRef } from 'effect';
@@ -36,35 +36,13 @@ import { startHostedViewServer, type HostedViewPorts } from '../http/index.js';
 import { FeedbackCacheWriter } from '../../base/cache/index.js';
 import { mergeLocalFeedbackObservation } from '../../app/index.js';
 import type { RemoteFeedback } from '../../model/index.js';
-import { executeViewAction, runWorkspaceTest, clearWorkspaceCache, decodeViewAction } from '../../app/index.js';
-import { ViewActionSchema } from '../../model/index.js';
+import { clearWorkspaceCache, decodeViewAction } from '../../app/index.js';
 import { Snapshot } from './computation.js';
 import { assertWorkspacePublicationReady } from '../../app/index.js';
 import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.js';
 
-const OperationRequest = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('action'), root: Schema.String, input: ViewActionSchema, snapshot: Snapshot }),
-  Schema.Struct({ kind: Schema.Literal('job'), root: Schema.String, caseId: Schema.String, snapshot: Snapshot }),
-]);
-export const operationLayer = (snapshot: Parameters<typeof CacheSnapshot.layer>[0] = {}) => Layer.mergeAll(Installation.layer, ServerRuntime.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(snapshot), Publication.layer.pipe(Layer.provide(PublicationValidationLive))).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
-export const runOperationMain = (): void => {
-  const program = Effect.tryPromise({ try: async () => {
-    const chunks: Buffer[] = []; let size = 0;
-    for await (const chunk of process.stdin) {
-      const bytes = Buffer.from(chunk); size += bytes.byteLength;
-      if (size > 32 * FRAME_LIMIT) throw new ConcordError('WorkspaceServerInputLimit', 'Operation input exceeds 32 MiB');
-      chunks.push(bytes);
-    }
-    return Schema.decodeUnknownSync(Schema.fromJsonString(OperationRequest), { onExcessProperty: 'error' })(new TextDecoder('utf8', { fatal: true }).decode(Buffer.concat(chunks)));
-  }, catch: failure }).pipe(Effect.flatMap(request => {
-    const layers = operationLayer(request.snapshot);
-    const operation = request.kind === 'action' ? executeViewAction(request.root, request.input) : runWorkspaceTest(request.root, request.caseId);
-    return operation.pipe(Effect.provide(feedbackWriterLayer.pipe(Layer.provideMerge(layers))));
-  }), Effect.match({ onSuccess: value => ({ ok: true, value }), onFailure: cause => { const error = failure(cause); return { ok: false, code: error.code, message: error.message, details: error.details }; } }), Effect.flatMap(reply => Effect.sync(() => { process.stdout.write(JSON.stringify(reply)); })));
-  NodeRuntime.runMain(program);
-};
-const OperationReply = Schema.Union([Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json }), Schema.Struct({ ok: Schema.Literal(false), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) })]);
-const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: string, snapshot: Effect.Effect<import('../../base/cache/index.js').ReadonlyCacheSnapshot, unknown>) {
+import { OperationReply } from './operation-protocol.js';
+const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: string, snapshot: Effect.Effect<import('../../base/cache/index.js').ReadonlyCacheSnapshot, unknown>, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown>) {
   const installation = yield* Installation;
   const owners = new Set<ReturnType<typeof makeOwnedProcessService>>();
   let unconfirmed = false;
@@ -86,6 +64,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     if (result.exitCode !== 0 || result.cancelled || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('OperationResultUnknown', 'Operation process ended without a confirmed receipt; inspect recovery state', { stderr: result.stderr.slice(-4096) }));
     const reply = yield* Effect.try({ try: () => Schema.decodeUnknownSync(Schema.fromJsonString(OperationReply), { onExcessProperty: 'error' })(result.stdout), catch: () => new ConcordError('OperationResultUnknown', 'Operation did not return a valid receipt; inspect recovery state') });
     if (!reply.ok) return yield* Effect.fail(new ConcordError(reply.code, reply.message, reply.details));
+    yield* acceptDerived(reply.derived);
     return reply.value;
     })).pipe(Effect.onExit(() => inspect(owner).pipe(Effect.orDie)));
   }) };
@@ -229,16 +208,17 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       return Effect.succeed<ReadonlyCacheSnapshot>({ unavailable: { code: code._tag === 'Success' ? code.value : 'HawdbUnavailable', message: error.message } });
     }));
     const protocolReady = yield* Deferred.make<void>();
-    const operations = yield* makeOperationOwner(root, cacheSnapshot);
     const owned = <A, E, R>(operation: Effect.Effect<A, E, R | PersistentCache>) => operation.pipe(Effect.provideService(PersistentCache, cache.service));
     const context = workspaceProjectionContext(root).pipe(Effect.provideService(Workspace, workspace));
     const sources = yield* Sources;
     let watch: SourceWatch | undefined;
     const stateContext = yield* Layer.build(WorkspaceState.layer(runtime.token));
-    const computation = yield* makeComputationOwner(root, rows => cache.mergeDerived(rows).pipe(Effect.catch(cause => {
+    const acceptDerived = (rows: readonly CacheDerivationBatch[]) => cache.mergeDerived(rows).pipe(Effect.catch(cause => {
       const error = workspaceServerFailure(cause);
       return Context.get(stateContext, WorkspaceState).transition('degraded', { code: error.code, message: error.message });
-    })));
+    }));
+    const operations = yield* makeOperationOwner(root, cacheSnapshot, acceptDerived);
+    const computation = yield* makeComputationOwner(root, acceptDerived);
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
       health: cache.verify,

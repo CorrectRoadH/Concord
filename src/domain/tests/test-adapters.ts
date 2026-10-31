@@ -251,6 +251,10 @@ export const executeNativeCase = Effect.fn('executeNativeCase')(function* (repo:
     if (requireNative) return yield* Effect.fail(new ConcordError('NativeSelectionUnsupported', 'This file uses the command runner'));
     return undefined;
   }
+  yield* sync(() => {
+    PersistentCache.repository(repo).prepareWrite({ create: true });
+    closeRepositoryCache(repo);
+  });
   return yield* withSession(repo, [adapter], session => Effect.gen(function* () {
     const collection = yield* collectOne(repo, adapter, [marker.file], session);
     const requested = yield* sync(() => repo.snapshot(() => bindNative(repo, marker, collection.manifest)));

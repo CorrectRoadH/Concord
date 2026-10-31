@@ -15,7 +15,8 @@ import { Cache, CacheSnapshot, HawdbFailure, cacheDatabasePath, openHawdb } from
 import { waitForPublication, acquireTraceLeaseSync, releaseTraceLeaseSync, Publication } from '../../src/base/publication/index.js';
 import { publicationLayer } from '../support/repository.js';
 import { cliLayer } from '../../src/entry/cli/index.js';
-import { operationLayer, readerLayer, writerLayer, refreshLayer } from '../../src/entry/server/main.js';
+import { readerLayer, writerLayer, refreshLayer } from '../../src/entry/server/main.js';
+import { operationLayer } from '../../src/entry/server/operation/main.js';
 import { PersistentCache } from '../../src/base/cache/index.js';
 import { Git } from '../../src/base/git/index.js';
 

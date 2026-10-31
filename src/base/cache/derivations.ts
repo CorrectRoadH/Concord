@@ -14,7 +14,7 @@ export class CacheDerivations extends Context.Service<CacheDerivations, {
     let bytes = 0;
     return {
       record: (namespace, rows) => {
-        if (!['annotation_cache', 'code_cache', 'config_cache', 'query_cache'].includes(namespace) || namespace === 'query_cache' && rows.some(row => !row.key.startsWith('writing:'))) throw new HawdbFailure('HawdbUnavailable', 'A computation cannot write persistent observations or historical results');
+        if (!['annotation_cache', 'code_cache', 'config_cache', 'query_cache'].includes(namespace) || namespace === 'query_cache' && rows.some(row => !row.key.startsWith('writing:'))) throw new HawdbFailure('HawdbUnavailable', 'A worker cannot derive remote observations or historical results');
         const name = namespace as CacheDerivationBatch['namespace'];
         const entries = pending.get(name) ?? new Map<string, HawdbEntry>();
         let next = bytes;
@@ -23,7 +23,7 @@ export class CacheDerivations extends Context.Service<CacheDerivations, {
           const before = entries.get(row.key);
           next += Buffer.byteLength(row.key) + Buffer.byteLength(row.payload) - (before ? Buffer.byteLength(before.key) + Buffer.byteLength(before.payload) : 0);
         }
-        if (next > 32 * 1024 * 1024) throw new HawdbFailure('HawdbLimit', 'One computation produced more than 32 MiB of cache derivations');
+        if (next > 32 * 1024 * 1024) throw new HawdbFailure('HawdbLimit', 'One worker produced more than 32 MiB of cache derivations');
         bytes = next;
         for (const row of changes.values()) entries.set(row.key, Object.freeze({ ...row }));
         pending.set(name, entries);

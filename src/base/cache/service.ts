@@ -43,7 +43,10 @@ export class CacheSnapshot extends Context.Service<CacheSnapshot, {
         attach: repo => Effect.gen(function*() {
           const derivations = yield* Effect.serviceOption(CacheDerivations);
           const access: RepositoryCache = {
-            prepareWrite: () => { throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access'); },
+            prepareWrite: () => {
+              if (derivations._tag === 'Some') return;
+              throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access');
+            },
             get: (namespace, keys) => persistent(() => keys.flatMap(key => { const row = indexes.get(namespace)?.get(key); return row ? [row] : []; })),
             scan: namespace => persistent(() => copy[namespace] ?? []),
             namespaces: () => persistent(() => Object.keys(rows) as HawdbNamespace[]),
