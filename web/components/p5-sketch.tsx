@@ -22,7 +22,7 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
   const [error, setError] = useState('');
   const [status, setStatus] = useState('正在加载图解…');
   const [height, setHeight] = useState(300);
-  const [generation, setGeneration] = useState(0);
+  const [frameId, setFrameId] = useState(() => crypto.randomUUID());
   const [loading, setLoading] = useState(false);
   const visibility = useRef(true);
   const updateLoop = () => frame.current?.contentWindow?.postMessage({ kind: !visibility.current || document.hidden ? 'pause' : 'resume' }, '*');
@@ -48,7 +48,7 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
       if (!result.ok) throw new Error(`${result.error}: ${result.message}`);
       if (!response.ok) throw new Error('p5 编译请求失败');
       if (!controller.signal.aborted) {
-        setBundle(result.value); setGeneration(value => value + 1); setStatus('正在启动…');
+        setBundle(result.value); setFrameId(crypto.randomUUID()); setStatus('正在启动…');
       }
     }, catch: cause => cause })).catch(cause => {
       if (!controller.signal.aborted) { setError(cause instanceof Error ? cause.message : String(cause)); setStatus('运行失败'); }
@@ -71,7 +71,7 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
     };
     window.addEventListener('message', receive);
     return () => { window.removeEventListener('message', receive); window.clearTimeout(timer); };
-  }, [bundle, generation]);
+  }, [bundle, frameId]);
 
   useEffect(() => {
     if (!bundle || !container.current) return;
@@ -80,13 +80,13 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
     document.addEventListener('visibilitychange', updateLoop);
     updateLoop();
     return () => { observer.disconnect(); document.removeEventListener('visibilitychange', updateLoop); };
-  }, [bundle, generation]);
+  }, [bundle, frameId]);
 
   return <div ref={container} className="p5-sketch" data-testid="p5-sketch">
     <span role="status" className={bundle && !error ? 'sr-only' : undefined}>{status}</span>
     {error && <Button type="button" variant="outline" size="sm" onClick={run} disabled={loading}>重试</Button>}
     {error && <pre role="alert" className="p5-error">{error}</pre>}
-    {bundle && <iframe key={generation} ref={frame} title="p5 图解" src="/p5-frame" sandbox="allow-scripts allow-downloads" allow="camera 'none'; microphone 'none'; geolocation 'none'" referrerPolicy="no-referrer" style={{ height }} />}
+    {bundle && <iframe key={frameId} ref={frame} title="p5 图解" src="/p5-frame" sandbox="allow-scripts allow-downloads" allow="camera 'none'; microphone 'none'; geolocation 'none'" referrerPolicy="no-referrer" style={{ height }} />}
   </div>;
 }
 

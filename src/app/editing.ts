@@ -135,11 +135,11 @@ export function isSourcePath(repo: Repository, path: string): boolean {
   });
 }
 
-export function setSource(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
+export function setSource(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt & { digest: string } {
   return inRepositorySnapshot(repo, () => {
   const source = readSource(repo, path);
   if (source.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${path} changed; use its current digest`);
-  return repo.publishSource(path, source.body, body, dryRun);
+  return { ...repo.publishSource(path, source.body, body, dryRun), digest: digest(body) };
   });
 }
 // @concord-end
@@ -154,7 +154,7 @@ export function showConfig(repo: LocalRepository): { operation: string; config: 
 
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-export function setConfig(repo: LocalRepository, config: ProjectConfig, expectedDigest: string, dryRun = false): MutationReceipt {
+export function setConfig(repo: LocalRepository, config: ProjectConfig, expectedDigest: string, dryRun = false): MutationReceipt & { digest: string } {
   return inRepositorySnapshot(repo, () => {
   const current = showConfig(repo);
   if (current.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${repo.configSnapshot.path} changed; use its current digest`);
@@ -162,19 +162,19 @@ export function setConfig(repo: LocalRepository, config: ProjectConfig, expected
   for (const path of [...(next.testRoots ?? []), ...(next.sourceRoots ?? []), ...(next.runner?.sourceFiles ?? [])]) repo.absolute(path);
   for (const root of [...(next.testRoots ?? []), ...(next.sourceRoots ?? [])]) if (sourceForbidden(root)) throw new ConcordError('InvalidSourcePath', `Unsafe sourceRoot or testRoot: ${root}`);
   const after = renderTypeScriptConfig(next);
-  return repo.publish('set-config', [{ path: repo.configSnapshot.path, before: repo.configSnapshot.source || null, after }], dryRun);
+  return { ...repo.publish('set-config', [{ path: repo.configSnapshot.path, before: repo.configSnapshot.source || null, after }], dryRun), digest: digest(after) };
   });
 }
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
-export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt {
+export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt & { digest: string } {
   return inRepositorySnapshot(repo, () => {
   const page = inspectDocumentFile(repo, path);
   if (page === undefined) throw new ConcordError('FileNotFound', 'Markdown editing is limited to the Concord document and supporting-page inventory');
   if (page.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${path} changed; use its current digest`);
   const before = repo.read(path);
   if (before === undefined) throw new ConcordError('FileNotFound', `${path} disappeared before publication`);
-  return repo.publish('set-markdown', [{ path, before, after: body }], dryRun);
+  return { ...repo.publish('set-markdown', [{ path, before, after: body }], dryRun), digest: digest(body) };
   });
 }

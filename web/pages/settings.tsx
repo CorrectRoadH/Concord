@@ -38,7 +38,7 @@ export function SettingsPage() {
   return <ConfigurationLoader />
 }
 
-/** The editable configuration baseline is the current target read, not a historical generation. */
+/** The editable configuration baseline is the current target read, not a historical result. */
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 function ConfigurationLoader() {
@@ -89,8 +89,8 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   const formDirty = testRootsText !== lines(baseline.config.testRoots) || sourceRootsText !== lines(baseline.config.sourceRoots ?? []) || sourceFilesText !== lines(baseline.config.runner?.sourceFiles) || timeoutText !== String(baseline.config.runner?.timeoutMs ?? 60000) || draft.runner?.kind !== baseline.config.runner?.kind || (draft.runner?.kind === "command" && argvText !== (baseline.config.runner?.kind === "command" ? lines(baseline.config.runner.argv) : ""))
   const dirty = formDirty || p5LibrariesText !== lines(baseline.config.p5?.libraries ?? []) || source !== json(baseline.config)
   const externallyChanged = externalConfig !== null
-  const checkedGeneration = React.useRef<string | null>(null)
-  const checkingGeneration = React.useRef<string | null>(null)
+  const checkedDigest = React.useRef<string | null>(null)
+  const checkingDigest = React.useRef<string | null>(null)
   const currentRead = React.useRef(0)
   const savingRef = React.useRef(false)
   const reloadingRef = React.useRef(false)
@@ -117,21 +117,21 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
   }
 
   React.useEffect(() => {
-    const generation = projection.builtAt
-    if (!generation || generation === checkedGeneration.current || generation === checkingGeneration.current) return
+    const sourceDigest = projection.sourceDigest
+    if (!sourceDigest || sourceDigest === checkedDigest.current || sourceDigest === checkingDigest.current) return
     // Explicit reloads own the read until the user's requested disk state is applied.
     if (reloadingRef.current) return
-    if (savingRef.current) { checkedGeneration.current = generation; return }
+    if (savingRef.current) { checkedDigest.current = sourceDigest; return }
     if (!snapshot.configDigest || snapshot.configDigest === baseline.digest) {
-      checkedGeneration.current = generation
+      checkedDigest.current = sourceDigest
       return
     }
-    checkingGeneration.current = generation
+    checkingDigest.current = sourceDigest
     const token = ++currentRead.current
     void api.file(CONFIG_PATH).then((file) => {
-      if (token !== currentRead.current) return
-      checkingGeneration.current = null
-      checkedGeneration.current = generation
+      if (token !== currentRead.current || file.digest !== snapshot.configDigest) return
+      checkingDigest.current = null
+      checkedDigest.current = sourceDigest
       if (!file.project) { setError("当前配置无法读取，请重新载入后检查。"); return }
       if (file.digest === baseline.digest) { setExternalConfig(null); return }
       const next = { config: file.project, digest: file.digest }
@@ -143,16 +143,16 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
       }
     }).catch((cause: unknown) => {
       if (token === currentRead.current) {
-        checkingGeneration.current = null
-        checkedGeneration.current = generation
+        checkingDigest.current = null
+        checkedDigest.current = sourceDigest
         setError(cause instanceof Error ? cause.message : String(cause))
       }
     })
     return () => {
       if (token === currentRead.current) currentRead.current += 1
-      if (checkingGeneration.current === generation) checkingGeneration.current = null
+      if (checkingDigest.current === sourceDigest) checkingDigest.current = null
     }
-  }, [api, baseline.digest, projection.builtAt, snapshot.configDigest])
+  }, [api, baseline.digest, projection.sourceDigest, snapshot.configDigest])
 
   function formConfig(): ProjectConfig {
     const libraries = values(p5LibrariesText)
@@ -179,15 +179,17 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
     if (externalConfig) throw new Error("磁盘配置已变化，请先重新载入当前设置。")
     const sent = revision
     const token = ++currentRead.current
-    checkedGeneration.current = projection.builtAt
+    checkedDigest.current = projection.sourceDigest
     savingRef.current = true
     setSaving(true)
     setError("")
     try {
-      await api.action({ action: "config.set", config, expectedDigest: baseline.digest })
+      const receipt = await api.action({ action: "config.set", config, expectedDigest: baseline.digest })
+      const confirmed = Schema.decodeUnknownSync(Schema.Struct({ digest: Schema.String }))(receipt)
       const file = await api.file(CONFIG_PATH)
       if (token !== currentRead.current) return
       if (!file.project) throw new Error("保存后无法读取项目配置。")
+      if (file.digest !== confirmed.digest) { setExternalConfig({ config: file.project, digest: file.digest }); throw new Error("保存后的磁盘摘要与服务确认不一致，请重新载入设置。"); }
       const saved = { config: file.project, digest: file.digest }
       setExternalConfig(null)
       flushSync(() => {
@@ -217,7 +219,7 @@ function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; dige
       setBaseline({ config: file.project, digest: file.digest })
       sync(file.project)
       setExternalConfig(null)
-      checkedGeneration.current = projection.builtAt
+      checkedDigest.current = projection.sourceDigest
       setError("")
       setReloadOpen(false)
       notify("已载入磁盘上的最新设置。", "info")

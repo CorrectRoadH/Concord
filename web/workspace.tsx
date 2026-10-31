@@ -20,7 +20,7 @@ interface WorkspaceValue {
   readonly projection: WorkspaceProjectionStatus;
   readonly workspaceIssue: WorkspaceIssue | null;
   readonly refreshIssue: WorkspaceIssue | null;
-  /** True until the next published generation reflects a completed write. */
+  /** True until the next accepted result reflects a completed write. */
   readonly navigationUpdating: boolean;
   readonly git: GitStatus | null;
   readonly gitIssue: WorkspaceIssue | null;
@@ -33,7 +33,7 @@ interface WorkspaceValue {
   flushAutoSave(): Promise<boolean>;
   discardAutoSave(): Promise<void>;
   refresh(): Promise<void>;
-  /** Requests a merged write-level refresh and re-reads the served generation. */
+  /** Requests a merged write-level refresh and re-reads the served result. */
   requestRefresh(): Promise<void>;
   act(action: ViewAction, success?: string): Promise<unknown>;
   runCase(caseId: string): Promise<void>;
@@ -190,7 +190,6 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
     let serverStopped = false;
     let connected = false;
     let timer: number | undefined;
-    let latestWorkspace = initial.projection.builtAt;
     const events = new EventSource('/api/events');
     events.onopen = () => { connected = true; };
     events.onerror = () => {
@@ -205,10 +204,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
         const problem = { code: 'WorkspaceServerStopped', message: '服务已停止，请重新运行 concord view。' };
         workspaceProblemRef.current = problem; setWorkspaceProblem(problem); return;
       }
-      const changed = event.workspace?.projection.builtAt !== latestWorkspace || event.workspace?.projection.status !== 'ready' || event.error !== undefined;
-      latestWorkspace = event.workspace?.projection.builtAt ?? latestWorkspace;
-      if (changed) void refresh({ includeWorkspace: true, includeGit: false, includeJobs: true });
-      else void refresh({ includeWorkspace: false, includeGit: false, includeJobs: true });
+      void refresh({ includeWorkspace: true, includeGit: false, includeJobs: true });
     };
     events.addEventListener('workspace', onEvent);
     events.addEventListener('stopping', onEvent);

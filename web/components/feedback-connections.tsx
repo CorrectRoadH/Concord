@@ -74,11 +74,11 @@ function ConnectionRow({ connection, onRemove, onReplace, prepareCheck }: {
   const [result, setResult] = React.useState("")
   const [error, setError] = React.useState("")
   const active = React.useRef<AbortController | null>(null)
-  const generation = React.useRef(0)
+  const requestTicket = React.useRef(crypto.randomUUID())
   const identity = connectionIdentity(connection)
   React.useLayoutEffect(() => {
     setChecking(false); setResult(""); setError("")
-    return () => { generation.current += 1; active.current?.abort() }
+    return () => { requestTicket.current = crypto.randomUUID(); active.current?.abort() }
   }, [identity])
 
   async function check(): Promise<void> {
@@ -86,25 +86,25 @@ function ConnectionRow({ connection, onRemove, onReplace, prepareCheck }: {
     active.current?.abort()
     const controller = new AbortController()
     active.current = controller
-    const ticket = ++generation.current
+    const ticket = (requestTicket.current = crypto.randomUUID())
     setChecking(true); setResult(""); setError("")
     try {
       await prepareCheck(connection)
-      if (controller.signal.aborted || generation.current !== ticket) return
+      if (controller.signal.aborted || requestTicket.current !== ticket) return
       const response = await api.action({ action: "feedback.check", connection: connection.id }, controller.signal)
-      if (controller.signal.aborted || generation.current !== ticket) return
+      if (controller.signal.aborted || requestTicket.current !== ticket) return
       const checked = Schema.decodeUnknownSync(CheckResultSchema, { onExcessProperty: "error" })(response)
       if (checked.connectionId !== connection.id || checked.target !== connectionSummary(connection)) throw new Error("检测结果与当前连接不一致。")
       setResult(`连接正常 · ${checked.target} · ${dateTime(checked.checkedAt)}`)
     } catch (cause) {
-      if (!controller.signal.aborted && generation.current === ticket) setError(cause instanceof Error ? cause.message : String(cause))
+      if (!controller.signal.aborted && requestTicket.current === ticket) setError(cause instanceof Error ? cause.message : String(cause))
     } finally {
-      if (generation.current === ticket) { setChecking(false); active.current = null }
+      if (requestTicket.current === ticket) { setChecking(false); active.current = null }
     }
   }
 
   function invalidate(): void {
-    generation.current += 1
+    requestTicket.current = crypto.randomUUID()
     active.current?.abort()
     active.current = null
     setChecking(false); setResult(""); setError("")

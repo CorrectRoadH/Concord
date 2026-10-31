@@ -47,7 +47,7 @@ function useOwner<T>(kind: 'policy' | 'catalog', scope: string, api: ReturnType<
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const generation = useRef(0);
+  const requestTicket = useRef(crypto.randomUUID());
   const currentPath = useRef(path);
   currentPath.current = path;
   const inFlight = useRef<Promise<void> | null>(null);
@@ -55,16 +55,16 @@ function useOwner<T>(kind: 'policy' | 'catalog', scope: string, api: ReturnType<
   const latest = useRef({ remote, draft, baseline, dirty });
   latest.current = { remote, draft, baseline, dirty };
   const invalidate = useCallback(() => {
-    generation.current++;
+    requestTicket.current = crypto.randomUUID();
     setRemote(null); setDraft(null); setBaseline(null); setOpen(false); setLoading(true); setSaving(false); setError('');
   }, []);
   const load = useCallback(async (expected?: string) => {
     const requestedPath = currentPath.current;
-    const ticket = ++generation.current;
+    const ticket = (requestTicket.current = crypto.randomUUID());
     setLoading(true);
     try {
       const value = await api.action(action({ action: kind === 'policy' ? 'writing.show' : 'concepts.show', path: requestedPath })) as Show<T>;
-      if (generation.current !== ticket || currentPath.current !== requestedPath || value.path !== requestedPath) return;
+      if (requestTicket.current !== ticket || currentPath.current !== requestedPath || value.path !== requestedPath) return;
       if (expected !== undefined && value.digest !== expected) {
         setError('保存后来源又被外部修改。草稿仍绑定本次提交摘要；请审阅外部变化。');
         return;
@@ -77,8 +77,8 @@ function useOwner<T>(kind: 'policy' | 'catalog', scope: string, api: ReturnType<
         setOpen(item !== null && item !== undefined);
       }
       setError('');
-    } catch (cause) { if (generation.current === ticket && currentPath.current === requestedPath) setError(errorText(cause)); }
-    finally { if (generation.current === ticket && currentPath.current === requestedPath) setLoading(false); }
+    } catch (cause) { if (requestTicket.current === ticket && currentPath.current === requestedPath) setError(errorText(cause)); }
+    finally { if (requestTicket.current === ticket && currentPath.current === requestedPath) setLoading(false); }
   }, [api, kind]);
   useEffect(() => { void load(); }, [path, load]);
   const edit = (value: T) => { changed(); setDraft(value); };
@@ -89,21 +89,21 @@ function useOwner<T>(kind: 'policy' | 'catalog', scope: string, api: ReturnType<
     const submitted = state.draft;
     const expectedDigest = state.remote.digest;
     const requestedPath = currentPath.current;
-    const ticket = ++generation.current;
+    const ticket = (requestTicket.current = crypto.randomUUID());
     setSaving(true); setError(''); changed();
     const pending = (async () => {
       try {
         const result = await api.action(action(kind === 'policy'
           ? { action: 'writing.set', path: requestedPath, policy: submitted, expectedDigest }
           : { action: 'concepts.set', path: requestedPath, source: submitted, expectedDigest })) as Receipt<T>;
-        if (generation.current !== ticket || currentPath.current !== requestedPath || result.path !== requestedPath) return;
+        if (requestTicket.current !== ticket || currentPath.current !== requestedPath || result.path !== requestedPath) return;
         const committed = kind === 'policy' ? result.policy : result.source as T;
         if (!committed) throw new Error('保存响应缺少已提交 owner。');
         setRemote({ state: 'valid', path: result.path, scope: result.scope, digest: result.digest, source: result.source });
         setBaseline(committed);
         setDraft(previous => same(previous, submitted) ? committed : previous);
         void load(result.digest);
-      } catch (cause) { if (generation.current === ticket && currentPath.current === requestedPath) setError(errorText(cause)); }
+      } catch (cause) { if (requestTicket.current === ticket && currentPath.current === requestedPath) setError(errorText(cause)); }
       finally { if (currentPath.current === requestedPath) setSaving(false); }
     })();
     inFlight.current = pending;
@@ -112,7 +112,7 @@ function useOwner<T>(kind: 'policy' | 'catalog', scope: string, api: ReturnType<
   };
   const discard = () => {
     const saved = latest.current;
-    generation.current++;
+    requestTicket.current = crypto.randomUUID();
     flushSync(() => { setDraft(saved.baseline); setBaseline(saved.baseline); setOpen(saved.remote?.state === 'valid'); setRemote(saved.remote); setLoading(false); setError(''); });
   };
   return { path, remote, draft, baseline, open, loading, saving, error, dirty, latest, edit, initialize, save, load, invalidate, discard, inFlight };
@@ -142,9 +142,9 @@ export function WritingPage() {
   const [report, setReport] = useState<Report | null>(null);
   const [checkError, setCheckError] = useState('');
   const [checking, setChecking] = useState(false);
-  const reportGeneration = useRef(0);
-  const aggregateGeneration = useRef(0);
-  const clearReport = () => { reportGeneration.current++; setReport(null); setCheckError(''); setChecking(false); };
+  const reportTicket = useRef(crypto.randomUUID());
+  const aggregateTicket = useRef(crypto.randomUUID());
+  const clearReport = () => { reportTicket.current = crypto.randomUUID(); setReport(null); setCheckError(''); setChecking(false); };
   const policy = useOwner<WritingPolicy>('policy', scope, api, clearReport);
   const [controlledError, setControlledError] = useState('');
   const [controlledText, setControlledText] = useState<string | null>(null);
@@ -165,14 +165,14 @@ export function WritingPage() {
     catch (cause) { setAggregateError(errorText(cause)); }
   }, [api]);
   const loadAggregate = useCallback(async () => {
-    const ticket = ++aggregateGeneration.current;
-    const reportTicket = reportGeneration.current;
+    const ticket = (aggregateTicket.current = crypto.randomUUID());
+    const capturedReportTicket = reportTicket.current;
     try {
       const result = await api.action(action({ action: 'concepts.index' })) as Aggregate;
-      if (aggregateGeneration.current !== ticket) return;
-      if (reportGeneration.current === reportTicket && aggregateCurrent.current && aggregateCurrent.current.inputDigest !== result.inputDigest) {
+      if (aggregateTicket.current !== ticket) return;
+      if (reportTicket.current === capturedReportTicket && aggregateCurrent.current && aggregateCurrent.current.inputDigest !== result.inputDigest) {
         setSourceWarning('术语来源已变化；旧检查结果只代表先前输入快照。请审阅来源并重新检查。');
-        reportGeneration.current++;
+        reportTicket.current = crypto.randomUUID();
         setReport(null);
         setCheckError('');
         setChecking(false);
@@ -180,7 +180,7 @@ export function WritingPage() {
       aggregateCurrent.current = result;
       setAggregate(result);
       setAggregateError('');
-    } catch (cause) { if (aggregateGeneration.current === ticket) { setAggregateError(errorText(cause)); } }
+    } catch (cause) { if (aggregateTicket.current === ticket) { setAggregateError(errorText(cause)); } }
   }, [api]);
   useEffect(() => { void loadIndex(); void loadAggregate(); }, [scope, loadIndex, loadAggregate]);
   useEffect(() => {
@@ -203,7 +203,7 @@ export function WritingPage() {
       await Promise.allSettled([latest.current.policy.inFlight.current, latest.current.catalog.inFlight.current].filter((item): item is Promise<void> => item !== null));
       if (latest.current.dirty) throw new Error('写作规则或术语表尚未显式保存。');
     },
-    discard: async () => { latest.current.policy.discard(); latest.current.catalog.discard(); clearControlled(); reportGeneration.current++; setReport(null); setCheckError(''); setChecking(false); },
+    discard: async () => { latest.current.policy.discard(); latest.current.catalog.discard(); clearControlled(); reportTicket.current = crypto.randomUUID(); setReport(null); setCheckError(''); setChecking(false); },
   }), []);
   useLayoutEffect(() => registerAutoSave(draftOwner), [draftOwner, registerAutoSave]);
   useLayoutEffect(() => reportDirty(draftOwner), [dirty, draftOwner, reportDirty]);
@@ -212,7 +212,7 @@ export function WritingPage() {
     selectionInitialized.current = true;
     if (next === scope) { setRequestedId(catalog.loading ? id ?? null : null); setEditingIndex(index); return; }
     if (latest.current.dirty || latest.current.policy.inFlight.current || latest.current.catalog.inFlight.current) { setPendingScope({ scope: next, index, id }); return; }
-    policy.invalidate(); catalog.invalidate(); aggregateGeneration.current++; clearReport();
+    policy.invalidate(); catalog.invalidate(); aggregateTicket.current = crypto.randomUUID(); clearReport();
     setSourceWarning(''); setAggregateError(''); setScope(next); setBanQuery(''); setEditingIndex(index); setRequestedId(id ?? null);
   };
   const discardAndSwitch = () => {
@@ -249,11 +249,11 @@ export function WritingPage() {
   const policyField = <K extends keyof WritingPolicy>(key: K, value: WritingPolicy[K]) => { if (policy.draft) policy.edit({ ...policy.draft, [key]: value }); };
   const banField = (index: number, key: keyof BannedTerm, value: string | readonly string[] | undefined) => { if (policy.draft) policy.edit({ ...policy.draft, bannedTerms: policy.draft.bannedTerms.map((item, at) => at === index ? { ...item, [key]: value } : item) }); };
   const check = async () => {
-    const ticket = ++reportGeneration.current;
+    const ticket = (reportTicket.current = crypto.randomUUID());
     setChecking(true); setReport(null); setCheckError('');
-    try { const result = await api.action(action({ action: 'writing.check' })) as Report; if (reportGeneration.current === ticket) setReport(result); }
-    catch (cause) { if (reportGeneration.current === ticket) setCheckError(errorText(cause)); }
-    finally { if (reportGeneration.current === ticket) setChecking(false); }
+    try { const result = await api.action(action({ action: 'writing.check' })) as Report; if (reportTicket.current === ticket) setReport(result); }
+    catch (cause) { if (reportTicket.current === ticket) setCheckError(errorText(cause)); }
+    finally { if (reportTicket.current === ticket) setChecking(false); }
   };
   const shownBans = policy.draft?.bannedTerms.map((ban, index) => ({ ban, index })).filter(({ ban }) => `${ban.term} ${ban.use} ${ban.why}`.toLocaleLowerCase().includes(banQuery.toLocaleLowerCase())) ?? [];
   const catalogEntries = [...(aggregate?.catalogs.filter(item => item.scope !== scope) ?? []), ...(structure.catalog ? [{ scope, path: catalog.path, catalog: structure.catalog }] : aggregate?.catalogs.filter(item => item.scope === scope) ?? [])];

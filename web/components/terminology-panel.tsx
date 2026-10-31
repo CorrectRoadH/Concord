@@ -15,22 +15,22 @@ export function TerminologyPanel({ document }: { readonly document: WorkspaceDoc
   const path = `${document.path.slice(0, document.path.lastIndexOf('/'))}/concepts.md`;
   const currentPath = useRef(path);
   currentPath.current = path;
-  const generation = useRef(0);
+  const requestTicket = useRef(crypto.randomUUID());
   const [response, setResponse] = useState<{ readonly path: string; readonly value: ConceptShow } | null>(null);
   const [error, setError] = useState<{ readonly path: string; readonly message: string } | null>(null);
   useEffect(() => {
-    const ticket = ++generation.current;
+    const ticket = (requestTicket.current = crypto.randomUUID());
     setResponse(null);
     setError(null);
     // The concepts tool owns definitions and diagnostics; its scope selection
-    // shares selectEffectiveConcepts with the panel's generation directory.
+    // shares selectEffectiveConcepts with the concept directory.
     void api.action({ action: 'concepts.show', path }).then(value => {
       const result = value as ConceptShow;
-      if (generation.current === ticket && currentPath.current === path && result.path === path) setResponse({ path, value: result });
+      if (requestTicket.current === ticket && currentPath.current === path && result.path === path) setResponse({ path, value: result });
     }).catch((cause: unknown) => {
-      if (generation.current === ticket && currentPath.current === path) setError({ path, message: cause instanceof Error ? cause.message : String(cause) });
+      if (requestTicket.current === ticket && currentPath.current === path) setError({ path, message: cause instanceof Error ? cause.message : String(cause) });
     });
-    return () => { generation.current++; };
+    return () => { requestTicket.current = crypto.randomUUID(); };
   }, [api, path]);
   const current = response?.path === path ? response.value : null;
   const currentError = error?.path === path ? error.message : '';

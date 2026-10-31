@@ -26,6 +26,14 @@ function delay(ms: number, signal?: AbortSignal): Promise<void> {
 }
 
 export class ConcordApi {
+  private reads: Promise<unknown> = Promise.resolve();
+
+  private read<T>(request: () => Promise<T>): Promise<T> {
+    const result = this.reads.then(request, request);
+    this.reads = result.catch(() => undefined);
+    return result;
+  }
+
   private readonly workspaceCache: { current?: { etag: string; value: WorkspaceProjection } } = {};
 
   private async retryBusy<T>(request: () => Promise<T>, signal?: AbortSignal): Promise<T> {
@@ -60,13 +68,13 @@ export class ConcordApi {
   }
 
   workspace(signal?: AbortSignal): Promise<WorkspaceProjection> {
-    return this.retryBusy(() => this.request('/api/workspace', { signal }, this.workspaceCache), signal).catch((cause: unknown) => {
+    return this.read(() => this.retryBusy(() => this.request('/api/workspace', { signal }, this.workspaceCache), signal).catch((cause: unknown) => {
       // Never let a failed read leave an ETag that can silently revive the old
       // snapshot on the next conditional request. Aborted effect reads are not
       // failures and retain the last known ETag.
       if (!signal?.aborted) this.workspaceCache.current = undefined;
       throw cause;
-    });
+    }));
   }
   /** Write-level merged refresh request. It never waits for the scan to finish. */
   async requestWorkspaceRefresh(signal?: AbortSignal): Promise<{ readonly status: 'requested' }> {
@@ -74,17 +82,17 @@ export class ConcordApi {
   }
   async file(path: string, signal?: AbortSignal): Promise<ViewFile> {
     const endpoint = `/api/file?path=${encodeURIComponent(path)}`;
-    return this.retryBusy(() => this.request<ViewFile>(endpoint, { signal }), signal);
+    return this.read(() => this.retryBusy(() => this.request<ViewFile>(endpoint, { signal }), signal));
   }
   action(action: ViewAction, signal?: AbortSignal): Promise<unknown> {
     const request = () => this.request('/api/action', { method: 'POST', body: JSON.stringify(action), signal });
     return ['document.set', 'document.metadata', 'source.set', 'writing.show', 'writing.set', 'writing.check'].includes(action.action) ? this.retryBusy(request, signal) : request();
   }
-  jobs(signal?: AbortSignal): Promise<readonly ViewJob[]> { return this.request('/api/jobs', { signal }); }
+  jobs(signal?: AbortSignal): Promise<readonly ViewJob[]> { return this.read(() => this.request('/api/jobs', { signal })); }
   run(caseId: string): Promise<ViewJob> { return this.request('/api/jobs', { method: 'POST', body: JSON.stringify({ caseId }) }); }
   cancel(id: string): Promise<ViewJob> { return this.request(`/api/jobs/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
-  git(signal?: AbortSignal): Promise<GitStatus> { return this.request('/api/git', { signal }); }
+  git(signal?: AbortSignal): Promise<GitStatus> { return this.read(() => this.request('/api/git', { signal })); }
   gitDiff(path: string, area: 'staged' | 'unstaged' | 'untracked', signal?: AbortSignal): Promise<GitDiff> {
-    return this.request(`/api/git/diff?path=${encodeURIComponent(path)}&area=${area}`, { signal });
+    return this.read(() => this.request(`/api/git/diff?path=${encodeURIComponent(path)}&area=${area}`, { signal }));
   }
 }

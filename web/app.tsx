@@ -81,7 +81,7 @@ function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(valu
     return [...projectDocs, ...documents, ...feedback, ...cases, ...codes].slice(0, 30);
   }, [query, snapshot]);
   const go = (href: string) => { onOpenChange(false); setQuery(''); navigate(href); };
-  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="search-dialog"><DialogHeader><DialogTitle>全局搜索</DialogTitle><DialogDescription>搜索项目文档、Spec、Feature 内的 Use Case、测试与实现声明。</DialogDescription></DialogHeader><div className="search-box"><Search size={18} /><Input aria-label="搜索工作区" autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="名称、ID 或路径…" /></div><div className="search-results">{query && results.length === 0 && <p className="muted">{conclusive ? '没有匹配内容。' : '当前代次未显示匹配项；投影可能不完整。'}</p>}{results.map(item => <button key={item.key} onClick={() => go(item.href)}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div></DialogContent></Dialog>;
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent className="search-dialog"><DialogHeader><DialogTitle>全局搜索</DialogTitle><DialogDescription>搜索项目文档、Spec、Feature 内的 Use Case、测试与实现声明。</DialogDescription></DialogHeader><div className="search-box"><Search size={18} /><Input aria-label="搜索工作区" autoFocus value={query} onChange={event => setQuery(event.target.value)} placeholder="名称、ID 或路径…" /></div><div className="search-results">{query && results.length === 0 && <p className="muted">{conclusive ? '没有匹配内容。' : '当前结果未显示匹配项；投影可能不完整。'}</p>}{results.map(item => <button key={item.key} onClick={() => go(item.href)}><strong>{item.title}</strong><span>{item.detail}</span></button>)}</div></DialogContent></Dialog>;
 }
 
 // @concord-code
@@ -122,7 +122,7 @@ function breadcrumb(pathname: string, search = ''): string {
   return pathname.split('/').filter(Boolean).map(segment => decodeURIComponent(segment)).join(' / ');
 }
 
-/** Keep the workbench mounted while hiding an unreadable or identity-mismatched generation. */
+/** Keep the workbench mounted while hiding an unreadable or identity-mismatched result. */
 // @concord-code
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 function WorkspaceGate({ children }: { readonly children: ReactNode }) {
@@ -151,7 +151,7 @@ function WorkspaceGate({ children }: { readonly children: ReactNode }) {
     <div hidden={blocking}>{children}</div>
     <main hidden={!blocking} className="startup-page"><section className="startup-card"><div className="brand-mark">C</div><h1>{title}</h1>
       {workspaceIssue && (pending
-        ? <p role="status">当前配置身份尚无可读代次；每 2 秒重试一次，不展示上一身份的导航。</p>
+        ? <p role="status">当前配置身份尚无可读结果；每 2 秒重试一次，不展示上一身份的导航。</p>
         : <><p role="alert">{workspaceIssue.message}</p>{workspaceIssue.hint && <p className="muted">{workspaceIssue.hint}</p>}
           {cleanupFailed && <p className="muted">请重启 View 以便既有租约恢复协议回收现场；不要在当前进程内重试恢复。</p>}
           <p className="muted">错误码：{workspaceIssue.code}</p></>)}
@@ -204,7 +204,7 @@ export function App() {
     const timer = window.setInterval(() => setAttempt(value => value + 1), 2000);
     return () => window.clearInterval(timer);
   }, [data, error?.code, error?.reason]);
-  // The first generation has no cache; retry the poll-level read every two seconds.
+  // The first result has no cache; retry the poll-level read every two seconds.
   useEffect(() => {
     if (!building) return undefined;
     const timer = window.setInterval(() => setAttempt(value => value + 1), 2000);

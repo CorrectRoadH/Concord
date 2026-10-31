@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
+import { Schema } from 'effect';
 import {
   MDXEditor,
   CodeMirrorEditor,
@@ -185,7 +186,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     ?? snapshot.pages.find(page => page.path === initial.path)?.digest;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
-  const checkedGeneration = useRef<string | null>(null);
+  const checkedDigest = useRef<string | null>(null);
   const checkToken = useRef(0);
   const readSequence = useRef(0);
 
@@ -204,10 +205,10 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     const controller = new AbortController();
     const id = window.setInterval(() => {
       if (savingNow.current) return;
-      const epoch = checkToken.current;
+      const ticket = checkToken.current;
       const sequence = ++readSequence.current;
       void api.file(initial.path, controller.signal).then(next => {
-        if (controller.signal.aborted || epoch !== checkToken.current || sequence !== readSequence.current || savingNow.current) return;
+        if (controller.signal.aborted || ticket !== checkToken.current || sequence !== readSequence.current || savingNow.current) return;
         if (next.digest === baseline.current.digest) return;
         if (dirtyRef.current) setExternal(next);
         else replaceWith(next);
@@ -218,20 +219,20 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
 
   useEffect(() => {
     // The projection digest only triggers a check. At most one targeted current
-    // read runs per published generation, and a newer baseline is never replaced
-    // by an older generation still arriving out of order.
-    const generation = projection.builtAt;
-    if (!generation || generation === checkedGeneration.current) return;
-    if (!observedDigest || observedDigest === baseline.current.digest || savingNow.current) { checkedGeneration.current = generation; return; }
-    checkedGeneration.current = generation;
+    // read runs per published source digest, and a newer baseline is never replaced
+    // by an older result still arriving out of order.
+    const sourceDigest = projection.sourceDigest;
+    if (!sourceDigest || sourceDigest === checkedDigest.current) return;
+    if (!observedDigest || observedDigest === baseline.current.digest || savingNow.current) { checkedDigest.current = sourceDigest; return; }
+    checkedDigest.current = sourceDigest;
     const token = checkToken.current;
     const sequence = ++readSequence.current;
     void api.file(initial.path).then(next => {
-      if (checkToken.current !== token || sequence !== readSequence.current || next.digest === baseline.current.digest) return;
+      if (checkToken.current !== token || sequence !== readSequence.current || next.digest !== observedDigest || next.digest === baseline.current.digest) return;
       if (dirtyRef.current) setExternal(next);
       else replaceWith(next);
     }).catch(() => undefined);
-  }, [projection.builtAt, observedDigest, api, initial.path, replaceWith]);
+  }, [projection.sourceDigest, observedDigest, api, initial.path, replaceWith]);
 
   const reload = useCallback(async () => {
     const token = ++checkToken.current;
@@ -253,14 +254,16 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     readSequence.current += 1;
     savingNow.current = true;
     try {
-      await api.action(source
+      const receipt = await api.action(source
         ? { action: 'source.set', path: before.path, body: sent, expectedDigest: before.digest }
         : { action: 'document.set', path: before.path, body: sent, expectedDigest: before.digest });
+      const confirmed = Schema.decodeUnknownSync(Schema.Struct({ digest: Schema.String }))(receipt);
       const sequence = ++readSequence.current;
       const next = await api.file(before.path);
+      if (next.digest !== confirmed.digest) { setExternal(next); throw new Error('保存后的磁盘摘要与服务确认不一致，请比较版本。'); }
       if (token !== checkToken.current || sequence !== readSequence.current) return;
       flushSync(() => {
-        baseline.current = next; setFile(next); checkedGeneration.current = projection.builtAt;
+        baseline.current = next; setFile(next); checkedDigest.current = projection.sourceDigest;
         if (currentDraft.current === sent) { currentDraft.current = next.body; setDraft(next.body); setLocalDirty(false); }
         else setLocalDirty(currentDraft.current !== next.body);
         setExternal(null); onSaved?.(next);
@@ -275,7 +278,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
       }
       throw cause;
     } finally { savingNow.current = false; }
-  }, [api, external, onSaved, requestRefresh, projection.builtAt, source]);
+  }, [api, external, onSaved, requestRefresh, projection.sourceDigest, source]);
   const autoSave = useAutoSave({ dirty, revision: draft, save, discard: () => { replaceWith(baseline.current); setCompareOpen(false); } });
   const saving = autoSave.saving;
   const changeDraft = (value: string) => { currentDraft.current = value; setDraft(value); setLocalDirty(value !== baseline.current.body); };
