@@ -1,5 +1,8 @@
 ---
-status: open
+status: closed
+closure:
+  kind: closed
+  reason: 按句柄与打开模式的现行规则，持久库只由工作区服务启动时或 cache rebuild 创建与填充，命令不创建；新 clone 中运行 panel、view 或 server start 后即有持久缓存。原现象记录的回源路径与 UnsafePath 来自已退休的实现。
 ---
 
 # 新 clone 永远不创建持久缓存
