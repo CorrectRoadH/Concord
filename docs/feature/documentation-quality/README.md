@@ -1,37 +1,120 @@
 # 文档写作与领域术语
 
-维护者通过 Concord CLI 与 Web 在全局、Feature、Engineering 及其它 docs 子目录定义领域术语和写作规则。术语由 concepts.md 拥有：每个概念有稳定 ID、唯一写法、定义段落与解释，旧写法列为弃用名；写作规则由 concord-writing.json 拥有禁词和检查选项。所在目录决定局部作用域，全项目视图自动汇总并保留来源，不复制定义。
+人和 AI 一起写 Spec 时，同一个东西常被叫成好几个名字，句子也越写越长，读者最后不知道哪个词指什么。这个 Feature 让项目把术语和写作规则写成仓库里的文件，`concord check` 每次都按它们检查正文，并告诉作者该怎么改。
 
-- [应用受控写作规则](use-case/apply-controlled-writing.md)
-- [检查正文与术语](use-case/inspect-writing.md)
-- [在 Web 管理写作与术语](use-case/manage-writing.md)
-- [按目录管理结构化术语与写作规则](use-case/manage-scoped-terminology.md)
-- [文件格式与作用域](policy.md)
-- [实现](architecture.md)
+## 你可以做什么
 
-写作规则使用 concord.writing/v3；术语使用 concepts.md 的标题结构，不设版本字段。祖先规则按范围合成，局部来源不能扩大目录或静默覆盖定义。同名不同义按作用域区分；弃用名称派生禁词并建议改为该概念的写法。正文可以链接到 `concepts.md#id`，断开的链接由检查报告。
+- 在 `concepts.md` 里给每个领域概念定一个名字和一段定义。概念改名后，旧名字会被检查报告出来，并给出新名字。
+- 在 `concord-writing.json` 里列出不该用的词，每条附上替换写法和理由；也可以限制句子与段落的长度。
+- 按目录划分术语：全局概念对整个 `docs/` 生效，Feature 目录里的概念只在该 Feature 内生效，不同 Feature 可以用同一个词表示不同的东西。
+- 在 Web 工作台查看全项目术语、编辑规则，并看到每条问题出现在哪一行。
 
-concepts.md 与 concord-writing.json 可以直接编辑；结构、作用域与被引用的定义由 `concord check` 校验，`concepts` 与 `writing` 工具是在写入前执行同一校验的助手（[决策依据](../../design/sdd-core-model/DECISION.md)）。工具写入使用严格 Schema、整文件 CAS 与可恢复事务，show 支持无效来源显式修复。Web 草稿和异步请求绑定具体 owner，保存一份来源不能把另一份草稿标成已保存。
+## 上手：让旧名字无处可藏
 
-检查报告表达某次已保存输入快照，包括禁词、字符长度、受控 token 长度、显式启用的词法规则与术语使用。检查不自动修改正文，不声称实现合规、功能完成或测试覆盖。Concord 不内置产品专属词库、目录或 API 语义。
+假设项目把“订单”定为正式名称，不再用“单子”。在 `docs/concepts.md` 写下定义，并把旧名字列为弃用名：
+
+```markdown
+---
+deprecated:
+  order: [单子]
+---
+
+# Project concepts
+
+## 订单 {#order}
+
+顾客提交的一次购买，包含商品、数量和收货地址。
+```
+
+某页正文写了“顾客确认单子后，系统锁定库存。”，运行检查：
+
+```sh
+concord docs check
+```
+
+```text
+Documentation writing: failed (47 files)
+Mode: project; selection: docs
+Policy: project
+docs/concepts.md:1 [unusedConcept] No selected prose uses docs/concepts.md#order
+docs/feature/cart/README.md:27 [bannedTerm] 单子: use 订单; docs/concepts.md#order
+```
+
+检查指出旧名字所在的行，并给出正式名称和定义的位置。由于正文还没有用到“订单”，这个概念同时被报告为未使用。把正文改成“顾客确认订单后”，再运行一次：
+
+```text
+Documentation writing: passed (47 files)
+Mode: project; selection: docs
+Policy: project
+```
+
+## 检查怎样工作
+
+检查读取正文，在当前目录生效的术语和禁词里查找匹配，再报告位置和建议写法。它只报告，不改正文。
+
+```p5
+import type P5 from 'p5';
+export default function (p: P5) {
+  const stages = ['正文', '术语与禁词', '检查报告'];
+  const notes = ['顾客确认单子后，系统锁定库存。', '订单（弃用名：单子）', 'README.md:27 单子 → 订单'];
+  let elapsed = 0;
+  p.setup = () => {
+    p.createCanvas(600, 210);
+    p.describe('正文、术语与禁词、检查报告三个方框依次突出显示，旧名字被匹配后报告为应改成正式名称，然后循环');
+    p.textAlign(p.CENTER, p.CENTER);
+  };
+  p.draw = () => {
+    elapsed = (elapsed + Math.min(p.deltaTime, 100)) % 7500;
+    const step = Math.floor(elapsed / 2500);
+    const progress = p.constrain((elapsed % 2500 - 1000) / 1200, 0, 1);
+    p.background(247);
+    for (let i = 0; i < stages.length; i++) {
+      const x = 100 + i * 200;
+      p.stroke(150);
+      p.fill(i === step ? '#d8eee7' : '#ffffff');
+      p.rect(x - 85, 40, 170, 90, 8);
+      p.noStroke();
+      p.fill('#203b33');
+      p.textSize(15);
+      p.text(stages[i]!, x, 62);
+      p.textSize(11);
+      p.fill(i === 2 ? '#a33a2c' : '#4a5a55');
+      p.text(notes[i]!, x - 78, 80, 156, 44);
+      if (i < stages.length - 1) {
+        p.stroke(150);
+        p.line(x + 85, 85, x + 115, 85);
+      }
+    }
+    if (step < stages.length - 1) {
+      p.noStroke();
+      p.fill('#28775c');
+      p.circle(185 + step * 200 + progress * 30, 85, 9);
+    }
+    p.noStroke();
+    p.fill('#203b33');
+    p.textSize(13);
+    const captions = ['读取所选目录下的 Markdown 正文', '按目录合成生效的概念、弃用名和禁词', '报告位置与正式名称，正文保持不变'];
+    p.text(captions[step]!, 300, 170);
+  };
+}
+```
 
 ## 聚合门禁
 
-`concord check` 是项目交付门禁，同时执行关系与生命周期检查和写作检查（[C-010](../../constitution.md#c-010)）。写作部分使用与 `concord docs check` 默认模式相同的文件选择与规则合成，不接受 `--rules`；独立 profile 与 `docs check --rules` 的结果不能替代门禁。
+`concord check` 把写作检查和关系检查合成一次结果，作为每次交付必须通过的门禁；有问题时退出码为 1。必查范围、必需规则、JSON 结果与退出码见[聚合门禁规则](gate.md)。
 
-- 必查范围：按[默认文件选择规则](policy.md#写作政策)派生，即全部政策的有效 roots，加上没有同目录政策的概念目录；门禁不接受缩小该集合的参数。
-- 必需规则：禁词、字符句长与段长、受控 token 句长与段落句数、显式启用的词法规则及术语使用检查都参与门禁。项目可以调整阈值与词表，用 `exempt`、`allowIn` 与局部政策豁免具体位置；数字阈值为 null 或布尔选项为 false 表示项目采用的参数，门禁仍执行其余规则。
-- 无政策：仓库没有任何写作政策与概念来源时，门禁报告 `WritingPolicyNotFound` 并失败。`concord init` 为新项目写入随包预设；已接入项目直接创建 `docs/concord-writing.json`，或用 `concord writing set --path docs/concord-writing.json --expected-digest null` 保存政策后通过。
-- 结果：JSON 的 `ok` 在全部检查无 finding 且输入完整时为 true。`complete` 为 false 表示关系图或写作输入不完整，包括政策缺失、无效和读取失败。每条 finding 带 `category`（`relation` 或 `writing`）与具名 code。`checks.relations` 与 `checks.writing` 分别给出 `ok` 与 `complete`。
-- 退出码：`ok` 为 true 时退出 0，否则退出 1。输入不完整与违规通过 `complete` 和 finding code 区分。
-- 入口一致：CLI `check`、结构化 action 与 Web 的项目检查使用同一聚合结果。
-- Design 记录边界：Spec 页面链接到 Design 包内除 README 与 DECISION 以外的页面时，报告 relation 类 finding `SpecDependsOnDesignRecord`，带来源路径、原始行号与链接目标（[C-012-10](../../constitution.md#c-012-10)）。
+## 用户路径
 
-Spec 页面指 Feature 包、项目 `architecture.md`、宪法、engineering 页与 docs 顶层页面。`docs/design/`、`docs/research/`、`docs/roadmap/`、`docs/issues/`、`docs/_template/` 与 `memory/` 不受此限。
+- [检查正文与术语](use-case/inspect-writing.md)
+- [按目录管理结构化术语与写作规则](use-case/manage-scoped-terminology.md)
+- [应用受控写作规则](use-case/apply-controlled-writing.md)
+- [在 Web 管理写作规则与术语](use-case/manage-writing.md)
 
-该检查覆盖行内与引用式链接，目标解码并规范化后比较，锚点不改变结果；图片、代码、HTML 注释、frontmatter 与 MDX 非正文源码不计。来源无法读取或解析时 `complete` 为 false。它只约束链接目标，不判断正文是否仍把规则委托给 Design。
+## 细节
 
-聚合门禁失败不阻断局部读取、`docs check`、`writing` 与 `concepts` 工具、直接编辑，以及修复所需的其它命令。
+- [文件格式与作用域](policy.md)：`concepts.md` 与 `concord-writing.json` 的结构、目录合成、匹配方式、工具写入与恢复。
+- [聚合门禁](gate.md)：`concord check` 的必查范围、必需规则、JSON 结果与退出码。
+- [实现](architecture.md)
 
 ## Constitution
 
@@ -45,3 +128,4 @@ Spec 页面指 Feature 包、项目 `architecture.md`、宪法、engineering 页
 - [C-003](../../constitution.md#c-003)
 - [C-008](../../constitution.md#c-008)
 - [C-009](../../constitution.md#c-009)
+- [C-016](../../constitution.md#c-016)

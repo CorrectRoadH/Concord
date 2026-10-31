@@ -2,25 +2,31 @@
 
 Before writing, read `docs/constitution.md` and link each applicable clause or paragraph ID next to the sentence that relies on it.
 
-Declare intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Concord Memory; product workflows belong in the contract.
+Write this page for a reader who has never used the feature. Declare intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Concord Memory; product workflows belong in the contract.
 
-## Problem
+Open with two or three sentences: who uses the feature and what problem it solves for them.
 
-Describe the user problem and why the product needs a current contract for it.
+## What You Can Do
 
-## Core Mental Model
+List what a user can accomplish, one capability per item, in the user's language. Use only terms defined in `concepts.md`; define a new term there before using it here. Link to shared terms in `concepts.md#id`, or define local terms in this directory's `concepts.md`.
 
-Define the concepts users must understand and identify who owns each declaration.
-Link to shared terms in `concepts.md#id`, or define local terms in this directory's
-`concepts.md`. Explain each term under its own heading there.
+## Getting Started
 
-Use Mermaid for structural diagrams and optional `p5` Markdown fences for animation or interaction. Keep the conclusion readable without running a sketch. Read `concord --skill view` for examples; declare extension libraries in project configuration, never in Markdown.
+Show one example a reader can follow as written: the commands or calls in order, and what the reader sees after each one. Copy real output once the feature runs; before that, mark it as expected output.
 
-## Scope
+## How It Works
 
-State what the feature includes and excludes.
+Explain the mechanism a user must understand to use the feature correctly. When a process involves several parties, state changes, or ordering, add a `p5` fence that loops through it; use Mermaid for static structure.
 
-## Entry Points
+A sketch only illustrates rules stated in prose, so keep the conclusion readable without running it. Read `concord --skill view` for examples; declare extension libraries in project configuration, never in Markdown.
+
+## User Paths
+
+Link each Use Case, grouped by what the user is trying to do.
+
+## Details
+
+Put output fields, named errors, exit codes, failure semantics, scope boundaries, and performance budgets on the pages below, not in this README.
 
 - [Library](library.md)
 - [CLI](cli.md)

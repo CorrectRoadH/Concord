@@ -178,7 +178,7 @@ Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支�
 {"code": "SpecDependsOnDesignRecord", "path": "docs/feature/cart/README.md", "line": 12, "message": "Spec links to a Design record page: docs/design/cart-storage/plans/files/README.md", "category": "relation"}
 ```
 
-适用范围与规则见[聚合门禁](../documentation-quality/README.md#聚合门禁)。
+适用范围与规则见[聚合门禁](../documentation-quality/gate.md)。
 
 `ok` 为 false 表示发现违规。`complete` 为 false 表示有必需输入没能读取，结论不完整。`advisories` 是提示，不影响退出码。
 

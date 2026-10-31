@@ -1,69 +1,205 @@
 # 本地 SDLC 闭环
 
-Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码表达产品 Spec、可执行验收、Issue 和 Memory。它面向离线、可移植的开发流程：文档与源码是事实来源，全部文件可以直接编辑。缓存可以随时删除，删除后结论不变。修复核验的结论写在 Issue 中，中断写入的恢复记录必须保留。
+功能该做成什么样、代码怎么实现、哪些测试在守护它，通常散落在聊天记录、PR 描述和各人的记忆里。Concord 把它们放回同一个 Git 仓库：Spec 写在 `docs/`，测试和代码用一行标记指向 Spec，`concord check` 核对三者是否仍然一致。
 
-开发由 Concord Spec 驱动：修改功能前先读取或更新 Feature、Use Case、cli 或 library 页与必要 Design，再进入实现和测试。`concord trace gaps --json` 派生当前显式实现/测试关系缺口，帮助发现尚未建立关系的 Spec 和已建档 CLI 页面；它不等于代码覆盖率，也不能发现从未建档的命令。
+面向的读者是维护者和 coding agent。全部内容都是仓库里的普通文件，可以直接编辑，不需要账号、模型 API 或云服务。
 
-## 用户价值
+## 你可以做什么
 
-维护者可以从同一个 CLI 完成接入、规划、测试关联、修复核验、Issue 与 Memory 生命周期、追踪和审阅，不需要 NiceEval checkout、全局凭据、部署服务或第二份关系注册表。
+- **先写 Spec 再动手。** 用 Feature 描述能力，用 Use Case 一步一步写出使用者的路径；方案有争议时，先比较候选方案再裁决。
+- **把测试和代码连到 Spec。** 在测试或实现文件里写一行标记，Concord 从源码反查出某个 Use Case 由哪些测试守护、由哪些代码实现。
+- **让 check 守住一致性。** Spec 被删除、改名或标记写错时，`concord check` 指出出错的文件和行；CI 对每次变化运行 `concord check --since <base>`。
+- **用证据关闭缺陷。** 缺陷记为 Issue。回归测试在缺陷提交上失败、在修复提交上通过，Concord 核验这两点后才把 Issue 关为已修复。
+- **积累工程知识。** 调查结论、根因和裁决写成 Memory，之后可以按关键词检索。
 
-## 范围
+## 上手：从一个 Use Case 到一次通过的检查
 
-- 初始化文档布局、写作指南、完整参考模板与可选的项目配置，不覆盖已有文件。
-- 按固定布局组织 Feature、Use Case、Roadmap、Design、Engineering、Research、Issue 与 Memory；身份由路径决定，名称由一级标题决定，frontmatter 只保存推导不出的字段（[领域与数据所有权](library.md#owner)）。
-- 全部文件直接编辑；`new`、`roadmap adopt`、`design decide`、`issue close` 等命令执行需要运行的步骤并把结果写进文件。
-- 从整文件、函数和完整代码段旁的注释反查 Feature / Use Case / Engineering 实现关联，支持按源码行定位；查询引用自动派生，无需手写声明 ID。
-- 从测试根里的 Concord 标记发现 case，不解析宿主测试语法。缓存损坏或删除时从源码重新计算。
-- 运行项目声明的 argv；把 Issue 关闭为 fixed 前，核验回归测试在缺陷提交上失败、在修复提交上通过，并把结论写进 Issue（[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)）。
-- `check --since <base>` 对照基线检查本次变化，使直接编辑与命令写入受同一门禁约束（[检查本次变化](cli.md#检查本次变化)）。
-- 写入不越出 worktree，不覆盖未知改动，中断后可以恢复。
-- 从 owner 动态编译 trace，并渲染本地 review 材料。
+下面的命令在一个空的 Git 仓库里运行，输出来自实际执行。
 
-## 非目标
+1. 初始化项目，并创建一个 Feature 和它的第一个 Use Case：
 
-Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal E2E；不自动发布、push、调用付费模型或操作远端 Issue；缓存不保存任何无法从源码重建的事实。
+   ```sh
+   concord init
+   concord new feature cart --title "购物车"
+   concord new use-case add-item --feature cart --title "加入商品"
+   ```
 
-## 验收
+   ```text
+   Applied new:
+     docs/feature/cart/use-case/add-item.md
 
-各 Use Case 均有带 `@use-case` 标记的测试。`concord check` 与 `trace check` 必须验证引用完整性；定向 `trace show` 与 `review render` 必须能从当前 owner 分别反查代码声明和测试。代码声明表示实现关联，不证明 Spec 完成。
+   Next: edit the pages, then run concord check.
+   ```
 
-局部命令只依赖自己的输入（[决策依据](../../design/operation-boundaries/DECISION.md)）：
+   打开 `docs/feature/cart/use-case/add-item.md`，按模板写下谁要做什么、每一步运行什么、看到什么结果。
 
-- 一个 Feature 的 README 损坏时，Memory 的 list、index、recall 与 activate 照常工作，为另一 Feature 生成注释照常工作，全局 check 报告该损坏。
-- 目标 owner、其归属链或显式 `@issue` 目标损坏时，局部命令失败，不退回祖先 owner。
-- `memory/` 含无法解析的记录时，Memory 的集合查询与短选择器查询失败；另一 canonical path 的精确读取按必要依赖验证。
+2. 让测试指向这个 Use Case。`test annotate` 生成可以直接粘贴的标记：
 
-- [检索与维护工程知识](use-case/recall-and-maintain-memory.md)
+   ```sh
+   concord test annotate --contract docs/feature/cart/use-case/add-item.md
+   ```
+
+   ```text
+   // @use-case docs/feature/cart/use-case/add-item.md
+   ```
+
+   把它放在 `test/cart.test.js` 顶部。实现文件用 `concord code annotate` 生成的 `@concord-implements` 标记指向 Feature。
+
+3. 运行检查：
+
+   ```sh
+   concord check
+   ```
+
+   ```text
+   check
+   ok: true
+   complete: true
+   findings: none
+   ```
+
+   `concord show docs/feature/cart/use-case/add-item.md` 列出守护这个 Use Case 的测试：
+
+   ```text
+   tests:
+     neref_854212737ecad7effc4666629752cb98 — test/cart.test.js:1
+       Contract: docs/feature/cart/use-case/add-item.md
+       Declaration: active
+   ```
+
+4. 有人把 Use Case 改名成 `add-to-cart.md`，测试里的标记却没有跟着改。再运行检查：
+
+   ```text
+   check
+   ok: false
+   complete: false
+   findings:
+     test/cart.test.js:1
+       ReferenceNotFound: Reference target does not exist: docs/feature/cart/use-case/add-to-cart.md
+   ```
+
+   检查以退出码 1 失败，指出标记所在的文件和行。改正标记后重新通过。
+
+完整的命令清单、JSON 输出和错误码见[命令体验](cli.md)。
+
+## Spec、测试与实现怎样保持一致
+
+Spec 是唯一的事实来源。测试和实现各自在源码里声明指向哪一份 Spec，反向关系由 Concord 从源码推导，不另存一份登记表。`check` 每次都重新核对这些指向。
+
+```p5
+import type P5 from 'p5';
+export default function (p: P5) {
+  const captions = [
+    '1. 在 docs/ 中写下 Spec：Feature 与 Use Case',
+    '2. 测试与实现用标记指向 Spec',
+    '3. concord check 核对每一条指向',
+    '4. Spec 改名而标记没改：check 报告断开的指向',
+  ];
+  const nodes = [
+    { label: 'Spec', x: 300, y: 50 },
+    { label: '测试', x: 150, y: 170 },
+    { label: '实现', x: 450, y: 170 },
+  ];
+  let elapsed = 0;
+  p.setup = () => {
+    p.createCanvas(600, 260);
+    p.describe('Spec、测试、实现三个方框；测试与实现依次画出指向 Spec 的连线，check 逐条核对，最后一轮中一条连线断开并显示为红色，随后循环');
+    p.textAlign(p.CENTER, p.CENTER);
+  };
+  const box = (x: number, y: number, label: string, active: boolean) => {
+    p.stroke(150);
+    p.fill(active ? '#d8eee7' : '#ffffff');
+    p.rect(x - 60, y - 22, 120, 44, 8);
+    p.noStroke();
+    p.fill('#203b33');
+    p.textSize(15);
+    p.text(label, x, y);
+  };
+  const link = (from: { x: number; y: number }, to: { x: number; y: number }, t: number, color: string, broken: boolean) => {
+    const ex = p.lerp(from.x, to.x, t), ey = p.lerp(from.y - 22, to.y + 22, t);
+    p.stroke(color);
+    p.strokeWeight(2);
+    if (broken) {
+      p.line(from.x, from.y - 22, p.lerp(from.x, ex, 0.45), p.lerp(from.y - 22, ey, 0.45));
+      p.line(p.lerp(from.x, ex, 0.6), p.lerp(from.y - 22, ey, 0.6), ex, ey);
+    } else {
+      p.line(from.x, from.y - 22, ex, ey);
+    }
+    p.strokeWeight(1);
+  };
+  p.draw = () => {
+    elapsed = (elapsed + Math.min(p.deltaTime, 100)) % 12000;
+    const step = Math.floor(elapsed / 3000);
+    const t = p.constrain((elapsed % 3000) / 1500, 0, 1);
+    p.background(247);
+    const [spec, test, impl] = nodes;
+    if (step >= 1) {
+      const grow = step === 1 ? t : 1;
+      link(test!, spec!, grow, step >= 2 ? '#28775c' : '#8a9a95', step === 3);
+      link(impl!, spec!, grow, step >= 2 ? '#28775c' : '#8a9a95', false);
+    }
+    if (step === 3) {
+      p.stroke('#a33a2c');
+      p.strokeWeight(2);
+      p.line(test!.x + 52, 102, test!.x + 68, 118);
+      p.line(test!.x + 68, 102, test!.x + 52, 118);
+      p.strokeWeight(1);
+    }
+    box(spec!.x, spec!.y, spec!.label, step === 0);
+    box(test!.x, test!.y, test!.label, step === 1 || step === 3);
+    box(impl!.x, impl!.y, impl!.label, step === 1);
+    if (step >= 2) {
+      p.noStroke();
+      p.fill(step === 3 ? '#a33a2c' : '#28775c');
+      p.textSize(13);
+      p.text(step === 3 ? 'check：ReferenceNotFound' : 'check：ok', 300, 130);
+    }
+    p.noStroke();
+    p.fill('#203b33');
+    p.textSize(13);
+    p.text(captions[step]!, 300, 235);
+  };
+}
+```
+
+## 用户路径
+
+开始一个项目或一项功能：
+
+- [接入并取得模板](use-case/onboard-from-template.md)
+- [规划并采用文档 Spec](use-case/plan-and-adopt-contracts.md)
+- [逐项比较方案并明确裁决](use-case/compare-design-plans.md)
+
+把测试和代码连到 Spec：
+
+- [把测试关联到 Use Case 步骤](use-case/link-tests-to-steps.md)
+- [发现测试并重建缓存](use-case/discover-annotated-tests.md)
+- [从源码追踪实现归属](use-case/trace-code-ownership.md)
+- [分析其它语言的代码声明与测试依赖](use-case/analyze-other-languages.md)
+- [通过 adapter 执行原生测试用例](use-case/run-native-test-adapters.md)
+
+检查与审阅：
+
+- [检查 Spec 与 CLI 页面的实现和测试关系缺口](use-case/inspect-relationship-gaps.md)
+- [追踪 Spec 并生成审阅材料](use-case/review-traceability.md)
+- [在编辑器中查看 Concord 关系](use-case/use-editor-service.md)
+
+修复缺陷与积累知识：
+
 - [核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)
+- [检索与维护工程知识](use-case/recall-and-maintain-memory.md)
 
-## 性能预算
+保护工作区：
 
-高频只读命令与检查命令的当前来源模式在[性能验收](../../engineering/concord-self-hosting/performance.md)规定的方法下满足以下 warm p50 预算。
+- [保护并恢复本地状态](use-case/recover-local-state.md)
 
-- 参照消费者：本仓库 commit `6346f4cf78bc3553448a0119443f8f2ec681f5d5` 的独立 clone，含 61 份文档 owner、6 条 Memory、232 个测试标记与 97 个代码声明。
-- 参照环境：AMD Ryzen 7 5800X，Linux x64，Node v24.19.0。
-- 阈值规则：每组阈值为参照实测 p50 加约 20% 余量取整，同组命令共用阈值；交付验收按完整采样实测确认。测量记录归 Memory。
+## 细节
 
-| 场景 | 测量内容 | p50 预算 |
-| --- | --- | ---: |
-| `local-sdlc/help` | 由静态数据输出的 CLI 帮助 | 50ms |
-| `local-sdlc/skill` | Agent 指引 | 350ms |
-| `local-sdlc/memory-index`、`local-sdlc/memory-list`、`local-sdlc/memory-recall` | Memory 索引、列表与检索 | 550ms |
-| `local-sdlc/issue-index`、`local-sdlc/issue-list`、`local-sdlc/issue-recall` | Issue 索引、列表与检索 | 500ms |
-| `local-sdlc/feature-list`、`local-sdlc/use-case-list`、`local-sdlc/research-list`、`local-sdlc/design-list`、`local-sdlc/roadmap-list`、`local-sdlc/engineering-list` | 文档类别列表 | 600ms |
-| `local-sdlc/docs-check` | 写作检查 | 1000ms |
-| `local-sdlc/trace-show-fresh`、`local-sdlc/trace-check` | 当前关系读取与检查 | 1300ms |
-| `local-sdlc/check` | 聚合检查 | 2300ms |
-| `local-sdlc/trace-show-fresh-server`、`local-sdlc/trace-check-server` | 经由运行中的工作区服务读取与检查当前关系 | 1300ms |
-| `local-sdlc/check-server` | 经由运行中的工作区服务的聚合检查 | 2300ms |
-| `local-sdlc/code-list` | 代码声明列表 | 2460ms |
-| `local-sdlc/test-list` | 测试声明列表 | 1910ms |
-| `local-sdlc/template-list` | 随包模板列表 | 430ms |
-
-帮助预算按静态输出的实测确定（禁用编译缓存时 p50 约 47 ms）；代码、测试、模板与作者正文四行的参照消费者为本仓库 `d267e06` 的独立 clone。
-
-异步投影的历史读取预算与后台刷新上限由[读取异步刷新的诊断投影](../local-data-engine/use-case/query-asynchronous-projections.md#性能预算)拥有，本表不重复声明。规模增长导致超出预算时，先按性能验收方法定位瓶颈，再调整实现或经修订调整预算，不跳过校验。`vp run bench local-sdlc` 通过场景 ID 读取本表测量，表格保持[预算表格式](../../engineering/concord-self-hosting/performance.md#预算表格式)。
+- [命令体验](cli.md)：每个命令的调用、JSON 输出、退出码与错误。
+- [领域与数据所有权](library.md)：文档身份、路径与字段的归属。
+- [范围与验收](scope.md)：本 Feature 包含和不包含的能力，以及局部命令的输入边界。
+- [性能预算](performance.md)：高频命令的 p50 预算。
+- [实现](architecture.md)
 
 ## Constitution
 
@@ -79,3 +215,4 @@ Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal
 - [C-013](../../constitution.md#c-013)
 - [C-014](../../constitution.md#c-014)
 - [C-002](../../constitution.md#c-002)
+- [C-016](../../constitution.md#c-016)

@@ -14,6 +14,16 @@ docs/
 
 Concord 识别 docs 下精确命名的 concepts.md 与 concord-writing.json，排除 docs/_template 及任何 .git、node_modules 路径段。目录决定作用域，不在来源中重复保存 scope。docs 以外的文件和其它文件名不获得这两类写入授权；聚合从来源派生，不回写全局文件。全局概念与局部概念均有来源路径，局部定义不会自动升级为全局。目录缺失、路径不安全或来源格式错误返回具名错误，不静默跳过。目录归属让局部事实留在使用它的目录，全项目视图只派生（[决策依据](../../design/scoped-terminology/DECISION.md)）。
 
+## 来源、合成与检查报告
+
+维护者通过 Concord CLI 与 Web 在全局、Feature、Engineering 及其它 docs 子目录定义领域术语和写作规则。术语由 concepts.md 拥有：每个概念有稳定 ID、唯一写法、定义段落与解释，旧写法列为弃用名；写作规则由 concord-writing.json 拥有禁词和检查选项。所在目录决定局部作用域，全项目视图自动汇总并保留来源，不复制定义。
+
+写作规则使用 concord.writing/v3；术语使用 concepts.md 的标题结构，不设版本字段。祖先规则按范围合成，局部来源不能扩大目录或静默覆盖定义。同名不同义按作用域区分；弃用名称派生禁词并建议改为该概念的写法。正文可以链接到 `concepts.md#id`，断开的链接由检查报告。
+
+concepts.md 与 concord-writing.json 可以直接编辑；结构、作用域与被引用的定义由 `concord check` 校验，`concepts` 与 `writing` 工具是在写入前执行同一校验的助手（[决策依据](../../design/sdd-core-model/DECISION.md)）。工具写入使用严格 Schema、整文件 CAS 与可恢复事务，show 支持无效来源显式修复。Web 草稿和异步请求绑定具体 owner，保存一份来源不能把另一份草稿标成已保存。
+
+检查报告表达某次已保存输入快照，包括禁词、字符长度、受控 token 长度、显式启用的词法规则与术语使用。检查不自动修改正文，不声称实现合规、功能完成或测试覆盖。Concord 不内置产品专属词库、目录或 API 语义。
+
 ## 概念定义
 
 ```markdown
@@ -80,7 +90,7 @@ catalog 可以直接编辑，`concord check` 报告上表的结构、导入与�
 
 roots 可省略：全局默认为 docs，局部默认为所在目录。全局 roots 可显式选择仓库其它文档目录；局部 roots 不得越出所在目录。所有路径均为仓库相对路径，不自动按文件位置重新解释。
 
-默认 `concord docs check --json` 选择全部政策 roots，加上没有同目录政策的概念目录；因此局部 owner 可以启动被全局窄 roots 排除的目录扫描。没有政策也可以检查概念。没有任何政策与 catalog 时返回 `WritingPolicyNotFound`；明确选中的根没有 Markdown 或 MDX 时返回 `WritingInputNotFound`。同一文件命中重叠根时只检查一次。`concord check` 的聚合门禁范围见 [Feature](README.md#聚合门禁)。
+默认 `concord docs check --json` 选择全部政策 roots，加上没有同目录政策的概念目录；因此局部 owner 可以启动被全局窄 roots 排除的目录扫描。没有政策也可以检查概念。没有任何政策与 catalog 时返回 `WritingPolicyNotFound`；明确选中的根没有 Markdown 或 MDX 时返回 `WritingInputNotFound`。同一文件命中重叠根时只检查一次。`concord check` 的聚合门禁范围见 [聚合门禁](gate.md)。
 
 选文件与应用规则是两个步骤。对已经选中的文件，全局和祖先政策按根目录到最近目录合成，与由哪个 owner 选中无关；roots 不取消祖先约束，单条禁词的 roots/exempt/allowIn 只限制它自身。禁词与弃用名累加，空数组不移除祖先禁词。长度和概念使用选项采用最近目录的显式值：省略表示继承，数字阈值的 null 表示清除，布尔 false 表示关闭；没有显式值时长度检查关闭，unusedConcepts 为 false。
 
