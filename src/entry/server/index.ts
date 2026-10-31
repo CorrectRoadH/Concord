@@ -6,6 +6,7 @@ export { remoteQueriesLayer } from './main.js';
 export { feedbackWriterLayer } from './main.js';
 export { serveWorkspaceView } from './main.js';
 export { WorkspaceState } from './state.js';
+export { waitForServerHandshake } from './state.js';
 export { makeWorkspaceService } from './service.js';
 export type { RuntimePorts } from './service.js';
 export { WorkspaceRpcs, ReadCodec, FRAME_LIMIT, packets } from './protocol.js';

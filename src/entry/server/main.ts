@@ -19,13 +19,14 @@ import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Queries, QueryReply, executeQuery, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
 import { ConcordError, failure, WorkspaceProjectionSchema } from '../../model/index.js';
+import { builtAssetRoot } from '../../app/index.js';
 import { Computation, ComputeRpcs, collectPackets, collectBytes } from './computation.js';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission } from './protocol.js';
 import { makeAdmittedProtocol } from './admission.js';
 import { getWorkspaceRead } from '../../app/index.js';
 import { QueryRefreshRequest, queryContext, storeQuery, scanQueryProcess } from '../../app/index.js';
 import { decodeQueryScanMessage } from '../../model/index.js';
-import { WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.js';
+import { WorkspaceState, waitForServerHandshake, serviceHeartbeat as importServiceHeartbeat } from './state.js';
 import { makeWorkspaceService } from './service.js';
 import { FeedbackSessions } from './feedback-session.js';
 import { ServerJobs } from './jobs.js';
@@ -211,6 +212,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const socketServer = yield* NodeSocketServer.make({ path: runtime.socketPath });
     yield* runtime.publish('opening');
     const cache = yield* PersistentCache.owner(privateDir);
+    const protocolReady = yield* Deferred.make<void>();
     const operations = yield* makeOperationOwner(root, cache.snapshot);
     const computation = yield* makeComputationOwner(root);
     const owned = <A, E, R>(operation: Effect.Effect<A, E, R | PersistentCache>) => operation.pipe(Effect.provideService(PersistentCache, cache.service));
@@ -225,7 +227,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),
       persist: (ctx, candidate, error) => owned(storeWorkspaceProjection(ctx, candidate, error)),
       compute: operation => cache.snapshot.pipe(Effect.catch(() => Effect.succeed({})), Effect.flatMap(snapshot => computation.run(operation, snapshot))),
-      open: cache.open,
+      open: Deferred.await(protocolReady).pipe(Effect.andThen(cache.open)),
       close: computation.close.pipe(Effect.andThen(cache.close)),
       clear: clearWorkspaceCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive)))),
       exists: Effect.sync(() => existsSync(root) && existsSync(privateDir)),
@@ -323,6 +325,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const protocol = yield* makeAdmittedProtocol(socketServer, service.connect, id => { feedback.disconnect(id); subscribers.delete(id); }).pipe(Effect.provideContext(serialization));
     yield* Effect.forkScoped(RpcServer.make(WorkspaceRpcs, { concurrency: 256 }).pipe(Effect.provide(handlers), Effect.provideService(RpcServer.Protocol, protocol)));
     yield* ready;
+    yield* Deferred.succeed(protocolReady, undefined);
     yield* service.stopped;
     yield* Effect.all([service.drain, operations.drain, ...[...httpSubscriptions].map(Fiber.await)], { concurrency: 'unbounded' }).pipe(Effect.timeout('3 seconds'), Effect.ignore);
     yield* operations.close;
@@ -345,6 +348,7 @@ export const readExistingWorkspaceProjection = (root: string) => Effect.scoped(E
   const runtime = yield* ServerRuntime;
   const connection = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
   if (!connection || connection.hello.installation !== runtime.installation() || connection.hello.protocol !== PROTOCOL) return undefined;
+  if (connection.hello.state === 'opening') return yield* Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is opening'));
   return yield* requestWorkspace(connection, 'workspace', {}).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(WorkspaceProjectionSchema, { onExcessProperty: 'error' })(value)), Effect.mapError(workspaceServerFailure));
 }));
 export const clearExistingWorkspaceCache = (root: string) => Effect.scoped(Effect.gen(function*() {
@@ -418,18 +422,13 @@ export const connectOrStartWorkspace = Effect.fn('connectOrStartWorkspace')(func
     current = undefined;
   }
   yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
-  const deadline = (yield* Clock.currentTimeMillis) + 1000;
-  do {
-    current = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
-    if (current && current.hello.installation === installation && current.hello.protocol === PROTOCOL) return current;
-    yield* Effect.sleep('10 millis');
-  } while ((yield* Clock.currentTimeMillis) < deadline);
-  return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'No workspace service completed a handshake within one second'));
+  return yield* waitForServerHandshake(existingWorkspace(root).pipe(Effect.map(connection => connection?.hello.installation === installation && connection.hello.protocol === PROTOCOL ? connection : undefined)));
 });
 export const startWorkspaceServer = (root: string) => Effect.scoped(connectOrStartWorkspace(root).pipe(Effect.map(connection => ({ operation: 'server-start', ...connection.hello }))));
 export const stopWorkspaceServer = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.flatMap(connection => connection ? connection.client.shutdown({ token: connection.hello.token }) : Effect.void), Effect.as({ operation: 'server-stop' }), Effect.mapError(asServerError)));
 const HttpLease = Schema.Struct({ host: Schema.String, port: Schema.Int, address: Schema.String, lease: Schema.String, token: Schema.String });
 export const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => void) {
+  yield* Effect.try({ try: () => builtAssetRoot('web'), catch: failure });
   return yield* Effect.scoped(Effect.gen(function*() {
     let inProcess: Fiber.Fiber<unknown, unknown> | undefined;
     if (options.inProcess) {
@@ -439,7 +438,14 @@ export const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(opti
     }
     const connection = options.inProcess ? yield* existingWorkspace(options.root) : yield* connectOrStartWorkspace(options.root);
     if (!connection) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'The in-process workspace service did not open its socket'));
-    const input = yield* requestWorkspace(connection, 'http', { action: 'open', host: options.host, port: options.port });
+    const deadline = (yield* Clock.currentTimeMillis) + 60_000;
+    let input: unknown;
+    for (;;) {
+      const attempt = yield* Effect.result(requestWorkspace(connection, 'http', { action: 'open', host: options.host, port: options.port }));
+      if (attempt._tag === 'Success') { input = attempt.success; break; }
+      if (!(attempt.failure instanceof WorkspaceServerError) || attempt.failure.code !== 'WorkspaceServerBusy' || (yield* Clock.currentTimeMillis) >= deadline) return yield* Effect.fail(attempt.failure);
+      yield* Effect.sleep('10 millis');
+    }
     const lease = yield* Schema.decodeUnknownEffect(HttpLease, { onExcessProperty: 'error' })(input);
     yield* Effect.addFinalizer(() => requestWorkspace(connection, 'http', { action: 'close', host: lease.host, port: lease.port, lease: lease.lease }).pipe(Effect.ignore));
     yield* Effect.sync(() => ready({ root: options.root, host: lease.host, port: lease.port, address: lease.address }));

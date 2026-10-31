@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#状态
 import { Clock, Context, Effect, Layer, Schedule, SubscriptionRef } from 'effect';
+import { ConcordError } from '../../model/index.js';
 import type { WorkspaceProjection } from '../../model/index.js';
 import type { ServerState } from './protocol.js';
 const transitions: Readonly<Record<ServerState, readonly ServerState[]>> = {
@@ -45,3 +46,13 @@ export class WorkspaceState extends Context.Service<WorkspaceState, {
 }
 export const serviceHeartbeat = Schedule.spaced('5 seconds');
 export const compensationRefresh = Schedule.spaced('30 seconds');
+
+export const serverStartupWait = '10 seconds' as const;
+/** Startup may load an installation; existing-service handshakes retain their own one-second bound. */
+export const waitForServerHandshake = <A, E, R>(attempt: Effect.Effect<A | undefined, E, R>) => Effect.gen(function*() {
+  for (;;) {
+    const value = yield* attempt.pipe(Effect.catch(() => Effect.succeed(undefined)));
+    if (value !== undefined) return value;
+    yield* Effect.sleep('10 millis');
+  }
+}).pipe(Effect.timeout(serverStartupWait), Effect.mapError(() => new ConcordError('WorkspaceServerUnavailable', 'No workspace service completed a handshake within ten seconds')));

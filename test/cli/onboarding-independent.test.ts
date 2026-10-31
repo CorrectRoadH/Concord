@@ -33,7 +33,7 @@ test('installed CLI exposes exactly the current command inventory and rejects re
   const result = spawnSync(process.execPath, [cli, '--help'], { cwd: root, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   const commands = result.stdout.split('SUBCOMMANDS')[1]!.trim().split('\n').map(line => line.trim().split(/\s+/u)[0]).filter(Boolean);
-  assert.deepEqual(commands.sort(), ['init','new','show','list','check','trace','test','code','use-case','issue','memory','design','roadmap','constitution','concepts','writing','docs','feedback','view','panel','config','template','cache','recover','doctor','lsp','review','action','workspace','git'].sort());
+  assert.deepEqual(commands.sort(), ['init','new','show','list','check','trace','test','code','use-case','issue','memory','design','roadmap','constitution','concepts','writing','docs','feedback','view','panel','server','config','template','cache','recover','doctor','lsp','review','action','workspace','git'].sort());
   for (const group of ['memory', 'issue', 'design', 'use-case', 'roadmap']) {
     const help = spawnSync(process.execPath, [cli, group, '--help'], { cwd: root, encoding: 'utf8' });
     assert.equal(help.status, 0, help.stderr);

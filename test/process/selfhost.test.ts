@@ -41,6 +41,9 @@ test('current checkout configures a version-matched runner whose annotations sca
   const consumer = realpathSync(mkdtempSync(join(tmpdir(), 'concord-selfhost-smoke-')));
   try {
     execFileSync('git', ['init', '-q', consumer]);
+    // Closed Issues retain verification commits; the copied consumer needs the
+    // same local history to validate those records in cache-off source reads.
+    execFileSync('git', ['-C', consumer, 'fetch', '-q', '--no-tags', root, 'HEAD']);
     const configPath = projectConfigPath(root);
     cpSync(join(root, configPath), join(consumer, configPath));
     // The global writing policy may select prose outside docs (READMEs, skills, templates).

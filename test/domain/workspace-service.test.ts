@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Deferred, Effect, Fiber, Layer, SubscriptionRef } from 'effect';
 import { TestClock } from 'effect/testing';
-import { WorkspaceState, makeWorkspaceService, type RuntimePorts } from '../../src/entry/server/index.js';
+import { WorkspaceState, waitForServerHandshake, makeWorkspaceService, type RuntimePorts } from '../../src/entry/server/index.js';
 import { ConcordError, type WorkspaceProjection, type WorkspaceProjectionRecord } from '../../src/model/index.js';
 import { panelSnapshot } from '../support/panel-fixture.js';
 
@@ -76,3 +76,26 @@ test('stopping and blocked states cannot be revived by a late watcher callback',
   yield* state.transition('stopping'); yield* state.transition('running');
   assert.equal((yield* SubscriptionRef.get(state.value)).state, 'stopping');
 }).pipe(Effect.provide(stateLayer))));
+
+// @feature docs/feature/local-data-engine/README.md
+// @issue docs/issues/workspace-server-unimplemented.md
+test('service startup waits ten seconds on the Effect clock and cancels an unresponsive handshake', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const started = yield* Deferred.make<void>();
+  const waiting = yield* Effect.forkScoped(Effect.result(waitForServerHandshake(Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)))));
+  yield* Deferred.await(started);
+  yield* TestClock.adjust(9999);
+  assert.equal(waiting.pollUnsafe(), undefined);
+  yield* TestClock.adjust(1);
+  const outcome = yield* Fiber.join(waiting);
+  assert.equal(outcome._tag, 'Failure');
+  if (outcome._tag === 'Failure') assert.equal(outcome.failure.code, 'WorkspaceServerUnavailable');
+})).pipe(Effect.provide(TestClock.layer()))));
+
+// @feature docs/feature/local-data-engine/README.md
+test('service startup returns the actual winning handshake before its Effect deadline', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const connected = yield* Deferred.make<{ token: string }>();
+  const waiting = yield* Effect.forkScoped(waitForServerHandshake(Deferred.await(connected)));
+  yield* TestClock.adjust(9000);
+  yield* Deferred.succeed(connected, { token: 'winner' });
+  assert.deepEqual(yield* Fiber.join(waiting), { token: 'winner' });
+})).pipe(Effect.provide(TestClock.layer()))));

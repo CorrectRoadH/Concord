@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
+// @concord-implements docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md#完整路径
 import { openWriteRepository } from "../../app/index.js";
 import { Effect, Option } from "effect";
 import { Command, Flag, Prompt } from "effect/unstable/cli";

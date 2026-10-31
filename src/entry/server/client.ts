@@ -16,11 +16,11 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
   );
   const context = yield* Layer.build(protocol);
   const client = yield* RpcClient.make(WorkspaceRpcs).pipe(Effect.provideContext(context));
-  yield* Deferred.await(opened).pipe(Effect.timeout('1 second'));
-  const hello = yield* client.hello({ installation, protocol: PROTOCOL }).pipe(Effect.timeout('1 second'));
+  yield* Deferred.await(opened);
+  const hello = yield* client.hello({ installation, protocol: PROTOCOL });
   if (hello.token !== token) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Instance token differs from the running record' }));
   return { client, hello, identity: () => ({ token, installation, requestId: crypto.randomUUID(), deadline: Date.now() + 60_000 }) };
-});
+}, Effect.timeout('1 second'));
 export type WorkspaceConnection = Effect.Success<ReturnType<typeof connectWorkspaceSocket>>;
 export const requestWorkspace = <N extends Exclude<keyof WorkspaceClient, 'hello' | 'shutdown' | 'subscribe'>>(connection: WorkspaceConnection, name: N, input: Omit<Parameters<WorkspaceClient[N]>[0], 'token' | 'installation' | 'requestId' | 'deadline'>) => {
   const call = connection.client[name] as (input: unknown) => Stream.Stream<typeof Packet.Type, unknown>;
