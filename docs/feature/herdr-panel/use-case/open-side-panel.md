@@ -18,4 +18,4 @@
 - 一个 owner 无法解析时，在它的位置显示诊断，其它条目照常显示。
 - 面板运行期间，同一工作树上的 CLI 调用不因面板而失败、等待锁或报告 `HawdbBusy`；多个面板可以同时打开。
 - 面板不写入任何仓库文件。面板进程退出后，它自己的连接、输入监听、定时器与渲染资源全部释放；面板启动的工作区服务按服务规则在空闲后退出。
-- Herdr 插件随 Concord 包发布；未安装 Herdr 时 `concord panel` 照常运行。
+- Herdr 插件随 Concord 包发布，位于包根的 `herdr/`。维护者以 Herdr 安装该目录，并以环境变量 `CONCORD_INSTALLATION` 指向这份 Concord 的包根；插件的构建步骤把这份 Concord 的入口与 Node 的绝对路径写入 Herdr 的插件副本，之后不依赖 PATH。未安装 Herdr 时 `concord panel` 照常运行。
