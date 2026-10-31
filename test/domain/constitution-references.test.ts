@@ -5,7 +5,7 @@ import { editKnowledge } from "../../src/app/index.js";
 import { writeProjectConfig } from '../support/support.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
@@ -103,6 +103,21 @@ test('amendment lists Issue references to a removed paragraph until the Issue is
   try { editKnowledge(repository, 'issue', issue, readFileSync(bodyFile, 'utf8'), fileDigest(root, issue)); } finally { repository.close(); }
   amend(root, reduced);
   check(root);
+}))));
+
+// @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#check-links
+test('Design and Research records keep links to removed IDs while Spec pages still report them', () => Effect.runPromise(Effect.sync(() => withConsumer('records', root => {
+  adopt(root, rules());
+  amend(root, rules('1. Writes keep edits. {#c-001-1}\n2. Writes check every preimage. {#c-001-2}\n'));
+  mkdirSync(join(root, 'docs/design/writes'), { recursive: true });
+  writeFileSync(join(root, 'docs/design/writes/README.md'), '# Writes\n\nChosen under [C-001](../../constitution.md#c-001-2).\n');
+  inspect(root, repo => createDocument(repo, 'research', { id: 'preimages', title: 'Preimages', body: '# Preimages\n\nSee [C-001](../../constitution.md#c-001-2).\n' }));
+  amend(root, rules('1. Writes keep edits. {#c-001-1}\n'));
+  assert.deepEqual(findings(check(root)).filter(finding => finding.code === 'AnchorNotFound'), []);
+  create(root, 'feature', 'cart', 'Cart');
+  appendFileSync(join(root, 'docs/feature/cart/README.md'), '\nWrites check preimages ([C-001](../../constitution.md#c-001-2)).\n');
+  const reported = findings(check(root, 1));
+  assert.deepEqual(reported.filter(finding => finding.code === 'AnchorNotFound').map(finding => finding.path), ['docs/feature/cart/README.md']);
 }))));
 
 const Receipt = Schema.Struct({ memory: Schema.String });

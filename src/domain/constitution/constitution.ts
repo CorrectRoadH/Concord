@@ -11,7 +11,7 @@ import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/ind
 import { markdownBody } from "../../model/index.js";
 import { documentMarkdown, documentMarkdownProjection } from "../documents/index.js";
 import { constitutionDecisionChange } from "../../model/index.js";
-import { inspectDocumentRecords, loadDocuments } from "../documents/index.js";
+import { inspectDocumentRecords } from "../documents/index.js";
 
 
 
@@ -199,6 +199,8 @@ export interface ConstitutionLinkScan {
 }
 
 const inScope = (path: string) => path.endsWith('.md') && path !== CONSTITUTION_PATH && !path.startsWith('docs/_template/');
+/** Design and Research pages are records read as of when they were written; links to IDs removed since then stay valid history. */
+const isRecord = (path: string) => path.startsWith('docs/design/') || path.startsWith('docs/research/');
 
 /** Every inline link from authored docs Markdown is a reference occurrence; reverse views derive from this scan. */
 export function scanConstitutionLinks(repo: Repository, index: ReadonlyMap<string, { readonly clause: string; readonly paragraph: string | null }>, read: (path: string) => string | undefined = path => repo.read(path)): ConstitutionLinkScan {
@@ -224,6 +226,7 @@ export function scanConstitutionLinks(repo: Repository, index: ReadonlyMap<strin
       if (target.kind === 'invalid') { complete = false; findings.push({ code: 'ConstitutionLinkInvalid', path, line: link.line, message: target.message }); continue; }
       const resolved = index.get(target.id);
       if (resolved === undefined) {
+        if (isRecord(path)) continue;
         broken.push({ path, line: link.line, id: target.id });
         findings.push({ code: 'AnchorNotFound', path, line: link.line, message: `Constitution clause ${target.id} does not exist` });
         continue;
@@ -294,16 +297,7 @@ function guardReferences(repo: Repository, current: ConstitutionRecord, candidat
     if (target?.kind === 'invalid') throw new ConcordError('ConstitutionLinkInvalid', `${CONSTITUTION_PATH}:${link.line}: ${target.message}`);
     if (target?.kind === 'fragment' && !candidate.has(target.id)) internal.push({ path: CONSTITUTION_PATH, line: link.line, id: target.id });
   }
-  const removedIds = new Set([...previous.keys()].filter(id => !candidate.has(id)));
-  const promotions = removedIds.size === 0 ? [] : loadDocuments(repo, ['memory']).flatMap(record => record.metadata.kind !== 'memory' || record.metadata.status !== 'current' ? [] : record.metadata.relations.filter(relation => relation.role === 'amends').map(relation => relation.target).flatMap(reference => {
-    if (!reference.startsWith(`${CONSTITUTION_PATH}#`)) return [];
-    const id = reference.slice(CONSTITUTION_PATH.length + 1);
-    if (!removedIds.has(id)) return [];
-    const lines = repo.read(record.path)!.split('\n');
-    const occurrence = lines.findIndex(line => line.includes(reference));
-    return [{ path: record.path, line: occurrence < 0 ? 1 : occurrence + 1, id }];
-  }));
-  const removed = [...scan.broken, ...internal, ...promotions].filter(item => previous.has(item.id));
+  const removed = [...scan.broken, ...internal].filter(item => previous.has(item.id));
   if (removed.length > 0) throw new ConcordError('ConstitutionClauseReferenced', `Removed IDs are still referenced: ${removed.map(item => `${item.path}:${item.line} #${item.id}`).join(', ')}`, removed);
   const missing = internal.find(item => !previous.has(item.id));
   if (missing !== undefined) throw new ConcordError('AnchorNotFound', `${CONSTITUTION_PATH}:${missing.line}: Constitution clause ${missing.id} does not exist`);

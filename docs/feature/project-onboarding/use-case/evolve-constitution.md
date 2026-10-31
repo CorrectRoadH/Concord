@@ -41,11 +41,13 @@
    concord --json check
    ```
 
-   指向不存在的 ID 时，退出 1（预期输出）：
+   Spec 页面中的链接指向不存在的 ID 时，退出 1（预期输出）：
 
    ```json
    {"operation":"check","ok":false,"complete":true,"findings":[{"code":"AnchorNotFound","path":"docs/feature/cart/README.md","line":12,"message":"Constitution clause c-099 does not exist","category":"relation"}]}
    ```
+
+   Design 与 Research 是记录，按写下时的含义理解：其中指向已不存在的 ID 的链接不报告 `AnchorNotFound`，也不阻止删除该 ID。修订记录 Memory 的 `amends` 同样如此。Issue 是仍在处理的工作项，删除它引用的 ID 前先改写 Issue。
 
 4. 查看哪些地方依据一条规则。 {#show-references}
 
@@ -124,9 +126,9 @@ adopt 与 amend 都要求 `--expected-digest` 等于当前摘要，否则返回 
 | `AnchorNotFound` | 链接的 fragment 不是条款、款或总则的 ID |
 | `ConstitutionLinkInvalid` | 宪法链接带 query，或百分号编码无法解码 |
 | `ConstitutionClauseInvalid` | 宪法中条款或款缺少 ID、ID 格式不对、重复，或标签与 ID 不一致 |
-| `ConstitutionClauseReferenced` | `amend` 或 `adopt` 删除仍被正文链接的 ID；输出列出引用位置，不写入 |
+| `ConstitutionClauseReferenced` | `amend` 或 `adopt` 删除仍被 Spec 页面链接的 ID；输出列出引用位置，不写入 |
 
-`amend` 按候选正文校验引用，同次删除一款及宪法内指向它的链接可以通过。要撤销一款时，先改写引用它的页面，再删除该款；直接编辑删除仍被链接的款时，`check` 报告 `AnchorNotFound`。任何纳入范围的文件无法读取时，`check` 与 `constitution show` 返回 `complete: false`，`amend` 与 `adopt` 拒绝执行。
+`amend` 按候选正文校验引用，同次删除一款及宪法内指向它的链接可以通过。要撤销一款时，先改写引用它的 Spec 页面，再删除该款；直接编辑删除仍被 Spec 页面链接的款时，`check` 报告 `AnchorNotFound`。任何纳入范围的文件无法读取时，`check` 与 `constitution show` 返回 `complete: false`，`amend` 与 `adopt` 拒绝执行。
 
 `check` 只校验引用的结构，不判断语义是否合规。宪法中的列表 ID 不是 Use Case 步骤，不进入 `use-case steps` 与 `trace gaps`。
 
