@@ -1,3 +1,4 @@
+import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
 // @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
 import assert from 'node:assert/strict';
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, symlinkSync, readdirSync } from 'node:fs';
@@ -70,11 +71,11 @@ test('default shared paths protect the global concepts.md catalog and writing po
     writeFileSync(join(root, 'docs/concepts.md'), '# Project concepts\n');
     git(root, 'add', 'docs/concepts.md'); git(root, 'commit', '-qm', 'catalog');
     const path = join(tmpdir(), `docs-work-shared-${process.pid}.json`);
-    writeFileSync(path, JSON.stringify({ format: 'concord.docs-work-plan/v1', items: [item('terms', ['docs/concepts.md']), item('policy', ['docs/concord-writing.json'])] }));
+    writeFileSync(path, JSON.stringify({ format: 'concord.docs-work-plan/v1', items: [item('terms', ['docs/concepts.md']), item('policy', ['docs/writing.md'])] }));
     try {
       const result = (await prepare(root, { plan: readPlan(path), runId: 'shared' }, 1));
       const shared = result.details!.problems!.filter(problem => problem.code === 'SharedPathWrite').map(problem => problem.path).sort();
-      assert.deepEqual(shared, ['docs/concepts.md', 'docs/concord-writing.json']);
+      assert.deepEqual(shared, ['docs/concepts.md', 'docs/writing.md']);
     } finally { rmSync(path, { force: true }); }
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
@@ -124,7 +125,7 @@ test('default writing uses main CLI rules on item paths and default finalizer ca
     // `init` creates valid project contract owners for the aggregate finalizer.
     const repository = new LocalRepository(root, { initialize: true });
     try { initialize(repository, false, { testRoots: [] }); } finally { repository.close(); }
-    writeFileSync(join(root, 'docs/concord-writing.json'), JSON.stringify({ format: 'concord.writing/v3', roots: ['docs/a', 'docs/b'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'Fixture rule' }] }));
+    writeFileSync(join(root, 'docs/writing.md'), renderWritingPolicy({ roots: ['docs/a', 'docs/b'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'Fixture rule' }] }));
     git(root, 'add', "."); git(root, 'commit', '-qm', 'initialized');
     const run = (await prepare(root, { runId: 'builtin', scopes: ['docs/a/'] }));
     writeFileSync(join(root, 'docs/a/one.md'), '# One\n\nForbidden text.\n');

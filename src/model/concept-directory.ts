@@ -7,8 +7,8 @@ import { scopeOf, under } from './writing-scopes.js';
 const { definition: _definition, ...descriptor } = ConceptDefinitionSchema.fields;
 /** id is the Markdown anchor; term is the current spelling for deprecated names. */
 export const WorkspaceConceptSchema = Schema.Struct(descriptor);
-  concepts: Schema.Array(WorkspaceConceptSchema),
 export const WorkspaceConceptCatalogSchema = Schema.Struct({
+  concepts: Schema.Array(WorkspaceConceptSchema),
   path: Schema.String.check(Schema.makeFilter(value => { try { scopeOf(value, 'catalog'); return true; } catch { return false; } })),
 });
 export type WorkspaceConcept = typeof WorkspaceConceptSchema.Type;

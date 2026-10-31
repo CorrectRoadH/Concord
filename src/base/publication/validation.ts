@@ -10,7 +10,6 @@ export interface PublicationCatalog {
   readonly operation: string;
   readonly scope: { readonly kind: string };
   readonly changes: readonly Change[];
-  readonly catalogDependencies?: readonly { readonly path: string; readonly digest: string }[];
 }
 export interface StepRenamePlan extends StepRename {
   readonly changes: readonly Change[];

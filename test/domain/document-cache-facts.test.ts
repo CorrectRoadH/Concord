@@ -54,7 +54,7 @@ test('volatile document projections preserve current CLI facts across edits, pat
     try { writeConceptFile(repo, '# Concepts\n\n## Fact {#fact}\n\nA current source statement.\n', digest(readFileSync(join(root, 'docs/concepts.md'), 'utf8'))); } finally { repo.close(); }
     parity(root);
     const writer = new LocalRepository(root);
-    try { writeWritingFile(writer, { roots: ['docs'], bannedTerms: [{ term: 'undesirable', use: 'clear', why: 'Use a concrete term' }] }, digest(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'))); } finally { writer.close(); }
+    try { writeWritingFile(writer, { roots: ['docs'], bannedTerms: [{ term: 'undesirable', use: 'clear', why: 'Use a concrete term' }] }, digest(readFileSync(join(root, 'docs/writing.md'), 'utf8'))); } finally { writer.close(); }
     parity(root);
     assert.match(JSON.stringify(cli(root, false)), /undesirable/u);
     const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false });

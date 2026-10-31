@@ -48,9 +48,9 @@ test('packed boundaries reject non-current formats and preserve configuration, o
  write(root, configPath, config);
  for (const format of ['concord.writing/v1', 'concord.writing/v2']) {
   const source = JSON.stringify({ format, bannedTerms: [] });
-  write(root, 'docs/concord-writing.json', source);
+  write(root, 'docs/writing.md', source);
   assert.equal(call(root, ['docs', 'check'], ErrorOutput, '', 1).error, 'InvalidWritingPolicy');
-  assert.equal(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'), source);
+  assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), source);
  }
  const id = 'ccev_11111111111111111111111111111111';
  const receiptPath = `.git/concord/evidence/${id}.json`;

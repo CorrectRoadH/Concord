@@ -1,5 +1,4 @@
 export { analyzeCatalogs } from './concepts.js';
-export { catalogDependencies } from './concepts.js';
 export type { CatalogRecord } from './concepts.js';
 export { catalogSources } from './concepts.js';
 export type { ConceptDiagnostic } from './concepts.js';

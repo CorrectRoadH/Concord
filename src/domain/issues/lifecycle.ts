@@ -1,6 +1,6 @@
-import type { LocalRepository } from '../../base/workspace/index.js';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/manage-local-observations.md
+import type { LocalRepository } from '../../base/workspace/index.js';
 import { posix } from 'node:path';
 import { fromMarkdown, markdownBody, ConcordError, parseReference, digest, inRepositorySnapshot, type IssueRelation, type MutationReceipt, type Repository } from '../../model/index.js';
 import { CONTRACT_KINDS, changed, loadDocuments, readDocumentReference, readDocumentSelector } from '../documents/index.js';
@@ -29,7 +29,6 @@ export function unlinkIssue(repo: Repository, selector: string, reference: strin
 }
 export function adoptIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt { return linkIssue(repo, selector, reference, dryRun, 'adopts'); }
 export function retireIssue(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt { return unlinkIssue(repo, selector, reference, dryRun, 'adopts'); }
-export function linkFeedbackFeature(repo: Repository, selector: string, reference: string, dryRun = false): MutationReceipt { return adoptIssue(repo, selector, reference, dryRun); }
 
 /** Only authored links and owner relations retain an Issue; regression markers retain historical evidence. */
 export function issueReferences(repo: Repository, target: string): readonly { path: string; line?: number }[] {

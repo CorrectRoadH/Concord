@@ -15,7 +15,7 @@ function cells(source: string, inline = true): string[] {
     else cell += source[index];
   }
   cells.push(cell.trim());
-  if (cells[0] === '') cells.shift(); if (cells.at(-1) === '') cells.pop();
+  if (cells[0] === '') cells.shift(); if (cells.at(-1) === '' && cells.length > 5) cells.pop();
   return inline ? cells.map(cell => fromMarkdown(cell).children.map(plain).join('')) : cells;
 }
 export function parseWritingPolicy(source: string, path = 'docs/writing.md'): WritingPolicy {

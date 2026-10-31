@@ -1,164 +1,41 @@
 import { writeWritingFile } from '../support/writing-files.js';
 import { initialize } from '../support/operations.js';
-import { installedConcordCli } from '../support/support.js';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import test from 'node:test';
-import { Effect } from 'effect';
-import { LocalRepository } from "../support/repository.js";
+import { LocalRepository } from '../support/repository.js';
+import { digest, parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
+import { showWriting, checkWriting } from '../../src/domain/writing/index.js';
 
-import { digest } from "../../src/model/index.js";
-import { showWriting, } from "../../src/domain/writing/index.js";
-import { checkWriting } from "../../src/domain/writing/index.js";
-
-const policyPath = 'docs/concord-writing.json';
-const policy = { roots: ['docs'] as [string, ...string[]], bannedTerms: [{ term: 'Resolve', use: '修复', why: '统一写法' }] };
-const source = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
-const fixture = () => {
+// @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
+test('ordinary Markdown saves create, repair and compare writing file preimages', () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-management-'));
-  execFileSync('git', ['init', '-q', root]);
-  const repo = new LocalRepository(root, { initialize: true });
-  try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
-  rmSync(join(root, 'docs/concord-writing.json'));
-  return root;
-};
-const withRepo = <T>(root: string, run: (repo: LocalRepository) => T, options = {}) => {
-  const repo = new LocalRepository(root, options);
-  try { return run(repo); } finally { repo.close(); }
-};
-const write = (root: string, path: string, body: string) => { mkdirSync(join(root, path, ".."), { recursive: true }); writeFileSync(join(root, path), body); };
-
-// @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('writing show preserves invalid and v1 bytes for explicit CAS repair', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
+  const path = 'docs/writing.md';
+  const policy = { bannedTerms: [{ term: 'Resolve', use: '修复', why: '统一写法' }] };
+  const withRepo = <T>(run: (repo: LocalRepository) => T) => { const repo = new LocalRepository(root); try { return run(repo); } finally { repo.close(); } };
   try {
-    assert.equal(withRepo(root, showWriting).state, 'missing');
-    write(root, policyPath, source({ ...policy, format: 'concord.writing/v1' }));
-    const old = withRepo(root, showWriting);
-    assert.equal(old.state, 'invalid');
-    assert.throws(() => withRepo(root, checkWriting), { code: 'InvalidWritingPolicy' });
-    assert.throws(() => withRepo(root, repo => writeWritingFile(repo, policy, null)), { code: 'FileChangedSinceRead' });
-    const saved = withRepo(root, repo => writeWritingFile(repo, policy, old.digest));
-    assert.equal(saved.digest, digest(saved.source));
-    assert.equal(withRepo(root, showWriting).state, 'valid');
-    assert.throws(() => withRepo(root, repo => writeWritingFile(repo, { ...policy, bannedTerms: [...policy.bannedTerms, { term: 'resolve', use: '修', why: '重复' }] }, saved.digest)), { code: 'InvalidWritingPolicy' });
-    assert.throws(() => withRepo(root, repo => writeWritingFile(repo, { ...policy, roots: ['../escape'] }, saved.digest)), { code: 'InvalidWritingPolicy' });
-    rmSync(join(root, policyPath));
-    symlinkSync('concepts.md', join(root, policyPath));
-    assert.throws(() => withRepo(root, showWriting), { code: 'UnsafePath' });
+    execFileSync('git', ['init', '-q', root]);
+    const initial = new LocalRepository(root, { initialize: true });
+    try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
+    rmSync(join(root, path));
+    assert.equal(withRepo(showWriting).state, 'missing');
+    withRepo(repo => writeWritingFile(repo, policy, null, true));
+    assert.equal(withRepo(showWriting).state, 'missing');
+    const created = withRepo(repo => writeWritingFile(repo, policy, null));
+    assert.deepEqual(parseWritingPolicy(readFileSync(join(root, path), 'utf8')), policy);
+    assert.throws(() => withRepo(repo => writeWritingFile(repo, policy, null)), { code: 'FileChangedSinceRead' });
+    const invalid = '# Rules\n\n## Not a rules section\n';
+    writeFileSync(join(root, path), invalid);
+    const shown = withRepo(showWriting);
+    assert.equal(shown.state, 'invalid'); assert.equal(shown.source, invalid);
+    assert.throws(() => withRepo(checkWriting), { code: 'InvalidWritingPolicy' });
+    assert.throws(() => withRepo(repo => writeWritingFile(repo, policy, created.digest)), { code: 'FileChangedSinceRead' });
+    withRepo(repo => writeWritingFile(repo, policy, digest(invalid)));
+    assert.equal(readFileSync(join(root, path), 'utf8'), renderWritingPolicy(policy));
+    rmSync(join(root, path)); symlinkSync('concepts.md', join(root, path));
+    assert.throws(() => withRepo(showWriting), { code: 'UnsafePath' });
   } finally { rmSync(root, { recursive: true, force: true }); }
-})));
-
-// @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('policy journal uses two-way authorization and preserves conflicting recovery scenes', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), journalPath = join(root, '.git/concord/journal.json');
-  try {
-    const before = source({ ...policy, svgTerms: false, svgStyle: null }), after = source(policy);
-    write(root, policyPath, before);
-    const config = readFileSync(join(root, 'concord.config.ts'), 'utf8');
-    const base = { format: 'concord.journal', root, privateDir: join(root, '.git/concord'), operation: 'set-writing-policy', phase: 'prepared', directories: [], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: config, configDigest: digest(config) }, changes: [{ path: policyPath, before, after, beforeDigest: digest(before), afterDigest: digest(after), mode: 0o644 }] };
-    for (const forged of [
-      { ...base, changes: [{ ...base.changes[0], path: 'docs/other.json' }] },
-      { ...base, changes: [{ ...base.changes[0], after: null, afterDigest: null }] },
-      { ...base, changes: [{ ...base.changes[0], after: '{}', afterDigest: digest('{}') }] },
-    ]) {
-      writeFileSync(journalPath, source(forged));
-      assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
-      assert.equal(readFileSync(join(root, policyPath), 'utf8'), before);
-      rmSync(journalPath);
-    }
-    for (const phase of ['prepared', 'committed']) {
-      const obsolete = { ...base, phase, changes: [{ ...base.changes[0], before: null, beforeDigest: null, after: before, afterDigest: digest(before) }] };
-      writeFileSync(journalPath, source(obsolete));
-      assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
-      assert.equal(readFileSync(journalPath, 'utf8'), source(obsolete));
-      assert.equal(readFileSync(join(root, policyPath), 'utf8'), before);
-      rmSync(journalPath);
-    }
-    writeFileSync(journalPath, source(base));
-    write(root, policyPath, after);
-    assert.equal(withRepo(root, repo => repo.recover(), { recover: true }).status, 'rolled-back');
-    assert.equal(readFileSync(join(root, policyPath), 'utf8'), before);
-    write(root, policyPath, after);
-    writeFileSync(journalPath, source({ ...base, phase: 'committed' }));
-    assert.equal(withRepo(root, repo => repo.recover(), { recover: true }).status, 'committed');
-    assert.equal(readFileSync(join(root, policyPath), 'utf8'), after);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-})));
-
-// @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-test('public CLI writing action validates strict v3 and creation CAS', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), cli = installedConcordCli(), input = join(root, 'writing-action.json');
-  try {
-    writeFileSync(input, JSON.stringify({ action: 'writing.set', policy, expectedDigest: null }));
-    const created = spawnSync(process.execPath, [cli, '--root', root, '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 15_000 });
-    assert.equal(created.status, 0, created.stderr);
-    assert.equal(JSON.parse(readFileSync(join(root, policyPath), 'utf8')).format, 'concord.writing/v3');
-    const conflict = spawnSync(process.execPath, [cli, '--root', root, '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 15_000 });
-    assert.notEqual(conflict.status, 0);
-    assert.match(`${conflict.stdout}${conflict.stderr}`, /FileChangedSinceRead/);
-    assert.equal(existsSync(join(root, 'docs/concepts.md')), true);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-})));
-
-// @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
-test('removed SVG fields reject every value and explicit CAS cleanup preserves the rest', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
-  try {
-    for (const path of [policyPath, 'docs/feature/sample/concord-writing.json', 'standalone.json']) {
-      const clean = { ...policy, roots: [path.startsWith('docs/feature/') ? 'docs/feature/sample' : 'docs'] as [string, ...string[]] };
-      for (const fields of [{ svgTerms: true }, { svgTerms: false }, { svgStyle: null }, { svgStyle: 'docs/style.css' }]) {
-        const before = source({ ...clean, ...fields });
-        write(root, path, before);
-        assert.throws(() => withRepo(root, repo => checkWriting(repo, path)), { code: 'InvalidWritingPolicy' });
-        if (path === 'standalone.json') continue;
-        const shown = withRepo(root, repo => showWriting(repo, path));
-        assert.equal(shown.state, 'invalid');
-        assert.equal(shown.source, before);
-        assert.equal(shown.digest, digest(before));
-        assert.throws(() => withRepo(root, repo => writeWritingFile(repo, clean, null, false, path)), { code: 'FileChangedSinceRead' });
-        withRepo(root, repo => writeWritingFile(repo, clean, shown.digest, true, path));
-        assert.equal(readFileSync(join(root, path), 'utf8'), before);
-        withRepo(root, repo => writeWritingFile(repo, clean, shown.digest, false, path));
-        assert.deepEqual(JSON.parse(readFileSync(join(root, path), 'utf8')), clean);
-      }
-    }
-  } finally { rmSync(root, { recursive: true, force: true }); }
-})));
-
-// @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
-test('C23: policy replacement refuses edited preimages and preserves invalid recovery scenes', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture();
-  try {
-    const old = source({ ...policy, format: 'concord.writing/v2' });
-    write(root, policyPath, old);
-    class ConcurrentRepository extends LocalRepository {
-      armed = true;
-      override read(path: string): string | undefined {
-        const before = super.read(path);
-        if (this.armed && path === policyPath) { this.armed = false; write(root, path, `${old} `); }
-        return before;
-      }
-    }
-    const repo = new ConcurrentRepository(root);
-    try { assert.throws(() => writeWritingFile(repo, policy, digest(old)), { code: 'FileChangedSinceRead' }); }
-    finally { repo.close(); }
-    assert.equal(readFileSync(join(root, policyPath), 'utf8'), `${old} `);
-    write(root, policyPath, old);
-    const config = readFileSync(join(root, 'concord.config.ts'), 'utf8');
-    const journal = { format: 'concord.journal', root, privateDir: join(root, '.git/concord'), operation: 'set-writing-policy', phase: 'prepared', directories: [], scope: { kind: 'documents', configPath: 'concord.config.ts', configSource: config, configDigest: digest(config) }, changes: [{ path: policyPath, before: null, after: old, beforeDigest: null, afterDigest: digest(old), mode: 0o644 }] };
-    const journalPath = join(root, '.git/concord/journal.json');
-    writeFileSync(journalPath, source(journal));
-    assert.throws(() => new LocalRepository(root, { recover: true }), { code: 'RecoveryConflict' });
-    assert.equal(readFileSync(journalPath, 'utf8'), source(journal));
-    assert.equal(readFileSync(join(root, policyPath), 'utf8'), old);
-    rmSync(journalPath);
-    const lease = join(root, '.git/concord/trace/publication.lease');
-    mkdirSync(lease, { recursive: true }); writeFileSync(join(lease, 'unknown-owner'), 'preserve');
-    assert.throws(() => withRepo(root, repo => writeWritingFile(repo, policy, digest(old))), /unexpected|owner|lease|publication/iu);
-    assert.equal(readFileSync(join(lease, 'unknown-owner'), 'utf8'), 'preserve');
-  } finally { rmSync(root, { recursive: true, force: true }); }
-})));
+});

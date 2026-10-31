@@ -1,6 +1,5 @@
 import { selectEffectiveConcepts, splitConceptReference } from '../../model/index.js';
 import { ConcordError, digest, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.js";
-import type { LocalRepository } from "../../base/workspace/index.js";
 import { fromMarkdown } from "../../model/index.js";
 import { documentMarkdown } from "../documents/index.js";
 import { parseConceptCatalog, conceptSpellingKey, type ConceptCatalog, type ConceptDefinition } from "../../model/index.js";
@@ -46,10 +45,6 @@ export interface CatalogRecord { path: string; scope: string; digest: string; ca
 export interface ConceptDiagnostic { code: string; message: string; sources: readonly string[]; scope?: string }
 export function catalogSources(repo: Repository): Map<string, string> {
   return new Map(discovered(repo, 'catalog').map(path => [path, repo.read(path) ?? '']));
-}
-export function catalogDependencies(repo: Repository, target: string): { path: string; digest: string }[] {
-  scopeOf(target, 'catalog');
-  return [...catalogSources(repo)].filter(([path]) => path !== target).map(([path, source]) => ({ path, digest: digest(source) })).sort((a, b) => a.path.localeCompare(b.path));
 }
 export function analyzeCatalogs(sources: Map<string, string>) {
   const catalogs: CatalogRecord[] = [];

@@ -24,7 +24,7 @@ function withoutStepMarkers(path: string, source: string): string {
 }
 interface Prose { line: number; text: string; readable: string; sentences: readonly string[]; paragraph: boolean }
 interface PolicyOwner { path: string; scope: string; policy: WritingPolicy }
-interface Ban { term: string; use: string; why: string; source: NonNullable<WritingFinding['source']>; roots?: readonly string[]; exempt?: readonly string[]; allowIn?: readonly string[]; ownerScope: string; conceptRef?: string }
+interface Ban { term: string; use: string; why: string; source: NonNullable<WritingFinding['source']>; roots?: readonly string[]; allowIn?: readonly string[]; ownerScope: string; conceptRef?: string }
 
 function authoredSource(file: string, source: string, positions = false): string {
   let frontmatter = false, generated = false, jsx = false;
@@ -47,25 +47,21 @@ function authoredSource(file: string, source: string, positions = false): string
     return raw;
   }).map((line, index) => positions && line === '' ? ' '.repeat(originalLines[index]!.length) : line).join('\n');
 }
-// Marks where inline code starts so sentence splitting sees the boundary the
-// rendered text loses; it never reaches lengths, contexts or term checks.
-const CODE_START = '\uE000';
-const SENTENCE_BREAK = /(?<=[。！？!?])|(?<=[.!?])\s+(?=[\uE000A-Z0-9"'“‘(\[\p{Script=Han}])/u;
-function textOf(node: Nodes, inlineCode: boolean, markCode = false): string {
+const SENTENCE_BREAK = /(?<=[。！？!?])|(?<=[.!?])\s+(?=[A-Z0-9"'“‘(\[\p{Script=Han}])/u;
+function textOf(node: Nodes): string {
   if (node.type === 'text') return node.value;
-  if (node.type === 'inlineCode') return inlineCode ? `${markCode ? CODE_START : ''}${node.value}` : ' ';
-  if (node.type === 'image' || node.type === 'imageReference') return inlineCode ? '' : node.alt ?? '';
+  if (node.type === 'inlineCode') return ' ';
+  if (node.type === 'image' || node.type === 'imageReference') return node.alt ?? '';
   if (node.type === 'break') return '\n';
-  if ('children' in node) return node.children.map(child => textOf(child, inlineCode, markCode)).join('');
+  if ('children' in node) return node.children.map(textOf).join('');
   return '';
 }
 function prose(file: string, source: string): { blocks: Prose[]; tree: ReturnType<typeof fromMarkdown>; source: string } {
   const result: Prose[] = [];
   const visit = (node: Nodes): void => {
     if (node.type === 'paragraph' || node.type === 'heading') {
-      const text = textOf(node, false);
-      const sentences = textOf(node, true, true).split(SENTENCE_BREAK).map(sentence => sentence.replaceAll(CODE_START, ''));
-      result.push({ line: node.position?.start.line ?? 1, text, readable: text, sentences: text.split(SENTENCE_BREAK), paragraph: node.type === 'paragraph' && !/^\s*\|/u.test(text) });
+      const text = textOf(node);
+      result.push({ line: node.position?.start.line ?? 1, text, readable: text, sentences: text.split(SENTENCE_BREAK), paragraph: node.type === 'paragraph' && !text.split('\n').some(line => /^\s*\|/u.test(line) || /^\s*\|?\s*:?-{3,}:?\s*\|/u.test(line)) });
     } else if ('children' in node) node.children.forEach(visit);
   };
   const authored = authoredSource(file, source), tree = fromMarkdown(authored);
@@ -74,7 +70,6 @@ function prose(file: string, source: string): { blocks: Prose[]; tree: ReturnTyp
 }
 // @concord-end
 const length = (text: string): number => [...text.replace(/\s/gu, '')].length;
-const rootsOf = (owner: PolicyOwner): readonly string[] => owner.policy.roots ?? [owner.scope];
 // @concord-begin
 // @concord-implements docs/feature/documentation-quality/format.md#conceptsmd
 // @concord-implements docs/feature/documentation-quality/format.md#writingmd
@@ -193,16 +188,15 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
           checkTerms(file, block.line, block.text, bans, active, findings);
           for (const item of concepts) if (!used.has(item.reference) && !sourceCatalogs.has(file) && spellingPositions(block.readable, item.concept.term).length > 0) used.add(item.reference);
           if (!block.paragraph) continue;
-          const legacySource = (key: 'paragraphLength' | 'sentenceLength'): PolicySource | undefined => { const owner = [...owners].reverse().find(owner => owner.policy[key] !== undefined); return owner ? { path: owner.path, pointer: `/${key}` } : undefined; };
+          const limitSource = (key: 'paragraphLength' | 'sentenceLength'): PolicySource | undefined => { const owner = [...owners].reverse().find(owner => owner.policy[key] !== undefined); return owner ? { path: owner.path, pointer: `/${key}` } : undefined; };
           const paragraphLength = inherited(owners, 'paragraphLength');
-          if (paragraphLength != null && length(block.readable) > paragraphLength) findings.push({ file, line: block.line, rule: 'paragraphLength', message: `Paragraph has ${length(block.readable)} characters; maximum ${paragraphLength}`, context: block.readable.trim().slice(0, 240), source: legacySource('paragraphLength') });
+          if (paragraphLength != null && length(block.readable) > paragraphLength) findings.push({ file, line: block.line, rule: 'paragraphLength', message: `Paragraph has ${length(block.readable)} characters; maximum ${paragraphLength}`, context: block.readable.trim().slice(0, 240), source: limitSource('paragraphLength') });
           const sentenceLength = inherited(owners, 'sentenceLength');
           for (const sentence of block.sentences) {
-            if (sentenceLength != null && length(sentence) > sentenceLength) findings.push({ file, line: block.line, rule: 'sentenceLength', message: `Sentence has ${length(sentence)} characters; maximum ${sentenceLength}`, context: sentence.trim().slice(0, 240), source: legacySource('sentenceLength') });
+            if (sentenceLength != null && length(sentence) > sentenceLength) findings.push({ file, line: block.line, rule: 'sentenceLength', message: `Sentence has ${length(sentence)} characters; maximum ${sentenceLength}`, context: sentence.trim().slice(0, 240), source: limitSource('sentenceLength') });
             if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
           }
         }
-        const original = inputs.get(file)!;
         if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
       }
       for (const item of catalogs.catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, record, concept })))) {
@@ -210,13 +204,13 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
         if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
       }
     }
-    for (const [path, before] of inputs) if (repo.read(path) !== (path === 'concord.config.ts' && before === '' ? undefined : before)) throw new ConcordError('WritingInputsChanged', `${path} changed during writing checks`);
+    for (const [path, before] of inputs) if (repo.read(path) !== (path === 'concord.config.ts' && before === '' ? undefined : before)) throw new ConcordError('SourceChanged', `${path} changed during writing checks`);
     const currentDocsMembers = repo.files('docs');
     for (const [root, before] of memberships) {
       const after = (root === 'docs' ? currentDocsMembers : repo.files(root)).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
-      if (JSON.stringify(after) !== JSON.stringify(before)) throw new ConcordError('WritingInputsChanged', `${root} membership changed during writing checks`);
+      if (JSON.stringify(after) !== JSON.stringify(before)) throw new ConcordError('SourceChanged', `${root} membership changed during writing checks`);
     }
-    if (JSON.stringify(discovered(repo, 'policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered(repo, 'catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('WritingInputsChanged', 'Writing owner membership changed during checks');
+    if (JSON.stringify(discovered(repo, 'policy', currentDocsMembers)) !== JSON.stringify(policyPaths) || JSON.stringify(discovered(repo, 'catalog', currentDocsMembers)) !== JSON.stringify(catalogPaths)) throw new ConcordError('SourceChanged', 'Writing owner membership changed during checks');
     if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
     findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
     if (persistentCache && cached === undefined) writeWritingFindings(repo, cacheDigest, findings);

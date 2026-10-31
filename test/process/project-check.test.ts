@@ -1,3 +1,4 @@
+import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
 import { initialize } from '../support/operations.js';
 import { LocalRepository as RepositoryBase } from '../../src/base/workspace/index.js';
 import { installedConcordCli } from '../support/support.js';
@@ -37,10 +38,11 @@ test('project check combines relation and writing findings and reports incomplet
 
   const page = join(root, 'docs/_template/README.md');
   writeFileSync(page, `${readFileSync(page, 'utf8')}\nForbidden phrase.\n`);
-  const policy = join(root, 'docs/concord-writing.json');
-  const current = JSON.parse(readFileSync(policy, 'utf8')) as { bannedTerms: unknown[] };
-  current.bannedTerms.push({ term: 'Forbidden phrase', use: 'Allowed phrase', why: 'test rule' });
-  writeFileSync(policy, `${JSON.stringify(current)}\n`);
+  const policy = join(root, 'docs/writing.md');
+  const current = parseWritingPolicy(readFileSync(policy, 'utf8'));
+  const terms = [...current.bannedTerms];
+  terms.push({ term: 'Forbidden phrase', use: 'Allowed phrase', why: 'test rule' });
+  writeFileSync(policy, renderWritingPolicy({ ...current, bannedTerms: terms }));
   const writingOnly = withRepo(checkProject);
   assert.equal(writingOnly.ok, false);
   assert.equal(writingOnly.complete, true);

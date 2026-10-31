@@ -258,16 +258,13 @@ test('steps C20 Memory support relations block rename with zero writes', () => E
   assert.equal(existsSync(join(repo.privateDir, 'journal.json')), false);
 }))));
 
-// @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
+// @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 // @name steps-writing-length
-test('steps writing ignores real terminal IDs in sentence and paragraph length but retains inline examples', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
+test('steps writing ignores real terminal IDs in sentence and paragraph length but ignores inline examples', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document(`# Flow\n\n1. Short {#${'long'.repeat(30)}}\n`));
-  write(root, 'steps-policy.json', JSON.stringify({ format: 'concord.writing/v3', roots: [path], bannedTerms: [], sentenceLength: 12, paragraphLength: 12,
-    controlled: { language: 'en', sentence: { en: { procedural: 1 } } } }));
-  assert.deepEqual(checkWriting(repo, 'steps-policy.json').findings, []);
+  write(root, 'docs/writing.md', '# Rules\n\n句子不超过 12 个字符，段落不超过 12 个字符。\n\n## 检查范围\n\n- ' + path + '\n');
+  assert.deepEqual(checkWriting(repo).findings, []);
   write(root, path, document(`# Flow\n\n1. Short \`{#${'long'.repeat(30)}}\`\n`));
-  const findings = checkWriting(repo, 'steps-policy.json').findings;
-  assert.ok(findings.some(finding => finding.rule === 'sentenceLength'));
-  assert.ok(findings.some(finding => finding.rule === 'paragraphLength'));
-  assert.ok(findings.some(finding => finding.rule === 'proceduralSentenceLength'));
+  const findings = checkWriting(repo).findings;
+  assert.deepEqual(findings, []);
 }))));

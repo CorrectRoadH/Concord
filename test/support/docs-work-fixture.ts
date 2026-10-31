@@ -15,7 +15,7 @@ function buildFixture(docsWork?: unknown, initialConfig = true) {
   writeFileSync(join(root, 'docs/README.md'), '# Documentation\n');
   writeFileSync(join(root, 'docs/input.md'), '# Input\n'); writeFileSync(join(root, 'outside.txt'), 'Outside\n');
   if (initialConfig) writeProjectConfig(root, { testRoots: [], sourceRoots: [], runner: { kind: 'command', argv: [process.execPath, '-e', 'process.exit(0)'], sourceFiles: [], timeoutMs: 1000 }, ...(docsWork === undefined ? {} : { docsWork }) });
-  writeFileSync(join(root, 'docs/concord-writing.json'), defaultWritingSource);
+  writeFileSync(join(root, 'docs/writing.md'), defaultWritingSource);
   git(root, 'add', "."); git(root, 'commit', '-qm', 'fixture');
   return root;
 }

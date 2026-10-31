@@ -66,7 +66,7 @@ test('only a term in effective prose counts as usage; catalogs still obey writin
   try {
     withRepo(root, repo => {
       writeWritingFile(repo, { roots: ['docs/feature/sample'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'fixture' }], }, showWriting(repo).digest);
-      const source = '---\ndeprecated:\n  issue: [观察]\n---\n\n# Terms\n\n## Issue {#issue}\n\nAn issue.\n\n### Explanation\n\n`观察` is old. Forbidden.\n';
+      const source = '# Terms\n\n## Issue {#issue}\n\nAn issue.\n\n旧写法：`观察`\n\n### Explanation\n\nForbidden.\n';
       writeConceptFile(repo, source, null, false, 'docs/feature/sample/concepts.md');
     });
     write(root, 'docs/feature/sample/page.md', '观察。\n');

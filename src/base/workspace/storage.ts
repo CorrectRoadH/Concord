@@ -148,7 +148,6 @@ const JournalScopeSchema = Schema.Union([
 const JournalSchema = Schema.Struct({
   format: Schema.Literal('concord.journal'), root: Text, privateDir: Text, operation: Text,
   phase: Schema.Literals(['prepared', 'committed']), directories: Schema.Array(Text), changes: Schema.Array(JournalChangeSchema), scope: JournalScopeSchema,
-  catalogDependencies: Schema.optional(Schema.Array(Schema.Struct({ path: Text, digest: Text }))),
 });
 type Journal = typeof JournalSchema.Type;
 
@@ -643,7 +642,7 @@ export class LocalRepository implements Repository {
   }
   // @concord-code
   // @concord-implements docs/feature/local-sdlc/architecture.md#写入管线
-  publish(operation: string, changes: readonly Change[], dryRun = false, catalogGuard?: readonly { path: string; digest: string }[]): MutationReceipt {
+  publish(operation: string, changes: readonly Change[], dryRun = false): MutationReceipt {
     if (this.access === 'read' && !dryRun && !this.noWrite) throw new ConcordError('ReadOnlyRepository', 'Publication requires write access');
     const managedWritingOwner = (path: string) => path.startsWith('docs/') && !path.split('/').some(part => part === '_template' || part === '.git' || part === 'node_modules') && (path.endsWith(`/${policyName}`) || path.endsWith(`/${catalogName}`));
     if (operation === 'init') {
@@ -672,7 +671,7 @@ export class LocalRepository implements Repository {
     const directories = new Set<string>();
     for (const c of entries) { let dir = dirname(c.path); while (dir !== '.') { if (!present(this.absolute(dir))) directories.add(dir); dir = dirname(dir); } }
     const isInit = operation === 'init' && this.configSnapshot.source === '';
-    const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest }, ...(catalogGuard === undefined ? {} : { catalogDependencies: [...catalogGuard] }) };
+    const journal: Journal = { format: 'concord.journal', root: this.root, privateDir: this.privateDir, operation, phase: 'prepared', directories: [...directories].sort((a,b) => a.length - b.length), changes: entries, scope: isInit ? { kind: 'documents', configPath: 'concord.config.ts', configSource: '', configDigest: digest('') } : { kind: 'documents', configPath: this.configSnapshot.path, configSource: this.configSnapshot.source, configDigest: this.configSnapshot.digest } };
     const receipt = this.publishJournal(journal, dryRun);
     if (!receipt.dryRun && plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) {
       this.configSnapshot = snapshot(plannedConfigChange.path as ConfigSnapshot['path'], plannedConfigChange.after, this.persistentCache === 'off' ? undefined : this.privateDir);
@@ -826,11 +825,10 @@ export class LocalRepository implements Repository {
       }
     }
     this.validation!.validateCatalog(this, journal, fail);
-    if (journal.operation !== 'set-concepts' && journal.catalogDependencies !== undefined) fail('Unexpected catalog dependency guard');
     assertDarwinPublicationPaths([...journal.changes.map((change) => change.path), ...journal.directories]);
     if (journal.scope.kind === 'issue-close') {
       const scope = journal.scope;
-      if (journal.operation !== 'close-issue' || journal.directories.length !== 0 || journal.catalogDependencies !== undefined) fail('Issue closure has an unauthorized operation or directory write');
+      if (journal.operation !== 'close-issue' || journal.directories.length !== 0) fail('Issue closure has an unauthorized operation or directory write');
       const current = this.currentSnapshot();
       if (digest(scope.configSource) !== scope.configDigest || current.path !== scope.configPath || current.digest !== scope.configDigest) fail('Issue closure project configuration changed');
       const before = new Map(journal.changes.map(change => [change.path, change.before]));
@@ -849,7 +847,7 @@ export class LocalRepository implements Repository {
       } catch (cause) { fail(`Issue closure authorization failed: ${cause instanceof Error ? cause.message : String(cause)}`); }
     } else if (journal.scope.kind === 'step-rename') {
       const scope = journal.scope;
-      if (journal.operation !== 'rename-step' || journal.directories.length !== 0 || journal.catalogDependencies !== undefined) fail('Step rename cannot create directories or use another operation');
+      if (journal.operation !== 'rename-step' || journal.directories.length !== 0) fail('Step rename cannot create directories or use another operation');
       const current = this.currentSnapshot();
       const before = new Map(journal.changes.map(change => [change.path, change.before]));
       const requiredMemberships = new Set<string>();

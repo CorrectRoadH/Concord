@@ -1,8 +1,7 @@
 import { Layer } from "effect";
 import { PublicationValidation } from "../base/publication/index.js";
 import { readWritingPolicy } from "../domain/writing/index.js";
-import { analyzeCatalogs, catalogDependencies, catalogSources, readConceptCatalog, splitReference } from "../domain/concepts/index.js";
-import { scopeOf, catalogName, EMPTY_CONCEPT_CATALOG, canonical } from "../model/index.js";
+import { EMPTY_CONCEPT_CATALOG } from "../model/index.js";
 import { planIssueClose } from './issue-close.js';
 import { planStepRename } from "./step-rewrite.js";
 

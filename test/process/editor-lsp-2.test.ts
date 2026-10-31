@@ -1,3 +1,4 @@
+import { parseWritingPolicy, renderWritingPolicy } from '../../src/model/index.js';
 import { pollUntil } from '../support/support.js';
 import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync, join, resolve, fileURLToPath, pathToFileURL, test, Effect, Schema, readProjectConfig, writeProjectConfig, Position, Range, Location, Response, Diagnostics, file, reference, source, stepLine, testText, codeText, scratch, entry, cli, consumer, Client, run } from '../support/editor-fixture.js';
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
@@ -5,9 +6,9 @@ import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync,
 test('packed editor C9/C17 rereads disk configuration, policy, deletion and rename without moving overlays', { timeout: 90000 }, () => run(async (c, root) => {
   c.open(file, source('new-step')); c.open('test/flow.ts', testText(reference));
   await c.diagnostic('test/flow.ts', 1);
-  const policyPath = 'docs/concord-writing.json';
-  const policy = JSON.parse(readFileSync(join(root, policyPath), 'utf8')) as Record<string, unknown>;
-  c.open(policyPath, JSON.stringify({ ...policy, bannedTerms: [{ term: 'buffer', use: 'document', why: 'Precise noun' }] }), 1, 'json');
+  const policyPath = 'docs/writing.md';
+  const policy = parseWritingPolicy(readFileSync(join(root, policyPath), 'utf8'));
+  c.open(policyPath, renderWritingPolicy({ ...policy, bannedTerms: [{ term: 'buffer', use: 'document', why: 'Precise noun' }] }), 1, 'markdown');
   const count = c.diagnostics.length;
   c.change(file, source('new-step'), 2);
   assert.ok((await c.diagnostic(file, 2, count)).diagnostics.some(item => item.code === 'bannedTerm'));

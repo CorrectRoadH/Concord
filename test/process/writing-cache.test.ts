@@ -13,13 +13,13 @@ import { LocalRepository } from "../support/repository.js";
 import { checkWriting } from "../../src/domain/writing/index.js";
 import { openHawdb } from "../../src/base/cache/index.js";
 
-const policy = JSON.stringify({ format: 'concord.writing/v3', roots: ['docs'], bannedTerms: [], sentenceLength: 5 });
+const policy = '# Rules\n\n句子不超过 5 个字符。\n';
 function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeof checkWriting>) => void) {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-cache-'));
   execFileSync('git', ['init', '-q', root]);
   const initial = new LocalRepository(root, { initialize: true });
   try { initialize(initial, false, { testRoots: [] }); } finally { initial.close(); }
-  writeFileSync(join(root, 'docs/concord-writing.json'), policy);
+  writeFileSync(join(root, 'docs/writing.md'), policy);
   writeFileSync(join(root, 'docs/corpus.md'), 'One two three.\n');
   openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: false, create: true }).close();
   const scan = (cache = true) => {
@@ -29,7 +29,7 @@ function fixture(run: (root: string, scan: (cache?: boolean) => ReturnType<typeo
   try { run(root, scan); } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
-// @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
+// @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('writing cache validates current sources, members, policies and payload integrity', () => Effect.runPromise(Effect.sync(() => fixture((root, scan) => {
   const uncached = scan(false);
   if (existsSync(join(root, '.git/concord/cache.hawdb'))) {
@@ -54,9 +54,9 @@ test('writing cache validates current sources, members, policies and payload int
   assert.ok(!scan().findings.some(f => f.file === 'docs/corpus.md'));
   writeFileSync(join(root, 'docs/new.md'), 'A newly added paragraph.\n');
   assert.ok(scan().findings.some(f => f.file === 'docs/new.md'));
-  writeFileSync(join(root, 'docs/concord-writing.json'), '{"format":"concord.writing/v3","unknown":true}');
+  writeFileSync(join(root, 'docs/writing.md'), '{"format":"concord.writing/v3","unknown":true}');
   assert.throws(() => scan(), { code: 'InvalidWritingPolicy' });
-  writeFileSync(join(root, 'docs/concord-writing.json'), policy);
+  writeFileSync(join(root, 'docs/writing.md'), policy);
   const repo = new LocalRepository(root, { access: 'read' });
   const read = repo.read.bind(repo);
   let changed = false;
@@ -68,7 +68,7 @@ test('writing cache validates current sources, members, policies and payload int
   try { assert.throws(() => checkWriting(repo), { code: 'WritingInputsChanged' }); } finally { repo.close(); }
 }))));
 
-// @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md
+// @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 test('a new public CLI process reuses validated writing findings without reparsing prose', () => Effect.runPromise(Effect.sync(() => fixture((root, scan) => {
   const loaded = join(root, 'loaded.json'), counts = join(root, 'parse-counts.jsonl');
   const modules = () => {
@@ -83,7 +83,7 @@ test('a new public CLI process reuses validated writing findings without reparsi
       output = result.stdout || result.stderr;
     }
     assert.equal(JSON.parse(output).operation, 'docs-check', output);
-    return { output, parses: readFileSync(counts, 'utf8').trim().split('\n').filter(Boolean) };
+    return { output, parses: readFileSync(counts, 'utf8').trim().split('\n').filter(Boolean).filter(value => JSON.parse(value) === 'One two three.\n') };
   };
   const cold = modules();
   assert.ok(cold.parses.length > 0, 'cold positive control must observe real prose parsing');

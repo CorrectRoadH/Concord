@@ -30,7 +30,7 @@ test('installed self-host commands accept the checkout and reject a broken imple
     const configPath = projectConfigPath(root);
     cpSync(join(root, configPath), join(consumer, configPath));
     // The global writing policy may select prose outside docs (READMEs, skills, templates).
-    const writingRoots = readWritingPolicy(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8')).roots ?? [];
+    const writingRoots = readWritingPolicy(readFileSync(join(root, 'docs/writing.md'), 'utf8')).roots ?? [];
     const sources = new Set(['docs', ...(project.testRoots ?? ['test']), ...(project.sourceRoots ?? []),
       'memory', ...(project.runner?.sourceFiles ?? []), ...writingRoots]);
     for (const source of sources) {

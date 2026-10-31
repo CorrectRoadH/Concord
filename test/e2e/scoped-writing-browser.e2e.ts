@@ -1,3 +1,4 @@
+import { parseWritingPolicy } from '../../src/model/index.js';
 import { writeConceptFile, writeWritingFile } from '../support/writing-files.js';
 import { initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
@@ -29,8 +30,8 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
       initialize(repo, false, { testRoots: [] });
       mkdirSync(join(root, a), { recursive: true });
       mkdirSync(join(root, b), { recursive: true });
-      writeWritingFile(repo, { bannedTerms: [{ term: 'Old', use: 'Alpha', why: 'scope A' }] }, null, false, `${a}/concord-writing.json`);
-      writeWritingFile(repo, { bannedTerms: [{ term: 'Old', use: 'Beta', why: 'scope B' }] }, null, false, `${b}/concord-writing.json`);
+      writeWritingFile(repo, { bannedTerms: [{ term: 'Old', use: 'Alpha', why: 'scope A' }] }, null, false, `${a}/writing.md`);
+      writeWritingFile(repo, { bannedTerms: [{ term: 'Old', use: 'Beta', why: 'scope B' }] }, null, false, `${b}/writing.md`);
       writeConceptFile(repo, "# Terms\n\n## Beta {#beta}\n\nBeta definition\n", null, false, `${b}/concepts.md`);
       const global = showConcepts(repo);
       writeConceptFile(repo, "# Terms\n\n```markdown\n## Example {#global}\n\nAn example only.\n```\n\n## Global {#global}\n\nGlobal definition\n\n## Second {#second}\n\nSecond definition\n", global.digest, false, 'docs/concepts.md');
@@ -80,7 +81,7 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     const release = new Promise<void>(resolve => { releaseA = resolve; });
     await page.route('**/api/action', async route => {
       const input = route.request().postDataJSON() as { action?: string; path?: string };
-      if (input.action === 'writing.show' && input.path === `${a}/concord-writing.json`) {
+      if (input.action === 'writing.show' && input.path === `${a}/writing.md`) {
         interceptedA();
         await release;
       }
@@ -110,8 +111,8 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     await expect(source).toContainText('Beta draft');
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByRole('button', { name: '保存规则' }).click();
-    await expect.poll(() => JSON.parse(readFileSync(join(root, b, 'concord-writing.json'), 'utf8')).bannedTerms[0]?.use).toBe('Beta saved');
-    assert.equal(JSON.parse(readFileSync(join(root, b, 'concord-writing.json'), 'utf8')).roots, undefined);
+    await expect.poll(() => parseWritingPolicy(readFileSync(join(root, b, 'writing.md'), 'utf8')).bannedTerms[0]?.use).toBe('Beta saved');
+    assert.equal(parseWritingPolicy(readFileSync(join(root, b, 'writing.md'), 'utf8')).roots, undefined);
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await expect(page.getByText('写作规则已保存。')).toBeVisible();
     await expect(source).toContainText('Beta draft');
@@ -153,7 +154,7 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     await page.getByRole('button', { name: '留在当前范围' }).click();
     await expect(source).toContainText('Beta draft');
     const unchanged = new LocalRepository(root);
-    try { assert.equal(showWriting(unchanged, `${b}/concord-writing.json`).policy?.bannedTerms[0]?.use, 'Beta saved'); }
+    try { assert.equal(showWriting(unchanged, `${b}/writing.md`).policy?.bannedTerms[0]?.use, 'Beta saved'); }
     finally { unchanged.close(); }
   } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
@@ -237,7 +238,7 @@ test('real browser creates a local Markdown catalog, diagnoses structure and sav
     await page.getByRole('button', { name: '打开范围' }).click();
     await page.getByRole('button', { name: '创建本目录术语表' }).click();
     const source = page.getByRole('textbox', { name: '源码原文' });
-    const markdown = '---\nimports: [docs/concepts.md#global]\ndeprecated:\n  local: [Legacy]\n---\n\n# Local terms\n\n## 本地 {#local}\n\nLocal definition\n\n### Explanation\n\nUse `Legacy` only in code.\n';
+    const markdown = '# Local terms\n\n## 本地 {#local}\n\nLocal definition\n\n旧写法：`Legacy`\n\n### Explanation\n\nUse `Legacy` only in code.\n';
     await source.fill('# Local terms\n\n## Missing ID\n');
     await expect(page.getByRole('alert')).toContainText('InvalidConceptCatalog');
     await expect(page.getByRole('button', { name: '保存术语' })).toBeDisabled();
@@ -252,13 +253,13 @@ test('real browser creates a local Markdown catalog, diagnoses structure and sav
     await expect(page.getByLabel('上级写作规则')).toContainText('320');
     await expect(page.getByText('沿用上级规则，尚无本范围的调整')).toBeVisible();
     await page.getByRole('button', { name: '添加规则' }).click();
-    await page.getByLabel('句子长度设置').selectOption('clear');
+    await page.getByLabel('句子长度', { exact: true }).fill('');
     await expect(page.getByLabel('SVG 样式继承方式')).toHaveCount(0);
     await page.getByRole('link', { name: '写作', exact: true }).click();
     await page.getByRole('button', { name: '保存规则' }).click();
     await expect(page.getByRole('region', { name: '写作规则编辑' }).getByRole('status')).toHaveText('写作规则已保存。');
-    await expect.poll(() => JSON.parse(readFileSync(join(root, scope, 'concord-writing.json'), 'utf8')).sentenceLength).toBe(null);
-    const policy = JSON.parse(readFileSync(join(root, scope, 'concord-writing.json'), 'utf8')) as { roots?: string[]; svgStyle?: null };
+    await expect.poll(() => parseWritingPolicy(readFileSync(join(root, scope, 'writing.md'), 'utf8')).sentenceLength).toBe(undefined);
+    const policy = parseWritingPolicy(readFileSync(join(root, scope, 'writing.md'), 'utf8')) as { roots?: string[]; svgStyle?: null };
     assert.equal(policy.roots, undefined);
     assert.equal(policy.svgStyle, undefined);
   } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }

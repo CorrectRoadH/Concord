@@ -1,3 +1,4 @@
+import { parseWritingPolicy } from '../../src/model/index.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -31,7 +32,7 @@ test('writing save wait keeps reload behind the successful HTTP receipt', ({ pag
     const capture = new Promise<void>(resolve => { captured = resolve; });
     const held = new Promise<void>(resolve => { release = resolve; });
     await page.route('**/api/action', async route => {
-      if (route.request().postDataJSON().action !== 'writing.set') return route.continue();
+      if (route.request().postDataJSON().action !== 'document.set') return route.continue();
       const response = await route.fetch();
       assert.equal(response.status(), 200);
       captured();
@@ -42,8 +43,8 @@ test('writing save wait keeps reload behind the successful HTTP receipt', ({ pag
     await input.fill(replacement);
     await page.getByRole('button', { name: '保存规则', exact: true }).click();
     await capture;
-    const path = join(root, 'docs/concord-writing.json');
-    assert.equal(JSON.parse(readFileSync(path, 'utf8')).bannedTerms.at(-1).use, replacement);
+    const path = join(root, 'docs/writing.md');
+    assert.equal(parseWritingPolicy(readFileSync(path, 'utf8')).bannedTerms.at(-1)?.use, replacement);
     let returned = false;
     waiting = waitForWritingSave(page, path, replacement).then(() => { returned = true; });
     await expect(page.getByText('有未保存更改', { exact: true })).toBeVisible();

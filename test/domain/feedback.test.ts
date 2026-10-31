@@ -12,7 +12,7 @@ import { getViewFile, getWorkspaceSnapshot } from "../../src/app/index.js";
 import { cacheStatus, scanAnnotations, clearCache } from "../../src/domain/tests/index.js";
 import { checkDocuments, loadDocuments, setAuthor } from "../../src/domain/documents/index.js";
 
-import { closeIssue, linkFeedbackFeature } from "../../src/domain/issues/index.js";
+import { adoptIssue, closeIssue } from "../../src/domain/issues/index.js";
 import { renderDocument } from "../../src/model/index.js";
 import { mergeFeedbackCache, readFeedbackCache, PersistentCache } from "../../src/base/cache/index.js";
 import { openHawdb } from "../../src/base/cache/index.js";
@@ -160,16 +160,14 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
       assert.equal(item.remote?.title, 'Changed remote title');
       assert.equal(item.triage, 'pending');
       createDocument(repo, 'feature', { id: 'feedback-home', title: 'Feedback home' });
-      linkFeedbackFeature(repo, item.document.metadata.id, 'feedback-home');
+      adoptIssue(repo, item.document.metadata.id, 'docs/feature/feedback-home/README.md');
       assert.equal(listFeedback(repo)[0]?.triage, 'linked');
       closeIssue(repo, item.document.metadata.id, 'Triaged');
       clearCache(repo);
-      const uncached = listFeedback(repo)[0]!;
-      assert.equal(uncached.availability, 'unavailable');
-      assert.equal(uncached.remote, null);
+      assert.deepEqual(listFeedback(repo), []);
     });
     const afterClear = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue({ state: 'open', updated_at: '2026-09-14T02:00:00Z' })]), credential: 'test-token' }));
-    assert.equal(afterClear.imported, 0, 'cache clear must not erase durable source identity');
+    assert.equal(afterClear.imported, 1, 'a deleted local Issue no longer owns the remote identity');
     open(root, repo => {
       const current = showConfig(repo);
       setConfig(repo, { ...current.config, feedbackConnections: [...(current.config.feedbackConnections ?? []), { id: 'github-copy', provider: 'github', credentialEnv: 'TEST_GITHUB_TOKEN', owner: 'acme', repo: 'project' }] }, current.digest);

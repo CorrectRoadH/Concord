@@ -86,7 +86,7 @@ export class ConcordApi {
   }
   action(action: ViewAction, signal?: AbortSignal): Promise<unknown> {
     const request = () => this.request('/api/action', { method: 'POST', body: JSON.stringify(action), signal });
-    return ['document.set', 'document.metadata', 'source.set', 'writing.show', 'writing.set', 'writing.check'].includes(action.action) ? this.retryBusy(request, signal) : request();
+    return ['document.set', 'document.metadata', 'source.set', 'writing.show', 'writing.check'].includes(action.action) ? this.retryBusy(request, signal) : request();
   }
   jobs(signal?: AbortSignal): Promise<readonly ViewJob[]> { return this.read(() => this.request('/api/jobs', { signal })); }
   run(caseId: string): Promise<ViewJob> { return this.request('/api/jobs', { method: 'POST', body: JSON.stringify({ caseId }) }); }

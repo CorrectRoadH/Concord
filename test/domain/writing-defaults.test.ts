@@ -18,17 +18,17 @@ import { defaultWritingSource } from "../../src/model/index.js";
 test('init adopts a complete writing preset, checks it immediately, and preserves existing policy bytes', () => Effect.runPromise(Effect.sync(() => {
   for (const existing of [false, true]) {
     const root = mkdtempSync(join(tmpdir(), 'concord-writing-preset-'));
-    const custom = '{ "format": "concord.writing/v3", "bannedTerms": [], "sentenceLength": 75 }\n';
+    const custom = '# Custom rules\n\n句子不超过 75 个字符。\n';
     try {
       execFileSync('git', ['init', '-q', root]);
       if (existing) {
         mkdirSync(join(root, 'docs'));
-        writeFileSync(join(root, 'docs/concord-writing.json'), custom);
+        writeFileSync(join(root, 'docs/writing.md'), custom);
       }
       const initial = new LocalRepository(root, { initialize: true });
       try {
         const preview = initialize(initial, true, { testRoots: [] });
-        assert.equal(preview.createdPaths.includes('docs/concord-writing.json'), !existing);
+        assert.equal(preview.createdPaths.includes('docs/writing.md'), !existing);
         initialize(initial, false, { testRoots: [] });
       } finally { initial.close(); }
       if (!existing) {
@@ -36,7 +36,7 @@ test('init adopts a complete writing preset, checks it immediately, and preserve
         try { assert.deepEqual(checkWriting(fresh).findings, []); } finally { fresh.close(); }
       }
       if (existing) {
-        assert.equal(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'), custom);
+        assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), custom);
       } else {
         writeFileSync(join(root, 'docs/sample.md'), '# 示例\n\n通过兜底处理。\n\n' + '长'.repeat(141) + '。\n');
         const repo = new LocalRepository(root);
@@ -60,9 +60,9 @@ test('init adopts a complete writing preset, checks it immediately, and preserve
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('init publication and recovery reject custom or local policies masquerading as the preset', () => Effect.runPromise(Effect.sync(() => {
   for (const [path, after] of [
-    ['docs/concord-writing.json', '{"format":"concord.writing/v3","bannedTerms":[]}\n'],
-    ['docs/feature/demo/concord-writing.json', defaultWritingSource],
-    ['docs/concord-writing.json', JSON.stringify({ ...JSON.parse(defaultWritingSource), svgTerms: true, svgStyle: null }, null, 2) + '\n'],
+    ['docs/writing.md', '# Custom rules\n'],
+    ['docs/feature/demo/writing.md', defaultWritingSource],
+    ['docs/writing.md', defaultWritingSource + '\n## Unknown section\n'],
   ] as const) {
     const root = mkdtempSync(join(tmpdir(), 'concord-writing-init-guard-'));
     try {

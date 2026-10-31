@@ -54,7 +54,7 @@ test('init only writes configured overrides and emits current templates and dire
     assert.match(instructions, /Directly edit files/);
     assert.match(instructions, /check/);
     assert.doesNotMatch(instructions, /skill repository|Do not directly read or edit/);
-    for (const path of ['docs/_template/memory/decision.md', 'docs/_template/memory/note.md', 'memory/README.md']) assert.equal(existsSync(join(root, path)), true);
+    for (const path of ['docs/_template/memory/README.md', 'docs/_template/taste.md', 'docs/_template/design/README.md', 'memory/README.md']) assert.equal(existsSync(join(root, path)), true);
     for (const path of ['docs/_template/memory/problem.md', 'docs/_template/feature-design/lifecycle.md']) assert.equal(existsSync(join(root, path)), false);
     const minimal = createDocument(repo, 'feature', { id: 'minimal', title: 'Minimal' });
     assert.deepEqual(minimal.changedPaths, ['docs/feature/minimal/README.md']);

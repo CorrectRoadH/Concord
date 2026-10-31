@@ -26,7 +26,6 @@ export type { IssueCommandRequirements } from './issue-project.js';
 export type { IssueCommandRunner } from './issue-project.js';
 export { linkIssue } from './lifecycle.js';
 export { unlinkIssue } from './lifecycle.js';
-export { linkFeedbackFeature } from './lifecycle.js';
 export { closeIssue } from './lifecycle.js';
 export { adoptIssue } from './lifecycle.js';
 export { retireIssue } from './lifecycle.js';
