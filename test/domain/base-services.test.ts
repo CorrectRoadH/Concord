@@ -66,7 +66,7 @@ test('Workspace rereads configuration for each operation and Sources rejects a c
 });
 
 // @feature docs/feature/local-data-engine/README.md
-test('read snapshots reuse captured inputs, verify drift and discard captures before the next operation', async () => {
+test('read snapshots reread current inputs, verify original observations and discard captures before the next operation', async () => {
   const root = createConsumer();
   const live = Layer.merge(Workspace.layer, Sources.layer).pipe(Layer.provide(NodeServices.layer));
   try {
@@ -74,12 +74,12 @@ test('read snapshots reuse captured inputs, verify drift and discard captures be
       const repo = yield* (yield* Workspace).openRead(root, { access: 'read', persistentCache: 'off' });
       const sources = yield* Sources;
       const result = yield* Effect.result(sources.snapshot(repo, Effect.sync(() => {
-        const before = repo.read('docs/README.md');
+        assert.notEqual(repo.read('docs/README.md'), '# Updated\n');
         const paths = repo.files('docs');
         const expected = [...paths]; paths.length = 0;
         assert.deepEqual(repo.files('docs'), expected);
         writeFileSync(join(root, 'docs/README.md'), '# Updated\n');
-        assert.equal(repo.read('docs/README.md'), before);
+        assert.equal(repo.read('docs/README.md'), '# Updated\n');
       })));
       assert.equal(result._tag, 'Failure');
       if (result._tag === 'Failure') assert.equal(result.failure.code, 'PreimageChanged');

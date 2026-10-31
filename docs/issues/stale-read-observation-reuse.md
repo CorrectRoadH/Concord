@@ -1,5 +1,8 @@
 ---
-status: open
+status: closed
+closure:
+  kind: closed
+  reason: 7e88232 修复成员枚举与末次核验的新鲜读取；回归测试在 4dd7b97 上 4 条失败（/tmp/p3-stale-read-red-4dd7b97.log）、7e88232 上 4 条通过（/tmp/p3-stale-read-green-7e88232.log）；修复提交同时改了其中一条回归测试的断言，冻结区间不成立，故不记 fixed。
 ---
 
 # 只读观察复用让枚举与末次核验读到旧状态
