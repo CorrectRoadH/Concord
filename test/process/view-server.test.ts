@@ -22,70 +22,7 @@ import { startViewServer, type ViewServerHandle } from '../e2e/server.js';
 import { parseWorkspaceProjection, pollUntil, installedConcordCli } from '../support/support.js';
 import { type WorkspaceProjection } from "../../src/model/index.js";
 
-const fixture = () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-view-'));
-  execFileSync('git', ['init', '-q', root]);
-  const webRoot = join(root, 'web-dist');
-  mkdirSync(join(webRoot, 'assets'), { recursive: true });
-  writeFileSync(join(webRoot, 'index.html'), '<!doctype html><main>application shell</main>');
-  writeFileSync(join(webRoot, 'assets/app.js'), 'globalThis.loaded = true;\n');
-  return { root, webRoot };
-};
-
-interface ResponseResult { readonly status: number; readonly type: string | undefined; readonly body: string }
-function send(server: ViewServerHandle, path: string, options: { readonly method?: string; readonly headers?: Readonly<Record<string, string>>; readonly body?: string } = {}): Promise<ResponseResult> {
-  return new Promise((resolve, reject) => {
-    // Each probe owns its connection. A pooled idle socket can expire while a
-    // synchronous fixture stalls the shared client/server event loop.
-    const call = request({ host: '127.0.0.1', port: server.port, path, agent: false, method: options.method ?? 'GET', headers: options.headers }, (response) => {
-      const chunks: Buffer[] = [];
-      response.on('data', (chunk: Buffer) => chunks.push(chunk));
-      response.once('end', () => resolve({ status: response.statusCode ?? 0, type: response.headers['content-type'], body: Buffer.concat(chunks).toString('utf8') }));
-    });
-    call.once('error', reject);
-    if (options.body !== undefined) call.write(options.body);
-    call.end();
-  });
-}
-
-function sendRaw(server: ViewServerHandle, requestText: string): Promise<ResponseResult> {
-  return new Promise((resolve, reject) => {
-    const socket = connect(server.port, '127.0.0.1', () => socket.end(requestText));
-    const chunks: Buffer[] = [];
-    socket.on('data', (chunk: Buffer) => chunks.push(chunk));
-    socket.once('error', reject);
-    socket.once('end', () => {
-      const response = Buffer.concat(chunks).toString('utf8');
-      const separator = response.indexOf('\r\n\r\n');
-      const head = separator === -1 ? response : response.slice(0, separator);
-      const body = separator === -1 ? '' : response.slice(separator + 4);
-      const status = Number(/^HTTP\/1\.1 ([0-9]{3})/u.exec(head)?.[1] ?? '0');
-      const type = /^content-type:\s*(.+)$/imu.exec(head)?.[1]?.trim();
-      resolve({ status, type, body });
-    });
-  });
-}
-
-const parsed = (response: ResponseResult): { readonly ok: boolean; readonly value?: unknown; readonly error?: string } => JSON.parse(response.body) as { readonly ok: boolean; readonly value?: unknown; readonly error?: string };
-const jsonHeaders = { 'content-type': 'application/json' };
-const waitForWorkspace = (server: ViewServerHandle, timeoutMs = 65_000, accepts: (value: WorkspaceProjection) => boolean = () => true): Promise<WorkspaceProjection> => pollUntil(async () => {
-  const response = await send(server, '/api/workspace');
-  if (response.status !== 200) return undefined;
-  const value = parseWorkspaceProjection(response.body);
-  return value !== undefined && accepts(value) ? value : undefined;
-}, { description: 'workspace projection', timeoutMs });
-
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('test HTTP requests remain independent after an event-loop stall exceeds server keep-alive', () => Effect.runPromise(Effect.tryPromise(async () => {
-  const f = fixture();
-  const server = await startViewServer({ ...f, host: '127.0.0.1', port: 0 });
-  try {
-    assert.equal((await send(server, '/assets/app.js')).status, 200);
-    // Reproduce a busy shared loop while an idle socket reaches its deadline.
-    Effect.runSync(Effect.sync(() => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 6_500)));
-    assert.equal((await send(server, '/assets/app.js')).status, 200);
-  } finally { await server.close(); rmSync(f.root, { recursive: true, force: true }); }
-})));
+import { fixture, send, sendRaw, parsed, jsonHeaders, waitForWorkspace } from '../support/view-http-fixture.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-scan-keeps-http-responsive
