@@ -1,22 +1,38 @@
+import { createDocument } from '../support/operations.js';
 import { createConsumer } from '../support/consumer.js';
 import { LocalRepository } from "../support/repository.js";
 import { editKnowledge } from "../../src/app/index.js";
-import { installedConcordCli, writeProjectConfig } from '../support/support.js';
+import { writeProjectConfig } from '../support/support.js';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { execFileSync, spawnSync } from 'node:child_process';
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { Effect, Schema } from 'effect';
 
-const cli = installedConcordCli();
-const run = (root: string, args: readonly string[], status = 0, input = ''): string => {
-  const output = spawnSync(process.execPath, [cli, '--root', root, '--json', '--fresh', ...args], { input, encoding: 'utf8', timeout: 30_000 });
-  assert.equal(output.status, status, JSON.stringify({ args, stdout: output.stdout, stderr: output.stderr, error: output.error }));
-  return output.stdout || output.stderr;
+import { checkProject, traceShow } from '../../src/app/index.js';
+import { adoptConstitution, amendConstitution, constitutionShow } from '../../src/domain/constitution/index.js';
+import { ConcordError } from '../../src/model/index.js';
+
+const inspect = (root: string, operation: (repo: LocalRepository) => unknown, status = 0): string => {
+  const repo = new LocalRepository(root);
+  try {
+    let result: unknown;
+    try { result = repo.snapshot(() => operation(repo)); }
+    catch (cause) {
+      assert.equal(status, 1, String(cause));
+      assert.ok(cause instanceof ConcordError);
+      return JSON.stringify({ error: cause.code, message: cause.message, details: cause.details });
+    }
+    if (result !== null && typeof result === 'object' && 'ok' in result) assert.equal(result.ok, status === 0);
+    else assert.equal(status, 0);
+    return JSON.stringify(result);
+  } finally { repo.close(); }
 };
+const check = (root: string, status = 0) => inspect(root, repo => checkProject(repo), status);
+const create = (root: string, kind: 'feature' | 'use-case' | 'issue' | 'engineering', id: string, title: string, input: { feature?: string; pages?: string[]; body?: string } = {}) =>
+  inspect(root, repo => createDocument(repo, kind, { id, title, ...input }));
 const fileDigest = (root: string, path: string): string => `sha256:${createHash('sha256').update(readFileSync(join(root, path))).digest('hex')}`;
 const read = (root: string, path: string) => readFileSync(join(root, path), 'utf8');
 const lineOf = (root: string, path: string, needle: string) => read(root, path).split('\n').findIndex(text => text.includes(needle)) + 1;
@@ -29,16 +45,16 @@ const Finding = Schema.Struct({ code: Schema.String, path: Schema.optional(Schem
 const findings = (output: string) => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ findings: Schema.Array(Finding) })), { onExcessProperty: 'ignore' })(output).findings;
 const Reference = Schema.Struct({ path: Schema.String, line: Schema.Number, clause: Schema.String, paragraph: Schema.NullOr(Schema.String) });
 const ShowView = Schema.Struct({ references: Schema.Array(Reference), complete: Schema.Boolean });
-const show = (root: string) => Schema.decodeUnknownSync(Schema.fromJsonString(ShowView), { onExcessProperty: 'ignore' })(run(root, ['constitution', 'show']));
-const adopt = (root: string, body: string) => run(root, ['action', '--input', '-'], 0, JSON.stringify({ action: 'constitution.adopt', body, reason: 'Adopt rules', impact: 'All pages', sources: [], expectedDigest: fileDigest(root, 'docs/constitution.md') }));
-const amend = (root: string, body: string, status = 0) => run(root, ['action', '--input', '-'], status, JSON.stringify({ action: 'constitution.amend', body, reason: 'Revise rules', impact: 'Linked pages', sources: [], expectedDigest: fileDigest(root, 'docs/constitution.md') }));
+const show = (root: string) => Schema.decodeUnknownSync(Schema.fromJsonString(ShowView), { onExcessProperty: 'ignore' })(inspect(root, constitutionShow));
+const adopt = (root: string, body: string) => inspect(root, repo => adoptConstitution(repo, body, 'Adopt rules', 'All pages', [], fileDigest(root, 'docs/constitution.md')));
+const amend = (root: string, body: string, status = 0) => inspect(root, repo => amendConstitution(repo, body, 'Revise rules', 'Linked pages', [], fileDigest(root, 'docs/constitution.md')), status);
 const rules = (paragraphs = '1. Writes keep edits. {#c-001-1}\n2. Writes check preimages. {#c-001-2}\n') => `# Constitution\n\n## 总则 {#general}\n\nRules apply to docs.\n\n## C-001 Preserve data {#c-001}\n\n${paragraphs}`;
 
 // @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#link-clause
 test('only scheme-less inline links that resolve to the constitution are references, on every docs page', () => Effect.runPromise(Effect.sync(() => withConsumer('scope', root => {
   adopt(root, rules());
-  run(root, ['new', 'feature', 'cart', '--title', 'Cart', '--pages', 'architecture']);
-  run(root, ['new', 'use-case', 'checkout', '--feature', 'cart', '--title', 'Checkout']);
+  create(root, 'feature', 'cart', 'Cart', { pages: ['architecture'] });
+  create(root, 'use-case', 'checkout', 'Checkout', { feature: 'cart' });
   const feature = 'docs/feature/cart/README.md', page = 'docs/feature/cart/architecture.md', useCase = 'docs/feature/cart/use-case/checkout.md';
   appendFileSync(join(root, feature), [
     '', 'Whole file [rules](../../constitution.md) and a clause [C-001](../../constitution.md#c-001).',
@@ -50,7 +66,7 @@ test('only scheme-less inline links that resolve to the constitution are referen
   ].join('\n'));
   appendFileSync(join(root, page), '\nThe writer keeps edits ([C-001](../../constitution.md#c-001-1)).\n');
   appendFileSync(join(root, useCase), '\nCheckout keeps edits ([C-001](../../../constitution.md#c-001-1)).\n');
-  run(root, ['check']);
+  check(root);
   const view = show(root);
   assert.equal(view.complete, true);
   assert.deepEqual(view.references, [
@@ -58,17 +74,17 @@ test('only scheme-less inline links that resolve to the constitution are referen
     { path: page, line: lineOf(root, page, '#c-001-1'), clause: 'c-001', paragraph: 'c-001-1' },
     { path: useCase, line: lineOf(root, useCase, '#c-001-1'), clause: 'c-001', paragraph: 'c-001-1' },
   ]);
-  assert.match(run(root, ['trace', 'show', feature]), /docs\/feature\/cart\/architecture\.md[\s\S]*docs\/constitution\.md#c-001-1/);
+  assert.match(inspect(root, repo => traceShow(repo, feature)), /docs\/feature\/cart\/architecture\.md[\s\S]*docs\/constitution\.md#c-001-1/);
   appendFileSync(join(root, feature), '\nQuery [rule](../../constitution.md?x#c-001).\n');
-  const query = findings(run(root, ['check'], 1));
+  const query = findings(check(root, 1));
   assert.deepEqual(query.map(item => ({ code: item.code, path: item.path, line: item.line })), [{ code: 'ConstitutionLinkInvalid', path: feature, line: lineOf(root, feature, '?x#c-001') }]);
   writeFileSync(join(root, feature), read(root, feature).replace('?x#c-001', '#c-%ZZ'));
-  const encoded = findings(run(root, ['check'], 1));
+  const encoded = findings(check(root, 1));
   assert.deepEqual(encoded.map(item => item.code), ['ConstitutionLinkInvalid']);
   assert.equal(show(root).complete, false);
   assert.match(amend(root, rules('1. Writes keep edits. {#c-001-1}\n2. Writes check preimages. {#c-001-2}\n3. Writes are scoped. {#c-001-3}\n'), 1), /ConstitutionLinkInvalid/);
   writeFileSync(join(root, feature), read(root, feature).replace('#c-%ZZ', '#c-001'));
-  run(root, ['check']);
+  check(root);
 }))));
 
 // @use-case docs/feature/project-onboarding/use-case/evolve-constitution.md#amend
@@ -76,7 +92,7 @@ test('amendment lists Issue references to a removed paragraph until the Issue is
   adopt(root, rules());
   const bodyFile = join(root, 'issue-body.md');
   writeFileSync(bodyFile, '# Preimage gap\n\nA write skipped its preimage check ([C-001](../constitution.md#c-001-2)).\n');
-  run(root, ['new', 'issue', 'preimage-gap', '--title', 'Preimage gap', '--body', bodyFile]);
+  create(root, 'issue', 'preimage-gap', 'Preimage gap', { body: readFileSync(bodyFile, 'utf8') });
   const issue = 'docs/issues/preimage-gap.md';
   const reduced = rules('1. Writes keep edits. {#c-001-1}\n');
   const refused = amend(root, reduced, 1);
@@ -86,7 +102,7 @@ test('amendment lists Issue references to a removed paragraph until the Issue is
   const repository = new LocalRepository(root);
   try { editKnowledge(repository, 'issue', issue, readFileSync(bodyFile, 'utf8'), fileDigest(root, issue)); } finally { repository.close(); }
   amend(root, reduced);
-  run(root, ['check']);
+  check(root);
 }))));
 
 const Receipt = Schema.Struct({ memory: Schema.String });
@@ -105,7 +121,7 @@ test('adopt and amend record their reason as a current Decision promoted to the 
   assert.notEqual(amended, adopted);
   assert.match(read(root, amended), /relations:\n {2}- role: amends\n {4}target: docs\/constitution\.md#c-001-2\n/u);
   assert.doesNotMatch(read(root, 'docs/constitution.md'), /amend|ratified/u);
-  run(root, ['check']);
+  check(root);
 }))));
 
 
@@ -115,19 +131,19 @@ test('non-current constitutions and declarative history fields fail strict decod
   const current = read(root, path);
   for (const source of [current.replace('status: draft', 'format: concord.constitution/v3\nstatus: draft'), current.replace('status: draft', 'format: concord.constitution/v2\nstatus: draft'), current.replace('status: draft', 'status: draft\namendments: []')]) {
     writeFileSync(join(root, path), source);
-    assert.match(run(root, ['constitution', 'show'], 1), /InvalidData/);
+    assert.match(inspect(root, constitutionShow, 1), /InvalidData/);
     assert.equal(read(root, path), source);
   }
   writeFileSync(join(root, path), current);
-  run(root, ['new', 'feature', 'cart', '--title', 'Cart']);
-  run(root, ['new', 'use-case', 'checkout', '--feature', 'cart', '--title', 'Checkout']);
-  run(root, ['new', 'engineering', 'build', '--title', 'Build']);
+  create(root, 'feature', 'cart', 'Cart');
+  create(root, 'use-case', 'checkout', 'Checkout', { feature: 'cart' });
+  create(root, 'engineering', 'build', 'Build');
   for (const owner of ['docs/feature/cart/README.md', 'docs/feature/cart/use-case/checkout.md', 'docs/engineering/build/README.md']) {
     const original = read(root, owner);
     for (const field of ['createdAt: 2026-01-01', 'createdAtSource: {}', 'origin: docs/roadmap/cart/README.md', 'constitutionRefs: []']) {
       const source = `---\n${field}\n---\n\n${original}`;
       writeFileSync(join(root, owner), source);
-      assert.ok(findings(run(root, ['check'], 1)).some(finding => finding.path === owner && finding.code === 'InvalidData'), field);
+      assert.ok(findings(check(root, 1)).some(finding => finding.path === owner && finding.code === 'InvalidData'), field);
       assert.equal(read(root, owner), source);
     }
     writeFileSync(join(root, owner), original);
@@ -141,5 +157,5 @@ test('amendment promotions include continuation changes and the surviving clause
   assert.match(read(root, revised), /relations:\n {2}- role: amends\n {4}target: docs\/constitution\.md#c-001-1\n/u);
   const reduced = memoryPath(amend(root, rules('1. Preserve edits. {#c-001-1}\n\n   Keep the exact original bytes.\n')));
   assert.match(read(root, reduced), /relations:\n {2}- role: amends\n {4}target: docs\/constitution\.md#c-001\n/u);
-  run(root, ['check']);
+  check(root);
 }))));
