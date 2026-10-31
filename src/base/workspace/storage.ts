@@ -299,7 +299,7 @@ export class LocalRepository implements Repository {
   private readonly observedFiles = new Map<string, string | undefined>();
   private readonly observedBytes = new Map<string, Buffer | undefined>();
   private observedRootFiles: string | undefined;
-  private readonly observedDirectories = new Map<string, { path: string; scope: 'source' | undefined; observation: string }>();
+  private readonly observedDirectories = new Map<string, { path: string; scope: 'source' | undefined; observation: string; files: readonly string[] }>();
   private readonly rootAnchor: readonly RootAnchor[];
   private rootFd: number | undefined;
   private readonly listings = new Map<string, Buffer[]>();
@@ -467,6 +467,9 @@ export class LocalRepository implements Repository {
     return this.snapshotDepth === 0 ? this.underLease(() => this.readObserved(path)) : this.readObserved(path);
   }
   private readObserved(path: string): string | undefined {
+    // Reuse bytes only inside this read operation. verifyObservations rereads
+    // every preimage through readCurrent before anything can be returned.
+    if (this.access === 'read' && this.snapshotDepth > 0 && this.observing && this.observedFiles.has(path)) return this.observedFiles.get(path);
     const source = this.readCurrent(path);
     if (this.observing && !this.observedFiles.has(path)) this.observedFiles.set(path, source);
     return source;
@@ -485,9 +488,11 @@ export class LocalRepository implements Repository {
     return this.snapshotDepth === 0 ? this.underLease(() => this.filesObserved(prefix, scope)) : this.filesObserved(prefix, scope);
   }
   private filesObserved(prefix: string, scope?: 'source'): string[] {
-    const scanned = this.scanDirectory(prefix, scope);
     const key = canonical([prefix, scope ?? 'all']);
-    if (this.observing && !this.observedDirectories.has(key)) this.observedDirectories.set(key, { path: prefix, scope, observation: scanned.observation });
+    const prior = this.observedDirectories.get(key);
+    if (this.access === 'read' && this.snapshotDepth > 0 && this.observing && prior) return [...prior.files];
+    const scanned = this.scanDirectory(prefix, scope);
+    if (this.observing && !prior) this.observedDirectories.set(key, { path: prefix, scope, observation: scanned.observation, files: [...scanned.files] });
     return scanned.files;
   }
   private sourcePath(path: string, roots: readonly string[]): void {
@@ -561,6 +566,7 @@ export class LocalRepository implements Repository {
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   beginSnapshot(reclaimDead = true): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
+    this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear();
     try {
       const acquire = this.recovering || !reclaimDead ? acquireFileLease : acquireRecoverablePublicationLease;
       if (!this.optimistic) this.traceLease = acquire(this.root, this.coordinationDirectory, PUBLICATION_LEASE, 'exclusive', 'snapshot', !this.previewWithoutState);
