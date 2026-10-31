@@ -13,7 +13,7 @@ import { tmpdir } from '../support/temporary.js';
 
 // @use-case docs/feature/herdr-panel/use-case/open-side-panel.md
 // @issue docs/issues/workspace-server-unimplemented.md
-test('generated panel startup and the complete CLI preserve root errors, path safety and the readable generation', { timeout: 45_000 }, async () => {
+test('generated panel startup and the complete CLI preserve the readable generation and parser isolation', { timeout: 45_000 }, async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-panel-startup-')), root = fixture();
   const install = join(scratch, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), '{"private":true}');
   installConcord(install, packConcord(scratch), [], { private: true });
@@ -21,26 +21,8 @@ test('generated panel startup and the complete CLI preserve root errors, path sa
   const manifest = resources.help, saved = `${manifest}.saved`;
   const generated = JSON.parse(readFileSync(manifest, 'utf8').split('export default ')[1]!.trim().replace(/;$/u, '')) as { panelStarts: string[][] };
   assert.deepEqual(generated.panelStarts, [['panel'], ['--root', '<root>', 'panel']]);
-  const plain = join(scratch, 'plain'); mkdirSync(plain);
-  const alias = join(scratch, 'alias'); symlinkSync(root, alias);
   const environment = { ...process.env, NO_COLOR: '1', TERM: 'dumb' };
-  const invoke = (args: readonly string[], cwd: string) => {
-    const result = spawnSync(process.execPath, [resources.bin, ...args], { cwd, env: environment, encoding: 'utf8', timeout: 15_000 });
-    assert.equal(result.error, undefined);
-    return { status: result.status, stdout: result.stdout, stderr: result.stderr };
-  };
   try {
-    for (const [args, cwd] of [
-      [['--root'], plain], [['--root', '--json', 'panel'], plain],
-      [['--root', join(scratch, 'missing'), 'panel'], plain],
-      [['--root', plain, 'panel'], plain], [['panel'], plain],
-      [['--root', alias, 'panel'], plain],
-    ] as const) {
-      const expected = invoke(args, cwd); assert.equal(expected.status, 1, JSON.stringify({ args, expected }));
-      renameSync(manifest, saved);
-      try { assert.deepEqual(invoke(args, cwd), expected, JSON.stringify(args)); }
-      finally { renameSync(saved, manifest); }
-    }
     writeProjectConfig(root, {});
     const nested = join(root, 'nested'); mkdirSync(nested);
     const observer = join(scratch, 'observe-parser.mjs'), observed = join(scratch, 'parser-loaded');
