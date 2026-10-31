@@ -6,8 +6,7 @@ import { Workspace } from "../base/workspace/index.js";
 import { Sources } from '../base/sources/index.js';
 import { Effect } from "effect";
 import { genericPrivateDirectorySync } from "../base/publication/index.js";
-import { assertLeasePath, ownerIsAlive, readLeaseOwner, PUBLICATION_LEASE } from "../base/publication/index.js";
-import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.js";
+import { ownerIsAlive, readLeaseOwner, PUBLICATION_LEASE } from "../base/publication/index.js";
 import { HawdbFailure, hawdbIdentity, PersistentCache } from "../base/cache/index.js";
 import { workspaceInstallationIdentity } from "../base/installation/index.js";
 import { requestCacheMaintenance } from "../base/cache/index.js";
@@ -78,18 +77,13 @@ const readEnvelope = Effect.fn('workspaceProjection.readEnvelope')(function*(con
     return envelope.identity === context.identity ? envelope : undefined;
   }, catch: cause => cause });
 });
-export function workspaceRefreshOwner(context: WorkspaceProjectionContext): 'active' | 'none' {
-  const owner = readLeaseOwner(join(context.privateDir, 'workspace-refresh', 'current'), 'workspace-read');
-  if (!owner) return 'none';
-  try { return ownerIsAlive(owner) ? 'active' : 'none'; } catch { return 'active'; }
-}
 export const readWorkspaceProjection = Effect.fn('readWorkspaceProjection')(function*(context: WorkspaceProjectionContext) {
   const unavailable = (cause: unknown) => {
     const error = failure(cause);
     return new ConcordError('WorkspaceProjectionUnavailable', 'Workspace cache is unavailable. Retry refresh; repair native installation or clear the cache if indicated, then restart View.', { reason: cause instanceof HawdbFailure ? cause.code : cause instanceof ConcordError ? cause.code : 'WorkspaceProjectionInvalid', message: error.message });
   };
   const envelope = yield* readEnvelope(context).pipe(Effect.mapError(unavailable));
-  const refreshOwner = yield* Effect.try({ try: () => workspaceRefreshOwner(context), catch: unavailable });
+  const refreshOwner = 'none' as const;
   return yield* Effect.try({ try: (): WorkspaceProjection => {
   if (!envelope?.record) {
     if (envelope?.error?.code === 'RecoveryRequired') throw new ConcordError('RecoveryRequired', envelope.error.message);

@@ -26,7 +26,6 @@ import { makeWorkspaceProjectionRecord, workspaceProjectionContext as identifyPr
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';
-import { ViewScanManager } from "../../src/app/index.js";
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
 
 function fixture(): string {
