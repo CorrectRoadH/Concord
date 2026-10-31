@@ -12,7 +12,6 @@ import { pollUntil, writeProjectConfig } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
 
 // @use-case docs/feature/herdr-panel/use-case/open-side-panel.md
-// @issue docs/issues/workspace-server-unimplemented.md
 test('generated panel startup and the complete CLI preserve root errors and path safety', { timeout: 45_000 }, async () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-panel-startup-')), root = fixture();
   const install = join(scratch, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), '{"private":true}');

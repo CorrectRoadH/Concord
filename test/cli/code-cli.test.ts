@@ -67,9 +67,8 @@ test('packed CLI traces code scopes and keeps command execution independent of c
     assert.ok(engineeringOwnerSnippet.includes(`// @concord-implements ${engineering}`));
     assert.ok(engineeringPageSnippet.includes(`// @concord-implements ${engineeringPage}#overview`));
     assert.equal(call(['code', 'marker', '--scope', 'node', '--contract', `${engineeringPage}#missing`], error, 1).error, 'AnchorNotFound');
-    owner('research', { id: 'research-target', title: 'Research target' });
     owner('roadmap', { id: 'roadmap-target', title: 'Roadmap target' });
-    assert.equal(call(['code', 'marker', '--scope', 'node', '--contract', 'docs/research/research-target/README.md'], error, 1).error, 'InvalidReferenceTarget');
+    assert.equal(call(['code', 'marker', '--scope', 'node', '--contract', 'docs/research/research-target/README.md'], error, 1).error, 'ReferenceNotFound');
     assert.equal(call(['code', 'marker', '--scope', 'node', '--contract', 'docs/roadmap/roadmap-target/README.md'], error, 1).error, 'InvalidReferenceTarget');
     const snippet = call(['code', 'marker', '--scope', 'node', '--contract', useCase, '--contract', `${feature}#orders`], Schema.Struct({ snippet: Schema.String })).snippet;
     assert.ok(snippet.includes(`// @concord-implements ${useCase}`));

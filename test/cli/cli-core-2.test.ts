@@ -44,17 +44,13 @@ test('packed HTTP workspace projection reads the shared generation and holds war
  } finally {server.kill('SIGTERM');await exited;}
 });
 
-// @use-case docs/feature/document-packages/use-case/organize-freeform-research.md
-test('packed Research creates only its title and edits arbitrary nested supporting Markdown', () => {
- const root = consumer('research-package');
- const created = call(root, ['new', 'research', 'notes', '--title', 'My notes'], Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
- assert.deepEqual(created.changedPaths, ['docs/research/notes/README.md']);
- const owner = parseDocumentRecord('docs/research/notes/README.md', readFileSync(join(root, 'docs/research/notes/README.md'), 'utf8'))!;
- assert.equal(owner.body.trim(), '# My notes');
- write(root, 'docs/research/notes/材料/比较.md', '# 比较\n');
- const page = readPage(root, 'docs/research/notes/材料/比较.md');
- assert.equal(page.body.trim(), '# 比较');
- savePage(root, 'docs/research/notes/材料/比较.md', '# 任意结构\n\n自由正文。\n', page.digest);
- assert.equal(readFileSync(join(root, 'docs/research/notes/材料/比较.md'), 'utf8'), '# 任意结构\n\n自由正文。\n');
- assert.equal(call(root, ['check'], CheckOutput).ok, true);
+// @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
+test('packed CLI rejects Research category and the removed open filter', () => {
+ const root = consumer('removed-document-options');
+ for (const args of [['new', 'research', 'notes'], ['list', 'research'], ['list', '--open']]) {
+  const result = spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20000 });
+  assert.equal(result.status, 1, JSON.stringify({ args, stdout: result.stdout, stderr: result.stderr }));
+  assert.match(result.stderr, /InvalidInput/u);
+ }
+ assert.equal(existsSync(join(root, 'docs/research/notes/README.md')), false);
 });
