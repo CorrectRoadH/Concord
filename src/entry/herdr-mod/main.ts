@@ -29,6 +29,7 @@ export default class ConcordMod extends View {
     this.title = InputState.new({ placeholder: '标题' });
     const cwd = focused()?.cwd;
     if (cwd) this.useFolder(cwd, cx);
+    else this.session.error = '请先在 Git 仓库中打开。';
   }
 
   private run<A, E>(cx: Context, effect: Effect.Effect<A, E> | ((cx: Context) => Effect.Effect<A, E>), after?: (cx: Context) => void): void {
@@ -110,19 +111,28 @@ export default class ConcordMod extends View {
   }
 
   private link(target: string, cx: Context): void {
+    const session = this.session;
     const path = markdownTarget(this.session.selected ?? 'docs/README.md', target);
     if (!path) return;
     const anchor = target.split('#')[1];
     const concept = this.session.concepts.find(item => item.path === path && item.concept.id === anchor);
     if (concept) {
       this.run(cx, Effect.tryPromise(async () => {
-        this.conceptText = `# ${concept.concept.term}\n\n${concept.concept.definition ?? ''}\n\n${concept.path}\n\n${await readTextFile(`${this.session.root}/${path}`) ?? ''}`;
+        const source = await readTextFile(`${session.root}/${path}`);
+        if (!session.closed && session === this.session) this.conceptText = `# ${concept.concept.term}\n\n${concept.concept.definition ?? ''}\n\n${concept.path}\n\n${source ?? ''}`;
       }));
     } else this.open(path, cx);
   }
 
   private button(id: string, label: string, action: (cx: Context) => void): Element {
     return div().id(id).px(8).py(5).rounded(4).bg(color('raised')).text_color(color('foreground')).child(label).on_click((_event, cx) => action(cx));
+  }
+
+  private save(cx: Context): void {
+    const editor = this.editor;
+    if (editor) this.run(cx, this.session.save(editor.value()), () => {
+      if (this.editor === editor) { editor.release(); this.editor = undefined; }
+    });
   }
 
   render(_cx: Context): Element {
@@ -156,15 +166,16 @@ export default class ConcordMod extends View {
       body.push(text(session.selected));
       if (session.deleted) body.push(text('这页已被删除'));
       if (session.conflict) body.push(text('文件已变化；草稿已保留。'), this.button('merge', '查看磁盘版本并重新合并', cx => this.run(cx, Effect.tryPromise(async () => {
-        const disk = await readTextFile(`${session.root}/${session.selected!}`);
-        if (disk === null) return;
+        const path = session.selected!;
+        const disk = await readTextFile(`${session.root}/${path}`);
+        if (disk === null || session.closed || session !== this.session || session.selected !== path) return;
         this.preview?.release(); this.preview = EditorState.new({ language: 'markdown', value: disk, readonly: true }); this.previewLabel = '磁盘版本；请在草稿中合并';
         // Explicit merge begins from the newly read disk preimage, retaining the editor.
         const draft = this.editor?.value(); session.draft = undefined;
         await runEffect(session.open(session.selected!, false)); session.draft = draft;
       }))));
       if (this.editor) body.push(h_flex().gap(6).children([
-        this.button('save', '保存并检查', cx => this.run(cx, session.save(this.editor!.value()), () => { this.editor?.release(); this.editor = undefined; })),
+        this.button('save', '保存并检查', cx => this.save(cx)),
         this.button('discard', '放弃修改', cx => this.open(session.selected!, cx)),
       ]), Editor.new(this.editor).id('document-editor').flex_1());
       else if (!session.deleted) body.push(this.button('edit', '编辑', cx => this.edit(cx)), TextView.markdown(`concord-body-${session.selected}`, session.source).on_link_click((url, cx) => this.link(url, cx)));
