@@ -118,14 +118,13 @@ export default function (p: P5) {
 
 ## Constitution
 
-- [C-001](../../constitution.md#c-001)
+- [C-019](../../constitution.md#c-019)
 - [C-002](../../constitution.md#c-002)
-- [C-004](../../constitution.md#c-004)
+- [C-021](../../constitution.md#c-021)
 - [C-005](../../constitution.md#c-005)
 - [C-006](../../constitution.md#c-006)
 - [C-007](../../constitution.md#c-007)
-- [C-012](../../constitution.md#c-012)
 - [C-003](../../constitution.md#c-003)
-- [C-008](../../constitution.md#c-008)
-- [C-009](../../constitution.md#c-009)
-- [C-016](../../constitution.md#c-016)
+- [总则](../../constitution.md#general-amend)
+- [C-020](../../constitution.md#c-020)
+- [C-017](../../constitution.md#c-017)

@@ -69,7 +69,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 - 根锚点：仓库对象构造时对根做一次完整检查，记录从 `/` 到根每一级的 bigint `dev`/`ino`；快照深度 0→1 时打开根目录 fd 并与锚点比对，回到 0 时关闭。
 - 读取检查在读字节前完成：逐级 `lstat` 核对锚点 inode，不枚举仓库根之上的目录；仓库内组件先做拼写核对，再 `lstat` 拒绝 symlink。文件以不跟随 symlink 的方式打开：Darwin 用 `O_NOFOLLOW_ANY`（要求 macOS 11 及以上，否则构造以 `UnsupportedHost` 失败），Linux 用 `O_NOFOLLOW` 并以 `/proc/self/fd/<fd>` 比对期望路径，不可用时拒绝读取。打开后 `fstat` 须为普通文件；大小或 `dev`/`ino` 与最后一次 `lstat` 不一致时按来源变化报 `SourceChanged`，在投影刷新中是可重试漂移，不返回部分值。
-- 快照内目录列表：拼写核对复用本次快照的目录列表，并记录实际查过的 `dir/segment`；每次目录成员扫描都新鲜枚举，不复用拼写列表作为成员集合。列表不跨快照、不跨进程、不按时间失效，嵌套快照共享外层结构，任何自身写入开始前清空（[C-014](../../constitution.md#c-014-3)）。
+- 快照内目录列表：拼写核对复用本次快照的目录列表，并记录实际查过的 `dir/segment`；每次目录成员扫描都新鲜枚举，不复用拼写列表作为成员集合。列表不跨快照、不跨进程、不按时间失效，嵌套快照共享外层结构，任何自身写入开始前清空（[性能约束](../../engineering/concord-self-hosting/performance.md#性能约束)）。
 - 结束核验在当前快照核验、投影漂移收集和发布前观察校验三处执行，使用只供本次核验的新列表：重新核对锚点与根 fd，只复核查过的条目仍以原字节存在且无碰撞别名，再比对文件内容与目录观察。拼写不一致、别名、锚点或 `fstat` 不一致归为来源变化：当前查询与发布报 `PreimageChanged`（`source-observation`），投影把条目路径并入漂移，锚点变化记为 `.`。只有 symlink、`ELOOP` 与非普通文件报 `UnsafePath`。发布先核验后清空列表，写者自身提交不被判为变化。
 
 验收在真实临时目录中进行。快照内祖先或仓库内目录被换成 symlink 或另一真实目录时，下一次读取在读字节前报 `UnsafePath`；叶子在检查与打开之间被换成 symlink 时同样报 `UnsafePath`。只被读取过的目录新增无关文件时，当前查询成功，被扫描过的目录新增成员时报 `PreimageChanged`；写者提交后的核验不报 `PreimageChanged`；Darwin 上发布新建目录成功。仓库根的父目录很宽时，构造之后对仓库根之上的 `readdirSync` 为 0，拼写检查每目录至多枚举一次，构造阶段次数单独计数。
@@ -159,4 +159,4 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 
 全局诊断 inventory 同时携带 documents、findings 与 complete。单独的 documents 数组不表示集合完整。逐文件收集解码错误，保留错误路径与具名代码，并传播 `complete: false`。关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断。有效记录不能单独证明集合完整。requireValidTrace 同时检查 complete 和 findings。部分图不能把 Issue 关闭为 fixed、采用 Roadmap 或批准关系迁移。
 
-未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有发布租约，返回前校验来源观察与发布代次，并在未完成 journal 前停止。读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../constitution.md#c-013)。
+未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有发布租约，返回前校验来源观察与发布代次，并在未完成 journal 前停止。读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../architecture.md#操作依赖与发布协调)。

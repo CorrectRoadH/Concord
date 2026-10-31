@@ -20,8 +20,8 @@ Design 候选按内容规模使用 `plans/<name>.md` 或 `plans/<name>/README.md
 
 ## Constitution
 
-- [C-001](../../constitution.md#c-001)
+- [C-019](../../constitution.md#c-019)
 - [C-003](../../constitution.md#c-003)
-- [C-004](../../constitution.md#c-004)
+- [C-021](../../constitution.md#c-021)
 - [C-006](../../constitution.md#c-006)
-- [C-009](../../constitution.md#c-009)
+- [C-020](../../constitution.md#c-020)

@@ -246,7 +246,7 @@ run 结束时在新快照中核对起止 candidate、配置、定义、Spec、�
 
 ## 操作依赖与资源边界
 
-各命令的读取范围、完整性诊断与需要完整图的结论见 [local SDLC 架构](feature/local-sdlc/architecture.md#操作依赖)，访问模式见[可移植协调架构](feature/portable-coordination/architecture.md#access-modes)，跨功能规则见 [C-013](constitution.md#c-013)。
+各命令的读取范围、完整性诊断与需要完整图的结论见 [local SDLC 架构](feature/local-sdlc/architecture.md#操作依赖)，访问模式见[可移植协调架构](feature/portable-coordination/architecture.md#access-modes)，跨功能规则见 [操作依赖与发布协调](#操作依赖与发布协调)。
 
 来源读者不创建 publication token。返回当前结果前核验观察集合与发布代次；写者在 journal 删除前推进代次，完整发布即使发生于同一个独占区间内也能被读者检测。普通提交只删除自身 owner。
 
@@ -260,13 +260,13 @@ runner 不确定时返回 blocked，并保留 journal 的实际处理结果。�
 
 ## Design 逐项比较与裁决
 
-候选比较、裁决与暂缓的行为见[逐项比较方案并明确裁决](feature/local-sdlc/use-case/compare-design-plans.md)。候选来自 `plans/` 的直接子项，裁决是 DECISION 中的 `Selected:` 行；可以直接编辑，`design decide` 与 `check --since` 用同一规则校验。已裁决的 Design 是决策记录（[C-012](constitution.md#c-012-7)）。
+候选比较、裁决与暂缓的行为见[逐项比较方案并明确裁决](feature/local-sdlc/use-case/compare-design-plans.md)。候选来自 `plans/` 的直接子项，裁决是 DECISION 中的 `Selected:` 行；可以直接编辑，`design decide` 与 `check --since` 用同一规则校验。已裁决的 Design 是决策记录（[Design 记录](document-model.md#design-记录)）。
 
 ## 测试执行与修复核验
 
-项目配置中的 runner 命令是用户声明的验收单元。Concord 报告命令的退出结果与可观察到的执行数量，不声称收集或证明 runner 的每个子 case，不构成正式 E2E、可靠性证书或覆盖证明（[C-004](constitution.md#c-004-1)）。runner 在消费者 cwd 下以 shell=false 执行，有 timeout；取消或超时清理进程组，信号或启动失败不记为通过。命令由项目作者信任与维护。
+项目配置中的 runner 命令是用户声明的验收单元。Concord 报告命令的退出结果与可观察到的执行数量，不声称收集或证明 runner 的每个子 case，不构成正式 E2E、可靠性证书或覆盖证明（[证据的范围](feature/local-sdlc/scope.md#证据的范围)）。runner 在消费者 cwd 下以 shell=false 执行，有 timeout；取消或超时清理进程组，信号或启动失败不记为通过。命令由项目作者信任与维护。
 
-Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷候选上以非零结果结束、在被接受的快照上通过，结论写入 Issue，可在声明的输入与环境下重放（[C-004](constitution.md#c-004-2)）。
+Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷候选上以非零结果结束、在被接受的快照上通过，结论写入 Issue，可在声明的输入与环境下重放（[证据的范围](feature/local-sdlc/scope.md#证据的范围)）。
 
 ## 测试标记与缓存身份
 
@@ -325,3 +325,21 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。发行 tgz 携带 Linux x64/glibc 与 macOS arm64 原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一打包，在目标平台安装同一份包验收。
 
 `pnpm check` 构建后检查测试与脚本类型，再执行领域、恢复和 package smoke；公开 CLI 验收使用独立安装后的命令。性能预算由 `pnpm bench` 按[性能验收](engineering/concord-self-hosting/performance.md)的测量路径单独判定，不进入 `pnpm check`。
+
+## 当前格式
+
+只有当前格式，没有历史包袱（[C-020](constitution.md#c-020)）。
+
+1. 配置、owner、journal、证据与缓存只有当前格式。运行时只按当前 Schema 严格解码，其它输入按无效输入返回具名解码错误；不识别旧版本，不提供迁移命令、兼容读取或双轨模型。无法解码的 journal 与锁保留现场并阻断写入，不被普通恢复删除。
+2. 格式变化时，Concord 自身仓库与接入项目把文件直接改写为当前格式，缓存与可重建投影直接丢弃重建。缺少当前绑定的证据必须重新取证，不补字段或重算摘要伪装为当前证明。
+3. 宪法、Spec 与指南只描述当前格式与行为，不描述格式如何变化，也不说明如何从旧格式过渡。
+4. 本条约束格式边界，不改变领域数据的含义。
+
+## 操作依赖与发布协调
+
+操作依赖、发布协调和证据裁决分别定义。
+
+1. 每个操作按目标与不变量声明所需输入。局部读取与精确引用验证不以无关 owner、代码或测试全部有效为前提；目标身份、来源、归属与路径安全仍须严格校验。
+2. 全局诊断保留可读取记录和全部已发现错误。完整性随投影与关系输出传播，不完整输入不能授权依赖完整图的裁决。
+3. 只读来源访问使用乐观快照并核验观察集合和发布代次；普通写入规划不持锁，提交使用短期独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
+4. 恢复区分 journal 结果、实际回收 token 与 runner 状态，返回成功前核验恢复后的协调状态，不用无 journal 推断仓库整体可写。

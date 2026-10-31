@@ -35,7 +35,7 @@
 `use-case rename-step <use-case> <old-id> <new-id>` 在一个变更集中改写正文的 `{#old-id}` 以及全部指向 `<use-case>#<old-id>` 的精确引用：
 
 - `new-id` 须符合步骤 ID 语法，且不与该文件的标题 anchor 或其它步骤冲突。
-- 改写对象是 testRoots 中的 `@use-case` 标记、sourceRoots 中的 `@concord-implements`，以及 `docs/` 中解析后指向旧引用的 Markdown 链接。标记识别遵守 [C-011](../../../constitution.md#c-011-5)，JS/TS 字符串、模板、正则与 Markdown 代码示例中的相同文本不变；不解析测试声明，不启动 adapter 或 LSP。扫描不完整或无法可靠定位 token 时拒绝整次操作。
+- 改写对象是 testRoots 中的 `@use-case` 标记、sourceRoots 中的 `@concord-implements`，以及 `docs/` 中解析后指向旧引用的 Markdown 链接。标记识别遵守 [关联由源码声明拥有](../library.md#关联由源码声明拥有)，JS/TS 字符串、模板、正则与 Markdown 代码示例中的相同文本不变；不解析测试声明，不启动 adapter 或 LSP。扫描不完整或无法可靠定位 token 时拒绝整次操作。
 - Issue 与 Memory 的 frontmatter 关系或正文链接中出现旧引用时返回 `ManagedReferenceBlocked`，零写入，由作者直接修改或用对应命令处理。
 - 没有 `@name` 的测试标记随目标改变测试引用，带 `@name` 的保持不变；结果列出受影响的 case。
 - 只改写已识别的引用 token、步骤 ID 与链接目标，不创建、删除或移动文件，不改 frontmatter、Memory、Issue 与配置。提交前冲突零写入；发布开始后冲突或中断返回 `RecoveryRequired`，`recover` 回滚 prepared、保留 committed 结果，遇到未知编辑拒绝并保留现场。`--dry-run` 执行同一规划与校验，不发布。

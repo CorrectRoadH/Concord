@@ -1,6 +1,6 @@
 # 项目测试接入边界
 
-Concord 用源码标记把测试关联到 Spec，通过配置的 `runner` 运行测试，并只按 runner 的退出码解释结果。它不登记测试套件，不签发原生 case 覆盖或正式可靠性结论（[C-004](constitution.md#c-004-1)）。
+Concord 用源码标记把测试关联到 Spec，通过配置的 `runner` 运行测试，并只按 runner 的退出码解释结果。它不登记测试套件，不签发原生 case 覆盖或正式可靠性结论（[证据的范围](feature/local-sdlc/scope.md#证据的范围)）。
 
 ## 项目拥有
 
@@ -8,7 +8,7 @@ Concord 用源码标记把测试关联到 Spec，通过配置的 `runner` 运行
 
 ## Concord 拥有
 
-发现范围（默认取存在的 `test/`、`tests/`，测试在其它位置时配置 `testRoots`）、源码标记解析、稳定 case 身份、`concord test run`，以及以 fixed 关闭 Issue 前的[修复核验](constitution.md#c-004-2)。所有权划分见[治理边界](feature/neutral-project-governance/architecture.md#所有权)。
+发现范围（默认取存在的 `test/`、`tests/`，测试在其它位置时配置 `testRoots`）、源码标记解析、稳定 case 身份、`concord test run`，以及以 fixed 关闭 Issue 前的[修复核验](feature/local-sdlc/scope.md#证据的范围)。所有权划分见[治理边界](feature/neutral-project-governance/architecture.md#所有权)。
 
 ## 可靠性治理
 

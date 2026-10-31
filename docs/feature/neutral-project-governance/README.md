@@ -12,7 +12,7 @@ NiceEval 是实践来源与接入消费者。公开入口验收、候选与 Spec
 - Spec、实现声明、测试定义、Issue 和 Memory 各有唯一 owner，反向关系派生；Spec 采用统一布局，身份由路径推导。
 - Feature 与 Use Case 明确目标和可观察验收，重要取舍通过 Design 记录；实现声明与测试声明显式关联 Spec。
 - 测试声明与执行结果必须区分；源码标记不显示为执行通过，`test run` 的结果不声称逐 case 覆盖或正式可靠性。
-- Issue 以 fixed 关闭前必须通过[修复核验](../../constitution.md#c-004-2)。执行适配、入口或界面变化不得把核验降级为普通命令成功。
+- Issue 以 fixed 关闭前必须通过[修复核验](../local-sdlc/scope.md#证据的范围)。执行适配、入口或界面变化不得把核验降级为普通命令成功。
 - Concord 的写入具备范围校验、前像冲突保护和中断恢复；直接编辑的可信度由 `check --since <base>` 门禁保证（[决策依据](../../design/sdd-core-model/DECISION.md)）。
 
 ## 项目职责
@@ -29,12 +29,11 @@ NiceEval 是实践来源与接入消费者。公开入口验收、候选与 Spec
 
 ## Constitution
 
-- [C-001](../../constitution.md#c-001)
+- [C-019](../../constitution.md#c-019)
 - [C-002](../../constitution.md#c-002)
 - [C-003](../../constitution.md#c-003)
-- [C-004](../../constitution.md#c-004)
+- [C-021](../../constitution.md#c-021)
 - [C-006](../../constitution.md#c-006)
 - [C-007](../../constitution.md#c-007)
-- [C-008](../../constitution.md#c-008)
-- [C-009](../../constitution.md#c-009)
-- [C-010](../../constitution.md#c-010)
+- [总则](../../constitution.md#general-amend)
+- [C-020](../../constitution.md#c-020)

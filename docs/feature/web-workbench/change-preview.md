@@ -1,6 +1,6 @@
 # 变更审阅
 
-本地工作台展示当前工作区；PR 预览展示冻结提交。用户路径见[本地未提交变更](use-case/review-local-changes.md)与[PR 预览](use-case/review-pull-request.md)，`view export` 的调用与错误见 [CLI 页](cli.md#pr-静态预览导出)。本页声明 PR 静态导出的实现（[C-001](../../constitution.md#c-001)、[C-002](../../constitution.md#c-002)、[C-003](../../constitution.md#c-003)、[C-007](../../constitution.md#c-007)、[C-014](../../constitution.md#c-014)）。
+本地工作台展示当前工作区；PR 预览展示冻结提交。用户路径见[本地未提交变更](use-case/review-local-changes.md)与[PR 预览](use-case/review-pull-request.md)，`view export` 的调用与错误见 [CLI 页](cli.md#pr-静态预览导出)。本页声明 PR 静态导出的实现（[C-019](../../constitution.md#c-019)、[C-002](../../constitution.md#c-002)、[C-003](../../constitution.md#c-003)、[C-007](../../constitution.md#c-007)、[C-023](../../constitution.md#c-023)）。
 
 PR 预览是静态产物而非托管服务，避免向读者暴露仓库写入与执行能力（[决策依据](../../design/pr-change-preview/DECISION.md)）；它与本地工作台共用文件树和 diff 组件。导出不要求项目配置有效，不加载消费者配置或源码，不建立持久缓存，不联网。
 

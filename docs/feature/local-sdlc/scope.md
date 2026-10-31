@@ -33,3 +33,11 @@ Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal
 - 一个 Feature 的 README 损坏时，Memory 的 list、index、recall 与 activate 照常工作，为另一 Feature 生成注释照常工作，全局 check 报告该损坏。
 - 目标 owner、其归属链或显式 `@issue` 目标损坏时，局部命令失败，不退回祖先 owner。
 - `memory/` 含无法解析的记录时，Memory 的集合查询与短选择器查询失败；另一 canonical path 的精确读取按必要依赖验证。
+
+## 证据的范围
+
+证据只表达实际证明的范围（[C-021](../../constitution.md#c-021)）。
+
+1. 源码声明不等于执行，命令成功收据不等于逐 case 覆盖或正式 E2E 可靠性。
+2. Issue 标记为 fixed 时，同一冻结命令必须在缺陷候选上以非零结果结束、在被接受的快照上通过，两者之间测试、runner 输入与所指 Spec 不变。核验结论写入 Issue，可在声明的输入与环境下重放；command 结果不证明逐 case 执行。
+3. 文档、宪法结构或关系检查不得被展示为实现合规、功能完成或测试覆盖的证明。

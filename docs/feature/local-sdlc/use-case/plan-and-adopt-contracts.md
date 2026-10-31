@@ -44,7 +44,7 @@
    {"operation":"new","dryRun":false,"changedPaths":["docs/roadmap/checkout/README.md","docs/roadmap/checkout/use-case/README.md"]}
    ```
 
-   Roadmap 的示例都是预期输出，实现与测试不指向 Roadmap（[C-012-4](../../../constitution.md#c-012-4)）。
+   Roadmap 的示例都是预期输出，实现与测试不指向 Roadmap（[页面职责](../../../document-model.md#页面职责)）。
 
 4. 准备实现时采用 Roadmap。 {#adopt}
 

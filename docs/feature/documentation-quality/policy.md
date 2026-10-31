@@ -124,7 +124,7 @@ Each second-level heading defines one concept: its text is the only accepted spe
 
 ## 无效输入
 
-写作政策只接受 `concord.writing/v3`，术语只由 concepts.md 拥有（[C-009](../../constitution.md#c-009-1)）。其它格式的政策是无效输入，返回 `InvalidWritingPolicy` 并保留原文；其它文件不被读取或检测。
+写作政策只接受 `concord.writing/v3`，术语只由 concepts.md 拥有（[当前格式](../../architecture.md#当前格式)）。其它格式的政策是无效输入，返回 `InvalidWritingPolicy` 并保留原文；其它文件不被读取或检测。
 
 ## CLI 示例
 

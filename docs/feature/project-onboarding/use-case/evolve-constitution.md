@@ -104,7 +104,7 @@
 
 ## 格式与状态
 
-宪法的 frontmatter 只有 `status`（draft 或 active）；status 是采用授权的边界。宪法是声明式的当前规则，不保存采用日期、修订日期或修订历史，不设语义版本号（[C-012-11](../../../constitution.md#c-012-11)）；整文件 digest 是并发前像。
+宪法的 frontmatter 只有 `status`（draft 或 active）；status 是采用授权的边界。宪法是声明式的当前规则，不保存采用日期、修订日期或修订历史，不设语义版本号（[只写当前声明](../../../document-model.md#只写当前声明)）；整文件 digest 是并发前像。
 
 采用与每次修订各对应一条 Decision Memory：`type: decision`、`status: current`，以 `amends` 关系指向受影响的条款或款（`docs/constitution.md#c-NNN-K`）；标题概括修订，正文写适用范围、理由与影响，来源列为仓库相对引用。Memory 位于 `memory/`。按条款检索修订从这些 `amends` 关系派生，逐字差异由 Git 提供（[决策依据](../../../design/sdd-core-model/DECISION.md)）。
 

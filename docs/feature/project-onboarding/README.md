@@ -35,14 +35,24 @@
 | `project-onboarding/constitution-server` | 经由运行中的工作区服务读取宪法及引用 | 880ms |
 | `project-onboarding/doctor` | 接入诊断 | 5250ms |
 
+## 接入项目采用的范式
+
+以下规则约束使用 Concord 的消费仓库。
+
+1. Concord 规定一套工作范式，接入项目必须采用：统一 Spec 布局；Spec 先于实现；每项事实一个 owner；`docs/` 只写声明（[页面职责](../../document-model.md#页面职责)）；测试与实现通过显式源码标记关联 Spec。工程过程进入 Memory 与 Issue；Issue 按关闭种类的规则关闭，fixed 经过修复核验；写入遵守前像与恢复 Spec。
+2. 不提供关闭事实归属、关系解释、生命周期、证据下限及安全写入不变量的配置。项目可以配置来源位置、执行适配、文档页面和写作规则参数，配置不得绕过已采用的不变量。
+3. `concord check` 必须执行关系、生命周期及项目写作政策检查；检查失败或必需输入缺失时返回非零退出码，并区分违规与输入不完整。必查范围、必需规则与接入条件由[文档写作的聚合门禁](../documentation-quality/gate.md)声明；定向检查或独立 profile 的结果不能替代聚合门禁。聚合检查不成为局部读取和修复操作的前提。
+4. 范式不规定技术栈。产品构建与部署、原生 runner、运行环境、语言与包管理器由接入项目拥有；通用模型不要求产品包名、私有 HTTP 接口、Nx metadata 或 host/provider 分类。可选执行能力缺失只阻断需要它的操作，不使静态 Spec 与关联失效。
+5. 关闭种类的要求是关闭结论的下限，不能通过换入口或删除配置绕过。修复核验由 Concord 统一执行；runner 与 adapter 负责真实执行与资源终结，范式不要求所有项目采用同一 runner。
+6. 政策变更与跨仓库切换必须保留历史原件、互斥和恢复边界，不得形成并行授权域或降低既有关闭要求。
+
 ## Constitution
 
-- [C-001](../../constitution.md#c-001)
+- [C-019](../../constitution.md#c-019)
 - [C-003](../../constitution.md#c-003)
-- [C-004](../../constitution.md#c-004)
+- [C-021](../../constitution.md#c-021)
 - [C-005](../../constitution.md#c-005)
 - [C-006](../../constitution.md#c-006)
-- [C-008](../../constitution.md#c-008)
-- [C-009](../../constitution.md#c-009)
-- [C-012](../../constitution.md#c-012)
+- [总则](../../constitution.md#general-amend)
+- [C-020](../../constitution.md#c-020)
 - [C-002](../../constitution.md#c-002)

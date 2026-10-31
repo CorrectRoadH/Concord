@@ -24,9 +24,9 @@ Concord 提供一个 Herdr 插件，在终端 pane 中打开只读的 Spec 面�
 
 ## Constitution
 
-- [C-001](../../constitution.md#c-001)
+- [C-019](../../constitution.md#c-019)
 - [C-002](../../constitution.md#c-002)
-- [C-014](../../constitution.md#c-014)
+- [C-023](../../constitution.md#c-023)
 
 ## 性能预算
 

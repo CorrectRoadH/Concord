@@ -90,7 +90,7 @@ changedPaths 是 write 集合内相对 baseCommit 有变化的路径；summary �
 | `check` | `operation: "docs-work-check"`、`receipt`、`receiptDigest` |
 | `finalize` | `operation: "docs-work-finalize"`、`status`（`finalized`、`failed`、`blocked`）、`blocked?`（`{ itemId, reason }[]`）、`finalizer?`（`exitCode`、`outputDigest`、`summary`） |
 
-verified 只说明声明范围内的内容通过了声明的检查（[C-004](../../../constitution.md#c-004-1)）：写入其它 item 的 write 会在那个 item 的 verify 或 finalize 时被拒绝，任何 item 都未声明的路径上的改动不被报告，由父 Agent 的 diff 验收负责。Docs Work 不启动、等待或关闭 Agent，不合并 diff，不修改 docs。run 状态只属于当前 worktree，不进入 Git，不自动删除；`show` 列出其位置。
+verified 只说明声明范围内的内容通过了声明的检查（[证据的范围](../../local-sdlc/scope.md#证据的范围)）：写入其它 item 的 write 会在那个 item 的 verify 或 finalize 时被拒绝，任何 item 都未声明的路径上的改动不被报告，由父 Agent 的 diff 验收负责。Docs Work 不启动、等待或关闭 Agent，不合并 diff，不修改 docs。run 状态只属于当前 worktree，不进入 Git，不自动删除；`show` 列出其位置。
 
 ## 验收
 

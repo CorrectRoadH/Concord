@@ -29,7 +29,7 @@
 
 ## 无效输入
 
-运行时只读取 `concord.config.ts`，按当前 Schema 严格解码（[C-009](../../../constitution.md#c-009-1)）；未列出的字段是无效输入，其它文件不是配置，不被读取或检测。所有入口（CLI、init、dry-run、recover、workspace）对同一现场给出同一结果：
+运行时只读取 `concord.config.ts`，按当前 Schema 严格解码（[当前格式](../../../architecture.md#当前格式)）；未列出的字段是无效输入，其它文件不是配置，不被读取或检测。所有入口（CLI、init、dry-run、recover、workspace）对同一现场给出同一结果：
 
 | 错误 | 触发条件 |
 | --- | --- |

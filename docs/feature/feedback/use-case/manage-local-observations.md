@@ -18,7 +18,7 @@ Local、GitHub、Linear 在同一反馈列表中作为三个来源呈现。Local
 - `issue unlink <id> --role <role> <target>` 删除这一项关系；删除 adopts 即退役该承接，历史在 Git。
 - `issue close <id>` 以种类选项写入关闭结论，省略种类时为 closed。各种类的必需字段：
   - closed：`reason`。
-  - fixed：`reason` 与 `verification`。命令先按[修复核验](../../../constitution.md#c-004-2)核验，失败或无法核验时零写入。
+  - fixed：`reason` 与 `verification`。命令先按[修复核验](../../local-sdlc/scope.md#证据的范围)核验，失败或无法核验时零写入。
   - delivered：`memory`、`target` 与至少一个 `proof`；`target` 必须是当前 adopts 之一。
   - duplicate：`canonical` 指向目标 Issue，是唯一的重复关系来源，不得成环。
   - declined：`memory`，指向 current 的 decision Memory。

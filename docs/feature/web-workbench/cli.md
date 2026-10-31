@@ -23,7 +23,7 @@
 
 ## 工作区投影
 
-`workspace show --json` 扫描当前来源后返回。`workspace projection --json` 是[历史投影](../../constitution.md#c-014-4)：只读 Web 使用的同一缓存记录，输出 `{ operation: 'workspace-projection', snapshot, projection }`，不扫描、不启动刷新或后台进程（[决策依据](../../design/workspace-projection/DECISION.md)）。
+`workspace show --json` 扫描当前来源后返回。`workspace projection --json` 是[历史投影](../local-data-engine/architecture.md#缓存与原生边界的约束)：只读 Web 使用的同一缓存记录，输出 `{ operation: 'workspace-projection', snapshot, projection }`，不扫描、不启动刷新或后台进程（[决策依据](../../design/workspace-projection/DECISION.md)）。
 
 `snapshot` 是不含任何正文的导航结构，`projection` 字段为：
 

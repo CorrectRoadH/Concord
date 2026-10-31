@@ -95,7 +95,7 @@ Engineering 描述仓库自己的测试与维护机制，例如自举检查、�
 
 ### 修复要有证据
 
-缺陷写成 Issue。先提交会失败的回归测试，再单独提交修复；`concord issue close --fixed` 在缺陷提交上运行测试并要求失败，在当前 HEAD 上运行并要求通过，两者之间测试、runner 配置与所指 Spec 不变（[C-004-2](constitution.md#c-004-2)）。核验结论写进 Issue：缺陷提交、修复提交与测试。
+缺陷写成 Issue。先提交会失败的回归测试，再单独提交修复；`concord issue close --fixed` 在缺陷提交上运行测试并要求失败，在当前 HEAD 上运行并要求通过，两者之间测试、runner 配置与所指 Spec 不变（[证据的范围](feature/local-sdlc/scope.md#证据的范围)）。核验结论写进 Issue：缺陷提交、修复提交与测试。
 
 结论随仓库共享，`concord test verify` 可以在任意 clone 中按记录重放。同一提交同时加入测试与修复、缺少提交或超时时，核验返回 `FixUnverifiable`，Issue 不能以 fixed 关闭（[决策依据](design/sdd-core-model/DECISION.md)）。
 
@@ -107,7 +107,7 @@ Engineering 描述仓库自己的测试与维护机制，例如自举检查、�
 
 人和 agent 直接编辑全部文件，包括 Issue 的状态与关闭结论、Memory 的状态与关系、宪法正文。命令是执行需要运行的步骤的助手：修复核验、Design 裁决与 Roadmap 采用都要运行检查，命令替你运行并把结果写进文件。
 
-可信度由门禁保证（[C-001-5](constitution.md#c-001-5)）。`concord check --since <base>` 对照基线检查本次变化：新写入的修复核验会被重放，状态转换必须合法，修改 active 宪法必须同时记录一条修订决策。CI 对每个变化运行它。
+可信度由门禁保证（[事实归属](document-model.md#事实归属)）。`concord check --since <base>` 对照基线检查本次变化：新写入的修复核验会被重放，状态转换必须合法，修改 active 宪法必须同时记录一条修订决策。CI 对每个变化运行它。
 
 ### 写入可恢复
 

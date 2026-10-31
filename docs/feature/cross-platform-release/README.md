@@ -36,8 +36,7 @@ macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安
 
 - [C-002](../../constitution.md#c-002)
 - [C-003](../../constitution.md#c-003)
-- [C-004](../../constitution.md#c-004)
+- [C-021](../../constitution.md#c-021)
 - [C-005](../../constitution.md#c-005)
 - [C-006](../../constitution.md#c-006)
 - [C-007](../../constitution.md#c-007)
-- [C-010](../../constitution.md#c-010)

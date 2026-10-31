@@ -24,7 +24,7 @@ deprecated:
 
 一项产品能力的 Spec，位于 `docs/feature/<id>/`，由 README、Use Case、cli 或 library 页和 architecture 页组成。
 
-README 告诉第一次读的人能做什么、怎么开始；字段、错误码与边界写在其它页面（[C-016](constitution.md#c-016)）。
+README 告诉第一次读的人能做什么、怎么开始；字段、错误码与边界写在其它页面（[C-017](constitution.md#c-017)）。
 
 ## Use Case {#use-case}
 

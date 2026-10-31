@@ -40,7 +40,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 ## 工作区投影
 
-工作区导航是可重建的派生视图，来源文件仍是事实 owner（[C-001](../../constitution.md#c-001-4)、[C-014](../../constitution.md#c-014-4)）。Web 与 `workspace projection` 共享服务端维护的一份结构投影，使读取与全量扫描解耦；当前查询与定向编辑保留严格前像（[决策依据](../../design/workspace-projection/DECISION.md)）。公开字段与错误见 [CLI 页](cli.md#工作区投影)。
+工作区导航是可重建的派生视图，来源文件仍是事实 owner（[缓存与原生边界的约束](../local-data-engine/architecture.md#缓存与原生边界的约束)、[缓存与原生边界的约束](../local-data-engine/architecture.md#缓存与原生边界的约束)）。Web 与 `workspace projection` 共享服务端维护的一份结构投影，使读取与全量扫描解耦；当前查询与定向编辑保留严格前像（[决策依据](../../design/workspace-projection/DECISION.md)）。公开字段与错误见 [CLI 页](cli.md#工作区投影)。
 
 ### 读取与发布
 

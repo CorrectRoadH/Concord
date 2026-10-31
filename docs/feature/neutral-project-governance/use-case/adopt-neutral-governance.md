@@ -10,7 +10,7 @@
 2. Feature / Use Case 定义目标与可观察验收；实现和真实测试用源码标记引用 canonical Spec。
 3. 查询、追踪与 Web 展示从权威源码派生关系，不因项目没有某个产品的通道、包名或 host 而失败，也不隐式运行测试。
 4. 通过项目的 runner 运行测试，结果只按 runner 退出码解释，不声称逐 case 覆盖或正式可靠性。
-5. 缺陷记为 Issue；先提交会失败的回归测试，再提交修复，以 fixed 关闭前通过[修复核验](../../../constitution.md#c-004-2)。缺测试、缺提交、区间含 merge 或 shallow clone 时具名返回 `FixUnverifiable`。
+5. 缺陷记为 Issue；先提交会失败的回归测试，再提交修复，以 fixed 关闭前通过[修复核验](../../local-sdlc/scope.md#证据的范围)。缺测试、缺提交、区间含 merge 或 shallow clone 时具名返回 `FixUnverifiable`。
 6. CI 对每个变更运行 `concord check --since <base>`；用打包后 Concord 与真实消费仓库验证接入，保留未完成事务及未知编辑。
 
 ## 验收

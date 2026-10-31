@@ -1,6 +1,6 @@
 # CLI 登录态复用：接入设计
 
-本方案定义可选 GitHub CLI 读取模式，与默认 API 连接并列；Linear 继续使用 API 连接。适用宪法：[单一来源](../../constitution.md#c-001)、[独立运行](../../constitution.md#c-002)、[受管写入](../../constitution.md#c-003)、[严格边界](../../constitution.md#c-005)、[授权与独立挑战](../../constitution.md#c-007)。视觉规则由根目录 `DESIGN.md` 拥有。
+本方案定义可选 GitHub CLI 读取模式，与默认 API 连接并列；Linear 继续使用 API 连接。适用宪法：[单一来源](../../constitution.md#c-019)、[独立运行](../../constitution.md#c-002)、[受管写入](../../constitution.md#c-003)、[严格边界](../../constitution.md#c-005)、[授权与独立挑战](../../constitution.md#c-007)。视觉规则由根目录 `DESIGN.md` 拥有。
 
 ## 目标
 
