@@ -14,6 +14,7 @@ import type { RequestTiming } from "../../app/index.js";
 import type { ViewFile, WorkspaceProjection, ViewJob } from '../../model/index.js';
 
 export interface HostedViewPorts {
+  readonly verify: () => Promise<void>;
   readonly workspace: () => Promise<WorkspaceProjection>;
   readonly refresh: () => void;
   readonly read: (path: string) => Promise<ViewFile>;
@@ -442,6 +443,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
       try {
         if (stopping) throw new ConcordError('ServerStopping', 'The workbench is shutting down');
         const url = timing.sync('http.validate', () => parseRequestTarget(request, validateAuthority(request)));
+        await hosted.verify();
         if (['iframe', 'frame'].includes(request.headers['sec-fetch-dest'] as string) && url.pathname !== '/p5-frame') throw new ConcordError('ForbiddenAuthority', 'Only the p5 runtime may be loaded in a frame');
         if (request.method === 'GET' && url.pathname === '/p5-frame') {
           exactQuery(url, []);

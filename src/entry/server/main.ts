@@ -308,7 +308,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const httpSubscriptions = new Set<Fiber.Fiber<unknown, unknown>>();
     const notify = () => { Effect.runFork(SubscriptionRef.update(service.state.value, value => ({ ...value }))); };
     const runOperation = async (input: Parameters<typeof operations.run>[0], signal?: AbortSignal) => {
-      try { return await Effect.runPromise(operations.run(input), { signal }); }
+      try { return await Effect.runPromise(runtime.verify.pipe(Effect.mapError(workspaceServerFailure), Effect.andThen(service.state.touch), Effect.andThen(operations.run(input))), { signal }); }
       finally {
         const clean = await Effect.runPromise(Effect.result(operations.ensureClean));
         if (clean._tag === 'Failure') { await Effect.runPromise(service.state.transition('blocked', { code: 'CleanupFailed', message: clean.failure.message })); throw clean.failure; }
@@ -325,6 +325,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     }));
     const hosted = yield* makeHttpLeases(runtime.token, (host, port, sse) => Effect.tryPromise({ try: () => {
       const ports: HostedViewPorts = {
+        verify: () => run(runtime.verify.pipe(Effect.mapError(workspaceServerFailure), Effect.andThen(service.state.touch))),
         workspace: () => run(readProjection),
         refresh: () => { Effect.runFork(service.request); },
         read: path => run(service.execute({ kind: 'read', path })) as Promise<import('../../model/index.js').ViewFile>,
