@@ -156,33 +156,110 @@ fn inspect_tree(path: &Path, require_owners: bool) -> napi::Result<Vec<PathBuf>>
 fn inspect_lock(path: &Path, create: bool) -> napi::Result<Option<File>> {
     open_lock_file(&path.join(LOCK), create).map(Some)
 }
-fn open_lock_file(lock_path: &Path, create: bool) -> napi::Result<File> {
+// Shared lock admission preserves the OS failure class; callers map it to their
+// own domain errors. Only try_lock's WouldBlock means a competing owner.
+struct LockFailure { code: &'static str, message: String }
+impl LockFailure {
+    fn new(code: &'static str, message: impl std::fmt::Display) -> Self { Self { code, message: message.to_string() } }
+    fn io(error: io::Error) -> Self {
+        Self::new(if error.kind() == io::ErrorKind::PermissionDenied { "Permission" } else { "Io" }, error)
+    }
+    fn hawdb(self) -> Error {
+        err(match self.code { "Busy" => "HawdbBusy", "Io" => "HawdbUnavailable", _ => "UnsafePath" }, self.message)
+    }
+    fn server(self) -> Error { Error::new(Status::GenericFailure, format!("ServerLock{}: {}", self.code, self.message)) }
+}
+fn checked_lock_file(lock_path: &Path, create: bool) -> Result<File, LockFailure> {
     match fs::symlink_metadata(lock_path) {
-        Ok(metadata) if !metadata.is_file() || metadata.nlink() != 1 => return Err(unsafe_path("ownership lock must be a regular unique inode")),
+        Ok(metadata) if !metadata.is_file() || metadata.nlink() != 1 => return Err(LockFailure::new("Type", "lock must be a single-link regular file")),
         Ok(_) => (),
-        Err(error) if error.kind() == io::ErrorKind::NotFound && !create => return Err(unavailable("ownership lock is absent")),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => (),
-        Err(error) => return Err(unsafe_path(error)),
+        Err(error) if error.kind() == io::ErrorKind::NotFound && create => (),
+        Err(error) => return Err(LockFailure::io(error)),
     }
     let file = OpenOptions::new().read(true).write(create).create(create).truncate(false)
-        .mode(0o600).custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC).open(lock_path).map_err(unsafe_path)?;
-    verify_lock_file(&file, lock_path)?;
+        .mode(0o600).custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK).open(lock_path).map_err(LockFailure::io)?;
+    checked_lock_identity(&file, lock_path)?;
     Ok(file)
 }
-fn verify_lock_file(file: &File, lock_path: &Path) -> napi::Result<()> {
-    let opened = file.metadata().map_err(unsafe_path)?;
-    let linked = fs::symlink_metadata(lock_path).map_err(unsafe_path)?;
-    if !opened.is_file() || !linked.is_file() || linked.file_type().is_symlink() || opened.nlink() != 1 || linked.nlink() != 1 || opened.dev() != linked.dev() || opened.ino() != linked.ino() {
-        return Err(unsafe_path("ownership lock inode changed"));
+fn checked_lock_identity(file: &File, lock_path: &Path) -> Result<(), LockFailure> {
+    let opened = file.metadata().map_err(LockFailure::io)?;
+    let linked = fs::symlink_metadata(lock_path).map_err(LockFailure::io)?;
+    if !opened.is_file() || !linked.is_file() || opened.nlink() != 1 || linked.nlink() != 1 {
+        return Err(LockFailure::new("Type", "lock must be a single-link regular file"));
+    }
+    if opened.dev() != linked.dev() || opened.ino() != linked.ino() {
+        return Err(LockFailure::new("Identity", "lock device/inode changed"));
     }
     Ok(())
 }
-fn lock_file(file: &File) -> napi::Result<()> {
+fn try_lock_file(file: &File) -> Result<(), LockFailure> {
     match file.try_lock() {
         Ok(()) => Ok(()),
-        Err(std::fs::TryLockError::WouldBlock) => Err(err("HawdbBusy", "database directory is owned by another handle")),
-        Err(std::fs::TryLockError::Error(error)) => Err(unavailable(error)),
+        Err(std::fs::TryLockError::WouldBlock) => Err(LockFailure::new("Busy", "lock is held by another handle")),
+        Err(std::fs::TryLockError::Error(error)) => Err(LockFailure::io(error)),
     }
+}
+fn open_lock_file(path: &Path, create: bool) -> napi::Result<File> { checked_lock_file(path, create).map_err(LockFailure::hawdb) }
+fn verify_lock_file(file: &File, path: &Path) -> napi::Result<()> { checked_lock_identity(file, path).map_err(LockFailure::hawdb) }
+fn lock_file(file: &File) -> napi::Result<()> { try_lock_file(file).map_err(LockFailure::hawdb) }
+
+fn server_directory(path: &Path) -> Result<(u64, u64), LockFailure> {
+    if !path.is_absolute() { return Err(LockFailure::new("Type", "server directory must be absolute")); }
+    let mut current = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::RootDir => current.push(component.as_os_str()),
+            Component::Normal(part) => {
+                current.push(part);
+                let metadata = fs::symlink_metadata(&current).map_err(LockFailure::io)?;
+                if !metadata.is_dir() || metadata.file_type().is_symlink() { return Err(LockFailure::new("Type", "server directory contains a non-directory or symlink")); }
+            }
+            _ => return Err(LockFailure::new("Type", "server directory must be canonical")),
+        }
+    }
+    let metadata = fs::symlink_metadata(path).map_err(LockFailure::io)?;
+    Ok((metadata.dev(), metadata.ino()))
+}
+#[napi(object)]
+pub struct ServerLockIdentity { pub device: String, pub inode: String }
+/// Owns only <server_directory>/lock. Closing never unlinks the lock file.
+#[napi]
+pub struct ServerLock { file: Option<File>, path: PathBuf, directory: PathBuf, identity: (u64, u64) }
+#[napi]
+impl ServerLock {
+    #[napi(constructor)]
+    pub fn new(directory: String) -> napi::Result<Self> {
+        let directory = PathBuf::from(directory);
+        let identity = server_directory(&directory).map_err(LockFailure::server)?;
+        let path = directory.join("lock");
+        let file = checked_lock_file(&path, true).map_err(LockFailure::server)?;
+        try_lock_file(&file).map_err(LockFailure::server)?;
+        let lock = Self { file: Some(file), path, directory, identity };
+        lock.verify()?;
+        Ok(lock)
+    }
+    #[napi]
+    pub fn verify(&self) -> napi::Result<()> {
+        let file = self.file.as_ref().ok_or_else(|| err("ServerLockClosed", "service lock is closed"))?;
+        if server_directory(&self.directory).map_err(LockFailure::server)? != self.identity {
+            return Err(err("ServerLockIdentity", "server directory device/inode changed"));
+        }
+        // A deleted inode has nlink=0; identity failure takes precedence here.
+        let opened = file.metadata().map_err(|e| LockFailure::io(e).server())?;
+        let linked = fs::symlink_metadata(&self.path).map_err(|e| LockFailure::io(e).server())?;
+        if (opened.dev(), opened.ino()) != (linked.dev(), linked.ino()) {
+            return Err(err("ServerLockIdentity", "service lock device/inode changed"));
+        }
+        checked_lock_identity(file, &self.path).map_err(LockFailure::server)
+    }
+    #[napi]
+    pub fn identity(&self) -> napi::Result<ServerLockIdentity> {
+        self.verify()?;
+        let metadata = self.file.as_ref().unwrap().metadata().map_err(|e| LockFailure::io(e).server())?;
+        Ok(ServerLockIdentity { device: metadata.dev().to_string(), inode: metadata.ino().to_string() })
+    }
+    #[napi]
+    pub fn close(&mut self) { self.file = None; }
 }
 struct ConcordLease { file: File, path: PathBuf, root: PathBuf, identity: (u64, u64) }
 impl ConcordLease {
