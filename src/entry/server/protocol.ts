@@ -1,0 +1,47 @@
+// @concord-file
+// @concord-implements docs/feature/local-data-engine/architecture.md#协议
+import { Schema, Stream } from 'effect';
+import { Rpc, RpcGroup } from 'effect/unstable/rpc';
+
+export const PROTOCOL = 'concord.workspace/v1';
+export const FRAME_LIMIT = 1024 * 1024;
+export const RESULT_LIMIT = 32 * FRAME_LIMIT;
+export const ServerState = Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']);
+export type ServerState = typeof ServerState.Type;
+export const strict = <S extends Schema.Top>(schema: S): S['Rebuild'] => schema.annotate({ parseOptions: { onExcessProperty: 'error' } });
+export class WorkspaceServerError extends Schema.TaggedError<WorkspaceServerError>()('WorkspaceServerError', {
+  code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json),
+}) {}
+export const HelloInput = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String }));
+export const Hello = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, token: Schema.String, state: ServerState, generation: Schema.Int }));
+export const Identity = { token: Schema.String, installation: Schema.String, requestId: Schema.String, deadline: Schema.Number };
+export const Packet = strict(Schema.Struct({ data: Schema.Uint8Array, last: Schema.Boolean }));
+export const QueryInput = strict(Schema.Struct({ name: Schema.String, input: Schema.Json }));
+const empty = strict(Schema.Struct(Identity));
+const rpc = <const N extends string, S extends Schema.Top>(name: N, payload: S) => Rpc.make(name, { payload, success: Packet, error: WorkspaceServerError, stream: true });
+export const WorkspaceRpcs = RpcGroup.make(
+  Rpc.make('hello', { payload: HelloInput, success: Hello, error: WorkspaceServerError }),
+  Rpc.make('shutdown', { payload: strict(Schema.Struct({ token: Schema.String })), success: Schema.Void, error: WorkspaceServerError }),
+  rpc('subscribe', strict(Schema.Struct({ ...Identity, kind: Schema.Literal('workspace') }))),
+  rpc('workspace', empty),
+  rpc('refresh', empty),
+  rpc('read', strict(Schema.Struct({ ...Identity, path: Schema.String, expectedDigest: Schema.optional(Schema.String) }))),
+  rpc('query', strict(Schema.Struct({ ...Identity, ...QueryInput.fields }))),
+  rpc('git-status', empty),
+  rpc('git-diff', strict(Schema.Struct({ ...Identity, path: Schema.String, area: Schema.Literals(['staged', 'unstaged', 'untracked']) }))),
+  rpc('http', strict(Schema.Struct({ ...Identity, action: Schema.Literals(['open', 'close']), host: Schema.String, port: Schema.Int, lease: Schema.optional(Schema.String) }))),
+  rpc('cache-clear', empty),
+  rpc('feedback-merge', strict(Schema.Struct({ ...Identity, action: Schema.Literals(['begin', 'append', 'commit']), session: Schema.String, connectionId: Schema.optional(Schema.String), items: Schema.optional(Schema.Json) }))),
+);
+export type WorkspaceClient = import('effect/unstable/rpc/RpcClient').RpcClient<RpcGroup.Rpcs<typeof WorkspaceRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>;
+
+/** Leave space for the binary RPC envelope; never allocate from a peer's length. */
+export function packets(data: Uint8Array) {
+  if (data.byteLength > RESULT_LIMIT) throw new WorkspaceServerError({ code: 'WorkspaceServerOutputLimit', message: 'Result exceeds 32 MiB' });
+  const result: (typeof Packet.Type)[] = [];
+  const size = FRAME_LIMIT - 4096;
+  for (let offset = 0; offset < data.byteLength; offset += size) result.push({ data: data.subarray(offset, offset + size), last: offset + size >= data.byteLength });
+  if (result.length === 0) result.push({ data: new Uint8Array(), last: true });
+  return Stream.fromIterable(result);
+}
+export const jsonPackets = (value: unknown) => packets(new TextEncoder().encode(JSON.stringify(value)));
