@@ -1,5 +1,8 @@
 import { packageBin, createDocument, createConsumer, installedConcordCli, assert, execFileSync, spawn, spawnSync, copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, dirname, join, resolve, tmpdir, test, Effect, Schema, buildSync, analysisBudgets, LanguageServersSchema, type LanguageServer, documentSymbols, positionOffset, bindSymbol, LspConnection, AnalysisObservationSchema, AnalysisViewSchema, historicalAnalysis, relevanceFor, CodeDeclarationSchema, decode, type AnnotatedCase, type DocumentRecord, observation, LocalRepository, withPersistentCache, observeOwnedProcessGroup, hydrateQueryValue, TraceShowValue, pollUntil, readProjectConfig, writeProjectConfig, packConcord, cli, target, source, write, call, ack, failure, analysis, codeList, projectCheck, server, consumer } from '../support/lsp-analysis-fixture.js';
 
+// These cases validate relevance and invalidation, rather than timeout budgets.
+// Dedicated budget tests retain the short fake-server limits and their failure assertions.
+const semanticServer = (): LanguageServer => ({ ...server(), budgets: { totalMs: 20_000, requestMs: 5000 } });
 
 // @use-case docs/feature/local-sdlc/use-case/analyze-other-languages.md
 // @issue docs/issues/test-architecture-gaps.md
@@ -7,6 +10,7 @@ import { packageBin, createDocument, createConsumer, installedConcordCli, assert
 test('LSP observations retain marker identity, traverse test helpers, and never govern check', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   try {
+    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [semanticServer()] });
     const baseline = call(root, ['check'], projectCheck); assert.equal(baseline.ok, true);
     const before = call(root, ['code', 'list'], codeList);
     assert.equal(before.codes.length, 1); assert.equal(before.analysis.relevance[0]?.relevance.verdict, 'not-observed');
@@ -53,10 +57,10 @@ test('LSP observations retain marker identity, traverse test helpers, and never 
     assert.deepEqual(call(root, ['check'], projectCheck), baseline);
     assert.deepEqual(call(root, ['code', 'list'], codeList).codes, before.codes);
     assert.equal(call(root, ['code', 'list'], codeList).analysis.observations.length, 0);
-    const shallow = server(); writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...shallow, budgets: { ...shallow.budgets, depth: 1 } }] });
+    const shallow = semanticServer(); writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [{ ...shallow, budgets: { ...shallow.budgets, depth: 1 } }] });
     const limited = call(root, ['code', 'analyze'], analysis).observations.find(value => value.value.analyzer === 'python-fixture')!;
     assert.ok(limited.gaps.includes('DepthLimit')); assert.deepEqual(limited.value.dependencies[0]?.declarations, []);
-    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [server()] });
+    writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [semanticServer()] });
     call(root, ['cache', 'clear'], ack);
     assert.deepEqual(call(root, ['check'], projectCheck), baseline);
     assert.deepEqual(call(root, ['code', 'list'], codeList).codes, before.codes);
