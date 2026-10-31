@@ -1,5 +1,5 @@
 import { defineBenchmarks, waitForProjection } from '../scripts/perf/scenario.js';
-const queries = { 'trace-gaps': ['trace', 'gaps'], 'trace-show': ['trace', 'show', 'docs/feature/local-sdlc/README.md'], 'review-render': ['review', 'render', 'local-sdlc'] } as const;
+const queries = { 'trace-gaps': ['trace', 'gaps'], 'trace-show': ['trace', 'show', 'docs/feature/local-sdlc/README.md'], 'review': ['review', 'local-sdlc'] } as const;
 export default defineBenchmarks('local-data-engine', [
   ...Object.entries(queries).flatMap(([name, argv]) => [
     { id: `local-data-engine/${name}-warm`, consumer: 'self' as const, state: 'warm' as const, run: argv, prepare: (context: Parameters<typeof waitForProjection>[0]) => waitForProjection(context, argv), expect: { exitCode: 0 } },

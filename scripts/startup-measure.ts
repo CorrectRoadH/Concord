@@ -25,7 +25,7 @@ Effect.runSync(Effect.sync(() => {
   const startLoad = loadavg(), startUptimeSeconds = uptime();
   const stdoutPath = resolve('.test-results/startup-measure-stdout');
   const stderrPath = resolve('.test-results/startup-measure-stderr');
-  for (const [name, args] of [['version', ['--version']], ['help', ['--help']], ['memory-index', ['memory', 'index', '--root', consumer, '--json']]] as const) {
+  for (const [name, args] of [['version', ['--version']], ['help', ['--help']], ['memory-list', ['list', 'memory', '--root', consumer, '--json']]] as const) {
     const samples: Record<string, number[]> = { baseline: [], candidate: [] };
     for (let round = -2; round < 9; round++) {
       const variants = round % 2 === 0 ? [['baseline', baseline], ['candidate', candidate]] : [['candidate', candidate], ['baseline', baseline]];

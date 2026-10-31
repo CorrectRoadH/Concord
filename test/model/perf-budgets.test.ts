@@ -24,8 +24,9 @@ test('budget discovery scans Feature owners and preserves scenario identities', 
 // @feature docs/feature/local-sdlc/README.md
 test('missing command owners are detected for paths and Feature identifiers', () => Effect.runPromise(Effect.sync(() => {
   assert.match(missingOwner(['trace', 'show', 'absent'], () => false) ?? '', /docs\/feature\/absent\/README.md/u);
-  assert.match(missingOwner(['review', 'render', 'docs/feature/absent/README.md'], () => false) ?? '', /Missing owner/u);
-  assert.equal(missingOwner(['memory', 'recall', 'HawDB'], () => false), undefined);
+  assert.match(missingOwner(['review', 'docs/feature/absent/README.md'], () => false) ?? '', /Missing owner/u);
+  assert.match(missingOwner(['review', 'absent'], () => false) ?? '', /docs\/feature\/absent\/README.md/u);
+  assert.equal(missingOwner(['memory', 'search', 'HawDB'], () => false), undefined);
 })));
 
 // @feature docs/feature/local-sdlc/README.md

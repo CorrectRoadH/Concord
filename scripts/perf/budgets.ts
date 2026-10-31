@@ -55,8 +55,8 @@ export const loadBudgets = (root: string) => io('Scan feature budget owners', ()
 export function missingOwner(args: readonly string[], exists: (path: string) => boolean): string | undefined {
   for (const arg of args) if (arg.startsWith('docs/') && !exists(arg)) return `Missing owner: ${arg}`;
   const query = args.filter(arg => !arg.startsWith('--'));
-  if ((query[0] === 'trace' && query[1] === 'show') || (query[0] === 'review' && query[1] === 'render')) {
-    const ref = query[2];
+  if ((query[0] === 'trace' && query[1] === 'show') || query[0] === 'review') {
+    const ref = query[0] === 'review' ? query[1] : query[2];
     if (ref && !ref.startsWith('docs/')) { const path = `docs/feature/${ref}/README.md`; if (!exists(path)) return `Missing owner: ${path}`; }
   }
   return undefined;
