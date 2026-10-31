@@ -1,7 +1,8 @@
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
-import { Effect, Schema } from 'effect';
+import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { acquireBuildLock } from './build-lock.js';
+import { tmpdir } from './test-temporary.js';
 
 class CheckFailed extends Schema.TaggedError<CheckFailed>()('CheckFailed', {
   phase: Schema.String,
@@ -19,6 +20,19 @@ const command = Effect.fn('check.command')(function* (name: string, executable: 
 
 const main = Effect.gen(function*() {
   const lock = yield* Effect.acquireRelease(acquireBuildLock(), lock => Effect.promise(lock.release));
+  const fs = yield* FileSystem.FileSystem;
+  const compileCache = yield* fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-check-compile-' });
+  yield* Effect.acquireRelease(Effect.sync(() => {
+    const previous = { cache: process.env.NODE_COMPILE_CACHE, owner: process.env.CONCORD_TEST_COMPILE_CACHE };
+    process.env.NODE_COMPILE_CACHE = compileCache;
+    process.env.CONCORD_TEST_COMPILE_CACHE = compileCache;
+    return previous;
+  }), previous => Effect.sync(() => {
+    if (previous.cache === undefined) delete process.env.NODE_COMPILE_CACHE;
+    else process.env.NODE_COMPILE_CACHE = previous.cache;
+    if (previous.owner === undefined) delete process.env.CONCORD_TEST_COMPILE_CACHE;
+    else process.env.CONCORD_TEST_COMPILE_CACHE = previous.owner;
+  }).pipe(Effect.andThen(fs.remove(compileCache, { recursive: true, force: true })), Effect.orDie));
   yield* Effect.acquireRelease(Effect.sync(() => {
     const previous = process.env.CONCORD_BUILD_LOCK;
     process.env.CONCORD_BUILD_LOCK = lock.token;
