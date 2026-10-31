@@ -47,6 +47,7 @@ function withPersistentCache<A>(repo: Repository, writable: boolean, use: (datab
 
 /** A scoped service value; callers cannot open or retain a native handle. */
 export interface RepositoryCache {
+  readonly diagnostic?: () => string | undefined;
   readonly prepareWrite: () => void;
   readonly get: (namespace: import('./hawdb-native.js').HawdbNamespace, keys: readonly string[]) => readonly import('./hawdb-native.js').HawdbEntry[];
   readonly scan: (namespace: import('./hawdb-native.js').HawdbNamespace) => readonly import('./hawdb-native.js').HawdbEntry[];
@@ -62,12 +63,23 @@ export function bindRepositoryCache(repo: Repository, access: RepositoryCache): 
   owners.set(repo, access);
   return () => { if (owners.get(repo) === access) { closeRepositoryCache(repo); owners.delete(repo); } };
 }
-export function nodeRepositoryCache(repo: Repository): RepositoryCache {
+export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase): RepositoryCache {
+  let diagnostic: string | undefined;
+  const rebuildable = (namespace: import('./hawdb-native.js').HawdbNamespace, keys?: readonly string[]) => !['feedback_cache', 'query_cache', 'workspace_projection'].includes(namespace) || namespace === 'query_cache' && keys !== undefined && keys.every(key => key.startsWith('writing:'));
+  const use = <A>(namespace: import('./hawdb-native.js').HawdbNamespace, keys: readonly string[] | undefined, writable: boolean, operation: (database: HawdbDatabase | undefined) => A): A => {
+    try { return withPersistentCache(repo, writable, operation); }
+    catch (cause) {
+      if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || !memory || !rebuildable(namespace, keys)) throw cause;
+      diagnostic = `HawdbBusy: ${cause.message}`;
+      return operation(memory);
+    }
+  };
   return {
+    diagnostic: () => diagnostic,
     prepareWrite: () => withPersistentCache(repo, true, () => {}),
-    get: (namespace, keys) => withPersistentCache(repo, false, database => database?.get(namespace, keys) ?? []),
-    scan: namespace => withPersistentCache(repo, false, database => database?.scan(namespace) ?? []),
-    put: (namespace, rows) => withPersistentCache(repo, true, database => database!.put(namespace, rows)),
+    get: (namespace, keys) => use(namespace, keys, false, database => database?.get(namespace, keys) ?? []),
+    scan: namespace => use(namespace, undefined, false, database => database?.scan(namespace) ?? []),
+    put: (namespace, rows) => use(namespace, rows.map(row => row.key), true, database => database!.put(namespace, rows)),
     namespaces: () => withPersistentCache(repo, false, database => database?.namespaces() ?? []),
   };
 }

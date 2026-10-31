@@ -98,10 +98,11 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
       yield* Effect.sleep(delay);
     }
     firstInvalidation = -Infinity;
+    yield* Queue.clear(invalidations);
     pending = false;
     yield* maintenance.withPermit(refresh);
   })));
-  yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() { if (!pending) yield* request; }), compensationRefresh));
+  yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() { if (!pending) yield* request; }), compensationRefresh).pipe(Effect.delay('30 seconds')));
   yield* Effect.forkScoped(Effect.repeat(maintenance.withPermit(Effect.gen(function*() {
     const current = yield* SubscriptionRef.get(state.value);
     if (current.state !== 'degraded' || !current.error || !['HawdbUnavailable', 'HawdbBusy', 'HawdbClosed'].includes(current.error.code)) return;

@@ -1,10 +1,10 @@
 import { launchDetachedWorker } from '../base/process/index.js';
-import { Effect, Result, Schema } from "effect";
+import { Context, Effect, Option, Result, Schema } from "effect";
 import { Workspace } from "../base/workspace/index.js";
 import { genericPrivateDirectorySync } from "../base/publication/index.js";
 import { assertLeasePath } from "../base/publication/index.js";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.js";
-import { HawdbFailure, PersistentCache } from "../base/cache/index.js";
+import { CacheSnapshot, HawdbFailure, PersistentCache } from "../base/cache/index.js";
 import { hydrateQueryValue } from "./query-values.js";
 import { TraceGapsValue, TraceShowValue, ReviewRenderValue, queryValueSchema } from "../model/index.js";
 import type { QueryScanMessage } from "../model/index.js";
@@ -21,6 +21,9 @@ export const Query = Schema.Union([
   Schema.Tuple([Schema.Literal('review'), Schema.Literal('render'), Schema.String]),
 ]);
 export type Query = typeof Query.Type;
+export class QueryRefreshRequest extends Context.Service<QueryRefreshRequest, {
+  readonly request: (context: QueryContext) => Effect.Effect<void, ConcordError>;
+}>()('concord/app/QueryRefreshRequest') {}
 const Instant = Schema.String.check(Schema.makeFilter(value => Number.isFinite(Date.parse(value))));
 export const QueryRecord = Schema.Struct({
   builtAt: Instant, scannedAt: Schema.Number, builtFrom: Instant, builtUntil: Instant,
@@ -84,9 +87,11 @@ function decodeForQuery(context: QueryContext, payload: string): QueryCacheEnvel
   if (envelope.record) Schema.decodeUnknownSync(queryValueSchema(context.query), { onExcessProperty: 'error' })(envelope.record.value);
   return envelope;
 }
-export const readQuery = Effect.fn('readQuery')(function*(context: QueryContext): Effect.fn.Return<{ record?: typeof QueryRecord.Type; lastAttempt?: typeof Attempt.Type; error?: typeof RefreshFailure.Type; unavailable?: string; unavailableCode?: string }, never, PersistentCache> {
-  const cache = yield* PersistentCache;
-  return yield* cache.read(context.privateDir, 'query_cache', [context.key]).pipe(
+export const readQuery = Effect.fn('readQuery')(function*(context: QueryContext): Effect.fn.Return<{ record?: typeof QueryRecord.Type; lastAttempt?: typeof Attempt.Type; error?: typeof RefreshFailure.Type; unavailable?: string; unavailableCode?: string }, never> {
+  const cache = yield* Effect.serviceOption(PersistentCache);
+  const snapshot = yield* Effect.serviceOption(CacheSnapshot);
+  const rows = Option.isSome(cache) ? cache.value.read(context.privateDir, 'query_cache', [context.key]) : Option.isSome(snapshot) ? Effect.succeed(snapshot.value.entries('query_cache').filter(row => row.key === context.key)) : Effect.fail(new HawdbFailure('HawdbUnavailable', 'No diagnostic snapshot is available'));
+  return yield* rows.pipe(
     Effect.flatMap(rows => Effect.try({ try: () => {
       const payload = rows.find(row => row.key === context.key)?.payload;
       const envelope = payload === undefined ? undefined : decodeForQuery(context, payload);
@@ -121,7 +126,8 @@ export const cachedQuery = Effect.fn('cachedQuery')(function*(input: string | un
     yield* Effect.sleep('10 millis');
     observed = yield* readQuery(context);
   }
-  const refresh = yield* Effect.result(launchDetachedWorker('query-refresh-worker', [context.root, JSON.stringify(query), String(Date.now())], context.root));
+  const requester = yield* Effect.serviceOption(QueryRefreshRequest);
+  const refresh = yield* Effect.result(Option.isSome(requester) ? requester.value.request(context) : launchDetachedWorker('query-refresh-worker', [context.root, JSON.stringify(query), String(Date.now())], context.root));
   if (observed.unavailable) return yield* Effect.fail(new ConcordError(observed.unavailableCode ?? 'QueryCacheInvalid', observed.unavailable));
   if (Result.isFailure(refresh) && !observed.record) return yield* Effect.fail(refresh.failure);
   if (!observed.record) return yield* Effect.fail(new ConcordError('QueryPending', 'No readable diagnostic snapshot; background refresh requested. Use --fresh to wait for current sources.', { refresh: observed.error ?? observed.unavailable ?? 'requested' }));

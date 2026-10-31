@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
-import { Context, Effect, Layer, Schema } from 'effect';
+import { Context, Effect, Layer, Schedule, Schema } from 'effect';
 import { ConcordError, failure } from '../model/index.js';
 import { Workspace } from '../base/workspace/index.js';
 import { Sources } from '../base/sources/index.js';
@@ -19,6 +19,7 @@ import { listCode } from './code-commands.js';
 import { showConfig } from './editing.js';
 import { documentShow, traceShow, traceGaps, renderReview } from './trace-queries.js';
 import { analysisView } from './analysis-view.js';
+import { Query, cachedQuery } from './query-cache.js';
 
 const strict = <S extends Schema.Top>(schema: S): S['Rebuild'] => schema.annotate({ parseOptions: { onExcessProperty: 'error' } });
 const operation = <const N extends string, F extends Schema.Struct.Fields>(name: N, fields: F) => strict(Schema.Struct({ name: Schema.Literal(name), input: strict(Schema.Struct(fields)) }));
@@ -37,20 +38,21 @@ export const QueryRequest = Schema.Union([
   operation('writing.show', { path: Schema.optional(Schema.String) }), empty('writing.index'),
   operation('concepts.show', { path: Schema.optional(Schema.String) }), empty('concepts.index'),
   empty('feedback.list'),
+  operation('historical', { query: Query }),
 ]);
 export type QueryRequest = typeof QueryRequest.Type;
 export const QueryReply = strict(Schema.Struct({ value: Schema.Json, exitCode: Schema.Literals([0, 1]) }));
 export type QueryReply = typeof QueryReply.Type;
 
-const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, request: QueryRequest): unknown => {
+const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, request: QueryRequest, cache: 'use' | 'off'): unknown => {
   switch (request.name) {
-    case 'trace.check': { const t = buildTrace(repo); return { operation: 'trace-check', ok: t.complete, complete: t.complete, findings: t.findings, edges: t.edges }; }
-    case 'trace.show': return traceShow(repo, request.input.reference);
-    case 'trace.gaps': return traceGaps(repo);
-    case 'review.render': return { operation: 'review-render', markdown: renderReview(repo, request.input.reference) };
+    case 'trace.check': { const t = buildTrace(repo, cache); return { operation: 'trace-check', ok: t.complete, complete: t.complete, findings: t.findings, edges: t.edges }; }
+    case 'trace.show': return traceShow(repo, request.input.reference, cache);
+    case 'trace.gaps': return traceGaps(repo, cache);
+    case 'review.render': return renderReview(repo, request.input.reference, cache);
     case 'constitution.show': return constitutionShow(repo);
     case 'config.show': return { ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source };
-    case 'docs.check': return checkWriting(repo, request.input.path);
+    case 'docs.check': return checkWriting(repo, request.input.path, cache !== 'off');
     case 'documents.list': {
       const { kind, open } = request.input;
       if (open && kind !== undefined && kind !== 'issue') throw new ConcordError('InvalidOption', '--open applies to Issues');
@@ -59,15 +61,15 @@ const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, 
     case 'documents.show': {
       const { id, kind } = request.input;
       const selected = id.includes('/') ? readDocumentReference(repo, id) : findDocument(loadDocuments(repo), id);
-      return { ...documentShow(repo, id, kind ?? selected.metadata.kind), operation: 'show' };
+      return { ...documentShow(repo, id, kind ?? selected.metadata.kind, cache), operation: 'show' };
     }
     case 'memory.index': return knowledgeIndex(repo, 'memory');
     case 'memory.recall': return knowledgeRecall(repo, 'memory', request.input.query);
     case 'issue.recall': return knowledgeRecall(repo, 'issue', request.input.query);
     case 'code.list': return listCode(repo);
-    case 'test.list': { const t = buildTrace(repo, 'use', { includeCode: false }); requireValidTrace(t); return { operation: 'test-list', cases: t.annotations.cases, cache: t.annotations.cache, observations: readNativeObservations(repo) }; }
+    case 'test.list': { const t = buildTrace(repo, cache, { includeCode: false }); requireValidTrace(t); return { operation: 'test-list', cases: t.annotations.cases, cache: t.annotations.cache, observations: readNativeObservations(repo) }; }
     case 'test.show': {
-      const t = buildTrace(repo, 'use', { includeCode: false }); requireValidTrace(t);
+      const t = buildTrace(repo, cache, { includeCode: false }); requireValidTrace(t);
       const selected = selectCase(t.annotations.cases, request.input.id);
       let codes: ReturnType<typeof scanCode>['codes'] = [];
       try { codes = scanCode(repo, { cache: 'off' }).codes; } catch { /* Optional observations. */ }
@@ -79,18 +81,19 @@ const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, 
     case 'concepts.index': return indexConcepts(repo);
     case 'feedback.list': return { operation: 'feedback-list', feedback: listFeedback(repo) };
     case 'check': throw new ConcordError('InvalidInput', 'Check requires its Effect operation');
+    case 'historical': throw new ConcordError('InvalidInput', 'Historical queries require their Effect operation');
   }
 };
 export const executeQuery = Effect.fn('Queries.Local.execute')(function*(root: string | undefined, input: QueryRequest, cache: 'use' | 'off' = 'use') {
   const request = yield* Schema.decodeUnknownEffect(QueryRequest, { onExcessProperty: 'error' })(input).pipe(Effect.mapError(failure));
-  const value = yield* request.name === 'check'
+  const value = yield* request.name === 'historical' ? cachedQuery(root, request.input.query) : request.name === 'check'
     ? checkCurrentProject(root, cache)
     : Effect.scoped(Effect.gen(function*() {
       const workspace = yield* Workspace;
       const sources = yield* Sources;
       const repo = yield* waitForPublication(reclaimPublication => workspace.openRead(root, { access: 'read', optimistic: true, persistentCache: cache, reclaimPublication }));
-      return yield* sources.snapshot(repo, Effect.try({ try: () => queryValue(repo, request), catch: failure }));
-    }));
+      return yield* sources.snapshot(repo, Effect.try({ try: () => queryValue(repo, request, cache), catch: failure }));
+    })).pipe(Effect.retry({ times: 2, schedule: Schedule.spaced('50 millis'), while: error => error.code === 'SourceChanged' || error.code === 'PreimageChanged' && error.details === 'source-observation' }));
   return yield* Effect.try({ try: () => {
     const json = Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(value)));
     const failed = ['check', 'trace.check', 'docs.check'].includes(request.name) && typeof value === 'object' && value !== null && 'ok' in value && value.ok === false;

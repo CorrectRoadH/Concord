@@ -20,8 +20,10 @@ const cacheFailure = (cause: unknown): HawdbFailure => cause instanceof HawdbFai
 
 /** In-memory handles cannot grant access to a persistent namespace. */
 export class Cache extends Context.Service<Cache, CacheService>()('concord/base/cache/Cache') {
-  static readonly layer = Layer.succeed(Cache, Cache.of({
-    memory: Effect.acquireRelease(Effect.try({ try: createMemoryHawdb, catch: cacheFailure }), database => Effect.sync(() => database.close())),
+  static readonly layer = Layer.effect(Cache, Effect.gen(function*() {
+    let database: HawdbDatabase | undefined;
+    yield* Effect.addFinalizer(() => Effect.sync(() => database?.close()));
+    return Cache.of({ memory: Effect.try({ try: () => database ??= createMemoryHawdb(), catch: cacheFailure }) });
   }));
 }
 
@@ -32,15 +34,24 @@ export class CacheSnapshot extends Context.Service<CacheSnapshot, {
 }>()('concord/base/cache/CacheSnapshot') {
   static layer(snapshot: ReadonlyCacheSnapshot = {}) {
     const copy = Object.fromEntries(Object.entries(snapshot).map(([namespace, entries]) => [namespace, Object.freeze(entries.map(entry => Object.freeze({ ...entry })))])) as ReadonlyCacheSnapshot;
+    let memory: HawdbDatabase | undefined;
+    const rebuildable = (namespace: HawdbNamespace) => !['feedback_cache', 'query_cache', 'workspace_projection'].includes(namespace);
     const access: RepositoryCache = {
       prepareWrite: () => { throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access'); },
-      get: (namespace, keys) => (copy[namespace] ?? []).filter(row => keys.includes(row.key)),
-      scan: namespace => copy[namespace] ?? [],
-      namespaces: () => Object.keys(copy) as HawdbNamespace[],
-      put: () => { throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access'); },
+      get: (namespace, keys) => rebuildable(namespace) ? memory?.get(namespace, keys) ?? [] : [...new Map([...(copy[namespace] ?? []).filter(row => keys.includes(row.key)), ...(namespace === 'query_cache' ? memory?.get(namespace, keys.filter(key => key.startsWith('writing:'))) ?? [] : [])].map((row: HawdbEntry) => [row.key, row] as const)).values()],
+      scan: namespace => rebuildable(namespace) ? memory?.scan(namespace) ?? [] : copy[namespace] ?? [],
+      namespaces: () => [...new Set([...Object.keys(copy) as HawdbNamespace[], ...(memory?.namespaces() ?? [])])],
+      put: (namespace, rows) => {
+        if (memory && (rebuildable(namespace) || namespace === 'query_cache' && rows.every(row => row.key.startsWith('writing:')))) { memory.put(namespace, rows); return; }
+        throw new HawdbFailure('HawdbUnavailable', 'A cache snapshot cannot grant persistent write access');
+      },
     };
-    return Layer.succeed(CacheSnapshot, CacheSnapshot.of({ entries: namespace => copy[namespace] ?? [],
-      attach: repo => Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, access), catch: cacheFailure }), release => Effect.sync(release)).pipe(Effect.asVoid),
+    return Layer.effect(CacheSnapshot, Effect.gen(function*() {
+      const cache = yield* Effect.serviceOption(Cache);
+      if (cache._tag === 'Some') memory = yield* cache.value.memory.pipe(Effect.catch(() => Effect.succeed(undefined)));
+      return CacheSnapshot.of({ entries: namespace => copy[namespace] ?? [],
+        attach: repo => Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, access), catch: cacheFailure }), release => Effect.sync(release)).pipe(Effect.asVoid),
+      });
     }));
   }
 }
@@ -54,7 +65,11 @@ export class PersistentCache extends Context.Service<PersistentCache, Persistent
     try { return use(); } finally { release(); }
   }
   static readonly layer = Layer.succeed(PersistentCache, PersistentCache.of({
-    attach: repo => Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, nodeRepositoryCache(repo)), catch: cacheFailure }), release => Effect.sync(release)).pipe(Effect.asVoid),
+    attach: repo => Effect.gen(function*() {
+      const cache = yield* Effect.serviceOption(Cache);
+      const memory = cache._tag === 'Some' ? yield* cache.value.memory.pipe(Effect.catch(() => Effect.succeed(undefined))) : undefined;
+      yield* Effect.acquireRelease(Effect.try({ try: () => bindRepositoryCache(repo, nodeRepositoryCache(repo, memory)), catch: cacheFailure }), release => Effect.sync(release));
+    }),
     read: (privateDir, namespace, keys) => Effect.scoped(Effect.gen(function*() {
       const database = yield* Effect.acquireRelease(Effect.try({ try: () => {
         const path = cacheDatabasePath(privateDir);

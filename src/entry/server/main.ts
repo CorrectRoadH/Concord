@@ -23,6 +23,8 @@ import { ComputeRpcs, collectPackets, collectBytes, type Computation } from './c
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission } from './protocol.js';
 import { makeAdmittedProtocol } from './admission.js';
 import { getWorkspaceRead } from '../../app/index.js';
+import { QueryRefreshRequest, queryContext, storeQuery, scanQueryProcess } from '../../app/index.js';
+import { decodeQueryScanMessage } from '../../model/index.js';
 import { WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.js';
 import { makeWorkspaceService } from './service.js';
 import { FeedbackSessions } from './feedback-session.js';
@@ -77,10 +79,11 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
 import { connectWorkspaceSocket, requestWorkspace } from './client.js';
 
 const asServerError = (cause: unknown) => cause instanceof WorkspaceServerError ? cause : new WorkspaceServerError({ code: cause instanceof ConcordError ? cause.code : 'WorkspaceServerUnavailable', message: cause instanceof Error ? cause.message : String(cause) });
-const computationLayer = (snapshot: Parameters<typeof CacheSnapshot.layer>[0]) => Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(snapshot)).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
+const computationLayer = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer).pipe(Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
 const compute = Effect.fn('workspace.compute')(function*(root: string, operation: Computation) {
   switch (operation.kind) {
     case 'query': return yield* executeQuery(root, operation.request);
+    case 'query-scan': return yield* scanQueryProcess(root, JSON.stringify(operation.query));
     case 'scan': {
       const builtFrom = new Date(yield* Clock.currentTimeMillis).toISOString();
       const { snapshot, drift } = yield* observeWorkspaceProjection(root);
@@ -94,6 +97,8 @@ const compute = Effect.fn('workspace.compute')(function*(root: string, operation
   }
 });
 export const runComputeMain = (root: string | undefined): void => {
+  const program = Effect.scoped(Effect.gen(function*() {
+  const context = yield* Layer.build(computationLayer);
   let snapshot: typeof Snapshot.Type = {}, snapshotId: string | undefined;
   let pendingId: string | undefined, size = 0, chunks: Uint8Array[] = [];
   const handlers = ComputeRpcs.toLayer({
@@ -110,11 +115,13 @@ export const runComputeMain = (root: string | undefined): void => {
     execute: request => Stream.unwrap(
     (request.snapshotId !== snapshotId ? Effect.fail(new ConcordError('WorkspaceServerProtocol', 'Snapshot is incomplete')) :
     (root === undefined ? Effect.fail(new ConcordError('InvalidInput', 'Missing compute root')) : compute(root, request.operation)).pipe(
-      Effect.provide(computationLayer(snapshot)),
+      Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context),
     )).pipe(Effect.map(value => request.operation.kind === 'read-bytes' ? packets(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT) : jsonPackets(value)), Effect.mapError(asServerError)),
   ) });
   const protocol = RpcServer.layerProtocolStdio.pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(NodeServices.layer));
-  NodeRuntime.runMain(RpcServer.make(ComputeRpcs, { concurrency: 1 }).pipe(Effect.provide(handlers), Effect.provide(protocol)));
+  yield* RpcServer.make(ComputeRpcs, { concurrency: 1 }).pipe(Effect.provide(handlers), Effect.provide(protocol));
+  }));
+  NodeRuntime.runMain(program);
 };
 
 const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string) {
@@ -131,6 +138,7 @@ const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: s
     const scope = yield* Scope.make();
     const owner = makeOwnedProcessService();
     const ready = yield* Deferred.make<(bytes: string | Uint8Array) => void, WorkspaceServerError>();
+    const opened = yield* Deferred.make<void>();
     const output = yield* Queue.unbounded<Uint8Array, WorkspaceServerError>();
     yield* Effect.forkIn(owner.run([process.execPath, ...installation.worker('compute-worker'), root], {
       cwd: installation.cwd, outputLimitBytes: 128 * 1024 * 1024,
@@ -143,9 +151,10 @@ const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: s
       runRaw: (handler, options) => Deferred.await(ready).pipe(Effect.andThen(options?.onOpen ?? Effect.void), Effect.andThen(Stream.runForEach(Stream.fromQueue(output), chunk => handler(chunk) ?? Effect.void)), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketReadError({ cause: error }) }))),
       writer: Effect.succeed(chunk => Deferred.await(ready).pipe(Effect.flatMap(write => Effect.sync(() => { if (!(chunk instanceof Socket.CloseEvent)) write(chunk); })), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketWriteError({ cause: error }) })))),
     });
-    const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(Layer.succeed(Socket.Socket, socket)));
+    const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(Layer.succeed(Socket.Socket, socket)), Layer.provide(Layer.succeed(RpcClient.ConnectionHooks, { onConnect: Deferred.succeed(opened, undefined).pipe(Effect.asVoid), onDisconnect: Effect.void })));
     const protocolContext = yield* Layer.build(protocol).pipe(Effect.provideService(Scope.Scope, scope));
     const client = yield* RpcClient.make(ComputeRpcs).pipe(Effect.provideContext(protocolContext), Effect.provideService(Scope.Scope, scope));
+    yield* Deferred.await(opened).pipe(Effect.timeout('60 seconds'));
     active = { scope, owner, client };
     return active;
   });
@@ -237,13 +246,29 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const output = makeOutputAdmission();
     const result = <A, E, R>(request: { token: string; installation: string; deadline: number }, operation: Effect.Effect<A, E, R>) => Stream.unwrap(authorize(request).pipe(Effect.andThen(operation), Effect.map(output.json), Effect.mapError(asServerError)));
     const feedback = new FeedbackSessions();
+    const refreshing = new Set<string>();
+    const refreshQuery = (query: import('../../app/index.js').Query) => Effect.gen(function*() {
+      const key = JSON.stringify(query);
+      if (refreshing.has(key)) return;
+      refreshing.add(key);
+      yield* Effect.forkIn(Effect.gen(function*() {
+        const ctx = yield* queryContext(root, query).pipe(Effect.provideService(Workspace, workspace));
+        const message = yield* service.execute({ kind: 'query-scan', query });
+        yield* runtime.verify;
+        const decoded = decodeQueryScanMessage(message);
+        yield* owned(storeQuery(ctx, decoded.ok ? { kind: 'candidate', message: decoded } : { kind: 'failure', error: { failedAt: new Date().toISOString(), scannedAt: decoded.scannedAt, code: decoded.code, message: decoded.message } }));
+      }).pipe(Effect.ensuring(Effect.sync(() => { refreshing.delete(key); })), Effect.ignore), serverScope);
+    });
     const handlers = WorkspaceRpcs.toLayer({
       hello: () => SubscriptionRef.get(service.state.value).pipe(Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, generation: value.generation }))),
       shutdown: request => request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : Effect.forkIn(Effect.sleep('10 millis').pipe(Effect.andThen(service.stop)), serverScope).pipe(Effect.asVoid),
       subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(event, output.json)))),
       workspace: request => result(request, SubscriptionRef.get(service.state.value).pipe(Effect.flatMap(value => value.workspace ? Effect.succeed(value.workspace) : Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is building'))))),
       refresh: request => result(request, service.request.pipe(Effect.as({ status: 'requested' }))),
-      query: request => result(request, service.execute({ kind: 'query', request: Schema.decodeUnknownSync(importedQueryRequest, { onExcessProperty: 'error' })({ name: request.name, input: request.input }) })),
+      query: request => result(request, Effect.gen(function*() {
+        const input = yield* Schema.decodeUnknownEffect(importedQueryRequest, { onExcessProperty: 'error' })({ name: request.name, input: request.input });
+        return yield* service.execute({ kind: 'query', request: input }).pipe(Effect.ensuring(input.name === 'historical' ? refreshQuery(input.input.query) : Effect.void));
+      })),
       read: request => Stream.unwrap(authorize(request).pipe(Effect.andThen(service.execute({ kind: 'read-bytes', path: request.path })), Effect.map(value => output.bytes(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT)), Effect.mapError(asServerError))),
       'git-status': request => result(request, service.execute({ kind: 'git-status' })),
       'git-diff': request => result(request, service.execute({ kind: 'git-diff', path: request.path, area: request.area })),
@@ -355,7 +380,7 @@ export const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(opti
     const input = yield* requestWorkspace(connection, 'http', { action: 'open', host: options.host, port: options.port });
     const lease = yield* Schema.decodeUnknownEffect(HttpLease, { onExcessProperty: 'error' })(input);
     yield* Effect.addFinalizer(() => requestWorkspace(connection, 'http', { action: 'close', host: lease.host, port: lease.port, lease: lease.lease }).pipe(Effect.ignore));
-    yield* Effect.sync(() => ready({ root: options.root, ...lease }));
+    yield* Effect.sync(() => ready({ root: options.root, host: lease.host, port: lease.port, address: lease.address }));
     if (inProcess) return yield* Fiber.join(inProcess);
     return yield* Effect.never;
   }));

@@ -45,9 +45,7 @@ function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { js
       return yield* withQuery(request);
     }
     if (query !== undefined && !settings.fresh && !settings.dryRun) {
-      const value = yield* cachedQuery(Option.getOrUndefined(settings.root), query);
-      yield* Effect.sync(() => emit(value, settings.json));
-      return value;
+      return yield* withQuery({ name: 'historical', input: { query } });
     }
     for (let attempt = 1; ; attempt++) {
       const result = yield* Effect.result(withRepo(operation, { readonly: true }));

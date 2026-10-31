@@ -24,8 +24,10 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
   static readonly layer = Layer.effect(Workspace, Effect.gen(function*() {
     const path = yield* Path.Path;
     const openRead = Effect.fn('Workspace.openRead')(function*(root: string | undefined, options: ReadRepositoryOptions) {
+      const persistent = yield* Effect.serviceOption(PersistentCache);
+      const selected = Option.isSome(persistent) ? options : { ...options, persistentCache: 'off' as const };
       const repo = yield* Effect.acquireRelease(
-        Effect.try({ try: () => new LocalRepository(root === undefined ? root : path.resolve(root), options), catch: failure }),
+        Effect.try({ try: () => new LocalRepository(root === undefined ? root : path.resolve(root), selected), catch: failure }),
         repo => Effect.sync(() => repo.close()),
       );
       yield* attachCache(repo);
@@ -33,8 +35,10 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
     });
     const openWrite = Effect.fn('Workspace.openWrite')(function*(root: string | undefined, options: RepositoryOptions = {}) {
       const publication = yield* Publication;
+      const persistent = yield* Effect.serviceOption(PersistentCache);
+      const selected = Option.isSome(persistent) ? options : { ...options, persistentCache: 'off' as const };
       const repo = yield* Effect.acquireRelease(
-        Effect.try({ try: () => new LocalRepository(root === undefined ? root : path.resolve(root), options, publication.validation), catch: failure }),
+        Effect.try({ try: () => new LocalRepository(root === undefined ? root : path.resolve(root), selected, publication.validation), catch: failure }),
         repo => Effect.sync(() => repo.close()),
       );
       yield* attachCache(repo);

@@ -1,19 +1,22 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
 import { NodeSocket } from '@effect/platform-node';
-import { Effect, Layer, Queue, Schema, Stream } from 'effect';
+import { Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
 import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
 import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.js';
 import { collectPackets, collectBytes } from './computation.js';
 import { decodeWorkspaceRead } from '../../model/index.js';
 
 export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string) {
+  const opened = yield* Deferred.make<void>();
   const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(
     Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })),
     Layer.provide(NodeSocket.layerNet({ path })),
+    Layer.provide(Layer.succeed(RpcClient.ConnectionHooks, { onConnect: Deferred.succeed(opened, undefined).pipe(Effect.asVoid), onDisconnect: Effect.void })),
   );
   const context = yield* Layer.build(protocol);
   const client = yield* RpcClient.make(WorkspaceRpcs).pipe(Effect.provideContext(context));
+  yield* Deferred.await(opened).pipe(Effect.timeout('1 second'));
   const hello = yield* client.hello({ installation, protocol: PROTOCOL }).pipe(Effect.timeout('1 second'));
   if (hello.token !== token) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Instance token differs from the running record' }));
   return { client, hello, identity: () => ({ token, installation, requestId: crypto.randomUUID(), deadline: Date.now() + 60_000 }) };

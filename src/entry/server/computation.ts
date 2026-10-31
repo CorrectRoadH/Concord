@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/local-data-engine/architecture.md#进程与资源
 import { Effect, Schema, Stream } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
-import { QueryRequest } from '../../app/index.js';
+import { Query, QueryRequest } from '../../app/index.js';
 import { Packet, strict, WorkspaceServerError, RESULT_LIMIT } from './protocol.js';
 
 const Row = strict(Schema.Struct({ key: Schema.String, payload: Schema.String }));
@@ -13,6 +13,7 @@ export const Snapshot = strict(Schema.Struct({
 }));
 export const Computation = Schema.Union([
   strict(Schema.Struct({ kind: Schema.Literal('scan') })),
+  strict(Schema.Struct({ kind: Schema.Literal('query-scan'), query: Query })),
   strict(Schema.Struct({ kind: Schema.Literal('query'), request: QueryRequest })),
   strict(Schema.Struct({ kind: Schema.Literal('read'), path: Schema.String })),
   strict(Schema.Struct({ kind: Schema.Literal('read-bytes'), path: Schema.String })),
