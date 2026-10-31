@@ -105,7 +105,7 @@ const prepareCheckout = Effect.fn('fixVerification.prepare')(function*(root: str
     const result = yield* runOwnedProcess(argv, { cwd: root, env: safeRunnerEnvironment(), timeoutMs: runner.timeoutMs }).pipe(Effect.scoped, Effect.mapError(error => new ConcordError('FixUnverifiable', `Runner preparation failed: ${error.message}`)));
     const cleanupOk = hasConfirmedOwnedGroupCleanup(result);
     if (!cleanupOk) yield* sync(cleanupUnknown);
-    if (!cleanupOk || result.exitCode !== 0 || result.timedOut || result.cancelled || result.signal !== null || result.error !== undefined || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('FixUnverifiable', `Runner preparation command ${index + 1} did not complete successfully`));
+    if (!cleanupOk || result.exitCode !== 0 || result.timedOut || result.cancelled || result.signal !== null || result.error !== undefined || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('FixUnverifiable', `Runner preparation command ${index + 1} did not complete successfully`, { command: index + 1, exitCode: result.exitCode, signal: result.signal, timedOut: result.timedOut, cancelled: result.cancelled, cleanupOk, error: result.error, stdout: result.stdout, stderr: result.stderr }));
   }
 });
 
