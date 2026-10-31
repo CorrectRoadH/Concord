@@ -21,3 +21,5 @@ export { AGENT_RULE_END } from './storage.js';
 export { AGENT_RULE_CONTENT } from './storage.js';
 export type { RepositoryOptions, ReadRepositoryOptions } from './storage.js';
 export { openReadRepository, openWriteRepository } from './open.js';
+export { Workspace } from './service.js';
+export type { WorkspaceService } from './service.js';
