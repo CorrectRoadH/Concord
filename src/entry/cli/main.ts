@@ -15,10 +15,15 @@ import { Workspace } from '../../base/workspace/index.js';
 import { Sources } from '../../base/sources/index.js';
 import { Cache, CacheSnapshot, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.js';
 import { ServerRuntime } from '../../base/server-lock/index.js';
-import { connectWorkspaceSocket, requestWorkspace, submitFeedback, waitForServerHandshake, PROTOCOL, FRAME_LIMIT, WorkspaceServerError } from '../server/index.js';
-
-const asServerError = (cause: unknown) => { const error = workspaceServerFailure(cause); return new WorkspaceServerError({ code: error.code, message: error.message }); };
-const workspaceServerFailure = (cause: unknown): ConcordError => cause instanceof WorkspaceServerError ? new ConcordError(cause.code, cause.message, cause.details) : failure(cause);
+const loadClient = () => Effect.tryPromise(() => import('../server/index.js')).pipe(Effect.mapError(failure));
+const requestWorkspace: typeof import('../server/index.js').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
+const ServerFailure = Schema.Struct({ _tag: Schema.Literal('WorkspaceServerError'), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) });
+const remoteFailure = (cause: unknown): ConcordError | undefined => {
+  const decoded = Schema.decodeUnknownExit(ServerFailure, { onExcessProperty: 'ignore' })(cause);
+  return decoded._tag === 'Success' ? new ConcordError(decoded.value.code, decoded.value.message, decoded.value.details) : undefined;
+};
+const workspaceServerFailure = (cause: unknown): ConcordError => remoteFailure(cause) ?? failure(cause);
+const asServerError = workspaceServerFailure;
 
 const loadServerMain = () => Effect.tryPromise(() => import('../server/main.js'));
 const loadApp = () => Effect.tryPromise(() => import('../../app/index.js'));
@@ -30,6 +35,7 @@ const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*
   const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
   const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
   if (!record) return undefined;
+  const { connectWorkspaceSocket } = yield* loadClient();
   const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? platform.installation(), record.token);
   if (connection.hello.installation !== record.installation || connection.hello.protocol !== record.protocol) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Handshake differs from the running record'));
   return connection;
@@ -38,17 +44,20 @@ const workspaceServerStatus = (root: string) => Effect.scoped(existingWorkspace(
 const readExistingWorkspaceProjection = (root: string) => Effect.scoped(Effect.gen(function*() {
   const runtime = yield* ServerRuntime;
   const connection = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
-  if (!connection || connection.hello.installation !== runtime.installation() || connection.hello.protocol !== PROTOCOL) return undefined;
+  if (!connection || connection.hello.installation !== runtime.installation()) return undefined;
+  if (connection.hello.protocol !== (yield* loadClient()).PROTOCOL) return undefined;
   if (connection.hello.state === 'opening') return yield* Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is opening'));
   return yield* requestWorkspace(connection, 'workspace', {}).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(WorkspaceProjectionSchema, { onExcessProperty: 'error' })(value)), Effect.mapError(workspaceServerFailure));
 }));
 const clearExistingWorkspaceCache = (root: string) => Effect.scoped(Effect.gen(function*() {
   const runtime = yield* ServerRuntime;
   const connection = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
-  if (!connection || connection.hello.installation !== runtime.installation() || connection.hello.protocol !== PROTOCOL) return undefined;
+  if (!connection || connection.hello.installation !== runtime.installation()) return undefined;
+  if (connection.hello.protocol !== (yield* loadClient()).PROTOCOL) return undefined;
   return yield* requestWorkspace(connection, 'cache-clear', {}).pipe(Effect.mapError(workspaceServerFailure));
 }));
 const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false, identifiedPrivateDir?: string) {
+  const { PROTOCOL, waitForServerHandshake } = yield* loadClient();
   const platform = yield* ServerRuntime;
   const installation = platform.installation();
   let current = yield* existingWorkspace(root, installation, identifiedPrivateDir).pipe(Effect.catch(() => Effect.succeed(undefined)));
@@ -86,7 +95,7 @@ function makeWorkspaceView() { return Effect.fn('serveWorkspaceView')(function*(
     for (;;) {
       const attempt = yield* Effect.result(requestWorkspace(connection, 'http', { action: 'open', host: options.host, port: options.port }));
       if (attempt._tag === 'Success') { input = attempt.success; break; }
-      if (!(attempt.failure instanceof WorkspaceServerError) || attempt.failure.code !== 'WorkspaceServerBusy' || (yield* Clock.currentTimeMillis) >= deadline) return yield* Effect.fail(attempt.failure);
+      if (remoteFailure(attempt.failure)?.code !== 'WorkspaceServerBusy' || (yield* Clock.currentTimeMillis) >= deadline) return yield* Effect.fail(attempt.failure);
       yield* Effect.sleep('10 millis');
     }
     const lease = yield* Schema.decodeUnknownEffect(HttpLease, { onExcessProperty: 'error' })(input);
@@ -119,11 +128,12 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
     if (cache === 'off') return yield* executeQuery(root, request, cache);
     const identified = yield* workspace.identify(root, true);
     const remote = yield* Effect.result(existingWorkspace(identified.root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime)));
-    if (remote._tag === 'Failure' || !remote.success || remote.success.hello.installation !== runtime.installation() || remote.success.hello.protocol !== PROTOCOL) return yield* executeQuery(root, request, cache);
+    if (remote._tag === 'Failure' || !remote.success || remote.success.hello.installation !== runtime.installation()) return yield* executeQuery(root, request, cache);
+    if (remote.success.hello.protocol !== (yield* loadClient()).PROTOCOL) return yield* executeQuery(root, request, cache);
     const reply = yield* Effect.result(requestWorkspace(remote.success, 'query', request));
     if (reply._tag === 'Failure') {
-      const cause = reply.failure;
-      if (cause instanceof WorkspaceServerError && !cause.code.startsWith('WorkspaceServer') && !cause.code.startsWith('WorkspaceCompute')) return yield* Effect.fail(new ConcordError(cause.code, cause.message, cause.details));
+      const cause = remoteFailure(reply.failure);
+      if (cause && !cause.code.startsWith('WorkspaceServer') && !cause.code.startsWith('WorkspaceCompute')) return yield* Effect.fail(cause);
       return yield* executeQuery(root, request, cache);
     }
     return yield* Schema.decodeUnknownEffect(QueryReply, { onExcessProperty: 'error' })(reply.success).pipe(Effect.mapError(failure));
@@ -137,7 +147,7 @@ const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*
     const connection = yield* existingWorkspace(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.catch(() => Effect.succeed(undefined)));
     if (!connection) return yield* mergeLocalFeedbackObservation(root, connectionId, items).pipe(Effect.provideService(Workspace, workspace));
     if (connection.hello.installation !== runtime.installation()) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Feedback owner has another installation identity'));
-    return yield* submitFeedback(connection, connectionId, items);
+    return yield* (yield* loadClient()).submitFeedback(connection, connectionId, items);
   })) });
 }));
 
