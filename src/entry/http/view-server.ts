@@ -22,7 +22,7 @@ export interface HostedViewPorts {
   readonly compile: (input: unknown) => Promise<unknown>;
   readonly action: (input: unknown, signal?: AbortSignal) => Promise<unknown>;
   readonly jobs: { list(): readonly ViewJob[]; start(caseId: string): ViewJob; cancel(id: string): ViewJob; close(): Promise<void> };
-  readonly subscribe: (listener: (event: unknown) => void) => () => void;
+  readonly subscribe: (listener: (event: unknown) => void | Promise<void>) => () => void;
   readonly sse: (delta: number) => void;
 }
 interface ProjectionPort {
@@ -318,7 +318,9 @@ async function api(request: IncomingMessage, response: ServerResponse, url: URL,
       if (response.writableEnded || response.destroyed) return;
       const stopping = typeof event === 'object' && event !== null && 'state' in event && event.state === 'stopping';
       const body = `event: ${stopping ? 'stopping' : 'workspace'}\ndata: ${JSON.stringify(event)}\n\n`;
-      if (stopping) { response.end(body); return; }
+      if (stopping) return new Promise<void>(resolve => {
+        response.once('finish', resolve); response.once('close', resolve); response.end(body);
+      });
       if (blocked) { pending = body; return; }
       blocked = !response.write(body);
     };

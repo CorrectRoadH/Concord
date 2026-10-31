@@ -24,6 +24,9 @@ const identity = (path: string) => {
   const stat = lstatSync(path, { bigint: true });
   return { device: String(stat.dev), inode: String(stat.ino) };
 };
+const serviceLockReleased = (privateDir: string) => Effect.scoped(scopedServerLock(join(privateDir, 'server')).pipe(
+  Effect.as(true), Effect.catch(error => error._tag === 'ServerLockHeld' ? Effect.succeed(false) : Effect.fail(error)),
+));
 export function readServerRecord(privateDir: string, requireSocket = true): ServerRecord | undefined {
   const path = join(privateDir, 'server', 'current.json');
   const stat = lstatSync(path, { throwIfNoEntry: false });
@@ -101,7 +104,8 @@ export class ServerRuntime extends Context.Service<ServerRuntime, {
   readonly acquire: typeof acquireServerRuntime;
   readonly read: typeof readServerRecord;
   readonly installation: typeof serverInstallation;
+  readonly released: typeof serviceLockReleased;
   readonly cwd: string;
 }>()('concord/base/server-lock/ServerRuntime') {
-  static readonly layer = Layer.succeed(ServerRuntime, { acquire: acquireServerRuntime, read: readServerRecord, installation: serverInstallation, cwd: serverCwd });
+  static readonly layer = Layer.succeed(ServerRuntime, { acquire: acquireServerRuntime, read: readServerRecord, installation: serverInstallation, released: serviceLockReleased, cwd: serverCwd });
 }

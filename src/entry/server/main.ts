@@ -233,6 +233,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     }).pipe(Effect.provideContext(stateContext));
     const serverScope = yield* Effect.scope;
     const event = SubscriptionRef.changes(service.state.value).pipe(Stream.buffer({ capacity: 1, strategy: 'sliding' }));
+    const httpSubscriptions = new Set<Fiber.Fiber<unknown, unknown>>();
     const notify = () => { Effect.runFork(SubscriptionRef.update(service.state.value, value => ({ ...value }))); };
     const runOperation = async (input: Parameters<typeof operations.run>[0], signal?: AbortSignal) => {
       try { return await Effect.runPromise(operations.run(input), { signal }); }
@@ -265,8 +266,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         },
         jobs, sse,
         subscribe: listener => {
-          const fiber = Effect.runFork(Stream.runForEach(event, value => Effect.sync(() => listener(value))));
-          return () => { Effect.runFork(Fiber.interrupt(fiber)); };
+          const fiber = Effect.runFork(Stream.runForEach(event.pipe(Stream.takeUntil(value => value.state === 'stopping')), value => Effect.promise(() => Promise.resolve(listener(value)))));
+          httpSubscriptions.add(fiber);
+          return () => { httpSubscriptions.delete(fiber); Effect.runFork(Fiber.interrupt(fiber)); };
         },
       };
       return startHostedViewServer({ root, host, port }, ports);
@@ -303,7 +305,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const handlers = WorkspaceRpcs.toLayer({
       hello: () => SubscriptionRef.get(service.state.value).pipe(Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, generation: value.generation }))),
       shutdown: request => request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : Effect.forkIn(Effect.sleep('10 millis').pipe(Effect.andThen(service.stop)), serverScope).pipe(Effect.asVoid),
-      subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(event, output.json)))),
+      subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(event.pipe(Stream.takeUntil(value => value.state === 'stopping')), output.json)))),
       workspace: request => result(request, readProjection),
       refresh: request => result(request, service.request.pipe(Effect.as({ status: 'requested' }))),
       query: request => result(request, Effect.gen(function*() {
@@ -322,7 +324,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     yield* Effect.forkScoped(RpcServer.make(WorkspaceRpcs, { concurrency: 256 }).pipe(Effect.provide(handlers), Effect.provideService(RpcServer.Protocol, protocol)));
     yield* ready;
     yield* service.stopped;
-    yield* Effect.all([service.drain, operations.drain], { concurrency: 'unbounded' }).pipe(Effect.timeout('3 seconds'), Effect.ignore);
+    yield* Effect.all([service.drain, operations.drain, ...[...httpSubscriptions].map(Fiber.await)], { concurrency: 'unbounded' }).pipe(Effect.timeout('3 seconds'), Effect.ignore);
     yield* operations.close;
   }));
 });
@@ -398,16 +400,21 @@ const submitFeedback = Effect.fn('submitFeedback')(function*(connection: import(
 });
 export const connectOrStartWorkspace = Effect.fn('connectOrStartWorkspace')(function*(root: string) {
   let current = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
-  const installation = (yield* ServerRuntime).installation();
+  const platform = yield* ServerRuntime;
+  const installation = platform.installation();
   if (current && current.hello.installation === installation && current.hello.protocol === PROTOCOL) return current;
   if (current) {
+    const { privateDir } = yield* (yield* Workspace).locate(root, true);
+    const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
     yield* current.client.shutdown({ token: current.hello.token }).pipe(Effect.mapError(asServerError));
     const deadline = (yield* Clock.currentTimeMillis) + 3000;
+    let released = false;
     while ((yield* Clock.currentTimeMillis) < deadline) {
-      const active = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
-      if (!active) break;
+      released = yield* platform.released(privateDir);
+      if (released) break;
       yield* Effect.sleep('20 millis');
     }
+    if (!released) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'The previous service has not released its native service lock', { pid: record?.pid, installation: current.hello.installation }));
     current = undefined;
   }
   yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
