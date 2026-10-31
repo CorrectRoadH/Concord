@@ -31,7 +31,7 @@ function fixture(): string {
 const run = <A, E>(effect: Effect.Effect<A, E, import('effect').FileSystem.FileSystem>): Promise<A> => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
-test('advanced writing emits plain Spec pages and reads Design selection from DECISION', async () => {
+test('advanced writing emits plain Spec pages and reads a single Design page', async () => {
   const root = fixture();
   try {
     const path = 'docs/design/storage.md';

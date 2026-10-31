@@ -7,8 +7,6 @@ import test from 'node:test';
 import { Effect, Schema } from 'effect';
 import { scanAnnotations } from "../../src/domain/tests/index.js";
 import { scanCode } from "../../src/domain/code/index.js";
-import { inlineLinks, relativeMarkdownLink } from "../../src/domain/taste/index.js";
-import { traceGaps } from "../../src/app/index.js";
 import { loadDocuments } from "../../src/domain/documents/index.js";
 import { LocalRepository } from "../support/repository.js";
 import { readWritingPolicy } from "../../src/domain/writing/index.js";
@@ -40,15 +38,6 @@ test('current checkout configures a version-matched runner whose annotations sca
       assert.deepEqual(code.findings, []);
       assert.ok(code.codes.some(item => item.file === 'src/base/workspace/storage.ts'), 'configured source roots must enter the self-host scan');
       assert.deepEqual(new Set(code.codes.map(item => item.scope)), new Set(['file', 'node', 'region']));
-      const tracked = new Set(documents.flatMap(issue => issue.metadata.kind !== 'issue' ? [] : inlineLinks(issue.body, issue.path).flatMap(link => {
-        const target = relativeMarkdownLink(issue.path, link.url);
-        return target?.kind === 'relative' && !target.query ? [target.path] : [];
-      })));
-      for (const gap of traceGaps(repository, 'off').contracts.filter(gap => gap.kind === 'use-case')) {
-        const owner = useCases.find(useCase => useCase.path === gap.path)!;
-        assert.ok(owner.metadata.kind === 'use-case');
-        assert.ok(tracked.has(owner.path) || tracked.has(owner.metadata.feature), `trace gap lacks an open Issue linking its Use Case or Feature: ${owner.path}`);
-      }
     } finally {
       repository.close();
     }

@@ -73,7 +73,7 @@ test('real browser authors writing policy, keeps conflict drafts, and displays s
     await expect.poll(() => parseWritingPolicy(readFileSync(join(root, 'docs/writing.md'), 'utf8')).bannedTerms.at(-1)?.use).toBe('Final');
     await second.getByLabel(`理由 ${rule}`).fill('草稿理由');
     await second.getByRole('button', { name: '保存规则' }).click();
-    await expect(second.locator('.form-error')).toContainText('FileChangedSinceRead');
+    await expect(second.locator('.form-error')).toContainText('docs/writing.md changed');
     await expect(second.getByLabel(`理由 ${rule}`)).toHaveValue('草稿理由');
     await second.getByRole('link', { name: '文档', exact: true }).click();
     await expect(second.getByRole('dialog', { name: '离开并丢弃未保存内容？' })).toBeVisible();
@@ -191,7 +191,7 @@ test('post-save derived refresh cannot adopt an unseen writer digest as the draf
     await expect(page.getByLabel('替换建议 1')).toHaveValue('Saved locally');
     await page.getByLabel('替换建议 1').fill('Second local');
     await page.getByRole('button', { name: '保存规则' }).click();
-    await expect(page.locator('.form-error')).toContainText('FileChangedSinceRead');
+    await expect(page.locator('.form-error')).toContainText('docs/writing.md changed');
     assert.equal(parseWritingPolicy(readFileSync(join(root, 'docs/writing.md'), 'utf8')).bannedTerms[0]?.use, 'External');
   } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
