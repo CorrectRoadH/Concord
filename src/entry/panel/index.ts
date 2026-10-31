@@ -6,5 +6,6 @@ export { panelItems, initialPanelState, reconcilePanelState, navigatePanel, visi
 export type { PanelState, PanelItem } from './state.js';
 export { markdownToTerminal, localTarget, terminalText, wrapTerminalLine, sliceColumns } from './markdown.js';
 export type { PanelConcept, TerminalMarkdown, TerminalLine, PanelLink } from './markdown.js';
-export { renderPanel, PanelWorktreeUnknown, panelWorktree } from './main.js';
+export { renderPanel } from './main.js';
 export type { PanelPorts, PanelGeneration, PanelReadResult, PanelSession } from './main.js';
+export { PanelWorktreeUnknown, PanelHerdrUnavailable, panelWorktree, panelOpenRequest, openHerdrPanel, bindHerdrManifest } from './herdr.js';

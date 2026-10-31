@@ -1,6 +1,6 @@
 import { createElement as h, type ReactElement } from 'react';
 import { Box, Text } from 'ink';
-import type { WorkspaceDisplay } from '../../model/workspace-display/index.js';
+import { displayConcepts, conceptBody, type WorkspaceDisplay } from '../../model/workspace-display/index.js';
 import { markdownToTerminal, sliceColumns, terminalText, wrapTerminalLine, type PanelConcept } from './markdown.js';
 import { panelItems, visiblePanelItems, type PanelState } from './state.js';
 
@@ -8,7 +8,6 @@ export interface BoundPanelBody {
   readonly path: string; readonly digest: string; readonly body: string;
   /** Relations and concepts frozen at the generation that accepted this body. */
   readonly model: WorkspaceDisplay;
-  readonly concepts: readonly PanelConcept[];
 }
 export interface PanelViewProps {
   readonly model?: WorkspaceDisplay;
@@ -24,8 +23,11 @@ export function panelDetail(props: PanelViewProps) {
   const lines: { text: string; literal?: boolean }[] = [];
   if (props.state.concept) {
     const concept = props.state.concept;
-    const definition = markdownToTerminal(concept.definition, concept.path, new Set(props.model ? panelItems(props.model).map(item => item.path) : []));
-    return { ...definition, lines: [{ text: `概念：${concept.term}` }, { text: concept.path }, ...definition.lines, ...concept.deprecated.map(term => ({ text: `弃用：${term} → ${concept.term}` }))] };
+    const acceptedConcept = props.bodies.get(concept.path);
+    const body = acceptedConcept && acceptedConcept.digest === concept.digest ? conceptBody(acceptedConcept.body, concept.id) : undefined;
+    if (body === undefined) return { lines: [{ text: `概念：${concept.term}` }, { text: `${concept.path}#${concept.id}` }, { text: '概念正文正在更新…' }], links: [], concepts: [] };
+    const definition = markdownToTerminal(body, concept.path, new Set(props.model ? panelItems(props.model).map(item => item.path) : []));
+    return { ...definition, lines: [{ text: `概念：${concept.term}` }, { text: `${concept.path}#${concept.id}` }, ...definition.lines, ...concept.deprecated.map(term => ({ text: `弃用：${term} → ${concept.term}` }))] };
   }
   if (!selected) return { lines: [{ text: props.model ? '选择条目阅读' : '正在构建工作区投影…' }], links: [], concepts: [] };
   const diagnostics = props.model!.findings.filter(item => item.path === selected.path).map(finding => ({ text: `诊断 ${finding.code}：${finding.message}` }));
@@ -37,7 +39,7 @@ export function panelDetail(props: PanelViewProps) {
   const source = displayed.kind === 'code' || displayed.kind === 'test'
     ? accepted.body.split('\n').slice((displayed.line ?? 1) - 1, displayed.endLine).map((text, index) => ({ text: `${(displayed.line ?? 1) + index}  ${terminalText(text)}`, literal: true })) : undefined;
   const markdown = source ? { lines: [{ text: `${displayed.title} · ${displayed.sourcePath}:${displayed.line}–${displayed.endLine}` }, ...source], links: [], concepts: [] }
-    : markdownToTerminal(accepted.body, selected.path, paths, accepted.concepts);
+    : markdownToTerminal(accepted.body, selected.path, paths, displayConcepts(accepted.model, selected.path));
   const links = [...markdown.links];
   lines.push(...markdown.lines);
   const detail = accepted.model.documents.find(item => item.document.path === selected.path);
@@ -50,10 +52,11 @@ export function panelDetail(props: PanelViewProps) {
       lines.push({ text: `实现 · ${group.owner.metadata.title}` });
       for (const code of group.codes) { links.push({ label: code.symbol ?? code.file, target: `${code.file}#L${code.line}` }); lines.push({ text: `${code.symbol ?? code.file} · ${code.file}:${code.line}–${code.endLine} [${links.length}]` }); }
     }
+    lines.push({ text: `测试声明：${detail.testSummary.count} 项（不表示覆盖率或功能完成）` });
+    for (const child of detail.testSummary.untestedUseCases) lines.push({ text: `未关联测试的 Use Case：${child.metadata.title}` });
     for (const group of detail.testGroups) if (group.cases.length) {
       lines.push({ text: `测试 · ${group.owner.metadata.title}` });
       for (const item of group.cases) { links.push({ label: item.name, target: `${item.file}#L${item.line}` }); lines.push({ text: `${item.name} · ${item.file}:${item.line} · ${item.status}${item.skipped ? ' · skipped' : ''} [${links.length}]` }); }
-      lines.push({ text: '测试运行状态暂不可用；关联声明不代表测试已运行。' });
     }
   }
   return { lines, links, concepts: markdown.concepts };

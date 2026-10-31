@@ -1,57 +1,41 @@
 // @concord-file
 // @concord-implements docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import type { showConcepts } from '../../src/domain/concepts/index';
 import type { WorkspaceDocument } from '../../src/model/index';
+import { effectiveWorkspaceConcepts, conceptBody } from '../lib/workspace-display';
 import { useWorkspace } from '../workspace';
 import { Button } from './ui/button';
 import { PanelEmpty, PanelHeader, RecordList, RecordItem } from './content-layout';
-
-type ConceptShow = ReturnType<typeof showConcepts>;
-
-function catalogPath(documentPath: string): string {
-  return `${documentPath.slice(0, documentPath.lastIndexOf('/'))}/concepts.md`;
-}
+import { MarkdownPreview } from './markdown-preview';
 
 export function TerminologyPanel({ document }: { readonly document: WorkspaceDocument }) {
-  const { api } = useWorkspace();
-  const path = catalogPath(document.path);
-  const currentPath = useRef(path);
-  currentPath.current = path;
-  const generation = useRef(0);
-  const [response, setResponse] = useState<{ readonly path: string; readonly value: ConceptShow } | null>(null);
-  const [error, setError] = useState<{ readonly path: string; readonly message: string } | null>(null);
+  const { api, snapshot } = useWorkspace();
+  const concepts = effectiveWorkspaceConcepts(snapshot, document.path);
+  const [reference, select] = useState<string | null>(null);
+  const selected = concepts.find(item => item.reference === reference);
+  const [detail, setDetail] = useState<{ reference: string; digest: string; body?: string; error?: string } | null>(null);
   useEffect(() => {
-    const ticket = ++generation.current;
-    setResponse(null);
-    setError(null);
-    void api.action({ action: 'concepts.show', path }).then(value => {
-      const result = value as ConceptShow;
-      if (generation.current === ticket && currentPath.current === path && result.path === path) setResponse({ path, value: result });
+    if (!selected?.digest) return;
+    const controller = new AbortController(), { path, digest, id, reference } = selected;
+    void api.file(path, controller.signal).then(file => {
+      if (controller.signal.aborted) return;
+      setDetail({ reference, digest, ...(file.digest === digest ? { body: conceptBody(file.body, id) } : {}) });
     }).catch((cause: unknown) => {
-      if (generation.current === ticket && currentPath.current === path) setError({ path, message: cause instanceof Error ? cause.message : String(cause) });
+      if (!controller.signal.aborted) setDetail({ reference, digest, error: cause instanceof Error ? cause.message : String(cause) });
     });
-    return () => { generation.current++; };
-  }, [api, path]);
-
-  const current = response?.path === path ? response.value : null;
-  const currentError = error?.path === path ? error.message : '';
+    return () => controller.abort();
+  }, [api, selected?.reference, selected?.digest]);
+  const current = selected && detail?.reference === selected.reference && detail.digest === selected.digest ? detail : null;
   return <>
     <PanelHeader title="术语" actions={<Button asChild variant="outline" size="sm"><Link to="/terms">打开术语</Link></Button>} />
-    <p className="path-text">术语表：<code>{path}</code>；包含本范围、上级范围和引用的术语定义。</p>
-    {currentError ? <div role="alert" className="form-error">术语目录读取失败：{currentError}</div>
-      : !current ? <p role="status">正在读取有效术语…</p>
-      : <>
-        {current.state === 'invalid' && <div role="alert" className="form-error">本地术语表无效：{current.diagnostic}</div>}
-        {current.diagnostics.length > 0 && <div role="alert" className="form-error"><strong>术语诊断</strong><ul>{current.diagnostics.map((item, index) => <li key={`${item.code}:${index}`}>{item.code}：{item.message}（{item.sources.join('、')}）</li>)}</ul></div>}
-        {current.effectiveConcepts.length === 0 ? <PanelEmpty title="此范围暂无有效术语">在术语页面管理当前范围或上级范围的术语。</PanelEmpty>
-          : <RecordList>{current.effectiveConcepts.map(item => <RecordItem key={item.reference}>
-            <strong>{item.concept.term}</strong>
-            <p className="mb-0 mt-2">{item.concept.definition}</p>
-            <code className="text-xs text-muted-foreground">{item.reference}</code>
-            {item.concept.deprecated.length > 0 && <p>弃用名称：{item.concept.deprecated.join('、')}</p>}
-          </RecordItem>)}</RecordList>}
-      </>}
+    {concepts.length === 0 ? <PanelEmpty title="当前代次没有此范围的有效术语">在术语页面管理当前范围或上级范围的术语。</PanelEmpty>
+      : <RecordList>{concepts.map(item => <RecordItem key={item.reference}>
+        <Button variant="link" className="px-0" onClick={() => select(item.reference)}>{item.term}</Button>
+        <code className="block text-xs text-muted-foreground">{item.reference}</code>
+        {item.deprecated.length > 0 && <p>弃用名称：{item.deprecated.join('、')} → {item.term}</p>}
+        {selected?.reference === item.reference && (current?.error ? <div role="alert" className="form-error">{current.error}</div>
+          : current?.body === undefined ? <p role="status">概念正文正在更新…</p> : <MarkdownPreview markdown={current.body} documentPath={item.path} />)}
+      </RecordItem>)}</RecordList>}
   </>;
 }

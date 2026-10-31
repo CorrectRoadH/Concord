@@ -2,27 +2,18 @@ import { createElement as h, useEffect, useRef, useState } from 'react';
 import { render, useInput, useWindowSize, type RenderOptions } from 'ink';
 import { Effect, Fiber, Schema, type Scope } from 'effect';
 import type { WorkspaceDisplay } from '../../model/workspace-display/index.js';
-import { documentCategories } from '../../model/workspace-display/index.js';
+import { documentCategories, displayConcepts } from '../../model/workspace-display/index.js';
 import { PanelView, panelDetail, type BoundPanelBody } from './view.js';
 import { initialPanelState, navigatePanel, reconcilePanelState, visiblePanelItems, panelItems, type PanelState } from './state.js';
-import type { PanelConcept } from './markdown.js';
 
 export interface PanelGeneration {
   readonly model: WorkspaceDisplay;
-  /** Already resolved by document directory in this generation. */
-  readonly concepts: ReadonlyMap<string, readonly PanelConcept[]>;
 }
 export interface PanelReadResult { readonly path: string; readonly digest: string; readonly body: string }
 export interface PanelPorts {
   readonly read: (request: { readonly path: string; readonly expectedDigest: string }) => Effect.Effect<PanelReadResult, Error>;
   readonly openInWeb: (path: string) => Effect.Effect<string, Error>;
 }
-export class PanelWorktreeUnknown extends Schema.TaggedError<PanelWorktreeUnknown>()('PanelWorktreeUnknown', { message: Schema.String }) {}
-/** Herdr adapters must pass the invocation context, never the plugin cwd. */
-export const panelWorktree = (context: unknown) => Schema.decodeUnknownEffect(Schema.Struct({ focused_pane_cwd: Schema.String.check(Schema.isPattern(/^\S[\s\S]*$/u)), focused_pane_id: Schema.String.check(Schema.isMinLength(1)) }), { onExcessProperty: 'ignore' })(context).pipe(
-  Effect.map(value => ({ cwd: value.focused_pane_cwd, targetPaneId: value.focused_pane_id })),
-  Effect.mapError(() => new PanelWorktreeUnknown({ message: 'PanelWorktreeUnknown：当前 pane 没有工作目录，无法打开 Spec 面板。' })),
-);
 const BodyRead = Schema.Struct({ path: Schema.String, digest: Schema.String, body: Schema.String });
 interface InteractiveProps {
   readonly generation?: PanelGeneration;
@@ -41,16 +32,17 @@ function InteractivePanel(props: InteractiveProps) {
   const [command, setCommand] = useState('');
   const model = props.generation?.model;
   // Reconcile before rendering this generation so removed items cannot be read.
-  const current = model ? reconcilePanelState(state, previous.current, model) : state;
+  const reconciled = model ? reconcilePanelState(state, previous.current, model) : state;
+  const current = model && reconciled.concept ? { ...reconciled, concept: displayConcepts(model, reconciled.selected ?? '').find(concept => concept.reference === `${reconciled.concept!.path}#${reconciled.concept!.id}`) } : reconciled;
   useEffect(() => { previous.current = model; setState(current); }, [model]);
-  const selected = model && panelItems(model).find(item => item.path === current.selected);
+  const selected = current.concept ? { path: current.concept.path, digest: current.concept.digest, sourcePath: current.concept.path } : model && panelItems(model).find(item => item.path === current.selected);
   useEffect(() => {
     if (!selected || !selected.digest || !props.generation) return;
     const generation = props.generation, path = selected.path, sourcePath = selected.sourcePath ?? path, digest = selected.digest;
     const cacheKey = `${sourcePath}\0${digest}`;
     const cached = bodyCache.current.get(cacheKey);
     if (cached) {
-      setBodies(old => new Map(old).set(path, { ...cached, path, model: generation.model, concepts: generation.concepts.get(path) ?? [] }));
+      setBodies(old => new Map(old).set(path, { ...cached, path, model: generation.model }));
       return;
     }
     const fiber = Effect.runSync(Effect.forkIn(Effect.gen(function*() {
@@ -59,7 +51,7 @@ function InteractivePanel(props: InteractiveProps) {
       if (body.path !== sourcePath || body.digest !== digest) return; // Wait for the next generation; retain accepted old detail.
       yield* Effect.sync(() => {
         bodyCache.current.set(cacheKey, body);
-        setBodies(old => new Map(old).set(path, { ...body, path, model: generation.model, concepts: generation.concepts.get(path) ?? [] }));
+        setBodies(old => new Map(old).set(path, { ...body, path, model: generation.model }));
       });
     }).pipe(Effect.catch(cause => Effect.sync(() => setState(old => ({ ...old, message: String(cause) }))))), props.scope));
     return () => { Effect.runFork(Fiber.interrupt(fiber)); };

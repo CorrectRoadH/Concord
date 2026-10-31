@@ -21,7 +21,7 @@ function terminal() {
   });
   return { input, output, errors, waitFor, text: () => text };
 }
-const generation: PanelGeneration = { model: workspaceDisplay(panelSnapshot), concepts: new Map() };
+const generation: PanelGeneration = { model: workspaceDisplay(panelSnapshot),  };
 
 // @use-case docs/feature/herdr-panel/use-case/open-side-panel.md#验收
 test('actual panel keyboard session reads by expected digest, resizes, opens a port, and removes input/resize listeners', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
@@ -102,5 +102,28 @@ test('real read port rejects mismatched body and reuses path/digest cache across
   yield* session.update({ ...next, model: workspaceDisplay({ ...panelSnapshot, documents: panelSnapshot.documents.map(document => document.path === featurePath ? { ...document, digest: 'feature-2' } : document), codes: [], cases: [] }) }, true);
   yield* Effect.promise(() => tty.waitFor(text => text.includes('重连中')));
   assert.deepEqual(reads, ['feature-1', 'feature-2']);
+  tty.input.write('q'); yield* session.closed;
+}))));
+
+// @use-case docs/feature/herdr-panel/use-case/read-spec-detail.md#验收
+test('concept selection reads its catalog by projected digest and refreshes definition on the next generation', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const tty = terminal(), catalogPath = 'docs/feature/reader/concepts.md', reads: { path: string; expectedDigest: string }[] = [];
+  const snapshot = { ...panelSnapshot, conceptCatalogs: [{ path: catalogPath, imports: [], concepts: [{ id: 'spec', term: 'Spec', deprecated: ['OldSpec'] }] }], pages: [...panelSnapshot.pages, { path: catalogPath, digest: 'concept-1', documentPath: featurePath }] };
+  const ports: PanelPorts = {
+    read: request => Effect.sync(() => {
+      reads.push(request);
+      return { path: request.path, digest: request.expectedDigest, body: request.path === catalogPath ? `# Concepts\n\n## Spec {#spec}\n\nDEFINITION_${request.expectedDigest}\n\nFull explanation.\n` : panelBody };
+    }), openInWeb: () => Effect.succeed('unused'),
+  };
+  const session = yield* renderPanel(ports, { model: workspaceDisplay(snapshot) }, { stdin: tty.input, stdout: tty.output, stderr: tty.errors, debug: true, interactive: true });
+  yield* Effect.promise(() => tty.waitFor(text => text.includes('Spec〔概念1〕')));
+  tty.input.write('\t'); yield* Effect.promise(() => tty.waitFor(text => text.includes('已连接 · 正文')));
+  tty.input.write('c'); yield* Effect.promise(() => tty.waitFor(text => text.includes('打开：c')));
+  tty.input.write('1'); yield* Effect.promise(() => tty.waitFor(text => text.includes('打开：c1')));
+  tty.input.write('\r'); yield* Effect.promise(() => tty.waitFor(text => text.includes('DEFINITION_concept-1')));
+  assert.deepEqual(reads.at(-1), { path: catalogPath, expectedDigest: 'concept-1' });
+  yield* session.update({ model: workspaceDisplay({ ...snapshot, pages: snapshot.pages.map(page => page.path === catalogPath ? { ...page, digest: 'concept-2' } : page) }) });
+  yield* Effect.promise(() => tty.waitFor(text => text.includes('DEFINITION_concept-2')));
+  assert.deepEqual(reads.at(-1), { path: catalogPath, expectedDigest: 'concept-2' });
   tty.input.write('q'); yield* session.closed;
 }))));

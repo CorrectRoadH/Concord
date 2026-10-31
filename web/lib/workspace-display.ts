@@ -1,2 +1,2 @@
 /** Browser adapter: all generation derivation is shared with the terminal. */
-export { documentCategories, documentsInCategory, featureMatches, featureUseCases, featureTree, contractIdentities, implementationGroups, relatedTests, testGroups, projectionIsConclusive, projectDocPages, projectDocTitle, workspaceDisplay } from '../../src/model/workspace-display/index.js';
+export { documentCategories, documentsInCategory, featureMatches, featureUseCases, featureTree, contractIdentities, implementationGroups, relatedTests, testGroups, projectionIsConclusive, projectDocPages, projectDocTitle, workspaceDisplay, testDeclarationSummary, effectiveWorkspaceConcepts, conceptBody } from '../../src/model/workspace-display/index.js';

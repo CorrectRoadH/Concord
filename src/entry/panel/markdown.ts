@@ -1,8 +1,8 @@
 import type { Nodes } from 'mdast';
 import stringWidth from 'string-width';
-import { fromMarkdown, markdownBody, conceptSpellingKey, type ConceptDefinition } from '../../model/index.js';
+import { fromMarkdown, markdownBody, conceptSpellingKey, type WorkspaceConcept } from '../../model/index.js';
 
-export interface PanelConcept extends ConceptDefinition { readonly path: string }
+export interface PanelConcept extends WorkspaceConcept { readonly path: string; readonly digest: string }
 export interface TerminalLine { readonly text: string; readonly literal?: boolean }
 export interface PanelLink { readonly label: string; readonly target: string }
 export interface TerminalMarkdown { readonly lines: readonly TerminalLine[]; readonly links: readonly PanelLink[]; readonly concepts: readonly PanelConcept[] }
