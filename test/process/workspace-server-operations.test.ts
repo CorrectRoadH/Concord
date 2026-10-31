@@ -71,12 +71,12 @@ test('HTTP cache status and forced rebuild use the persistent workspace owner', 
         try { await Effect.runPromise(rpc.requestWorkspace(connection, 'workspace', {})); return true; } catch { return undefined; }
       }, { description: 'accepted workspace before HTTP maintenance', timeoutMs: 10_000 }));
       const listener = Schema.decodeUnknownSync(Schema.Struct({ address: Schema.String }))(yield* rpc.requestWorkspace(connection, 'http', { action: 'open', host: '127.0.0.1', port: 0 }));
-      const action = (name: string) => Effect.tryPromise(async () => {
-        const response = await fetch(`${listener.address}/api/action`, { method: 'POST', headers: { 'Content-Type': 'application/json', Connection: 'close' }, body: JSON.stringify({ action: name }) });
+      const action = (name: string) => Effect.tryPromise({ try: async () => {
+        const response = await fetch(new URL('/api/action', listener.address), { method: 'POST', headers: { 'Content-Type': 'application/json', Connection: 'close' }, body: JSON.stringify({ action: name }) });
         const body: unknown = await response.json();
         assert.equal(response.status, 200, JSON.stringify(body));
         return body;
-      });
+      }, catch: cause => cause });
       const status = Schema.decodeUnknownSync(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Struct({ status: Schema.Literal('ready') }) }))(yield* action('cache.status'));
       assert.equal(status.value.status, 'ready');
       const rebuilt = Schema.decodeUnknownSync(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Struct({ cache: Schema.Struct({ status: Schema.Literal('miss') }), codeCache: Schema.Struct({ status: Schema.Literals(['miss', 'hit']) }), cacheStatus: Schema.Struct({ status: Schema.Literal('ready') }) }) }))(yield* action('cache.rebuild'));
