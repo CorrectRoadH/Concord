@@ -241,7 +241,7 @@ test('C3c: same-size editor atomic save during open rejects queries and projecti
 })));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-// @issue docs/issues/workspace-server-unimplemented.md
+// @issue docs/issues/stale-read-observation-reuse.md
 test('C4: spelling checks reuse listings while every files scan enumerates current members without ancestors', t => Effect.runSync(Effect.sync(() => {
   const { parent, root } = fixture(t);
   for (let index = 0; index < 5000; index++) writeFileSync(join(parent, `wide-${index}`), '');
@@ -281,7 +281,7 @@ test('C4: spelling checks reuse listings while every files scan enumerates curre
 })));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-// @issue docs/issues/workspace-server-unimplemented.md
+// @issue docs/issues/stale-read-observation-reuse.md
 test('repeated files scans within one snapshot see deleted and newly added members', t => Effect.runSync(Effect.sync(() => {
   const { root } = fixture(t);
   const repo = reader(t, root);
