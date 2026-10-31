@@ -19,7 +19,7 @@
 
 项目使用固定版本的 Vite+ 管理任务，依赖安装由 `vp install` 委托固定版本的 pnpm。未全局安装时以 `pnpm exec vp` 调用。
 
-`pnpm check`（等价于 `vp run check`）是唯一的检查入口，满足 [用产品自身管理和验收开发](../../constitution.md#c-006)。默认运行完整门禁，日常开发和 CI 使用同一条命令，不提供只做部分检查的入口。
+`pnpm check`（等价于 `vp run check`）是唯一的检查入口，满足 [用 Concord 管理自身](#用-concord-管理自身)。默认运行完整门禁，日常开发和 CI 使用同一条命令，不提供只做部分检查的入口。
 
 | 阶段 | 内容 |
 | --- | --- |
@@ -61,3 +61,28 @@
 | 构建资源 | Web 工作台、PR 预览导出等依赖构建资源的命令，在源码模式下返回 `BuildRequired` 并提示 `vp build`；Web 开发使用 `vp dev` |
 
 验收：没有全局 Concord、没有 `dist/*.js`，只有原生产物时，`pnpm concord --json --dry-run check`、`pnpm concord docs check --json` 与 `pnpm concord trace show <path> --json` 在本仓库正常运行。
+
+## 技术栈
+
+本节约束 Concord 自身的维护代码。
+
+1. 实现、测试和构建脚本采用严格 TypeScript，执行与副作用通过 Effect 组织。不添加手工维护的 JavaScript，不绕过类型检查；编译输出和 JavaScript 消费者兼容 fixture 除外。
+2. Effect 依赖精确固定，使用 API 前读取安装包指引。不可信边界严格 Schema 解码并返回具名失败。
+3. 唯一原生例外是 `native/hawdb`：Rust N-API 桥接、链接胶水、字节转换、预算执行与固定 revision 的目录所有权锁适配。领域决策、来源核验、测试和构建编排仍属 TypeScript/Effect。
+4. 本条约束 Concord 自身。接入项目的语言、包管理器和运行时由其自行选择。
+
+## 用 Concord 管理自身
+
+Concord 用自己的流程开发和验收自己。
+
+1. 新功能先声明目标 Feature 与完整 Use Case，重要方案经 Design 比较和裁决。
+2. 验收测试在声明旁关联 Spec。交付必须通过 `pnpm check`，通过构建与打包后的公开 CLI 在隔离 Git 消费者中验证。
+3. Concord 的 check、trace 与 review 用于检查自身关系，不虚构测试关联或完成状态。
+
+## 协作与授权
+
+多个任务并行修改同一个仓库，对外操作需要明确授权。
+
+1. 保留其他任务的改动，控制写入范围。
+2. 未经明确授权不得 push、发布、操作生产、调用付费模型或发送外部消息。
+3. 破坏消费者兼容、改变持久数据含义、重划资源所有权或信任边界、回滚依赖协调迁移的方案，必须先完成独立设计挑战：由未参与方案的 reviewer 只读审查并给出书面结论，存在未解决的阻断意见时不得定案。

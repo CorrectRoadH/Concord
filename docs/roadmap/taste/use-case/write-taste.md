@@ -21,23 +21,7 @@
    - 坏的样子：README 开头就是字段、退出码和边界条件。
    ```
 
-2. 写一条 Decision Memory，说明为什么写下这条品味。
-
-   ```markdown
-   ---
-   type: decision
-   status: current
-   relations:
-     - role: changes
-       target: docs/taste.md
-   ---
-
-   # 写下项目的第一条品味
-   ```
-
-   正文写适用范围、理由、来源与影响。
-
-3. 查看品味。
+2. 查看品味。
 
    ```sh
    concord taste
@@ -50,17 +34,17 @@
      (没有页面依据这一条)
    ```
 
-4. 提交前检查本次变化。
+3. 检查。
 
    ```sh
-   concord check --since master
+   concord check
    ```
 
    预期输出以 `ok: true` 开头，退出 0。
 
 ## 结果
 
-`docs/taste.md` 有了第一条品味，它从这一刻起生效，不需要另外“启用”。修改记录在 Memory 中。
+`docs/taste.md` 有了第一条品味，它从这一刻起生效，不需要另外“启用”。修改历史由 Git 保存。
 
 ## Spec 来源
 

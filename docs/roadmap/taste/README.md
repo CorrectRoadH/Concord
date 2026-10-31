@@ -5,9 +5,8 @@
 ## 你可以做什么
 
 - 在 `docs/taste.md` 里写下项目的品味：每条一句话，说明它解决什么问题，再给出好的样子和坏的样子。
-- 写下底线：少数绝对不能违反的约束，例如凭据不进入日志。
 - 在依据某条品味的句子旁链接它，之后能查到哪些页面依据哪一条。
-- 修改品味时记下理由，`check --since` 确认每次修改都有记录。
+- 直接编辑修改品味，修改历史由 Git 保存。
 
 ## 上手
 
@@ -41,15 +40,7 @@ T-1 读得懂胜过写得全
 
 ## 怎样工作
 
-品味就是一个普通的 Markdown 文件，直接编辑。`concord taste` 只负责列出条目和依据它们的位置；`check` 确认链接指向存在的条目；`check --since` 确认每次修改条目都附了一条记下理由的 Decision Memory。
-
-```mermaid
-flowchart LR
-  A[编辑 docs/taste.md] --> B[写一条 Decision Memory，说明为什么改]
-  B --> C[check --since 确认修改都有理由]
-  D[Spec 页面链接条目] --> E[check 确认链接有效]
-  D --> F[concord taste 列出依据位置]
-```
+品味就是一个普通的 Markdown 文件，直接编辑，修改历史由 Git 保存。`concord taste` 列出条目和依据它们的位置；`check` 确认链接指向存在的条目。
 
 ## 用户路径
 
@@ -60,8 +51,7 @@ flowchart LR
 
 修改品味：
 
-- [修改品味并记下理由](use-case/change-taste.md)
-- [修改品味却没有记下理由](use-case/change-without-reason.md)
+- [修改品味](use-case/change-taste.md)
 - [删除仍被依据的条目](use-case/remove-cited-entry.md)
 
 ## 细节
@@ -69,7 +59,7 @@ flowchart LR
 - [命令](cli.md)：`concord taste` 的输出与错误码。
 - [文件格式](format.md)：条目的写法与 ID 规则。
 
-## 依据的品味与底线
+## 依据的品味
 
 - [读得懂胜过写得全](../../constitution.md#c-017)
 - [一个词一个意思](../../constitution.md#c-018)

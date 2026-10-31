@@ -24,7 +24,7 @@ concord issue remote preview reopen <number> --connection <id>
 concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 ```
 
-只支持 github.com 的 `transport: 'gh'` 连接，凭据只来自 gh 登录态（[尊重协作与外部操作授权](../../../constitution.md#c-007-4)）。远端写入由 `concord issue remote preview` 与 `concord issue remote apply` 提供，Web 与 action 不提供；本地 `docs/issues` 不因远端写入改变。
+只支持 github.com 的 `transport: 'gh'` 连接，凭据只来自 gh 登录态（[凭据](../../../architecture.md#凭据)）。远端写入由 `concord issue remote preview` 与 `concord issue remote apply` 提供，Web 与 action 不提供；本地 `docs/issues` 不因远端写入改变。
 
 ## plan
 
@@ -36,7 +36,7 @@ concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 
 ## 授权
 
-`--authorize` 是调用方声明的当次授权，不是凭据，Concord 不保存授权记录，也不证明授权真实存在。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传入，不得因 plan 成功、工具可用或权限宽松而推断授权（[尊重协作与外部操作授权](../../../constitution.md#c-007-2)）。
+`--authorize` 是调用方声明的当次授权，不是凭据，Concord 不保存授权记录，也不证明授权真实存在。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传入，不得因 plan 成功、工具可用或权限宽松而推断授权（[协作与授权](../../../engineering/concord-self-hosting/README.md#协作与授权)）。
 
 ## execute
 
@@ -71,5 +71,5 @@ concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 ## Spec 来源
 
 - [Feedback CLI 接入设计](../../feedback/cli-integration.md)
-- [品味 C-007](../../../constitution.md#c-007)
+- [品味 C-007](../../../engineering/concord-self-hosting/README.md#协作与授权)
 - [决策依据](../../../design/repository-workflows/DECISION.md)

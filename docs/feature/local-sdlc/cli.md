@@ -316,3 +316,11 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 导航仅使用同版当前输入。过期请求返回 ContentModified（-32801），取消返回 RequestCancelled（-32800）；输入缺失发布 EditorInputsIncomplete。悬停明确说明未提供分析观察，不将缺失观察解释成没有关系。
 
 服务只读，不提供 formatting、codeAction、executeCommand 或 willRenameFiles；未知编辑执行请求返回 EditorMethodNotSupported（-32601）。不启动 language server、collector 或 runner，不监听网络，不持久化 overlay。关闭、EOF 或 SIGINT 终结任务与句柄。预算与完整生命周期见[编辑器 Use Case](use-case/use-editor-service.md)。
+
+## 机器可读输出
+
+agent 和脚本只依赖机器可读输出。
+
+1. `--json` 输出结构、具名错误码与退出码是 agent 和脚本依赖的公开 Spec，由对应 Feature 的 CLI 页面或 Use Case 声明。
+2. 删除或改变已声明字段、错误码与退出码含义属于破坏消费者兼容，须先经过[独立设计挑战](../../engineering/concord-self-hosting/README.md#协作与授权)；新增字段不改变既有字段语义。
+3. 人读输出不是 Spec，消费者不解析人读输出。

@@ -116,15 +116,10 @@ export default function (p: P5) {
 - [聚合门禁](gate.md)：`concord check` 的必查范围、必需规则、JSON 结果与退出码。
 - [实现](architecture.md)
 
-## 依据的品味与底线
+## 依据的品味
 
 - [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [独立、本地、可安装](../../constitution.md#c-002)
 - [只声称证明过的](../../constitution.md#c-021)
-- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
-- [用产品自身管理和验收开发](../../constitution.md#c-006)
-- [尊重协作与外部操作授权](../../constitution.md#c-007)
-- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
 - [总则](../../constitution.md#general-amend)
 - [写现在，不写过去](../../constitution.md#c-020)
 - [读得懂胜过写得全](../../constitution.md#c-017)

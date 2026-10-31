@@ -24,12 +24,7 @@ Web 以常驻反馈导航和右侧详情组织处理流程，导航提供搜索�
 | --- | --- | ---: |
 | `feedback/list` | 本地反馈列表 | 620ms |
 
-## 依据的品味与底线
+## 依据的品味
 
 - [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [独立、本地、可安装](../../constitution.md#c-002)
-- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
 - [只声称证明过的](../../constitution.md#c-021)
-- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
-- [用产品自身管理和验收开发](../../constitution.md#c-006)
-- [尊重协作与外部操作授权](../../constitution.md#c-007)

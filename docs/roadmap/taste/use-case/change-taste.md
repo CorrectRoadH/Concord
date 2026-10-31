@@ -1,8 +1,8 @@
-# 修改品味并记下理由
+# 修改品味
 
 ## 用户目标
 
-维护者发现一条品味需要补充或改写，希望修改后别人能查到为什么改。
+维护者发现一条品味需要补充或改写，希望改完就生效，以后能查到改了什么。
 
 ## 起始状态
 
@@ -14,34 +14,24 @@
 
    例如在好的样子里加一句：“功能在不同情形下的表现各写成一个 Use Case。”
 
-2. 在同一变化中写一条 Decision Memory，以 `changes` 指向 T-1。
-
-   ```markdown
-   ---
-   type: decision
-   status: current
-   relations:
-     - role: changes
-       target: docs/taste.md#t-1
-   ---
-
-   # T-1 增加 Use Case 的好坏对照
-   ```
-
-   正文写适用范围、理由、来源与影响。
-
-3. 检查本次变化。
+2. 提交。理由写在提交说明里。
 
    ```sh
-   concord check --since master
+   git commit -am "taste: T-1 adds per-situation Use Cases"
+   ```
+
+3. 检查。
+
+   ```sh
+   concord check
    ```
 
    预期输出以 `ok: true` 开头，退出 0。
 
 ## 结果
 
-品味文件只保存修改后的正文；为什么改，记录在 Memory 中，逐字差异由 Git 提供。
+品味文件只保存当前正文。改了什么、为什么改，由 Git 历史回答，Concord 不另存修改记录。
 
 ## Spec 来源
 
-- [文件格式](../format.md#修改记录)
+- [文件格式](../format.md)

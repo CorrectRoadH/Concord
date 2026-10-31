@@ -68,13 +68,8 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 
 `GET /api/workspace` 的 warm p95 另不超过 600ms。就绪请求不含全量扫描；首次构建另报时长与状态，不计入 warm。jobs、file、document.set、action 与 git-status 的阈值为参照实测 p50 加约 20% 余量取整。
 
-## 依据的品味与底线
+## 依据的品味
 
 - [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [独立、本地、可安装](../../constitution.md#c-002)
-- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
 - [只声称证明过的](../../constitution.md#c-021)
-- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
-- [用产品自身管理和验收开发](../../constitution.md#c-006)
-- [尊重协作与外部操作授权](../../constitution.md#c-007)
 - [快到每次都愿意跑](../../constitution.md#c-023)

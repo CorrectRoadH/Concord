@@ -46,13 +46,9 @@
 5. 关闭种类的要求是关闭结论的下限，不能通过换入口或删除配置绕过。修复核验由 Concord 统一执行；runner 与 adapter 负责真实执行与资源终结，范式不要求所有项目采用同一 runner。
 6. 政策变更与跨仓库切换必须保留历史原件、互斥和恢复边界，不得形成并行授权域或降低既有关闭要求。
 
-## 依据的品味与底线
+## 依据的品味
 
 - [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
 - [只声称证明过的](../../constitution.md#c-021)
-- [维护代码采用严格 TypeScript 与 Effect](../../constitution.md#c-005)
-- [用产品自身管理和验收开发](../../constitution.md#c-006)
 - [总则](../../constitution.md#general-amend)
 - [写现在，不写过去](../../constitution.md#c-020)
-- [独立、本地、可安装](../../constitution.md#c-002)

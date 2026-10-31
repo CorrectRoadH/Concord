@@ -1,6 +1,6 @@
 # 变更审阅
 
-本地工作台展示当前工作区；PR 预览展示冻结提交。用户路径见[本地未提交变更](use-case/review-local-changes.md)与[PR 预览](use-case/review-pull-request.md)，`view export` 的调用与错误见 [CLI 页](cli.md#pr-静态预览导出)。本页声明 PR 静态导出的实现（[一件事只写一次，其余推导](../../constitution.md#c-019)、[独立、本地、可安装](../../constitution.md#c-002)、[写入遵守范围和恢复 Spec](../../constitution.md#c-003)、[尊重协作与外部操作授权](../../constitution.md#c-007)、[快到每次都愿意跑](../../constitution.md#c-023)）。
+本地工作台展示当前工作区；PR 预览展示冻结提交。用户路径见[本地未提交变更](use-case/review-local-changes.md)与[PR 预览](use-case/review-pull-request.md)，`view export` 的调用与错误见 [CLI 页](cli.md#pr-静态预览导出)。本页声明 PR 静态导出的实现（[一件事只写一次，其余推导](../../constitution.md#c-019)、[独立与本地](../local-sdlc/scope.md#独立与本地)、[写入安全](../local-sdlc/scope.md#写入安全)、[协作与授权](../../engineering/concord-self-hosting/README.md#协作与授权)、[快到每次都愿意跑](../../constitution.md#c-023)）。
 
 PR 预览是静态产物而非托管服务，避免向读者暴露仓库写入与执行能力（[决策依据](../../design/pr-change-preview/DECISION.md)）；它与本地工作台共用文件树和 diff 组件。导出不要求项目配置有效，不加载消费者配置或源码，不建立持久缓存，不联网。
 

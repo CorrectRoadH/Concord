@@ -51,7 +51,7 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 `use-case format` 沿用正文编辑的前像与发布协议。`rename-step` 在唯一 journal 与发布租约下使用专用 `step-rename` 授权范围，不串联多次 `source.set` 或文档发布。该范围绑定项目、worktree、冻结配置、Use Case 路径、old-id、new-id、完整文件前后像、摘要与 mode，以及规划时观察的目录成员。
 
-规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[写入遵守范围和恢复 Spec](../../constitution.md#c-003)）。
+规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[写入安全](scope.md#写入安全)）。
 
 ## 代码声明引用
 
@@ -65,7 +65,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ## 路径安全
 
-仓库路径解析分两个入口。写入、建目录与删除、原子替换、journal、发布 preflight 与 apply、恢复、`discoverRoot`、`init` 及构造期的 privateDir 与 journal 检查使用完整检查：从文件系统根逐级核对 Darwin 字节拼写并 `lstat` 拒绝 symlink，不读取任何复用信息。只读快照内的文件读取与目录扫描使用读取检查，写入前像同样经读取检查取得（[写入遵守范围和恢复 Spec](../../constitution.md#c-003-1)）。
+仓库路径解析分两个入口。写入、建目录与删除、原子替换、journal、发布 preflight 与 apply、恢复、`discoverRoot`、`init` 及构造期的 privateDir 与 journal 检查使用完整检查：从文件系统根逐级核对 Darwin 字节拼写并 `lstat` 拒绝 symlink，不读取任何复用信息。只读快照内的文件读取与目录扫描使用读取检查，写入前像同样经读取检查取得（[写入安全](scope.md#写入安全)）。
 
 - 根锚点：仓库对象构造时对根做一次完整检查，记录从 `/` 到根每一级的 bigint `dev`/`ino`；快照深度 0→1 时打开根目录 fd 并与锚点比对，回到 0 时关闭。
 - 读取检查在读字节前完成：逐级 `lstat` 核对锚点 inode，不枚举仓库根之上的目录；仓库内组件先做拼写核对，再 `lstat` 拒绝 symlink。文件以不跟随 symlink 的方式打开：Darwin 用 `O_NOFOLLOW_ANY`（要求 macOS 11 及以上，否则构造以 `UnsupportedHost` 失败），Linux 用 `O_NOFOLLOW` 并以 `/proc/self/fd/<fd>` 比对期望路径，不可用时拒绝读取。打开后 `fstat` 须为普通文件；大小或 `dev`/`ino` 与最后一次 `lstat` 不一致时按来源变化报 `SourceChanged`，在投影刷新中是可重试漂移，不返回部分值。

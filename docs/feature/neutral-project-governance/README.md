@@ -27,13 +27,9 @@ NiceEval 是实践来源与接入消费者。公开入口验收、候选与 Spec
 - [计划并执行一次远端 Issue 写入](use-case/mutate-remote-issue.md)
 - [并行切分文档工作](use-case/coordinate-docs-work.md)
 
-## 依据的品味与底线
+## 依据的品味
 
 - [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [独立、本地、可安装](../../constitution.md#c-002)
-- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
 - [只声称证明过的](../../constitution.md#c-021)
-- [用产品自身管理和验收开发](../../constitution.md#c-006)
-- [尊重协作与外部操作授权](../../constitution.md#c-007)
 - [总则](../../constitution.md#general-amend)
 - [写现在，不写过去](../../constitution.md#c-020)

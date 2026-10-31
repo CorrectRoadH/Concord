@@ -18,10 +18,8 @@ Research 主题是决策输入，不因创建或结构检查而成为已采用 S
 
 Design 候选按内容规模使用 `plans/<name>.md` 或 `plans/<name>/README.md`，候选名称是唯一身份（[决策依据](../../design/plan-content/DECISION.md)）。目录归属与入口解析见[架构](architecture.md)。
 
-## 依据的品味与底线
+## 依据的品味
 
 - [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [写入遵守范围和恢复 Spec](../../constitution.md#c-003)
 - [只声称证明过的](../../constitution.md#c-021)
-- [用产品自身管理和验收开发](../../constitution.md#c-006)
 - [写现在，不写过去](../../constitution.md#c-020)
