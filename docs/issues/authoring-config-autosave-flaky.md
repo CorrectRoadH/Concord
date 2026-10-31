@@ -6,7 +6,7 @@ status: open
 
 ## 现象
 
-`test/e2e/view-authoring-config.e2e.ts:107` 在完整门禁中失败：在源码编辑器中填入新内容后，5 秒内配置文件仍是旧值；随后测试的清理关闭服务，又使一次保存请求被拒绝连接（`.test-results/run-RifjVO`、`/tmp/p3-final-full-gate.log`）。同一文件在空闲机器上定向运行通过（77.6 s，`/tmp/p3-final-authoring-config-idle.log`）。
+`test/e2e/view-authoring-config.e2e.ts:107` 在完整门禁中失败：在源码编辑器中填入新内容后，5 秒内配置文件仍是旧值。随后测试的清理关闭了服务，又使一次保存请求被拒绝连接（`.test-results/run-RifjVO`、`/tmp/p3-final-full-gate.log`）。同一文件在空闲机器上定向运行通过（77.6 s，`/tmp/p3-final-authoring-config-idle.log`）。
 
 ## 期望
 
