@@ -48,7 +48,7 @@ test('linear failing-test then fix records verification and replays exact commit
 test('commit verification refuses invalid candidate paths and changed frozen inputs', async t => {
   for (const [name, arrange, expected] of [
     ['dirty Issue', (f: ReturnType<typeof fixture>) => { f.fix(); writeFileSync(join(f.root, 'docs/issues/sku.md'), readFileSync(join(f.root, 'docs/issues/sku.md'), 'utf8') + '\nUncommitted note.\n'); }, 'FixUnverifiable'],
-    ['only runner input changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'concord.config.ts'), readFileSync(join(f.root, 'concord.config.ts'), 'utf8') + '\n'); commit(f.root, 'runner change'); f.fix(); }, 'FixUnverifiable'],
+    ['runner timeout changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'concord.config.ts'), readFileSync(join(f.root, 'concord.config.ts'), 'utf8').replace('"timeoutMs": 5000', '"timeoutMs": 5001')); commit(f.root, 'runner change'); f.fix(); }, 'FixUnverifiable'],
     ['test file changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'test/cart.test.ts'), readFileSync(join(f.root, 'test/cart.test.ts'), 'utf8') + '\n'); f.fix(); }, 'FixUnverifiable'],
     ['Spec changed', (f: ReturnType<typeof fixture>) => { writeFileSync(join(f.root, 'docs/feature/cart/README.md'), '# Cart\n\nChanged.\n'); f.fix(); }, 'FixUnverifiable'],
     ['unfixed green candidate', (_f: ReturnType<typeof fixture>) => {}, 'FixVerificationFailed'],

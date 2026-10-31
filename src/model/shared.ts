@@ -38,8 +38,8 @@ export const Strings = Schema.Array(Text);
 // @concord-begin
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
 export const RunnerSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('node-test'), sourceFiles: Strings, timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
-  Schema.Struct({ kind: Schema.Literal('command'), argv: Schema.NonEmptyArray(Text), sourceFiles: Strings, timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
+  Schema.Struct({ kind: Schema.Literal('node-test'), sourceFiles: Strings, prepare: Schema.optional(Schema.Array(Schema.NonEmptyArray(Text))), timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
+  Schema.Struct({ kind: Schema.Literal('command'), argv: Schema.NonEmptyArray(Text), sourceFiles: Strings, prepare: Schema.optional(Schema.Array(Schema.NonEmptyArray(Text))), timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
 ]);
 export type Runner = typeof RunnerSchema.Type;
 export const TemplatePageSchema = Schema.Literals(['library', 'cli', 'architecture', 'use-case']);

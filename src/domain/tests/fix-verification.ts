@@ -14,8 +14,8 @@ import { executeCommand, requireRunner, withRunner } from "./evidence.js";
 import { safeRunnerEnvironment } from "../../base/process/index.js";
 import type { CommandEvidence } from "../../model/index.js";
 import { OwnedProcess, runOwnedProcess, hasConfirmedOwnedGroupCleanup } from "../../base/process/index.js";
-import { LocalRepository, git } from "../../base/workspace/index.js";
-import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema } from "../../model/index.js";
+import { LocalRepository, git, parseTypeScriptConfig } from "../../base/workspace/index.js";
+import { ConcordError, canonical, digest, failure, objectDigest, type AnnotatedCase, type Repository, type FixVerificationSchema, type ProjectConfig, type Runner } from "../../model/index.js";
 import { commitRepository, firstParentPath, gitBlobBytes, resolveCommit, worktreeIdentity } from "../../base/git/index.js";
 
 type Verification = typeof FixVerificationSchema.Type;
@@ -31,9 +31,14 @@ function selectedTests(repo: Repository, issue: string): readonly AnnotatedCase[
   if (!tests.length) unavailable(`No runnable @issue markers reference ${issue}`);
   return tests;
 }
+function configurationWithoutPreparation(config: ProjectConfig): ProjectConfig {
+  if (config.runner === undefined) return config;
+  const { prepare: _prepare, ...runner } = config.runner;
+  return { ...config, runner };
+}
 function frozenInputs(repo: Repository, tests: readonly AnnotatedCase[], commit?: string) {
-  const paths = [...new Set([repo.configSnapshot.path, ...tests.map(test => test.file), ...requireRunner(repo).sourceFiles, ...tests.map(test => test.contract.split('#')[0]!)])].sort();
-  return { runner: objectDigest(repo.config.runner), tests: tests.map(test => test.id), files: paths.map(path => {
+  const paths = [...new Set([...tests.map(test => test.file), ...requireRunner(repo).sourceFiles, ...tests.map(test => test.contract.split('#')[0]!)])].filter(path => path !== repo.configSnapshot.path).sort();
+  return { runner: objectDigest(configurationWithoutPreparation(repo.configSnapshot.config)), configuration: repo.configSnapshot.path, tests: tests.map(test => test.id), files: paths.map(path => {
     const source = repo.read(path); if (source === undefined) unavailable(`Frozen runner input is unavailable: ${path}`);
     return { path, digest: digest(commit === undefined ? snapshotBytes(repo, path)! : gitBlobBytes(repo.root, commit, path)) };
   }) };
@@ -86,9 +91,21 @@ const inWorktree = <A>(repo: LocalRepository, issue: string, commit: string, cle
 
 const assertFrozenRoot = Effect.fn('fixVerification.assertFrozenRoot')(function*(root: string, inputs: ReturnType<typeof frozenInputs>, code: string) {
   const sources = yield* Sources;
+  const config = yield* sources.read(root, inputs.configuration).pipe(Effect.mapError(error => new ConcordError(code, error.message)));
+  const configDigest = yield* sync(() => objectDigest(configurationWithoutPreparation(config === undefined ? {} : parseTypeScriptConfig(config, inputs.configuration))));
+  if (configDigest !== inputs.runner) return yield* Effect.fail(new ConcordError(code, `Materialized project configuration changed: ${inputs.configuration}`));
   for (const file of inputs.files) {
     const bytes = yield* sources.readBytes(root, file.path).pipe(Effect.mapError(error => new ConcordError(code, error.message.includes('Symbolic') ? `Frozen input became a symbolic link: ${file.path}` : `Materialized frozen input is unavailable: ${file.path}`)));
     if (bytes === undefined || digest(bytes) !== file.digest) return yield* Effect.fail(new ConcordError(code, `Materialized frozen input changed: ${file.path}`));
+  }
+});
+
+const prepareCheckout = Effect.fn('fixVerification.prepare')(function*(root: string, runner: Runner, cleanupUnknown: () => void) {
+  for (const [index, argv] of (runner.prepare ?? []).entries()) {
+    const result = yield* runOwnedProcess(argv, { cwd: root, env: safeRunnerEnvironment(), timeoutMs: runner.timeoutMs }).pipe(Effect.scoped, Effect.mapError(error => new ConcordError('FixUnverifiable', `Runner preparation failed: ${error.message}`)));
+    const cleanupOk = hasConfirmedOwnedGroupCleanup(result);
+    if (!cleanupOk) yield* sync(cleanupUnknown);
+    if (!cleanupOk || result.exitCode !== 0 || result.timedOut || result.cancelled || result.signal !== null || result.error !== undefined || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('FixUnverifiable', `Runner preparation command ${index + 1} did not complete successfully`));
   }
 });
 
@@ -108,7 +125,7 @@ export const replayFix = (repo: LocalRepository, selector: string, options: { re
     // test verify freezes against F; since freezes against its worktree target.
     const targetRepo = options.worktree ? repo : commitRepository(repo, fix);
     const tests = selectedTests(targetRepo, issue.path);
-    if (canonical(tests.map(test => test.id)) !== canonical(recorded.tests.slice().sort()) || objectDigest(targetRepo.config.runner) !== recorded.runner) unavailable('Recorded tests or runner configuration changed');
+    if (canonical(tests.map(test => test.id)) !== canonical(recorded.tests.slice().sort()) || objectDigest(configurationWithoutPreparation(targetRepo.configSnapshot.config)) !== recorded.runner) unavailable('Recorded tests or project configuration changed');
     const defect = resolveCommit(repo.root, recorded.defect);
     const targetCommit = options.worktree ? resolveCommit(repo.root, 'HEAD') : fix;
     firstParentPath(repo.root, defect, fix);
@@ -118,11 +135,15 @@ export const replayFix = (repo: LocalRepository, selector: string, options: { re
       const historical = commitRepository(repo, commit);
       if (canonical(frozenInputs(historical, selectedTests(historical, issue.path), commit)) !== canonical(inputs)) unavailable('Frozen runner inputs or referenced Spec changed');
     }
-    return { issue, recorded, tests, inputs, runner: requireRunner(targetRepo), identity: worktreeIdentity(repo) };
+    return { issue, recorded, tests, inputs, runner: requireRunner(targetRepo), preparation: requireRunner(commitRepository(repo, fix)), identity: worktreeIdentity(repo) };
   });
   const run = (root: string, red: boolean) => Effect.gen(function* () {
     const code = root === repo.root ? 'PreimageChanged' : 'FixUnverifiable';
     yield* assertFrozenRoot(root, prepared.inputs, code);
+    if (root !== repo.root) {
+      yield* prepareCheckout(root, prepared.preparation, cleanupUnknown);
+      yield* assertFrozenRoot(root, prepared.inputs, code);
+    }
     const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runner, test).pipe(Effect.tap(result => sync(() => assertOutcome(result, red)))));
     yield* assertFrozenRoot(root, prepared.inputs, code);
     return results;
@@ -146,6 +167,8 @@ export const closeFixedIssue = (repo: LocalRepository, selector: string, reason:
     return { issue, ...freeze(targetRepo, issue.path, defect, fix), runnerConfig: requireRunner(targetRepo), issueDigest };
   }));
   const run = (root: string, red: boolean) => Effect.gen(function* () {
+    yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
+    yield* prepareCheckout(root, prepared.runnerConfig, cleanupUnknown);
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');
     const results = yield* Effect.forEach(prepared.tests, test => executeCommand(root, prepared.runnerConfig, test).pipe(Effect.tap(result => sync(() => assertOutcome(result, red)))));
     yield* assertFrozenRoot(root, prepared.inputs, 'FixUnverifiable');

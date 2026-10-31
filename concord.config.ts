@@ -9,6 +9,10 @@ export default {
   "testRoots": ["test"],
   "runner": {
     "kind": "command",
+    "prepare": [
+      ["pnpm", "install", "--frozen-lockfile", "--offline"],
+      ["pnpm", "exec", "vp", "build"]
+    ],
     "argv": [
       "node",
       "--import",
