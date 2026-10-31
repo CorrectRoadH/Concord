@@ -20,7 +20,7 @@
 | `issue` | `close`（删除 Issue，fixed 时先核验）、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
 | `memory` | `link`、`search`；摘要列表用 `list memory` |
 | `design` | `decide`、`postpone`、`check`、`format` |
-| `roadmap` | `adopt`（移入 `docs/feature/`）；取消方向即删除目录，历史在 Git |
+| `roadmap` | `start <roadmap> [--feature <id>]`：移入 `docs/feature/`，省略 `--feature` 时 Feature ID 与 Roadmap 同名；取消方向即删除目录，历史在 Git |
 | `taste` | 列出品味条目与依据它们的页面 |
 | `concepts`、`writing` | 概念与写作政策的查看与受管写入 |
 | `docs` | `docs check` 与 `docs work` |

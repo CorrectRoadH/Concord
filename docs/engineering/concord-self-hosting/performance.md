@@ -27,7 +27,7 @@
 
 | 场景 | 测量内容 | p50 预算 |
 | --- | --- | ---: |
-| `local-data-engine/trace-gaps-warm`、`local-data-engine/review-render-warm` | 已有投影时读取关系缺口与审阅材料 | 600ms |
+| `local-data-engine/trace-gaps-warm`、`local-data-engine/review-warm` | 已有投影时读取关系缺口与审阅材料 | 600ms |
 ```
 
 场景 ID 的格式为 `<feature-id>/<名称>`，`feature-id` 必须是拥有该预算行的 owner 所属 Feature。场景引用的 owner 不存在于所测消费者时，该场景在记录中标为 `skipped` 并写明原因，不参与通过判定；`self` 消费者上出现 `skipped` 视为场景或预算表失效，判失败。

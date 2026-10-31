@@ -14,8 +14,8 @@
 | --- | --- | ---: |
 | `local-sdlc/help` | 由静态数据输出的 CLI 帮助 | 50ms |
 | `local-sdlc/skill` | Agent 指引 | 350ms |
-| `local-sdlc/memory-index`、`local-sdlc/memory-list`、`local-sdlc/memory-recall` | Memory 索引、列表与检索 | 550ms |
-| `local-sdlc/issue-index`、`local-sdlc/issue-list`、`local-sdlc/issue-recall` | Issue 索引、列表与检索 | 500ms |
+| `local-sdlc/memory-list`、`local-sdlc/memory-search` | Memory 列表与检索 | 550ms |
+| `local-sdlc/issue-list`、`local-sdlc/issue-search` | Issue 列表与检索 | 500ms |
 | `local-sdlc/feature-list`、`local-sdlc/use-case-list`、`local-sdlc/research-list`、`local-sdlc/design-list`、`local-sdlc/roadmap-list`、`local-sdlc/engineering-list` | 文档类别列表 | 600ms |
 | `local-sdlc/docs-check` | 写作检查 | 1000ms |
 | `local-sdlc/trace-show-fresh`、`local-sdlc/trace-check` | 当前关系读取与检查 | 1300ms |

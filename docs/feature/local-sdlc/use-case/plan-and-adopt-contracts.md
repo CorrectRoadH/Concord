@@ -46,7 +46,7 @@
 
    Roadmap 的示例都是预期输出，实现与测试不指向 Roadmap（[页面职责](../../../document-model.md#页面职责)）。
 
-4. 准备实现时采用 Roadmap。 {#adopt}
+4. 准备实现时，把 Roadmap 移入 Feature。 {#adopt}
 
    ```sh
    concord --json roadmap start checkout
@@ -55,6 +55,8 @@
    ```json
    {"operation":"roadmap-start","dryRun":false,"changedPaths":["docs/roadmap/checkout/README.md","docs/roadmap/checkout/use-case/README.md","docs/feature/checkout/README.md","docs/feature/checkout/use-case/README.md"]}
    ```
+
+   省略 `--feature` 时，Feature ID 与 Roadmap 同名；用 `--feature <id>` 换一个 ID，例如 `concord roadmap start checkout --feature cart-checkout`。
 
 ## 结果
 

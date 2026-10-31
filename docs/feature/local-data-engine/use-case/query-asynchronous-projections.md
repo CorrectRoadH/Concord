@@ -62,7 +62,7 @@ consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap
 
 | 场景 | 测量内容 | p50 预算 |
 | --- | --- | ---: |
-| `local-data-engine/trace-gaps-warm`、`local-data-engine/trace-show-warm`、`local-data-engine/review-render-warm` | 已有诊断投影的历史读取 | 600ms |
+| `local-data-engine/trace-gaps-warm`、`local-data-engine/trace-show-warm`、`local-data-engine/review-warm` | 已有诊断投影的历史读取 | 600ms |
 | `local-data-engine/cache-status` | 缓存状态 | 670ms |
 
 ## 刷新上限
@@ -73,4 +73,4 @@ consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap
 | --- | --- | ---: |
 | `local-data-engine/trace-gaps-refresh` | 关系缺口来源扫描 | 120000ms |
 | `local-data-engine/trace-show-refresh` | 单个 Feature 关系扫描 | 120000ms |
-| `local-data-engine/review-render-refresh` | 审阅材料来源扫描 | 120000ms |
+| `local-data-engine/review-refresh` | 审阅材料来源扫描 | 120000ms |
