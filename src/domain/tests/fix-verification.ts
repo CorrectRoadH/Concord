@@ -123,6 +123,7 @@ function assertOutcome(result: CommandEvidence, red: boolean): void {
 /** Both public replay entrypoints verify the recorded D/F claim, without writing. */
 export const replayFix = (repo: LocalRepository, selector: string) => withRunner(repo, (release, cleanupUnknown) => Effect.gen(function* () {
   const prepared = yield* sync(() => repo.snapshot(() => {
+    const runtimeHead = resolveCommit(repo.root, 'HEAD');
     const issue = readDocumentSelector(repo, selector, 'issue');
     if (issue.metadata.kind !== 'issue' || issue.metadata.closure?.kind !== 'fixed' || !issue.metadata.closure.verification) unavailable('Issue has no recorded fix verification');
     const recorded = issue.metadata.closure.verification;
@@ -136,7 +137,7 @@ export const replayFix = (repo: LocalRepository, selector: string) => withRunner
       const historical = commitRepository(repo, commit);
       if (canonical(frozenInputs(historical, selectedTests(historical, issue.path), commit)) !== canonical(inputs)) unavailable('Frozen runner inputs or referenced Spec changed');
     }
-    const head = commitRepository(repo, resolveCommit(repo.root, 'HEAD'));
+    const head = commitRepository(repo, runtimeHead);
     return { issue, recorded, tests, inputs, runner: requireRunner(targetRepo), preparation: head.config.runner, issueDigest: digest(snapshotBytes(repo, issue.path)!) };
   }));
   const run = (root: string, red: boolean, preserve: () => void) => Effect.gen(function* () {
@@ -150,11 +151,9 @@ export const replayFix = (repo: LocalRepository, selector: string) => withRunner
   });
   const red = yield* inWorktree(repo, prepared.recorded.defect, cleanupUnknown, (root, preserve) => run(root, true, preserve));
   const green = yield* inWorktree(repo, prepared.recorded.fix, cleanupUnknown, (root, preserve) => run(root, false, preserve));
-  yield* sync(() => repo.snapshot(() => {
-    const current = snapshotBytes(repo, prepared.issue.path);
-    if (current === undefined || digest(current) !== prepared.issueDigest) throw new ConcordError('PreimageChanged', 'Issue changed during verification');
-    release();
-  }));
+  const current = yield* (yield* Sources).readBytes(repo.root, prepared.issue.path);
+  if (current === undefined || digest(current) !== prepared.issueDigest) return yield* Effect.fail(new ConcordError('PreimageChanged', 'Issue changed during verification'));
+  yield* sync(release);
   return { operation: 'test-verify', issue: prepared.issue.path, verification: prepared.recorded, verified: 'replayed' as const, red, green };
 })).pipe(Effect.mapError(verificationFailure));
 
