@@ -68,7 +68,7 @@ test('all benchmark scenarios execute on minimal frozen consumers without timing
     const status = yield* mustRun(['git', 'status', '--porcelain'], { cwd: isolated.root, outputDir });
     assert.equal(status.stdout.trim(), '', `${group.name} changed its frozen consumer`);
     yield* trace(`${group.name} done`, groupStarted);
-  }), { concurrency: 8 });
+  }).pipe(Effect.scoped), { concurrency: 8 });
 
 }).pipe(Effect.scoped), { signal: t.signal }));
 

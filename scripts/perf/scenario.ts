@@ -7,6 +7,7 @@ import type { Scope } from 'effect';
 import type { Artifact } from './artifact.js';
 import type { Consumer } from './consumer.js';
 import { io, mustRun, PerfError, timedRun, type TimedRun } from './process.js';
+import { openTerminal } from '../terminal-process.js';
 
 export interface BenchContext {
   readonly artifact: Artifact; readonly consumer: Consumer; readonly outputDir: string;
@@ -22,7 +23,7 @@ export interface HttpRequest {
 }
 export interface RequestSpec extends HttpRequest { readonly companions?: readonly HttpRequest[] }
 export type BenchRun = readonly string[] | { readonly argv: readonly string[]; readonly concurrency: number }
-  | { readonly request: RequestSpec } | { readonly scan: readonly string[] };
+  | { readonly request: RequestSpec } | { readonly scan: readonly string[] } | { readonly terminal: 'first-screen' | 'push' };
 export interface BenchScenario {
   readonly id: string; readonly consumer: 'self' | 'scale' | `fixture:${string}`;
   readonly server?: 'running';
@@ -58,6 +59,7 @@ export function runArguments(run: BenchRun): readonly string[] {
   if ('argv' in run) return run.argv;
   if ('scan' in run) return run.scan;
   if ('request' in run) return ['view'];
+  if ('terminal' in run) return ['panel'];
   return run;
 }
 export const cliCommand = (artifact: Artifact, root: string, argv: readonly string[]) => (argv[0] === 'repo' || argv.includes('--skill') || argv.includes('--help') || argv.includes('--version'))
@@ -129,7 +131,21 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
     }
   }
   let result: TimedRun;
-  if ('request' in run) {
+  if ('terminal' in run) {
+    const panel = yield* openTerminal(cliCommand(context.artifact, context.consumer.root, ['panel']), context.consumer.root, context.env).pipe(Effect.mapError(cause => new PerfError({ message: String(cause) })));
+    const readableAt = yield* panel.waitFor('PANEL_READABLE.').pipe(Effect.mapError(cause => new PerfError({ message: String(cause) })));
+    let started = panel.startedAt, ended = readableAt;
+    if (run.terminal === 'push') {
+      const path = join(context.consumer.root, 'docs/feature/local-sdlc/README.md');
+      const original = yield* Effect.acquireRelease(io('Capture panel source', () => readFileSync(path)), original => io('Restore panel source', () => writeFileSync(path, original)).pipe(Effect.orDie));
+      const marker = `PANEL_PUSH_${crypto.randomUUID()}`;
+      const offset = panel.text().length;
+      yield* io('Edit panel source', () => writeFileSync(path, Buffer.concat([original, Buffer.from(`\n${marker}\n`)])));
+      started = performance.now();
+      ended = yield* panel.waitFor(marker, offset).pipe(Effect.mapError(cause => new PerfError({ message: String(cause) })));
+    }
+    result = { ms: ended - started, startedAtMs: started, endedAtMs: ended, exitCode: 0, signal: null, stdout: panel.text(), stderr: '' };
+  } else if ('request' in run) {
     result = yield* Effect.tryPromise({ try: async signal => {
       const address = context.services.get('view');
       if (!address) throw new Error('prepare must start view');
