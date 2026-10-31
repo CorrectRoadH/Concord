@@ -61,7 +61,7 @@ test('Workspace rereads configuration for each operation and Sources rejects a c
         writeFileSync(join(root, 'docs/README.md'), '# Changed\n');
       })));
       assert.equal(result._tag, 'Failure');
-      if (result._tag === 'Failure') assert.equal(result.failure.code, 'FileChangedSinceRead');
+      if (result._tag === 'Failure') assert.equal(result.failure.code, 'SourceChanged');
     }).pipe(Effect.scoped, Effect.provide(live)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
@@ -83,7 +83,7 @@ test('read snapshots reread current inputs, verify original observations and dis
         assert.equal(repo.read('docs/README.md'), '# Updated\n');
       })));
       assert.equal(result._tag, 'Failure');
-      if (result._tag === 'Failure') assert.equal(result.failure.code, 'FileChangedSinceRead');
+      if (result._tag === 'Failure') assert.equal(result.failure.code, 'SourceChanged');
       yield* sources.snapshot(repo, Effect.sync(() => assert.equal(repo.read('docs/README.md'), '# Updated\n')));
     })).pipe(Effect.provide(live)));
   } finally { rmSync(root, { recursive: true, force: true }); }
@@ -151,7 +151,7 @@ test('Sources snapshots verify raw bytes and isolate caller mutations', async ()
         writeFileSync(join(root, path), Buffer.from([0xfe, 0, 0x80]));
       })));
       assert.equal(result._tag, 'Failure');
-      if (result._tag === 'Failure') assert.equal(result.failure.code, 'FileChangedSinceRead');
+      if (result._tag === 'Failure') assert.equal(result.failure.code, 'SourceChanged');
     })).pipe(Effect.provide(live)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

@@ -50,7 +50,7 @@ test('source reads do not own a lease and detect a concurrent successful publica
 })));
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
-test('a complete A-B-A publication is detected before the writer releases ownership', () => Effect.runPromise(Effect.sync(() => {
+test('a complete A-B-A publication preserves the same source result', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer();
   const writer = new LocalRepository(root);
   const reader = new LocalRepository(root, { access: 'read' });
@@ -62,7 +62,7 @@ test('a complete A-B-A publication is detected before the writer releases owners
     writer.publish('test-edit', [{ path, before, after: `${before}\nchanged\n` }]);
     writer.publish('test-edit', [{ path, before: `${before}\nchanged\n`, after: before }]);
     assert.equal(readFileSync(join(root, path), 'utf8'), before);
-    assert.throws(() => reader.verifySnapshot(), { code: 'SourceChanged' });
+    assert.doesNotThrow(() => reader.verifySnapshot());
     assert.ok(existsSync(join(root, '.git/concord/trace/publication.lease')));
   } finally { reader.close(); writer.close(); rmSync(root, { recursive: true, force: true }); }
 })));

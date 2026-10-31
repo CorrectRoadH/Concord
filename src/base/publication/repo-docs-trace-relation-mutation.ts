@@ -692,6 +692,8 @@ export function recoverTraceMultiFile(root: string): Effect.Effect<TraceRecovery
 
 export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Effect.Effect<TraceMultiFileReceipt, E | TraceCoordinationError, R> {
   return withLease(options.root, "exclusive", options.operation, true, (lease) => Effect.gen(function*() {
+    let committed: MultiFileJournalV2 | undefined;
+    let receipt: TraceMultiFileReceipt | undefined;
     try {
       if (lease === undefined) throw new Error("exclusive Trace lease was not created");
       const pending = pendingRecovery(options.root, lease.directory);
@@ -711,6 +713,7 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
         return { path: change.path, temporary, preimage: preimageForJournal(source), planned: bytes === null ? { kind: "absent" as const } : { kind: "file" as const, digest: traceDigest(bytes), byteLength: bytes.byteLength, mode: change.mode ?? (source.kind === "file" ? source.mode : 0o644) } };
       });
       const journal: MultiFileJournalV2 = { format: "concord.trace/multi-file-publication-journal/v1", phase: "prepared", transactionId: token, operation: options.operation, headCommit: head, indexEntries: Object.fromEntries(files.map((file) => [file.path, indexEntry(options.root, file.path, options.operation)])), identity: worktreeIdentity(options.root, lease.directory, true, options.operation), files };
+      receipt = { format: "concord.docs-trace/multi-file-mutation/v1", transactionId: token, preimages: files.map(file => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map(file => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
       invalidateActiveRun(options.root);
       writeMultiJournal(options.root, lease.directory, journal);
       files.forEach((file, index) => {
@@ -735,11 +738,23 @@ export function mutateTraceFiles<E, R>(options: TraceMultiFileOptions<E, R>): Ef
         if (options.injectFailureAfterRename === index + 1) throw mutationFailure(options.operation, "publish", "injected interruption", file.path);
       });
       writeMultiJournal(options.root, lease.directory, { ...journal, phase: "committed" });
+      committed = { ...journal, phase: "committed" };
       if (options.injectFailureAfterCommit === true) throw mutationFailure(options.operation, "cleanup", "injected interruption");
       writeMultiJournal(options.root, lease.directory, { ...journal, phase: "cleanup" });
       removeMultiJournal(lease.directory);
-      return { format: "concord.docs-trace/multi-file-mutation/v1", transactionId: token, preimages: files.map((file) => ({ path: file.path, digest: file.preimage.kind === "absent" ? null : file.preimage.digest })), plannedDigests: files.map((file) => ({ path: file.path, digest: file.planned.kind === "absent" ? null : file.planned.digest })), committed: true };
+      return receipt;
     } catch (cause) {
+      if (committed && receipt && lease && !options.injectFailureAfterCommit) {
+        try {
+          if (!sameIdentity(worktreeIdentity(options.root, lease.directory, false, options.operation), committed.identity)) throw new TraceRecoveryConflict({ path: lease.directory, message: "worktree identity changed during cleanup" });
+          assertMultiGit(options.root, committed);
+          for (const file of committed.files) {
+            if (!fileSnapshotMatches(readFileSnapshot(repositoryPath(options.root, file.path, options.operation), options.operation), file.planned) || existsSync(repositoryPath(options.root, file.temporary, options.operation))) throw new TraceRecoveryConflict({ path: file.path, message: "committed planned image changed during cleanup" });
+          }
+          removeMultiJournal(lease.directory);
+          return receipt;
+        } catch (recoveryCause) { return yield* Effect.fail(recoveryCause instanceof TraceRecoveryConflict ? recoveryCause : mutationFailure(options.operation, 'cleanup', recoveryCause)); }
+      }
       return yield* Effect.fail(cause instanceof TraceMutationError || cause instanceof TraceRecoveryConflict || cause instanceof TraceRecoveryRequired ? cause : mutationFailure(options.operation, "publish", cause));
     }
   }));

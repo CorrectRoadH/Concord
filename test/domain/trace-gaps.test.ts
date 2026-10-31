@@ -193,7 +193,7 @@ test('shared reference targets are read once and reverified, including external 
     assert.throws(() => buildTrace(repo, 'use', { timing: { sync(name, operation) {
       if (name === 'trace.verifyReferences') writeFileSync(target, `${original}\nExternal edit\n`);
       return operation();
-    } } }), { code: 'FileChangedSinceRead' });
+    } } }), { code: 'SourceChanged' });
     writeFileSync(target, original);
     assert.throws(() => buildTrace(repo, 'use', { timing: { sync(name, operation) {
       if (name === 'trace.verifyReferences') { rmSync(target); symlinkSync(join(root, 'docs/taste.md'), target); }

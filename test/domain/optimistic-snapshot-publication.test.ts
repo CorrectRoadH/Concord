@@ -27,7 +27,7 @@ test('directory observations detect a size change even when an oversized file wa
   try {
     reader.beginSnapshot(); reader.files('src');
     writeFileSync(join(root, 'src', 'large.ts'), '// @feature docs/feature/sample/README.md\n');
-    assert.throws(() => reader.verifySnapshot(), { code: 'FileChangedSinceRead' });
+    assert.throws(() => reader.verifySnapshot(), { code: 'SourceChanged' });
   } finally { reader.close(); rmSync(root, { recursive: true, force: true }); }
 })));
 
