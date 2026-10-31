@@ -28,9 +28,7 @@ import { pollUntil, readProjectConfig, writeProjectConfig } from './support.js';
 import { packConcord } from './installed-package.js';
 
 export const cli = installedConcordCli();
-export const target = 'docs/feature/sample/use-case/sample.md';
-export const source = `# @concord-code\n# @concord-implements ${target}\ndef implementation():\n    return 1\n`;
-export function write(root: string, path: string, text: string): void { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); }
+export { target, source, write, server, consumer } from './lsp-analysis-source-fixture.js';
 export function call<A>(root: string, args: readonly string[], schema: Schema.ConstraintDecoder<A, never>, status = 0, binary = cli, env = process.env): A {
   const result = spawnSync(process.execPath, [binary, '--root', root, '--json', '--fresh', ...args], { env, encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
   const text = result.stdout + result.stderr;
@@ -42,24 +40,6 @@ export const failure = Schema.Struct({ error: Schema.String, message: Schema.Str
 export const analysis = Schema.Struct({ observations: Schema.Array(AnalysisObservationSchema) });
 export const codeList = Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), analysis: AnalysisViewSchema });
 export const projectCheck = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Unknown), complete: Schema.optional(Schema.Boolean) });
-export function server(mode = 'normal'): LanguageServer {
-  return { id: 'python-fixture', languageId: 'python', extensions: ['.py'], argv: [process.execPath, 'server.mjs'], cwd: ".", environment: ['LANG'], initializationOptions: { mode }, implementationFiles: ['server.mjs'], sourceFiles: [], budgets: { totalMs: 5000, requestMs: 500 }, profile: { version: 'fixture-v1', serverVersion: '1.0.0', commentPrefixes: ['#'], declarationKinds: [5, 6, 12], symbolShape: 'document-symbol', decorators: 'at-line', leadingComments: true, readiness: { kind: 'progress', token: 'index' }, positionEncodings: ['utf-16'] } };
-}
-export function consumer(): string {
-  const root = createConsumer();
-  writeProjectConfig(root, { testRoots: ['test'], sourceRoots: ['src'] });
-  const repository = new LocalRepository(root);
-  try {
-    createDocument(repository, 'feature', { id: 'sample', title: 'Sample' });
-    createDocument(repository, 'use-case', { id: 'sample', feature: 'sample', title: 'Sample' });
-  } finally { repository.close(); }
-  buildSync({ entryPoints: ['test/fixtures/lsp-server.ts'], bundle: true, platform: 'node', format: 'esm', outfile: join(root, 'server.mjs'), logLevel: 'silent' });
-  write(root, 'src/sample.py', source);
-  write(root, 'test/sample.py', `# @use-case ${target}\n# @name native-sample\ndef test_sample():\n    helper()\n`);
-  write(root, 'test/helper.py', 'def helper():\n    implementation()\n');
-  writeProjectConfig(root, { ...readProjectConfig(root), languageServers: [server()] });
-  return root;
-}
 
 export { packageBin };
 export { createDocument };
