@@ -73,7 +73,11 @@ const main = Effect.scoped(Effect.gen(function* () {
   yield* Effect.sync(() => console.error(`# ${needsPackage ? "Built distribution selected" : "Source tests prepared"} in ${(performance.now() - started).toFixed(0)}ms; Node concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}`));
   yield* Effect.sync(() => console.error(`# Machine load: ${loadavg().map(value => value.toFixed(2)).join(', ')}; CPUs=${availableParallelism()}`));
   const shardFiles = new Set(discovered.filter(file => file.endsWith('.test.ts')).filter((_file, index) => shard === undefined || index % shard[1] === shard[0] - 1));
-  const nodeFiles = [...new Set(files.filter(file => file.endsWith('.test.ts') && (shard === undefined || shardFiles.has(file))).map(file => resolve(file)))].sort();
+  const nodeCandidates = [...new Set(files.filter(file => file.endsWith('.test.ts') && (shard === undefined || shardFiles.has(file))).map(file => resolve(file)))].sort();
+  const nodeSizes = yield* Effect.forEach(nodeCandidates, file => fs.stat(file).pipe(Effect.map(stat => ({ file, bytes: stat.size }))), { concurrency });
+  // Start larger scenario files first to reduce the final queue tail. Shard
+  // membership still comes from canonical paths; no prior results are reused.
+  const nodeFiles = nodeSizes.sort((left, right) => left.bytes === right.bytes ? left.file.localeCompare(right.file) : left.bytes > right.bytes ? -1 : 1).map(entry => entry.file);
   const browserFiles = files.filter(file => file.endsWith('.e2e.ts'));
   const nodeTests = Effect.gen(function*() {
     let failed = false;
