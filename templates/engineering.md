@@ -2,7 +2,7 @@
 
 Declare the required mechanism and observable behavior. Keep execution logs and delivery progress in Concord Memory rather than this contract.
 Define local terms in this directory's `concepts.md` and scoped writing policy in
-`concord-writing.json`; `concord check` validates both.
+`writing.md`; `concord check` validates both.
 
 ## Goal
 
