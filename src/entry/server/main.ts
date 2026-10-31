@@ -17,7 +17,7 @@ import { Git } from '../../base/git/index.js';
 import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { QueryReply, executeQuery, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
+import { Queries, QueryReply, executeQuery, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
 import { ConcordError, failure } from '../../model/index.js';
 import { ComputeRpcs, collectPackets, type Computation } from './computation.js';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets } from './protocol.js';
@@ -78,7 +78,8 @@ const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: s
       writer: Effect.succeed(chunk => Deferred.await(ready).pipe(Effect.flatMap(write => Effect.sync(() => { if (!(chunk instanceof Socket.CloseEvent)) write(chunk); })), Effect.mapError(error => new Socket.SocketError({ reason: new Socket.SocketWriteError({ cause: error }) })))),
     });
     const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(Layer.succeed(Socket.Socket, socket)));
-    const client = yield* RpcClient.make(ComputeRpcs).pipe(Effect.provide(protocol), Effect.provideService(Scope.Scope, scope));
+    const protocolContext = yield* Layer.build(protocol).pipe(Effect.provideService(Scope.Scope, scope));
+    const client = yield* RpcClient.make(ComputeRpcs).pipe(Effect.provideContext(protocolContext), Effect.provideService(Scope.Scope, scope));
     active = { scope, owner, client };
     return active;
   });
@@ -95,6 +96,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const workspace = yield* Workspace;
     const { root, privateDir } = yield* workspace.identify(input, true, true);
     const platform = yield* ServerRuntime;
+    const installation = platform.installation();
     const runtime = yield* platform.acquire(root, privateDir);
     const socketServer = yield* NodeSocketServer.make({ path: runtime.socketPath });
     yield* runtime.publish('opening');
@@ -103,6 +105,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const owned = <A, E, R>(operation: Effect.Effect<A, E, R | PersistentCache>) => operation.pipe(Effect.provideService(PersistentCache, cache.service));
     const context = workspaceProjectionContext(root).pipe(Effect.provideService(Workspace, workspace));
     const sources = yield* Sources;
+    const stateContext = yield* Layer.build(WorkspaceState.layer(runtime.token));
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
       context,
@@ -114,12 +117,12 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       close: computation.close.pipe(Effect.andThen(cache.close)),
       clear: Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Cache maintenance is not connected')),
       exists: Effect.sync(() => existsSync(root) && existsSync(privateDir)),
-    }).pipe(Effect.provide(WorkspaceState.layer(runtime.token)));
+    }).pipe(Effect.provideContext(stateContext));
     const watch = yield* sources.watch(root, () => { Effect.runFork(service.invalidate); }, error => { Effect.runFork(service.state.transition('degraded', { code: error.code, message: error.message })); });
     yield* watch.reconcile(null);
     yield* Effect.forkScoped(Stream.runForEach(SubscriptionRef.changes(service.state.value), event => runtime.publish(event.state).pipe(Effect.catch(() => service.stop))));
     const authorize = (request: { token: string; installation: string; deadline: number }) => runtime.verify.pipe(Effect.andThen(Effect.gen(function*() {
-      if (request.token !== runtime.token || request.installation !== platform.installation()) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Service identity differs' }));
+      if (request.token !== runtime.token || request.installation !== installation) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Service identity differs' }));
       if (request.deadline < (yield* Clock.currentTimeMillis)) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerDeadline', message: 'Request deadline has expired' }));
       const state = yield* SubscriptionRef.get(service.state.value);
       if (['blocked', 'stopping'].includes(state.state)) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerBusy', message: `Service is ${state.state}` }));
@@ -127,7 +130,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     })), Effect.mapError(asServerError));
     const result = <A, E, R>(request: { token: string; installation: string; deadline: number }, operation: Effect.Effect<A, E, R>) => Stream.unwrap(authorize(request).pipe(Effect.andThen(operation), Effect.map(jsonPackets), Effect.mapError(asServerError)));
     const handlers = WorkspaceRpcs.toLayer({
-      hello: () => SubscriptionRef.get(service.state.value).pipe(Effect.map(value => ({ protocol: PROTOCOL, installation: platform.installation(), token: runtime.token, state: value.state, generation: value.generation }))),
+      hello: () => SubscriptionRef.get(service.state.value).pipe(Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, generation: value.generation }))),
       shutdown: request => request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : service.stop,
       subscribe: request => Stream.unwrap(authorize(request).pipe(Effect.as(Stream.flatMap(SubscriptionRef.changes(service.state.value), jsonPackets)))),
       workspace: request => result(request, SubscriptionRef.get(service.state.value).pipe(Effect.flatMap(value => value.workspace ? Effect.succeed(value.workspace) : Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is building'))))),
@@ -163,6 +166,23 @@ export const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: 
   return yield* connectWorkspaceSocket(record.socket.path, platform.installation(), record.token);
 });
 export const workspaceServerStatus = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.map(connection => connection ? { operation: 'server-status', ...connection.hello } : { operation: 'server-status', state: 'absent' }), Effect.catch(() => Effect.succeed({ operation: 'server-status', state: 'absent' }))));
+export const remoteQueriesLayer = Layer.unwrap(Effect.gen(function*() {
+  const workspace = yield* Workspace;
+  const runtime = yield* ServerRuntime;
+  return Queries.Remote((root, request, cache = 'use') => Effect.scoped(Effect.gen(function*() {
+    if (cache === 'off') return yield* executeQuery(root, request, cache);
+    const identified = yield* workspace.identify(root, true);
+    const remote = yield* Effect.result(existingWorkspace(identified.root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime)));
+    if (remote._tag === 'Failure' || !remote.success || remote.success.hello.installation !== runtime.installation() || remote.success.hello.protocol !== PROTOCOL) return yield* executeQuery(root, request, cache);
+    const reply = yield* Effect.result(requestWorkspace(remote.success, 'query', request));
+    if (reply._tag === 'Failure') {
+      const cause = reply.failure;
+      if (cause instanceof WorkspaceServerError && !cause.code.startsWith('WorkspaceServer') && !cause.code.startsWith('WorkspaceCompute')) return yield* Effect.fail(new ConcordError(cause.code, cause.message, cause.details));
+      return yield* executeQuery(root, request, cache);
+    }
+    return yield* Schema.decodeUnknownEffect(QueryReply, { onExcessProperty: 'error' })(reply.success).pipe(Effect.mapError(failure));
+  })));
+}));
 export const connectOrStartWorkspace = Effect.fn('connectOrStartWorkspace')(function*(root: string) {
   let current = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
   const installation = (yield* ServerRuntime).installation();

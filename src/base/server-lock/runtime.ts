@@ -52,7 +52,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
   }, catch: failure }).pipe(Effect.flatMap(parent => Effect.try({ try: () => {
     const stat = lstatSync(parent);
     if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid !== process.getuid?.() || (stat.mode & 0o777) !== 0o700) throw new ConcordError('WorkspaceServerUnavailable', 'Runtime directory must be user-owned, nonsymlink and mode 0700');
-    const path = join(parent, `${digest(privateDir).slice(0, 32)}.sock`);
+    const path = join(parent, `${digest(privateDir).slice('sha256:'.length, 'sha256:'.length + 32)}.sock`);
     if (Buffer.byteLength(path) > 107) throw new ConcordError('WorkspaceServerUnavailable', 'Socket path exceeds the platform limit');
     const stale = lstatSync(path, { throwIfNoEntry: false });
     if (stale) {
@@ -62,6 +62,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
     return path;
   }, catch: failure })));
   const token = randomUUID();
+  const installation = serverInstallation();
   let current: ServerRecord | undefined;
   const publish = (state: ServerRecord['state']) => Effect.gen(function*() {
     yield* lock.verify;
@@ -69,7 +70,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
       chmodSync(socketPath, 0o600);
       const socket = { path: socketPath, ...identity(socketPath) };
       if (current && (current.socket.device !== socket.device || current.socket.inode !== socket.inode)) throw new ConcordError('ServerLockUnavailable', 'Socket identity changed');
-      current = { state, token, pid: process.pid, startedAt: current?.startedAt ?? new Date().toISOString(), lock: lock.identity, installation: serverInstallation(), protocol: 'concord.workspace/v1', socket };
+      current = { state, token, pid: process.pid, startedAt: current?.startedAt ?? new Date().toISOString(), lock: lock.identity, installation, protocol: 'concord.workspace/v1', socket };
       const temporary = join(directory, `current-${token}.tmp`);
       try { writeFileSync(temporary, `${JSON.stringify(current)}\n`, { flag: 'wx', mode: 0o600 }); renameSync(temporary, recordPath); }
       finally { try { unlinkSync(temporary); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ENOENT') throw cause; } }

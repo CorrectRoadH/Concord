@@ -2,11 +2,11 @@
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 import { Installation } from '../../base/installation/index.js';
 import { LspLauncher, ViewLauncher, ServerLauncher } from "./launchers.js";
-import { serveWorkspace, startWorkspaceServer, stopWorkspaceServer, workspaceServerStatus } from '../server/index.js';
+import { serveWorkspace, startWorkspaceServer, stopWorkspaceServer, workspaceServerStatus, remoteQueriesLayer } from '../server/index.js';
 import { serveViewServer, viewAddresses } from "../http/index.js";
 import { serveEditor } from "../lsp/index.js";
 import { Publication } from "../../base/publication/index.js";
-import { PublicationValidationLive } from "../../app/index.js";
+import { PublicationValidationLive, Queries } from "../../app/index.js";
 import { resourcePath } from "../../app/index.js";
 import { readFileSync } from "node:fs";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
@@ -39,9 +39,9 @@ const launchers = Layer.mergeAll(
 const cliServices = Layer.mergeAll(ServerRuntime.layer, Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(), PersistentCache.layer, Publication.layer.pipe(Layer.provide(PublicationValidationLive))).pipe(
   Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer),
 );
-export const cliLayer = launchers.pipe(Layer.provideMerge(cliServices));
+export const cliLayer = launchers.pipe(Layer.merge(remoteQueriesLayer), Layer.provideMerge(cliServices));
 
-export function runCli(command: Command.Command<any, any, any, any, PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
+export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
  command.pipe(Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(resourcePath('package.json'),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))

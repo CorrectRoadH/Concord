@@ -101,4 +101,5 @@ export class Queries extends Context.Service<Queries, {
   readonly execute: typeof executeQuery;
 }>()('concord/app/Queries') {
   static readonly Local = Layer.succeed(Queries, Queries.of({ execute: executeQuery }));
+  static Remote(execute: typeof executeQuery) { return Layer.succeed(Queries, Queries.of({ execute })); }
 }

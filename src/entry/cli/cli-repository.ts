@@ -8,6 +8,15 @@ import { ConcordError } from '../../model/index.js';
 import { type LocalRepository, openWriteRepository, openReadRepository } from "../../app/index.js";
 
 import { root, emit, sync } from "./cli-base.js";
+import { Queries, type QueryRequest } from '../../app/index.js';
+
+export const withQuery = (request: QueryRequest) => Effect.gen(function*() {
+  const settings = yield* root;
+  const queries = yield* Queries;
+  const reply = yield* queries.execute(Option.getOrUndefined(settings.root), request, settings.dryRun ? 'off' : 'use');
+  yield* Effect.sync(() => { if (reply.exitCode !== 0) process.exitCode = reply.exitCode; emit(reply.value, settings.json); });
+  return reply.value;
+});
 
 function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, options: { initialize?: boolean; recover?: boolean; readonly?: boolean; unlocked?: boolean } = {}) {
   return Effect.gen(function*() {
