@@ -566,7 +566,7 @@ export class LocalRepository implements Repository {
   // @concord-implements docs/feature/portable-coordination/architecture.md#entity-ownership
   beginSnapshot(reclaimDead = true): void {
     if (this.snapshotDepth > 0) { this.snapshotDepth++; return; }
-    this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear();
+    if (this.access === 'read') { this.observedFiles.clear(); this.observedBytes.clear(); this.observedRootFiles = undefined; this.observedDirectories.clear(); }
     try {
       const acquire = this.recovering || !reclaimDead ? acquireFileLease : acquireRecoverablePublicationLease;
       if (!this.optimistic) this.traceLease = acquire(this.root, this.coordinationDirectory, PUBLICATION_LEASE, 'exclusive', 'snapshot', !this.previewWithoutState);
