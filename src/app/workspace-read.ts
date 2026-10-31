@@ -4,11 +4,9 @@ import { Effect } from 'effect';
 import { Workspace } from '../base/workspace/index.js';
 import { Sources } from '../base/sources/index.js';
 import { ConcordError, digest, failure, type WorkspaceRead } from '../model/index.js';
-import { getViewFile } from './application.js';
 import { inspectDocumentFile, isSourcePath } from './editing.js';
 
 export const getWorkspaceRead = Effect.fn('getWorkspaceRead')(function*(root: string, path: string) {
-  const authorized = yield* getViewFile(root, path);
   return yield* Effect.scoped(Effect.gen(function*() {
     const repo = yield* (yield* Workspace).openRead(root, { access: 'read', optimistic: true });
     return yield* (yield* Sources).snapshot(repo, Effect.try({ try: (): WorkspaceRead => {
@@ -24,8 +22,9 @@ export const getWorkspaceRead = Effect.fn('getWorkspaceRead')(function*(root: st
       }
       const files = [...paths].map(path => { const bytes = repo.readBytes(path); if (!bytes) throw new ConcordError('SourceChanged', 'A read file disappeared'); return { path, bytes }; });
       const target = files.find(file => file.path === path)!;
-      if (digest(target.bytes) !== authorized.digest) throw new ConcordError('SourceChanged', 'The directed source changed while reading');
-      return { envelope: { path, digest: authorized.digest, files: files.map(file => ({ path: file.path, digest: digest(file.bytes), length: file.bytes.byteLength, diagnostics: [] })) }, files };
+      const targetDigest = digest(target.bytes);
+      if (document && targetDigest !== document.digest) throw new ConcordError('SourceChanged', 'The directed source changed while reading');
+      return { envelope: { path, digest: targetDigest, files: files.map(file => ({ path: file.path, digest: digest(file.bytes), length: file.bytes.byteLength, diagnostics: [] })) }, files };
     }, catch: failure }));
   }));
 });

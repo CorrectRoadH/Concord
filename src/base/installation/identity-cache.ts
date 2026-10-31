@@ -18,8 +18,13 @@ function inspect(trees: readonly IdentityTree[]) {
     if (stat.isSymbolicLink()) throw new ConcordError('UnsafePath', 'Installation contains a symbolic link');
     const identity = [String(stat.dev), String(stat.ino), String(stat.size), String(stat.mtimeNs), String(stat.ctimeNs)];
     if (stat.isDirectory()) {
-      const names = readdirSync(path).sort(); metadata.push([prefix, 'directory', identity, names]);
-      for (const name of names) visit(join(path, name), prefix ? `${prefix}/${name}` : name, accept);
+      const entries = readdirSync(path, { withFileTypes: true }).sort((left, right) => left.name < right.name ? -1 : left.name > right.name ? 1 : 0);
+      metadata.push([prefix, 'directory', identity, entries.map(entry => entry.name)]);
+      for (const entry of entries) {
+        if (entry.isSymbolicLink()) throw new ConcordError('UnsafePath', 'Installation contains a symbolic link');
+        const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
+        if (entry.isDirectory() || accept(entry.name, relative)) visit(join(path, entry.name), relative, accept);
+      }
     } else {
       metadata.push([prefix, stat.isFile() ? 'file' : 'special', identity]);
       if (stat.isFile() && accept(path.split('/').at(-1)!, prefix)) files.push({ path, relative: prefix });
