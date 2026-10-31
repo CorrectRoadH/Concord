@@ -1,5 +1,15 @@
 ---
-status: open
+status: closed
+closure:
+  kind: fixed
+  reason: execution 使用 ran/none/skipped/unknown；在仓库树外的私有检出中准备依赖、构建并重放 red 与 green
+  verification:
+    defect: 209389d3f5cc5965659a65e3c6b48b226a8e8ace
+    fix: 3f19011db3001ac73cce139df6417bea305fdf6d
+    tests:
+      - neref_3b11763e77bb20c1fe7f67b9ac53bfa6
+    runner: sha256:db83e0ff88b65dcaaf52a8f69c6262dbd1b596991eee44d5fcf69e1a65b4e8e0
+    concord: dev
 ---
 
 # 命令收据的 execution 取值 nonzero 容易误读
