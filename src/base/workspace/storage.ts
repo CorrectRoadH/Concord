@@ -42,8 +42,6 @@ function storageCoordinationFailure(cause: unknown): ConcordError {
   return new ConcordError('CoordinationFailed', error.message, { operation: error.operation, phase: error.phase, path: error.path });
 }
 // @concord-end
-// @concord-code
-// @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/architecture.md#操作依赖
 function present(path: string): boolean { try { lstatSync(path); return true; } catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; } }
@@ -425,9 +423,6 @@ export class LocalRepository implements Repository {
     return this.snapshotDepth === 0 ? this.underLease(() => this.readObserved(path)) : this.readObserved(path);
   }
   private readObserved(path: string): string | undefined {
-    // Reuse bytes only inside this read operation. verifyObservations rereads
-    // every preimage through readCurrent before anything can be returned.
-    if (this.access === 'read' && this.snapshotDepth > 0 && this.observing && this.observedFiles.has(path)) return this.observedFiles.get(path);
     const source = this.readCurrent(path);
     if (this.observing && !this.observedFiles.has(path)) this.observedFiles.set(path, source);
     return source;
@@ -448,7 +443,6 @@ export class LocalRepository implements Repository {
   private filesObserved(prefix: string, scope?: 'source'): string[] {
     const key = canonical([prefix, scope ?? 'all']);
     const prior = this.observedDirectories.get(key);
-    if (this.access === 'read' && this.snapshotDepth > 0 && this.observing && prior) return [...prior.files];
     const scanned = this.scanDirectory(prefix, scope);
     if (this.observing && !prior) this.observedDirectories.set(key, { path: prefix, scope, observation: scanned.observation, files: [...scanned.files] });
     return scanned.files;

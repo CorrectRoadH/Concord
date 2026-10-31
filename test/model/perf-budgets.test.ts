@@ -11,7 +11,12 @@ test('budget discovery scans Feature owners and preserves scenario identities', 
   const rows = yield* loadBudgets(resolve("."));
   assert.ok(rows.length > 0);
   assert.ok(rows.every(row => row.owner.startsWith('docs/feature/') && row.scenarios.length > 0));
-  assert.ok(rows.filter(row => row.heading === '刷新上限').every(row => row.limitMs === 120000));
+  const refresh = rows.filter(row => row.heading === '刷新上限');
+  assert.ok(refresh.some(row => row.scenarios.includes('herdr-panel/push')));
+  for (const row of refresh) {
+    const declared = parseBudgetTable(readFileSync(join(resolve('.'), row.owner), 'utf8'), row.heading);
+    assert.ok(declared.some(value => value.limitMs === row.limitMs && value.scenarios.some(id => row.scenarios.includes(id))));
+  }
   assert.deepEqual(parseBudgetTable('## 性能预算\n| 场景 | 内容 | p50 |\n| --- | --- | ---: |\n| `local-sdlc/help`、`local-sdlc/skill` | 启动 | 350ms |', '性能预算'), [{ scenarios: ['local-sdlc/help', 'local-sdlc/skill'], limitMs: 350 }]);
   for (const text of ['## 性能预算\nNo table.', '## 性能预算\n| 场景 | p50 |\n| --- | ---: |\n| `concord check` | 1ms |', '## 性能预算\n| 场景 | p50 |\n| --- | ---: |\n| `local-sdlc/help` | 0ms |']) assert.throws(() => parseBudgetTable(text, '性能预算'));
 })));

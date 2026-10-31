@@ -119,7 +119,7 @@ test('partial derived relationships retain healthy endpoints and reject malforme
 
 // @use-case docs/feature/local-sdlc/use-case/review-traceability.md
 // @issue docs/issues/stale-read-observation-reuse.md
-test('memoized owners retain target-kind gates, anchor validation and final byte rechecks', () => Effect.runPromise(Effect.sync(() => withTraceConsumer((repo, root) => {
+test('memoized owners retain target-kind and anchor gates, and a rewrite during reading is found as SourceChanged', () => Effect.runPromise(Effect.sync(() => withTraceConsumer((repo, root) => {
   const trace = buildTrace(repo, 'off');
   const path = 'docs/feature/shared/architecture.md';
   const references = referenceResolver(repo, trace.documents);
@@ -132,7 +132,7 @@ test('memoized owners retain target-kind gates, anchor validation and final byte
   assert.throws(() => references.resolve(path, ['memory']), { code: 'InvalidReferenceTarget' });
   assert.throws(() => references.resolve(`${path}#absent`), { code: 'AnchorNotFound' });
   writeFileSync(join(root, path), '# Changed\n');
-  assert.ok(references.verify().some(finding => finding.code === 'PreimageChanged' && finding.path === path));
+  assert.ok(references.verify().some(finding => finding.code === 'SourceChanged' && finding.path === path));
 }))));
 
 // @use-case docs/feature/local-sdlc/use-case/inspect-relationship-gaps.md

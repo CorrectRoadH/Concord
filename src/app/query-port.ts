@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/architecture.md#应用端口-queries
+// @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
 import { Context, Effect, Layer, Schema } from 'effect';
 import type { executeQuery } from './queries.js';
 

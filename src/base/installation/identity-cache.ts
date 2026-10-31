@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/architecture.md#基础服务
+// @concord-implements docs/feature/local-data-engine/architecture.md#启动与裁决
 import { constants, closeSync, fstatSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
