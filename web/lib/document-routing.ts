@@ -1,13 +1,6 @@
 import type { WorkspaceDocument } from '../../src/model/index';
-import { matchingOwners } from '../../src/model/index';
+import { workspaceDocumentHref } from '../../src/model/workspace-display/index.js';
 
 export function documentHref(document: Pick<WorkspaceDocument, 'path' | 'metadata'>, documents: readonly WorkspaceDocument[]): string {
-  if (document.metadata.kind === 'use-case') {
-    const owners = matchingOwners(documents, document.metadata.feature, 'feature');
-    if (owners.length !== 1) return '/features';
-    return `/features/${encodeURIComponent(owners[0]!.metadata.id)}/use-cases/${encodeURIComponent(document.metadata.id)}`;
-  }
-  const sections = { feature: 'features', engineering: 'engineering', roadmap: 'roadmap', design: 'design', research: 'research', memory: 'memory', issue: 'feedback' };
-  const selector = document.metadata.kind === 'memory' ? document.path : document.metadata.id;
-  return `/${sections[document.metadata.kind]}/${encodeURIComponent(selector)}`;
+  return workspaceDocumentHref(document, documents);
 }

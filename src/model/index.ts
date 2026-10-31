@@ -430,3 +430,4 @@ export { parseReference } from './reference.js';
 
 export { WorkspaceConceptSchema, WorkspaceConceptCatalogSchema, projectConceptCatalogs, selectEffectiveConcepts, splitConceptReference } from './concept-directory.js';
 export type { WorkspaceConcept, WorkspaceConceptCatalog } from './concept-directory.js';
+export { WorkspaceRead, decodeWorkspaceRead } from './workspace-read.js';

@@ -73,8 +73,8 @@ export function queryInstallationIdentity(): InstallationFiles {
 let workspaceIdentity: string | undefined;
 /** Built workspace identity stays fixed for the process, as its executable does. */
 export function workspaceInstallationIdentity(): string {
-  if (sourceInstallation) return digest(JSON.stringify(sourceIdentity()));
   if (workspaceIdentity !== undefined) return workspaceIdentity;
+  if (sourceInstallation) { workspaceIdentity = digest(JSON.stringify(sourceIdentity())); return workspaceIdentity; }
   const files = collectFiles(directory, '', (name, relative) => name.endsWith('.js') || relative.startsWith('native/'));
   requireNativeArtifacts();
   workspaceIdentity = digest(JSON.stringify(files));

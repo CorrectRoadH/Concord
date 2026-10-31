@@ -1,11 +1,14 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
-import { Schema, Stream } from 'effect';
+import { Effect, Schema, Stream } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
+import { SchemaBinary } from 'effect/unstable/encoding';
+import { WorkspaceRead } from '../../model/index.js';
 
 export const PROTOCOL = 'concord.workspace/v1';
 export const FRAME_LIMIT = 1024 * 1024;
 export const RESULT_LIMIT = 32 * FRAME_LIMIT;
+export const ReadCodec = SchemaBinary.toCodec(WorkspaceRead);
 export const ServerState = Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']);
 export type ServerState = typeof ServerState.Type;
 export const strict = <S extends Schema.Top>(schema: S): S['Rebuild'] => schema.annotate({ parseOptions: { onExcessProperty: 'error' } });
@@ -36,12 +39,24 @@ export const WorkspaceRpcs = RpcGroup.make(
 export type WorkspaceClient = import('effect/unstable/rpc/RpcClient').RpcClient<RpcGroup.Rpcs<typeof WorkspaceRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>;
 
 /** Leave space for the binary RPC envelope; never allocate from a peer's length. */
-export function packets(data: Uint8Array) {
-  if (data.byteLength > RESULT_LIMIT) throw new WorkspaceServerError({ code: 'WorkspaceServerOutputLimit', message: 'Result exceeds 32 MiB' });
+export function packets(data: Uint8Array, limit = RESULT_LIMIT) {
+  if (data.byteLength > limit) throw new WorkspaceServerError({ code: 'WorkspaceServerOutputLimit', message: 'Result exceeds its byte allowance' });
   const result: (typeof Packet.Type)[] = [];
   const size = FRAME_LIMIT - 4096;
   for (let offset = 0; offset < data.byteLength; offset += size) result.push({ data: data.subarray(offset, offset + size), last: offset + size >= data.byteLength });
   if (result.length === 0) result.push({ data: new Uint8Array(), last: true });
-  return Stream.fromIterable(result);
+  return Stream.fromIterable(result, { chunkSize: 1 });
 }
 export const jsonPackets = (value: unknown) => packets(new TextEncoder().encode(JSON.stringify(value)));
+
+export function makeOutputAdmission() {
+  let retained = 0;
+  const bytes = (data: Uint8Array, limit = RESULT_LIMIT) => Stream.unwrap(Effect.acquireRelease(
+    Effect.try({ try: () => {
+      if (retained + data.byteLength > 64 * FRAME_LIMIT) throw new WorkspaceServerError({ code: 'WorkspaceServerBusy', message: 'Pending output exceeds 64 MiB' });
+      retained += data.byteLength;
+    }, catch: cause => cause instanceof WorkspaceServerError ? cause : new WorkspaceServerError({ code: 'WorkspaceServerProtocol', message: String(cause) }) }),
+    () => Effect.sync(() => { retained -= data.byteLength; }),
+  ).pipe(Effect.map(() => packets(data, limit))));
+  return { bytes, json: (value: unknown) => Stream.unwrap(Effect.sync(() => bytes(new TextEncoder().encode(JSON.stringify(value))))) };
+}

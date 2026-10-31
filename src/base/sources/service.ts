@@ -14,6 +14,7 @@ export interface SourcesService {
   readonly read: (root: string, path: string) => Effect.Effect<string | undefined, ConcordError>;
   readonly authorBody: (path: string) => Effect.Effect<string, ConcordError>;
   readonly watch: (root: string, changed: () => void, failed: (error: ConcordError) => void) => Effect.Effect<SourceWatch, never, Scope.Scope>;
+  readonly watchPrivateHead: (privateDir: string, changed: () => void) => Effect.Effect<void, never, Scope.Scope>;
   readonly pendingPublications: typeof inspectPendingJournals;
   readonly readReportFiles: typeof readReportFiles;
   readonly exists: (path: string) => Effect.Effect<boolean, ConcordError>;
@@ -44,6 +45,7 @@ export class Sources extends Context.Service<Sources, SourcesService>()('concord
         Effect.sync(() => new NodeSourceWatch(root, changed, failed)),
         watcher => Effect.sync(() => watcher.close()),
       )),
+      watchPrivateHead: (privateDir, changed) => Effect.forkScoped(Stream.runForEach(fs.watch(path.dirname(privateDir)), event => Effect.sync(() => { if (path.basename(event.path) === 'HEAD') changed(); })).pipe(Effect.ignore)).pipe(Effect.asVoid),
       read: Effect.fn('Sources.read')((root: string, relative: string) => Effect.try({ try: () => readRepositoryFileSync(path.resolve(root), relative), catch: failure })),
       authorBody: Effect.fn('Sources.authorBody')(function*(path: string) {
         if (path !== '-') {

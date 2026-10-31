@@ -38,6 +38,12 @@ function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: 
 function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, query?: Query) {
   return Effect.gen(function*() {
     const settings = yield* root;
+    if (query !== undefined && settings.fresh && !settings.dryRun) {
+      const request: QueryRequest = query[0] === 'trace'
+        ? query[1] === 'show' ? { name: 'trace.show', input: { reference: query[2] } } : { name: 'trace.gaps', input: {} }
+        : { name: 'review.render', input: { reference: query[2] } };
+      return yield* withQuery(request);
+    }
     if (query !== undefined && !settings.fresh && !settings.dryRun) {
       const value = yield* cachedQuery(Option.getOrUndefined(settings.root), query);
       yield* Effect.sync(() => emit(value, settings.json));

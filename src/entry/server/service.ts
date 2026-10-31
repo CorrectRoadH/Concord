@@ -1,6 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#状态
-import { Clock, Deferred, Effect, Fiber, Queue, Schedule, Semaphore, Stream, SubscriptionRef } from 'effect';
+import { Clock, Deferred, Effect, Fiber, Queue, Schema, Schedule, Semaphore, Stream, SubscriptionRef } from 'effect';
 import { ConcordError, failure, decodeWorkspaceProjectionRecord, type WorkspaceProjection, type WorkspaceProjectionRecord } from '../../model/index.js';
 import type { WorkspaceProjectionContext } from '../../model/index.js';
 import { WorkspaceState, compensationRefresh, serviceHeartbeat } from './state.js';
@@ -17,7 +17,12 @@ export interface RuntimePorts {
   readonly close: Effect.Effect<void, unknown>;
   readonly clear: Effect.Effect<unknown, unknown>;
   readonly exists: Effect.Effect<boolean, unknown>;
+  readonly reconcile?: (candidate: WorkspaceProjectionRecord) => Effect.Effect<boolean, unknown>;
 }
+const namedFailure = (cause: unknown) => {
+  const decoded = Schema.decodeUnknownExit(Schema.Struct({ code: Schema.String, message: Schema.String }))(cause);
+  return decoded._tag === 'Success' ? new ConcordError(decoded.value.code, decoded.value.message) : failure(cause);
+};
 
 /** Production scheduling uses the same Clock-driven state machine as tests. */
 export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(ports: RuntimePorts) {
@@ -39,8 +44,8 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* request;
   });
   const fail = (cause: unknown) => {
-    const error = failure(cause);
-    return state.transition(error.code === 'CleanupFailed' ? 'blocked' : 'degraded', { code: error.code, message: error.message });
+    const error = namedFailure(cause);
+    return state.transition(['CleanupFailed', 'UnsafePath', 'ServerLockUnavailable'].includes(error.code) ? 'blocked' : 'degraded', { code: error.code, message: error.message });
   };
   const refresh = Effect.gen(function*() {
     const status = yield* SubscriptionRef.get(state.value);
@@ -50,22 +55,27 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* ports.ready(context);
     const value = yield* ports.compute({ kind: 'scan' });
     const candidate = yield* Effect.try({ try: () => decodeWorkspaceProjectionRecord(value), catch: failure });
+    if (ports.reconcile && (yield* ports.reconcile(candidate))) yield* request;
     yield* ports.verify;
     if ((yield* ports.context).identity !== context.identity) { yield* request; return; }
     yield* ports.ready(context);
     if (stopping) return;
     yield* ports.persist(context, candidate);
     yield* state.accept(yield* ports.restore(context));
+    if ((yield* SubscriptionRef.get(state.value)).state === 'running') yield* state.transition('running');
     if (!candidate.consistent) yield* Effect.forkScoped(Effect.sleep('1 second').pipe(Effect.andThen(request)));
   }).pipe(Effect.catch(cause => Effect.gen(function*() {
-    const error = failure(cause);
+    const error = namedFailure(cause);
     if (stopping) return;
+    if (error.code === 'RepositoryBusy' || error.code === 'SourceChanged') { yield* Effect.forkScoped(Effect.sleep('100 millis').pipe(Effect.andThen(request))); return; }
     const context = yield* Effect.result(ports.context);
     if (context._tag === 'Success') {
       yield* ports.persist(context.success, undefined, error).pipe(Effect.ignore);
       yield* ports.restore(context.success).pipe(Effect.flatMap(state.accept), Effect.ignore);
     }
-    yield* fail(cause);
+    const prior = yield* SubscriptionRef.get(state.value);
+    if (error.code === 'CleanupFailed') yield* state.transition('blocked', { code: error.code, message: error.message });
+    else yield* state.transition(prior.state === 'degraded' ? 'degraded' : 'running', { code: error.code, message: error.message });
   })));
   const stop = Effect.suspend(() => {
     if (stopping) return Effect.void;
@@ -92,6 +102,14 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* maintenance.withPermit(refresh);
   })));
   yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() { if (!pending) yield* request; }), compensationRefresh));
+  yield* Effect.forkScoped(Effect.repeat(maintenance.withPermit(Effect.gen(function*() {
+    const current = yield* SubscriptionRef.get(state.value);
+    if (current.state !== 'degraded' || !current.error || !['HawdbUnavailable', 'HawdbBusy', 'HawdbClosed'].includes(current.error.code)) return;
+    yield* ports.verify;
+    yield* ports.open;
+    yield* state.transition('running');
+    yield* request;
+  })).pipe(Effect.ignore), Schedule.spaced('1 second')));
   yield* Effect.forkScoped(Effect.repeat(Effect.gen(function*() {
     const valid = yield* Effect.result(ports.verify);
     if (valid._tag === 'Failure' || !(yield* ports.exists) || connections === 0 && (yield* state.expired)) yield* stop;
@@ -100,13 +118,23 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* state.transition('draining');
     yield* ports.close;
     yield* state.transition('clearing');
-    const result = yield* ports.clear;
+    const outcome = yield* Effect.result(ports.clear);
+    if (outcome._tag === 'Failure') {
+      const error = namedFailure(outcome.failure);
+      if (error.code === 'RepositoryBusy') {
+        yield* ports.open;
+        yield* state.transition('running');
+        yield* request;
+      } else yield* state.transition('blocked', { code: error.code, message: error.message });
+      return yield* Effect.fail(error);
+    }
+    yield* state.reset;
     yield* state.transition('opening');
     yield* ports.open;
     yield* state.transition('running');
     yield* request;
-    return result;
-  }).pipe(Effect.catch(cause => fail(cause).pipe(Effect.andThen(Effect.fail(cause))))));
+    return outcome.success;
+  }));
   yield* Effect.addFinalizer(() => stop.pipe(Effect.andThen(Fiber.interrupt(refreshFiber)), Effect.andThen(ports.close), Effect.orDie));
   return { state, stopped: Deferred.await(stopped), stop, request, invalidate, clear,
     connect: Effect.acquireRelease(Effect.sync(() => { connections++; }), () => Effect.sync(() => { connections--; })),

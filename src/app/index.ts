@@ -185,3 +185,4 @@ export { Queries, QueryRequest, QueryReply, executeQuery } from './queries.js';
 export { mergeLocalFeedbackObservation } from './entry-operations.js';
 export { runWorkspaceTest } from './workspace-test.js';
 export { clearWorkspaceCache } from './workspace-cache.js';
+export { getWorkspaceRead } from './workspace-read.js';

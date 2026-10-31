@@ -1,0 +1,45 @@
+// @concord-file
+// @concord-implements docs/feature/local-data-engine/architecture.md#协议
+import { Effect, Scope } from 'effect';
+import { RpcServer } from 'effect/unstable/rpc';
+import { Socket, SocketServer } from 'effect/unstable/socket';
+
+/** Connection and request admission surrounds the actual Effect RPC protocol. */
+export const makeAdmittedProtocol = Effect.fn('makeAdmittedProtocol')(function*(server: SocketServer.SocketServer['Service'], connected: Effect.Effect<unknown, never, Scope.Scope>, disconnected: (client: number) => void) {
+  const requests = new Map<number, Set<string>>();
+  const close = new Map<number, Effect.Effect<void>>();
+  let connections = 0, nextId = 0, queued = 0, sending = 0;
+  const sockets: SocketServer.SocketServer['Service'] = { ...server, run: handler => server.run(socket => Effect.scoped(Effect.gen(function*() {
+    const write = yield* socket.writer;
+    const busy = write(new Socket.CloseEvent(1013, 'WorkspaceServerBusy')).pipe(Effect.ignore);
+    if (connections >= 64) { yield* busy; return; }
+    const id = nextId++; connections++; close.set(id, busy);
+    yield* Effect.addFinalizer(() => Effect.sync(() => { connections--; close.delete(id); queued -= requests.get(id)?.size ?? 0; requests.delete(id); disconnected(id); }));
+    yield* connected;
+    const bounded = Socket.make({ ...socket,
+      writer: Effect.succeed(chunk => Effect.suspend(() => {
+        const size = typeof chunk === 'string' ? Buffer.byteLength(chunk) : chunk instanceof Socket.CloseEvent ? 0 : chunk.byteLength;
+        if (sending + size > 64 * 1024 * 1024) return busy;
+        sending += size;
+        return write(chunk).pipe(Effect.ensuring(Effect.sync(() => { sending -= size; })));
+      })),
+    });
+    yield* handler(bounded);
+  }))) };
+  const protocol = yield* RpcServer.makeProtocolSocketServer.pipe(Effect.provideService(SocketServer.SocketServer, sockets));
+  return {
+    ...protocol,
+    run: dispatch => protocol.run((id, message) => {
+      if (message._tag === 'Request') {
+        const pending = requests.get(id) ?? new Set<string>();
+        if (pending.size >= 8 || queued >= 256 || pending.has(String(message.id))) return close.get(id) ?? Effect.void;
+        pending.add(String(message.id)); requests.set(id, pending); queued++;
+      }
+      return dispatch(id, message);
+    }),
+    send: (id, message, transferables) => {
+      if (message._tag === 'Exit' && requests.get(id)?.delete(String(message.requestId))) queued--;
+      return protocol.send(id, message, transferables);
+    },
+  } satisfies RpcServer.Protocol['Service'];
+});

@@ -1,8 +1,12 @@
 import { createElement as h, useEffect, useRef, useState } from 'react';
 import { render, useInput, useWindowSize, type RenderOptions } from 'ink';
-import { Effect, Fiber, Schema, type Scope } from 'effect';
+import { Effect, Fiber, Schema, Stream, type Scope } from 'effect';
 import type { WorkspaceDisplay } from '../../model/workspace-display/index.js';
-import { documentCategories, displayConcepts } from '../../model/workspace-display/index.js';
+import { documentCategories, displayConcepts, workspaceDisplay, workspacePathHref } from '../../model/workspace-display/index.js';
+import { WorkspaceProjectionSnapshotSchema, type WorkspaceProjectionSnapshot } from '../../model/index.js';
+import { connectOrStartWorkspace, requestWorkspace, subscribeWorkspace, type WorkspaceConnection } from '../server/index.js';
+import { OwnedProcess } from '../../base/process/index.js';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { PanelView, panelDetail, type BoundPanelBody } from './view.js';
 import { initialPanelState, navigatePanel, reconcilePanelState, visiblePanelItems, panelItems, type PanelState } from './state.js';
 
@@ -134,4 +138,43 @@ export const renderPanel = Effect.fn('renderPanel')(function*(ports: PanelPorts,
     }),
     closed: Effect.tryPromise(() => instance.waitUntilExit()),
   } satisfies PanelSession;
+});
+
+const Event = Schema.Struct({ token: Schema.String, generation: Schema.Int, state: Schema.String, workspace: Schema.optional(Schema.Struct({ snapshot: WorkspaceProjectionSnapshotSchema, projection: Schema.Json })), error: Schema.optional(Schema.Struct({ code: Schema.String, message: Schema.String })) });
+const Lease = Schema.Struct({ address: Schema.String, host: Schema.String, port: Schema.Int, lease: Schema.String, token: Schema.String });
+export const serveWorkspacePanel = Effect.fn('serveWorkspacePanel')(function*(root: string) {
+  return yield* Effect.scoped(Effect.gen(function*() {
+    const owner = yield* OwnedProcess;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    let connection: WorkspaceConnection | undefined = yield* connectOrStartWorkspace(root);
+    let initialConnection: WorkspaceConnection | undefined = connection;
+    let snapshot: WorkspaceProjectionSnapshot | undefined;
+    const connected = () => {
+      if (!connection) throw new Error('工作区服务正在重连');
+      return connection;
+    };
+    const ports: PanelPorts = {
+      read: request => requestWorkspace(connected(), 'read', request).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(BodyRead, { onExcessProperty: 'ignore' })(value)), Effect.mapError(cause => cause instanceof Error ? cause : new Error(String(cause)))),
+      openInWeb: path => Effect.gen(function*() {
+        const current = connected();
+        const value = yield* requestWorkspace(current, 'http', { action: 'open', host: '127.0.0.1', port: 4317 });
+        const lease = yield* Schema.decodeUnknownEffect(Lease, { onExcessProperty: 'error' })(value);
+        const address = new URL(snapshot ? workspacePathHref(snapshot, path) : `/docs?file=${encodeURIComponent(path)}`, lease.address).href;
+        const browser = yield* owner.resolveExecutable(root, process.platform === 'darwin' ? 'open' : 'xdg-open', owner.environment.env.PATH ?? '').pipe(Effect.catch(() => Effect.succeed(undefined)));
+        if (browser) yield* Effect.scoped(spawner.spawn(ChildProcess.make(browser.executable, [address], { cwd: owner.environment.cwd, detached: true, stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })).pipe(Effect.flatMap(child => child.unref), Effect.ignore));
+        return address;
+      }).pipe(Effect.mapError(cause => cause instanceof Error ? cause : new Error(String(cause)))),
+    };
+    const session = yield* renderPanel(ports);
+    const watch = Effect.forever(Effect.scoped(Effect.gen(function*() {
+      connection = initialConnection ?? (yield* connectOrStartWorkspace(root));
+      initialConnection = undefined;
+      yield* Stream.runForEach(subscribeWorkspace(connection), input => Effect.gen(function*() {
+        const event = yield* Schema.decodeUnknownEffect(Event, { onExcessProperty: 'error' })(input);
+        if (event.workspace) { snapshot = event.workspace.snapshot; yield* session.update({ model: workspaceDisplay(snapshot) }); }
+        else yield* session.update(undefined);
+      }));
+    })).pipe(Effect.catch(() => Effect.void), Effect.andThen(Effect.sync(() => { connection = undefined; })), Effect.andThen(session.update(undefined, true)), Effect.andThen(Effect.sleep('250 millis'))));
+    yield* Effect.raceFirst(session.closed, watch);
+  }));
 });

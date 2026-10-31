@@ -3,8 +3,9 @@
 import { NodeSocket } from '@effect/platform-node';
 import { Effect, Layer, Queue, Schema, Stream } from 'effect';
 import { RpcClient, RpcSerialization } from 'effect/unstable/rpc';
-import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError } from './protocol.js';
-import { collectPackets } from './computation.js';
+import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClient, type Packet, WorkspaceServerError, ReadCodec } from './protocol.js';
+import { collectPackets, collectBytes } from './computation.js';
+import { decodeWorkspaceRead } from '../../model/index.js';
 
 export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string) {
   const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(
@@ -20,7 +21,8 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
 export type WorkspaceConnection = Effect.Success<ReturnType<typeof connectWorkspaceSocket>>;
 export const requestWorkspace = <N extends Exclude<keyof WorkspaceClient, 'hello' | 'shutdown' | 'subscribe'>>(connection: WorkspaceConnection, name: N, input: Omit<Parameters<WorkspaceClient[N]>[0], 'token' | 'installation' | 'requestId' | 'deadline'>) => {
   const call = connection.client[name] as (input: unknown) => Stream.Stream<typeof Packet.Type, unknown>;
-  return collectPackets(call({ ...input, ...connection.identity() }));
+  const stream = call({ ...input, ...connection.identity() });
+  return name === 'read' ? collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes)), Effect.map(decodeWorkspaceRead)) : collectPackets(stream);
 };
 
 export const subscribeWorkspace = (connection: WorkspaceConnection) => Stream.callback<unknown, unknown>(queue => Effect.gen(function*() {

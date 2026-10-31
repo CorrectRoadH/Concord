@@ -24,12 +24,20 @@ const identity = (path: string) => {
   const stat = lstatSync(path, { bigint: true });
   return { device: String(stat.dev), inode: String(stat.ino) };
 };
-export function readServerRecord(privateDir: string): ServerRecord | undefined {
+export function readServerRecord(privateDir: string, requireSocket = true): ServerRecord | undefined {
   const path = join(privateDir, 'server', 'current.json');
   const stat = lstatSync(path, { throwIfNoEntry: false });
   if (!stat) return undefined;
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 16 * 1024) throw new ConcordError('WorkspaceServerUnavailable', 'Server record must be a bounded regular file');
-  try { return Schema.decodeUnknownSync(Schema.fromJsonString(ServerRecord), { onExcessProperty: 'error' })(readFileSync(path, 'utf8')); }
+  try {
+    const record = Schema.decodeUnknownSync(Schema.fromJsonString(ServerRecord), { onExcessProperty: 'error' })(readFileSync(path, 'utf8'));
+    const lock = identity(join(privateDir, 'server', 'lock'));
+    if (lock.device !== record.lock.device || lock.inode !== record.lock.inode) throw new Error('Server lock identity changed');
+    if (!requireSocket) return record;
+    const socket = lstatSync(record.socket.path, { bigint: true });
+    if (lock.device !== record.lock.device || lock.inode !== record.lock.inode || !record.socket.path.endsWith(`/${digest(privateDir).slice(7, 39)}.sock`) || !socket.isSocket() || String(socket.dev) !== record.socket.device || String(socket.ino) !== record.socket.inode || socket.uid !== BigInt(process.getuid?.() ?? -1) || (socket.mode & 0o777n) !== 0o600n) throw new Error('Server identity changed');
+    return record;
+  }
   catch { throw new ConcordError('WorkspaceServerUnavailable', 'Invalid server record'); }
 }
 export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(root: string, privateDir: string) {
@@ -79,7 +87,7 @@ export const acquireServerRuntime = Effect.fn('acquireServerRuntime')(function*(
   yield* Effect.addFinalizer(() => Effect.sync(() => {
     // A replaced Git-private directory belongs to a different service instance.
     try {
-      const record = readServerRecord(privateDir);
+      const record = readServerRecord(privateDir, false);
       if (record?.token === token && record.lock.device === lock.identity.device && record.lock.inode === lock.identity.inode) unlinkSync(recordPath);
     } catch { /* Never delete an unverified record. */ }
     if (current) try {

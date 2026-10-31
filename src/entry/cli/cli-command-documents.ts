@@ -10,7 +10,7 @@ import { documentShow } from "../../app/index.js";
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../app/index.js";
 import { ConcordError, type DocumentKind } from "../../model/index.js";
 import { text, optional, many, id, body, sync, cached } from "./cli-base.js";
-import { withRepo, withReadRepo } from "./cli-repository.js";
+import { withRepo, withReadRepo, withQuery } from "./cli-repository.js";
 
 const kinds = ['feature', 'use-case', 'research', 'design', 'roadmap', 'engineering', 'issue', 'memory'] as const;
 const category = Argument.choice('category', kinds);
@@ -31,16 +31,9 @@ export const newDocument = Command.make('new', {
   return { ...receipt, operation: 'new' };
 }))).pipe(Command.withDescription('Create a document from its bundled template; --pages selects optional pages, --type selects Memory type.'));
 
-export const showDocument = Command.make('show', { id }, args => withReadRepo((repo, settings) => sync(() => {
-  const selected = args.id.includes('/') ? readDocumentReference(repo, args.id) : findDocument(loadDocuments(repo), args.id);
-  return { ...documentShow(repo, args.id, selected.metadata.kind, cached(settings.dryRun)), operation: 'show' };
-}))).pipe(Command.withDescription('Show a document and its relationships by path or selector.'));
+export const showDocument = Command.make('show', { id }, args => withQuery({ name: 'documents.show', input: { id: args.id } })).pipe(Command.withDescription('Show a document and its relationships by path or selector.'));
 
-export const listDocuments = Command.make('list', { category: category.pipe(Argument.optional), open: Flag.boolean('open').pipe(Flag.withDefault(false)) }, args => withReadRepo(repo => sync(() => {
-  const kind = Option.getOrUndefined(args.category);
-  if (args.open && kind !== undefined && kind !== 'issue') throw new ConcordError('InvalidOption', '--open applies to Issues');
-  return { operation: 'list', documents: loadDocuments(repo, args.open ? ['issue'] : kind === undefined ? undefined : [kind]).filter(document => !args.open || document.metadata.kind === 'issue' && document.metadata.status !== 'closed').map(document => ({ path: document.path, ...document.metadata })) };
-}))).pipe(Command.withDescription('List documents; --open selects open Issues.'));
+export const listDocuments = Command.make('list', { category: category.pipe(Argument.optional), open: Flag.boolean('open').pipe(Flag.withDefault(false)) }, args => withQuery({ name: 'documents.list', input: { kind: Option.getOrUndefined(args.category), open: args.open } })).pipe(Command.withDescription('List documents; --open selects open Issues.'));
 
 export function docsGroup(kind: Extract<DocumentKind, 'use-case' | 'design' | 'roadmap'>) {
   const commands = kind === 'roadmap' ? [

@@ -33,6 +33,6 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     read: (_directory, namespace, keys) => use(db => keys === undefined ? db.scan(namespace) : db.get(namespace, keys)).pipe(Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', cause.message))),
     update: (_directory, namespace, key, update) => use(db => db.put(namespace, [{ key, payload: update(db.get(namespace, [key])[0]?.payload) }])),
   };
-  const snapshot = use(db => Object.fromEntries(['feedback_cache', 'query_cache', 'workspace_projection'].map(namespace => [namespace, db.scan(namespace as 'feedback_cache' | 'query_cache' | 'workspace_projection')])) as ReadonlyCacheSnapshot);
+  const snapshot = use(db => Object.fromEntries(['feedback_cache', 'query_cache'].map(namespace => [namespace, db.scan(namespace as 'feedback_cache' | 'query_cache')])) as ReadonlyCacheSnapshot);
   return { open, close, service, snapshot, mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use(db => mergeFeedbackRows(db, connectionId, items)) };
 });

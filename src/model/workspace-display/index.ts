@@ -86,6 +86,24 @@ export function workspaceDisplay(snapshot: WorkspaceProjectionSnapshot) {
 }
 export type WorkspaceDisplay = ReturnType<typeof workspaceDisplay>;
 
+export function workspaceDocumentHref(document: Pick<WorkspaceDocument, 'path' | 'metadata'>, documents: readonly WorkspaceDocument[]): string {
+  if (document.metadata.kind === 'use-case') {
+    const feature = document.metadata.feature;
+    const owner = documents.filter(candidate => candidate.metadata.kind === 'feature' && featureMatches(feature, candidate));
+    if (owner.length !== 1) return '/features';
+    return `/features/${encodeURIComponent(owner[0]!.metadata.id)}/use-cases/${encodeURIComponent(document.metadata.id)}`;
+  }
+  const sections = { feature: 'features', engineering: 'engineering', roadmap: 'roadmap', design: 'design', research: 'research', memory: 'memory', issue: 'feedback' };
+  return `/${sections[document.metadata.kind]}/${encodeURIComponent(document.metadata.kind === 'memory' ? document.path : document.metadata.id)}`;
+}
+export function workspacePathHref(snapshot: WorkspaceProjectionSnapshot, reference: string): string {
+  const [path, anchor] = reference.split('#');
+  const page = snapshot.pages.find(page => page.path === path);
+  const owner = snapshot.documents.find(document => document.path === (page?.documentPath ?? path));
+  const href = owner ? `${workspaceDocumentHref(owner, snapshot.documents)}${owner.path === path ? '' : `?file=${encodeURIComponent(path!)}`}` : `/docs?file=${encodeURIComponent(path!)}`;
+  return `${href}${anchor ? `#${encodeURIComponent(anchor)}` : ''}`;
+}
+
 /** Read the selected H2 section, including its definition and explanation. */
 export function conceptBody(source: string, id: string): string | undefined {
   const nodes = fromMarkdown(markdownBody(source)).children;
