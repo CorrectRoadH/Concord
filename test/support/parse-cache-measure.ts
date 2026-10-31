@@ -9,7 +9,7 @@ Effect.runSync(Effect.sync(() => {
   if (entry === undefined || root === undefined || output === undefined) throw new Error('entry, independent clone, and output path are required');
   const load = () => execFileSync('uptime', [], { encoding: 'utf8' }).trim();
   const artifacts = [{ label: 'candidate', entry, root }, ...(baselineEntry === undefined || baselineRoot === undefined ? [] : [{ label: 'baseline', entry: baselineEntry, root: baselineRoot }])];
-  const groups = [['check'], ['docs', 'check'], ['memory', 'index']];
+  const groups = [['check'], ['docs', 'check'], ['list', 'memory']];
   const results = groups.map(args => {
     const invoke = (artifact: typeof artifacts[number]) => {
       const start = performance.now();

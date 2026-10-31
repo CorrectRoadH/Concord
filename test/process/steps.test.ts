@@ -210,8 +210,8 @@ test('steps C19 second CLI blocks interrupted work and recovers prepared and com
 // @name steps-managed-reference-block
 test('steps rename updates ordinary Design decision Markdown references', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document('1. A {#old}\n'));
-  createDocument(repo, 'design', { id: 'sample', title: 'Sample', alternatives: ['one', 'two'], pages: [] });
-  const design = 'docs/design/sample/DECISION.md';
+  createDocument(repo, 'design', { id: 'sample', title: 'Sample', pages: [] });
+  const design = 'docs/design/sample.md';
   write(root, design, `${repo.read(design)!}\n[Step](../../feature/sample/use-case/flow.md#old)\n`);
   renameUseCaseStep(repo, path, 'old', 'new');
   assert.match(repo.read(path)!, /\{#new\}/u);
@@ -249,7 +249,7 @@ test('steps C19 recovery rejects a forged postimage even when its digest matches
 // @name steps-memory-reference-block
 test('steps C20 Memory support relations block rename with zero writes', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document('1. A {#old}\n'));
-  createDocument(repo, 'memory', { id: 'support', title: 'Support', memoryKind: 'note' });
+  createDocument(repo, 'memory', { id: 'support', title: 'Support' });
   const memory = loadDocuments(repo, ['memory'])[0]!;
   if (memory.metadata.kind !== 'memory') throw new Error('Expected Memory');
   write(root, memory.path, renderDocument({ ...memory.metadata, relations: [{ role: 'supports', target: `${path}#old` }] }, memory.body));

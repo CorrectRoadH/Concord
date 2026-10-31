@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { checkCurrentProject, checkSince, traceShow } from '../../src/app/index.js';
+import { checkCurrentProject, traceShow } from '../../src/app/index.js';
 import { createConsumer } from '../support/consumer.js';
 import { gitCommit } from '../support/fix-consumer.js';
 import { createDocument } from '../support/operations.js';
@@ -32,25 +32,5 @@ test('neutral static checks and trace derive source relations without executing 
     const checked = await runApplication(checkCurrentProject(root, 'off'));
     assert.equal(checked.ok, true, JSON.stringify(checked.findings));
     assert.equal(existsSync(join(root, 'EXECUTED')), false);
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
-// @use-case docs/feature/neutral-project-governance/use-case/adopt-neutral-governance.md
-test('removing runner configuration cannot authorize a directly written fixed closure without verification', async () => {
-  const root = createConsumer();
-  try {
-    const repo = new LocalRepository(root);
-    try { createDocument(repo, 'issue', { id: 'unverified', title: 'Unverified closure' }); } finally { repo.close(); }
-    writeProjectConfig(root, { runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } });
-    const base = gitCommit(root, 'open observation');
-    // Invalid closure fixture: verification is deliberately absent.
-    const source = renderOwnerFixture({ kind: 'issue', id: 'unverified', title: 'Unverified closure', status: 'closed', relations: [], closure: { kind: 'fixed', reason: 'Claimed fix' } });
-    const path = join(root, 'docs/issues/unverified.md');
-    writeFileSync(path, source);
-    rmSync(join(root, 'concord.config.ts'));
-    const checked = await runApplication(checkSince(root, base));
-    assert.equal(checked.ok, false);
-    assert.ok(checked.findings.some(item => item.path === 'docs/issues/unverified.md' && item.code === 'FixUnverifiable'), JSON.stringify(checked.findings));
-    assert.equal(readFileSync(path, 'utf8'), source);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

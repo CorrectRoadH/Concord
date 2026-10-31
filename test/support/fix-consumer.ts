@@ -1,8 +1,7 @@
-import { createDocument } from './operations.js';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { createConsumer } from './consumer.js';
+import { tmpdir } from './temporary.js';
 import { LocalRepository } from "./repository.js";
 
 import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
@@ -10,9 +9,13 @@ import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
 export const gitCommand = (root: string, ...args: string[]) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_AUTHOR_NAME: 'Concord', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Concord', GIT_COMMITTER_EMAIL: 'test@example.invalid' } }).trim();
 export const gitCommit = (root: string, message: string) => { gitCommand(root, 'add', '.'); gitCommand(root, 'commit', '-qm', message); return gitCommand(root, 'rev-parse', 'HEAD'); };
 export function createFixConsumer(options: { greenAtDefect?: boolean; runnerSource?: boolean; runner?: 'timeout' | 'zero' | 'skipped' | 'signal' | 'move-head' | 'edit-issue' | 'edit-config'; } = {}) {
-  const root = createConsumer(); const repo = new LocalRepository(root);
-  createDocument(repo, 'feature', { id: 'cart', title: 'Cart' });
-  createDocument(repo, 'issue', { id: 'sku', title: 'SKU accumulation' });
+  const root = mkdtempSync(join(tmpdir(), 'concord-fix-'));
+  gitCommand(root, 'init', '-q');
+  mkdirSync(join(root, 'docs/feature/cart'), { recursive: true });
+  mkdirSync(join(root, 'docs/issues'), { recursive: true });
+  writeFileSync(join(root, 'docs/feature/cart/README.md'), '# Cart\n');
+  writeFileSync(join(root, 'docs/issues/sku.md'), '# SKU accumulation\n');
+  const repo = new LocalRepository(root);
   writeFileSync(join(root, 'concord.config.ts'), renderTypeScriptConfig({ ...repo.configSnapshot.config, testRoots: ['test'], sourceRoots: ['src'], runner: { kind: 'node-test', sourceFiles: options.runnerSource ? ['runner.ts'] : [], timeoutMs: options.runner === 'timeout' ? 50 : 5000 } }));
   mkdirSync(join(root, 'src'), { recursive: true }); mkdirSync(join(root, 'test'), { recursive: true });
   writeFileSync(join(root, 'src/cart.ts'), `export const quantity = ${options.greenAtDefect ? 2 : 1};\n`);

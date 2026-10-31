@@ -22,7 +22,7 @@ test('incomplete workspace notice opens health diagnostics and dismisses without
   const repo = new LocalRepository(root, { initialize: true });
   try {
     initialize(repo, false, { testRoots: [] });
-    createDocument(repo, 'research', { id: 'health', title: 'Health example' });
+    createDocument(repo, 'engineering', { id: 'health', title: 'Health example' });
   } finally { repo.close(); }
   mkdirSync(join(root, 'docs/feature/broken'));
   writeFileSync(join(root, 'docs/feature/broken/README.md'), '---\nformat: concord.document/v1\nkind: feature\nid: broken\n---\n');
@@ -30,7 +30,7 @@ test('incomplete workspace notice opens health diagnostics and dismisses without
 
   try {
 
-    await page.goto(`http://127.0.0.1:${server.port}/research/health`);
+    await page.goto(`http://127.0.0.1:${server.port}/engineering/health`);
     const notice = page.getByRole('link', { name: /查看工作区健康/ });
     await expect(notice).toBeVisible({ timeout: 15000 });
     await act(fixtures, '通过当前页面的工作区健康提示，打开健康诊断。', () => notice.click());
@@ -49,7 +49,7 @@ test('polling reads the workspace cache with jobs and serializes slow reads', as
   const repo = new LocalRepository(root, { initialize: true });
   try {
     initialize(repo, false, { testRoots: [] });
-    createDocument(repo, 'research', { id: 'polling', title: 'Polling study' });
+    createDocument(repo, 'engineering', { id: 'polling', title: 'Polling study' });
   } finally { repo.close(); }
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
 
@@ -68,7 +68,7 @@ test('polling reads the workspace cache with jobs and serializes slow reads', as
       if (requests > 8) await gate;
       await route.continue();
     });
-    await page.goto(`http://127.0.0.1:${server.port}/research/polling`);
+    await page.goto(`http://127.0.0.1:${server.port}/engineering/polling`);
     await expect(page.getByRole('heading', { name: 'Polling study', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect.poll(() => jobs).toBe(1);
     assert.equal(requests, 1, 'mounting the workspace does not fetch it again');

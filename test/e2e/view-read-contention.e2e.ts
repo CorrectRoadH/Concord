@@ -38,7 +38,7 @@ test('file reads and navigation remain available with live or dead publication o
     const repo = new LocalRepository(root, { initialize: true });
     try {
       initialize(repo, false, { testRoots: [] });
-      createDocument(repo, 'design', { id: 'lease', title: 'Lease', alternatives: ['first'], pages: ['architecture'], body: '# Lease content' });
+      createDocument(repo, 'design', { id: 'lease', title: 'Lease', pages: ['architecture'], body: '# Lease content' });
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);

@@ -13,7 +13,6 @@ import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
 import { chromium, expect, type Browser } from '@playwright/test';
-import { authorDesignFixture } from './design-fixture.js';
 import { pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh } from './support.js';
 import { ProjectSchema, digest } from "../../src/model/index.js";
 import { caseDiscriminator, deriveTestReference } from "../../src/model/index.js";
@@ -33,8 +32,6 @@ export const DoctorOutput = Schema.Struct({ cases: Schema.Int, missingTestRoots:
 export const DryRunOutput = Schema.Struct({ dryRun: Schema.Boolean });
 export const OwnerOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Unknown }) });
 export const StateOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ state: Schema.String }) }) });
-export const DecisionOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ decision: Schema.Struct({ selected: Schema.String }) }) }) });
-export const MemoryLifecycleOutput = Schema.Struct({ document: Schema.Struct({ metadata: Schema.Struct({ status: Schema.String }) }) });
 export const TemplatesOutput = Schema.Struct({ templates: Schema.Array(Schema.Struct({ name: Schema.String })) });
 export const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
 export let cli: string;
@@ -64,7 +61,6 @@ export function call<A>(root: string,args: readonly string[],schema: Schema.Cons
 export function callString(root: string,args: readonly string[],input='Contract body.\n',status=0): string {
  return call(root, args, Schema.String, input, status);
 }
-export function clearDecision(root: string, id: string) { const path = `docs/design/${id}/DECISION.md`; write(root, path, readFileSync(join(root, path), 'utf8').replace(/^Selected:.*$/mu, '')); }
 export function readPage(root: string, path: string) { const body = readFileSync(join(root, path), 'utf8'); return { body, digest: digest(body) }; }
 export function savePage(root: string, path: string, body: string, expectedDigest: string, status = 0) {
  return call(root, ['action', '--input', '-'], status === 0 ? Ack : ErrorOutput, JSON.stringify({ action: 'document.set', path, body, expectedDigest }), status) as { error?: string };
@@ -110,7 +106,6 @@ export { Schema };
 export { chromium };
 export { expect };
 export type { Browser };
-export { authorDesignFixture };
 export { pollUntil };
 export { readProjectConfig };
 export { writeProjectConfig };

@@ -24,7 +24,7 @@ function call(root: string, args: readonly string[], status = 0) {
   return decode(ObjectSchema, JSON.parse(result.stdout.trim() || result.stderr), 'CLI result');
 }
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-test('packed close fixed records commits, verify replays without writing, and since accepts the worktree', t => {
+test('packed close fixed prints commit evidence, deletes the Issue, and verifies explicit commits without writing', t => {
   const f = createFixConsumer(); t.after(() => rmSync(f.root, { recursive: true, force: true }));
   const receipts = join(f.root, '.git/concord/evidence'); mkdirSync(receipts, { recursive: true });
   writeFileSync(join(receipts, 'historical.json'), 'preserved legacy receipt');
@@ -33,15 +33,11 @@ test('packed close fixed records commits, verify replays without writing, and si
   const closed = call(f.root, ['issue', 'close', 'sku', '--fixed', '--reason', 'Accumulate quantities']);
   const verification = decode(FixVerificationSchema, closed.verification, 'verification');
   assert.deepEqual({ defect: verification.defect, fix: verification.fix }, { defect: f.defect, fix });
-  const before = readFileSync(join(f.root, 'docs/issues/sku.md'), 'utf8');
-  const replay = call(f.root, ['test', 'verify', 'sku']); assert.equal(replay.verified, 'replayed');
-  assert.equal(readFileSync(join(f.root, 'docs/issues/sku.md'), 'utf8'), before);
+  assert.throws(() => readFileSync(join(f.root, 'docs/issues/sku.md')), /ENOENT/u);
+  const replay = call(f.root, ['test', 'verify', '--defect', f.defect, '--fix', fix, verification.tests[0]!]);
+  assert.equal(replay.verified, 'replayed');
   const current = call(f.root, ['check']);
-  assert.deepEqual(current.verifications, [{ path: 'docs/issues/sku.md', verified: 'recorded', verification }]);
-  const check = call(f.root, ['check', '--since', f.defect]);
-  assert.deepEqual(check.since, { base: f.defect, target: 'worktree', scope: 'endpoints' });
-  assert.deepEqual(check.verifications, [{ path: 'docs/issues/sku.md', verified: 'replayed', verification }]);
-  assert.equal(check.ok, true); assert.equal(check.complete, true);
+  assert.equal('verifications' in current, false);
   assert.deepEqual(readdirSync(receipts), ['historical.json']);
   assert.equal(readFileSync(join(receipts, 'historical.json'), 'utf8'), 'preserved legacy receipt');
   assert.equal(readFileSync(join(f.root, 'concord.repository.json'), 'utf8'), '{legacy-profile-is-not-current-input');
@@ -77,7 +73,7 @@ test('packed close fixed accepts a parallel commit and records the initially cap
   assert.notEqual(gitCommand(f.root, 'rev-parse', 'HEAD'), fix);
   assert.equal(gitCommand(f.root, 'rev-parse', 'HEAD^'), fix);
   assert.equal(readFileSync(join(f.root, 'parallel.txt'), 'utf8'), 'Independent commit\n');
-  assert.deepEqual(call(f.root, ['check']).verifications, [{ path: 'docs/issues/sku.md', verified: 'recorded', verification }]);
+  assert.equal('verifications' in call(f.root, ['check']), false);
 });
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 test('packed close fixed returns FileChangedSinceRead and preserves an Issue edited during verification', t => {
@@ -88,10 +84,4 @@ test('packed close fixed returns FileChangedSinceRead and preserves an Issue edi
   const before = readFileSync(path, 'utf8');
   assert.equal(call(f.root, ['issue', 'close', 'sku', '--fixed', '--reason', 'Candidate'], 1).error, 'FileChangedSinceRead');
   assert.equal(readFileSync(path, 'utf8'), before + '\nConcurrent Issue note.\n');
-});
-// @feature docs/feature/local-sdlc/cli.md#检查本次变化
-test('packed since rejects an unavailable baseline as InvalidBase', t => {
-  const f = createFixConsumer(); t.after(() => rmSync(f.root, { recursive: true, force: true })); f.fix();
-  assert.equal(call(f.root, ['check', '--since', 'missing-commit'], 1).error, 'InvalidBase');
-  assert.equal(call(f.root, ['test', 'verify', 'sku'], 1).error, 'FixUnverifiable');
 });

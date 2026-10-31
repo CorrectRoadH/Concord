@@ -1,5 +1,4 @@
 import { createDocument, addPage, templateBody } from '../support/operations.js';
-import { authorDesignFixture } from '../support/design-fixture.js';
 import { createConsumer } from '../support/consumer.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -21,17 +20,12 @@ function write(root: string, path: string, source: string): void { mkdirSync(dir
 function fixture(): string {
   const root = createConsumer();
   for (const path of ['docs/issues', 'memory', 'e2e']) mkdirSync(join(root, path), { recursive: true });
-  write(root, 'memory/insight.md', renderOwnerFixture({ id: 'insight', title: 'Knowledge', kind: 'memory', type: 'insight', status: 'current', relations: [] }));
-  write(root, 'docs/issues/issue.md', renderOwnerFixture({ id: 'issue', title: 'Issue', kind: 'issue', status: 'open', relations: [] }));
+  write(root, 'memory/insight.md', renderOwnerFixture({ id: 'insight', title: 'Knowledge', kind: 'memory', relations: [] }));
+  write(root, 'docs/issues/issue.md', renderOwnerFixture({ id: 'issue', title: 'Issue', kind: 'issue', relations: [] }));
   write(root, 'docs/feature/migrated/README.md', renderOwnerFixture({ id: 'migrated', title: 'Feature', kind: 'feature' }));
   write(root, 'docs/feature/migrated/use-case/README.md', '# Use Cases\n');
   write(root, 'docs/feature/migrated/use-case/flow.md', renderOwnerFixture({ id: 'flow', title: 'Flow', kind: 'use-case', feature: 'docs/feature/migrated/README.md' }));
-  write(root, 'docs/design/storage/README.md', renderOwnerFixture({ id: 'storage', title: 'Storage', kind: 'design', alternatives: ['files', 'sqlite'] }));
-  for (const plan of ['files', 'sqlite']) write(root, `docs/design/storage/plans/${plan}/README.md`, `# ${plan}\n`);
-  write(root, 'docs/design/storage/DECISION.md', '# Decision\n\n## Decision\n\nSelected: [files](plans/files/README.md)\n\n## Rationale\n\nFiles preserve the source.\n');
-  authorDesignFixture(root, 'storage', ['files', 'sqlite'], 'files');
-  execFileSync('git', ['-C', root, 'add', "."]);
-  execFileSync('git', ['-C', root, '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'Fixture']);
+  write(root, 'docs/design/storage.md', '# Storage\n\nCompare files and sqlite.\n');
   return root;
 }
 const run = <A, E>(effect: Effect.Effect<A, E, import('effect').FileSystem.FileSystem>): Promise<A> => Effect.runPromise(effect.pipe(Effect.provide(NodeServices.layer)));
@@ -40,11 +34,10 @@ const run = <A, E>(effect: Effect.Effect<A, E, import('effect').FileSystem.FileS
 test('advanced writing emits plain Spec pages and reads Design selection from DECISION', async () => {
   const root = fixture();
   try {
-    const path = 'docs/design/storage/README.md';
+    const path = 'docs/design/storage.md';
     const repo = new LocalRepository(root);
     try {
     const decoded = loadDocuments(repo).find(record => record.path === path)!;
-    assert.equal(decoded.metadata.kind === 'design' ? decoded.metadata.decision?.selected : undefined, 'files');
     const base = 'docs/_template/feature-design';
     write(root, `${base}/README.md`, templateBody('feature', '<功能或候选名>'));
     write(root, `${base}/use-case/README.md`, templateBody('use-case-index', '<功能或候选名>'));

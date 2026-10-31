@@ -62,9 +62,9 @@ test('C7 persists no owner or remote bodies and hydrates byte-identical current 
     assert.deepEqual(changed.bodyChanged, [ownerPath]);
     assert.ok('subject' in changed.value);
     assert.equal('body' in changed.value.subject ? changed.value.subject.body : undefined, undefined);
-    writeFileSync(join(root, 'docs/constitution.md'), readFileSync(join(root, 'docs/constitution.md'), 'utf8') + '\nchanged\n');
+    writeFileSync(join(root, 'docs/taste.md'), readFileSync(join(root, 'docs/taste.md'), 'utf8') + '\nchanged\n');
     const review = hydrateQueryValue(root, stored.get(JSON.stringify(['review', 'sample']))!);
-    assert.deepEqual(review.bodyChanged, ['docs/constitution.md']);
-    assert.match(Schema.decodeUnknownSync(Schema.Struct({ body: Schema.String }))(review.value).body, /constitution changed since projection/u);
+    assert.deepEqual(review.bodyChanged, ['docs/taste.md']);
+    assert.match(Schema.decodeUnknownSync(Schema.Struct({ body: Schema.String }))(review.value).body, /taste changed since projection/u);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });

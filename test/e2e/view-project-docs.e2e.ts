@@ -22,7 +22,7 @@ test('project Markdown deep links edit and persist custom paths, frontmatter and
     const repo = new LocalRepository(root, { initialize: true });
     try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
     mkdirSync(join(root, 'docs/说明'), { recursive: true });
-    const paths = ['docs/作者边界.md', 'docs/说明/嵌套.md', 'docs/constitution.md'];
+    const paths = ['docs/作者边界.md', 'docs/说明/嵌套.md', 'docs/taste.md'];
     writeFileSync(join(root, paths[0]!), '# 作者边界\n\n原始正文。\n');
     writeFileSync(join(root, paths[1]!), '---\ntitle: 嵌套文档\n---\n# 嵌套文档\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });

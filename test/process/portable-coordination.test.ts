@@ -222,7 +222,7 @@ test('ordinary CLI queries share ownership with a live reader', t => runApplicat
   const reader = acquireTraceLeaseSync(root, 'shared', 'query-observer')!;
   try {
     for (const args of [
-      ['list', 'memory'], ['memory', 'index'], ['memory', 'recall', 'missing'],
+      ['list', 'memory'], ['list', 'memory'], ['memory', 'search', 'missing'],
       ['code', 'marker', '--scope', 'file', '--contract', 'docs/feature/target/README.md'],
       ['test', 'marker', '--contract', 'docs/feature/target/README.md'],
     ]) {

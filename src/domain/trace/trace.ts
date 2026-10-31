@@ -96,8 +96,7 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
     } catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidReference', path: item.file, line: item.line, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
   findings.push(...measureScan(options.timing, 'trace.verifyReferences', () => references.verify()));
-  const verifications: readonly never[] = [];
-  const trace = { documents, annotations, tasteReferences: taste.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, inventoryComplete: inventory.complete, advisories, verifications, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
+  const trace = { documents, annotations, tasteReferences: taste.references, codeDeclarations, codeFiles: code?.files ?? [], edges, findings, complete: inventory.complete && findings.length === 0, inventoryComplete: inventory.complete, advisories, codeCache: code?.cache, codeRelationsUnknown: code?.relationsUnknown ?? false };
   return { trace, references };
 }
 export function requireValidTrace(trace: ReturnType<typeof buildTrace>): void {

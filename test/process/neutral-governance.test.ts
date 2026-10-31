@@ -37,9 +37,9 @@ test('a neutral software consumer completes Spec, source relations, configured e
   assert.deepEqual(call(root, ['test', 'run', id], outcome), { scope: 'command', commandOutcome: 'pass', execution: 'ran', exitCode: 0 });
   const closed = call(root, ['issue', 'close', 'quantity', '--fixed', '--reason', 'Accumulate quantity', '--defect', defect], Verification);
   assert.deepEqual(closed.verification, { defect, fix });
-  const checked = call(root, ['check', '--since', defect], Schema.Struct({ ok: Schema.Boolean, verifications: Schema.Array(Schema.Struct({ verified: Schema.String })) }));
+  const checked = call(root, ['check'], Schema.Struct({ ok: Schema.Boolean }));
   assert.equal(checked.ok, true);
-  assert.deepEqual(checked.verifications.map(item => item.verified), ['replayed']);
+  assert.equal('verifications' in checked, false);
   const review = callString(root, ['review', 'cart']);
   assert.ok(review.includes(id));
   assert.ok(review.includes('docs/issues/quantity.md'));
@@ -47,4 +47,3 @@ test('a neutral software consumer completes Spec, source relations, configured e
   assert.equal(existsSync(join(root, 'package.json')), false, 'consumer needs no product package or host metadata');
   assert.equal(gitCommand(root, 'worktree', 'list', '--porcelain').split('\n').filter(line => line.startsWith('worktree ')).length, 1);
 })));
-

@@ -47,7 +47,7 @@ test('C21 current query commands and a local writer share the persistent owner w
     assert.equal((await command(root, ['server', 'start'])).status, 0);
     const simultaneous = await Promise.all([
       command(root, ['list', 'feature']), command(root, ['config', 'show']),
-      command(root, ['constitution', 'show']), command(root, ['test', 'list']),
+      command(root, ['taste']), command(root, ['test', 'list']),
       command(root, ['new', 'feature', 'service-query', '--title', 'Service query']),
     ]);
     for (const reply of simultaneous) assert.equal(reply.status, 0, reply.stderr);

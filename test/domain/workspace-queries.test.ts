@@ -48,11 +48,11 @@ test('current query operations on read-only computation capabilities match cache
   const requests: readonly QueryRequest[] = [
     { name: 'documents.list', input: { kind: 'feature' } },
     { name: 'documents.show', input: { id: 'service-query' } },
-    { name: 'config.show', input: {} }, { name: 'constitution.show', input: {} },
+    { name: 'config.show', input: {} }, { name: 'taste', input: {} },
     { name: 'test.list', input: {} }, { name: 'code.list', input: {} },
     { name: 'trace.check', input: {} }, { name: 'check', input: {} },
     { name: 'docs.check', input: {} }, { name: 'memory.index', input: {} },
-    { name: 'memory.recall', input: { query: 'query' } }, { name: 'issue.recall', input: { query: 'query' } },
+    { name: 'memory.search', input: { query: 'query' } }, { name: 'issue.search', input: { query: 'query' } },
     { name: 'feedback.list', input: { filter: { provider: 'local' } } },
     { name: 'feedback.connection.list', input: {} },
   ];

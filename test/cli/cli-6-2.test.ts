@@ -1,4 +1,4 @@
-import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, authorDesignFixture, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, DecisionOutput, MemoryLifecycleOutput, TemplatesOutput, scratch, cli, call, callString, clearDecision, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
+import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, TemplatesOutput, scratch, cli, call, callString, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
 
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
@@ -31,14 +31,13 @@ test('installed init previews configuration, preserves existing docs, and never 
 // @feature docs/feature/project-onboarding/README.md
 test('packed boundaries reject non-current formats and preserve configuration, owners, receipts, journals and locks', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('current-formats-only');
- const constitution = 'docs/constitution.md';
- const current = readFileSync(join(root, constitution), 'utf8');
- for (const source of [current.replace('---\n', '---\nformat: concord.constitution/v2\n'), current.replace('status: draft', 'status: draft\namendments: []')]) {
-  write(root, constitution, source);
-  assert.equal(call(root, ['constitution', 'show'], ErrorOutput, '', 1).error, 'InvalidData');
-  assert.equal(readFileSync(join(root, constitution), 'utf8'), source);
- }
- write(root, constitution, current);
+ const taste = 'docs/taste.md';
+ const current = readFileSync(join(root, taste), 'utf8');
+ const invalidTaste = `---\nstatus: active\n---\n${current}`;
+ write(root, taste, invalidTaste);
+ assert.equal(call(root, ['taste'], ErrorOutput, '', 1).error, 'TasteEntryInvalid');
+ assert.equal(readFileSync(join(root, taste), 'utf8'), invalidTaste);
+ write(root, taste, current);
  const configPath = 'concord.config.ts';
  const config = readFileSync(join(root, configPath), 'utf8');
  for (const [source, code] of [['export default { projectId: \"retired\" };', 'InvalidData'], ['export default { ...{} };\n', 'InvalidConfigSyntax']] as const) {

@@ -11,7 +11,7 @@ import { checkWriting } from '../../src/domain/writing/index.js';
 import { openHawdb, PersistentCache } from '../../src/base/cache/index.js';
 import { LocalRepository } from '../support/repository.js';
 import { writeProjectConfig, readProjectConfig } from '../support/support.js';
-import { fixture, useCasePath, researchPath } from '../support/document-cache-fixture.js';
+import { fixture, useCasePath, engineeringPath } from '../support/document-cache-fixture.js';
 
 function cli(root: string, dryRun: boolean, args = ['check']) {
   const repo = new LocalRepository(root, { access: 'read', dryRun, persistentCache: dryRun ? 'off' : 'use' });
@@ -22,7 +22,7 @@ function cli(root: string, dryRun: boolean, args = ['check']) {
   } finally { repo.close(); }
 }
 function parity(root: string) {
-  for (const args of [['check'], ['docs', 'check'], ['memory', 'index']]) assert.deepEqual(cli(root, false, args), cli(root, true, args), args.join(' '));
+  for (const args of [['check'], ['docs', 'check'], ['list', 'memory']]) assert.deepEqual(cli(root, false, args), cli(root, true, args), args.join(' '));
 }
 function existingCacheFixture(): string {
   const root = fixture(), repo = new LocalRepository(root);
@@ -39,8 +39,8 @@ test('volatile document projections preserve current CLI facts across edits, pat
     writeFileSync(join(root, useCasePath), readFileSync(join(root, useCasePath), 'utf8').replace('Return the facts. {#return}', 'Return the modified undesirable facts. {#read}'));
     parity(root);
     assert.notDeepEqual(cli(root, false), before, 'current byte changes remain visible');
-    const support = 'docs/feature/sample/research-copy.md';
-    writeFileSync(join(root, support), readFileSync(join(root, researchPath)));
+    const support = 'docs/feature/sample/engineering-copy.md';
+    writeFileSync(join(root, support), readFileSync(join(root, engineeringPath)));
     parity(root);
     assert.equal(cli(root, false).value.documents, 3, 'copying prose to a supporting path does not create an owner');
     rmSync(join(root, support));

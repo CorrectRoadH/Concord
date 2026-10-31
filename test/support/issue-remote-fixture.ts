@@ -44,10 +44,10 @@ export function mode(extra: Readonly<Record<string, unknown>> = {}) { writeFileS
 export function calls(): readonly Call[] { return readFileSync(callsFile, 'utf8').trim().split('\n').filter(Boolean).map(source => JSON.parse(source) as Call); }
 export function writes(): readonly Call[] { return calls().filter(call => call.args.includes('--method') && call.args[call.args.indexOf('--method') + 1] !== 'GET'); }
 export function cli(root: string, args: readonly string[], timeout = 150_000) {
-  return spawnSync(process.execPath, [packedCli, '--root', root, 'issue', ...args, '--json'], { cwd: root, encoding: 'utf8', timeout, env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, GH_DEBUG: 'api', GH_REPO: 'attacker/other' } });
+  return spawnSync(process.execPath, [packedCli, '--root', root, 'issue', 'remote', ...args, '--json'], { cwd: root, encoding: 'utf8', timeout, env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}`, GH_DEBUG: 'api', GH_REPO: 'attacker/other' } });
 }
 export function plan(root: string, operation: string, args: readonly string[] = ['12']): Receipt {
-  const result = cli(root, ['plan', operation, ...args, '--connection', connection.id]);
+  const result = cli(root, ['preview', operation, ...args, '--connection', connection.id]);
   assert.equal(result.status, 0, result.stderr);
   const receipt = JSON.parse(result.stdout) as Receipt;
   assert.equal(writes().length, 0);
@@ -56,7 +56,7 @@ export function plan(root: string, operation: string, args: readonly string[] = 
   assert.equal(statSync(join(root, '.git/concord/issue-plan/v1/planned', `${receipt.receiptId}.json`)).mode & 0o777, 0o600);
   return receipt;
 }
-export function execute(root: string, receipt: Receipt, authorization = receipt.authorize, selected: string = connection.id) { return cli(root, ['execute', receipt.receiptId, '--connection', selected, '--authorize', authorization]); }
+export function execute(root: string, receipt: Receipt, authorization = receipt.authorize, selected: string = connection.id) { return cli(root, ['apply', receipt.receiptId, '--connection', selected, '--authorize', authorization]); }
 export function error(result: ReturnType<typeof cli>, code: string | readonly string[]) { assert.equal(result.status, 1, result.stdout); const actual = (JSON.parse(result.stderr) as { error: string }).error; if (typeof code === 'string') assert.equal(actual, code, result.stderr); else assert.ok(code.includes(actual), result.stderr); }
 export function alterReceipt(root: string, receipt: Receipt, patch: Readonly<Record<string, unknown>>) {
   const path = join(root, '.git/concord/issue-plan/v1/planned', `${receipt.receiptId}.json`);

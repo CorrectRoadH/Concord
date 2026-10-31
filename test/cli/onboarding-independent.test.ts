@@ -33,8 +33,8 @@ test('installed CLI exposes exactly the current command inventory and rejects re
   const result = spawnSync(process.execPath, [cli, '--help'], { cwd: root, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
   const commands = result.stdout.split('SUBCOMMANDS')[1]!.trim().split('\n').map(line => line.trim().split(/\s+/u)[0]).filter(Boolean);
-  assert.deepEqual(commands.sort(), ['init','new','show','list','check','trace','test','code','use-case','issue','memory','design','roadmap','constitution','concepts','writing','docs','feedback','view','panel','server','config','template','cache','recover','doctor','lsp','review','action','workspace','git'].sort());
-  for (const group of ['memory', 'issue', 'design', 'use-case', 'roadmap']) {
+  assert.deepEqual(commands.sort(), ['init','new','show','list','check','trace','test','code','use-case','issue','memory','roadmap','taste','concepts','writing','docs','feedback','view','panel','server','config','template','cache','recover','doctor','lsp','review','action','workspace','git'].sort());
+  for (const group of ['memory', 'issue', 'use-case', 'roadmap']) {
     const help = spawnSync(process.execPath, [cli, group, '--help'], { cwd: root, encoding: 'utf8' });
     assert.equal(help.status, 0, help.stderr);
     assert.doesNotMatch(help.stdout, /\n  (?:create|add|page|promote|retire|correct-reason|resolve|metadata)\s/u);
@@ -51,7 +51,7 @@ test('installed init previews without writing configuration and creates direct-e
   assert.equal(existsSync(join(root, '.git/concord')), false);
   run(root, ['init']);
   assert.equal(existsSync(join(root, 'concord.config.ts')), false);
-  assert.match(readFileSync(join(root, 'AGENTS.md'), 'utf8'), /Directly edit files[\s\S]*check --since <base>/u);
+  assert.match(readFileSync(join(root, 'AGENTS.md'), 'utf8'), /Directly edit files[\s\S]*check/u);
   const nested = join(root, 'nested'); mkdirSync(nested);
   const result = spawnSync(process.execPath, [cli, '--json', 'new', 'feature', 'cart', '--pages', 'cli,use-case'], { cwd: nested, encoding: 'utf8' });
   assert.equal(result.status, 0, result.stderr);
@@ -79,24 +79,22 @@ test('installed new and relation helpers persist only current owner fields', () 
   const root = consumer('owners');
   run(root, ['new', 'feature', 'cart']);
   run(root, ['new', 'use-case', 'add', '--feature', 'cart']);
-  run(root, ['new', 'memory', 'choice', '--type', 'decision']);
-  run(root, ['memory', 'activate', 'choice', '--reason', 'Adopt']);
-  run(root, ['memory', 'link', 'choice', '--target', 'docs/feature/cart/README.md', '--role', 'supports']);
+  run(root, ['new', 'memory', 'choice']);
+  run(root, ['memory', 'link', 'choice', 'docs/feature/cart/README.md']);
   run(root, ['new', 'issue', 'bug']);
   run(root, ['issue', 'link', 'bug', 'memory/choice.md', '--role', 'investigation']);
   run(root, ['issue', 'unlink', 'bug', 'memory/choice.md', '--role', 'investigation']);
   run(root, ['issue', 'link', 'bug', 'docs/feature/cart/README.md', '--role', 'adopts']);
   run(root, ['issue', 'unlink', 'bug', 'docs/feature/cart/README.md', '--role', 'adopts']);
-  assert.match(readFileSync(join(root, 'memory/choice.md'), 'utf8'), /type: decision[\s\S]*status: current[\s\S]*role: supports/u);
+  assert.match(readFileSync(join(root, 'memory/choice.md'), 'utf8'), /role: supports/u);
   assert.doesNotMatch(readFileSync(join(root, 'docs/issues/bug.md'), 'utf8'), /relations:|history:|format:|draft/u);
   assert.equal(run(root, ['list', 'issue']).documents.length, 1);
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
-test('installed new Design creates candidate scaffolds and defer records its reason', () => Effect.runPromise(Effect.sync(() => {
+test('installed new Design creates one directly editable tradeoff page', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('design');
   run(root, ['new', 'design', 'storage']);
-  for (const plan of ['plan-1', 'plan-2']) assert.equal(existsSync(join(root, `docs/design/storage/plans/${plan}/README.md`)), true);
-  run(root, ['design', 'defer', 'storage', '--reason', 'Wait for measurements']);
-  assert.match(readFileSync(join(root, 'docs/design/storage/DECISION.md'), 'utf8'), /Deferred: Wait for measurements/u);
+  assert.equal(existsSync(join(root, 'docs/design/storage.md')), true);
+  assert.equal(existsSync(join(root, 'docs/design/storage')), false);
 })));

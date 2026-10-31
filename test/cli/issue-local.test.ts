@@ -22,32 +22,18 @@ function call(root: string, args: string[], status = 0): Record<string, unknown>
   return JSON.parse(result.stdout.trim() || result.stderr) as Record<string, unknown>;
 }
 // @use-case docs/feature/feedback/use-case/manage-local-observations.md
-test('local Issue links, closure kinds and reopen persist only current declarations', t => {
+test('local Issue links and deletion preserve inbound reference guards', t => {
   const root = createConsumer(); t.after(() => rmSync(root, { recursive: true, force: true }));
-  call(root, ['new', 'feature', 'flow', '--title', 'Flow']);
-  call(root, ['new', 'memory', 'decision', '--title', 'Decision', '--type', 'decision']);
-  call(root, ['memory', 'activate', 'decision', '--reason', 'Adopted']);
-  for (const id of ['canonical', 'observation']) call(root, ['new', 'issue', id, '--title', id]);
-  const path = 'docs/issues/observation.md', target = 'docs/feature/flow/README.md';
-  call(root, ['issue', 'link', 'observation', target, '--role', 'adopts']);
-  assert.equal(call(root, ['issue', 'close', 'observation', '--kind', 'invalid', '--evidence', 'Disproven'], 1).error, 'InvalidState');
-  call(root, ['issue', 'unlink', 'observation', target, '--role', 'adopts']);
-  for (const role of ['investigation', 'root-cause', 'decision']) call(root, ['issue', 'link', 'observation', 'memory/decision.md', '--role', role]);
-  assert.equal(call(root, ['issue', 'link', 'observation', 'memory/decision.md'], 1).error, 'DuplicateLink');
-  for (const flags of [
-    ['--reason', 'Reviewed'], ['--kind', 'invalid', '--evidence', 'Disproven'],
-    ['--kind', 'duplicate', '--canonical', 'docs/issues/canonical.md'],
-    ['--kind', 'declined', '--memory', 'memory/decision.md'],
-    ['--kind', 'external-fixed', '--dependency', 'library', '--version', '2', '--proof', 'Release'],
-  ]) {
-    call(root, ['issue', 'close', 'observation', ...flags]);
-    assert.equal(call(root, ['issue', 'link', 'observation', target, '--role', 'adopts'], 1).error, 'InvalidIssueState');
-    call(root, ['issue', 'reopen', 'observation', '--reason', 'More investigation']);
-    const record = decodeDocumentSource(path, readFileSync(join(root, path), 'utf8'));
-    assert.equal(record?.metadata.kind === 'issue' && record.metadata.closure, undefined);
-    assert.equal(record?.metadata.kind === 'issue' && record.metadata.status, 'open');
-  }
-  call(root, ['issue', 'link', 'observation', target, '--role', 'adopts']);
-  call(root, ['issue', 'close', 'observation', '--kind', 'delivered', '--memory', 'memory/decision.md', '--target', target, '--proof', 'Accepted']);
-  assert.doesNotMatch(readFileSync(join(root, path), 'utf8'), /(?:history|epoch|adoptions|memoryRelations):/u);
+  call(root, ['new', 'memory', 'investigation', '--title', 'Investigation']);
+  for (const id of ['canonical', 'observation']) call(root, ['new', 'issue', id]);
+  const path = 'docs/issues/observation.md';
+  call(root, ['issue', 'link', 'observation', 'memory/investigation.md']);
+  call(root, ['issue', 'link', 'observation', 'memory/investigation.md'], 1);
+  call(root, ['issue', 'link', 'canonical', path, '--role', 'related']);
+  const refused = call(root, ['issue', 'close', 'observation', '--reason', 'Handled'], 1);
+  assert.equal(refused.error, 'IssueReferenced');
+  call(root, ['issue', 'unlink', 'canonical', path, '--role', 'related']);
+  const closed = call(root, ['issue', 'close', 'observation', '--reason', 'Handled']);
+  assert.match(String(closed.conclusion), /Closed docs\/issues\/observation.md/u);
+  assert.throws(() => readFileSync(join(root, path)), /ENOENT/u);
 });

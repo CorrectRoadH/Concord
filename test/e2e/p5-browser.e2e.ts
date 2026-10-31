@@ -63,8 +63,8 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     write('docs/feature/sketch/demo/main.js', external);
     write('docs/feature/sketch/demo/style.css', '.restart { background: rgb(1, 2, 3); color: white; padding: 12px; border-radius: 8px; }');
     write('docs/feature/sketch/demo/pixel.svg', '<svg xmlns="http://www.w3.org/2000/svg" width="2" height="2"><rect width="2" height="2" fill="blue"/></svg>');
-    const constitution = readFileSync(join(root, 'docs/constitution.md'), 'utf8');
-    write('docs/constitution.md', constitution + '\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n\n<pre><code class="language-p5">spoofed p5 source</code></pre>\n');
+    const constitution = readFileSync(join(root, 'docs/taste.md'), 'utf8');
+    write('docs/taste.md', constitution + '\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n\n<pre><code class="language-p5">spoofed p5 source</code></pre>\n');
     const projectSketch = '# Project sketch\n\n```p5 src="./feature/sketch/demo/main.js"\n```\n';
     write('docs/sketch.md', projectSketch);
     const before = readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8');
@@ -143,9 +143,9 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
     const directFrame = await page.request.get(address + '/api/workspace', { headers: { 'sec-fetch-dest': 'iframe' } });
     assert.equal(directFrame.status(), 403);
     assert.equal(readFileSync(join(root, 'docs/feature/sketch/README.md'), 'utf8'), before);
-    await page.goto(`${address}/docs?file=docs%2Fconstitution.md`);
+    await page.goto(`${address}/docs?file=docs%2Ftaste.md`);
     // Frontmatter documents preserve their raw source in the project Markdown editor.
-    await expect(page.getByRole('textbox', { name: 'Markdown 原文', exact: true })).toHaveValue(readFileSync(join(root, 'docs/constitution.md'), 'utf8'));
+    await expect(page.getByRole('textbox', { name: 'Markdown 原文', exact: true })).toHaveValue(readFileSync(join(root, 'docs/taste.md'), 'utf8'));
     await expect(blocks).toHaveCount(0);
     await page.goto(`${address}/docs?file=docs%2Fsketch.md`);
     await expect(blocks).toHaveCount(1, { timeout: 20000 });

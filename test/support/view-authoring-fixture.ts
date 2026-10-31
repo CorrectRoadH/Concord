@@ -22,8 +22,7 @@ export function authoringConsumer(): string {
     const architecturePath = 'docs/engineering/build/architecture.md';
     setMarkdown(repo, architecturePath, '# Architecture\n\n## Source\n', digest(readFileSync(join(root, architecturePath), 'utf8')));
     createDocument(repo,'roadmap',{id:'future',title:'Future direction',pages:['architecture']});
-    createDocument(repo,'design',{id:'options',title:'Design options',alternatives:['first','second'],pages:['architecture']});
-    createDocument(repo,'research',{id:'study',title:'Research study',observedAt:'2026-09-14',sources:['Local observations']});
+    createDocument(repo,'design',{id:'options',title:'Design options'});
   } finally { repo.close(); }
   mkdirSync(join(root,'src'));
   writeFileSync(join(root,'src/demo.ts'),'// @concord-code\n// @concord-implements docs/engineering/build/architecture.md#source\nexport function demo() { return 1; }\n');

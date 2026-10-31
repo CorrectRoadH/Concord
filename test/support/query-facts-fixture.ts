@@ -25,7 +25,7 @@ export function queryFactsConsumer(): string {
   writeFileSync(join(root, 'test/000.ts'), '// @feature docs/feature/sample/README.md\nexport const first = 1;\n');
   writeFileSync(join(root, 'test/steps.ts'), `// @use-case ${flow}#first\n`);
   writeFileSync(join(root, 'src/steps.ts'), `// @concord-file\n// @concord-implements ${flow}#first\nexport const flow = 1;\n`);
-  for (const [path, marker] of [[ownerPath, 'PRIVATE_OWNER_BODY_SENTINEL'], ['docs/constitution.md', 'PRIVATE_CONSTITUTION_BODY_SENTINEL']]) {
+  for (const [path, marker] of [[ownerPath, 'PRIVATE_OWNER_BODY_SENTINEL'], ['docs/taste.md', 'PRIVATE_CONSTITUTION_BODY_SENTINEL']]) {
     writeFileSync(join(root, path!), readFileSync(join(root, path!), 'utf8') + `\n${marker}\n`);
   }
   const issuePath = 'docs/issues/remote.md';

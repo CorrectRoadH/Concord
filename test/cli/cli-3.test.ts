@@ -1,4 +1,4 @@
-import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, authorDesignFixture, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, DecisionOutput, MemoryLifecycleOutput, TemplatesOutput, scratch, cli, call, callString, clearDecision, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
+import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, TemplatesOutput, scratch, cli, call, callString, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#link-declarations
 // @name packed-steps-navigation-and-maintenance
@@ -35,27 +35,16 @@ test('packed steps C15 C16 C18 navigate exact steps, preserve examples and renam
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md
-test('installed Design and Roadmap packages retain their pages and authoritative lifecycle metadata', () => Effect.runPromise(Effect.sync(() => {
+test('installed Roadmap retains selected pages and Memory supports Engineering', () => Effect.runPromise(Effect.sync(() => {
  const root = consumer('document-packages');
  call(root, ['new', 'engineering', 'release', '--title', 'Release'], Ack);
- call(root, ['new', 'design', 'storage', '--title', 'Storage', '--alternative', 'sqlite', '--alternative', 'files', '--pages', 'architecture'], Ack);
- assert.match(readFileSync(join(root, 'docs/design/storage/plans/sqlite/architecture.md'), 'utf8'), /Storage/);
- assert.equal(existsSync(join(root, 'docs/design/storage/GOALS.md')), true);
- const candidate = readPage(root, 'docs/design/storage/plans/sqlite/README.md');
- savePage(root, 'docs/design/storage/plans/sqlite/README.md', '# SQLite\n\nA single local store.\n', candidate.digest);
- authorDesignFixture(root, 'storage', ['sqlite', 'files'], 'sqlite');
- clearDecision(root, 'storage');
- call(root, ['design', 'decide', 'storage', '--selected', 'sqlite', '--target', 'docs/engineering/release/README.md', '--reason', 'One deployment owner'], Ack);
- const decision = call(root, ['show', 'storage'], DecisionOutput).document.metadata.decision;
- assert.equal(decision.selected, 'sqlite');
  call(root, ['new', 'roadmap', 'session', '--title', 'Session', '--pages', 'architecture'], Ack);
  const started = call(root, ['roadmap', 'start', 'session'], Schema.Struct({ operation: Schema.Literal('roadmap-start') }));
  assert.equal(started.operation, 'roadmap-start');
  assert.equal(existsSync(join(root, 'docs/feature/session/architecture.md')), true);
  assert.equal(call(root, ['show', 'session'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) })).document.path, 'docs/feature/session/README.md');
- call(root, ['new', 'memory', 'release-owner', '--type', 'decision', '--title', 'Release owner'], Ack);
- call(root, ['memory', 'activate', 'release-owner', '--reason', 'Adopt'], Ack);
- call(root, ['memory', 'link', 'release-owner', '--target', 'docs/engineering/release/README.md'], Ack);
+ call(root, ['new', 'memory', 'release-owner', '--title', 'Release owner'], Ack);
+ call(root, ['memory', 'link', 'release-owner', 'docs/engineering/release/README.md'], Ack);
  assert.equal(call(root, ['test', 'marker', '--contract', 'docs/engineering/release/README.md'], ErrorOutput, '', 1).error, 'InvalidReferenceTarget');
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
 })));

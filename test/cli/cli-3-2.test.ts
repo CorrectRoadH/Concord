@@ -1,22 +1,5 @@
-import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, authorDesignFixture, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, DecisionOutput, MemoryLifecycleOutput, TemplatesOutput, scratch, cli, call, callString, clearDecision, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
+import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, TemplatesOutput, scratch, cli, call, callString, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
 
-// @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md
-test('packed CLI accepts file Plans and nested directory pages with exact entry links', () => Effect.runPromise(Effect.sync(() => {
- const root = consumer('plan-file');
- call(root, ['new', 'design', 'storage', '--title', 'Storage', '--alternative', 'local', '--alternative', 'remote'], Ack);
- authorDesignFixture(root, 'storage', ['local', 'remote'], 'local');
- const base = join(root, 'docs/design/storage');
- writeFileSync(join(base, 'plans/local.md'), readFileSync(join(base, 'plans/local/README.md'), 'utf8').replaceAll('../../', '../'));
- rmSync(join(base, 'plans/local'), { recursive: true });
- writeFileSync(join(base, 'DECISION.md'), readFileSync(join(base, 'DECISION.md'), 'utf8').replace('plans/local/README.md', 'plans/local.md'));
- write(root, 'docs/design/storage/plans/remote/存储/快照.md', '# 存储/快照.md\n');
- const page = readPage(root, 'docs/design/storage/plans/remote/存储/快照.md');
- assert(page.body.includes('存储/快照.md'));
- call(root, ['design', 'check', 'storage'], CheckOutput);
- clearDecision(root, 'storage');
- call(root, ['design', 'decide', 'storage', '--selected', 'local', '--reason', 'Local'], Ack);
- call(root, ['check'], CheckOutput);
-})));
 
 
 // @use-case docs/feature/documentation-quality/use-case/apply-controlled-writing.md

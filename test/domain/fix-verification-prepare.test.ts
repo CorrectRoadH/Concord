@@ -4,7 +4,7 @@ import { join, sep } from 'node:path';
 import { userInfo } from 'node:os';
 import { Schema } from 'effect';
 import test from 'node:test';
-import { closeFixedIssue, replayFix, runCommandCase, scanAnnotations } from '../../src/domain/tests/index.js';
+import { closeFixedIssue, verifyTest, runCommandCase, scanAnnotations } from '../../src/domain/tests/index.js';
 import { readDocumentSelector } from '../../src/domain/documents/index.js';
 import { createFixConsumer, gitCommit } from '../support/fix-consumer.js';
 import { LocalRepository, runApplication } from '../support/repository.js';
@@ -70,17 +70,15 @@ test('verification prepares both checkouts in order using only the fix candidate
       [process.execPath, '-e', "const fs = require('node:fs'); if (fs.readFileSync('preparation-stage', 'utf8') !== 'ready') process.exit(9); fs.writeFileSync('prepared.ts', 'export const prepared = true;\\n');"],
     ]);
     const fix = f.fix();
-    await verify(f.root, defect);
+    const receipt = await verify(f.root, defect);
     assert.equal(existsSync(join(f.root, 'prepared.ts')), false, 'prepare must not run in the current worktree');
     const roots = readFileSync(log, 'utf8').trim().split('\n');
     assert.equal(roots.length, 2);
     assert.ok(roots.every(root => root !== f.root && !existsSync(root)), 'both temporary checkouts are removed');
     const repo = new LocalRepository(f.root, { optimistic: true });
     try {
-      const issue = readDocumentSelector(repo, 'sku', 'issue');
-      if (issue.metadata.kind !== 'issue' || issue.metadata.closure?.kind !== 'fixed') assert.fail('Expected verified Issue');
-      assert.equal(issue.metadata.closure.verification?.fix, fix);
-      assert.equal((await runApplication(replayFix(repo, 'sku'))).verified, 'replayed');
+      assert.equal(receipt.verification.fix, fix);
+      assert.equal((await runApplication(verifyTest(repo, receipt.verification.tests[0]!, defect, receipt.verification.fix))).verified, 'replayed');
       assert.equal(readFileSync(log, 'utf8').trim().split('\n').length, 4);
     } finally { repo.close(); }
   } finally { rmSync(f.root, { recursive: true, force: true }); }

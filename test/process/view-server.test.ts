@@ -45,13 +45,13 @@ test('a real thousand-file workspace scan leaves static and document HTTP reques
     const lease = join(f.root, '.git/concord/trace/publication.lease');
     assert.equal(existsSync(lease), false, 'source scanning does not acquire publication ownership');
     const responsiveAt = performance.now();
-    const [asset, document] = await Promise.all([send(server, '/assets/app.js'), send(server, '/api/file?path=docs%2Fconstitution.md')]);
+    const [asset, document] = await Promise.all([send(server, '/assets/app.js'), send(server, '/api/file?path=docs%2Ftaste.md')]);
     assert.equal(asset.status, 200, asset.body);
     assert.equal(document.status, 200, document.body);
     const responseMs = performance.now() - responsiveAt;
     const ready = await waitForWorkspace(server);
     const coldMs = performance.now() - started;
-    assert.ok(ready.snapshot.pages.some(page => page.path === 'docs/constitution.md'));
+    assert.ok(ready.snapshot.pages.some(page => page.path === 'docs/taste.md'));
     const second = await send(server, '/api/workspace');
     assert.equal(second.status, 200, second.body);
     t.diagnostic(`1072 source + 1072 test files: concurrent response ${Math.round(responseMs)}ms; cold workspace ${Math.round(coldMs)}ms`);

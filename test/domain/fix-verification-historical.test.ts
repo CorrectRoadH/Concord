@@ -10,18 +10,9 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 async function close(root: string, defect: string, fix: string) {
   const repo = new LocalRepository(root, { optimistic: true });
-  try { await runApplication(closeFixedIssue(repo, 'sku', 'Historical fix', defect, fix)); }
+  try { return await runApplication(closeFixedIssue(repo, 'sku', 'Historical fix', defect, fix)); }
   finally { repo.close(); }
 }
-function fixedAt(root: string): string {
-  const repo = new LocalRepository(root);
-  try {
-    const issue = readDocumentSelector(repo, 'sku', 'issue');
-    if (issue.metadata.kind !== 'issue' || issue.metadata.closure?.kind !== 'fixed' || !issue.metadata.closure.verification) assert.fail('Expected verified closure');
-    return issue.metadata.closure.verification.fix;
-  } finally { repo.close(); }
-}
-
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
 test('an explicit historical F uses runtime HEAD preparation and preserves later Issue and shared runner changes', async () => {
   const f = createFixConsumer({ runnerSource: true });
@@ -36,11 +27,11 @@ test('an explicit historical F uses runtime HEAD preparation and preserves later
     writeProjectConfig(f.root, { ...config, runner: { ...config.runner!, timeoutMs: 5001, prepare: [[process.execPath, '-e', `require('node:fs').appendFileSync(${JSON.stringify(log)}, process.cwd() + '\\n');`]] } });
     gitCommit(f.root, 'later unrelated changes');
     const head = git(f.root, 'rev-parse', 'HEAD');
-    await close(f.root, f.defect, fix);
-    assert.equal(fixedAt(f.root), fix);
+    const receipt = await close(f.root, f.defect, fix);
+    assert.equal(receipt.verification.fix, fix);
     assert.notEqual(head, fix);
     assert.equal(git(f.root, 'rev-parse', 'HEAD'), head);
-    assert.match(readFileSync(path, 'utf8'), /Later investigation note/u);
+    assert.throws(() => readFileSync(path), /ENOENT/u);
     assert.equal(readFileSync(join(f.root, 'runner.ts'), 'utf8'), '// Later shared infrastructure\n');
     assert.equal(readFileSync(join(f.root, 'src/cart.ts'), 'utf8'), 'export const quantity = -1;\n');
     const roots = readFileSync(log, 'utf8').trim().split('\n');
@@ -84,7 +75,7 @@ test('a merge after the selected F does not widen the frozen D..F interval', asy
     git(f.root, 'switch', '-q', branch);
     writeFileSync(join(f.root, 'main.txt'), 'Main branch\n'); gitCommit(f.root, 'main');
     git(f.root, 'merge', '--no-ff', '-qm', 'later merge', 'side');
-    await close(f.root, f.defect, fix);
-    assert.equal(fixedAt(f.root), fix);
+    const receipt = await close(f.root, f.defect, fix);
+    assert.equal(receipt.verification.fix, fix);
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });

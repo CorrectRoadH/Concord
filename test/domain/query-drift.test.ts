@@ -1,5 +1,5 @@
 import { initialize } from '../support/operations.js';
-import { initialConstitution } from "../../src/domain/constitution/index.js";
+import { parseTaste } from "../../src/domain/taste/index.js";
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
@@ -27,7 +27,7 @@ function candidate(at: number, paths: string[] = [], publicationChanged = false)
 }
 const fail = (at: number): QueryUpdate => ({ kind: 'failure', error: { failedAt: new Date(at).toISOString(), scannedAt: at, code: 'InvalidConfig', message: 'invalid' } });
 function trace(findings: Finding[]): ReturnType<typeof buildTrace> {
-  return { documents: [], constitutionReferences: [], annotations: { cases: [], findings: [], files: [], digest: '', cache: value.cache }, codeDeclarations: [], codeFiles: [], edges: [], findings, complete: findings.length === 0, inventoryComplete: true, advisories: [], verifications: [], codeCache: undefined, codeRelationsUnknown: findings.some(f => f.code === 'CodeSourceChanged') };
+  return { documents: [], tasteReferences: [], annotations: { cases: [], findings: [], files: [], digest: '', cache: value.cache }, codeDeclarations: [], codeFiles: [], edges: [], findings, complete: findings.length === 0, inventoryComplete: true, advisories: [], codeCache: undefined, codeRelationsUnknown: findings.some(f => f.code === 'CodeSourceChanged') };
 }
 const success = decodeQueryScanMessage({ format: 'concord.query-scan/v1', ok: true, scannedAt: 100, finishedAt: 110, value, complete: true, unknown: [], drift: { files: [], directories: [], publicationChanged: false } });
 function processResult(message: unknown = success, fields: Partial<OwnedProcessResult> = {}): OwnedProcessResult {
@@ -153,22 +153,22 @@ test('owner and remote bodies are stripped and restored only after safe matching
     const missing = hydrateQueryValue(root, stored);
     assert.deepEqual(missing.bodyUnavailable, [{ path, code: 'BodyUnavailable' }]);
     assert.throws(() => Schema.decodeUnknownSync(TraceShowValue, { onExcessProperty: 'error' })({ ...stored, subject: owner }));
-    const metadata = { format: 'concord.document/v1' as const, kind: 'issue' as const, id: 'remote', title: 'Remote', createdAt: '2026-10-06T00:00:00.000Z', status: 'open' as const,
+    const metadata = { format: 'concord.document/v1' as const, kind: 'issue' as const, id: 'remote', title: 'Remote',
       relations: [],
       source: { provider: 'github' as const, instance: 'https://api.github.com' as const, id: '123', url: 'https://github.com/example/example/issues/1', title: 'Remote', body: 'PRIVATE_REMOTE_BODY', state: 'open', updatedAt: '2026-10-06T00:00:00.000Z', connectionId: 'github', importedAt: '2026-10-06T00:00:00.000Z' } };
     const remoteSource = renderDocument(metadata, '# PRIVATE_ISSUE_BODY\n');
     const remote = stripQueryBodies({ operation: 'trace-show', subject: { path: 'docs/issues/remote.md', metadata, body: '# PRIVATE_ISSUE_BODY\n', digest: digest(remoteSource) }, relatedPaths: [], incoming: [], outgoing: [], tests: [], codeDeclarations: [], stepGroups: [], cache: value.cache });
     assert.doesNotMatch(JSON.stringify(remote), /PRIVATE_(REMOTE|ISSUE)_BODY/u);
     assert.match(JSON.stringify(hydrateQueryValue(root, remote, () => remoteSource).value), /PRIVATE_REMOTE_BODY/u);
-    const constitution = initialConstitution({ body: '# PRIVATE_CONSTITUTION_BODY\n' }).source;
-    const matchedReview = hydrateQueryValue(root, { segments: [{ text: 'before\n' }, { constitution: { path, digest: digest(constitution) } }, { text: '\nafter' }] }, () => constitution).value;
+    const taste = '# PRIVATE_TASTE_BODY\n';
+    const matchedReview = hydrateQueryValue(root, { segments: [{ text: 'before\n' }, { taste: { path, digest: digest(taste) } }, { text: '\nafter' }] }, () => taste).value;
     assert.ok('body' in matchedReview);
-    assert.equal(matchedReview.body, 'before\n# PRIVATE_CONSTITUTION_BODY\nafter');
-    const review = { segments: [{ text: 'before\n' }, { constitution: { path, digest: digest(source) } }, { text: '\nafter' }] };
+    assert.equal(matchedReview.body, 'before\n# PRIVATE_TASTE_BODY\nafter');
+    const review = { segments: [{ text: 'before\n' }, { taste: { path, digest: digest(source) } }, { text: '\nafter' }] };
     assert.deepEqual(hydrateQueryValue(root, review, () => source + 'changed').bodyChanged, [path]);
     const rendered = hydrateQueryValue(root, review, () => source + 'changed').value;
     assert.ok('body' in rendered);
-    assert.match(rendered.body, /constitution changed/);
+    assert.match(rendered.body, /taste changed/);
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));
 

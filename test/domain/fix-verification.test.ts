@@ -7,14 +7,12 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { Effect } from 'effect';
-import { createConsumer } from '../support/consumer.js';
 import { LocalRepository } from "../support/repository.js";
 import { readDocumentSelector } from "../../src/domain/documents/index.js";
 
 import { renderTypeScriptConfig } from "../../src/base/workspace/index.js";
-import { closeFixedIssue, replayFix } from "../../src/domain/tests/index.js";
+import { closeFixedIssue, verifyTest, scanAnnotations } from "../../src/domain/tests/index.js";
 import { OwnedProcessLive } from "../../src/base/process/index.js";
-import { inspectEndpointEvents, checkSince } from "../../src/app/index.js";
 
 async function verify(root: string, defect?: string) {
   const repo = new LocalRepository(root, { optimistic: true });
@@ -24,23 +22,20 @@ async function verify(root: string, defect?: string) {
 const code = (expected: string) => (cause: unknown) => { assert.equal((cause as { code: string }).code, expected); return true; };
 
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#close-fixed
-test('linear failing-test then fix records verification and replays exact commits without writing', async () => {
+test('linear failing-test then fix deletes the Issue and replays supplied commits without writing', async () => {
   const f = fixture();
   try {
-    const fix = f.fix(); await verify(f.root);
+    const fix = f.fix();
+    const receipt = await verify(f.root);
+    assert.deepEqual({ defect: receipt.verification.defect, fix: receipt.verification.fix }, { defect: f.defect, fix });
+    assert.throws(() => readFileSync(join(f.root, 'docs/issues/sku.md')), /ENOENT/u);
+    assert.match(receipt.conclusion, /Put the lines above in your commit message/u);
     const repo = new LocalRepository(f.root, { optimistic: true });
     try {
-      const issue = readDocumentSelector(repo, 'sku', 'issue'); assert.equal(issue.metadata.kind, 'issue');
-      if (issue.metadata.kind !== 'issue' || issue.metadata.closure?.kind !== 'fixed') assert.fail('Expected fixed Issue');
-      assert.deepEqual({ defect: issue.metadata.closure.verification?.defect, fix: issue.metadata.closure.verification?.fix }, { defect: f.defect, fix });
-      const source = readFileSync(join(f.root, issue.path), 'utf8');
-      const replay = await runApplication(replayFix(repo, 'sku').pipe(Effect.provide(OwnedProcessLive)));
-      assert.equal(replay.verified, 'replayed'); assert.equal(readFileSync(join(f.root, issue.path), 'utf8'), source);
+      const replay = await runApplication(verifyTest(repo, receipt.verification.tests[0]!, f.defect, fix));
+      assert.equal(replay.verified, 'replayed');
       assert.equal(git(f.root, 'worktree', 'list', '--porcelain').split('\n').filter(line => line.startsWith('worktree ')).length, 1);
     } finally { repo.close(); }
-    const checked = await runApplication(checkSince(f.root, f.defect).pipe(Effect.provide(OwnedProcessLive)));
-    assert.deepEqual(checked.since, { base: f.defect, target: 'worktree', scope: 'endpoints' });
-    assert.equal(checked.verifications[0]?.verified, 'replayed');
   } finally { rmSync(f.root, { recursive: true, force: true }); }
 });
 

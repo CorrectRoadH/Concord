@@ -1,4 +1,4 @@
-import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, authorDesignFixture, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, DecisionOutput, MemoryLifecycleOutput, TemplatesOutput, scratch, cli, call, callString, clearDecision, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
+import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, TemplatesOutput, scratch, cli, call, callString, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
 
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
@@ -12,12 +12,12 @@ test('packed local operations isolate unrelated malformed contracts and check re
  const target = 'docs/feature/target/README.md';
  assert.match(call(root, ['code', 'marker', '--scope', 'file', '--contract', target], AnnotationOutput).snippet, /@concord-implements docs\/feature\/target\/README.md/u);
  assert.match(call(root, ['test', 'marker', '--contract', target], AnnotationOutput).snippet, /@feature docs\/feature\/target\/README.md/u);
- call(root, ['new', 'memory', 'repair-note', '--title', 'Repair note', '--type', 'note'], Ack);
- const index = call(root, ['memory', 'index'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })) }));
+ call(root, ['new', 'memory', 'repair-note', '--title', 'Repair note'], Ack);
+ const index = call(root, ['list', 'memory'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })) }));
  const note = index.documents.find(record => record.path === 'memory/repair-note.md');
  assert.ok(note);
- call(root, ['action', '--input', '-'], Ack, JSON.stringify({ action: 'document.set', path: note.path, body: '---\ntype: note\nstatus: captured\n---\n\n# Repair note\n\nObserved broken contract metadata.\n', expectedDigest: note.digest }));
- const recalled = call(root, ['memory', 'recall', 'broken contract'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ body: Schema.String })) }));
+ call(root, ['action', '--input', '-'], Ack, JSON.stringify({ action: 'document.set', path: note.path, body: '# Repair note\n\nObserved broken contract metadata.\n', expectedDigest: note.digest }));
+ const recalled = call(root, ['memory', 'search', 'broken contract'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ body: Schema.String })) }));
  assert.equal(recalled.documents.length, 1);
  assert.match(recalled.documents[0]!.body, /Observed broken contract metadata/u);
  const listed = call(root, ['list', 'memory'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ id: Schema.String })) }));

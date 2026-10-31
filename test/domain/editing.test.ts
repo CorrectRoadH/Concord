@@ -44,7 +44,7 @@ test('editing exposes configured source and known Markdown only, with whole-file
   const support = inspectDocuments(repo).pages.find(item => item.path === 'docs/feature/pages/architecture.md');
   assert.equal(support?.documentPath, 'docs/feature/pages/README.md', 'support pages must be reachable through their owner');
 
-  createDocument(repo, 'research', { id: 'study', title: 'Study', body: '# Notes\n', observedAt: '2026-09-14', sources: ['https://example.invalid'] });
+  createDocument(repo, 'engineering', { id: 'study', title: 'Study', body: '# Notes\n' });
   let document = inspectDocuments(repo).documents.find(item => item.metadata.id === 'study');
   assert.ok(document);
   const edited = setMarkdown(repo, document!.path, '# Edited notes\n', document!.digest);
@@ -62,24 +62,24 @@ test('editing exposes configured source and known Markdown only, with whole-file
 test('project documents under docs are readable without becoming category owners', () => Effect.runPromise(Effect.sync(() => withRepository((root, repo) => {
   const inventory = inspectDocuments(repo);
   const architecture = inventory.pages.find(page => page.path === 'docs/architecture.md');
-  const constitution = inventory.pages.find(page => page.path === 'docs/constitution.md');
+  const taste = inventory.pages.find(page => page.path === 'docs/taste.md');
   const template = inventory.pages.find(page => page.path === 'docs/_template/feature-design/library.md');
   assert.equal(architecture?.documentPath, undefined);
   assert.ok(template);
-  assert.equal(inventory.documents.some(document => document.path === 'docs/architecture.md' || document.path === 'docs/constitution.md'), false);
+  assert.equal(inventory.documents.some(document => document.path === 'docs/architecture.md' || document.path === 'docs/taste.md'), false);
 
   let walks = 0;
   const files = repo.files.bind(repo);
   repo.files = path => { walks += 1; return files(path); };
   assert.deepEqual(inspectDocumentFile(repo, 'docs/architecture.md'), architecture);
-  assert.deepEqual(inspectDocumentFile(repo, 'docs/constitution.md'), constitution);
+  assert.deepEqual(inspectDocumentFile(repo, 'docs/taste.md'), taste);
   assert.equal(walks, 0, 'opening one project document must not enumerate the repository');
 
   const saved = setMarkdown(repo, architecture!.path, '# Project architecture\n\nSaved from the workbench.\n', architecture!.digest);
   assert.deepEqual(saved.changedPaths, ['docs/architecture.md']);
   assert.match(readFileSync(join(root, 'docs/architecture.md'), 'utf8'), /Saved from the workbench/);
-  setMarkdown(repo, constitution!.path, `${constitution!.body}\nAdditional principle.\n`, constitution!.digest);
-  assert.match(readFileSync(join(root, 'docs/constitution.md'), 'utf8'), /status: draft/);
+  setMarkdown(repo, taste!.path, `${taste!.body}\nAdditional principle.\n`, taste!.digest);
+  assert.doesNotMatch(readFileSync(join(root, 'docs/taste.md'), 'utf8'), /status: draft/);
 
   mkdirSync(join(root, 'docs/notes'), { recursive: true });
   writeFileSync(join(root, 'docs/notes/extra.md'), '# Extra\n');
@@ -166,7 +166,7 @@ test('Markdown save publishes the complete owner and catalog bytes using only th
   const issue = inspectDocumentFile(repo, 'docs/issues/observation.md')!;
   const before = readFileSync(join(root, issue.path), 'utf8');
   assert.equal(issue.body, before, 'the editor must receive frontmatter and Markdown as one file');
-  const after = before.replace('status: open', 'status: closed\nclosure:\n  kind: closed\n  reason: Resolved locally');
+  const after = `${before}\nResolved locally.\n`;
   setMarkdown(repo, issue.path, after, issue.digest);
   assert.equal(readFileSync(join(root, issue.path), 'utf8'), after);
   throwsCode('FileChangedSinceRead', () => setMarkdown(repo, issue.path, before, issue.digest));

@@ -16,7 +16,7 @@ test('packed execute aborts on read budgets and preserves rejection when outcome
 test('packed concurrent execute consumes the receipt exactly once across processes', async () => {
   const root = consumer('concurrent'); mode(); const receipt = plan(root, 'close');
   const service = makeOwnedProcessService();
-  const argv = [process.execPath, packedCli, '--root', root, 'issue', 'execute', receipt.receiptId, '--connection', connection.id, '--authorize', receipt.authorize, '--json'];
+  const argv = [process.execPath, packedCli, '--root', root, 'issue', 'remote', 'apply', receipt.receiptId, '--connection', connection.id, '--authorize', receipt.authorize, '--json'];
   const results = await Effect.runPromise(Effect.all([1, 2].map(() => Effect.scoped(service.run(argv, { cwd: root, env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ''}` }, timeoutMs: 20_000 }))), { concurrency: 2 }));
   assert.deepEqual(results.map(result => result.exitCode).sort(), [0, 1]);
   assert.equal((JSON.parse(results.find(result => result.exitCode === 1)!.stderr) as { error: string }).error, 'IssuePlanConsumed');

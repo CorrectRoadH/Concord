@@ -22,7 +22,7 @@ test('browser navigates owner directories and preserves implementation and docum
     assert.equal(await page.locator('[data-slot="sidebar"]').getByRole('link',{name:'Use Case',exact:true}).count(),0);
     const sidebar=page.locator('[data-slot="sidebar"]');
     const navigation=page.getByRole('navigation',{name:'内容导航',exact:true});
-    for (const [category,title,section] of [['Engineering','Build workflow','engineering'],['Roadmap','Future direction','roadmap'],['Design','Design options','design'],['Research','Research study','research']] as const) {
+    for (const [category,title,section] of [['Engineering','Build workflow','engineering'],['Roadmap','Future direction','roadmap'],['Design','Design options','design']] as const) {
       await sidebar.getByRole('link',{name:category,exact:true}).click();
       const list=navigation.getByRole('list',{name:`${category} 列表`,exact:true});
       await expect(sidebar.getByRole('link',{name:title,exact:true})).toHaveCount(0);
@@ -65,29 +65,15 @@ test('browser navigates owner directories and preserves implementation and docum
         await expect(page.getByText(/@concord-implements docs\/engineering\/build\/architecture\.md#source/).first()).toBeVisible();
         await page.getByRole('tab',{name:'正文',exact:true}).click();
       }
-      if (category !== 'Research') {
+      if (category === 'Design') {
+        await expect(page.getByTestId('document-file-tree')).toHaveCount(0);
+        await expect(page.locator('[contenteditable="true"]').first()).toBeVisible();
+      } else {
         const tree=page.getByTestId('document-file-tree');
-        if (category === 'Design') {
-          assert.ok(await page.getByTestId('document-file-preview').evaluate(element=>element.getBoundingClientRect().width >= 600),'Design body stays at least 600px wide at 1440px');
-        }
         await expect(tree).toBeVisible();
         const disclosure=tree.getByRole('button',{name:'文件',exact:true});
         if (await disclosure.isVisible()) await disclosure.click();
-        if (category === 'Design') {
-          await expect(tree.getByRole('button',{name:'展开 plans',exact:true})).toHaveAttribute('aria-expanded','false');
-          await tree.getByRole('button',{name:'展开 plans',exact:true}).click();
-          await expect(tree.getByRole('button',{name:'展开 plans/second',exact:true})).toHaveAttribute('aria-expanded','false');
-          await tree.getByRole('button',{name:'展开 plans/first',exact:true}).click();
-          await expect(tree.getByRole('button',{name:'plans/first/README.md',exact:true})).toHaveCount(0);
-          await tree.getByRole('button',{name:'plans/first',exact:true}).click();
-          await expect(tree.getByRole('button',{name:'plans/first',exact:true,includeHidden:true})).toHaveAttribute('data-active','true');
-          if (await disclosure.isVisible()) {
-            await expect(disclosure).toHaveAttribute('aria-expanded','false');
-            await disclosure.click();
-          }
-        }
-        const supportingPage=page.getByTestId('document-file-tree').getByRole('button',{name:category === 'Design' ? 'plans/first/architecture.md' : 'architecture.md',exact:true});
-        await supportingPage.click();
+        await tree.getByRole('button',{name:'architecture.md',exact:true}).click();
         await expect(page.locator('[contenteditable="true"]').first()).toBeVisible();
       }
       await expect(list.getByRole('link',{name:title,exact:true})).toBeVisible();

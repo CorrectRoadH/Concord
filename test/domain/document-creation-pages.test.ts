@@ -78,9 +78,9 @@ test('installed create selects optional pages, keeps README required, and reject
  assert.equal(create(root, 'feature', 'conflict', 'Conflict', ErrorOutput, { pages: ['cli'] }, 1).error, 'DocumentExists');
  assert.equal(existsSync(join(root, 'docs/feature/conflict/README.md')), false);
  assert.equal(readFileSync(join(root, 'docs/feature/conflict/cli.md'), 'utf8'), '# Existing\n');
- create(root, 'design', 'minimal-design', 'Design', Ack, { alternatives: ['one'] });
- for (const file of ['README.md', 'GOALS.md', 'LIMITS.md', 'CASES.md', 'DECISION.md', 'plans/one/README.md']) assert.equal(existsSync(join(root, 'docs/design/minimal-design', file)), true);
- assert.equal(existsSync(join(root, 'docs/design/minimal-design/plans/one/cli.md')), false);
+ create(root, 'design', 'minimal-design', 'Design', Ack);
+ assert.equal(existsSync(join(root, 'docs/design/minimal-design.md')), true);
+ assert.equal(existsSync(join(root, 'docs/design/minimal-design')), false);
  create(root, 'roadmap', 'minimal-roadmap', 'Roadmap', Ack);
  result(root, repo => adoptRoadmap(repo, 'minimal-roadmap', 'adopted-minimal'), Ack);
  assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/README.md')), true);

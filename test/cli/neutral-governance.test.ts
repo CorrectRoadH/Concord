@@ -35,6 +35,6 @@ test('packed execution and fixed closure require a runner while preserving the o
   assert.equal(call(root, ['test', 'run', id], ErrorOutput, '', 1).error, 'FixUnverifiable');
   assert.equal(call(root, ['issue', 'close', 'missing-runner', '--fixed', '--reason', 'No runner'], ErrorOutput, '', 1).error, 'FixUnverifiable');
   const issue = readFileSync(join(root, 'docs/issues/missing-runner.md'), 'utf8');
-  assert.match(issue, /status: open/u);
+  assert.doesNotMatch(issue, /status:|closure:/u);
   assert.doesNotMatch(issue, /verification:/u);
 })));

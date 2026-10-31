@@ -57,6 +57,6 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
     },
     advisories: trace.advisories, documents: trace.documents.length,
     cases: trace.annotations.cases.length, codeDeclarations: trace.codeDeclarations.length,
-    verifications: trace.verifications, cache: trace.annotations.cache, codeCache: trace.codeCache,
+    cache: trace.annotations.cache, codeCache: trace.codeCache,
   };
 }

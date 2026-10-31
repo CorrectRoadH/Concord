@@ -197,7 +197,7 @@ test('shared reference targets are read once and reverified, including external 
     } } }), { code: 'FileChangedSinceRead' });
     writeFileSync(target, original);
     assert.throws(() => buildTrace(repo, 'use', { timing: { sync(name, operation) {
-      if (name === 'trace.verifyReferences') { rmSync(target); symlinkSync(join(root, 'docs/constitution.md'), target); }
+      if (name === 'trace.verifyReferences') { rmSync(target); symlinkSync(join(root, 'docs/taste.md'), target); }
       return operation();
     } } }), { code: 'UnsafePath' });
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }

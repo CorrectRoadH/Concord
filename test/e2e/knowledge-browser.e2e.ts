@@ -37,12 +37,12 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
       const index = await action({ action: 'issue.index' });
       assert.equal(index.ok, true);
       assert.equal(JSON.stringify(index.value).includes('"provider":"local"'), true);
-      const recall = await action({ action: 'issue.recall', query: 'Local content' });
+      const recall = await action({ action: 'issue.search', query: 'Local content' });
       assert.equal(JSON.stringify(recall.value).includes('Local content.'), true);
 
 
-      assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'first-memory', title: 'First memory', body: 'First memory content.', type: 'note' })).ok, true);
-      assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'second-memory', title: 'Second memory', body: 'Second memory content.', type: 'note' })).ok, true);
+      assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'first-memory', title: 'First memory', body: 'First memory content.' })).ok, true);
+      assert.equal((await action({ action: 'document.create', kind: 'memory', id: 'second-memory', title: 'Second memory', body: 'Second memory content.' })).ok, true);
       await pollUntil(async () => {
         const value = await waitForWorkspaceProjection(base);
         return ['first-memory', 'second-memory'].every(id => value.snapshot.documents.some(document => document.metadata.id === id)) ? true : undefined;
@@ -71,7 +71,7 @@ test('HTTP and browser show Local beside remote filters and delete only safe loc
         await page.getByRole('dialog').getByRole('button', { name: '删除', exact: true }).click();
       });
       await expect(page.getByRole('link', { name: 'Browser draft' })).toHaveCount(0, { timeout: 15_000 });
-      assert.equal((await action({ action: 'issue.recall', query: 'Local content' })).ok, true);
+      assert.equal((await action({ action: 'issue.search', query: 'Local content' })).ok, true);
       assert.equal(JSON.stringify((await action({ action: 'issue.index' })).value).includes('browser-draft'), false);
     } finally {
       await server?.close();

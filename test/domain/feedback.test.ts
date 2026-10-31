@@ -157,7 +157,6 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
       assert.equal(item.document.metadata.title, 'Local investigation');
       assert.equal(item.document.body, '# Local investigation\n');
       assert.equal(item.document.metadata.source?.title, 'Remote report');
-      assert.equal(item.document.metadata.status, 'open');
       assert.equal(item.remote?.title, 'Changed remote title');
       assert.equal(item.triage, 'pending');
       createDocument(repo, 'feature', { id: 'feedback-home', title: 'Feedback home' });
@@ -172,7 +171,6 @@ test('sync binds and imports atomically while repeat sync preserves editable loc
     const afterClear = await runApplication(syncFeedback(root, 'github-main', { transport: githubTransport([issue({ state: 'open', updated_at: '2026-09-14T02:00:00Z' })]), credential: 'test-token' }));
     assert.equal(afterClear.imported, 0, 'cache clear must not erase durable source identity');
     open(root, repo => {
-      assert.equal(listFeedback(repo)[0]?.document.metadata.status, 'closed', 'remote open state must not reopen local feedback');
       const current = showConfig(repo);
       setConfig(repo, { ...current.config, feedbackConnections: [...(current.config.feedbackConnections ?? []), { id: 'github-copy', provider: 'github', credentialEnv: 'TEST_GITHUB_TOKEN', owner: 'acme', repo: 'project' }] }, current.digest);
     });

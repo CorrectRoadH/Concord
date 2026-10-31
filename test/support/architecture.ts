@@ -16,7 +16,7 @@ export const moduleOf = (file: string): string => dirname(file);
 const layerOf = (file: string): string => file.split('/')[1] ?? '';
 const domainOf = (file: string): string => file.split('/')[2] ?? '';
 const domainLevel = new Map([
-  ['documents', 1], ['concepts', 2], ['constitution', 2], ['designs', 2], ['issues', 2], ['memory', 2], ['docs-work', 2],
+  ['documents', 1], ['concepts', 2], ['taste', 2], ['issues', 2], ['docs-work', 2],
   ['writing', 3], ['code', 3], ['tests', 3], ['trace', 4], ['feedback', 4], ['onboarding', 4],
 ]);
 const plain = (file: string, line: number, code: string, text: string): Violation => ({ file, line, code, text });
