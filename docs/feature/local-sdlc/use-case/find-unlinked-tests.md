@@ -30,13 +30,19 @@ agent 写了一大堆测试，维护者想知道哪些测试没有说明自己�
    ```json
    {
      "operation": "trace-gaps",
-     "unlinkedTests": [
-       {"path": "test/cart.test.js", "line": 42, "name": "addItem handles a null sku"}
-     ]
+     "unlinkedTests": {
+       "collectedAt": "2026-10-31T09:12:04Z",
+       "stale": false,
+       "tests": [
+         {"path": "test/cart.test.js", "nativeId": "cart > addItem handles a null sku"}
+       ]
+     }
    }
    ```
 
-   `unlinkedTests` 列出原生测试清单里有、但没有任何 `@use-case` 或 `@feature` 标记覆盖的测试。
+   `tests` 的每一项是一个原生用例：`path` 是测试文件，`nativeId` 是 adapter 给出的原生 ID，也作显示名；只有 adapter 提供位置时才有 `line`。内置的 vitest、pytest、go 与 cargo 清单不提供位置。
+
+   清单是新鲜的（收集时的源码与当前一致）时，按现有的精确绑定判断，列出没有被任何 `@use-case` 或 `@feature` 标记绑定的原生用例。
 
 3. 逐个决定。 {#decide}
 
@@ -50,7 +56,7 @@ agent 写了一大堆测试，维护者想知道哪些测试没有说明自己�
 | 情形 | 结果 |
 | --- | --- |
 | 没有配置 adapter，或还没运行 `test discover` | `unlinkedTests` 不出现，`limitations` 说明需要先收集原生测试清单 |
-| 原生清单是上一次收集的结果，测试文件之后变过 | 照常列出，并标明清单的收集时间；重新运行 `test discover` 得到最新结果 |
+| 原生清单是上一次收集的结果，测试文件之后变过 | `stale` 为 true，不做位置绑定，只按文件判断：列出当前源码中整个文件都没有 `@use-case` 或 `@feature` 标记的那些文件里的原生用例；`limitations` 说明精确判断需要先重新运行 `test discover` |
 | 测试只关联了 Engineering | 不算没关联；守护仓库维护机制的测试指向 Engineering |
 | 测试带 `@concord-status retired` | 不列出 |
 
