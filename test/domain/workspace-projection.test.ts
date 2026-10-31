@@ -30,6 +30,7 @@ import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitFo
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.js';
 import { PersistentCache } from '../../src/base/cache/index.js';
+import { ConcordError } from '../../src/model/index.js';
 import { storeWorkspaceProjection as publishProjection, readWorkspaceProjection as readPublishedProjection } from '../../src/app/index.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
@@ -50,6 +51,23 @@ test('a completed workspace scan survives brief contention at publication', asyn
       assert.equal(published.projection.builtAt, candidate.builtAt);
       assert.equal(writes, 1, 'the persistent owner publishes the completed candidate exactly once');
     })).pipe(Effect.provide(PersistentCache.layer)));
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('a recovery failure preserves the exact previously accepted persistent generation', async () => {
+  const root = fixture();
+  try {
+    const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
+    const candidate = makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString());
+    const context = workspaceProjectionContext(root);
+    storeWorkspaceProjection(context, candidate);
+    const previous = readWorkspaceProjection(context);
+    storeWorkspaceProjection(context, undefined, new ConcordError('RecoveryRequired', 'An interrupted publication exists'));
+    const blocked = readWorkspaceProjection(context);
+    assert.equal(blocked.projection.builtAt, previous.projection.builtAt);
+    assert.equal(blocked.projection.status, 'blocked');
+    assert.deepEqual(blocked.snapshot, previous.snapshot);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

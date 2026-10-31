@@ -85,15 +85,20 @@ test('an interrupted publication retains a prior generation with blocked status'
   try {
     const previous = await waitForWorkspaceProjection(base);
     interruptPublication(root);
+    writeFileSync(join(root, 'src/main.ts'), 'export const unpublishableReplacement = 2;\n');
     const response = await fetchFresh(`${base}/api/workspace`, { method: 'POST', headers: jsonHeaders, body: '{}' });
     assert.equal(response.status, 202);
     const blocked = await pollUntil(async () => {
       const value = await waitForWorkspaceProjection(base);
       return value.projection.status === 'blocked' ? value : undefined;
     }, { description: 'blocked existing generation' });
-    assert.equal(blocked.projection.builtAt, previous.projection.builtAt);
     assert.equal(blocked.projection.lastError?.code, 'RecoveryRequired');
-    assert.deepEqual(blocked.snapshot, previous.snapshot);
+    assert.deepEqual(blocked.snapshot.documents, previous.snapshot.documents);
+    assert.deepEqual(blocked.snapshot.pages, previous.snapshot.pages);
+    assert.deepEqual(blocked.snapshot.sources, previous.snapshot.sources, 'the blocked refresh cannot replace the accepted source generation');
+    const retained = await waitForWorkspaceProjection(base);
+    assert.equal(retained.projection.builtAt, blocked.projection.builtAt);
+    assert.deepEqual(retained.snapshot, blocked.snapshot);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
