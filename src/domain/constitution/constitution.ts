@@ -11,7 +11,7 @@ import { markdown_facts_markdownAnchor as markdownAnchor } from "../../model/ind
 import { markdownBody } from "../../model/index.js";
 import { documentMarkdown, documentMarkdownProjection } from "../documents/index.js";
 import { constitutionDecisionChange } from "../../model/index.js";
-import { loadDocuments } from "../documents/index.js";
+import { inspectDocumentRecords, loadDocuments } from "../documents/index.js";
 
 
 
@@ -204,13 +204,20 @@ const inScope = (path: string) => path.endsWith('.md') && path !== CONSTITUTION_
 export function scanConstitutionLinks(repo: Repository, index: ReadonlyMap<string, { readonly clause: string; readonly paragraph: string | null }>, read: (path: string) => string | undefined = path => repo.read(path)): ConstitutionLinkScan {
   const references: (ConstitutionReference & { target: string })[] = [], broken: { path: string; line: number; id: string }[] = [], findings: Finding[] = [];
   let complete = true;
+  const candidates: { path: string; source?: string; finding?: Finding }[] = [];
   for (const path of repo.files('docs').filter(inScope).sort()) {
     let source: string | undefined;
     try { source = read(path); }
-    catch (cause) { complete = false; findings.push({ code: cause instanceof ConcordError ? cause.code : 'SourceChanged', path, message: cause instanceof Error ? cause.message : String(cause) }); continue; }
-    if (source === undefined) { complete = false; findings.push({ code: 'SourceChanged', path, message: 'File disappeared while constitution references were read' }); continue; }
+    catch (cause) { candidates.push({ path, finding: { code: cause instanceof ConcordError ? cause.code : 'SourceChanged', path, message: cause instanceof Error ? cause.message : String(cause) } }); continue; }
+    if (source === undefined) { candidates.push({ path, finding: { code: 'SourceChanged', path, message: 'File disappeared while constitution references were read' } }); continue; }
     // Any constitution link spells the path, percent-encodes it, or uses a character reference.
     if (!/constitution|[%&]/iu.test(source)) continue;
+    candidates.push({ path, source });
+  }
+  inspectDocumentRecords(candidates.flatMap(item => item.source === undefined ? [] : [{ path: item.path, source: item.source }]), true);
+  for (const { path, source, finding } of candidates) {
+    if (finding !== undefined) { complete = false; findings.push(finding); continue; }
+    if (source === undefined) continue;
     for (const link of inlineLinks(source, path)) {
       const target = constitutionLinkTarget(path, link.url);
       if (target === undefined || target.kind === 'whole') continue;

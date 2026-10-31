@@ -4,7 +4,7 @@ import type { TraceEdge } from "../../model/index.js";
 import { scanAnnotations } from "../tests/index.js";
 import { scanCode } from "../code/index.js";
 import type { CodeDeclaration } from "../../model/index.js";
-import { checkDocuments, diagnoseDocuments, type DocumentInventory } from "../documents/index.js";
+import { checkDocuments, diagnoseDocuments, inspectDocumentRecords, type DocumentInventory } from "../documents/index.js";
 import { ConcordError, type AnnotatedCase, type Finding, type Repository } from "../../model/index.js";
 import { CONSTITUTION_PATH, inspectConstitution } from "../constitution/index.js";
 import { measureScan, type ScanTiming } from "../../base/sources/index.js";
@@ -32,12 +32,21 @@ export function buildUnderSnapshot(repo: Repository, cache: 'use' | 'off' | 'reb
     if (page.cause !== undefined) throw page.cause;
     return page.source;
   };
+  const docPaths = repo.files('docs').filter(path => path.endsWith('.md'));
+  const markdown: { path: string; source: string }[] = [];
+  for (const path of docPaths) {
+    try { const source = readPage(path); if (source !== undefined) markdown.push({ path, source }); }
+    catch { /* The normal diagnostic pass below retains each read failure. */ }
+  }
+  // Managed owners and supporting pages share one bounded memory-cache batch.
+  // This also covers root pages and templates outside the owner inventory.
+  inspectDocumentRecords(markdown, true);
   const constitution = measureScan(options.timing, 'trace.constitution', () => inspectConstitution(repo, readPage));
   const constitutionFindings = constitution.findings;
   const advisories = constitutionFindings.filter((finding) => finding.code === 'ConstitutionDraft');
   const findings: Finding[] = [...inventory.findings, ...measureScan(options.timing, 'trace.documents', () => checkDocuments(repo, documents)), ...annotations.findings, ...constitutionFindings.filter((finding) => finding.code !== 'ConstitutionDraft')];
   // Constitution list IDs are paragraphs, not Use Case steps.
-  for (const path of repo.files('docs').filter(path => path.endsWith('.md') && path !== CONSTITUTION_PATH)) {
+  for (const path of docPaths.filter(path => path !== CONSTITUTION_PATH)) {
     try { const source = readPage(path); if (source !== undefined) findings.push(...extractSteps(path, source).findings); }
     catch (cause) { findings.push({ code: cause instanceof ConcordError ? cause.code : 'InvalidSteps', path, message: cause instanceof Error ? cause.message : String(cause) }); }
   }
