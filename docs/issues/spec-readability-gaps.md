@@ -18,6 +18,29 @@ status: open
 
 - `docs/_template` 已按 C-016 改写，随包模板 `templates/feature.md` 与 `templates/use-case.md` 仍是 Problem、Core Mental Model、Scope 的结构。`concord new` 生成的页面因此不引导作者写上手示例、图解和 Use Case 导航。
 
+## 命令用词
+
+第一次用的人看不懂命令在做什么（[C-017](../constitution.md#c-017)）。以下为待确认的替换建议，改动公开 CLI，确认后写入 Spec：
+
+| 现在 | 实际做什么 | 建议 |
+| --- | --- | --- |
+| `constitution adopt`、`constitution amend` | 启用与修订宪法 | 取消，直接编辑，见 [Roadmap：写下项目的品味](../roadmap/taste/README.md) |
+| `roadmap adopt` | 把方向移入 `docs/feature/` | `roadmap start` |
+| `memory activate` | 把 captured 改为 current | `memory confirm` |
+| `memory supersede` | 用新记录替代旧记录 | `memory replace` |
+| `memory recall`、`issue recall` | 按关键词检索 | `search` |
+| `memory index`、`issue index` | 摘要列表 | 并入 `list` |
+| `test annotate`、`code annotate` | 生成可粘贴的标记 | `test marker`、`code marker` |
+| `code locate --line` | 查某一行属于哪些代码声明 | `code at <path>:<line>` |
+| `test collect` | 运行 adapter，记下原生测试清单 | `test discover` |
+| `issue plan`、`issue execute` | 预览并执行远端 Issue 写入 | `issue sync --preview`、`issue sync` |
+| `review render` | 生成审阅材料 | `review` |
+| `design defer` | 暂缓裁决 | `design postpone` |
+| `--expected-digest` | 防止覆盖读取后被别人改过的文件 | `--if-unchanged` |
+| `PreimageChanged` | 文件在读取后被改过 | `FileChangedSinceRead` |
+
+另外，`concord <命令> <子命令> --help` 打印的都是根命令的说明，看不出子命令做什么。
+
 ## 术语歧义
 
 - 「发布」同时指写入的原子提交（publication）和软件发版（release），C-013 的标题与 cross-platform-release 使用同一个词。
