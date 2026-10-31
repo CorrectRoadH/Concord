@@ -12,7 +12,7 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 持久库位于 Git-private `cache.hawdb`，各类持久缓存以命名空间隔离。持久句柄只有一个所有者（[C-005](../../constitution.md#c-005-4)）：该 worktree 的[工作区服务](#工作区服务)运行时由它长期持有；没有服务时由当前命令的最外层来源快照按需打开，嵌套调用只复用，快照结束时释放。
 
-持久库只在命令等待的路径之外创建与批量填充：工作区服务启动时、[异步诊断投影](use-case/query-asynchronous-projections.md)的后台刷新进程，或显式的 `cache rebuild`。以保存观察为目的的显式命令 `test collect` 与 `code analyze` 本身就要启动外部进程并持久化结果，也可以创建持久库。其它命令在没有服务时只打开已经存在的持久库，不存在时使用本进程的内存缓存，不创建持久库。创建与首次填充需要数百次同步落盘，放在命令路径上会让一次只读命令被磁盘日志提交阻塞十余秒。只读句柄需要写入时，关闭后以写模式重开并重新竞争所有权。原生事务不跨调用逃逸。publication lease 的持有者不持有持久句柄，存在独占提交时数据库先于 lease 释放。
+持久库只在命令等待的路径之外创建与批量填充：工作区服务启动时、[异步诊断投影](use-case/query-asynchronous-projections.md)的后台刷新进程，或显式的 `cache rebuild`。显式启动外部进程并保存观察的命令 `test collect`、`test run` 与 `code analyze` 也可以创建持久库。其它命令在没有服务时只打开已经存在的持久库，不存在时使用本进程的内存缓存，不创建持久库。创建与首次填充需要数百次同步落盘，放在命令路径上会让一次只读命令被磁盘日志提交阻塞十余秒。只读句柄需要写入时，关闭后以写模式重开并重新竞争所有权。原生事务不跨调用逃逸。发布租约的持有者不持有持久句柄，存在独占提交时数据库先于租约释放。
 
 持久句柄因协调锁被占用、或发现运行中的工作区服务而不打开时，可由当前来源完整重建的解析缓存（文档、配置、代码、测试标记与 Git 基线）改用本进程的内存缓存，命令照常完成，正确性仍由当前来源核验保证。缓存诊断保留 `HawdbBusy` 原因。远端反馈快照与诊断投影不是解析缓存：服务运行时经由服务读取，没有服务而库被占用时如实报告不可用，不把空内存实例当作已读取的快照，不自动联网。损坏、预算、路径安全与原生产物失败保留各自的具名失败。`cache status`、`cache clear` 与 `cache rebuild` 如实报告占用。
 
@@ -34,7 +34,7 @@ Repository 的只读属性 `persistentCache: 'use' | 'off'` 独立于来源访�
 
 ## 清理
 
-有工作区服务时，`cache clear` 发送给服务：服务进入 draining，等待已受理的请求完成，关闭持久句柄，再异步取得独占 publication lease（最多等待 3 秒，超时重新打开并返回 `RepositoryBusy`），执行下述清理，释放 lease 后重新打开并从头刷新。服务全程持有服务锁，当前版本的其它进程不会在此期间打开持久库。没有服务时，清理在本进程按现行方式执行。
+有工作区服务时，`cache clear` 发送给服务：服务进入 draining，等待已受理的请求完成，关闭持久句柄，再异步取得独占发布租约（最多等待 3 秒，超时重新打开并返回 `RepositoryBusy`），执行下述清理，释放租约后重新打开并从头刷新。服务全程持有服务锁，当前版本的其它进程不会在此期间打开持久库。没有服务时，清理在本进程按现行方式执行。
 
 clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.lock`，并按路径排序锁住树内全部以 `.lock` 结尾的普通文件，包括分支与 catalog 锁。描述符持有到清理结束。任一锁占用、权限、I/O、路径异常或未知错误都拒绝删除；打开失败不代表可删除，损坏的 manifest 不影响独立取锁。只有显式 clear 可以为已验证目录补建根锁，不补建嵌套引擎锁。
 
@@ -52,7 +52,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 | 实体 | 身份 | 拥有与生命周期 |
 | --- | --- | --- |
-| 服务主进程 | worktree 的 Git-private 目录 + 安装身份 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算；只在清理时、关闭持久库之后持有 publication lease |
+| 服务主进程 | worktree 的 Git-private 目录 + 安装身份 + 随机实例 token | 持有服务锁、持久句柄、socket、HTTP 监听与订阅；不执行领域计算；只在清理时、关闭持久库之后持有发布租约 |
 | 计算进程 | 由主进程经 `OwnedProcessService` 启动的长期子进程 | 持有内存解析缓存，执行刷新扫描与只读查询；不打开持久库；60 秒无响应或超出预算时整组终止并重启，缓存冷启动 |
 | 操作进程 | 每个 Web 写入、恢复或测试终结一个，经 `OwnedProcessService` 启动 | 执行现行 ViewAction、前像、journal 与 publication 协议；使用内存缓存，不打开持久库；结束后退出 |
 | 服务锁 | `<privateDir>/server/lock`，原生排他文件锁，单链接普通文件，按 device/inode 校验 | 与数据库[协调锁](#协调锁)是两把锁；服务存活期间一直持有，清理期间也不释放；进程死亡时由操作系统释放 |
@@ -64,7 +64,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 主进程把需要的持久数据（远端反馈快照、诊断投影）随请求交给计算进程，计算进程把结果交回主进程写入；持久命名空间只在主进程读写。
 
-远端观察由发起同步的 CLI 或操作进程取得。它完成来源发布并释放 publication lease 后，以 `feedback-merge` 会话把完整批次分块交给服务（begin、若干 append、commit）。主进程逐块严格解码并累计到批量上限，在 commit 时对当前持久行执行现行的单调时间戳与同版本冲突检查，在一个事务中合并并返回 warnings；未 commit 的会话随连接断开丢弃。该请求只更新可丢弃的远端观察缓存，不写来源。服务不存在、处于降级或合并失败时，按现行缓存更新失败处理：来源回执不变，结果带 warning，不重跑来源写入。没有服务时仍由本进程在释放 lease 后直接合并。
+远端观察由发起同步的 CLI 或操作进程取得。它完成来源发布并释放发布租约后，以 `feedback-merge` 会话把完整批次分块交给服务（begin、若干 append、commit）。主进程逐块严格解码并累计到批量上限，在 commit 时对当前持久行执行现行的单调时间戳与同版本冲突检查，在一个事务中合并并返回 warnings；未 commit 的会话随连接断开丢弃。该请求只更新可丢弃的远端观察缓存，不写来源。服务不存在、处于降级或合并失败时，按现行缓存更新失败处理：来源回执不变，结果带 warning，不重跑来源写入。没有服务时仍由本进程在释放租约后直接合并。
 
 ### 启动与裁决
 
@@ -135,7 +135,7 @@ CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`-
 
 1. 一个 worktree 任一时刻最多一个工作区服务，由服务锁裁决；服务锁在清理期间也不释放。
 2. 当前版本的 Concord 进程在发现运行中的服务后不打开该 worktree 的持久库；任一时刻最多一个打开者由数据库协调锁保证。
-3. 持有 publication lease 的进程不打开持久库；服务主进程只在清理时持有 publication lease，且此时已关闭持久库。
+3. 持有发布租约的进程不打开持久库；服务主进程只在清理时持有发布租约，且此时已关闭持久库。
 4. 客户端不取得数据库句柄；经由服务的查询结果与本进程计算相同。
 5. 写入、发布、恢复与证据不依赖服务：服务不存在、崩溃或版本不同时，同一命令得到相同结果。
 
@@ -176,7 +176,7 @@ CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`-
 
 ## 诊断投影
 
-诊断投影只服务[异步查询](use-case/query-asynchronous-projections.md)（[决策依据](../../design/asynchronous-projections/DECISION.md)、[漂移发布依据](../../design/diagnostic-projection-drift/DECISION.md)）。缓存命中不加载 Repository，不等待 publication lease。check、trace check、Memory 与 Issue 检索、作者读取、写入、恢复与证据裁决不读取 `query_cache`；`--fresh` 与 `--dry-run` 走当前来源扫描。
+诊断投影只服务[异步查询](use-case/query-asynchronous-projections.md)（[决策依据](../../design/asynchronous-projections/DECISION.md)、[漂移发布依据](../../design/diagnostic-projection-drift/DECISION.md)）。缓存命中不加载 Repository，不等待发布租约。check、trace check、Memory 与 Issue 检索、作者读取、写入、恢复与证据裁决不读取 `query_cache`；`--fresh` 与 `--dry-run` 走当前来源扫描。
 
 ### 刷新
 
@@ -192,7 +192,7 @@ type QueryScanMessage =
   | { format: 'concord.query-scan/v1'; ok: false; scannedAt: number; code: string; message: string; details?: Json };
 ```
 
-投影身份键由 worktree、Git-private 目录、配置字节摘要、命令参数、安装 JS 与原生产物摘要组成。刷新进程在扫描前与收到消息后各计算一次；两次不同时丢弃候选，不写 error 与 lastAttempt，以新键请求一次刷新。旧键的排队请求在发布前重算身份时同样放弃。取得 lease 后，若 `record.scannedAt`、`lastAttempt.scannedAt` 或 `error.scannedAt` 不早于本请求时间，请求已被满足，刷新进程直接退出。
+投影身份键由 worktree、Git-private 目录、配置字节摘要、命令参数、安装 JS 与原生产物摘要组成。刷新进程在扫描前与收到消息后各计算一次；两次不同时丢弃候选，不写 error 与 lastAttempt，以新键请求一次刷新。旧键的排队请求在发布前重算身份时同样放弃。取得租约后，若 `record.scannedAt`、`lastAttempt.scannedAt` 或 `error.scannedAt` 不早于本请求时间，请求已被满足，刷新进程直接退出。
 
 ### 漂移分拣
 
