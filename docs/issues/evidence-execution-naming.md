@@ -1,15 +1,5 @@
 ---
-status: closed
-closure:
-  kind: fixed
-  reason: execution 以 ran/none 表示数量，与退出码独立；red 与 green 均在冻结提交的临时检出中核验
-  verification:
-    defect: 209389d3f5cc5965659a65e3c6b48b226a8e8ace
-    fix: 3a5209fd45ebc09f61ab714cf8977d8c7fa80873
-    tests:
-      - neref_3b11763e77bb20c1fe7f67b9ac53bfa6
-    runner: sha256:fd7da6b6c34baad208a76243f3aa97f42871a0a1629cabfe2716d3baa25ad6b6
-    concord: dev
+status: open
 ---
 
 # 命令收据的 execution 取值 nonzero 容易误读
