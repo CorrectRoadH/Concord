@@ -25,6 +25,7 @@ export type BenchRun = readonly string[] | { readonly argv: readonly string[]; r
   | { readonly request: RequestSpec } | { readonly scan: readonly string[] };
 export interface BenchScenario {
   readonly id: string; readonly consumer: 'self' | 'scale' | `fixture:${string}`;
+  readonly server?: 'running';
   readonly env?: NodeJS.ProcessEnv;
   readonly state: 'warm' | 'cold'; readonly prepare?: BenchStep; readonly beforeEach?: BenchStep;
   readonly run: BenchRun;
@@ -64,6 +65,14 @@ export const cliCommand = (artifact: Artifact, root: string, argv: readonly stri
 export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: NodeJS.ProcessEnv, refreshLimitMs = 0): BenchContext => ({
   artifact, consumer, outputDir, smoke, refreshLimitMs, services: new Map(), ...(env ? { env } : {}),
   cli: (argv, timeoutMs) => timedRun(cliCommand(artifact, consumer.root, argv), { cwd: consumer.root, outputDir, ...(env ? { env } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }) }),
+});
+export const prepareServer = Effect.fn('perf.prepareServer')(function*(context: BenchContext) {
+  if (context.services.has('workspace-server')) return;
+  const started = yield* context.cli(['server', 'start']);
+  if (started.exitCode !== 0) return yield* new PerfError({ message: `Workspace service failed to start: ${started.stderr || started.stdout}` });
+  context.services.set('workspace-server', 'running');
+  yield* Effect.addFinalizer(() => context.cli(['server', 'stop']).pipe(Effect.ignore, Effect.ensuring(Effect.sync(() => { context.services.delete('workspace-server'); }))));
+  yield* waitForProjection(context, ['workspace', 'projection'], 60_000);
 });
 export const Published = Schema.Struct({ projection: Schema.Struct({ current: Schema.Literal(false), builtAt: Schema.String }) });
 export const waitForProjection = Effect.fn('perf.waitForProjection')(function*(context: BenchContext, argv: readonly string[], deadlineMs = context.refreshLimitMs + 30_000) {

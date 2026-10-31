@@ -13,4 +13,7 @@ const reads = Object.entries(commands).map(([name, run]) => ({
   id: `local-sdlc/${name}`, consumer: 'self' as const, state: 'warm' as const, run, ...(name === 'help' ? { env: helpEnvironment } : {}), expect: { exitCode: 0 },
 }));
 
-export default defineBenchmarks('local-sdlc', reads);
+export default defineBenchmarks('local-sdlc', [...reads, ...['trace-check', 'trace-show-fresh', 'check'].map(name => ({
+  id: `local-sdlc/${name}-server`, consumer: 'self' as const, state: 'warm' as const, server: 'running' as const,
+  run: commands[name]!, expect: { exitCode: 0 },
+}))]);

@@ -7,7 +7,7 @@ import { environment, loadArtifact, verifyArtifact } from './perf/artifact.js';
 import { loadBudgets, missingOwner } from './perf/budgets.js';
 import { prepareBaseline } from './perf/baseline.js';
 import { changedSelection, defaultBase, selectScenarios } from './perf/selection.js';
-import { executeScenario, loadScenarios, makeContext, runArguments, type BenchContext } from './perf/scenario.js';
+import { executeScenario, loadScenarios, makeContext, prepareServer, runArguments, type BenchContext } from './perf/scenario.js';
 import { io, mustRun, PerfError } from './perf/process.js';
 import { judge, measurementPass, skippedVerdict, summarize, type GroupStats, type GroupVerdict } from './perf/stats.js';
 import { parseScale, prepareConsumer, settleConsumerRefreshes, workDirectory } from './perf/workspace.js';
@@ -58,17 +58,18 @@ const main = Effect.gen(function*() {
     const kind = values.consumer ?? scenario.consumer;
     const perArtifact: BenchContext[] = [];
     for (const artifact of artifacts) {
-      const key = `${kind}:${values['isolated-caches'] ? artifact.label : 'shared'}`;
+      const condition = `${kind}:${scenario.server ?? 'absent'}`;
+      const key = `${condition}:${values['isolated-caches'] ? artifact.label : 'shared'}`;
       const contextKey = `${key}:${artifact.label}`;
       let context = contexts.get(contextKey);
       if (!context) {
-        const frozen = frozenConsumers.get(kind);
+        const frozen = frozenConsumers.get(condition);
         const consumerDir = join(workDir, `consumer-${contexts.size}`);
         yield* io('Create consumer directory', () => mkdirSync(consumerDir));
         let consumer = frozen;
         if (!consumer) {
           consumer = yield* prepareConsumer(kind, { repository: root, commit: values.commit, entry: candidate.entry, scale, workDir: consumerDir });
-          frozenConsumers.set(kind, consumer);
+          frozenConsumers.set(condition, consumer);
         } else if (values['isolated-caches']) {
           const clone = yield* prepareConsumer('self', { repository: frozen!.root, commit: frozen!.commit, entry: artifact.entry, scale, workDir: consumerDir });
           consumer = { ...frozen!, root: clone.root, cache: 'ready' };
@@ -85,10 +86,11 @@ const main = Effect.gen(function*() {
     for (const phase of ['cold', 'warm'] as const) {
       for (const c of perArtifact) {
         const prepared = yield* Effect.result(Effect.gen(function*() {
+          if (phase === 'warm' && scenario.server === 'running') yield* prepareServer(c);
           if (phase === 'warm' && scenario.prepare) yield* scenario.prepare(c);
           if (scenario.state === 'warm') {
             // Record cold separately, then restore a valid cache before warm measurement.
-            if (phase === 'cold' && !scenario.prepare && !('request' in scenario.run) && !('scan' in scenario.run)) {
+            if (phase === 'cold' && scenario.server !== 'running' && !scenario.prepare && !('request' in scenario.run) && !('scan' in scenario.run)) {
               const clear = yield* c.cli(['cache', 'clear']);
               if (clear.exitCode !== 0) return yield* new PerfError({ message: `Cache clear failed: ${clear.stderr || clear.stdout}` });
               const first = yield* c.cli(runArguments(scenario.run));

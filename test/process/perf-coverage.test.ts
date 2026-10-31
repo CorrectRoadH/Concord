@@ -6,7 +6,7 @@ import { Effect, Schema } from 'effect';
 import { loadArtifact } from '../../scripts/perf/artifact.js';
 import { loadBudgets } from '../../scripts/perf/budgets.js';
 import { commandGroups, selectScenarios } from '../../scripts/perf/selection.js';
-import { executeScenario, loadScenarios, makeContext, runArguments, type BenchScenario } from '../../scripts/perf/scenario.js';
+import { executeScenario, loadScenarios, makeContext, prepareServer, runArguments, type BenchScenario } from '../../scripts/perf/scenario.js';
 import { io, mustRun } from '../../scripts/perf/process.js';
 import { installedConcordCli } from '../support/support.js';
 import { prepareConsumer, workDirectory } from '../../scripts/perf/workspace.js';
@@ -59,6 +59,7 @@ test('all benchmark scenarios execute on minimal frozen consumers without timing
     yield* trace(`${group.name} ready`, groupStarted);
     const context = makeContext(artifact, isolated, outputDir, true);
     for (const scenario of group.scenarios) {
+      if (scenario.server === 'running') yield* prepareServer(context);
       yield* Effect.scoped(Effect.gen(function*() {
         if (scenario.prepare) yield* scenario.prepare(context);
         yield* executeScenario(scenario, context);
