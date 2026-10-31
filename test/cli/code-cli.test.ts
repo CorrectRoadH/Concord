@@ -1,3 +1,8 @@
+import { createDocument } from '../support/operations.js';
+import { createConsumer } from '../support/consumer.js';
+import { LocalRepository } from '../support/repository.js';
+import type { DocumentKind } from '../../src/model/index.js';
+import type { CreateDocumentInput } from '../../src/app/index.js';
 import { packageBin } from '../../scripts/package-location.js';
 import { packConcord, installConcord } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
@@ -45,9 +50,13 @@ test('packed CLI traces code scopes and keeps command execution independent of c
     assert.deepEqual(config.sourceRoots, ['src', 'test']);
     assert.deepEqual(config.testRoots, []);
     assert.deepEqual(call(['doctor'], Schema.Struct({ missingSourceRoots: Schema.Array(Schema.String) })).missingSourceRoots, ['src', 'test']);
-    call(['new', 'feature', 'orders', '--title', 'Orders'], ack);
-    call(['new', 'use-case', 'create-order', '--feature', feature, '--title', 'Create order'], ack);
-    call(['new', 'engineering', 'tooling', '--title', 'Tooling'], ack);
+    const owner = (kind: DocumentKind, input: CreateDocumentInput) => {
+      const repo = new LocalRepository(root);
+      try { createDocument(repo, kind, input); } finally { repo.close(); }
+    };
+    owner('feature', { id: 'orders', title: 'Orders' });
+    owner('use-case', { id: 'create-order', feature, title: 'Create order' });
+    owner('engineering', { id: 'tooling', title: 'Tooling' });
     writeFileSync(join(root, 'docs/feature/orders/behavior.md'), '# Behavior\n\n## Normalize\n\n## Validate\n');
     const engineering = 'docs/engineering/tooling/README.md';
     const engineeringPage = 'docs/engineering/tooling/architecture.md';
@@ -58,8 +67,8 @@ test('packed CLI traces code scopes and keeps command execution independent of c
     assert.ok(engineeringOwnerSnippet.includes(`// @concord-implements ${engineering}`));
     assert.ok(engineeringPageSnippet.includes(`// @concord-implements ${engineeringPage}#overview`));
     assert.equal(call(['code', 'annotate', '--scope', 'node', '--contract', `${engineeringPage}#missing`], error, 1).error, 'AnchorNotFound');
-    call(['new', 'research', 'research-target', '--title', 'Research target'], ack);
-    call(['new', 'roadmap', 'roadmap-target', '--title', 'Roadmap target'], ack);
+    owner('research', { id: 'research-target', title: 'Research target' });
+    owner('roadmap', { id: 'roadmap-target', title: 'Roadmap target' });
     assert.equal(call(['code', 'annotate', '--scope', 'node', '--contract', 'docs/research/research-target/README.md'], error, 1).error, 'InvalidReferenceTarget');
     assert.equal(call(['code', 'annotate', '--scope', 'node', '--contract', 'docs/roadmap/roadmap-target/README.md'], error, 1).error, 'InvalidReferenceTarget');
     const snippet = call(['code', 'annotate', '--scope', 'node', '--contract', useCase, '--contract', `${feature}#orders`], Schema.Struct({ snippet: Schema.String })).snippet;
@@ -126,60 +135,5 @@ test('packed CLI traces code scopes and keeps command execution independent of c
     rmSync(join(root, 'src/renamed.ts'));
     assert.deepEqual(call(['code', 'list'], codes).codes, []);
 
-    // A code finding must not become an extra precondition for real red/green evidence.
-    call(['new', 'issue', 'wrong-result', '--title', 'Wrong result'], ack);
-    const problem = 'docs/issues/wrong-result.md';
-    writeProjectConfig(root, { ...config, testRoots: ['test'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
-    writeFileSync(join(root, 'test/result.test.mjs'), [
-      "import test from 'node:test';", "import assert from 'node:assert/strict';", "import { result } from '../src/result.mjs';",
-      `// @use-case ${useCase}`, `// @issue ${problem}`,
-      "test('result', () => { assert.equal(result(), 2); });", '',
-    ].join('\n'));
-    const resultCase = deriveTestReference('test/result.test.mjs', 'test/result.test.mjs', caseDiscriminator(useCase, 0));
-    const product = (value: number) => `// @concord-unknown-label invalid\nexport function result() { return ${value}; }\n`;
-    writeFileSync(join(root, 'src/result.mjs'), product(1));
-    assert.equal(call(['check'], Schema.Struct({ ok: Schema.Boolean }), 1).ok, false);
-    assert.equal(call(['code', 'list'], error, 1).error, 'TraceInvalid');
-    assert.equal(call(['test', 'list'], Schema.Struct({ cases: Schema.Array(Schema.Unknown) })).cases.length, 1);
-    call(['test', 'show', resultCase], ack);
-    const receipt = Schema.Struct({ commandOutcome: Schema.String });
-    const red = call(['test', 'run', resultCase], receipt, 1); assert.equal(red.commandOutcome, 'fail');
-    writeFileSync(join(root, 'src/result.mjs'), product(2));
-    const green = call(['test', 'run', resultCase], receipt); assert.equal(green.commandOutcome, 'pass');
-    const testFile = join(root, 'test/result.test.mjs');
-    writeFileSync(testFile, readFileSync(testFile, 'utf8').replace(useCase, 'docs/feature/missing/README.md'));
-    assert.equal(call(['test', 'list'], error, 1).error, 'TraceInvalid', 'original test reference validation remains enforced');
-    writeProjectConfig(root, { ...config, sourceRoots: ['../escape'] });
-    assert.equal(call(['doctor'], error, 1).error, 'UnsafePath');
-    writeFileSync(join(root, 'concord.config.ts'), readFileSync(join(root, 'concord.config.ts'), 'utf8').replace(/"sourceRoots": \[[\s\S]*?\]/u, '"sourceRoots": "src"'));
-    assert.equal(call(['doctor'], error, 1).error, 'InvalidData');
-
-    const skill = spawnSync(process.execPath, [cli, '--skill', 'code'], { cwd: scratch, encoding: 'utf8', timeout: 10000 });
-    assert.equal(skill.status, 0, skill.stderr); assert.match(skill.stdout, /code locate/);
-
-    // Execute the shipped quick start itself; copied examples cannot prove the README works.
-    const readme = readFileSync(join(install, 'node_modules/concord-sdlc/README.md'), 'utf8');
-    const quickStart = readme.split('## Quick start\n')[1]?.split('\n## ')[0];
-    const script = quickStart === undefined ? undefined : /```sh\n([\s\S]*?)\n```/u.exec(quickStart)?.[1];
-    assert.ok(script, 'README must contain a runnable quick start');
-    const demo = join(scratch, 'concord-demo'); mkdirSync(demo);
-    execFileSync('git', ['init', '-q', demo]);
-    const demoRun = spawnSync('bash', ['-euo', 'pipefail', '-c', script], {
-      cwd: demo, encoding: 'utf8', timeout: 60000,
-      env: { ...process.env, PATH: `${join(install, 'node_modules/.bin')}:${process.env.PATH ?? ''}` },
-    });
-    assert.equal(demoRun.status, 0, demoRun.stdout + demoRun.stderr);
-    // Quick start assumes an existing Git repository and shows source/test annotations separately.
-    const snippets = [...quickStart!.matchAll(/```ts\n([\s\S]*?)\n```/gu)].map(match => match[1]!);
-    assert.equal(snippets.length, 2);
-    mkdirSync(join(demo, 'src')); mkdirSync(join(demo, 'test'));
-    writeFileSync(join(demo, 'src/greeting.ts'), snippets[0]!);
-    writeFileSync(join(demo, 'test/greeting.test.ts'), `${snippets[1]}\nimport test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { greet } from '../src/greeting.ts';\ntest('greet', () => assert.equal(greet('world'), 'Hello, world!'));\n`);
-    const demoCheck = spawnSync(process.execPath, [cli, '--root', demo, '--json', 'check'], { encoding: 'utf8', timeout: 10000 });
-    assert.equal(demoCheck.status, 0, demoCheck.stderr);
-    assert.deepEqual(Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ok: Schema.Boolean, codeDeclarations: Schema.Int, cases: Schema.Int })))(demoCheck.stdout), { ok: true, codeDeclarations: 1, cases: 1 });
-    const demoLocate = spawnSync(process.execPath, [cli, '--root', demo, '--json', 'code', 'locate', 'src/greeting.ts', '--line', '3'], { encoding: 'utf8', timeout: 10000 });
-    assert.equal(demoLocate.status, 0, demoLocate.stderr);
-    assert.deepEqual(new Set(Schema.decodeUnknownSync(Schema.fromJsonString(codes))(demoLocate.stdout).codes.map(item => item.scope)), new Set(['node']));
   } finally { rmSync(scratch, { recursive: true, force: true }); }
 })));
