@@ -432,3 +432,4 @@ export { WorkspaceConceptSchema, WorkspaceConceptCatalogSchema, projectConceptCa
 export type { WorkspaceConcept, WorkspaceConceptCatalog } from './concept-directory.js';
 export { WorkspaceRead, decodeWorkspaceRead } from './workspace-read.js';
 export { WorkspaceProjectionSchema, WorkspaceServerEvent } from './workspace-projection.js';
+export { CacheSnapshotUnavailable, CacheDerivationBatch } from './cache-snapshot.js';

@@ -146,7 +146,7 @@ export function dependencyViolations(audit: Audit): Violation[] {
         || from === 'domain' && !['model', 'base', 'domain'].includes(to!) || from === 'app' && to === 'entry'
         || from === 'entry' && to !== 'model' && to !== 'app' && moduleOf(edge.from) !== moduleOf(edge.to) && !root) fail('LayerDirection');
       if (from === 'entry' && root && (to === 'domain' || to === 'base') && !edge.typeOnly
-        && !edge.bindings.every(name => /(?:Live|Layer|layer)$/u.test(name) || ['Installation', 'Workspace', 'Sources', 'Publication', 'Cache', 'CacheSnapshot', 'PersistentCache', 'Git', 'OwnedProcess', 'PublicationValidation', 'ServerRuntime', 'FeedbackCacheWriter'].includes(name))) fail('CompositionRootLayer');
+        && !edge.bindings.every(name => /(?:Live|Layer|layer)$/u.test(name) || ['Installation', 'Workspace', 'Sources', 'Publication', 'Cache', 'CacheSnapshot', 'CacheDerivations', 'PersistentCache', 'Git', 'OwnedProcess', 'PublicationValidation', 'ServerRuntime', 'FeedbackCacheWriter'].includes(name))) fail('CompositionRootLayer');
       if (from === 'domain' && to === 'domain' && domainOf(edge.from) !== domainOf(edge.to)) {
         const left = domainLevel.get(domainOf(edge.from)), right = domainLevel.get(domainOf(edge.to));
         if (left === undefined || right === undefined || right >= left) fail('DomainOrder');

@@ -3,7 +3,10 @@
 import { Clock, Effect, Exit, Scope } from 'effect';
 import { ConcordError } from '../../model/index.js';
 import { PersistentCache, type PersistentCacheService, type ReadonlyCacheSnapshot } from './service.js';
-import { HawdbFailure, validateHawdbArtifact, type HawdbDatabase } from './hawdb-native.js';
+import { HawdbFailure, validateHawdbArtifact, type HawdbDatabase, type HawdbNamespace, type HawdbEntry } from './hawdb-native.js';
+import { CacheDerivationBatch } from '../../model/index.js';
+import { Schema } from 'effect';
+import { writeCachePayloads } from './cache-query.js';
 import { mergeFeedbackRows } from './feedback-cache.js';
 import type { RemoteFeedback } from '../../model/index.js';
 
@@ -12,6 +15,7 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
   const backend = yield* PersistentCache;
   let scope: Scope.Closeable | undefined;
   let database: HawdbDatabase | undefined;
+  const snapshots = new Map<HawdbNamespace, readonly HawdbEntry[]>();
   let validatedAt = -Infinity, validationError: HawdbFailure | undefined;
   const verify = Effect.gen(function*() {
     const now = yield* Clock.currentTimeMillis;
@@ -23,6 +27,7 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     if (validationError) return yield* Effect.fail(validationError);
   });
   const close = Effect.suspend(() => {
+    snapshots.clear();
     const prior = scope; scope = undefined; database = undefined;
     return prior ? Scope.close(prior, Exit.void) : Effect.void;
   });
@@ -42,8 +47,22 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     attach: () => Effect.fail(new HawdbFailure('HawdbUnavailable', 'The persistent owner cannot execute repository operations')),
     open: () => Effect.fail(new HawdbFailure('HawdbUnavailable', 'The owner does not transfer database handles')),
     read: (_directory, namespace, keys) => use(db => keys === undefined ? db.scan(namespace) : db.get(namespace, keys)).pipe(Effect.mapError(cause => cause instanceof HawdbFailure ? cause : new HawdbFailure('HawdbUnavailable', cause.message))),
-    update: (_directory, namespace, key, update) => use(db => db.put(namespace, [{ key, payload: update(db.get(namespace, [key])[0]?.payload) }])),
+    update: (_directory, namespace, key, update) => use(db => { db.put(namespace, [{ key, payload: update(db.get(namespace, [key])[0]?.payload) }]); snapshots.delete(namespace); }),
   };
-  const snapshot = use(db => Object.fromEntries(['feedback_cache', 'query_cache'].map(namespace => [namespace, db.scan(namespace as 'feedback_cache' | 'query_cache')])) as ReadonlyCacheSnapshot);
-  return { open, close, verify, service, snapshot, mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use(db => mergeFeedbackRows(db, connectionId, items)) };
+  const snapshot = use(db => Object.fromEntries((['annotation_cache', 'code_cache', 'config_cache', 'feedback_cache', 'query_cache'] as const).map(namespace => {
+    let rows = snapshots.get(namespace);
+    if (!rows) { rows = Object.freeze(db.scan(namespace).map(row => Object.freeze({ ...row }))); snapshots.set(namespace, rows); }
+    return [namespace, rows];
+  })) as ReadonlyCacheSnapshot);
+  const mergeDerived = (input: readonly CacheDerivationBatch[]) => use(db => {
+    const batches = Schema.decodeUnknownSync(Schema.Array(CacheDerivationBatch), { onExcessProperty: 'error' })(input);
+    for (const batch of batches) {
+      if (batch.namespace === 'query_cache' && batch.entries.some(row => !row.key.startsWith('writing:'))) throw new HawdbFailure('HawdbUnavailable', 'A computation cannot replace historical query observations');
+      try { writeCachePayloads(db, batch.namespace, batch.entries); }
+      finally { snapshots.delete(batch.namespace); }
+    }
+  });
+  return { open, close, verify, service, snapshot, mergeDerived,
+    mergeFeedback: (connectionId: string, items: readonly RemoteFeedback[]) => use(db => { const warnings = mergeFeedbackRows(db, connectionId, items); snapshots.delete('feedback_cache'); return warnings; }),
+  };
 });

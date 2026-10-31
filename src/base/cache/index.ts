@@ -1,5 +1,6 @@
 export { assertCacheDatabaseSafe } from './cache-file.js';
 export { Cache, CacheSnapshot, PersistentCache } from './service.js';
+export { CacheDerivations } from './derivations.js';
 export type { CacheService, PersistentCacheService, ReadonlyCacheSnapshot } from './service.js';
 export type { CacheClearInventory } from './cache-file.js';
 export { cacheDatabasePath } from './cache-file.js';

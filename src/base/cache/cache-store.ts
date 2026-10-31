@@ -69,9 +69,12 @@ export function nodeRepositoryCache(repo: Repository, memory?: HawdbDatabase): R
   const use = <A>(namespace: import('./hawdb-native.js').HawdbNamespace, keys: readonly string[] | undefined, writable: boolean, operation: (database: HawdbDatabase | undefined) => A): A => {
     try { return withPersistentCache(repo, writable, operation); }
     catch (cause) {
-      if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || !memory || !rebuildable(namespace, keys)) throw cause;
+      if (!(cause instanceof HawdbFailure) || cause.code !== 'HawdbBusy' || !rebuildable(namespace, keys)) throw cause;
       diagnostic = `HawdbBusy: ${cause.message}`;
-      return operation(memory);
+      if (memory && ['document_parse', 'code_parse', 'git_baseline'].includes(namespace)) return operation(memory);
+      // Derived rows have no memory table. Their existing unavailable-cache
+      // path recomputes from source while retaining the busy diagnostic.
+      throw cause;
     }
   };
   return {

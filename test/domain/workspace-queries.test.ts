@@ -4,7 +4,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { Effect, Layer, Schema } from 'effect';
 import { executeQuery, type QueryRequest } from '../../src/app/index.js';
-import { CacheSnapshot } from '../../src/base/cache/index.js';
+import { CacheSnapshot, CacheDerivations, PersistentCache } from '../../src/base/cache/index.js';
+import { genericPrivateDirectorySync } from '../../src/base/publication/index.js';
 import { computationLayer } from '../../src/entry/server/index.js';
 import { createConsumer } from '../support/consumer.js';
 import { createDocument } from '../support/operations.js';
@@ -23,11 +24,17 @@ test('fresh computation requests retain the annotation parser cache owned by the
   try {
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const context = yield* Layer.build(computationLayer);
-      const query = () => executeQuery(root, { name: 'test.list', input: {} }).pipe(Effect.provide(CacheSnapshot.layer()), Effect.provideContext(context));
-      yield* query();
-      const second = yield* query();
-      assert.equal(Schema.decodeUnknownSync(status)(second).value.cache.status, 'hit');
-    })));
+      const owner = yield* PersistentCache.owner(genericPrivateDirectorySync(root));
+      yield* owner.open;
+      const query = () => Effect.gen(function*() {
+        const snapshot = yield* owner.snapshot, derived = CacheDerivations.make();
+        const reply = yield* Effect.promise(() => Effect.runPromise(Effect.scoped(executeQuery(root, { name: 'test.list', input: {} }).pipe(Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideContext(context)))));
+        yield* owner.mergeDerived(derived.batches());
+        return reply;
+      });
+      yield* query(); const second = yield* query();
+      assert.equal(Schema.decodeUnknownSync(status)(second).value.cache.status, 'hit', JSON.stringify(second));
+    })).pipe(Effect.provide(PersistentCache.layer)));
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
 

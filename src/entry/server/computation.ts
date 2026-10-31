@@ -3,14 +3,20 @@
 import { Effect, Schema, Stream } from 'effect';
 import { Rpc, RpcGroup } from 'effect/unstable/rpc';
 import { Query, QueryRequest } from '../../app/index.js';
+import { CacheSnapshotUnavailable, CacheDerivationBatch } from '../../model/index.js';
 import { Packet, strict, WorkspaceServerError, RESULT_LIMIT } from './protocol.js';
 
 const Row = strict(Schema.Struct({ key: Schema.String, payload: Schema.String }));
 export const Snapshot = strict(Schema.Struct({
+  unavailable: Schema.optional(CacheSnapshotUnavailable),
+  annotation_cache: Schema.optional(Schema.Array(Row)),
+  code_cache: Schema.optional(Schema.Array(Row)),
+  config_cache: Schema.optional(Schema.Array(Row)),
   feedback_cache: Schema.optional(Schema.Array(Row)),
   query_cache: Schema.optional(Schema.Array(Row)),
   workspace_projection: Schema.optional(Schema.Array(Row)),
 }));
+export const ComputationReply = strict(Schema.Struct({ value: Schema.Json, derived: Schema.Array(CacheDerivationBatch) }));
 export const Computation = Schema.Union([
   strict(Schema.Struct({ kind: Schema.Literal('scan') })),
   strict(Schema.Struct({ kind: Schema.Literal('query-scan'), query: Query })),

@@ -1,11 +1,13 @@
 import { Installation } from '../../base/installation/index.js';
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Effect, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { Publication } from "../../base/publication/index.js";
 import { PublicationValidationLive } from "../../app/index.js";
 import { Workspace } from '../../base/workspace/index.js';
 import { Sources, type SourceWatch } from '../../base/sources/index.js';
-import { Cache, CacheSnapshot, PersistentCache } from '../../base/cache/index.js';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../base/cache/index.js';
+import type { ReadonlyCacheSnapshot } from '../../base/cache/index.js';
+import type { CacheDerivationBatch } from '../../model/index.js';
 import type { ChildProcessSpawner } from 'effect/unstable/process';
 import { NodeSocketServer } from '@effect/platform-node';
 import { Clock, Deferred, Exit, Fiber, Queue, Schema, Scope, Semaphore, Stream, SubscriptionRef } from 'effect';
@@ -18,9 +20,9 @@ import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { Queries, QueryReply, executeQuery, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
-import { ConcordError, failure, WorkspaceProjectionSchema } from '../../model/index.js';
+import { CacheSnapshotUnavailable, ConcordError, failure, WorkspaceProjectionSchema } from '../../model/index.js';
 import { builtAssetRoot } from '../../app/index.js';
-import { Computation, ComputeRpcs, collectPackets, collectBytes } from './computation.js';
+import { Computation, ComputationReply, ComputeRpcs, collectPackets, collectBytes } from './computation.js';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission } from './protocol.js';
 import { makeAdmittedProtocol } from './admission.js';
 import { getWorkspaceRead } from '../../app/index.js';
@@ -78,7 +80,7 @@ const makeOperationOwner = Effect.fn('makeOperationOwner')(function*(root: strin
     yield* ensureClean;
     const owner = makeOwnedProcessService(); owners.add(owner);
     return yield* Effect.scoped(Effect.gen(function*() {
-    const rows = yield* snapshot.pipe(Effect.catch(() => Effect.succeed({})));
+    const rows = yield* snapshot;
     const result = yield* owner.run([process.execPath, ...installation.worker('operation-worker')], { cwd: installation.cwd, stdin: JSON.stringify({ root, snapshot: rows, ...input }), outputLimitBytes: 32 * FRAME_LIMIT });
     if (!OwnedProcess.confirmed(result)) { unconfirmed = true; return yield* ensureClean; }
     if (result.exitCode !== 0 || result.cancelled || result.outputLimitExceeded) return yield* Effect.fail(new ConcordError('OperationResultUnknown', 'Operation process ended without a confirmed receipt; inspect recovery state', { stderr: result.stderr.slice(-4096) }));
@@ -139,8 +141,9 @@ export const runComputeMain = (root: string | undefined): void => {
       const operation = yield* Schema.decodeUnknownEffect(Computation, { onExcessProperty: 'error' })(request.operation);
       if (request.snapshotId !== snapshotId) return yield* Effect.fail(new ConcordError('WorkspaceServerProtocol', 'Snapshot is incomplete'));
       if (root === undefined) return yield* Effect.fail(new ConcordError('InvalidInput', 'Missing compute root'));
-      const value = yield* compute(root, operation).pipe(Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context));
-      return operation.kind === 'read-bytes' ? packets(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT) : jsonPackets(value);
+      const derived = CacheDerivations.make();
+      const value = yield* compute(root, operation).pipe(Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context));
+      return operation.kind === 'read-bytes' ? packets(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT) : jsonPackets({ value, derived: derived.batches() });
     }).pipe(Effect.mapError(asServerError))),
   });
   const protocol = RpcServer.layerProtocolStdio.pipe(Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })), Layer.provide(NodeServices.layer));
@@ -149,10 +152,10 @@ export const runComputeMain = (root: string | undefined): void => {
   NodeRuntime.runMain(program);
 };
 
-export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string) {
+export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(root: string, acceptDerived: (rows: readonly CacheDerivationBatch[]) => Effect.Effect<void, unknown> = () => Effect.void) {
   const installation = yield* Installation;
   const mutex = yield* Semaphore.make(1);
-  let active: { scope: Scope.Closeable; client: RpcClient.RpcClient<import('effect/unstable/rpc/RpcGroup').Rpcs<typeof ComputeRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>; owner: ReturnType<typeof makeOwnedProcessService> } | undefined;
+  let active: { scope: Scope.Closeable; client: RpcClient.RpcClient<import('effect/unstable/rpc/RpcGroup').Rpcs<typeof ComputeRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>; owner: ReturnType<typeof makeOwnedProcessService>; snapshot?: { readonly text: string; readonly id: string } } | undefined;
   let starting: { scope: Scope.Closeable; owner: ReturnType<typeof makeOwnedProcessService> } | undefined;
   const close = Effect.gen(function*() {
     const worker = active ?? starting; active = undefined; starting = undefined;
@@ -190,13 +193,20 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
   yield* Effect.addFinalizer(() => close.pipe(Effect.orDie));
   return { close, run: (operation: Computation, snapshot: Parameters<typeof CacheSnapshot.layer>[0] = {}) => mutex.withPermit(Effect.gen(function*() {
     const worker = active ?? (yield* start);
-    const id = crypto.randomUUID(), bytes = new TextEncoder().encode(JSON.stringify(snapshot ?? {}));
+    const text = JSON.stringify(snapshot ?? {}), id = worker.snapshot?.text === text ? worker.snapshot.id : crypto.randomUUID();
+    const bytes = new TextEncoder().encode(text);
     if (bytes.byteLength > 32 * FRAME_LIMIT) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Cache snapshot exceeds 32 MiB'));
     const chunkSize = FRAME_LIMIT - 4096;
     return yield* Effect.gen(function*() {
-      for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) yield* worker.client.snapshot({ id, data: bytes.subarray(offset, offset + chunkSize), last: offset + chunkSize >= bytes.byteLength });
+      if (worker.snapshot?.id !== id) {
+        for (let offset = 0; offset < bytes.byteLength; offset += chunkSize) yield* worker.client.snapshot({ id, data: bytes.subarray(offset, offset + chunkSize), last: offset + chunkSize >= bytes.byteLength });
+        worker.snapshot = { text, id };
+      }
       const stream = worker.client.execute({ operation: JSON.parse(JSON.stringify(operation)), snapshotId: id });
-      return yield* operation.kind === 'read-bytes' ? collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes))) : collectPackets(stream);
+      if (operation.kind === 'read-bytes') return yield* collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes)));
+      const reply = yield* collectPackets(stream).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(ComputationReply, { onExcessProperty: 'error' })(value)));
+      if (reply.derived.length > 0) yield* acceptDerived(reply.derived);
+      return reply.value;
     });
   }).pipe(Effect.timeout('60 seconds'), Effect.onError(() => close.pipe(Effect.orDie)))) };
 });
@@ -212,14 +222,22 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const socketServer = yield* NodeSocketServer.make({ path: runtime.socketPath });
     yield* runtime.publish('opening');
     const cache = yield* PersistentCache.owner(privateDir);
+    const cacheSnapshot = cache.snapshot.pipe(Effect.catch(cause => {
+      const error = workspaceServerFailure(cause);
+      const code = Schema.decodeUnknownExit(CacheSnapshotUnavailable.fields.code)(error.code);
+      return Effect.succeed<ReadonlyCacheSnapshot>({ unavailable: { code: code._tag === 'Success' ? code.value : 'HawdbUnavailable', message: error.message } });
+    }));
     const protocolReady = yield* Deferred.make<void>();
-    const operations = yield* makeOperationOwner(root, cache.snapshot);
-    const computation = yield* makeComputationOwner(root);
+    const operations = yield* makeOperationOwner(root, cacheSnapshot);
     const owned = <A, E, R>(operation: Effect.Effect<A, E, R | PersistentCache>) => operation.pipe(Effect.provideService(PersistentCache, cache.service));
     const context = workspaceProjectionContext(root).pipe(Effect.provideService(Workspace, workspace));
     const sources = yield* Sources;
     let watch: SourceWatch | undefined;
     const stateContext = yield* Layer.build(WorkspaceState.layer(runtime.token));
+    const computation = yield* makeComputationOwner(root, rows => cache.mergeDerived(rows).pipe(Effect.catch(cause => {
+      const error = workspaceServerFailure(cause);
+      return Context.get(stateContext, WorkspaceState).transition('degraded', { code: error.code, message: error.message });
+    })));
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
       health: cache.verify,
@@ -227,7 +245,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources)),
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),
       persist: (ctx, candidate, error) => owned(storeWorkspaceProjection(ctx, candidate, error)),
-      compute: operation => cache.snapshot.pipe(Effect.catch(() => Effect.succeed({})), Effect.flatMap(snapshot => computation.run(operation, snapshot))),
+      compute: operation => cacheSnapshot.pipe(Effect.flatMap(snapshot => computation.run(operation, snapshot))),
       open: Deferred.await(protocolReady).pipe(Effect.andThen(cache.open)),
       close: computation.close.pipe(Effect.andThen(cache.close)),
       clear: clearWorkspaceCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive)))),
