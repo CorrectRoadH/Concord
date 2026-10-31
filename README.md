@@ -10,48 +10,92 @@ Everything is a plain file in your Git worktree, and people and agents edit all 
 
 ## The problem Concord solves
 
-In most projects, *what* to build, *how* it was built, and *why* it was built that way live in different places. Requirements sit in chat threads and PR descriptions. Design tradeoffs live in someone's memory. A test claims to protect a feature, but nobody can tell which behavior it actually guards.
+Concord starts from two problems.
 
-Coding agents make this worse because every session starts from zero. An agent may re-decide settled semantics, use different words for the same thing, or declare a bug fixed without evidence. Reviewing thousands of generated lines is also harder than reviewing the few sentences of intent behind them.
+**Specs that nobody can read.** A spec written as a long list of constraints, fields, and edge cases leaves readers unable to say what the feature does or what to run first. A spec nobody understands is not really reviewed, so nobody maintains it.
+
+Concord asks for features written the way you would teach someone to use them: what you can do, then an example you can follow as written. Use Cases read like tutorials, and processes that prose cannot make clear get a p5 animation.
+
+**AI that uses words loosely.** An agent may rename the same thing in every session or switch between spellings, and readers are left guessing whether two words mean the same thing. In Concord each concept has one name and one definition in `concepts.md`, and `check` reports an old name wherever it appears.
+
+Around these two problems sit the other complexities of building software with coding agents. Requirements live in chat threads and PR descriptions, and design tradeoffs live in someone's memory. Every agent session starts from zero and may re-decide settled semantics. A test claims to protect a feature, but nobody can tell which behavior it guards.
+
+Bugs are declared fixed without evidence. Reviewing thousands of generated lines is also harder than reviewing the few sentences of intent behind them.
 
 Concord moves review to the spec. The spec is Markdown in the repository. Code and tests point to it through source annotations, and the tool derives the reverse links from source. A reviewer reads how the spec changed, and `concord check` verifies that implementation, tests, and records still match it.
 
-## How a repository is organized
+## How Concord handles development complexity
 
-Documents are grouped by the question they answer. Location and the single top-level heading give each document its identity, kind, and name. Frontmatter holds only facts that cannot be derived, such as an Issue's status.
-
-| Group | Documents | Answers |
+| Complexity | What Concord does | What you get |
 | --- | --- | --- |
-| Spec | Features under `docs/feature/`; the repository's own maintenance mechanisms under `docs/engineering/` | What the system must do now |
-| Proposals | Roadmap under `docs/roadmap/`, written like a Feature | Directions not yet adopted |
-| Project rules | Constitution, glossary (`concepts.md`), writing policy (`concord-writing.json`) | What every Feature follows |
-| Decision records | Design and Research under `docs/design/` and `docs/research/` | Why it was designed this way |
-| Work items | Issues under `docs/issues/` | What is wrong or still to do |
-| Knowledge | Memory under `memory/` | What was learned |
+| Specs are unreadable, so review is a formality | Feature pages come in three kinds. The README and CLI page are the product guide, written as a tutorial; the architecture page is the technical design; Use Cases are user journeys, one per situation in which the feature behaves differently, with real output | A first-time reader can say what the feature does and how to start, and a reviewer can see how the intent changed |
+| Processes and timing are hard to explain in prose | A `p5` fence in Markdown plays as a looping animation in the web workspace; Mermaid covers static structure | One loop of an animation shows a multi-party flow or a state change; the prose stays the rule and the sketch only illustrates it |
+| People and agents use different words for one thing | `concepts.md` gives each concept one name and a definition, scoped by directory; `check` reports deprecated names | Readers do not guess whether two words mean the same thing, and an agent reading literally finds only one meaning |
+| Vague words and ever-longer sentences | `concord-writing.json` bans words such as `helper` or `resolve` that hide responsibility and limits sentence and paragraph length; each rule gives a replacement and a reason | Implementers do not have to guess what the author meant |
+| Every agent session starts from zero and re-decides settled questions | Cross-feature rules live in the constitution, tradeoffs in Design records, and findings in Memory, all in the repository | A new session reads the current rules and their reasons instead of overturning them |
+| Nobody knows which behavior a test guards | Tests point to a Use Case or one of its steps through an annotation; code points to the spec through a declaration; reverse links are derived from source | From a spec you can find the tests and code behind it, and the links appear in the same diff as the code |
+| Refactors churn the spec and the tests | Behavior pages (README, Use Case, CLI, library) are separate from the architecture page | A behavior-preserving refactor changes only the architecture page, so behavior pages and the tests pointing at them stay stable |
+| Bugs are declared fixed without evidence | A defect becomes an Issue; the regression test fails on the defect commit and passes on the fix, and `issue close --fixed` verifies both and records the result | Anyone can replay the fix verification |
+| Direct edits bypass the process | CI runs `concord check --since <base>` on every change, checking status transitions, fix verifications, constitution amendments, and Design decisions | People and agents edit files directly, and the gate decides whether a change is legal |
+| Development logs leak into the spec | Process goes to Memory and open questions go to Issues; `docs/` keeps only current declarations | The spec always describes what the system must do now |
+| Ideas are not settled, or settled but not scheduled | Roadmap keeps a direction in Feature form until `roadmap adopt` moves it into `docs/feature/`; Research keeps dated external facts with sources | Unsettled directions are never mistaken for current requirements |
 
-A Feature consists of up to four kinds of pages. The README describes the capability, and Use Cases describe user paths with acceptance criteria. `architecture.md` describes the implementation, and `cli.md` or `library.md` shows concrete calls and outputs. See the [document model](docs/document-model.md) for locations and fields.
+## Every file in a Concord repository
 
-## Why each concept exists
+A file's location and its single top-level heading give it identity, kind, and name. Frontmatter holds only facts that cannot be derived, such as an Issue's status. See the [document model](docs/document-model.md) for exact fields.
 
-| Concept | Problem it solves |
-| --- | --- |
-| Feature and Use Case | Record the behavior the product must have as a durable spec, written before implementation. A Use Case describes one user path with its main flow and acceptance criteria, which gives code and tests a target more specific than "the whole feature". |
-| Behavior pages and architecture pages | README, Use Case, and example pages state what users observe; the architecture page states how it is built. A refactor that keeps behavior changes only the architecture page, so behavior pages and the tests that point at them stay stable. |
-| Design | When several approaches are viable, compare candidates against shared goals and limits, then record one choice and its reason. The adopted rules move into the Spec, and the Spec links the decision as its rationale. |
-| Roadmap and Research | Roadmap holds directions that are not yet adopted, written in the same form as a Feature; adoption moves it into `docs/feature/`. Research holds dated external facts with sources as decision input. |
-| Glossary | Each concept has one preferred name, and `check` reports deprecated names. Directories scope definitions, so the same word can mean different things in different features. Agents read text literally, so a spec stays unambiguous only when its terms do. |
-| Writing policy | Ban words that hide responsibility, such as `helper` or `resolve`, limit sentence and paragraph length, and give a replacement and a reason for each rule. Clear specs leave less for the implementation to guess. |
-| Source annotations | Code and tests declare in source which spec they relate to, so the relationship appears in the same diff as the code. Reverse lists are derived, with no separate registry to drift. |
-| Issue and fix verification | Defects, requests, and observations are Issues. A fix is proven at the commit level: the regression test fails on the commit that added it and passes on the fix, and the result is written into the Issue where anyone can replay it. |
-| Memory | Reusable knowledge and decisions that need no Design. `docs/` therefore holds only current declarations, not development logs. |
-| Project constitution | Records long-lived rules that span features. Pages cite the clauses they rely on, and each amendment is recorded as a decision in Memory. |
-| Change gate | `concord check --since <base>` checks what a change did: status transitions, fix verifications, constitution amendments, and Design decisions. Direct edits stay trustworthy because CI runs it on every change. |
+**Spec: what the system must do now**
+
+| File | What it is | Who reads it, and when |
+| --- | --- | --- |
+| `docs/feature/<f>/README.md` | Entry point of the product guide, written as a tutorial: who uses it, what they can do, a getting-started example, how it works (with a diagram), and links to its Use Cases | Anyone meeting the feature for the first time |
+| `docs/feature/<f>/use-case/<u>.md` | One user journey in one situation: starting state, numbered steps with `{#step-id}`, commands and output, and the result; a feature that behaves differently in several situations has several Use Cases | Before implementing or writing tests; test annotations point here |
+| `docs/feature/<f>/cli.md`, `library.md` | Exact calls, human output, `--json` fields, exit codes, and named errors | Agents and scripts integrating with the feature; these fields are a public contract |
+| `docs/feature/<f>/architecture.md` | Technical design: ownership, data flow, invariants, failure stages, and resource lifecycles | When changing the implementation; a behavior-preserving refactor changes only this page |
+| Other pages in `docs/feature/<f>/` | Supporting pages, such as performance budgets or file formats | Reached from the README when the detail is needed |
+| `docs/engineering/<t>/` | How the repository itself is built, tested, and released, in Feature form | Maintainers of the repository |
+| `docs/architecture.md` | System boundaries and modules across features | When a change spans several features |
+
+**Project rules: what every spec follows**
+
+| File | What it is | Who reads it, and when |
+| --- | --- | --- |
+| `docs/constitution.md` | Long-lived cross-feature rules with stable clause IDs; sentences that rely on a rule link its ID | Before planning, implementing, or reviewing any feature |
+| `docs/concepts.md`, `docs/**/concepts.md` | Glossary: each second-level heading is one concept, the heading is its only spelling, and the first paragraph is its definition; frontmatter lists deprecated names | Before writing a domain term; the directory sets the scope |
+| `docs/concord-writing.json`, `docs/**/concord-writing.json` | Writing policy: banned words with replacements and reasons, sentence and paragraph limits | Enforced by `check`; writers read the reason when reported |
+
+**Proposals and decision records: why it was designed this way**
+
+| File | What it is | Who reads it, and when |
+| --- | --- | --- |
+| `docs/roadmap/<r>/` | A direction not yet adopted, written like a Feature; code and tests do not point at it | When discussing what to build next; `roadmap adopt` moves it into `docs/feature/` |
+| `docs/design/<d>/` | One comparison of approaches: README states the question, GOALS and LIMITS the targets and constraints, CASES the scenarios, `plans/<candidate>/` each complete candidate, DECISION the choice and reason | Only when revisiting that decision; current rules live in the spec |
+| `docs/research/<r>/` | External facts with observation dates and sources | When a decision needs outside evidence |
+
+**Work items and knowledge: what is wrong and what was learned**
+
+| File | What it is | Who reads it, and when |
+| --- | --- | --- |
+| `docs/issues/<i>.md` | A defect, request, or observation; frontmatter holds status and relations, and a fixed closure records its verification | When picking up a problem; `issue close` writes the closure |
+| `memory/<m>.md` | Reusable knowledge as a decision, insight, or note; each constitution amendment has a decision | Before related work, found with `concord memory recall` |
+
+**Setup, source, and derived data**
+
+| File | What it is | Who reads it, and when |
+| --- | --- | --- |
+| The Concord block in `AGENTS.md` | Tells agents to read the Concord guidance and run the check before delivery | Agents, every time they enter the repository |
+| `concord.config.ts` | Optional configuration: source roots, test roots, test runner, p5 libraries | Only when the defaults do not fit |
+| `docs/_template/` | Complete reference templates installed by `concord init` | When unsure how to write a kind of page |
+| Annotations in source and tests | `// @use-case <path>` at the top of a test, `// @concord-implements <path>` next to code | Read by `check` and `trace` to derive reverse links |
+| `concord/` in the Git private directory | Per-worktree cache, write recovery records, and leases | Not for reading; `concord cache clear` removes the cache without changing results, while recovery records are handled by `concord recover` and must not be deleted by hand |
 
 ## What you can do
 
 - **Define the work.** Write Features and Use Cases, compare design alternatives, and record an explicit decision before implementation.
 - **Find the implementation.** Follow a spec to its annotated files, functions, code regions, and tests. Reverse links are derived from source.
 - **Prove fixes.** Record a defect as an Issue, commit a failing regression test, commit the fix, and close the Issue with a verified, replayable result.
+- **Explain mechanisms with diagrams.** Write a `p5` fence in a spec and the web workspace plays it as a loop, showing multi-party flows and state changes.
+- **Keep one word per concept.** Define concepts in `concepts.md` and banned words in `concord-writing.json`; `check` reports old names and vague words with their replacements.
 - **Review in context.** Inspect specs, source, tests, Issues, feedback, and Git changes in the web workspace, or generate local review material from the CLI.
 
 Concord adopts a spec-first workflow while leaving your language, package manager, and test runner to your project. An annotation declares a relationship, and a test run reports one execution. Neither is a claim of complete test coverage.
