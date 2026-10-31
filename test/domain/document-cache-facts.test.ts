@@ -1,10 +1,11 @@
+import { writeConceptFile, writeWritingFile } from '../support/writing-files.js';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { setWriting } from '../../src/domain/writing/index.js';
-import { setConcepts } from '../../src/domain/concepts/index.js';
+import {} from '../../src/domain/writing/index.js';
+import {} from '../../src/domain/concepts/index.js';
 import { digest } from '../../src/model/index.js';
 import { checkProject, knowledgeIndex } from '../../src/app/index.js';
 import { checkWriting } from '../../src/domain/writing/index.js';
@@ -50,10 +51,10 @@ test('volatile document projections preserve current CLI facts across edits, pat
     writeProjectConfig(root, { ...readProjectConfig(root), testRoots: ['acceptance'] });
     parity(root);
     const repo = new LocalRepository(root);
-    try { setConcepts(repo, '# Concepts\n\n## Fact {#fact}\n\nA current source statement.\n', digest(readFileSync(join(root, 'docs/concepts.md'), 'utf8'))); } finally { repo.close(); }
+    try { writeConceptFile(repo, '# Concepts\n\n## Fact {#fact}\n\nA current source statement.\n', digest(readFileSync(join(root, 'docs/concepts.md'), 'utf8'))); } finally { repo.close(); }
     parity(root);
     const writer = new LocalRepository(root);
-    try { setWriting(writer, { format: 'concord.writing/v3', roots: ['docs'], bannedTerms: [{ term: 'undesirable', use: 'clear', why: 'Use a concrete term' }] }, digest(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'))); } finally { writer.close(); }
+    try { writeWritingFile(writer, { roots: ['docs'], bannedTerms: [{ term: 'undesirable', use: 'clear', why: 'Use a concrete term' }] }, digest(readFileSync(join(root, 'docs/concord-writing.json'), 'utf8'))); } finally { writer.close(); }
     parity(root);
     assert.match(JSON.stringify(cli(root, false)), /undesirable/u);
     const database = openHawdb(join(root, '.git/concord/cache.hawdb'), { readOnly: true, create: false });

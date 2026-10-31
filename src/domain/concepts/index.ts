@@ -6,7 +6,6 @@ export type { ConceptDiagnostic } from './concepts.js';
 export { effectiveConcepts } from './concepts.js';
 export { indexConcepts } from './concepts.js';
 export { readConceptCatalog } from './concepts.js';
-export { setConcepts } from './concepts.js';
 export { showConcepts } from './concepts.js';
 export { spellingKey } from './concepts.js';
 export { spellingPositions } from './concepts.js';

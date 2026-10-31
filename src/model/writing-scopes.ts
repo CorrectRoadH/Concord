@@ -1,11 +1,11 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/policy.md#写作政策
-// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
+// @concord-implements docs/feature/documentation-quality/format.md#writingmd
+// @concord-implements docs/feature/documentation-quality/format.md#conceptsmd
 import { repositoryDirname as dirname } from "./repo-path.js";
 import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from "./shared.js";
 import { canonicalPath } from "./path-rules.js";
 
-export const policyName = 'concord-writing.json';
+export const policyName = 'writing.md';
 export const catalogName = 'concepts.md';
 export const globalPolicyPath = `docs/${policyName}`;
 export const globalCatalogPath = `docs/${catalogName}`;

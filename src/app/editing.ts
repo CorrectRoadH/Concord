@@ -168,9 +168,13 @@ export function setConfig(repo: LocalRepository, config: ProjectConfig, expected
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
-export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string, dryRun = false): MutationReceipt & { digest: string } {
+export function setMarkdown(repo: LocalRepository, path: string, body: string, expectedDigest: string | null, dryRun = false): MutationReceipt & { digest: string } {
   return inRepositorySnapshot(repo, () => {
   const page = inspectDocumentFile(repo, path);
+  if (page === undefined && expectedDigest === null) {
+    if (!/^docs\/(?:[^/]+\/)*(?:writing|concepts)\.md$/u.test(path) || path.split('/').some(part => ['_template', '.git', 'node_modules'].includes(part))) throw new ConcordError('InvalidWritingPath', path);
+    return { ...repo.publish('set-markdown', [{ path, before: null, after: body }], dryRun), digest: digest(body) };
+  }
   if (page === undefined) throw new ConcordError('FileNotFound', 'Markdown editing is limited to the Concord document and supporting-page inventory');
   if (page.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${path} changed; use its current digest`);
   const before = repo.read(path);

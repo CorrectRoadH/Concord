@@ -1,3 +1,4 @@
+import { writeConceptFile, writeWritingFile } from '../support/writing-files.js';
 import { initialize, createDocument, addPage } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -9,9 +10,9 @@ import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.js";
 
 import { EMPTY_CONCEPT_CATALOG } from "../../src/model/index.js";
-import { indexConcepts, readConceptCatalog, setConcepts, showConcepts } from "../../src/domain/concepts/index.js";
+import { indexConcepts, readConceptCatalog, showConcepts } from "../../src/domain/concepts/index.js";
 import { checkWriting } from "../../src/domain/writing/index.js";
-import { setWriting, showWriting } from "../../src/domain/writing/index.js";
+import { showWriting } from "../../src/domain/writing/index.js";
 import { checkProject } from "../../src/app/index.js";
 import { setAuthor } from "../../src/domain/documents/index.js";
 
@@ -38,8 +39,6 @@ const term = (id: string, spelling: string) => `# Terms\n\n## ${spelling} {#${id
 test('Markdown catalog structure is strict, preserves definition Markdown, and reports the failing line', () => Effect.runPromise(Effect.sync(() => {
   const source = '# Terms\n\nIntro.\n\n## Memory {#memory}\n\nA **durable** [finding](notes.md) with `code`.\n\n### Explanation\n\nExtra paragraphs.\n\n## Issue {#issue}\n\nAn observation.\n';
   const parsed = readConceptCatalog(source);
-  assert.deepEqual(parsed.imports, []);
-  assert.deepEqual(parsed.deprecated, {});
   assert.equal(parsed.title, 'Terms');
   assert.equal(readConceptCatalog('# **Project** `terms`\n').title, 'Project terms');
   assert.equal(readFileSync(new URL('../../templates/concepts.md', import.meta.url), 'utf8'), EMPTY_CONCEPT_CATALOG);
@@ -66,9 +65,9 @@ test('only a term in effective prose counts as usage; catalogs still obey writin
   const root = fixture();
   try {
     withRepo(root, repo => {
-      setWriting(repo, { format: 'concord.writing/v3', roots: ['docs/feature/sample'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'fixture' }], unusedConcepts: true }, showWriting(repo).digest);
+      writeWritingFile(repo, { roots: ['docs/feature/sample'], bannedTerms: [{ term: 'Forbidden', use: 'Allowed', why: 'fixture' }], }, showWriting(repo).digest);
       const source = '---\ndeprecated:\n  issue: [观察]\n---\n\n# Terms\n\n## Issue {#issue}\n\nAn issue.\n\n### Explanation\n\n`观察` is old. Forbidden.\n';
-      setConcepts(repo, source, null, false, 'docs/feature/sample/concepts.md');
+      writeConceptFile(repo, source, null, false, 'docs/feature/sample/concepts.md');
     });
     write(root, 'docs/feature/sample/page.md', '观察。\n');
     const old = withRepo(root, repo => checkWriting(repo, undefined, false));
@@ -90,8 +89,8 @@ test('catalog-looking Markdown outside discovery remains ordinary prose for usag
   const root = fixture();
   try {
     withRepo(root, repo => {
-      setWriting(repo, { format: 'concord.writing/v3', roots: ['docs', 'guide'], bannedTerms: [], unusedConcepts: true }, showWriting(repo).digest);
-      setConcepts(repo, term('glossary-word', 'GlossaryWord'), showConcepts(repo).digest);
+      writeWritingFile(repo, { roots: ['docs', 'guide'], bannedTerms: [], }, showWriting(repo).digest);
+      writeConceptFile(repo, term('glossary-word', 'GlossaryWord'), showConcepts(repo).digest);
     });
     write(root, 'guide/concepts.md', 'GlossaryWord.\n');
     write(root, 'docs/_template/local/concepts.md', 'Other prose.\n');
@@ -104,34 +103,6 @@ test('catalog-looking Markdown outside discovery remains ordinary prose for usag
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 // C5, C6, C9, C10, C14
-test('Markdown publication preserves exact bytes and CAS, guards imports, and isolates sibling names', () => Effect.runPromise(Effect.sync(() => {
-  const root = fixture(), a = 'docs/feature/a/concepts.md', b = 'docs/feature/b/concepts.md';
-  try {
-    const source = '# Terms\r\n\r\n<!-- Author spacing -->\r\n\r\n## Job {#job}\r\n\r\nDefinition.\r\n\r\n';
-    const saved = withRepo(root, repo => setConcepts(repo, source, null, false, a));
-    assert.equal(saved.source, source);
-    assert.equal(readFileSync(join(root, a), 'utf8'), source);
-    assert.throws(() => withRepo(root, repo => setConcepts(repo, term('job', 'Work'), null, false, a)), { code: 'FileChangedSinceRead' });
-    const next = withRepo(root, repo => setConcepts(repo, source + '\r\n', saved.digest, false, a));
-    assert.throws(() => withRepo(root, repo => setConcepts(repo, source, saved.digest, false, a)), { code: 'FileChangedSinceRead' });
-    withRepo(root, repo => setConcepts(repo, term('other-job', 'Job'), null, false, b));
-    assert.equal(withRepo(root, indexConcepts).diagnostics.length, 0);
-    const before = withRepo(root, repo => showConcepts(repo, b));
-    withRepo(root, repo => setConcepts(repo, `---\nimports: [${a}#job]\n---\n\n${term('other-job', 'Job')}`, before.digest, false, b));
-    const ambiguous = withRepo(root, indexConcepts).diagnostics.find(item => item.code === 'AmbiguousConceptName');
-    assert.deepEqual([...(ambiguous?.sources ?? [])].sort(), [`${a}#job`, `${b}#other-job`]);
-    assert.throws(() => withRepo(root, repo => setConcepts(repo, EMPTY_CONCEPT_CATALOG, next.digest, false, a)), error => error instanceof Error && 'code' in error && error.code === 'ConceptInUse' && error.message.includes(b));
-    const importer = withRepo(root, repo => showConcepts(repo, b));
-    withRepo(root, repo => setConcepts(repo, term('other-job', 'Job'), importer.digest, false, b));
-    write(root, 'docs/feature/a/page.md', '[Job](concepts.md#job).\n');
-    withRepo(root, repo => setConcepts(repo, EMPTY_CONCEPT_CATALOG, next.digest, false, a));
-    const broken = withRepo(root, repo => checkProject(repo, 'off')).findings.find(item => item.code === 'AnchorNotFound');
-    assert.equal(broken?.category, 'relation');
-    assert.equal(broken?.path, 'docs/feature/a/page.md');
-    assert.equal(broken?.line, 1);
-    assert.throws(() => withRepo(root, repo => setConcepts(repo, '---\nimports: [docs/concepts.md#missing]\n---\n\n# Terms\n', null, false, 'docs/feature/c/concepts.md')), { code: 'DanglingConceptImport' });
-  } finally { rmSync(root, { recursive: true, force: true }); }
-})));
 
 // @use-case docs/feature/documentation-quality/use-case/inspect-writing.md
 // C3
@@ -139,7 +110,7 @@ test('terminology links reuse inline-link filtering and percent decoding', () =>
   const root = fixture();
   try {
     const target = 'docs/feature/语言/concepts.md';
-    withRepo(root, repo => setConcepts(repo, term('memory', 'Memory'), null, false, target));
+    withRepo(root, repo => writeConceptFile(repo, term('memory', 'Memory'), null, false, target));
     write(root, 'docs/links.md', '[Memory](feature/%E8%AF%AD%E8%A8%80/concepts.md#%6demory) [page](feature/语言/concepts.md)\n\n![image](feature/语言/concepts.md#missing)\n\n[ref][reference]\n\n[reference]: feature/语言/concepts.md#missing\n\n`[code](feature/语言/concepts.md#missing)`\n\n<a href="feature/语言/concepts.md#missing">html</a>\n');
     assert.equal(withRepo(root, repo => checkProject(repo, 'off')).findings.filter(item => item.category === 'relation').length, 0);
     write(root, 'docs/links.md', '\n[Memory](feature/语言/concepts.md#memo)\n');

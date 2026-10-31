@@ -1,3 +1,4 @@
+import { writeConceptFile } from '../support/writing-files.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -10,7 +11,7 @@ import { initialize } from '../support/operations.js';
 import { LocalRepository } from '../support/repository.js';
 import { tmpdir } from '../support/temporary.js';
 import { waitForWorkspaceProjection } from '../support/support.js';
-import { setConcepts, showConcepts } from '../../src/domain/concepts/index.js';
+import { showConcepts } from '../../src/domain/concepts/index.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-writing.md
 test('a late successful concepts index preserves the newer writing report', ({ page }) => Effect.runPromise(Effect.tryPromise(async () => {
@@ -23,9 +24,9 @@ test('a late successful concepts index preserves the newer writing report', ({ p
     const repo = new LocalRepository(root, { initialize: true });
     try {
       initialize(repo, false, { testRoots: [] });
-      setConcepts(repo, '# Terms\n\n## Initial {#initial}\n\nInitial definition\n', showConcepts(repo).digest);
+      writeConceptFile(repo, '# Terms\n\n## Initial {#initial}\n\nInitial definition\n', showConcepts(repo).digest);
       mkdirSync(join(root, scope), { recursive: true });
-      setConcepts(repo, '# Terms\n\n## Beta {#beta}\n\nBeta definition\n', null, false, `${scope}/concepts.md`);
+      writeConceptFile(repo, '# Terms\n\n## Beta {#beta}\n\nBeta definition\n', null, false, `${scope}/concepts.md`);
       writeFileSync(join(root, scope, 'sample.md'), '# Beta\n\nBeta.\n');
     } finally { repo.close(); }
     server = await startViewServer({ root, port: 0 });
@@ -41,7 +42,7 @@ test('a late successful concepts index preserves the newer writing report', ({ p
     try {
       const current = showConcepts(other);
       assert.equal(current.state, 'valid');
-      setConcepts(other, `${current.source}\n## External {#external}\n\nExternal definition\n`, current.digest);
+      writeConceptFile(other, `${current.source}\n## External {#external}\n\nExternal definition\n`, current.digest);
     } finally { other.close(); }
     let captured!: () => void;
     const capture = new Promise<void>(resolve => { captured = resolve; });

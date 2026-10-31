@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的聚合检查
+// @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的合并检查
 import { Effect, Result } from "effect";
 import { ConcordError, failure } from "../model/index.js";
 import { openReadRepository } from "../base/workspace/index.js";

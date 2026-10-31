@@ -38,11 +38,11 @@ Local issues require no external account or connection. Local changes never auth
 
 ## Scoped concepts and writing
 
-Use \`concord concepts index --json\` for a derived project glossary. The global catalog is docs/concepts.md; each Feature, Engineering, or other docs subdirectory may own its own concepts.md and concord-writing.json. The containing directory defines local scope.
+Use \`concord concepts index --json\` for a derived project glossary. The global catalog is docs/concepts.md; each Feature, Engineering, or other docs subdirectory may own its own concepts.md and writing.md. The containing directory defines local scope.
 
 Keep each stable ID, its single term, definition paragraph and explanation together in concepts.md. Use optional imports and deprecated YAML frontmatter. Only deprecated names generate terminology bans.
 
-Edit concepts.md and concord-writing.json directly. Concord check validates their structure, scope and references. Do not duplicate definitions in a global aggregate.
+Edit concepts.md and writing.md directly. Concord check validates their structure, scope and references. Do not duplicate definitions in a global aggregate.
 
 Writing v3 composes ancestor policy within scope. Check saved inputs with \`concord docs check --json\`. Policies must match the current Schema. Only explicitly deprecated names are banned.
 

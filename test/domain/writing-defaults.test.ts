@@ -47,7 +47,7 @@ test('init adopts a complete writing preset, checks it immediately, and preserve
           assert.equal(shown.policy?.paragraphLength, 320);
           assert.equal(Object.hasOwn(shown.policy!, 'svgTerms'), false);
           assert.equal(Object.hasOwn(shown.policy!, 'svgStyle'), false);
-          assert.equal(shown.policy?.unusedConcepts, true);
+          assert.equal('unusedConcepts' in shown.policy!, false);
           const report = checkWriting(repo);
           assert.ok(report.findings.some(finding => finding.file === 'docs/sample.md' && finding.rule === 'sentenceLength'));
           assert.ok(report.findings.some(finding => finding.file === 'docs/sample.md' && finding.context.includes('兜底')));

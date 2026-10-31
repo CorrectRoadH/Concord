@@ -73,7 +73,7 @@ const mutatingActions: ReadonlySet<ViewAction['action']> = new Set([
   'roadmap.start',
   'memory.link',
   'issue.unlink', 'issue.link', 'issue.edit', 'issue.remove', 'issue.close',
-  'feedback.sync', 'feedback.link', 'source.set', 'writing.set', 'concepts.set', 'config.set',
+  'feedback.sync', 'feedback.link', 'source.set', 'config.set',
 ]);
 
 export function WorkspaceProvider({ initial, api, children }: { initial: WorkspaceProjection; api: ConcordApi; children: ReactNode }) {

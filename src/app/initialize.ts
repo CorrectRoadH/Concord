@@ -44,8 +44,8 @@ export const initialize = Effect.fn('initialize')(function*(repo: Repository, dr
     if (repo.read(path) === undefined) paths[path] = name === 'concepts' ? EMPTY_CONCEPT_CATALOG : catalog.render(name, 'Project');
     else preservedPaths.push(path);
   }
-  if (repo.read('docs/concord-writing.json') === undefined) paths['docs/concord-writing.json'] = defaultWritingSource;
-  else preservedPaths.push('docs/concord-writing.json');
+  if (repo.read('docs/writing.md') === undefined) paths['docs/writing.md'] = defaultWritingSource;
+  else preservedPaths.push('docs/writing.md');
   const sections: Record<string, [string, string, string]> = {
     'docs/feature/README.md': ['Features', 'Adopted product contracts. Write the target behavior and link complete user paths.', 'new feature'],
     'docs/roadmap/README.md': ['Roadmap', 'Settled directions awaiting adoption as current Feature contracts.', 'new roadmap'],

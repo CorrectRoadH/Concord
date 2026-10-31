@@ -1,10 +1,10 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/policy.md#写作政策
+// @concord-implements docs/feature/documentation-quality/format.md#writingmd
+import { renderWritingPolicy } from './writing-format.js';
 import type { WritingPolicy } from "./writing-schema.js";
 
 // Curated from NiceEval docs/writing-rules.json; no consumer checkout dependency.
 export const defaultWritingPolicy: WritingPolicy = {
-  "format": "concord.writing/v3",
   "roots": [
     "docs"
   ],
@@ -335,7 +335,6 @@ export const defaultWritingPolicy: WritingPolicy = {
     }
   ],
   "sentenceLength": 140,
-  "paragraphLength": 320,
-  "unusedConcepts": true
+  "paragraphLength": 320
 };
-export const defaultWritingSource = `${JSON.stringify(defaultWritingPolicy, null, 2)}\n`;
+export const defaultWritingSource = renderWritingPolicy(defaultWritingPolicy);

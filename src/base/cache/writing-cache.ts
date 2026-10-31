@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/documentation-quality/policy.md#使用统计与输入快照
+// @concord-implements docs/feature/documentation-quality/format.md
 import { Schema } from "effect";
 import { repositoryCache } from "./cache-store.js";
 import { readCachePayloads, writeCachePayloads } from "./cache-query.js";

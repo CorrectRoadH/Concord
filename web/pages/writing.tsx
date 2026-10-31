@@ -7,7 +7,7 @@ import { useLocation } from 'react-router-dom';
 import { defaultWritingPolicy } from '../../src/model/index';
 import type { ViewAction } from '../../src/model/index';
 import { Schema } from 'effect';
-import { ControlledSchema } from '../../src/model/index';
+import { renderWritingPolicy, parseWritingPolicy } from '../../src/model/index';
 import type { BannedTerm, WritingPolicy } from '../../src/model/index';
 import { EMPTY_CONCEPT_CATALOG, parseConceptCatalog, type ConceptCatalog, type ConceptDefinition } from '../../src/model/index';
 import { fromMarkdown } from 'mdast-util-from-markdown';
@@ -24,12 +24,12 @@ type Concept = ConceptDefinition;
 type Catalog = ConceptCatalog;
 type Scope = { scope: string; policyPath: string; catalogPath: string; hasPolicy: boolean; hasCatalog: boolean };
 type Aggregate = { catalogs: readonly { path: string; scope: string; digest: string; catalog: Catalog }[]; concepts: readonly { reference: string; path: string; scope: string; concept: Concept }[]; diagnostics: readonly { code: string; message: string; sources: readonly string[]; scope?: string }[]; inputDigest: string };
-type Show<T> = { state: 'missing' | 'invalid' | 'valid'; path: string; scope: string; digest: string | null; source: string | null; diagnostic?: string; effectiveControlled?: Record<string, { value: unknown; source?: { path: string; pointer: string } }>; effectiveControlledDiagnostics?: readonly { path: string; message: string }[]; policy?: T | null; catalog?: T | null };
+type Show<T> = { state: 'missing' | 'invalid' | 'valid'; path: string; scope: string; digest: string | null; source: string | null; diagnostic?: string; policy?: T | null; catalog?: T | null };
 type Receipt<T> = { path: string; scope: string; digest: string; source: string; policy?: T; catalog?: T };
 type Report = WritingReport;
-const policyPath = (scope: string) => `${scope}/concord-writing.json`;
+const policyPath = (scope: string) => `${scope}/writing.md`;
 const catalogPath = (scope: string) => `${scope}/concepts.md`;
-const emptyPolicy = (): WritingPolicy => ({ format: 'concord.writing/v3', bannedTerms: [] });
+const emptyPolicy = (): WritingPolicy => ({ bannedTerms: [] });
 const emptyCatalog = () => EMPTY_CONCEPT_CATALOG;
 const sourceExtensions: readonly import('@codemirror/state').Extension[] = [];
 const lines = (text: string) => text.split(/\r?\n/u).map(value => value.trim()).filter(Boolean);
@@ -93,9 +93,11 @@ function useOwner<T>(kind: 'policy' | 'catalog', scope: string, api: ReturnType<
     setSaving(true); setError(''); changed();
     const pending = (async () => {
       try {
-        const result = await api.action(action(kind === 'policy'
-          ? { action: 'writing.set', path: requestedPath, policy: submitted, expectedDigest }
-          : { action: 'concepts.set', path: requestedPath, source: submitted, expectedDigest })) as Receipt<T>;
+        const source = kind === 'policy' ? renderWritingPolicy(submitted as WritingPolicy) : submitted as string;
+        if (kind === 'policy') parseWritingPolicy(source, requestedPath);
+        else parseConceptCatalog(source, fromMarkdown);
+        const receipt = await api.action(action({ action: 'document.set', path: requestedPath, body: source, expectedDigest })) as { digest: string };
+        const result: Receipt<T> = { path: requestedPath, scope, source, digest: receipt.digest, ...(kind === 'policy' ? { policy: submitted } : {}) };
         if (requestTicket.current !== ticket || currentPath.current !== requestedPath || result.path !== requestedPath) return;
         const committed = kind === 'policy' ? result.policy : result.source as T;
         if (!committed) throw new Error('保存响应缺少已提交 owner。');
@@ -146,10 +148,6 @@ export function WritingPage() {
   const aggregateTicket = useRef(crypto.randomUUID());
   const clearReport = () => { reportTicket.current = crypto.randomUUID(); setReport(null); setCheckError(''); setChecking(false); };
   const policy = useOwner<WritingPolicy>('policy', scope, api, clearReport);
-  const [controlledError, setControlledError] = useState('');
-  const [controlledText, setControlledText] = useState<string | null>(null);
-  const clearControlled = useCallback(() => { setControlledError(''); setControlledText(null); }, []);
-  useEffect(clearControlled, [scope, clearControlled]);
   const catalog = useOwner<string>('catalog', scope, api, clearReport);
   const structure = useMemo(() => {
     const headings = new Map<string, number>();
@@ -157,7 +155,7 @@ export function WritingPage() {
     try { return { catalog: parseConceptCatalog(catalog.draft, fromMarkdown, (id, line) => headings.set(id, line)), headings, error: '' }; }
     catch (cause) { return { catalog: null, headings, error: `InvalidConceptCatalog: ${errorText(cause)}` }; }
   }, [catalog.draft]);
-  const dirty = policy.dirty || catalog.dirty || !!controlledError;
+  const dirty = policy.dirty || catalog.dirty;
   const latest = useRef({ policy, catalog, dirty });
   latest.current = { policy, catalog, dirty };
   const loadIndex = useCallback(async () => {
@@ -203,7 +201,7 @@ export function WritingPage() {
       await Promise.allSettled([latest.current.policy.inFlight.current, latest.current.catalog.inFlight.current].filter((item): item is Promise<void> => item !== null));
       if (latest.current.dirty) throw new Error('写作规则或术语表尚未显式保存。');
     },
-    discard: async () => { latest.current.policy.discard(); latest.current.catalog.discard(); clearControlled(); reportTicket.current = crypto.randomUUID(); setReport(null); setCheckError(''); setChecking(false); },
+    discard: async () => { latest.current.policy.discard(); latest.current.catalog.discard(); reportTicket.current = crypto.randomUUID(); setReport(null); setCheckError(''); setChecking(false); },
   }), []);
   useLayoutEffect(() => registerAutoSave(draftOwner), [draftOwner, registerAutoSave]);
   useLayoutEffect(() => reportDirty(draftOwner), [dirty, draftOwner, reportDirty]);
@@ -245,7 +243,7 @@ export function WritingPage() {
     if (catalog.draft !== null) catalog.edit(next); else catalog.initialize(next);
   };
 
-  const reload = () => { if (latest.current.dirty) return; setReloadVersion(value => value + 1); clearControlled(); clearReport(); void policy.load(); void catalog.load(); void loadIndex(); void loadAggregate(); };
+  const reload = () => { if (latest.current.dirty) return; setReloadVersion(value => value + 1); clearReport(); void policy.load(); void catalog.load(); void loadIndex(); void loadAggregate(); };
   const policyField = <K extends keyof WritingPolicy>(key: K, value: WritingPolicy[K]) => { if (policy.draft) policy.edit({ ...policy.draft, [key]: value }); };
   const banField = (index: number, key: keyof BannedTerm, value: string | readonly string[] | undefined) => { if (policy.draft) policy.edit({ ...policy.draft, bannedTerms: policy.draft.bannedTerms.map((item, at) => at === index ? { ...item, [key]: value } : item) }); };
   const check = async () => {
@@ -297,20 +295,13 @@ export function WritingPage() {
       </section>
     </div>
     <div hidden={view === 'terms'}>
-    <section hidden={view !== 'lint'} aria-label="写作规则编辑" className="content-section"><div role="toolbar" aria-label="写作操作" className="button-row justify-end mb-3">{reloadButton}{policy.draft && <Button variant="outline" disabled={!policy.dirty || policy.saving || !!controlledError} onClick={() => void policy.save().then(() => { void loadIndex(); void loadAggregate(); })}>{policy.saving ? '正在保存…' : '保存规则'}</Button>}</div>
-      {scope !== 'docs' && <div aria-label="上级写作规则"><p>本范围沿用上级写作规则；需要调整时可添加本范围的规则。</p>{inheritanceError ? <p role="alert">{inheritanceError}</p> : <><p>上级规则来源：{ancestors.map(owner => owner.path).join('、') || '无'}。句子长度：{inheritedPolicy.sentenceLength ?? '不限制'}；段落长度：{inheritedPolicy.paragraphLength ?? '不限制'}；禁用表达：{ancestors.reduce((count, owner) => count + owner.policy.bannedTerms.length, 0)} 条。未使用术语：{inheritedPolicy.unusedConcepts ? '检查' : '不检查'}。</p></>}</div>}
+    <section hidden={view !== 'lint'} aria-label="写作规则编辑" className="content-section"><div role="toolbar" aria-label="写作操作" className="button-row justify-end mb-3">{reloadButton}{policy.draft && <Button variant="outline" disabled={!policy.dirty || policy.saving} onClick={() => void policy.save().then(() => { void loadIndex(); void loadAggregate(); })}>{policy.saving ? '正在保存…' : '保存规则'}</Button>}</div>
+      {scope !== 'docs' && <div aria-label="上级写作规则"><p>本范围沿用上级写作规则；需要调整时可添加本范围的规则。</p>{inheritanceError ? <p role="alert">{inheritanceError}</p> : <><p>上级规则来源：{ancestors.map(owner => owner.path).join('、') || '无'}。句子长度：{inheritedPolicy.sentenceLength ?? '不限制'}；段落长度：{inheritedPolicy.paragraphLength ?? '不限制'}；禁用表达：{ancestors.reduce((count, owner) => count + owner.policy.bannedTerms.length, 0)} 条。</p></>}</div>}
       {policy.loading && !policy.remote && <p role="status">正在载入写作规则…</p>}{policy.error && <p role="alert" className="form-error">{policy.error}</p>}
       {policy.remote?.state === 'missing' && !policy.open && <PanelEmpty title={scope === 'docs' ? '尚未采用写作规则' : '沿用上级规则，尚无本范围的调整'}><Button variant="outline" onClick={() => policy.initialize(scope === 'docs' ? structuredClone(defaultWritingPolicy) : emptyPolicy())}>添加规则</Button></PanelEmpty>}
       {policy.remote?.state === 'invalid' && <div><h3>写作规则格式错误</h3><p role="alert">{policy.remote.diagnostic}</p><p>原文摘要：<code>{policy.remote.digest}</code></p><pre>{policy.remote.source}</pre>{!policy.open && <Button variant="outline" onClick={() => policy.initialize(scope === 'docs' ? structuredClone(defaultWritingPolicy) : emptyPolicy())}>修复规则</Button>}</div>}
-      {policy.draft && policy.open && <><div className="writing-scan-roots"><p className="field__hint">扫描目录留空时检查当前范围。</p><label>扫描目录（每行一项）<Textarea aria-label="扫描目录" value={listed(policy.draft.roots)} onChange={event => { const values = lines(event.target.value); policyField('roots', values.length ? values as [string, ...string[]] : undefined); }} /></label></div>
-        <div className="writing-options"><label>句子长度<select aria-label="句子长度设置" value={policy.draft.sentenceLength === undefined ? 'inherit' : policy.draft.sentenceLength === null ? 'clear' : 'value'} onChange={event => policyField('sentenceLength', event.target.value === 'inherit' ? undefined : event.target.value === 'clear' ? null : 1)}><option value="inherit">沿用上级规则</option><option value="clear">不限制</option><option value="value">指定</option></select><Input aria-label="句子长度" type="number" min="1" disabled={typeof policy.draft.sentenceLength !== 'number'} value={typeof policy.draft.sentenceLength === 'number' ? policy.draft.sentenceLength : ''} onChange={event => policyField('sentenceLength', event.target.value ? Number(event.target.value) : undefined)} /></label><label>段落长度<select aria-label="段落长度设置" value={policy.draft.paragraphLength === undefined ? 'inherit' : policy.draft.paragraphLength === null ? 'clear' : 'value'} onChange={event => policyField('paragraphLength', event.target.value === 'inherit' ? undefined : event.target.value === 'clear' ? null : 1)}><option value="inherit">沿用上级规则</option><option value="clear">不限制</option><option value="value">指定</option></select><Input aria-label="段落长度" type="number" min="1" disabled={typeof policy.draft.paragraphLength !== 'number'} value={typeof policy.draft.paragraphLength === 'number' ? policy.draft.paragraphLength : ''} onChange={event => policyField('paragraphLength', event.target.value ? Number(event.target.value) : undefined)} /></label></div><div className="writing-check-options"><label>检查未使用术语<select aria-label="检查未使用术语" value={policy.draft.unusedConcepts === undefined ? 'inherit' : String(policy.draft.unusedConcepts)} onChange={event => policyField('unusedConcepts', event.target.value === 'inherit' ? undefined : event.target.value === 'true')}><option value="inherit">沿用上级规则</option><option value="true">检查</option><option value="false">不检查</option></select></label></div>
-        <section aria-label="受控写作规则"><PanelHeader title="受控写作规则" /><p>词法检查默认关闭。配置语言、句长、词表与豁免后保存，再检查已保存的文档。空白沿用上级；null 清除本目录的继承。</p><label>受控规则 JSON<Textarea aria-label="受控规则 JSON" rows={12} value={controlledText ?? (policy.draft.controlled === undefined ? '' : JSON.stringify(policy.draft.controlled, null, 2))} aria-invalid={!!controlledError} onChange={event => {
-          setControlledText(event.target.value); clearReport();
-          try {
-            const value = event.target.value.trim() ? Schema.decodeUnknownSync(Schema.NullOr(ControlledSchema), { onExcessProperty: 'error' })(JSON.parse(event.target.value)) : undefined;
-            policyField('controlled', value); setControlledError('');
-          } catch (cause) { setControlledError(errorText(cause)); }
-        }} /></label>{controlledError && <p role="alert">{controlledError}</p>}<RecordDetails title="已保存的有效受控规则与来源">{policy.remote?.effectiveControlledDiagnostics?.map(item => <p key={item.path} role="alert">{item.path}: {item.message}</p>)}{Object.entries(policy.remote?.effectiveControlled ?? {}).map(([key, leaf]) => <p key={key}><code>{key}</code>: {JSON.stringify(leaf.value)} — {leaf.source ? `${leaf.source.path}${leaf.source.pointer}` : '默认，无 owner'}</p>)}</RecordDetails></section>
+      {policy.draft && policy.open && <><div className="writing-scan-roots" hidden={scope !== 'docs'}><p className="field__hint">扫描目录留空时检查当前范围。</p><label>扫描目录（每行一项）<Textarea aria-label="扫描目录" value={listed(policy.draft.roots)} onChange={event => { const values = lines(event.target.value); policyField('roots', values.length ? values as [string, ...string[]] : undefined); }} /></label></div>
+        <div className="writing-options"><label>句子长度<Input aria-label="句子长度" type="number" min="1" value={policy.draft.sentenceLength ?? ''} placeholder={String(inheritedPolicy.sentenceLength ?? '不限制')} onChange={event => policyField('sentenceLength', event.target.value ? Number(event.target.value) : undefined)} /></label><label>段落长度<Input aria-label="段落长度" type="number" min="1" value={policy.draft.paragraphLength ?? ''} placeholder={String(inheritedPolicy.paragraphLength ?? '不限制')} onChange={event => policyField('paragraphLength', event.target.value ? Number(event.target.value) : undefined)} /></label></div>
         <PanelHeader title="禁用表达" actions={<Button variant="outline" onClick={() => policy.edit({ ...policy.draft!, bannedTerms: [...policy.draft!.bannedTerms, { term: '', use: '', why: '' }] })}>新增规则</Button>} /><Input aria-label="搜索禁用表达" value={banQuery} onChange={event => setBanQuery(event.target.value)} placeholder="搜索写法、替换建议或理由" />
         <RecordList className="writing-rules">{shownBans.map(({ ban, index }) => <RecordItem key={index} className="writing-rule"><fieldset className="writing-fields">
           <legend className="sr-only">规则 {index + 1}</legend>
@@ -320,10 +311,9 @@ export function WritingPage() {
             <label>理由<Textarea rows={1} aria-label={`理由 ${index + 1}`} value={ban.why} onChange={event => banField(index, 'why', event.target.value)} /></label>
             <Button className="writing-rule-delete" variant="ghost" size="icon" aria-label={`删除规则 ${index + 1}`} title={`删除规则 ${index + 1}`} onClick={() => policy.edit({ ...policy.draft!, bannedTerms: policy.draft!.bannedTerms.filter((_, at) => at !== index) })}><Trash2 size={16} /></Button>
           </div>
-          <details className="writing-rule-scope"><summary>范围与例外<span>{ban.roots?.length ? `${ban.roots.length} 个目录` : '当前范围'}{ban.exempt?.length ? ` · ${ban.exempt.length} 个豁免` : ''}{ban.allowIn?.length ? ` · ${ban.allowIn.length} 个允许长词` : ''}</span></summary>
+          <details className="writing-rule-scope"><summary>范围与例外<span>{ban.roots?.length ? `${ban.roots.length} 个目录` : '当前范围'}{ban.allowIn?.length ? ` · ${ban.allowIn.length} 个允许长词` : ''}</span></summary>
             <div className="writing-options">
               <label>适用范围（每行一项）<Textarea aria-label={`适用范围 ${index + 1}`} value={listed(ban.roots)} onChange={event => { const values = lines(event.target.value); banField(index, 'roots', values.length ? values : undefined); }} /></label>
-              <label>豁免路径（每行一项）<Textarea aria-label={`豁免路径 ${index + 1}`} value={listed(ban.exempt)} onChange={event => banField(index, 'exempt', lines(event.target.value))} /></label>
               <label>允许的长词（每行一项）<Textarea aria-label={`允许的长词 ${index + 1}`} value={listed(ban.allowIn)} onChange={event => banField(index, 'allowIn', lines(event.target.value))} /></label>
             </div>
           </details>

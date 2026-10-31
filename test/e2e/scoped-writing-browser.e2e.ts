@@ -1,3 +1,4 @@
+import { writeConceptFile, writeWritingFile } from '../support/writing-files.js';
 import { initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -10,8 +11,8 @@ import { LocalRepository } from "../support/repository.js";
 
 import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
-import { showWriting, setWriting } from "../../src/domain/writing/index.js";
-import { showConcepts, setConcepts } from "../../src/domain/concepts/index.js";
+import { showWriting, } from "../../src/domain/writing/index.js";
+import { showConcepts, } from "../../src/domain/concepts/index.js";
 import { waitForWorkspaceProjection } from '../support/support.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
@@ -28,11 +29,11 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
       initialize(repo, false, { testRoots: [] });
       mkdirSync(join(root, a), { recursive: true });
       mkdirSync(join(root, b), { recursive: true });
-      setWriting(repo, { format: 'concord.writing/v3', bannedTerms: [{ term: 'Old', use: 'Alpha', why: 'scope A' }] }, null, false, `${a}/concord-writing.json`);
-      setWriting(repo, { format: 'concord.writing/v3', bannedTerms: [{ term: 'Old', use: 'Beta', why: 'scope B' }] }, null, false, `${b}/concord-writing.json`);
-      setConcepts(repo, "# Terms\n\n## Beta {#beta}\n\nBeta definition\n", null, false, `${b}/concepts.md`);
+      writeWritingFile(repo, { bannedTerms: [{ term: 'Old', use: 'Alpha', why: 'scope A' }] }, null, false, `${a}/concord-writing.json`);
+      writeWritingFile(repo, { bannedTerms: [{ term: 'Old', use: 'Beta', why: 'scope B' }] }, null, false, `${b}/concord-writing.json`);
+      writeConceptFile(repo, "# Terms\n\n## Beta {#beta}\n\nBeta definition\n", null, false, `${b}/concepts.md`);
       const global = showConcepts(repo);
-      setConcepts(repo, "# Terms\n\n```markdown\n## Example {#global}\n\nAn example only.\n```\n\n## Global {#global}\n\nGlobal definition\n\n## Second {#second}\n\nSecond definition\n", global.digest, false, 'docs/concepts.md');
+      writeConceptFile(repo, "# Terms\n\n```markdown\n## Example {#global}\n\nAn example only.\n```\n\n## Global {#global}\n\nGlobal definition\n\n## Second {#second}\n\nSecond definition\n", global.digest, false, 'docs/concepts.md');
     } finally { repo.close(); }
     writeFileSync(join(root, a, 'sample.md'), '# Alpha writing\n\nOld expression in Alpha.\n');
     writeFileSync(join(root, b, 'sample.md'), '# Old in Beta\n\nOld. Global.\n');
@@ -119,7 +120,7 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     try {
       const current = showConcepts(external, `${b}/concepts.md`);
       if (current.state !== 'valid') throw new Error('Expected scoped catalog');
-      setConcepts(external, current.source.replace('Beta definition', 'External definition'), current.digest, false, `${b}/concepts.md`);
+      writeConceptFile(external, current.source.replace('Beta definition', 'External definition'), current.digest, false, `${b}/concepts.md`);
     } finally { external.close(); }
     await page.getByRole('link', { name: '术语', exact: true }).click();
     await page.getByRole('button', { name: '保存术语' }).click();
@@ -135,7 +136,7 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
     try {
       const current = showConcepts(changedGlobal, 'docs/concepts.md');
       if (current.state !== 'valid') throw new Error('Expected global catalog');
-      setConcepts(changedGlobal, current.source.replace('Global definition', 'Changed inherited definition'), current.digest, false, 'docs/concepts.md');
+      writeConceptFile(changedGlobal, current.source.replace('Global definition', 'Changed inherited definition'), current.digest, false, 'docs/concepts.md');
     } finally { changedGlobal.close(); }
     await page.getByRole('link', { name: '术语', exact: true }).click();
     await page.getByRole('button', { name: '刷新列表' }).click();
@@ -167,7 +168,7 @@ test('real browser can check again after editing invalidates a delayed check res
     const repo = new LocalRepository(root, { initialize: true });
     try {
       initialize(repo, false, { testRoots: [] });
-      setWriting(repo, { format: 'concord.writing/v3', bannedTerms: [{ term: 'Old', use: 'New', why: '统一写法' }] }, showWriting(repo).digest);
+      writeWritingFile(repo, { bannedTerms: [{ term: 'Old', use: 'New', why: '统一写法' }] }, showWriting(repo).digest);
     } finally { repo.close(); }
     writeFileSync(join(root, 'docs/sample.md'), '# Sample\n\nOld.\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
@@ -225,7 +226,7 @@ test('real browser creates a local Markdown catalog, diagnoses structure and sav
       initialize(repo, false, { testRoots: [] });
       mkdirSync(join(root, scope), { recursive: true });
       const global = showConcepts(repo);
-      setConcepts(repo, "# Terms\n\n## Shared {#global}\n\nShared concept\n", global.digest, false, 'docs/concepts.md');
+      writeConceptFile(repo, "# Terms\n\n## Shared {#global}\n\nShared concept\n", global.digest, false, 'docs/concepts.md');
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);

@@ -14,7 +14,7 @@ const docs = Command.make('docs').pipe(Command.withDescription('Check authored p
     (delivery: { stdout: string; stderr: string; exitCode: number }) => Effect.sync(() => { process.stdout.write(delivery.stdout); process.stderr.write(delivery.stderr); if (delivery.exitCode !== 0) process.exitCode = delivery.exitCode; }),
     root.pipe(Effect.map(settings => ({ root: Option.getOrUndefined(settings.root), json: settings.json, dryRun: settings.dryRun }))),
   ),
-  Command.make('check', { rules: optional('rules') }, args => withQuery({ name: 'docs.check', input: { path: Option.getOrUndefined(args.rules) } })),
+  Command.make('check', {}, () => withQuery({ name: 'docs.check', input: {} })),
 ]));
 
 export { docs };

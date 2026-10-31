@@ -32,10 +32,10 @@ import { buildTrace } from "../domain/trace/index.js";
 import { renderReview, traceShow } from "./trace-queries.js";
 import { readWritingPolicy } from "../domain/writing/index.js";
 import { ViewActionSchema, type ViewAction, type ViewFile, type WorkspaceSnapshot } from "../model/index.js";
-import { showWriting, setWriting, writingIndex } from "../domain/writing/index.js";
+import { showWriting, writingIndex } from "../domain/writing/index.js";
 import { checkWriting } from "../domain/writing/index.js";
 import { checkProject } from "./project-check.js";
-import { indexConcepts, setConcepts, showConcepts } from "../domain/concepts/index.js";
+import { indexConcepts, showConcepts } from "../domain/concepts/index.js";
 import type { RequestTiming } from "./request-timing.js";
 
 const sync = <A>(name: string, evaluate: () => A): Effect.Effect<A, ConcordError> => Effect.try({
@@ -58,7 +58,6 @@ export function validateViewRoot(input: string): string {
 // @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md
 export function decodeViewAction(input: unknown): ViewAction {
-  if (Predicate.isObject(input) && input.action === 'writing.set') readWritingPolicy(JSON.stringify(input.policy), typeof input.path === 'string' ? input.path : undefined);
   return decode(ViewActionSchema, input, 'view action');
 }
 
@@ -84,8 +83,6 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'feedback.sync':
     case 'feedback.link':
     case 'source.set':
-    case 'writing.set':
-    case 'concepts.set':
     case 'config.set':
     case 'cache.clear':
       return { ...action, dryRun: true };
@@ -216,7 +213,7 @@ export const observeWorkspaceProjection = Effect.fn('view.observeWorkspaceProjec
   let drift = { files: [] as string[], directories: [] as string[], publicationChanged: false };
   const sourceDigest = yield* workspaceSourceDigest(root);
   const snapshot = yield* compileWorkspace(root, 'off', timing, value => { drift = value; });
-  if ((yield* workspaceSourceDigest(root)) !== sourceDigest) return yield* Effect.fail(new ConcordError('SourceChanged', 'Workspace sources changed during refresh'));
+  if ((yield* workspaceSourceDigest(root)) !== sourceDigest) drift = { ...drift, files: [...new Set([...drift.files, '.'])] };
   return { snapshot, drift, sourceDigest };
 });
 // @concord-end
@@ -312,11 +309,9 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'source.set': return setSource(repo, action.path, action.body, action.expectedDigest, dryRun);
     case 'writing.index': return writingIndex(repo);
     case 'writing.show': return showWriting(repo, action.path);
-    case 'writing.set': return setWriting(repo, action.policy, action.expectedDigest, dryRun, action.path);
     case 'writing.check': return checkWriting(repo, action.path);
     case 'concepts.index': return indexConcepts(repo);
     case 'concepts.show': return showConcepts(repo, action.path);
-    case 'concepts.set': return setConcepts(repo, action.source, action.expectedDigest, dryRun, action.path);
     case 'config.set': return setConfig(repo, action.config, action.expectedDigest, dryRun);
     case 'code.marker': return codeSnippet(repo, action.scope, action.contracts);
     case 'code.at': return locateCode(repo, action.path, action.line);

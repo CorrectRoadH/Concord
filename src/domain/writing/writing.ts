@@ -2,8 +2,7 @@ import type { WritingFinding, WritingReport } from "../../model/index.js";
 import { fromMarkdown } from "../../model/index.js";
 import type { Nodes } from "mdast";
 import { ConcordError, inRepositorySnapshot, objectDigest, type Repository } from "../../model/index.js";
-import { checkControlled, type ParsedWriting } from "./writing-controlled.js";
-import { composeControlled, WRITING_PARSER_VERSION, writingBudget, type PolicySource, type EffectiveControlled } from "../../model/index.js";
+import { WRITING_PARSER_VERSION, writingBudget, type PolicySource } from "../../model/index.js";
 import { LocalRepository } from "../../base/workspace/index.js";
 import { canonicalPath } from "../../model/index.js";
 import { readWritingPolicy } from "./writing-policy.js";
@@ -60,13 +59,13 @@ function textOf(node: Nodes, inlineCode: boolean, markCode = false): string {
   if ('children' in node) return node.children.map(child => textOf(child, inlineCode, markCode)).join('');
   return '';
 }
-function prose(file: string, source: string): ParsedWriting & { blocks: Prose[] } {
+function prose(file: string, source: string): { blocks: Prose[]; tree: ReturnType<typeof fromMarkdown>; source: string } {
   const result: Prose[] = [];
   const visit = (node: Nodes): void => {
     if (node.type === 'paragraph' || node.type === 'heading') {
       const text = textOf(node, false);
       const sentences = textOf(node, true, true).split(SENTENCE_BREAK).map(sentence => sentence.replaceAll(CODE_START, ''));
-      result.push({ line: node.position?.start.line ?? 1, text, readable: textOf(node, true), sentences, paragraph: node.type === 'paragraph' && !/^\s*\|/u.test(text) });
+      result.push({ line: node.position?.start.line ?? 1, text, readable: text, sentences: text.split(SENTENCE_BREAK), paragraph: node.type === 'paragraph' && !/^\s*\|/u.test(text) });
     } else if ('children' in node) node.children.forEach(visit);
   };
   const authored = authoredSource(file, source), tree = fromMarkdown(authored);
@@ -77,12 +76,12 @@ function prose(file: string, source: string): ParsedWriting & { blocks: Prose[] 
 const length = (text: string): number => [...text.replace(/\s/gu, '')].length;
 const rootsOf = (owner: PolicyOwner): readonly string[] => owner.policy.roots ?? [owner.scope];
 // @concord-begin
-// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
-// @concord-implements docs/feature/documentation-quality/policy.md#写作政策
+// @concord-implements docs/feature/documentation-quality/format.md#conceptsmd
+// @concord-implements docs/feature/documentation-quality/format.md#writingmd
 function applicablePolicy(file: string, policies: readonly PolicyOwner[]): PolicyOwner[] {
   return policies.filter(owner => applies(file, owner.scope)).sort((a, b) => a.scope.length - b.scope.length || a.path.localeCompare(b.path));
 }
-function inherited<T extends 'sentenceLength' | 'paragraphLength' | 'unusedConcepts'>(owners: readonly PolicyOwner[], key: T): WritingPolicy[T] {
+function inherited<T extends 'sentenceLength' | 'paragraphLength'>(owners: readonly PolicyOwner[], key: T): WritingPolicy[T] {
   let value: WritingPolicy[T] = undefined;
   for (const owner of owners) if (owner.policy[key] !== undefined) value = owner.policy[key];
   return value;
@@ -92,7 +91,7 @@ const contextLine = (text: string, offset: number): string => text.split('\n')[s
 function bansFor(file: string, owners: readonly PolicyOwner[], concepts: ReturnType<typeof effectiveConcepts>): Ban[] {
   const bans: Ban[] = owners.flatMap(owner => owner.policy.bannedTerms.map((ban: BannedTerm, index) => ({ ...ban, source: { path: owner.path, entry: index + 1 }, ownerScope: owner.scope })));
   for (const item of concepts) for (const term of item.concept.deprecated) bans.push({ term, use: item.concept.term, why: item.reference, source: { path: item.path, ref: item.reference }, ownerScope: item.scope, conceptRef: item.reference });
-  return bans.filter(ban => (!ban.roots || ban.roots.some(root => under(file, root))) && !ban.exempt?.some(root => under(file, root)));
+  return bans.filter(ban => (!ban.roots || ban.roots.some(root => under(file, root))));
 }
 function activeSpellingsFor(concepts: ReturnType<typeof effectiveConcepts>) {
   const active = new Map<string, { reference: string; source: NonNullable<WritingFinding['source']> }[]>();
@@ -107,7 +106,7 @@ function activeSpellingsFor(concepts: ReturnType<typeof effectiveConcepts>) {
 }
 // @concord-end
 // @concord-code
-// @concord-implements docs/feature/documentation-quality/policy.md#概念定义
+// @concord-implements docs/feature/documentation-quality/format.md#conceptsmd
 function checkTerms(file: string, line: number, value: string, bans: readonly Ban[], active: ReturnType<typeof activeSpellingsFor>, findings: WritingFinding[]): void {
   const occurrences = new Map<string, { term: string; offset: number; bans: Ban[]; active: { reference: string; source: NonNullable<WritingFinding['source']> }[] }>();
   let candidates = 0;
@@ -136,7 +135,6 @@ function checkTerms(file: string, line: number, value: string, bans: readonly Ba
 
 // @concord-code
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md
-// @concord-implements docs/feature/documentation-quality/use-case/apply-controlled-writing.md
 export function checkWriting(repo: Repository, selectedPath?: string, persistentCache = repo instanceof LocalRepository): WritingReport {
   return inRepositorySnapshot(repo, () => {
     const inputs = new Map<string, string>([['concord.config.ts', repo.configSnapshot.source]]);
@@ -152,57 +150,29 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     const catalogPaths = discovered(repo, 'catalog', docsMembers);
     const policySources = new Map(policyPaths.map(path => [path, read(path)]));
     const sourceCatalogs = new Map(catalogPaths.map(path => [path, read(path)]));
-    let mode: 'project' | 'managed' | 'standalone' = 'project';
-    let selection: readonly string[];
-    let activePolicies: PolicyOwner[] = [];
-    const external = selectedPath !== undefined && !policyPaths.includes(selectedPath) && !(selectedPath.endsWith('/concord-writing.json') && selectedPath.startsWith('docs/') && !selectedPath.includes('/_template/'));
-    if (external) {
-      canonicalPath(selectedPath); repo.absolute(selectedPath);
-      const source = repo.read(selectedPath);
-      if (source === undefined) throw new ConcordError('WritingPolicyNotFound', `Missing writing policy: ${selectedPath}`);
-      inputs.set(selectedPath, source);
-      const profile = readWritingPolicy(source, selectedPath, false);
-      mode = 'standalone'; selection = profile.roots ?? ['docs'];
-      activePolicies = [{ path: selectedPath, scope: 'docs', policy: profile }];
-    } else {
-      for (const path of policyPaths) {
-        const source = policySources.get(path)!;
-        const policy = readWritingPolicy(source, path);
-        activePolicies.push({ path, scope: scopeOf(path, 'policy'), policy });
-      }
-      if (activePolicies.length === 0 && catalogPaths.length === 0) throw new ConcordError('WritingPolicyNotFound', 'No writing policy or concept catalog was found');
-      if (selectedPath === undefined) selection = [...activePolicies.flatMap(rootsOf), ...catalogPaths.filter(path => !policyPaths.includes(path.replace(/concepts\.md$/u, 'concord-writing.json'))).map(path => scopeOf(path, 'catalog'))];
-      else {
-      canonicalPath(selectedPath); repo.absolute(selectedPath);
+    let mode: 'project' | 'managed' = 'project';
+    const activePolicies: PolicyOwner[] = policyPaths.map(path => ({ path, scope: scopeOf(path, 'policy'), policy: readWritingPolicy(policySources.get(path)!, path) }));
+    let selection: readonly string[] = activePolicies.find(owner => owner.path === 'docs/writing.md')?.policy.roots ?? ['docs'];
+    if (selectedPath !== undefined) {
       const managed = activePolicies.find(owner => owner.path === selectedPath);
-      if (managed) { mode = 'managed'; selection = rootsOf(managed); }
-      else throw new ConcordError('WritingPolicyNotFound', `Missing writing policy: ${selectedPath}`);
-      }
+      if (!managed) throw new ConcordError('WritingPolicyNotFound', `Missing managed writing rules: ${selectedPath}`);
+      mode = 'managed'; selection = [managed.scope];
     }
     const selectedRoots = [...new Set(selection)].sort();
     const files = new Set<string>();
     for (const root of selectedRoots) {
       const members = (root === 'docs' ? docsMembers : repo.files(root)).filter(path => /\.(?:md|mdx)$/iu.test(path)).sort();
       memberships.set(root, members);
-      if (!members.length) throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
+      if (!members.length && root !== 'docs') throw new ConcordError('WritingInputNotFound', `No Markdown or MDX files in writing root: ${root}`);
       members.forEach(file => files.add(file));
     }
     const documents = new Map<string, string>();
     for (const file of [...files].sort()) {
       const source = read(file);
-      if (/\.mdx?$/iu.test(file)) documents.set(file, source);
+      if (!policySources.has(file) && /\.mdx?$/iu.test(file)) documents.set(file, source);
     }
     const inputDigest = snapshotDigest([...inputs, ['@writing-parser-version', WRITING_PARSER_VERSION], ['@writing-policy-membership', JSON.stringify(policyPaths)], ['@concept-catalog-membership', JSON.stringify(catalogPaths)]], [...memberships]);
     const cacheDigest = objectDigest({ inputDigest, selectedPath: selectedPath ?? null });
-    const effectivePolicies = new Map<string, EffectiveControlled>();
-    // Validate every applicable composed policy even when text analysis is cached.
-    const contexts = new Map([...documents.keys()].map(file => {
-      const owners = applicablePolicy(file, activePolicies);
-      const policyKey = owners.map(owner => owner.path).join('\n');
-      let controlled = effectivePolicies.get(policyKey);
-      if (!controlled) { controlled = composeControlled(owners); effectivePolicies.set(policyKey, controlled); }
-      return [file, { owners, controlled }] as const;
-    }));
     const cached = persistentCache ? readWritingFindings(repo, cacheDigest) : undefined;
     const findings: WritingFinding[] = cached ?? [];
     if (cached === undefined) {
@@ -214,11 +184,11 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
       for (const [file, authored] of documents) {
         const source = withoutStepMarkers(file, authored);
         const parsed = prose(file, source);
-        const { owners, controlled } = contexts.get(file)!;
+        const owners = applicablePolicy(file, activePolicies);
         const concepts = effectiveConcepts(file, catalogs.catalogs);
         const bans = bansFor(file, owners, concepts);
         const active = activeSpellingsFor(concepts);
-        for (const item of concepts) if (inherited(owners, 'unusedConcepts') === true) eligible.add(item.reference);
+        for (const item of concepts) eligible.add(item.reference);
         for (const block of parsed.blocks) {
           checkTerms(file, block.line, block.text, bans, active, findings);
           for (const item of concepts) if (!used.has(item.reference) && !sourceCatalogs.has(file) && spellingPositions(block.readable, item.concept.term).length > 0) used.add(item.reference);
@@ -233,7 +203,6 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
           }
         }
         const original = inputs.get(file)!;
-        if (owners.some(owner => owner.policy.controlled != null)) checkControlled(file, authoredSource(file, source, true), original, controlled, findings, parsed);
         if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
       }
       for (const item of catalogs.catalogs.flatMap(record => record.catalog.concepts.map(concept => ({ reference: `${record.path}#${concept.id}`, record, concept })))) {
@@ -251,6 +220,6 @@ export function checkWriting(repo: Repository, selectedPath?: string, persistent
     if (findings.length > 10000) writingBudget('Writing report exceeds 10000 findings');
     findings.sort((a, b) => a.file.localeCompare(b.file) || a.line - b.line || a.rule.localeCompare(b.rule));
     if (persistentCache && cached === undefined) writeWritingFindings(repo, cacheDigest, findings);
-    return { operation: 'docs-check', ok: findings.length === 0, complete: true, policy: selectedPath ?? 'project', mode, selectedRoots, files: files.size, findings, inputDigest };
+    return { operation: 'docs-check', ok: findings.length === 0, complete: true, policy: selectedPath ?? 'project', mode, selectedRoots, files: documents.size, findings, inputDigest };
   });
 }

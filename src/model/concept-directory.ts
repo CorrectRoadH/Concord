@@ -9,9 +9,9 @@ import { scopeOf, under } from './writing-scopes.js';
 const { definition: _definition, ...descriptor } = ConceptDefinitionSchema.fields;
 /** id is the Markdown anchor; term is the current spelling for deprecated names. */
 export const WorkspaceConceptSchema = Schema.Struct(descriptor);
+  concepts: Schema.Array(WorkspaceConceptSchema),
 export const WorkspaceConceptCatalogSchema = Schema.Struct({
   path: Schema.String.check(Schema.makeFilter(value => { try { scopeOf(value, 'catalog'); return true; } catch { return false; } })),
-  imports: Schema.Array(Schema.String.check(Schema.makeFilter(value => { try { splitConceptReference(value); return true; } catch { return false; } }))), concepts: Schema.Array(WorkspaceConceptSchema),
 });
 export type WorkspaceConcept = typeof WorkspaceConceptSchema.Type;
 export type WorkspaceConceptCatalog = typeof WorkspaceConceptCatalogSchema.Type;
@@ -26,7 +26,7 @@ export function splitConceptReference(reference: string): { path: string; id: st
 /** Shared by the domain's full catalogs and the body-free workspace directory. */
 export function selectEffectiveConcepts<Concept extends { readonly id: string }>(file: string, catalogs: readonly {
   readonly path: string; readonly scope: string;
-  readonly catalog: { readonly imports: readonly string[]; readonly concepts: readonly Concept[] };
+  readonly catalog: { readonly concepts: readonly Concept[] };
 }[]): { reference: string; path: string; scope: string; concept: Concept }[] {
   const byPath = new Map(catalogs.map(record => [record.path, record]));
   const effective = new Map<string, { reference: string; path: string; scope: string; concept: Concept }>();
@@ -36,11 +36,7 @@ export function selectEffectiveConcepts<Concept extends { readonly id: string }>
       const reference = `${record.path}#${concept.id}`;
       effective.set(reference, { reference, path: record.path, scope: record.scope, concept });
     }
-    for (const reference of record.catalog.imports) {
-      const { path, id } = splitConceptReference(reference), owner = byPath.get(path);
-      const concept = owner?.catalog.concepts.find(item => item.id === id);
-      if (owner && concept) effective.set(reference, { reference, path, scope: owner.scope, concept });
-    }
+
   }
   return [...effective.values()];
 }
@@ -51,7 +47,7 @@ export function projectConceptCatalogs(pages: readonly { readonly path: string; 
     if (!page.path.startsWith('docs/') || !page.path.endsWith('/concepts.md') || page.path.split('/').some(part => ['_template', '.git', 'node_modules'].includes(part))) continue;
     try {
       const catalog = parseConceptCatalog(page.body, fromMarkdown);
-      catalogs.push({ path: page.path, imports: catalog.imports, concepts: catalog.concepts.map(({ id, term, deprecated }) => ({ id, term, deprecated })) });
+      catalogs.push({ path: page.path, concepts: catalog.concepts.map(({ id, term, deprecated }) => ({ id, term, deprecated })) });
     } catch { findings.push({ code: 'InvalidConceptCatalog', path: page.path, message: 'Concept catalog cannot be projected; repair its structure.' }); }
   }
   return { catalogs, findings };

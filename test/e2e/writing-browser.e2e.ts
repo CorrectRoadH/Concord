@@ -1,3 +1,4 @@
+import { writeWritingFile } from '../support/writing-files.js';
 import { initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -12,7 +13,7 @@ import { LocalRepository } from "../support/repository.js";
 import { type ViewServerHandle } from './server.js';
 import { startViewServer } from './server.js';
 import { defaultWritingPolicy } from "../../src/model/index.js";
-import { showWriting, setWriting } from "../../src/domain/writing/index.js";
+import { showWriting, } from "../../src/domain/writing/index.js";
 import { waitForWorkspaceProjection } from '../support/support.js';
 import { waitForWritingSave } from '../support/writing-save.js';
 
@@ -173,7 +174,7 @@ test('real browser displays invalid policy bytes and requires an explicit repair
     execFileSync('git', ['init', '-q', root]);
     const repo = new LocalRepository(root, { initialize: true });
     try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
-    const obsolete = JSON.stringify({ format: 'concord.writing/v3', bannedTerms: [{ term: 'old', use: 'custom', why: 'keep' }], svgTerms: false, svgStyle: null });
+    const obsolete = JSON.stringify({ bannedTerms: [{ term: 'old', use: 'custom', why: 'keep' }], svgTerms: false, svgStyle: null });
     writeFileSync(join(root, 'docs/concord-writing.json'), obsolete);
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
 
@@ -208,7 +209,7 @@ test('post-save derived refresh cannot adopt an unseen writer digest as the draf
     const repo = new LocalRepository(root, { initialize: true });
     try {
       initialize(repo, false, { testRoots: [] });
-      setWriting(repo, { format: 'concord.writing/v3', roots: ['docs'], bannedTerms: [{ term: 'Old', use: 'Seed', why: '初始规则' }] }, showWriting(repo).digest);
+      writeWritingFile(repo, { roots: ['docs'], bannedTerms: [{ term: 'Old', use: 'Seed', why: '初始规则' }] }, showWriting(repo).digest);
     } finally { repo.close(); }
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
 
@@ -228,7 +229,7 @@ test('post-save derived refresh cannot adopt an unseen writer digest as the draf
         try {
           const current = showWriting(other);
           if (current.state !== 'valid') throw new Error('Expected saved writing policy');
-          setWriting(other, { ...current.policy, bannedTerms: [{ term: 'Old', use: 'External', why: '另一写者' }] }, current.digest);
+          writeWritingFile(other, { ...current.policy, bannedTerms: [{ term: 'Old', use: 'External', why: '另一写者' }] }, current.digest);
         } finally { other.close(); }
         externalWritten();
       }

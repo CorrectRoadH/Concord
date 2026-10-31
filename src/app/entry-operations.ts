@@ -23,7 +23,6 @@ export const previewCacheClear: typeof Module1.previewCacheClear = (...args) => 
 export const scanAnnotations: typeof Module1.scanAnnotations = (...args) => Module1.scanAnnotations(...args);
 export const scanCode: typeof Module2.scanCode = (...args) => Module2.scanCode(...args);
 export const indexConcepts: typeof Module3.indexConcepts = (...args) => Module3.indexConcepts(...args);
-export const setConcepts: typeof Module3.setConcepts = (...args) => Module3.setConcepts(...args);
 export const showConcepts: typeof Module3.showConcepts = (...args) => Module3.showConcepts(...args);
 export const tasteShow: typeof Module4.tasteShow = (...args) => Module4.tasteShow(...args);
 export const checkWriting: typeof Module5.checkWriting = (...args) => Module5.checkWriting(...args);
@@ -49,7 +48,6 @@ export const requireValidTrace: typeof Module11.requireValidTrace = (...args) =>
 export const selectCase: typeof Module11.selectCase = (...args) => Module11.selectCase(...args);
 export const annotationSnippet: typeof Module12.annotationSnippet = (...args) => Module12.annotationSnippet(...args);
 export const showWriting: typeof Module5.showWriting = (...args) => Module5.showWriting(...args);
-export const setWriting: typeof Module5.setWriting = (...args) => Module5.setWriting(...args);
 export const writingIndex: typeof Module5.writingIndex = (...args) => Module5.writingIndex(...args);
 export const readWritingPolicy: typeof Module5.readWritingPolicy = (...args) => Module5.readWritingPolicy(...args);
 export const waitForPublication: typeof Module13.waitForPublication = (...args) => Module13.waitForPublication(...args);

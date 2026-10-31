@@ -1,3 +1,4 @@
+import { writeWritingFile } from '../support/writing-files.js';
 import { initialize } from '../support/operations.js';
 import { installedConcordCli } from '../support/support.js';
 import assert from 'node:assert/strict';
@@ -10,11 +11,11 @@ import { Effect } from 'effect';
 import { LocalRepository } from "../support/repository.js";
 
 import { digest } from "../../src/model/index.js";
-import { showWriting, setWriting } from "../../src/domain/writing/index.js";
+import { showWriting, } from "../../src/domain/writing/index.js";
 import { checkWriting } from "../../src/domain/writing/index.js";
 
 const policyPath = 'docs/concord-writing.json';
-const policy = { format: 'concord.writing/v3' as const, roots: ['docs'] as [string, ...string[]], bannedTerms: [{ term: 'Resolve', use: '修复', why: '统一写法' }] };
+const policy = { roots: ['docs'] as [string, ...string[]], bannedTerms: [{ term: 'Resolve', use: '修复', why: '统一写法' }] };
 const source = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
 const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-writing-management-'));
@@ -39,12 +40,12 @@ test('writing show preserves invalid and v1 bytes for explicit CAS repair', () =
     const old = withRepo(root, showWriting);
     assert.equal(old.state, 'invalid');
     assert.throws(() => withRepo(root, checkWriting), { code: 'InvalidWritingPolicy' });
-    assert.throws(() => withRepo(root, repo => setWriting(repo, policy, null)), { code: 'FileChangedSinceRead' });
-    const saved = withRepo(root, repo => setWriting(repo, policy, old.digest));
+    assert.throws(() => withRepo(root, repo => writeWritingFile(repo, policy, null)), { code: 'FileChangedSinceRead' });
+    const saved = withRepo(root, repo => writeWritingFile(repo, policy, old.digest));
     assert.equal(saved.digest, digest(saved.source));
     assert.equal(withRepo(root, showWriting).state, 'valid');
-    assert.throws(() => withRepo(root, repo => setWriting(repo, { ...policy, bannedTerms: [...policy.bannedTerms, { term: 'resolve', use: '修', why: '重复' }] }, saved.digest)), { code: 'InvalidWritingPolicy' });
-    assert.throws(() => withRepo(root, repo => setWriting(repo, { ...policy, roots: ['../escape'] }, saved.digest)), { code: 'InvalidWritingPolicy' });
+    assert.throws(() => withRepo(root, repo => writeWritingFile(repo, { ...policy, bannedTerms: [...policy.bannedTerms, { term: 'resolve', use: '修', why: '重复' }] }, saved.digest)), { code: 'InvalidWritingPolicy' });
+    assert.throws(() => withRepo(root, repo => writeWritingFile(repo, { ...policy, roots: ['../escape'] }, saved.digest)), { code: 'InvalidWritingPolicy' });
     rmSync(join(root, policyPath));
     symlinkSync('concepts.md', join(root, policyPath));
     assert.throws(() => withRepo(root, showWriting), { code: 'UnsafePath' });
@@ -118,10 +119,10 @@ test('removed SVG fields reject every value and explicit CAS cleanup preserves t
         assert.equal(shown.state, 'invalid');
         assert.equal(shown.source, before);
         assert.equal(shown.digest, digest(before));
-        assert.throws(() => withRepo(root, repo => setWriting(repo, clean, null, false, path)), { code: 'FileChangedSinceRead' });
-        withRepo(root, repo => setWriting(repo, clean, shown.digest, true, path));
+        assert.throws(() => withRepo(root, repo => writeWritingFile(repo, clean, null, false, path)), { code: 'FileChangedSinceRead' });
+        withRepo(root, repo => writeWritingFile(repo, clean, shown.digest, true, path));
         assert.equal(readFileSync(join(root, path), 'utf8'), before);
-        withRepo(root, repo => setWriting(repo, clean, shown.digest, false, path));
+        withRepo(root, repo => writeWritingFile(repo, clean, shown.digest, false, path));
         assert.deepEqual(JSON.parse(readFileSync(join(root, path), 'utf8')), clean);
       }
     }
@@ -143,7 +144,7 @@ test('C23: policy replacement refuses edited preimages and preserves invalid rec
       }
     }
     const repo = new ConcurrentRepository(root);
-    try { assert.throws(() => setWriting(repo, policy, digest(old)), { code: 'FileChangedSinceRead' }); }
+    try { assert.throws(() => writeWritingFile(repo, policy, digest(old)), { code: 'FileChangedSinceRead' }); }
     finally { repo.close(); }
     assert.equal(readFileSync(join(root, policyPath), 'utf8'), `${old} `);
     write(root, policyPath, old);
@@ -157,7 +158,7 @@ test('C23: policy replacement refuses edited preimages and preserves invalid rec
     rmSync(journalPath);
     const lease = join(root, '.git/concord/trace/publication.lease');
     mkdirSync(lease, { recursive: true }); writeFileSync(join(lease, 'unknown-owner'), 'preserve');
-    assert.throws(() => withRepo(root, repo => setWriting(repo, policy, digest(old))), /unexpected|owner|lease|publication/iu);
+    assert.throws(() => withRepo(root, repo => writeWritingFile(repo, policy, digest(old))), /unexpected|owner|lease|publication/iu);
     assert.equal(readFileSync(join(lease, 'unknown-owner'), 'utf8'), 'preserve');
   } finally { rmSync(root, { recursive: true, force: true }); }
 })));

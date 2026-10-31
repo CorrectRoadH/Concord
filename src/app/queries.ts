@@ -32,7 +32,7 @@ export const QueryRequest = Schema.Union([
   empty('check'),
   empty('trace.check'), operation('trace.show', { reference: Schema.String }), empty('trace.gaps'),
   operation('review', { reference: Schema.optional(Schema.String) }),
-  operation('docs.check', { path: Schema.optional(Schema.String) }),
+  empty('docs.check'),
   empty('taste'), empty('config.show'),
   empty('workspace.show'),
   operation('documents.list', { kind: Schema.optional(DocumentKindSchema) }),
@@ -55,7 +55,7 @@ const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, 
     case 'review': return renderReview(repo, request.input.reference, cache);
     case 'taste': return tasteShow(repo);
     case 'config.show': return { ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source };
-    case 'docs.check': return checkWriting(repo, request.input.path, cache !== 'off');
+    case 'docs.check': return checkWriting(repo, undefined, cache !== 'off');
     case 'documents.list': {
       const { kind } = request.input;
       if (kind === 'memory' || kind === 'issue') return { operation: 'list', documents: knowledgeIndex(repo, kind).documents };
