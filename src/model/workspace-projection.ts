@@ -63,6 +63,15 @@ const RefreshError = Schema.Struct({ failedAt: Instant, ...ErrorFields, message:
 
 export const WorkspaceProjectionEnvelope = Schema.Struct({ format: Schema.Literal('concord.workspace-projection/v1'), identity: Schema.String,
   record: Schema.optional(WorkspaceProjectionRecordSchema), lastAttempt: Schema.optional(Attempt), error: Schema.optional(RefreshError) });
+const { snapshot: _snapshot, ...ProjectionFields } = WorkspaceProjectionRecordSchema.fields;
+export const WorkspaceProjectionSchema = Schema.Struct({ snapshot: WorkspaceProjectionSnapshotSchema, projection: Schema.Struct({ ...ProjectionFields,
+  status: Schema.Literals(['ready', 'refresh-failed', 'blocked']), current: Schema.Literal(false), refreshOwner: Schema.Literals(['active', 'none']),
+  lastAttempt: Schema.optional(Attempt), lastError: Schema.optional(RefreshError),
+}) });
+export const WorkspaceServerEvent = Schema.Struct({ token: Schema.String, generation: Schema.Int,
+  state: Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']),
+  workspace: Schema.optional(WorkspaceProjectionSchema), error: Schema.optional(Schema.Struct(ErrorFields)),
+}).annotate({ parseOptions: { onExcessProperty: 'error' } });
 export type WorkspaceProjectionRecord = typeof WorkspaceProjectionRecordSchema.Type;
 export interface WorkspaceProjectionContext { readonly root: string; readonly privateDir: string; readonly identity: string }
 export const WORKSPACE_PROJECTION_LIMIT = 8 * 1024 * 1024;

@@ -4,6 +4,8 @@ import '@fontsource-variable/noto-sans-sc/wght.css';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { GitStatus, ViewAction, ViewJob, WorkspaceProjection, WorkspaceProjectionSnapshot, WorkspaceProjectionStatus } from '../src/model/index';
 import { ApiError, ConcordApi } from './lib/api';
+import { Schema } from 'effect';
+import { WorkspaceServerEvent } from '../src/model/index';
 
 interface Notice { readonly id: number; readonly tone: 'success' | 'error' | 'info'; readonly text: string }
 export interface WorkspaceIssue { readonly code: string; readonly message: string; readonly hint?: string; readonly reason?: string }
@@ -117,6 +119,7 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
 
   const refreshInFlight = useRef<Promise<void> | null>(null);
   const workspaceProblemRef = useRef<WorkspaceIssue | null>(null);
+  const serverStoppedRef = useRef(false);
   workspaceProblemRef.current = workspaceProblem;
   const writtenAt = useRef(0);
   const lastGitReadAt = useRef(0);
@@ -136,9 +139,11 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
   const readWorkspace = useCallback(async (): Promise<WorkspaceProjection | null> => {
     try {
       const value = await api.workspace();
+      if (serverStoppedRef.current) return null;
       applyProjection(value);
       return value;
     } catch (cause) {
+      if (serverStoppedRef.current) return null;
       const problem = workspaceIssue(cause);
       workspaceProblemRef.current = problem;
       setWorkspaceProblem(problem);
@@ -183,21 +188,46 @@ export function WorkspaceProvider({ initial, api, children }: { initial: Workspa
 
   useEffect(() => {
     let stopped = false;
+    let serverStopped = false;
+    let connected = false;
     let timer: number | undefined;
+    let latestWorkspace = initial.projection.builtAt;
+    const events = new EventSource('/api/events');
+    events.onopen = () => { connected = true; };
+    events.onerror = () => {
+      if (connected) { connected = false; window.clearTimeout(timer); timer = window.setTimeout(() => void poll(), 4000); }
+    };
+    const onEvent = (message: MessageEvent<string>) => {
+      let event: typeof WorkspaceServerEvent.Type;
+      try { event = Schema.decodeUnknownSync(Schema.fromJsonString(WorkspaceServerEvent), { onExcessProperty: 'error' })(message.data); }
+      catch { connected = false; return; }
+      if (event.state === 'stopping') {
+        serverStopped = true; serverStoppedRef.current = true; connected = false; events.close(); window.clearTimeout(timer);
+        const problem = { code: 'WorkspaceServerStopped', message: '服务已停止，请重新运行 concord view。' };
+        workspaceProblemRef.current = problem; setWorkspaceProblem(problem); return;
+      }
+      const changed = event.workspace?.projection.builtAt !== latestWorkspace || event.workspace?.projection.status !== 'ready' || event.error !== undefined;
+      latestWorkspace = event.workspace?.projection.builtAt ?? latestWorkspace;
+      if (changed) void refresh({ includeWorkspace: true, includeGit: false, includeJobs: true });
+      else void refresh({ includeWorkspace: false, includeGit: false, includeJobs: true });
+    };
+    events.addEventListener('workspace', onEvent);
+    events.addEventListener('stopping', onEvent);
     const poll = async (initial = false) => {
+      if (serverStopped) return;
       // Workspace GET reads the published cache. Pending reads retry faster,
       // while jobs and Git retain their own cadences through the same queue.
       const now = Date.now();
       await refresh({
-        includeWorkspace: !initial || retryableProjection(workspaceProblemRef.current),
+        includeWorkspace: !connected && !initial || retryableProjection(workspaceProblemRef.current),
         includeGit: initial || now - lastGitReadAt.current >= 32_000,
-        includeJobs: initial || now - lastJobsReadAt.current >= 4000,
+        includeJobs: initial || !connected && now - lastJobsReadAt.current >= 4000,
       });
-      if (!stopped) timer = window.setTimeout(() => void poll(), retryableProjection(workspaceProblemRef.current) ? 2000 : 4000);
+      if (!stopped && !serverStopped) timer = window.setTimeout(() => void poll(), retryableProjection(workspaceProblemRef.current) ? 2000 : connected ? 32_000 : 4000);
     };
     // App has just loaded the workspace; only fetch the remaining panels now.
     void poll(true);
-    return () => { stopped = true; window.clearTimeout(timer); };
+    return () => { stopped = true; window.clearTimeout(timer); events.close(); };
   }, [refresh]);
 
   const act = useCallback(async (action: ViewAction, success = '操作已完成。') => {

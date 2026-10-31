@@ -3,7 +3,7 @@ import { render, useInput, useWindowSize, type RenderOptions } from 'ink';
 import { Effect, Fiber, Schema, Stream, type Scope } from 'effect';
 import type { WorkspaceDisplay } from '../../model/workspace-display/index.js';
 import { documentCategories, displayConcepts, workspaceDisplay, workspacePathHref } from '../../model/workspace-display/index.js';
-import { WorkspaceProjectionSnapshotSchema, type WorkspaceProjectionSnapshot } from '../../model/index.js';
+import { WorkspaceServerEvent, type WorkspaceProjectionSnapshot } from '../../model/index.js';
 import { connectOrStartWorkspace, requestWorkspace, subscribeWorkspace, type WorkspaceConnection } from '../server/index.js';
 import { OwnedProcess } from '../../base/process/index.js';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
@@ -140,7 +140,6 @@ export const renderPanel = Effect.fn('renderPanel')(function*(ports: PanelPorts,
   } satisfies PanelSession;
 });
 
-const Event = Schema.Struct({ token: Schema.String, generation: Schema.Int, state: Schema.String, workspace: Schema.optional(Schema.Struct({ snapshot: WorkspaceProjectionSnapshotSchema, projection: Schema.Json })), error: Schema.optional(Schema.Struct({ code: Schema.String, message: Schema.String })) });
 const Lease = Schema.Struct({ address: Schema.String, host: Schema.String, port: Schema.Int, lease: Schema.String, token: Schema.String });
 export const serveWorkspacePanel = Effect.fn('serveWorkspacePanel')(function*(root: string) {
   return yield* Effect.scoped(Effect.gen(function*() {
@@ -170,7 +169,7 @@ export const serveWorkspacePanel = Effect.fn('serveWorkspacePanel')(function*(ro
       connection = initialConnection ?? (yield* connectOrStartWorkspace(root));
       initialConnection = undefined;
       yield* Stream.runForEach(subscribeWorkspace(connection), input => Effect.gen(function*() {
-        const event = yield* Schema.decodeUnknownEffect(Event, { onExcessProperty: 'error' })(input);
+        const event = yield* Schema.decodeUnknownEffect(WorkspaceServerEvent, { onExcessProperty: 'error' })(input);
         if (event.workspace) { snapshot = event.workspace.snapshot; yield* session.update({ model: workspaceDisplay(snapshot) }); }
         else yield* session.update(undefined);
       }));

@@ -20,6 +20,7 @@ export function ProjectionStatus() {
   const recover = async () => { setRetrying(true); try { await act({ action: 'recover' }, '恢复已执行，正在重新构建。'); } catch { /* Provider reports the named failure. */ } finally { setRetrying(false); } };
   const built = time(projection.builtAt);
   const range = projection.builtFrom && projection.builtUntil ? `${projection.builtFrom} – ${projection.builtUntil}` : undefined;
+  if (workspaceIssue?.code === 'WorkspaceServerStopped') return <div className="projection-status" role="status" aria-label="工作区服务状态"><Badge variant="destructive">服务已停止</Badge><span>请重新运行 concord view。</span></div>;
   if (workspaceIssue) return <div className="projection-status" role="status" aria-label="工作区投影状态">
     <Badge variant="destructive">工作区读取失败</Badge>
     <span title={workspaceIssue.message}>{workspaceIssue.code}</span>
