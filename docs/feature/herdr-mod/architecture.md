@@ -13,7 +13,8 @@ mod 是随 Concord 包发布的一组 JavaScript 文件：`main.js` 默认导出
 
 ## 界面
 
-- 左栏是文档树，按 Feature、品味、术语、Issue、Memory、其它文档分组；右侧是正文。
+- 左栏是文档树，按 Feature、品味、术语、Issue、Memory、其它文档分组；右侧是正文。Feature、Engineering 与 Roadmap 的包内页面取自 `concord --json show <包>` 的 `pages`。
+- “其它文档”只包括项目的固定入口中存在的那些：`docs/README.md`、`docs/architecture.md`、`docs/document-model.md`、`docs/taste.md`、`docs/concepts.md` 与 `docs/writing.md`，以及从已列出页面的正文链接可以到达的 Markdown。mod 不扫描任意 Markdown。
 - 正文用 `TextView.markdown` 渲染；编辑用 `EditorState` 与 `Editor`。
 - Use Case 正文下方列出守护它的测试与实现它的代码，按步骤分组；点击跳到对应文件位置。
 - p5 代码块显示 `p.describe` 的文字说明与源码，以及“在浏览器中播放”按钮：mod 让 Concord 把这一个图解导出为本地 HTML 文件，再用系统浏览器打开。

@@ -23,7 +23,7 @@ mod 只通过公开 CLI 取数据和执行操作，不读取 Concord 的私有�
 | --- | --- |
 | 判断目录是否已初始化、初始化 | `concord --json doctor`、`concord --json init` |
 | 文档列表 | `concord --json list` |
-| 一页文档及其测试、实现与关系 | `concord --json show <path>` |
+| 一页文档及其测试、实现与关系；文档包的全部页面（`pages`） | `concord --json show <path>` |
 | 术语 | `concord --json concepts index` |
 | 品味与依据位置 | `concord --json taste` |
 | 检查 | `concord --json check` |

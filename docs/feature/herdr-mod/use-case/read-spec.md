@@ -12,7 +12,7 @@
 
 1. 在文档树里点 Feature `cart`。 {#open-feature}
 
-   右侧按 Markdown 显示 README：能做什么、上手示例、怎样工作。
+   右侧按 Markdown 显示 README：能做什么、上手示例、怎样工作。文档树在 `cart` 下展开它的全部页面：README、architecture、cli 与每个 Use Case。
 
 2. 点 Use Case“加入商品”。 {#open-use-case}
 
@@ -34,3 +34,5 @@
 ## 结果
 
 不离开 Herdr 就能读完一个 Feature 和它的测试与实现。读到的内容与 `concord show` 的结果一致。
+
+“其它文档”列出项目的固定入口（文档导航、架构、文档模型、品味、术语、写作规则），以及从已列出页面的正文链接可以到达的页面；没有被任何页面链接的零散 Markdown 不出现在文档树里。

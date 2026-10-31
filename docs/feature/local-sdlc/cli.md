@@ -83,7 +83,7 @@ Inspect configuration: concord doctor
 
 ## 创建与编辑文档
 
-`concord new <类别> <名称>` 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Issue 或 Memory。`show <路径或选择器>` 返回一个文档及其关系、测试与实现，`list [类别]` 列出文档，`list --open` 列出打开的 Issue。以下为预期输出：
+`concord new <类别> <名称>` 按模板创建 Feature、Use Case、Engineering、Roadmap、Design、Issue 或 Memory。`show <路径或选择器>` 返回一个文档及其关系、测试与实现，`list [类别]` 列出文档。以下为预期输出：
 
 ```sh
 concord new feature cart --title "购物车" --pages cli,use-case
@@ -107,6 +107,28 @@ concord --json new use-case add-item --feature cart --title "加入商品"
 ```
 
 路径已存在时返回 `DocumentExists`，退出 1，不改文件。短选择器在同一类别中匹配多个文档时返回具名错误，需要写出路径。路径、类别与名称的规则见[领域与数据所有权](library.md#owner)。
+
+### 查看一个文档包
+
+`show` 一个 Feature、Engineering 或 Roadmap 时，结果另有 `pages`，列出包内的全部页面，按路径排序。以下为预期输出：
+
+```sh
+concord --json show cart
+```
+
+```json
+{
+  "operation": "show",
+  "pages": [
+    {"path": "docs/feature/cart/README.md", "kind": "readme", "name": "购物车"},
+    {"path": "docs/feature/cart/architecture.md", "kind": "architecture", "name": "购物车的实现"},
+    {"path": "docs/feature/cart/cli.md", "kind": "cli", "name": "购物车命令"},
+    {"path": "docs/feature/cart/use-case/add-item.md", "kind": "use-case", "name": "加入商品"}
+  ]
+}
+```
+
+（省略关系、测试与实现字段。）`kind` 取 `readme`、`use-case`、`architecture`、`cli`、`library`，其它支持页为 `page`；`name` 是页面的一级标题。人读输出在关系之前列出这些页面。`show` 其它类别的文档时没有 `pages`。
 
 创建之后直接编辑文件。Web 工作台的保存带整文件摘要；文件在读取后被外部改过时返回 `FileChangedSinceRead`，需要重新读取并合并。摘要只防止覆盖并发编辑，不是授权边界。
 
