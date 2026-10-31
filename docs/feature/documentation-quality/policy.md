@@ -217,6 +217,7 @@ token 从左到右最长匹配：每个汉字一个；拉丁字母连同结合�
 | --- | --- | ---: |
 | `documentation-quality/docs-check` | self 冻结副本，两条长度路径与词法规则开启 | 1000ms |
 | `documentation-quality/check` | 同一 self 冻结副本的全量聚合 | 2300ms |
+| `documentation-quality/check-server` | 同一冻结副本经由运行中的工作区服务的全量聚合 | 2300ms |
 | `documentation-quality/docs-check-scale` | 1000 页、每页约 10KiB 与 1000 token、4096 项词表 | 5000ms |
 | `documentation-quality/writing-index` | 目录政策索引 | 610ms |
 | `documentation-quality/concepts-index` | 目录术语索引 | 650ms |

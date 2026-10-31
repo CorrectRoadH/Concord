@@ -27,3 +27,15 @@ Concord 提供一个 Herdr 插件，在终端 pane 中打开只读的 Spec 面�
 - [C-001](../../constitution.md#c-001)
 - [C-002](../../constitution.md#c-002)
 - [C-014](../../constitution.md#c-014)
+
+## 性能预算
+
+| 场景 | 测量内容 | p50 预算 |
+| --- | --- | ---: |
+| `herdr-panel/first-screen` | 已有服务与可读投影时，在真实终端中从启动面板到首屏可读，见[打开侧边面板](use-case/open-side-panel.md) | 300ms |
+
+## 刷新上限
+
+| 场景 | 测量内容 | 上限 |
+| --- | --- | ---: |
+| `herdr-panel/push` | 文件写入停止到面板显示新内容，见[打开侧边面板](use-case/open-side-panel.md) | 1000ms |

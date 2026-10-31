@@ -32,6 +32,7 @@
 | --- | --- | ---: |
 | `project-onboarding/config` | 读取配置 | 670ms |
 | `project-onboarding/constitution` | 读取宪法及引用 | 880ms |
+| `project-onboarding/constitution-server` | 经由运行中的工作区服务读取宪法及引用 | 880ms |
 | `project-onboarding/doctor` | 接入诊断 | 5250ms |
 
 ## Constitution
