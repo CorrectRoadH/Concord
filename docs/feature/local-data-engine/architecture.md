@@ -70,7 +70,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 1. 启动者读取运行记录，核对 worktree、privateDir 与安装身份，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
-3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者；权限、I/O、类型或身份失败分别以具名错误 `ServerLockUnavailable` 报告。
+3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者；权限、I/O、类型或身份失败分别以具名错误 `ServerLockUnavailable` 报告。服务锁由原生绑定提供，原生产物缺失或无法加载时同样报告 `ServerLockUnavailable`（原因 native），服务不启动；面板与 `view` 报 `WorkspaceServerUnavailable`，CLI 在本进程计算。
 4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`，然后打开持久库、读取已有代次并启动计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务并在状态中报告原因。
 5. 启动者等待可握手的服务最多 1 秒；`opening` 已可握手，不必等待打开持久库。
 
@@ -82,7 +82,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 | --- | --- | --- |
 | opening | `hello`、订阅（推送 opening 状态） | 持久库打开成功进入 running，失败进入 degraded |
 | running | 全部请求 | clear、维护或 shutdown 进入 draining |
-| degraded | 全部请求；持久命名空间不可用，状态中给出原因，按原因映射 Web 的 unavailable:native 与 unavailable:corrupt | 原生产物按现行一秒退避重新验证后重新打开；损坏需用户 clear；安全失败不当作缓存缺失 |
+| degraded | 全部请求；只发生在已取得服务锁之后，持久命名空间不可用，状态中给出原因，按原因映射 Web 的 unavailable:native 与 unavailable:corrupt | 原生产物按现行一秒退避重新验证后重新打开；损坏需用户 clear；安全失败不当作缓存缺失 |
 | draining | 新的相关请求排队，已受理的请求完成 | 进入 clearing、maintaining 或 stopping |
 | clearing / maintaining | 只读订阅与 `hello` | 成功后进入 opening；部分删除、路径或身份异常、清理未确认时进入 blocked |
 | blocked | 只读订阅与 `hello`，状态给出具名原因 | 保留现场，不自动恢复或重开；用户处理后重启服务 |
