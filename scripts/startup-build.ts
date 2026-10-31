@@ -36,8 +36,8 @@ const capture = (args: readonly string[]) => Effect.tryPromise({
 });
 
 /** Keep the source module's resource and identity owner after code splitting. */
-async function bundleCommands(entries: readonly string[], splitting = true, entryNames = '[name]', chunkNames = 'runtime-[hash]', write = true) {
-  const output = resolve('dist/entry/cli'), model = resolve('dist/model');
+async function bundleCommands(entries: readonly string[], splitting = true, entryNames = '[name]', chunkNames = 'runtime-[hash]', write = true, directory = 'dist/entry/cli') {
+  const output = resolve(directory), model = resolve('dist/model');
   const libraries = ['model', 'base', 'domain', 'app'].map(layer => resolve('dist', layer) + '/');
   const parser = resolve(model, 'markdown-parser.js');
   const api = new API({ runExternalCode: false });
@@ -89,6 +89,7 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
   // Package dependencies remain external to preserve Effect service identity with
   // repository contributions and all public exports. Installation resources resolve their package owner independently of bundle depth.
   const closure = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/cli-fallback.js'], outfile: 'dist/entry/cli/cli-fallback-bundle.js', metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
+  yield* Effect.tryPromise(() => bundleCommands(['dist/entry/server/operation/main.js'], false, '[name]', 'runtime-[hash]', true, 'dist/entry/server/operation'));
   // Capture the panel from original modules. Command bundling overwrites the
   // selected command files, whose generated shared chunks include other roots.
   const panels = ['dist/entry/cli/panel-start.js'];
