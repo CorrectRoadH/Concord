@@ -3,30 +3,13 @@ import { readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
 import { Schema } from 'effect';
-import { analyzeCode, executeQuery, clearWorkspaceCache, type QueryRequest } from '../../src/app/index.js';
+import { clearWorkspaceCache } from '../../src/app/index.js';
 import { AnalysisObservationSchema, AnalysisViewSchema, CodeDeclarationSchema, type language_server_config_LanguageServer as LanguageServer } from '../../src/model/index.js';
 import { LocalRepository, runApplication } from '../support/repository.js';
 import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 import { PersistentCache } from '../../src/base/cache/index.js';
+import { query, analyze, codeList, projectCheck } from '../support/lsp-observation-operations.js';
 import { consumer, server, target, write } from '../support/lsp-analysis-source-fixture.js';
-
-const analysis = Schema.Struct({ observations: Schema.Array(AnalysisObservationSchema) });
-const codeList = Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), analysis: AnalysisViewSchema });
-const projectCheck = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Unknown), complete: Schema.optional(Schema.Boolean) });
-async function query<A>(root: string, request: QueryRequest, schema: Schema.ConstraintDecoder<A, never>, exitCode = 0, language?: string): Promise<A> {
-  const prior = process.env.LANG;
-  if (language !== undefined) process.env.LANG = language;
-  try {
-    const reply = await runApplication(executeQuery(root, request));
-    assert.equal(reply.exitCode, exitCode);
-    return Schema.decodeUnknownSync(schema, { onExcessProperty: 'ignore' })(reply.value);
-  } finally { if (prior === undefined) delete process.env.LANG; else process.env.LANG = prior; }
-}
-async function analyze(root: string) {
-  const repo = new LocalRepository(root, { optimistic: true });
-  try { return Schema.decodeUnknownSync(analysis, { onExcessProperty: 'ignore' })(await runApplication(analyzeCode(repo))); }
-  finally { repo.close(); }
-}
 
 // These cases validate relevance and invalidation, rather than timeout budgets.
 // Dedicated budget tests retain the short fake-server limits and their failure assertions.
