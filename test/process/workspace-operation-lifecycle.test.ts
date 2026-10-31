@@ -6,7 +6,7 @@ import test from 'node:test';
 import { digest } from '../../src/model/index.js';
 import { createConsumer } from '../support/consumer.js';
 import { command, record, recordPath, stop } from '../support/workspace-server-fixture.js';
-import { pollUntil, fetchFresh, waitForWorkspaceProjection } from '../support/support.js';
+import { pollUntil, fetchFresh, waitForWorkspaceProjection, writeProjectConfig } from '../support/support.js';
 import { startViewServer } from '../e2e/server.js';
 
 const children = (pid: number) => execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' }).split('\n').flatMap(line => {
@@ -23,6 +23,7 @@ const idle = (pid: number, excluded: readonly number[] = []) => pollUntil(async 
 // @issue docs/issues/workspace-server-unimplemented.md
 test('each Web write consumes a different idle process and stopped services reclaim the replacement', { skip: process.platform === 'win32', timeout: 25_000 }, async () => {
   const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'] });
   mkdirSync(join(root, 'src'), { recursive: true });
   const path = 'src/operation.ts'; writeFileSync(join(root, path), 'export const value = 0;\n');
   const server = await startViewServer({ root });
@@ -49,6 +50,7 @@ test('each Web write consumes a different idle process and stopped services recl
 // @issue docs/issues/workspace-server-unimplemented.md
 test('killing an unused operation process preserves the next write and produces a new idle process', { skip: process.platform === 'win32', timeout: 20_000 }, async () => {
   const root = createConsumer();
+  writeProjectConfig(root, { sourceRoots: ['src'] });
   mkdirSync(join(root, 'src'), { recursive: true });
   const path = 'src/operation.ts', before = 'export const value = 0;\n', after = 'export const recovered = true;\n';
   writeFileSync(join(root, path), before);
