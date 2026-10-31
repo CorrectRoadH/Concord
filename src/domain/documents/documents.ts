@@ -130,7 +130,7 @@ export function diagnoseDocuments(repo: Repository): DocumentInventory {
         const record = result.value;
         if (currentDocument(repo, record)) documents.push(record);
       } catch (cause) {
-        if (!(cause instanceof ConcordError) || !['InvalidData', 'InvalidPlacement', 'InvalidPlan', 'DesignPlanNotFound', 'AmbiguousDesignPlan', 'DesignSelectionInvalid', 'DesignSelectionConflict'].includes(cause.code)) throw cause;
+        if (!(cause instanceof ConcordError) || !['InvalidData', 'InvalidPlacement'].includes(cause.code)) throw cause;
         findings.push({ code: cause.code, path: input.path, message: cause.message });
       }
     }

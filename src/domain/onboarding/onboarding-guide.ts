@@ -26,7 +26,7 @@ Write contracts as declarations of intended behavior, constraints, and acceptanc
 Behavior pages (Feature README, Use Case, cli, library) state commands, real human and JSON output, exit codes, and named errors. The architecture page states how the Feature is implemented. Run \`concord --skill document\` for the full rules.
 
 Templates provide writing prompts, not completed requirements or evidence.
-Read docs/taste.md before creating or revising Feature and Design owners. Link each applicable clause or paragraph ID next to the sentence that relies on it. The check command validates every taste link under docs. Use \`concord taste\` to list where each rule is referenced.
+Read docs/taste.md before creating or revising Feature and Design owners. Link each applicable taste entry ID next to the sentence that relies on it. The check command validates every taste link under docs. Use \`concord taste\` to list where each rule is referenced.
 
 ## Recall and maintain local knowledge
 
@@ -107,7 +107,7 @@ supported placeholders are {file}, {name}, and {pattern}. Arguments never run th
 
 Include additional assertion or runner configuration files in sourceFiles. Concord does not install your dependencies.
 
-\`concord test run <id>\` executes the configured runner. Fix closure and replay also execute it; \`check --since <base>\` replays newly recorded fixes. Plain check, trace, template, and doctor do not run tests.
+\`concord test run <id>\` executes the configured runner. Fixed Issue closure and explicit test verification also execute it. Plain check, trace, template, and doctor do not run tests.
 
 Run results are command evidence, not proof that a native case executed or that a feature is covered.
 

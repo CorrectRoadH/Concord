@@ -58,6 +58,7 @@ const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, 
     case 'docs.check': return checkWriting(repo, request.input.path, cache !== 'off');
     case 'documents.list': {
       const { kind } = request.input;
+      if (kind === 'memory' || kind === 'issue') return { operation: 'list', documents: knowledgeIndex(repo, kind).documents };
       return { operation: 'list', documents: loadDocuments(repo, kind === undefined ? undefined : [kind]).map(doc => ({ path: doc.path, ...doc.metadata })) };
     }
     case 'documents.show': {

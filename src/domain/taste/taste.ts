@@ -16,10 +16,10 @@ import { inspectDocumentRecords } from "../documents/index.js";
 export const TASTE_PATH = 'docs/taste.md';
 export interface TasteEntry { readonly id: string; readonly title: string; readonly paragraphs: readonly string[] }
 export interface TasteRecord { readonly path: typeof TASTE_PATH; readonly source: string; readonly body: string; readonly digest: string; readonly entries: readonly TasteEntry[] }
-/** One inline link occurrence; `paragraph` is null when the link targets a clause or the general section. */
+/** One inline link occurrence; `paragraph` is null when the link targets a entry or the general section. */
 export interface TasteReference { readonly path: string; readonly line: number; readonly entry: string }
 
-const CLAUSE_ID = /^t-[1-9]\d*$/u;
+const ENTRY_ID = /^t-[1-9]\d*$/u;
 const SEGMENT = /^[a-z0-9]+(?:-[a-z0-9]+)*$/u;
 
 // @concord-begin
@@ -39,10 +39,10 @@ export function trailingId(source: string, node: Heading | Paragraph): { readonl
 
 const invalid = (line: number | undefined, message: string): never => { throw new ConcordError('TasteEntryInvalid', `docs/taste.md:${line ?? 1}: ${message}`, { path: TASTE_PATH, line }); };
 
-/** Clauses are H2 headings with `{#t-N}`; paragraphs are root ordered items below them with `{#c-NNN-name}`. */
+/** Clauses are H2 headings with `{#t-N}`; paragraphs are root ordered items below them with `{#general-name}`. */
 export function tasteEntries(source: string): TasteEntry[] {
   const masked = markdownBody(source);
-  const clauses: { id: string; title: string; paragraphs: string[] }[] = [];
+  const entries: { id: string; title: string; paragraphs: string[] }[] = [];
   const declared = new Map<string, number>(), slugs = new Set<string>();
   const declare = (id: string, line: number | undefined) => {
     if (declared.has(id)) invalid(line, `duplicate ID ${id}`);
@@ -63,15 +63,15 @@ export function tasteEntries(source: string): TasteEntry[] {
       } else declare(marker.id, line);
       if (node.depth !== 2) continue;
       const label = /^T-(\d+)(?=\s|$)/u.exec(text);
-      if (marker?.id === 'general') { current = { id: 'general', title: text, paragraphs: [] }; clauses.push(current); continue; }
+      if (marker?.id === 'general') { current = { id: 'general', title: text, paragraphs: [] }; entries.push(current); continue; }
       if (label === null && (marker === undefined || !/^t-\d+$/u.test(marker.id))) continue;
-      if (marker === undefined) invalid(line, `clause heading "${text}" requires a trailing {#t-N}`);
-      if (!CLAUSE_ID.test(marker!.id)) invalid(line, `clause ID ${marker!.id} must be t- followed by a positive integer without leading zeros`);
-      if (label === null || `t-${label[1]}` !== marker!.id) invalid(line, `clause label must be ${marker!.id.toUpperCase()} to match {#${marker!.id}}`);
+      if (marker === undefined) invalid(line, `entry heading "${text}" requires a trailing {#t-N}`);
+      if (!ENTRY_ID.test(marker!.id)) invalid(line, `entry ID ${marker!.id} must be t- followed by a positive integer without leading zeros`);
+      if (label === null || `t-${label[1]}` !== marker!.id) invalid(line, `entry label must be ${marker!.id.toUpperCase()} to match {#${marker!.id}}`);
       const title = text.slice(label![0].length).trim();
-      if (title.length === 0) invalid(line, `clause ${marker!.id} requires a title`);
+      if (title.length === 0) invalid(line, `entry ${marker!.id} requires a title`);
       current = { id: marker!.id, title, paragraphs: [] };
-      clauses.push(current);
+      entries.push(current);
     } else if (node.type === 'list' && node.ordered === true && current?.id === 'general') {
       for (const item of node.children) {
         const first = item.children[0];
@@ -86,14 +86,14 @@ export function tasteEntries(source: string): TasteEntry[] {
     }
   }
   for (const [id, line] of declared) if (slugs.has(id)) invalid(line, `ID ${id} collides with a heading slug`);
-  return clauses;
+  return entries;
 }
 
-export function entryIndex(clauses: readonly TasteEntry[]): ReadonlyMap<string, { readonly entry: string }> {
+export function entryIndex(entries: readonly TasteEntry[]): ReadonlyMap<string, { readonly entry: string }> {
   const index = new Map<string, { entry: string }>();
-  for (const clause of clauses) {
-    index.set(clause.id, { entry: clause.id });
-    for (const paragraph of clause.paragraphs) index.set(paragraph, { entry: paragraph });
+  for (const entry of entries) {
+    index.set(entry.id, { entry: entry.id });
+    for (const paragraph of entry.paragraphs) index.set(paragraph, { entry: paragraph });
   }
   return index;
 }
@@ -215,7 +215,7 @@ export function scanTasteLinks(repo: Repository, index: ReadonlyMap<string, { re
 
 export interface TasteInspection { readonly record?: TasteRecord; readonly references: TasteLinkScan['references']; readonly findings: readonly Finding[]; readonly complete: boolean }
 
-/** Structure, current adoption state and all in-scope references, without throwing for diagnosable states. */
+/** Structure and all in-scope references, without throwing for diagnosable states. */
 export function inspectTaste(repo: Repository, read?: (path: string) => string | undefined): TasteInspection {
   if (repo.read(TASTE_PATH) === undefined) return { references: [], findings: [{ code: 'TasteMissing', path: TASTE_PATH, message: 'docs/taste.md is missing' }], complete: true };
   let record: TasteRecord;

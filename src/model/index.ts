@@ -222,7 +222,6 @@ export { GitCommit } from './shared.js';
 export { HistoricalDispositionSchema } from './shared.js';
 export { inRepositorySnapshot } from './shared.js';
 export type { IssueMeta } from './shared.js';
-export { IssueOriginSchema } from './shared.js';
 export type { IssueRelation } from './shared.js';
 export { IssueRelationSchema } from './shared.js';
 export { IssueSchema } from './shared.js';

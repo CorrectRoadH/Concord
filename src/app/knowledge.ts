@@ -1,3 +1,4 @@
+import { closeIssue } from '../domain/issues/index.js';
 import { findDocument, loadDocuments, readDocumentSelector, setAuthor } from "../domain/documents/index.js";
 import { buildTrace, requireValidTrace } from "../domain/trace/index.js";
 import { ConcordError, digest, inRepositorySnapshot, type DocumentKind, type DocumentRecord, type MutationReceipt, type Repository } from "../model/index.js";
@@ -33,7 +34,7 @@ export function knowledgeIndex(repo: Repository, kind: KnowledgeKind) {
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#recall
 function queryTerms(query: string): readonly string[] {
   const terms = query.trim().toLocaleLowerCase().split(/\s+/u).filter(Boolean);
-  if (terms.length === 0) throw new ConcordError('InvalidInput', 'search query must be non-empty');
+  if (terms.length === 0) throw new ConcordError('InvalidInput', 'recall/search query must be non-empty');
   return terms;
 }
 
@@ -89,13 +90,6 @@ export function removeIssue(repo: Repository, selector: string, expectedDigest: 
     requireValidTrace(trace);
     const record = findDocument(trace.documents, selector, 'issue');
     if (record.digest !== expectedDigest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; use its current digest`);
-    for (const edge of trace.edges) {
-      if (edge.from === record.path) continue;
-      const target = edge.to.split('#', 1)[0]!;
-      if (target === record.path || target === record.metadata.id) throw new ConcordError('IssueReferenced', `${record.path} has an incoming Trace relationship`);
-    }
-    const before = repo.read(record.path);
-    if (before === undefined || digest(before) !== record.digest) throw new ConcordError('FileChangedSinceRead', `${record.path} changed; reload and retry`);
-    return repo.publish('remove-issue', [{ path: record.path, before, after: null }], dryRun);
+    return { ...closeIssue(repo, record.path, 'Handled', dryRun), operation: 'remove-issue' };
   });
 }

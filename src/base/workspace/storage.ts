@@ -194,8 +194,8 @@ Before planning, implementing, or reviewing governed work:
 - Use \`concord --skill all\` only when the complete offline guide is needed.
 - Before changing behavior, read or update the owning Feature, leaf Use Case, documented CLI page, and any required Design. Then run \`concord trace gaps --json\` to inspect missing explicit code/test relationships before implementation.
 - Write contracts as declarations of intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Memory; product workflows remain valid contract content.
-- Directly edit files under \`docs/\` and \`memory/\`, including statuses and relations. Use \`concord memory recall\` and \`concord issue recall\` for search. Commands run required steps such as fix verification; run \`concord check --since <base>\` before delivery. Do not maintain a manual INDEX.
-- For remote Issue writes, run plan, obtain explicit user agreement to its authorization string (or its action, target, and payload), then execute with \`--authorize\`; never infer authorization from plan success, tool availability, or permissive access.
+- Directly edit files under \`docs/\` and \`memory/\`, including relations. Use \`concord memory search\` and \`concord issue search\` for search. Commands run required steps such as fix verification; run \`concord check\` before delivery. Do not maintain a manual INDEX.
+- For remote Issue writes, run remote preview, obtain explicit user agreement to its authorization string (or its action, target, and payload), then remote apply with \`--authorize\`; never infer authorization from preview success, tool availability, or permissive access.
 - Local issues work without GitHub, Linear, credentials, or connections. Use \`concord new issue\` for local observations; local operations never authorize remote mutations.
 - Directly edit directory-scoped \`concepts.md\` and \`concord-writing.json\`; \`concord check\` validates them. Keep each concept's term, definition and explanation together; only deprecated names become terminology bans.
 

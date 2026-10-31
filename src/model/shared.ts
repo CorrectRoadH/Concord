@@ -124,11 +124,6 @@ export const MEMORY_RELATION_KINDS = ['investigation', 'root-cause', 'related'] 
 export const IssueRelationSchema = Schema.Struct({ role: Schema.Literals([...MEMORY_RELATION_KINDS, 'adopts']), target: Text });
 export type IssueRelation = typeof IssueRelationSchema.Type;
 export const FixVerificationSchema = Schema.Struct({ defect: GitCommit, fix: GitCommit, tests: Schema.NonEmptyArray(Text).check(Schema.makeFilter(values => new Set(values).size === values.length)), runner: Sha256, concord: Text });
-export const IssueOriginSchema = Schema.Union([
-  Schema.Struct({ kind: Schema.Literal('dev'), repository: Text, commit: Schema.optional(Text) }),
-  Schema.Struct({ kind: Schema.Literal('dogfood'), repository: Text, originId: Text, commit: Text }),
-  Schema.Struct({ kind: Schema.Literal('issue'), repository: Text, number: Nat, url: Text }),
-]);
 export const IssueSchema = Schema.Struct({ ...declarative, kind: Schema.Literal('issue'), relations: Schema.Array(IssueRelationSchema), source: Schema.optional(FeedbackSourceSchema) });
 export type IssueMeta = typeof IssueSchema.Type;
 export const DocumentSchema = Schema.Union([FeatureSchema, UseCaseSchema, DesignSchema, RoadmapSchema, EngineeringSchema, MemorySchema, IssueSchema]);
