@@ -2,12 +2,12 @@
 
 ## 用户目标
 
-测试维护者在任意语言的测试文件里写一行注释，把测试关联到 Feature 或 Use Case。Concord 从这些注释发现测试，不解析测试框架的语法。缓存损坏或被删除时，结果仍以源码为准。
+测试维护者在任意语言的测试文件里写一行注释，把测试关联到 Feature、Engineering 或它们的 Use Case。Concord 从这些注释发现测试，不解析测试框架的语法。缓存损坏或被删除时，结果仍以源码为准。
 
 ## 起始状态
 
 - `concord.config.ts` 的 `testRoots` 指向测试目录，例如 `["test"]`。
-- 要关联的 Feature 或 Use Case 已存在。
+- 要关联的 Feature、Engineering 或 Use Case 已存在。
 
 ## 完整路径
 
@@ -20,6 +20,8 @@
    ```text
    // @use-case docs/feature/cart/use-case/add-item.md
    ```
+
+   守护仓库自身维护机制的测试指向 Engineering，写法与 Feature 相同，例如 `// @feature docs/engineering/concord-self-hosting/README.md`。
 
    `--issue docs/issues/<i>.md` 追加 `@issue` 行，标明这条回归测试守护的 Issue；`issue close` 删除该 Issue 时一并删除这一行，所以 `@issue` 只出现在还要处理的 Issue 的回归测试里。需要可读名称时，在标记块里手写 `@name <text>`。Spec 或 Issue 不存在时返回 `ReferenceNotFound`。
 
@@ -66,7 +68,7 @@
 
 ## 标记规则
 
-- 每个标记块只选一个 Spec。多个标记块可以关联同一个 Feature 或 Use Case。
+- 每个标记块只选一个 Spec。多个标记块可以关联同一个 Feature、Engineering 或 Use Case。
 - `@status retired` 表示测试已退役，不参与修复核验。
 - 工具不从测试语法推断跳过或待办状态。
 
