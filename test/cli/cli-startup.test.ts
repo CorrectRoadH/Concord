@@ -9,13 +9,19 @@ test('installed static help enumerates the actual commands and matches the publi
     for (let index = 0; index < helpCalls.length; index++) {
       assert.equal(expected[index]!.status, helpCalls[index]!.length === 0 ? 1 : 0, JSON.stringify({ args: helpCalls[index], actual: expected[index] }));
       assert.deepEqual(fallback[index], expected[index], JSON.stringify(helpCalls[index]));
+      const args = helpCalls[index]!;
+      if (args.at(-1) === '--help') {
+        const usage = `concord${args.length === 1 ? '' : ` ${args.slice(0, -1).join(' ')}`}`;
+        const actual = /(?:^|\n)USAGE\n\s+([^\n]+)/u.exec(expected[index]!.stdout)?.[1];
+        assert.ok(actual === usage || actual?.startsWith(`${usage} `), JSON.stringify({ args, actual }));
+      }
     }
   } finally { renameSync(`${path}.saved`, path); }
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('installed help and version load the generated data without Effect, commands or native modules', () => {
-  for (const args of [[], ['--version'], ['--help'], ['memory', 'index', '--help'], ['test', 'verify', '--help'], ['check', '--help']]) {
+  for (const args of [[], ['--version'], ['--help'], ['memory', 'search', '--help'], ['test', 'verify', '--help'], ['check', '--help']]) {
     const path = join(scratch, 'loaded.json');
     const result = spawnSync(process.execPath, ['--import', 'tsx', '--import', resolve('test/support/cli-load-probe.ts'), entry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, args.length === 0 ? 1 : 0, JSON.stringify({ args, stdout: result.stdout, stderr: result.stderr }));

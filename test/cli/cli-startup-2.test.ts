@@ -2,7 +2,7 @@ import { assert, execFile, spawnSync, appendFileSync, mkdirSync, mkdtempSync, re
 
 // @use-case docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md
 test('installed ordinary commands load only their selected command group', () => {
-  for (const [group, args] of [['memory', ['--json', '--root', scratch, 'memory', 'index']], ['template', ['template', 'list', '--json']]] as const) {
+  for (const [group, args] of [['memory', ['--json', '--root', scratch, 'memory', 'search', 'cache']], ['template', ['template', 'list', '--json']]] as const) {
     const path = join(scratch, 'loaded.json');
     const result = spawnSync(process.execPath, ['--import', 'tsx', '--import', resolve('test/support/cli-load-probe.ts'), entry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.error, undefined);
@@ -17,9 +17,9 @@ test('installed ordinary commands load only their selected command group', () =>
 test('installed routing preserves flags, unknown inputs, delimiters, completion and skills', () => Effect.runPromise(Effect.gen(function* () {
   const calls = [
     ['--json', 'unknown'], ['memory', 'unknown', '--json'], ['template', 'list', '--unknown', '--json'],
-    ['--json', '--root', '/concord-missing-root', 'memory', 'index'], ['--root=/concord-missing-root', 'memory', 'index', '--json'],
+    ['--json', '--root', '/concord-missing-root', 'memory', 'search', 'cache'], ['--root=/concord-missing-root', 'memory', 'search', 'cache', '--json'],
     ['template', 'list', '--json'], ['--json=true', 'template', 'list'], ['template', '--', '--help'],
-    ['memory', 'index', '--', '--json'], ['--root', '--help'], ['--unknown', 'template', 'list'],
+    ['memory', 'search', '--', '--json'], ['--root', '--help'], ['--unknown', 'template', 'list'],
     ['template', 'list', '-h'], ['template', 'list', '--help=true'], ['memory', '-v'],
     ['--completions', 'bash'], ['template', '--completions=zsh'], ['--json', 'show', 'missing'], ['--skill', 'memory'],
   ];

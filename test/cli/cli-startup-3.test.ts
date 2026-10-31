@@ -28,7 +28,7 @@ test('help preserves terminal rendering and rejects mismatched generated data', 
   };
   for (const [term, tty, color] of [['dumb', false, undefined], ['xterm-256color', false, undefined], ['xterm-256color', true, undefined], ['dumb', false, '1']] as const) {
     const env = { ...environment, TERM: term, FORCE_COLOR: color, NODE_NO_WARNINGS: '1' };
-    for (const args of [['--help'], ['memory', 'index', '--help'], ['--version']]) {
+    for (const args of [['--help'], ['memory', 'search', '--help'], ['--version']]) {
       const expected = run(args, env, tty);
       assert.equal(expected.status, 0, JSON.stringify(expected));
       renameSync(manifest, `${manifest}.saved`);

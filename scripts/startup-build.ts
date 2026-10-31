@@ -126,7 +126,16 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
   };
   visit(definitions.fullCommand, []);
   const calls = [[], ['--version'], ...paths.map(path => [...path, '--help'])];
-  const receipts = yield* Effect.all(calls.map(args => capture(args).pipe(Effect.map(receipt => [JSON.stringify(args), receipt] as const))), { concurrency: 4 });
+  const receipts = yield* Effect.all(calls.map(args => capture(args).pipe(Effect.flatMap(receipt => {
+    if (args.at(-1) === '--help') {
+      const usage = `concord${args.length === 1 ? '' : ` ${args.slice(0, -1).join(' ')}`}`;
+      const actual = /(?:^|\n)USAGE\n\s+([^\n]+)/u.exec(receipt.stdout)?.[1];
+      if (receipt.status !== 0 || actual === undefined || !(actual === usage || actual.startsWith(`${usage} `))) {
+        return Effect.fail(new StartupBuildFailed({ message: `Help for ${usage} did not describe that command: ${receipt.stderr || receipt.stdout}` }));
+      }
+    }
+    return Effect.succeed([JSON.stringify(args), receipt] as const);
+  }))), { concurrency: 4 });
   const commands = [...new Set(Object.values(bootstrap.metafile!.inputs).flatMap(input => input.imports)
     .filter(item => item.kind === 'dynamic-import' && item.path.startsWith('dist/entry/cli/')).map(item => item.path))];
   yield* Effect.tryPromise({ try: async () => {
