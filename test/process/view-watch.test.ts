@@ -70,7 +70,7 @@ const waitForPublished = Effect.fn('waitForWatchedProjection')(function* (
   let last: WorkspaceProjection | undefined;
   for (;;) {
     last = yield* Effect.sync(() => readPublished(root));
-    if (last?.projection.status === 'ready' && last.projection.consistent && accepts(last)) return last;
+    if (last?.projection.status === 'ready' && accepts(last)) return last;
     if (performance.now() >= deadline) assert.fail(`${description} was not published within 15 seconds: ${JSON.stringify({ projection: last?.projection, findings: last?.snapshot.findings, sources: last?.snapshot.sources })}`);
     yield* Effect.sleep(100);
   }

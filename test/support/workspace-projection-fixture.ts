@@ -22,7 +22,7 @@ import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
 
 import { type WorkspaceProjection } from "../../src/model/index.js";
-import { makeWorkspaceProjectionRecord, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
+import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';

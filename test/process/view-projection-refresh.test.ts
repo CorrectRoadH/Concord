@@ -22,7 +22,7 @@ import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
 
 import { type WorkspaceProjection } from "../../src/model/index.js";
-import { makeWorkspaceProjectionRecord, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
+import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';
@@ -31,46 +31,12 @@ import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitFo
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.js';
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('a first generation built during source drift publishes incomplete navigation instead of failing', async () => {
-  const root = fixture();
-  const sources = Array.from({ length: 900 }, (_value, index) => `src/source-${index}.ts`);
-  for (const path of sources) writeFileSync(join(root, path), 'export const value = 0;\n');
-  let revision = 0;
-  const churn = setInterval(() => {
-    const path = sources[revision % sources.length]!;
-    writeFileSync(join(root, path), `export const value = ${revision += 1};\n`);
-  }, 2);
-  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  const base = baseOf(server);
-  try {
-    const first = await fetchFresh(`${base}/api/workspace`);
-    await first.arrayBuffer();
-    const value = await pollUntil(async () => {
-      const response = await fetchFresh(`${base}/api/workspace`);
-      if (response.status !== 200) { await response.arrayBuffer(); return undefined; }
-      const parsed = parseWorkspaceProjection(await response.text());
-      return parsed?.projection.consistent === false ? parsed : undefined;
-    }, { description: 'drifted first generation', timeoutMs: 50_000 });
-    assert.equal(value.projection.status, 'ready');
-    assert.equal(value.projection.consistent, false);
-    assert.equal(value.projection.complete, false);
-    assert.equal(value.projection.unknownRelations, true);
-    assert.ok(value.projection.changedPaths.length > 0, 'a drifted generation lists what changed');
-  } finally {
-    clearInterval(churn);
-    await server.close();
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a new consistent generation with findings replaces the previous healthy generation', async () => {
   const root = fixture();
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
     const healthy = await waitForWorkspaceProjection(base);
-    assert.equal(healthy.projection.consistent, true);
     assert.deepEqual(healthy.snapshot.findings, []);
     const broken = 'docs/feature/broken/README.md';
     mkdirSync(join(root, 'docs/feature/broken'), { recursive: true });
@@ -84,7 +50,6 @@ test('a new consistent generation with findings replaces the previous healthy ge
       if (parsed === undefined || parsed.snapshot.findings.length === 0) return undefined;
       return parsed;
     }, { description: 'replacement generation with findings', timeoutMs: 45_000 });
-    assert.equal(replaced.projection.consistent, true);
     assert.equal(replaced.projection.complete, false);
     assert.ok(replaced.snapshot.findings.some(finding => finding.path === broken), JSON.stringify(replaced.snapshot.findings));
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }

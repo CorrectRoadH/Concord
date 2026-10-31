@@ -20,12 +20,14 @@ export interface WorkspaceEvent {
   readonly sourceDigest: string | null;
   readonly workspace?: WorkspaceProjection;
   readonly projection?: WorkspaceProjection['projection'];
+  readonly lastAttempt?: WorkspaceProjection['projection']['lastAttempt'];
   readonly error?: { readonly code: string; readonly message: string };
 }
 export class WorkspaceState extends Context.Service<WorkspaceState, {
   readonly value: SubscriptionRef.SubscriptionRef<WorkspaceEvent>;
   readonly transition: (state: ServerState, error?: WorkspaceEvent['error']) => Effect.Effect<void>;
   readonly accept: (workspace: WorkspaceProjection) => Effect.Effect<void>;
+  readonly attempt: (attempt: NonNullable<WorkspaceEvent['lastAttempt']>) => Effect.Effect<void>;
   readonly reset: Effect.Effect<void>;
   readonly touch: Effect.Effect<void>;
   readonly expired: Effect.Effect<boolean>;
@@ -37,8 +39,9 @@ export class WorkspaceState extends Context.Service<WorkspaceState, {
       return {
         value,
         transition: (state, error) => SubscriptionRef.update(value, prior => transitions[prior.state].includes(state) ? { ...prior, state, error } : prior),
-        accept: workspace => SubscriptionRef.update(value, prior => ({ ...prior, sourceDigest: workspace.projection.sourceDigest, workspace })),
-        reset: SubscriptionRef.update(value, prior => ({ ...prior, workspace: undefined, sourceDigest: null, error: undefined })),
+        accept: workspace => SubscriptionRef.update(value, prior => ({ ...prior, sourceDigest: workspace.projection.sourceDigest, lastAttempt: workspace.projection.lastAttempt, workspace })),
+        attempt: lastAttempt => SubscriptionRef.update(value, prior => ({ ...prior, lastAttempt })),
+        reset: SubscriptionRef.update(value, prior => ({ ...prior, workspace: undefined, sourceDigest: null, lastAttempt: undefined, error: undefined })),
         touch: Clock.currentTimeMillis.pipe(Effect.tap(now => Effect.sync(() => { lastRequest = now; })), Effect.asVoid),
         expired: Clock.currentTimeMillis.pipe(Effect.map(now => now - lastRequest >= 600_000)),
       };

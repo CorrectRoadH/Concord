@@ -104,7 +104,7 @@ export { computeEditor } from './editor-compute.js';
 export { runEditorJob } from './editor-job.js';
 export { workspaceProjectionContext } from './workspace-projection.js';
 export { assertWorkspacePublicationReady } from './workspace-projection.js';
-export { makeWorkspaceProjectionRecord } from './workspace-projection.js';
+export { makeWorkspaceProjectionCandidate } from './workspace-projection.js';
 export { readWorkspaceProjection } from './workspace-projection.js';
 export { storeWorkspaceProjection } from './workspace-projection.js';
 export type { Observation } from './request-timing.js';

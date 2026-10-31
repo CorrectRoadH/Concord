@@ -48,14 +48,21 @@ export const WorkspaceProjectionSnapshotSchema = Schema.Struct({
   cache: Schema.Struct({ status: Schema.String, hits: Schema.optional(Schema.Number), misses: Schema.optional(Schema.Number), path: Schema.optional(Schema.String), detail: Schema.optional(Schema.String) }),
   diagnostics: Diagnostic,
 });
-export const WorkspaceProjectionRecordSchema = Schema.Struct({
-  sourceDigest: Schema.String, builtAt: Instant, builtFrom: Instant, builtUntil: Instant,
-  consistent: Schema.Boolean, complete: Schema.Boolean, changedPaths: Schema.Array(Schema.String), unknownRelations: Schema.Boolean,
+const RecordFields = {
+  builtAt: Instant, builtFrom: Instant, builtUntil: Instant,
+  complete: Schema.Boolean, changedPaths: Schema.Array(Schema.String), unknownRelations: Schema.Boolean,
   snapshot: WorkspaceProjectionSnapshotSchema,
-}).check(Schema.makeFilter(value => value.consistent === (value.changedPaths.length === 0)
-  && value.complete === (value.consistent && value.snapshot.complete === true)
-  && value.unknownRelations === !value.complete
+};
+export const WorkspaceProjectionRecordSchema = Schema.Struct({ sourceDigest: Schema.String, ...RecordFields }).check(Schema.makeFilter(value =>
+  value.changedPaths.length === 0 && value.complete === (value.snapshot.complete === true)
+  && value.unknownRelations === !value.complete && Date.parse(value.builtFrom) <= Date.parse(value.builtUntil)));
+/** A drifting computation is an attempt, with no result identity or publication authority. */
+export const WorkspaceProjectionCandidateSchema = Schema.Struct({ sourceDigest: Schema.optional(Schema.String), ...RecordFields }).check(Schema.makeFilter(value =>
+  (value.sourceDigest !== undefined) === (value.changedPaths.length === 0)
+  && value.complete === (value.snapshot.complete === true) && value.unknownRelations === !value.complete
   && Date.parse(value.builtFrom) <= Date.parse(value.builtUntil)));
+export type WorkspaceProjectionCandidate = typeof WorkspaceProjectionCandidateSchema.Type;
+export const decodeWorkspaceProjectionCandidate = Schema.decodeUnknownSync(WorkspaceProjectionCandidateSchema, { onExcessProperty: 'error' });
 
 const Attempt = Schema.Struct({ at: Instant, complete: Schema.Boolean, changedPaths: Schema.Array(Schema.String) });
 
@@ -70,7 +77,7 @@ export const WorkspaceProjectionSchema = Schema.Struct({ snapshot: WorkspaceProj
 }) });
 export const WorkspaceServerEvent = Schema.Struct({ token: Schema.String, sourceDigest: Schema.NullOr(Schema.String),
   state: Schema.Literals(['opening', 'running', 'degraded', 'draining', 'clearing', 'maintaining', 'blocked', 'stopping']),
-  workspace: Schema.optional(WorkspaceProjectionSchema), projection: Schema.optional(WorkspaceProjectionSchema.fields.projection), error: Schema.optional(Schema.Struct(ErrorFields)),
+  lastAttempt: Schema.optional(Attempt), workspace: Schema.optional(WorkspaceProjectionSchema), projection: Schema.optional(WorkspaceProjectionSchema.fields.projection), error: Schema.optional(Schema.Struct(ErrorFields)),
 }).annotate({ parseOptions: { onExcessProperty: 'error' } });
 export type WorkspaceProjectionRecord = typeof WorkspaceProjectionRecordSchema.Type;
 export interface WorkspaceProjectionContext { readonly root: string; readonly privateDir: string; readonly identity: string }

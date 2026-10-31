@@ -115,8 +115,8 @@ export function FeedbackNavigation() {
       active: item.document.metadata.id === id, searchText: searchText(item),
       suffix: <span className="text-xs text-muted-foreground">{feedbackTriageLabel(item.triage)} · {feedbackProviderLabel(item.provider)}{item.warnings.length > 0 && <span title={item.warnings.join("；")}> · 有提醒</span>}</span>,
     })), filterable: false, emptyMessage: filtered
-      ? conclusive ? '没有匹配的反馈' : '当前代次未显示匹配反馈；列表可能不完整'
-      : feedback.length ? '没有匹配的反馈' : conclusive ? '还没有反馈' : '当前代次未显示反馈；列表可能不完整',
+      ? conclusive ? '没有匹配的反馈' : '当前结果未显示匹配反馈；列表可能不完整'
+      : feedback.length ? '没有匹配的反馈' : conclusive ? '还没有反馈' : '当前结果未显示反馈；列表可能不完整',
     actions: feedback.length > 0 ? <div className="feedback-toolbar"><Select value={provider} onValueChange={(value) => setProvider(value as ProviderFilter)}><SelectTrigger aria-label="按来源筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部来源</SelectItem><SelectItem value="local">仅本地</SelectItem><SelectItem value="github">GitHub</SelectItem><SelectItem value="linear">Linear</SelectItem></SelectContent></Select><Select value={triage} onValueChange={(value) => setTriage(value as TriageFilter)}><SelectTrigger aria-label="按处理状态筛选"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">全部处理状态</SelectItem><SelectItem value="pending">待处理</SelectItem><SelectItem value="linked">已关联</SelectItem></SelectContent></Select></div> : undefined,
     }],
   }} />
@@ -135,7 +135,7 @@ export function FeedbackPage() {
     {receiptNotices.length > 0 && <div className="callout callout--warning feedback-receipt-warnings"><div><strong>同步已完成，但有提醒</strong>{receiptNotices.map((warning) => <p key={warning}>{warning}</p>)}</div><Button size="sm" variant="ghost" onClick={() => setReceiptNotices([])}>关闭</Button></div>}
     {feedback.length === 0 ? conclusive
       ? <PanelEmpty title="新建第一条反馈">新建本地反馈，或前往<Link to="/settings?tab=feedback">反馈来源设置</Link>添加连接。</PanelEmpty>
-      : <PanelEmpty title="当前代次未显示反馈">投影尚未完整且一致，暂时无法确认反馈是否存在。</PanelEmpty>
+      : <PanelEmpty title="当前结果未显示反馈">投影尚未完整且一致，暂时无法确认反馈是否存在。</PanelEmpty>
       : <PanelEmpty title="选择反馈">从内容导航选择反馈，查看正文、来源与处理状态。</PanelEmpty>}
 
   </>
@@ -216,7 +216,7 @@ function FeatureLinker({ item }: { item: WorkspaceFeedback }) {
     try { const action: ViewAction = { action: "issue.link", id: item.document.path, memory: feature, role: "adopts" }; await act(action, "反馈已关联 Feature。") }
     catch (cause) { setError(errorMessage(cause)) }
   }
-  return <Card className="feedback-feature-card"><CardHeader><CardTitle>Feature 关联</CardTitle><CardDescription>关联后处理状态会变为“已关联”；Memory 关系和关闭操作在生命周期页签中维护。</CardDescription></CardHeader><CardContent>{linked.length > 0 && <div className="tag-list">{linked.map((reference) => <code key={reference}>{reference}</code>)}</div>}{available.length > 0 ? <><div className="feedback-link-row"><Select value={feature} onValueChange={setFeature}><SelectTrigger aria-label="关联 Feature"><SelectValue placeholder="选择 Feature" /></SelectTrigger><SelectContent>{available.map((candidate) => <SelectItem key={candidate.path} value={candidate.path}>{candidate.metadata.title} · {candidate.metadata.id}</SelectItem>)}</SelectContent></Select><Button variant="outline" disabled={!conclusive || busy || !feature} onClick={() => fire(linkFeature())}><Link2 /> 关联 Feature</Button></div>{!conclusive && <p className="muted">当前投影不完整或关系未知，暂不能确认可关联的 Feature。</p>}</> : <p className="muted">{!conclusive ? "当前代次无法确认 Feature 列表或关联状态。" : features.length === 0 ? "项目中还没有 Feature。" : "已关联所有可用 Feature。"}</p>}{error && <div className="form-error" role="alert">{error}</div>}</CardContent></Card>
+  return <Card className="feedback-feature-card"><CardHeader><CardTitle>Feature 关联</CardTitle><CardDescription>关联后处理状态会变为“已关联”；Memory 关系和关闭操作在生命周期页签中维护。</CardDescription></CardHeader><CardContent>{linked.length > 0 && <div className="tag-list">{linked.map((reference) => <code key={reference}>{reference}</code>)}</div>}{available.length > 0 ? <><div className="feedback-link-row"><Select value={feature} onValueChange={setFeature}><SelectTrigger aria-label="关联 Feature"><SelectValue placeholder="选择 Feature" /></SelectTrigger><SelectContent>{available.map((candidate) => <SelectItem key={candidate.path} value={candidate.path}>{candidate.metadata.title} · {candidate.metadata.id}</SelectItem>)}</SelectContent></Select><Button variant="outline" disabled={!conclusive || busy || !feature} onClick={() => fire(linkFeature())}><Link2 /> 关联 Feature</Button></div>{!conclusive && <p className="muted">当前投影不完整或关系未知，暂不能确认可关联的 Feature。</p>}</> : <p className="muted">{!conclusive ? "当前结果无法确认 Feature 列表或关联状态。" : features.length === 0 ? "项目中还没有 Feature。" : "已关联所有可用 Feature。"}</p>}{error && <div className="form-error" role="alert">{error}</div>}</CardContent></Card>
 }
 
 // @concord-code
@@ -227,6 +227,6 @@ export function FeedbackDetailPage() {
   const item = snapshot.feedback.find((candidate) => candidate.document.metadata.id === id)
   if (!item) return projectionIsConclusive(projection)
     ? <Empty kind="missing" title="找不到反馈">它可能已被移动、删除或尚未导入。</Empty>
-    : <Empty title="当前代次未包含此反馈">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
+    : <Empty title="当前结果未包含此反馈">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
   return <><DocumentDetailPage kind="issue" relatedContent={<><PanelHeader title="来源与关联" /><RemoveLocalDraft item={item} /><div className="feedback-detail-context"><SourcePanel item={item} /><FeatureLinker item={item} /></div></>} /></>
 }

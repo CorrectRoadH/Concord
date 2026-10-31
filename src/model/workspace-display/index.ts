@@ -52,7 +52,7 @@ export function effectiveWorkspaceConcepts(snapshot: Pick<WorkspaceProjectionSna
     .map(item => ({ ...item.concept, path: item.path, digest: snapshot.pages.find(page => page.path === item.path)?.digest ?? '', reference: item.reference }));
 }
 export function projectionIsConclusive(projection: WorkspaceProjectionStatus): boolean {
-  return projection.status === 'ready' && projection.consistent && projection.complete && !projection.unknownRelations;
+  return projection.status === 'ready' && projection.complete && !projection.unknownRelations;
 }
 const ROOT_RANK = ['docs/README.md', 'docs/architecture.md', 'docs/taste.md', 'docs/concepts.md', 'docs/concord.md'];
 function under(path: string, root: string): boolean { return path === root || path.startsWith(`${root}/`); }

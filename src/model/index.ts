@@ -389,3 +389,6 @@ export { CacheSnapshotUnavailable, CacheDerivationBatch } from './cache-snapshot
 export { writingBudget, WRITING_PARSER_VERSION } from './writing-limits.js';
 export type { PolicySource } from './writing-limits.js';
 export { parseWritingPolicy, renderWritingPolicy } from './writing-format.js';
+
+export { decodeWorkspaceProjectionCandidate } from './workspace-projection.js';
+export type { WorkspaceProjectionCandidate } from './workspace-projection.js';

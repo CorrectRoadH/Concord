@@ -22,7 +22,7 @@ import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
 
 import { type WorkspaceProjection } from "../../src/model/index.js";
-import { makeWorkspaceProjectionRecord, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
+import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';
@@ -38,7 +38,7 @@ test('a completed workspace scan survives brief contention at publication', asyn
   const root = fixture();
   try {
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
-    const candidate = makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
+    const candidate = makeWorkspaceProjectionCandidate(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
     const context = workspaceProjectionContext(root);
     await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
       const owner = yield* PersistentCache.owner(context.privateDir);
@@ -59,7 +59,7 @@ test('a recovery failure preserves the exact previously accepted persistent gene
   const root = fixture();
   try {
     const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
-    const candidate = makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
+    const candidate = makeWorkspaceProjectionCandidate(snapshot, { files: [], directories: [], publicationChanged: false }, new Date().toISOString(), 'fixture-sources');
     const context = workspaceProjectionContext(root);
     storeWorkspaceProjection(context, candidate);
     const previous = readWorkspaceProjection(context);
@@ -77,13 +77,12 @@ test('a drifted candidate retains the last consistent generation and reports the
   const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
   const context = workspaceProjectionContext(root);
   try {
-    storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date(Date.now() - 1000).toISOString(), 'fixture-sources'));
+    storeWorkspaceProjection(context, makeWorkspaceProjectionCandidate(snapshot, { files: [], directories: [], publicationChanged: false }, new Date(Date.now() - 1000).toISOString(), 'fixture-sources'));
     const healthy = readWorkspaceProjection(context);
     assert.equal(healthy.projection.status, 'ready');
-    storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: ['src/main.ts'], directories: [], publicationChanged: false }, new Date().toISOString(), 'drifted-sources'));
+    storeWorkspaceProjection(context, makeWorkspaceProjectionCandidate(snapshot, { files: ['src/main.ts'], directories: [], publicationChanged: false }, new Date().toISOString(), 'drifted-sources'));
     const retained = readWorkspaceProjection(context);
     assert.equal(retained.projection.status, 'ready', 'source drift during editing is not a refresh failure');
-    assert.equal(retained.projection.consistent, true, 'the last consistent generation stays the navigation result');
     assert.deepEqual(retained.projection.changedPaths, []);
     assert.equal(retained.projection.lastError, undefined);
     assert.deepEqual(retained.projection.lastAttempt?.changedPaths, ['src/main.ts']);
@@ -108,4 +107,17 @@ test('observeProjection reports observed file drift without throwing the candida
     assert.deepEqual(result.drift.directories, []);
     assert.equal(result.drift.publicationChanged, false);
   } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('a first drifting candidate stores only its attempt and remains pending without a sourceDigest', async () => {
+  const root = fixture();
+  try {
+    const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
+    const candidate = makeWorkspaceProjectionCandidate(snapshot, { files: ['src/main.ts'], directories: [], publicationChanged: false }, new Date().toISOString(), 'must-not-publish');
+    assert.equal(candidate.sourceDigest, undefined);
+    const context = workspaceProjectionContext(root);
+    storeWorkspaceProjection(context, candidate);
+    assert.throws(() => readWorkspaceProjection(context), { code: 'WorkspaceProjectionPending' });
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

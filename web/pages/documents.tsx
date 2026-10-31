@@ -356,7 +356,7 @@ export function DocumentsListPage({
         <Badge variant="secondary">{documents.length} 项</Badge>
       </div>
       {documents.length === 0 ? (
-        <Empty kind={filter ? "filtered" : "empty"} title={conclusive ? filter ? "没有匹配的文档" : `还没有 ${humanKind(kind)}` : `当前代次未显示${humanKind(kind)}`}>
+        <Empty kind={filter ? "filtered" : "empty"} title={conclusive ? filter ? "没有匹配的文档" : `还没有 ${humanKind(kind)}` : `当前结果未显示${humanKind(kind)}`}>
           {conclusive ? filter ? "调整筛选条件后重试。" : "使用新建入口创建第一项。" : "投影尚未完整且一致，暂时无法确认是否还有匹配项。"}
         </Empty>
       ) : (
@@ -406,14 +406,14 @@ export function FeatureDetailPage() {
   if (!feature) {
     return conclusive
       ? <Empty kind="missing" title="找不到 Feature">它可能已被移动或删除。</Empty>
-      : <Empty title="当前代次未包含此 Feature">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
+      : <Empty title="当前结果未包含此 Feature">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
   }
   const useCases = featureUseCases(snapshot, feature)
   const nested = (
     <section className="feature-use-cases">
       <PanelHeader title="Use Cases" actions={<CreateDocument kind="use-case" feature={feature.path} />} />
       {useCases.length === 0 ? (
-        <PanelEmpty title={conclusive ? "还没有 Use Case" : "当前代次暂未显示 Use Case"}>
+        <PanelEmpty title={conclusive ? "还没有 Use Case" : "当前结果暂未显示 Use Case"}>
           {conclusive ? `从这里创建时会自动绑定 ${feature.metadata.title}。` : "投影尚未完整且一致，暂时无法确认是否还有 Use Case。"}
         </PanelEmpty>
       ) : (
@@ -454,12 +454,12 @@ export function UseCaseDrawer() {
   const document = snapshot.documents.find(item => item.metadata.kind === "use-case" && item.metadata.id === useCaseId && feature !== undefined && featureMatches(item.metadata.feature, feature))
   const close = () => navigation.close(`/features/${encodeURIComponent(id ?? "")}?tab=use-cases`)
   return <DetailDrawer open onClose={close} model={{
-    title: document?.metadata.title ?? (conclusive ? "找不到 Use Case" : "当前代次未包含此 Use Case"),
+    title: document?.metadata.title ?? (conclusive ? "找不到 Use Case" : "当前结果未包含此 Use Case"),
     description: `所属 Feature：${feature?.metadata.title ?? id}`,
   }}>
     {document ? <DocumentLayout key={document.path} document={document} /> : conclusive
       ? <Empty kind="missing" title="找不到 Use Case">此 Feature 下没有该 Use Case。</Empty>
-      : <Empty title="当前代次未包含此 Use Case">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>}
+      : <Empty title="当前结果未包含此 Use Case">投影尚未完整且一致，暂时无法确认它是否存在。</Empty>}
   </DetailDrawer>
 }
 
@@ -475,7 +475,7 @@ export function DocumentDetailPage({ kind, relatedContent }: { kind: DocumentKin
   if (!document) {
     return conclusive
       ? <Empty kind="missing" title={`找不到 ${humanKind(kind)}`}>它可能已被移动或删除。</Empty>
-      : <Empty title={`当前代次未包含此${humanKind(kind)}`}>投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
+      : <Empty title={`当前结果未包含此${humanKind(kind)}`}>投影尚未完整且一致，暂时无法确认它是否存在。</Empty>
   }
   let back: React.ReactNode = null
   if (document.metadata.kind === "use-case") {

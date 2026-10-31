@@ -54,7 +54,6 @@ test('HTTP projection retains orphan annotation incompleteness and observes its 
     writeFileSync(path, `${original}\n// @concord-file\n// @concord-implements docs/feature/cached/README.md\n`);
     await requestRefresh();
     const orphaned = await waitForFinding('OrphanCodeAnnotation');
-    assert.equal(orphaned.projection.consistent, true);
     assert.equal(orphaned.projection.complete, false);
     writeFileSync(path, original);
     await requestRefresh();

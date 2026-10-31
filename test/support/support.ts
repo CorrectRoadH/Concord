@@ -110,7 +110,6 @@ const WorkspaceProjectionStatusSchema = Schema.Struct({
   builtAt: Schema.String,
   builtFrom: Schema.String,
   builtUntil: Schema.String,
-  consistent: Schema.Boolean,
   complete: Schema.Boolean,
   changedPaths: Schema.Array(Schema.String),
   unknownRelations: Schema.Boolean,

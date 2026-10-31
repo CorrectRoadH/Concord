@@ -183,7 +183,8 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
   const [compareOpen, setCompareOpen] = useState(false);
   const [editorKey, setEditorKey] = useState(initial.digest);
   const observedDigest = snapshot.documents.find(document => document.path === initial.path)?.digest
-    ?? snapshot.pages.find(page => page.path === initial.path)?.digest;
+    ?? snapshot.pages.find(page => page.path === initial.path)?.digest
+    ?? snapshot.sources.find(source => source.path === initial.path)?.digest;
   const dirtyRef = useRef(dirty);
   dirtyRef.current = dirty;
   const checkedDigest = useRef<string | null>(null);

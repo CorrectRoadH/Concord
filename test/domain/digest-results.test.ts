@@ -50,7 +50,7 @@ test('a changed source digest discards the late candidate before persistent publ
   const service = yield* makeWorkspaceService(ports({
     sourceDigest: Effect.sync(() => sourceDigest),
     compute: () => Effect.suspend(() => ++scans === 1 ? Deferred.succeed(started, undefined).pipe(Effect.andThen(Deferred.await(finish))) : Effect.never),
-    persist: () => Effect.sync(() => { writes++; }),
+    persist: (_context, candidate) => Effect.sync(() => { if (candidate) writes++; }),
   }));
   yield* Deferred.await(started);
   sourceDigest = 'changed';
@@ -59,6 +59,7 @@ test('a changed source digest discards the late candidate before persistent publ
   yield* TestClock.adjust(0);
   assert.equal(writes, 0);
   assert.equal(scans, 2);
+  assert.deepEqual((yield* SubscriptionRef.get(service.state.value)).lastAttempt?.changedPaths, ['.']);
   assert.equal((yield* SubscriptionRef.get(service.state.value)).sourceDigest, record.sourceDigest);
   yield* service.stop;
 })).pipe(Effect.provide(stateLayer))));
@@ -81,3 +82,27 @@ test('final source verification detects a completed multi-file publication insid
     }), { code: 'SourceChanged' });
   } finally { reader.close(); writer.close(); rmSync(root, { recursive: true, force: true }); }
 });
+
+// @feature docs/feature/local-data-engine/README.md
+test('an observed ABA drift has no result identity, preserves building, and retries after one second', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+  const { sourceDigest: _sourceDigest, ...withoutIdentity } = record;
+  const drifting = { ...withoutIdentity, changedPaths: ['src/a.ts'] };
+  let scans = 0, published = false;
+  const service = yield* makeWorkspaceService(ports({
+    restore: () => published ? Effect.succeed(projection) : Effect.fail(new Error('No accepted result')),
+    compute: () => Effect.sync(() => ++scans === 1 ? drifting : record),
+    persist: (_context, candidate) => Effect.sync(() => { if (candidate) published = true; }),
+  }));
+  yield* TestClock.adjust(0);
+  const building = yield* SubscriptionRef.get(service.state.value);
+  assert.equal(building.sourceDigest, null);
+  assert.equal(building.workspace, undefined);
+  assert.deepEqual(building.lastAttempt?.changedPaths, ['src/a.ts']);
+  assert.equal(scans, 1);
+  yield* TestClock.adjust(999);
+  assert.equal(scans, 1);
+  yield* TestClock.adjust(1);
+  assert.equal(scans, 2);
+  assert.equal((yield* SubscriptionRef.get(service.state.value)).sourceDigest, record.sourceDigest);
+  yield* service.stop;
+})).pipe(Effect.provide(stateLayer))));

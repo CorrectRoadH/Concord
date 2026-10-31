@@ -40,7 +40,6 @@ export function OverviewPage() {
   const healthUnknownReasons = [
     projection.status === 'refresh-failed' ? '最近刷新失败，当前来源状态未知' : null,
     projection.status === 'blocked' ? '刷新被阻断，当前来源状态未知' : null,
-    projection.consistent === false ? '构建期间来源发生变化' : null,
     projection.complete === false ? '扫描不完整' : null,
     projection.unknownRelations ? '部分关系未知' : null,
   ].filter((value): value is string => value !== null);

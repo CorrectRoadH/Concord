@@ -11,11 +11,11 @@ export function WorkspaceHealthNotice() {
   const { projection } = useWorkspace();
   const [dismissed, setDismissed] = useState<string | null>(null);
   const reasons: string[] = [];
-  if (projection.consistent && projection.complete === false) reasons.push('工作区扫描不完整，列表和关联可能缺失');
-  if (projection.consistent && projection.unknownRelations) reasons.push('部分关系未知');
+  if (projection.complete === false) reasons.push('工作区扫描不完整，列表和关联可能缺失');
+  if (projection.unknownRelations) reasons.push('部分关系未知');
   if (projection.status === 'refresh-failed') reasons.push('最近刷新失败，当前来源状态未知');
   if (projection.status === 'blocked') reasons.push('刷新被恢复状态阻断，当前来源状态未知');
-  const signature = JSON.stringify([projection.status, projection.builtAt, projection.consistent, projection.complete, projection.unknownRelations, projection.changedPaths]);
+  const signature = JSON.stringify([projection.status, projection.sourceDigest, projection.complete, projection.unknownRelations, projection.changedPaths]);
   useEffect(() => { if (reasons.length === 0) setDismissed(null); }, [reasons.length]);
   if (reasons.length === 0 || dismissed === signature) return null;
   return <div role="alert" className="flex items-start justify-between gap-3 text-amber-700">

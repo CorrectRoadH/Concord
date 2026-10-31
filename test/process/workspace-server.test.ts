@@ -34,7 +34,7 @@ test('workspace service publishes its initial computation and serves the accepte
       const result = await command(root, ['workspace', 'projection']);
       if (result.status !== 0) return undefined;
       const value = JSON.parse(result.stdout);
-      return value.projection.status === 'ready' && value.projection.consistent ? value : undefined;
+      return value.projection.status === 'ready' ? value : undefined;
     }, { description: 'initial computation accepted by the persistent owner and readable through CLI', timeoutMs: 10_000 });
     assert.equal(projection.operation, 'workspace-projection');
     assert.equal(projection.projection.refreshOwner, 'active');

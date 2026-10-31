@@ -22,7 +22,7 @@ import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
 
 import { type WorkspaceProjection } from "../../src/model/index.js";
-import { makeWorkspaceProjectionRecord, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
+import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';
@@ -44,7 +44,6 @@ test('GET /api/workspace serves a body-free projection and reports pending befor
     const value = await waitForWorkspaceProjection(base);
     assert.equal(value.projection.status, 'ready');
     assert.equal(value.projection.current, false);
-    assert.equal(value.projection.consistent, true);
     assert.deepEqual(value.projection.changedPaths, []);
     assert.equal(value.projection.unknownRelations, false);
     assert.ok(Number.isFinite(Date.parse(value.projection.builtAt)));

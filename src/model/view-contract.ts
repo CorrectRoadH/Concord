@@ -102,7 +102,7 @@ export interface WorkspaceProjectionSnapshot {
 // @concord-end
 export interface WorkspaceProjectionRefreshError { readonly failedAt: string; readonly code: string; readonly message: string }
 export interface WorkspaceProjectionAttempt { readonly at: string; readonly complete: boolean; readonly changedPaths: readonly string[] }
-/** `consistent` marks a drift-free build; `complete` keeps the scan/finding semantics. Never current facts. */
+/** Accepted navigation results describe a completed scan, never current facts. */
 export interface WorkspaceProjectionStatus {
   readonly sourceDigest: string;
   readonly status: 'ready' | 'refresh-failed' | 'blocked';
@@ -111,7 +111,6 @@ export interface WorkspaceProjectionStatus {
   readonly builtAt: string;
   readonly builtFrom: string;
   readonly builtUntil: string;
-  readonly consistent: boolean;
   readonly complete: boolean;
   readonly changedPaths: readonly string[];
   readonly unknownRelations: boolean;

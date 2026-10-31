@@ -41,7 +41,7 @@ export function ProjectDocsPage() {
   if (!selectedPath) {
     return conclusive
       ? <><PageHeader title="文档" description="docs 下还没有可查看的项目文档。" /><Empty title="没有项目文档">初始化后的架构、宪法和参考模板会出现在这里。</Empty></>
-      : <><PageHeader title="文档" description="当前导航代次未显示项目文档。" /><Empty title="暂时无法确认项目文档列表">投影尚未完整且一致，暂时无法确认是否存在项目文档。</Empty></>;
+      : <><PageHeader title="文档" description="当前导航结果未显示项目文档。" /><Empty title="暂时无法确认项目文档列表">投影尚未完整且一致，暂时无法确认是否存在项目文档。</Empty></>;
   }
   if (requested !== selectedPath) return <Navigate to={projectDocHref(selectedPath)} replace />;
 

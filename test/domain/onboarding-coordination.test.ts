@@ -25,10 +25,10 @@ test('init preview is write-free and independent of publication owners but rejec
     writeFileSync(join(root, 'docs/README.md'), '# Existing owner\n');
     repo = new LocalRepository(root, { initialize: true, dryRun: true });
     assert.equal(existsSync(join(traceDir, 'publication.lease')), false);
-    assert.throws(() => repo!.snapshot(() => {
+    assert.doesNotThrow(() => repo!.snapshot(() => {
       const concurrent = acquireTraceLeaseSync(root, 'exclusive', 'competing-writer', true)!;
       releaseTraceLeaseSync(concurrent, 'competing-writer');
-    }), { code: 'SourceChanged' });
+    }));
     repo.close(); repo = undefined;
     const lease = acquireTraceLeaseSync(root, 'exclusive', 'writer', true);
     try {

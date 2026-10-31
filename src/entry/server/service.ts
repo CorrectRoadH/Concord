@@ -1,7 +1,7 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#状态
 import { Clock, Deferred, Effect, Fiber, Queue, Schema, Schedule, Semaphore, Stream, SubscriptionRef } from 'effect';
-import { ConcordError, failure, decodeWorkspaceProjectionRecord, type WorkspaceProjection, type WorkspaceProjectionRecord } from '../../model/index.js';
+import { ConcordError, failure, decodeWorkspaceProjectionCandidate, type WorkspaceProjection, type WorkspaceProjectionCandidate } from '../../model/index.js';
 import type { WorkspaceProjectionContext } from '../../model/index.js';
 import { WorkspaceState, compensationRefresh, serviceHeartbeat } from './state.js';
 import type { Computation } from './computation.js';
@@ -13,13 +13,13 @@ export interface RuntimePorts {
   readonly context: Effect.Effect<WorkspaceProjectionContext, unknown>;
   readonly ready: (context: WorkspaceProjectionContext) => Effect.Effect<void, unknown>;
   readonly restore: (context: WorkspaceProjectionContext) => Effect.Effect<WorkspaceProjection, unknown>;
-  readonly persist: (context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionRecord, error?: ConcordError) => Effect.Effect<void, unknown>;
+  readonly persist: (context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionCandidate, error?: ConcordError, attempt?: WorkspaceProjection['projection']['lastAttempt']) => Effect.Effect<void, unknown>;
   readonly compute: (operation: Computation) => Effect.Effect<unknown, unknown>;
   readonly open: Effect.Effect<void, unknown>;
   readonly close: Effect.Effect<void, unknown>;
   readonly clear: Effect.Effect<unknown, unknown>;
   readonly exists: Effect.Effect<boolean, unknown>;
-  readonly reconcile?: (candidate: WorkspaceProjectionRecord) => Effect.Effect<boolean, unknown>;
+  readonly reconcile?: (candidate: WorkspaceProjectionCandidate) => Effect.Effect<boolean, unknown>;
 }
 const namedFailure = (cause: unknown) => {
   const decoded = Schema.decodeUnknownExit(Schema.Struct({ code: Schema.String, message: Schema.String }))(cause);
@@ -53,6 +53,13 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     const error = namedFailure(cause);
     return state.transition(['CleanupFailed', 'UnsafePath', 'ServerLockUnavailable'].includes(error.code) ? 'blocked' : 'degraded', { code: error.code, message: error.message });
   };
+  const discard = (context: WorkspaceProjectionContext, changedPaths: readonly string[]) => Effect.gen(function*() {
+    const attempt = { at: new Date(yield* Clock.currentTimeMillis).toISOString(), complete: false, changedPaths };
+    yield* ports.persist(context, undefined, undefined, attempt);
+    yield* ports.restore(context).pipe(Effect.flatMap(state.accept), Effect.ignore);
+    yield* state.attempt(attempt);
+    yield* Effect.forkScoped(Effect.sleep('1 second').pipe(Effect.andThen(request)));
+  });
   const refresh = Effect.gen(function*() {
     const status = yield* SubscriptionRef.get(state.value);
     if (stopping || status.state === 'blocked') return;
@@ -61,21 +68,27 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* ports.ready(context);
     const sourceDigest = yield* ports.sourceDigest;
     const value = yield* ports.compute({ kind: 'scan' });
-    const candidate = yield* Effect.try({ try: () => decodeWorkspaceProjectionRecord(value), catch: failure });
+    const candidate = yield* Effect.try({ try: () => decodeWorkspaceProjectionCandidate(value), catch: failure });
     if (ports.reconcile && (yield* ports.reconcile(candidate))) yield* request;
     yield* ports.verify;
-    if (candidate.sourceDigest !== sourceDigest || (yield* ports.sourceDigest) !== sourceDigest) { yield* request; return; }
     if ((yield* ports.context).identity !== context.identity) { yield* request; return; }
     yield* ports.ready(context);
     if (stopping) return;
+    if (candidate.sourceDigest === undefined) { yield* discard(context, candidate.changedPaths); return; }
+    if (candidate.sourceDigest !== sourceDigest || (yield* ports.sourceDigest) !== sourceDigest) { yield* discard(context, ['.']); return; }
     yield* ports.persist(context, candidate);
     yield* state.accept(yield* ports.restore(context));
     if ((yield* SubscriptionRef.get(state.value)).state === 'running') yield* state.transition('running');
-    if (!candidate.consistent) yield* Effect.forkScoped(Effect.sleep('1 second').pipe(Effect.andThen(request)));
   }).pipe(Effect.catch(cause => Effect.gen(function*() {
     const error = namedFailure(cause);
     if (stopping) return;
-    if (error.code === 'RepositoryBusy' || error.code === 'SourceChanged') { yield* Effect.forkScoped(Effect.sleep('100 millis').pipe(Effect.andThen(request))); return; }
+    if (error.code === 'RepositoryBusy') { yield* Effect.forkScoped(Effect.sleep('100 millis').pipe(Effect.andThen(request))); return; }
+    if (error.code === 'SourceChanged') {
+      const context = yield* Effect.result(ports.context);
+      if (context._tag === 'Success') yield* discard(context.success, ['.']);
+      else yield* Effect.forkScoped(Effect.sleep('1 second').pipe(Effect.andThen(request)));
+      return;
+    }
     const context = yield* Effect.result(ports.context);
     if (context._tag === 'Success') {
       yield* ports.persist(context.success, undefined, error).pipe(Effect.ignore);

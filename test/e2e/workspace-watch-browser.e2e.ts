@@ -50,37 +50,25 @@ const withWorkspaceBrowser = Effect.fn('withWorkspaceBrowser')((page: Page, inco
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 // @name workspace-watch-drift-and-failures
-test('ordinary pages suppress drift while health stays unknown and real diagnostics remain visible', ({ page }) => Effect.runPromise(withWorkspaceBrowser(page, true, async (page, origin, actual) => {
-  assert.equal(actual.projection.consistent, true);
+test('ordinary pages show incomplete scans and refresh failures while keeping real diagnostics visible', ({ page }) => Effect.runPromise(withWorkspaceBrowser(page, true, async (page, origin, actual) => {
   assert.equal(actual.projection.complete, false);
   assert.ok(actual.snapshot.findings.some(finding => finding.code === 'InvalidData'));
   const changedPath = 'docs/feature/watch/README.md';
-  let served: WorkspaceProjection = { ...actual, projection: { ...actual.projection, consistent: false, complete: false, unknownRelations: true, changedPaths: [changedPath] } };
+  let served: WorkspaceProjection = actual;
   // Only the HTTP projection boundary is simulated; documents and diagnostics
   // come from the real repository and the real browser components render them.
   await page.route('**/api/workspace', route => route.fulfill({ json: { ok: true, value: served } }));
   await page.goto(`${origin}/features/watch`);
   await expect(page.getByRole('heading', { name: 'Watch fixture', exact: true })).toBeVisible();
   const notice = page.getByRole('alert').filter({ has: page.getByRole('link', { name: /查看工作区健康/ }) });
-  await expect(notice).toHaveCount(0);
-  await expect(page.getByText('来源已变化', { exact: true })).toHaveCount(0);
-  await expect(page.getByText(/变化路径：/)).toHaveCount(0);
-  await page.getByRole('link', { name: '总览', exact: true }).click();
-  const health = page.locator('#workspace-health');
-  await expect(health.getByText('健康结论未知', { exact: true })).toBeVisible();
-  await expect(health).toContainText(changedPath);
-  await expect(health.getByText('没有发现结构问题', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '复制全部', exact: true })).toBeDisabled();
-
-  served = actual;
-  await page.goto(`${origin}/features/watch`);
   await expect(notice).toContainText('工作区扫描不完整');
   await page.getByRole('link', { name: '总览', exact: true }).click();
+  const health = page.locator('#workspace-health');
   const brokenDiagnostic = health.getByRole('list', { name: '结构诊断' }).getByRole('listitem').filter({ hasText: 'docs/feature/broken/README.md' });
   // A malformed owner can produce multiple field diagnostics.
   await expect(brokenDiagnostic.getByText('InvalidData', { exact: true }).first()).toBeVisible();
   for (const status of ['refresh-failed', 'blocked'] as const) {
-    served = { ...actual, projection: { ...actual.projection, status, consistent: false, changedPaths: [changedPath], lastError: { failedAt: actual.projection.builtAt, code: status === 'blocked' ? 'RecoveryRequired' : 'WorkspaceWatchUnavailable', message: 'Refresh cannot finish' } } };
+    served = { ...actual, projection: { ...actual.projection, status, lastAttempt: { at: actual.projection.builtAt, complete: false, changedPaths: [changedPath] }, lastError: { failedAt: actual.projection.builtAt, code: status === 'blocked' ? 'RecoveryRequired' : 'WorkspaceWatchUnavailable', message: 'Refresh cannot finish' } } };
     await page.goto(`${origin}/features/watch`);
     await expect(notice).toContainText(status === 'blocked' ? '刷新被恢复状态阻断' : '最近刷新失败');
     await expect(page.getByLabel('工作区投影状态')).toContainText(status === 'blocked' ? '刷新被阻断' : '刷新失败');

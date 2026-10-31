@@ -16,7 +16,7 @@ import { ConcordError, digest, failure } from "../model/index.js";
 import type { WorkspaceProjection, WorkspaceSnapshot } from "../model/index.js";
 
 const key = 'workspace';
-import { type WorkspaceProjectionRecord, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord } from "../model/index.js";
+import { type WorkspaceProjectionCandidate, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord, decodeWorkspaceProjectionCandidate } from "../model/index.js";
 
 export const assertWorkspacePublicationReady = Effect.fn('workspaceProjection.publicationReady')(function*(context: WorkspaceProjectionContext) {
   const pending = yield* (yield* Sources).pendingPublications(context.privateDir);
@@ -39,7 +39,7 @@ export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext'
 
 
 /** Explicit construction, followed by strict decoding, keeps source bodies out of persistent storage. */
-export function makeWorkspaceProjectionRecord(snapshot: WorkspaceSnapshot, drift: { files: readonly string[]; directories: readonly string[]; publicationChanged: boolean }, builtFrom: string, sourceDigest: string): WorkspaceProjectionRecord {
+export function makeWorkspaceProjectionCandidate(snapshot: WorkspaceSnapshot, drift: { files: readonly string[]; directories: readonly string[]; publicationChanged: boolean }, builtFrom: string, sourceDigest: string): WorkspaceProjectionCandidate {
   const remote = <T extends { readonly body: string }>(value: T) => { const { body: _body, ...rest } = value; return rest; };
   const document = (value: WorkspaceSnapshot['documents'][number]) => ({ path: value.path, digest: value.digest,
     metadata: value.metadata.kind === 'issue' && value.metadata.source ? { ...value.metadata, source: remote(value.metadata.source) } : value.metadata });
@@ -53,9 +53,9 @@ export function makeWorkspaceProjectionRecord(snapshot: WorkspaceSnapshot, drift
   const diagnostic = typeof diagnostics === 'object' && diagnostics !== null && 'error' in diagnostics
     ? { ...('ok' in diagnostics ? { ok: diagnostics.ok } : {}), error: diagnostics.error, message: 'message' in diagnostics ? diagnostics.message : '' }
     : diagnostics;
-  return decodeWorkspaceProjectionRecord({ sourceDigest, builtAt: builtUntil, builtFrom, builtUntil, consistent,
-    complete: consistent && snapshotComplete, changedPaths, unknownRelations: !consistent || !snapshotComplete,
-    snapshot: { ...snapshot, complete: consistent && snapshotComplete, diagnostics: diagnostic, conceptCatalogs: directory.catalogs, findings: [...snapshot.findings, ...directory.findings],
+  return decodeWorkspaceProjectionCandidate({ ...(consistent ? { sourceDigest } : {}), builtAt: builtUntil, builtFrom, builtUntil,
+    complete: snapshotComplete, changedPaths, unknownRelations: !snapshotComplete,
+    snapshot: { ...snapshot, complete: snapshotComplete, diagnostics: diagnostic, conceptCatalogs: directory.catalogs, findings: [...snapshot.findings, ...directory.findings],
       documents: snapshot.documents.map(document),
       pages: snapshot.pages.map(page => ({ path: page.path, digest: page.digest, ...(page.documentPath ? { documentPath: page.documentPath } : {}),
         ...(page.body.match(/^#\s+(.+)$/mu)?.[1] ? { derivedTitle: page.body.match(/^#\s+(.+)$/mu)![1]!.trim() } : {}) })),
@@ -99,19 +99,20 @@ export const readWorkspaceProjection = Effect.fn('readWorkspaceProjection')(func
 
 
 /** Called only by the refresh lease owner after candidate and identity validation. */
-export const storeWorkspaceProjection = Effect.fn('storeWorkspaceProjection')(function*(context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionRecord, error?: ConcordError) {
+export const storeWorkspaceProjection = Effect.fn('storeWorkspaceProjection')(function*(context: WorkspaceProjectionContext, candidate?: WorkspaceProjectionCandidate, error?: ConcordError, attempt?: WorkspaceProjection['projection']['lastAttempt']) {
   const cache = yield* PersistentCache;
   yield* cache.update(context.privateDir, 'workspace_projection', key, payload => {
     let prior: typeof Envelope.Type | undefined;
     if (payload) { try { const parsed = decodeEnvelope(JSON.parse(payload)); if (parsed.identity === context.identity) prior = parsed; } catch { /* Invalid payload is replaced, never served. */ } }
-    const next = candidate === undefined ? undefined : decodeWorkspaceProjectionRecord(candidate);
-    const retain = next !== undefined && !next.consistent && prior?.record?.consistent === true;
-    const record = retain || next === undefined ? prior?.record : next;
-    const lastAttempt = next ? { at: next.builtUntil, complete: next.complete, changedPaths: next.changedPaths } : prior?.lastAttempt;
+    const next = candidate === undefined ? undefined : decodeWorkspaceProjectionCandidate(candidate);
+    const record = next?.sourceDigest !== undefined ? decodeWorkspaceProjectionRecord(next) : prior?.record;
+    const lastAttempt = attempt ?? (next ? { at: next.builtUntil, complete: next.sourceDigest !== undefined && next.complete, changedPaths: next.changedPaths } : prior?.lastAttempt);
+    const discarded = attempt !== undefined || next !== undefined && next.sourceDigest === undefined;
+    const refreshError = error ? { failedAt: new Date().toISOString(), code: error.code, message: error.message.slice(0, 4096) } : discarded ? prior?.error : undefined;
     // A drifted attempt that keeps the last consistent result is reported through lastAttempt, not as a failure.
     const envelope = decodeEnvelope({ format: 'concord.workspace-projection/v1', identity: context.identity,
       ...(record ? { record } : {}), ...(lastAttempt ? { lastAttempt } : {}),
-      ...(error ? { error: { failedAt: new Date().toISOString(), code: error.code, message: error.message.slice(0, 4096) } } : {}) });
+      ...(refreshError ? { error: refreshError } : {}) });
     const serialized = JSON.stringify(envelope);
     if (Buffer.byteLength(serialized) + Buffer.byteLength(key) + Buffer.byteLength('workspace_projection') > WORKSPACE_PROJECTION_LIMIT) throw new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds its 8 MiB budget');
     return serialized;

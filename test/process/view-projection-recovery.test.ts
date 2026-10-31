@@ -22,7 +22,7 @@ import { digest } from "../../src/model/index.js";
 import { LocalRepository } from "../support/repository.js";
 
 import { type WorkspaceProjection } from "../../src/model/index.js";
-import { makeWorkspaceProjectionRecord, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
+import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';
@@ -141,7 +141,6 @@ test('a running workspace serves its accepted generation while foreign cache ope
     const recovered = parseWorkspaceProjection(body);
     assert.ok(recovered);
     assert.equal(recovered.projection.status, 'ready');
-    assert.equal(recovered.projection.consistent, true);
     assert.deepEqual(recovered.snapshot.documents, previous.snapshot.documents);
     assert.deepEqual(recovered.snapshot.sources, previous.snapshot.sources);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }

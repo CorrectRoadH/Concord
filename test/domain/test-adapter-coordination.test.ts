@@ -55,7 +55,7 @@ test('unknown adapter cleanup quarantines the same runner domain before another 
 
 // @use-case docs/feature/local-sdlc/use-case/run-native-test-adapters.md
 // @name adapter-invalidation-epoch-c10
-test('an invalidated collect epoch cannot publish an otherwise successful observation (C10)', () => runApplication(Effect.scoped(Effect.gen(function* () {
+test('an invalidated collect run cannot publish an otherwise successful observation (C10)', () => runApplication(Effect.scoped(Effect.gen(function* () {
   const root = yield* consumer;
   const repo = yield* Effect.acquireRelease(Effect.sync(() => new LocalRepository(root)), repo => Effect.sync(() => repo.close()));
   yield* Effect.sync(() => {

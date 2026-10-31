@@ -25,8 +25,8 @@ export function DocumentNavigation() {
   const documents = documentsInCategory(snapshot, section.kind);
   const selected = documents.find(document => { const href = documentHref(document, snapshot.documents); return pathname === href || pathname.startsWith(`${href}/`); });
   const groups: ContentSidebarGroup[] = [{
-    id: 'documents', label: `${section.label} 列表`, emptyMessage: conclusive ? `暂无 ${section.label}` : `当前代次暂未显示 ${section.label}`,
-    filterEmptyMessage: conclusive ? `没有匹配的 ${section.label}` : `当前代次未显示匹配项，列表可能不完整`,
+    id: 'documents', label: `${section.label} 列表`, emptyMessage: conclusive ? `暂无 ${section.label}` : `当前结果暂未显示 ${section.label}`,
+    filterEmptyMessage: conclusive ? `没有匹配的 ${section.label}` : `当前结果未显示匹配项，列表可能不完整`,
     items: documents.map(document => ({
       id: document.path, path: document.path, href: documentHref(document, snapshot.documents),
       title: document.metadata.title, active: selected?.path === document.path, icon: <FileText size={16} />,
@@ -51,7 +51,7 @@ function ProjectDocNavigation({ search }: { readonly search: string }) {
     icon: <FileText size={16} />,
   });
   const groups: ContentSidebarGroup[] = [
-    { id: 'project', label: '项目文档', heading: '项目文档', items: root.map(item), emptyMessage: conclusive ? '暂无项目文档' : '当前代次暂未包含全部项目文档', filterEmptyMessage: conclusive ? '没有匹配的项目文档' : '当前代次未显示匹配文档，列表可能不完整' },
+    { id: 'project', label: '项目文档', heading: '项目文档', items: root.map(item), emptyMessage: conclusive ? '暂无项目文档' : '当前结果暂未包含全部项目文档', filterEmptyMessage: conclusive ? '没有匹配的项目文档' : '当前结果未显示匹配文档，列表可能不完整' },
     ...(templates.length === 0 ? [] : [{ id: 'templates', label: '参考模板', heading: '参考模板', treeRoot: 'docs/_template/', items: templates.map(item) }]),
   ];
   return <ContentSidebar key="docs" model={{

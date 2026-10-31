@@ -4,7 +4,7 @@ import { NodeRuntime } from "@effect/platform-node";
 import { runReaderMain } from './main.js';
 import { Effect, Queue, Schema } from "effect";
 import { observeWorkspaceProjection } from "../../app/index.js";
-import { makeWorkspaceProjectionRecord } from "../../app/index.js";
+import { makeWorkspaceProjectionCandidate } from "../../app/index.js";
 import { WORKSPACE_PROJECTION_LIMIT } from "../../model/index.js";
 import { ConcordError, failure } from "../../model/index.js";
 import { RequestTiming } from "../../app/index.js";
@@ -15,7 +15,7 @@ const scan = (root: string, id: number) => Effect.gen(function*() {
   const builtFrom = new Date().toISOString();
   const { snapshot, drift, sourceDigest } = yield* observeWorkspaceProjection(root, timing);
   timing.workspace(snapshot);
-  const value = yield* Effect.try({ try: () => makeWorkspaceProjectionRecord(snapshot, drift, builtFrom, sourceDigest), catch: failure });
+  const value = yield* Effect.try({ try: () => makeWorkspaceProjectionCandidate(snapshot, drift, builtFrom, sourceDigest), catch: failure });
   const body = JSON.stringify(value);
   if (Buffer.byteLength(body, 'utf8') > WORKSPACE_PROJECTION_LIMIT) return yield* Effect.fail(new ConcordError('WorkspaceProjectionOutputLimit', 'Workspace projection exceeds 8 MiB'));
   return { kind: 'success' as const, body, phases: timing.result(), observations: [...timing.observations], caches: timing.caches };

@@ -19,7 +19,7 @@ import { Git } from '../../base/git/index.js';
 import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.js';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionRecord, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
+import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
 import { CacheSnapshotUnavailable, ConcordError, failure } from '../../model/index.js';
 import { Computation, ComputationReply, ComputeRpcs } from './computation.js';
 import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.js';
@@ -162,7 +162,7 @@ const compute = Effect.fn('workspace.compute')(function*(root: string, operation
     case 'scan': {
       const builtFrom = new Date(yield* Clock.currentTimeMillis).toISOString();
       const { snapshot, drift, sourceDigest } = yield* observeWorkspaceProjection(root);
-      return yield* Effect.try({ try: () => makeWorkspaceProjectionRecord(snapshot, drift, builtFrom, sourceDigest), catch: failure });
+      return yield* Effect.try({ try: () => makeWorkspaceProjectionCandidate(snapshot, drift, builtFrom, sourceDigest), catch: failure });
     }
     case 'read': return yield* getViewFile(root, operation.path);
     case 'read-bytes': return yield* getWorkspaceRead(root, operation.path);
@@ -297,7 +297,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       sourceDigest: workspaceSourceDigest(root).pipe(Effect.provideService(Workspace, workspace)),
       ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources)),
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),
-      persist: (ctx, candidate, error) => owned(storeWorkspaceProjection(ctx, candidate, error)),
+      persist: (ctx, candidate, error, attempt) => owned(storeWorkspaceProjection(ctx, candidate, error, attempt)),
       compute: operation => cacheSnapshot.pipe(Effect.flatMap(snapshot => computation.run(operation, snapshot))),
       open: Deferred.await(protocolReady).pipe(Effect.andThen(operations.resume), Effect.andThen(cache.open)),
       close: SubscriptionRef.get(Context.get(stateContext, WorkspaceState).value).pipe(Effect.flatMap(value => value.state === 'stopping'
