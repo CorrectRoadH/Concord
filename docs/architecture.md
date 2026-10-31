@@ -101,7 +101,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | Installation | 安装包根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自包根）、模板与 skill 资源、工作进程入口，以及安装身份。安装身份是安装目录全部 JS 与原生产物的内容摘要，按各文件的 device、inode、大小、mtime、ctime 与目录成员组成的元数据指纹缓存在用户缓存目录；指纹任一变化时重新计算内容摘要，因此产物被替换时仍能发现 |
 | Workspace | worktree 根、Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
 | Sources | 路径安全的读取、乐观快照与返回前核验 |
-| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作政策、概念目录、步骤重命名规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
+| Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作政策、概念目录、步骤重命名与 Issue 关闭的规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
 | Cache | 解析缓存（内存或持久）、只读快照（`CacheSnapshot`，进程内不可写的行，不经内存 HawDB）、持久命名空间的独占写入，三种能力分开提供；计算进程另有 `CacheDerivations`，只在请求内收集新产生的派生行，随结果交回主进程写入，不持有句柄或写入能力 |
 | Git | 状态、diff、提交与 worktree 操作 |
 | OwnedProcess | 用 `unstable/process` 的 ChildProcess 启动与发送信号；Concord 负责后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出也核对后代 |
@@ -117,8 +117,8 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | 操作 | 执行位置 | 语义 | HTTP | RPC |
 | --- | --- | --- | --- | --- |
 | `hello`、`shutdown`、`http` 租约 | 主进程 | 控制 | — | 控制帧 |
-| `subscribe` | 主进程 | 内存中的当前代次与之后的事件 | `GET /api/events`（SSE） | 是 |
-| `workspace` | 主进程 | 已接受代次（历史） | `GET /api/workspace` | 是 |
+| `subscribe` | 主进程 | 内存中的当前结果与之后的事件 | `GET /api/events`（SSE） | 是 |
+| `workspace` | 主进程 | 已接受的结果（历史） | `GET /api/workspace` | 是 |
 | `refresh` | 主进程申请，计算进程执行 | 申请刷新，不等待 | `POST /api/workspace` | 是 |
 | `read` | 计算进程 | 当前来源的定向严格读取；RPC 返回原始字节与信封，HTTP 返回 `ViewFile` | `GET /api/file` | 是 |
 | `query` | 计算进程 | 白名单当前查询，见[CLI 查询](feature/local-data-engine/architecture.md#cli-查询) | — | 是 |
@@ -184,7 +184,7 @@ HawDB 句柄的所有权、只读与可写打开、dry-run 与 cache-off 的行�
 
 文档解析、静态配置解析、代码解析及 Git 测试基线使用有界 HawDB 内存命名空间，不另存解析结果 Map。每篇文档每个进程最多解析一次，元数据、标题锚点、steps 与链接事实取自同一棵语法树。当前源文件集合和字节每次读取。配置的进程内解析命中不重新打开持久库；缓存只拥有严格解码的配置值，不拥有仓库路径验证或访问授权。
 
-CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验。集合解析按批读取和写入缓存，逐文件保留解析失败；大批键查询使用有界命名空间扫描后选择请求的键，单键查询保持定向读取。当前来源查询的临时结果只属于当前调用。Web 工作区导航独立读取异步结构投影，不把历史代次用于当前事实授权。缓存命中仍核对原文摘要、解析器身份和 Schema，来源前后核验保留。
+CLI 与 Web 的全局扫描共用文档 inventory、测试扫描、代码扫描与引用校验。集合解析按批读取和写入缓存，逐文件保留解析失败；大批键查询使用有界命名空间扫描后选择请求的键，单键查询保持定向读取。当前来源查询的临时结果只属于当前调用。Web 工作区导航独立读取异步结构投影，不把历史结果用于当前事实授权。缓存命中仍核对原文摘要、解析器身份和 Schema，来源前后核验保留。
 
 同次关系图编译复用相同引用与目标类型的解析结果。读取的目标及 README 边界在返回前逐一复核字节和安全路径；变化或复核失败保留 finding，不能返回完整图。临时引用结果随本次编译结束释放，不跨请求保存。
 
@@ -194,11 +194,11 @@ flowchart TD
   Query[CLI trace show / gaps / review] --> QueryCache[HawDB query_cache 诊断投影]
   Query -. 请求刷新 .-> QueryRefresh[后台刷新进程，每查询键一个 owner]
   QueryRefresh -->|内部 query-scan-worker| Scan
-  QueryRefresh -->|一致结果，或无一致代次时标注漂移的结果| QueryCache
+  QueryRefresh -->|一致结果，或没有一致结果时标注漂移的结果| QueryCache
   Web[Web workspace] --> WorkspaceCache[HawDB workspace_projection 结构投影]
   WorkspaceRefresh[工作区服务，每 worktree 一个] --> Scan
-  WorkspaceRefresh -->|推送代次| Clients[Web 与 CLI]
-  WorkspaceRefresh -->|一致或标注漂移的代次| WorkspaceCache
+  WorkspaceRefresh -->|推送结果变化| Clients[Web 与 CLI]
+  WorkspaceRefresh -->|一致或标注漂移的结果| WorkspaceCache
   Scan --> Sources[当前目录集合与安全文件读取]
   Sources --> Keys[原文摘要与解析器身份]
   Keys --> Cache[有界 HawDB 批量查询]
@@ -227,7 +227,7 @@ Git-private 状态通过 `git rev-parse --git-path concord` 定位，每个 work
 
 支持同主机、同 PID 命名空间内的 Linux 与 macOS 本地工作树，不保证网络多机协调与 Windows 执行。macOS 上防护大小写、Unicode 路径碰撞和 symlink。
 
-普通来源查询不取得发布租约。读取记录文件前像、缺失路径和目录集合，返回前验证观察集合与 publication.revision；合作发布开始与结束均推进随机代次，变化返回 SourceChanged。未完成 journal 仍阻断当前事实结果。缓存快照查询不加载来源 Repository。
+普通来源查询不取得发布租约。读取记录文件前像、缺失路径和目录集合，返回前重新核对读过的每个文件摘要与目录集合，并确认没有未完成的 journal，变化返回 SourceChanged。未完成 journal 仍阻断当前事实结果。缓存快照查询不加载来源 Repository。
 
 普通文档写入的规划采用乐观读取，提交阶段才取得独占发布租约，复核配置、全部观察与完整前像，写入 journal 后逐文件原子 rename。冲突拒绝覆盖；恢复与 Issue 关闭保持独占协调。显式低层写快照可保护必须串行化的状态转换，不能用于普通来源查询。
 
@@ -249,7 +249,7 @@ run 结束时在新快照中核对起止 candidate、配置、定义、Spec、�
 
 各命令的读取范围、完整性诊断与需要完整图的结论见 [local SDLC 架构](feature/local-sdlc/architecture.md#操作依赖)，访问模式见[可移植协调架构](feature/portable-coordination/architecture.md#access-modes)，跨功能规则见 [操作依赖与发布协调](#操作依赖与发布协调)。
 
-来源读者不创建 publication token。返回当前结果前核验观察集合与发布代次；写者在 journal 删除前推进代次，完整发布即使发生于同一个独占区间内也能被读者检测。普通提交只删除自身 owner。
+来源读者不创建 publication token。返回当前结果前，重新核对读过的每个文件摘要与目录集合，并确认没有未完成的 journal。完整发布即使发生在一次读取之内，也会因文件摘要变化被发现。普通提交只删除自身 owner。
 
 未知文件、其它 exclusive token 或身份改变时保留现场并拒绝。任一活 owner、host 不匹配、EPERM、PID 复用或未知 owner 都保留现场。fsync 或核验失败时保留具名错误和可恢复现场。
 
@@ -342,7 +342,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 1. 每个操作按目标与不变量声明所需输入。局部读取与精确引用验证不以无关 owner、代码或测试全部有效为前提；目标身份、来源、归属与路径安全仍须严格校验。
 2. 全局诊断保留可读取记录和全部已发现错误。完整性随投影与关系输出传播，不完整输入不能授权依赖完整图的裁决。
-3. 只读来源访问使用乐观快照并核验观察集合和发布代次；普通写入规划不持锁，提交使用短期独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
+3. 只读来源访问使用乐观快照，返回前核对观察到的文件摘要、目录集合与未完成的 journal；普通写入规划不持锁，提交使用短期独占协调与前像核验；dry-run 表达变更预览，与访问权限分别建模。未知 runner 清理状态阻断发布。
 4. 恢复区分 journal 结果、实际回收 token 与 runner 状态，返回成功前核验恢复后的协调状态，不用无 journal 推断仓库整体可写。
 
 ## 凭据

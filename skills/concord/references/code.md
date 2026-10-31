@@ -102,6 +102,6 @@ code list、trace show --fresh、test show 的 analysis 返回 observations 与 
 
 保存不以磁盘覆盖客户端文本，携全文时必须一致。非法增量、版本倒退、重复打开和保存冲突须关闭重开；旧请求返回 ContentModified（-32801），取消返回 RequestCancelled（-32800）。删除保留打开文本并标记不完整；didRenameFiles 不迁移 overlay，须关闭旧 URI 并打开新 URI。文件变化可通过 didChangeWatchedFiles、didDeleteFiles 和 didRenameFiles 通知。
 
-只接受当前 worktree 的安全 file URI，拒绝符号链接、路径逃逸与私有目录。配置授权使用已保存配置，每次计算复核配置、磁盘和缓冲区代次；输入缺失显示 EditorInputsIncomplete，不表示项目全部通过。服务不提供分析观察，不能据此推断没有关系或执行覆盖。
+只接受当前 worktree 的安全 file URI，拒绝符号链接、路径逃逸与私有目录。配置授权使用已保存配置，每次计算复核配置、磁盘摘要和缓冲区的打开标识与版本；输入缺失显示 EditorInputsIncomplete，不表示项目全部通过。服务不提供分析观察，不能据此推断没有关系或执行覆盖。
 
 服务不注册编辑、格式化、codeAction、executeCommand 或 willRenameFiles，不启动分析进程、测试 collector 或 runner，不开网络端口，不持久化缓冲区。未知编辑执行请求拒绝；shutdown/exit、EOF 与 SIGINT 释放任务和句柄。具体预算与客户端生命周期见随包 docs/feature/local-sdlc/use-case/use-editor-service.md。

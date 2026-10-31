@@ -10,7 +10,7 @@
 2. 编辑器通过 didOpen 提交全文、languageId 和整数版本。服务在会话内维护文本，未打开的依赖来自受校验磁盘快照。
 3. didChange 使用递增版本，按顺序应用全文或 UTF-16 增量。步骤、源码标记、引用与写作政策共同使用同版输入。
 4. 客户端读取带文档版本的 publishDiagnostics，并使用 definition、references、completion 与 hover 导航。
-5. didSave 保留客户端文本；携带全文时须与缓冲区一致。didClose 清空诊断并移除缓冲区，重新打开取得新打开代次。
+5. didSave 保留客户端文本；携带全文时须与缓冲区一致。didClose 清空诊断并移除缓冲区，重新打开取得新的打开标识。
 6. 客户端通过 shutdown、exit 或 stdin EOF 结束服务，服务取消任务并释放内存与句柄。
 
 ## 导航与诊断
@@ -38,7 +38,7 @@ URI 只接受当前 worktree 的安全 file 路径，拒绝路径逃逸、符号
 ## 验收
 
 - 同时修改未保存步骤、测试引用与实现标记时，诊断、跳转、引用、补全与悬停使用一致版本，支持未落盘新文件。
-- 非 BMP 文本增量按 UTF-16 换算；越界、倒退、取消、关闭重开与迟到结果遵守代次淘汰。
+- 非 BMP 文本增量按 UTF-16 换算；越界、倒退、取消、关闭重开与迟到结果按打开标识淘汰：标识不同的结果直接丢弃。
 - 保存不覆盖缓冲区；磁盘配置、政策、删除与重命名使受影响结果失效或明确不完整。
 - 服务只读，只提供文档生命周期、诊断和上述四种导航。编辑、格式化、codeAction、executeCommand 与 willRenameFiles 请求以 EditorMethodNotSupported 拒绝。
 - 服务不开网络端口，不启动 language server、测试收集器或 runner。stdout 只包含 framed JSON-RPC，stderr 用于具名诊断。

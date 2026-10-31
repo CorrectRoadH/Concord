@@ -21,7 +21,7 @@
 - Cargo 多模块源码归属不能核实时返回 `CargoFileMembershipUnknown`。受管报告目录当前仅在 Linux 通过目录句柄安全读取，其它平台返回 `ReportUnsafe`。
 - Node test 不具备已核实的独立原生收集能力时，观察显示 `NodeCollectionUnsupported`，不据此声明原生精确选择。Node 测试按文件级 command scope 执行。
 - [修复核验](resolve-with-command-evidence.md)在缺陷提交与修复提交上各运行一次。缺陷提交上的结果须为 red，修复提交上须为 green；任一次为 invalid 时返回 `FixUnverifiable`。
-- 收集、选择、执行、解析及终结由同一个 runner 所有权覆盖。输入或成员变化、失效 epoch、非零收集退出、截断与清理未知均不授权当前清单或有效原生结果。清理未知时保留阻断现场。
+- 收集、选择、执行、解析及终结由同一个 runner 所有权覆盖。输入或成员变化、失效标记、非零收集退出、截断与清理未知均不授权当前清单或有效原生结果。清理未知时保留阻断现场。
 
 ## 验收
 

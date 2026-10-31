@@ -22,7 +22,7 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。HTTP �
 
 后台编译复用 trace 生成诊断。文档与代码的纯解析结果使用有容量上限的 HawDB 内存缓存，以当前原文匹配；目录集合、文件读取、路径安全、配置、租约及恢复检查仍每次执行，不以时间戳代替内容校验。单文件预览只读取目标和其 README 归属链，全局 inventory 异常由 workspace/check 诊断。Git 测试基线在 HawDB 内存 namespace 中按 worktree、不可变 HEAD revision、测试根与解析器版本缓存，工作树状态仍实时读取。
 
-浏览器以 `GET /api/events`（SSE）接收工作区服务的状态事件（代次、刷新状态与任务变化），收到后读取工作区缓存；SSE 断开期间改为每四秒读取工作区缓存和任务状态并重连。Git 每三十二秒读取，轮询不重叠；首次构建期间每两秒重试读取缓存。读取不触发扫描，不重置当前文件或草稿。写入后的读取排在已有读取之后。首次取得工作区后不立即重复读取。同一 Research 主题内切换文件保留文件树节点、折叠和滚动状态，加载占位保持工具栏布局。
+浏览器以 `GET /api/events`（SSE）接收工作区服务的状态事件（结果变化、刷新状态与任务变化）。事件只作信号，收到后读取工作区缓存，读取串行执行；SSE 断开期间改为每四秒读取工作区缓存和任务状态并重连。Git 每三十二秒读取，轮询不重叠；首次构建期间每两秒重试读取缓存。读取不触发扫描，不重置当前文件或草稿。写入后的读取排在已有读取之后。首次取得工作区后不立即重复读取。同一 Research 主题内切换文件保留文件树节点、折叠和滚动状态，加载占位保持工具栏布局。
 
 文档与源码使用一套当前恢复日志，按写入范围区分文档事务和源码事务，不维护历史格式兼容分支。源码事务冻结经过验证的配置范围与身份，仅替换既有 JS/TS 常规文件，不与配置修改混合。prepared 可回滚，committed 只核验完成后的内容；外部改动导致具名冲突，不删除恢复现场。
 
@@ -48,11 +48,11 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 刷新开始与写入前都重算身份，不一致时丢弃候选并立即以新身份刷新，不记为失败。安装身份在进程内首次计算后不变，配置字节每次重读。
 
-一次刷新最多 60 秒，漂移时不重扫，首次即可发布 `consistent:false` 代次。`complete = consistent && 扫描完整`，`unknownRelations = !complete`。`buildTrace` 异常仍能形成安全结构与具名 finding 时发布不完整代次，无结构时不发布。代次替换遵守[替换规则](../local-data-engine/architecture.md#替换规则)：新的一致代次即使含 finding 也替换旧代次，不一致候选不替换已有一致代次，只更新 `lastAttempt`。
+一次刷新最多 60 秒，漂移时不重扫，首次即可发布 `consistent:false` 的结果。`complete = consistent && 扫描完整`，`unknownRelations = !complete`。`buildTrace` 异常仍能形成安全结构与具名 finding 时发布不完整的结果，无结构时不发布。替换遵守[替换规则](../local-data-engine/architecture.md#替换规则)：新的一致结果即使含 finding 也替换旧结果，不一致的候选不替换已有一致结果，只更新 `lastAttempt`。
 
 ### 持久记录
 
-独立 `workspace_projection` 命名空间只有 key 为 `workspace` 的一行，payload 格式为 `concord.workspace-projection/v1`。它含 `identity`、可选 `record`（构建区间、完整性字段与结构 `snapshot`）、`lastAttempt`（不含快照）与 `error`。一次 put 原子替换该行，新身份覆盖旧行；损坏记录不提供给前台，writer 可直接覆盖。身份由 worktree root、Git-private 目录、配置原文摘要（无配置为 absent，非法配置仍取安全读取的字节摘要）、安装目录全部 JS 与 native 产物摘要及类型 `workspace` 组成。读取前先验证原生模块，缺失为不可用而非尚无代次。
+独立 `workspace_projection` 命名空间只有 key 为 `workspace` 的一行，payload 格式为 `concord.workspace-projection/v1`。它含 `identity`、可选 `record`（构建区间、完整性字段与结构 `snapshot`）、`lastAttempt`（不含快照）与 `error`。一次 put 原子替换该行，新身份覆盖旧行；损坏记录不提供给前台，writer 可直接覆盖。身份由 worktree root、Git-private 目录、配置原文摘要（无配置为 absent，非法配置仍取安全读取的字节摘要）、安装目录全部 JS 与 native 产物摘要及类型 `workspace` 组成。读取前先验证原生模块，缺失为不可用而非尚无结果。
 
 快照由 `WorkspaceProjectionSnapshotSchema` 白名单严格解码，读写都拒绝额外字段。它只含路径、摘要、metadata、单行 derivedTitle、关系、诊断、反馈分诊与概念目录；概念目录列出每个 `concepts.md` 的路径与其中每个概念的术语、锚点、弃用名与现行写法，定义与解释正文不进入。正文、`source.body`、远端 body、配置原文、证据与发布日志不进入 Schema。搜索只索引标题、ID、路径与 URL。
 
@@ -60,7 +60,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 ### 刷新所有权
 
-`ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移代次发布后一秒再申请一次。刷新失败不改变已完成写入的回执。
+`ViewProjectionManager` 运行在工作区服务中，拥有监听、调度与关闭。服务启动、监听事件、服务端写入或证据发布、恢复、`POST /api/workspace` 与每 30 秒的补偿定时器申请刷新，不依赖浏览器。扫描期间的写入、显式请求与监听事件合并为一个后续刷新，完成后立即执行；补偿请求不排队。漂移的结果发布后一秒再申请一次。刷新失败不改变已完成写入的回执。
 
 服务锁保证每个 worktree 只有一个刷新者。扫描在服务的计算进程中执行，60 秒上限与超时整组终止沿用 `ViewScanManager` 的规则，计算进程只返回候选；主进程确认回复、身份与无待恢复 journal 后短事务写入，孤儿 worker 无发布权。
 
@@ -68,8 +68,8 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 | 状态 | 恢复条件 | 呈现 |
 | --- | --- | --- |
-| building | 首个代次写入 | 每 2 秒自动重试，可手动重试 |
-| refresh-failed | 下次成功刷新；漂移与身份变化不进入此状态 | 旧代次、失败码与重试 |
+| building | 首份结果写入 | 每 2 秒自动重试，可手动重试 |
+| refresh-failed | 下次成功刷新；漂移与身份变化不进入此状态 | 上一份结果、失败码与重试 |
 | unavailable:native | 修复安装并重启服务 | 原生诊断与重启提示 |
 | unavailable:corrupt | writer 覆盖，或无法打开时清理缓存 | 损坏码、重试，必要时提示 `concord cache clear` |
 | blocked:recovery-required | `concord recover` 或 HTTP recover 成功后立即刷新 | 恢复按钮与错误码 |
@@ -85,7 +85,7 @@ Host 接受合法的域名、IPv4 与 IPv6 authority。请求携带 Origin 时�
 
 正文、设置、元数据与反馈详情的前像只来自 `/api/file`。`ViewFile` 在同一次严格读取内可附目标的 `document`、`project` 或 `feedback`，不扫描全仓库；解析失败的原文仍可读，不制造有效 owner。定向 `feedback.warnings` 只报告该对象可确认的状态，跨文件告警来自投影。
 
-投影 digest 只触发核对：与编辑器基线不同且未处理过时，至多发起一次定向读取；读回仍不同且草稿干净才替换，有草稿则进入 external 对比。较旧代次不替换较新基线，提交使用建立草稿时的 digest；保存后定向读取确认。导航在下一代次前显示正在更新，新建对象短暂缺席不是创建失败。不同安装的服务按[启动与裁决](../local-data-engine/architecture.md#启动与裁决)交接同一 worktree，只保留最近身份，不提供兼容读取或第二份缓存。
+投影 digest 只触发核对：与编辑器基线不同且未处理过时，至多发起一次定向读取；读回仍不同且草稿干净才替换，有草稿则进入 external 对比。编辑器基线只在服务端确认的文件摘要等于读回的摘要时更新，旧事件不会覆盖较新的基线；提交使用建立草稿时的 digest；保存后定向读取确认。导航在下一份结果到达前显示正在更新，新建对象短暂缺席不是创建失败。不同安装的服务按[启动与裁决](../local-data-engine/architecture.md#启动与裁决)交接同一 worktree，只保留最近身份，不提供兼容读取或第二份缓存。
 
 ### 模块
 

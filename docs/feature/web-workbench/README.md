@@ -58,7 +58,7 @@ Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导�
 
 | 场景 | 测量内容 | p50 预算 |
 | --- | --- | ---: |
-| `web-workbench/workspace` | 已有可读代次时的 `GET /api/workspace` | 250ms |
+| `web-workbench/workspace` | 已有可读结果时的 `GET /api/workspace` | 250ms |
 | `web-workbench/jobs` | 并发任务请求 | 211ms |
 | `web-workbench/file` | 并发文件请求 | 280ms |
 | `web-workbench/document-set` | 并发 document.set 请求 | 550ms |

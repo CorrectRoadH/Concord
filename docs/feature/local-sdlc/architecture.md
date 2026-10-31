@@ -45,6 +45,8 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 `use-case format` 沿用正文编辑的前像与发布协议。`rename-step` 在唯一 journal 与发布租约下使用专用 `step-rename` 授权范围，不串联多次 `source.set` 或文档发布。该范围绑定项目、worktree、冻结配置、Use Case 路径、old-id、new-id、完整文件前后像、摘要与 mode，以及规划时观察的目录成员。
 
+`issue close` 同样使用专用的 `issue-close` 授权范围：在唯一 journal 与发布租约下删除 Issue 文件，并从回归测试源码中删除指向它的 `@issue` 行。规划在 `app` 中完成，由测试领域的标记解析器找出这些行；该范围绑定项目、worktree、冻结配置、测试成员集合、Issue 路径、每个被改文件的完整前后像、摘要与 mode。发布与恢复时经 `PublicationValidation` 以冻结输入重新规划，只接受与之完全相同的写集：每个测试文件的后像必须恰好等于前像删去这些 `@issue` 行，其余字节不变。重新规划结果不同、前像不符或无法解码时保留 journal 并阻断写入。
+
 规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[写入安全](scope.md#写入安全)）。
 
 ## 代码声明引用
@@ -87,12 +89,12 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 - 绑定：握手与能力核验后按协商编码换算位置。层级 `DocumentSymbol[]`、扁平 `SymbolInformation[]` 与 `null` 分开处理，扁平结果不推导层级。范围须有序、位于当前文本内，`selectionRange` 含于 `range`，子范围含于父范围。从标记块结束处按 profile 跳过允许的空白与前置内容，先选最近起点再选最深声明；仍占同一位置或无法验证时记歧义缺口，不按序号强绑。
 - 调用观察：有当前原生绑定与有效范围时从范围内全部可调用声明出发，否则使用文件级并带 `FileScope`。沿安全仓库路径请求 `prepareCallHierarchy` 与 `outgoingCalls`，允许穿过 testRoots 中的转调函数，只在映射实现声明时筛选 sourceRoots；仓库外与不支持文件不展开并记边界缺口。观察总带 `OpenWorldCalls`；空数组、`null` 或全部请求成功都不推导未调用。预算耗尽分别记 `DepthLimit`、`NodeLimit`、`RequestLimit`，非故障截断可发布已有正向观察。
 - 输入身份：项目、root、worktree 与 server/profile 构成一个分析单元，`inputs` 覆盖源码与测试成员及字节、Spec、配置、构建与模块配置、server 实现与版本、选项、profile 与算法版本、预算、位置编码，以及所用原生清单、绑定与选择集合。任一变化使整个单元失效，不能只比对声明所在文件。
-- 生命周期：启动任何外部进程前取得 runner 所有权并捕获完整输入，随后关闭来源快照与 HawDB 持久句柄；分析与测试收集不并发占用同一 runner。进程组在 Effect Scope 内运行，取消先发协议取消，再平衡关闭文档、`shutdown`、`exit`，超时后 TERM 再 KILL，并核对进程组与输出管道终结。清理成功后用新快照核验成员、摘要、配置、run 失效标记与发布代次，再在短发布协调中写投影。
+- 生命周期：启动任何外部进程前取得 runner 所有权并捕获完整输入，随后关闭来源快照与 HawDB 持久句柄；分析与测试收集不并发占用同一 runner。进程组在 Effect Scope 内运行，取消先发协议取消，再平衡关闭文档、`shutdown`、`exit`，超时后 TERM 再 KILL，并核对进程组与输出管道终结。清理成功后用新快照核验成员、摘要、配置与 run 失效标记，并确认没有未完成的 journal，再在短发布协调中写投影。
 - 信任：server 是受信程序，进程组管理不是文件或网络沙箱。client 不发 `workspace/executeCommand`，对 `workspace/applyEdit` 回 `applied: false`，其它请求按方法白名单严格解码，配置响应只含显式公开项；凭据与原始环境不进入缓存或诊断。
 
 ## 编辑器计算
 
-`concord lsp` 为每个会话维护 URI 到文本、languageId、版本与打开代次的 overlay，未打开的依赖读取受校验磁盘快照，不把历史投影当作当前图。每次任务捕获会话代次、全部依赖的 URI、版本、打开代次与磁盘身份，发布或返回前再次核对，任一变化即丢弃结果并重排；步骤、标记、引用解析与写作检查使用同一版本集合。
+`concord lsp` 为每个会话维护 URI 到文本、languageId、版本与打开标识的 overlay，未打开的依赖读取受校验磁盘快照，不把历史投影当作当前图。每次任务捕获会话标识、全部依赖的 URI、版本、打开标识与磁盘身份，发布或返回前再次核对，任一变化即丢弃结果并重排；步骤、标记、引用解析与写作检查使用同一版本集合。
 
 每个计算 Job 是包内 `editor-worker.js` 的 Node 子进程，固定 256 MiB heap 上限，由独立 OwnedProcess 进程组持有，原生编译器继承该进程组；项目配置不能替换可执行文件、入口或参数。Job 经 stdin 单个 JSON 输入、stdout 单个 JSON 返回，双方严格解码。每个 Job 有自己的 Scope，收尾后核验进程组归属、清理已检查且后代已消失；缺少清理记录视为未知。未知或失败的清理使会话永久保留 `EditorTaskFailed`，停止新计算，不发布该任务结果。取消的任务在清理结论取得前仍计入运行集合，shutdown、EOF 与 exit 等待全部收尾。Job 不获得来源写权限或发布租约。
 
@@ -100,7 +102,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 - 绑定：先按 provider 的 group key（项目、文件、声明范围与组身份）归并参数项，不凭同名合并。标记块从首个关联标记到连续元数据末行；自动绑定优先最内层包含标记的唯一 leaf 组，否则取紧随其后的唯一 leaf 组，中间只允许空白及 provider 明确覆盖的注释或装饰器。有普通语句、同深度重叠、缺范围或只有 suite 时不自动绑定。`@native` 与可验证的自动绑定不一致时 `NativeSelectorConflict`，歧义为 `AmbiguousNativeBinding`，二者都是执行前失败，不是 check finding。执行集按 native ID 去重，一次结果可投射到多个关联。
 - 输入身份：`inputs` 绑定项目与 root、测试与源码及配置成员集合和字节、fixture、导入支持文件、构建配置、conftest 与 lockfile。它还绑定框架与运行时版本、adapter 真实脚本及传递实现文件、选择能力、算法版本与选中组范围；`node adapter.js` 摘要 adapter.js 而非 node。
-- 协调：任何 adapter 进程启动前取得与 runner 相同的运行租约与失效 epoch，捕获完整快照后关闭来源句柄再运行外部进程；run 所有权贯穿收集、选择、执行、报告与终结，短发布协调不跨外部调用。结束后重读全部输入与成员，有漂移、非零收集退出、截断、缺失调用或清理未知时不发布当前清单，旧清单只作历史展示。
+- 协调：任何 adapter 进程启动前取得与 runner 相同的运行租约与失效标记，捕获完整快照后关闭来源句柄再运行外部进程；run 所有权贯穿收集、选择、执行、报告与终结，短发布协调不跨外部调用。结束后重读全部输入与成员，有漂移、非零收集退出、截断、缺失调用或清理未知时不发布当前清单，旧清单只作历史展示。
 - 报告：每个 run 分配新报告目录，每个 Invocation 独占执行前为空的子目录，以安全目录句柄读取并复核文件身份，读取后变化也拒绝。拒绝 symlink、多重硬链接、特殊文件、目录逃逸与非本次产生的文件；XML 禁止 DTD 与外部实体。目录在最后一个使用者结束后清理，失败保留恢复信息且不发布有效原生结果。
 
 ## 文档身份
@@ -153,4 +155,4 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 
 全局诊断 inventory 同时携带 documents、findings 与 complete。单独的 documents 数组不表示集合完整。逐文件收集解码错误，保留错误路径与具名代码，并传播 `complete: false`。关系 show 和 Web workspace 返回 complete 及全部相关完整性诊断。有效记录不能单独证明集合完整。requireValidTrace 同时检查 complete 和 findings。部分图不能把 Issue 关闭为 fixed、采用 Roadmap 或批准关系迁移。
 
-未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有发布租约，返回前校验来源观察与发布代次，并在未完成 journal 前停止。读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../architecture.md#操作依赖与发布协调)。
+未完成的多文件 journal 仍阻断普通快照。局部解析隔离不持有发布租约，返回前重新核对读过的文件摘要与目录集合，遇到未完成的 journal 时停止。读写 access 与 dryRun 的分离、乐观一致性核验和恢复结果见[可移植协调架构](../portable-coordination/architecture.md)。跨功能规则见 [c-013](../../architecture.md#操作依赖与发布协调)。

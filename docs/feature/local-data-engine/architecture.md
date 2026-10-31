@@ -16,7 +16,7 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 持久句柄因协调锁被占用、或发现运行中的工作区服务而不打开时，可由当前来源完整重建的解析缓存（文档、配置、代码、测试标记与 Git 基线）改用本进程的内存缓存，命令照常完成，正确性仍由当前来源核验保证。缓存诊断保留 `HawdbBusy` 原因。远端反馈快照与诊断投影不是解析缓存：服务运行时经由服务读取，没有服务而库被占用时如实报告不可用，不把空内存实例当作已读取的快照，不自动联网。损坏、预算、路径安全与原生产物失败保留各自的具名失败。`cache status`、`cache clear` 与 `cache rebuild` 如实报告占用。
 
-文档与静态配置解析、代码解析及不可变 Git 测试基线使用进程期内存实例。纯解析入口不依赖 Repository 或磁盘目录；命名空间区分数据，源摘要与解析器身份区分代次。内存实例没有文件锁，关闭或失效后可以重建。
+文档与静态配置解析、代码解析及不可变 Git 测试基线使用进程期内存实例。纯解析入口不依赖 Repository 或磁盘目录；命名空间区分数据，源摘要与解析器身份区分结果。内存实例没有文件锁，关闭或失效后可以重建。
 
 配置读取、feedback 观察与 status 以 existing-only 只读方式打开。只读不写来源、不改逻辑缓存行，也不初始化表、显式 checkpoint、修复 WAL 或远端刷新。已有完整库允许分支 runtime 挂载、内部派生文件重建和创建同级协调锁。缺目录、格式标记、根 manifest、结构性 `owner.hawdb.lock` 或表时不初始化。已有 `branch.head` 的目录必须已有 `owner.hawdb.lock`；分支 `runtime/` 及其锁是可重建的派生文件。existing-only 打开缺失库时不创建锁或目录；可写创建可以建立已验证的数据库目录与协调锁。
 
@@ -73,10 +73,10 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 1. 启动者读取运行记录，核对 worktree、privateDir 与安装身份，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
 3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者；权限、I/O、类型或身份失败分别以具名错误 `ServerLockUnavailable` 报告。服务锁由原生绑定提供，原生产物缺失或无法加载时同样报告 `ServerLockUnavailable`（原因 native），服务不启动；面板与 `view` 报 `WorkspaceServerUnavailable`，CLI 在本进程计算。
-4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`，然后打开持久库、读取已有代次并启动计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务并在状态中报告原因。
+4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`，然后打开持久库、读取最近一份已接受的结果并启动计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务并在状态中报告原因。
 5. 启动者等待自己拉起或竞争中胜出的服务完成握手，最多 10 秒，覆盖新进程在负载下的冷启动；`opening` 已可握手，不必等待打开持久库。连接已在运行的服务时握手最多 1 秒，CLI 超时后在本进程计算。
 
-`hello` 与 `shutdown` 是控制帧，结构由本页固定：`hello {protocol, installation}` 返回 `{protocol, installation, token, state, generation}`；安装身份或协议不同时只回应这两种控制帧。启动者遇到不同身份的服务时发送带对方 token 的 `shutdown`，等待其释放服务锁（上限 3 秒），超时返回 `WorkspaceServerBusy` 并在 details 中给出对方 pid 与安装身份。CLI 只读命令遇到不同身份的服务时在本进程计算，不接管。
+`hello` 与 `shutdown` 是控制帧，结构由本页固定：`hello {protocol, installation}` 返回 `{protocol, installation, token, state, sourceDigest}`；安装身份或协议不同时只回应这两种控制帧。启动者遇到不同身份的服务时发送带对方 token 的 `shutdown`，等待其释放服务锁（上限 3 秒），超时返回 `WorkspaceServerBusy` 并在 details 中给出对方 pid 与安装身份。CLI 只读命令遇到不同身份的服务时在本进程计算，不接管。
 
 ### 状态
 
@@ -96,9 +96,9 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 
 ### 刷新与推送
 
-服务是该 worktree 唯一的工作区投影刷新者。监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。刷新在计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)；主进程确认结果、身份与无待恢复 journal 后接受该代次：在内存中替换当前代次，并写入 `workspace_projection` 作为服务重启后的首个代次与无服务时的历史读取。订阅、`GET /api/workspace` 与经服务的 `workspace projection` 从内存返回，不读持久库。
+服务是该 worktree 唯一的工作区投影刷新者。监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。刷新在计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)；刷新开始时记录来源摘要，完成时重新核对当前来源，与计算时一致、身份不变且没有待恢复的 journal，主进程才接受这份结果：在内存中替换当前结果，并写入 `workspace_projection` 作为服务重启后的首份结果与无服务时的历史读取。过时的结果核对不上，直接丢弃；服务内的刷新串行执行，不存在两个并发刷新。订阅、`GET /api/workspace` 与经服务的 `workspace projection` 从内存返回，不读持久库。
 
-订阅以 `(token, generation)` 识别代次。首次订阅与重连先发送完整状态；之后代次、`lastAttempt`、错误、状态与任务变化都发送事件，即使没有新代次。同一连接上未发送的旧事件被新的完整状态替换，不排队。
+一份结果由它的来源摘要 `sourceDigest` 识别：参与计算的全部来源文件摘要，加上解析器与 Schema 身份的组合摘要。订阅以 `(token, sourceDigest)` 识别当前结果。首次订阅与重连先发送完整状态；之后结果、`lastAttempt`、错误、状态与任务变化都发送事件，`sourceDigest` 与上次推送相同时不重发结果。同一连接上未发送的旧事件被新的完整状态替换，不排队。
 
 ### 协议
 
@@ -114,7 +114,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 | --- | --- |
 | `hello`、`shutdown` | 见启动与裁决 |
 | `subscribe {kind: workspace}` | 完整状态，之后的事件 |
-| `workspace` | 内存中已接受的代次 |
+| `workspace` | 内存中已接受的结果 |
 | `refresh` | 受理即应答，不等待刷新 |
 | `git-status`、`git-diff {path, area}` | 当前 Git 状态与定向 diff |
 | `read {path, ifUnchanged?}` | 与 Web `/api/file` 相同的定向严格读取的原始字节与信封，另附实际摘要 |
