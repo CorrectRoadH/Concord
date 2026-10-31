@@ -286,11 +286,10 @@ test('an interrupted publication retains a prior generation with blocked status'
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('a busy native cache is explicitly unavailable and recovers after its handle closes', async () => {
   const root = fixture();
+  const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: true });
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
-    const previous = await waitForWorkspaceProjection(base);
-    const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false });
     try {
       const response = await fetchFresh(`${base}/api/workspace`);
       assert.equal(response.status, 503);
@@ -299,34 +298,33 @@ test('a busy native cache is explicitly unavailable and recovers after its handl
       assert.equal(body.details.reason, 'HawdbBusy');
       assert.equal(body.value, undefined);
     } finally { database.close(); }
-    const recovered = await waitForWorkspaceProjection(base);
+    const recovered = await pollUntil(async () => {
+      const response = await fetchFresh(`${base}/api/workspace`);
+      const body = await response.text();
+      return response.status === 200 ? parseWorkspaceProjection(body) : undefined;
+    }, { description: 'persistent owner reopens the released cache and accepts a generation', timeoutMs: 10_000 });
     assert.equal(recovered.projection.status, 'ready');
-    assert.deepEqual(recovered.snapshot.documents, previous.snapshot.documents);
-    assert.deepEqual(recovered.snapshot.sources, previous.snapshot.sources);
-  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
+    assert.ok(recovered.snapshot.documents.length > 0);
+  } finally { database.close(); await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
-test('a briefly busy workspace cache recovers within the same HTTP request', async () => {
+test('a running workspace serves its accepted generation while foreign cache opens are rejected', async () => {
   const root = fixture();
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   const base = baseOf(server);
   try {
     const previous = await waitForWorkspaceProjection(base);
-    const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false });
-    const release = setTimeout(() => database.close(), 100);
-    try {
-      const response = await fetchFresh(`${base}/api/workspace`);
-      const body = await response.text();
-      assert.equal(response.status, 200, body);
-      const recovered = parseWorkspaceProjection(body);
-      assert.ok(recovered);
-      // Startup watch reconciliation can publish a newer generation during the retry.
-      assert.equal(recovered.projection.status, 'ready');
-      assert.equal(recovered.projection.consistent, true);
-      assert.deepEqual(recovered.snapshot.documents, previous.snapshot.documents);
-      assert.deepEqual(recovered.snapshot.sources, previous.snapshot.sources);
-    } finally { clearTimeout(release); database.close(); }
+    assert.throws(() => openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: true, create: false }), { code: 'HawdbBusy' });
+    const response = await fetchFresh(`${base}/api/workspace`);
+    const body = await response.text();
+    assert.equal(response.status, 200, body);
+    const recovered = parseWorkspaceProjection(body);
+    assert.ok(recovered);
+    assert.equal(recovered.projection.status, 'ready');
+    assert.equal(recovered.projection.consistent, true);
+    assert.deepEqual(recovered.snapshot.documents, previous.snapshot.documents);
+    assert.deepEqual(recovered.snapshot.sources, previous.snapshot.sources);
   } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
 });
 

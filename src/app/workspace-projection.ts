@@ -3,9 +3,10 @@ import { WorkspaceProjectionEnvelope as Envelope } from "../model/index.js";
 import { join } from "node:path";
 
 import { Workspace } from "../base/workspace/index.js";
+import { Sources } from '../base/sources/index.js';
 import { Effect } from "effect";
 import { genericPrivateDirectorySync } from "../base/publication/index.js";
-import { assertLeasePath, ownerIsAlive, readLeaseOwner } from "../base/publication/index.js";
+import { assertLeasePath, ownerIsAlive, readLeaseOwner, PUBLICATION_LEASE } from "../base/publication/index.js";
 import { assertCacheDatabaseSafe, cacheDatabasePath, cacheRootOwnerOnly } from "../base/cache/index.js";
 import { HawdbFailure, hawdbIdentity, PersistentCache } from "../base/cache/index.js";
 import { workspaceInstallationIdentity } from "../base/installation/index.js";
@@ -17,6 +18,16 @@ import type { WorkspaceProjection, WorkspaceSnapshot } from "../model/index.js";
 
 const key = 'workspace';
 import { type WorkspaceProjectionRecord, type WorkspaceProjectionContext, WORKSPACE_PROJECTION_LIMIT, decodeEnvelope, decodeWorkspaceProjectionRecord } from "../model/index.js";
+
+export const assertWorkspacePublicationReady = Effect.fn('workspaceProjection.publicationReady')(function*(context: WorkspaceProjectionContext) {
+  const pending = yield* (yield* Sources).pendingPublications(context.privateDir);
+  if (pending.length === 0) return;
+  const live = yield* Effect.try({ try: () => {
+    const owner = readLeaseOwner(join(context.privateDir, 'trace', PUBLICATION_LEASE), 'workspace-publication');
+    return owner !== undefined && owner.root === context.root && ownerIsAlive(owner);
+  }, catch: failure });
+  return yield* Effect.fail(new ConcordError(live ? 'RepositoryBusy' : 'RecoveryRequired', live ? 'Publication is still running; discard the candidate and retry' : 'An interrupted publication exists; run concord recover'));
+});
 
 export const workspaceProjectionContext = Effect.fn('workspaceProjectionContext')(function*(input: string) {
   const workspace = yield* Workspace;

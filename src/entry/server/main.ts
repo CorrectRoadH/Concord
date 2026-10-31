@@ -37,6 +37,7 @@ import type { RemoteFeedback } from '../../model/index.js';
 import { executeViewAction, runWorkspaceTest, clearWorkspaceCache, decodeViewAction } from '../../app/index.js';
 import { ViewActionSchema } from '../../model/index.js';
 import { Snapshot } from './computation.js';
+import { assertWorkspacePublicationReady } from '../../app/index.js';
 
 const OperationRequest = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('action'), root: Schema.String, input: ViewActionSchema, snapshot: Snapshot }),
@@ -220,7 +221,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const service = yield* makeWorkspaceService({
       verify: runtime.verify,
       context,
-      ready: ctx => sources.pendingPublications(ctx.privateDir).pipe(Effect.flatMap(pending => pending.length > 0 ? Effect.fail(new ConcordError('RecoveryRequired', 'An interrupted publication exists; run concord recover')) : Effect.void)),
+      ready: ctx => assertWorkspacePublicationReady(ctx).pipe(Effect.provideService(Sources, sources)),
       restore: ctx => owned(readWorkspaceProjection(ctx)).pipe(Effect.map(value => ({ ...value, projection: { ...value.projection, refreshOwner: 'active' as const } }))),
       persist: (ctx, candidate, error) => owned(storeWorkspaceProjection(ctx, candidate, error)),
       compute: operation => cache.snapshot.pipe(Effect.catch(() => Effect.succeed({})), Effect.flatMap(snapshot => computation.run(operation, snapshot))),
@@ -243,9 +244,15 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     const jobs = new ServerJobs((caseId, signal) => runOperation({ kind: 'job', caseId }, signal), () => { notify(); Effect.runFork(service.request); });
     yield* Effect.addFinalizer(() => Effect.tryPromise(() => jobs.close()).pipe(Effect.orDie));
     const run = <A, E>(operation: Effect.Effect<A, E>, signal?: AbortSignal) => Effect.runPromise(operation, { signal });
+    const readProjection = SubscriptionRef.get(service.state.value).pipe(Effect.flatMap(value => {
+      if (value.workspace) return Effect.succeed(value.workspace);
+      if (value.error?.code === 'RecoveryRequired') return Effect.fail(new ConcordError('RecoveryRequired', value.error.message));
+      if (value.state === 'degraded' && value.error) return Effect.fail(new ConcordError('WorkspaceProjectionUnavailable', value.error.message, { reason: value.error.code }));
+      return Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is building'));
+    }));
     const hosted = yield* makeHttpLeases(runtime.token, (host, port, sse) => Effect.tryPromise({ try: () => {
       const ports: HostedViewPorts = {
-        workspace: () => run(SubscriptionRef.get(service.state.value).pipe(Effect.flatMap(value => value.workspace ? Effect.succeed(value.workspace) : Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is building'))))),
+        workspace: () => run(readProjection),
         refresh: () => { Effect.runFork(service.request); },
         read: path => run(service.execute({ kind: 'read', path })) as Promise<import('../../model/index.js').ViewFile>,
         git: () => run(service.execute({ kind: 'git-status' })),
@@ -297,7 +304,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       hello: () => SubscriptionRef.get(service.state.value).pipe(Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, generation: value.generation }))),
       shutdown: request => request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : Effect.forkIn(Effect.sleep('10 millis').pipe(Effect.andThen(service.stop)), serverScope).pipe(Effect.asVoid),
       subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(event, output.json)))),
-      workspace: request => result(request, SubscriptionRef.get(service.state.value).pipe(Effect.flatMap(value => value.workspace ? Effect.succeed(value.workspace) : Effect.fail(new ConcordError('WorkspaceProjectionPending', 'Workspace is building'))))),
+      workspace: request => result(request, readProjection),
       refresh: request => result(request, service.request.pipe(Effect.as({ status: 'requested' }))),
       query: request => result(request, Effect.gen(function*() {
         const input = yield* Schema.decodeUnknownEffect(importedQueryRequest, { onExcessProperty: 'error' })({ name: request.name, input: request.input });

@@ -118,9 +118,10 @@ function json(response: ServerResponse, status: number, value: ViewResponse<unkn
 
 const success = (response: ServerResponse, value: unknown, status = 200): void => json(response, status, { ok: true, value });
 
-function statusFor(error: ConcordError): number {
+function statusFor(error: ConcordError, workspace: boolean): number {
   if (error.code === 'WorkspaceProjectionPending') return 202;
   if (error.code === 'WorkspaceProjectionUnavailable') return 503;
+  if (workspace && error.code === 'RecoveryRequired') return 503;
   if (error.code === 'ForbiddenAuthority') return 403;
   if (error.code === 'BodyTooLarge') return 413;
   if (['RepositoryBusy', 'RecoveryRequired', 'RecoveryConflict', 'PreimageChanged', 'ProjectExists', 'DocumentExists', 'DecisionExists', 'DecisionSourceUncommitted', 'DuplicatePromotion', 'DuplicateLink', 'InvalidMemoryState', 'InvalidRoadmapState', 'InvalidIssueState', 'OpenProblem', 'JobBusy', 'CleanupFailed', 'ServerStopping', 'CodeSourceChanged'].includes(error.code)) return 409;
@@ -131,7 +132,7 @@ function statusFor(error: ConcordError): number {
 function failed(request: IncomingMessage, response: ServerResponse, cause: unknown): void {
   const error = failure(cause);
   const value: ViewFailure = { ok: false, ...(error.code === 'WritingBudgetExceeded' ? { complete: false as const } : {}), error: error.code, message: error.message, ...(error.details === undefined ? {} : { details: error.details }) };
-  const status = statusFor(error);
+  const status = statusFor(error, request.url?.split('?')[0] === '/api/workspace');
   // Error details are returned to the caller, not copied into request logs.
   // Pending builds and short cache lock collisions are retried by the client; they are not server errors.
   const transient = error.code === 'WorkspaceProjectionPending' || error.code === 'WorkspaceProjectionUnavailable' && typeof error.details === 'object' && error.details !== null && (error.details as { reason?: unknown }).reason === 'HawdbBusy';
