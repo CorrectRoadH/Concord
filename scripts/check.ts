@@ -1,6 +1,7 @@
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { acquireBuildLock } from './build-lock.js';
 
 class CheckFailed extends Schema.TaggedError<CheckFailed>()('CheckFailed', {
   phase: Schema.String,
@@ -17,6 +18,15 @@ const command = Effect.fn('check.command')(function* (name: string, executable: 
 });
 
 const main = Effect.gen(function*() {
+  const lock = yield* Effect.acquireRelease(acquireBuildLock(), lock => Effect.promise(lock.release));
+  yield* Effect.acquireRelease(Effect.sync(() => {
+    const previous = process.env.CONCORD_BUILD_LOCK;
+    process.env.CONCORD_BUILD_LOCK = lock.token;
+    return previous;
+  }), previous => Effect.sync(() => {
+    if (previous === undefined) delete process.env.CONCORD_BUILD_LOCK;
+    else process.env.CONCORD_BUILD_LOCK = previous;
+  }));
   const started = performance.now();
   const sourceTests = yield* command('Source tests (architecture/model/domain)', process.execPath, ['--import', 'tsx', 'scripts/test-built.ts', '--suite=source', ...process.argv.slice(2)]);
   if (sourceTests !== 0) return yield* new CheckFailed({ phase: 'source tests', exitCode: sourceTests });

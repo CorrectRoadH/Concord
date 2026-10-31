@@ -56,16 +56,7 @@ test('packed public CLI analyzes an isolated offline consumer without a source c
     return stdout;
   };
   try {
-    const packed = packConcord(scratch);
-    const install = join(scratch, 'install'); mkdirSync(install);
-    run('tar', ['-xzf', resolve(scratch, packed.filename), '-C', install], scratch);
-    const unpacked = join(install, 'package');
-    // Match the release packer's fixed-lock identity without writing to the shared package store.
-    copyFileSync('pnpm-lock.yaml', join(unpacked, 'pnpm-lock.yaml'));
-    copyFileSync('pnpm-workspace.yaml', join(unpacked, 'pnpm-workspace.yaml'));
-    const store = run('pnpm', ['store', 'path'], resolve(".")).trim();
-    run('pnpm', ['install', '--prod', '--offline', '--frozen-store', '--frozen-lockfile', '--ignore-scripts', '--store-dir', store], unpacked);
-    const binary = packageBin(unpacked);
+    const binary = installedConcordCli();
     root = mkdtempSync(join(scratch, 'consumer-'));
     execFileSync('git', ['init', '-q', root], { stdio: 'ignore' });
     call(root, ['init', '--test-root', 'test', '--source-root', 'src'], ack, 0, binary);

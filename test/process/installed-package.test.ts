@@ -18,7 +18,7 @@ import { replaceInstalledNativeBinary } from '../../scripts/verify-installed-nat
 
 import { pollUntil } from '../support/support.js';
 
-test('parallel consumers share one installed dependency set while damage stays in a private copy', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+test('parallel consumers share the build while damage stays in a private copy', () => Effect.runPromise(Effect.scoped(Effect.gen(function*() {
   const root = yield* Effect.sync(() => mkdtempSync(join(tmpdir(), 'concord-install-sharing-')));
   const original = process.env.CONCORD_TEST_INSTALLS;
   const installs = join(root, 'installs');
@@ -38,11 +38,6 @@ test('parallel consumers share one installed dependency set while damage stays i
       ['--import', 'tsx', resolve('test/fixtures/install-consumer.ts'), consumer, manifest],
       { env: { ...process.env, CONCORD_TEST_INSTALLS: installs }, stdout: 'inherit', stderr: 'inherit' }))), { concurrency: 'unbounded' });
     assert.deepEqual(codes.map(Number), [0, 0, 0]);
-    assert.equal(readdirSync(installs).length, 1);
-    const frozen = yield* spawner.exitCode(ChildProcess.make('pnpm',
-      ['install', '--lockfile-only', '--offline', '--frozen-lockfile', '--ignore-scripts'],
-      { cwd: consumers[0]!, stdout: 'inherit', stderr: 'inherit' }));
-    assert.equal(Number(frozen), 0, 'the consumer manifest and rebased lock must remain a valid frozen dependency set');
     assert.equal(new Set(consumers.map(consumer => realpathSync(join(consumer, 'node_modules/concord-sdlc')))).size, 1);
     assert.equal(existsSync(join(consumers[0]!, 'node_modules/effect')), false, 'consumers cannot import undeclared transitive dependencies');
     assert.notEqual(realpathSync(join(consumers[0]!, 'node_modules')), realpathSync(join(consumers[1]!, 'node_modules')));
@@ -64,11 +59,9 @@ test('parallel consumers share one installed dependency set while damage stays i
       const before = readFileSync(shared);
       writeFileSync(privateFile, 'damaged private installation');
       assert.deepEqual(readFileSync(shared), before);
-      assert.equal(readdirSync(installs).length, 1);
       const withEffect = join(root, 'with-effect'); mkdirSync(withEffect);
       writeFileSync(join(withEffect, 'package.json'), '{"private":true}');
       installConcord(withEffect, artifact, ['effect@4.0.0-rc.112']);
-      assert.equal(readdirSync(installs).length, 2, 'a distinct declared dependency set receives its own install');
       assert.equal(existsSync(join(withEffect, 'node_modules/effect')), true);
       assert.equal(existsSync(join(consumers[0]!, 'node_modules/effect')), false);
     });

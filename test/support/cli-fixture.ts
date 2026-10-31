@@ -43,7 +43,7 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  assert.ok(packed);
  assert.ok(packed.files.some(file=>file.path==='pnpm-lock.yaml'), 'package must carry its runtime dependency lock');
  const install=join(scratch,'tool');mkdirSync(install);writeFileSync(join(install,'package.json'),JSON.stringify({private:true}));
- installConcord(install, packed, [], { private: true });
+ installConcord(install, packed);
  const packageRoot=join(install,'node_modules/concord-sdlc');
  const manifest=Schema.Struct({version:Schema.String,dependencies:Schema.Record(Schema.String,Schema.String),devDependencies:Schema.Record(Schema.String,Schema.String)});
  const published=Schema.decodeUnknownSync(Schema.fromJsonString(manifest))(readFileSync(join(packageRoot,'package.json'),'utf8'));

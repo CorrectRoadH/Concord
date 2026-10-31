@@ -3,13 +3,12 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { basename, join, resolve } from 'node:path';
 import { availableParallelism } from 'node:os';
-import { tmpdir } from './test-temporary.js';
 import { parseArgs } from 'node:util';
 import { createHash } from 'node:crypto';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { discoverTests } from './test-discovery.js';
 import { TestCounts } from './test-reporter.js';
-import { packConcord } from './release-package.js';
+import { acquireBuildLock } from './build-lock.js';
 
 const Concurrency = Schema.NumberFromString.pipe(Schema.check(Schema.isInt(), Schema.isGreaterThan(0)));
 class TestArgumentsInvalid extends Schema.TaggedError<TestArgumentsInvalid>()('TestArgumentsInvalid', {
@@ -61,25 +60,17 @@ const main = Effect.scoped(Effect.gen(function* () {
     if (values.suite === 'source' || values.suite === 'packed') return;
     return yield* new TestArgumentsInvalid({ detail: 'No test files selected' });
   }
-  const scratch = yield* Effect.acquireRelease(
-    fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-test-run-' }),
-    path => fs.remove(path, { recursive: true, force: true }).pipe(Effect.orDie),
-  );
+  if (files.some(file => !sourceFile(file))) yield* Effect.acquireRelease(acquireBuildLock(), lock => Effect.promise(lock.release));
   const started = performance.now();
   const needsPackage = files.some(file => !sourceFile(file));
-  const manifest = join(scratch, 'artifact.json');
-  if (needsPackage) {
-    const artifact = yield* Effect.sync(() => packConcord(scratch));
-    yield* fs.writeFileString(manifest, JSON.stringify(artifact));
-  }
   yield* fs.makeDirectory('.test-results', { recursive: true });
   const output = resolve(yield* fs.makeTempDirectory({ directory: '.test-results', prefix: 'run-' }));
-  const env = { ...process.env, ...(needsPackage ? { CONCORD_TEST_ARTIFACT: manifest } : {}), CONCORD_TEST_INSTALLS: join(scratch, 'installs'),
+  const env = { ...process.env,
     CONCORD_TEST_FAILURES: join(output, 'node-failures.jsonl'),
     CONCORD_TEST_TIMINGS: process.env.CONCORD_TEST_TIMINGS ?? join(output, 'node-timings.jsonl'),
     CONCORD_E2E_OUTPUT: join(output, 'e2e'), E2E_TELEMETRY_DISABLED: '1',
     CONCORD_E2E_AGENT: values.suite === 'agent' ? '1' : '0' };
-  yield* Effect.sync(() => console.error(`# ${needsPackage ? "Packed test artifact" : "Source tests prepared"} in ${(performance.now() - started).toFixed(0)}ms; Node concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}`));
+  yield* Effect.sync(() => console.error(`# ${needsPackage ? "Built distribution selected" : "Source tests prepared"} in ${(performance.now() - started).toFixed(0)}ms; Node concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}`));
   const shardFiles = new Set(discovered.filter(file => file.endsWith('.test.ts')).filter((_file, index) => shard === undefined || index % shard[1] === shard[0] - 1));
   const nodeFiles = [...new Set(files.filter(file => file.endsWith('.test.ts') && (shard === undefined || shardFiles.has(file))).map(file => resolve(file)))].sort();
   const browserFiles = files.filter(file => file.endsWith('.e2e.ts'));
