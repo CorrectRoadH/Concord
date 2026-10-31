@@ -225,7 +225,7 @@ type QueryCacheEnvelope = {
 
 `scannedAt` 是扫描开始的毫秒时间戳，`builtFrom` 是其 ISO 表示，`builtUntil` 是扫描结束，`builtAt` 是发布时间。
 
-`QueryValue` 按查询选择 `src/query-values.ts` 中 `onExcessProperty: 'error'` 的 Schema。`TraceGapsValue` 与当前来源的 `trace gaps --json` 相同。`TraceShowValue` 与 `trace show --json` 相同，但 `subject` 去掉 `body`，Issue 的 `metadata.source` 去掉远端 `body`。`ReviewRenderValue` 为按顺序拼接的 `{ text }` 与 `{ constitution: { path, digest } }` 片段。解码失败与身份不匹配报告 `QueryCacheInvalid`，不在前台扫描。
+`QueryValue` 按查询选择 `src/query-values.ts` 中 `onExcessProperty: 'error'` 的 Schema。`TraceGapsValue` 与当前来源的 `trace gaps --json` 相同。`TraceShowValue` 与 `trace show --json` 相同，但 `subject` 去掉 `body`，Issue 的 `metadata.source` 去掉远端 `body`。`ReviewRenderValue` 为按顺序拼接的 `{ text }` 与 `{ taste: { path, digest } }` 片段。解码失败与身份不匹配报告 `QueryCacheInvalid`，不在前台扫描。
 
 ### 替换规则
 
@@ -265,7 +265,7 @@ type QueryCacheEnvelope = {
 
 ## 缓存与原生边界的约束
 
-缓存只加速，原生引擎只承担桥接（[一件事只写一次，其余推导](../../constitution.md#c-019)、[技术栈](../../engineering/concord-self-hosting/README.md#技术栈)）。
+缓存只加速，原生引擎只承担桥接（[一件事只写一次，其余推导](../../taste.md#t-3)、[技术栈](../../engineering/concord-self-hosting/README.md#技术栈)）。
 
 1. HawDB 只保存可重建投影与可丢弃缓存，短期解析使用同一引擎的内存实例。文件 owner、证据与发布日志不进入缓存。
 2. 桥接、引擎、Rust toolchain 与依赖精确固定。持久句柄由明确的唯一所有者管理，来源快照不拥有跨请求句柄；客户端的逻辑会话、事务、快照与清理的生命周期分别声明，内存句柄按进程管理。缓存不参与来源发布或证据裁决。发行包携带目标平台产物，消费者不需要 Rust、全局 HawDB 或数据库服务。锁协议与上游 revision 绑定，升级必须重新验证互斥与清理。

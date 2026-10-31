@@ -34,7 +34,7 @@ Concord moves review to the spec. The spec is Markdown in the repository. Code a
 | Processes and timing are hard to explain in prose | A `p5` fence in Markdown plays as a looping animation in the web workspace; Mermaid covers static structure | One loop of an animation shows a multi-party flow or a state change; the prose stays the rule and the sketch only illustrates it |
 | People and agents use different words for one thing | `concepts.md` gives each concept one name and a definition, scoped by directory; `check` reports deprecated names | Readers do not guess whether two words mean the same thing, and an agent reading literally finds only one meaning |
 | Vague words and ever-longer sentences | `concord-writing.json` bans words such as `helper` or `resolve` that hide responsibility and limits sentence and paragraph length; each rule gives a replacement and a reason | Implementers do not have to guess what the author meant |
-| Every agent session starts from zero and re-decides settled questions | Cross-feature rules live in the constitution, tradeoffs in Design records, and findings in Memory, all in the repository | A new session reads the current rules and their reasons instead of overturning them |
+| Every agent session starts from zero and re-decides settled questions | Cross-feature preferences live in the taste file, tradeoffs in Design records, and findings in Memory, all in the repository | A new session reads the current rules and their reasons instead of overturning them |
 | Nobody knows which behavior a test guards | Tests point to a Use Case or one of its steps through an annotation; code points to the spec through a declaration; reverse links are derived from source | From a spec you can find the tests and code behind it, and the links appear in the same diff as the code |
 | Refactors churn the spec and the tests | Behavior pages (README, Use Case, CLI, library) are separate from the architecture page | A behavior-preserving refactor changes only the architecture page, so behavior pages and the tests pointing at them stay stable |
 | Bugs are declared fixed without evidence | A defect becomes an Issue; the regression test fails on the defect commit and passes on the fix, and `issue close --fixed` verifies both and records the result | Anyone can replay the fix verification |
@@ -62,7 +62,7 @@ A file's location and its single top-level heading give it identity, kind, and n
 
 | File | What it is | Who reads it, and when |
 | --- | --- | --- |
-| `docs/constitution.md` | Long-lived cross-feature rules with stable clause IDs; sentences that rely on a rule link its ID | Before planning, implementing, or reviewing any feature |
+| `docs/taste.md` | Long-lived cross-feature rules with stable clause IDs; sentences that rely on a rule link its ID | Before planning, implementing, or reviewing any feature |
 | `docs/concepts.md`, `docs/**/concepts.md` | Glossary: each second-level heading is one concept, the heading is its only spelling, and the first paragraph is its definition; frontmatter lists deprecated names | Before writing a domain term; the directory sets the scope |
 | `docs/concord-writing.json`, `docs/**/concord-writing.json` | Writing policy: banned words with replacements and reasons, sentence and paragraph limits | Enforced by `check`; writers read the reason when reported |
 
@@ -128,7 +128,7 @@ concord new feature greeting --title "Greeting" --pages use-case
 concord new use-case greet-name --feature greeting --title "Greet a name"
 ```
 
-Concord discovers `src/`, `test/`, and `tests/` by default, so `concord.config.ts` is optional. Pass `--source-root` or `--test-root` when your code lives elsewhere, or `--docs-only` for a repository without tests. Initialization creates document templates, a project constitution, and an agent guidance block in `AGENTS.md`.
+Concord discovers `src/`, `test/`, and `tests/` by default, so `concord.config.ts` is optional. Pass `--source-root` or `--test-root` when your code lives elsewhere, or `--docs-only` for a repository without tests. Initialization creates document templates, a taste file, and an agent guidance block in `AGENTS.md`.
 
 `new` only fills a template; you can create the same files by hand. Write the intended behavior directly in them:
 

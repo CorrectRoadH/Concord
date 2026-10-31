@@ -24,7 +24,7 @@ deprecated:
 
 一项产品能力的 Spec，位于 `docs/feature/<id>/`，由 README、Use Case、cli 或 library 页和 architecture 页组成。
 
-README 告诉第一次读的人能做什么、怎么开始；字段、错误码与边界写在其它页面（[读得懂胜过写得全](constitution.md#c-017)）。
+README 告诉第一次读的人能做什么、怎么开始；字段、错误码与边界写在其它页面（[读得懂胜过写得全](taste.md#t-1)）。
 
 ## Use Case {#use-case}
 
@@ -38,7 +38,7 @@ README 告诉第一次读的人能做什么、怎么开始；字段、错误码�
 
 尚未采用的产品方向，按 Feature 的体裁书写；采用后移入 `docs/feature/`，实现与测试不指向它。
 
-## 品味 {#constitution}
+## 品味 {#taste}
 
 项目判断“什么是好的”的共同标准：一句话写清它偏好什么，说明它解决的问题，并给出好的样子与坏的样子。规则写不到的地方按品味选择，审阅时按品味判断好坏。
 

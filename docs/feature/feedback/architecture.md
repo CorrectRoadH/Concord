@@ -7,28 +7,23 @@ Feedback 是产品入口，本地 Issue `docs/issues/<id>.md` 是唯一 owner，
 frontmatter 只保存推导不出的字段，每个字段只在非空时出现：
 
 ```yaml
-status: open                     # open 或 closed
 relations:
   - role: root-cause
     target: memory/token-race.md
 source: {...}                    # FeedbackSource，见下文
-closure:
-  kind: fixed
-  reason: 修正锁顺序
-  verification: {...}            # 仅 fixed
 ```
 
 | 角色 | 目标 | 含义 |
 | --- | --- | --- |
-| `investigation`、`root-cause`、`decision` | current 或 superseded 的 Memory | 调查记录、根因、所依据的决策 |
+| `investigation`、`root-cause` | Memory | 调查记录与根因 |
 | `adopts` | Feature、Use Case 或 Engineering 的路径或锚点 | 该 Issue 当前被这条 Spec 承接；退役即删除这一项，历史在 Git |
 | `related` | 另一个 Issue | 两个 Issue 相关，例如一个观察的缺陷由另一个 Issue 跟踪 |
 
-同一角色与目标的关系只保存一次。`closure` 各种类的必需字段与写入规则见[本地观察](use-case/manage-local-observations.md#操作-spec)；fixed 的 `verification` 按[修复核验](../local-sdlc/scope.md#证据的范围)写入。
+同一角色与目标的关系只保存一次。Issue 处理完就删除，见[关闭本地 Issue](use-case/manage-local-observations.md#close)；fixed 先按[修复核验](../local-sdlc/scope.md#证据的范围)核验再删除。
 
 `source` 是 FeedbackSource：GitHub 与 Linear 各一个分支，包含首次导入时的远端对象身份（见下文的去重键）、来源摘录、远端状态与时间，以及 `connectionId` 与 `importedAt`。没有 `source` 的 Issue 是 Local 来源。
 
-Issue 文件可以直接编辑，`concord issue` 是写入同样内容并执行必要步骤的助手。`concord check` 校验当前字段与关闭结论。
+Issue 文件可以直接编辑，`concord issue` 是写入同样内容并执行必要步骤的助手。`concord check` 校验当前字段。
 
 ## 远端来源
 
@@ -58,12 +53,12 @@ API 适配器只访问固定 HTTPS API，重定向拒绝，外部 URL 只用于�
 
 来源类型从现有 owner 的 source 派生，未声明 source 表示 Local；展示字段不是第二份持久登记表。远端连接配置仍只描述需要连接的 provider。Local 不实现假的同步接口，三种来源共享本地调查与关联能力，不假定全部来源拥有同样的外部权限。
 
-Web 的安全本地删除通过同一文档事务发布 after:null，要求当前完整摘要与合法关系图；任何入边、关系或关闭结论都阻止删除。直接删除文件时，`check` 报告指向它的失效引用。详见[本地观察 Spec](use-case/manage-local-observations.md)。
+Web 关闭 Issue 与 `issue close` 相同：仍有链接指向它时拒绝，否则删除文件。直接删除文件时，`check` 报告指向它的失效引用。详见[本地 Issue](use-case/manage-local-observations.md)。
 
 ## 反馈生命周期
 
-`status: open` 且没有关系的 Issue 显示「待处理」；带有任一关系显示「已关联」；`status: closed` 显示「已关闭」。这三个展示状态从当前字段推导，不额外持久化一份 triage 字段。
+没有关系的 Issue 显示「待处理」，带有任一关系显示「已关联」。展示状态从当前字段推导，不另存。
 
-来源的 Open、Done、Closed 等状态只描述上一次远端观察，同步不关闭本地 Issue。本地关闭按[关闭种类](use-case/manage-local-observations.md#操作-spec)写入结论；fixed 关闭前经过[修复核验](../local-sdlc/scope.md#证据的范围)，结论写入 `closure.verification`。
+来源的 Open、Done、Closed 等状态只描述上一次远端观察，同步不关闭本地 Issue。本地处理完按[关闭本地 Issue](use-case/manage-local-observations.md#close)删除；fixed 删除前经过[修复核验](../local-sdlc/scope.md#证据的范围)，结论写进提交说明。
 
 来源摘录与本地笔记分开；用户对标题和正文的编辑不会被重复同步覆盖。远端移出列表、连接删除、缓存清空都不删除本地观察。多个反馈可指向同一个 Memory 或 Spec，无需按相似标题自动合并。

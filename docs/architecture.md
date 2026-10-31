@@ -4,7 +4,7 @@
 
 Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致（[为什么需要 Concord](../README.md)）。它是可安装到任意 Git 仓库的本地 CLI。
 
-文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](constitution.md)，Web 界面设计见根目录 `DESIGN.md`。
+文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](taste.md)，Web 界面设计见根目录 `DESIGN.md`。
 
 ## 代码结构
 
@@ -30,7 +30,7 @@ Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent �
 src/
   model/        纯模型：Schema、Markdown 与 frontmatter 解析、文档身份推导、关系推导、写作规则、作用域与路径算法、步骤、代码引用
   base/         基础服务：installation、workspace、sources、publication、cache、git、process
-  domain/       领域服务：documents、designs、trace、tests、code、issues、memory、constitution、writing、concepts、feedback、onboarding、docs-work
+  domain/       领域服务：documents、designs、trace、tests、code、issues、memory、taste、writing、concepts、feedback、onboarding、docs-work
   app/          应用操作、Queries 端口与 ViewAction
   entry/        入口：cli、http（Web 工作台的服务端）、server（工作区服务的主进程、计算进程与操作进程）、lsp、panel
 web/            浏览器前端，只调用 HTTP 接口
@@ -44,7 +44,8 @@ native/hawdb/   HawDB 的 N-API 绑定
 | [local-sdlc](feature/local-sdlc/README.md) | `domain/documents`、`domain/trace`、`domain/tests`、`domain/code`、`domain/issues`、`domain/memory`、`entry/cli`、`entry/lsp` |
 | [document-packages](feature/document-packages/README.md) | `domain/documents`、`domain/designs` |
 | [documentation-quality](feature/documentation-quality/README.md) | `domain/writing`、`domain/concepts`、`model` 的写作规则 |
-| [project-onboarding](feature/project-onboarding/README.md) | `domain/onboarding`、`domain/constitution` |
+| [project-onboarding](feature/project-onboarding/README.md) | `domain/onboarding` |
+| [taste](feature/taste/README.md) | `domain/taste` |
 | [feedback](feature/feedback/README.md) | `domain/feedback`、`domain/issues` |
 | [neutral-project-governance](feature/neutral-project-governance/README.md) | `domain/tests`（runner 与 adapter）、`domain/docs-work` |
 | [local-data-engine](feature/local-data-engine/README.md) | `base/cache`、`native/hawdb`、`entry/server` |
@@ -68,9 +69,9 @@ native/hawdb/   HawDB 的 N-API 绑定
 领域之间的依赖按以下层级，只能依赖排在前面层级的模块；同一层级的领域互不依赖，需要同层能力时由 `app` 编排或提取共享的纯模型：
 
 1. `documents`：owner 读取、inventory 与精确引用解析；
-2. `concepts`、`constitution`、`designs`、`issues`、`memory`、`docs-work`：各自拥有生命周期与采用操作，`issues` 拥有远端写入与 IssueProject 端口，`docs-work` 拥有写集规划与 scoped-clean 规则；
+2. `concepts`、`taste`、`designs`、`issues`、`memory`、`docs-work`：各自拥有生命周期与采用操作，`issues` 拥有远端写入与 IssueProject 端口，`docs-work` 拥有写集规划与 scoped-clean 规则；
 3. `writing`（依赖 `concepts`）、`code`、`tests`；
-4. `trace`（依赖 `documents`、`code`、`tests`、`constitution`）、`feedback`（依赖 `issues`）、`onboarding`（模板、配置与初始化规则，依赖 `documents`、`concepts`、`constitution`、`writing`）。
+4. `trace`（依赖 `documents`、`code`、`tests`、`taste`）、`feedback`（依赖 `issues`）、`onboarding`（模板、配置与初始化规则，依赖 `documents`、`concepts`、`taste`、`writing`）。
 
 一个入口需要启动另一个入口时（`concord view` 启动 HTTP 服务、`concord lsp` 启动语言服务），由该入口自己定义启动端口，组合根用对方入口的实现提供；协议实现留在对方入口，`app` 不感知传输。
 
@@ -161,7 +162,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 
 `concord.config.ts` 可以不存在；存在时运行时只读取这一个静态 TS 配置文件，不执行模块。配置项与默认值见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#配置项)，journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)。配置快照拥有原文前像、路径与摘要，写入与恢复使用同一协议。
 
-Memory 固定位于 worktree 根的 `memory/`。`docs/constitution.md` 存在即启用，`status` 为 draft 或 active；docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `constitution show` 派生。品味不充当测试 Spec 或自动合规证据。根 `DESIGN.md` 可选。
+Memory 固定位于 worktree 根的 `memory/`。`docs/taste.md` 存在即启用，`status` 为 draft 或 active；docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `taste` 派生。品味不充当测试 Spec 或自动合规证据。根 `DESIGN.md` 可选。
 
 ## 领域与 CLI
 
@@ -328,7 +329,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 ## 当前格式
 
-只有当前格式，没有历史包袱（[写现在，不写过去](constitution.md#c-020)）。
+只有当前格式，没有历史包袱（[写现在，不写过去](taste.md#t-4)）。
 
 1. 配置、owner、journal、证据与缓存只有当前格式。运行时只按当前 Schema 严格解码，其它输入按无效输入返回具名解码错误；不识别旧版本，不提供迁移命令、兼容读取或双轨模型。无法解码的 journal 与锁保留现场并阻断写入，不被普通恢复删除。
 2. 格式变化时，Concord 自身仓库与接入项目把文件直接改写为当前格式，缓存与可重建投影直接丢弃重建。缺少当前绑定的证据必须重新取证，不补字段或重算摘要伪装为当前证明。

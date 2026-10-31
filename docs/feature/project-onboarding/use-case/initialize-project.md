@@ -18,7 +18,7 @@
 
 ## 可观察验收
 
-- 新项目必有 docs/constitution.md；不将未填写原则或模板示例当成已采用规则。
+- 新项目必有 docs/taste.md；不将未填写原则或模板示例当成已采用规则。
 - 没有选择 runner 或覆盖时不创建 `concord.config.ts`，`check`、`trace` 与 Web 工作台按[默认值](maintain-project-config.md#配置项)工作。
 - 没有 AGENTS.md 时创建；已有文件只追加或刷新边界明确的托管区块，保留区块外的原字节。标记残缺时原子拒绝，不覆盖未知内容。
 - DESIGN.md 仅在选中时创建，已有文档保留。

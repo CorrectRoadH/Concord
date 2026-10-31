@@ -121,7 +121,7 @@ Issue 打开时没有 `closure`，关闭时写入；fixed 的 `closure` 带[修�
 
 ### Memory
 
-Memory 从 captured 开始。decision 与 insight 经 activate 成为 current；note 保持 captured。被新记录替代时成为 superseded，并写 `supersededBy` 或 `supersession`。品味每次 adopt 与 amend 写一条 `type: decision`、current 的 Memory，以 `amends` 指向受影响的条款与款，见[演进品味](../project-onboarding/use-case/evolve-constitution.md#amend)。
+Memory 从 captured 开始。decision 与 insight 经 activate 成为 current；note 保持 captured。被新记录替代时成为 superseded，并写 `supersededBy` 或 `supersession`。品味每次 adopt 与 amend 写一条 `type: decision`、current 的 Memory，以 `amends` 指向受影响的条款与款，见[演进品味](../project-onboarding/use-case/evolve-taste.md#amend)。
 
 ### 退役与恢复
 

@@ -21,7 +21,7 @@
 | `memory` | `confirm`、`replace`、`link`、`search`；摘要列表用 `list memory` |
 | `design` | `decide`、`postpone`、`check`、`format` |
 | `roadmap` | `adopt`（移入 `docs/feature/`）；取消方向即删除目录，历史在 Git |
-| `constitution` | `show`、`adopt`、`amend` |
+| `taste` | 列出品味条目与依据它们的页面 |
 | `concepts`、`writing` | 概念与写作政策的查看与受管写入 |
 | `docs` | `docs check` 与 `docs work` |
 | `feedback` | 外部来源的同步与导入 |
@@ -74,8 +74,8 @@ Inspect configuration: concord doctor
   "documents": 3,
   "cases": 1,
   "codeDeclarations": 1,
-  "findings": [{"code": "ConstitutionDraft", "path": "docs/constitution.md", "message": "The project constitution is structurally valid but still draft; adopt real principles explicitly."}],
-  "nextSteps": ["Adopt real project principles with concord constitution adopt; draft is not compliance.", "Run concord check to validate all relations.", "Configure runner to run tests and verify fixes."]
+  "findings": [],
+  "nextSteps": ["Run concord check to validate all relations.", "Configure runner to run tests and verify fixes."]
 }
 ```
 
@@ -153,8 +153,7 @@ checks:
     ok: true
     complete: true
 advisories:
-  docs/constitution.md
-    ConstitutionDraft: The project constitution is structurally valid but still draft; adopt real principles explicitly.
+  docs/taste.md
 documents: 3
 cases: 1
 codeDeclarations: 1

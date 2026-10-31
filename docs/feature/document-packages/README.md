@@ -20,6 +20,6 @@ Design 候选按内容规模使用 `plans/<name>.md` 或 `plans/<name>/README.md
 
 ## 依据的品味
 
-- [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [只声称证明过的](../../constitution.md#c-021)
-- [写现在，不写过去](../../constitution.md#c-020)
+- [一件事只写一次，其余推导](../../taste.md#t-3)
+- [只声称证明过的](../../taste.md#t-5)
+- [写现在，不写过去](../../taste.md#t-4)

@@ -34,4 +34,4 @@ macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安
 
 ## 依据的品味
 
-- [只声称证明过的](../../constitution.md#c-021)
+- [只声称证明过的](../../taste.md#t-5)

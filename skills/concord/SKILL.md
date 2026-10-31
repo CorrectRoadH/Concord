@@ -34,7 +34,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 | `docs/design/<d>/`、`docs/research/<r>/` | Design 与 Research |
 | `docs/issues/<i>.md` | Issue：缺陷、请求与观察 |
 | `memory/<m>.md` | Memory：decision、insight、note |
-| `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 品味、概念与写作政策 |
+| `docs/taste.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 品味、概念与写作政策 |
 
 仓库相对路径是文档的唯一身份，名称取自正文唯一的一级标题。目录名与文件名可以作短选择器，同类中有歧义时命令具名拒绝并要求写出路径。移动文件即改变身份，`check` 报告全部失效的精确引用。
 

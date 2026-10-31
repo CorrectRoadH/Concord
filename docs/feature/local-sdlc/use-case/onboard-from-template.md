@@ -19,7 +19,7 @@
 
    ```text
    Would apply init:
-     docs/constitution.md
+     docs/taste.md
      docs/concord.md
      docs/_template/feature-design/README.md
      ...
@@ -43,7 +43,7 @@
 
    创建的内容：
 
-   - 品味：`docs/constitution.md`，`status` 为 draft。
+   - 品味：`docs/taste.md`，`status` 为 draft。
    - 配置：给出 `--test-root`、`--source-root` 或 `--docs-only` 时写入 `concord.config.ts`，只含这些项。
    - 入口与说明：`docs/concord.md`、`docs/README.md`、`docs/architecture.md`。
    - 术语与写作政策：随包空 catalog `docs/concepts.md`、预设的 `docs/concord-writing.json`。

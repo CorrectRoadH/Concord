@@ -11,7 +11,7 @@
 | 读取文档 | `show <路径或选择器>`、`list [类别]` | 分类列表与详情 |
 | 正文与页面 | 直接编辑文件 | 富文本与源码编辑 |
 | 元数据、源码、配置 | 直接编辑文件，或 `action --input <file|->` | 详情、源码、设置表单 |
-| 生命周期 | `issue`、`memory`、`design decide/defer`、`roadmap start`、`constitution adopt/amend` | 对应记录的操作表单或结构化 action |
+| 生命周期 | `issue`、`memory`、`roadmap start` | 对应记录的操作表单或结构化 action |
 | 测试与修复核验 | `test list/run/verify` | 测试与运行页 |
 | 声明辅助 | — | 代码与测试声明助手生成可粘贴的注释 |
 | Git 变化 | `git status`、`git diff <path> --area staged|unstaged|untracked` | Git 面板 |

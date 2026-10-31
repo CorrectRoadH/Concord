@@ -37,7 +37,7 @@ consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap
 
 后台刷新合并同键请求，只合并开始于请求之后的扫描；等待同键刷新与来源扫描共用[刷新上限](#刷新上限)，超时不声明刷新成功。成功以事务替换完整结果，失败保留上一代，数据库可写时记录具名错误。进程在终端退出后可继续完成刷新，不持有文档发布租约。发布阶段的数据库占用最多重试三秒，进程终止后的清理以清理宽限为界，二者不计入刷新上限。扫描消息输出上限为 4MiB。
 
-投影不保存 owner 正文与远端 Issue 正文。trace show 与 review 在服务时读取当前正文（单文件上限 32MiB）。摘要与投影记录一致时，输出排除 `projection` 与 `cache` 后与同源 `--fresh --dry-run` 逐字节相同。摘要变化时省略该正文并在 `projection.bodyChanged` 列出路径，读取失败时列入 `projection.bodyUnavailable` 并附错误码。review 中变化的品味片段输出 `(constitution changed since projection; use --fresh)`。
+投影不保存 owner 正文与远端 Issue 正文。trace show 与 review 在服务时读取当前正文（单文件上限 32MiB）。摘要与投影记录一致时，输出排除 `projection` 与 `cache` 后与同源 `--fresh --dry-run` 逐字节相同。摘要变化时省略该正文并在 `projection.bodyChanged` 列出路径，读取失败时列入 `projection.bodyUnavailable` 并附错误码。review 中变化的品味片段输出 `(taste changed since projection; use --fresh)`。
 
 缓存清理只删除可丢弃投影。没有原生产物或数据库不可用时，--fresh 仍可通过现有回源能力执行诊断。
 

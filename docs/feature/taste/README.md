@@ -59,9 +59,18 @@ T-1 读得懂胜过写得全
 - [命令](cli.md)：`concord taste` 的输出与错误码。
 - [文件格式](format.md)：条目的写法与 ID 规则。
 
+## 性能预算
+
+按[性能验收](../../engineering/concord-self-hosting/performance.md)的方法，在 warm 状态下判定 p50。
+
+| 场景 | 测量内容 | p50 预算 |
+| --- | --- | ---: |
+| `taste/list` | 列出品味条目与依据它们的页面 | 880ms |
+| `taste/list-server` | 经由运行中的工作区服务列出品味条目与依据位置 | 880ms |
+
 ## 依据的品味
 
-- [读得懂胜过写得全](../../constitution.md#c-017)
-- [一个词一个意思](../../constitution.md#c-018)
-- [文件是界面，命令只是助手](../../constitution.md#c-022)
-- [规则少而硬，机制留给实现](../../constitution.md#c-024)
+- [读得懂胜过写得全](../../taste.md#t-1)
+- [一个词一个意思](../../taste.md#t-2)
+- [文件是界面，命令只是助手](../../taste.md#t-6)
+- [规则少而硬，机制留给实现](../../taste.md#t-8)

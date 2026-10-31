@@ -29,7 +29,7 @@ NiceEval 是实践来源与接入消费者。公开入口验收、候选与 Spec
 
 ## 依据的品味
 
-- [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [只声称证明过的](../../constitution.md#c-021)
-- [总则](../../constitution.md#general-amend)
-- [写现在，不写过去](../../constitution.md#c-020)
+- [一件事只写一次，其余推导](../../taste.md#t-3)
+- [只声称证明过的](../../taste.md#t-5)
+- [总则](../../taste.md#general-amend)
+- [写现在，不写过去](../../taste.md#t-4)

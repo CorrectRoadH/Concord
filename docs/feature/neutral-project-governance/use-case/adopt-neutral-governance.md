@@ -28,4 +28,4 @@
 
 - [统一项目治理](../README.md)
 - [治理边界](../architecture.md)
-- [品味](../../../constitution.md)
+- [品味](../../../taste.md)

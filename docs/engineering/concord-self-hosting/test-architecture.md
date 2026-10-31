@@ -36,7 +36,7 @@ fake 只用于外部边界：GitHub 与其它远端服务、模型、系统浏�
 
 测试仓库由 `test/support` 中的一个 fixture 模块构造。每次测试运行先构建一个已初始化的模板消费者，每个测试复制模板得到自己的仓库，不在每个测试中重新执行 `git init` 与 `concord init`。需要不同初始状态的测试在复制后通过公开入口修改。
 
-受管文件的内容只由格式的 owner 生成：Spec 与 Memory 通过领域写入入口或 `renderDocument`，品味通过 `initialConstitution`，配置通过配置渲染函数，写作政策与 concepts 通过各自的写入入口。测试源码不手写受管格式的 frontmatter、配置或 JSON。格式改变时只改格式 owner，测试不随之修改（[当前格式](../../architecture.md#当前格式)）。
+受管文件的内容只由格式的 owner 生成：Spec 与 Memory 通过领域写入入口或 `renderDocument`，品味通过 `initialTaste`，配置通过配置渲染函数，写作政策与 concepts 通过各自的写入入口。测试源码不手写受管格式的 frontmatter、配置或 JSON。格式改变时只改格式 owner，测试不随之修改（[当前格式](../../architecture.md#当前格式)）。
 
 例外是验证无效输入的测试：它们需要手写的错误输入，集中在一张无效输入表中，每行给出输入、所属格式与期望的具名错误。
 

@@ -58,7 +58,7 @@ Concord 把审阅移到 Spec 上。Spec 是仓库中的 Markdown，代码与测�
 
 | 文件 | 是什么 | 谁在什么时候读 |
 | --- | --- | --- |
-| `docs/constitution.md` | 跨 Feature、长期有效的规则，每款有稳定 ID；依据它的句子旁链接该 ID | 规划、实现和审阅任何功能前读 |
+| `docs/taste.md` | 跨 Feature、长期有效的规则，每款有稳定 ID；依据它的句子旁链接该 ID | 规划、实现和审阅任何功能前读 |
 | `docs/concepts.md`、`docs/**/concepts.md` | 术语表：每个二级标题是一个概念，标题是唯一写法，第一段是定义；frontmatter 列出弃用名 | 写下一个领域名词前查；所在目录决定作用域 |
 | `docs/concord-writing.json`、`docs/**/concord-writing.json` | 写作政策：禁词及替代写法和理由，句长与段长上限 | 由 `check` 执行；写作者被报告时读理由 |
 

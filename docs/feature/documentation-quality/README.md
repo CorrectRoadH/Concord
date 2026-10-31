@@ -118,8 +118,8 @@ export default function (p: P5) {
 
 ## 依据的品味
 
-- [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [只声称证明过的](../../constitution.md#c-021)
-- [总则](../../constitution.md#general-amend)
-- [写现在，不写过去](../../constitution.md#c-020)
-- [读得懂胜过写得全](../../constitution.md#c-017)
+- [一件事只写一次，其余推导](../../taste.md#t-3)
+- [只声称证明过的](../../taste.md#t-5)
+- [总则](../../taste.md#general-amend)
+- [写现在，不写过去](../../taste.md#t-4)
+- [读得懂胜过写得全](../../taste.md#t-1)

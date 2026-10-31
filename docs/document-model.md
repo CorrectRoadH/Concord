@@ -7,7 +7,7 @@ Concord 管理的文档按回答的问题分组。身份、类别、所属关系
 | Spec | Feature：README（产品功能，像使用教程）、`use-case/`（不同情形下的用户旅程）、`architecture.md`（技术架构）、`cli.md` 或 `library.md`（调用与输出） | `docs/feature/<f>/` | 无 |
 | Spec | Engineering：开发 Concord 本身的构建、测试与发布，结构同 Feature | `docs/engineering/<t>/` | 无 |
 | 提案 | Roadmap：还没开始实现的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
-| 项目规则 | 品味、术语、写作政策 | `docs/constitution.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 无 |
+| 项目规则 | 品味、术语、写作政策 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/concord-writing.json` | 无 |
 | 待定的取舍 | Design：一个还没定下来的取舍，列出几种做法和各自的代价 | `docs/design/<d>.md` | 无 |
 | 待处理 | Issue：还要处理的缺陷、请求或观察 | `docs/issues/<i>.md` | `relations`、`source` |
 | 经验 | Memory：开发中可复用的经验 | `memory/<m>.md` | `relations` |
@@ -42,7 +42,7 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 
 ## 事实归属
 
-每项事实只由自己的来源维护（[一件事只写一次，其余推导](constitution.md#c-019)）。
+每项事实只由自己的来源维护（[一件事只写一次，其余推导](taste.md#t-3)）。
 
 1. 每项事实只有一个 owner。Spec 正文由 Markdown owner 拥有；领域术语由 docs 下按目录归属的 `concepts.md` 拥有，写作政策由同目录的 `concord-writing.json` 拥有；测试定义与正向关系由测试源码拥有。Issue 拥有工作项的状态、关系与关闭结论，Memory 拥有知识的正文、类型、状态与关系；生命周期的文本历史在 Git。
 2. 目录确定术语与政策的局部作用域，docs 根拥有全局定义。术语的定义与解释写在同一 `concepts.md`；其它 Markdown 链接到定义，不重复维护。
@@ -51,7 +51,7 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 
 ## 页面职责
 
-Feature 的页面按读者的问题分工（[读得懂胜过写得全](constitution.md#c-017)）。
+Feature 的页面按读者的问题分工（[读得懂胜过写得全](taste.md#t-1)）。
 
 1. 行为页（Feature README、Use Case、cli、library）用使用者的语言声明输入、可观察结果、错误与约束。公开的输入输出结构、协议、机器可读字段、具名错误码、退出码，以及使用者可观察的持久化与恢复保证，属于行为页。行为页不写内部模块、内部数据结构、调用链和引擎选型。
 2. 规范性陈述应能被测试断言。命令页给出完整调用、机器可读输出、退出码、具名错误与最小示例；API 页给出签名、返回值与失败。人读输出示例用于理解，可以规范化动态值，不保证逐字稳定（[机器可读输出](feature/local-sdlc/cli.md#机器可读输出)）。实现之前的示例标为预期输出；交付验收核对实际运行，运行记录进入 Memory，示例不作为运行证据。同一输出或错误定义只在一个行为页维护，其它页面链接引用。
@@ -63,7 +63,7 @@ Feature 的页面按读者的问题分工（[读得懂胜过写得全](constitut
 
 ## 只写当前声明
 
-声明式页面只写现在（[写现在，不写过去](constitution.md#c-020)）。
+声明式页面只写现在（[写现在，不写过去](taste.md#t-4)）。
 
 1. 约束用现行句式表达，只描述当前规则，不描述它与过去的差别，不点名已删除的接口、实现或文档。
 2. 实施日志、进度、待办、排障经过、测试运行记录、审阅与挑战经过、提交收据和 agent 交接不进入 `docs/`。排障经过、根因和可复用经验归 Memory，待调查的观察归 Issue，正式采用的目标归 Spec。
@@ -71,7 +71,7 @@ Feature 的页面按读者的问题分工（[读得懂胜过写得全](constitut
 
 ## 术语与语言
 
-一个词一个意思（[一个词一个意思](constitution.md#c-018)）。
+一个词一个意思（[一个词一个意思](taste.md#t-2)）。
 
 1. Spec 页面用到的领域名词由生效范围内的 `concepts.md` 定义。一个概念只用它的 term 一种写法，不在中英两种写法之间切换；新名词先进入 `concepts.md`，再进入 Spec。
 2. Spec 页面使用项目文档的主语言。命令、字段、错误码和代码标识写在行内代码中，不当作正文名词翻译或改写。

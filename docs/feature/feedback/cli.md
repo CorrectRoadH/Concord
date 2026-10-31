@@ -48,10 +48,10 @@ concord issue link output-confusion --role investigation memory/output-investiga
 concord check
 ```
 
-Issue 文件可以直接编辑与删除；删除后 `check` 报告指向它的失效引用。已关联或已关闭的记录通过 close 与 reopen 处理，不能删除来绕过调查与关闭结论。本地写入从不自动写入 GitHub 或 Linear。
+Issue 文件可以直接编辑与删除；删除后 `check` 报告指向它的失效引用。本地写入从不自动写入 GitHub 或 Linear。
 
 ## 命令分工
 
-`concord issue` 是执行必要步骤的本地 Issue 助手：`close`（fixed 时先核验）、`reopen`、`link`、`unlink`，命令与前置条件见[本地观察](use-case/manage-local-observations.md#操作-spec)。远端写入只经 [plan 与 execute](../neutral-project-governance/use-case/mutate-remote-issue.md)。`concord feedback` 只负责外部来源与反馈列表：`connection`、`sync`、`import <url>`、`list`、`show`。help 描述本地 owner 时统一使用 Issue 一词。action 提供 `issue.close`、`issue.reopen`、`issue.link` 与 `issue.unlink`，参数与 CLI 相同。
+`concord issue` 是执行必要步骤的本地 Issue 助手：`close`（删除 Issue，fixed 时先核验）、`link`、`unlink`，见[本地 Issue](use-case/manage-local-observations.md)。远端写入只经 [remote preview 与 remote apply](../neutral-project-governance/use-case/mutate-remote-issue.md)。`concord feedback` 只负责外部来源与反馈列表：`connection`、`sync`、`import <url>`、`list`、`show`。help 描述本地 owner 时统一使用 Issue 一词。action 提供 `issue.close`、`issue.link` 与 `issue.unlink`，参数与 CLI 相同。
 
 全部 Issue 文件可以直接编辑，命令写入同样的内容，`check` 检查字段是否完整。

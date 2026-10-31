@@ -1,6 +1,6 @@
 # 测试执行与浏览器验收
 
-本页遵守 [独立与本地](../../feature/local-sdlc/scope.md#独立与本地)、[只声称证明过的](../../constitution.md#c-021)、[技术栈](README.md#技术栈) 与 [用 Concord 管理自身](README.md#用-concord-管理自身)，规定测试如何执行；测试应当怎样写见[测试架构](test-architecture.md)。
+本页遵守 [独立与本地](../../feature/local-sdlc/scope.md#独立与本地)、[只声称证明过的](../../taste.md#t-5)、[技术栈](README.md#技术栈) 与 [用 Concord 管理自身](README.md#用-concord-管理自身)，规定测试如何执行；测试应当怎样写见[测试架构](test-architecture.md)。
 
 ## 执行入口
 

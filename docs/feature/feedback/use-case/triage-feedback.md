@@ -9,7 +9,7 @@
 2. 明确触发导入或同步；读取在仓库写锁外完成。分页只是一次有界遍历，不承诺某一瞬间的完整快照。
 3. 同一来源对象只有一条本地反馈；换连接或清空缓存后再次导入也不重复创建。
 4. 在反馈详情分别查看首次来源摘录、缓存的远端观察和本地 Markdown 笔记。更新远端数据不改本地标题、正文或关闭状态。
-5. 按角色关联 Memory，或以 adopts 由 Feature、Use Case 或 Engineering 承接；关闭按[关闭种类](manage-local-observations.md#操作-spec)写入结论。
+5. 按角色关联 Memory，或以 adopts 由 Feature、Use Case 或 Engineering 承接；处理完按[关闭本地 Issue](manage-local-observations.md#close)删除。
 
 ## 验收
 

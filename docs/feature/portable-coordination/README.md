@@ -26,5 +26,5 @@ Git remains required for repository identity. Network and multi-host coordinatio
 
 ## 依据的品味
 
-- [一件事只写一次，其余推导](../../constitution.md#c-019)
-- [只声称证明过的](../../constitution.md#c-021)
+- [一件事只写一次，其余推导](../../taste.md#t-3)
+- [只声称证明过的](../../taste.md#t-5)

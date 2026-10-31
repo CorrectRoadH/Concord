@@ -40,7 +40,7 @@ pnpm exec vp run check
 
 `vp run check` 是完整的交付检查。`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。测试使用 Node runner，每次调用共享一份打包产物，消费者独立安装。任务缓存关闭；局部检查不替代完整验收。
 
-参与开发前请阅读[开发规则](../../../AGENTS.md)与[项目品味](../../constitution.md)。
+参与开发前请阅读[开发规则](../../../AGENTS.md)与[项目品味](../../taste.md)。
 
 ## 构建与检查入口
 
