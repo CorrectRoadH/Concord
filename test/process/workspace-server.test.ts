@@ -63,6 +63,29 @@ test('workspace service publishes its initial computation and serves the accepte
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
+test('CLI cache clear drains the running persistent owner and publishes a new generation under the same service token', { timeout: 25_000 }, async () => {
+  const root = fixture();
+  try {
+    assert.equal((await command(root, ['server', 'start'])).status, 0);
+    const previous = await pollUntil(async () => {
+      const result = await command(root, ['workspace', 'projection']);
+      return result.status === 0 ? JSON.parse(result.stdout) : undefined;
+    }, { description: 'initial generation before clear', timeoutMs: 8000 });
+    const token = record(root).token;
+    const cleared = await command(root, ['cache', 'clear']);
+    assert.equal(cleared.status, 0, cleared.stderr);
+    assert.equal(record(root).token, token);
+    await pollUntil(async () => {
+      const result = await command(root, ['workspace', 'projection']);
+      if (result.status !== 0) return undefined;
+      const value = JSON.parse(result.stdout);
+      return value.projection.builtAt !== previous.projection.builtAt ? value : undefined;
+    }, { description: 'new accepted generation after owner clear and reopen', timeoutMs: 8000 });
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/README.md
+// @issue docs/issues/workspace-server-unimplemented.md
 test('concurrent starters share one real service and shutdown removes its record and socket', { timeout: 30_000 }, async () => {
   const root = fixture();
   try {
