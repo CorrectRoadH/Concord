@@ -1,3 +1,5 @@
+// @concord-file
+// @concord-implements docs/feature/herdr-panel/architecture.md#herdr-插件
 import { NodeRuntime } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
 import { openHerdrPanel, PanelWorktreeUnknown } from './herdr.js';

@@ -1,3 +1,5 @@
+// @concord-file
+// @concord-implements docs/feature/herdr-panel/architecture.md#herdr-插件
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem } from 'effect';
 import { resolve, join } from 'node:path';

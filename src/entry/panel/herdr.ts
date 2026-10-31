@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/herdr-panel/architecture.md#Herdr-插件
+// @concord-implements docs/feature/herdr-panel/architecture.md#herdr-插件
 import { connect } from 'node:net';
 import { isAbsolute } from 'node:path';
 import { Effect, Schema } from 'effect';
