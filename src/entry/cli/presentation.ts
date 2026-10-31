@@ -24,6 +24,12 @@ export function humanOutput(value: unknown): string {
   if (typeof value === 'string') return value;
   if (!Predicate.isObject(value)) return scalar(value);
   if (Array.isArray(value)) return value.length ? value.map(item => humanOutput(item)).join('\n') : 'None.';
+  if (value.operation === 'herdr-install') return `${value.dryRun ? 'Would install' : 'Installed'} Concord mod: ${String(value.path)}\nHerdr loads it on save; open it with the "Concord" command.`;
+  if (value.operation === 'herdr-uninstall') return `${value.dryRun ? 'Would uninstall' : 'Uninstalled'} Concord mod: ${String(value.path)}`;
+  if (Predicate.isObject(value.document) && Array.isArray(value.pages)) {
+    const { pages, ...relations } = value;
+    return ['Pages:', ...pages.filter(Predicate.isObject).map(page => `  ${String(page.path)} [${String(page.kind)}] ${String(page.name)}`), '', humanOutput(relations)].join('\n');
+  }
   if (Predicate.isObject(value.projection)) {
     const { projection, ...result } = value;
     return `Diagnostic snapshot: ${String(projection.builtAt)} (historical; refresh ${String(projection.refresh)})\n${projection.lastError ? `Last refresh failed: ${JSON.stringify(projection.lastError)}\n` : ''}${humanOutput(result.operation === 'cached-query' ? result.body : result)}`;

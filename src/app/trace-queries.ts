@@ -1,7 +1,9 @@
+import { unlinkedTests } from './unlinked-tests.js';
 import { analysisView } from "./analysis-view.js";
 import type { AnalysisView } from "../model/index.js";
 import { findDocument } from "../domain/documents/index.js";
-import { ConcordError, type DocumentRecord, type Repository } from "../model/index.js";
+import { ConcordError, documentTitle, type DocumentRecord, type Repository } from "../model/index.js";
+import { posix } from 'node:path';
 import { TASTE_PATH, showTaste } from "../domain/taste/index.js";
 import { referenceResolver } from "../domain/documents/index.js";
 import { extractSteps } from "../domain/documents/index.js";
@@ -147,10 +149,12 @@ export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildT
       const missing = gap(counts);
       return missing.length === 0 ? [] : [{ path, feature: document.path, title: document.metadata.title, missing, relationships: counts }];
     });
+    const native = unlinkedTests(repo, trace.annotations.cases);
     return {
       operation: 'trace-gaps',
       semantics: 'missing-explicit-relationships-not-coverage',
-      limitations: ['Only documented CLI pages are discoverable; undocumented commands require a product-owned inventory.'],
+      limitations: ['Only documented CLI pages are discoverable; undocumented commands require a product-owned inventory.', ...native.limitations],
+      ...(native.unlinkedTests === undefined ? {} : { unlinkedTests: native.unlinkedTests }),
       contracts,
       cliPages,
       unmarkedLists: trace.documents.filter(doc => doc.metadata.kind === 'use-case').flatMap(doc => {
@@ -166,7 +170,7 @@ export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildT
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#show
 export function documentShow(repo: Repository, selector: string, kind: DocumentRecord['metadata']['kind'], cache: 'use' | 'off' = 'use') {
-  const { trace, document, useCases, incoming, outgoing, testIds, codeIds } = deriveTrace(repo, cache, false, (trace, references) => {
+  const { trace, document, useCases, incoming, outgoing, testIds, codeIds, pages } = deriveTrace(repo, cache, false, (trace, references) => {
     const document = findTraced(trace, selector, kind);
     const useCases = kind === 'feature' ? trace.documents.filter(candidate => candidate.metadata.kind === 'use-case' && pathOf(candidate.metadata.feature) === document.path) : [];
     const relatedPaths = new Set([document.path, ...useCases.map(candidate => candidate.path)]);
@@ -174,11 +178,17 @@ export function documentShow(repo: Repository, selector: string, kind: DocumentR
     const testIds = new Set(incoming.filter(edge => edge.from.startsWith('case:')).map(edge => edge.from.slice(5)));
     const codeIds = new Set(incoming.filter(edge => edge.from.startsWith('code:')).map(edge => edge.from.slice(5)));
     const outgoing = trace.edges.filter(edge => relatedPaths.has(edge.from) || (edge.relation === 'taste' && relatedPaths.has(pageOwner(references, edge.from) ?? '')));
-    return { trace, document, useCases, incoming, outgoing, testIds, codeIds };
+    const pages = ['feature', 'engineering', 'roadmap'].includes(kind) ? repo.files(posix.dirname(document.path)).filter(path => /\.mdx?$/u.test(path)).sort().map(path => ({
+      path,
+      kind: trace.documents.some(candidate => candidate.path === path && candidate.metadata.kind === 'use-case') ? 'use-case' : posix.basename(path).toLowerCase() === 'readme.md' ? 'readme' : ['architecture.md', 'cli.md', 'library.md'].includes(posix.basename(path)) ? posix.basename(path).slice(0, -3) : 'page',
+      name: documentTitle(path, repo.read(path) ?? ''),
+    })) : undefined;
+    return { trace, document, useCases, incoming, outgoing, testIds, codeIds, pages };
   });
   return {
     operation: `${kind}-show`,
     document: { path: document.path, metadata: document.metadata, digest: document.digest },
+    ...(pages === undefined ? {} : { pages }),
     ...(kind === 'feature' ? { useCases: useCases.map(candidate => ({ path: candidate.path, metadata: candidate.metadata, digest: candidate.digest })) } : {}),
     incoming,
     outgoing,
