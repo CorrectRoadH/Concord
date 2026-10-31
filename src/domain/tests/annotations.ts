@@ -128,12 +128,16 @@ function sources(repo: Repository, mode: SourceMode): Source[] {
   const paths = [...new Set(repo.config.testRoots.flatMap(root => repo.files(root, 'source')))].sort();
   const selected: Source[] = [];
   for (const path of paths) {
-    const absolute = repo.absolute(path);
-    if (mode === 'disk') {
-      let stat;
-      try { stat = snapshotMetadata(repo, path); } catch { continue; }
-      if (stat === undefined || !stat.file || stat.symbolicLink || stat.size > TEXT_LIMIT) continue;
+    let stat: ReturnType<typeof snapshotMetadata> = undefined;
+    if (mode === 'disk' && repo.inspect !== undefined) {
+      // The scoped metadata read already verifies the root and every ancestor.
+      // Keep that proof outside the skippable metadata failure boundary.
+      stat = snapshotMetadata(repo, path);
+    } else {
+      repo.absolute(path);
+      if (mode === 'disk') { try { stat = snapshotMetadata(repo, path); } catch { continue; } }
     }
+    if (mode === 'disk' && (stat === undefined || !stat.file || stat.symbolicLink || stat.size > TEXT_LIMIT)) continue;
     const text = repo.read(path);
     if (text === undefined) throw new ConcordError('SourceChanged', `${path} disappeared while it was scanned`);
     if (Buffer.byteLength(text) > TEXT_LIMIT) continue;
