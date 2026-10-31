@@ -41,7 +41,7 @@ function withReadRepo<A, E, R>(operation: (repo: LocalRepository, settings: { js
     if (query !== undefined && settings.fresh && !settings.dryRun) {
       const request: QueryRequest = query[0] === 'trace'
         ? query[1] === 'show' ? { name: 'trace.show', input: { reference: query[2] } } : { name: 'trace.gaps', input: {} }
-        : { name: 'review.render', input: { reference: query[2] } };
+        : { name: 'review', input: { reference: query[1] } };
       return yield* withQuery(request);
     }
     if (query !== undefined && !settings.fresh && !settings.dryRun) {

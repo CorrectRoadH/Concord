@@ -17,8 +17,8 @@ import { requestCacheMaintenance } from "../base/cache/index.js";
 export const Query = Schema.Union([
   Schema.Tuple([Schema.Literal('trace'), Schema.Literal('gaps')]),
   Schema.Tuple([Schema.Literal('trace'), Schema.Literal('show'), Schema.String]),
-  Schema.Tuple([Schema.Literal('review'), Schema.Literal('render')]),
-  Schema.Tuple([Schema.Literal('review'), Schema.Literal('render'), Schema.String]),
+  Schema.Tuple([Schema.Literal('review')]),
+  Schema.Tuple([Schema.Literal('review'), Schema.String]),
 ]);
 export type Query = typeof Query.Type;
 export class QueryRefreshRequest extends Context.Service<QueryRefreshRequest, {

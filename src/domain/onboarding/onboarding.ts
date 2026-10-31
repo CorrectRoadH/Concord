@@ -16,6 +16,6 @@ export function annotationSnippet(repo: Repository, contract: string, issues: re
   }
   const tag = target.metadata.kind === 'use-case' ? '@use-case' : '@feature';
   const snippet = [`// ${tag} ${contract}`, ...issues.map(ref => `// @issue ${ref}`)].join('\n') + '\n';
-  return { operation: 'test-annotate', snippet };
+  return { operation: 'test-marker', snippet };
   });
 }

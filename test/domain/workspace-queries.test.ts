@@ -46,7 +46,7 @@ test('current query operations on read-only computation capabilities match cache
   try { createDocument(repository, 'feature', { id: 'service-query', title: 'Service query' }); }
   finally { repository.close(); }
   const requests: readonly QueryRequest[] = [
-    { name: 'documents.list', input: { kind: 'feature', open: false } },
+    { name: 'documents.list', input: { kind: 'feature' } },
     { name: 'documents.show', input: { id: 'service-query' } },
     { name: 'config.show', input: {} }, { name: 'constitution.show', input: {} },
     { name: 'test.list', input: {} }, { name: 'code.list', input: {} },

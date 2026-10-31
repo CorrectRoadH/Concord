@@ -34,7 +34,7 @@ export function ImplementationPanel({ document }: { document: WorkspaceDocument 
   const addAssociation = (path: string) => { setContracts(path); setAnnotate(true); };
   const annotation = async (event: React.FormEvent) => {
     event.preventDefault();
-    setResult(await act({ action: 'code.annotate', scope, contracts: contracts.split('\n').filter(Boolean) }, '关联注释片段已生成。'));
+    setResult(await act({ action: 'code.marker', scope, contracts: contracts.split('\n').filter(Boolean) }, '关联注释片段已生成。'));
     setAnnotate(false);
   };
   return <>

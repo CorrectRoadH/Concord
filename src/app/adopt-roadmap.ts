@@ -10,12 +10,12 @@ import { findDocument } from "../domain/documents/index.js";
 
 // @concord-code
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#adopt
-export function adoptRoadmap(repo: Repository, selector: string, featureId: string, dryRun = false): MutationReceipt {
+export function adoptRoadmap(repo: Repository, selector: string, featureId?: string, dryRun = false): MutationReceipt {
   return inRepositorySnapshot(repo, () => {
   const documents = loadDocuments(repo); const roadmap = findDocument(documents, selector, 'roadmap');
   if (roadmap.metadata.kind !== 'roadmap') throw new ConcordError('InvalidDocumentKind', selector);
   if (roadmap.metadata.state !== 'planned') throw new ConcordError('InvalidRoadmapState', 'Only a planned Roadmap can be adopted');
-  const id = decode(DocumentName, featureId, 'featureId'); const featurePath = defaultDocumentPath('feature', id);
+  const id = decode(DocumentName, featureId ?? roadmap.metadata.id, 'featureId'); const featurePath = defaultDocumentPath('feature', id);
   if (documents.some(document => document.metadata.kind === 'feature' && document.metadata.id === id)) throw new ConcordError('DocumentExists', `Feature id ${id} already exists`);
   if (repo.read(featurePath) !== undefined) throw new ConcordError('DocumentExists', `${featurePath} already exists`);
   const roadmapDirectory = posix.dirname(roadmap.path);
@@ -66,6 +66,6 @@ export function adoptRoadmap(repo: Repository, selector: string, featureId: stri
   const recaptured = repo.files(roadmapDirectory).sort();
   if (recaptured.length !== sourcePaths.length || recaptured.some((path, index) => path !== sourcePaths[index])) throw new ConcordError('FileChangedSinceRead', 'Roadmap source collection changed during adoption planning');
   for (const sourcePath of sourcePaths) if (repo.read(sourcePath) !== observed.get(sourcePath)) throw new ConcordError('FileChangedSinceRead', `${sourcePath} changed during adoption planning`);
-  return repo.publish('adopt-roadmap', changes, dryRun);
+  return repo.publish('roadmap-start', changes, dryRun);
   });
 }

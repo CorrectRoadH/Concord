@@ -915,7 +915,7 @@ export class LocalRepository implements Repository {
   }
   /** File images are committed first, so prepared recovery can restore every source. */
   private pruneMovedRoadmap(journal: Journal): void {
-    if (journal.operation !== 'adopt-roadmap') return;
+    if (journal.operation !== 'roadmap-start') return;
     const directories = new Set<string>();
     for (const change of journal.changes) {
       if (change.after !== null || !/^docs\/roadmap\/[^/]+\//u.test(change.path)) continue;

@@ -6,8 +6,9 @@ import { renderReview } from "../../app/index.js";
 import { optional, sync, cached } from "./cli-base.js";
 import { withReadRepo } from "./cli-repository.js";
 
-const review = Command.make('review').pipe(Command.withDescription('Generate local review material from current contracts and history.'),Command.withSubcommands([
-  Command.make('render',{ref:Argument.string('reference').pipe(Argument.optional)},args=>withReadRepo((repo,s)=>sync(()=>renderReview(repo,Option.getOrUndefined(args.ref),cached(s.dryRun))), Option.isSome(args.ref) ? ['review', 'render', args.ref.value] : ['review', 'render'])),
-]));
+const review = Command.make('review', { ref: Argument.string('reference').pipe(Argument.optional) }, args =>
+  withReadRepo((repo, settings) => sync(() => renderReview(repo, Option.getOrUndefined(args.ref), cached(settings.dryRun))),
+    Option.isSome(args.ref) ? ['review', args.ref.value] : ['review'])
+).pipe(Command.withDescription('Generate local review material from current contracts and history; optionally select one Feature.'));
 
 export { review };

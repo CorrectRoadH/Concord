@@ -79,7 +79,7 @@ export function applyViewDryRun(input: unknown, enabled: boolean): ViewAction {
     case 'memory.link':
     case 'issue.unlink':
     case 'design.defer':
-    case 'roadmap.adopt':
+    case 'roadmap.start':
     case 'design.decide':
     case 'design.format':
     case 'memory.activate':
@@ -307,7 +307,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'issue.unlink': return unlinkIssue(repo, action.id, action.memory, dryRun, action.role);
     case 'design.defer': return deferDesign(repo, action.id, action.reason, dryRun);
     case 'document.set': return setMarkdown(repo, action.path, action.body, action.expectedDigest, dryRun);
-    case 'roadmap.adopt': return adoptRoadmap(repo, action.id, action.feature, dryRun);
+    case 'roadmap.start': return adoptRoadmap(repo, action.id, action.feature, dryRun);
     case 'design.decide': return decideDesign(repo, action.id, action.selected, action.targets, action.reason, dryRun);
     case 'design.check': return checkDesign(repo, action.id);
     case 'design.format': return formatDesign(repo, action.id, dryRun);
@@ -337,9 +337,9 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
     case 'constitution.initialize': return initializeConstitution(repo, dryRun);
     case 'constitution.adopt': return adoptConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
     case 'constitution.amend': return amendConstitution(repo, action.body, action.reason, action.impact, action.sources, action.expectedDigest, dryRun);
-    case 'code.annotate': return codeSnippet(repo, action.scope, action.contracts);
-    case 'code.locate': return locateCode(repo, action.path, action.line);
-    case 'test.annotate': return annotationSnippet(repo, action.contract, action.issues);
+    case 'code.marker': return codeSnippet(repo, action.scope, action.contracts);
+    case 'code.at': return locateCode(repo, action.path, action.line);
+    case 'test.marker': return annotationSnippet(repo, action.contract, action.issues);
     case 'cache.status': return cacheStatus(repo);
     case 'cache.clear': return dryRun ? previewCacheClear(repo) : clearCache(repo);
     case 'cache.rebuild': return rebuildCache(repo);
@@ -351,7 +351,7 @@ function executeWithRepo(repo: LocalRepository, action: Exclude<ViewAction, { ac
       return { operation: 'trace-check', ok: trace.complete, complete: trace.complete, findings: trace.findings, edges: trace.edges };
     }
     case 'trace.show': return traceShow(repo, action.reference);
-    case 'review.render': return { operation: 'review-render', markdown: renderReview(repo, action.reference) };
+    case 'review': return { operation: 'review-render', markdown: renderReview(repo, action.reference) };
     case 'doctor': return doctor(repo);
   }
 }
@@ -363,8 +363,8 @@ function actionAccess(action: ViewAction['action']): 'read' | 'write' {
   switch (action) {
     case 'design.check': case 'memory.index': case 'memory.recall': case 'issue.index': case 'issue.recall': case 'issue.list': case 'feedback.list':
     case 'writing.index': case 'writing.show': case 'writing.check': case 'concepts.index': case 'concepts.show':
-    case 'code.annotate': case 'code.locate': case 'test.annotate': case 'cache.status':
-    case 'check': case 'trace.check': case 'trace.show': case 'review.render': case 'doctor': case 'template.show':
+    case 'code.marker': case 'code.at': case 'test.marker': case 'cache.status':
+    case 'check': case 'trace.check': case 'trace.show': case 'review': case 'doctor': case 'template.show':
       return 'read';
     default: return 'write';
   }

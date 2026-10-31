@@ -27,7 +27,7 @@ test('packed steps C15 C16 C18 navigate exact steps, preserve examples and renam
  const trace = call(root, ['trace', 'show', path], Schema.Struct({ stepGroups: Schema.Array(Schema.Struct({ nonStepAnchors: Schema.Array(Schema.Struct({ ref: Schema.String })), wholeUseCase: Schema.Struct({ tests: Schema.Array(Schema.Unknown) }) })) }));
  assert.equal(trace.stepGroups[0]?.nonStepAnchors[0]?.ref, `${path}#details`);
  assert.equal(trace.stepGroups[0]?.wholeUseCase.tests.length, 1);
- assert.match(callString(root, ['review', 'render', path]), /Step: .*#拒绝令牌/u);
+ assert.match(callString(root, ['review', path]), /Step: .*#拒绝令牌/u);
  call(root, ['check'], CheckOutput);
  write(root, 'test/broken.ts', `// @use-case ${path}#missing\n`);
  const broken = call(root, ['check'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ code: Schema.String })) }), '', 1);
@@ -49,12 +49,13 @@ test('installed Design and Roadmap packages retain their pages and authoritative
  const decision = call(root, ['show', 'storage'], DecisionOutput).document.metadata.decision;
  assert.equal(decision.selected, 'sqlite');
  call(root, ['new', 'roadmap', 'session', '--title', 'Session', '--pages', 'architecture'], Ack);
- call(root, ['roadmap', 'adopt', 'session', '--feature', 'session'], Ack);
+ const started = call(root, ['roadmap', 'start', 'session'], Schema.Struct({ operation: Schema.Literal('roadmap-start') }));
+ assert.equal(started.operation, 'roadmap-start');
  assert.equal(existsSync(join(root, 'docs/feature/session/architecture.md')), true);
  assert.equal(call(root, ['show', 'session'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) })).document.path, 'docs/feature/session/README.md');
  call(root, ['new', 'memory', 'release-owner', '--type', 'decision', '--title', 'Release owner'], Ack);
  call(root, ['memory', 'activate', 'release-owner', '--reason', 'Adopt'], Ack);
  call(root, ['memory', 'link', 'release-owner', '--target', 'docs/engineering/release/README.md'], Ack);
- assert.equal(call(root, ['test', 'annotate', '--contract', 'docs/engineering/release/README.md'], ErrorOutput, '', 1).error, 'InvalidReferenceTarget');
+ assert.equal(call(root, ['test', 'marker', '--contract', 'docs/engineering/release/README.md'], ErrorOutput, '', 1).error, 'InvalidReferenceTarget');
  assert.equal(call(root, ['check'], CheckOutput).ok, true);
 })));

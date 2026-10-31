@@ -238,7 +238,7 @@ export const collectNativeTests = Effect.fn('collectNativeTests')(function* (rep
   const results = yield* withSession(repo, adapters, session => Effect.gen(function* () {
     return yield* Effect.forEach(adapters.filter(adapter => files.some(file => adapter.include.some(root => inPath(file, root)))), adapter => collectOne(repo, adapter, files.filter(file => adapter.include.some(root => inPath(file, root))), session), { concurrency: 1 });
   }), results => { publishObservations(repo, results); });
-  return { operation: 'test-collect', observations: results.map(item => ({ adapterId: item.adapter.id, observation: { ...observation(item.manifest, item.before.inputs, item.manifest.completeness.gaps, true, new Date().toISOString()), complete: item.manifest.completeness.complete }, inputScope: { ...item.before, versions: item.versions } })) };
+  return { operation: 'test-discover', observations: results.map(item => ({ adapterId: item.adapter.id, observation: { ...observation(item.manifest, item.before.inputs, item.manifest.completeness.gaps, true, new Date().toISOString()), complete: item.manifest.completeness.complete }, inputScope: { ...item.before, versions: item.versions } })) };
 });
 // @concord-end
 export interface NativeExecution { readonly adapter: TestAdapter; readonly inputs: string; readonly manifest: NativeManifest; readonly requested: readonly string[]; readonly report: AdapterReport; readonly statuses: readonly ProcessStatus[]; readonly plan: AdapterPlan; readonly planId: string; readonly versions: AdapterVersions; readonly inputScope: ReturnType<typeof adapterInputSnapshot>; }

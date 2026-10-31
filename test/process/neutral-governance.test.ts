@@ -17,7 +17,7 @@ test('a neutral software consumer completes Spec, source relations, configured e
   writeProjectConfig(root, { testRoots: ['spec'], sourceRoots: ['lib'], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 5000 } });
   write(root, 'lib/cart.ts', `// @concord-file\n// @concord-implements ${contract}\nexport const quantity = 1;\n`);
   gitCommit(root, 'neutral consumer implementation and Spec');
-  const annotation = call(root, ['test', 'annotate', '--contract', contract, '--issue', 'docs/issues/quantity.md'], AnnotationOutput);
+  const annotation = call(root, ['test', 'marker', '--contract', contract, '--issue', 'docs/issues/quantity.md'], AnnotationOutput);
   write(root, 'spec/cart.test.ts', `import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { quantity } from '../lib/cart.ts';\n${annotation.snippet}test('quantity accumulates', () => assert.equal(quantity, 2));\n`);
   const defect = gitCommit(root, 'failing quantity regression');
   const cases = call(root, ['test', 'list'], Cases).cases;
@@ -40,7 +40,7 @@ test('a neutral software consumer completes Spec, source relations, configured e
   const checked = call(root, ['check', '--since', defect], Schema.Struct({ ok: Schema.Boolean, verifications: Schema.Array(Schema.Struct({ verified: Schema.String })) }));
   assert.equal(checked.ok, true);
   assert.deepEqual(checked.verifications.map(item => item.verified), ['replayed']);
-  const review = callString(root, ['review', 'render', 'cart']);
+  const review = callString(root, ['review', 'cart']);
   assert.ok(review.includes(id));
   assert.ok(review.includes('docs/issues/quantity.md'));
   assert.equal(existsSync(join(root, 'nx.json')), false);

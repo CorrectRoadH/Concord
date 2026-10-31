@@ -43,7 +43,7 @@ test('packed adapters collect and select real Vitest pytest Go Cargo and report 
         yield* Effect.promise(() => t.test('cargo compiler/linker unavailable', { skip: compiled.stderr || compiled.error }, () => Effect.runPromise(Effect.void))); continue;
       }
     }
-    const collected = yield* success(consumer, cli, ['test', 'collect', spec.file]);
+    const collected = yield* success(consumer, cli, ['test', 'discover', spec.file]);
     t.diagnostic(`${spec.name}: collection completed; ${available.stdout.trim()}`);
     const native = parse(collected.stdout); assert.ok(native.observations);
     const collectedState = Schema.decodeUnknownSync(Schema.Struct({ observations: Schema.Array(Schema.Struct({ observation: Schema.Struct({ complete: Schema.Boolean, gaps: Schema.Array(Schema.String) }), inputScope: Schema.Struct({ members: Schema.Array(Schema.Unknown), excluded: Schema.Array(Schema.String), versions: Schema.Struct({ framework: Schema.String, runtime: Schema.String, observedFramework: Schema.String, observedRuntime: Schema.optional(Schema.String) }) }) })) }))(JSON.parse(collected.stdout)).observations[0]!;
@@ -58,7 +58,7 @@ test('packed adapters collect and select real Vitest pytest Go Cargo and report 
     else { assert.equal(executed.exitCode, 0, `${spec.name}\n${executed.stderr}\n${executed.stdout}`); const receipt = Schema.decodeUnknownSync(Receipt)(JSON.parse(executed.stdout)); assert.equal(receipt.scope, 'native'); assert.equal(receipt.commandOutcome, 'green'); assert.equal(receipt.requested?.length, 1); assert.ok(receipt.gaps?.includes('ExternalInputUnknown')); assert.equal(receipt.versions?.framework, adapter.frameworkVersion); }
     if (spec.name === 'cargo') {
       yield* Effect.sync(() => text(consumer, 'test/tests/other.rs', '// @feature docs/feature/example/README.md\n// @native cargo:rs:test:test:other:test/tests/other.rs:selected\n#[test]\nfn selected() {}\n#[test]\nfn excluded() { panic!("must not execute"); }\n'));
-      const multiple = yield* success(consumer, cli, ['test', 'collect', spec.file, 'test/tests/other.rs']);
+      const multiple = yield* success(consumer, cli, ['test', 'discover', spec.file, 'test/tests/other.rs']);
       const inventory = Schema.decodeUnknownSync(Schema.Struct({ observations: Schema.Array(Schema.Struct({ observation: Schema.Struct({ value: Schema.Struct({ cases: Schema.Array(Schema.Struct({ nativeId: Schema.String })) }) }) })) }))(JSON.parse(multiple.stdout));
       const nativeIds = inventory.observations.flatMap(item => item.observation.value.cases.map(item => item.nativeId));
       assert.equal(new Set(nativeIds).size, nativeIds.length); assert.ok(nativeIds.some(id => id.includes(':lib:'))); assert.ok(nativeIds.some(id => id.includes(':test:other:')));

@@ -268,7 +268,7 @@ export function scanQueryValue(repo: Repository, query: readonly string[]) {
   const { trace, references } = buildUnderSnapshot(repo, 'off', {});
   const initial = siftQueryDrift(trace);
   requireValidTrace(trace);
-  const value = query[0] === 'review' ? renderReviewValue(repo, trace, references, query[2])
+  const value = query[0] === 'review' ? renderReviewValue(repo, trace, references, query[1])
     : query[1] === 'show' ? traceShowValue(repo, trace, references, query[2]!) : traceGapsValue(repo, trace, references);
   trace.findings.push(...references.verify());
   const final = siftQueryDrift(trace);

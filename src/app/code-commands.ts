@@ -19,14 +19,14 @@ export function listCode(repo: Repository) {
 // @concord-implements docs/feature/local-sdlc/use-case/trace-code-ownership.md#locate
 export function locateCode(repo: Repository, file: string, line: number) {
   repo.absolute(file);
-  if (!Number.isSafeInteger(line) || line < 1) throw new ConcordError('InvalidCodeLine', '--line must be a positive integer');
+  if (!Number.isSafeInteger(line) || line < 1) throw new ConcordError('InvalidCodeLine', 'Source line must be a positive integer');
   const trace = buildTrace(repo, 'use'); requireValidTrace(trace);
   const scanned = trace.codeFiles.find(item => item.path === file);
   if (!scanned) throw new ConcordError('CodeSourceNotScanned', `${file} is not a JS/TS file inside configured sourceRoots`);
   const text = repo.read(file);
   if (text === undefined || digest(text) !== scanned.digest) throw new ConcordError('CodeSourceChanged', `${file} changed during the location query`);
   if (line > text.split(/\r\n|\r|\n/u).length) throw new ConcordError('InvalidCodeLine', `Line ${line} is outside ${file}`);
-  return { operation: 'code-locate', file, line, codes: trace.codeDeclarations.filter(item => item.file === file && item.line <= line && line <= item.endLine) };
+  return { operation: 'code-at', file, line, codes: trace.codeDeclarations.filter(item => item.file === file && item.line <= line && line <= item.endLine) };
 }
 
 
@@ -39,6 +39,6 @@ export function codeSnippet(repo: Repository, scope: 'file' | 'node' | 'region',
   for (const ref of contracts) readDocumentReference(repo, ref, ['feature', 'use-case', 'engineering']);
   const tag = scope === 'node' ? 'code' : scope === 'region' ? 'begin' : 'file';
   const snippet = [`// @concord-${tag}`, ...contracts.map(ref => `// @concord-implements ${ref}`), ...(scope === 'region' ? ['// Place complete statements here.', '// @concord-end'] : [])].join('\n') + '\n';
-  return { operation: 'code-annotate', scope, snippet };
+  return { operation: 'code-marker', scope, snippet };
   });
 }

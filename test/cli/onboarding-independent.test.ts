@@ -89,7 +89,7 @@ test('installed new and relation helpers persist only current owner fields', () 
   run(root, ['issue', 'unlink', 'bug', 'docs/feature/cart/README.md', '--role', 'adopts']);
   assert.match(readFileSync(join(root, 'memory/choice.md'), 'utf8'), /type: decision[\s\S]*status: current[\s\S]*role: supports/u);
   assert.doesNotMatch(readFileSync(join(root, 'docs/issues/bug.md'), 'utf8'), /relations:|history:|format:|draft/u);
-  assert.equal(run(root, ['list', '--open']).documents.length, 1);
+  assert.equal(run(root, ['list', 'issue']).documents.length, 1);
 })));
 
 // @use-case docs/feature/local-sdlc/use-case/compare-design-plans.md

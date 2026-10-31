@@ -31,11 +31,11 @@ const DocumentKindSchema = Schema.Literals(['feature', 'use-case', 'research', '
 export const QueryRequest = Schema.Union([
   empty('check'),
   empty('trace.check'), operation('trace.show', { reference: Schema.String }), empty('trace.gaps'),
-  operation('review.render', { reference: Schema.optional(Schema.String) }),
+  operation('review', { reference: Schema.optional(Schema.String) }),
   operation('docs.check', { path: Schema.optional(Schema.String) }),
   empty('constitution.show'), empty('config.show'),
   empty('workspace.show'),
-  operation('documents.list', { kind: Schema.optional(DocumentKindSchema), open: Schema.Boolean }),
+  operation('documents.list', { kind: Schema.optional(DocumentKindSchema) }),
   operation('documents.show', { id: Schema.String, kind: Schema.optional(DocumentKindSchema) }),
   empty('memory.index'), operation('memory.recall', { query: Schema.String }), operation('issue.recall', { query: Schema.String }),
   empty('code.list'), empty('test.list'), operation('test.show', { id: Schema.String }),
@@ -52,14 +52,13 @@ const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, 
     case 'trace.check': { const t = buildTrace(repo, cache); return { operation: 'trace-check', ok: t.complete, complete: t.complete, findings: t.findings, edges: t.edges }; }
     case 'trace.show': return traceShow(repo, request.input.reference, cache);
     case 'trace.gaps': return traceGaps(repo, cache);
-    case 'review.render': return renderReview(repo, request.input.reference, cache);
+    case 'review': return renderReview(repo, request.input.reference, cache);
     case 'constitution.show': return constitutionShow(repo);
     case 'config.show': return { ...showConfig(repo), path: repo.configSnapshot.path, source: repo.configSnapshot.source };
     case 'docs.check': return checkWriting(repo, request.input.path, cache !== 'off');
     case 'documents.list': {
-      const { kind, open } = request.input;
-      if (open && kind !== undefined && kind !== 'issue') throw new ConcordError('InvalidOption', '--open applies to Issues');
-      return { operation: 'list', documents: loadDocuments(repo, open ? ['issue'] : kind === undefined ? undefined : [kind]).filter(doc => !open || doc.metadata.kind === 'issue' && doc.metadata.status !== 'closed').map(doc => ({ path: doc.path, ...doc.metadata })) };
+      const { kind } = request.input;
+      return { operation: 'list', documents: loadDocuments(repo, kind === undefined ? undefined : [kind]).map(doc => ({ path: doc.path, ...doc.metadata })) };
     }
     case 'documents.show': {
       const { id, kind } = request.input;

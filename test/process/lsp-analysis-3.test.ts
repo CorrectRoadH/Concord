@@ -18,7 +18,7 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     const initial = invoke(['code', 'analyze'], analysis).observations.find(item => item.value.analyzer === 'python-fixture')!;
     assert.equal(initial.value.dependencies[0]!.scope, 'file');
     assert.ok(initial.value.dependencies[0]!.gaps.includes('NativeObservationUnavailable'));
-    invoke(['test', 'collect', 'test/sample.py'], ack);
+    invoke(['test', 'discover', 'test/sample.py'], ack);
     const first = invoke(['code', 'analyze'], analysis).observations.find(item => item.value.analyzer === 'python-fixture')!;
     const dependency = first.value.dependencies[0]!;
     assert.equal(dependency.scope, 'native-case');
@@ -28,7 +28,7 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     const listed = invoke(['code', 'list'], codeList).analysis.relevance[0]!;
     assert.equal(listed.scope, 'native-case'); assert.equal(listed.relevance.verdict, 'observed');
     writeFileSync(statePath, 'second');
-    invoke(['test', 'collect', 'test/sample.py'], ack);
+    invoke(['test', 'discover', 'test/sample.py'], ack);
     assert.equal(invoke(['code', 'list'], codeList).analysis.observations.find(item => item.value.analyzer === 'python-fixture')!.current, false);
     const second = invoke(['code', 'analyze'], analysis).observations.find(item => item.value.analyzer === 'python-fixture')!;
     assert.equal(second.value.dependencies[0]!.native!.manifestInputs, dependency.native!.manifestInputs);
@@ -46,7 +46,7 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     })); } finally { repo.close(); }
     assert.equal(invoke(['code', 'list'], codeList).analysis.observations.find(item => item.value.analyzer === 'python-fixture')!.current, false);
     writeFileSync(statePath, 'no-range');
-    invoke(['test', 'collect', 'test/sample.py'], ack);
+    invoke(['test', 'discover', 'test/sample.py'], ack);
     const fallback = invoke(['code', 'analyze'], analysis).observations.find(item => item.value.analyzer === 'python-fixture')!;
     assert.equal(fallback.value.dependencies[0]!.scope, 'file');
     assert.ok(fallback.value.dependencies[0]!.gaps.includes('NativeRangeUnavailable'));

@@ -223,8 +223,8 @@ test('ordinary CLI queries share ownership with a live reader', t => runApplicat
   try {
     for (const args of [
       ['list', 'memory'], ['memory', 'index'], ['memory', 'recall', 'missing'],
-      ['code', 'annotate', '--scope', 'file', '--contract', 'docs/feature/target/README.md'],
-      ['test', 'annotate', '--contract', 'docs/feature/target/README.md'],
+      ['code', 'marker', '--scope', 'file', '--contract', 'docs/feature/target/README.md'],
+      ['test', 'marker', '--contract', 'docs/feature/target/README.md'],
     ]) {
       const result = spawnSync(process.execPath, [entry, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 15000 });
       assert.equal(result.status, 0, `${args.join(' ')}: ${result.stderr}`);

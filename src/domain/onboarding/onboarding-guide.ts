@@ -8,7 +8,7 @@ Concord drives development by connecting current product contracts, implementati
 
 Configure sourceRoots in concord.config.ts, or initialize with --source-root src (repeatable).
 
-Run concord --skill code for file, function and statement-region declarations. Use code annotate to generate comments, code locate <path> --line <n> to inspect all containing scopes, and trace show to reverse-query the contract.
+Run concord --skill code for file, function and statement-region declarations. Use code marker to generate comments, code at <path>:<n> to inspect all containing scopes, and trace show to reverse-query the contract.
 
 Code declarations describe implementation associations, not completion or test coverage.
 
@@ -119,7 +119,7 @@ Close a defect through a reproducible regression:
 3. Run \`concord issue close <id> --fixed\` to verify the frozen command against the defect and fixed snapshots and record the result in the Issue.
 4. Run \`concord check --since <base>\` before delivery.
 
-Use \`concord test verify <issue>\` to replay a recorded fix. Verification proves that one frozen command failed on the defect and passed on the accepted snapshot; it does not establish native case coverage. Use \`concord review render\` for local review material.
+Use \`concord test verify <issue>\` to replay a recorded fix. Verification proves that one frozen command failed on the defect and passed on the accepted snapshot; it does not establish native case coverage. Use \`concord review\` for local review material.
 
 ## Working safely
 

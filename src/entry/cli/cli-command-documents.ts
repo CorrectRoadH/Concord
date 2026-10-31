@@ -12,7 +12,7 @@ import { ConcordError, type DocumentKind } from "../../model/index.js";
 import { text, optional, many, id, body, sync, cached } from "./cli-base.js";
 import { withRepo, withReadRepo, withQuery } from "./cli-repository.js";
 
-const kinds = ['feature', 'use-case', 'research', 'design', 'roadmap', 'engineering', 'issue', 'memory'] as const;
+const kinds = ['feature', 'use-case', 'design', 'roadmap', 'engineering', 'issue', 'memory'] as const;
 const category = Argument.choice('category', kinds);
 
 export const newDocument = Command.make('new', {
@@ -33,11 +33,11 @@ export const newDocument = Command.make('new', {
 
 export const showDocument = Command.make('show', { id }, args => withQuery({ name: 'documents.show', input: { id: args.id } })).pipe(Command.withDescription('Show a document and its relationships by path or selector.'));
 
-export const listDocuments = Command.make('list', { category: category.pipe(Argument.optional), open: Flag.boolean('open').pipe(Flag.withDefault(false)) }, args => withQuery({ name: 'documents.list', input: { kind: Option.getOrUndefined(args.category), open: args.open } })).pipe(Command.withDescription('List documents; --open selects open Issues.'));
+export const listDocuments = Command.make('list', { category: category.pipe(Argument.optional) }, args => withQuery({ name: 'documents.list', input: { kind: Option.getOrUndefined(args.category) } })).pipe(Command.withDescription('List documents, optionally within one category.'));
 
 export function docsGroup(kind: Extract<DocumentKind, 'use-case' | 'design' | 'roadmap'>) {
   const commands = kind === 'roadmap' ? [
-    Command.make('adopt', { id, feature: text('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, args.feature, s.dryRun)))),
+    Command.make('start', { id, feature: optional('feature') }, args => withRepo((repo, s) => sync(() => adoptRoadmap(repo, args.id, Option.getOrUndefined(args.feature), s.dryRun)))).pipe(Command.withDescription('Start a Roadmap as a Feature; --feature optionally selects a different Feature ID.')),
   ] : kind === 'design' ? [
     Command.make('decide', { id, selected: text('selected'), target: many('target'), reason: text('reason') }, args => withRepo((repo, s) => sync(() => decideDesign(repo, args.id, args.selected, args.target, args.reason, s.dryRun)))),
     Command.make('defer', { id, reason: text('reason') }, args => withRepo((repo, s) => sync(() => deferDesign(repo, args.id, args.reason, s.dryRun)))),

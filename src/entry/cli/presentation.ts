@@ -83,7 +83,7 @@ export function humanOutput(value: unknown): string {
     else if (!value.dryRun && value.changedPaths.length > 0) lines.push('', value.operation === 'new' ? 'Next: edit the pages, then run concord check.' : typeof value.operation === 'string' && value.operation.startsWith('create-') ? 'Next: edit the author prose, then run concord check.' : 'Next: concord check.');
     return lines.join('\n');
   }
-  if ((value.operation === 'test-annotate' || value.operation === 'code-annotate') && typeof value.snippet === 'string') return value.snippet;
+  if ((value.operation === 'test-marker' || value.operation === 'code-marker') && typeof value.snippet === 'string') return value.snippet;
   if (value.operation === 'template-show' && typeof value.body === 'string') return value.body;
   if (value.scope === 'command') return [
     `Command ${String(value.commandOutcome)} — ${String(value.selectedCaseId)}`,
@@ -120,7 +120,7 @@ export function humanOutput(value: unknown): string {
       lines.push(`${label(key)}:`, indent(humanOutput(item), 2));
     } else lines.push(`${label(key)}: ${scalar(item)}`);
   }
-  if (value.operation === 'test-list' && Array.isArray(value.cases) && value.cases.length === 0) lines.push('Next: concord test annotate --contract <Feature or Use Case path>', 'Place the marker in a test file, then run concord check.');
+  if (value.operation === 'test-list' && Array.isArray(value.cases) && value.cases.length === 0) lines.push('Next: concord test marker --contract <Feature or Use Case path>', 'Place the marker in a test file, then run concord check.');
   if (value.operation === 'code-list' && Array.isArray(value.codes) && value.codes.length === 0) lines.push('Next: configure sourceRoots in concord.config.ts, then use concord --skill code.');
   if (value.operation === 'check' && value.cases === 0) lines.push('No test annotations found. This checks document integrity; it does not establish test coverage.');
   return lines.join('\n');

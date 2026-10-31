@@ -178,7 +178,7 @@ test('partial relationships never assign a malformed nested owner page to its he
   const reference = 'docs/feature/parent/nested/page.md';
   write(root, reference, '# Page\n');
   write(root, 'src/declared.ts', `// @concord-file\n// @concord-implements ${reference}\nexport const value = 1;\n`);
-  call(root, ['code', 'annotate', '--scope', 'file', '--contract', reference], 1);
+  call(root, ['code', 'marker', '--scope', 'file', '--contract', reference], 1);
   const show = JSON.parse(call(root, ['show', 'docs/feature/parent/README.md'], 0).stdout) as { complete: boolean; codeDeclarations: unknown[]; incoming: unknown[] };
   assert.equal(show.complete, false);
   assert.deepEqual(show.codeDeclarations, []);

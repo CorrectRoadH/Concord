@@ -10,8 +10,8 @@ test('packed local operations isolate unrelated malformed contracts and check re
  call(root, ['new', 'feature', 'broken-b', '--title', 'Broken B'], Ack);
  for (const id of ['broken-a', 'broken-b']) write(root, `docs/feature/${id}/README.md`, '---\nformat: concord.document/v1\nkind: feature\n---\n# Incomplete owner\n');
  const target = 'docs/feature/target/README.md';
- assert.match(call(root, ['code', 'annotate', '--scope', 'file', '--contract', target], AnnotationOutput).snippet, /@concord-implements docs\/feature\/target\/README.md/u);
- assert.match(call(root, ['test', 'annotate', '--contract', target], AnnotationOutput).snippet, /@feature docs\/feature\/target\/README.md/u);
+ assert.match(call(root, ['code', 'marker', '--scope', 'file', '--contract', target], AnnotationOutput).snippet, /@concord-implements docs\/feature\/target\/README.md/u);
+ assert.match(call(root, ['test', 'marker', '--contract', target], AnnotationOutput).snippet, /@feature docs\/feature\/target\/README.md/u);
  call(root, ['new', 'memory', 'repair-note', '--title', 'Repair note', '--type', 'note'], Ack);
  const index = call(root, ['memory', 'index'], Schema.Struct({ documents: Schema.Array(Schema.Struct({ path: Schema.String, digest: Schema.String })) }));
  const note = index.documents.find(record => record.path === 'memory/repair-note.md');
@@ -27,7 +27,7 @@ test('packed local operations isolate unrelated malformed contracts and check re
  const checked = call(root, ['check'], Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String })) }), '', 1);
  assert.equal(checked.ok, false);
  for (const id of ['broken-a', 'broken-b']) assert.ok(checked.findings.some(finding => finding.path === `docs/feature/${id}/README.md`));
- assert.equal(call(root, ['code', 'annotate', '--scope', 'file', '--contract', 'docs/feature/broken-a/README.md'], ErrorOutput, '', 1).error, 'InvalidData');
+ assert.equal(call(root, ['code', 'marker', '--scope', 'file', '--contract', 'docs/feature/broken-a/README.md'], ErrorOutput, '', 1).error, 'InvalidData');
 })));
 
 // @use-case docs/feature/web-workbench/use-case/review-pull-request.md

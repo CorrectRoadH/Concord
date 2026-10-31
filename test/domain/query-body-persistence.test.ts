@@ -33,7 +33,7 @@ test('C7 persists no owner or remote bodies and hydrates byte-identical current 
   const root = queryFactsConsumer();
   try {
     const stored = new Map<string, QueryValue>();
-    for (const query of [['trace', 'show', ownerPath], ['trace', 'show', 'docs/issues/remote.md'], ['review', 'render', 'sample']] as const) {
+    for (const query of [['trace', 'show', ownerPath], ['trace', 'show', 'docs/issues/remote.md'], ['review', 'sample']] as const) {
       const value = await persist(root, query); stored.set(JSON.stringify(query), value);
       const fresh = current(root, query);
       const historical = hydrateQueryValue(root, value).value;
@@ -63,7 +63,7 @@ test('C7 persists no owner or remote bodies and hydrates byte-identical current 
     assert.ok('subject' in changed.value);
     assert.equal('body' in changed.value.subject ? changed.value.subject.body : undefined, undefined);
     writeFileSync(join(root, 'docs/constitution.md'), readFileSync(join(root, 'docs/constitution.md'), 'utf8') + '\nchanged\n');
-    const review = hydrateQueryValue(root, stored.get(JSON.stringify(['review', 'render', 'sample']))!);
+    const review = hydrateQueryValue(root, stored.get(JSON.stringify(['review', 'sample']))!);
     assert.deepEqual(review.bodyChanged, ['docs/constitution.md']);
     assert.match(Schema.decodeUnknownSync(Schema.Struct({ body: Schema.String }))(review.value).body, /constitution changed since projection/u);
   } finally { rmSync(root, { recursive: true, force: true }); }

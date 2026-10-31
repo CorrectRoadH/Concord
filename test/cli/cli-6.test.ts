@@ -89,7 +89,7 @@ test('installed onboarding creates editable packages and connects supporting-pag
  savePage(root, 'docs/feature/accounts/README.md', '# Accounts\n\nUsers sign in with valid credentials.\n', readme.digest);
  assert.deepEqual(call(root, ['show', 'accounts'], OwnerOutput).document.metadata, ownerBefore.metadata);
  call(root, ['new', 'issue', 'expired', '--title', 'Expired token'], Ack);
- const annotation = call(root, ['test', 'annotate', '--contract', 'docs/feature/accounts/cli.md#sign-in', '--issue', 'docs/issues/expired.md'], AnnotationOutput);
+ const annotation = call(root, ['test', 'marker', '--contract', 'docs/feature/accounts/cli.md#sign-in', '--issue', 'docs/issues/expired.md'], AnnotationOutput);
  assert.equal(existsSync(join(root, 'test')), false, 'annotate must not edit test sources');
  write(root, 'test/accounts.test.mjs', `import test from 'node:test';\n${annotation.snippet}test('rejects expired tokens', () => {});\n`);
  const accountCase = deriveTestReference('test/accounts.test.mjs', 'test/accounts.test.mjs', caseDiscriminator('docs/feature/accounts/cli.md#sign-in', 0));
@@ -98,7 +98,7 @@ test('installed onboarding creates editable packages and connects supporting-pag
  assert.ok(tracedTest);
  assert.equal(tracedTest.id, accountCase);
  assert.equal(call(root, ['trace', 'show', 'other'], TraceOutput).tests.length, 0);
- assert.match(callString(root, ['review', 'render', 'accounts']), new RegExp(accountCase));
+ assert.match(callString(root, ['review', 'accounts']), new RegExp(accountCase));
  assert.equal(call(root, ['doctor'], DoctorOutput).cases, 1);
  const human = spawnSync(process.execPath, [cli, '--root', root, 'test', 'list'], { encoding: 'utf8' });
  assert.equal(human.status, 0, human.stderr);
