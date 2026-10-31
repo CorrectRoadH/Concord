@@ -1,5 +1,8 @@
 ---
-status: open
+status: closed
+closure:
+  kind: closed
+  reason: 已补当前 Use Case 的源码、打包 CLI 与进程生命周期验收：静态关联不隐式执行 runner，配置缺失边界，Spec→实现/测试→执行→Issue 修复核验→check --since→审阅闭环；定向构建门禁及分层测试通过。
 ---
 
 # 接入软件项目的 Use Case 没有测试
