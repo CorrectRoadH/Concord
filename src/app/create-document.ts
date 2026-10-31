@@ -30,7 +30,7 @@ export const createDocument = Effect.fn('createDocument')(function*(repo: Reposi
   const catalog = yield* templateCatalog();
   return yield* Effect.try({ try: (): MutationReceipt => inRepositorySnapshot(repo, () => {
   const id = decode(DocumentName, input.id, 'id');
-  if (['use-case', 'issue', 'memory'].includes(kind) && id.toLowerCase() === 'readme') throw new ConcordError('InvalidInput', 'README is reserved for navigation');
+  if (['use-case', 'issue', 'memory', 'design'].includes(kind) && id.toLowerCase() === 'readme') throw new ConcordError('InvalidInput', 'README is reserved for navigation');
   const title = required(input.title, 'title');
   if (input.feature !== undefined && kind !== 'use-case') throw new ConcordError('InvalidInput', 'feature is only valid for use-case');
   if (input.pages !== undefined && !['feature', 'roadmap'].includes(kind)) throw new ConcordError('InvalidInput', 'pages is only valid for feature and roadmap');
