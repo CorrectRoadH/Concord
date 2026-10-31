@@ -11,6 +11,8 @@ import { tmpdir } from '../support/temporary.js';
 import { startViewServer } from '../e2e/server.js';
 import { installConcord, packConcord } from '../support/installed-package.js';
 
+import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
+
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
 test('workspace server status observes absence without starting a service', () => {
@@ -22,28 +24,6 @@ test('workspace server status observes absence without starting a service', () =
     assert.deepEqual(JSON.parse(reply.stdout), { operation: 'server-status', state: 'absent' });
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
-
-const Record = Schema.Struct({ token: Schema.String, pid: Schema.Int, installation: Schema.String, socket: Schema.Struct({ path: Schema.String }) });
-const recordPath = (root: string) => join(root, '.git/concord/server/current.json');
-const record = (root: string) => Schema.decodeUnknownSync(Schema.fromJsonString(Record), { onExcessProperty: 'ignore' })(readFileSync(recordPath(root), 'utf8'));
-const fixture = () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-workspace-'));
-  execFileSync('git', ['init', '-q', root]);
-  mkdirSync(join(root, 'docs/feature/reader'), { recursive: true });
-  writeFileSync(join(root, 'docs/feature/reader/README.md'), '# Reader\n\nFirst generation.\n');
-  return root;
-};
-const command = (root: string, args: readonly string[], entry = installedConcordCli()) => new Promise<{ status: number | null; stdout: string; stderr: string }>((resolve, reject) => {
-  const child = spawn(process.execPath, [entry, '--root', root, '--json', ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
-  let stdout = '', stderr = '';
-  child.stdout.on('data', data => { stdout += String(data); }); child.stderr.on('data', data => { stderr += String(data); });
-  child.once('error', reject); child.once('close', status => resolve({ status, stdout, stderr }));
-});
-const rpcModule = async () => await import(pathToFileURL(join(installationRootForBin(installedConcordCli()), 'dist/entry/server/index.js')).href) as typeof import('../../src/entry/server/index.js');
-const stop = async (root: string) => {
-  if (existsSync(recordPath(root))) await command(root, ['server', 'stop']);
-  await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'service record removed after confirmed cleanup', timeoutMs: 8000 });
-};
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/workspace-server-unimplemented.md
@@ -60,60 +40,6 @@ test('workspace service publishes its initial computation and serves the accepte
     }, { description: 'initial computation accepted by the persistent owner and readable through CLI', timeoutMs: 10_000 });
     assert.equal(projection.operation, 'workspace-projection');
     assert.equal(projection.projection.refreshOwner, 'active');
-  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
-});
-
-// @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
-test('CLI cache clear drains the running persistent owner and publishes a new generation under the same service token', { timeout: 25_000 }, async () => {
-  const root = fixture();
-  try {
-    assert.equal((await command(root, ['server', 'start'])).status, 0);
-    const previous = await pollUntil(async () => {
-      const result = await command(root, ['workspace', 'projection']);
-      return result.status === 0 ? JSON.parse(result.stdout) : undefined;
-    }, { description: 'initial generation before clear', timeoutMs: 8000 });
-    const token = record(root).token;
-    const cleared = await command(root, ['cache', 'clear']);
-    assert.equal(cleared.status, 0, cleared.stderr);
-    assert.equal(record(root).token, token);
-    await pollUntil(async () => {
-      const result = await command(root, ['workspace', 'projection']);
-      if (result.status !== 0) return undefined;
-      const value = JSON.parse(result.stdout);
-      return value.projection.builtAt !== previous.projection.builtAt ? value : undefined;
-    }, { description: 'new accepted generation after owner clear and reopen', timeoutMs: 8000 });
-  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
-});
-
-// @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
-test('C21 current query commands and a local writer share the persistent owner without busy failures', { timeout: 45_000 }, async () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-server-queries-'));
-  execFileSync('git', ['init', '-q', root]);
-  try {
-    const initialized = await command(root, ['init', '--docs-only']);
-    assert.equal(initialized.status, 0, initialized.stderr);
-    assert.equal((await command(root, ['server', 'start'])).status, 0);
-    const simultaneous = await Promise.all([
-      command(root, ['list', 'feature']), command(root, ['config', 'show']),
-      command(root, ['constitution', 'show']), command(root, ['test', 'list']),
-      command(root, ['new', 'feature', 'service-query', '--title', 'Service query']),
-    ]);
-    for (const reply of simultaneous) assert.equal(reply.status, 0, reply.stderr);
-    const queries = [
-      ['list', 'feature'], ['show', 'service-query'], ['config', 'show'],
-      ['constitution', 'show'], ['test', 'list'], ['code', 'list'], ['trace', 'check'], ['check'],
-      ['docs', 'check'], ['memory', 'index'], ['memory', 'recall', 'query'], ['issue', 'recall', 'query'],
-      ['feedback', 'list', '--provider', 'local'], ['feedback', 'connection', 'list'],
-    ];
-    const comparable = (text: string) => JSON.parse(text, (key, value) => key === 'cache' || key === 'codeCache' ? undefined : value);
-    for (const args of queries) {
-      const remote = await command(root, args), local = await command(root, ['--dry-run', ...args]);
-      assert.equal(remote.status, local.status, `${args.join(' ')}: ${remote.stderr}\n${local.stderr}`);
-      assert.deepEqual(comparable(remote.stdout), comparable(local.stdout), args.join(' '));
-      assert.doesNotMatch(remote.stderr, /HawdbBusy/u);
-    }
   } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
 });
 
@@ -153,67 +79,4 @@ test('binary socket reads preserve a source larger than one frame and reject mis
       assert.equal(invalid._tag, 'Failure');
     })));
   } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
-});
-
-// @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
-test('a killed service releases persistent ownership and the next invocation can restart', { timeout: 30_000 }, async () => {
-  const root = fixture();
-  try {
-    const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
-    const before = record(root); process.kill(before.pid, 'SIGKILL');
-    const read = await command(root, ['list', 'feature']); assert.equal(read.status, 0, read.stderr);
-    const restarted = await command(root, ['server', 'start']); assert.equal(restarted.status, 0, restarted.stderr);
-    assert.notEqual(record(root).token, before.token);
-  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
-});
-
-// @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
-test('C22 deleting the Git-private directory stops the service and removes its exact socket', { timeout: 20_000 }, async () => {
-  const root = fixture();
-  let running: ReturnType<typeof record> | undefined;
-  try {
-    assert.equal((await command(root, ['server', 'start'])).status, 0);
-    running = record(root);
-    rmSync(join(root, '.git/concord'), { recursive: true, force: true });
-    const started = performance.now();
-    await pollUntil(async () => !existsSync(running!.socket.path) ? true : undefined, { description: 'service cleanup after Git-private directory deletion', timeoutMs: 6500 });
-    assert.ok(performance.now() - started < 5500);
-    assert.equal(existsSync(recordPath(root)), false);
-  } finally {
-    if (running && existsSync(running.socket.path)) try { process.kill(running.pid, 'SIGTERM'); } catch { /* already stopped */ }
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
-// @feature docs/feature/local-data-engine/README.md
-// @issue docs/issues/workspace-server-unimplemented.md
-test('C23 another installation waits for native ownership handoff and the old Web connection receives stopping', { timeout: 30_000 }, async () => {
-  const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-server-handoff-'));
-  const old = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  try {
-    writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
-    installConcord(installation, packConcord(installation), [], { private: true });
-    const installed = join(installation, 'node_modules/concord-sdlc');
-    writeFileSync(join(installed, 'dist/handoff-identity-fixture.js'), 'export {};\n');
-    const manifest = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
-    const entry = join(installed, manifest.bin.concord);
-    const before = record(root);
-    const events = await fetch(new URL('api/events', old.address), { signal: AbortSignal.timeout(15_000) });
-    const stopping = (async () => {
-      let output = '';
-      for await (const chunk of events.body!) { output += new TextDecoder().decode(chunk); if (output.includes('event: stopping')) return true; }
-      return false;
-    })();
-    const started = await command(root, ['server', 'start'], entry);
-    assert.equal(started.status, 0, started.stderr);
-    const after = record(root);
-    assert.notEqual(after.token, before.token);
-    assert.notEqual(after.installation, before.installation);
-    assert.equal(await stopping, true);
-    assert.equal((await command(root, ['list', 'feature'], entry)).status, 0);
-    await command(root, ['server', 'stop'], entry);
-    await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'replacement service releases ownership', timeoutMs: 8000 });
-  } finally { await old.close(); await stop(root); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });

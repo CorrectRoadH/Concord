@@ -1,0 +1,70 @@
+import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.js';
+import { createDocument, initialize } from '../support/operations.js';
+import { Workspace } from '../../src/base/workspace/index.js';
+import { NodeServices } from '@effect/platform-node';
+import { runApplication } from '../support/repository.js';
+import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
+import { installationResources } from "../../src/base/installation/index.js";
+import { packageBin } from '../../scripts/package-location.js';
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from '../support/temporary.js';
+import { join } from 'node:path';
+import test from 'node:test';
+import { Effect } from 'effect';
+import { getWorkspaceSnapshot } from "../../src/app/index.js";
+import { cacheDatabasePath } from "../../src/base/cache/index.js";
+import { acquireTraceLeaseSync, genericPrivateDirectorySync, releaseTraceLeaseSync } from "../../src/base/publication/index.js";
+
+import { openHawdb } from "../../src/base/cache/index.js";
+import { digest } from "../../src/model/index.js";
+import { LocalRepository } from "../support/repository.js";
+
+import { type WorkspaceProjection } from "../../src/model/index.js";
+import { makeWorkspaceProjectionRecord, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
+import { type ViewServerHandle } from '../e2e/server.js';
+import { startViewServer } from '../e2e/server.js';
+import { installConcord, packConcord } from '../support/installed-package.js';
+import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
+
+import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.js';
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('a drifted candidate retains the last consistent generation and reports the attempt without failing', async () => {
+  const root = fixture();
+  const snapshot = await runApplication(getWorkspaceSnapshot(root, 'off'));
+  const context = workspaceProjectionContext(root);
+  try {
+    storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: [], directories: [], publicationChanged: false }, new Date(Date.now() - 1000).toISOString()));
+    const healthy = readWorkspaceProjection(context);
+    assert.equal(healthy.projection.status, 'ready');
+    storeWorkspaceProjection(context, makeWorkspaceProjectionRecord(snapshot, { files: ['src/main.ts'], directories: [], publicationChanged: false }, new Date().toISOString()));
+    const retained = readWorkspaceProjection(context);
+    assert.equal(retained.projection.status, 'ready', 'source drift during editing is not a refresh failure');
+    assert.equal(retained.projection.consistent, true, 'the last consistent generation stays the navigation result');
+    assert.deepEqual(retained.projection.changedPaths, []);
+    assert.equal(retained.projection.lastError, undefined);
+    assert.deepEqual(retained.projection.lastAttempt?.changedPaths, ['src/main.ts']);
+    assert.equal(retained.projection.lastAttempt?.complete, false);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('observeProjection reports observed file drift without throwing the candidate away', () => {
+  const root = fixture();
+  const repo = new LocalRepository(root, { optimistic: true, access: 'read' });
+  try {
+    const target = 'docs/feature/projected/README.md';
+    const original = readFileSync(join(root, target), 'utf8');
+    const result = repo.observeProjection(() => {
+      assert.equal(repo.read(target), original);
+      writeFileSync(join(root, target), `${original}\nDrifted after read.\n`);
+      return { ok: true as const };
+    });
+    assert.equal(result.value.ok, true, 'file drift does not throw the candidate away');
+    assert.deepEqual(result.drift.files, [target]);
+    assert.deepEqual(result.drift.directories, []);
+    assert.equal(result.drift.publicationChanged, false);
+  } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
+});
