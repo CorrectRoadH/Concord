@@ -1,7 +1,7 @@
 import type { AdapterReport, ProcessStatus, AdapterVersions } from "./test-adapter-protocol.js";
 export interface CommandEvidence {
   readonly operation: 'test-run'; readonly scope: 'command'; readonly selectedCaseId: string;
-  readonly commandOutcome: 'pass' | 'fail' | 'invalid'; readonly execution: 'nonzero' | 'zero' | 'skipped' | 'unknown';
+  readonly commandOutcome: 'pass' | 'fail' | 'invalid'; readonly execution: 'ran' | 'none' | 'skipped' | 'unknown';
   readonly exitCode: number | null; readonly signal: string | null; readonly timedOut: boolean; readonly cancelled: boolean;
   readonly cleanupOk: boolean; readonly arguments: readonly string[];
 }

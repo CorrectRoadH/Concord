@@ -31,9 +31,9 @@ export function commandObservation(result: OwnedProcessResult, runner: Runner): 
   const count = (name: string) => [...tap.matchAll(new RegExp(`^# ${name} (\\d+)\\s*$`, 'gmu'))].map(match => Number(match[1])).at(-1);
   const tests = count('tests'), pass = count('pass'), failed = count('fail'), skipped = count('skipped'), todo = count('todo');
   let execution: CommandEvidence['execution'] = 'unknown';
-  if (tests !== undefined && pass !== undefined && failed !== undefined && skipped !== undefined && todo !== undefined && pass + failed + skipped + todo === tests) execution = tests === 0 ? 'zero' : pass + failed > 0 ? 'nonzero' : 'skipped';
+  if (tests !== undefined && pass !== undefined && failed !== undefined && skipped !== undefined && todo !== undefined && pass + failed + skipped + todo === tests) execution = tests === 0 ? 'none' : pass + failed > 0 ? 'ran' : 'skipped';
   // A command runner can report no per-case counts, including a build failure.
-  if (execution === 'zero' || execution === 'skipped' || runner.kind === 'node-test' && execution === 'unknown') return { execution, commandOutcome: 'invalid' };
+  if (execution === 'none' || execution === 'skipped' || runner.kind === 'node-test' && execution === 'unknown') return { execution, commandOutcome: 'invalid' };
   return { execution, commandOutcome: result.exitCode === 0 ? 'pass' : 'fail' };
 }
 
