@@ -195,7 +195,7 @@ concord --skill test
 concord --skill memory
 ```
 
-Use `concord <command> --help` for exact arguments, `--json` for structured results, and `--root /path/to/project` to target another worktree. Agents edit specs, Issues, and Memory directly; commands such as `issue close --fixed`, `design decide`, and `roadmap start` run the steps those changes require.
+Use `concord <command> --help` for exact arguments, `--json` for structured results, and `--root /path/to/project` to target another worktree. Agents edit specs, Issues, and Memory directly; commands such as `issue close --fixed` and `roadmap start` run the steps those changes require.
 
 ## Go further
 

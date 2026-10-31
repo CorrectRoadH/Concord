@@ -145,7 +145,7 @@ Repository 负责安全读取、配置身份、依赖观察和发布。文档模
 | code/test marker | 每个指定 canonical reference、归属链、类型、anchor；显式 `@issue` 目标 | 乐观来源快照 | 指定依赖缺陷，不加载全局 Trace |
 | trace、review | 展示的关系图 | 乐观来源快照 | 输出 findings；需要完整图的结论拒绝不完整输入 |
 | check | 全仓库事实与关联；`--since` 另读基线差异 | 乐观来源快照 | 各 owner 解析错误累计为 findings，`ok: false` |
-| issue close、roadmap start、design decide | 核验与保证关系完整所需的集合 | 独占 publication；fixed 另持 runner 租约 | 保留严格身份、修复核验和逆向关系要求 |
+| issue close、roadmap start | 核验与保证关系完整所需的集合 | 独占 publication；fixed 另持 runner 租约 | 保留严格身份、修复核验和逆向关系要求 |
 
 集合查询先按类别的固定目录限定路径，再解码。Feature 与 Use Case 共用 `docs/feature/` 时，同根候选中的坏记录必须报错。Memory 精确路径不需要其它 Memory 内容有效。短选择器读取全部候选，避免隐藏未解码记录中的同名文件。来源扫描使用安全目录读取。
 

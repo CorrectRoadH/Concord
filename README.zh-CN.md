@@ -191,7 +191,7 @@ concord --skill test
 concord --skill memory
 ```
 
-用 `concord <command> --help` 查看精确参数，`--json` 获取结构化结果，`--root /path/to/project` 指定其它工作树。Agent 直接编辑 Spec、Issue 与 Memory；`issue close --fixed`、`design decide`、`roadmap start` 等命令执行这些变化需要运行的步骤。
+用 `concord <command> --help` 查看精确参数，`--json` 获取结构化结果，`--root /path/to/project` 指定其它工作树。Agent 直接编辑 Spec、Issue 与 Memory；`issue close --fixed`、`roadmap start` 等命令执行这些变化需要运行的步骤。
 
 ## 深入使用
 

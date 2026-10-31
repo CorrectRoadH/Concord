@@ -84,20 +84,9 @@ p5 采用流程动作循环：分阶段自动推进，当前阶段高亮，沿�
 
 ## Design 与采用
 
-了解现行行为只读 Feature、Use Case、cli、library、architecture 与 engineering 页；Design 只在重新审视某项决策时读取。
+了解现行行为只读 Feature、Use Case、cli、library、architecture 与 engineering 页。
 
-Design 目录有 README、GOALS、LIMITS、CASES、DECISION 与 `plans/<候选>/`；候选就是 `plans/` 下的子目录，每个候选是一个完整的 Feature 设计包。GOALS/LIMITS 用 `## G1: 标题`、`## L1: 标题` 定义稳定条目；每个候选 README 的 `## Goals`、`## Limits` 各用四列表格逐项写出要求链接、状态、机制/缺口和依据。状态支持 satisfied/not-satisfied/pending（满足/不满足/待验证），Goal 另支持 partial（部分满足）。链接例如 `[L1](../../LIMITS.md#l1-offline)`，必须指向实际标题。代码块、HTML 和引用式链接不作为要求回应。
-
-DECISION 的 `## Decision` 只放 `Selected: [sqlite](plans/sqlite/README.md)` 或 `选择 [sqlite](plans/sqlite/README.md)。`；`## Rationale`、`## Rejected Options`、`## Residual Risks` 写真实论证。每个非 satisfied 的已选 Goal 需在 Rationale 单独写 `G1: 接受缺口的理由`。全部候选必须完整回应，所选候选的所有 Limit 必须 satisfied。
-
-```sh
-concord check --json
-concord design decide session-store --selected sqlite
-concord design postpone session-store
-concord roadmap start sessions
-```
-
-`design decide` 校验全部候选与 Limits 后写入 `Selected:` 行；直接编辑这一行时，`check` 用同一规则校验。结构通过不代表真实验证。裁决之后，把选中候选中仍适用的规则写进 Feature 的行为页与 architecture 页，Spec 只把 Design 的 README 或 DECISION 链接为依据。链接到候选页、CASES、GOALS 或 LIMITS 时 `concord check` 报告 `SpecDependsOnDesignRecord`。
+Design 只用于真正难以取舍的问题，一页 `docs/design/<d>.md`：写清要决定什么、几种做法和各自的代价。定下来后把规则写进 Spec，删除这一页，理由写在提交说明里。不难取舍的问题直接改 Spec。
 
 `roadmap start` 把 Roadmap 目录移入 `docs/feature/`，同时改写指向它的链接；目标已存在或采用期间文件发生变化时拒绝。
 

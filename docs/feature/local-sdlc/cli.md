@@ -19,7 +19,6 @@
 | `use-case` | `steps`、`format`、`rename-step`：Use Case 步骤 |
 | `issue` | `close`（删除 Issue，fixed 时先核验）、`link`、`unlink`、`search`；`remote preview` 与 `remote apply` 写入远端 |
 | `memory` | `link`、`search`；摘要列表用 `list memory` |
-| `design` | `decide`、`postpone`、`check`、`format` |
 | `roadmap` | `start <roadmap> [--feature <id>]`：移入 `docs/feature/`，省略 `--feature` 时 Feature ID 与 Roadmap 同名；取消方向即删除目录，历史在 Git |
 | `taste` | 列出品味条目与依据它们的页面 |
 | `concepts`、`writing` | 概念与写作政策的查看与受管写入 |
@@ -169,12 +168,6 @@ codeDeclarations: 1
   "findings": [{"code": "ReferenceNotFound", "path": "test/cart.test.js", "line": 5, "message": "Reference target does not exist: docs/feature/cart/use-case/add-items.md", "category": "relation"}],
   "checks": {"relations": {"ok": false, "complete": false}, "writing": {"ok": true, "complete": true}}
 }
-```
-
-Spec 页面链接到 Design 包内的候选页、CASES、GOALS、LIMITS 或支持页时，`check` 退出 1，finding 为：
-
-```json
-{"code": "SpecDependsOnDesignRecord", "path": "docs/feature/cart/README.md", "line": 12, "message": "Spec links to a Design record page: docs/design/cart-storage/plans/files/README.md", "category": "relation"}
 ```
 
 适用范围与规则见[聚合门禁](../documentation-quality/gate.md)。

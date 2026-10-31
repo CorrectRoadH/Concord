@@ -26,7 +26,7 @@
      docs/feature/cart/use-case/README.md
    ```
 
-   README 必需，`--pages` 从 `library`、`cli`、`architecture`、`use-case` 中选择其余页面，省略时只建 README。`--title` 写成一级标题，省略时取名称。Design 外层的 GOALS、LIMITS、CASES、DECISION 总是生成。Engineering 从目标、机制、使用、验收四节开始，按主题加页。
+   README 必需，`--pages` 从 `library`、`cli`、`architecture`、`use-case` 中选择其余页面，省略时只建 README。`--title` 写成一级标题，省略时取名称。Design 是单个文件 `docs/design/<名称>.md`。Engineering 从目标、机制、使用、验收四节开始，按主题加页。
 
    也可以直接创建目录与 README，结果相同：类别由路径决定，名称由一级标题决定。
 

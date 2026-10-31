@@ -259,9 +259,9 @@ runner 不确定时返回 blocked，并保留 journal 的实际处理结果。�
 
 未完成的多文件 journal 阻断普通快照。来源扫描按当前配置和安全目录读取，文件名不推导作者 ID。协调细节见[可移植协调架构](feature/portable-coordination/architecture.md)，文档读取职责见[本地 SDLC 架构](feature/local-sdlc/architecture.md)，随包步骤由 `concord --skill recovery` 提供。
 
-## Design 逐项比较与裁决
+## Design
 
-候选比较、裁决与暂缓的行为见[逐项比较方案并明确裁决](feature/local-sdlc/use-case/compare-design-plans.md)。候选来自 `plans/` 的直接子项，裁决是 DECISION 中的 `Selected:` 行；可以直接编辑，`design decide` 与 `check` 用同一规则校验。已裁决的 Design 是决策记录（[Design 记录](document-model.md#design)）。
+Design 是一页还没定下来的取舍，见[记下一个还没定的取舍](feature/local-sdlc/use-case/compare-design-plans.md)。定下来后规则写进 Spec，页面删除（[Design](document-model.md#design)）。
 
 ## 测试执行与修复核验
 
