@@ -94,7 +94,7 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 
 ### 刷新与推送
 
-服务是该 worktree 唯一的工作区投影刷新者。监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。刷新在计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)；主进程确认结果、身份与无待恢复 journal 后写入 `workspace_projection`，服务重启后最新代次立即可读。
+服务是该 worktree 唯一的工作区投影刷新者。监听只产生失效信号，范围与合并沿用 [Web 工作台的来源监听](../web-workbench/architecture.md#来源监听)，另外监听 Git-private 目录的 `HEAD`。刷新在计算进程中执行，读取、漂移与替换规则沿用[读取与发布](../web-workbench/architecture.md#读取与发布)；主进程确认结果、身份与无待恢复 journal 后接受该代次：在内存中替换当前代次，并写入 `workspace_projection` 作为服务重启后的首个代次与无服务时的历史读取。订阅、`GET /api/workspace` 与经服务的 `workspace projection` 从内存返回，不读持久库（[决策依据](../../design/workspace-runtime/DECISION.md)）。
 
 订阅以 `(token, generation)` 识别代次。首次订阅与重连先发送完整状态；之后代次、`lastAttempt`、错误、状态与任务变化都发送事件，即使没有新代次。同一连接上未发送的旧事件被新的完整状态替换，不排队。
 
@@ -106,10 +106,15 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 
 请求同样可以分帧：单帧不超过 1 MiB，`feedback-merge` 的批次按现行批量上限（1000 条或 16 MiB）累计；每个连接未完成的输入不超过 32 MiB。超限返回具名失败，不截断。
 
+操作的定义、执行位置与 HTTP 对应见[服务操作](../../architecture.md#服务操作)，下表给出 RPC 的应答。
+
 | 请求 | 应答 |
 | --- | --- |
 | `hello`、`shutdown` | 见启动与裁决 |
 | `subscribe {kind: workspace}` | 完整状态，之后的事件 |
+| `workspace` | 内存中已接受的代次 |
+| `refresh` | 受理即应答，不等待刷新 |
+| `git-status`、`git-diff {path, area}` | 当前 Git 状态与定向 diff |
 | `read {path, expectedDigest?}` | 与 Web `/api/file` 相同的定向严格读取的原始字节与信封，另附实际摘要 |
 | `query {name, input}` | 白名单只读查询的结果或具名错误，见 CLI 查询 |
 | `http {open \| close, host, port, lease?}` | 监听地址与租约 |

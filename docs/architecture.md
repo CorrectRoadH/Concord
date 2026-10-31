@@ -109,6 +109,27 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Local` 调用同一应用查询，`Queries.Remote` 是工作区服务的 RPC 客户端。CLI 按[工作区服务](feature/local-data-engine/architecture.md#cli-查询)的规则选择。两者实现同一份完整的操作定义：输入模式、领域结果与错误 Schema，以及从结果到退出码的同一映射；公开输出只在入口生成一次。Remote 把传输失败（断线、超时、编码失败）在适配层归类为本进程重算或既有的服务失败，不把 RPC 包装错误当作领域错误输出，也不为等待重连突破回退的截止时间。
 
+### 服务操作
+
+工作区服务的每个应用操作只定义一次：名称、输入、结果与错误 Schema、准入与取消、执行位置、当前或历史语义，以及发布后是否申请刷新。RPC 与 HTTP 是适配层：RPC 负责二进制序列化与帧准入，HTTP 负责 Host/Origin 校验、请求体上限、状态码、ETag 与安全头；SSE 是 `subscribe` 的 HTTP 编码，保留慢消费者合并与 `stopping` 事件。静态资源、p5 frame 与 SPA 页面只属于 HTTP（[决策依据](design/workspace-runtime/DECISION.md)）。
+
+| 操作 | 执行位置 | 语义 | HTTP | RPC |
+| --- | --- | --- | --- | --- |
+| `hello`、`shutdown`、`http` 租约 | 主进程 | 控制 | — | 控制帧 |
+| `subscribe` | 主进程 | 内存中的当前代次与之后的事件 | `GET /api/events`（SSE） | 是 |
+| `workspace` | 主进程 | 已接受代次（历史） | `GET /api/workspace` | 是 |
+| `refresh` | 主进程申请，计算进程执行 | 申请刷新，不等待 | `POST /api/workspace` | 是 |
+| `read` | 计算进程 | 当前来源的定向严格读取；RPC 返回原始字节与信封，HTTP 返回 `ViewFile` | `GET /api/file` | 是 |
+| `query` | 计算进程 | 白名单当前查询，见[CLI 查询](feature/local-data-engine/architecture.md#cli-查询) | — | 是 |
+| `git-status`、`git-diff` | 计算进程 | 当前 Git 状态与定向 diff | `GET /api/git`、`GET /api/git/diff` | 是 |
+| `p5-compile` | 计算进程 | 当前来源捕获与编译，编译器经 `OwnedProcess` | `POST /api/p5/compile` | — |
+| `action` | 操作进程（写入、恢复与反馈）；`cache.*` 转给主进程维护 | 现行 ViewAction；写入后申请刷新 | `POST /api/action` | — |
+| `job-start`、`job-list`、`job-cancel` | 主进程监督，runner 经 `OwnedProcess` | 单槽任务；浏览器断开不取消，取消确认子进程组退出后才释放 | `POST /api/jobs`、`GET /api/jobs`、`DELETE /api/jobs/:id` | — |
+| `cache-clear` | 主进程 | 见[清理](feature/local-data-engine/architecture.md#清理) | 经 `action` | 是 |
+| `feedback-merge` | 主进程 | begin、append、commit，commit 原子生效 | — | 是 |
+
+`feedback.sync` 与 `feedback.check` 的 HTTP 请求断开时取消外部操作，任务不随连接取消。`view export` 只在 CLI 本进程执行。
+
 ### 进程能力
 
 | 进程 | 提供 | 不提供 |
@@ -133,7 +154,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | 在途请求与取消 | FiberMap、FiberSet | 键为实例、连接与请求身份；中断不替代进程组回收与 60 秒超时 |
 | 启动就绪 | Deferred | — |
 | HTTP 与静态资源 | HttpRouter、HttpStaticServer | Host/Origin 校验沿用现行规则 |
-| 测试中的时间与协议 | TestClock；RpcTest | RpcTest 只验证逻辑；公开输出等价用真实序列化验收 |
+| 测试中的时间与协议 | TestClock；RpcTest | 服务的状态机与计时在测试进程内以 Layer 加 TestClock 验证；TestClock 不抢占同步计算，也不产生文件或进程事件，计算与操作进程、服务锁、进程退出与清理确认用真实进程验证。RpcTest 只验证逻辑；公开输出等价用真实序列化验收 |
 | 性能剖析 | `Effect.fn` 的 span，按需经 `unstable/observability` 导出 | — |
 
 ## 初始化与项目治理
