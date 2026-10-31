@@ -36,21 +36,7 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
 
   });
   if (name.startsWith('writing') || name === 'smoke') {
-    const shown = yield* cli('writing', 'show');
-    const digest = yield* io('Decode writing preimage', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ digest: Schema.String })), { onExcessProperty: 'ignore' })(shown.stdout).digest);
-    const word = (n: number): string => `word${String.fromCharCode(97 + Math.floor(n / 676), 97 + Math.floor(n / 26) % 26, 97 + n % 26)}`;
-    const input = join(workDir, 'writing-policy.json');
-    yield* io('Prepare controlled policy', () => writeFileSync(input, JSON.stringify({
-      format: 'concord.writing/v3', roots: ['docs/feature/measured/pages'], bannedTerms: [],
-      sentenceLength: 300, paragraphLength: 320,
-      controlled: {
-        language: 'auto', sentence: { zh: { procedural: 30, descriptive: 40 }, en: { procedural: 20, descriptive: 25 } }, paragraphSentences: 6,
-        procedural: { singleInstruction: true, requireVerb: true, verbs: { zh: ['读取'], en: [{ lemma: 'read' }] } },
-        approvedWords: { enabled: true, en: [...new Set('measured content instrument synchronize consistent authorized preserved diagnostic performance'.split(' ')), ...Array.from({ length: name === 'writing-scale' ? 4087 : 30 }, (_, i) => word(i))] },
-        passiveVoice: { zh: true, en: true, participles: ['measured'] },
-      },
-    })));
-    yield* cli('writing', 'set', '--body', input, '--if-unchanged', digest);
+    yield* io('Write Markdown rules', () => writeFileSync(join(root, 'docs/writing.md'), '# Writing rules\n\n句子不超过 300 个字符，段落不超过 320 个字符。\n\n## 检查范围\n\n- docs/feature/measured/pages\n'));
   }
   yield* git('add', '.');
   yield* git('-c', 'user.name=Concord bench', '-c', 'user.email=bench@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Frozen benchmark fixture');
@@ -62,7 +48,7 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
   return { kind: 'fixture', fixture: name, root, commit, cache: 'ready', scale: { sources, tests: 1, pages }, fixtureStats } satisfies Consumer;
 });
 
-/** A frozen self clone with both length paths and a lexical scan enabled. */
+/** A frozen self clone using its declared Markdown terminology and writing rules. */
 const writingSelfConsumer = Effect.fn('bench.writingSelfConsumer')(function*(entry: string, workDir: string, source: { readonly repository: string; readonly commit: string }) {
   const root = join(workDir, 'writing');
   const git = (...argv: string[]) => mustRun(['git', '-C', root, ...argv], { cwd: workDir, outputDir: workDir });
@@ -70,17 +56,6 @@ const writingSelfConsumer = Effect.fn('bench.writingSelfConsumer')(function*(ent
   yield* git('checkout', '-q', '--detach', source.commit);
   const sourceCommit = (yield* git('rev-parse', 'HEAD')).stdout.trim();
   const cli = (...argv: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', ...argv], { cwd: root, outputDir: workDir });
-  const shown = yield* cli('writing', 'show');
-  const previous = yield* io('Decode self writing policy', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ digest: Schema.String, policy: Schema.Record(Schema.String, Schema.Json) })), { onExcessProperty: 'ignore' })(shown.stdout));
-  const input = join(workDir, 'self-writing-policy.json');
-  yield* io('Prepare self controlled policy', () => writeFileSync(input, JSON.stringify({
-    ...previous.policy,
-    controlled: { language: 'auto', sentence: { zh: { procedural: 100000, descriptive: 100000 }, en: { procedural: 100000, descriptive: 100000 } },
-      paragraphSentences: 100000, passiveVoice: { en: true, participles: ['benchparticiple'] } },
-  })));
-  yield* cli('writing', 'set', '--body', input, '--if-unchanged', previous.digest);
-  yield* git('add', 'docs/concord-writing.json');
-  yield* git('-c', 'user.name=Concord bench', '-c', 'user.email=bench@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Frozen controlled writing self consumer');
   const commit = (yield* git('rev-parse', 'HEAD')).stdout.trim();
   const files = (yield* git('ls-files', '-z')).stdout.split('\0').filter(Boolean);
   yield* cli('cache', 'rebuild');
