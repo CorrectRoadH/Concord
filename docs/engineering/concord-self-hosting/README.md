@@ -23,11 +23,13 @@
 
 | 阶段 | 内容 |
 | --- | --- |
-| 构建 | 原生绑定按下文规则复用；CLI、repository 与 Web 构建，三个 TypeScript 项目并行编译 |
-| 静态检查 | 构建产物上的 repository、测试与脚本类型检查与 `check:selfhost` 并行执行 |
-| 测试 | 打包一次，Node 测试与 e2e 浏览器测试按下文并发执行 |
+| 构建 | 先把当前 checkout 的源码与依赖清单复制到本次调用私有的目录 `.check/run-*`，在其中构建；原生绑定按下文规则复用；CLI 与 Web 并行编译 |
+| 静态检查 | 私有目录中的源码、测试与脚本类型检查与 `check:selfhost` 并行执行 |
+| 测试 | 从私有目录打包一次；不需要构建的层先运行，随后安装包层与 e2e 浏览器测试按下文并发执行 |
 
-`pnpm check` 接受 `--test-name-pattern=表达式`、`--test-shard=序号/总数` 与测试文件路径。给出文件或过滤条件时，构建与静态检查仍完整执行，只运行选中的测试；结果不能替代完整门禁。未指定文件时自动发现 `test/*.test.ts` 与 `test/e2e/*.e2e.ts`。CI 每个分片运行 `pnpm check --test-shard=序号/4`，分片并集覆盖完整测试集。
+门禁的输入是开始时复制的那份源码，此后 checkout 中的编辑与 `vp build` 不影响本次结果，门禁也不读写 checkout 的 `dist`。多个 agent 在同一 checkout 中并行开发时，每次门禁检查的是开始时刻的整个工作区，包括他人尚未提交的改动；交付前在自己的改动提交后运行。同一台机器同时只运行一次门禁：后启动的调用等待前一次结束，等待时输出前一次的进程号与开始时间。
+
+`pnpm check` 接受 `--test-name-pattern=表达式`、`--test-shard=序号/总数` 与测试文件路径。给出文件或过滤条件时，构建与静态检查仍完整执行，只运行选中的测试；结果不能替代完整门禁。未指定文件时递归发现 `test/` 下的 `*.test.ts` 与 `test/e2e/` 下的 `*.e2e.ts`。CI 每个分片运行 `pnpm check --test-shard=序号/4`，分片并集覆盖完整测试集。
 
 其它入口不是检查：`vp build` 只构建，`vp dev` 只启动 Web 开发服务器，`pnpm concord` 运行源码 CLI。`vp run test:e2e:agent` 运行自然语言用例，使用环境中的模型配置，需要显式授权，不属于日常门禁。
 
@@ -49,11 +51,11 @@
 
 ## 从源码运行
 
-开发时用 `pnpm concord <参数>` 直接运行当前 checkout 的源码 CLI，等价于 `node --import tsx src/entry.ts`。它不需要 `vp build`，也不需要全局安装的 Concord；依赖由 `vp install` 准备。源码 CLI 用于日常操作与调试，交付门禁仍是基于构建产物的 `pnpm check`。
+开发时用 `pnpm concord <参数>` 直接运行当前 checkout 的源码 CLI，等价于 `node --import tsx src/entry/cli/entry.ts`。它不需要 `vp build`，也不需要全局安装的 Concord；依赖由 `vp install` 准备。源码 CLI 用于日常操作与调试，交付门禁仍是基于构建产物的 `pnpm check`。
 
 | 方面 | 规则 |
 | --- | --- |
-| 原生绑定 | 源码与构建产物都加载 `dist/native/<target>/`，校验规则相同。只有 `native/hawdb` 或其锁文件变化时才需要重建，命令为 `pnpm exec vp run build:native`；缺失时返回 `HawdbUnavailable` 并提示该命令 |
+| 原生绑定 | 源码运行取自经身份校验的本机共享缓存，构建产物取自包根，校验规则相同。只有 `native/hawdb` 或其锁文件变化时才需要重建，命令为 `pnpm exec vp run build:native`；缺失时返回 `HawdbUnavailable` 并提示该命令 |
 | 子进程 | 运行模式由一个模块统一判断。源码模式下，查询、扫描与编辑器子进程使用同一 loader 启动对应的 `.ts` 入口；构建模式不变 |
 | 安装身份 | 源码模式的安装身份是 `src/` 下 TypeScript 源码与原生产物的摘要，构建模式沿用产物摘要。两种模式的缓存身份不同，互不复用 |
 | 构建资源 | Web 工作台、PR 预览导出等依赖构建资源的命令，在源码模式下返回 `BuildRequired` 并提示 `vp build`；Web 开发使用 `vp dev` |
