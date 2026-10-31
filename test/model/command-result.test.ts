@@ -17,7 +17,7 @@ test('runner abnormal or unconfirmed cleanup results never qualify as red or gre
     { groupCleanup: { ...normal.groupCleanup, gone: null } }, { exitCode: null },
   ]) for (const exitCode of [0, 1]) assert.deepEqual(commandObservation({ ...normal, exitCode, ...patch }, runner), { commandOutcome: 'invalid', execution: 'unknown' });
   for (const [stdout, execution] of [
-    ['# tests 0\n# pass 0\n# fail 0\n# skipped 0\n# todo 0\n', 'zero'],
+    ['# tests 0\n# pass 0\n# fail 0\n# skipped 0\n# todo 0\n', 'none'],
     ['# tests 2\n# pass 0\n# fail 0\n# skipped 1\n# todo 1\n', 'skipped'],
   ] as const) assert.deepEqual(commandObservation({ ...normal, stdout }, runner), { commandOutcome: 'invalid', execution });
 });
