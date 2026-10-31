@@ -1,6 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
-import { Context, Effect, Layer, Schedule, Schema } from 'effect';
+import { Effect, Schedule, Schema } from 'effect';
+import type { QueryReply } from './query-port.js';
+export { Queries, QueryReply } from './query-port.js';
 import { ConcordError, failure, FeedbackFilterSchema } from '../model/index.js';
 import { Workspace } from '../base/workspace/index.js';
 import { Sources } from '../base/sources/index.js';
@@ -44,8 +46,6 @@ export const QueryRequest = Schema.Union([
   operation('historical', { query: Query }),
 ]);
 export type QueryRequest = typeof QueryRequest.Type;
-export const QueryReply = strict(Schema.Struct({ value: Schema.Json, exitCode: Schema.Literals([0, 1]) }));
-export type QueryReply = typeof QueryReply.Type;
 
 const queryValue = (repo: import('../base/workspace/index.js').LocalRepository, request: QueryRequest, cache: 'use' | 'off'): unknown => {
   switch (request.name) {
@@ -114,9 +114,3 @@ export const executeQuery = Effect.fn('Queries.Local.execute')(function*(root: s
     return { value: json, exitCode: failed ? 1 : 0 } satisfies QueryReply;
   }, catch: failure });
 });
-export class Queries extends Context.Service<Queries, {
-  readonly execute: typeof executeQuery;
-}>()('concord/app/Queries') {
-  static readonly Local = Layer.succeed(Queries, Queries.of({ execute: executeQuery }));
-  static Remote(execute: typeof executeQuery) { return Layer.succeed(Queries, Queries.of({ execute })); }
-}
