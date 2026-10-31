@@ -1,5 +1,8 @@
 ---
-status: open
+status: closed
+closure:
+  kind: closed
+  reason: P3 已交付（至 6a22940）：服务锁、运行记录与 socket 协议、计算进程与预热的单次操作进程、服务操作表、持久缓存所有权与无服务时只开已有库、CLI 白名单经服务查询、SSE、concord panel 与 Herdr 清单、服务与面板的 bench 场景和预算行。验收 C14–C16、C20–C24 与 7 个新增场景 reference 均通过，证据见交接。Herdr 真实主机核验由 herdr-plugin-host-unverified 跟踪。
 ---
 
 # 工作区服务与 Herdr 面板尚未实现
