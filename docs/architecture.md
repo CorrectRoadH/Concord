@@ -101,7 +101,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 | Workspace | worktree 根、Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
 | Sources | 路径安全的读取、乐观快照与返回前核验 |
 | Publication | 租约、journal、原子替换与恢复；租约以 `Effect.acquireRelease` 在 Scope 中持有。发布前检查与恢复需要的领域校验（写作政策、概念目录、步骤重命名规划）经它要求的 `PublicationValidation` 端口取得：端口定义在 `base`，实现在 `app`，由入口的组合根提供，缺少时 Layer 无法构建 |
-| Cache | 解析缓存（内存或持久）、只读远端观察快照、持久命名空间的独占写入，三种能力分开提供 |
+| Cache | 解析缓存（内存或持久）、只读快照（`CacheSnapshot`，进程内不可写的行，不经内存 HawDB）、持久命名空间的独占写入，三种能力分开提供；计算进程另有 `CacheDerivations`，只在请求内收集新产生的派生行，随结果交回主进程写入，不持有句柄或写入能力 |
 | Git | 状态、diff、提交与 worktree 操作 |
 | OwnedProcess | 用 `unstable/process` 的 ChildProcess 启动与发送信号；Concord 负责后代清理确认、TERM 到 KILL 的上限、输出预算、清理未知时的隔离与结果记录。leader 成功退出也核对后代 |
 
@@ -136,7 +136,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | --- | --- | --- |
 | CLI | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存；无服务时持久）、Queries（Remote 或 Local） | — |
 | 工作区服务主进程 | Workspace、Git、Cache 的持久独占写入、工作区投影、RPC 与 HTTP 服务、计算与操作进程的监督；Publication 只在清理作用域中、关闭持久库之后提供 | 领域计算 |
-| 计算进程 | Workspace、Sources、Cache（内存解析与主进程交来的只读快照）、Queries.Local；RPC 经标准输入输出，结构以 JSON 编码、入口按计算请求 Schema 严格解码，来源原文以二进制字节帧传输；日志只写标准错误 | Publication、持久 Cache、OwnedProcess 之外的子进程 |
+| 计算进程 | Workspace、Sources、Cache（内存解析、主进程交来的只读快照与 `CacheDerivations`）、Queries.Local；RPC 经标准输入输出，结构以 JSON 编码、入口按计算请求 Schema 严格解码，来源原文以二进制字节帧传输；日志只写标准错误 | Publication、持久 Cache、OwnedProcess 之外的子进程 |
 | 操作进程 | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存）、远端读取；发布后经 `feedback-merge` 更新远端观察 | 持久 Cache |
 | 面板 | RPC 客户端与终端渲染 | 文件与缓存 |
 
