@@ -69,7 +69,7 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
   }
   if (foreground) {
     const owner = yield* OwnedProcess, installed = yield* Installation;
-    yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], { cwd: installed.cwd })));
+    yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], { cwd: installed.cwd, stream: { ready: () => {}, stdout: () => {}, stderr: chunk => { process.stderr.write(chunk); } } })));
   } else yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
   return yield* waitForServerHandshake(existingWorkspace(root, installation).pipe(Effect.map(connection => connection?.hello.installation === installation && connection.hello.protocol === PROTOCOL ? connection : undefined)));
 });
