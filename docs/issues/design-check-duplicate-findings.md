@@ -1,5 +1,9 @@
 ---
-status: open
+status: closed
+closure:
+  kind: invalid
+  evidence:
+    - b92a806 源码复现 cart-store 两候选：8 条 DesignResponseIncomplete 全部唯一；每个 L1/G1 各指明 Mechanism or gap 与 Evidence。实现 src/model/design-content.ts:133，构建 CLI 回归 test/cli/cli-2.test.ts:36；列名诊断已在历史提交 5fbaea3 采用。
 ---
 
 # design check 对同一条要求重复报告相同 finding
