@@ -3,9 +3,7 @@
 import { Installation } from '../../base/installation/index.js';
 import { LspLauncher, ViewLauncher, ServerLauncher, PanelLauncher } from "./launchers.js";
 import { Publication } from "../../base/publication/index.js";
-import { PublicationValidationLive, Queries, QueryReply, executeQuery, mergeLocalFeedbackObservation, builtAssetRoot } from "../../app/index.js";
-import { resourcePath } from "../../app/index.js";
-import { readFileSync } from "node:fs";
+import { Queries, QueryReply } from "../../app/index.js";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
 import { Clock, Effect, Fiber, Layer, Schema } from "effect";
 import { Command, CliError } from "effect/unstable/cli";
@@ -23,12 +21,16 @@ const asServerError = (cause: unknown) => { const error = workspaceServerFailure
 const workspaceServerFailure = (cause: unknown): ConcordError => cause instanceof WorkspaceServerError ? new ConcordError(cause.code, cause.message, cause.details) : failure(cause);
 
 const loadServerMain = () => Effect.tryPromise(() => import('../server/main.js'));
-const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: string) {
+const loadApp = () => Effect.tryPromise(() => import('../../app/index.js'));
+const executeQuery: typeof import('../../app/index.js').executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
+const mergeLocalFeedbackObservation: typeof import('../../app/index.js').mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
+const builtAssetRoot = (name: 'web') => loadApp().pipe(Effect.flatMap(app => Effect.try({ try: () => app.builtAssetRoot(name), catch: failure })), Effect.mapError(failure));
+const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: string, installation?: string) {
   const platform = yield* ServerRuntime;
   const { privateDir } = yield* (yield* Workspace).locate(root, true);
   const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
   if (!record) return undefined;
-  const connection = yield* connectWorkspaceSocket(record.socket.path, platform.installation(), record.token);
+  const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? platform.installation(), record.token);
   if (connection.hello.installation !== record.installation || connection.hello.protocol !== record.protocol) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Handshake differs from the running record'));
   return connection;
 });
@@ -47,9 +49,9 @@ const clearExistingWorkspaceCache = (root: string) => Effect.scoped(Effect.gen(f
   return yield* requestWorkspace(connection, 'cache-clear', {}).pipe(Effect.mapError(workspaceServerFailure));
 }));
 const connectOrStartWorkspace = Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false) {
-  let current = yield* existingWorkspace(root).pipe(Effect.catch(() => Effect.succeed(undefined)));
   const platform = yield* ServerRuntime;
   const installation = platform.installation();
+  let current = yield* existingWorkspace(root, installation).pipe(Effect.catch(() => Effect.succeed(undefined)));
   if (current && current.hello.installation === installation && current.hello.protocol === PROTOCOL) return current;
   if (current) {
     const { privateDir } = yield* (yield* Workspace).locate(root, true);
@@ -69,14 +71,14 @@ const connectOrStartWorkspace = Effect.fn('connectOrStartWorkspace')(function*(r
     const owner = yield* OwnedProcess, installed = yield* Installation;
     yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], { cwd: installed.cwd })));
   } else yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
-  return yield* waitForServerHandshake(existingWorkspace(root).pipe(Effect.map(connection => connection?.hello.installation === installation && connection.hello.protocol === PROTOCOL ? connection : undefined)));
+  return yield* waitForServerHandshake(existingWorkspace(root, installation).pipe(Effect.map(connection => connection?.hello.installation === installation && connection.hello.protocol === PROTOCOL ? connection : undefined)));
 });
 const startWorkspaceServer = (root: string) => Effect.scoped(connectOrStartWorkspace(root).pipe(Effect.map(connection => ({ operation: 'server-start', ...connection.hello }))));
 const stopWorkspaceServer = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.flatMap(connection => connection ? connection.client.shutdown({ token: connection.hello.token }) : Effect.void), Effect.as({ operation: 'server-stop' }), Effect.mapError(asServerError)));
 
 const HttpLease = Schema.Struct({ host: Schema.String, port: Schema.Int, address: Schema.String, lease: Schema.String, token: Schema.String });
 const serveWorkspaceView = Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => void) {
-  yield* Effect.try({ try: () => builtAssetRoot('web'), catch: failure });
+  yield* builtAssetRoot('web');
   return yield* Effect.scoped(Effect.gen(function*() {
     const connection = yield* connectOrStartWorkspace(options.root, options.inProcess === true);
     const deadline = (yield* Clock.currentTimeMillis) + 60_000;
@@ -126,17 +128,18 @@ const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*
   })) });
 }));
 
-const launchers = Layer.mergeAll(
-  Layer.effect(PanelLauncher, Effect.gen(function*() {
+const panelLauncher = Layer.effect(PanelLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | NodeServices.NodeServices | OwnedProcess>();
     const workspace = yield* Workspace;
-    return PanelLauncher.of({ serve: root => Effect.gen(function*() {
+    return PanelLauncher.of({ serve: root => Effect.scoped(Effect.gen(function*() {
       const location = yield* workspace.identify(root, false, true).pipe(Effect.mapError(error => /not a git repository/iu.test(error.message) ? new ConcordError(error.code, `${error.message}; run concord init in a Git worktree`, error.details) : error));
       if (location.config === null) return yield* Effect.fail(new ConcordError('ProjectNotFound', 'No Concord configuration; run concord init in this Git worktree'));
       const panel = yield* Effect.tryPromise(() => import('../panel/index.js'));
       return yield* panel.serveWorkspacePanel(root, path => connectOrStartWorkspace(path).pipe(Effect.provideContext(context)));
-    }).pipe(Effect.provideContext(context)) });
-  })),
+    })).pipe(Effect.provideContext(context)) });
+  }));
+const launchers = Layer.mergeAll(
+  panelLauncher,
   Layer.effect(ServerLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
     return ServerLauncher.of({
@@ -151,7 +154,7 @@ const launchers = Layer.mergeAll(
   Layer.effect(ViewLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
     return ViewLauncher.of({ serve: (options, ready) => Effect.gen(function*() {
-      yield* Effect.try({ try: () => builtAssetRoot('web'), catch: failure });
+      yield* builtAssetRoot('web');
       const http = yield* Effect.tryPromise(() => import('../http/index.js'));
       return yield* serveWorkspaceView(options, info => ready({ ...info, ...http.viewAddresses(info.host, info.port) }));
     }).pipe(Effect.mapError(failure), Effect.provideContext(context)) });
@@ -159,18 +162,27 @@ const launchers = Layer.mergeAll(
   Layer.succeed(LspLauncher, LspLauncher.of({ serve: root => Effect.tryPromise(() => import('../lsp/index.js')).pipe(Effect.flatMap(lsp => lsp.serveEditor(root)), Effect.mapError(failure)) })),
 );
 
-const cliServices = Layer.mergeAll(ServerRuntime.layer, Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(), PersistentCache.layer, Publication.layer.pipe(Layer.provide(PublicationValidationLive))).pipe(
+const validation = Layer.unwrap(loadApp().pipe(Effect.map(app => app.PublicationValidationLive)));
+const cliServices = Layer.mergeAll(ServerRuntime.layer, Installation.layer, Workspace.layer, Sources.layer, Git.layer, Cache.layer, CacheSnapshot.layer(), PersistentCache.layer, Publication.layer.pipe(Layer.provide(validation))).pipe(
   Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer),
 );
 export const cliLayer = launchers.pipe(Layer.merge(querySelection), Layer.merge(feedbackSelection), Layer.provideMerge(cliServices));
 
-export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | PanelLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
- command.pipe(Command.run({version:Schema.decodeUnknownSync(Schema.Struct({version:Schema.String}))(JSON.parse(readFileSync(resourcePath('package.json'),'utf8'))).version,renderErrors:!process.argv.includes('--json')}),Effect.catch(cause=>Effect.sync(()=>{
+const cliFailure = (cause: unknown) => Effect.sync(() => {
   const error=CliError.isCliError(cause) && cause._tag === 'ShowHelp' && cause.errors.length > 0
     ? new ConcordError('InvalidInput', cause.errors.map(item => item.message).join('; '))
     : failure(cause);
   const result = {ok:false,error:error.code,message:error.message,...(error.code === 'WritingBudgetExceeded' ? {complete:false} : {}),...(error.details===undefined?{}:{details:error.details})};
   process.stderr.write(`${process.argv.includes('--json') ? JSON.stringify(result) : humanOutput(result)}\n`);process.exitCode=1;
-})),Effect.provide(cliLayer),NodeRuntime.runMain);
-
+});
+const runCommand = <R>(command: Command.Command<any, any, any, any, R>) => Effect.gen(function*() {
+  const version = yield* (yield* Installation).version;
+  return yield* command.pipe(Command.run({ version, renderErrors: !process.argv.includes('--json') }));
+}).pipe(Effect.catch(cliFailure));
+const panelCliLayer = panelLauncher.pipe(Layer.provideMerge(Layer.mergeAll(ServerRuntime.layer, Installation.layer, Workspace.layer)), Layer.provideMerge(OwnedProcessLive), Layer.provideMerge(NodeServices.layer));
+export function runPanelCli(command: Command.Command<any, any, any, any, PanelLauncher>): void {
+  runCommand(command).pipe(Effect.provide(panelCliLayer), NodeRuntime.runMain);
+}
+export function runCli(command: Command.Command<any, any, any, any, Queries | PersistentCache | Installation | Workspace | Sources | Git | LspLauncher | ViewLauncher | ServerLauncher | PanelLauncher | Publication | NodeServices.NodeServices | import("../../base/process/index.js").OwnedProcess>): void {
+  runCommand(command).pipe(Effect.provide(cliLayer), NodeRuntime.runMain);
 }
