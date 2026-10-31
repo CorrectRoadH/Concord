@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { NodeRuntime } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
-import { environment, loadArtifact } from './perf/artifact.js';
+import { environment, loadArtifact, verifyArtifact } from './perf/artifact.js';
 import { loadBudgets, missingOwner } from './perf/budgets.js';
 import { prepareBaseline } from './perf/baseline.js';
 import { changedSelection, defaultBase, selectScenarios } from './perf/selection.js';
@@ -122,8 +122,7 @@ const main = Effect.gen(function*() {
     yield* io('Report measurement progress', () => process.stderr.write(`${scenario.id}: p50 ${verdict.candidate.p50.toFixed(1)}ms ${verdict.pass && !errors.length ? 'pass' : 'FAIL'}\n`));
   }
   for (const artifact of artifacts) {
-    const verified = yield* loadArtifact(artifact.label, artifact.dir);
-    if (verified.commit !== artifact.commit || verified.digest !== artifact.digest) return yield* new PerfError({ message: `${artifact.label} artifact changed during measurement` });
+    yield* verifyArtifact(artifact);
   }
   for (const c of contexts.values()) {
     yield* settleConsumerRefreshes(c.consumer);

@@ -9,6 +9,9 @@ import { decode, encode } from '@jridgewell/sourcemap-codec';
 import { build as bundle } from 'esbuild';
 import { buildStartup } from './startup-build.js';
 import { P5_LIBRARIES } from "../src/model/p5/index.js";
+import { captureBuildSource, writeBuildIdentity, type BuildIdentity } from './build-identity.js';
+
+let sourceIdentity: BuildIdentity | undefined;
 
 class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
   project: Schema.String,
@@ -100,6 +103,7 @@ const narrowGeneratedImports = Effect.fn('build.narrowGeneratedImports')(functio
 });
 
 const prepare = Effect.gen(function*() {
+  sourceIdentity = yield* captureBuildSource();
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
   yield* fs.remove('dist', { recursive: true, force: true });
@@ -139,4 +143,7 @@ const finish = Effect.gen(function*() {
 });
 
 export const prepareDistribution = () => Effect.runPromise(prepare.pipe(Effect.provide(NodeServices.layer)));
-export const finishDistribution = () => Effect.runPromise(finish.pipe(Effect.provide(NodeServices.layer)));
+export const finishDistribution = () => Effect.runPromise(Effect.gen(function*() {
+  yield* finish;
+  if (sourceIdentity !== undefined) yield* writeBuildIdentity(sourceIdentity);
+}).pipe(Effect.provide(NodeServices.layer)));

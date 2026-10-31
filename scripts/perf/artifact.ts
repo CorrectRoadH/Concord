@@ -7,7 +7,8 @@ import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, realp
 import { cpus, totalmem } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { packageBin } from '../package-location.js';
-import { Effect } from 'effect';
+import { Effect, Schema } from 'effect';
+import { BuildIdentity } from '../build-identity.js';
 import { io, PerfError } from './process.js';
 
 export interface Artifact { readonly label: 'candidate' | 'baseline'; readonly dir: string; readonly entry: string; readonly commit: string; readonly dirty: boolean; readonly digest: string }
@@ -18,7 +19,7 @@ function digestDist(directory: string): string {
     for (const entry of readdirSync(folder, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
       const path = join(folder, entry.name), name = `${prefix}/${entry.name}`;
       if (entry.isDirectory()) visit(path, name);
-      else if (entry.isFile() && /(?:\.js|\.node|artifact\.json)$/u.test(entry.name)) {
+      else if (entry.isFile() && /(?:\.js|\.node|(?:artifact|build-identity)\.json)$/u.test(entry.name)) {
         hash.update(name); hash.update('\0'); hash.update(readFileSync(path)); hash.update('\0');
       }
     }
@@ -42,13 +43,27 @@ const installArtifact = Effect.fn('perf.installArtifact')(function*(repository: 
 export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string, installedEntry?: string) {
   const dir = yield* io('Resolve artifact', () => realpathSync(resolve(path)));
   const built = packageBin(dir);
-  const entry = installedEntry ?? ((yield* io('Find distribution', () => existsSync(built))) ? yield* installArtifact(dir) : built);
+  const entry = installedEntry ?? (label === 'candidate' ? built : ((yield* io('Find distribution', () => existsSync(built))) ? yield* installArtifact(dir) : built));
   if (!(yield* io('Find artifact', () => existsSync(entry)))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
   const git = (...args: string[]) => Effect.tryPromise({ try: () => new Promise<string>((accept, reject) => execFile('git', ['-C', dir, ...args], { encoding: 'utf8' }, (error, stdout) => error ? reject(error) : accept(stdout.trim()))), catch: cause => new PerfError({ message: `Identify artifact: ${String(cause)}` }) });
-  const commit = yield* git('rev-parse', 'HEAD'), dirty = (yield* git('status', '--porcelain')) !== '';
-  const digest = yield* io('Digest artifact', () => digestDist(join(installedEntry === undefined ? dir : installationRootForBin(installedEntry), 'dist')));
+  const distribution = join(installedEntry === undefined ? dir : installationRootForBin(installedEntry), 'dist');
+  const identity = yield* io('Read build identity', () => {
+    const path = join(distribution, 'build-identity.json');
+    return existsSync(path) ? Schema.decodeUnknownSync(Schema.fromJsonString(BuildIdentity), { onExcessProperty: 'error' })(readFileSync(path, 'utf8')) : undefined;
+  });
+  const commit = identity?.commit ?? (yield* git('rev-parse', 'HEAD'));
+  const dirty = identity?.dirty ?? ((yield* git('status', '--porcelain')) !== '');
+  const digest = yield* io('Digest artifact', () => digestDist(distribution));
   return { label, dir, entry, commit, dirty, digest } satisfies Artifact;
 });
+
+/** Concurrent source commits do not change an already built, locked artifact. */
+export const verifyArtifact = Effect.fn('perf.verifyArtifact')((artifact: Artifact) => io('Verify artifact bytes', () => {
+  const distribution = join(installationRootForBin(artifact.entry), 'dist');
+  if (digestDist(distribution) !== artifact.digest || digestDist(join(artifact.dir, 'dist')) !== artifact.digest) {
+    throw new PerfError({ message: `${artifact.label} artifact changed during measurement` });
+  }
+}));
 
 export function environment() {
   return { node: process.version, platform: process.platform, arch: process.arch, cpu: cpus()[0]?.model ?? 'unknown', cpuCount: cpus().length, memoryBytes: totalmem() };
