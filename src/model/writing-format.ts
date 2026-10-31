@@ -10,7 +10,7 @@ const list = (value: string): string[] => value.split(/[、,，]/u).map(item => 
 function cells(source: string, inline = true): string[] {
   const cells: string[] = []; let cell = '';
   for (let index = 0; index < source.length; index++) {
-    if (source[index] === '\\' && source[index + 1] === '|') { cell += '|'; index++; }
+    if (source[index] === '\\' && index + 1 < source.length) { cell += source[index]! + source[index + 1]!; index++; }
     else if (source[index] === '|') { cells.push(cell.trim()); cell = ''; }
     else cell += source[index];
   }

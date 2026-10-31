@@ -12,7 +12,7 @@ import { readConceptCatalog } from '../../src/domain/concepts/index.js';
 
 // @use-case docs/feature/documentation-quality/use-case/manage-scoped-terminology.md
 test('Markdown rules round-trip escaped cells, limits, roots and longer exceptions and reject malformed sections', () => {
-  const policy = { roots: ['docs', 'README.md'] as const, sentenceLength: 20, paragraphLength: 60, bannedTerms: [{ term: 'bad', use: '`clear` | exact', why: 'Use <specific> *words*', roots: ['docs/cart'], allowIn: ['badger'] }] };
+  const policy = { roots: ['docs', 'README.md'] as const, sentenceLength: 20, paragraphLength: 60, bannedTerms: [{ term: 'bad', use: '`clear` | exact', why: String.raw`Use <specific> *words* \ | paths`, roots: ['docs/cart'], allowIn: ['badger'] }] };
   assert.deepEqual(parseWritingPolicy(renderWritingPolicy(policy)), policy);
   assert.deepEqual(parseWritingPolicy('# Rules\n\n## 不用的词\n\n词 | 改成 | 为什么 | 只在 | 例外\n--- | --- | --- | --- | ---\nbad | good | clear | |\n').bannedTerms, [{ term: 'bad', use: 'good', why: 'clear' }]);
   assert.deepEqual(parseWritingPolicy('# Rules\n\nSome introduction.\n'), { bannedTerms: [] });
