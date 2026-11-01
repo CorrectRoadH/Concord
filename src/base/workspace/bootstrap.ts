@@ -8,8 +8,8 @@ const MAX_BYTES = 32 * 1024 * 1024;
 const errno = (error: unknown, code: string) => error instanceof Error && 'code' in error && error.code === code;
 function present(path: string): boolean { try { lstatSync(path); return true; } catch (cause) { if (errno(cause, 'ENOENT')) return false; throw cause; } }
 
-export function git(root: string, args: readonly string[]): string {
-  const env = { ...process.env };
+export function git(root: string, args: readonly string[], environment: Readonly<Record<string, string | undefined>> = process.env): string {
+  const env = { ...environment };
   for (const key of Object.keys(env)) if (key.startsWith('GIT_')) delete env[key];
   try { return execFileSync('git', ['-C', root, ...args], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: MAX_BYTES, timeout: 10000 }).trimEnd(); }
   catch { throw new ConcordError('GitFailed', `Git could not ${args[0] ?? 'inspect'} the selected repository`); }

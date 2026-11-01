@@ -53,7 +53,7 @@ export type { InitializationReceipt } from './initialize.js';
 export { initialize } from './initialize.js';
 export { PublicationValidationLive } from './publication-validation.js';
 export { withSourceSnapshot } from './entry-operations.js';
-export { maintainCache } from './cache-maintenance.js';
+export { maintainCache, cacheMaintenanceNeeded } from './cache-maintenance.js';
 export type { GitBaselineCache } from './git-view.js';
 export { BaselineSchema } from './git-view.js';
 export { BASELINE_PARSER } from './git-view.js';

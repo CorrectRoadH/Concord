@@ -8,7 +8,7 @@ Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent �
 
 ## 运行形态
 
-Concord 由可独立执行的 CLI、按需启动的工作区服务和浏览器工作台组成。使用者在当前目录运行命令，Concord 定位[项目目录](concepts.md#project-directory)，也可以通过 `concord --root <目录>` 显式选择。
+Concord 由 CLI、按需启动的工作区服务和浏览器工作台组成。使用者在当前目录运行命令，Concord 定位[项目目录](concepts.md#project-directory)，也可以通过 `concord --root <目录>` 显式选择。
 
 每个项目目录最多一个工作区服务。同一项目下的不同子目录复用同一服务，不按命令启动位置重复创建。服务不按分支分配；在同一目录切换分支时，来源变化触发重新核验与刷新。
 
@@ -18,8 +18,9 @@ Concord 不规定分支或检出方式：直接在 main 开发、在同一目录
 
 ```mermaid
 flowchart LR
-  CLI[CLI 命令] -->|无可用服务时本进程执行| Local[同一套应用与领域服务]
-  CLI -->|白名单查询：本机 socket / RPC| Server[工作区服务主进程]
+  CLI[CLI 命令] -->|写入、发布与恢复| Local[同一套应用与领域服务]
+  CLI -->|查询自动启动或复用：本机 socket / RPC| Server[工作区服务主进程]
+  Local -->|缓存快照与派生行| Server
   Herdr[Herdr mod] -->|公开 CLI 查询| CLI
   View[concord view] -->|启动或复用，取得 HTTP 租约| Server
   Browser[浏览器工作台] -->|HTTP 操作与 SSE 订阅| Server
@@ -31,14 +32,14 @@ flowchart LR
   Operation -->|校验后发布| Sources
 ```
 
-服务让解析缓存与投影保持热，并为 Web 提供长期连接。普通 CLI 命令不依赖服务启动；白名单查询使用已有服务，连接失败或身份不匹配时在本进程计算。CLI 写入、发布与恢复也能独立完成，浏览器操作则由服务调度。
+服务让解析缓存与投影保持热，并为 Web 提供长期连接。CLI 查询自动启动或复用服务，每次请求绑定调用者环境；安装或协议不匹配时报告冲突并保留已有实例。CLI 写入、发布与恢复按各自入口执行，有服务时通过快照与派生行使用其缓存；浏览器操作由服务调度。
 
 ### 应用生命周期
 
 | 阶段 | 行为与归属 |
 | --- | --- |
 | 执行命令 | CLI 定位项目目录，组合本次操作需要的 Effect 服务；操作结束后释放快照、连接与本进程资源 |
-| 启动服务 | `concord view` 与 `concord server start` 连接已有实例；没有可用实例时启动服务进程，由服务锁决定唯一所有者 |
+| 启动服务 | CLI 查询、`concord view` 与 `concord server start` 连接已有实例；没有可用实例时启动服务进程，由服务锁决定唯一所有者 |
 | 准备服务 | 主进程先绑定 socket 并进入 `opening`，再打开持久缓存、恢复投影并启动计算能力；缓存打开失败时报告降级原因 |
 | 持续运行 | 主进程接收请求、监督子进程并保存派生结果；来源监听触发刷新，计算进程读取当前文件，主进程核验后接受结果 |
 | 维护缓存 | 清理先停止受理相关新工作，等待在途操作、关闭持久句柄，再独占清理；服务锁一直保留，完成后重新打开并刷新 |
@@ -53,6 +54,8 @@ flowchart LR
 HTTP 监听与工作区服务分别管理生命周期。退出 `view` 释放它自己的租约；仍有租约或浏览器 SSE 连接时，监听继续存在。最后一个租约与连接结束后关闭监听，服务再按自身的空闲条件退出。关闭浏览器不取消已启动的测试任务。规则见[服务托管](feature/web-workbench/architecture.md#服务托管)。
 
 默认启动的服务可以在启动它的命令结束后继续运行。`view --in-process` 在需要新服务时把服务子进程纳入当前命令的作用域，命令退出时回收；已有可用服务仍按复用规则处理。`concord server run` 在前台运行服务，`server status` 与 `server stop` 操作选定项目目录的实例。
+
+CI 可以使用 `concord --server=command check`：服务属于本次命令，返回结果前完成回收。已有实例时拒绝接管；继承的作用域只允许同一项目目录，不能开启 HTTP。具体规则见[命令作用域查询](feature/local-data-engine/architecture.md#命令作用域查询)。
 
 ### 数据与信任边界
 
@@ -175,7 +178,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 ### 应用端口 Queries
 
-Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Local` 调用同一应用查询，`Queries.Remote` 是工作区服务的 RPC 客户端。CLI 按[工作区服务](feature/local-data-engine/architecture.md#cli-查询)的规则选择。两者实现同一份完整的操作定义：输入模式、领域结果与错误 Schema，以及从结果到退出码的同一映射；公开输出只在入口生成一次。Remote 把传输失败（断线、超时、编码失败）在适配层归类为本进程重算或既有的服务失败，不把 RPC 包装错误当作领域错误输出，也不为等待重连突破回退的截止时间。
+Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Local` 调用同一应用查询，`Queries.Remote` 是工作区服务的 RPC 客户端。CLI 默认使用 Remote，计算进程使用 Local；`--dry-run` 与 cache-off 在本进程执行同一查询，保持无持久状态约束。生命周期由[工作区服务](feature/local-data-engine/architecture.md#cli-查询)拥有。两者实现同一份完整的操作定义：输入模式、领域结果与错误 Schema，以及从结果到退出码的同一映射；公开输出只在入口生成一次。Remote 在适配层区分可重试的传输失败与领域错误；只读请求断线最多重新连接并重试一次，不在客户端计算。
 
 ### 服务操作
 
@@ -194,6 +197,8 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 | `action` | 操作进程（写入、恢复与反馈）；`cache.*` 转给主进程维护 | 现行 ViewAction；写入后申请刷新 | `POST /api/action` | — |
 | `job-start`、`job-list`、`job-cancel` | 主进程监督，runner 经 `OwnedProcess` | 单槽任务；浏览器断开不取消，取消确认子进程组退出后才释放 | `POST /api/jobs`、`GET /api/jobs`、`DELETE /api/jobs/:id` | — |
 | `cache-clear` | 主进程 | 见[清理](feature/local-data-engine/architecture.md#清理) | 经 `action` | 是 |
+| `cache-status`、`cache-rebuild` | 主进程；重建计算交给计算进程 | 持有者读取状态并保存重建结果 | 经 `action` | 是 |
+| `cache-snapshot`、`cache-derived` | 主进程 | 本地 CLI 操作读取快照与分块提交派生行 | — | 是 |
 | `feedback-merge` | 主进程 | begin、append、commit，commit 原子生效 | — | 是 |
 
 `feedback.sync` 与 `feedback.check` 的 HTTP 请求断开时取消外部操作，任务不随连接取消。`view export` 只在 CLI 本进程执行。
@@ -202,7 +207,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 
 | 进程 | 提供 | 不提供 |
 | --- | --- | --- |
-| CLI | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存；无服务时持久）、Queries（Remote 或 Local） | — |
+| CLI | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存；有服务时使用快照和派生行，无服务时持久）、Queries.Remote | — |
 | 工作区服务主进程 | Workspace、Git、Cache 的持久独占写入、工作区投影、RPC 与 HTTP 服务、计算与操作进程的监督；Publication 只在清理作用域中、关闭持久库之后提供 | 领域计算 |
 | 计算进程 | Workspace、Sources、Cache（内存解析、主进程交来的只读快照与 `CacheDerivations`）、Queries.Local；RPC 经标准输入输出，结构以 JSON 编码、入口按计算请求 Schema 严格解码，来源原文以二进制字节帧传输；日志只写标准错误 | Publication、持久 Cache、OwnedProcess 之外的子进程 |
 | 操作进程 | Workspace、Sources、Publication、Git、OwnedProcess、Cache（内存）、远端读取；发布后经 `feedback-merge` 更新远端观察 | 持久 Cache |

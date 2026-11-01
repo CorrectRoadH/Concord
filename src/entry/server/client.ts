@@ -8,8 +8,9 @@ import { WorkspaceRpcs, PROTOCOL, RESULT_LIMIT, FRAME_LIMIT, type WorkspaceClien
 import { collectPackets, collectBytes } from './protocol.js';
 import { ConcordError, decodeWorkspaceRead } from '../../model/index.js';
 import type { RemoteFeedback } from '../../model/index.js';
+import type { CacheDerivationBatch } from '../../model/index.js';
 
-export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string) {
+export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string, scope?: string) {
   const opened = yield* Deferred.make<void, WorkspaceServerError>();
   const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(
     Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })),
@@ -19,9 +20,9 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
   const context = yield* Layer.build(protocol);
   const client = yield* RpcClient.make(WorkspaceRpcs).pipe(Effect.provideContext(context));
   yield* Deferred.await(opened);
-  const hello = yield* client.hello({ installation, protocol: PROTOCOL });
+  const hello = yield* client.hello({ installation, protocol: PROTOCOL, ...(scope === undefined ? {} : { scope }) });
   if (hello.token !== token) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Instance token differs from the running record' }));
-  return { client, hello, identity: () => ({ token, installation, requestId: crypto.randomUUID(), deadline: Date.now() + 60_000 }) };
+  return { client, hello, identity: () => ({ token, installation, ...(scope === undefined ? {} : { scope }), requestId: crypto.randomUUID(), deadline: Date.now() + 60_000 }) };
 }, Effect.timeout('1 second'));
 export type WorkspaceConnection = Effect.Success<ReturnType<typeof connectWorkspaceSocket>>;
 export const requestWorkspace = <N extends Exclude<keyof WorkspaceClient, 'hello' | 'shutdown' | 'subscribe'>>(connection: WorkspaceConnection, name: N, input: Omit<Parameters<WorkspaceClient[N]>[0], 'token' | 'installation' | 'requestId' | 'deadline'>) => {
@@ -60,6 +61,18 @@ export const submitFeedback = Effect.fn('submitFeedback')(function*(connection: 
   const reply = yield* requestWorkspace(connection, 'feedback-merge', { action: 'commit', session });
   const decoded = yield* Schema.decodeUnknownEffect(Schema.Struct({ warnings: Schema.Array(Schema.String) }), { onExcessProperty: 'error' })(reply);
   return decoded.warnings;
+});
+
+export const submitDerivations = Effect.fn('submitDerivations')(function*(connection: WorkspaceConnection, batches: readonly CacheDerivationBatch[]) {
+  if (batches.length === 0) return;
+  const data = Buffer.from(JSON.stringify(batches));
+  if (data.byteLength > RESULT_LIMIT) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Cache derivations exceed 32 MiB'));
+  const session = crypto.randomUUID();
+  yield* requestWorkspace(connection, 'cache-derived', { action: 'begin', session });
+  for (let offset = 0; offset < data.byteLength; offset += FRAME_LIMIT / 2) {
+    yield* requestWorkspace(connection, 'cache-derived', { action: 'append', session, data: data.subarray(offset, offset + FRAME_LIMIT / 2) });
+  }
+  yield* requestWorkspace(connection, 'cache-derived', { action: 'commit', session });
 });
 
 export const serverStartupWait = '10 seconds' as const;

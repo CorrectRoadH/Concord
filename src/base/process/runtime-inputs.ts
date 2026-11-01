@@ -32,11 +32,11 @@ function implementation(): string {
 }
 
 /** Observation-only runtime inputs for a source snapshot; this capability cannot launch a tool. */
-export function adapterRuntimeInputs(root: string, command: string, envNames: readonly string[]) {
-  const candidates = command.includes('/') ? [resolve(root, command)] : (process.env.PATH ?? '').split(delimiter).map(path => join(path, command));
+export function adapterRuntimeInputs(root: string, command: string, envNames: readonly string[], environment: Readonly<Record<string, string | undefined>> = process.env) {
+  const candidates = command.includes('/') ? [resolve(root, command)] : (environment.PATH ?? '').split(delimiter).map(path => resolve(root, path, command));
   const found = candidates.find(path => existsSync(path) && lstatSync(path).isFile());
   const linked = candidates.find(path => { try { return readFileSync(path).length > 0; } catch { return false; } });
   if (!found && !linked) throw new ConcordError('CollectFailed', `Adapter executable is unavailable: ${command}`);
   const path = found ?? linked!;
-  return { executable: { path, digest: digest(readFileSync(path)) }, env: Object.fromEntries(envNames.map(name => [name, process.env[name]])), implementation: implementation(), version: process.version };
+  return { executable: { path, digest: digest(readFileSync(path)) }, env: Object.fromEntries(envNames.map(name => [name, environment[name]])), implementation: implementation(), version: process.version };
 }

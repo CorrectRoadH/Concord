@@ -183,13 +183,16 @@ test('maintenance competing with another process holding and writing a handle ex
 })));
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('a packed public command launches detached maintenance and an explicit rebuild restores the cache', () => Effect.runPromise(Effect.tryPromise(async () => {
+test('a query service maintains an oversized cache while retaining ownership and accepting later queries', () => Effect.runPromise(Effect.tryPromise(async () => {
   const f = fixture(), install = join(f.root, 'installation');
+  let installedEntry: string | undefined;
   try {
     mkdirSync(install);
     writeFileSync(join(install, 'package.json'), JSON.stringify({ name: 'maintenance-consumer', private: true, type: 'module' }));
     installConcord(install, packConcord(f.root));
     const entry = packageBin(join(install, 'node_modules/concord-sdlc'));
+    installedEntry = entry;
+    const command = (...args: string[]) => spawnSync(process.execPath, [entry, '--root', f.root, '--json', ...args], { cwd: install, encoding: 'utf8', timeout: 30_000 });
     const rebuild = () => {
       const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'cache', 'rebuild'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
       assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -198,15 +201,25 @@ test('a packed public command launches detached maintenance and an explicit rebu
     pad(f.padding, CACHE_PHYSICAL_LIMIT_BYTES + 1);
     const result = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    const launched = execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n').some(line => line.includes('cache-maintenance-worker.js') && line.includes(f.root));
-    assert.ok(launched || !existsSync(f.padding), 'the worker starts before the public command exits');
-    await pollUntil(async () => existsSync(f.padding) ? undefined : true, { description: 'oversized cache to be discarded' });
-    await settle(f.root);
-    assert.deepEqual(readdirSync(f.path), ['owner.hawdb.lock']);
+    const owner = JSON.parse(command('server', 'status').stdout);
+    assert.equal(owner.state, 'running');
+    await pollUntil(async () => existsSync(f.padding) ? undefined : true, { description: 'service-owned oversized cache maintenance', timeoutMs: 45_000 });
+    await pollUntil(async () => {
+      const status = command('cache', 'status');
+      return status.status === 0 && JSON.parse(status.stdout).status === 'ready' ? true : undefined;
+    }, { description: 'service reopens its cache after maintenance', timeoutMs: 10_000 });
+    assert.equal(JSON.parse(command('server', 'status').stdout).token, owner.token);
     rebuild();
     const rebuilt = spawnSync(process.execPath, [entry, '--root', f.root, '--json', 'check'], { cwd: install, encoding: 'utf8', timeout: 30_000 });
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
-    assert.deepEqual(JSON.parse(rebuilt.stdout), JSON.parse(result.stdout));
+    assert.equal(JSON.parse(rebuilt.stdout).ok, true);
     assert.ok(readdirSync(f.path).length > 1);
-  } finally { await settle(f.root); rmSync(f.root, { recursive: true, force: true }); }
+  } finally {
+    if (installedEntry) {
+      const stopped = spawnSync(process.execPath, [installedEntry, '--root', f.root, '--json', 'server', 'stop'], { encoding: 'utf8', timeout: 30_000 });
+      assert.equal(stopped.status, 0, stopped.stdout + stopped.stderr);
+      await pollUntil(async () => existsSync(join(f.privateDir, 'server/current.json')) ? undefined : true, { description: 'maintenance service releases its instance', timeoutMs: 10_000 });
+    }
+    await settle(f.root); rmSync(f.root, { recursive: true, force: true });
+  }
 })));

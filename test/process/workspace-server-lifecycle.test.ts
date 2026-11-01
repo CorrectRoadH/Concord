@@ -70,7 +70,7 @@ test('C22 deleting the Git-private directory stops the service and removes its e
 });
 
 // @feature docs/feature/local-data-engine/README.md
-test('C23 another installation waits for native ownership handoff and the old Web connection receives stopping', { timeout: 30_000 }, async () => {
+test('C23 another installation reports a version conflict and preserves the existing service until explicit stop', { timeout: 30_000 }, async () => {
   const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-server-handoff-'));
   const old = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
@@ -81,18 +81,19 @@ test('C23 another installation waits for native ownership handoff and the old We
     const manifest = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
     const entry = join(installed, manifest.bin.concord);
     const before = record(root);
-    const events = await fetch(new URL('api/events', old.address), { signal: AbortSignal.timeout(15_000) });
-    const stopping = (async () => {
-      let output = '';
-      for await (const chunk of events.body!) { output += new TextDecoder().decode(chunk); if (output.includes('event: stopping')) return true; }
-      return false;
-    })();
-    const started = await command(root, ['server', 'start'], entry);
-    assert.equal(started.status, 0, started.stderr);
+    for (const args of [['server', 'start'], ['check']]) {
+      const rejected = await command(root, args, entry);
+      assert.equal(rejected.status, 1, rejected.stdout);
+      assert.equal(JSON.parse(rejected.stderr).error, 'WorkspaceServerVersionConflict');
+      assert.equal(record(root).token, before.token);
+    }
+    assert.equal((await fetch(old.address, { headers: { connection: 'close' } })).ok, true);
+    assert.equal((await command(root, ['server', 'stop'], entry)).status, 0);
+    await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'explicit stop releases the previous service', timeoutMs: 8000 });
+    const started = await command(root, ['server', 'start'], entry); assert.equal(started.status, 0, started.stderr);
     const after = record(root);
     assert.notEqual(after.token, before.token);
     assert.notEqual(after.installation, before.installation);
-    assert.equal(await stopping, true);
     assert.equal((await command(root, ['list', 'feature'], entry)).status, 0);
     await command(root, ['server', 'stop'], entry);
     await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'replacement service releases ownership', timeoutMs: 8000 });

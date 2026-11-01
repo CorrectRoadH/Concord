@@ -10,6 +10,7 @@ import { humanOutput } from "./presentation.js";
 const root = Command.make('concord').pipe(Command.withDescription('Connect product contracts, code and test declarations, and engineering memory. Agent guidance: concord --skill [topic].'), Command.withSharedFlags({
   root: Flag.string('root').pipe(Flag.optional, Flag.withDescription('Consumer Git worktree root; otherwise use the Git worktree containing cwd; configuration is optional.')),
   json: Flag.boolean('json').pipe(Flag.withDefault(false)),
+  server: Flag.choice('server', ['shared', 'command']).pipe(Flag.withDefault('shared'), Flag.withDescription('Query through a shared service or a service owned by this command.')),
   fresh: Flag.boolean('fresh').pipe(Flag.withDefault(false), Flag.withDescription('Wait for current diagnostic sources instead of reading an asynchronously refreshed snapshot.')),
   dryRun: Flag.boolean('dry-run').pipe(Flag.withDefault(false), Flag.withDescription('Validate a document mutation without writing.')),
 }));

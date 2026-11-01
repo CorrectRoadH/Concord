@@ -6,7 +6,12 @@ import { genericPrivateDirectorySync } from "../base/publication/index.js";
 import { CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../base/installation/index.js";
 import { PersistentCache } from "../base/cache/index.js";
 import { openWriteRepository } from "../base/workspace/index.js";
+import { failure } from "../model/index.js";
 
+export const cacheMaintenanceNeeded = (privateDir: string) => Effect.try({
+  try: () => cachePhysicalBytes(privateDir) > CACHE_MAINTENANCE_THRESHOLD_BYTES,
+  catch: failure,
+});
 
 /** Best effort: reclaim first, then release every native lock before publication. */
 export const maintainCache = Effect.fn('maintainCache')(function*(root: string): Effect.fn.Return<'below-threshold' | 'reclaimed' | 'cleared' | 'deferred', never, import('../base/workspace/index.js').Workspace | Publication | PersistentCache> {

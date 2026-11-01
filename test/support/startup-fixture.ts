@@ -22,7 +22,7 @@ before(() => {
 });
 after(() => rmSync(scratch, { recursive: true, force: true }));
 const invoke = (args: readonly string[]) => Effect.tryPromise(() => new Promise<{ stdout: string; stderr: string; status: number }>((accept, reject) => {
-  execFile(process.execPath, [entry, ...args], { env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+  execFile(process.execPath, [entry, ...args], { cwd: scratch, env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
     if (error && typeof error.code !== 'number') { reject(error); return; }
     accept({ stdout, stderr, status: typeof error?.code === 'number' ? error.code : 0 });
   });

@@ -9,18 +9,20 @@ import { type LocalRepository, openWriteRepository, openReadRepository } from ".
 
 import { root, emit, sync } from "./cli-base.js";
 import { Queries, type QueryRequest } from '../../app/index.js';
+import { QueryServerMode, ServerLauncher } from './launchers.js';
 
 export const withQuery = (request: QueryRequest) => Effect.gen(function*() {
   const settings = yield* root;
   const queries = yield* Queries;
-  const reply = yield* queries.execute(Option.getOrUndefined(settings.root), request, settings.dryRun ? 'off' : 'use');
+  const reply = yield* queries.execute(Option.getOrUndefined(settings.root), request, settings.dryRun ? 'off' : 'use').pipe(Effect.provideService(QueryServerMode, settings.server));
   yield* Effect.sync(() => { if (reply.exitCode !== 0) process.exitCode = reply.exitCode; emit(reply.value, settings.json); });
   return reply.value;
 });
 
-function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, options: { initialize?: boolean; recover?: boolean; readonly?: boolean; unlocked?: boolean } = {}) {
+function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: boolean; dryRun: boolean }) => Effect.Effect<A, E, R>, options: { initialize?: boolean; recover?: boolean; readonly?: boolean; unlocked?: boolean; cacheRequired?: boolean } = {}) {
   return Effect.gen(function*() {
     const settings = yield* root;
+    const runWithRepository = Effect.scoped(Effect.gen(function*() {
     const repo = yield* Effect.acquireRelease(
       waitForPublication(reclaimDead => {
         const selected = { optimistic: !options.unlocked, reclaimPublication: reclaimDead, initialize: options.initialize, recover: options.recover, dryRun: options.initialize && options.readonly || settings.dryRun };
@@ -31,7 +33,11 @@ function withRepo<A, E, R>(operation: (repo: LocalRepository, settings: { json: 
       repo => Effect.sync(() => repo.close()),
     );
     const run = operation(repo, settings);
-    return yield* (options.unlocked ? run : withSourceSnapshot(repo, run)).pipe(Effect.tap(result => Effect.sync(() => emit(result, settings.json))));
+    return yield* (options.unlocked ? run : withSourceSnapshot(repo, run));
+    }));
+    const result = yield* (options.initialize || settings.dryRun ? runWithRepository : (yield* ServerLauncher).withCache(Option.getOrUndefined(settings.root), runWithRepository, options.cacheRequired));
+    yield* Effect.sync(() => emit(result, settings.json));
+    return result;
   }).pipe(Effect.scoped);
 }
 

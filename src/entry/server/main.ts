@@ -22,7 +22,7 @@ import { join } from 'node:path';
 import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.js';
 import { CacheSnapshotUnavailable, ConcordError, failure } from '../../model/index.js';
 import { Computation, ComputationReply, ComputeRpcs } from './computation.js';
-import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.js';
+import { WorkspaceRpcs, WorkspaceServerError, FRAME_LIMIT, PROTOCOL, CommandScope, jsonPackets, ReadCodec, packets, makeOutputAdmission, collectPackets, collectBytes } from './protocol.js';
 import { makeAdmittedProtocol } from './admission.js';
 import { makeRequestAdmission } from './request-admission.js';
 import { getWorkspaceRead } from '../../app/index.js';
@@ -31,13 +31,14 @@ import { decodeQueryScanMessage } from '../../model/index.js';
 import { workspaceEvents, WorkspaceState, serviceHeartbeat as importServiceHeartbeat } from './state.js';
 import { makeWorkspaceService } from './service.js';
 import { FeedbackSessions } from './feedback-session.js';
+import { DerivationSessions } from './derivation-session.js';
 import { ServerJobs } from './jobs.js';
 import { makeHttpLeases } from './http-leases.js';
 import { startHostedViewServer, type HostedViewPorts } from '../http/index.js';
 import { FeedbackCacheWriter } from '../../base/cache/index.js';
 import { mergeLocalFeedbackObservation } from '../../app/index.js';
 import type { RemoteFeedback } from '../../model/index.js';
-import { clearWorkspaceCache, decodeViewAction } from '../../app/index.js';
+import { clearWorkspaceCache, decodeViewAction, maintainCache, cacheMaintenanceNeeded } from '../../app/index.js';
 import { Snapshot } from './computation.js';
 import { assertWorkspacePublicationReady } from '../../app/index.js';
 import { computeCacheRebuild, finishCacheRebuild } from '../../app/index.js';
@@ -157,7 +158,7 @@ export const computationLayer = Layer.mergeAll(Installation.layer, Workspace.lay
 const compute = Effect.fn('workspace.compute')(function*(root: string, operation: Computation) {
   switch (operation.kind) {
     case 'cache-rebuild': return yield* computeCacheRebuild(root);
-    case 'query': return yield* executeQuery(root, operation.request);
+    case 'query': return yield* executeQuery(root, operation.request, operation.cache);
     case 'query-scan': return yield* scanQueryProcess(root, JSON.stringify(operation.query));
     case 'scan': {
       const builtFrom = new Date(yield* Clock.currentTimeMillis).toISOString();
@@ -192,7 +193,9 @@ export const runComputeMain = (root: string | undefined): void => {
       if (request.snapshotId !== snapshotId) return yield* Effect.fail(new ConcordError('WorkspaceServerProtocol', 'Snapshot is incomplete'));
       if (root === undefined) return yield* Effect.fail(new ConcordError('InvalidInput', 'Missing compute root'));
       const derived = CacheDerivations.make();
-      const value = yield* compute(root, operation).pipe(Effect.provide(CacheSnapshot.layer(snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context));
+      const queryEnvironment = operation.kind === 'query' ? operation.environment : undefined;
+      const requestContext = queryEnvironment === undefined ? context : Context.merge(context, yield* Layer.build(Workspace.layerWithEnvironment(queryEnvironment)).pipe(Effect.provideContext(context)));
+      const value = yield* compute(root, operation).pipe(Effect.provide(CacheSnapshot.layer(operation.kind === 'query' && operation.cache === 'off' ? {} : snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(requestContext));
       return operation.kind === 'read-bytes' ? packets(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT) : jsonPackets({ value, derived: derived.batches() });
     }).pipe(Effect.mapError(asServerError))),
   });
@@ -255,23 +258,25 @@ export const makeComputationOwner = Effect.fn('makeComputationOwner')(function*(
       const stream = worker.client.execute({ operation: JSON.parse(JSON.stringify(operation)), snapshotId: id });
       if (operation.kind === 'read-bytes') return yield* collectBytes(stream, 64 * FRAME_LIMIT).pipe(Effect.flatMap(bytes => Schema.decodeUnknownEffect(ReadCodec, { onExcessProperty: 'error' })(bytes)));
       const reply = yield* collectPackets(stream).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(ComputationReply, { onExcessProperty: 'error' })(value)));
-      if (reply.derived.length > 0) yield* acceptDerived(reply.derived);
+      if (reply.derived.length > 0 && !(operation.kind === 'query' && operation.cache === 'off')) yield* acceptDerived(reply.derived);
       return reply.value;
     });
   }).pipe(Effect.timeout('60 seconds'), Effect.onError(() => close.pipe(Effect.orDie)))) };
 });
 
 const serverServices = Layer.mergeAll(Installation.layer, ServerRuntime.layer, Workspace.layer, Sources.layer, PersistentCache.layer).pipe(Layer.provideMerge(NodeServices.layer));
-export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: string, ready: Effect.Effect<void> = Effect.void) {
+export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: string, ready: Effect.Effect<void> = Effect.void, commandScope?: typeof CommandScope.Type) {
   return yield* Effect.scoped(Effect.gen(function*() {
     const workspace = yield* Workspace;
     const { root, privateDir } = yield* workspace.locate(input, true);
+    if (commandScope && (commandScope.root !== root || commandScope.privateDir !== privateDir || !process.connected)) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeMismatch', 'Command service requires its matching root and live parent IPC'));
     const platform = yield* ServerRuntime;
     const installation = platform.installation();
     const runtime = yield* platform.acquire(root, privateDir);
     const admission = makeRequestAdmission();
     const socketServer = yield* NodeSocketServer.make({ path: runtime.socketPath });
     yield* runtime.publish('opening');
+    const persistent = yield* PersistentCache;
     const cache = yield* PersistentCache.owner(privateDir);
     const cacheSnapshot = cache.snapshot.pipe(Effect.catch(cause => {
       const error = workspaceServerFailure(cause);
@@ -303,10 +308,29 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       close: SubscriptionRef.get(Context.get(stateContext, WorkspaceState).value).pipe(Effect.flatMap(value => value.state === 'stopping'
         ? operations.close : operations.pause.pipe(Effect.andThen(operations.drain))), Effect.andThen(computation.close), Effect.andThen(cache.close)),
       clear: clearWorkspaceCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive)))),
+      maintenance: {
+        needed: cacheMaintenanceNeeded(privateDir),
+        run: maintainCache(root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(PersistentCache, persistent), Effect.provide(Publication.layer.pipe(Layer.provide(PublicationValidationLive)))),
+      },
       exists: Effect.sync(() => existsSync(root) && existsSync(privateDir)),
       reconcile: candidate => watch ? watch.reconcile(candidate.snapshot.project, candidate.snapshot.sources) : Effect.succeed(false),
     }).pipe(Effect.provideContext(stateContext));
+    if (commandScope) {
+      const disconnected = yield* Deferred.make<void>();
+      yield* Effect.acquireRelease(Effect.sync(() => {
+        const listener = () => { Deferred.doneUnsafe(disconnected, Effect.void); };
+        process.once('disconnect', listener);
+        if (!process.connected) listener();
+        return listener;
+      }), listener => Effect.sync(() => { process.off('disconnect', listener); }));
+      yield* Effect.forkScoped(Deferred.await(disconnected).pipe(Effect.andThen(service.stop)));
+    }
     const serverScope = yield* Effect.scope;
+    const rebuildOwnedCache = service.maintain(Effect.gen(function*() {
+      const value = yield* cacheSnapshot.pipe(Effect.flatMap(snapshot => computation.run({ kind: 'cache-rebuild' }, snapshot)));
+      const status = yield* cache.status;
+      return yield* Effect.try({ try: () => finishCacheRebuild(value, status), catch: failure });
+    }));
     const event = SubscriptionRef.changes(service.state.value).pipe(Stream.buffer({ capacity: 1, strategy: 'sliding' }));
     const httpSubscriptions = new Set<Fiber.Fiber<unknown, unknown>>();
     const notify = () => { Effect.runFork(SubscriptionRef.update(service.state.value, value => ({ ...value }))); };
@@ -339,11 +363,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
         action: async (input, signal) => {
           const action = decodeViewAction(input);
           const maintenance: Effect.Effect<unknown, unknown> | undefined = action.action === 'cache.status' ? service.maintain(cache.status)
-            : action.action === 'cache.rebuild' ? service.maintain(Effect.gen(function*() {
-              const value = yield* cacheSnapshot.pipe(Effect.flatMap(snapshot => computation.run({ kind: 'cache-rebuild' }, snapshot)));
-              const status = yield* cache.status;
-              return yield* Effect.try({ try: () => finishCacheRebuild(value, status), catch: failure });
-            })) : undefined;
+            : action.action === 'cache.rebuild' ? rebuildOwnedCache : undefined;
           const value = action.action === 'cache.clear' && !action.dryRun ? await runAdmitted(service.clear, signal) : maintenance ? await runAdmitted(maintenance, signal) : await runOperation({ kind: 'action', input: action }, signal);
           await run(service.request); return value;
         },
@@ -362,7 +382,10 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     yield* watch.reconcile(null);
     yield* sources.watchPrivateHead(privateDir, () => { Effect.runFork(service.invalidate); });
     yield* Effect.forkScoped(Stream.runForEach(SubscriptionRef.changes(service.state.value), event => runtime.publish(event.state).pipe(Effect.catch(() => service.stop))));
-    const authorize = (request: { token: string; installation: string; deadline: number }, subscription = false) => runtime.verify.pipe(Effect.andThen(Effect.gen(function*() {
+    const authorizeScope = (scope?: string) => commandScope && scope !== commandScope.key
+      ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerScoped', message: 'This service belongs to another command scope' }))
+      : !commandScope && scope !== undefined ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerScopeExpired', message: 'The command service has ended' })) : Effect.void;
+    const authorize = (request: { token: string; installation: string; deadline: number; scope?: string }, subscription = false) => runtime.verify.pipe(Effect.andThen(authorizeScope(request.scope)), Effect.andThen(Effect.gen(function*() {
       if (request.token !== runtime.token || request.installation !== installation) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Service identity differs' }));
       if (request.deadline < (yield* Clock.currentTimeMillis)) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerDeadline', message: 'Request deadline has expired' }));
       const state = yield* SubscriptionRef.get(service.state.value);
@@ -370,8 +393,9 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       yield* service.state.touch;
     })), Effect.mapError(asServerError));
     const output = makeOutputAdmission();
-    const result = <A, E, R>(request: { token: string; installation: string; deadline: number }, operation: Effect.Effect<A, E, R>) => Stream.unwrap(authorize(request).pipe(Effect.andThen(operation), Effect.map(output.json), Effect.mapError(asServerError)));
+    const result = <A, E, R>(request: { token: string; installation: string; deadline: number; scope?: string }, operation: Effect.Effect<A, E, R>) => Stream.unwrap(authorize(request).pipe(Effect.andThen(operation), Effect.map(output.json), Effect.mapError(asServerError)));
     const feedback = new FeedbackSessions();
+    const derivations = new DerivationSessions();
     const refreshing = new Set<string>();
     const refreshQuery = (query: import('../../app/index.js').Query) => Effect.gen(function*() {
       const key = JSON.stringify(query);
@@ -386,24 +410,29 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       }).pipe(Effect.ensuring(Effect.sync(() => { refreshing.delete(key); })), Effect.ignore), serverScope);
     });
     const handlers = WorkspaceRpcs.toLayer({
-      hello: () => SubscriptionRef.get(service.state.value).pipe(Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, sourceDigest: value.sourceDigest }))),
-      shutdown: request => request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : Effect.forkIn(Effect.sleep('10 millis').pipe(Effect.andThen(service.stop)), serverScope).pipe(Effect.asVoid),
+      hello: request => authorizeScope(request.scope).pipe(Effect.andThen(SubscriptionRef.get(service.state.value)), Effect.map(value => ({ protocol: PROTOCOL, installation, token: runtime.token, state: value.state, sourceDigest: value.sourceDigest }))),
+      shutdown: request => authorizeScope(request.scope).pipe(Effect.andThen(request.token !== runtime.token ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Invalid instance token' })) : Effect.forkIn(Effect.sleep('10 millis').pipe(Effect.andThen(service.stop)), serverScope).pipe(Effect.asVoid))),
       subscribe: (request, options) => Stream.unwrap(authorize(request, true).pipe(Effect.tap(() => Effect.sync(() => { subscribers.add(options.client.id); })), Effect.as(Stream.flatMap(workspaceEvents(event).pipe(Stream.takeUntil(value => value.state === 'stopping')), output.json)))),
       workspace: request => result(request, readProjection),
       refresh: request => result(request, service.request.pipe(Effect.as({ status: 'requested' }))),
       query: request => result(request, Effect.gen(function*() {
+        if (Buffer.byteLength(JSON.stringify(request.environment)) > 256 * 1024) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Query environment exceeds 256 KiB'));
         const input = yield* Schema.decodeUnknownEffect(importedQueryRequest, { onExcessProperty: 'error' })({ name: request.name, input: request.input });
-        return yield* service.execute({ kind: 'query', request: input }).pipe(Effect.ensuring(input.name === 'historical' ? refreshQuery(input.input.query) : Effect.void));
+        return yield* service.execute({ kind: 'query', request: input, environment: request.environment, cache: request.cache }).pipe(Effect.ensuring(input.name === 'historical' && request.cache !== 'off' ? refreshQuery(input.input.query) : Effect.void));
       })),
       read: request => Stream.unwrap(authorize(request).pipe(Effect.andThen(service.execute({ kind: 'read-bytes', path: request.path })), Effect.map(value => output.bytes(Schema.encodeUnknownSync(ReadCodec)(value), 64 * FRAME_LIMIT)), Effect.mapError(asServerError))),
       'git-status': request => result(request, service.execute({ kind: 'git-status' })),
       'git-diff': request => result(request, service.execute({ kind: 'git-diff', path: request.path, area: request.area })),
-      http: (request, options) => result(request, request.action === 'open' ? hosted.open(request.host, request.port, subscribers.has(options.client.id), options.client.id) : request.lease ? hosted.close(request.lease) : Effect.fail(new ConcordError('InvalidInput', 'HTTP close requires a lease'))),
+      http: (request, options) => result(request, commandScope ? Effect.fail(new ConcordError('WorkspaceServerScoped', 'Command services cannot open HTTP listeners')) : request.action === 'open' ? hosted.open(request.host, request.port, subscribers.has(options.client.id), options.client.id) : request.lease ? hosted.close(request.lease) : Effect.fail(new ConcordError('InvalidInput', 'HTTP close requires a lease'))),
       'cache-clear': request => result(request, service.clear),
+      'cache-status': request => result(request, service.maintain(cache.status)),
+      'cache-rebuild': request => result(request, rebuildOwnedCache),
+      'cache-snapshot': request => result(request, service.maintain(cacheSnapshot)),
+      'cache-derived': (request, options) => result(request, derivations.apply(options.client.id, request, batches => service.maintain(cache.mergeDerived(batches)))),
       'feedback-merge': (request, options) => result(request, feedback.apply(options.client.id, request, cache.mergeFeedback)),
     });
     const serialization = yield* Layer.build(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT }));
-    const protocol = yield* makeAdmittedProtocol(socketServer, service.connect, id => { feedback.disconnect(id); subscribers.delete(id); Effect.runFork(hosted.disconnect(id)); }, admission).pipe(Effect.provideContext(serialization));
+    const protocol = yield* makeAdmittedProtocol(socketServer, service.connect, id => { feedback.disconnect(id); derivations.disconnect(id); subscribers.delete(id); Effect.runFork(hosted.disconnect(id)); }, admission).pipe(Effect.provideContext(serialization));
     yield* Effect.forkScoped(RpcServer.make(WorkspaceRpcs, { concurrency: 256 }).pipe(Effect.provide(handlers), Effect.provideService(RpcServer.Protocol, protocol)));
     yield* ready;
     yield* Deferred.succeed(protocolReady, undefined);
@@ -414,7 +443,11 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
   }));
 });
 import { QueryRequest as importedQueryRequest } from '../../app/index.js';
-export const runWorkspaceMain = (root: string) => NodeRuntime.runMain(serveWorkspace(root).pipe(Effect.provide(serverServices), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause))));
+export const serveWorkspaceFromEnvironment = Effect.fn('serveWorkspaceFromEnvironment')(function*(root: string) {
+  const scope = process.env.CONCORD_SERVER_SCOPE === undefined ? undefined : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CommandScope), { onExcessProperty: 'error' })(process.env.CONCORD_SERVER_SCOPE).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid command service scope')));
+  return yield* serveWorkspace(root, Effect.void, scope);
+});
+export const runWorkspaceMain = (root: string) => NodeRuntime.runMain(serveWorkspaceFromEnvironment(root).pipe(Effect.provide(serverServices), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause))));
 
 export const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: string) {
   const platform = yield* ServerRuntime;

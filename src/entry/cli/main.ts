@@ -1,11 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
 import { Installation } from '../../base/installation/index.js';
-import { LspLauncher, ViewLauncher, ServerLauncher } from "./launchers.js";
+import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./launchers.js";
 import { Publication } from "../../base/publication/index.js";
 import type { Queries } from "../../app/index.js";
 import { NodeRuntime, NodeServices } from "@effect/platform-node";
-import { Clock, Effect, Fiber, Layer, Schema } from "effect";
+import { Clock, Context, Effect, Fiber, Layer, Schema } from "effect";
 import type { Command } from "effect/unstable/cli";
 import { ConcordError, failure, WorkspaceProjectionSchema } from "../../model/index.js";
 import { humanOutput } from "./presentation.js";
@@ -13,7 +13,7 @@ import { OwnedProcess, OwnedProcessLive } from "../../base/process/index.js";
 import { Git } from '../../base/git/index.js';
 import { Workspace } from '../../base/workspace/index.js';
 import { Sources } from '../../base/sources/index.js';
-import { Cache, CacheSnapshot, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.js';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.js';
 import { ServerRuntime } from '../../base/server-lock/index.js';
 const loadClient = () => Effect.tryPromise(() => import('../server/index.js')).pipe(Effect.mapError(failure));
 const requestWorkspace: typeof import('../server/index.js').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
@@ -24,19 +24,20 @@ const remoteFailure = (cause: unknown): ConcordError | undefined => {
 };
 const workspaceServerFailure = (cause: unknown): ConcordError => remoteFailure(cause) ?? failure(cause);
 const asServerError = workspaceServerFailure;
+const installationIdentity = (runtime: ServerRuntime['Service']) => Effect.try({ try: () => runtime.installation(), catch: failure });
 
 const loadServerMain = () => Effect.tryPromise(() => import('../server/main.js'));
 const loadApp = () => Effect.tryPromise(() => import('../../app/index.js'));
 const executeQuery: typeof import('../../app/index.js').executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
 const mergeLocalFeedbackObservation: typeof import('../../app/index.js').mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
 const builtAssetRoot = (name: 'web') => loadApp().pipe(Effect.flatMap(app => Effect.try({ try: () => app.builtAssetRoot(name), catch: failure })), Effect.mapError(failure));
-const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string) {
+const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string, scope?: string) {
   const platform = yield* ServerRuntime;
   const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
   const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
   if (!record) return undefined;
   const { connectWorkspaceSocket } = yield* loadClient();
-  const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? platform.installation(), record.token);
+  const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? (yield* installationIdentity(platform)), record.token, scope);
   if (connection.hello.installation !== record.installation || connection.hello.protocol !== record.protocol) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Handshake differs from the running record'));
   return connection;
 });
@@ -56,32 +57,124 @@ const clearExistingWorkspaceCache = (root: string) => Effect.scoped(Effect.gen(f
   if (connection.hello.protocol !== (yield* loadClient()).PROTOCOL) return undefined;
   return yield* requestWorkspace(connection, 'cache-clear', {}).pipe(Effect.mapError(workspaceServerFailure));
 }));
-const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false, identifiedPrivateDir?: string) {
+const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false, identifiedPrivateDir?: string, capturedInstallation?: string) {
   const { PROTOCOL, waitForServerHandshake } = yield* loadClient();
   const platform = yield* ServerRuntime;
-  const installation = platform.installation();
-  let current = yield* existingWorkspace(root, installation, identifiedPrivateDir).pipe(Effect.catch(() => Effect.succeed(undefined)));
+  const installation = capturedInstallation ?? (yield* installationIdentity(platform));
+  const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
+  yield* assertCompatibleWorkspaceRecord(privateDir, installation);
+  const current = yield* existingWorkspace(root, installation, identifiedPrivateDir).pipe(Effect.catch(cause => {
+    const error = workspaceServerFailure(cause);
+    return error.code.startsWith('WorkspaceServerScope') || error.code === 'WorkspaceServerVersionConflict' ? Effect.fail(error) : Effect.succeed(undefined);
+  }));
   if (current && current.hello.installation === installation && current.hello.protocol === PROTOCOL) return current;
   if (current) {
-    const { privateDir } = yield* (yield* Workspace).locate(root, true);
-    const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
-    yield* current.client.shutdown({ token: current.hello.token }).pipe(Effect.mapError(asServerError));
-    const deadline = (yield* Clock.currentTimeMillis) + 3000;
-    let released = false;
-    while ((yield* Clock.currentTimeMillis) < deadline) {
-      released = yield* platform.released(privateDir);
-      if (released) break;
-      yield* Effect.sleep('20 millis');
-    }
-    if (!released) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'The previous service has not released its native service lock', { pid: record?.pid, installation: current.hello.installation }));
-    current = undefined;
+    return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol; stop it explicitly before starting this version'));
   }
   if (foreground) {
     const owner = yield* OwnedProcess, installed = yield* Installation;
     yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], { cwd: installed.cwd, stream: { ready: () => {}, stdout: () => {}, stderr: chunk => { process.stderr.write(chunk); } } })));
   } else yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
-  return yield* waitForServerHandshake(existingWorkspace(root, installation).pipe(Effect.map(connection => connection?.hello.installation === installation && connection.hello.protocol === PROTOCOL ? connection : undefined)));
+  const connection = yield* waitForServerHandshake(existingWorkspace(root, installation));
+  if (connection.hello.installation !== installation || connection.hello.protocol !== PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol'));
+  return connection;
 });
+
+const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceRecord')(function*(privateDir: string, installation?: string) {
+  const runtime = yield* ServerRuntime, client = yield* loadClient();
+  const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+  if (!record) return false;
+  if (record.installation === (installation ?? (yield* installationIdentity(runtime))) && record.protocol === client.PROTOCOL) return true;
+  if (yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure))) return false;
+  return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol; stop it with its matching installation'));
+});
+
+const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root: string, privateDir: string) {
+  const client = yield* loadClient();
+  const runtime = yield* ServerRuntime;
+  const installation = yield* installationIdentity(runtime);
+  const inherited = process.env.CONCORD_SERVER_SCOPE;
+  if (inherited !== undefined) {
+    const scope = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(client.CommandScope), { onExcessProperty: 'error' })(inherited).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid inherited command scope')));
+    if (scope.root !== root || scope.privateDir !== privateDir) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeMismatch', 'Inherited command scope belongs to another project'));
+    yield* assertCompatibleWorkspaceRecord(privateDir, installation);
+    const connection = yield* existingWorkspace(root, installation, privateDir, scope.key).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeExpired', 'The inherited command service is unavailable')));
+    if (!connection) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeExpired', 'The inherited command service has ended'));
+    if (connection.hello.installation !== installation || connection.hello.protocol !== client.PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The inherited service uses another installation or protocol'));
+    return connection;
+  }
+  if ((yield* QueryServerMode) === 'shared') return yield* connectOrStartWorkspace(root, false, privateDir, installation);
+  const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+  if (record && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'A service already owns this project; command mode cannot attach to it'));
+  const current = yield* existingWorkspace(root, installation, privateDir).pipe(Effect.catch(cause => {
+    const error = workspaceServerFailure(cause);
+    return error.code.startsWith('WorkspaceServerScope') ? Effect.fail(new ConcordError('WorkspaceServerBusy', 'A command service already owns this project')) : Effect.succeed(undefined);
+  }));
+  if (current) return yield* Effect.fail(new ConcordError('WorkspaceServerBusy', 'A service already owns this project; command mode cannot attach to it'));
+  const scope = { root, privateDir, key: crypto.randomUUID() };
+  const owner = (yield* loadApp()).makeOwnedProcessService({ graceMs: 5000 });
+  const installed = yield* Installation;
+  yield* Effect.addFinalizer(() => owner.cleanupResults.pipe(Effect.flatMap(results => results.some(result => !OwnedProcess.confirmed(result))
+    ? Effect.die(new ConcordError('CleanupFailed', 'Command service process group cleanup is unconfirmed')) : Effect.void)));
+  const fiber = yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], {
+    cwd: installed.cwd, env: { ...process.env, CONCORD_SERVER_SCOPE: JSON.stringify(scope) },
+    ipc: { ready: () => {}, message: () => {} },
+  })));
+  const connection = yield* client.waitForServerHandshake(existingWorkspace(root, installation, privateDir, scope.key)).pipe(
+    Effect.raceFirst(Fiber.join(fiber).pipe(Effect.flatMap(() => Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Command service exited before completing startup'))))),
+  );
+  yield* Effect.addFinalizer(() => connection.client.shutdown({ token: connection.hello.token, scope: scope.key }).pipe(
+    Effect.ignore, Effect.andThen(Fiber.join(fiber).pipe(Effect.timeout('3 seconds'), Effect.catch(() => Fiber.interrupt(fiber)))), Effect.asVoid,
+  ));
+  return connection;
+});
+
+const awaitQueryReady = Effect.fn('awaitQueryReady')(function*(connection: import('../server/index.js').WorkspaceConnection) {
+  let hello = connection.hello;
+  while (hello.state === 'opening') {
+    yield* Effect.sleep('10 millis');
+    hello = yield* connection.client.hello({ protocol: (yield* loadClient()).PROTOCOL, installation: connection.identity().installation, scope: connection.identity().scope });
+  }
+}, Effect.timeout('60 seconds'));
+
+const existingCompatibleWorkspace = Effect.fn('existingCompatibleWorkspace')(function*(root: string, privateDir: string) {
+  const client = yield* loadClient(), runtime = yield* ServerRuntime;
+  let key: string | undefined;
+  if (process.env.CONCORD_SERVER_SCOPE !== undefined) {
+    const scope = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(client.CommandScope), { onExcessProperty: 'error' })(process.env.CONCORD_SERVER_SCOPE).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid inherited command scope')));
+    if (scope.root !== root || scope.privateDir !== privateDir) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeMismatch', 'Inherited command scope belongs to another project'));
+    key = scope.key;
+  }
+  const active = yield* assertCompatibleWorkspaceRecord(privateDir);
+  const connection = active ? yield* existingWorkspace(root, runtime.installation(), privateDir, key).pipe(Effect.catch(cause => Effect.gen(function*() {
+    if (yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure))) return undefined;
+    return yield* Effect.fail(workspaceServerFailure(cause));
+  }))) : undefined;
+  if (!connection && key !== undefined) return yield* Effect.fail(new ConcordError('WorkspaceServerScopeExpired', 'The inherited command service has ended'));
+  if (connection && (connection.hello.installation !== runtime.installation() || connection.hello.protocol !== client.PROTOCOL)) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol'));
+  if (connection) yield* awaitQueryReady(connection).pipe(Effect.mapError(workspaceServerFailure));
+  return connection;
+});
+
+function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: ServerRuntime['Service'], local: PersistentCache['Service'], root: string | undefined, operation: Effect.Effect<A, E, R>, required: boolean): Effect.Effect<A, E | ConcordError, R> {
+  return Effect.scoped(Effect.gen(function*() {
+    const identified = yield* workspace.locate(root);
+    const connection = yield* existingCompatibleWorkspace(identified.root, identified.privateDir).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime));
+    if (!connection) return yield* operation;
+    const client = yield* loadClient();
+    const snapshot = yield* requestWorkspace(connection, 'cache-snapshot', {}).pipe(Effect.flatMap(value => Schema.decodeUnknownEffect(client.Snapshot, { onExcessProperty: 'error' })(value)), Effect.mapError(workspaceServerFailure));
+    const derived = CacheDerivations.make();
+    const cache = Context.get(yield* Layer.build(CacheSnapshot.layer(snapshot)), CacheSnapshot);
+    const result = yield* operation.pipe(Effect.provideService(PersistentCache, {
+      ...local,
+      attach: repo => repo.privateDir === identified.privateDir ? cache.attach(repo).pipe(Effect.provideService(CacheDerivations, derived)) : local.attach(repo),
+    }));
+    yield* client.submitDerivations(connection, derived.batches()).pipe(Effect.mapError(workspaceServerFailure), Effect.catch(error => required ? Effect.fail(error) : Effect.sync(() => {
+      process.stderr.write(`${JSON.stringify({ warning: 'CacheUpdateFailed', message: 'The operation completed, but its disposable cache update failed', reason: error.code })}\n`);
+    })));
+    return result;
+  }));
+}
 const startWorkspaceServer = (root: string) => Effect.scoped(connectOrStartWorkspace(root).pipe(Effect.map(connection => ({ operation: 'server-start', ...connection.hello }))));
 const stopWorkspaceServer = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.flatMap(connection => connection ? connection.client.shutdown({ token: connection.hello.token }) : Effect.void), Effect.as({ operation: 'server-stop' }), Effect.mapError(asServerError)));
 
@@ -107,26 +200,32 @@ function makeWorkspaceView() { return Effect.fn('serveWorkspaceView')(function*(
 const serveWorkspaceView = /*#__PURE__*/ makeWorkspaceView();
 
 
-// Discovery needs only the base ports. Commands without an owner avoid loading
-// the service's RPC, HTTP and computation entrypoints into their short lifetime.
+// Queries connect through the same service; launch ownership stays at this entry.
 function makeCliLayer() {
 return Layer.unwrap(loadApp().pipe(Effect.map(({ Queries, QueryReply }) => {
 const querySelection = Layer.unwrap(Effect.gen(function*() {
   const workspace = yield* Workspace;
   const runtime = yield* ServerRuntime;
+  const installation = yield* Installation;
+  const processes = yield* OwnedProcess;
   return Queries.Remote((root, request, cache = 'use') => Effect.scoped(Effect.gen(function*() {
-    if (cache === 'off') return yield* executeQuery(root, request, cache);
-    const identified = yield* workspace.identify(root, true);
-    const remote = yield* Effect.result(existingWorkspace(identified.root).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime)));
-    if (remote._tag === 'Failure' || !remote.success || remote.success.hello.installation !== runtime.installation()) return yield* executeQuery(root, request, cache);
-    if (remote.success.hello.protocol !== (yield* loadClient()).PROTOCOL) return yield* executeQuery(root, request, cache);
-    const reply = yield* Effect.result(requestWorkspace(remote.success, 'query', request));
-    if (reply._tag === 'Failure') {
-      const cause = remoteFailure(reply.failure);
-      if (cause && !cause.code.startsWith('WorkspaceServer') && !cause.code.startsWith('WorkspaceCompute')) return yield* Effect.fail(cause);
-      return yield* executeQuery(root, request, cache);
+    if (cache === 'off' && process.env.CONCORD_SERVER_SCOPE === undefined) return yield* executeQuery(root, request, cache);
+    const identified = yield* workspace.locate(root);
+    const environment = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
+    delete environment.CONCORD_SERVER_SCOPE;
+    if (Buffer.byteLength(JSON.stringify(environment)) > 256 * 1024) return yield* Effect.fail(new ConcordError('WorkspaceServerInputLimit', 'Query environment exceeds 256 KiB'));
+    for (let attempt = 0; ; attempt++) {
+      const result = yield* Effect.result(Effect.scoped(Effect.gen(function*() {
+        const connection = yield* connectQueryWorkspace(identified.root, identified.privateDir).pipe(Effect.provideService(Workspace, workspace), Effect.provideService(ServerRuntime, runtime), Effect.provideService(Installation, installation), Effect.provideService(OwnedProcess, processes));
+        yield* awaitQueryReady(connection);
+        const reply = yield* requestWorkspace(connection, 'query', { ...request, environment, cache });
+        return yield* Schema.decodeUnknownEffect(QueryReply, { onExcessProperty: 'error' })(reply).pipe(Effect.mapError(failure));
+      })));
+      if (result._tag === 'Success') return result.success;
+      const error = workspaceServerFailure(result.failure);
+      const retryable = error.code === 'WorkspaceServerUnavailable' || error.code === 'WorkspaceComputeExited' || error.code === 'OperationFailed' && remoteFailure(result.failure) === undefined;
+      if (attempt >= 1 || !retryable || (yield* QueryServerMode) === 'command' || process.env.CONCORD_SERVER_SCOPE !== undefined) return yield* Effect.fail(error);
     }
-    return yield* Schema.decodeUnknownEffect(QueryReply, { onExcessProperty: 'error' })(reply.success).pipe(Effect.mapError(failure));
   })));
 }));
 
@@ -144,13 +243,20 @@ const feedbackSelection = Layer.effect(FeedbackCacheWriter, Effect.gen(function*
 const launchers = Layer.mergeAll(
   Layer.effect(ServerLauncher, Effect.gen(function*() {
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
+    const workspace = yield* Workspace, runtime = yield* ServerRuntime, persistent = yield* PersistentCache;
     return ServerLauncher.of({
-      run: root => loadServerMain().pipe(Effect.flatMap(server => server.serveWorkspace(root)), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause)), Effect.provideContext(context)),
+      run: root => loadServerMain().pipe(Effect.flatMap(server => server.serveWorkspaceFromEnvironment(root)), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause)), Effect.provideContext(context)),
       start: root => startWorkspaceServer(root).pipe(Effect.provideContext(context)),
       stop: root => stopWorkspaceServer(root).pipe(Effect.provideContext(context)),
       status: root => workspaceServerStatus(root).pipe(Effect.provideContext(context)),
       projection: root => readExistingWorkspaceProjection(root).pipe(Effect.provideContext(context)),
       clear: root => clearExistingWorkspaceCache(root).pipe(Effect.provideContext(context)),
+      cache: (root, action) => Effect.scoped(Effect.gen(function*() {
+        const identified = yield* workspace.locate(root);
+        const connection = yield* existingCompatibleWorkspace(identified.root, identified.privateDir).pipe(Effect.provideContext(context));
+        return connection ? yield* requestWorkspace(connection, action, {}).pipe(Effect.mapError(workspaceServerFailure)) : undefined;
+      })),
+      withCache: (root, operation, required = false) => withWorkspaceCache(workspace, runtime, persistent, root, operation, required),
     });
   })),
   Layer.effect(ViewLauncher, Effect.gen(function*() {

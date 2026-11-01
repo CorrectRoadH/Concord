@@ -1,6 +1,8 @@
 import { Context, Effect } from "effect";
 import type { ConcordError } from "../../model/index.js";
 
+export const QueryServerMode = Context.Reference<'shared' | 'command'>('concord/cli/QueryServerMode', { defaultValue: () => 'shared' });
+
 export interface ViewLaunchOptions { readonly root: string; readonly host: string; readonly port: number; readonly inProcess?: boolean }
 export interface ViewLaunchInfo {
   readonly root: string; readonly host: string; readonly port: number; readonly address: string;
@@ -19,4 +21,6 @@ export class ServerLauncher extends Context.Service<ServerLauncher, {
   readonly status: (root: string) => Effect.Effect<unknown, unknown>;
   readonly projection: (root: string) => Effect.Effect<import('../../model/index.js').WorkspaceProjection | undefined, unknown>;
   readonly clear: (root: string) => Effect.Effect<unknown, unknown>;
+  readonly cache: (root: string, action: 'cache-status' | 'cache-rebuild') => Effect.Effect<unknown, ConcordError>;
+  readonly withCache: <A, E, R>(root: string | undefined, operation: Effect.Effect<A, E, R>, required?: boolean) => Effect.Effect<A, E | ConcordError, R>;
 }>()('concord/cli/ServerLauncher') {}

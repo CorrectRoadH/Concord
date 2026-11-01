@@ -9,6 +9,8 @@ Cache namespace 区分各类投影及资源预算。Ownership guard 覆盖缓存
 
 CLI 与 Web 使用同一入口和生命周期约束。安装包在支持的 Linux 与 macOS 上携带所需运行产物，消费者无需 Rust 编译器、HawDB checkout、全局程序或额外数据库服务。目标平台缺少产物须明确诊断，不以另一个数据库冒充 HawDB。
 
+在项目的任意子目录运行 `concord check`，查询会自动启动或复用该项目的后台。连续查询共享热解析缓存，每次仍核验当前文件。CI 可以运行 `concord --server=command check`：结果返回后回收本次后台；已有后台时明确失败，避免结束其它客户端的服务（[适配项目的开发方式](../../taste.md#t-9)）。
+
 原生边界、句柄与清理所有权、资源预算及诊断投影的刷新协议见[架构](architecture.md)，发行产物见[跨平台发布架构](../cross-platform-release/architecture.md#身份与复用)。
 
 ## 验收入口

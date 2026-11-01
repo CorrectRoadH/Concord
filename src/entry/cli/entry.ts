@@ -21,8 +21,8 @@ function selectedGroup(data: StartupData): string | undefined {
   while (index < args.length) {
     const arg = args[index]!;
     if (['--json', '--fresh', '--dry-run'].includes(arg) || /^(?:--json|--fresh|--dry-run)=(?:true|false)$/u.test(arg)) { index++; continue; }
-    if (arg.startsWith('--root=')) { index++; continue; }
-    if (arg === '--root' && args[index + 1] !== undefined && !args[index + 1]!.startsWith('-')) { index += 2; continue; }
+    if (arg.startsWith('--root=') || arg.startsWith('--server=')) { index++; continue; }
+    if ((arg === '--root' || arg === '--server') && args[index + 1] !== undefined && !args[index + 1]!.startsWith('-')) { index += 2; continue; }
     return data.groups.find(item => item.name === arg)?.name;
   }
 }

@@ -19,6 +19,7 @@ const fixture = () => {
   writeFileSync(join(root, 'src/0.ts'), 'export const value = 0;\n');
   return root;
 };
+const environment = Object.fromEntries(Object.entries(process.env).filter((item): item is [string, string] => item[1] !== undefined));
 const workerPid = (root: string) => pollUntil(async () => {
   for (const line of execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' }).split('\n')) {
     const row = /^\s*(\d+)\s+(\d+)\s+(.+)$/u.exec(line);
@@ -46,9 +47,9 @@ test('cancelling a queued computation preserves the active child and cancelling 
       yield* Effect.promise(() => projection(rpc, connection));
       pid = yield* Effect.promise(() => workerPid(root));
       process.kill(pid, 'SIGSTOP');
-      const active = yield* Effect.forkScoped(rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {} }));
+      const active = yield* Effect.forkScoped(rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, environment, cache: 'use' }));
       yield* connection.client.hello({ protocol: 'concord.workspace/v1', installation: running.installation });
-      const queued = yield* Effect.forkScoped(rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {} }));
+      const queued = yield* Effect.forkScoped(rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, environment, cache: 'use' }));
       yield* connection.client.hello({ protocol: 'concord.workspace/v1', installation: running.installation });
       yield* Fiber.interrupt(queued);
       assert.doesNotThrow(() => process.kill(pid!, 0));
@@ -57,7 +58,7 @@ test('cancelling a queued computation preserves the active child and cancelling 
         try { process.kill(pid!, 0); return undefined; } catch { return true; }
       }, { description: 'RPC cancellation confirms computation process group termination' }));
       assert.deepEqual(readdirSync(lease.path), [`${lease.owner.token}.json`]);
-      const next = yield* rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {} });
+      const next = yield* rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, environment, cache: 'use' });
       assert.equal(Schema.decodeUnknownSync(Schema.Struct({ exitCode: Schema.Int }))(next).exitCode, 0);
       assert.deepEqual(readdirSync(lease.path), [`${lease.owner.token}.json`]);
     })));

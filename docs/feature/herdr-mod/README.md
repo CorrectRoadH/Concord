@@ -27,7 +27,7 @@ Herdr loads it on save; open it with the "Concord" command.
 
 ## 怎样工作
 
-mod 不保存任何事实。它用 `concord --json` 取得文档列表、关系和检查结果，直接读取文件正文来显示，保存时直接写文件，再运行 `concord check`。监听到 `docs/`、`memory/` 或测试与源码目录变化时，重新取数据刷新。机器上运行着工作区服务时，`concord` 命令经由服务返回，速度更快；没有服务也能正常工作。
+mod 不保存任何事实。它用 `concord --json` 取得文档列表、关系和检查结果，直接读取文件正文来显示，保存时直接写文件，再运行 `concord check`。监听到 `docs/`、`memory/` 或测试与源码目录变化时，重新取数据刷新。查询命令自动启动或复用项目的工作区服务，与其它 CLI 调用共享缓存；生命周期由[工作区服务](../local-data-engine/architecture.md#cli-查询)拥有。
 
 图解里的 p5 动画需要浏览器才能播放。mod 显示图解的文字说明与源码，并提供“在浏览器中播放”。
 

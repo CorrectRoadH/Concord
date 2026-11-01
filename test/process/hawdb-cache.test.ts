@@ -52,7 +52,7 @@ test('fresh dry-run and cache-off processes never touch an existing complete cac
   try {
     const rebuilt = cli(root, 'cache', 'rebuild');
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
-    const shown = cli(root, 'config', 'show');
+    const shown = cli(root, '--dry-run', 'config', 'show');
     assert.equal(shown.status, 0, shown.stderr);
     const config = JSON.parse(shown.stdout) as { config: { sourceRoots: string[] }; digest: string };
     const input = join(root, 'config-preview.json');
@@ -116,15 +116,15 @@ test('clear unlinks internal aliases before native locks and can retry after det
 });
 
 // @use-case docs/feature/local-data-engine/use-case/use-unified-cache.md
-test('fresh Git consumers check without creating a cache and explicit rebuild enables persistent hits', () => runApplication(Effect.sync(() => {
+test('fresh Git consumers start a cache owner for checks and explicit rebuild keeps persistent hits available', () => runApplication(Effect.sync(() => {
   const root = freshConsumer();
   try {
     const cold = cli(root, 'check');
     const first = Schema.decodeUnknownSync(Schema.fromJsonString(ScanReport))(cold.stdout);
-    assert.equal(first.cache.status, 'unavailable', cold.stdout + cold.stderr);
-    assert.equal(first.codeCache.status, 'unavailable');
+    assert.ok(['hit', 'miss'].includes(first.cache.status), cold.stdout + cold.stderr);
+    assert.ok(['hit', 'miss'].includes(first.codeCache.status));
     const directory = join(root, '.git/concord');
-    assert.equal(existsSync(join(directory, 'cache.hawdb')), false);
+    assert.equal(existsSync(join(directory, 'cache.hawdb')), true);
     const rebuilt = cli(root, 'cache', 'rebuild');
     assert.equal(rebuilt.status, 0, rebuilt.stdout + rebuilt.stderr);
     assert.equal(statSync(directory).mode & 0o777, 0o700);

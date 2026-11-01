@@ -18,6 +18,7 @@ export interface RuntimePorts {
   readonly open: Effect.Effect<void, unknown>;
   readonly close: Effect.Effect<void, unknown>;
   readonly clear: Effect.Effect<unknown, unknown>;
+  readonly maintenance?: { readonly needed: Effect.Effect<boolean, unknown>; readonly run: Effect.Effect<unknown, unknown> };
   readonly exists: Effect.Effect<boolean, unknown>;
   readonly reconcile?: (candidate: WorkspaceProjectionCandidate) => Effect.Effect<boolean, unknown>;
 }
@@ -189,6 +190,23 @@ export const makeWorkspaceService = Effect.fn('makeWorkspaceService')(function*(
     yield* state.touch;
     return yield* operation;
   }));
+  if (ports.maintenance) {
+    const idleMaintenance = ports.maintenance;
+    yield* Effect.forkScoped(Effect.repeat(maintenance.withPermit(Effect.gen(function*() {
+      if (stopping || operations > 0 || (yield* SubscriptionRef.get(state.value)).state !== 'running' || !(yield* idleMaintenance.needed)) return;
+      yield* ports.verify;
+      yield* state.transition('draining');
+      yield* ports.close;
+      if (stopping) return;
+      yield* state.transition('maintaining');
+      yield* idleMaintenance.run;
+      if (stopping) return;
+      yield* state.transition('opening');
+      yield* ports.open;
+      yield* state.transition('running');
+      yield* request;
+    })).pipe(Effect.catch(fail)), Schedule.spaced('30 seconds')));
+  }
   const operate = <A, E, R>(operation: Effect.Effect<A, E, R>) => Effect.scoped(maintain(Effect.acquireRelease(Effect.gen(function*() {
     if (operations === 0) operationIdle = yield* Deferred.make<void>();
     operations++;

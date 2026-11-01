@@ -203,14 +203,15 @@ Before planning, implementing, or reviewing governed work:
 Follow the returned instructions and the repository's current \`docs/taste.md\`. A gap result means an explicit Concord relationship is absent; it is not code coverage, and undocumented CLI commands require the product's own inventory. Do not infer completion or test coverage from document structure or command receipts alone.`;
 // @concord-end
 
-export interface RepositoryOptions { readonly initialize?: boolean; readonly recover?: boolean; readonly reclaimPublication?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off'; readonly optimistic?: boolean }
+export interface RepositoryOptions { readonly environment?: Readonly<Record<string, string | undefined>>; readonly initialize?: boolean; readonly recover?: boolean; readonly reclaimPublication?: boolean; readonly dryRun?: boolean; readonly access?: 'read' | 'write'; readonly persistentCache?: 'use' | 'off'; readonly optimistic?: boolean }
 export interface ReadRepositoryOptions extends RepositoryOptions { readonly access: 'read' }
 
 export class LocalRepository implements Repository {
+  private readonly executionEnvironment: Readonly<Record<string, string | undefined>>;
   readonly runtimeVersion = process.version;
   exists(path: string): boolean { return this.inspectComponents(path).stat !== undefined; }
-  runtimeInputs(command: string, envNames: readonly string[]) { return adapterRuntimeInputs(this.root, command, envNames); }
-  environment(names: readonly string[]): Readonly<Record<string, string | undefined>> { return Object.fromEntries(names.map(name => [name, process.env[name]])); }
+  runtimeInputs(command: string, envNames: readonly string[]) { return adapterRuntimeInputs(this.root, command, envNames, this.executionEnvironment); }
+  environment(names: readonly string[]): Readonly<Record<string, string | undefined>> { return Object.fromEntries(names.map(name => [name, this.executionEnvironment[name]])); }
   inspect(path: string): ReturnType<NonNullable<Repository['inspect']>> {
     const read = () => {
       const stat = this.inspectComponents(path).stat;
@@ -264,6 +265,7 @@ export class LocalRepository implements Repository {
   constructor(input: string | undefined, options: ReadRepositoryOptions);
   constructor(input: string | undefined, options: RepositoryOptions, validation: PublicationValidation['Service']);
   constructor(input?: string, options: RepositoryOptions = {}, private readonly validation?: PublicationValidation['Service']) {
+    this.executionEnvironment = Object.freeze({ ...(options.environment ?? process.env) });
     this.root = discoverRoot(input, options.initialize);
     assertNoSymlink(this.root);
     const anchors: RootAnchor[] = [];
@@ -283,7 +285,7 @@ export class LocalRepository implements Repository {
     if (options.recover && this.access === 'read') throw new ConcordError('InvalidOption', 'Recovery requires write access');
     if (options.recover && this.noWrite) throw new ConcordError('InvalidOption', 'recover does not accept --dry-run');
     assertReadHost();
-    if (git(this.root, ['rev-parse', '--show-toplevel']) !== this.root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
+    if (git(this.root, ['rev-parse', '--show-toplevel'], this.executionEnvironment) !== this.root) throw new ConcordError('ProjectRootInvalid', 'The project must be the Git worktree top-level directory');
     assertCurrentRuntimeFormat(this.root);
     try { this.privateDir = genericPrivateDirectorySync(this.root); }
     catch (cause) { throw storageCoordinationFailure(cause); }

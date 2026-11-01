@@ -6,7 +6,7 @@ import * as RpcGroup from 'effect/unstable/rpc/RpcGroup';
 import * as SchemaBinary from 'effect/unstable/encoding/SchemaBinary';
 import { WorkspaceRead } from '../../model/index.js';
 
-export const PROTOCOL = 'concord.workspace/v1';
+export const PROTOCOL = 'concord.workspace/v2';
 export const FRAME_LIMIT = 1024 * 1024;
 export const RESULT_LIMIT = 32 * FRAME_LIMIT;
 export const ReadCodec = SchemaBinary.toCodec(WorkspaceRead);
@@ -16,25 +16,31 @@ export const strict = <S extends Schema.Top>(schema: S): S['Rebuild'] => schema.
 export class WorkspaceServerError extends Schema.TaggedError<WorkspaceServerError>()('WorkspaceServerError', {
   code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json),
 }) {}
-export const HelloInput = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String }));
+export const CommandScope = strict(Schema.Struct({ root: Schema.String, privateDir: Schema.String, key: Schema.String }));
+export const QueryEnvironment = Schema.Record(Schema.String, Schema.String);
+export const HelloInput = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, scope: Schema.optional(Schema.String) }));
 export const Hello = strict(Schema.Struct({ protocol: Schema.String, installation: Schema.String, token: Schema.String, state: ServerState, sourceDigest: Schema.NullOr(Schema.String) }));
-export const Identity = { token: Schema.String, installation: Schema.String, requestId: Schema.String, deadline: Schema.Number };
+export const Identity = { token: Schema.String, installation: Schema.String, requestId: Schema.String, deadline: Schema.Number, scope: Schema.optional(Schema.String) };
 export const Packet = strict(Schema.Struct({ data: Schema.Uint8Array, last: Schema.Boolean }));
 export const QueryInput = strict(Schema.Struct({ name: Schema.String, input: Schema.Json }));
 const empty = strict(Schema.Struct(Identity));
 const rpc = <const N extends string, S extends Schema.Top>(name: N, payload: S) => Rpc.make(name, { payload, success: Packet, error: WorkspaceServerError, stream: true });
 export const WorkspaceRpcs = RpcGroup.make(
   Rpc.make('hello', { payload: HelloInput, success: Hello, error: WorkspaceServerError }),
-  Rpc.make('shutdown', { payload: strict(Schema.Struct({ token: Schema.String })), success: Schema.Void, error: WorkspaceServerError }),
+  Rpc.make('shutdown', { payload: strict(Schema.Struct({ token: Schema.String, scope: Schema.optional(Schema.String) })), success: Schema.Void, error: WorkspaceServerError }),
   rpc('subscribe', strict(Schema.Struct({ ...Identity, kind: Schema.Literal('workspace') }))),
   rpc('workspace', empty),
   rpc('refresh', empty),
   rpc('read', strict(Schema.Struct({ ...Identity, path: Schema.String, expectedDigest: Schema.optional(Schema.String) }))),
-  rpc('query', strict(Schema.Struct({ ...Identity, ...QueryInput.fields }))),
+  rpc('query', strict(Schema.Struct({ ...Identity, ...QueryInput.fields, environment: QueryEnvironment, cache: Schema.Literals(['use', 'off']) }))),
   rpc('git-status', empty),
   rpc('git-diff', strict(Schema.Struct({ ...Identity, path: Schema.String, area: Schema.Literals(['staged', 'unstaged', 'untracked']) }))),
   rpc('http', strict(Schema.Struct({ ...Identity, action: Schema.Literals(['open', 'close']), host: Schema.String, port: Schema.Int, lease: Schema.optional(Schema.String) }))),
   rpc('cache-clear', empty),
+  rpc('cache-status', empty),
+  rpc('cache-rebuild', empty),
+  rpc('cache-snapshot', empty),
+  rpc('cache-derived', strict(Schema.Struct({ ...Identity, action: Schema.Literals(['begin', 'append', 'commit']), session: Schema.String, data: Schema.optional(Schema.Uint8Array) }))),
   rpc('feedback-merge', strict(Schema.Struct({ ...Identity, action: Schema.Literals(['begin', 'append', 'commit']), session: Schema.String, connectionId: Schema.optional(Schema.String), items: Schema.optional(Schema.Json) }))),
 );
 export type WorkspaceClient = import('effect/unstable/rpc/RpcClient').RpcClient<RpcGroup.Rpcs<typeof WorkspaceRpcs>, import('effect/unstable/rpc/RpcClientError').RpcClientError>;

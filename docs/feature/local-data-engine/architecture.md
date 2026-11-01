@@ -12,9 +12,9 @@ Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵
 
 持久库位于 Git-private `cache.hawdb`，各类持久缓存以命名空间隔离。持久句柄只有一个所有者（[缓存与原生边界的约束](#缓存与原生边界的约束)）：该 worktree 的[工作区服务](#工作区服务)运行时由它长期持有；没有服务时由当前命令的最外层来源快照按需打开，嵌套调用只复用，快照结束时释放。
 
-持久库只在命令等待的路径之外创建与批量填充：工作区服务启动时、[异步诊断投影](use-case/query-asynchronous-projections.md)的后台刷新进程，或显式的 `cache rebuild`。显式启动外部进程并保存观察的命令 `test discover`、`test run` 与 `code analyze` 也可以创建持久库。其它命令在没有服务时只打开已经存在的持久库，不存在时使用本进程的内存缓存，不创建持久库。创建与首次填充需要数百次同步落盘，放在命令路径上会让一次只读命令被磁盘日志提交阻塞十余秒。只读句柄需要写入时，关闭后以写模式重开并重新竞争所有权。原生事务不跨调用逃逸。发布租约的持有者不持有持久句柄，存在独占提交时数据库先于租约释放。
+持久库由工作区服务创建与批量填充，首次查询等待实例就绪，后续客户端复用同一持有者。没有服务时，[异步诊断投影](use-case/query-asynchronous-projections.md)的后台刷新进程、显式的 `cache rebuild`，以及保存外部观察的 `test discover`、`test run` 与 `code analyze` 可以创建持久库。其它本地操作只打开已经存在的持久库，不存在时使用本进程的内存缓存，不创建持久库。只读句柄需要写入时，关闭后以写模式重开并重新竞争所有权。原生事务不跨调用逃逸。发布租约的持有者不持有持久句柄，存在独占提交时数据库先于租约释放。
 
-持久句柄因协调锁被占用、或发现运行中的工作区服务而不打开时，可由当前来源完整重建的解析缓存（文档、配置、代码、测试标记与 Git 基线）改用本进程的内存缓存，命令照常完成，正确性仍由当前来源核验保证。缓存诊断保留 `HawdbBusy` 原因。远端反馈快照与诊断投影不是解析缓存：服务运行时经由服务读取，没有服务而库被占用时如实报告不可用，不把空内存实例当作已读取的快照，不自动联网。损坏、预算、路径安全与原生产物失败保留各自的具名失败。`cache status`、`cache clear` 与 `cache rebuild` 如实报告占用。
+持久句柄因协调锁被占用、或发现运行中的工作区服务而不打开时，可由当前来源完整重建的解析缓存（文档、配置、代码、测试标记与 Git 基线）改用本进程的内存缓存，命令照常完成，正确性仍由当前来源核验保证。缓存诊断保留 `HawdbBusy` 原因。远端反馈快照与诊断投影不是解析缓存：服务运行时经由服务读取，没有服务而库被占用时如实报告不可用，不把空内存实例当作已读取的快照，不自动联网。损坏、预算、路径安全与原生产物失败保留各自的具名失败。`cache status`、`cache clear` 与 `cache rebuild` 有服务时由它处理，没有服务时按本进程的持有状态报告。
 
 文档与静态配置解析、代码解析及不可变 Git 测试基线使用进程期内存实例。纯解析入口不依赖 Repository 或磁盘目录；命名空间区分数据，源摘要与解析器身份区分结果。内存实例没有文件锁，关闭或失效后可以重建。
 
@@ -66,19 +66,23 @@ Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git
 
 主进程把需要的持久数据（远端反馈快照、诊断投影）随请求交给计算进程，计算进程把结果交回主进程写入；持久命名空间只在主进程读写。
 
+CLI 的本地操作在同一实例的连接作用域内读取缓存快照，仍在调用者进程执行来源访问与 runner。可重建的配置、代码、测试观察与写作检查行使用和计算进程相同的派生批次 Schema；操作成功后、输出成功结果前交回主进程。派生批次不能覆盖远端观察、历史查询或工作区投影。传输断开或保存失败不重跑来源操作；只产出缓存的 `test discover` 与 `code analyze` 返回失败，其它操作保留完成结果并输出 `CacheUpdateFailed` 警告，来源回执与 journal 保持现状。
+
+`cache-derived` 会话以随机 session 标识，按 begin、append、commit 顺序接收 UTF-8 JSON 字节；每个连接最多一个未完成会话，单批最多 32 MiB，全服务未完成数据合计最多 64 MiB。commit 在严格解码完整批次后交给既有缓存写入校验，超限、失败或断开都释放会话。快照与派生行只对同安装、同实例及匹配命令作用域开放；客户端不接收数据库句柄。普通本地操作不因此自动启动服务。
+
 远端观察由发起同步的 CLI 或操作进程取得。它完成来源发布并释放发布租约后，以 `feedback-merge` 会话把完整批次分块交给服务（begin、若干 append、commit）。主进程逐块严格解码并累计到批量上限，在 commit 时对当前持久行执行现行的单调时间戳与同版本冲突检查，在一个事务中合并并返回 warnings；未 commit 的会话随连接断开丢弃。该请求只更新可丢弃的远端观察缓存，不写来源。服务不存在、处于降级或合并失败时，按现行缓存更新失败处理：来源回执不变，结果带 warning，不重跑来源写入。没有服务时仍由本进程在释放租约后直接合并。
 
 ### 启动与裁决
 
-`concord view` 与 `concord server start` 可以自动启动服务；其它业务命令只使用已有服务。`concord server run` 是前台服务入口。`view --in-process` 需要新服务时，以受当前命令作用域管理的子进程启动；已有服务仍可复用，所有启动方式都先取得同一服务锁。
+CLI 查询、`concord view` 与 `concord server start` 自动启动或复用选定项目目录的服务。`concord server run` 是前台服务入口。`server status` 与 `server stop` 不启动服务。`view --in-process` 需要新服务时，以受当前命令管理的子进程启动；已有服务仍可复用。所有启动方式先取得同一服务锁。
 
 1. 启动者读取运行记录，核对 worktree、privateDir 与安装身份，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
-3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者；权限、I/O、类型或身份失败分别以具名错误 `ServerLockUnavailable` 报告。服务锁由原生绑定提供，原生产物缺失或无法加载时同样报告 `ServerLockUnavailable`（原因 native），服务不启动；面板与 `view` 报 `WorkspaceServerUnavailable`，CLI 在本进程计算。
+3. `server run` 尝试取得服务锁。只有 WouldBlock 表示已有服务，此时进程退出，启动者回到第 1 步等待胜者；权限、I/O、类型或身份失败以具名错误 `ServerLockUnavailable` 报告。服务锁由原生绑定提供，原生产物缺失或无法加载时同样报告 `ServerLockUnavailable`（原因 native），服务不启动；客户端报告 `WorkspaceServerUnavailable`，不在本进程执行查询。
 4. 胜者在锁内删除残留 socket，绑定新 socket，写入 `state: opening` 的运行记录并开始应答 `hello`，然后打开持久库、读取最近一份已接受的结果并启动计算进程，最后把记录改为 `state: running`。打开失败时进入降级状态，用内存缓存继续服务并在状态中报告原因。
-5. 启动者等待自己拉起或竞争中胜出的服务完成握手，最多 10 秒，覆盖新进程在负载下的冷启动；`opening` 已可握手，不必等待打开持久库。连接已在运行的服务时握手最多 1 秒，CLI 超时后在本进程计算。
+5. 启动者等待自己拉起或竞争中胜出的服务完成握手，最多 10 秒；`opening` 已可握手，项目查询等待服务就绪。连接已在运行的服务时握手最多 1 秒。配置无效不阻止控制接口与查询入口启动，查询返回原有配置诊断。
 
-`hello` 与 `shutdown` 是控制帧，结构由本页固定：`hello {protocol, installation}` 返回 `{protocol, installation, token, state, sourceDigest}`；安装身份或协议不同时只回应这两种控制帧。启动者遇到不同身份的服务时发送带对方 token 的 `shutdown`，等待其释放服务锁（上限 3 秒），超时返回 `WorkspaceServerBusy` 并在 details 中给出对方 pid 与安装身份。CLI 只读命令遇到不同身份的服务时在本进程计算，不接管。
+`hello {protocol, installation, scope?}` 返回 `{protocol, installation, token, state, sourceDigest}`；`shutdown {token, scope?}` 显式停止实例。安装身份或协议不同时只回应控制帧。普通启动与查询返回 `WorkspaceServerVersionConflict`，不能自动停止已有实例；用户可以显式执行 `server stop`。
 
 ### 状态
 
@@ -120,9 +124,11 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 | `refresh` | 受理即应答，不等待刷新 |
 | `git-status`、`git-diff {path, area}` | 当前 Git 状态与定向 diff |
 | `read {path, ifUnchanged?}` | 与 Web `/api/file` 相同的定向严格读取的原始字节与信封，另附实际摘要 |
-| `query {name, input}` | 白名单只读查询的结果或具名错误，见 CLI 查询 |
+| `query {name, input, environment, cache}` | 白名单只读查询的结果或具名错误，见 CLI 查询 |
 | `http {open \| close, host, port, lease?}` | 监听地址与租约 |
 | `cache-clear` | 按[清理](#清理)执行后应答 |
+| `cache-status`、`cache-rebuild` | 主进程读取状态，或计算派生行后由主进程保存并读取状态 |
+| `cache-snapshot`、`cache-derived begin \| append \| commit` | 本地操作的只读缓存快照与派生批次；见进程与资源 |
 | `feedback-merge begin \| append \| commit` | commit 返回合并后的 warnings；见进程与资源 |
 
 每个服务最多 64 个连接，每个连接最多 8 个在途请求，全服务最多 256 个尚未应答的请求（含正在执行的；RPC 与 HTTP 共用这一计数），待发送字节合计不超过 64 MiB；超限按请求或连接以 `WorkspaceServerBusy` 失败，其它连接不受影响。
@@ -131,7 +137,19 @@ clear、维护与 shutdown 串行执行。服务在受理请求、绑定、发�
 
 可经由服务的命令是固定白名单：各类 `list` 与 `show`、`trace check`、`check`、`docs check` 与 `list memory`。每项在计算进程中以一个新的乐观 Repository 快照执行与本进程相同的领域函数，返回前按该命令原有规则核验文件、缺失路径、目录集合、配置、路径安全、publication.revision 与恢复状态；服务只提供热的解析缓存，不提供结果。`trace show`、`trace gaps` 与 `review` 的历史投影读取保留[异步诊断投影](use-case/query-asynchronous-projections.md)的语义，只是由服务读取投影。
 
-CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`--dry-run` 不连接服务。查询在应答前断开时，CLI 以相同输入在本进程重新计算；服务已返回的领域错误原样输出，不重算。写命令、交互命令、`view`、`lsp` 与外部 runner 不经由服务。
+CLI 默认自动启动或复用同安装身份、同协议的服务，再发送 `query`。传输断开后可以重新连接并重试一次；领域错误原样输出，不重算。`--dry-run` 与 cache-off 调用在本进程执行同一应用查询，不启动或连接后台，也不读取或写入持久缓存，保持[打开模式](#句柄与打开模式)的无持久状态约束。写命令、交互命令、`lsp` 与外部 runner 的执行入口由各自 Feature 拥有。
+
+查询携带本次调用的完整环境映射，最多 256 KiB；缺失变量保持缺失，不从服务启动环境补齐。计算进程为每次查询组合 Workspace，Repository 的环境读取与 adapter 输入身份使用同一映射，查询结束后释放。环境不进入运行记录、缓存、事件、诊断或日志；预热解析缓存不改变来源身份。
+
+### 命令作用域查询
+
+`concord --server=command check` 为本次查询启动受管后台，取得结果后先停止服务并确认进程组回收，再退出命令。已有实例时返回 `WorkspaceServerBusy`，不能附着后停止它。默认模式是 `--server=shared`。
+
+命令作用域标识绑定规范项目根、Git-private 目录与随机能力值，通过受管进程环境传递，RPC 每次核验。继承标识的同根调用只连接所属实例；跨根或无效标识返回 `WorkspaceServerScopeMismatch`，所属实例失联返回 `WorkspaceServerScopeExpired`，均不启动共享后台。外部 RPC 与 HTTP 监听返回 `WorkspaceServerScoped`。
+
+继承作用域的 cache-off 查询也须核验同根与所属实例，通过既有实例执行且不使用请求缓存；不能用 `--dry-run` 绕过作用域约束。
+
+服务通过父子 IPC 的断开事件感知所有者退出，并执行同一停止流程；不能仅凭 PID 判断所有权。CLI 正常结束、失败与中断均关闭本次作用域。`--help`、`--version`、`--skill` 和随包资源读取不启动服务。
 
 ### 不变量
 
@@ -139,15 +157,15 @@ CLI 有同安装身份的服务时发送 `query`，否则在本进程计算，`-
 2. 当前版本的 Concord 进程在发现运行中的服务后不打开该 worktree 的持久库；任一时刻最多一个打开者由数据库协调锁保证。
 3. 持有发布租约的进程不打开持久库；服务主进程只在清理时持有发布租约，且此时已关闭持久库。
 4. 客户端不取得数据库句柄；经由服务的查询结果与本进程计算相同。
-5. 写入、发布、恢复与证据不依赖服务：服务不存在、崩溃或版本不同时，同一命令得到相同结果。
+5. 写入、发布、恢复与证据仍由来源及 journal 决定；缓存回写失败不改变已完成的来源结果，也不重跑操作。已有服务的安装或协议冲突须先显式解决，不能绕过其缓存所有权。
 
 | 失败 | 结果 |
 | --- | --- |
-| 拉起的服务 10 秒内没有完成握手 | 面板、`view` 与 `server start` 报 `WorkspaceServerUnavailable` 并以非零码退出 |
-| 已运行的服务 1 秒内没有完成握手 | CLI 在本进程计算 |
+| 拉起的服务 10 秒内没有完成握手 | 客户端报 `WorkspaceServerUnavailable` 并以非零码退出 |
+| 已运行的服务 1 秒内没有完成握手 | 重新发现实例；不能在客户端计算 |
 | 服务锁无法取得（非 WouldBlock） | `ServerLockUnavailable`，details 给出原因 |
 | 运行目录不符合要求 | 不创建服务，报告原因 |
-| 不同身份的服务 3 秒内未退出 | `WorkspaceServerBusy`，details 给出对方 pid 与安装身份 |
+| 活跃服务的安装或协议不同 | `WorkspaceServerVersionConflict`，已有实例继续运行 |
 | 计算进程超时或崩溃 | 当前请求以具名错误失败，计算进程重启，后续请求冷启动 |
 | 服务进程被杀 | 操作系统释放服务锁，下一个启动者删除残留 socket 后启动；面板与浏览器显示重连中 |
 
