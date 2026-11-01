@@ -32,5 +32,6 @@
 
 ## 还在路上的
 
+- [多客户端共享项目后台](roadmap/shared-project-service/README.md)：CLI、Herdr 与 Web 共享运行状态的目标方案。
 - [Roadmap](roadmap/README.md)：还没开始实现的方向。
 - [Issue](issues/README.md)：待处理的问题与请求。
