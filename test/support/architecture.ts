@@ -161,19 +161,3 @@ export function dependencyViolations(audit: Audit): Violation[] {
   }
   return result;
 }
-
-export function domainCycles(audit: Audit, typeOnly: boolean): readonly string[] {
-  const graph = new Map<string, Set<string>>();
-  for (const edge of audit.edges) if (edge.to && edge.typeOnly === typeOnly && layerOf(edge.from) === 'domain' && layerOf(edge.to) === 'domain') {
-    const from = domainOf(edge.from), to = domainOf(edge.to);
-    if (from !== to) { const targets = graph.get(from) ?? new Set(); targets.add(to); graph.set(from, targets); }
-  }
-  const cycles = new Set<string>();
-  const visit = (node: string, path: readonly string[]): void => {
-    if (path.includes(node)) { cycles.add([...path.slice(path.indexOf(node)), node].join(' -> ')); return; }
-    for (const target of graph.get(node) ?? []) visit(target, [...path, node]);
-  };
-  for (const node of graph.keys()) visit(node, []);
-  return [...cycles].sort();
-}
-export const violationKey = (violation: Violation): string => `${violation.file}#${violation.code}#${violation.text}`;

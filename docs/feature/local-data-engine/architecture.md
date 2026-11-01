@@ -46,7 +46,9 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 ## 工作区服务
 
-每个 worktree 最多一个工作区服务。它长期持有该 worktree 的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。HawDB 规定一个目录由一个进程长期持有，服务按此持有缓存。
+每个[项目目录](../../concepts.md#project-directory)最多一个工作区服务，与分支名或检出方式无关。它长期持有该目录的持久 HawDB，保持解析结果热，监听来源并刷新工作区投影，通过本机 socket 向 [Web 工作台](../web-workbench/architecture.md#工作区投影)与 CLI 提供领域结果。客户端不取得数据库句柄。
+
+Git 适配把项目目录定位到 worktree 顶层，通过 `git rev-parse --git-path concord` 取得该目录独立的 Git-private 状态位置。普通 clone 的工作目录与 linked worktree 使用同一协议；同一目录切换分支不改变服务归属。以下以 worktree 表述这项底层隔离边界。
 
 ### 进程与资源
 
@@ -68,7 +70,7 @@ clear 先关闭本仓库的持久句柄，再取得协调锁和根 `owner.hawdb.
 
 ### 启动与裁决
 
-只有 `concord view` 与 `concord server start` 启动服务；其它 CLI 命令只使用已有服务。`view --in-process` 在本进程运行同一服务，同样先取得服务锁。
+`concord view` 与 `concord server start` 可以自动启动服务；其它业务命令只使用已有服务。`concord server run` 是前台服务入口。`view --in-process` 需要新服务时，以受当前命令作用域管理的子进程启动；已有服务仍可复用，所有启动方式都先取得同一服务锁。
 
 1. 启动者读取运行记录，核对 worktree、privateDir 与安装身份，连接 socket 并发送 `hello`；应答的实例 token 必须与记录一致。
 2. 没有可用服务时，启动者以 detached 方式启动 `concord server run --root <worktree>`。
