@@ -45,6 +45,7 @@ const main = Effect.tryPromise({ try: async () => {
   let closed = false, output: HostElement | undefined, view: ModView | undefined;
   const errors: unknown[] = [], tasks = new Set<HostTask>(), disposers: (() => void)[] = [];
   const calls: string[][] = [];
+  const timings: { operation: string; ms: number }[] = [];
   const context = (): HostContext => ({
     notify() { if (closed) throw new Error('Closed mod context'); output = view?.render(context()); },
     spawn(callback) {
@@ -72,10 +73,13 @@ const main = Effect.tryPromise({ try: async () => {
     exec: async (command: string, args: string[], options: { cwd: string }) => {
       if (command !== 'concord') throw new Error(`Unexpected product command ${command}`);
       calls.push(args.slice(args.indexOf('--root') + 2));
-      return await new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => execFile(process.execPath, [entry, ...args], { cwd: options.cwd, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+      const started = performance.now();
+      const reply = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => execFile(process.execPath, [entry, ...args], { cwd: options.cwd, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
         if (error && typeof error.code !== 'number') reject(error);
         else resolve({ code: typeof error?.code === 'number' ? error.code : 0, stdout, stderr });
       }));
+      timings.push({ operation: args.slice(args.indexOf('--root') + 2).join(' '), ms: performance.now() - started });
+      return reply;
     },
     readTextFile: async (path: string) => readFile(path, 'utf8').catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }),
     writeTextFile: async (path: string, text: string, expected: string | null) => {
@@ -121,6 +125,7 @@ const main = Effect.tryPromise({ try: async () => {
   try {
     let started = performance.now();
     const module = await import(pathToFileURL(join(installationResources(installationRootForBin(entry)).herdrMod, 'main.js')).href) as { default: new() => ModView };
+    timings.push({ operation: 'load built mod', ms: performance.now() - started });
     view = new module.default(); view.init(undefined, context()); output = view.render(context());
     if (mode === 'workflow') {
       await waitFor(() => fileWatchers.size > 0);
@@ -158,7 +163,7 @@ const main = Effect.tryPromise({ try: async () => {
       started = performance.now();
       ended = await waitFor(() => output?.find('concord-body-docs/feature/measured/README.md')?.text().includes(marker) === true);
     }
-    process.stdout.write(JSON.stringify({ ms: ended - started, startedAtMs: started, endedAtMs: ended, boundary: 'readable-mod-description; external Herdr UI substituted; no native drawing', text: output?.text(), calls }) + '\n');
+    process.stdout.write(JSON.stringify({ ms: ended - started, startedAtMs: started, endedAtMs: ended, boundary: 'readable-mod-description; external Herdr UI substituted; no native drawing', text: output?.text(), calls, timings }) + '\n');
   } finally {
     view?.close(context()); closed = true;
     for (const task of tasks) task.cancel();
