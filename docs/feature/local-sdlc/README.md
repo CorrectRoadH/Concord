@@ -8,7 +8,7 @@
 
 - **先写 Spec 再动手。** 用 Feature 描述能力，用 Use Case 一步一步写出使用者的路径；方案有争议时，先比较候选方案再裁决。
 - **把测试和代码连到 Spec。** 在测试或实现文件里写一行标记，Concord 从源码反查出某个 Use Case 由哪些测试守护、由哪些代码实现。
-- **找出没用的测试。** 每个测试标注它验证的 Use Case 或其中一步；`concord test discover` 收集测试运行器认识的全部测试后，`concord trace gaps` 列出没有关联任何 Use Case 的测试，你可以逐个判断是补上关联还是删掉。
+- **找出没有关联 Use Case 的测试。** 每个测试标注它验证的 Use Case 或其中一步；`concord test discover` 收集测试运行器认识的全部测试后，`concord trace gaps` 列出没有关联任何 Use Case 的测试。缺少关联不表示测试没有价值，维护者需要结合测试目的决定如何处理（[只声称证明过的](../../taste.md#t-5)）。
 - **让 check 守住一致性。** Spec 被删除、改名或标记写错时，`concord check` 指出出错的文件和行。
 - **用证据关闭缺陷。** 缺陷记为 Issue。回归测试在缺陷提交上失败、在修复提交上通过，Concord 核验这两点后才把 Issue 关为已修复。
 - **积累工程知识。** 调查结论、根因和裁决写成 Memory，之后可以按关键词检索。
@@ -76,7 +76,7 @@
    complete: false
    findings:
      test/cart.test.js:1
-       ReferenceNotFound: Reference target does not exist: docs/feature/cart/use-case/add-to-cart.md
+       ReferenceNotFound: Reference target does not exist: docs/feature/cart/use-case/add-item.md
    ```
 
    检查以退出码 1 失败，指出标记所在的文件和行。改正标记后重新通过。

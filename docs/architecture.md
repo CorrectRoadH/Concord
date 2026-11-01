@@ -92,7 +92,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 ### 测试布局
 
-测试目录对应[测试架构](engineering/concord-self-hosting/test-architecture.md)的层：`test/model/` 与 `test/domain/` 从 `src/` 导入；`test/cli/` 运行本次打包安装的 bin，`test/process/` 还可以运行该安装包中的工作进程入口。`test/process/` 中验证源码运行与原生构建的检查是例外；`test/e2e/` 是浏览器测试；`test/architecture.test.ts` 检查依赖规则。测试不导入或运行 `dist/`。
+测试分层与目录职责由[测试架构](engineering/concord-self-hosting/test-architecture.md)定义；运行入口、构建产物使用与检查顺序由[构建与检查入口](engineering/concord-self-hosting/README.md#构建与检查入口)定义。
 
 ### 基础服务
 
@@ -325,7 +325,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。发行 tgz 携带 Linux x64/glibc 与 macOS arm64 原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一打包，在目标平台安装同一份包验收。
 
-`pnpm check` 构建后检查测试与脚本类型，再执行领域、恢复和 package smoke；公开 CLI 验收使用独立安装后的命令。性能预算由 `pnpm bench` 按[性能验收](engineering/concord-self-hosting/performance.md)的测量路径单独判定，不进入 `pnpm check`。
+交付通过 `pnpm check`，检查流程由[构建与检查入口](engineering/concord-self-hosting/README.md#构建与检查入口)定义。性能预算由 `pnpm bench` 按[性能验收](engineering/concord-self-hosting/performance.md)的测量路径单独判定，不进入 `pnpm check`。
 
 ## 当前格式
 

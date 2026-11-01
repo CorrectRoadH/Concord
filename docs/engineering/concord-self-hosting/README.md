@@ -30,15 +30,15 @@ pnpm exec vp run concord --help
 pnpm exec vp run check
 ```
 
-`pnpm check`（也可通过 `vp run check` 调用）是唯一的检查入口。它先构建 CLI 与 Web 工作台并复用已校验的原生产物，再并行做 repository、测试和脚本的类型检查以及当前 checkout 的 Spec 检查，最后在隔离 Git 消费者中并发运行打包 CLI 的 Node 与浏览器测试。
+`pnpm check`（也可通过 `vp run check` 调用）是唯一的检查入口，检查顺序与产物使用见[构建与检查入口](#构建与检查入口)。
 
 运行 `pnpm concord trace show local-sdlc` 可从源码查看关联。
 
 没有全局安装 Vite+ 时使用 `pnpm exec vp`。`vp install` 通过固定版本的 pnpm 管理依赖。
 
-`pnpm check test/writing-cache.test.ts` 在完整构建和静态检查之后只运行指定文件；用 `--test-name-pattern=...` 选择用例，用 `--test-shard=1/4` 对完整测试集分片。只跑部分测试不能代替完整检查。
+按文件、用例或分片选择测试的参数见[构建与检查入口](#构建与检查入口)。只跑部分测试不能代替完整检查。
 
-`vp run check` 是完整的交付检查。`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。测试使用 Node runner，每次调用共享一份打包产物，消费者独立安装。任务缓存关闭；局部检查不替代完整验收。
+`vp build` 的生产构建钩子准备完整发行产物。Vite+ 内置的 `vp check` 和 `vp test` 不调用项目脚本。任务缓存关闭；局部检查不替代完整验收。
 
 参与开发前请阅读[开发规则](../../../AGENTS.md)与[项目品味](../../taste.md)。
 
@@ -103,7 +103,7 @@ pnpm exec vp run check
 Concord 用自己的流程开发和验收自己。
 
 1. 新功能先声明目标 Feature 与完整 Use Case，重要方案经 Design 比较和裁决。
-2. 验收测试在声明旁关联 Spec。交付必须通过 `pnpm check`，通过构建与打包后的公开 CLI 在隔离 Git 消费者中验证。
+2. 验收测试在声明旁关联 Spec。交付必须通过 `pnpm check`，测试按[构建与检查入口](#构建与检查入口)使用产物并验证公开 CLI。
 3. Concord 的 check、trace 与 review 用于检查自身关系，不虚构测试关联或完成状态。
 
 ## 协作与授权
