@@ -1,6 +1,6 @@
 # CLI 登录态复用：接入设计
 
-本方案定义可选 GitHub CLI 读取模式，与默认 API 连接并列；Linear 继续使用 API 连接。适用品味：[单一来源](../../taste.md#t-3)、[独立运行](../local-sdlc/scope.md#独立与本地)、[受管写入](../local-sdlc/scope.md#写入安全)、[严格边界](../../engineering/concord-self-hosting/README.md#技术栈)、[授权与独立挑战](../../engineering/concord-self-hosting/README.md#协作与授权)。视觉规则由根目录 `DESIGN.md` 拥有。
+本方案定义可选 GitHub CLI 读取模式，与默认 API 连接并列；Linear 继续使用 API 连接。适用品味：[单一来源](../../taste.md#t-3)、[独立运行](../local-sdlc/scope.md#独立与本地)、[受管写入](../local-sdlc/scope.md#写入安全)、[严格边界](../../engineering/concord-self-hosting/README.md#技术栈)、[授权与独立挑战](../../engineering/concord-self-hosting/README.md#协作与授权)。视觉规则由[工作台视觉规范](../web-workbench/visual-design.md)拥有。
 
 ## 目标
 

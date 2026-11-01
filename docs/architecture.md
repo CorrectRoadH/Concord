@@ -4,7 +4,7 @@
 
 Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致（[为什么需要 Concord](../README.md)）。它是可安装到任意 Git 仓库的本地 CLI。
 
-文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](taste.md)，Web 界面设计见根目录 `DESIGN.md`。
+文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](taste.md)，Web 界面设计见[工作台视觉规范](feature/web-workbench/visual-design.md)。
 
 ## 代码结构
 
@@ -162,7 +162,7 @@ Queries 是白名单只读查询的应用端口，有两个实现：`Queries.Loc
 
 `concord.config.ts` 可以不存在；存在时运行时只读取这一个静态 TS 配置文件，不执行模块。配置项与默认值见[维护项目配置](feature/project-onboarding/use-case/maintain-project-config.md#配置项)，journal 分类与恢复授权见[项目接入架构](feature/project-onboarding/architecture.md)。配置快照拥有原文前像、路径与摘要，写入与恢复使用同一协议。
 
-Memory 固定位于 worktree 根的 `memory/`。`docs/taste.md` 存在即启用，`status` 为 draft 或 active；docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `taste` 派生。品味不充当测试 Spec 或自动合规证据。根 `DESIGN.md` 可选。
+Memory 固定位于 worktree 根的 `memory/`。`docs/taste.md` 存在即启用，`status` 为 draft 或 active；docs 下的页面在依据规则的句子旁链接条款或款的 ID，`check` 校验这些链接，反向引用由 `taste` 派生。品味不充当测试 Spec 或自动合规证据。设计说明按[文档模型](document-model.md#页面职责)放在所属 Spec 中。
 
 ## 领域与 CLI
 
@@ -307,7 +307,7 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 ## Web 工作台与 Herdr mod
 
-`concord view` 提供随包分发的 React 工作台，是工作区服务的客户端。[Herdr mod](feature/herdr-mod/README.md) 在 Herdr 中提供完整的阅读、初始化与编辑，只通过公开 CLI 取数据。Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见根目录 `DESIGN.md`。
+`concord view` 提供随包分发的 React 工作台，是工作区服务的客户端。[Herdr mod](feature/herdr-mod/README.md) 在 Herdr 中提供完整的阅读、初始化与编辑，只通过公开 CLI 取数据。Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见[工作台视觉规范](feature/web-workbench/visual-design.md)。
 
 ## 文档写作检查
 

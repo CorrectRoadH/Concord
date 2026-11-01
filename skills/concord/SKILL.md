@@ -48,7 +48,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 - 过程写入 Memory 与 Issue，`docs/` 的 Spec 只保留当前声明。下一次会话读到的是现行约定。
 - 修复可以核验：先提交在缺陷上失败的回归测试，再提交修复，`issue close --fixed` 在两个提交上各运行一次，把结论写进 Issue，任何人都能重放。
 
-决策依据见随包 `docs/design/sdd-core-model/DECISION.md`，完整说明见随包 `docs/why-concord.md`。
+文档归属见随包 `docs/document-model.md`，产品介绍与开发流程见随包 `README.md`。
 
 ## 工作原则
 

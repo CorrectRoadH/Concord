@@ -28,6 +28,7 @@
 
 - [架构](architecture.md)：跨 Feature 的系统结构。
 - [工程指南](engineering/concord-self-hosting/README.md)：开发、测试与发布 Concord 本身。
+- [来源与第三方声明](notices.md)：源码来源及随包许可证材料的位置。
 
 ## 还在路上的
 

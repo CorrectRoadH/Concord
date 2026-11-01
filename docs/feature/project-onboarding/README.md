@@ -8,7 +8,7 @@
 ## 已确认的需求
 
 - `concord.config.ts` 可以不存在；存在时是静态 TS 数据，运行时只读取它，不执行配置模块。配置项与默认值见[维护项目配置](use-case/maintain-project-config.md#配置项)。
-- 初始化提供渐进交互与等价的非交互输入，预览完整变更，取消不写入，保留已有文件。init 创建 draft 品味 `docs/taste.md`；根目录 `DESIGN.md` 是独立可选项。
+- 初始化提供渐进交互与等价的非交互输入，预览完整变更，取消不写入，保留已有文件。init 创建 draft 品味 `docs/taste.md`，系统架构入口位于 `docs/architecture.md`。
 - 品味文件存在即启用，`status` 决定是否已采用。
 - 创建 Feature 时以参数选择页面：README 必需，其余页面可选。
 - 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，`check` 检查结果是否一致。

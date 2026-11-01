@@ -10,7 +10,7 @@
 ## 完整路径
 
 1. 运行 init，查看按约定发现的测试根与源码根。
-2. 创建必需的项目品味；没有已采用原则时保留明确 draft，后续由作者显式采用为 active。独立选择是否生成 DESIGN.md。
+2. 创建必需的项目品味；没有已采用原则时保留明确 draft，后续由作者显式采用为 active。系统设计从 `docs/architecture.md` 进入，各 Feature 的内部设计放在所属的 architecture 页。
 3. 需要 `test run` 或修复核验时配置 runner；测试或实现不在约定位置时覆盖发现范围。无测试项目允许没有测试根。
 4. 预览完整文件变更后完成；非交互输入能表达相同选择。
 5. 在根 AGENTS.md 读取 Concord 托管指引，通过 `concord --skill` 获取当前安装版本的任务路由和主题说明。
@@ -21,7 +21,7 @@
 - 新项目必有 docs/taste.md；不将未填写原则或模板示例当成已采用规则。
 - 没有选择 runner 或覆盖时不创建 `concord.config.ts`，`check`、`trace` 与 Web 工作台按[默认值](maintain-project-config.md#配置项)工作。
 - 没有 AGENTS.md 时创建；已有文件只追加或刷新边界明确的托管区块，保留区块外的原字节。标记残缺时原子拒绝，不覆盖未知内容。
-- DESIGN.md 仅在选中时创建，已有文档保留。
+- `docs/architecture.md` 缺失时创建，已有文档保留。
 - 缺失的全局写作政策直接采用随包预设，已有政策保留原文。新项目生成的指南和模板通过这套规则；预设值与来源见[写作管理](../../documentation-quality/use-case/manage-writing.md)。
 - 取消、非法选项或文件冲突不得留下部分初始化；dry-run 不写项目文件。已有 owner 或租约文件的仓库预览遵守未完成 journal 障碍，确认后在短期独占提交中重验前像；无 owner、无锁的新仓库不创建私有状态。
 - 非 TTY 不等待交互，结果确定；重跑不覆盖既有项目配置。
