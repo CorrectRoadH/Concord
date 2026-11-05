@@ -1,4 +1,4 @@
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from '../support/installed-package.js';
 import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import { createConsumer } from '../support/consumer.js';
 import assert from 'node:assert/strict';

@@ -37,7 +37,7 @@ export const verifyInstalledNative = Effect.fn('native.verifyInstalled')(functio
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const installed = yield* fs.realPath(resolve(packageRoot));
-  const cli = packageBin(installed);
+  const cli = yield* packageBin(installed);
   assert.ok(yield* fs.exists(cli), 'installed CLI is required');
   const scratch = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-native-install-' });
   const bin = join(scratch, 'bin');

@@ -1,5 +1,5 @@
 import { installationResources } from "../../src/base/installation/index.js";
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFile, spawnSync } from 'node:child_process';
 import { appendFileSync, readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';

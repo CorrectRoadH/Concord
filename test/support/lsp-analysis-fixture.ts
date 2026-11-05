@@ -1,5 +1,5 @@
 import { createDocument } from './operations.js';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 
 import { createConsumer } from './consumer.js';
 import { installedConcordCli } from './support.js';

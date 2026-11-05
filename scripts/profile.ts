@@ -43,7 +43,7 @@ const main = Effect.gen(function*() {
   const runs = join(workDir, 'runs');
   yield* fs.makeDirectory(runs);
   const candidatePackage = yield* buildForMeasurement(resolve('.'), runs);
-  const candidate = yield* loadArtifact('candidate', '.', packageBin(candidatePackage));
+  const candidate = yield* loadArtifact('candidate', '.', yield* packageBin(candidatePackage));
   const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
   // Output artifacts intentionally survive; only the work directory is disposable.
   const dir = values.out === undefined ? yield* fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-profile-out-' }) : resolve(values.out);

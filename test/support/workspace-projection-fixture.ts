@@ -5,7 +5,7 @@ import { NodeServices } from '@effect/platform-node';
 import { runApplication } from '../support/repository.js';
 import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
 import { installationResources } from "../../src/base/installation/index.js";
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';

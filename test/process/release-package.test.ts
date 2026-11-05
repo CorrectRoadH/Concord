@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { packConcord } from '../../scripts/release-package.js';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from '../support/installed-package.js';
 import { hawdbTarget, installationResources } from '../../src/base/installation/index.js';
 import { builtConcord } from '../support/installed-package.js';
 import { tmpdir } from '../support/temporary.js';

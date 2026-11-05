@@ -2,8 +2,9 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, sy
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
-import { packageBin } from '../../scripts/package-location.js';
-import { nativeArtifactRoot, nativeSourceFiles } from '../../src/base/installation/index.js';
+import { installationResources, nativeArtifactRoot, nativeSourceFiles } from '../../src/base/installation/index.js';
+
+export const packageBin = (root: string): string => installationResources(root).bin;
 
 export const distributionRoot = fileURLToPath(new URL('../..', import.meta.url));
 const Manifest = Schema.fromJsonString(Schema.Struct({ name: Schema.String, version: Schema.String, files: Schema.Array(Schema.String) }));

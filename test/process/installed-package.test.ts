@@ -3,7 +3,7 @@ import { waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
 import { execFileSync } from 'node:child_process';
 import { installationResources } from "../support/source-resources.js";
 import { relative } from "node:path";
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from '../support/installed-package.js';
 import { hawdbTarget } from "../../src/base/installation/index.js";
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';

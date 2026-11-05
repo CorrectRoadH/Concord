@@ -41,7 +41,8 @@ const headOf = Effect.fn('perf.headOf')(function*(root: string, outputDir: strin
 });
 
 /** Self-hosting consumer: an independent clone of this repository frozen at one commit; uncommitted edits are excluded by design. */
-export const selfConsumer = Effect.fn('perf.selfConsumer')(function*(repository: string, commit: string, workDir: string, entry = packageBin(repository), smoke = false) {
+export const selfConsumer = Effect.fn('perf.selfConsumer')(function*(repository: string, commit: string, workDir: string, entry?: string, smoke = false) {
+  entry ??= yield* packageBin(repository);
   const root = join(workDir, 'self');
   yield* mustRun(['git', 'clone', '-q', '--no-hardlinks', '--no-checkout', repository, root], { cwd: workDir, outputDir: workDir });
   yield* git(root, workDir, 'checkout', '-q', '--detach', commit);

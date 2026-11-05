@@ -1,4 +1,4 @@
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';

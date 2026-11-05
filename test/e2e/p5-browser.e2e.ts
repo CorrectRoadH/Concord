@@ -1,5 +1,5 @@
 import { createDocument, initialize } from '../support/operations.js';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from '../support/installed-package.js';
 import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';

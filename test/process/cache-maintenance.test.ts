@@ -2,7 +2,7 @@ import { runApplication } from '../support/repository.js';
 import { PersistentCache } from '../../src/base/cache/index.js';
 import { initialize } from '../support/operations.js';
 import { installedConcordCli } from '../support/support.js';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from '../support/installed-package.js';
 import { publicationService } from '../support/repository.js';
 import { workerEntryArgv, CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../../src/base/installation/index.js";
 import assert from 'node:assert/strict';

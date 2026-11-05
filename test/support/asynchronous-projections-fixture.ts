@@ -9,7 +9,7 @@ import { makeOwnedProcessService } from '../../src/base/process/index.js';
 import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
 import { classifyQueryRefresh, persist } from '../../src/app/index.js';
 import { pathToFileURL } from 'node:url';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 import { createConsumer } from './consumer.js';
 import { genericPrivateDirectorySync } from "../../src/base/publication/index.js";
 import { refreshQuery } from "../../src/app/index.js";

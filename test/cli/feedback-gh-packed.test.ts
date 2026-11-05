@@ -1,5 +1,5 @@
 import { initialize } from '../support/operations.js';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from '../support/installed-package.js';
 import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md

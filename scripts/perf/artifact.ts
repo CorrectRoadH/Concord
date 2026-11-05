@@ -36,14 +36,14 @@ const installArtifact = Effect.fn('perf.installArtifact')(function*(repository: 
   yield* fs.writeFileString(join(scratch, 'package.json'), '{"private":true}');
   yield* fs.copyFile(join(repository, 'pnpm-workspace.yaml'), join(scratch, 'pnpm-workspace.yaml'));
   yield* mustRun(['pnpm', 'add', '--ignore-scripts', '--prefer-offline', '--save-exact', artifact.filename], { cwd: scratch, outputDir: scratch, timeoutMs: 120_000 });
-  return packageBin(join(scratch, 'node_modules/concord-sdlc'));
+  return yield* packageBin(join(scratch, 'node_modules/concord-sdlc'));
 });
 
 /** Identify the supplied installation; retain its source repository for consumer fixtures. */
 export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string, installedEntry?: string) {
   const fs = yield* FileSystem.FileSystem;
   const dir = yield* fs.realPath(resolve(path));
-  const built = packageBin(dir);
+  const built = yield* packageBin(dir);
   const entry = installedEntry ?? (label === 'candidate' ? built : ((yield* fs.exists(built)) ? yield* installArtifact(dir) : built));
   if (!(yield* fs.exists(entry))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
   const git = (...args: string[]) => mustRun(['git', '-C', dir, ...args], { cwd: dir, outputDir: dir }).pipe(Effect.map(result => result.stdout.trim()));

@@ -1,5 +1,5 @@
 import { createRequire } from 'node:module';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 import { createConsumer } from './consumer.js';
 import { sourceConcord, prepareSourceConsumer } from './installed-package.js';
 import assert from 'node:assert/strict';

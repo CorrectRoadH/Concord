@@ -40,7 +40,7 @@ const main = Effect.gen(function*() {
   const workDir = yield* workDirectory('concord-bench-', values.keep), outputDir = join(workDir, 'runs');
   yield* fs.makeDirectory(outputDir);
   const candidatePackage = yield* buildForMeasurement(root, outputDir);
-  const candidate = yield* loadArtifact('candidate', root, packageBin(candidatePackage));
+  const candidate = yield* loadArtifact('candidate', root, yield* packageBin(candidatePackage));
   const base = values.changed !== undefined || values.compare !== undefined ? (values.changed !== undefined ? values.changed || (yield* defaultBase(root, outputDir)) : values.compare || (yield* defaultBase(root, outputDir))) : undefined;
   const scenarios = yield* loadScenarios(root), budgets = yield* loadBudgets(root);
   const changed = values.changed === undefined ? undefined : yield* changedSelection(root, candidate.entry, base!, outputDir);

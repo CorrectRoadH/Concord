@@ -14,7 +14,7 @@ export const prepareBaseline = Effect.fn('perf.prepareBaseline')(function*(repos
   if (yield* fs.exists(marker)) {
     const bytes = yield* fs.readFileString(marker);
     const saved = yield* io('Decode baseline identity', () => Schema.decodeUnknownSync(Schema.fromJsonString(Identity), { onExcessProperty: 'error' })(bytes));
-    const artifact = yield* loadArtifact('baseline', folder, (yield* fs.exists(join(built, 'package.json'))) ? packageBin(built) : undefined);
+    const artifact = yield* loadArtifact('baseline', folder, (yield* fs.exists(join(built, 'package.json'))) ? yield* packageBin(built) : undefined);
     if (saved.commit !== commit || artifact.commit !== commit || saved.digest !== artifact.digest || saved.node !== process.version) return yield* new PerfError({ message: `Cached baseline identity mismatch: ${folder}` });
     const status = (yield* mustRun(['git', 'status', '--porcelain', '--untracked-files=no'], { cwd: folder, outputDir })).stdout.trim();
     if (status !== '') return yield* new PerfError({ message: `Cached baseline has modified sources: ${folder}` });
@@ -38,7 +38,7 @@ export const prepareBaseline = Effect.fn('perf.prepareBaseline')(function*(repos
   const external = yield* fs.exists(join(folder, 'scripts/build-output.ts'));
   yield* mustRun(['pnpm', 'exec', 'vp', 'build', ...(external ? ['--outDir', built] : [])], { cwd: folder, outputDir });
   if (external) yield* mustRun(['pnpm', 'install', '--prod', '--frozen-lockfile', '--ignore-scripts', '--offline'], { cwd: built, outputDir });
-  const artifact = yield* loadArtifact('baseline', folder, external ? packageBin(built) : undefined);
+  const artifact = yield* loadArtifact('baseline', folder, external ? yield* packageBin(built) : undefined);
   if (artifact.commit !== commit || artifact.dirty) return yield* new PerfError({ message: 'Baseline source identity changed while building' });
   yield* fs.writeFileString(marker, `${JSON.stringify({ format: 'concord.bench-baseline/v1', commit, digest: artifact.digest, node: process.version })}\n`);
   yield* pruneBaselines(repository, cache, commit, outputDir);

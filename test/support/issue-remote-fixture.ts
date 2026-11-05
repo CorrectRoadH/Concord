@@ -1,6 +1,6 @@
 import { initialize } from './operations.js';
 import { writeGhFixture } from './gh-fixture.js';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 import { sourceConcord, prepareSourceConsumer } from './installed-package.js';
 // @concord-file
 import assert from 'node:assert/strict';

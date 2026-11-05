@@ -3,7 +3,7 @@ import { createConsumer } from '../support/consumer.js';
 import { LocalRepository } from '../support/repository.js';
 import type { DocumentKind } from '../../src/model/index.js';
 import type { CreateDocumentInput } from '../../src/app/index.js';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from '../support/installed-package.js';
 import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';

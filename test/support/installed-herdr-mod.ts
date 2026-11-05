@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 
 /** Verify distribution resources only after the single packaging test installs them. */
 export function verifyInstalledHerdrMod(packageRoot: string, scratch: string): void {

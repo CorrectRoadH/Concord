@@ -1,7 +1,7 @@
 import { LocalRepository } from './repository.js';
 import { createConsumer } from './consumer.js';
 import { createDocument } from './operations.js';
-import { packageBin } from '../../scripts/package-location.js';
+import { packageBin } from './installed-package.js';
 import { renderOwnerFixture } from '../support/owner-fixture.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
