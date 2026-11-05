@@ -1,11 +1,12 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
+// @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#follow
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Schema } from "effect";
 import { resourcePath } from "../../app/index.js";
 
-const TOPICS = ['init', 'docs-from-scratch', 'docs-from-code', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback'] as const;
+const TOPICS = ['init', 'docs-from-scratch', 'docs-from-code', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback', 'spec', 'implement', 'review', 'fix'] as const;
 const TopicSchema = Schema.Literals(TOPICS);
 const ArgvSchema = Schema.Array(Schema.String);
 const SkillContentSchema = Schema.String.check(

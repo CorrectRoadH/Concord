@@ -11,6 +11,7 @@ import { AGENT_RULE_BEGIN } from "../base/workspace/index.js";
 import { AGENT_RULE_END } from "../base/workspace/index.js";
 import { AGENT_RULE_CONTENT } from "../base/workspace/index.js";
 import { git } from "../base/workspace/index.js";
+import { planWorkflowSkills } from './workflow-skills.js';
 
 
 export function withAgentInstructions(source: string): string {
@@ -31,6 +32,7 @@ export type InitializationReceipt = typeof InitializationReceiptSchema.Type;
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#init
 // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
+// @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#install
 export const initialize = Effect.fn('initialize')(function*(repo: Repository, dryRun = false, options: InitializeOptions = {}, initialGuide?: WritingGuide) {
   const catalog = yield* templateCatalog();
   return yield* Effect.try({ try: (): InitializationReceipt => inRepositorySnapshot(repo, () => {
@@ -65,8 +67,11 @@ export const initialize = Effect.fn('initialize')(function*(repo: Repository, dr
   for (const path of Object.keys(paths)) if (repo.read(path) !== undefined) throw new ConcordError('InitializationConflict', `${path} already exists; no existing file will be overwritten`);
   const agentBefore = repo.read('AGENTS.md') ?? null;
   const agentAfter = withAgentInstructions(agentBefore ?? '');
+  const skills = planWorkflowSkills(repo);
+  preservedPaths.push(...skills.unchangedPaths);
   const changes: Change[] = Object.entries(paths).map(([path, after]) => ({ path, before: null, after }));
   if (agentBefore !== agentAfter) changes.push({ path: 'AGENTS.md', before: agentBefore, after: agentAfter });
+  changes.push(...skills.changes);
   const receipt = repo.publish('init', changes, dryRun);
   return decode(InitializationReceiptSchema, { ...receipt, config, createdPaths: receipt.changedPaths, preservedPaths, guide }, 'init result');
   }), catch: failure });

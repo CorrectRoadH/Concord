@@ -394,3 +394,5 @@ export { decodeWorkspaceProjectionCandidate } from './workspace-projection.js';
 export type { WorkspaceProjectionCandidate } from './workspace-projection.js';
 export { WritingGuideSchema, InitializationReceiptSchema } from './initialization.js';
 export type { WritingGuide, InitializationReceipt } from './initialization.js';
+export { WORKFLOW_SKILL_TOPICS, workflowSkillPaths, isWorkflowSkillPath, SkillsInstallReceiptSchema } from './workflow-skills.js';
+export type { WorkflowSkillTopic } from './workflow-skills.js';

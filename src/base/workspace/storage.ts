@@ -12,7 +12,7 @@ import { release } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { Schema } from "effect";
 import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from "../publication/index.js";
-import { ConcordError, Text, canonical, decode, digest, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.js";
+import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.js";
 import { snapshot } from "./config.js";
 import { closeRepositoryCache } from "../cache/index.js";
 import { invalidateActiveRun } from "../publication/index.js";
@@ -469,7 +469,7 @@ export class LocalRepository implements Repository {
     this.validateConfiguredRoots(config);
     for (const path of config.runner?.sourceFiles ?? []) this.absolute(path);
   }
-  private allowedOwner(path: string, _config: ProjectConfig = this.config): boolean { return fixedOwner(path) || path.startsWith('memory/') && path.endsWith('.md') || path.startsWith('docs/') && path.endsWith('/writing.md'); }
+  private allowedOwner(path: string, _config: ProjectConfig = this.config): boolean { return fixedOwner(path) || isWorkflowSkillPath(path) || path.startsWith('memory/') && path.endsWith('.md') || path.startsWith('docs/') && path.endsWith('/writing.md'); }
   private currentSnapshot(): ConfigSnapshot {
     const source = this.read('concord.config.ts');
     return snapshot('concord.config.ts', source ?? '', this.privateDir, source === undefined);

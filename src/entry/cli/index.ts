@@ -29,6 +29,7 @@ export { showDocument } from './cli-command-documents.js';
 export { feedback } from './cli-command-feedback.js';
 export { gitView } from './cli-command-git.js';
 export { init } from './cli-command-init.js';
+export { skills } from './cli-command-skills.js';
 export { issue } from './cli-command-issue.js';
 export { lsp } from './cli-command-lsp.js';
 export { memory } from './cli-command-memory.js';

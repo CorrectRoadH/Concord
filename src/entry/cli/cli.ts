@@ -13,6 +13,7 @@ const loaders = {
   show: () => import("./cli-command-documents.js").then(m => m.showDocument),
   list: () => import("./cli-command-documents.js").then(m => m.listDocuments),
   init: () => import("./cli-command-init.js").then(m => m.init),
+  skills: () => import("./cli-command-skills.js").then(m => m.skills),
   recover: () => import("./cli-command-recover.js").then(m => m.recover),
   config: () => import("./cli-command-config.js").then(m => m.config),
   taste: () => import("./cli-command-taste.js").then(m => m.taste),

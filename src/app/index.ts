@@ -51,6 +51,7 @@ export { withAgentInstructions } from './initialize.js';
 export type { InitializeOptions } from './initialize.js';
 export type { InitializationReceipt } from './initialize.js';
 export { initialize } from './initialize.js';
+export { installWorkflowSkills } from './workflow-skills.js';
 export { PublicationValidationLive } from './publication-validation.js';
 export { withSourceSnapshot } from './entry-operations.js';
 export { maintainCache, cacheMaintenanceNeeded } from './cache-maintenance.js';

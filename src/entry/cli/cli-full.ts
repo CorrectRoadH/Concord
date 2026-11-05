@@ -3,6 +3,7 @@
 import { Command } from "effect/unstable/cli";
 import { root } from "./cli-base.js";
 import { init } from "./cli-command-init.js";
+import { skills } from './cli-command-skills.js';
 import { recover } from "./cli-command-recover.js";
 import { config } from "./cli-command-config.js";
 import { taste } from "./cli-command-taste.js";
@@ -29,4 +30,4 @@ import { view } from "./cli-command-view.js";
 import { server } from './cli-command-server.js';
 import { herdr } from './cli-command-herdr.js';
 
-export const fullCommand = root.pipe(Command.withSubcommands([init,newDocument,showDocument,listDocuments,recover,config,taste,...(['use-case','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,herdr]));
+export const fullCommand = root.pipe(Command.withSubcommands([init,skills,newDocument,showDocument,listDocuments,recover,config,taste,...(['use-case','roadmap'] as const).map(docsGroup),memory,issue,feedback,test,code,cache,docs,writing,concepts,check,lsp,trace,review,templates,diagnose,action,workspace,gitView,view,server,herdr]));
