@@ -1,10 +1,10 @@
 # {{title}}
 
-Describe how this feature is implemented. Behavior belongs in the README, Use Case, CLI, and library pages; refactors that keep behavior change only this page.
+Describe how this feature is implemented. Behavior belongs in the README, Use Case, cli, library, api, format, ui, and performance pages; refactors that keep behavior change only this page. When the internal storage needs its own page, write it in `data-model.md` and link it here.
 
-## Entity Ownership
+## Modules and Ownership
 
-Define which entities contain or reference each other, how they are identified, and which owner creates and destroys them. Give exact shapes for public configuration and results.
+Name each module, its responsibility, and which owner creates and destroys each entity.
 
 ## Data Flow
 
@@ -20,10 +20,10 @@ List the properties every implementation must preserve.
 
 When the feature holds resources or state, describe how each owner acquires and validates them. Then describe how it runs, reuses and revalidates them. Describe cleanup after normal and interrupted runs. State what invalidates reuse and the observable result of cleanup failure.
 
-## Errors
+## Failure Stages
 
-Assign each failure to its stage and owner: acquisition, execution, cancellation or cleanup. Define the observable terminal result, and do not let one failure hide another.
+Assign each failure to its stage and owner: acquisition, execution, cancellation or cleanup. Link the observable error to the behavior page that defines it, and do not let one failure hide another.
 
-## Identity and Reuse
+## Key Choices and Dependencies
 
-State which declarations and results contribute to identity, when reuse is valid, and what invalidates it.
+Record the choices this implementation depends on, including third-party libraries and internal inter-process communication.

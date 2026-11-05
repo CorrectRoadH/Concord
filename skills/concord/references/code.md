@@ -18,7 +18,7 @@ concord review orders
 concord check
 ```
 
-`marker` 只生成经验证的片段，不编辑源文件，不接收或返回声明 ID。范围标记不带参数，`@concord-implements` 保留显式 Spec 关联。关联多个 Spec 时重复 `--contract`，或添加多条相邻 implements；重复 exactRef 拒绝。目标使用 canonical Feature / Use Case / Engineering 路径，也支持 Feature 或 Engineering supporting page 与有效 `#anchor`。不同 anchor 保留独立关联。
+`marker` 只生成经验证的片段，不编辑源文件，不接收或返回声明 ID。范围标记不带参数，`@concord-implements` 保留显式 Spec 关联。关联多个 Spec 时重复 `--contract`，或添加多条相邻 implements；重复 exactRef 拒绝。目标使用 canonical Feature / Use Case / Engineering 路径，也支持 Feature 或 Engineering 包内各种类的页面与有效 `#anchor`。不同 anchor 保留独立关联。
 
 ```ts
 // @concord-file

@@ -1,6 +1,6 @@
 # {{title}}
 
-State observable behavior directly: commands, output, exit codes, and errors. Keep implementation in the architecture page.
+This page answers how to call the commands. State observable behavior directly: argv, human-readable output, stdout and stderr, `--json` fields, exit codes, and named errors. Keep implementation in the architecture page.
 
 ## Command
 
@@ -12,7 +12,7 @@ Specify human-readable output and machine-readable output, including their exact
 
 ## Errors
 
-Describe failure messages, exit behavior, and which input each error identifies.
+List each named error, its exit code, and which input it identifies. When another entry point shares the error, define it once here and let that page state only its own mapping.
 
 ## Minimal Example
 

@@ -86,10 +86,10 @@ Concord 让审阅从 Spec 开始。Spec 是仓库中的 Markdown，代码与测�
 | --- | --- | --- |
 | `docs/feature/<f>/README.md` | 产品功能的入口，像使用教程：谁用它、能做什么、上手示例、怎样工作（配图解）、Use Case 导航 | 任何人第一次了解这项功能时先读 |
 | `docs/feature/<f>/use-case/<u>.md` | 一个用户旅程：起始状态、带 `{#step-id}` 的逐步动作与输出、结果；不同目标或路径单独成篇，同一路径中的输入与错误变化可以用表格说明 | 实现和写测试前读；测试标记指向这里 |
-| `docs/feature/<f>/cli.md`、`library.md` | 完整调用、人读输出、`--json` 字段、退出码与具名错误 | agent 和脚本对接时读；这些字段是公开约定 |
-| `docs/feature/<f>/architecture.md` | 技术架构：实体归属、数据流、不变量、失败阶段与资源生命周期 | 改实现时读和改；行为不变的重构只改这一页 |
-| `docs/feature/<f>/` 下的其它页面 | 支持页，例如性能预算或文件格式 | 需要细节时从 README 链接进入 |
-| `docs/engineering/<t>/` | 仓库自身的构建、测试与发布机制，页面结构同 Feature | 维护这个仓库的人读 |
+| `docs/feature/<f>/cli.md`、`library.md`、`api.md` | 命令、库或网络协议的完整调用、输出、`--json` 字段、退出码与具名错误 | agent 和脚本对接时读；这些字段是公开约定 |
+| `docs/feature/<f>/format.md`、`ui.md`、`performance.md` | 使用者编辑或读取的文件格式、界面的布局与交互、性能预算 | 写文件、做界面或改高频命令时读 |
+| `docs/feature/<f>/architecture.md`、`data-model.md` | 技术实现：模块与职责、数据流、不变量、失败阶段、资源生命周期与内部存储 | 改实现时读和改；行为不变的重构只改这些页 |
+| `docs/engineering/<t>/` | 开发本仓库所需的维护能力，例如构建、测试与性能测量；页面种类同 Feature | 维护这个仓库的人读 |
 | `docs/architecture.md` | 跨 Feature 的系统边界与模块划分 | 改动跨越多个 Feature 时读 |
 
 **项目规则：所有 Spec 共同遵守什么**

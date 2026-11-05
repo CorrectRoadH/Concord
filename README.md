@@ -94,10 +94,10 @@ A file's location and its single top-level heading give it identity, kind, and n
 | --- | --- | --- |
 | `docs/feature/<f>/README.md` | Entry point of the product guide, written as a tutorial: who uses it, what they can do, a getting-started example, how it works (with a diagram), and links to its Use Cases | Anyone meeting the feature for the first time |
 | `docs/feature/<f>/use-case/<u>.md` | One user journey: starting state, numbered steps with `{#step-id}`, commands, output, and the result; distinct goals or paths get separate Use Cases, while input and error variations along the same path can use a table | Before implementing or writing tests; test annotations point here |
-| `docs/feature/<f>/cli.md`, `library.md` | Exact calls, human output, `--json` fields, exit codes, and named errors | Agents and scripts integrating with the feature; these fields are a public contract |
-| `docs/feature/<f>/architecture.md` | Technical design: ownership, data flow, invariants, failure stages, and resource lifecycles | When changing the implementation; a behavior-preserving refactor changes only this page |
-| Other pages in `docs/feature/<f>/` | Supporting pages, such as performance budgets or file formats | Reached from the README when the detail is needed |
-| `docs/engineering/<t>/` | How the repository itself is built, tested, and released, in Feature form | Maintainers of the repository |
+| `docs/feature/<f>/cli.md`, `library.md`, `api.md` | Exact calls for commands, libraries, or network protocols: output, `--json` fields, exit codes, and named errors | Agents and scripts integrating with the feature; these fields are a public contract |
+| `docs/feature/<f>/format.md`, `ui.md`, `performance.md` | File formats users edit or read, interface layout and interaction, and performance budgets | When writing those files, building the interface, or changing a frequent command |
+| `docs/feature/<f>/architecture.md`, `data-model.md` | Technical design: modules and ownership, data flow, invariants, failure stages, resource lifecycles, and internal storage | When changing the implementation; a behavior-preserving refactor changes only these pages |
+| `docs/engineering/<t>/` | One maintainer capability of this repository, such as build, testing, or performance measurement, using the Feature page kinds | Maintainers of the repository |
 | `docs/architecture.md` | System boundaries and modules across features | When a change spans several features |
 
 **Project rules: what every spec follows**

@@ -2,24 +2,28 @@
 
 Before writing, read `docs/taste.md` and link each applicable entry ID next to the sentence that relies on it.
 
-Declare intended behavior, constraints, and acceptance. Keep development logs, investigation history, and implementation progress in Concord Memory; product workflows belong in the contract.
+This README answers what the feature does and how to start. Write it like a tutorial for the people who use it. Fields, error codes, interface states, and internal mechanisms belong in the other page kinds listed in `docs/document-model.md`; link to them instead of repeating them.
 
-## Problem
+## Who It Is For
 
-Describe the user problem and why the product needs a current contract for it.
+Describe who uses the feature and the problem it solves for them.
 
-## Core Mental Model
+## What You Can Do
 
-Define the concepts users must understand and identify who owns each declaration.
-Link to shared terms in `concepts.md#id`, or define local terms in this directory's
-`concepts.md`. Explain each term under its own heading there.
+List the capabilities in the user's language. Link shared terms to `concepts.md#id`, or define local terms in this directory's `concepts.md`.
 
-Use Mermaid for structural diagrams and optional `p5` Markdown fences for animation or interaction. Keep the conclusion readable without running a sketch. Read `concord --skill view` for examples; declare extension libraries in project configuration, never in Markdown.
+## Quick Start
 
-## Scope
+Show one complete example a reader can run as written, with the output they see.
 
-State what the feature includes and excludes.
+## How It Works
 
-## Entry Points
+Explain the concepts users must understand. Use Mermaid for structure and an optional `p5` fence for collaboration, state changes, or data flow; keep the conclusion readable without running a sketch. Read `concord --skill view` for examples.
+
+## Scope and Acceptance
+
+State what the feature includes and excludes, and how a reader can confirm it works.
+
+## Pages
 
 {{entryPoints}}

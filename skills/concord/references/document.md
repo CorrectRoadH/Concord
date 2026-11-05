@@ -1,22 +1,27 @@
 # Spec 与文档
 
-已采用的当前目标写入 Feature，叶子用户路径写入 Use Case；设计未完成或暂不实现的方向写入 Roadmap（与 Feature 同体裁），还没定下来的取舍写入 Design，仓库测试与维护机制写入 Engineering。
+已采用的当前目标写入 Feature，叶子用户路径写入 Use Case；设计未完成或暂不实现的方向写入 Roadmap（与 Feature 同体裁），还没定下来的取舍写入 Design，开发本仓库所需的维护能力（构建、测试、性能测量等）写入 Engineering。
 
 Spec 正文采用声明式表达：写产品必须具备的行为、边界与验收，不写“这轮做了什么”、开发流水账、实施进度或临时计划。用户操作流程、状态迁移和验收步骤可以保留。排障经过与交付经验写进 `memory/`；待调查观察写进 `docs/issues/`。
 
 ## 布局与创建
 
-Feature 目录包含 README（必需）、`use-case/`、`architecture.md`、示例页 `cli.md` 或 `library.md`，其它页面是支持页面。Engineering 与 Roadmap 的页面结构相同。Spec、Roadmap 与 Design 没有 frontmatter：身份是仓库相对路径，名称是正文唯一的一级标题（代码块中的标题不计），Use Case 属于所在目录的 Feature。
+Feature 目录包含 README（必需）与按需选用的固定页面种类，文件名就是种类；Engineering 与 Roadmap 使用同一组种类，完整职责见随包 `docs/document-model.md` 的「页面种类」。
+
+- `use-case/<u>.md` 是一个用户旅程，`use-case/README.md` 是可选的导航页；Use Case 不嵌套，也不跨文件。
+- 除 README、`use-case/`、`performance.md`、`concepts.md` 与 `writing.md` 外，一种页面写不下时，把 `<种类>.md` 换成 `<种类>/` 目录：入口是 `<种类>/README.md`，其余页面自由命名，种类与目录相同。单页与目录不能并存。
+- 包内无法归类的页面由 `check` 报告 `UnknownPageKind`，页面照常可读可编辑；按内容把它拆到对应种类，不靠改名凑合。项目的说明性文档放在包外，例如 `docs/guides/<g>.md`。
+Spec、Roadmap 与 Design 没有 frontmatter：身份是仓库相对路径，名称是正文唯一的一级标题（代码块中的标题不计），Use Case 属于所在目录的 Feature。
 
 直接创建目录与文件即可。`concord new` 按随包模板创建，页面在创建时选择，README 必需，其余可选：
 
 ```sh
-concord new feature login
+concord new feature login --pages cli,use-case
 concord new use-case expired-token
 concord new design session-store
 ```
 
-类别、页面选择与所属 Feature 的参数以 `concord new --help` 为准。名称允许 Unicode 字母、组合标记和数字，可用单连字符分隔，保留原样，不翻译或自动更改大小写；禁止路径分隔符、空白和路径穿越。用 `concord list [类别]` 发现文档，用 `concord show <路径或选择器>` 读取文档及其关系、测试与实现；短选择器在同类中有歧义时具名拒绝，改写完整路径。
+`--pages` 可选 `use-case`、`cli`、`library`、`api`、`format`、`ui`、`performance`、`architecture`、`data-model`，用于 Feature、Engineering 与 Roadmap；`concepts.md` 与 `writing.md` 直接编辑。其它参数以 `concord new --help` 为准。名称允许 Unicode 字母、组合标记和数字，可用单连字符分隔，保留原样，不翻译或自动更改大小写；禁止路径分隔符、空白和路径穿越。用 `concord list [类别]` 发现文档，用 `concord show <路径或选择器>` 读取文档及其关系、测试与实现；短选择器在同类中有歧义时具名拒绝，改写完整路径。
 
 ## 写作指南
 
@@ -26,15 +31,21 @@ concord new design session-store
 | --- | --- | --- |
 | 功能对使用者做什么 | Feature README | 产品功能：谁用它、能做什么、上手示例、怎样工作（配图解）、Use Case 导航 |
 | 某个情形下会发生什么 | Use Case | 一个情形一个 Use Case：用户目标、起始状态、带 `{#id}` 的逐步动作与输出、结果、Spec 来源 |
-| 命令或 API 怎样调用、返回什么 | cli、library | 完整调用、人读输出、`--json` 输出、退出码、具名错误、最小示例 |
-| 它是怎么实现的 | architecture | 实体归属、数据流、不变量、失败阶段、资源生命周期 |
+| 命令怎样调用 | cli | argv、人读输出、stdout 与 stderr、`--json` 字段、退出码、具名错误、最小示例 |
+| 库怎样调用 | library | 导出的签名、返回值、失败 |
+| 其它程序通过网络协议怎样调用 | api | HTTP 路由、RPC 方法与事件，请求与响应、状态码、错误、兼容规则 |
+| 使用者编辑或读取的文件长什么样 | format | 受支持文件的路径、语法、字段、校验错误与示例 |
+| 界面怎样呈现和响应 | ui | 布局、交互状态、键盘与可访问性、视觉验收 |
+| 多快才算合格 | performance | 场景 ID、测量内容、预算与理解预算所需的前提 |
+| 它是怎么实现的 | architecture | 模块与职责、数据流、不变量、失败阶段、资源生命周期、依赖选型 |
+| 内部存什么 | data-model | 实体、存储结构、字段约束、索引、事务边界、数据生命周期 |
 | 还没定下来的取舍 | Design | 要决定什么、几种做法和各自的代价；定下后写进 Spec 并删除 |
 | 排障经过、根因、经验 | Memory | `memory/<id>.md` |
 | 缺陷、请求与待调查的观察 | Issue | `docs/issues/<id>.md` |
 
 行为页的规范性陈述要能被测试断言。已实现的命令在临时仓库实际运行，复制输出，把每次运行都会变化的摘要和时间戳写成省略号或说明；尚未实现时标为预期输出，交付验收再核对实际运行，运行记录写进 Memory。错误写成表格，列出错误码和触发条件。`--json` 字段、错误码和退出码属于公开 Spec；人读输出帮助理解，不保证逐字稳定。同一输出或错误只在一个页面定义，其它页面链接过去。
 
-行为页不写内部模块、内部数据结构、调用链、缓存或存储引擎；公开的输入输出结构、协议和可观察的恢复保证留在行为页。出现这些词时，把那段移到 architecture 页，行为页只保留使用者能观察到的保证，例如“删除缓存后结论不变”。architecture 页不重新定义行为；只改实现时只改 architecture 页。
+行为页不写内部模块、内部数据结构、调用链、缓存或存储引擎；公开的输入输出结构、协议和可观察的恢复保证留在行为页。出现这些词时，把那段移到 architecture 或 data-model 页，行为页只保留使用者能观察到的保证，例如“删除缓存后结论不变”。architecture 页不重新定义行为；只改实现时只改 architecture 页。同一领域结构或错误被多个入口使用时只在一个行为页定义，其它页面只写自己入口的映射；能被打开阅读的内部文件不等于公开格式；性能预算只写在 Feature 的 `performance.md`。
 
 正文写现行规则，不写“目前”“已实现”“这次改了什么”，不点名已删除的接口。Use Case 主流程的步骤加 `{#id}`，测试和实现可以指向具体步骤。路径与 anchor 是关系身份，链接目标写仓库相对路径或相对链接。
 

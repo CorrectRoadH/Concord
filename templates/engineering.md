@@ -1,24 +1,25 @@
 # {{title}}
 
-Declare the required mechanism and observable behavior. Keep execution logs and delivery progress in Concord Memory rather than this contract.
-Define local terms in this directory's `concepts.md` and scoped writing policy in
-`writing.md`; `concord check` validates both.
+Engineering declares one capability maintainers need to develop this repository, such as build, testing, or performance measurement. It uses the same page kinds as a Feature; see `docs/document-model.md`. Keep execution logs and delivery progress in Concord Memory rather than this page.
 
-## Goal
+Define local terms in this directory's `concepts.md` and scoped writing policy in `writing.md`; `concord check` validates both.
 
-Describe the repository engineering problem and the observable outcome this mechanism must provide.
+## Who It Is For
 
-## Mechanism
+Describe the maintainers who use this capability and the outcome it must provide.
 
-Define the mechanism, its owners, and the boundaries it must preserve.
+## Quick Start
 
-## Usage
+Show the shortest complete command sequence and its observable result.
 
-Show how maintainers use the mechanism, including inputs, commands, and observable results.
-Keep a small topic in this README. Engineering uses the Feature page layout: add
-use-case/, architecture.md, or cli.md pages when the topic needs them, plus supporting
-pages, and link them here.
+## How It Works
+
+Describe the rules maintainers must follow and the boundaries they must preserve. Put command arguments in `cli.md`, file formats in `format.md`, and internal mechanisms in `architecture.md`.
 
 ## Acceptance
 
-List the checks and observable results that establish the mechanism works.
+List the checks and observable results that establish the capability works.
+
+## Pages
+
+{{entryPoints}}

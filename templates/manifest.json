@@ -28,12 +28,12 @@
     },
     {
       "name": "feature",
-      "description": "Current feature contract overview.",
+      "description": "Feature README: who uses it, what it does, a runnable quick start, and links to its pages.",
       "path": "feature.md"
     },
     {
       "name": "roadmap",
-      "description": "Product direction not yet started.",
+      "description": "Roadmap README: a direction not yet adopted, using the Feature page kinds.",
       "path": "roadmap.md"
     },
     {
@@ -43,7 +43,7 @@
     },
     {
       "name": "engineering",
-      "description": "Repository engineering mechanism.",
+      "description": "Engineering README: one maintainer capability of this repository, using the Feature page kinds.",
       "path": "engineering.md"
     },
     {
@@ -63,22 +63,22 @@
     },
     {
       "name": "library",
-      "description": "Public library contract page.",
+      "description": "library page: exported signatures, return values, and failures.",
       "path": "library.md"
     },
     {
       "name": "cli",
-      "description": "Command-line contract page.",
+      "description": "cli page: argv, output, --json fields, exit codes, and named errors.",
       "path": "cli.md"
     },
     {
       "name": "architecture",
-      "description": "Internal ownership and data-flow page.",
+      "description": "architecture page: modules, data flow, invariants, failure stages, and resource lifecycle.",
       "path": "architecture.md"
     },
     {
       "name": "use-case-index",
-      "description": "Index of user-goal paths.",
+      "description": "use-case/README.md navigation page; each journey is its own file.",
       "path": "use-case-index.md"
     }
   ]
