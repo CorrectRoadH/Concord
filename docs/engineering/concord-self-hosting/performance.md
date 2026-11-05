@@ -7,8 +7,8 @@
 - 参照消费者：预算表声明的本仓库 commit 的独立 Git clone，冻结后测量。每组预算绑定该 commit、完整命令参数与参照环境。
 - 参照环境：预算表声明的机器与 Node 精确版本，使用构建后的 `dist/entry/cli/entry.js`。绝对预算只在参照环境判定；其它机器只做同机交错对照，判定回退比例。
 - 测量记录：消费者 commit、纳入测量的来源及规模、基线与候选产物身份、Node 精确版本及硬件信息。
-- 基线：对照时的基线是 `--compare` 指定提交（默认 `origin/master` 与 HEAD 的 merge-base）的构建产物，测量前确定，不在测后挑选。两套产物在同一冻结消费者上分别预热。
-- 引擎版本不能共用缓存时，`self` 消费者上的 `--compare` 测量使用 `--isolated-caches`。两套产物读取同一冻结提交的独立 clone，各自初始化缓存并交错采样；记录包含各消费者的路径、提交和缓存状态。
+- 基线：对照时的基线是 `--compare` 指定提交（默认 `origin/master` 与 HEAD 的 merge-base）的构建产物，测量前确定，不在测后挑选。两套产物各自使用同一冻结提交的独立 clone 并分别预热，因为一个项目目录同一时刻只有一个安装身份的工作区服务。
+- 两个 clone 各自初始化缓存与服务并交错采样；比较结束时停止两边的服务。记录包含各消费者的路径、提交和缓存状态。
 - 服务条件：默认按公开 CLI 的启动规则测量，查询预热会自动启动并复用工作区服务。场景声明 `server: running` 时，测量前显式启动该消费者的工作区服务并等待首份结果，预算行在测量内容中写明经由服务。
 - 冷暖状态：warm 表示参照消费者已执行一次同一命令、HawDB 缓存有效；cold 表示执行 `concord cache clear` 后的首次运行。预算按 warm 判定，cold 只记录。
 - 产物稳定：`bench` 与 `bench:profile` 从构建候选到最后一次采样全程持有与门禁、`vp build` 相同的本机构建锁，测量期间其它调用不能改写 `dist`。
@@ -20,7 +20,7 @@
 
 ## 预算表格式
 
-预算数字只在 Spec owner 中声明，测量步骤只在[基准场景](#基准场景)源码中声明，二者以场景 ID 对应，不另存预算清单。拥有高频公开操作的 Feature 在其包内页面（README、支持页面或 Use Case）的 `## 性能预算`（按 warm p50 判定）或 `## 刷新上限`（按最大值判定）标题下写一张 Markdown 表：首列以行内代码列出一个或多个场景 ID，中间列用文字说明测量内容，末列为 `<整数>ms`。同一行的场景共用该阈值。测量工具扫描 `docs/feature/` 下全部页面派生预算行，不维护 owner 列表；Design、Engineering 与 Research 页面中的数字不是预算。
+预算数字只在 Spec owner 中声明，测量步骤只在[基准场景](#基准场景)源码中声明，二者以场景 ID 对应，不另存预算清单。拥有高频公开操作的 Feature 在其包内页面（README、支持页面或 Use Case）的 `## 性能预算`（按 warm p50 判定）或 `## 刷新上限`（按最大值判定）标题下写一张 Markdown 表：首列以行内代码列出一个或多个场景 ID，中间列用文字说明测量内容，末列为 `<整数>ms`。同一行的场景共用该阈值。测量工具扫描 `docs/feature/` 下全部页面派生预算行，不维护 owner 列表；Design 与 Engineering 页面中的数字不是预算。
 
 ```markdown
 ## 性能预算
@@ -77,7 +77,7 @@
 ```text
 vp run bench [<场景 ID | feature-id> ...] [--changed [<base>]] [--compare [<rev>]] [--quick] [--reference]
              [--consumer self|scale|<path>] [--commit <rev>] [--scale <sources>,<tests>,<pages>]
-             [--isolated-caches] [--samples 7] [--out <file.json>] [--keep]
+             [--samples 7] [--out <file.json>] [--keep]
 vp run bench:profile <场景 ID> [--warm] [--out <dir>] [--keep]
 vp run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <concord 参数>
 ```
