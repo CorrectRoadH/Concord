@@ -5,14 +5,14 @@
 ## 测量 Spec
 
 - 参照消费者：预算表声明的本仓库 commit 的独立 Git clone，冻结后测量。每组预算绑定该 commit、完整命令参数与参照环境。
-- 参照环境：预算表声明的机器与 Node 精确版本，使用构建后的 `dist/entry/cli/entry.js`。绝对预算只在参照环境判定；其它机器只做同机交错对照，判定回退比例。
+- 参照环境：预算表声明的机器与 Node 精确版本，使用构建到临时目录的安装包。绝对预算只在参照环境判定；其它机器只做同机交错对照，判定回退比例。
 - 测量记录：消费者 commit、纳入测量的来源及规模、基线与候选产物身份、Node 精确版本及硬件信息。
 - 基线：对照时的基线是 `--compare` 指定提交（默认 `origin/master` 与 HEAD 的 merge-base）的构建产物，测量前确定，不在测后挑选。两套产物各自使用同一冻结提交的独立 clone 并分别预热，因为一个项目目录同一时刻只有一个安装身份的工作区服务。
 - 两个 clone 各自初始化缓存与服务并交错采样；比较结束时停止两边的服务。记录包含各消费者的路径、提交和缓存状态。
 - 服务条件：默认按公开 CLI 的启动规则测量，查询预热会自动启动并复用工作区服务。场景声明 `server: running` 时，测量前显式启动该消费者的工作区服务并等待首份结果，预算行在测量内容中写明经由服务。
 - 冷暖状态：warm 表示参照消费者已执行一次同一命令、HawDB 缓存有效；cold 表示执行 `concord cache clear` 后的首次运行。预算按 warm 判定，cold 只记录。
-- 产物稳定：`bench` 与 `bench:profile` 从构建候选到最后一次采样全程持有与门禁、`vp build` 相同的本机构建锁，测量期间其它调用不能改写 `dist`。
-- 计时边界：从启动 `node dist/entry/cli/entry.js` 进程到进程退出的 wall time，stdout 与 stderr 重定向到文件。
+- 产物稳定：`bench` 与 `bench:profile` 把候选安装包构建到自己的临时目录，测量期间其它调用不能改写它。
+- 计时边界：从启动安装包的 CLI 进程到进程退出的 wall time，stdout 与 stderr 重定向到文件。
 - 采样：先预热一次，再对每条命令运行至少 7 次全新进程，取中位数（p50）。对照测量时新旧产物交错运行。
 - 统计与阈值：p50 不超过所属 Spec 的预算，并且同机交错对照中 p50 相比基线的回退不超过 20%。
 - 波动：同一命令的最大值超过 p50 的 2 倍、且超出 p50 不少于 20 ms 时，该组样本无效，须重新测量；连续两组无效视为失败。p50 只有几毫秒的场景，个位或十几毫秒的离散是计时噪声，不表示测量不稳定。
@@ -91,7 +91,7 @@ vp run bench:profile cli [--consumer ...] [--warm] [--out <dir>] [--keep] -- <co
 | `--quick` | 每组 3 次样本，只输出 p50 与预算的对照，用于开发中快速反馈；记录的 `acceptance` 恒为 false |
 | `--reference` | 声明当前机器为参照环境，判定绝对预算 |
 
-刷新上限场景以 `{ scan }` 形式运行内部扫描入口 `dist/query-scan-worker.js <root> <query-json>`，即后台刷新进程实际执行的扫描，按最大值对照上限。读取异步投影的 `warm` 场景在采样前等待投影发布，等待不超过刷新上限加 30 秒；等不到投影时测量失败，记录最后一次输出的 `QueryPending` 及 `refresh` 详情。读取采样期间每次调用都照常请求后台刷新，结果包含这一竞争。
+刷新上限场景以 `{ scan }` 形式运行安装包的内部扫描入口 `query-scan-worker.js <root> <query-json>`，即后台刷新进程实际执行的扫描，按最大值对照上限。读取异步投影的 `warm` 场景在采样前等待投影发布，等待不超过刷新上限加 30 秒；等不到投影时测量失败，记录最后一次输出的 `QueryPending` 及 `refresh` 详情。读取采样期间每次调用都照常请求后台刷新，结果包含这一竞争。
 
 `profile <场景 ID>` 用 V8 CPU profiler 和 fs 调用计数执行该场景的一次 `run`，`profile cli` 对任意一条命令做同样的 profile。profile 用于定位热点，不作为预算或上限证据。
 
@@ -119,7 +119,7 @@ profile 通过 `NODE_OPTIONS` 注入 `--cpu-prof` 与计数模块，因此 Conco
 flowchart LR
   Owners[Spec owner 预算表] --> Budgets[预算表解析]
   Scenarios[bench/*.bench.ts 场景] --> Bench
-  Checkout[当前 checkout dist] --> Candidate[候选产物]
+  Checkout[当前 checkout] --> Candidate[候选安装包]
   Parent[基线提交，缓存目录中的 worktree] --> Baseline[基线产物]
   Commit[本仓库 commit] --> Self[self clone]
   CLI[候选产物公开 CLI] --> Scale[scale 合成仓库]
@@ -176,7 +176,7 @@ flowchart LR
 }
 ```
 
-`concord.profile/v2` 标明场景 ID 或命令，按进程列出 CPU 自身耗时最高的函数、按层（`dist/<模块>`、依赖包、`node:internal`、原生）汇总的耗时，以及 user/system CPU、最大 RSS 和各 `node:fs` 调用的次数与同步耗时。原始 `.cpuprofile` 留在输出目录，可用 Chrome DevTools 或 speedscope 打开。
+`concord.profile/v2` 标明场景 ID 或命令，按进程列出 CPU 自身耗时最高的函数、按层（安装包内模块、依赖包、`node:internal`、原生）汇总的耗时，以及 user/system CPU、最大 RSS 和各 `node:fs` 调用的次数与同步耗时。原始 `.cpuprofile` 留在输出目录，可用 Chrome DevTools 或 speedscope 打开。
 
 ```json
 {

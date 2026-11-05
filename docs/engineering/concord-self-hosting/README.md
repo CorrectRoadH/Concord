@@ -48,17 +48,19 @@ pnpm exec vp run check
 
 `pnpm check`（等价于 `vp run check`）是唯一的检查入口，满足 [用 Concord 管理自身](#用-concord-管理自身)。默认运行完整门禁，日常开发和 CI 使用同一条命令，不提供只做部分检查的入口。
 
+开发检出中没有 `dist/`：日常开发、门禁和测试都运行源码，一个检出只有源码这一个安装身份，CLI 与工作区服务不会因新旧产物并存而冲突。门禁开始时发现检出中存在 `dist/` 即以 `DistInCheckout` 失败，提示删除。安装包只在检出之外构建。
+
 | 阶段 | 内容 |
 | --- | --- |
-| 构建 | 原生绑定按下文规则复用；CLI 与 Web 并行编译到 `dist` |
 | 静态检查 | 源码、测试与脚本类型检查与 `check:selfhost` 并行执行 |
-| 测试 | 不需要构建的层（从 `src` 运行的纯函数与仓库内测试）与构建、静态检查并行执行；三者都成功后，直接运行 `dist` 的 CLI 层、进程层与 e2e 浏览器测试，按下文并发执行 |
+| 测试 | 全部测试层运行源码，与静态检查并行执行，按下文并发；CLI 子进程与 `pnpm concord` 的启动方式相同 |
+| 打包 | 唯一的打包测试用 `vp build --out <临时目录>` 构建安装包，打包、安装一次，核对文件清单并从安装包启动 |
 
-门禁不复制源码、不另建 checkout，测试也不为运行而打包安装；只有验证发布内容的打包测试打包并安装一次。门禁检查的是 checkout 当前的工作区，包括其它 agent 尚未提交的改动。`dist` 只由门禁与 `vp build` 写入，两者取得同一把本机锁：同一台机器同时只有一个写入 `dist` 的调用，后来者等待并输出前者的进程号与开始时间。日常开发运行源码，不需要 `dist`。
+门禁不复制源码、不另建 checkout。门禁检查的是 checkout 当前的工作区，包括其它 agent 尚未提交的改动。
 
-`pnpm check` 接受 `--test-name-pattern=表达式`、`--test-shard=序号/总数` 与测试文件路径。给出文件或过滤条件时，构建与静态检查仍完整执行，只运行选中的测试；结果不能替代完整门禁。未指定文件时递归发现 `test/` 下的 `*.test.ts` 与 `test/e2e/` 下的 `*.e2e.ts`。CI 每个分片运行 `pnpm check --test-shard=序号/4`，分片并集覆盖完整测试集。
+`pnpm check` 接受 `--test-name-pattern=表达式`、`--test-shard=序号/总数` 与测试文件路径。给出文件或过滤条件时，静态检查仍完整执行，只运行选中的测试；结果不能替代完整门禁。未指定文件时递归发现 `test/` 下的 `*.test.ts` 与 `test/e2e/` 下的 `*.e2e.ts`。CI 每个分片运行 `pnpm check --test-shard=序号/4`，分片并集覆盖完整测试集。
 
-其它入口不是检查：`vp build` 只构建，`vp dev` 只启动 Web 开发服务器，`pnpm concord` 运行源码 CLI。`vp run test:e2e:agent` 运行自然语言用例，使用环境中的模型配置，需要显式授权，不属于日常门禁。
+其它入口不是检查：`vp build --out <目录>` 把完整安装包构建到检出之外的目录，目录位于检出内时以 `BuildOutputInCheckout` 拒绝；`vp dev` 只启动 Web 开发服务器；`pnpm concord` 运行源码 CLI。发布流程、打包测试与[性能对照](performance.md)各自构建到自己的临时目录，互不共享，不需要本机构建锁。`vp run test:e2e:agent` 运行自然语言用例，使用环境中的模型配置，需要显式授权，不属于日常门禁。
 
 测试的质量标准、分层、fixture 与成本上限见[测试架构](test-architecture.md)；资源归属、并发、安装共享与失败诊断见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。
 
@@ -66,7 +68,7 @@ pnpm exec vp run check
 
 ### 原生绑定复用
 
-`vp build` 每次清空 `dist`，原生产物按以下顺序取得，第一项命中即停止。每一项都经 `--prebuilt` 的身份校验：target、ABI、HawDB revision、源码摘要、锁文件摘要、二进制与许可证摘要全部一致才使用。
+`vp build` 每次清空输出目录，原生产物按以下顺序取得，第一项命中即停止。每一项都经 `--prebuilt` 的身份校验：target、ABI、HawDB revision、源码摘要、锁文件摘要、二进制与许可证摘要全部一致才使用。
 
 1. 本机共享缓存 `${XDG_CACHE_HOME:-~/.cache}/concord/native/<源码摘要>-<锁文件摘要>/<target>/`，同一台机器的所有 checkout 与 worktree 共用。
 2. 本仓库 GitHub Release `native-<源码摘要前 16 位>` 中的 `concord-native-<target>.tar.gz`。下载后校验，写入共享缓存。设置 `CONCORD_NATIVE_OFFLINE=1` 时跳过下载。
@@ -74,20 +76,20 @@ pnpm exec vp run check
 
 下载失败、产物缺失或校验不一致时进入下一项，并输出原因，不中断构建。发布流程不使用前两项，始终从源码编译要发布的原生产物。按摘要的 Release 由手动触发的 `native` workflow 为每个 target 编译并发布；本地构建与 CI 只读取它。
 
-源码变化后必须重新构建，才能运行依赖产物的检查。任务结果不缓存，定向结果不能替代完整验收。Vite+ 的内置 `check` 与 `test` 不代表本项目同名脚本。开发服务器不运行发行准备。
+任务结果不缓存，定向结果不能替代完整验收。Vite+ 的内置 `check` 与 `test` 不代表本项目同名脚本。开发服务器不运行发行准备。
 
 ## 从源码运行
 
-开发时用 `pnpm concord <参数>` 直接运行当前 checkout 的源码 CLI，等价于 `node --import tsx src/entry/cli/entry.ts`。它不需要 `vp build`，也不需要全局安装的 Concord；依赖由 `vp install` 准备。源码 CLI 用于日常操作与调试，交付门禁仍是基于构建产物的 `pnpm check`。
+开发时用 `pnpm concord <参数>` 直接运行当前 checkout 的源码 CLI，等价于 `node --import tsx src/entry/cli/entry.ts`。它不需要 `vp build`，也不需要全局安装的 Concord；依赖由 `vp install` 准备。源码 CLI 用于日常操作、调试与全部测试，交付门禁 `pnpm check` 同样运行源码。
 
 | 方面 | 规则 |
 | --- | --- |
 | 原生绑定 | 源码运行取自经身份校验的本机共享缓存，构建产物取自包根，校验规则相同。只有 `native/hawdb` 或其锁文件变化时才需要重建，命令为 `pnpm exec vp run build:native`；缺失时返回 `HawdbUnavailable` 并提示该命令 |
-| 子进程 | 运行模式由一个模块统一判断。源码模式下，查询、扫描与编辑器子进程使用同一 loader 启动对应的 `.ts` 入口；构建模式不变 |
-| 安装身份 | 源码模式的安装身份是 `src/` 下 TypeScript 源码与原生产物的摘要，构建模式沿用产物摘要。两种模式的缓存身份不同，互不复用 |
-| 构建资源 | Web 工作台、PR 预览导出等依赖构建资源的命令，在源码模式下返回 `BuildRequired` 并提示 `vp build`；Web 开发使用 `vp dev` |
+| 子进程 | 运行模式由一个模块统一判断。源码模式下，查询、扫描与编辑器子进程使用同一 loader 启动对应的 `.ts` 入口；安装包模式启动包内的 JavaScript 入口 |
+| 安装身份 | 源码模式的安装身份是 `src/` 与 `web/` 下源码及原生产物的摘要，安装包模式使用产物摘要。两种模式的缓存身份不同，互不复用 |
+| Web 资源 | 源码模式下，工作区服务通过 Vite 从 `web/` 源码即时编译 Web 工作台与 PR 预览，不需要 `vp build`；安装包模式读取包内的编译结果 |
 
-验收：没有全局 Concord、没有 `dist/*.js`，只有原生产物时，`pnpm concord --json --dry-run check`、`pnpm concord docs check --json` 与 `pnpm concord trace show <path> --json` 在本仓库正常运行。
+验收：没有全局 Concord、没有 `dist/`，只有共享缓存中的原生产物时，`pnpm concord --json --dry-run check`、`pnpm concord docs check --json` 与 `pnpm concord trace show <path> --json` 在本仓库正常运行。
 
 ## 技术栈
 
