@@ -4,8 +4,8 @@ Concord 管理的文档按回答的问题分组。身份、类别、所属关系
 
 | 分组 | 文档 | 位置 | frontmatter |
 | --- | --- | --- | --- |
-| Spec | Feature：README（产品功能，像使用教程）、`use-case/`（不同情形下的用户旅程）、`architecture.md`（技术架构）、`cli.md` 或 `library.md`（调用与输出） | `docs/feature/<f>/` | 无 |
-| Spec | Engineering：开发 Concord 本身的构建、测试与发布，结构同 Feature | `docs/engineering/<t>/` | 无 |
+| Spec | Feature：使用者能用的一项功能，页面见[页面种类](#页面种类) | `docs/feature/<f>/` | 无 |
+| Spec | Engineering：维护者用来开发本项目的一项能力，例如构建、测试、性能测量与发布；页面种类同 Feature | `docs/engineering/<t>/` | 无 |
 | 提案 | Roadmap：还没开始实现的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
 | 项目规则 | 品味、术语、写作政策 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 无 |
 | 待定的取舍 | Design：一个还没定下来的取舍，列出几种做法和各自的代价 | `docs/design/<d>.md` | 无 |
@@ -53,13 +53,36 @@ Design 只用于真正难以取舍的问题，例如一个 API 有几种可行�
 
 Feature 的页面按读者的问题分工（[读得懂胜过写得全](taste.md#t-1)）。
 
-1. 行为页（Feature README、Use Case、cli、library）用使用者的语言声明输入、可观察结果、错误与约束。公开的输入输出结构、协议、机器可读字段、具名错误码、退出码，以及使用者可观察的持久化与恢复保证，属于行为页。行为页不写内部模块、内部数据结构、调用链和引擎选型。
+1. 行为页（README、Use Case、cli、library、api、format、ui）用使用者的语言声明输入、可观察结果、错误与约束。公开的输入输出结构、协议、机器可读字段、具名错误码、退出码，以及使用者可观察的持久化与恢复保证，属于行为页。行为页不写内部模块、内部数据结构、调用链和引擎选型。
 2. 规范性陈述应能被测试断言。命令页给出完整调用、机器可读输出、退出码、具名错误与最小示例；API 页给出签名、返回值与失败。人读输出示例用于理解，可以规范化动态值，不保证逐字稳定（[机器可读输出](feature/local-sdlc/cli.md#机器可读输出)）。实现之前的示例标为预期输出；交付验收核对实际运行，运行记录进入 Memory，示例不作为运行证据。同一输出或错误定义只在一个行为页维护，其它页面链接引用。
-3. architecture 与 lifecycle 页声明该 Feature 的内部实现：实体归属、数据流、不变量、失败阶段与资源生命周期。它们随实现修改，不重新定义行为。跨 Feature 的系统边界写在项目 `docs/architecture.md`。只改内部实现的修改不改行为页。
+3. architecture 与 data-model 页声明该 Feature 的内部实现：实体归属、数据流、不变量、失败阶段与资源生命周期。它们随实现修改，不重新定义行为。跨 Feature 的系统边界写在项目 `docs/architecture.md`。只改内部实现的修改不改行为页。
 4. Roadmap 与 Feature 同体裁，表示尚未采用的方向，其示例均为预期输出。实现与测试不指向 Roadmap。
-5. Feature 的页面分三类，各回答一个问题。README 与 cli、library 页是产品功能，像使用教程一样写谁用它、能做什么、怎么做；architecture 页是技术架构；Use Case 把功能连到用户旅程。README 给出用户价值、一个照着就能运行的上手示例和 Use Case 导航；输出字段、具名错误与退出码写在 cli 或 library 页，README 只链接它们。
+5. 页面种类见[页面种类](#页面种类)。README 与 cli、library 等行为页像使用教程一样写谁用它、能做什么、怎么做；architecture 与 data-model 页是技术实现；Use Case 把功能连到用户旅程。README 给出用户价值、一个照着就能运行的上手示例和 Use Case 导航；输出字段、具名错误与退出码写在 cli 或 library 页，README 只链接它们。
 6. 每个 Use Case 描述一个用户旅程：起始状态、使用者的每步动作、要运行的命令或调用，以及看到的输出。用户目标或处理路径明显不同时，另写一个 Use Case；同一路径中的输入变化与错误结果可以用表格说明。拆分应帮助读者理解操作，避免重复相同的步骤（[读得懂胜过写得全](taste.md#t-1)）。
 7. 文字难以说清的过程配图解。多方协作、状态迁移、时序和数据流程用 p5 动画演示，静态结构用 Mermaid。图解只演示页面已声明的规则，不新增规则，也不作为运行证据。
+
+## 页面种类
+
+Feature、Engineering 与 Roadmap 的目录使用同一组页面，文件名就是页面种类。每种页面回答一个读者问题，同一事实只写在回答它的那一页（[一件事只写一次，其余推导](taste.md#t-3)）。Engineering 与 Feature 只是读者不同：Feature 写给使用者，Engineering 写给维护者，例如测试方案写成 `docs/engineering/testing/`，构建方案写成 `docs/engineering/build/`。
+
+| 文件 | 回答 | 写什么 | 不写什么 |
+| --- | --- | --- | --- |
+| `README.md` | 能做什么、怎么开始 | 谁用、能做什么、上手示例、怎样工作、Use Case 导航、范围与验收方式 | 字段、错误码、内部机制 |
+| `use-case/<u>.md` | 某个情形下发生什么 | 起始状态、带 `{#id}` 的步骤、要运行的命令、看到的输出、结果表 | 内部模块 |
+| `cli.md` | 命令怎么调用 | 完整调用、人读输出、`--json` 字段、退出码、具名错误 | 内部模块 |
+| `library.md` | 库怎么调用 | 导出的签名、返回值、失败 | 内部模块 |
+| `api.md` | 其它程序通过网络或进程协议怎么调用 | HTTP 路由、RPC 方法或事件，请求与响应结构、状态码、错误、兼容规则 | 实现框架 |
+| `format.md` | 使用者编辑或读取的文件长什么样 | 路径、语法、字段、校验错误与示例 | 内部缓存与日志格式 |
+| `ui.md` | 界面长什么样 | 布局、视觉规则、交互状态与可访问性要求 | 组件实现 |
+| `architecture.md` | 怎么实现 | 模块与职责、数据流、不变量、失败阶段、资源生命周期、关键取舍 | 重新定义行为 |
+| `data-model.md` | 内部存什么 | 实体、持久化结构（文件、表或键）、字段类型与约束、唯一性与索引、事务边界、数据生命周期 | 使用者编辑的格式 |
+| `performance.md` | 多快才算合格 | 场景 ID、测量内容与预算的表格 | 测量方法 |
+| `concepts.md`、`writing.md` | 用哪些词、怎么写 | 见[术语与语言](#术语与语言) | — |
+
+1. 只有 `README.md` 必需，其余按需要创建。目录中出现其它文件名时，`concord check` 报告 `UnknownPageKind`，并给出最接近的种类。
+2. 前六种是行为页，`architecture.md` 与 `data-model.md` 是实现页，规则见[页面职责](#页面职责)。只改实现时只改实现页。
+3. 一种页面写不下时，把它拆成同名目录下的多页，例如 `architecture/` 下的 `index.md` 与其它页面，目录内页面的种类与目录相同。
+4. 测量方法、测试分层、构建产物这类维护规则属于 Engineering 主题，Feature 只链接它们。
 
 ## 只写当前声明
 
