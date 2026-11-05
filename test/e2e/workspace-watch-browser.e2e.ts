@@ -208,18 +208,20 @@ test('navigation polling preserves drafts and a completed write reads after an o
     releaseSave?.();
     const receipt = await saved;
     assert.equal(receipt.status(), 200, await receipt.text());
+    // The completed write's file read is queued behind this older poll.
+    // Release it before awaiting readback, keeping its captured old response.
+    assert.equal(activeReads, 1);
+    assert.equal(maximumReads, 1);
+    const builtFrom = await page.evaluate(() => new Date().toISOString());
+    served = { ...served, projection: { ...served.projection, builtAt: builtFrom, builtFrom, builtUntil: builtFrom } };
+    holdRead = false;
+    releaseRead?.();
     const file = await readback;
     assert.equal(file.status(), 200, await file.text());
     assert.equal(await file.finished(), null);
     await page.clock.runFor(1);
     await expect(page.locator('.editor-shell')).toHaveAttribute('data-dirty', 'false');
     await expect.poll(() => refreshRequests).toBe(1);
-    await expect(page.getByLabel('工作区投影状态')).toContainText('导航更新中');
-    assert.equal(maximumReads, 1, 'post-write refresh waits behind the older workspace read');
-    const builtFrom = await page.evaluate(() => new Date().toISOString());
-    served = { ...served, projection: { ...served.projection, builtAt: builtFrom, builtFrom, builtUntil: builtFrom } };
-    holdRead = false;
-    releaseRead?.();
     await expect(page.getByLabel('工作区投影状态')).not.toContainText('导航更新中');
     await expect(editor).toContainText('Unsaved watch draft.');
     assert.equal(maximumReads, 1);
