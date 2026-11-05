@@ -30,7 +30,7 @@ const main = Effect.gen(function*() {
     consumer: { type: 'string' }, commit: { type: 'string', default: 'HEAD' }, scale: { type: 'string' },
     changed: { type: 'string' }, compare: { type: 'string' }, quick: { type: 'boolean', default: false },
     samples: { type: 'string', default: '7' }, reference: { type: 'boolean', default: false },
-    'isolated-caches': { type: 'boolean', default: false }, out: { type: 'string' }, keep: { type: 'boolean', default: false },
+    out: { type: 'string' }, keep: { type: 'boolean', default: false },
   } }));
   const requested = yield* io('Decode sample count', () => Schema.decodeUnknownSync(Schema.NumberFromString.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 100 })))(values.samples));
   const samples = values.quick ? 3 : requested;
@@ -45,7 +45,6 @@ const main = Effect.gen(function*() {
   const changed = values.changed === undefined ? undefined : yield* changedSelection(root, candidate.entry, base!, outputDir);
   const selected = yield* io('Select scenarios', () => selectScenarios(scenarios, positionals, changed));
   const artifacts = values.compare === undefined ? [candidate] : [candidate, yield* prepareBaseline(root, values.compare || base!, outputDir)];
-  if (values['isolated-caches'] && values.consumer !== undefined && values.consumer !== 'self') return yield* new PerfError({ message: '--isolated-caches requires self consumers' });
   const contexts = new Map<string, BenchContext>();
   const frozenConsumers = new Map<string, BenchContext['consumer']>();
   const verdicts: (GroupVerdict & { readonly scenario: string; readonly budget?: { owner: string; heading: string } })[] = [];
@@ -59,8 +58,7 @@ const main = Effect.gen(function*() {
     const perArtifact: BenchContext[] = [];
     for (const artifact of artifacts) {
       const condition = `${kind}:${scenario.server ?? 'absent'}`;
-      const key = `${condition}:${values['isolated-caches'] ? artifact.label : 'shared'}`;
-      const contextKey = `${key}:${artifact.label}`;
+      const contextKey = `${condition}:${artifact.label}`;
       let context = contexts.get(contextKey);
       if (!context) {
         const frozen = frozenConsumers.get(condition);
@@ -70,9 +68,13 @@ const main = Effect.gen(function*() {
         if (!consumer) {
           consumer = yield* prepareConsumer(kind, { repository: root, commit: values.commit, entry: candidate.entry, scale, workDir: consumerDir });
           frozenConsumers.set(condition, consumer);
-        } else if (values['isolated-caches']) {
-          const clone = yield* prepareConsumer('self', { repository: frozen!.root, commit: frozen!.commit, entry: artifact.entry, scale, workDir: consumerDir });
-          consumer = { ...frozen!, root: clone.root, cache: 'ready' };
+        }
+        if (values.compare !== undefined) {
+          const frozen = frozenConsumers.get(condition)!;
+          const cloneDir = join(consumerDir, 'artifact');
+          yield* io('Create isolated artifact directory', () => mkdirSync(cloneDir));
+          const clone = yield* prepareConsumer('self', { repository: frozen.root, commit: frozen.commit, entry: artifact.entry, scale, workDir: cloneDir });
+          consumer = { ...frozen, root: clone.root, cache: 'ready' };
         }
         context = makeContext(artifact, consumer, outputDir, false, undefined, Math.max(0, ...budgets.filter(row => row.limitKind === 'max').map(row => row.limitMs))); contexts.set(contextKey, context);
       }
@@ -82,7 +84,7 @@ const main = Effect.gen(function*() {
     const absent = perArtifact.map(c => missingOwner(runArguments(scenario.run), path => existsSync(join(c.consumer.root, path)))).find(Boolean);
     if (absent) { verdicts.push({ ...skippedVerdict(scenario.id, context.consumer.kind, absent), scenario: scenario.id }); continue; }
     let preparationFailed = false;
-    // Finish cache clears before warming either artifact in a shared consumer.
+    // Both artifacts use the same frozen sources with independent caches and services.
     for (const phase of ['cold', 'warm'] as const) {
       for (const c of perArtifact) {
         const prepared = yield* Effect.result(Effect.gen(function*() {

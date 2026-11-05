@@ -1,10 +1,10 @@
-import { mkdtempSync, realpathSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, realpathSync, rmSync } from 'node:fs';
 import { tmpdir } from '../test-temporary.js';
 import { join } from 'node:path';
 import { Effect, Schema } from 'effect';
 import { fixtureConsumer } from '../../bench/fixtures/index.js';
 import { defaultScale, pathConsumer, scaleConsumer, selfConsumer, type Consumer, type ScaleSpec } from './consumer.js';
-import { io, refreshPids, settleRefreshes } from './process.js';
+import { io, mustRun, refreshPids, settleRefreshes } from './process.js';
 
 /** Temporary directories are canonical before any CLI observes them. */
 export const workDirectory = (prefix: string, keep: boolean) => Effect.acquireRelease(
@@ -27,7 +27,13 @@ export const prepareConsumer = Effect.fn('perf.prepareConsumer')(function*(kind:
   // Register cleanup before initialization, including failed initialization.
   const root = kind.startsWith('fixture:') ? join(options.workDir, kind.slice(8)) : kind === 'self' || kind === 'scale' ? join(options.workDir, kind) : yield* io('Resolve consumer path', () => realpathSync(kind));
   const preexisting = yield* refreshPids(root);
-  yield* Effect.addFinalizer(() => settleRefreshes(root, preexisting).pipe(Effect.orDie));
+  const hadServer = yield* io('Inspect preexisting consumer service', () => existsSync(join(root, '.git/concord/server/current.json')));
+  yield* Effect.addFinalizer(() => Effect.gen(function*() {
+    if (!hadServer && existsSync(join(root, '.git/concord/server/current.json'))) {
+      yield* mustRun([process.execPath, options.entry, '--root', root, '--json', 'server', 'stop'], { cwd: root, outputDir: options.workDir });
+    }
+    yield* settleRefreshes(root, preexisting);
+  }).pipe(Effect.orDie));
   const consumer = yield* (kind.startsWith('fixture:') ? fixtureConsumer(kind.slice(8), options.entry, options.workDir, options.smoke, { repository: options.repository, commit: options.commit }) : kind === 'self' ? selfConsumer(options.repository, options.commit, options.workDir, options.entry, options.smoke)
     : kind === 'scale' ? scaleConsumer(options.entry, options.scale, options.workDir)
       : pathConsumer(kind, options.workDir));
