@@ -87,9 +87,9 @@ test('native installation damage and repair preserve an image already mapped by 
     try {
       await waitForWorkspaceProjection(server.address.replace(/\/$/u, ''));
       const bytes = readFileSync(binary), inode = statSync(binary).ino;
-      replaceInstalledNativeBinary(binary, Buffer.concat([bytes, Buffer.from('digest mismatch')]));
+      await Effect.runPromise(replaceInstalledNativeBinary(binary, Buffer.concat([bytes, Buffer.from('digest mismatch')])).pipe(Effect.provide(NodeServices.layer)));
       assert.notEqual(statSync(binary).ino, inode, 'a mapped image must not be truncated');
-      replaceInstalledNativeBinary(binary, bytes);
+      await Effect.runPromise(replaceInstalledNativeBinary(binary, bytes).pipe(Effect.provide(NodeServices.layer)));
       assert.equal((await fetchFresh(`${server.address}api/workspace`)).status, 200);
     } finally { await server.close(); }
     assert.equal(server.process.signalCode, null, 'mapped native finalizers must not crash shutdown');
