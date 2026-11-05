@@ -1,16 +1,14 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/architecture.md
-// Only the external Herdr/GPUI boundary is replaced; this loads the built mod
-// and executes the installed public CLI. It does not measure native drawing.
+// Only the external Herdr/GPUI boundary is replaced; this loads the source mod
+// and executes the public CLI. It does not measure native drawing.
 import { execFile } from 'node:child_process';
 import { registerHooks } from 'node:module';
 import { watch } from 'node:fs';
 import { readFile, writeFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
-import { pathToFileURL } from 'node:url';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
-import { installationResources, installationRootForBin } from '../src/base/installation/index.js';
 
 type Callback = (event: unknown, cx: HostContext) => void;
 class HostElement {
@@ -124,8 +122,8 @@ const main = Effect.tryPromise({ try: async () => {
   let original: string | undefined;
   try {
     let started = performance.now();
-    const module = await import(pathToFileURL(join(installationResources(installationRootForBin(entry)).herdrMod, 'main.js')).href) as { default: new() => ModView };
-    timings.push({ operation: 'load built mod', ms: performance.now() - started });
+    const module = await import(new URL('../src/entry/herdr-mod/main.ts', import.meta.url).href) as { default: new() => ModView };
+    timings.push({ operation: 'load source mod', ms: performance.now() - started });
     view = new module.default(); view.init(undefined, context()); output = view.render(context());
     if (mode === 'workflow') {
       await waitFor(() => fileWatchers.size > 0);

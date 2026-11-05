@@ -1,3 +1,4 @@
+import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 import { packageBin, createDocument, createConsumer, installedConcordCli, assert, execFileSync, spawn, spawnSync, copyFileSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync, dirname, join, resolve, tmpdir, test, Effect, Schema, buildSync, analysisBudgets, LanguageServersSchema, type LanguageServer, documentSymbols, positionOffset, bindSymbol, LspConnection, AnalysisObservationSchema, AnalysisViewSchema, historicalAnalysis, relevanceFor, CodeDeclarationSchema, decode, type AnnotatedCase, type DocumentRecord, observation, LocalRepository, withPersistentCache, observeOwnedProcessGroup, hydrateQueryValue, TraceShowValue, pollUntil, readProjectConfig, writeProjectConfig, sourceConcord, cli, target, source, write, call, ack, failure, analysis, codeList, projectCheck, server, consumer } from '../support/lsp-analysis-fixture.js';
 
 
@@ -37,6 +38,7 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     assert.equal(second.value.dependencies[0]!.scope, 'native-case');
     assert.deepEqual(second.value.dependencies[0]!.declarations, []);
     assert.equal(invoke(['code', 'list'], codeList).analysis.relevance[0]!.relevance.verdict, 'not-observed');
+    stopWorkspaceServer(root);
     const repo = new LocalRepository(root);
     try { repo.snapshot(() => withPersistentCache(repo, true, database => {
       const row = database!.get('annotation_cache', ['native-inputs/v1/range-fixture'])[0]!;
@@ -52,5 +54,5 @@ test('native manifests constrain LSP roots and changed observations invalidate i
     assert.ok(fallback.value.dependencies[0]!.gaps.includes('NativeRangeUnavailable'));
     assert.ok(fallback.value.dependencies[0]!.gaps.includes('FileScope'));
     assert.deepEqual(invoke(['check'], projectCheck), baseline);
-  } finally { rmSync(root, { recursive: true, force: true }); rmSync(external, { recursive: true, force: true }); }
+  } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); rmSync(external, { recursive: true, force: true }); }
 })));

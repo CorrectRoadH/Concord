@@ -11,7 +11,7 @@ import { installedConcordCli } from '../support/support.js';
 
 // @feature docs/feature/local-data-engine/README.md
 // @issue docs/issues/exit-hang-after-output.md
-test('C15 cold show returns the current source without creating a persistent cache', () => {
+test('C15 dry-run cold show returns the current source without creating a persistent cache', () => {
   const root = createConsumer();
   const repo = new LocalRepository(root);
   try { createDocument(repo, 'feature', { id: 'cold-show', title: 'Cold show', body: 'Current source.\n' }); }
@@ -19,7 +19,7 @@ test('C15 cold show returns the current source without creating a persistent cac
   const path = 'docs/feature/cold-show/README.md', database = join(root, '.git/concord/cache.hawdb');
   try {
     assert.equal(existsSync(database), false);
-    const shown = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'show', 'cold-show'], { encoding: 'utf8', timeout: 15_000 });
+    const shown = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', '--dry-run', 'show', 'cold-show'], { encoding: 'utf8', timeout: 15_000 });
     assert.equal(shown.status, 0, shown.stdout + shown.stderr);
     const value = JSON.parse(shown.stdout) as { operation: string; document: { path: string; digest: string } };
     assert.equal(value.operation, 'show');

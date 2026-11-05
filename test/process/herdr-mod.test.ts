@@ -1,3 +1,4 @@
+import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, existsSync, rmSync } from 'node:fs';
@@ -7,7 +8,7 @@ import { installedConcordCli } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
 
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
-test('the built native mod reads and refreshes through the installed public CLI without starting a server', { timeout: 90_000 }, () => {
+test('the native mod reads and refreshes through the public CLI and a shared workspace server', { timeout: 90_000 }, () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-herdr-mod-'));
   const cli = installedConcordCli();
   try {
@@ -24,11 +25,11 @@ test('the built native mod reads and refreshes through the installed public CLI 
       assert.ok(result.ms > 0); assert.match(result.text, /measured/u);
       assert.match(result.boundary, /no native drawing/u);
       assert.ok(result.calls.every(call => ['doctor', 'list', 'show', 'concepts', 'taste'].includes(call[0]!)));
-      assert.equal(existsSync(join(root, '.git/concord/server/current.json')), false);
+      assert.equal(existsSync(join(root, '.git/concord/server/current.json')), true);
       assert.equal(readFileSync(path, 'utf8'), original, 'measurement restores its edited consumer source');
       if (mode === 'push') assert.match(result.text, /MOD_PUSH_/u);
     }
-  } finally { rmSync(root, { recursive: true, force: true }); }
+  } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }
 });
 
 // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md
@@ -41,6 +42,6 @@ test('native mod controls initialize, create, edit, check and retain a stale-sav
     const result = JSON.parse(reply.stdout) as { workflow: string; calls: string[][] };
     assert.match(result.workflow, /preserved conflict/u);
     for (const operation of ['init', 'new', 'check']) assert.ok(result.calls.some(call => call[0] === operation));
-    assert.equal(existsSync(join(root, '.git/concord/server/current.json')), false);
-  } finally { rmSync(root, { recursive: true, force: true }); }
+    assert.equal(existsSync(join(root, '.git/concord/server/current.json')), true);
+  } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }
 });

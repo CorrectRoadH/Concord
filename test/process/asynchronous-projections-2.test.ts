@@ -11,7 +11,7 @@ test('packed C1 publishes cold projections during continuous docs, test, and cod
       const result = await refreshInstalled(root, ['trace', 'gaps']);
       assert.equal(result.status, 0, result.stderr);
       const context = { privateDir: genericPrivateDirectorySync(root), query: ['trace', 'gaps'] as const };
-      const stored = packedEnvelope(root, context.query);
+      const stored = await packedEnvelope(root, context.query);
       assert.ok(stored.record, JSON.stringify(stored));
       assert.equal(stored.record.consistent, false);
       assert.equal(stored.record.complete, false);

@@ -7,6 +7,7 @@ import { externalCase } from '../support/external-adapter-fixture.js';
 // @name packed-external-adapter-boundaries
 test('packed external adapter preserves static relations and rejects dishonest protocol/report outcomes (C1-C5 C7-C16)', { skip: process.platform !== 'linux' && 'Native report directory-handle traversal is not verified on this platform' }, () => Effect.runPromise(Effect.scoped(Effect.gen(function* () {
   const { consumer, cli, id } = yield* externalCase();
+  yield* Effect.addFinalizer(() => call(consumer, cli, ['server', 'stop']).pipe(Effect.tap(result => Effect.sync(() => assert.equal(result.exitCode, 0, result.stderr))), Effect.asVoid, Effect.orDie));
   const checkBefore = yield* success(consumer, cli, ['check']);
   const coldCases = Schema.decodeUnknownSync(CaseList)(JSON.parse((yield* success(consumer, cli, ['test', 'list'])).stdout)).cases;
   yield* success(consumer, cli, ['test', 'discover']);
@@ -19,7 +20,7 @@ test('packed external adapter preserves static relations and rejects dishonest p
     finally { closeRepositoryCache(repo); repo.close(); }
   };
   for (const state of ['warm', 'corrupt', 'clear']) {
-    if (state === 'corrupt') yield* Effect.sync(corruptObservation);
+    if (state === 'corrupt') { yield* success(consumer, cli, ['server', 'stop']); yield* Effect.sync(corruptObservation); }
     if (state === 'clear') yield* success(consumer, cli, ['cache', 'clear']);
     const checked = parse((yield* success(consumer, cli, ['check'])).stdout);
     for (const field of ['ok', 'complete', 'findings']) assert.deepEqual(checked[field], before[field], state);
@@ -30,7 +31,7 @@ test('packed external adapter preserves static relations and rejects dishonest p
   let wrongSource: unknown;
   for (const state of ['cold', 'warm', 'corrupt', 'clear']) {
     if (state === 'warm') yield* success(consumer, cli, ['test', 'discover']);
-    if (state === 'corrupt') yield* Effect.sync(corruptObservation);
+    if (state === 'corrupt') { yield* success(consumer, cli, ['server', 'stop']); yield* Effect.sync(corruptObservation); }
     if (state === 'clear') yield* success(consumer, cli, ['cache', 'clear']);
     const checked = yield* call(consumer, cli, ['check']); assert.equal(checked.exitCode, 1);
     const result = parse(checked.stdout); const stable = { ok: result.ok, complete: result.complete, findings: result.findings };

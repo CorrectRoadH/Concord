@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url';
 import test from 'node:test';
 import { installedConcordCli, pollUntil } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 
 interface Task { cancel(): void; is_done(): boolean }
 interface Context {
@@ -98,7 +99,7 @@ test('built mod initializes through the real CLI, reads packaged Markdown and hi
   };
   try {
     execFileSync('git', ['init', '-q', root]);
-    const { default: BuiltMod } = await import(pathToFileURL(resolve('dist/herdr-mod/main.js')).href) as { default: new() => Mod };
+    const { default: BuiltMod } = await import(pathToFileURL(resolve('src/entry/herdr-mod/main.ts')).href) as { default: new() => Mod };
     view = new BuiltMod(); view.init(undefined, context); context.notify();
     await wait(() => output?.find('initialize') !== undefined);
     output!.find('initialize')!.click!(undefined, context);
@@ -123,6 +124,7 @@ test('built mod initializes through the real CLI, reads packaged Markdown and hi
   } finally {
     await close();
     hooks.deregister(); delete global.__concordGuideHost;
+    stopWorkspaceServer(root);
     rmSync(root, { recursive: true, force: true });
   }
 });

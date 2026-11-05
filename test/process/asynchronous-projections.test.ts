@@ -8,7 +8,7 @@ test('packed C7 worker publishes a readable body-free envelope and exits', async
     const query = ['trace', 'show', ownerPath] as const;
     const result = await refreshInstalled(root, query);
     assert.equal(result.status, 0, result.stderr);
-    const stored = packedEnvelope(root, query);
+    const stored = await packedEnvelope(root, query);
     assert.ok(stored.record, JSON.stringify(stored));
     assert.doesNotMatch(JSON.stringify(stored), /PRIVATE_(OWNER|CONSTITUTION|ISSUE|REMOTE)_BODY_SENTINEL/u);
     const historical = installedCall(root, '--json', ...query);

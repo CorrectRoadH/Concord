@@ -25,11 +25,11 @@ test('packed C2 retains the consistent generation and annotates the later drifti
   try {
     const context = { privateDir: genericPrivateDirectorySync(root), query: ['trace', 'gaps'] as const };
     assert.equal((await refreshInstalled(root, ['trace', 'gaps'])).status, 0);
-    const previous = packedEnvelope(root, context.query).record;
+    const previous = (await packedEnvelope(root, context.query)).record;
     assert.ok(previous?.consistent);
     stop = await editing(root, 'docs/feature/sample/README.md');
     assert.equal((await refreshInstalled(root, ['trace', 'gaps'])).status, 0);
-    const retained = packedEnvelope(root, context.query);
+    const retained = await packedEnvelope(root, context.query);
     assert.deepEqual(retained.record, previous);
     assert.equal(retained.lastAttempt?.complete, false);
     // Atomic replacement can interrupt a read before a structured candidate

@@ -1,3 +1,6 @@
+import { stopWorkspaceServer } from './stop-workspace-server.js';
+import { record, recordPath } from './workspace-server-fixture.js';
+import { connectWorkspaceSocket, requestWorkspace, Snapshot } from '../../src/entry/server/index.js';
 import { readQuery, storeQuery } from './operations.js';
 import { initialize, createDocument } from './operations.js';
 import { Workspace } from '../../src/base/workspace/index.js';
@@ -57,6 +60,7 @@ export async function historicalCall(root: string) {
 
 /** Only processes naming this isolated consumer are owned by this test. */
 export async function waitForRefreshExit(root: string): Promise<void> {
+  stopWorkspaceServer(root);
   const active = () => execFileSync('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }).split('\n')
     .filter(line => line.includes(root) && /query-(refresh|scan)-worker\.(?:js|ts)/u.test(line)).map(line => Number(line.trim().split(/\s/u)[0]));
   const deadline = Date.now() + 125_000;
@@ -93,13 +97,24 @@ export function packedConsumer(workload = true): string {
   }
   return root;
 }
-export function packedEnvelope(root: string, query: readonly string[]): ReturnType<typeof readQuery> {
+export async function packedEnvelope(root: string, query: readonly string[]): Promise<ReturnType<typeof readQuery>> {
   const path = cacheDatabasePath(genericPrivateDirectorySync(root));
   if (!existsSync(path)) return {};
   let db;
   try {
-    db = openHawdb(path, { readOnly: true, create: false });
-    const rows = db.scan('query_cache').filter(row => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ format: Schema.optional(Schema.String) })), { onExcessProperty: 'ignore' })(row.payload).format === 'concord.query-cache/v3').map(row => Schema.decodeUnknownSync(Schema.fromJsonString(QueryCacheEnvelope), { onExcessProperty: 'error' })(row.payload));
+    let entries;
+    if (existsSync(recordPath(root))) {
+      const current = record(root);
+      const snapshot = await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+        const connection = yield* connectWorkspaceSocket(current.socket.path, current.installation, current.token);
+        return yield* requestWorkspace(connection, 'cache-snapshot', {});
+      })));
+      entries = Schema.decodeUnknownSync(Snapshot, { onExcessProperty: 'error' })(snapshot).query_cache ?? [];
+    } else {
+      db = openHawdb(path, { readOnly: true, create: false });
+      entries = db.scan('query_cache');
+    }
+    const rows = entries.filter(row => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ format: Schema.optional(Schema.String) })), { onExcessProperty: 'ignore' })(row.payload).format === 'concord.query-cache/v3').map(row => Schema.decodeUnknownSync(Schema.fromJsonString(QueryCacheEnvelope), { onExcessProperty: 'error' })(row.payload));
     const operation = query[0] === 'review' ? undefined : query[1] === 'show' ? 'trace-show' : 'trace-gaps';
     return rows.find(row => row.record && (operation === undefined ? 'segments' in row.record.value : 'operation' in row.record.value && row.record.value.operation === operation && (operation !== 'trace-show' || 'subject' in row.record.value && row.record.value.subject.path === query[2])))
       ?? (rows.length === 1 ? rows[0]! : {});
@@ -113,7 +128,7 @@ export async function refreshInstalled(root: string, query: readonly string[]) {
   const requested = installedCall(root, '--json', ...query);
   assert.ok(requested.status === 0 || requested.status === 1, requested.stderr);
   await pollUntil(async () => {
-    const value = packedEnvelope(root, query);
+    const value = await packedEnvelope(root, query);
     return Math.max(value.record?.scannedAt ?? 0, value.lastAttempt?.scannedAt ?? 0, value.error?.scannedAt ?? 0) >= requestedAt ? true : undefined;
   }, { timeoutMs: 125_000, description: 'installed CLI diagnostic refresh' });
   await waitForRefreshExit(root);

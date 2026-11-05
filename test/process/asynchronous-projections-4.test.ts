@@ -9,10 +9,10 @@ test('CLI exits before refresh, serves a historical snapshot, and keeps fresh ch
     assert.equal(cold.status, 1, cold.stderr);
     assert.match(cold.stderr, /QueryPending/);
     const deadline = Date.now() + 125_000;
-    let cached = packedEnvelope(root, ['trace', 'gaps']);
+    let cached = await packedEnvelope(root, ['trace', 'gaps']);
     while (!cached.record && Date.now() < deadline) {
       await Effect.runPromise(Effect.sleep('100 millis'));
-      cached = packedEnvelope(root, ['trace', 'gaps']);
+      cached = await packedEnvelope(root, ['trace', 'gaps']);
     }
     assert.ok(cached.record, JSON.stringify(cached));
     for (let i = 0; i < 4; i++) {
@@ -33,10 +33,10 @@ test('CLI exits before refresh, serves a historical snapshot, and keeps fresh ch
     assert.equal(fresh.status, 1, fresh.stdout + fresh.stderr);
     assert.match(fresh.stderr, /TraceInvalid/);
     const failedDeadline = Date.now() + 125_000;
-    let failed = packedEnvelope(root, ['trace', 'gaps']);
+    let failed = await packedEnvelope(root, ['trace', 'gaps']);
     while (!failed.error && Date.now() < failedDeadline) {
       await Effect.runPromise(Effect.sleep('100 millis'));
-      failed = packedEnvelope(root, ['trace', 'gaps']);
+      failed = await packedEnvelope(root, ['trace', 'gaps']);
     }
     assert.ok(failed.error, JSON.stringify(failed));
     assert.deepEqual(failed.record?.value, cached.record.value, 'failed refresh retains the complete prior diagnostic content');
