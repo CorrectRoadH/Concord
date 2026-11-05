@@ -1,4 +1,4 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
@@ -26,14 +26,14 @@ export function builtConcord(_destination?: string): BuiltConcord {
   }));
 }
 
-/** Consumers share dist. Only damage fixtures copy the runtime files they modify. */
+/** Consumers share source. Only damage fixtures copy the runtime files they modify. */
 export function prepareBuiltConsumer(directory: string, artifact: BuiltConcord, dependencies: readonly string[] = [], options: { private?: boolean } = {}): void {
   Effect.runSync(Effect.sync(() => {
     const modules = join(directory, 'node_modules'); mkdirSync(modules, { recursive: true });
     const target = join(modules, artifact.name);
     if (options.private) {
       mkdirSync(target);
-      for (const path of ['dist', 'templates', 'skills', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
+      for (const path of ['src', 'web', 'native', 'scripts', 'vite.config.ts', 'vite.preview.config.ts', 'templates', 'skills', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) {
         cpSync(join(distributionRoot, path), join(target, path), { recursive: true });
       }
       symlinkSync(join(distributionRoot, 'node_modules'), join(target, 'node_modules'), 'junction');
@@ -47,7 +47,10 @@ export function prepareBuiltConsumer(directory: string, artifact: BuiltConcord, 
     mkdirSync(join(modules, '.bin'), { recursive: true });
     const cli = packageBin(target);
     if (process.platform === 'win32') writeFileSync(join(modules, '.bin/concord.cmd'), `@"${process.execPath}" "${cli}" %*\r\n`);
-    else symlinkSync(cli, join(modules, '.bin/concord'));
+    else {
+      writeFileSync(join(modules, '.bin/concord'), `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} --conditions=concord-source --import ${JSON.stringify(import.meta.resolve('tsx'))} ${JSON.stringify(cli)} "$@"\n`);
+      chmodSync(join(modules, '.bin/concord'), 0o755);
+    }
     const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(readFileSync(join(directory, 'package.json'), 'utf8'));
     writeFileSync(join(directory, 'package.json'), `${JSON.stringify({ ...manifest, dependencies: { [artifact.name]: `file:${distributionRoot}`, ...Object.fromEntries(dependencies.map(dependency => [dependency.slice(0, dependency.lastIndexOf('@')), dependency.slice(dependency.lastIndexOf('@') + 1)])) } }, null, 2)}\n`);
   }));

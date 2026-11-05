@@ -1,5 +1,4 @@
-import { packageBin } from '../../scripts/package-location.js';
-import { packConcord, installConcord } from './installed-package.js';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from './temporary.js';
 import { after as nodeAfter, before as nodeBefore } from 'node:test';
 import { Effect, Schema } from 'effect';
@@ -196,23 +195,7 @@ export const waitForWorkspaceNotModified = async (base: string, options: PollOpt
   return etag!;
 };
 
-let sharedInstalledCli: string | undefined;
-let sharedInstalledScratch: string | undefined;
-nodeAfter(() => Effect.runPromise(Effect.sync(() => {
-  if (sharedInstalledScratch !== undefined) rmSync(sharedInstalledScratch, { recursive: true, force: true });
-})));
-/** One read-only installed CLI per test process; the invocation supplies its frozen artifact. */
+/** The compatibility name now resolves the current checkout's source CLI. */
 export function installedConcordCli(): string {
-  if (sharedInstalledCli !== undefined) return sharedInstalledCli;
-  return Effect.runSync(Effect.sync(() => {
-    const scratch = mkdtempSync(join(tmpdir(), 'concord-cli-fixture-'));
-    try {
-      const install = join(scratch, 'consumer'); mkdirSync(install);
-      writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-      installConcord(install, packConcord(scratch));
-      sharedInstalledCli = packageBin(join(install, 'node_modules/concord-sdlc'));
-      sharedInstalledScratch = scratch;
-      return sharedInstalledCli;
-    } catch (cause) { rmSync(scratch, { recursive: true, force: true }); throw cause; }
-  }));
+  return fileURLToPath(new URL('../../src/entry/cli/entry.ts', import.meta.url));
 }

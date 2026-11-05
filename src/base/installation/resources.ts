@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { Schema } from 'effect';
 
@@ -7,8 +7,10 @@ const Manifest = Schema.fromJsonString(Schema.Struct({ bin: Schema.Struct({ conc
 export function installationResources(root: string) {
   const manifest = Schema.decodeUnknownSync(Manifest, { onExcessProperty: 'ignore' })(readFileSync(join(root, 'package.json'), 'utf8'));
   const distribution = join(root, 'dist');
+  const source = existsSync(join(root, 'src/entry/cli/entry.ts'));
+  const runtime = source ? join(root, 'src') : distribution;
   return {
-    bin: join(root, manifest.bin.concord),
+    bin: source ? join(runtime, 'entry/cli/entry.ts') : join(root, manifest.bin.concord),
     help: join(distribution, 'startup-data.js'),
     native: join(distribution, 'native'),
     web: join(distribution, 'web'),
@@ -16,7 +18,7 @@ export function installationResources(root: string) {
     command: (group: string) => join(distribution, 'entry/cli', `cli-command-${group}.js`),
     fallback: join(distribution, 'entry/cli/cli-fallback-bundle.js'),
     skill: join(distribution, 'entry/cli/skill.js'),
-    worker: (name: string) => join(distribution, 'entry/server', `${name}.js`),
+    worker: (name: string) => join(runtime, 'entry/server', `${name}.${source ? 'ts' : 'js'}`),
   };
 }
 
@@ -26,7 +28,7 @@ export function installationRootForBin(bin: string): string {
   for (;;) {
     try {
       const manifest = Schema.decodeUnknownSync(Manifest, { onExcessProperty: 'ignore' })(readFileSync(join(directory, 'package.json'), 'utf8'));
-      if (resolve(directory, manifest.bin.concord) === resolve(bin)) return directory;
+      if (resolve(directory, manifest.bin.concord) === resolve(bin) || resolve(directory, 'src/entry/cli/entry.ts') === resolve(bin)) return directory;
     } catch { /* A containing directory may belong to a dependency workspace. */ }
     const parent = dirname(directory);
     if (parent === directory) throw new Error('InstallationUnavailable: executable has no matching package manifest');

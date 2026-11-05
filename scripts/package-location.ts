@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import { Effect, Schema } from 'effect';
 
@@ -7,6 +7,8 @@ const Manifest = Schema.fromJsonString(Schema.Struct({ bin: Schema.Struct({ conc
 /** Packaging and acceptance resolve the bin from the artifact's own manifest. */
 export function packageBin(root: string): string {
   return Effect.runSync(Effect.try({ try: () => {
+    const source = join(root, 'src/entry/cli/entry.ts');
+    if (existsSync(source)) return source;
     const manifest = Schema.decodeUnknownSync(Manifest, { onExcessProperty: 'ignore' })(readFileSync(join(root, 'package.json'), 'utf8'));
     const file = resolve(root, manifest.bin.concord);
     if (!file.startsWith(resolve(root) + sep)) throw new Error('Package bin escapes its installation');

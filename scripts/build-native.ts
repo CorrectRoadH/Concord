@@ -57,7 +57,7 @@ function dependencyNotices(dest: string): void {
 }
 const ArgsSchema = Schema.Struct({ output: Schema.String, prebuilt: Schema.optional(Schema.String), requirePortable: Schema.Boolean, testHooks: Schema.Boolean, reuse: Schema.Boolean });
 function parseArgs(argv: readonly string[]): Schema.Schema.Type<typeof ArgsSchema> {
-  const result: { output: string; prebuilt?: string; requirePortable: boolean; testHooks: boolean; reuse: boolean } = { output: 'dist/native', requirePortable: false, testHooks: false, reuse: false };
+  const result: { output: string; prebuilt?: string; requirePortable: boolean; testHooks: boolean; reuse: boolean } = { output: nativeCacheRoot(), requirePortable: false, testHooks: false, reuse: false };
   for (let i = 0; i < argv.length; i++) {
     const value = argv[i];
     if (value === '--output' && argv[i + 1]) result.output = argv[++i]!;
