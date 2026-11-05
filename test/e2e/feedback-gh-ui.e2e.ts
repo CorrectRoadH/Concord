@@ -33,7 +33,7 @@ test('GitHub settings keep API defaults and binding while gh detection follows s
     try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
     const initial = readProjectConfig(root);
     writeProjectConfig(root, { ...initial, feedbackConnections: [{ id: 'existing', provider: 'github', credentialEnv: 'GITHUB_TOKEN', owner: 'acme', repo: 'demo', repositoryId: '321' }] });
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0, ...(process.env.CONCORD_TEST_WEB_ROOT ? { webRoot: process.env.CONCORD_TEST_WEB_ROOT } : {}) });
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
 
     await page.setViewportSize({ width: 390, height: 844 });
     const pageErrors: string[] = [];

@@ -1,6 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { cpSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Schema } from 'effect';
 import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
@@ -8,7 +8,7 @@ import { tmpdir } from '../support/temporary.js';
 import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 
-export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly webRoot?: string; readonly installedBin?: string }
+export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly installedBin?: string }
 export interface ViewServerHandle {
   readonly root: string; readonly host: string; readonly port: number; readonly address: string;
   readonly process: ChildProcess;
@@ -16,7 +16,7 @@ export interface ViewServerHandle {
 }
 const Ready = Schema.Struct({ operation: Schema.Literal('view'), root: Schema.String, host: Schema.String, port: Schema.Number, address: Schema.String });
 
-/** Every HTTP/browser consumer starts the invocation's installed public bin. */
+/** HTTP/browser consumers run the checkout's source CLI. */
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-browser-server-'));
   let child: ChildProcess | undefined;
@@ -27,12 +27,8 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     else {
       const install = join(scratch, 'tool'); mkdirSync(install);
       writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-      prepareSourceConsumer(install, sourceConcord(), [], { private: options.webRoot !== undefined });
+      prepareSourceConsumer(install, sourceConcord());
       resources = installationResources(join(install, 'node_modules/concord-sdlc'));
-    }
-    if (options.webRoot !== undefined) {
-      rmSync(resources.web, { recursive: true, force: true });
-      cpSync(options.webRoot, resources.web, { recursive: true });
     }
     entry = resources.bin;
     child = spawn(process.execPath, [resources.bin, '--root', options.root, '--json', 'view', '--in-process', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
@@ -56,26 +52,34 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     });
     let closing: Promise<void> | undefined;
     return { ...ready, process: processHandle, close: () => closing ??= (async () => {
-      if (processHandle.exitCode === null && processHandle.signalCode === null) {
-        const stopped = once(processHandle, 'exit');
-        processHandle.kill('SIGTERM');
-        let deadline: ReturnType<typeof setTimeout> | undefined;
-        try {
-          await Promise.race([stopped, new Promise<never>((_accept, reject) => {
-            deadline = setTimeout(() => reject(new Error('Installed View did not stop after SIGTERM with an unused socket')), 5_000);
-          })]);
-        } catch (cause) {
-          processHandle.kill('SIGKILL'); await stopped;
-          stopWorkspaceServer(options.root, resources.bin);
-          rmSync(scratch, { recursive: true, force: true }); throw cause;
-        } finally { if (deadline !== undefined) clearTimeout(deadline); }
+      try {
+        // Release the service handles before ending its CLI owner.
+        stopWorkspaceServer(options.root, resources.bin);
+      } finally {
+        try { await terminate(processHandle); }
+        finally { rmSync(scratch, { recursive: true, force: true }); }
       }
-      stopWorkspaceServer(options.root, resources.bin);
-      rmSync(scratch, { recursive: true, force: true });
     })() };
   } catch (cause) {
-    if (child && child.exitCode === null && child.signalCode === null) { const stopped = once(child, 'exit'); child.kill('SIGTERM'); await stopped; }
-    if (entry) stopWorkspaceServer(options.root, entry);
-    rmSync(scratch, { recursive: true, force: true }); throw cause;
+    try { if (entry) stopWorkspaceServer(options.root, entry); }
+    finally {
+      try { if (child) await terminate(child); }
+      finally { rmSync(scratch, { recursive: true, force: true }); }
+    }
+    throw cause;
   }
+}
+
+async function terminate(child: ChildProcess): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const stopped = once(child, 'exit');
+  child.kill('SIGTERM');
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([stopped, new Promise<never>((_accept, reject) => {
+      deadline = setTimeout(() => reject(new Error('Source View did not stop after SIGTERM')), 5_000);
+    })]);
+  } catch (cause) {
+    child.kill('SIGKILL'); await stopped; throw cause;
+  } finally { if (deadline !== undefined) clearTimeout(deadline); }
 }

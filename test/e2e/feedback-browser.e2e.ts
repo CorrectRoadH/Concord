@@ -39,7 +39,7 @@ test('feedback browser separates remote observations from local editing and prot
       const {connectionId: _connectionId,importedAt: _importedAt,...remote}=source;
       mergeFeedbackCache(repo,'fixture',[{...remote,title:'Updated remote title',body:'Updated remote body',state:'closed',updatedAt:'2026-09-14T00:00:00.000Z'}]);
     } finally {repo.close();}
-    server=await startViewServer({root,host:'127.0.0.1',port:0,...(process.env.CONCORD_TEST_WEB_ROOT?{webRoot:process.env.CONCORD_TEST_WEB_ROOT}:{})});
+    server=await startViewServer({root,host:'127.0.0.1',port:0});
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({width:1440,height:1000});
@@ -154,7 +154,7 @@ test('empty feedback keeps creation and settings visible without filters', async
     execFileSync('git',['init','-q',root]);
     const repo=new LocalRepository(root,{initialize:true});
     try { initialize(repo,false,{testRoots:[]}); } finally { repo.close(); }
-    server=await startViewServer({root,host:'127.0.0.1',port:0,...(process.env.CONCORD_TEST_WEB_ROOT?{webRoot:process.env.CONCORD_TEST_WEB_ROOT}:{})});
+    server=await startViewServer({root,host:'127.0.0.1',port:0});
 
 
     await page.goto(`http://127.0.0.1:${server.port}/feedback`);

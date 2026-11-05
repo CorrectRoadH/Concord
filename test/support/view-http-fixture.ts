@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { request } from 'node:http';
 import { connect } from 'node:net';
 import { join } from 'node:path';
@@ -10,11 +10,7 @@ import { parseWorkspaceProjection, pollUntil } from './support.js';
 export const fixture = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-view-'));
   execFileSync('git', ['init', '-q', root]);
-  const webRoot = join(root, 'web-dist');
-  mkdirSync(join(webRoot, 'assets'), { recursive: true });
-  writeFileSync(join(webRoot, 'index.html'), '<!doctype html><main>application shell</main>');
-  writeFileSync(join(webRoot, 'assets/app.js'), 'globalThis.loaded = true;\n');
-  return { root, webRoot };
+  return { root };
 };
 
 export interface ResponseResult { readonly status: number; readonly type: string | undefined; readonly body: string }

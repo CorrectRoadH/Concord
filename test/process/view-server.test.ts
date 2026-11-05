@@ -45,7 +45,10 @@ test('a real thousand-file workspace scan leaves static and document HTTP reques
     const lease = join(f.root, '.git/concord/trace/publication.lease');
     assert.equal(existsSync(lease), false, 'source scanning does not acquire publication ownership');
     const responsiveAt = performance.now();
-    const [asset, document] = await Promise.all([send(server, '/assets/app.js'), send(server, '/api/file?path=docs%2Ftaste.md')]);
+    const shell = await send(server, '/');
+    const script = /src="([^"]+\.js)"/u.exec(shell.body)?.[1];
+    assert.ok(script, shell.body);
+    const [asset, document] = await Promise.all([send(server, script), send(server, '/api/file?path=docs%2Ftaste.md')]);
     assert.equal(asset.status, 200, asset.body);
     assert.equal(document.status, 200, document.body);
     const responseMs = performance.now() - responsiveAt;
@@ -60,12 +63,12 @@ test('a real thousand-file workspace scan leaves static and document HTTP reques
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view writes request failure codes without copying request targets or diagnostics into logs', async () => {
-  const { root, webRoot } = fixture();
+  const { root } = fixture();
   let server: ViewServerHandle | undefined;
   const logs: string[] = [];
   const write = process.stderr.write;
   try {
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot });
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     process.stderr.write = ((chunk: string | Uint8Array) => { logs.push(String(chunk)); return true; }) as typeof process.stderr.write;
     const result = await send(server, '/api/missing?token=private');
     assert.equal(result.status, 404);
@@ -93,13 +96,14 @@ async function waitFor(manager: ViewJobManager, id: string, state: readonly stri
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view server keeps the application shell data-free and allows unauthenticated access and enforces authority, strict JSON, and API fallback', async () => {
-  const { root, webRoot } = fixture();
+  const { root } = fixture();
   let server: ViewServerHandle | undefined;
   try {
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot });
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const shell = await send(server, '/workspace/deep-link');
     assert.equal(shell.status, 200);
-    assert.equal(shell.body, '<!doctype html><main>application shell</main>');
+    assert.match(shell.body, /<div id="root"><\/div>/u);
+    assert.equal(shell.body.includes(root), false, 'the application shell contains no consumer path');
     assert.match(shell.type ?? '', /^text\/html/u);
 
     const customAuthority = `concord.example.test:${server.port}`;
@@ -180,10 +184,10 @@ test('view server keeps the application shell data-free and allows unauthenticat
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('view server rejects malformed or ambiguous authorities and non-origin-form request targets over HTTP', async () => {
-  const { root, webRoot } = fixture();
+  const { root } = fixture();
   let server: ViewServerHandle | undefined;
   try {
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot });
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const connection = 'Connection: close\r\n';
     const invalidHosts = [
       `user@concord.example.test:${server.port}`,
@@ -263,14 +267,14 @@ test('view CLI propagates or rejects shared dry-run without cache or repository 
 
 // @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
 test('workspace diagnostics never dereference unsafe configuration paths', async () => {
-  const { root, webRoot } = fixture();
+  const { root } = fixture();
   const outside = mkdtempSync(join(tmpdir(), 'concord-view-outside-'));
   let server: ViewServerHandle | undefined;
   try {
     const secret = 'must-not-cross-the-worktree-boundary';
     writeFileSync(join(outside, 'secret.json'), secret);
     symlinkSync(join(outside, 'secret.json'), join(root, 'concord.config.ts'));
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot });
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     // A linked config is a path-safety failure: the target must never be dereferenced
     // or served, whatever failure surface the refresh chooses.
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -319,7 +323,7 @@ test('HTTP jobs run, cancel, and run again without credentials', async () => {
   let server: ViewServerHandle | undefined;
   try {
     writeCase(root, true);
-    server = await startViewServer({ root, host: '127.0.0.1', port: 0, webRoot: join(root, 'web-dist') });
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     const current = server;
     const start = async () => {
       const response = await send(current, '/api/jobs', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ caseId: viewJobCase }) });
@@ -346,7 +350,7 @@ test('HTTP jobs run, cancel, and run again without credentials', async () => {
     const second = await start();
     const completed = await waitForHttp(second, ['completed', 'failed']);
     assert.equal(completed.state, 'completed');
-    assert.equal(completed.evidence?.commandOutcome, 'pass');
+    assert.equal(completed.evidence?.commandOutcome, 'pass', JSON.stringify(completed));
   } finally {
     await server?.close();
     rmSync(root, { recursive: true, force: true });
@@ -371,7 +375,7 @@ test('view jobs preserve pre-spawn cancellation, serialize repository ownership,
     const completed = manager.start(viewJobCase);
     const completedResult = await waitFor(manager, completed.id, ['completed', 'failed']);
     assert.equal(completedResult.state, 'completed', JSON.stringify(completedResult.error));
-    assert.equal(completedResult.evidence?.commandOutcome, 'pass');
+    assert.equal(completedResult.evidence?.commandOutcome, 'pass', JSON.stringify(completedResult));
 
     held = new LocalRepository(root);
     held.beginSnapshot();

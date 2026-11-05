@@ -37,9 +37,13 @@ test('browser navigates owner directories and preserves implementation and docum
       if (category === 'Engineering') {
         const diagram=page.getByLabel('Mermaid 图表预览').locator('svg');
         await expect(diagram).toBeVisible();
-        const initialDiagram=await diagram.evaluate(element=>element.outerHTML);
+        const diagramColors = () => diagram.evaluate(element => Array.from(element.querySelectorAll('rect, path, text')).map(node => {
+          const style = getComputedStyle(node);
+          return [style.fill, style.stroke, style.color];
+        }));
+        const initialDiagram=await diagramColors();
         await page.locator('.theme-toggle').click();
-        await expect.poll(()=>diagram.evaluate(element=>element.outerHTML)).not.toBe(initialDiagram);
+        await expect.poll(diagramColors).not.toEqual(initialDiagram);
         await page.getByRole('tab',{name:'实现',exact:true}).click();
         await expect(page.getByRole('tab',{name:'实现',exact:true})).toHaveAttribute('data-state','active');
         await expect(page.getByRole('tab',{name:'测试',exact:true})).toHaveCount(0);
