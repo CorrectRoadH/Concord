@@ -19,7 +19,7 @@ The sole native exception is `native/hawdb`: Rust N-API engine bindings, require
 
 Use the project-pinned Vite+ toolchain. Bootstrap with `pnpm install --frozen-lockfile`; use `vp install` thereafter. When no global CLI is installed, prefix Vite+ commands with `pnpm exec`, for example `pnpm exec vp dev`. Keep the pinned pnpm package manager and lockfile. Run the current source CLI with `pnpm concord`; delivery uses `pnpm check`.
 
-- The checkout never contains `dist/`; development, the gate and every test run source. `vp build --out <dir>` builds the complete installable package (native bindings, CLI, Web, Preview, packaged resources) into a directory outside the checkout. `vp dev` starts only the Web development server.
+- The checkout never contains `dist/`; development, the gate and every test run source. `vp build --outDir <dir>` builds the complete installable package (native bindings, CLI, Web, Preview, packaged resources) into a directory outside the checkout. `vp dev` starts only the Web development server.
 - `pnpm check` (equivalent to `vp run check`) is the sole check entry: type/selfhost checks and all Node and browser suites run against source in parallel; only the single packaging test builds a package into its own temp directory. Vite+'s built-in `vp check` and `vp test` do not run this project's gate.
 - `pnpm check [files...]` accepts `--test-name-pattern=...` and `--test-shard=1/4`. Build and static checks remain complete; selected tests do not replace full acceptance.
 - `vp run build:native` reuses validated shared native artifacts, then downloads the matching digest release, then falls back to Cargo. `CONCORD_NATIVE_OFFLINE=1` skips downloads. Release workflows compile from source.

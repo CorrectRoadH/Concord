@@ -54,13 +54,13 @@ pnpm exec vp run check
 | --- | --- |
 | 静态检查 | 源码、测试与脚本类型检查与 `check:selfhost` 并行执行 |
 | 测试 | 全部测试层运行源码，与静态检查并行执行，按下文并发；CLI 子进程与 `pnpm concord` 的启动方式相同 |
-| 打包 | 唯一的打包测试用 `vp build --out <临时目录>` 构建安装包，打包、安装一次，核对文件清单并从安装包启动 |
+| 打包 | 唯一的打包测试用 `vp build --outDir <临时目录>` 构建安装包，打包、安装一次，核对文件清单并从安装包启动 |
 
 门禁不复制源码、不另建 checkout。门禁检查的是 checkout 当前的工作区，包括其它 agent 尚未提交的改动。
 
 `pnpm check` 接受 `--test-name-pattern=表达式`、`--test-shard=序号/总数` 与测试文件路径。给出文件或过滤条件时，静态检查仍完整执行，只运行选中的测试；结果不能替代完整门禁。未指定文件时递归发现 `test/` 下的 `*.test.ts` 与 `test/e2e/` 下的 `*.e2e.ts`。CI 每个分片运行 `pnpm check --test-shard=序号/4`，分片并集覆盖完整测试集。
 
-其它入口不是检查：`vp build --out <目录>` 把完整安装包构建到检出之外的目录，目录位于检出内时以 `BuildOutputInCheckout` 拒绝；`vp dev` 只启动 Web 开发服务器；`pnpm concord` 运行源码 CLI。发布流程、打包测试与[性能对照](performance.md)各自构建到自己的临时目录，互不共享，不需要本机构建锁。`vp run test:e2e:agent` 运行自然语言用例，使用环境中的模型配置，需要显式授权，不属于日常门禁。
+其它入口不是检查：`vp build --outDir <目录>` 把完整安装包构建到检出之外的目录，目录位于检出内时以 `BuildOutputInCheckout` 拒绝；`vp dev` 只启动 Web 开发服务器；`pnpm concord` 运行源码 CLI。发布流程、打包测试与[性能对照](performance.md)各自构建到自己的临时目录，互不共享，不需要本机构建锁。`vp run test:e2e:agent` 运行自然语言用例，使用环境中的模型配置，需要显式授权，不属于日常门禁。
 
 测试的质量标准、分层、fixture 与成本上限见[测试架构](test-architecture.md)；资源归属、并发、安装共享与失败诊断见[测试执行与浏览器验收](testing.md)。报告写入每次调用独立的 `.test-results/run-*`，CI 按分片上传。
 
