@@ -5,6 +5,8 @@ import { unplugin as stylex } from '@stylexjs/unplugin';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { externalBuildOutput } from './scripts/build-output.js';
+import { Effect } from 'effect';
+import { NodeServices } from '@effect/platform-node';
 
 // Only production builds prepare the complete CLI distribution. Dev stays Web-only.
 const distribution = (output: string): Plugin => ({
@@ -18,9 +20,9 @@ const distribution = (output: string): Plugin => ({
   async writeBundle() { await (await import('./scripts/distribution.js')).finishDistribution(output); },
 });
 
-export default defineConfig(({ command }) => {
+export default defineConfig(async ({ command }) => {
   const index = process.argv.findIndex(value => value === '--outDir');
-  const output = command === 'build' ? externalBuildOutput(index < 0 ? undefined : process.argv[index + 1]) : undefined;
+  const output = command === 'build' ? await Effect.runPromise(externalBuildOutput(index < 0 ? undefined : process.argv[index + 1]).pipe(Effect.provide(NodeServices.layer))) : undefined;
   return ({
   run: { cache: false, tasks: {
     'check:source': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit', cache: false },
