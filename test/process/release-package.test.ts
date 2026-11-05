@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { NodeServices } from '@effect/platform-node';
-import { Effect, FileSystem, Schema } from 'effect';
+import { Effect, FileSystem, Schema, Stream } from 'effect';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { packConcord } from '../../scripts/release-package.js';
 import { packageBin } from '../support/installed-package.js';
 import { hawdbTarget, installationResources } from '../../src/base/installation/index.js';
@@ -63,6 +64,32 @@ test('one release archive contains the declared distribution and starts from its
     const install = spawnSync('pnpm', ['install', '--prod', '--frozen-lockfile', '--ignore-scripts', '--offline', '--store-dir', store, '--package-import-method=copy'], { cwd: installed, encoding: 'utf8', timeout: 120_000 });
     assert.equal(install.status, 0, `${install.stdout}\n${install.stderr}\n${String(install.error)}`);
     const installMs = performance.now() - beforeInstall;
+    await Effect.runPromise(Effect.gen(function*() {
+      const fs = yield* FileSystem.FileSystem;
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+      yield* fs.makeDirectory(join(consumer, 'node_modules'));
+      yield* fs.symlink(installed, join(consumer, 'node_modules/concord-sdlc'));
+      yield* fs.writeFileString(join(consumer, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
+      yield* fs.writeFileString(join(consumer, 'tsconfig.json'), JSON.stringify({
+        compilerOptions: { strict: true, module: 'NodeNext', moduleResolution: 'NodeNext', types: [], noEmit: true },
+        include: ['concord.config.ts'],
+      }));
+      const configPath = join(consumer, 'concord.config.ts');
+      const valid = `import type { ProjectConfig } from 'concord-sdlc/config';\nexport default { testRoots: [], runner: { kind: 'node-test', sourceFiles: [], timeoutMs: 1000 } } as const satisfies ProjectConfig;\n`;
+      const compile = Effect.fn('release.configConsumer')(function*() {
+        const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [
+          fileURLToPath(new URL('../../node_modules/typescript/bin/tsc', import.meta.url)), '-p', 'tsconfig.json',
+        ], { cwd: consumer, env: { ...process.env, NODE_OPTIONS: '' } }));
+        return yield* Effect.all({ status: child.exitCode, diagnostics: child.all.pipe(Stream.decodeText(), Stream.mkString) }, { concurrency: 'unbounded' });
+      }, Effect.scoped, Effect.timeout('30 seconds'));
+      yield* fs.writeFileString(configPath, valid);
+      const accepted = yield* compile();
+      assert.equal(Number(accepted.status), 0, accepted.diagnostics);
+      yield* fs.writeFileString(configPath, valid.replace('testRoots: []', 'testRoots: [], testRoot: []'));
+      const rejected = yield* compile();
+      assert.notEqual(Number(rejected.status), 0, rejected.diagnostics);
+      assert.match(rejected.diagnostics, /'testRoot' does not exist in type 'ProjectConfig'/u);
+    }).pipe(Effect.provide(NodeServices.layer)));
     const version = execFileSync(process.execPath, [packageBin(installed), '--version'], { cwd: consumer, encoding: 'utf8', timeout: 30_000 });
     assert.equal(version.trim(), `concord v${artifact.version}`);
     for (const file of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) assert.deepEqual(readFileSync(join(installed, file)), readFileSync(file));
