@@ -10,7 +10,7 @@
 ## 完整路径
 
 1. 运行 init，查看按约定发现的测试根与源码根。
-2. 创建必需的项目品味；没有已采用原则时保留明确 draft，后续由作者显式采用为 active。系统设计从 `docs/architecture.md` 进入，各 Feature 的内部设计放在所属的 architecture 页。
+2. 创建必需的项目品味；init 只写入写法说明与示例，维护者确认的条目由作者直接写进去。系统设计从 `docs/architecture.md` 进入，各 Feature 的内部设计放在所属的 architecture 页。
 3. 需要 `test run` 或修复核验时配置 runner；测试或实现不在约定位置时覆盖发现范围。无测试项目允许没有测试根。
 4. 预览完整文件变更后完成；非交互输入能表达相同选择。
 5. 在根 AGENTS.md 读取 Concord 托管指引，通过 `concord --skill` 获取当前安装版本的任务路由和主题说明。按 init 推荐的写作指南开始写 Spec，见[初始化后按项目情况开始写 Spec](start-writing-specs.md)。
@@ -18,7 +18,7 @@
 
 ## 可观察验收
 
-- 新项目必有 docs/taste.md；不将未填写原则或模板示例当成已采用规则。
+- 新项目必有 docs/taste.md；模板示例不是项目规则，作者写入真实条目时替换它们。
 - 没有选择 runner 或覆盖时不创建 `concord.config.ts`，`check`、`trace` 与 Web 工作台按[默认值](maintain-project-config.md#配置项)工作。
 - 没有 AGENTS.md 时创建；已有文件只追加或刷新边界明确的托管区块，保留区块外的原字节。标记残缺时原子拒绝，不覆盖未知内容。
 - `docs/architecture.md` 缺失时创建，已有文档保留。

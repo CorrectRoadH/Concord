@@ -20,13 +20,13 @@ concord doctor --json
 | `sourceIgnore` | 无；另外始终排除 `.env`、`.env.*` 与 `dist` | vendor、生成文件 |
 | `testAdapters`、`languageServers`、`feedbackConnections`、`p5`、`docsWork` | 无 | 按需 |
 
-Memory 固定在 `memory/`。品味 `docs/taste.md` 存在即启用，其 `status` 决定是否已采用。
+Memory 固定在 `memory/`。品味 `docs/taste.md` 存在即生效，没有状态字段。
 
 `--docs-only` 适用于没有测试的文档仓库：生成 `testRoots: []`，不要求测试目录；不能与 `--test-root` 同用。以后有真实测试再配置 testRoots。文档检查通过不代表测试覆盖。
 
 `--runner-config` 指向严格 JSON 文件。自定义 command runner 的 argv 不经过 shell，`{file}`、`{name}`、`{pattern}` 必须各占一个完整参数。`concord.config.ts` 是静态文件，可以直接编辑；`concord config show --json` 返回同一次读取的内容与 digest，`config set` 做整文件 CAS。
 
-交互 `init` 在确认前展示最终配置及创建/保留清单；取消不写项目文件。仅无文档、无锁的新仓库预览不创建 Git-private 状态；已有仓库预览遵守未完成 journal 障碍，确认后在短期独占提交中重验。非 TTY 采用确定默认。品味默认是 `status: draft`；只有写入真实条款并显式采用才是 active。
+交互 `init` 在确认前展示最终配置及创建/保留清单；取消不写项目文件。仅无文档、无锁的新仓库预览不创建 Git-private 状态；已有仓库预览遵守未完成 journal 障碍，确认后在短期独占提交中重验。非 TTY 采用确定默认。init 生成的品味只有写法说明和示例；写入维护者确认过的条目后，它们就是现行规则。
 
 `init` 一次创建分类目录、`docs/concord.md` 和缺失的 `docs/README.md`。它同时创建随包空 catalog `docs/concepts.md`、预设 `docs/writing.md`、`docs/architecture.md`、`docs/taste.md` 与 `docs/_template/`。
 

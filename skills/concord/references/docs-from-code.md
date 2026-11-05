@@ -39,6 +39,6 @@ init 保留仓库原有的文档原文。逐份阅读：仍然成立的内容并
 
 ## 6. 提炼品味和名词
 
-代码和评审中反复出现的取舍，写成 `docs/taste.md` 的条目，经维护者确认后把 `status` 改为 `active`。代码里的领域名词写进 `docs/concepts.md`；同一概念在代码和文档里有几种写法时，选一种作为 term，其余写进“旧写法”，`concord docs check` 会找出它们。
+代码和评审中反复出现的取舍，经维护者确认后写成 `docs/taste.md` 的条目。代码里的领域名词写进 `docs/concepts.md`；同一概念在代码和文档里有几种写法时，选一种作为 term，其余写进“旧写法”，`concord docs check` 会找出它们。
 
 页面写法的完整规则见 `concord --skill document`。

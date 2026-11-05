@@ -41,7 +41,7 @@ gh 模式使用服务端登录态，工作台操作者可触发该账号对配�
 
 ```sh
 concord new issue output-confusion
-concord feedback list --provider local --status open --json
+concord feedback list --provider local --triage pending --json
 concord show docs/issues/output-confusion.md --json
 # 直接编辑 docs/issues/output-confusion.md 的正文
 concord issue link output-confusion --role investigation memory/output-investigation.md

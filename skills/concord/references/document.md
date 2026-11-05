@@ -1,12 +1,12 @@
 # Spec 与文档
 
-已采用的当前目标写入 Feature，叶子用户路径写入 Use Case；设计未完成或暂不实现的方向写入 Roadmap（与 Feature 同体裁），多方案比较写入 Design，带来源的研究输入写入 Research，仓库测试与维护机制写入 Engineering。
+已采用的当前目标写入 Feature，叶子用户路径写入 Use Case；设计未完成或暂不实现的方向写入 Roadmap（与 Feature 同体裁），还没定下来的取舍写入 Design，仓库测试与维护机制写入 Engineering。
 
 Spec 正文采用声明式表达：写产品必须具备的行为、边界与验收，不写“这轮做了什么”、开发流水账、实施进度或临时计划。用户操作流程、状态迁移和验收步骤可以保留。排障经过与交付经验写进 `memory/`；待调查观察写进 `docs/issues/`。
 
 ## 布局与创建
 
-Feature 目录包含 README（必需）、`use-case/`、`architecture.md`、示例页 `cli.md` 或 `library.md`，其它页面是支持页面。Engineering 与 Roadmap 的页面结构相同。Spec、Roadmap、Research 与 Design 没有 frontmatter：身份是仓库相对路径，名称是正文唯一的一级标题（代码块中的标题不计），Use Case 属于所在目录的 Feature。
+Feature 目录包含 README（必需）、`use-case/`、`architecture.md`、示例页 `cli.md` 或 `library.md`，其它页面是支持页面。Engineering 与 Roadmap 的页面结构相同。Spec、Roadmap 与 Design 没有 frontmatter：身份是仓库相对路径，名称是正文唯一的一级标题（代码块中的标题不计），Use Case 属于所在目录的 Feature。
 
 直接创建目录与文件即可。`concord new` 按随包模板创建，页面在创建时选择，README 必需，其余可选：
 
@@ -14,12 +14,9 @@ Feature 目录包含 README（必需）、`use-case/`、`architecture.md`、示�
 concord new feature login
 concord new use-case expired-token
 concord new design session-store
-concord new research auth-input
 ```
 
 类别、页面选择与所属 Feature 的参数以 `concord new --help` 为准。名称允许 Unicode 字母、组合标记和数字，可用单连字符分隔，保留原样，不翻译或自动更改大小写；禁止路径分隔符、空白和路径穿越。用 `concord list [类别]` 发现文档，用 `concord show <路径或选择器>` 读取文档及其关系、测试与实现；短选择器在同类中有歧义时具名拒绝，改写完整路径。
-
-Research 的正文自由组织；观察日期与来源写在模板固定的来源小节，见 `concord template show research`。
 
 ## 写作指南
 
@@ -31,7 +28,7 @@ Research 的正文自由组织；观察日期与来源写在模板固定的来�
 | 某个情形下会发生什么 | Use Case | 一个情形一个 Use Case：用户目标、起始状态、带 `{#id}` 的逐步动作与输出、结果、Spec 来源 |
 | 命令或 API 怎样调用、返回什么 | cli、library | 完整调用、人读输出、`--json` 输出、退出码、具名错误、最小示例 |
 | 它是怎么实现的 | architecture | 实体归属、数据流、不变量、失败阶段、资源生命周期 |
-| 为什么这样选 | Design | 目标、约束、候选与裁决；裁决后只作记录 |
+| 还没定下来的取舍 | Design | 要决定什么、几种做法和各自的代价；定下后写进 Spec 并删除 |
 | 排障经过、根因、经验 | Memory | `memory/<id>.md` |
 | 缺陷、请求与待调查的观察 | Issue | `docs/issues/<id>.md` |
 

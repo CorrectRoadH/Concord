@@ -7,7 +7,7 @@
 ## 起始状态
 
 - `docs/taste.md` 中有 `T-3`。
-- Feature `cart` 的 README 和一个已裁决的 Design 都链接了 T-3。
+- Feature `cart` 的 README 和一个还没定下来的 Design `docs/design/cart-storage.md` 都链接了 T-3。
 
 ## 完整路径
 
@@ -22,18 +22,18 @@
    预期输出，退出 1：
 
    ```json
-   {"operation":"check","ok":false,"complete":true,"findings":[{"code":"AnchorNotFound","path":"docs/feature/cart/README.md","line":14,"message":"Taste entry t-3 does not exist","category":"relation"}]}
+   {"operation":"check","ok":false,"complete":true,"findings":[{"code":"AnchorNotFound","path":"docs/design/cart-storage.md","line":9,"message":"Taste entry t-3 does not exist","category":"relation"},{"code":"AnchorNotFound","path":"docs/feature/cart/README.md","line":14,"message":"Taste entry t-3 does not exist","category":"relation"}]}
    ```
 
-   只有 Feature 被报告。Design 是记录，按裁决时的含义理解，它的链接保持原样。
+   Feature 与 Design 都被报告。Design 也只写现在，和其它页面一样检查。
 
-3. 改写 Feature 中依据 T-3 的句子，改为链接仍适用的条目或删去链接，再检查。
+3. 改写两页中依据 T-3 的句子，改为链接仍适用的条目或删去链接，再检查。
 
    预期输出以 `ok: true` 开头，退出 0。
 
 ## 结果
 
-Spec 页面不留下指向已删除条目的链接；记录类页面保留当时的引用。
+`docs/` 下的页面不留下指向已删除条目的链接。
 
 ## Spec 来源
 

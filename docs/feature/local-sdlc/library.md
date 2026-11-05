@@ -13,10 +13,9 @@
 | `docs/feature/<f>/` 下其它页面 | 支持页面 | 无 |
 | `docs/engineering/<t>/` | Engineering，页面结构同 Feature | 无 |
 | `docs/roadmap/<r>/` | 提案：尚未采用的方向，页面结构同 Feature | 无 |
-| `docs/design/<d>/` | Design：候选比较与正式选择 | 无 |
-| `docs/research/<r>/` | Research：带来源与观察时间的研究输入 | 无 |
+| `docs/design/<d>.md` | Design：一个还没定下来的取舍；定下后写进 Spec 并删除 | 无 |
 | `docs/issues/<i>.md` | Issue：缺陷、请求与观察 | 见下文 |
-| `memory/<m>.md` | Memory：可复用知识与不需要 Design 的决策 | 见下文 |
+| `memory/<m>.md` | Memory：开发中可复用的经验 | 见下文 |
 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 项目规则 | 无 |
 
 - canonical 仓库相对路径是唯一身份。移动文件即改变身份，`check` 报告全部失效的精确引用。

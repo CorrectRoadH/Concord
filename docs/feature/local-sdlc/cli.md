@@ -25,12 +25,13 @@
 | `docs` | `docs check` 与 `docs work` |
 | `feedback` | 外部来源的同步与导入 |
 | `view` | Web 工作台 |
+| `server` | `start`、`run`、`status`、`stop`：管理项目目录的[工作区服务](../../concepts.md#workspace-server)，查询命令也会自动启动它 |
 | `herdr` | `install`、`uninstall`：安装 [Herdr mod](../herdr-mod/README.md) |
 | `workspace`、`git` | 工作区的当前扫描与历史投影、只读 Git 状态与差异，见 [Web 工作台 CLI](../web-workbench/cli.md) |
 | `config`、`template` | 查看与替换配置；查看随包模板 |
 | `cache`、`recover`、`doctor`、`lsp`、`review`、`action` | 维护与集成 |
 
-顶层共 30 个命令。Design 暂缓写成 DECISION 中的 `Deferred:` 行加理由。
+顶层共 30 个命令。
 
 本页其余各节给出这些命令的调用、输出与错误。
 

@@ -6,7 +6,7 @@
 
 服务不做身份认证；任何能连接该端口的人都可以读取和修改仓库、修改配置并执行测试，拥有服务进程的代码执行权限。明文 HTTP 只用于可信网络；远程使用安全通道。服务不自动信任反向代理的转发头。
 
-Feature、Engineering、Roadmap、Design、Research 是侧栏入口；Use Case 必须归属于 Feature，在 Feature 内创建和浏览。「文档」列出 `docs/` 下没有分类 owner 的项目文档和参考模板，例如架构与品味。active 品味的正文不在工作台里保存。正文用富文本编辑；Issue 与 Memory 的状态、关系与关闭结论不经正文保存写入，见下文的保存边界。未知 Markdown 可用源码视图，初始加载不会自动保存归一化内容。
+Feature、Engineering、Roadmap、Design 是侧栏入口；Use Case 必须归属于 Feature，在 Feature 内创建和浏览。「文档」列出 `docs/` 下没有分类 owner 的项目文档和参考模板，例如架构与品味。active 品味的正文不在工作台里保存。正文用富文本编辑；Issue 与 Memory 的状态、关系与关闭结论不经正文保存写入，见下文的保存边界。未知 Markdown 可用源码视图，初始加载不会自动保存归一化内容。
 
 Markdown 的 `p5` 代码块在阅读与编辑页面自动加载运行，像动画图片一样直接展示，无需编译或播放操作。内联块可写 `p.setup`、`p.draw` 或默认导出实例函数。外部入口用 `src="./demo/main.ts"`，可用 `css="./demo/style.css"`；两者均相对 Markdown。
 

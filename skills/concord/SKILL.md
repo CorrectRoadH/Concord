@@ -7,7 +7,7 @@ description: 在本地 Git 仓库中使用 Concord 维护产品 Spec、代码与
 
 Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与测试中的 Concord 标记、Issue 与 Memory 各自保存在自己的文件里，关系从中推导。先遵守消费仓库的 `AGENTS.md`，并用对应命令的 `--help` 核对当前参数。脚本和 Agent 优先使用 `--json`；跨目录操作时显式传 `--root <worktree>`。
 
-`docs/` 与 `memory/` 下的全部文件都可以直接编辑，包括 Issue 与 Memory 的状态和关系。具名命令是执行需要运行的步骤的助手，例如修复核验与 Design 裁决，它们把结果写进同一份文件；`concord check` 检查结果是否一致。
+`docs/` 与 `memory/` 下的全部文件都可以直接编辑，包括 Issue 与 Memory 的状态和关系。具名命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用，它们把结果写进同一份文件；`concord check` 检查结果是否一致。
 
 只在任务授权范围内修改文件或运行写命令。`check`、`trace` 无 finding 不等于测试覆盖率；提交、push、发布、部署和远端消息仍需独立授权。
 
@@ -15,7 +15,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 
 - 首次接入、配置或模板：运行 `concord --skill init`。
 - 为项目写第一批 Spec：还没有代码时运行 `concord --skill docs-from-scratch`，已有代码时运行 `concord --skill docs-from-code`。
-- Feature、Use Case、Engineering、Roadmap、Design、Research 的布局、写法与采用：运行 `concord --skill document`。
+- Feature、Use Case、Engineering、Roadmap、Design 的布局、写法与采用：运行 `concord --skill document`。
 - 整文件、函数和代码段的实现关联与位置查询：运行 `concord --skill code`。
 - 测试标记、测试执行与修复核验：运行 `concord --skill test`。
 - Memory 的类型、状态与关系：运行 `concord --skill memory`。
@@ -32,9 +32,9 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 | `docs/feature/<f>/` | Feature：README、`use-case/<u>.md`、`architecture.md`、`cli.md` 或 `library.md`，以及支持页面 |
 | `docs/engineering/<t>/` | Engineering，页面结构同 Feature |
 | `docs/roadmap/<r>/` | 尚未采用的方向，页面结构同 Feature |
-| `docs/design/<d>/`、`docs/research/<r>/` | Design 与 Research |
+| `docs/design/<d>.md` | Design：一个还没定下来的取舍，定下后删除 |
 | `docs/issues/<i>.md` | Issue：缺陷、请求与观察 |
-| `memory/<m>.md` | Memory：decision、insight、note |
+| `memory/<m>.md` | Memory：开发中可复用的经验 |
 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 品味、概念与写作政策 |
 
 仓库相对路径是文档的唯一身份，名称取自正文唯一的一级标题。目录名与文件名可以作短选择器，同类中有歧义时命令具名拒绝并要求写出路径。移动文件即改变身份，`check` 报告全部失效的精确引用。

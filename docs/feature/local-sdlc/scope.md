@@ -11,7 +11,7 @@ Concord 让一个 Git worktree 用仓库内可审阅的 Markdown 与测试源码
 ## 范围
 
 - 初始化文档布局、写作指南、完整参考模板与可选的项目配置，不覆盖已有文件。
-- 按固定布局组织 Feature、Use Case、Roadmap、Design、Engineering、Research、Issue 与 Memory；身份由路径决定，名称由一级标题决定，frontmatter 只保存推导不出的字段（[领域与数据所有权](library.md#owner)）。
+- 按固定布局组织 Feature、Use Case、Roadmap、Design、Engineering、Issue 与 Memory；身份由路径决定，名称由一级标题决定，frontmatter 只保存推导不出的字段（[领域与数据所有权](library.md#owner)）。
 - 全部文件直接编辑；`new`、`roadmap start`、`issue close` 等命令执行需要运行的步骤并把结果写进文件。
 - 从整文件、函数和完整代码段旁的注释反查 Feature / Use Case / Engineering 实现关联，支持按源码行定位；查询引用自动派生，无需手写声明 ID。
 - 从测试根里的 Concord 标记发现 case，不解析宿主测试语法。缓存损坏或删除时从源码重新计算。

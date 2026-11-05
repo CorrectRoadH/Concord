@@ -2,7 +2,7 @@
 
 `concord view` 在当前 Git 工作区提供 Web 工作台。Web 为维护者提供导航、表单、富文本编辑与结果检查；CLI 为 AI 提供严格输入、明确命令和 JSON 输出。两者使用同一套领域校验。
 
-主侧栏显示 Feature、Roadmap、Design、Research、Engineering、Memory 等分类入口，以及「文档」。独立的第二侧栏始终显示当前分类的完整条目列表及筛选输入；点击条目只切换右侧预览，列表不会消失。分类入口默认预览第一项，空集合提供创建入口，不重复展示卡片网格。
+主侧栏显示 Feature、Roadmap、Design、Engineering、Memory 等分类入口，以及「文档」。独立的第二侧栏始终显示当前分类的完整条目列表及筛选输入；点击条目只切换右侧预览，列表不会消失。分类入口默认预览第一项，空集合提供创建入口，不重复展示卡片网格。
 
 支持页面与 Use Case 在右侧预览内访问，移动端通过单独的内容导航抽屉访问条目列表。点击 Use Case 时保留 Feature 背景，并从右侧打开详情抽屉；深链接和刷新仍打开该抽屉。关闭或返回时先完成待保存内容，只有自动保存失败时才要求处理草稿。Use Case 是 Feature 内的 Spec，必须在所属 Feature 内创建和浏览，没有独立顶级入口。
 
@@ -20,7 +20,7 @@ Engineering 详情同样提供实现列表、添加关联与源码跳转，汇�
 
 ## 文档阅读与编辑
 
-支持页面从所属 Spec 的文件树进入。「文档」汇总 `docs/` 下尚未归属 Feature、Roadmap、Design、Research、Engineering 或 Issue 的 Markdown，包括架构、品味、概念、索引、指南和 `_template` 参考模板；已有分类入口的 Spec 不在这里重复。点击条目只切换右侧预览。文档页面中的 Markdown 均可编辑，不按文件名、frontmatter 或解析结果设置只读限制；保存规则见[自动保存](#自动保存)。品味在文档页使用同一原文编辑器。阅读或结构检查不是合规证据。
+支持页面从所属 Spec 的文件树进入。「文档」汇总 `docs/` 下尚未归属 Feature、Roadmap、Design、Engineering 或 Issue 的 Markdown，包括架构、品味、概念、索引、指南和 `_template` 参考模板；已有分类入口的 Spec 不在这里重复。点击条目只切换右侧预览。文档页面中的 Markdown 均可编辑，不按文件名、frontmatter 或解析结果设置只读限制；保存规则见[自动保存](#自动保存)。品味在文档页使用同一原文编辑器。阅读或结构检查不是合规证据。
 
 正文使用 MDXEditor，基础交互使用 shadcn/ui。React Router 管理地址与导航，Vite 构建静态资源并随 CLI 包分发。仓库文件始终是事实来源，关系仍从源码和文档推导，不增加 Web 专属注册表。
 

@@ -8,7 +8,7 @@ React Router 管理人用导航，Vite 产物放在安装包 `dist/web`。HTTP �
 
 术语由 `docs/**/concepts.md` 拥有，目录决定作用域；文档术语页通过 concepts 工具读取当前文档目录的有效定义、直接导入与来源诊断，不在前端解析 catalog 或自行实现第二套合成规则。术语编辑打开 catalog 源码，保存调用 `concepts.set`。全项目汇总与写作页共享同一后端来源，不建立术语注册表。
 
-`docs/` 下不属于 Feature、Roadmap、Design、Research、Engineering 或 Issue 的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/taste.md` 与其它文档一样直接编辑。阅读不是合规证据。
+`docs/` 下不属于 Feature、Roadmap、Design、Engineering 或 Issue 的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/taste.md` 与其它文档一样直接编辑。阅读不是合规证据。
 
 `docs/` 与 `memory/` 下的 Markdown 经 `document.set` 以整文件摘要写入。`document.set` 解析目标的当前原文与候选原文，按[自动保存](README.md#自动保存)列出的字段与规则比较二者，命中时在发布前拒绝；其它差异不做语义判断。术语编辑器经 `concepts.set` 写入，写入前校验 catalog。`source.set` 只写配置范围内的既有 JS/TS 文件，其余路径只读。单文件读取仍不枚举全仓库。
 
