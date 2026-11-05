@@ -15,9 +15,9 @@
 
 ## 基线
 
-`--compare` 自动准备基线产物，位置为 `${XDG_CACHE_HOME:-~/.cache}/concord/bench/baseline/<commit>/`。准备时以 `git worktree add --detach` 检出基线提交，再执行 `pnpm install --frozen-lockfile --offline` 与 `vp build`；原生产物按[原生绑定复用](../build/architecture.md#原生绑定复用)取得，不需要 Cargo。
+`--compare` 自动准备基线产物，位置为 `${XDG_CACHE_HOME:-~/.cache}/concord/bench/baseline/<commit>/`。准备时把基线提交克隆为该目录下独立的 Git clone，执行 `pnpm install --frozen-lockfile --offline`，再用该提交自带的构建入口构建；clone 内出现 `dist/` 不违反开发检出没有 `dist/` 的规则。原生产物按[原生绑定复用](../build/architecture.md#原生绑定复用)取得，不需要 Cargo。
 
-同一提交的基线产物在后续测量中复用，构建前后都校验产物身份；保留最近 3 个基线，更早的以 `git worktree remove` 删除。候选产物可以有未提交改动，记录中 `dirty` 为 true。
+同一提交的基线产物在后续测量中复用，构建前后都校验产物身份；保留最近 3 个基线，更早的 clone 直接删除。候选产物可以有未提交改动，记录中 `dirty` 为 true。
 
 ## 数据流
 
