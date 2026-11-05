@@ -7,6 +7,8 @@ import { CodeMirrorEditor, useCodeBlockEditorContext, type CodeBlockEditorProps 
 import { P5BundleSchema, P5EventSchema, parseP5Options, type P5Bundle } from "../../src/model/p5/index.js";
 import { Button } from './ui/button';
 import { Input } from './ui/input';
+import { useTheme } from '../theme';
+import { WorkbenchThemeSchema, themeVariables } from '../p5/theme';
 
 export const P5DocumentContext = createContext<string | undefined>(undefined);
 const ResponseSchema = Schema.Union([
@@ -25,6 +27,12 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
   const [frameId, setFrameId] = useState(() => crypto.randomUUID());
   const [loading, setLoading] = useState(false);
   const visibility = useRef(true);
+  const theme = useTheme();
+  const updateTheme = () => {
+    const style = getComputedStyle(document.documentElement);
+    const variables = Schema.decodeUnknownSync(WorkbenchThemeSchema, { onExcessProperty: 'error' })(Object.fromEntries(themeVariables.map(name => [name, style.getPropertyValue(name).trim()])));
+    frame.current?.contentWindow?.postMessage({ kind: 'theme', variables }, '*');
+  };
   const updateLoop = () => frame.current?.contentWindow?.postMessage({ kind: !visibility.current || document.hidden ? 'pause' : 'resume' }, '*');
 
   const stop = () => {
@@ -64,7 +72,10 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
       const decoded = Schema.decodeUnknownOption(P5EventSchema, { onExcessProperty: 'error' })(event.data);
       if (decoded._tag !== 'Some') return;
       const data = decoded.value;
-      if (data.kind === 'ready') frame.current?.contentWindow?.postMessage({ kind: 'start', bundle }, '*');
+      if (data.kind === 'ready') {
+        updateTheme();
+        frame.current?.contentWindow?.postMessage({ kind: 'start', bundle }, '*');
+      }
       if (data.kind === 'started') { ready = true; setStatus('运行中'); window.clearTimeout(timer); updateLoop(); }
       if (data.kind === 'error') { ready = true; setError(data.message); setStatus('运行失败'); window.clearTimeout(timer); }
       if (data.kind === 'resize') setHeight(data.height);
@@ -72,6 +83,8 @@ export function P5Sketch({ code, meta, document: documentPath }: { code: string;
     window.addEventListener('message', receive);
     return () => { window.removeEventListener('message', receive); window.clearTimeout(timer); };
   }, [bundle, frameId]);
+
+  useEffect(() => { if (bundle) updateTheme(); }, [theme, bundle, frameId]);
 
   useEffect(() => {
     if (!bundle || !container.current) return;

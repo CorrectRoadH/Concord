@@ -2,7 +2,7 @@
 // @concord-implements docs/feature/web-workbench/use-case/embed-p5-sketch.md#执行与生命周期
 import P5 from 'p5';
 import { Effect, Schema } from 'effect';
-import { P5ControlSchema } from "../../src/model/p5/index.js";
+import { P5FrameControlSchema } from './theme.js';
 
 const globals = window as unknown as { p5: typeof P5; ConcordSketch?: { default?: (p: P5) => void } };
 globals.p5 = P5;
@@ -36,8 +36,10 @@ function trackLoop(p: P5): void {
 window.addEventListener('message', event => {
   if (event.source !== parent || parent === window) return;
   void Effect.runPromise(Effect.try({ try: () => {
-    const input = Schema.decodeUnknownSync(P5ControlSchema, { onExcessProperty: 'error' })(event.data);
-    if (input.kind === 'start') {
+    const input = Schema.decodeUnknownSync(P5FrameControlSchema, { onExcessProperty: 'error' })(event.data);
+    if (input.kind === 'theme') {
+      for (const [name, value] of Object.entries(input.variables)) document.documentElement.style.setProperty(name, value);
+    } else if (input.kind === 'start') {
       if (started) return;
       started = true;
       const style = document.createElement('style');

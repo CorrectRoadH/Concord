@@ -20,9 +20,8 @@ import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { EditorView } from '@codemirror/view';
 import { tags } from '@lezer/highlight';
 import { fromMarkdown } from 'mdast-util-from-markdown';
-import * as stylex from '@stylexjs/stylex';
 import { AlertTriangle, GitCompareArrows, RefreshCw } from 'lucide-react';
-import { Component, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ErrorInfo, ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import type { ViewFile } from '../../src/model/index';
@@ -38,6 +37,7 @@ import { SourceEditor } from './source-editor';
 import { P5DocumentContext, p5CodeBlockDescriptor } from './p5-sketch';
 import { hasMarkdownMath } from './markdown-math';
 import { MarkdownPreview } from './markdown-preview';
+import { MermaidDiagram } from './mermaid-diagram';
 
 interface Props {
   readonly initial: ViewFile;
@@ -88,49 +88,8 @@ interface MarkdownErrorBoundaryProps {
   readonly onError: (error: Error) => void;
 }
 
-const markdownStyles = stylex.create({
-  mermaidEditor: { display: 'grid', gap: 12 },
-  mermaidPreview: {
-    overflowX: 'auto',
-    padding: 16,
-    borderWidth: 1,
-    borderStyle: 'solid',
-    borderColor: 'var(--border)',
-    borderRadius: 8,
-    backgroundColor: 'var(--background)',
-    color: 'var(--foreground)',
-    textAlign: 'center',
-  },
-  mermaidSvg: { display: 'block', maxWidth: '100%', marginInline: 'auto' },
-  mermaidError: { margin: 0, color: 'var(--destructive)', textAlign: 'left', whiteSpace: 'pre-wrap' },
-});
-
 function MermaidCodeBlockEditor(props: CodeBlockEditorProps) {
-  const reactId = useId().replaceAll(':', '');
-  const [svg, setSvg] = useState('');
-  const [error, setError] = useState('');
-  const theme = useTheme();
-  useEffect(() => {
-    let cancelled = false;
-    void import('mermaid').then(async ({ default: mermaid }) => {
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: theme === 'dark' ? 'dark' : 'default' });
-      const rendered = await mermaid.render(`concord-mermaid-${reactId}`, props.code);
-      if (!cancelled) { setSvg(rendered.svg); setError(''); }
-    }).catch(cause => {
-      if (!cancelled) { setSvg(''); setError(cause instanceof Error ? cause.message : String(cause)); }
-    });
-    return () => { cancelled = true; };
-  }, [props.code, reactId, theme]);
-
-  return <div data-testid="mermaid-editor" {...stylex.props(markdownStyles.mermaidEditor)}>
-    <div aria-label="Mermaid 图表预览" {...stylex.props(markdownStyles.mermaidPreview)}>
-      {svg ? <div {...stylex.props(markdownStyles.mermaidSvg)} dangerouslySetInnerHTML={{ __html: svg }} /> : error ? <pre {...stylex.props(markdownStyles.mermaidError)}>{error}</pre> : <span role="status">正在渲染图表…</span>}
-    </div>
-    <details className="mermaid-source">
-      <summary>编辑 Mermaid 源码</summary>
-      <CodeMirrorEditor {...props} />
-    </details>
-  </div>;
+  return <MermaidDiagram code={props.code}><CodeMirrorEditor {...props} /></MermaidDiagram>;
 }
 
 const mermaidCodeBlockDescriptor = {

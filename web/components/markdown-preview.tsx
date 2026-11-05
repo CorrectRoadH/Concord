@@ -1,21 +1,22 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import Markdown from 'react-markdown';
+import Markdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkMath from 'remark-math';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import type { Root, RootContent } from 'mdast';
 import { P5Sketch } from './p5-sketch';
+import { MermaidDiagram } from './mermaid-diagram';
 import { RecordDetails } from './content-layout';
 import { rehypeSafeMath, remarkMathNodes } from './markdown-math';
 
 /** Read-only rendering never round-trips source bytes through an editor. */
-function p5Blocks(markdown: string): ReadonlyMap<number, { code: string; meta: string }> {
-  const blocks = new Map<number, { code: string; meta: string }>();
+function diagramBlocks(markdown: string): ReadonlyMap<number, { language: string; code: string; meta: string }> {
+  const blocks = new Map<number, { language: string; code: string; meta: string }>();
   const visit = (node: Root | RootContent): void => {
-    if (node.type === 'code' && node.lang === 'p5' && node.position?.start.offset !== undefined) {
-      blocks.set(node.position.start.offset, { code: node.value, meta: node.meta ?? '' });
+    if (node.type === 'code' && (node.lang === 'p5' || node.lang?.toLowerCase() === 'mermaid') && node.position?.start.offset !== undefined) {
+      blocks.set(node.position.start.offset, { language: node.lang.toLowerCase(), code: node.value, meta: node.meta ?? '' });
     }
     if ('children' in node) for (const child of node.children) visit(child);
   };
@@ -24,7 +25,15 @@ function p5Blocks(markdown: string): ReadonlyMap<number, { code: string; meta: s
 }
 
 export function MarkdownPreview({ markdown, documentPath, onFollowLink }: { markdown: string; documentPath?: string; onFollowLink?: (href: string) => boolean }) {
-  const sketches = useMemo(() => p5Blocks(markdown), [markdown]);
+  const diagrams = useMemo(() => diagramBlocks(markdown), [markdown]);
+  const renderPre = useMemo<Components['pre']>(() => ({ children, ...props }) => {
+    const offset = props.node?.position?.start.offset;
+    const diagram = offset === undefined ? undefined : diagrams.get(offset);
+    if (diagram?.language === 'p5') return <P5Sketch code={diagram.code} meta={diagram.meta} document={documentPath} />;
+    if (diagram?.language === 'mermaid') return <MermaidDiagram code={diagram.code}><pre><code>{diagram.code}</code></pre></MermaidDiagram>;
+    const { node: _node, ...attributes } = props;
+    return <pre {...attributes}>{children}</pre>;
+  }, [diagrams, documentPath]);
   const article = useRef<HTMLElement>(null);
   const location = useLocation();
   const navigate = useNavigate();
@@ -40,13 +49,7 @@ export function MarkdownPreview({ markdown, documentPath, onFollowLink }: { mark
   return <>
     <article ref={article} className="wysiwyg__content min-h-0" data-testid="markdown-preview">
       <Markdown remarkPlugins={[remarkGfm, remarkFrontmatter, remarkMath, remarkMathNodes]} rehypePlugins={[rehypeSafeMath]} components={{
-        pre: ({ children, ...props }) => {
-          const offset = props.node?.position?.start.offset;
-          const sketch = offset === undefined ? undefined : sketches.get(offset);
-          if (sketch) return <P5Sketch code={sketch.code} meta={sketch.meta} document={documentPath} />;
-          const { node: _node, ...attributes } = props;
-          return <pre {...attributes}>{children}</pre>;
-        },
+        pre: renderPre,
         a: ({ node: _node, href, children, ...props }) => <a {...props} href={href} onClick={event => {
           if (!href || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
           if (href.startsWith('#')) {

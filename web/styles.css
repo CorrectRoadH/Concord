@@ -66,7 +66,37 @@
   --sidebar-accent-foreground: #fffdf7;
   --sidebar-border: #31575b;
   --sidebar-ring: #e5b46d;
-  font-family: Inter, "Noto Sans SC Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  --concord-bg: var(--background);
+  --concord-fg: var(--foreground);
+  --concord-muted: var(--muted-foreground);
+  --concord-accent: var(--primary);
+  --concord-series-1: var(--primary);
+  --concord-series-2: var(--sidebar-primary);
+  --concord-series-3: var(--ring);
+  --concord-series-4: var(--destructive);
+  --concord-series-5: var(--muted-foreground);
+  --concord-series-6: var(--secondary-foreground);
+  --concord-series-7: var(--sidebar-accent);
+  --concord-series-8: var(--accent-foreground);
+  --concord-font: Inter, "Noto Sans SC Variable", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK SC", "PingFang SC", sans-serif;
+  --pele-bg: var(--concord-bg);
+  --pele-fg: var(--concord-fg);
+  --pele-muted: var(--concord-muted);
+  --pele-line: var(--concord-fg);
+  --pele-surface: var(--concord-bg);
+  --pele-surface-alt: var(--concord-bg);
+  --pele-border: var(--concord-muted);
+  --pele-accent: var(--concord-accent);
+  --pele-series-1: var(--concord-series-1);
+  --pele-series-2: var(--concord-series-2);
+  --pele-series-3: var(--concord-series-3);
+  --pele-series-4: var(--concord-series-4);
+  --pele-series-5: var(--concord-series-5);
+  --pele-series-6: var(--concord-series-6);
+  --pele-series-7: var(--concord-series-7);
+  --pele-series-8: var(--concord-series-8);
+  --pele-font: var(--concord-font);
+  font-family: var(--concord-font);
 }
 
 .dark {
@@ -332,6 +362,10 @@ kbd { padding: .1rem .36rem; border: 1px solid var(--border); border-radius: .28
 .wysiwyg__content > table { display: block; max-width: 100%; overflow-x: auto; border-collapse: collapse; color: var(--foreground); }
 .wysiwyg__content > table :is(th, td) { min-width: 5em; padding: .65em .85em; border: 1px solid var(--border); vertical-align: top; }
 .wysiwyg__content > table th { background: var(--muted); color: var(--foreground); font-weight: 650; }
+.mermaid-diagram { display: grid; gap: 12px; }
+.mermaid-preview { overflow-x: auto; padding: 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--concord-bg); color: var(--concord-fg); text-align: center; }
+.mermaid-svg { display: block; max-width: 100%; margin-inline: auto; }
+.mermaid-error { margin: 0; color: var(--destructive); text-align: left; white-space: pre-wrap; }
 .mermaid-source { min-width: 0; text-align: left; }
 .p5-sketch { min-width: 0; margin-block: .75rem; }
 .p5-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; margin-bottom: .5rem; font-size: .85rem; }
