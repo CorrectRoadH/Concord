@@ -67,6 +67,7 @@
 | `new`、`roadmap` | 创建文档与采用 Roadmap 是低频写入，耗时由模板与前像核验决定 |
 | `show` | 与 `trace show` 读取同一份文档与关系，由 `local-sdlc/trace-show-fresh` 覆盖 |
 | `use-case` | 步骤查看与改写是低频操作，解析路径与 `docs check` 相同 |
+| `skills` | 安装工作流 skill 是低频写入 |
 | `writing` | 写作政策的查看与受管写入是低频操作，解析路径与 `docs check` 相同 |
 | `herdr-mod` | Herdr 中的原生界面，通过公开 CLI 读取，见 [Herdr mod](../../feature/herdr-mod/README.md) |
 | `server` | 工作区服务的启动、停止与状态控制；经由服务的请求耗时由声明 `server: running` 的查询场景与面板场景测量 |

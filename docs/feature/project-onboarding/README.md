@@ -14,6 +14,7 @@
 - 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，`check` 检查结果是否一致。
 - 初始化在根 `AGENTS.md` 中维护有边界标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
 - init 结束时按仓库有没有项目文件推荐一份写作指南：新项目读 `docs-from-scratch`，已有代码的项目读 `docs-from-code`，见[初始化后按项目情况开始写 Spec](use-case/start-writing-specs.md)。
+- init 与 `concord skills install` 在项目中安装四个工作流 skill（`concord-spec`、`concord-implement`、`concord-review`、`concord-fix`），Claude Code 与 Codex 共用同一份文件，见[用斜杠命令走开发流程](use-case/run-workflow-from-agent.md)。
 - Memory 固定位于 worktree 根的 `memory/`。
 - Feature 可以推动品味新增、修订条目：直接编辑 `docs/taste.md`，理由写在提交说明或 Memory 中（[总则](../../taste.md#general-amend)），不把功能细节无限追加为全局规则。
 

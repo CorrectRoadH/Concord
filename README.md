@@ -17,6 +17,10 @@ Concord follows spec-driven development (SDD): define the intended behavior befo
 3. **Implement and test that behavior.** Link code and tests to the Use Case or step they serve. If the intended behavior needs to change during implementation, update the spec before continuing with that change.
 4. **Verify and review the result.** Run `concord check` and the project's tests and quality checks. Review the spec diff alongside the related implementation and test results. A valid link alone does not establish that the behavior works.
 
+Different roles usually take these steps. Whoever writes the spec settles names, behavior and verification. Implementers follow it and stop only when it is missing something or contradicts the facts.
+
+Reviewers judge the result against the spec and actual runs; passing tests alone are not acceptance. A spec that implementers need not ask about lets people and agents work in parallel without guessing ([taste](docs/taste.md#t-11)).
+
 The starting point depends on the change:
 
 | Change | How to approach it |
@@ -221,7 +225,18 @@ Without `--host`, the server listens on `127.0.0.1:4317`. It has no authenticati
 
 ## Work with an agent
 
-Agents can read the instructions shipped with the installed version, even outside an initialized repository:
+After initialization the project has four skills, one per workflow step. Trigger them with a slash command such as `/concord-spec` in Claude Code or `$concord-spec` in Codex; agents also pick them up when a task matches:
+
+| Skill | What it does |
+| --- | --- |
+| `concord-spec` | Turn a request into a Feature and Use Cases and settle open questions |
+| `concord-implement` | Implement from the spec and link code and tests; stop when the spec falls short |
+| `concord-review` | Review a set of changes against the spec and actual runs |
+| `concord-fix` | Follow the defect workflow: regression test, fix, verification |
+
+Run `concord skills install` to add them to a repository that is already initialized. See [run the workflow from an agent](docs/feature/project-onboarding/use-case/run-workflow-from-agent.md).
+
+Agents can also read the instructions shipped with the installed version, even outside an initialized repository:
 
 ```sh
 concord --skill

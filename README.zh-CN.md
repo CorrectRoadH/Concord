@@ -17,6 +17,8 @@ Concord 采用 Spec 驱动开发（SDD）：先明确目标行为，再实现，
 3. **实现并测试这些行为。** 代码与测试关联到对应的 Use Case 或步骤。实现期间发现目标行为需要调整，先更新 Spec，再继续对应的改动。
 4. **验证并审阅结果。** 运行 `concord check` 和项目自己的测试、质量检查。把 Spec 差异、关联实现与测试结果放在一起审阅；关联有效本身不能证明行为正确。
 
+这四步通常由不同角色完成：写 Spec 的人定下命名、行为和验收方式；实现者照着 Spec 做，只在 Spec 缺失或与事实冲突时停下，带着证据回到 Spec；验收者对照 Spec 和实际运行判断结果，不以“测试通过”代替验收。Spec 写到实现者不用再问，人和不同的 agent 才能并行开发而不各自猜测（[品味](docs/taste.md#t-11)）。
+
 不同改动有不同的起点：
 
 | 改动 | 怎样推进 |
@@ -215,7 +217,18 @@ concord view
 
 ## 与 Agent 一起使用
 
-Agent 可以读取当前安装版本随包提供的指引，无需先初始化仓库：
+初始化后，项目里有四个对应开发流程的 skill。Claude Code 中输入 `/concord-spec` 这样的斜杠命令，Codex 中输入 `$concord-spec` 触发；agent 也会按任务自动选用：
+
+| skill | 做什么 |
+| --- | --- |
+| `concord-spec` | 把需求写成 Feature 与 Use Case，定下待决问题 |
+| `concord-implement` | 照着 Spec 实现，关联代码与测试；Spec 不够时停下 |
+| `concord-review` | 对照 Spec 与实际运行验收一组改动 |
+| `concord-fix` | 按缺陷流程提交回归测试、修复并核验 |
+
+已经初始化的仓库运行 `concord skills install` 补上它们。详见[用斜杠命令走开发流程](docs/feature/project-onboarding/use-case/run-workflow-from-agent.md)。
+
+Agent 也可以读取当前安装版本随包提供的指引，无需先初始化仓库：
 
 ```sh
 concord --skill

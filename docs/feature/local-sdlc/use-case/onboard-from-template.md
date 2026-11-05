@@ -51,6 +51,7 @@
    - 术语与写作政策：随包空 catalog `docs/concepts.md`、预设的 `docs/writing.md`。
    - 模板与目录：`docs/_template/`、各分类目录的 README。
    - `AGENTS.md` 中的 Concord 区块。
+   - 工作流 skill：`.agents/skills/concord-*/SKILL.md` 与 `.claude/skills/` 下指向它们的链接，见[用斜杠命令走开发流程](../../project-onboarding/use-case/run-workflow-from-agent.md)。
 
 3. 查看接入缺口。 {#doctor}
 
@@ -80,7 +81,8 @@
 | 错误 | 触发条件 |
 | --- | --- |
 | `ProjectExists` | `concord.config.ts` 已存在 |
-| `InitializationConflict` | 任一待创建文件已存在，例如 `docs/concord.md` |
+| `InitializationConflict` | 任一待创建文件已存在，例如 `docs/concord.md`；Concord 生成的工作流 skill 不算冲突 |
+| `SkillPathOccupied` | 工作流 skill 的路径已有不是 Concord 生成的文件 |
 | `ConflictingOptions` | `--docs-only` 与 `--test-root` 同时出现 |
 
 ```json

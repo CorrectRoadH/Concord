@@ -26,12 +26,13 @@
 | `feedback` | 外部来源的同步与导入 |
 | `view` | Web 工作台 |
 | `server` | `start`、`run`、`status`、`stop`：管理项目目录的[工作区服务](../../concepts.md#workspace-server)，查询命令也会自动启动它；`server stop` 等目标实例回收子进程、关闭持久缓存、删除实例记录并释放服务锁后才返回 0，返回后其它命令可以立即打开持久缓存 |
+| `skills` | `install`：在项目中创建或更新 Concord 工作流 skill，见[用斜杠命令走开发流程](../project-onboarding/use-case/run-workflow-from-agent.md) |
 | `herdr` | `install`、`uninstall`：安装 [Herdr mod](../herdr-mod/README.md) |
 | `workspace`、`git` | 工作区的当前扫描与历史投影、只读 Git 状态与差异，见 [Web 工作台 CLI](../web-workbench/cli.md) |
 | `config`、`template` | 查看与替换配置；查看随包模板 |
 | `cache`、`recover`、`doctor`、`lsp`、`review`、`action` | 维护与集成 |
 
-顶层共 30 个命令。
+顶层共 31 个命令。
 
 本页其余各节给出这些命令的调用、输出与错误。
 
@@ -69,6 +70,16 @@ Inspect configuration: concord doctor
 ```json
 {"operation":"init","dryRun":false,"changedPaths":["docs/taste.md","..."],"config":{},"createdPaths":["docs/taste.md","..."],"preservedPaths":[],"guide":"docs-from-code"}
 ```
+
+`concord skills install` 创建或更新 `.agents/skills/concord-{spec,implement,review,fix}/SKILL.md` 与 `.claude/skills/` 下指向它们的符号链接；`init` 安装同一组文件。人读输出按 `Created`、`Updated`、`Unchanged` 分组列出路径。`--json` 返回：
+
+```json
+{"operation":"skills-install","dryRun":false,"createdPaths":[".agents/skills/concord-spec/SKILL.md","..."],"updatedPaths":[],"unchangedPaths":[]}
+```
+
+| 错误 | 触发条件 |
+| --- | --- |
+| `SkillPathOccupied` | 目标路径已有不带 `concord-managed` 标记的文件，或指向别处的链接；`details.path` 给出路径，不写任何文件 |
 
 `concord doctor --json` 报告配置与接入缺口，不运行测试：
 
