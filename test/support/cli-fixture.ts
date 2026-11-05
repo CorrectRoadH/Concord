@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
 import { packageBin } from '../../scripts/package-location.js';
 import { createConsumer } from './consumer.js';
-import { packConcord, installConcord } from './installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from './installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync } from 'node:fs';
@@ -36,11 +36,11 @@ export const TemplatesOutput = Schema.Struct({ templates: Schema.Array(Schema.St
 export const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
 export let cli: string;
 before(() => Effect.runPromise(Effect.sync(()=>{
- const packed = packConcord(scratch);
+ const packed = sourceConcord();
  assert.ok(packed);
  assert.ok(packed.files.some(file=>file.path==='pnpm-lock.yaml'), 'package must carry its runtime dependency lock');
  const install=join(scratch,'tool');mkdirSync(install);writeFileSync(join(install,'package.json'),JSON.stringify({private:true}));
- installConcord(install, packed);
+ prepareSourceConsumer(install, packed);
  const packageRoot=join(install,'node_modules/concord-sdlc');
  const manifest=Schema.Struct({version:Schema.String,dependencies:Schema.Record(Schema.String,Schema.String),devDependencies:Schema.Record(Schema.String,Schema.String)});
  const published=Schema.decodeUnknownSync(Schema.fromJsonString(manifest))(readFileSync(join(packageRoot,'package.json'),'utf8'));
@@ -76,8 +76,8 @@ export function write(root: string,path: string,source: string){mkdirSync(join(r
 export { createRequire };
 export { packageBin };
 export { createConsumer };
-export { packConcord };
-export { installConcord };
+export { sourceConcord };
+export { prepareSourceConsumer };
 export { assert };
 export { execFileSync };
 export { spawn };

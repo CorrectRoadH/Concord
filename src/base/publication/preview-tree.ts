@@ -1,7 +1,7 @@
 import { lstatSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, parse, sep } from 'node:path';
 import { Effect, Schema } from 'effect';
-import { builtAssetRoot } from '../installation/index.js';
+import { sourceInstallation, builtAssetRoot } from '../installation/index.js';
 import { ConcordError, failure } from '../../model/index.js';
 const MiB = 1024 * 1024;
 
@@ -33,8 +33,8 @@ function staticFiles(): Map<string, Buffer> {
   }
   visit('');if(!files.has('index.html'))throw new ConcordError('PreviewAssetsInvalid','Installed preview is missing index.html.');return files;
 }
-function publishNow(out: string, data: string, chain: DirectoryIdentity[]): void {
-  const files=staticFiles(); files.set('changes.json',Buffer.from(data));
+function publishNow(out: string, data: string, chain: DirectoryIdentity[], assets: Map<string, Buffer>): void {
+  const files=new Map(assets); files.set('changes.json',Buffer.from(data));
   verifyDirectories(chain);
   try { mkdirSync(out,{mode:0o700}); } catch(cause) {
     if(Schema.is(Schema.Struct({code:Schema.Literal('EEXIST')}))(cause))throw new ConcordError('PreviewOutputExists',`Output already exists: ${out}`);
@@ -60,4 +60,9 @@ export const inspectExportAncestors = Effect.fn('Publication.inspectExportAncest
     return directoryChain(dirname(out));
   }, catch: failure,
 }));
-export const publishExport = Effect.fn('Publication.publishExport')((out: string, data: string, chain: DirectoryIdentity[]) => Effect.try({ try: () => publishNow(out, data, chain), catch: failure }));
+export const publishExport = Effect.fn('Publication.publishExport')(function*(out: string, data: string, chain: DirectoryIdentity[]) {
+  const files = sourceInstallation
+    ? yield* Effect.tryPromise({ try: async () => (await import('../installation/source-web.js')).sourcePreviewFiles(), catch: failure })
+    : yield* Effect.try({ try: staticFiles, catch: failure });
+  return yield* Effect.try({ try: () => publishNow(out, data, chain, files), catch: failure });
+});

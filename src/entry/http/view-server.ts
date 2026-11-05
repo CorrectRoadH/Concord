@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { isIP } from "node:net";
 import { extname, join, resolve, sep } from "node:path";
-import { builtAssetRoot } from "../../app/index.js";
+import { builtAssetRoot, sourceInstallation, sourceWebServer, sourceP5Runtime } from "../../app/index.js";
 import { existsSync, lstatSync, readFileSync } from "node:fs";
 import { gzipSync } from "node:zlib";
 import { Schema } from "effect";
@@ -292,16 +292,16 @@ function serveStatic(request: IncomingMessage, response: ServerResponse, pathnam
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/architecture.md#p5-图解
-function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoot: string): void {
+function serveP5Frame(request: IncomingMessage, response: ServerResponse, webRoot: string, sourceRuntime?: string): void {
   const target = join(webRoot, 'p5-runtime.js');
   const stat = lstatSync(target, { throwIfNoEntry: false });
-  if (!stat?.isFile() || stat.isSymbolicLink() || stat.size > STATIC_LIMIT) throw new ConcordError('P5RuntimeMissing', 'The packaged p5 runtime is unavailable');
+  if (sourceRuntime === undefined && (!stat?.isFile() || stat.isSymbolicLink() || stat.size > STATIC_LIMIT)) throw new ConcordError('P5RuntimeMissing', 'The packaged p5 runtime is unavailable');
   securityHeaders(response);
   response.setHeader('Content-Security-Policy', "sandbox allow-scripts allow-downloads; default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' blob:; style-src 'unsafe-inline' blob: data:; img-src data: blob:; media-src data: blob:; font-src data: blob:; connect-src data: blob:; worker-src blob:; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'");
   response.setHeader('X-Frame-Options', 'SAMEORIGIN');
   response.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=()');
   response.setHeader('Content-Type', 'text/html; charset=utf-8');
-  const runtime = readFileSync(target, 'utf8').replace(/<\/script/giu, '<\\/script');
+  const runtime = (sourceRuntime ?? readFileSync(target, 'utf8')).replace(/<\/script/giu, '<\\/script');
   sendCompressible(request, response, `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>html{background:white;color:#171717}body{margin:8px;font-family:system-ui;min-height:84px}canvas{display:block;max-width:100%;height:auto}</style></head><body><script>${runtime}</script></body></html>`);
 }
 
@@ -418,6 +418,8 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
   const requestedPort = options.port ?? 4317;
   if (!Number.isSafeInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) throw new ConcordError('InvalidPort', 'View port must be between 0 and 65535');
   const webRoot = options.webRoot ?? builtAssetRoot('web');
+  const sourceWeb = sourceInstallation && options.webRoot === undefined ? await sourceWebServer() : undefined;
+  let p5Runtime: Promise<string> | undefined;
   const jobs = hosted.jobs;
   const requestLog = new ViewRequestLog();
   let stopping = false;
@@ -447,11 +449,12 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
         if (['iframe', 'frame'].includes(request.headers['sec-fetch-dest'] as string) && url.pathname !== '/p5-frame') throw new ConcordError('ForbiddenAuthority', 'Only the p5 runtime may be loaded in a frame');
         if (request.method === 'GET' && url.pathname === '/p5-frame') {
           exactQuery(url, []);
-          serveP5Frame(request, response, webRoot);
+          serveP5Frame(request, response, webRoot, sourceWeb === undefined ? undefined : await (p5Runtime ??= sourceP5Runtime()));
         } else if (url.pathname.startsWith('/api/')) {
           await api(request, response, url, root, jobs, scans, runAction, timing, hosted);
         } else if (request.method === 'GET') {
-          timing.sync('http.static', () => serveStatic(request, response, url.pathname, webRoot));
+          if (sourceWeb === undefined) timing.sync('http.static', () => serveStatic(request, response, url.pathname, webRoot));
+          else { securityHeaders(response); await timing.async('http.static', () => sourceWeb.serve(request, response)); }
         } else {
           throw new ConcordError('MethodNotAllowed', 'Only GET is available for the static application');
         }
@@ -462,7 +465,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
   server.headersTimeout = 10_000;
   server.keepAliveTimeout = 5_000;
   await new Promise<void>((resolveReady, reject) => {
-    const onError = (cause: Error) => { requestLog.close(); server.off('listening', onListening); reject(failure(cause)); };
+    const onError = (cause: Error) => { requestLog.close(); void sourceWeb?.close(); server.off('listening', onListening); reject(failure(cause)); };
     const onListening = () => { server.off('error', onError); resolveReady(); };
     server.once('error', onError);
     server.once('listening', onListening);
@@ -488,7 +491,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
       const closed = new Promise<void>((resolveClosed, reject) => server.close((cause) => cause ? reject(failure(cause)) : resolveClosed()));
       server.closeAllConnections();
       try { await Promise.allSettled([...feedbackTasks]); await Promise.all([scans.close(), closed]); }
-      finally { requestLog.close(); }
+      finally { await sourceWeb?.close(); requestLog.close(); }
     })(),
   };
   scans.start();

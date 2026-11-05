@@ -4,7 +4,7 @@ import { homedir } from 'node:os';
 import { Context, Effect, Layer, Schema } from 'effect';
 import { ConcordError, failure } from '../../model/index.js';
 import { packageRoot } from './location.js';
-import { workerEntryArgv, workspaceInstallationIdentity } from './index.js';
+import { workerEntryArgv, workspaceInstallationIdentity, sourceInstallation } from './index.js';
 import { manageHerdrMod } from './herdr-mod.js';
 
 export interface TemplateResources {
@@ -47,7 +47,11 @@ export class Installation extends Context.Service<Installation, {
     }, catch: failure }),
     asset: (directory, path) => Effect.try({ try: () => {
       if (path.split('/').some(part => !part || part === '.' || part === '..') || path.includes('\\')) throw new ConcordError('UnsafePath', 'Invalid installation asset');
-      const absolute = join(packageRoot, 'dist', directory, path);
+      const libraries = { 'p5.sound.js': 'p5.sound/dist/p5.sound.js', 'p5.brush.js': 'p5.brush/dist/p5.brush.js' };
+      const absolute = sourceInstallation ? directory === 'p5-types' ? join(packageRoot, 'node_modules/p5/types', path)
+        : path === 'p5-libraries/p5.js' ? join(packageRoot, 'node_modules/p5/lib/p5.min.js')
+          : join(packageRoot, 'node_modules', libraries[path.replace('p5-libraries/', '') as keyof typeof libraries] ?? path)
+        : join(packageRoot, 'dist', directory, path);
       if (!lstatSync(absolute).isFile()) throw new ConcordError('InvalidFile', 'Installation asset must be a regular file');
       return readFileSync(absolute, 'utf8');
     }, catch: failure }),

@@ -1,5 +1,5 @@
 import { packageBin } from '../../scripts/package-location.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,7 +14,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'concord-skill-'));
 let cli: string;
 
 before(() => Effect.runPromise(Effect.sync(() => {
-  const packed = packConcord(scratch);
+  const packed = sourceConcord();
   const artifact = packed;
   assert.ok(artifact);
   for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'skills/concord/references/feedback.md', 'skills/concord/references/docs-from-scratch.md', 'skills/concord/references/docs-from-code.md']) {
@@ -23,7 +23,7 @@ before(() => Effect.runPromise(Effect.sync(() => {
   const install = join(scratch, 'tool');
   mkdirSync(install);
   writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  installConcord(install, packed, [], { private: true });
+  prepareSourceConsumer(install, packed, [], { private: true });
   cli = packageBin(join(install, 'node_modules/concord-sdlc'));
 })));
 

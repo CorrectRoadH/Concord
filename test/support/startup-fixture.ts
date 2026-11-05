@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url';
 import test, { before, after } from 'node:test';
 import { Effect, Schema } from 'effect';
 import { fullCommand } from "../../src/entry/cli/index.js";
-import { installConcord, packConcord } from '../support/installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 
 const environment: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', TERM: 'dumb', NODE_OPTIONS: '', NODE_DISABLE_COMPILE_CACHE: '1' };
 delete environment.FORCE_COLOR;
@@ -17,7 +17,7 @@ const scratch = mkdtempSync(join(tmpdir(), 'concord-startup-'));
 let packageRoot: string, entry: string;
 before(() => {
   const install = join(scratch, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), '{"private":true,"type":"module"}');
-  installConcord(install, packConcord(scratch), [], { private: true });
+  prepareSourceConsumer(install, sourceConcord(), [], { private: true });
   packageRoot = join(install, 'node_modules/concord-sdlc'); entry = packageBin(packageRoot);
 });
 after(() => rmSync(scratch, { recursive: true, force: true }));

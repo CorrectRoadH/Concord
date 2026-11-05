@@ -1,5 +1,5 @@
 import { packageBin } from '../../scripts/package-location.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,12 +14,12 @@ import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 test('packed CLI manages documentation without test roots and can later discover real tests', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-docs-only-'));
   try {
-    const packed = packConcord(scratch);
+    const packed = sourceConcord();
     assert.ok(packed);
     const install = join(scratch, 'tool');
     mkdirSync(install);
     writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-    installConcord(install, packed);
+    prepareSourceConsumer(install, packed);
     const cli = packageBin(join(install, 'node_modules/concord-sdlc'));
     const root = join(scratch, 'consumer');
     mkdirSync(root);

@@ -1,6 +1,6 @@
 import { createDocument, initialize } from '../support/operations.js';
 import { packageBin } from '../../scripts/package-location.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -43,10 +43,10 @@ test('packed CLI runs isolated p5 sketches with project libraries, resources, CS
 
   let exited: Promise<void> | undefined;
   try {
-    const pack = packConcord(scratch);
+    const pack = sourceConcord();
     const tool = join(scratch, 'tool'); mkdirSync(tool);
     writeFileSync(join(tool, 'package.json'), '{"private":true}');
-    installConcord(tool, pack);
+    prepareSourceConsumer(tool, pack);
     const root = join(scratch, 'consumer'); mkdirSync(root);
     execFileSync('git', ['init', '-q', root]);
     const write = (path: string, value: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), value); };

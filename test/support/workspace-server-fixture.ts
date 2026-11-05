@@ -5,7 +5,7 @@ import { Schema } from 'effect';
 import { installedConcordCli, pollUntil } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
 
-const Record = Schema.Struct({ token: Schema.String, pid: Schema.Int, installation: Schema.String, socket: Schema.Struct({ path: Schema.String }) });
+const Record = Schema.Struct({ token: Schema.String, pid: Schema.Int, installation: Schema.String, sourceDigest: Schema.optional(Schema.String), socket: Schema.Struct({ path: Schema.String }) });
 export const recordPath = (root: string) => join(root, '.git/concord/server/current.json');
 export const record = (root: string) => Schema.decodeUnknownSync(Schema.fromJsonString(Record), { onExcessProperty: 'ignore' })(readFileSync(recordPath(root), 'utf8'));
 export const fixture = () => {

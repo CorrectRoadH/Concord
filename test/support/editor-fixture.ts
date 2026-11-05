@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { after, before, test } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import { readProjectConfig, writeProjectConfig } from '../support/support.js';
 
 const Position = Schema.Struct({ line: Schema.Int, character: Schema.Int });
@@ -30,9 +30,9 @@ const codeText = (ref: string) => `// @concord-file\n// @concord-implements ${re
 let scratch: string, entry: string;
 before(() => Effect.runPromise(Effect.sync(() => {
   scratch = mkdtempSync(join(tmpdir(), 'concord-editor-packed-'));
-  const artifact = packConcord(scratch);
+  const artifact = sourceConcord();
   const tool = join(scratch, 'tool'); mkdirSync(tool); writeFileSync(join(tool, 'package.json'), '{"private":true}');
-  installConcord(tool, artifact);
+  prepareSourceConsumer(tool, artifact);
   entry = packageBin(join(tool, 'node_modules/concord-sdlc'));
 })));
 after(() => Effect.runPromise(Effect.sync(() => { if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true }); })));

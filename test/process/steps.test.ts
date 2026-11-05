@@ -7,7 +7,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from '../support/temporary.js';
 import { join, resolve } from 'node:path';
 import test, { before, after } from 'node:test';
-import { installConcord, packConcord } from '../support/installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 import { Effect, Schema } from 'effect';
 import { extractSteps } from "../../src/domain/documents/index.js";
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../src/app/index.js";
@@ -29,7 +29,7 @@ import { OwnedProcess, type OwnedProcessResult } from "../../src/base/process/in
 const path = 'docs/feature/sample/use-case/flow.md';
 const packedRoot = mkdtempSync(join(tmpdir(), 'concord-steps-packed-'));
 let entry: string;
-before(() => { const install = join(packedRoot, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true })); installConcord(install, packConcord(packedRoot)); entry = packageBin(join(install, 'node_modules/concord-sdlc')); });
+before(() => { const install = join(packedRoot, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true })); prepareSourceConsumer(install, sourceConcord()); entry = packageBin(join(install, 'node_modules/concord-sdlc')); });
 after(() => rmSync(packedRoot, { recursive: true, force: true }));
 function document(body: string, kind: 'use-case' | 'feature' = 'use-case') {
   return renderDocument(kind === 'use-case' ? { format: 'concord.document/v1', kind, id: 'flow', title: 'Flow', feature: 'docs/feature/sample/README.md' } : { format: 'concord.document/v1', kind, id: 'sample', title: 'Sample' }, body);

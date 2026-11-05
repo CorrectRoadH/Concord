@@ -1,5 +1,5 @@
 import { packageBin } from '../../scripts/package-location.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import { createConsumer } from '../support/consumer.js';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -13,7 +13,7 @@ const packedRoot = mkdtempSync(join(tmpdir(), 'concord-issue-packed-'));
 let cli: string;
 before(() => {
   const install = join(packedRoot, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  installConcord(install, packConcord(packedRoot)); cli = packageBin(join(install, 'node_modules/concord-sdlc'));
+  prepareSourceConsumer(install, sourceConcord()); cli = packageBin(join(install, 'node_modules/concord-sdlc'));
 });
 after(() => rmSync(packedRoot, { recursive: true, force: true }));
 function call(root: string, args: string[], status = 0): Record<string, unknown> {

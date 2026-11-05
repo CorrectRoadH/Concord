@@ -1,5 +1,5 @@
 import { packageBin } from '../../scripts/package-location.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -16,11 +16,11 @@ import { caseDiscriminator, deriveTestReference } from "../../src/model/index.js
 test('the shipped README quick start executes through the built bin and traces its exact snippets', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-code-cli-'));
   try {
-    const packed = packConcord(scratch);
+    const packed = sourceConcord();
     assert.ok(packed);
     const install = join(scratch, 'tool'); mkdirSync(install);
     writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-    installConcord(install, packed);
+    prepareSourceConsumer(install, packed);
     const cli = packageBin(join(install, 'node_modules/concord-sdlc'));
     const codes = Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema) });
     const skill = spawnSync(process.execPath, [cli, '--skill', 'code'], { cwd: scratch, encoding: 'utf8', timeout: 10000 });

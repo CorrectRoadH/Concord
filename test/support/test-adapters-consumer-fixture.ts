@@ -12,7 +12,7 @@ import { renderTypeScriptConfig, parseTypeScriptConfig } from "../../src/base/wo
 import { type test_adapter_config_TestAdapter as TestAdapter } from "../../src/model/index.js";
 import { LocalRepository } from "./repository.js";
 import { closeRepositoryCache, PersistentCache, type RepositoryCache } from "../../src/base/cache/index.js";
-import { installConcord, packConcord } from './installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from './installed-package.js';
 
 export const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
 export const text = (root: string, path: string, value: string) => { mkdirSync(join(root, path, ".."), { recursive: true }); writeFileSync(join(root, path), value); };
@@ -26,7 +26,7 @@ export const CaseList = Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: 
 export const Receipt = Schema.Struct({ scope: Schema.String, commandOutcome: Schema.String, definitionDigest: Schema.optional(Schema.String), requested: Schema.optional(Schema.Array(Schema.String)), gaps: Schema.optional(Schema.Array(Schema.String)), commandExecutionCount: Schema.optional(Schema.Int), versions: Schema.optional(Schema.Struct({ framework: Schema.String, runtime: Schema.String })) });
 export const setup = Effect.fn('adapterTest.pack')(function* (root: string, needsEffect = false) {
   return yield* Effect.sync(() => {
-    const packed = packConcord(root); const tool = join(root, 'tool');
+    const packed = sourceConcord(); const tool = join(root, 'tool');
     mkdirSync(tool); text(tool, 'package.json', JSON.stringify({ private: true, type: 'module' }));
     const fixtureDependencies: string[] = [];
     if (needsEffect) {
@@ -34,7 +34,7 @@ export const setup = Effect.fn('adapterTest.pack')(function* (root: string, need
       // Only the external fixture imports Effect; framework consumers use package dependencies.
       fixtureDependencies.push(`effect@${dependencies.effect}`);
     }
-    installConcord(tool, packed, ['vitest@4.1.11', ...fixtureDependencies]);
+    prepareSourceConsumer(tool, packed, ['vitest@4.1.11', ...fixtureDependencies]);
     return { cli: packageBin(join(tool, 'node_modules/concord-sdlc')), tool };
   });
 });
@@ -91,5 +91,5 @@ export type { TestAdapter };
 export { LocalRepository };
 export { closeRepositoryCache };
 export const withPersistentCache = <A>(repo: import('../../src/model/index.js').Repository, _writable: boolean, use: (cache: RepositoryCache) => A): A => use(PersistentCache.repository(repo));
-export { installConcord };
-export { packConcord };
+export { prepareSourceConsumer };
+export { sourceConcord };

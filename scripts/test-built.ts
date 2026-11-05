@@ -67,7 +67,7 @@ const main = Effect.scoped(Effect.gen(function* () {
   const compileCache = process.env.CONCORD_TEST_COMPILE_CACHE ?? join(output, 'node-compile-cache');
   if (process.env.CONCORD_TEST_COMPILE_CACHE === undefined) yield* Effect.addFinalizer(() => fs.remove(compileCache, { recursive: true, force: true }).pipe(Effect.orDie));
   const env = { ...process.env,
-    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --conditions=concord-source --import ${JSON.stringify(import.meta.resolve('tsx'))}`, 
+    NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --conditions=concord-source --import ${JSON.stringify(import.meta.resolve('tsx'))} --import ${JSON.stringify(new URL('../test/support/source-runtime.ts', import.meta.url).href)}`,
     NODE_COMPILE_CACHE: compileCache, CONCORD_TEST_COMPILE_CACHE: compileCache,
     CONCORD_TEST_FAILURES: join(output, 'node-failures.jsonl'),
     CONCORD_TEST_TIMINGS: process.env.CONCORD_TEST_TIMINGS ?? join(output, 'node-timings.jsonl'),

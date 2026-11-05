@@ -8,13 +8,13 @@ import { before, after, test } from 'node:test';
 import { Schema } from 'effect';
 import { decode, FixVerificationSchema } from "../../src/model/index.js";
 import { createFixConsumer, gitCommand, gitCommit } from '../support/fix-consumer.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-fix-cli-'));
 let cli: string;
 before(() => {
   const install = join(scratch, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  installConcord(install, packConcord(scratch)); cli = packageBin(join(install, 'node_modules/concord-sdlc'));
+  prepareSourceConsumer(install, sourceConcord()); cli = packageBin(join(install, 'node_modules/concord-sdlc'));
 });
 after(() => rmSync(scratch, { recursive: true, force: true }));
 const ObjectSchema = Schema.Record(Schema.String, Schema.Unknown);

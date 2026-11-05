@@ -1,6 +1,6 @@
 import { initialize } from '../support/operations.js';
 import { packageBin } from '../../scripts/package-location.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -17,10 +17,10 @@ import { LocalRepository } from "../support/repository.js";
 test('packed config has usable type hints and rejects misspelled fields', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-config-package-'));
   try {
-    const packed = packConcord(scratch);
+    const packed = sourceConcord();
     const project = join(scratch, 'consumer'); mkdirSync(project);
     writeFileSync(join(project, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-    installConcord(project, packed, ['typescript@7.1.0-beta', '@types/node@24.13.3']);
+    prepareSourceConsumer(project, packed, ['typescript@7.1.0-beta', '@types/node@24.13.3']);
     const consumer = join(scratch, 'initialized');
     execFileSync('git', ['init', '-q', consumer]);
     const cli = packageBin(join(project, 'node_modules/concord-sdlc'));

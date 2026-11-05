@@ -14,7 +14,7 @@ import { Git } from '../../base/git/index.js';
 import { Workspace } from '../../base/workspace/index.js';
 import { Sources } from '../../base/sources/index.js';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.js';
-import { ServerRuntime } from '../../base/server-lock/index.js';
+import { ServerRuntime, serverSourceDigest } from '../../base/server-lock/index.js';
 const loadClient = () => Effect.tryPromise(() => import('../server/index.js')).pipe(Effect.mapError(failure));
 const requestWorkspace: typeof import('../server/index.js').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
 const ServerFailure = Schema.Struct({ _tag: Schema.Literal('WorkspaceServerError'), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) });
@@ -84,7 +84,16 @@ const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceReco
   const runtime = yield* ServerRuntime, client = yield* loadClient();
   const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
   if (!record) return false;
-  if (record.installation === (installation ?? (yield* installationIdentity(runtime))) && record.protocol === client.PROTOCOL) return true;
+  if (record.installation === (installation ?? (yield* installationIdentity(runtime))) && record.protocol === client.PROTOCOL) {
+    const sourceDigest = yield* Effect.try({ try: serverSourceDigest, catch: failure });
+    if (sourceDigest !== undefined && record.sourceDigest !== sourceDigest && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) {
+      const connection = yield* client.connectWorkspaceSocket(record.socket.path, record.installation, record.token).pipe(Effect.mapError(workspaceServerFailure));
+      yield* connection.client.shutdown({ token: record.token }).pipe(Effect.mapError(workspaceServerFailure));
+      yield* waitForWorkspaceStop(runtime, privateDir, record.token).pipe(Effect.mapError(workspaceServerFailure));
+      return false;
+    }
+    return true;
+  }
   if (yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure))) return false;
   return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'The running service uses another installation or protocol; stop it with its matching installation'));
 });
@@ -176,7 +185,26 @@ function withWorkspaceCache<A, E, R>(workspace: Workspace['Service'], runtime: S
   }));
 }
 const startWorkspaceServer = (root: string) => Effect.scoped(connectOrStartWorkspace(root).pipe(Effect.map(connection => ({ operation: 'server-start', ...connection.hello }))));
-const stopWorkspaceServer = (root: string) => Effect.scoped(existingWorkspace(root).pipe(Effect.flatMap(connection => connection ? connection.client.shutdown({ token: connection.hello.token }) : Effect.void), Effect.as({ operation: 'server-stop' }), Effect.mapError(asServerError)));
+const waitForWorkspaceStop = (runtime: ServerRuntime['Service'], privateDir: string, token: string) => Effect.gen(function*() {
+      for (;;) {
+        const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
+        // A replacement token can only be published after the previous owner released its lock.
+        if (record && record.token !== token) return;
+        if (!record && (yield* runtime.released(privateDir))) return;
+        yield* Effect.sleep('10 millis');
+      }
+    }).pipe(Effect.timeout('10 seconds'), Effect.mapError(() => new ConcordError('CleanupFailed', 'Workspace service shutdown could not be confirmed')));
+const stopWorkspaceServer = (root: string) => Effect.scoped(Effect.gen(function*() {
+  const runtime = yield* ServerRuntime;
+  const { privateDir } = yield* (yield* Workspace).locate(root, true);
+  const connection = yield* existingWorkspace(root);
+  if (connection) {
+    const token = connection.hello.token;
+    yield* connection.client.shutdown({ token });
+    yield* waitForWorkspaceStop(runtime, privateDir, token);
+  }
+  return { operation: 'server-stop' };
+}).pipe(Effect.mapError(asServerError)));
 
 const HttpLease = Schema.Struct({ host: Schema.String, port: Schema.Int, address: Schema.String, lease: Schema.String, token: Schema.String });
 function makeWorkspaceView() { return Effect.fn('serveWorkspaceView')(function*(options: { root: string; host: string; port: number; inProcess?: boolean }, ready: (server: { root: string; host: string; port: number; address: string }) => void) {

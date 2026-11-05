@@ -9,7 +9,7 @@ import { installationRootForBin } from '../../src/base/installation/index.js';
 import { installedConcordCli, pollUntil } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
 import { startViewServer } from '../e2e/server.js';
-import { installConcord, packConcord } from '../support/installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
 
@@ -75,11 +75,11 @@ test('C23 another installation reports a version conflict and preserves the exis
   const old = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
     writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
-    installConcord(installation, packConcord(installation), [], { private: true });
+    prepareSourceConsumer(installation, sourceConcord(), [], { private: true });
     const installed = join(installation, 'node_modules/concord-sdlc');
-    writeFileSync(join(installed, 'dist/handoff-identity-fixture.js'), 'export {};\n');
+    writeFileSync(join(installed, 'src/handoff-identity-fixture.ts'), 'export {};\n');
     const manifest = JSON.parse(readFileSync(join(installed, 'package.json'), 'utf8'));
-    const entry = join(installed, manifest.bin.concord);
+    const entry = join(installed, 'src/entry/cli/entry.ts');
     const before = record(root);
     for (const args of [['server', 'start'], ['check']]) {
       const rejected = await command(root, args, entry);
@@ -98,4 +98,28 @@ test('C23 another installation reports a version conflict and preserves the exis
     await command(root, ['server', 'stop'], entry);
     await pollUntil(async () => !existsSync(recordPath(root)) ? true : undefined, { description: 'replacement service releases ownership', timeoutMs: 8000 });
   } finally { await old.close(); await stop(root); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
+});
+
+// @feature docs/engineering/concord-self-hosting/README.md
+test('source edits replace the same checkout service only after the previous owner exits', { timeout: 45_000 }, async () => {
+  const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-source-reload-'));
+  let entry = '';
+  try {
+    writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
+    prepareSourceConsumer(installation, sourceConcord(), [], { private: true });
+    const tool = join(installation, 'node_modules/concord-sdlc');
+    entry = join(tool, 'src/entry/cli/entry.ts');
+    const start = await command(root, ['server', 'start'], entry);
+    assert.equal(start.status, 0, start.stderr);
+    const before = record(root);
+    writeFileSync(join(tool, 'src/source-reload-fixture.ts'), 'export {};\n');
+    const query = await command(root, ['list', 'feature'], entry);
+    assert.equal(query.status, 0, query.stderr);
+    const after = record(root);
+    assert.notEqual(after.token, before.token);
+    assert.equal(after.installation, before.installation);
+    assert.notEqual(after.sourceDigest, before.sourceDigest);
+    assert.equal((await command(root, ['server', 'stop'], entry)).status, 0);
+    assert.equal(existsSync(recordPath(root)), false);
+  } finally { if (entry) await command(root, ['server', 'stop'], entry); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });

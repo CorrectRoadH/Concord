@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Schema } from 'effect';
 import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
 import { tmpdir } from '../support/temporary.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly webRoot?: string; readonly installedBin?: string }
 export interface ViewServerHandle {
@@ -25,7 +25,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     else {
       const install = join(scratch, 'tool'); mkdirSync(install);
       writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-      installConcord(install, packConcord(scratch), [], { private: options.webRoot !== undefined });
+      prepareSourceConsumer(install, sourceConcord(), [], { private: options.webRoot !== undefined });
       resources = installationResources(join(install, 'node_modules/concord-sdlc'));
     }
     if (options.webRoot !== undefined) {

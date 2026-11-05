@@ -21,7 +21,7 @@ import { openHawdb, createMemoryHawdb, HawdbFailure } from "../../src/base/cache
 import { maintainCache } from "../../src/app/index.js";
 
 
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 import { pollUntil } from '../support/support.js';
 
 function fixture() {
@@ -189,7 +189,7 @@ test('a query service maintains an oversized cache while retaining ownership and
   try {
     mkdirSync(install);
     writeFileSync(join(install, 'package.json'), JSON.stringify({ name: 'maintenance-consumer', private: true, type: 'module' }));
-    installConcord(install, packConcord(f.root));
+    prepareSourceConsumer(install, sourceConcord());
     const entry = packageBin(join(install, 'node_modules/concord-sdlc'));
     installedEntry = entry;
     const command = (...args: string[]) => spawnSync(process.execPath, [entry, '--root', f.root, '--json', ...args], { cwd: install, encoding: 'utf8', timeout: 30_000 });

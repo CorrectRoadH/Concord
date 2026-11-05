@@ -1,10 +1,11 @@
+import { installationResources } from '../support/source-resources.js';
 import assert from 'node:assert/strict';
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { readdirSync } from 'node:fs';
 import test from 'node:test';
 import { Effect, Schema, Stream } from 'effect';
-import { installConcord, packConcord } from '../support/installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 import { pollUntil } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
 import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.js';
@@ -15,10 +16,10 @@ test('runtime native validation degrades the locked service and a repaired artif
   let metadata = '', hidden = '';
   try {
     writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-    installConcord(install, packConcord(install), [], { private: true });
+    prepareSourceConsumer(install, sourceConcord(), [], { private: true });
     const packageRoot = join(install, 'node_modules/concord-sdlc');
-    const entry = join(packageRoot, 'dist/entry/cli/entry.js');
-    const native = join(packageRoot, 'dist/native');
+    const entry = join(packageRoot, 'src/entry/cli/entry.ts');
+    const native = installationResources(packageRoot).native;
     metadata = join(native, readdirSync(native)[0]!, 'artifact.json'); hidden = `${metadata}.hidden`;
     assert.equal((await command(root, ['server', 'start'], entry)).status, 0);
     const running = record(root), rpc = await rpcModule();

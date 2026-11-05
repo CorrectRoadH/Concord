@@ -25,7 +25,7 @@ import { observeOwnedProcessGroup } from "../../src/base/process/index.js";
 import { hydrateQueryValue } from "../../src/app/index.js";
 import { TraceShowValue } from "../../src/model/index.js";
 import { pollUntil, readProjectConfig, writeProjectConfig } from './support.js';
-import { packConcord } from './installed-package.js';
+import { sourceConcord } from './installed-package.js';
 
 export const cli = installedConcordCli();
 export { target, source, write, server, consumer } from './lsp-analysis-source-fixture.js';
@@ -87,4 +87,4 @@ export { TraceShowValue };
 export { pollUntil };
 export { readProjectConfig };
 export { writeProjectConfig };
-export { packConcord };
+export { sourceConcord };

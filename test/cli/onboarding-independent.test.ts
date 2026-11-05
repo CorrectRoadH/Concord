@@ -7,14 +7,14 @@ import { join } from 'node:path';
 import test, { before, after } from 'node:test';
 import { Effect, Schema } from 'effect';
 import { InitializationReceiptSchema } from '../../src/model/index.js';
-import { packConcord, installConcord } from '../support/installed-package.js';
+import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-public-onboarding-'));
 let cli: string;
 before(() => Effect.runPromise(Effect.sync(() => {
   const install = join(scratch, 'tool'); mkdirSync(install);
   writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  installConcord(install, packConcord(scratch));
+  prepareSourceConsumer(install, sourceConcord());
   cli = packageBin(join(install, 'node_modules/concord-sdlc'));
 })));
 after(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));

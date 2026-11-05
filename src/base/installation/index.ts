@@ -85,4 +85,5 @@ export * from './hawdb-native-contract.js';
 export { nativeSourceDigest, nativeCacheRoot, nativeSourceFiles, nativeLockDigest } from './native-artifact.js';
 export { installationResources, installationRootForBin } from './resources.js';
 export { Installation } from './service.js';
+export { sourceWebServer, sourceP5Runtime } from './source-web.js';
 export type { TemplateResources } from './service.js';

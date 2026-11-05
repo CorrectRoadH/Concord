@@ -160,6 +160,7 @@ export type { LocalRepository } from './entry-operations.js';
 export { openReadRepository } from './entry-operations.js';
 export { resourcePath } from './entry-operations.js';
 export { builtAssetRoot } from './entry-operations.js';
+export { sourceInstallation, sourceWebServer, sourceP5Runtime } from './entry-operations.js';
 export { readRepositoryFileSync } from './entry-operations.js';
 export { uriPath } from './entry-operations.js';
 export { makeOwnedProcessService } from './entry-operations.js';

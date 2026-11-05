@@ -9,7 +9,7 @@ import { installationRootForBin } from '../../src/base/installation/index.js';
 import { installedConcordCli, pollUntil } from '../support/support.js';
 import { tmpdir } from '../support/temporary.js';
 import { startViewServer } from '../e2e/server.js';
-import { installConcord, packConcord } from '../support/installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.js';
 

@@ -25,7 +25,7 @@ import { type WorkspaceProjection } from "../../src/model/index.js";
 import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
-import { installConcord, packConcord } from '../support/installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.js';
@@ -152,7 +152,7 @@ test('an installation missing native artifacts reports unavailable instead of pe
   const installation = mkdtempSync(join(tmpdir(), 'concord-projection-install-'));
   try {
     writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
-    installConcord(installation, packConcord(installation), [], { private: true });
+    prepareSourceConsumer(installation, sourceConcord(), [], { private: true });
     const installed = join(installation, 'node_modules/concord-sdlc');
     rmSync(installationResources(installed).native, { recursive: true });
     const result = spawnSync(process.execPath, [packageBin(installed), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });

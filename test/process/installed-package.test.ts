@@ -13,7 +13,7 @@ import test from 'node:test';
 import { NodeServices } from '@effect/platform-node';
 import { Effect } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { installConcord, packConcord } from '../support/installed-package.js';
+import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 import { replaceInstalledNativeBinary } from '../../scripts/verify-installed-native.js';
 
 import { pollUntil } from '../support/support.js';
@@ -23,7 +23,7 @@ test('parallel consumers share the build while damage stays in a private copy', 
   const original = process.env.CONCORD_TEST_INSTALLS;
   const installs = join(root, 'installs');
   try {
-    const artifact = yield* Effect.sync(() => packConcord(root));
+    const artifact = yield* Effect.sync(() => sourceConcord());
     const manifest = join(root, 'artifact.json');
     const consumers = ['one', 'two', 'three'].map(name => join(root, name));
     yield* Effect.sync(() => {
@@ -49,7 +49,7 @@ test('parallel consumers share the build while damage stays in a private copy', 
       assert.equal(existsSync(join(consumers[1]!, 'node_modules/.vite/cache')), false);
       const privateRoot = join(root, 'private'); mkdirSync(privateRoot);
       writeFileSync(join(privateRoot, 'package.json'), '{"private":true}');
-      installConcord(privateRoot, artifact, [], { private: true });
+      prepareSourceConsumer(privateRoot, artifact, [], { private: true });
       const shared = packageBin(join(consumers[0]!, 'node_modules/concord-sdlc'));
       const privateFile = packageBin(join(privateRoot, 'node_modules/concord-sdlc'));
       assert.notEqual(statSync(shared).ino, statSync(privateFile).ino);
@@ -61,7 +61,7 @@ test('parallel consumers share the build while damage stays in a private copy', 
       assert.deepEqual(readFileSync(shared), before);
       const withEffect = join(root, 'with-effect'); mkdirSync(withEffect);
       writeFileSync(join(withEffect, 'package.json'), '{"private":true}');
-      installConcord(withEffect, artifact, ['effect@4.0.0-rc.112']);
+      prepareSourceConsumer(withEffect, artifact, ['effect@4.0.0-rc.112']);
       assert.equal(existsSync(join(withEffect, 'node_modules/effect')), true);
       assert.equal(existsSync(join(consumers[0]!, 'node_modules/effect')), false);
     });
@@ -78,7 +78,7 @@ test('native installation damage and repair preserve an image already mapped by 
   const root = mkdtempSync(join(tmpdir(), 'concord-mapped-install-'));
   try {
     writeFileSync(join(root, 'package.json'), '{"private":true}');
-    installConcord(root, packConcord(root), [], { private: true });
+    prepareSourceConsumer(root, sourceConcord(), [], { private: true });
     const installed = join(root, 'node_modules/concord-sdlc');
     const binary = join(installationResources(installed).native, hawdbTarget(), 'hawdb.node');
     const consumer = join(root, 'consumer'); mkdirSync(consumer);
