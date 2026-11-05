@@ -228,7 +228,7 @@ export function CreateDocument({
   const [title, setTitle] = React.useState("")
   const [body, setBody] = React.useState("")
   const [pages, setPages] = React.useState<TemplatePage[]>([])
-  const selectablePages = kind === "feature" || kind === "roadmap"
+  const selectablePages = kind === "feature" || kind === "engineering" || kind === "roadmap"
   async function submit(event: React.FormEvent): Promise<void> {
     event.preventDefault()
     const action: ViewAction = {

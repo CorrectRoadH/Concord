@@ -63,12 +63,10 @@ test('installed create selects optional pages, keeps README required, and reject
  assert.ok(useCaseRelations.outgoing.some(edge => edge.to === 'docs/feature/custom/README.md'));
  create(root, 'feature', 'preview', 'Preview', Ack, { pages: ['cli'], dryRun: true });
  assert.equal(existsSync(join(root, 'docs/feature/preview')), false);
- for (const [id, pages, error] of [['unknown', 'other', 'InvalidData'], ['duplicate', 'cli,cli', 'InvalidInput'], ['empty', 'cli,', 'InvalidData']] as const) {
+ for (const [id, pages, error] of [['unknown', 'other', 'InvalidInput'], ['duplicate', 'cli,cli', 'InvalidInput'], ['empty', 'cli,', 'InvalidInput']] as const) {
    assert.equal(create(root, 'feature', id, id, ErrorOutput, { pages: pages.split(',') }, 1).error, error);
    assert.equal(existsSync(join(root, 'docs/feature', id)), false);
  }
- assert.equal(create(root, 'engineering', 'invalid', 'Invalid', ErrorOutput, { pages: ['cli'] }, 1).error, 'InvalidInput');
- assert.equal(existsSync(join(root, 'docs/engineering/invalid')), false);
  const engineering = create(root, 'engineering', 'small', 'Small', Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
  assert.deepEqual(engineering.changedPaths, ['docs/engineering/small/README.md']);
  const engineeringShow = show(root, 'small', 'engineering', Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
@@ -85,5 +83,41 @@ test('installed create selects optional pages, keeps README required, and reject
  result(root, repo => adoptRoadmap(repo, 'minimal-roadmap', 'adopted-minimal'), Ack);
  assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/README.md')), true);
  assert.equal(existsSync(join(root, 'docs/feature/adopted-minimal/cli.md')), false);
+ } finally { rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md#页面选择
+test('all three package kinds select the nine page templates without creating a Use Case journey', () => Effect.runPromise(Effect.sync(() => {
+ const root = consumer('all-page-kinds');
+ const pages = ['use-case', 'cli', 'library', 'api', 'format', 'ui', 'performance', 'architecture', 'data-model'];
+ try {
+ for (const kind of ['feature', 'engineering', 'roadmap'] as const) {
+   const selected = create(root, kind, `selected-${kind}`, 'Selected', Schema.Struct({ changedPaths: Schema.Array(Schema.String) }), { pages });
+   const base = `docs/${kind}/selected-${kind}/`;
+   assert.deepEqual([...selected.changedPaths].sort(), [base + 'README.md', ...pages.map(page => base + (page === 'use-case' ? 'use-case/README.md' : `${page}.md`))].sort());
+   const readme = readFileSync(join(root, base, 'README.md'), 'utf8');
+   assert.doesNotMatch(readme, /\{\{entryPoints\}\}/u);
+   for (const page of pages) {
+     const path = page === 'use-case' ? 'use-case/README.md' : `${page}.md`;
+     assert.ok(readme.includes(`](${path})`), `${kind}: missing navigation to ${path}`);
+     assert.match(readFileSync(join(root, base, path), 'utf8'), /^# Selected\n/u);
+   }
+   assert.equal(existsSync(join(root, base, 'concepts.md')), false);
+   assert.equal(existsSync(join(root, base, 'writing.md')), false);
+   const minimal = create(root, kind, `minimal-${kind}`, 'Minimal', Schema.Struct({ changedPaths: Schema.Array(Schema.String) }));
+   assert.deepEqual(minimal.changedPaths, [`docs/${kind}/minimal-${kind}/README.md`]);
+   const minimalBody = readFileSync(join(root, minimal.changedPaths[0]!), 'utf8');
+   assert.doesNotMatch(minimalBody, /\{\{entryPoints\}\}|\]\(|supporting pages|mental model/u);
+   for (const invalid of [['scope'], ['concepts'], ['writing'], ['api', 'api']]) {
+     assert.equal(create(root, kind, `invalid-${kind}`, 'Invalid', ErrorOutput, { pages: invalid }, 1).error, 'InvalidInput');
+     assert.equal(existsSync(join(root, `docs/${kind}/invalid-${kind}`)), false);
+   }
+ }
+ assert.deepEqual(result(root, repo => ({ documents: loadDocuments(repo, ['use-case']) }), Schema.Struct({ documents: Schema.Array(Schema.Unknown) })).documents, []);
+ for (const kind of ['design', 'issue', 'memory', 'use-case'] as const) {
+   assert.equal(create(root, kind, `invalid-${kind}`, 'Invalid', ErrorOutput, { pages: ['api'] }, 1).error, 'InvalidInput');
+   const path = kind === 'memory' ? 'memory/invalid-memory.md' : kind === 'issue' ? 'docs/issues/invalid-issue.md' : `docs/${kind}/invalid-${kind}.md`;
+   assert.equal(existsSync(join(root, path)), false);
+ }
  } finally { rmSync(root, { recursive: true, force: true }); }
 })));

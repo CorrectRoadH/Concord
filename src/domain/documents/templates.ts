@@ -8,7 +8,7 @@ import { TEMPLATE_PAGES, PAGE_DESCRIPTIONS, type TemplatePage } from "../../mode
 
 const TEMPLATE_NAMES = [
   'feature', 'roadmap', 'design', 'engineering', 'use-case', 'memory', 'issue',
-  'library', 'cli', 'architecture', 'use-case-index',
+  'library', 'cli', 'api', 'format', 'ui', 'performance', 'architecture', 'data-model', 'use-case-index',
   'project-index', 'concepts', 'project-architecture', 'taste', 'project-design',
 ] as const;
 
@@ -91,7 +91,7 @@ function renderTemplate(resources: TemplateResources, name: string, title: strin
   const entry = findTemplate(resources, name);
   try {
     const entryPoints = pages.length === 0
-      ? 'Add supporting pages when needed and link them here. Keep the problem, mental model, and scope in this README.'
+      ? 'Add pages for public behavior or internal implementation when needed and link them here. Keep this README focused on who uses the capability, what it provides, how to start, and its scope and acceptance.'
       : pages.map(page => `- [${PAGE_DESCRIPTIONS[page].label}](${page === 'use-case' ? 'use-case/README.md' : `${page}.md`})`).join('\n');
     return resources.read(entry.path)
       .replaceAll('{{entryPoints}}', () => entryPoints).replaceAll('{{title}}', () => title);
@@ -120,16 +120,16 @@ export const listTemplates = Effect.fn('listTemplates')(function*() { return (yi
 export function projectTemplateFiles(catalog: { readonly render: (name: string, title: string, pages?: readonly TemplatePage[]) => string }): Record<string, string> {
   const files: Record<string, string> = {};
   const add = (path: string, name: string) => { files[`docs/_template/${path}`] = catalog.render(name, 'Your title'); };
-  const packageTemplates = [['feature-design', 'feature'], ['roadmap', 'roadmap']] as const;
+  const packageTemplates = [['feature-design', 'feature'], ['roadmap', 'roadmap'], ['engineering', 'engineering']] as const;
   const addPackage = (directory: string, name: string) => {
     add(`${directory}/README.md`, name);
     for (const page of TEMPLATE_PAGES) add(`${directory}/${page === 'use-case' ? 'use-case/README.md' : `${page}.md`}`, page === 'use-case' ? 'use-case-index' : page);
   };
   for (const [directory, name] of packageTemplates) addPackage(directory, name);
-  add('engineering/README.md', 'engineering');
   for (const name of ['design', 'use-case', 'issue', 'memory']) add(`${name}/README.md`, name);
   add('taste.md', 'taste');
   add('project-DESIGN.md', 'project-design');
-  files['docs/_template/README.md'] = "# Concord writing templates\n\nThis complete reference set is installed by concord init. `concord new` uses the bundled templates, not this directory. These examples are not adopted contracts or test evidence.\n\nA document's path is its identity and its single top-level heading is its name, so templates carry no frontmatter. Issue and Memory frontmatter holds source facts and forward relations, and only when they are non-empty.\n\nFeature, Roadmap and Engineering require README only; choose the other pages when creating them. A Design is one Markdown page for an open choice.\n\n| Optional page | Use when |\n| --- | --- |\n| library | A public programming interface needs exact shapes and examples |\n| cli | Public commands need inputs, outputs, and errors |\n| architecture | Internal entities, boundaries, invariants, and resource lifecycles need explanation |\n| use-case | User goals need an index of complete paths; create actual cases separately |\n\n" + Object.keys(files).map(path => `- [${path.slice('docs/_template/'.length)}](${path.slice('docs/_template/'.length)})`).join('\n') + '\n';
+  const pageTable = TEMPLATE_PAGES.map(page => `| ${page} | ${PAGE_DESCRIPTIONS[page].purpose} |`).join('\n');
+  files['docs/_template/README.md'] = "# Concord writing templates\n\nThis complete reference set is installed by concord init. `concord new` uses the bundled templates, not this directory. These examples are not adopted contracts or test evidence.\n\nA document's path is its identity and its single top-level heading is its name, so templates carry no frontmatter. Issue and Memory frontmatter holds source facts and forward relations, and only when they are non-empty.\n\nFeature, Roadmap and Engineering require README only; choose the other pages when creating them. A Design is one Markdown page for an open choice. Edit concepts.md and writing.md directly; they are not --pages options.\n\n| Optional page | Use when |\n| --- | --- |\n" + pageTable + '\n\n' + Object.keys(files).map(path => `- [${path.slice('docs/_template/'.length)}](${path.slice('docs/_template/'.length)})`).join('\n') + '\n';
   return files;
 }

@@ -42,7 +42,7 @@ export const RunnerSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('command'), argv: Schema.NonEmptyArray(Text), sourceFiles: Strings, prepare: Schema.optional(Schema.Array(Schema.NonEmptyArray(Text))), timeoutMs: Schema.Int.check(Schema.isBetween({minimum: 1, maximum: 3600000})) }),
 ]);
 export type Runner = typeof RunnerSchema.Type;
-export const TemplatePageSchema = Schema.Literals(['library', 'cli', 'architecture', 'use-case']);
+export const TemplatePageSchema = Schema.Literals(['library', 'cli', 'api', 'format', 'ui', 'performance', 'architecture', 'data-model', 'use-case']);
 export const ProjectSchema = Schema.Struct({
   testRoots: Schema.optional(Schema.Array(Text)),
   sourceRoots: Schema.optional(Schema.Array(Text)),

@@ -55,6 +55,16 @@ test('init only writes configured overrides and emits current templates and dire
     assert.match(instructions, /check/);
     assert.doesNotMatch(instructions, /skill repository|Do not directly read or edit/);
     for (const path of ['docs/_template/memory/README.md', 'docs/_template/taste.md', 'docs/_template/design/README.md', 'memory/README.md']) assert.equal(existsSync(join(root, path)), true);
+    const templateIndex = readFileSync(join(root, 'docs/_template/README.md'), 'utf8');
+    for (const page of ['library', 'cli', 'api', 'format', 'ui', 'performance', 'architecture', 'data-model', 'use-case']) {
+      assert.ok(templateIndex.includes(`| ${page} |`), `Missing page purpose: ${page}`);
+      const path = page === 'use-case' ? 'use-case/README.md' : `${page}.md`;
+      for (const owner of ['feature-design', 'engineering', 'roadmap']) {
+        assert.equal(existsSync(join(root, `docs/_template/${owner}/${path}`)), true);
+        assert.ok(readFileSync(join(root, `docs/_template/${owner}/README.md`), 'utf8').includes(`](${path})`));
+      }
+    }
+    assert.doesNotMatch(templateIndex, /problem, mental model|supporting pages/u);
     for (const path of ['docs/_template/memory/problem.md', 'docs/_template/feature-design/lifecycle.md']) assert.equal(existsSync(join(root, path)), false);
     const minimal = createDocument(repo, 'feature', { id: 'minimal', title: 'Minimal' });
     assert.deepEqual(minimal.changedPaths, ['docs/feature/minimal/README.md']);

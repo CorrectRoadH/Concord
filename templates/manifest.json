@@ -72,9 +72,34 @@
       "path": "cli.md"
     },
     {
+      "name": "api",
+      "description": "api page: public network requests, responses, errors, and compatibility.",
+      "path": "api.md"
+    },
+    {
+      "name": "format",
+      "description": "format page: supported file paths, syntax, fields, validation, and examples.",
+      "path": "format.md"
+    },
+    {
+      "name": "ui",
+      "description": "ui page: layout, interaction states, keyboard behavior, accessibility, and visual acceptance.",
+      "path": "ui.md"
+    },
+    {
+      "name": "performance",
+      "description": "performance page: scenario identities, measurements, budgets, and workload assumptions.",
+      "path": "performance.md"
+    },
+    {
       "name": "architecture",
       "description": "architecture page: modules, data flow, invariants, failure stages, and resource lifecycle.",
       "path": "architecture.md"
+    },
+    {
+      "name": "data-model",
+      "description": "data-model page: internal entities, storage structures, constraints, transactions, and data lifecycle.",
+      "path": "data-model.md"
     },
     {
       "name": "use-case-index",

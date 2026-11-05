@@ -10,6 +10,12 @@ test('packed templates work outside a project and fail clearly when their invent
  assert.equal(result.status, 0, result.stderr);
  const templates = Schema.decodeUnknownSync(Schema.fromJsonString(TemplatesOutput))(result.stdout);
  assert.ok(templates.templates.some(item => item.name === 'engineering'));
+ for (const name of ['api', 'format', 'ui', 'performance', 'data-model']) {
+  assert.ok(templates.templates.some(item => item.name === name));
+  const page = spawnSync(process.execPath, [cli, 'template', 'show', name, '--title', 'Accounts'], { cwd: scratch, encoding: 'utf8' });
+  assert.equal(page.status, 0, page.stderr);
+  assert.match(page.stdout, /# Accounts/u);
+ }
  const shown = spawnSync(process.execPath, [cli, 'template', 'show', 'feature', '--title', 'Accounts'], { cwd: scratch, encoding: 'utf8' });
  assert.equal(shown.status, 0, shown.stderr);
  assert.match(shown.stdout, /# Accounts/);

@@ -86,3 +86,32 @@ test('browser navigates owner directories and preserves implementation and docum
     assert.deepEqual(errors,[]);
   } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });
+
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md#页面选择
+test('browser creates Engineering with all nine optional page kinds', async ({ page }) => {
+  const root = authoringConsumer();
+  let server: ViewServerHandle | undefined;
+  try {
+    server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+    await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.goto(`http://127.0.0.1:${server.port}/engineering`);
+    await page.getByRole('button', { name: '新建 Engineering', exact: true }).click();
+    await page.getByLabel('Engineering ID', { exact: true }).fill('browser-engineering');
+    await page.getByLabel('Engineering 标题', { exact: true }).fill('Browser Engineering');
+    for (const label of ['Use Cases', 'CLI', 'Library', 'API', 'Format', 'UI', 'Performance', 'Architecture', 'Data Model']) {
+      await page.getByRole('checkbox', { name: label, exact: true }).check();
+    }
+    await page.getByRole('button', { name: '创建', exact: true }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('navigation', { name: '内容导航', exact: true }).getByRole('link', { name: 'Browser Engineering', exact: true }).click();
+    const tree = page.getByTestId('document-file-tree');
+    await expect(tree).toBeVisible();
+    const disclosure = tree.getByRole('button', { name: '文件', exact: true });
+    if (await disclosure.isVisible()) await disclosure.click();
+    for (const filename of ['cli.md', 'library.md', 'api.md', 'format.md', 'ui.md', 'performance.md', 'architecture.md', 'data-model.md']) {
+      await expect(tree.getByRole('button', { name: filename, exact: true })).toBeVisible();
+    }
+    await expect(tree.getByRole('button', { name: 'use-case', exact: true })).toBeVisible();
+  } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
+});
