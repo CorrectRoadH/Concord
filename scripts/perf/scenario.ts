@@ -61,8 +61,10 @@ export function runArguments(run: BenchRun): readonly string[] {
   if ('mod' in run) return ['herdr'];
   return run;
 }
+// Source smoke tests still need a loader when a measured scenario clears NODE_OPTIONS.
+const nodeEntry = (entry: string) => [process.execPath, ...(entry.endsWith('.ts') ? ['--import', import.meta.resolve('tsx')] : []), entry];
 export const cliCommand = (artifact: Artifact, root: string, argv: readonly string[]) => (argv[0] === 'repo' || argv.includes('--skill') || argv.includes('--help') || argv.includes('--version'))
-  ? [process.execPath, artifact.entry, ...argv] : [process.execPath, artifact.entry, '--root', root, ...argv];
+  ? [...nodeEntry(artifact.entry), ...argv] : [...nodeEntry(artifact.entry), '--root', root, ...argv];
 export const makeContext = (artifact: Artifact, consumer: Consumer, outputDir: string, smoke = false, env?: NodeJS.ProcessEnv, refreshLimitMs = 0): BenchContext => ({
   artifact, consumer, outputDir, smoke, refreshLimitMs, services: new Map(), ...(env ? { env } : {}),
   cli: (argv, timeoutMs) => timedRun(cliCommand(artifact, consumer.root, argv), { cwd: consumer.root, outputDir, ...(env ? { env } : {}), ...(timeoutMs === undefined ? {} : { timeoutMs }) }),
@@ -163,7 +165,7 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
     }
     result = target!;
   } else {
-    const argv = 'scan' in run ? [process.execPath, ((yield* fs.exists(installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker'))) ? installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker') : join(dirname(context.artifact.entry), 'query-scan-worker.js')), context.consumer.root, JSON.stringify(run.scan)]
+    const argv = 'scan' in run ? [...nodeEntry(((yield* fs.exists(installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker'))) ? installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker') : join(dirname(context.artifact.entry), 'query-scan-worker.js'))), context.consumer.root, JSON.stringify(run.scan)]
       : cliCommand(context.artifact, context.consumer.root, runArguments(run));
     const count = 'argv' in run ? run.concurrency : 1;
     const results = yield* Effect.all(Array.from({ length: count }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,

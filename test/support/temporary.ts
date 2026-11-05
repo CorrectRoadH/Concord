@@ -1,1 +1,1 @@
-export { tmpdir } from '../../scripts/test-temporary.js';
+export { tmpdir } from 'node:os';

@@ -2,13 +2,13 @@
 // @concord-implements docs/feature/herdr-mod/architecture.md
 // Only the external Herdr/GPUI boundary is replaced; this loads the source mod
 // and executes the public CLI. It does not measure native drawing.
-import { execFile } from 'node:child_process';
 import { registerHooks } from 'node:module';
-import { watch } from 'node:fs';
-import { readFile, writeFile, rename } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
-import { Effect, Schema } from 'effect';
+import { Duration, Effect, Fiber, FileSystem, Schema, Stream } from 'effect';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
+import { installationResources, installationRootForBin } from '../src/base/installation/index.js';
 
 type Callback = (event: unknown, cx: HostContext) => void;
 class HostElement {
@@ -37,11 +37,20 @@ class HostState {
   value() { return this.text; } set_value(value: string) { this.text = value; } release() { return true; }
 }
 class HostFailure extends Schema.TaggedError<HostFailure>()('HostFailure', { message: Schema.String }) {}
-const main = Effect.tryPromise({ try: async () => {
+const main = Effect.scoped(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const fibers = new Set<Fiber.Fiber<unknown, unknown>>();
+  const scope = yield* Effect.scope;
+  yield* Effect.addFinalizer(() => Effect.forEach(fibers, Fiber.interrupt, { concurrency: 'unbounded', discard: true }));
+  const readFile = (path: string, _encoding: 'utf8') => Effect.runPromise(fs.readFileString(path));
+  const writeFile = (path: string, text: string) => Effect.runPromise(fs.writeFileString(path, text));
+  const rename = (from: string, to: string) => Effect.runPromise(fs.rename(from, to));
+  return yield* Effect.tryPromise({ try: async signal => {
   const [entry, root, mode] = process.argv.slice(2);
   if (!entry || !root || !['first-screen', 'push', 'workflow'].includes(mode ?? '')) throw new Error('Expected installed CLI, consumer root, and first-screen|push|workflow');
   let closed = false, output: HostElement | undefined, view: ModView | undefined;
-  const errors: unknown[] = [], tasks = new Set<HostTask>(), disposers: (() => void)[] = [];
+  const errors: unknown[] = [], tasks = new Set<HostTask>();
   const calls: string[][] = [];
   const timings: { operation: string; ms: number }[] = [];
   const context = (): HostContext => ({
@@ -55,8 +64,9 @@ const main = Effect.tryPromise({ try: async () => {
     },
     timer: { after(ms, callback) {
       let done = false;
-      const timer = setTimeout(() => { done = true; if (!closed) callback(context()); }, ms);
-      const task = { cancel() { clearTimeout(timer); done = true; }, is_done: () => done };
+      const timer = Effect.runFork(Effect.sleep(Duration.millis(ms)).pipe(Effect.andThen(Effect.sync(() => { done = true; if (!closed) callback(context()); }))));
+      fibers.add(timer);
+      const task = { cancel() { timer.interruptUnsafe(); done = true; }, is_done: () => done };
       tasks.add(task); return task;
     } },
   });
@@ -72,14 +82,21 @@ const main = Effect.tryPromise({ try: async () => {
       if (command !== 'concord') throw new Error(`Unexpected product command ${command}`);
       calls.push(args.slice(args.indexOf('--root') + 2));
       const started = performance.now();
-      const reply = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => execFile(process.execPath, [entry, ...args], { cwd: options.cwd, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
-        if (error && typeof error.code !== 'number') reject(error);
-        else resolve({ code: typeof error?.code === 'number' ? error.code : 0, stdout, stderr });
-      }));
+      const execution = Effect.scoped(Effect.gen(function*() {
+        const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [entry, ...args], {
+          cwd: options.cwd, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+        }));
+        const result = yield* Effect.all({ code: child.exitCode, stdout: Stream.mkString(Stream.decodeText(child.stdout)), stderr: Stream.mkString(Stream.decodeText(child.stderr)) }, { concurrency: 'unbounded' });
+        return { ...result, code: Number(result.code) };
+      }).pipe(Effect.timeout('30 seconds')));
+      const fiber = Effect.runFork(execution.pipe(Effect.forkIn(scope)));
+      const child = await Effect.runPromise(Fiber.join(fiber), { signal });
+      fibers.add(child);
+      const reply = await Effect.runPromise(Fiber.join(child), { signal });
       timings.push({ operation: args.slice(args.indexOf('--root') + 2).join(' '), ms: performance.now() - started });
       return reply;
     },
-    readTextFile: async (path: string) => readFile(path, 'utf8').catch(error => { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null; throw error; }),
+    readTextFile: (path: string) => Effect.runPromise(fs.readFileString(path).pipe(Effect.catch(error => error.reason._tag === 'NotFound' ? Effect.succeed(null) : Effect.fail(error)))),
     writeTextFile: async (path: string, text: string, expected: string | null) => {
       if (await host.readTextFile(path) !== expected) throw new Error('File changed');
       const temporary = `${path}.herdr-host-tmp`; await writeFile(temporary, text); await rename(temporary, path); return null;
@@ -89,11 +106,11 @@ const main = Effect.tryPromise({ try: async () => {
       if (!state) {
         state = { pending: [], resolve: undefined }; fileWatchers.set(path, state);
         const watched = state;
-        const watcher = watch(path, { recursive: true }, (_type, filename) => {
-          if (filename) watched.pending.push(join(path, String(filename)));
+        const watcher = Effect.runFork(fs.watch(path, { recursive: true }).pipe(Stream.runForEach(event => Effect.sync(() => {
+          watched.pending.push(join(path, event.path));
           if (watched.resolve) { const resolve = watched.resolve; watched.resolve = undefined; const paths = watched.pending.splice(0); resolve(paths); }
-        });
-        disposers.push(() => watcher.close());
+        })), Effect.catch(error => Effect.sync(() => { if (!closed) errors.push(error); }))));
+        fibers.add(watcher);
       }
       if (state.pending.length) return state.pending.splice(0);
       return await new Promise(resolve => { state.resolve = resolve; });
@@ -109,21 +126,21 @@ const main = Effect.tryPromise({ try: async () => {
       return names ? { format: 'module', source: names.map(name => `export const ${name} = globalThis.__concordHerdrBoundary.${name};`).join('\n'), shortCircuit: true } : next(url, context);
     },
   });
-  const waitFor = async (predicate: () => boolean) => {
-    const deadline = performance.now() + 30_000;
+  const waitFor = (predicate: () => boolean) => Effect.runPromise(Effect.gen(function*() {
     while (!predicate()) {
-      if (errors.length) throw errors[0];
-      if (performance.now() > deadline) throw new Error(`Mod description timeout: ${output?.text().slice(0, 1000)}`);
-      await new Promise(resolve => setTimeout(resolve, 5));
+      if (errors.length) return yield* Effect.fail(new HostFailure({ message: String(errors[0]) }));
+      yield* Effect.sleep('5 millis');
     }
     return performance.now();
-  };
+  }).pipe(Effect.timeoutOrElse({ duration: '30 seconds', orElse: () => Effect.fail(new HostFailure({ message: `Mod description timeout: ${output?.text().slice(0, 1000)}` })) })), { signal });
   const sourcePath = join(root, 'docs/feature/measured/README.md');
   let original: string | undefined;
   try {
     let started = performance.now();
-    const module = await import(new URL('../src/entry/herdr-mod/main.ts', import.meta.url).href) as { default: new() => ModView };
-    timings.push({ operation: 'load source mod', ms: performance.now() - started });
+    const mod = entry.endsWith('.ts') ? new URL('../src/entry/herdr-mod/main.ts', import.meta.url).href
+      : pathToFileURL(join(installationResources(installationRootForBin(entry)).herdrMod, 'main.js')).href;
+    const module = await import(mod) as { default: new() => ModView };
+    timings.push({ operation: entry.endsWith('.ts') ? 'load source mod' : 'load packaged mod', ms: performance.now() - started });
     view = new module.default(); view.init(undefined, context()); output = view.render(context());
     if (mode === 'workflow') {
       await waitFor(() => fileWatchers.size > 0);
@@ -145,7 +162,7 @@ const main = Effect.tryPromise({ try: async () => {
       if (output!.find('document-editor')!.state!.value() !== '# MY_CONFLICTING_DRAFT\n' || await readFile(sourcePath, 'utf8') !== disk) throw new Error('Conflict replaced the disk or draft');
       click('discard');
       await waitFor(() => output?.find(`concord-body-docs/feature/measured/README.md`)?.text().includes('AGENT_CHANGE') === true);
-      process.stdout.write(JSON.stringify({ boundary: 'actual built mod and public CLI; external Herdr UI only', text: output?.text(), calls, workflow: 'initialized, created, edited, saved, checked, preserved conflict, discarded' }) + '\n');
+      process.stdout.write(JSON.stringify({ boundary: 'actual mod and public CLI; external Herdr UI only', text: output?.text(), calls, workflow: 'initialized, created, edited, saved, checked, preserved conflict, discarded' }) + '\n');
       return;
     }
     let ended = await waitFor(() => output?.find('concord-tree')?.text().includes('measured') === true);
@@ -165,9 +182,10 @@ const main = Effect.tryPromise({ try: async () => {
   } finally {
     view?.close(context()); closed = true;
     for (const task of tasks) task.cancel();
-    for (const dispose of disposers) dispose();
+    await Effect.runPromise(Effect.forEach(fibers, Fiber.interrupt, { concurrency: 'unbounded', discard: true }));
     if (original !== undefined) { const temporary = `${sourcePath}.restore.tmp`; await writeFile(temporary, original); await rename(temporary, sourcePath); }
     hooks.deregister(); delete global.__concordHerdrBoundary;
   }
 }, catch: error => new HostFailure({ message: error instanceof Error ? error.message : String(error) }) });
+}));
 main.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
