@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/engineering/concord-self-hosting/README.md#从源码运行
+// @concord-implements docs/engineering/build/architecture.md#从源码运行
 import { lstatSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { packageRoot } from "./location.js";

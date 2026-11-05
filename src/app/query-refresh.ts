@@ -11,7 +11,7 @@ import { persist } from "./query-refresh-store.js";
 
 
 // @concord-code
-// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#刷新上限
+// @concord-implements docs/feature/local-data-engine/performance.md#刷新上限
 export function classifyQueryScan(result: OwnedProcessResult, scannedAt: number, elapsedMs: number, limitMs: number): QueryUpdate {
   const failed = (code: string, message: string, timing = false): QueryUpdate => ({ kind: 'failure', error: {
     failedAt: new Date().toISOString(), scannedAt, code, message: message.slice(0, 4096), ...(timing ? { elapsedMs, limitMs } : {}) } });
@@ -37,7 +37,7 @@ export function classifyQueryRefresh(before: string, after: string, result: Owne
 }
 
 // @concord-begin
-// @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md#刷新上限
+// @concord-implements docs/feature/local-data-engine/performance.md#刷新上限
 export const refreshQuery = Effect.fn('refreshQuery')(function*(input: string | undefined, query: Query, requestedAt: number, limitMs = 120_000) {
   const started = Date.now(), deadline = started + limitMs;
   const context = yield* queryContext(input, query);

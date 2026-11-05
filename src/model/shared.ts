@@ -104,7 +104,7 @@ export const GitCommit = Schema.String.check(Schema.isPattern(/^[0-9a-f]{40}$/))
 export const SourceRecordSchema = Schema.Struct({ path: Text, commit: GitCommit, digest: Sha256 });
 // @concord-end
 // @concord-begin
-// @concord-implements docs/feature/local-sdlc/library.md#owner
+// @concord-implements docs/feature/local-sdlc/format.md#owner
 /** Declarative owners hold current declarations only; Git and record owners keep their history (C-012-11). */
 const Title = Text.check(Schema.isMaxLength(1024), Schema.isPattern(/^[^\r\n\u2028\u2029]+$/u));
 const declarative = { format: Schema.Literal('concord.document/v1'), id: DocumentName, title: Title, description: Schema.optional(Text) };

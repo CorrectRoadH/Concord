@@ -85,7 +85,7 @@ function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange(valu
 }
 
 // @concord-code
-// @concord-implements docs/feature/web-workbench/README.md#web-组件组合
+// @concord-implements docs/feature/web-workbench/architecture.md#web-组件组合
 function Shell() {
   useNavigationScroll();
   const { snapshot, git, dirty, notices, clearNotice, flushAutoSave, discardAutoSave } = useWorkspace();

@@ -318,7 +318,7 @@ export function CreateDocument({
 }
 
 // @concord-code
-// @concord-implements docs/feature/web-workbench/README.md#web-组件组合
+// @concord-implements docs/feature/web-workbench/architecture.md#web-组件组合
 export function DocumentsListPage({
   kind,
 }: {
@@ -383,7 +383,7 @@ export function DocumentsListPage({
 }
 
 // @concord-code
-// @concord-implements docs/feature/web-workbench/README.md#web-组件组合
+// @concord-implements docs/feature/web-workbench/architecture.md#web-组件组合
 function DocumentSummary({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   if (metadata.kind === "roadmap") {
@@ -566,7 +566,7 @@ function DocumentLayout({
 
 // @concord-code
 // @concord-implements docs/feature/web-workbench/README.md#文档阅读与编辑
-// @concord-implements docs/feature/web-workbench/README.md#自动保存
+// @concord-implements docs/feature/web-workbench/ui.md#自动保存
 function DocumentFiles({
   document,
   pages,
@@ -794,7 +794,7 @@ function FileTree({ nodes, ownerDirectory, expanded, selectedPath, onToggle, onS
 // @concord-end
 
 // @concord-code
-// @concord-implements docs/feature/web-workbench/README.md#自动保存
+// @concord-implements docs/feature/web-workbench/ui.md#自动保存
 function MetadataForm({ document }: { document: WorkspaceDocument }) {
   const metadata = document.metadata
   return <><PanelHeader title="文档信息" /><ContentSection title="来源"><dl>

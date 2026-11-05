@@ -31,7 +31,7 @@ test('CLI top-level command definitions have scenarios or documented exemptions'
   const artifact = yield* loadArtifact('candidate', root, installedConcordCli());
   const groups = yield* commandGroups(artifact.entry, root, work);
   const scenarios = yield* loadScenarios(root);
-  const policy = readFileSync(join(root, 'docs/engineering/concord-self-hosting/performance.md'), 'utf8');
+  const policy = readFileSync(join(root, 'docs/engineering/performance/format.md'), 'utf8');
   const exemptions = [...policy.matchAll(/^\| ((?:`[^`]+`[、 ]*)+) \| ([^|]+) \|$/gmu)].flatMap(match => [...match[1]!.matchAll(/`([^`]+)`/gu)].map(item => item[1]!));
   const covered = scenarios.map(s => runArguments(s.run).find(arg => !arg.startsWith('--')));
   for (const group of groups) assert.ok(covered.includes(group) || exemptions.includes(group), `Uncovered CLI command group: ${group}`);

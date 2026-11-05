@@ -6,18 +6,18 @@ import { dependencyViolations, inspectArchitecture } from './support/architectur
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 
-// @feature docs/engineering/concord-self-hosting/test-architecture.md#架构守护
+// @feature docs/engineering/testing/architecture.md#架构守护
 test('source import and export graphs obey module exits, layers, domain order and composition roots', () => Effect.runSync(Effect.sync(() => {
   const audit = inspectArchitecture(root);
   assert.deepEqual(dependencyViolations(audit), []);
 })));
 
-// @feature docs/engineering/concord-self-hosting/test-architecture.md#架构守护
+// @feature docs/engineering/testing/architecture.md#架构守护
 test('model, domain and application code access platform capabilities through services', () => Effect.runSync(Effect.sync(() => {
   assert.deepEqual(inspectArchitecture(root).platform, []);
 })));
 
-// @feature docs/engineering/concord-self-hosting/test-architecture.md#架构守护
+// @feature docs/engineering/testing/architecture.md#架构守护
 test('domain and application consumers cannot open persistent cache handles or select their own access mode', () => Effect.runSync(Effect.sync(() => {
   const audit = inspectArchitecture(root);
   assert.deepEqual(audit.edges.filter(edge => /^src\/(?:domain|app)\//u.test(edge.from)
@@ -25,7 +25,7 @@ test('domain and application consumers cannot open persistent cache handles or s
     && edge.bindings.some(name => name === 'openHawdb' || name === 'withPersistentCache')), []);
 })));
 
-// @feature docs/engineering/concord-self-hosting/test-architecture.md#架构守护
+// @feature docs/engineering/testing/architecture.md#架构守护
 test('architecture audit sees type exports, finite dynamic imports and aliased process capabilities', () => Effect.runSync(Effect.sync(() => {
   const sources = new Map([
     ['src/model/index.ts', 'export type { Hidden } from "../domain/documents/index.js";'],

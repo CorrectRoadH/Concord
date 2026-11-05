@@ -66,7 +66,7 @@ function ConfigurationLoader() {
 
 // @concord-code
 // @concord-implements docs/feature/project-onboarding/use-case/maintain-project-config.md
-// @concord-implements docs/feature/web-workbench/README.md#自动保存
+// @concord-implements docs/feature/web-workbench/ui.md#自动保存
 function ConfigurationEditor({ initial, digest }: { initial: ProjectConfig; digest: string }) {
   const { api, requestRefresh, notify } = useWorkspace()
   const [baseline, setBaseline] = React.useState({ config: initial, digest })

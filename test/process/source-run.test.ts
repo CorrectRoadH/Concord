@@ -2,7 +2,7 @@ import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 import { nativeArtifactRoot, nativeSourceFiles } from "../../src/base/installation/index.js";
 import { basename, dirname } from "node:path";
 // @concord-file
-// @concord-implements docs/engineering/concord-self-hosting/README.md#从源码运行
+// @concord-implements docs/engineering/build/architecture.md#从源码运行
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, symlinkSync } from 'node:fs';

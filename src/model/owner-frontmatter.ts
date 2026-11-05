@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/local-sdlc/library.md#owner
+// @concord-implements docs/feature/local-sdlc/format.md#owner
 import { Schema } from "effect";
 import { stringify } from './markdown-dependencies.js';
 import { FeedbackSourceSchema } from "./feedback-schema.js";

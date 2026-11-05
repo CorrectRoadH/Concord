@@ -100,7 +100,7 @@ test('C23 another installation reports a version conflict and preserves the exis
   } finally { await old.close(); await stop(root); rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
 });
 
-// @feature docs/engineering/concord-self-hosting/README.md
+// @feature docs/engineering/build/architecture.md#从源码运行
 test('source edits replace the same checkout service only after the previous owner exits', { timeout: 45_000 }, async () => {
   const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-source-reload-'));
   let entry = '';

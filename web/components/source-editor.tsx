@@ -1,5 +1,5 @@
 // @concord-file
-// @concord-implements docs/feature/web-workbench/README.md#自动保存
+// @concord-implements docs/feature/web-workbench/ui.md#自动保存
 // @concord-implements docs/feature/web-workbench/use-case/use-web-workbench.md#验收
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { javascript } from '@codemirror/lang-javascript';
