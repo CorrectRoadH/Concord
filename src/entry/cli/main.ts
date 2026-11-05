@@ -14,7 +14,7 @@ import { Git } from '../../base/git/index.js';
 import { Workspace } from '../../base/workspace/index.js';
 import { Sources } from '../../base/sources/index.js';
 import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.js';
-import { ServerRuntime, serverSourceDigest } from '../../base/server-lock/index.js';
+import { ServerRuntime } from '../../base/server-lock/index.js';
 const loadClient = () => Effect.tryPromise(() => import('../server/index.js')).pipe(Effect.mapError(failure));
 const requestWorkspace: typeof import('../server/index.js').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
 const ServerFailure = Schema.Struct({ _tag: Schema.Literal('WorkspaceServerError'), code: Schema.String, message: Schema.String, details: Schema.optional(Schema.Json) });
@@ -84,11 +84,11 @@ const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceReco
   const runtime = yield* ServerRuntime, client = yield* loadClient();
   const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
   if (!record) {
-    yield* Effect.try({ try: serverSourceDigest, catch: failure });
+    yield* Effect.try({ try: runtime.sourceDigest, catch: failure });
     return false;
   }
   if (record.installation === (installation ?? (yield* installationIdentity(runtime))) && record.protocol === client.PROTOCOL) {
-    const sourceDigest = yield* Effect.try({ try: serverSourceDigest, catch: failure });
+    const sourceDigest = yield* Effect.try({ try: runtime.sourceDigest, catch: failure });
     if (sourceDigest !== undefined && record.sourceDigest !== sourceDigest && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) {
       yield* Effect.scoped(Effect.gen(function*() {
         const connection = yield* client.connectWorkspaceSocket(record.socket.path, record.installation, record.token).pipe(Effect.mapError(workspaceServerFailure));

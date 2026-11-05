@@ -11,7 +11,7 @@ export default {
     "kind": "command",
     "prepare": [
       ["pnpm", "install", "--frozen-lockfile", "--offline"],
-      ["pnpm", "exec", "vp", "build"]
+      ["pnpm", "exec", "vp", "run", "build:native"]
     ],
     "argv": [
       "node",

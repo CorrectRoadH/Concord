@@ -107,8 +107,9 @@ export class ServerRuntime extends Context.Service<ServerRuntime, {
   readonly acquire: typeof acquireServerRuntime;
   readonly read: typeof readServerRecord;
   readonly installation: typeof serverInstallation;
+  readonly sourceDigest: typeof serverSourceDigest;
   readonly released: typeof serviceLockReleased;
   readonly cwd: string;
 }>()('concord/base/server-lock/ServerRuntime') {
-  static readonly layer = Layer.succeed(ServerRuntime, { acquire: acquireServerRuntime, read: readServerRecord, installation: serverInstallation, released: serviceLockReleased, cwd: serverCwd });
+  static readonly layer = Layer.succeed(ServerRuntime, { acquire: acquireServerRuntime, read: readServerRecord, installation: serverInstallation, sourceDigest: serverSourceDigest, released: serviceLockReleased, cwd: serverCwd });
 }
