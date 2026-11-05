@@ -27,15 +27,15 @@
      .agents/skills/concord-implement/SKILL.md
      .agents/skills/concord-review/SKILL.md
      .agents/skills/concord-fix/SKILL.md
-     .claude/skills/concord-spec -> ../../.agents/skills/concord-spec
-     .claude/skills/concord-implement -> ../../.agents/skills/concord-implement
-     .claude/skills/concord-review -> ../../.agents/skills/concord-review
-     .claude/skills/concord-fix -> ../../.agents/skills/concord-fix
+     .claude/skills/concord-spec/SKILL.md
+     .claude/skills/concord-implement/SKILL.md
+     .claude/skills/concord-review/SKILL.md
+     .claude/skills/concord-fix/SKILL.md
 
    Next: commit these files so everyone on the project gets the commands.
    ```
 
-   Codex 从 `.agents/skills/` 读取 skill，Claude Code 从 `.claude/skills/` 读取，两处指向同一份文件。
+   Codex 从 `.agents/skills/` 读取 skill，Claude Code 从 `.claude/skills/` 读取。两处是内容相同的普通文件，都由 Concord 生成并一起更新，和其它文档一样在同一次写入中提交，中断后由 `concord recover` 恢复。
 
 2. 在 agent 里触发一步。 {#invoke}
 
@@ -65,11 +65,11 @@
 | 情形 | 结果 |
 | --- | --- |
 | skill 文件已由 Concord 生成 | 重写为当前内容，列在 `Updated` 或 `Unchanged` 下 |
-| 同一路径已有不是 Concord 生成的文件或目录 | 返回 `SkillPathOccupied`，不写任何文件 |
+| 任一目标路径已有不带标记的文件，或是目录、符号链接 | 返回 `SkillPathOccupied`，不写任何文件 |
 | 加 `--dry-run` | 列出将要创建或更新的路径，不写文件 |
-| 维护者不想要某个 skill | 直接删除对应目录与链接；`concord skills install` 会重新创建 |
+| 维护者不想要某个 skill | 直接删除两处对应目录；`concord skills install` 会重新创建 |
 
-Concord 生成的 `SKILL.md` 带有 `concord-managed` 标记行，只有带标记的文件会被重写。符号链接只在目标是对应的 `.agents/skills/concord-<名称>` 时视为 Concord 生成。
+Concord 生成的 `SKILL.md` 带有 `concord-managed` 标记行，只有带标记的文件会被重写。
 
 ## Spec 来源
 

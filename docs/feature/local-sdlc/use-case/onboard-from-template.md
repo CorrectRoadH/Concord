@@ -51,7 +51,7 @@
    - 术语与写作政策：随包空 catalog `docs/concepts.md`、预设的 `docs/writing.md`。
    - 模板与目录：`docs/_template/`、各分类目录的 README。
    - `AGENTS.md` 中的 Concord 区块。
-   - 工作流 skill：`.agents/skills/concord-*/SKILL.md` 与 `.claude/skills/` 下指向它们的链接，见[用斜杠命令走开发流程](../../project-onboarding/use-case/run-workflow-from-agent.md)。
+   - 工作流 skill：`.agents/skills/concord-*/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，见[用斜杠命令走开发流程](../../project-onboarding/use-case/run-workflow-from-agent.md)。
 
 3. 查看接入缺口。 {#doctor}
 

@@ -71,7 +71,7 @@ Inspect configuration: concord doctor
 {"operation":"init","dryRun":false,"changedPaths":["docs/taste.md","..."],"config":{},"createdPaths":["docs/taste.md","..."],"preservedPaths":[],"guide":"docs-from-code"}
 ```
 
-`concord skills install` 创建或更新 `.agents/skills/concord-{spec,implement,review,fix}/SKILL.md` 与 `.claude/skills/` 下指向它们的符号链接；`init` 安装同一组文件。人读输出按 `Created`、`Updated`、`Unchanged` 分组列出路径。`--json` 返回：
+`concord skills install` 创建或更新 `.agents/skills/concord-{spec,implement,review,fix}/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，全部是普通文件，在一次写入中提交；`init` 安装同一组文件。人读输出按 `Created`、`Updated`、`Unchanged` 分组列出路径。`--json` 返回：
 
 ```json
 {"operation":"skills-install","dryRun":false,"createdPaths":[".agents/skills/concord-spec/SKILL.md","..."],"updatedPaths":[],"unchangedPaths":[]}
@@ -79,7 +79,7 @@ Inspect configuration: concord doctor
 
 | 错误 | 触发条件 |
 | --- | --- |
-| `SkillPathOccupied` | 目标路径已有不带 `concord-managed` 标记的文件，或指向别处的链接；`details.path` 给出路径，不写任何文件 |
+| `SkillPathOccupied` | 目标路径已有不带 `concord-managed` 标记的文件，或是目录、符号链接；`details.path` 给出路径，不写任何文件 |
 
 `concord doctor --json` 报告配置与接入缺口，不运行测试：
 
