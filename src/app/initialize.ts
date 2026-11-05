@@ -60,7 +60,7 @@ export const initialize = Effect.fn('initialize')(function*(repo: Repository, dr
     'docs/engineering/README.md': ['Engineering', 'Repository testing and maintenance mechanisms, their usage and acceptance requirements.', 'new engineering'],
     'docs/issues/README.md': ['Local feedback and observations', 'Editable local feedback, imported source snapshots, and investigation links. Concord reads configured providers only during explicit sync/import and never mutates remote issues.', 'new issue'],
   };
-  sections['memory/README.md'] = ['Engineering memory', 'Decisions, insights and notes. Edit files directly and validate with concord check.', 'new memory'];
+  sections['memory/README.md'] = ['Engineering memory', 'Reusable lessons from developing this project: measurements, root causes, pitfalls and tradeoffs. Edit files directly and validate with concord check.', 'new memory'];
   for (const [path, [title, description, command]] of Object.entries(sections)) paths[path] = `# ${title}\n\n${description}\n\nStart with \`concord ${command} --help\`.\nUse \`concord list\` to discover documents.\n`;
   for (const path of Object.keys(paths)) if (repo.read(path) !== undefined) throw new ConcordError('InitializationConflict', `${path} already exists; no existing file will be overwritten`);
   const agentBefore = repo.read('AGENTS.md') ?? null;

@@ -75,7 +75,7 @@ test('exact references derive identity from paths and reject malformed owners', 
     throwsCode('InvalidData', () => readDocumentReference(repo, 'docs/feature/alpha/nested/README.md', ['feature']));
 
     write(root, 'memory/historical-feature.md', renderDocument(alpha.metadata, alpha.body));
-    throwsCode('InvalidData', () => readDocumentReference(repo, 'memory/historical-feature.md', ['feature']));
+    throwsCode('InvalidReferenceTarget', () => readDocumentReference(repo, 'memory/historical-feature.md', ['feature']));
 
     const flow = readDocumentReference(repo, 'docs/feature/alpha/use-case/flow.md', ['use-case']);
     write(root, 'docs/feature/beta/use-case/misplaced.md', renderDocument(flow.metadata, flow.body));

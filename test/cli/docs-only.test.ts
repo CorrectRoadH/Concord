@@ -41,8 +41,8 @@ test('packed CLI manages documentation without test roots and can later discover
     const config = readProjectConfig(root);
     assert.deepEqual(config.testRoots, []);
     call(['new', 'feature', 'backup', '--title', 'Backup'], ack);
-    call(['new', 'design', 'storage', '--title', 'Storage', '--alternative', 'files'], ack);
-    assert.equal(existsSync(join(root, 'docs/design/storage/plans/files/README.md')), true);
+    call(['new', 'design', 'storage', '--title', 'Storage'], ack);
+    assert.equal(existsSync(join(root, 'docs/design/storage.md')), true);
     const initial = call(['doctor'], diagnosis);
     assert.equal(initial.cases, 0);
     assert.deepEqual(initial.missingTestRoots, []);

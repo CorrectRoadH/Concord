@@ -63,7 +63,22 @@ test('scenario execution checks every concurrent result and restores beforeEach 
   assert.equal(existsSync(transient), false);
   const status = yield* mustRun(['git', 'status', '--porcelain'], { cwd: consumer.root, outputDir: work });
   assert.equal(status.stdout.trim(), '');
-  const cold = yield* executeScenario({ id: 'local-sdlc/cold-fixture', consumer: 'fixture:minimal', state: 'cold', run: ['--json', 'cache', 'status'], expect: { exitCode: 0 } }, context);
+  const coldCommands: (readonly string[])[] = [];
+  const cold = yield* executeScenario({
+    id: 'local-sdlc/cold-fixture', consumer: 'fixture:minimal', state: 'cold',
+    beforeEach: () => Effect.sync(() => assert.deepEqual(coldCommands, [['cache', 'clear']])),
+    run: ['--json', 'cache', 'status'], expect: { exitCode: 0 },
+  }, {
+    ...context,
+    cli: (argv, timeoutMs) => context.cli(argv[0] === 'cache' && argv[1] === 'clear' ? [...argv, '--json'] : argv, timeoutMs).pipe(Effect.tap(result => Effect.sync(() => {
+      coldCommands.push(argv);
+      if (argv[0] === 'cache' && argv[1] === 'clear') {
+        assert.equal(result.exitCode, 0, result.stderr);
+        Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.Literals(['cleared', 'empty']) })))(result.stdout);
+      }
+    }))),
+  });
   const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.String })), { onExcessProperty: 'ignore' })(cold.stdout);
-  assert.notEqual(decoded.status, 'ready');
+  assert.deepEqual(coldCommands, [['cache', 'clear']]);
+  assert.ok(['empty', 'ready'].includes(decoded.status), cold.stdout);
 }).pipe(Effect.scoped)));

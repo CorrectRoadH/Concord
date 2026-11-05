@@ -152,8 +152,7 @@ const JournalSchema = Schema.Struct({
 type Journal = typeof JournalSchema.Type;
 
 function currentJournal(path: string): Journal {
-  try { return jsonFile(path, JournalSchema); }
-  catch (cause) { throw new ConcordError('RecoveryRequired', 'Cannot decode the publication journal; preserve it for recovery', cause); }
+  return jsonFile(path, JournalSchema);
 }
 // @concord-end
 

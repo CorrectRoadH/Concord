@@ -1,6 +1,6 @@
 import { packageBin, packConcord, installConcord, assert, execFileSync, spawnSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, statSync, tmpdir, join, resolve, test, Effect, Schema, makeOwnedProcessService, LocalRepository, initialize, setConfig, showConfig, type Call, type Receipt, connection, issue, scratch, bin, scenarioFile, callsFile, packedCli, consumer, mode, calls, writes, cli, plan, execute, error, alterReceipt } from '../support/issue-remote-fixture.js';
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed plan/execute binds authorization, consumes once, uses stdin and emits private outcome', () => Effect.runPromise(Effect.sync(() => {
+test('packed preview/apply binds authorization, consumes once, uses stdin and emits private outcome', () => Effect.runPromise(Effect.sync(() => {
   const root = consumer('authorization'); mode();
   const receipt = plan(root, 'close', ['12', '--reason', 'completed']);
   const before = calls().length;
@@ -14,11 +14,11 @@ test('packed plan/execute binds authorization, consumes once, uses stdin and emi
   const outcome = join(root, '.git/concord/issue-plan/v1/consumed', `${receipt.receiptId}.outcome.json`);
   assert.equal((JSON.parse(readFileSync(outcome, 'utf8')) as { state: string }).state, 'applied'); assert.equal(statSync(outcome).mode & 0o777, 0o600);
   error(execute(root, receipt), 'IssuePlanConsumed'); assert.equal(writes().length, 1);
-  error(cli(root, ['plan', 'close', '12', '--connection', connection.id]), 'IssueNoChange');
+  error(cli(root, ['preview', 'close', '12', '--connection', connection.id]), 'IssueNoChange');
 })));
 
 // @use-case docs/feature/neutral-project-governance/use-case/mutate-remote-issue.md
-test('packed execute rejects expired, drifted, corrupt and wrong repository plans without writes', () => Effect.runPromise(Effect.sync(() => {
+test('packed apply rejects expired, drifted, corrupt and wrong repository plans without writes', () => Effect.runPromise(Effect.sync(() => {
   for (const variant of ['expired', 'drifted', 'repository', 'corrupt']) {
     const root = consumer(variant); mode(); const receipt = plan(root, 'close');
     if (variant === 'expired') alterReceipt(root, receipt, { expiresAt: 0 });

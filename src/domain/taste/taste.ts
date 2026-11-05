@@ -175,8 +175,6 @@ export interface TasteLinkScan {
 }
 
 const inScope = (path: string) => path.endsWith('.md') && path !== TASTE_PATH && !path.startsWith('docs/_template/');
-/** Design and Research pages are records read as of when they were written; links to IDs removed since then stay valid history. */
-const isRecord = (path: string) => path.startsWith('docs/design/') || path.startsWith('docs/research/');
 
 /** Every inline link from authored docs Markdown is a reference occurrence; reverse views derive from this scan. */
 export function scanTasteLinks(repo: Repository, index: ReadonlyMap<string, { readonly entry: string }>, read: (path: string) => string | undefined = path => repo.read(path)): TasteLinkScan {
@@ -202,7 +200,6 @@ export function scanTasteLinks(repo: Repository, index: ReadonlyMap<string, { re
       if (target.kind === 'invalid') { complete = false; findings.push({ code: 'TasteLinkInvalid', path, line: link.line, message: target.message }); continue; }
       const resolved = index.get(target.id);
       if (resolved === undefined) {
-        if (isRecord(path)) continue;
         broken.push({ path, line: link.line, id: target.id });
         findings.push({ code: 'AnchorNotFound', path, line: link.line, message: `Taste entry ${target.id} does not exist` });
         continue;

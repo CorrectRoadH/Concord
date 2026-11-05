@@ -208,11 +208,11 @@ test('steps C19 second CLI blocks interrupted work and recovers prepared and com
 
 // @use-case docs/feature/local-sdlc/use-case/link-tests-to-steps.md#rename-step
 // @name steps-managed-reference-block
-test('steps rename updates ordinary Design decision Markdown references', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
+test('steps rename updates single-page Design Markdown references', () => Effect.runPromise(Effect.sync(() => consumer((repo, root) => {
   write(root, path, document('1. A {#old}\n'));
-  createDocument(repo, 'design', { id: 'sample', title: 'Sample', pages: [] });
+  createDocument(repo, 'design', { id: 'sample', title: 'Sample' });
   const design = 'docs/design/sample.md';
-  write(root, design, `${repo.read(design)!}\n[Step](../../feature/sample/use-case/flow.md#old)\n`);
+  write(root, design, `${repo.read(design)!}\n[Step](../feature/sample/use-case/flow.md#old)\n`);
   renameUseCaseStep(repo, path, 'old', 'new');
   assert.match(repo.read(path)!, /\{#new\}/u);
   assert.match(repo.read(design)!, /flow\.md#new/u);

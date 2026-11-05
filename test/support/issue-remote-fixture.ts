@@ -16,7 +16,12 @@ import { LocalRepository } from "./repository.js";
 import { setConfig, showConfig } from "../../src/app/index.js";
 
 export interface Call { readonly args: readonly string[]; readonly stdin: string; readonly env: Readonly<Record<string, unknown>> }
-export interface Receipt { readonly receiptId: string; readonly authorize: string; readonly payloadDigest: string; readonly expiresAt: string; readonly target: string }
+const ReceiptSchema = Schema.Struct({
+  operation: Schema.Literal('issue-plan'), receiptId: Schema.String, connection: Schema.String,
+  issueOperation: Schema.String, target: Schema.String, payloadDigest: Schema.String,
+  remotePreimageDigest: Schema.String, expiresAt: Schema.String, authorize: Schema.String,
+});
+export type Receipt = typeof ReceiptSchema.Type;
 export const connection = { id: 'product-gh', provider: 'github', transport: 'gh', owner: 'example', repo: 'product', repositoryId: '42' } as const;
 export const issue = (number = 12, extra: Readonly<Record<string, unknown>> = {}) => ({ number, html_url: `https://github.com/example/product/issues/${number}`, title: 'Planned title', body: 'initial', state: 'open', labels: [{ name: 'old' }], ...extra });
 export const scratch = mkdtempSync(join(tmpdir(), 'concord-issue-remote-'));
@@ -49,14 +54,31 @@ export function cli(root: string, args: readonly string[], timeout = 150_000) {
 export function plan(root: string, operation: string, args: readonly string[] = ['12']): Receipt {
   const result = cli(root, ['preview', operation, ...args, '--connection', connection.id]);
   assert.equal(result.status, 0, result.stderr);
-  const receipt = JSON.parse(result.stdout) as Receipt;
+  const receipt = Schema.decodeUnknownSync(Schema.fromJsonString(ReceiptSchema), { onExcessProperty: 'error' })(result.stdout);
+  assert.equal(receipt.connection, connection.id);
+  assert.equal(receipt.issueOperation, operation);
+  assert.match(receipt.payloadDigest, /^sha256:[a-f0-9]{64}$/u);
+  assert.match(receipt.remotePreimageDigest, /^sha256:[a-f0-9]{64}$/u);
+  assert.match(receipt.expiresAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|\+00:00)$/u);
+  assert.ok(Number.isFinite(Date.parse(receipt.expiresAt)));
   assert.equal(writes().length, 0);
   assert.match(receipt.authorize, new RegExp(`^${operation}:example/product(?:#12)?@[a-f0-9]{12}$`));
   assert.equal(receipt.authorize.split('@')[1], receipt.payloadDigest.slice(7, 19));
   assert.equal(statSync(join(root, '.git/concord/issue-plan/v1/planned', `${receipt.receiptId}.json`)).mode & 0o777, 0o600);
   return receipt;
 }
-export function execute(root: string, receipt: Receipt, authorization = receipt.authorize, selected: string = connection.id) { return cli(root, ['apply', receipt.receiptId, '--connection', selected, '--authorize', authorization]); }
+export function execute(root: string, receipt: Receipt, authorization = receipt.authorize, selected: string = connection.id) {
+  const result = cli(root, ['apply', receipt.receiptId, '--connection', selected, '--authorize', authorization]);
+  if (result.status === 0) {
+    const output = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({
+      operation: Schema.Literal('issue-execute'), receiptId: Schema.String, issueOperation: Schema.String,
+      issue: Schema.Struct({ number: Schema.Int, url: Schema.String, state: Schema.String, title: Schema.String, labels: Schema.Array(Schema.String) }),
+    })), { onExcessProperty: 'error' })(result.stdout);
+    assert.equal(output.receiptId, receipt.receiptId);
+    assert.equal(output.issueOperation, receipt.issueOperation);
+  }
+  return result;
+}
 export function error(result: ReturnType<typeof cli>, code: string | readonly string[]) { assert.equal(result.status, 1, result.stdout); const actual = (JSON.parse(result.stderr) as { error: string }).error; if (typeof code === 'string') assert.equal(actual, code, result.stderr); else assert.ok(code.includes(actual), result.stderr); }
 export function alterReceipt(root: string, receipt: Receipt, patch: Readonly<Record<string, unknown>>) {
   const path = join(root, '.git/concord/issue-plan/v1/planned', `${receipt.receiptId}.json`);

@@ -1,6 +1,6 @@
 import { createRequire, packageBin, createConsumer, packConcord, installConcord, assert, execFileSync, spawn, spawnSync, mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync, tmpdir, join, resolve, test, after, before, once, createServer, pathToFileURL, Effect, Schema, chromium, expect, type Browser, pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh, ProjectSchema, digest, caseDiscriminator, deriveTestReference, parseDocumentRecord, renderDocument, HAWDB_REVISION, openHawdb, verifyInstalledNative, settleRefreshes, Ack, ErrorOutput, DigestOutput, PageOutput, AnnotationOutput, CheckOutput, TraceOutput, DoctorOutput, DryRunOutput, OwnerOutput, StateOutput, TemplatesOutput, scratch, cli, call, callString, readPage, savePage, consumer, write } from '../support/cli-fixture.js';
 
-// @use-case docs/feature/feedback/use-case/triage-feedback.md
+// @use-case docs/feature/feedback/use-case/manage-local-observations.md
 test('packed feedback commands persist connections and local triage without remote calls', () => Effect.runPromise(Effect.sync(() => {
  const root=consumer('packed-feedback');
  call(root,['feedback','connection','add','--id','github-main','--provider','github','--owner','example','--repo','demo','--credential-env','CONCORD_TEST_MISSING_TOKEN'],Ack);
@@ -19,19 +19,20 @@ test('packed feedback commands persist connections and local triage without remo
  const listed=call(root,['feedback','list'],Schema.Unknown);
  assert.match(JSON.stringify(listed),/observation/);
  call(root,['feedback','show','observation'],Schema.Unknown);
- call(root,['issue','close','observation','--reason','Investigation complete'],Ack);
  call(root,['new', 'issue','pending','--title','Pending observation'],Ack);
  const feedbackList=Schema.Struct({feedback:Schema.Array(Schema.Struct({document:Schema.Struct({metadata:Schema.Struct({id:Schema.String})})}))});
  const issueList=Schema.Struct({drafts:Schema.Array(Schema.Struct({metadata:Schema.Struct({id:Schema.String})}))});
- assert.deepEqual(call(root,['feedback','list','--provider','local','--state','closed','--triage','closed','--query','LOCAL'],feedbackList).feedback.map(item=>item.document.metadata.id),['observation']);
- assert.deepEqual(call(root,['feedback','list','--state','open','--triage','pending'],feedbackList).feedback.map(item=>item.document.metadata.id),['pending']);
+ assert.deepEqual(call(root,['feedback','list','--provider','local','--triage','linked','--query','LOCAL'],feedbackList).feedback.map(item=>item.document.metadata.id),['observation']);
+ assert.deepEqual(call(root,['feedback','list','--triage','pending'],feedbackList).feedback.map(item=>item.document.metadata.id),['pending']);
  assert.deepEqual(call(root,['feedback','list','--provider','github'],feedbackList).feedback,[]);
- assert.deepEqual(call(root,['action','--input','-'],feedbackList,JSON.stringify({action:'feedback.list',provider:'local',state:'open',triage:'pending'})).feedback.map(item=>item.document.metadata.id),['pending']);
- assert.deepEqual(call(root,['action','--input','-'],issueList,JSON.stringify({action:'issue.list',state:'closed'})).drafts.map(item=>item.metadata.id),['observation']);
+ assert.deepEqual(call(root,['action','--input','-'],feedbackList,JSON.stringify({action:'feedback.list',provider:'local',triage:'pending'})).feedback.map(item=>item.document.metadata.id),['pending']);
+ assert.deepEqual(call(root,['action','--input','-'],issueList,JSON.stringify({action:'issue.list',query:'Local observation'})).drafts.map(item=>item.metadata.id),['observation']);
  call(root,['action','--input','-'],ErrorOutput,JSON.stringify({action:'feedback.list',state:'draft'}),1);
- const closed=parseDocumentRecord(relative,readFileSync(join(root,relative),'utf8'));
  call(root,['feedback','connection','remove','github-main'],Ack);
  assert.ok(existsSync(join(root,relative)),'removing a connection must preserve local observations');
+ call(root,['issue','close','observation','--reason','Investigation complete'],Ack);
+ assert.equal(existsSync(join(root,relative)),false);
+ assert.deepEqual(call(root,['feedback','list','--provider','local'],feedbackList).feedback.map(item=>item.document.metadata.id),['pending']);
  assert.equal(call(root,['check'],CheckOutput).ok,true);
 })));
 
@@ -75,12 +76,14 @@ test('packed PR export preserves Git object types and refuses unsafe or incomple
   const realGit=execFileSync('sh',['-c','command -v git'],{encoding:'utf8'}).trim();
   const quote=(value:string)=>"'"+value.replaceAll("'","'\\''")+"'";
   writeFileSync(join(shim,'git'),`#!/bin/sh\ncase " $* " in *" diff "*) echo $$ > "$CONCORD_TEST_GIT_PID"; sleep 60 & wait;; *) exec ${quote(realGit)} "$@";; esac\n`,{mode:0o755});
+  execFileSync(process.execPath,['--import','tsx','-e',''],{env:{...process.env,TMPDIR:temporary}});
+  const loaderEntries=readdirSync(temporary).sort();
   const child=spawn(process.execPath,[cli,'--root',root,'--json','view','export','--base',base,'--head',head,'--out',join(scratch,'cancelled-out')],{env:{...process.env,PATH:shim+':'+process.env.PATH,TMPDIR:temporary,CONCORD_TEST_GIT_PID:pidFile},stdio:'ignore'});
   const exited=once(child,'exit');
   try{
    const deadline=Date.now()+15000;while(!existsSync(pidFile)&&Date.now()<deadline)await Effect.runPromise(Effect.sleep('20 millis'));
    assert.ok(existsSync(pidFile),'export reached the scoped Git comparison');const pid=Number(readFileSync(pidFile,'utf8').trim());
-   child.kill('SIGTERM');await exited;assert.throws(()=>process.kill(pid,0));assert.deepEqual(readdirSync(temporary),[],'interruption releases the temporary Git repository');
+   child.kill('SIGTERM');await exited;assert.throws(()=>process.kill(pid,0));assert.deepEqual(readdirSync(temporary).sort(),loaderEntries,'interruption releases the temporary Git repository');
   }finally{if(child.exitCode===null&&child.signalCode===null){child.kill('SIGKILL');await exited;}}
  }
 });

@@ -18,10 +18,10 @@ Code declarations describe implementation associations, not completion or test c
 - [Roadmap](roadmap/README.md): a product direction in the same genre as Feature that has not been adopted yet. Its design is incomplete, or it is designed but not scheduled.
 - Design: one open tradeoff in docs/design/<name>.md; write the adopted rule in Spec and delete the Design when decided.
 - [Engineering](engineering/README.md): how this repository is tested and maintained.
-- [Memory](../memory/README.md): decisions, insights, and notes.
+- [Memory](../memory/README.md): reusable lessons from developing this project: measurements, root causes, pitfalls and tradeoffs.
 - [Issues](issues/README.md): local observations awaiting investigation.
 
-Write contracts as declarations of intended behavior, constraints, and acceptance. Product workflows and lifecycle rules belong in contracts. Development logs, investigation history, and implementation progress belong in Memory. Observations awaiting investigation belong in Issues.
+Write contracts as declarations of intended behavior, constraints, and acceptance. Product workflows and lifecycle rules belong in contracts. Memory keeps reusable lessons: measurements, root causes, pitfalls and tradeoffs. Process logs and delivery progress stay outside the repository. Observations awaiting investigation belong in Issues.
 
 Behavior pages (Feature README, Use Case, cli, library) state commands, real human and JSON output, exit codes, and named errors. The architecture page states how the Feature is implemented. Run \`concord --skill document\` for the full rules.
 
@@ -57,7 +57,7 @@ Feature, Roadmap, and each Design candidate require README. Select optional page
 
 Design decision wrapper pages are always created. Engineering starts with README and expands by topic.
 
-Add supporting pages by editing files directly and link them from README. Design candidates use plans/name.md or plans/name/README.md, never both.
+Add supporting pages by editing files directly and link them from README. Write each open Design tradeoff in one docs/design/<name>.md file.
 
 Document IDs and Use Case filenames also accept Unicode letters, combining marks and numbers, with single hyphen separators; spelling is preserved. Names cannot contain path separators, whitespace or traversal components.
 

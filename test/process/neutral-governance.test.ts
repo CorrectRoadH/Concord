@@ -42,7 +42,9 @@ test('a neutral software consumer completes Spec, source relations, configured e
   assert.equal('verifications' in checked, false);
   const review = callString(root, ['review', 'cart']);
   assert.ok(review.includes(id));
-  assert.ok(review.includes('docs/issues/quantity.md'));
+  assert.ok(!review.includes('docs/issues/quantity.md'));
+  assert.equal(existsSync(join(root, 'docs/issues/quantity.md')), false);
+  assert.ok(!readFileSync(join(root, 'spec/cart.test.ts'), 'utf8').includes('@issue'));
   assert.equal(existsSync(join(root, 'nx.json')), false);
   assert.equal(existsSync(join(root, 'package.json')), false, 'consumer needs no product package or host metadata');
   assert.equal(gitCommand(root, 'worktree', 'list', '--porcelain').split('\n').filter(line => line.startsWith('worktree ')).length, 1);

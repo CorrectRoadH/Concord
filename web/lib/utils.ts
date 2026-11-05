@@ -12,7 +12,6 @@ export function humanKind(kind: string): string {
     engineering: 'Engineering',
     roadmap: 'Roadmap',
     design: 'Design',
-    research: 'Research',
     memory: 'Memory',
     issue: 'Issue',
   };

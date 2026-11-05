@@ -41,16 +41,21 @@ test('taste derives ordered references from inline links and never writes', () =
 }));
 
 // @use-case docs/feature/taste/use-case/remove-cited-entry.md
-test('missing taste is advisory, removed entries fail current pages and spare Design records', () => fixture((repo, write) => {
+test('missing taste is advisory and removed entries fail Feature and Design pages', () => fixture((repo, write) => {
   assert.deepEqual(inspectTaste(repo).findings.map(finding => finding.code), ['TasteMissing']);
   const missing = checkProject(repo, 'off');
   assert.ok(!missing.findings.some(finding => finding.code === 'TasteMissing'));
   assert.ok(missing.advisories.some(finding => finding.code === 'TasteMissing'));
-  write('docs/taste.md', source);
+  write('docs/taste.md', `${source}\n## T-99 Shared rule {#t-99}\n\nKeep references valid.\n`);
   write('docs/design/store.md', '# Store\n\nUse [removed](../taste.md#t-99).\n');
   write('docs/feature/cart/README.md', '# Cart\n\nUse [removed](../../taste.md#t-99).\n');
+  assert.equal(checkProject(repo, 'off').ok, true);
+  write('docs/taste.md', source);
   const result = checkProject(repo, 'off');
-  assert.deepEqual(result.findings.filter(finding => finding.code === 'AnchorNotFound').map(finding => [finding.path, finding.line]), [['docs/feature/cart/README.md', 3]]);
+  assert.deepEqual(result.findings.filter(finding => finding.code === 'AnchorNotFound').map(finding => [finding.path, finding.line]), [['docs/design/store.md', 3], ['docs/feature/cart/README.md', 3]]);
+  write('docs/design/store.md', '# Store\n\nUse [owner](../taste.md#t-1).\n');
+  write('docs/feature/cart/README.md', '# Cart\n\nUse [owner](../../taste.md#t-1).\n');
+  assert.equal(checkProject(repo, 'off').ok, true);
   write('docs/feature/cart/README.md', '# Cart\n\nUse [invalid](../../taste.md?query#t-1).\n');
   assert.throws(() => tasteShow(repo), code('TasteLinkInvalid'));
 }));

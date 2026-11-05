@@ -44,7 +44,8 @@ test('packed close fixed prints commit evidence, deletes the Issue, and verifies
   const listed = call(f.root, ['test', 'list']);
   const cases = decode(Schema.Array(Schema.Unknown), listed.cases, 'cases');
   assert.equal(cases.length, 1);
-  assert.deepEqual(decode(ObjectSchema, cases[0], 'case').issues, ['docs/issues/sku.md']);
+  assert.deepEqual(decode(ObjectSchema, cases[0], 'case').issues, []);
+  assert.ok(!readFileSync(join(f.root, 'test/cart.test.ts'), 'utf8').includes('@issue'));
 });
 // @use-case docs/feature/local-sdlc/use-case/resolve-with-command-evidence.md#结果
 test('packed verification rejects green defects and failing fix candidates without changing the Issue', async t => {
