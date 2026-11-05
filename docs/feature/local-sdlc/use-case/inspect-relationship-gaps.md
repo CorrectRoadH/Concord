@@ -39,6 +39,7 @@
 
 - `contracts` 与 `cliPages` 分开列出，每项用 `missing` 说明缺少的是 `code` 还是 `test`，用 `relationships` 给出现有数量。
 - Feature 的计数包含自身、附页与所属 Use Case。Use Case 只计自身。CLI 页面只计直接指向该页面或其 anchor 的关系，指向 Feature 的关系不算。
+- `cliPages` 覆盖每个 Feature 中种类为 cli 的全部页面：单页 `cli.md`，或 `cli/` 目录中的每个页面，包括入口 `cli/README.md`。每个页面按实际文件分别判定与计数，`feature` 给出所属 Feature 的 README，按路径排序。
 - 退役（`@status retired`）的测试不算测试关系。无效的 owner 或标记先由 `check` 的 finding 报告。
 - `unmarkedLists` 列出 Use Case 中含未标记步骤的有序列表。
 - 收集过原生测试清单时，另有 `unlinkedTests`，列出没有任何标记覆盖的原生用例，见[找出没有关联 Use Case 的测试](find-unlinked-tests.md)。
@@ -46,7 +47,7 @@
 ## 边界
 
 - 结果只表示 Concord 没有观察到显式关系。它不是代码覆盖率或命令覆盖率，也不说明功能缺失或测试未执行。`semantics` 字段固定说明这一点。
-- 只能审计已有的 CLI 页面。没有页面的命令不会出现，需要由产品自己的命令清单或评审补上，`limitations` 字段说明这一点。
+- 只能审计已有的 cli 种类页面。没有页面的命令不会出现，需要由产品自己的命令清单或评审补上，`limitations` 字段说明这一点。
 
 ## Spec 来源
 

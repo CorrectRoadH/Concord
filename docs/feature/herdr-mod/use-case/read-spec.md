@@ -12,7 +12,7 @@
 
 1. 在文档树里点 Feature `cart`。 {#open-feature}
 
-   右侧按 Markdown 显示 README：能做什么、上手示例、怎样工作。文档树在 `cart` 下展开它的全部页面：README、architecture、cli 与每个 Use Case。
+   右侧按 Markdown 显示 README：能做什么、上手示例、怎样工作。文档树在 `cart` 下展开它的全部页面：README、architecture、cli、种类目录中的页面与每个 Use Case。种类目录（例如 `architecture/`）显示为一个节点，点开显示其 `README.md`；无法归类的页面同样列出。
 
 2. 点 Use Case“加入商品”。 {#open-use-case}
 

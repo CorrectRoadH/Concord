@@ -1,10 +1,10 @@
 # 文档目录与完整发现
 
-维护者在 Concord 中看到消费仓库的全部文档：Feature、Engineering、Roadmap、Design 与 Issue。文档的身份由路径决定，名称取自正文唯一的一级标题（[领域与数据所有权](../local-sdlc/format.md#owner)）；无法读取的文档产生诊断，并把结果标为不完整，原文件保持不动。
+维护者在 Concord 中看到消费仓库的全部文档：Feature、Engineering、Roadmap、Design 与 Issue。文档的身份由路径决定，名称取自正文唯一的一级标题（[文档与标记格式](../local-sdlc/format.md#owner)）；无法读取的文档产生诊断，并把结果标为不完整，原文件保持不动。
 
 ## 你可以做什么
 
-- 用中文等 Unicode 名称命名目录、Use Case 文件和自定义页面，不需要另建英文副本。
+- 用中文等 Unicode 名称命名 Feature 目录、Use Case 文件和种类目录内的页面，不需要另建英文副本。包内其它页面使用固定的[页面种类](../../document-model.md#页面种类)文件名；项目的说明性文档放在包外，用链接连到 Spec。
 - 在 CLI 与 Web 中看到同一份文档清单：CLI 和 Web 使用同一套发现规则。
 - 编辑文档的同时运行检查：检查期间文件被改动时，Concord 自动重试，不把半途的状态报告为结论。
 

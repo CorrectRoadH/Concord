@@ -97,7 +97,7 @@
 
 ## 页面选择
 
-Feature 只要求 README。`concord new feature` 的 `--pages` 从 `library`、`cli`、`architecture`、`use-case` 中选择其余页面，省略时只建 README。README 的入口只链接选中的页面。Use Case 索引不创建叶子 Use Case。Engineering 从目标、机制、使用、验收四节开始，按主题加页。
+Feature、Engineering 与 Roadmap 只要求 README。`concord new` 的 `--pages` 从 `use-case`、`cli`、`library`、`api`、`format`、`ui`、`performance`、`architecture`、`data-model` 中选择其余页面，省略时只建 README；未知或重复的值返回 `InvalidInput`，见[创建与编辑文档](../cli.md#创建与编辑文档)。README 的入口只链接选中的页面。Use Case 索引不创建叶子 Use Case。`concepts.md` 与 `writing.md` 直接编辑，不经 `--pages` 创建。每种页面的模板说明它回答的问题、该写什么与不写什么，与[页面种类](../../../document-model.md#页面种类)一致。
 
 ## 纯文档仓库
 

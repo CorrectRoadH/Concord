@@ -244,7 +244,7 @@ Memory 固定位于项目目录的 `memory/`。`docs/taste.md` 存在即生效�
 
 ## 存储 Spec
 
-文档的位置、身份与字段由[文档模型](document-model.md)与[领域与数据所有权](feature/local-sdlc/format.md#owner)拥有。模板随工具包安装，由严格 manifest 校验；`new` 与 init 用模板创建文件，模板是作者提示，不是完成状态或验收证据。init 生成布局、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md` 与 `docs/architecture.md`；根 `AGENTS.md` 保留既有正文，追加或刷新一个带边界的托管区块。
+文档的位置、身份与字段由[文档模型](document-model.md)与[文档与标记格式](feature/local-sdlc/format.md#owner)拥有。模板随工具包安装，由严格 manifest 校验；`new` 与 init 用模板创建文件，模板是作者提示，不是完成状态或验收证据。init 生成布局、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md` 与 `docs/architecture.md`；根 `AGENTS.md` 保留既有正文，追加或刷新一个带边界的托管区块。
 
 测试关联是测试源码中的 Concord 标记：`@feature <path>` 或 `@use-case <path>`，可附 `@issue <path>`、`@status retired` 与 `@name`。测试身份由文件和标记派生为 `neref_...`，反向关系由当前源码派生，不写回 Spec。标记语法与发现范围见[发现测试](feature/local-sdlc/use-case/discover-annotated-tests.md)。
 

@@ -11,6 +11,7 @@
 - 名称取自正文唯一的一级标题，可以与路径名不同。标题按 Markdown 语法树识别，代码块中的标题不计；名称保留 Unicode 原拼写与组合标记。
 - 普通正文链接只是导航。frontmatter 中的路径值一律是仓库相对路径，字段只在非空时出现。
 - Design 是一页还没定下来的取舍，见[文档模型](../../document-model.md#design)。
+- 文档类别（Feature、Use Case、Engineering、Roadmap 等）决定关系与短选择器；页面种类（cli、api、format 等）只说明包内页面回答哪个问题，不产生新的文档类别。种类目录中的页面属于所在的 Feature 或 Engineering。
 
 创建时间、采用来源与修订历史由 Git 提供（[只写当前声明](../../document-model.md#只写当前声明)）。测试源码拥有 case 身份和正向关系。
 

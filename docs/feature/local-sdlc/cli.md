@@ -125,7 +125,15 @@ concord --json new use-case add-item --feature cart --title "加入商品"
 {"operation":"new","dryRun":false,"changedPaths":["docs/feature/cart/use-case/add-item.md"]}
 ```
 
-路径已存在时返回 `DocumentExists`，退出 1，不改文件。短选择器在同一类别中匹配多个文档时返回具名错误，需要写出路径。路径、类别与名称的规则见[领域与数据所有权](format.md#owner)。
+`--pages` 只用于 `new feature`、`new engineering` 与 `new roadmap`，取逗号分隔的页面种类：`use-case`、`cli`、`library`、`api`、`format`、`ui`、`performance`、`architecture`、`data-model`。省略时只建 README；README 只链接选中的页面。`use-case` 只创建 `use-case/README.md` 导航页，不创建旅程。`concepts.md` 与 `writing.md` 不经 `--pages` 创建，直接编辑。
+
+| 情形 | 结果 |
+| --- | --- |
+| 未知种类，例如 `--pages scope` | `InvalidInput`，退出 1，不改文件 |
+| 重复种类，例如 `--pages cli,cli` | `InvalidInput`，退出 1，不改文件 |
+| 对其它类别使用 `--pages` | `InvalidInput`，退出 1，不改文件 |
+
+路径已存在时返回 `DocumentExists`，退出 1，不改文件。短选择器在同一类别中匹配多个文档时返回具名错误，需要写出路径。路径、类别与名称的规则见[文档与标记格式](format.md#owner)。
 
 ### 查看一个文档包
 
@@ -147,7 +155,20 @@ concord --json show cart
 }
 ```
 
-（省略关系、测试与实现字段。）`kind` 取 `readme`、`use-case`、`architecture`、`cli`、`library`，其它支持页为 `page`；`name` 是页面的一级标题。人读输出在关系之前列出这些页面。`show` 其它类别的文档时没有 `pages`。
+（省略关系、测试与实现字段。）`name` 是页面的一级标题。人读输出在关系之前列出这些页面。`show` 其它类别的文档时没有 `pages`。
+
+`kind` 按[路径与识别](../../document-model.md#路径与识别)取值：
+
+| `kind` | 页面 |
+| --- | --- |
+| `readme` | 包入口 `README.md` |
+| `use-case-index` | `use-case/README.md` 导航页 |
+| `use-case` | `use-case/<u>.md` 旅程 |
+| `cli`、`library`、`api`、`format`、`ui`、`performance`、`architecture`、`data-model` | 种类单页，或该种类目录中的页面，包括目录入口 `<种类>/README.md` |
+| `concepts`、`writing` | 包内各层的 `concepts.md` 与 `writing.md` |
+| `unknown` | 无法归类的页面；`check` 同时报告 [`UnknownPageKind`](../documentation-quality/cli.md#页面种类) |
+
+种类目录中的页面取目录的种类，例如 `docs/feature/cart/architecture/checkout-flow.md` 的 `kind` 为 `architecture`。
 
 创建之后直接编辑文件。Web 工作台的保存带整文件摘要；文件在读取后被外部改过时返回 `FileChangedSinceRead`，需要重新读取并合并。摘要只防止覆盖并发编辑，不是授权边界。
 
