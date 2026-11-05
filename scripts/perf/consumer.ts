@@ -61,7 +61,8 @@ export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: st
   yield* concord('new', 'feature', 'scale', '--title', 'Scale');
   yield* concord('new', 'feature', 'local-sdlc', '--title', 'Local SDLC query target');
   yield* concord('new', 'use-case', 'scale-read', '--title', 'Scale read', '--feature', 'docs/feature/scale/README.md');
-  for (const folder of ['src', 'test', 'docs/feature/scale/pages']) yield* fs.makeDirectory(join(root, folder), { recursive: true });
+  for (const folder of ['src', 'test', 'docs/feature/scale/format']) yield* fs.makeDirectory(join(root, folder), { recursive: true });
+  yield* fs.writeFileString(join(root, 'docs/feature/scale/format/README.md'), '# Scale formats\n');
   for (let index = 0; index < spec.sources; index++) {
     yield* fs.writeFileString(join(root, 'src', `module-${index}.ts`), `// @concord-file\n// @concord-implements docs/feature/scale/README.md\nexport function value${index}(input: number): number {\n  return input + ${index};\n}\n`);
   }
@@ -69,7 +70,7 @@ export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: st
     yield* fs.writeFileString(join(root, 'test', `case-${index}.test.ts`), `import test from 'node:test';\n\n// @use-case docs/feature/scale/use-case/scale-read.md\ntest('scale case ${index}', () => {});\n`);
   }
   for (let index = 0; index < spec.pages; index++) {
-    yield* fs.writeFileString(join(root, 'docs/feature/scale/pages', `page-${index}.md`), `# Page ${index}\n\nSupporting page for [Scale](../README.md).\n`);
+    yield* fs.writeFileString(join(root, 'docs/feature/scale/format', `page-${index}.md`), `# Page ${index}\n\nSupporting page for [Scale](../README.md).\n`);
   }
   yield* commitAll(root, workDir, 'Frozen scale consumer');
   const cache = yield* prepareCache(entry, root, workDir);
