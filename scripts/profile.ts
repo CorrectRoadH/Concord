@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeF
 import { tmpdir } from './test-temporary.js';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { build as bundle } from 'esbuild';
+import { packJavaScript } from './pack-javascript.js';
 import { parseArgs } from 'node:util';
 import { NodeRuntime } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
@@ -54,10 +54,10 @@ const main = Effect.gen(function*() {
   const previous = yield* io('Inventory profile output', () => new Set(readdirSync(out)));
   const command = cliCommand(candidate, consumer.root, args);
   const counter = join(workDir, 'fs-counter.mjs');
-  yield* Effect.tryPromise({
-    try: () => bundle({ entryPoints: [fileURLToPath(new URL('./perf/fs-counter.ts', import.meta.url))], outfile: counter, bundle: true, platform: 'node', format: 'esm', target: 'node24', logLevel: 'silent' }),
-    catch: cause => new PerfError({ message: `Build profile preload: ${String(cause)}` }),
-  });
+  yield* packJavaScript({ entry: { 'fs-counter': fileURLToPath(new URL('./perf/fs-counter.ts', import.meta.url)) }, outDir: workDir,
+    platform: 'node', format: 'esm', target: 'node24', logLevel: 'silent',
+    deps: { alwaysBundle: /.*/u, onlyBundle: false }, outputOptions: { entryFileNames: '[name].mjs' },
+  }).pipe(Effect.mapError(cause => new PerfError({ message: `Build profile preload: ${String(cause)}` })));
   const env = {
     NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --cpu-prof --cpu-prof-dir=${JSON.stringify(out)} --import ${JSON.stringify(counter)}`,
     CONCORD_PERF_COUNTER_DIR: out, CONCORD_PERF_COUNTER_ROOT: consumer.root,

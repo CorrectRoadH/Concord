@@ -1,12 +1,11 @@
 import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
 import { decode, encode } from '@jridgewell/sourcemap-codec';
-import { build as bundle } from 'esbuild';
+import { packJavaScript, p5RuntimeNotice } from './pack-javascript.js';
 import { buildStartup } from './startup-build.js';
 import { P5_LIBRARIES } from "../src/model/p5/index.js";
 import { captureBuildSource, writeBuildIdentity, type BuildIdentity } from './build-identity.js';
@@ -40,8 +39,7 @@ const SourceMapSchema = Schema.Struct({
   mappings: Schema.String,
 });
 
-function narrowNamespaceImports(api: API, file: string): void {
-  const text = readFileSync(file, 'utf8');
+function namespaceImportEdits(api: API, file: string, text: string) {
   const retained = api.createSourceFile(file, text, { scriptKind: ts.ScriptKind.JS });
   const edits: { start: number; end: number; text: string; firstLine: number; lastLine: number }[] = [];
   try {
@@ -70,39 +68,43 @@ function narrowNamespaceImports(api: API, file: string): void {
       edits.push({ start, end, text: replacement + endings.join(''), firstLine, lastLine });
     }
   } finally { retained.dispose(); }
+  return edits;
+}
+
+const narrowNamespaceImports = Effect.fn('build.narrowNamespaceImports')(function*(api: API, file: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const text = yield* fs.readFileString(file);
+  const edits = yield* Effect.try({
+    try: () => namespaceImportEdits(api, file, text),
+    catch: cause => cause instanceof BuildOutputFailed ? cause : new BuildOutputFailed({ file, message: String(cause) }),
+  });
   if (edits.length === 0) return;
   const mapPath = `${file}.map`;
   let nextMap: string | undefined;
-  if (existsSync(mapPath)) {
-    const map = Schema.decodeUnknownSync(SourceMapSchema, { onExcessProperty: 'error' })(JSON.parse(readFileSync(mapPath, 'utf8')));
+  if (yield* fs.exists(mapPath)) {
+    const map = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SourceMapSchema), { onExcessProperty: 'error' })(yield* fs.readFileString(mapPath));
     // decode resolves all cross-line source/name deltas before any line is removed.
     const mappings = decode(map.mappings);
     for (const edit of edits) for (let line = edit.firstLine; line <= edit.lastLine && line < mappings.length; line++) mappings[line] = [];
     nextMap = JSON.stringify({ ...map, mappings: encode(mappings) });
   } else if (/^\s*\/\/[#@]\s*sourceMappingURL=/mu.test(text)) {
-    throw new BuildOutputFailed({ file, message: 'Generated JavaScript declares a missing source map' });
+    return yield* new BuildOutputFailed({ file, message: 'Generated JavaScript declares a missing source map' });
   }
   let rewritten = text;
   for (const edit of edits.reverse()) rewritten = rewritten.slice(0, edit.start) + edit.text + rewritten.slice(edit.end);
-  writeFileSync(file, rewritten);
-  if (nextMap !== undefined) writeFileSync(mapPath, nextMap);
-}
+  yield* fs.writeFileString(file, rewritten);
+  if (nextMap !== undefined) yield* fs.writeFileString(mapPath, nextMap);
+});
 
 const narrowGeneratedImports = Effect.fn('build.narrowGeneratedImports')(function*() {
-  yield* Effect.try({ try: () => {
-    const api = new API({ runExternalCode: false });
-    try {
-      const visit = (directory: string): void => {
-        for (const entry of readdirSync(directory, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
-          const file = join(directory, entry.name);
-          if (entry.isDirectory()) visit(file);
-          else if (entry.isFile() && /\.(?:[cm]?js)$/u.test(entry.name)) narrowNamespaceImports(api, file);
-        }
-      };
-      visit(dist());
-    } finally { api.close(); }
-  }, catch: cause => cause instanceof BuildOutputFailed ? cause : new BuildOutputFailed({ file: dist(), message: cause instanceof Error ? cause.message : String(cause) }) });
-});
+  const fs = yield* FileSystem.FileSystem;
+  const api = yield* Effect.acquireRelease(Effect.sync(() => new API({ runExternalCode: false })), api => Effect.sync(() => api.close()));
+  for (const name of (yield* fs.readDirectory(dist(), { recursive: true })).sort((left, right) => left.localeCompare(right))) {
+    if (!/\.(?:[cm]?js)$/u.test(name)) continue;
+    const file = dist(name);
+    if ((yield* fs.stat(file)).type === 'File') yield* narrowNamespaceImports(api, file);
+  }
+}, Effect.scoped);
 
 const prepare = Effect.gen(function*() {
   sourceIdentity = yield* captureBuildSource();
@@ -112,7 +114,7 @@ const prepare = Effect.gen(function*() {
   yield* fs.remove(join(outputRoot, 'node_modules'), { recursive: true, force: true });
   yield* fs.symlink(resolve('node_modules'), join(outputRoot, 'node_modules'));
   yield* fs.remove(dist(), { recursive: true, force: true });
-  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'templates', 'skills', 'docs', ...readdirSync('.').filter(name => /^README(?:\..+)?\.md$/u.test(name))]) yield* fs.copy(name, join(outputRoot, name), { overwrite: true });
+  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'templates', 'skills', 'docs', ...(yield* fs.readDirectory('.')).filter(name => /^README(?:\..+)?\.md$/u.test(name))]) yield* fs.copy(name, join(outputRoot, name), { overwrite: true });
   const nativeArgs = ['--import', 'tsx', 'scripts/build-native.ts', '--output', dist('native'), '--reuse'];
   const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
   if (prebuilt !== undefined) nativeArgs.push('--prebuilt', prebuilt);
@@ -125,7 +127,9 @@ const prepare = Effect.gen(function*() {
   })), { concurrency: 'unbounded' });
   yield* narrowGeneratedImports();
   yield* buildStartup(dist(), outputRoot);
-  yield* Effect.tryPromise(() => bundle({ entryPoints: ['src/entry/herdr-mod/main.ts'], outfile: dist('herdr-mod/main.js'), bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', external: ['gpui-kit', 'gpui-base', 'herdr'], minify: true }));
+  yield* packJavaScript({ entry: { main: 'src/entry/herdr-mod/main.ts' }, outDir: dist('herdr-mod'), format: 'esm', platform: 'neutral', target: 'es2022', minify: true,
+    deps: { neverBundle: ['gpui-kit', 'gpui-base', 'herdr'], alwaysBundle: /^(?!gpui-kit$|gpui-base$|herdr$)/u, onlyBundle: false },
+    outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
   yield* fs.writeFileString(dist('herdr-mod/mod.json'), JSON.stringify({ place: 'right', size: 760 }) + '\n');
   yield* fs.writeFileString(dist('herdr-mod/NOTICE.txt'), `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);
 });
@@ -136,7 +140,10 @@ const finish = Effect.gen(function*() {
     const { build } = await import('vite-plus');
     await build({ configFile: 'vite.preview.config.ts', build: { outDir: dist('preview') } });
   });
-  yield* Effect.tryPromise(() => bundle({ entryPoints: ['web/p5/runtime.ts'], outfile: dist('web/p5-runtime.js'), bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'linked', define: { IS_MINIFIED: 'true' } }));
+  yield* packJavaScript({ entry: { 'p5-runtime': 'web/p5/runtime.ts' }, outDir: dist('web'), format: 'iife', platform: 'browser', target: 'es2022', minify: true,
+    deps: { alwaysBundle: /.*/u, onlyBundle: false }, define: { IS_MINIFIED: 'true' },
+    plugins: [p5RuntimeNotice],
+    outputOptions: { entryFileNames: '[name].js', comments: { legal: true } } });
   yield* fs.copyFile('node_modules/p5/license.txt', dist('web/P5-LICENSE.txt'));
   yield* fs.copy('node_modules/p5/types', dist('p5-types'));
   yield* fs.makeDirectory(dist('web/p5-libraries'), { recursive: true });
