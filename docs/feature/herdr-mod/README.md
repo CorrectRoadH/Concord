@@ -4,7 +4,7 @@
 
 ## 你可以做什么
 
-- 选一个目录，在里面初始化 Concord。
+- 选一个目录，在里面初始化 Concord，拿到适合这个项目的写作指南。
 - 阅读全部文档：Feature 与 Use Case、品味、术语、Issue 与 Memory，正文按 Markdown 渲染。
 - 打开一个 Use Case，看守护它的测试和实现它的代码；点开术语，看它的定义。
 - 直接修改一页文档，保存后立刻看到检查结果。
@@ -23,7 +23,7 @@ Installed Concord mod: ~/.config/herdr-app/mods/concord
 Herdr loads it on save; open it with the "Concord" command.
 ```
 
-在 Herdr 中打开 Concord mod，它出现在右侧。当前 pane 所在目录还没有初始化时，mod 显示“在这里初始化 Concord”；点一下，mod 运行 `concord init`，然后列出新建的文档。已经初始化的仓库直接显示 Feature 列表。
+在 Herdr 中打开 Concord mod，它出现在右侧。当前 pane 所在目录还没有初始化时，mod 显示“在这里初始化 Concord”；点一下，mod 运行 `concord init`，列出新建的文档，并给出让 agent 读的写作指南。已经初始化的仓库直接显示 Feature 列表。
 
 ## 怎样工作
 

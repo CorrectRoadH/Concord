@@ -46,9 +46,9 @@
 
 ## 接入
 
-`concord --skill` 输出 Agent 入口：主题列表、设计理由与工作原则。`concord --skill <topic>` 输出一个主题，`concord --skill all` 输出全部主题。这个入口在任意 cwd 可用，不读取项目，也不写文件。未知主题返回 `SkillTopicUnknown`。
+`concord --skill` 输出 Agent 入口：主题列表、设计理由与工作原则。`concord --skill <topic>` 输出一个主题，`concord --skill all` 输出全部主题。主题包括两份[写作指南](../../concepts.md#writing-guide)：`docs-from-scratch` 与 `docs-from-code`。这个入口在任意 cwd 可用，不读取项目，也不写文件。未知主题返回 `SkillTopicUnknown`。
 
-`concord init` 在 Git worktree 顶层初始化项目，人读输出列出创建的文件，最后给出下一步：
+`concord init` 在 Git worktree 顶层初始化项目，人读输出列出创建的文件，最后给出下一步和推荐的写作指南（预期输出）：
 
 ```text
   docs/README.md
@@ -59,8 +59,14 @@
   AGENTS.md
 
 Start here: docs/concord.md
-Next: concord new feature <name> --title "Your feature"
+Writing guide: concord --skill docs-from-scratch
 Inspect configuration: concord doctor
+```
+
+`--json` 输出在 `changedPaths`、`createdPaths`、`preservedPaths` 之外给出 `guide`，取值 `docs-from-scratch` 或 `docs-from-code`；`--dry-run init` 同样给出。选择规则见[初始化后按项目情况开始写 Spec](../project-onboarding/use-case/start-writing-specs.md#选哪份指南)。
+
+```json
+{"operation":"init","dryRun":false,"changedPaths":["docs/taste.md","..."],"config":{},"createdPaths":["docs/taste.md","..."],"preservedPaths":[],"guide":"docs-from-code"}
 ```
 
 `concord doctor --json` 报告配置与接入缺口，不运行测试：

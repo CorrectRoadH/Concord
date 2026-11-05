@@ -13,6 +13,7 @@
 - 创建 Feature 时以参数选择页面：README 必需，其余页面可选。
 - 初始化指引要求 Spec 声明目标，开发过程归 Memory。`docs/` 与 `memory/` 下的全部文件都可以直接编辑；Concord 命令执行需要运行的步骤，`check` 检查结果是否一致。
 - 初始化在根 `AGENTS.md` 中维护有边界标记的 Concord 指引，保留区块外正文，并引导 coding agent 从已安装版本运行 `concord --skill` 按任务读取说明。
+- init 结束时按仓库有没有项目文件推荐一份写作指南：新项目读 `docs-from-scratch`，已有代码的项目读 `docs-from-code`，见[初始化后按项目情况开始写 Spec](use-case/start-writing-specs.md)。
 - Memory 固定位于 worktree 根的 `memory/`。
 - Feature 可以推动品味新增、修订条款；理由、来源与影响记入以 `amends` 指向受影响条款的 Decision Memory，不把功能细节无限追加为全局规则。
 

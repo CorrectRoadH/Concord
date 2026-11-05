@@ -14,6 +14,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 ## 按需读取
 
 - 首次接入、配置或模板：运行 `concord --skill init`。
+- 为项目写第一批 Spec：还没有代码时运行 `concord --skill docs-from-scratch`，已有代码时运行 `concord --skill docs-from-code`。
 - Feature、Use Case、Engineering、Roadmap、Design、Research 的布局、写法与采用：运行 `concord --skill document`。
 - 整文件、函数和代码段的实现关联与位置查询：运行 `concord --skill code`。
 - 测试标记、测试执行与修复核验：运行 `concord --skill test`。

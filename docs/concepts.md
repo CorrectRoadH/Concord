@@ -60,6 +60,10 @@ README 告诉第一次读的人能做什么、怎么开始；字段、错误码�
 
 为一个项目目录提供缓存、查询与 Web 连接的本地服务。同一项目目录最多一个实例，CLI 可以在没有该服务时独立执行。
 
+## 写作指南 {#writing-guide}
+
+随安装包提供、告诉 agent 怎样为项目写第一批 Spec 的 skill 主题。`docs-from-scratch` 面向还没有代码的项目，`docs-from-code` 面向已有代码的项目。
+
 ## 标记 {#marker}
 
 测试源码里指向 Spec 的 Concord 注释，例如 `@use-case`。测试与 Spec 的关联只由标记建立。

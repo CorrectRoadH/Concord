@@ -13,22 +13,24 @@
 
 1. 打开 Concord mod。 {#open}
 
-   mod 在右侧出现，显示“这个仓库还没有初始化 Concord”和一个“初始化”按钮。
+   mod 在右侧出现，显示“这个仓库还没有初始化 Concord”和“在这里初始化 Concord”按钮。
 
-2. 点“初始化”。 {#init}
+2. 点“在这里初始化 Concord”。 {#init}
 
-   mod 在仓库根目录运行 `concord init`，然后列出新建的文件：
+   mod 在仓库根目录运行 `concord init`，显示新建了多少个文件，文档树列出它们。
+
+3. 看推荐的写作指南。 {#guide}
+
+   mod 在新建文件的数量下方显示 init 推荐的[写作指南](../../../concepts.md#writing-guide)，以及交给 agent 的命令（预期输出）：
 
    ```text
-   docs/README.md
-   docs/taste.md
-   docs/concepts.md
-   docs/writing.md
-   memory/README.md
-   AGENTS.md
+   下一步：让 agent 读写作指南
+   concord --skill docs-from-scratch
    ```
 
-3. 新建第一个 Feature。 {#new-feature}
+   点“阅读指南”，mod 运行这条命令，把指南正文按 Markdown 显示在阅读区。指南怎样选、写了什么见[初始化后按项目情况开始写 Spec](../../project-onboarding/use-case/start-writing-specs.md)。
+
+4. 新建第一个 Feature。 {#new-feature}
 
    点“新建 Feature”，输入名称和标题；mod 运行 `concord new feature <名称> --title <标题>`，并打开新建的 README 供编辑。
 
@@ -40,4 +42,5 @@
 | --- | --- |
 | 当前目录不在 Git 仓库里 | mod 显示“请先在 Git 仓库中打开”，提供“选择目录” |
 | 想用另一个目录 | 点“选择目录”，在弹出的目录选择器里选 |
-| 仓库已经初始化 | 直接显示文档树，不显示“初始化” |
+| 仓库已有代码 | 推荐 `docs-from-code` |
+| 仓库已经初始化 | 直接显示文档树，不显示初始化按钮和写作指南 |

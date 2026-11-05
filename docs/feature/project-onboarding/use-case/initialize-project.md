@@ -13,7 +13,7 @@
 2. 创建必需的项目品味；没有已采用原则时保留明确 draft，后续由作者显式采用为 active。系统设计从 `docs/architecture.md` 进入，各 Feature 的内部设计放在所属的 architecture 页。
 3. 需要 `test run` 或修复核验时配置 runner；测试或实现不在约定位置时覆盖发现范围。无测试项目允许没有测试根。
 4. 预览完整文件变更后完成；非交互输入能表达相同选择。
-5. 在根 AGENTS.md 读取 Concord 托管指引，通过 `concord --skill` 获取当前安装版本的任务路由和主题说明。
+5. 在根 AGENTS.md 读取 Concord 托管指引，通过 `concord --skill` 获取当前安装版本的任务路由和主题说明。按 init 推荐的写作指南开始写 Spec，见[初始化后按项目情况开始写 Spec](start-writing-specs.md)。
 6. 运行 doctor，查看实际生效的配置与待完善项。
 
 ## 可观察验收
