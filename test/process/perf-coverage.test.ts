@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
+import { NodeServices } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
 import { loadArtifact } from '../../scripts/perf/artifact.js';
 import { loadBudgets } from '../../scripts/perf/budgets.js';
@@ -23,7 +24,7 @@ test('performance budgets and executable scenarios have exactly one consistent o
   assert.equal(selectScenarios(scenarios, [], { files: ['scripts/perf/stats.ts'], features: [] }).length, ids.length);
   assert.deepEqual(selectScenarios(scenarios, [], { files: ['bench/feedback.bench.ts'], features: [] }).map(s => s.id), ['feedback/list']);
   assert.throws(() => selectScenarios(scenarios, ['absent']));
-})));
+}).pipe(Effect.provide(NodeServices.layer))));
 // @feature docs/feature/local-sdlc/README.md
 test('CLI top-level command definitions have scenarios or documented exemptions', () => Effect.runPromise(Effect.gen(function*() {
   const work = yield* workDirectory('concord-coverage-', false);
@@ -34,10 +35,10 @@ test('CLI top-level command definitions have scenarios or documented exemptions'
   const exemptions = [...policy.matchAll(/^\| ((?:`[^`]+`[、 ]*)+) \| ([^|]+) \|$/gmu)].flatMap(match => [...match[1]!.matchAll(/`([^`]+)`/gu)].map(item => item[1]!));
   const covered = scenarios.map(s => runArguments(s.run).find(arg => !arg.startsWith('--')));
   for (const group of groups) assert.ok(covered.includes(group) || exemptions.includes(group), `Uncovered CLI command group: ${group}`);
-}).pipe(Effect.scoped)));
+}).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));
 // @feature docs/feature/local-sdlc/README.md
 test('all ordinary benchmark scenarios execute on minimal frozen consumers without timing verdicts', { timeout: 180_000 }, t =>
-  Effect.runPromise(benchmarkSmoke(false).pipe(Effect.scoped), { signal: t.signal }));
+  Effect.runPromise(benchmarkSmoke(false).pipe(Effect.scoped, Effect.provide(NodeServices.layer)), { signal: t.signal }));
 
 
 // @feature docs/feature/local-sdlc/README.md
@@ -81,4 +82,4 @@ test('scenario execution checks every concurrent result and restores beforeEach 
   const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ status: Schema.String })), { onExcessProperty: 'ignore' })(cold.stdout);
   assert.deepEqual(coldCommands, [['cache', 'clear']]);
   assert.ok(['empty', 'ready'].includes(decoded.status), cold.stdout);
-}).pipe(Effect.scoped)));
+}).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));

@@ -1,12 +1,11 @@
 import { packageBin } from './package-location.js';
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
-import { tmpdir } from './test-temporary.js';
+import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { packJavaScript } from './pack-javascript.js';
 import { parseArgs } from 'node:util';
-import { NodeRuntime } from '@effect/platform-node';
-import { Effect, Schema } from 'effect';
+import { NodeRuntime, NodeServices } from '@effect/platform-node';
+import { Effect, FileSystem, Schema } from 'effect';
 import { loadBudgets } from './perf/budgets.js';
 import { environment, loadArtifact } from './perf/artifact.js';
 import { combineProfiles, CpuProfile, hotSpots } from './perf/cpu-profile.js';
@@ -25,6 +24,7 @@ const CounterRecord = Schema.Struct({
 });
 /** NODE_OPTIONS is inherited by nested refresh processes; benchmark runs never load these probes. */
 const main = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
   const separator = process.argv.indexOf('--');
   const own = separator < 0 ? process.argv.slice(2) : process.argv.slice(2, separator);
   const passthrough = separator < 0 ? [] : process.argv.slice(separator + 1);
@@ -41,17 +41,15 @@ const main = Effect.gen(function*() {
   const scale = yield* io('Parse scale', () => parseScale(values.scale));
   const workDir = yield* workDirectory('concord-profile-', values.keep);
   const runs = join(workDir, 'runs');
-  yield* io('Create run directory', () => mkdirSync(runs));
+  yield* fs.makeDirectory(runs);
   const candidatePackage = yield* buildForMeasurement(resolve('.'), runs);
   const candidate = yield* loadArtifact('candidate', '.', packageBin(candidatePackage));
   const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
   // Output artifacts intentionally survive; only the work directory is disposable.
-  const out = yield* io('Create profile output', () => {
-    const dir = values.out === undefined ? mkdtempSync(join(tmpdir(), 'concord-profile-out-')) : resolve(values.out);
-    mkdirSync(dir, { recursive: true });
-    return realpathSync(dir);
-  });
-  const previous = yield* io('Inventory profile output', () => new Set(readdirSync(out)));
+  const dir = values.out === undefined ? yield* fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-profile-out-' }) : resolve(values.out);
+  yield* fs.makeDirectory(dir, { recursive: true });
+  const out = yield* fs.realPath(dir);
+  const previous = new Set(yield* fs.readDirectory(out));
   const command = cliCommand(candidate, consumer.root, args);
   const counter = join(workDir, 'fs-counter.mjs');
   yield* packJavaScript({ entry: { 'fs-counter': fileURLToPath(new URL('./perf/fs-counter.ts', import.meta.url)) }, outDir: workDir,
@@ -82,10 +80,12 @@ const main = Effect.gen(function*() {
     yield* settleConsumerRefreshes(consumer);
     return result;
   }).pipe(Effect.scoped);
+  const files = (yield* fs.readDirectory(out)).filter(name => !previous.has(name));
+  const evidence = new Map<string, string>();
+  for (const name of files.filter(name => /^counter-\d+\.json$/u.test(name) || name.endsWith('.cpuprofile'))) evidence.set(name, yield* fs.readFileString(join(out, name)));
   const processes = yield* io('Decode CPU profiles and counters', () => {
-    const files = readdirSync(out).filter(name => !previous.has(name));
     const counters = files.filter(name => /^counter-\d+\.json$/u.test(name)).map(name =>
-      Schema.decodeUnknownSync(Schema.fromJsonString(CounterRecord), { onExcessProperty: 'error' })(readFileSync(join(out, name), 'utf8')));
+      Schema.decodeUnknownSync(Schema.fromJsonString(CounterRecord), { onExcessProperty: 'error' })(evidence.get(name)!));
     const profiles = files.filter(name => name.endsWith('.cpuprofile'));
     if (profiles.length === 0 || counters.length === 0) throw new Error(`Missing profile evidence; command exited ${run.exitCode}: ${run.stderr}`);
     const byPid = new Map<number, CpuProfile[]>();
@@ -93,7 +93,7 @@ const main = Effect.gen(function*() {
       const match = /^CPU\.\d{8}\.\d{6}\.(\d+)\.\d+(?:\.\d+)?\.cpuprofile$/u.exec(name);
       if (!match) throw new Error(`Unexpected CPU profile name: ${name}`);
       const pid = Number(match[1]);
-      const profile = Schema.decodeUnknownSync(Schema.fromJsonString(CpuProfile), { onExcessProperty: 'error' })(readFileSync(join(out, name), 'utf8'));
+      const profile = Schema.decodeUnknownSync(Schema.fromJsonString(CpuProfile), { onExcessProperty: 'error' })(evidence.get(name)!);
       const group = byPid.get(pid) ?? [];
       group.push(profile);
       byPid.set(pid, group);
@@ -111,12 +111,12 @@ const main = Effect.gen(function*() {
     command: ['concord', ...(scenario && 'scan' in scenario.run ? ['--json', '--fresh', '--dry-run', ...scenario.run.scan] : args)], wallMs: run.ms, exitCode: run.exitCode, stderr: run.stderr, stdout: run.stdout, output: out,
     note: 'Wall time includes profiler and counter overhead; compare profiles with each other, not with benchmark samples.' + (scenario && 'request' in scenario.run ? ' HTTP process profiles include server preparation and shutdown.' : ''), processes,
   };
+  const text = `${JSON.stringify(record, null, 2)}\n`;
+  yield* fs.writeFileString(join(out, 'summary.json'), text);
   yield* io('Write profile summary', () => {
-    const text = `${JSON.stringify(record, null, 2)}\n`;
-    writeFileSync(join(out, 'summary.json'), text);
     process.stdout.write(text);
     process.stderr.write(`profile written to ${out}\n`);
     if (run.exitCode !== (scenario?.expect.exitCode ?? 0)) process.exitCode = 1;
   });
 }).pipe(Effect.scoped);
-NodeRuntime.runMain(main);
+main.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);

@@ -1,70 +1,71 @@
 import { packConcord } from '../release-package.js';
-import { tmpdir } from '../test-temporary.js';
 import { workspaceInstallationIdentity, installationRootForBin } from '../../src/base/installation/index.js';
-import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { cpus, totalmem } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { cpus, totalmem, tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { packageBin } from '../package-location.js';
-import { Effect, Schema } from 'effect';
+import { Effect, FileSystem, Schema } from 'effect';
+import type { PlatformError } from 'effect/PlatformError';
 import { BuildIdentity } from '../build-identity.js';
-import { io, PerfError } from './process.js';
+import { io, mustRun, PerfError } from './process.js';
 
 export interface Artifact { readonly label: 'candidate' | 'baseline'; readonly dir: string; readonly entry: string; readonly commit: string; readonly dirty: boolean; readonly digest: string }
 
-function digestDist(directory: string): string {
+const digestDist = Effect.fn('perf.digestDist')(function*(directory: string) {
+  const fs = yield* FileSystem.FileSystem;
   const hash = createHash('sha256');
-  const visit = (folder: string, prefix: string): void => {
-    for (const entry of readdirSync(folder, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
-      const path = join(folder, entry.name), name = `${prefix}/${entry.name}`;
-      if (entry.isDirectory()) visit(path, name);
-      else if (entry.isFile() && /(?:\.js|\.node|(?:artifact|build-identity)\.json)$/u.test(entry.name)) {
-        hash.update(name); hash.update('\0'); hash.update(readFileSync(path)); hash.update('\0');
+  const visit = Effect.fn('perf.digestDist.visit')(function*(folder: string, prefix: string): Effect.fn.Return<void, PlatformError> {
+    for (const entry of (yield* fs.readDirectory(folder)).sort((a, b) => a.localeCompare(b))) {
+      const path = join(folder, entry), name = `${prefix}/${entry}`;
+      if ((yield* Effect.result(fs.readLink(path)))._tag === 'Success') continue;
+      const info = yield* fs.stat(path);
+      if (info.type === 'Directory') yield* visit(path, name);
+      else if (info.type === 'File' && /(?:\.js|\.node|(?:artifact|build-identity)\.json)$/u.test(entry)) {
+        hash.update(name); hash.update('\0'); hash.update(yield* fs.readFile(path)); hash.update('\0');
       }
     }
-  };
-  visit(directory, 'dist');
+  });
+  yield* visit(directory, 'dist');
   return `sha256:${hash.digest('hex')}`;
-}
+});
 
 const installArtifact = Effect.fn('perf.installArtifact')(function*(repository: string) {
-  const scratch = yield* Effect.acquireRelease(io('Create benchmark installation', () => mkdtempSync(join(tmpdir(), 'concord-bench-install-'))), directory => Effect.sync(() => rmSync(directory, { recursive: true, force: true })));
-  const artifact = yield* io('Pack benchmark artifact', () => packConcord(scratch, repository));
-  yield* io('Install benchmark artifact', () => {
-    writeFileSync(join(scratch, 'package.json'), '{"private":true}');
-    copyFileSync(join(repository, 'pnpm-workspace.yaml'), join(scratch, 'pnpm-workspace.yaml'));
-    execFileSync('pnpm', ['add', '--ignore-scripts', '--prefer-offline', '--save-exact', artifact.filename], { cwd: scratch, encoding: 'utf8', timeout: 120_000 });
-  });
+  const fs = yield* FileSystem.FileSystem;
+  const scratch = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-bench-install-' });
+  const artifact = yield* packConcord(scratch, repository);
+  yield* fs.writeFileString(join(scratch, 'package.json'), '{"private":true}');
+  yield* fs.copyFile(join(repository, 'pnpm-workspace.yaml'), join(scratch, 'pnpm-workspace.yaml'));
+  yield* mustRun(['pnpm', 'add', '--ignore-scripts', '--prefer-offline', '--save-exact', artifact.filename], { cwd: scratch, outputDir: scratch, timeoutMs: 120_000 });
   return packageBin(join(scratch, 'node_modules/concord-sdlc'));
 });
 
 /** Identify the supplied installation; retain its source repository for consumer fixtures. */
 export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string, installedEntry?: string) {
-  const dir = yield* io('Resolve artifact', () => realpathSync(resolve(path)));
+  const fs = yield* FileSystem.FileSystem;
+  const dir = yield* fs.realPath(resolve(path));
   const built = packageBin(dir);
-  const entry = installedEntry ?? (label === 'candidate' ? built : ((yield* io('Find distribution', () => existsSync(built))) ? yield* installArtifact(dir) : built));
-  if (!(yield* io('Find artifact', () => existsSync(entry)))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
-  const git = (...args: string[]) => Effect.tryPromise({ try: () => new Promise<string>((accept, reject) => execFile('git', ['-C', dir, ...args], { encoding: 'utf8' }, (error, stdout) => error ? reject(error) : accept(stdout.trim()))), catch: cause => new PerfError({ message: `Identify artifact: ${String(cause)}` }) });
+  const entry = installedEntry ?? (label === 'candidate' ? built : ((yield* fs.exists(built)) ? yield* installArtifact(dir) : built));
+  if (!(yield* fs.exists(entry))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
+  const git = (...args: string[]) => mustRun(['git', '-C', dir, ...args], { cwd: dir, outputDir: dir }).pipe(Effect.map(result => result.stdout.trim()));
   const source = entry.endsWith('.ts');
   const distribution = join(installationRootForBin(entry), 'dist');
-  const identity = yield* io('Read build identity', () => {
-    const path = join(distribution, 'build-identity.json');
-    return existsSync(path) ? Schema.decodeUnknownSync(Schema.fromJsonString(BuildIdentity), { onExcessProperty: 'error' })(readFileSync(path, 'utf8')) : undefined;
-  });
+  const identityPath = join(distribution, 'build-identity.json');
+  const identityBytes = (yield* fs.exists(identityPath)) ? yield* fs.readFileString(identityPath) : undefined;
+  const identity = yield* io('Read build identity', () => identityBytes === undefined ? undefined : Schema.decodeUnknownSync(Schema.fromJsonString(BuildIdentity), { onExcessProperty: 'error' })(identityBytes));
   const commit = identity?.commit ?? (yield* git('rev-parse', 'HEAD'));
   const dirty = identity?.dirty ?? ((yield* git('status', '--porcelain')) !== '');
-  const digest = yield* io('Digest artifact', () => source ? workspaceInstallationIdentity() : digestDist(distribution));
+  const digest = source ? yield* io('Identify source installation', () => workspaceInstallationIdentity()) : yield* digestDist(distribution);
   return { label, dir, entry, commit, dirty, digest } satisfies Artifact;
 });
 
 /** Concurrent source commits do not change an already built installation. */
-export const verifyArtifact = Effect.fn('perf.verifyArtifact')((artifact: Artifact) => io('Verify artifact bytes', () => {
+export const verifyArtifact = Effect.fn('perf.verifyArtifact')(function*(artifact: Artifact) {
   const distribution = join(installationRootForBin(artifact.entry), 'dist');
-  if ((artifact.entry.endsWith('.ts') ? workspaceInstallationIdentity() : digestDist(distribution)) !== artifact.digest) {
-    throw new PerfError({ message: `${artifact.label} artifact changed during measurement` });
+  const digest = artifact.entry.endsWith('.ts') ? yield* io('Identify source installation', () => workspaceInstallationIdentity()) : yield* digestDist(distribution);
+  if (digest !== artifact.digest) {
+    return yield* new PerfError({ message: `${artifact.label} artifact changed during measurement` });
   }
-}));
+});
 
 export function environment() {
   return { node: process.version, platform: process.platform, arch: process.arch, cpu: cpus()[0]?.model ?? 'unknown', cpuCount: cpus().length, memoryBytes: totalmem() };

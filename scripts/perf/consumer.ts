@@ -1,7 +1,6 @@
-import { mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { packageBin } from '../package-location.js';
-import { Effect, Schema } from 'effect';
+import { Effect, FileSystem, Schema } from 'effect';
 import { io, mustRun, PerfError } from './process.js';
 
 export interface ScaleSpec { readonly sources: number; readonly tests: number; readonly pages: number }
@@ -53,25 +52,24 @@ export const selfConsumer = Effect.fn('perf.selfConsumer')(function*(repository:
 /** Synthetic consumer created through the candidate's public CLI, then frozen in Git. */
 export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: string, spec: ScaleSpec, workDir: string) {
   const root = join(workDir, 'scale');
-  yield* io('Create scale root', () => mkdirSync(root));
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.makeDirectory(root);
   yield* git(root, workDir, 'init', '-q');
   const concord = (...args: string[]) => mustRun([process.execPath, entry, '--root', root, '--json', ...args], { cwd: root, outputDir: workDir });
   yield* concord('init', '--test-root', 'test', '--source-root', 'src', '--yes');
   yield* concord('new', 'feature', 'scale', '--title', 'Scale');
   yield* concord('new', 'feature', 'local-sdlc', '--title', 'Local SDLC query target');
   yield* concord('new', 'use-case', 'scale-read', '--title', 'Scale read', '--feature', 'docs/feature/scale/README.md');
-  yield* io('Generate scale sources', () => {
-    for (const folder of ['src', 'test', 'docs/feature/scale/pages']) mkdirSync(join(root, folder), { recursive: true });
-    for (let index = 0; index < spec.sources; index++) {
-      writeFileSync(join(root, 'src', `module-${index}.ts`), `// @concord-file\n// @concord-implements docs/feature/scale/README.md\nexport function value${index}(input: number): number {\n  return input + ${index};\n}\n`);
-    }
-    for (let index = 0; index < spec.tests; index++) {
-      writeFileSync(join(root, 'test', `case-${index}.test.ts`), `import test from 'node:test';\n\n// @use-case docs/feature/scale/use-case/scale-read.md\ntest('scale case ${index}', () => {});\n`);
-    }
-    for (let index = 0; index < spec.pages; index++) {
-      writeFileSync(join(root, 'docs/feature/scale/pages', `page-${index}.md`), `# Page ${index}\n\nSupporting page for [Scale](../README.md).\n`);
-    }
-  });
+  for (const folder of ['src', 'test', 'docs/feature/scale/pages']) yield* fs.makeDirectory(join(root, folder), { recursive: true });
+  for (let index = 0; index < spec.sources; index++) {
+    yield* fs.writeFileString(join(root, 'src', `module-${index}.ts`), `// @concord-file\n// @concord-implements docs/feature/scale/README.md\nexport function value${index}(input: number): number {\n  return input + ${index};\n}\n`);
+  }
+  for (let index = 0; index < spec.tests; index++) {
+    yield* fs.writeFileString(join(root, 'test', `case-${index}.test.ts`), `import test from 'node:test';\n\n// @use-case docs/feature/scale/use-case/scale-read.md\ntest('scale case ${index}', () => {});\n`);
+  }
+  for (let index = 0; index < spec.pages; index++) {
+    yield* fs.writeFileString(join(root, 'docs/feature/scale/pages', `page-${index}.md`), `# Page ${index}\n\nSupporting page for [Scale](../README.md).\n`);
+  }
   yield* commitAll(root, workDir, 'Frozen scale consumer');
   const cache = yield* prepareCache(entry, root, workDir);
   return { kind: 'scale', root, commit: yield* headOf(root, workDir), scale: spec, cache } satisfies Consumer;
@@ -79,7 +77,8 @@ export const scaleConsumer = Effect.fn('perf.scaleConsumer')(function*(entry: st
 
 /** An existing consumer is measured in place and must be clean so its commit identifies the sources. */
 export const pathConsumer = Effect.fn('perf.pathConsumer')(function*(path: string, workDir: string) {
-  const root = yield* io('Resolve consumer', () => realpathSync(resolve(path)));
+  const fs = yield* FileSystem.FileSystem;
+  const root = yield* fs.realPath(resolve(path));
   const status = (yield* git(root, workDir, 'status', '--porcelain')).stdout.trim();
   if (status !== '') return yield* new PerfError({ message: `Consumer ${root} has uncommitted changes; measure a frozen clone instead` });
   return { kind: 'path', root, commit: yield* headOf(root, workDir) } satisfies Consumer;

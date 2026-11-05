@@ -1,8 +1,7 @@
 import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
-import { existsSync, readdirSync, readFileSync, lstatSync, chmodSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { Effect, Schema } from 'effect';
+import { Effect, FileSystem, Schema } from 'effect';
 import type { Scope } from 'effect';
 import type { Artifact } from './artifact.js';
 import type { Consumer } from './consumer.js';
@@ -12,9 +11,9 @@ export interface BenchContext {
   readonly artifact: Artifact; readonly consumer: Consumer; readonly outputDir: string;
   readonly smoke: boolean; readonly refreshLimitMs: number; readonly env?: NodeJS.ProcessEnv;
   readonly services: Map<string, string>;
-  readonly cli: (argv: readonly string[], timeoutMs?: number) => Effect.Effect<TimedRun, PerfError>;
+  readonly cli: (argv: readonly string[], timeoutMs?: number) => Effect.Effect<TimedRun, PerfError, FileSystem.FileSystem>;
 }
-export type BenchStep = (context: BenchContext) => Effect.Effect<unknown, PerfError, Scope.Scope>;
+export type BenchStep = (context: BenchContext) => Effect.Effect<unknown, PerfError, Scope.Scope | FileSystem.FileSystem>;
 export interface HttpRequest {
   readonly path: string;
   readonly body?: (context: BenchContext) => unknown;
@@ -43,7 +42,8 @@ export function defineBenchmarks(featureId: string, scenarios: readonly BenchSce
   return { featureId, scenarios };
 }
 export const loadScenarios = Effect.fn('perf.loadScenarios')(function*(root: string) {
-  const files = yield* io('Discover benchmark sources', () => readdirSync(join(root, 'bench')).filter(name => name.endsWith('.bench.ts')).sort());
+  const fs = yield* FileSystem.FileSystem;
+  const files = (yield* fs.readDirectory(join(root, 'bench'))).filter(name => name.endsWith('.bench.ts')).sort();
   const result: BenchScenario[] = [];
   for (const name of files) {
     const module = yield* Effect.tryPromise({ try: () => import(pathToFileURL(join(root, 'bench', name)).href) as Promise<{ default: Benchmarks }>, catch: cause => new PerfError({ message: `Load ${name}: ${String(cause)}` }) });
@@ -77,14 +77,14 @@ export const prepareServer = Effect.fn('perf.prepareServer')(function*(context: 
 });
 export const Published = Schema.Struct({ projection: Schema.Struct({ current: Schema.Literal(false), builtAt: Schema.String }) });
 export const waitForProjection = Effect.fn('perf.waitForProjection')(function*(context: BenchContext, argv: readonly string[], deadlineMs = context.refreshLimitMs + 30_000) {
-  const started = performance.now(); let last = '';
-  while (performance.now() - started < deadlineMs) {
-    const attempt = yield* context.cli(['--json', ...argv], Math.max(1, deadlineMs - (performance.now() - started))); last = attempt.stdout || attempt.stderr || last;
-    if (attempt.exitCode === 0 && Schema.decodeUnknownExit(Schema.fromJsonString(Published), { onExcessProperty: 'ignore' })(attempt.stdout)._tag === 'Success') return;
-    const remaining = deadlineMs - (performance.now() - started);
-    if (remaining > 0) yield* Effect.sleep(Math.min(100, remaining));
-  }
-  return yield* new PerfError({ message: `No published snapshot within ${deadlineMs}ms; last QueryPending/refresh: ${last}` });
+  let last = '';
+  return yield* Effect.gen(function*() {
+    for (;;) {
+      const attempt = yield* context.cli(['--json', ...argv]); last = attempt.stdout || attempt.stderr || last;
+      if (attempt.exitCode === 0 && Schema.decodeUnknownExit(Schema.fromJsonString(Published), { onExcessProperty: 'ignore' })(attempt.stdout)._tag === 'Success') return;
+      yield* Effect.sleep('100 millis');
+    }
+  }).pipe(Effect.timeoutOrElse({ duration: deadlineMs, orElse: () => Effect.fail(new PerfError({ message: `No published snapshot within ${deadlineMs}ms; last QueryPending/refresh: ${last}` })) }));
 });
 export const checkExpectation = Effect.fn('perf.checkExpectation')(function*(scenario: BenchScenario, run: TimedRun) {
   if (run.exitCode !== scenario.expect.exitCode) return yield* new PerfError({ message: `${scenario.id} exited ${run.exitCode ?? run.signal}, expected ${scenario.expect.exitCode}: ${run.stderr || run.stdout}` });
@@ -97,6 +97,7 @@ const ScanMessage = Schema.Union([
   Schema.Struct({ format: Schema.Literal('concord.query-scan/v1'), ok: Schema.Literal(false), scannedAt: Schema.Number, code: Schema.String, message: Schema.String, details: Schema.optionalKey(Schema.Json) }),
 ]);
 export const executeScenario = Effect.fn('perf.executeScenario')(function*(scenario: BenchScenario, context: BenchContext, timeoutMs?: number) {
+  const fs = yield* FileSystem.FileSystem;
   const run = scenario.run;
   if (scenario.state === 'cold') {
     const clear = yield* context.cli(['cache', 'clear']);
@@ -109,22 +110,26 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
       if (status.stdout.trim()) return yield* new PerfError({ message: 'beforeEach changed a path consumer; preserve its edits and measure a frozen clone instead' });
     } else {
       const tracked = (yield* mustRun(['git', 'ls-files', '-z'], { cwd: context.consumer.root, outputDir: context.outputDir })).stdout.split('\0').filter(Boolean);
-      const originals = yield* io('Snapshot beforeEach sources', () => new Map(tracked.map(path => {
+      const originals = new Map<string, { bytes: Uint8Array; mode: number }>();
+      for (const path of tracked) {
         const absolute = join(context.consumer.root, path);
-        if (!lstatSync(absolute).isFile()) throw new Error(`beforeEach requires regular source files: ${path}`);
-        return [path, { bytes: readFileSync(absolute), mode: lstatSync(absolute).mode & 0o777 }] as const;
-      })));
+        const info = yield* fs.stat(absolute);
+        if (info.type !== 'File' || (yield* Effect.result(fs.readLink(absolute)))._tag === 'Success') return yield* new PerfError({ message: `beforeEach requires regular source files: ${path}` });
+        originals.set(path, { bytes: yield* fs.readFile(absolute), mode: info.mode & 0o777 });
+      }
       yield* Effect.addFinalizer(() => Effect.gen(function*() {
         const untracked = (yield* mustRun(['git', 'ls-files', '--others', '--exclude-standard', '-z'], { cwd: context.consumer.root, outputDir: context.outputDir })).stdout.split('\0').filter(Boolean);
-        yield* io('Restore frozen beforeEach sources', () => {
-          for (const [path, { bytes, mode }] of originals) {
-            const absolute = join(context.consumer.root, path);
-            if (existsSync(absolute) && !lstatSync(absolute).isFile()) throw new Error(`Unsafe beforeEach replacement: ${path}`);
-            if (!existsSync(absolute) || !readFileSync(absolute).equals(bytes)) { mkdirSync(dirname(absolute), { recursive: true }); writeFileSync(absolute, bytes); }
-            if ((lstatSync(absolute).mode & 0o777) !== mode) chmodSync(absolute, mode);
+        for (const [path, { bytes, mode }] of originals) {
+          const absolute = join(context.consumer.root, path);
+          const exists = yield* fs.exists(absolute);
+          if ((yield* Effect.result(fs.readLink(absolute)))._tag === 'Success' || (exists && (yield* fs.stat(absolute)).type !== 'File')) return yield* new PerfError({ message: `Unsafe beforeEach replacement: ${path}` });
+          if (!exists || !Buffer.from(yield* fs.readFile(absolute)).equals(bytes)) {
+            yield* fs.makeDirectory(dirname(absolute), { recursive: true });
+            yield* fs.writeFile(absolute, bytes);
           }
-          for (const path of untracked) rmSync(join(context.consumer.root, path), { force: true });
-        });
+          if (((yield* fs.stat(absolute)).mode & 0o777) !== mode) yield* fs.chmod(absolute, mode);
+        }
+        for (const path of untracked) yield* fs.remove(join(context.consumer.root, path), { force: true });
       }).pipe(Effect.orDie));
       yield* scenario.beforeEach(context);
     }
@@ -136,28 +141,29 @@ export const executeScenario = Effect.fn('perf.executeScenario')(function*(scena
     const timing = yield* io('Decode readable mod description measurement', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ms: Schema.Number, startedAtMs: Schema.Number, endedAtMs: Schema.Number })), { onExcessProperty: 'ignore' })(captured.stdout));
     result = { ...captured, ...timing };
   } else if ('request' in run) {
-    result = yield* Effect.tryPromise({ try: async signal => {
-      const address = context.services.get('view');
-      if (!address) throw new Error('prepare must start view');
-      const invoke = async (request: HttpRequest) => {
-        const body = request.body?.(context);
-        if (request.delayMs) await new Promise(resolve => setTimeout(resolve, request.delayMs));
+    const address = context.services.get('view');
+    if (!address) return yield* new PerfError({ message: 'prepare must start view' });
+    const invoke = Effect.fn('perf.request')(function*(request: HttpRequest) {
+      const body = request.body?.(context);
+      if (request.delayMs) yield* Effect.sleep(request.delayMs);
+      return yield* Effect.tryPromise({ try: async signal => {
         const started = performance.now();
-        const response = await fetch(new URL(request.path, address), { signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs ?? 60_000)]),
+        const response = await fetch(new URL(request.path, address), { signal,
           ...(body === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }) });
         const stdout = await response.text();
         return { stdout, exitCode: response.ok ? 0 : response.status, ms: performance.now() - started, startedAtMs: started, endedAtMs: performance.now(), signal: null, stderr: '' };
-      };
-      const [target, ...companions] = await Promise.all([invoke(run.request), ...(run.request.companions ?? []).map(request => invoke(request))]);
-      for (const companion of companions) {
-        if (companion.exitCode !== 0) throw new Error(`Competing request failed: ${companion.stdout}`);
-        Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json })), { onExcessProperty: 'error' })(companion.stdout);
-      }
-      return target!;
-
-    }, catch: cause => new PerfError({ message: `Request ${scenario.id}: ${String(cause)}` }) });
+      }, catch: cause => new PerfError({ message: `Request ${scenario.id}: ${String(cause)}` }) }).pipe(
+        Effect.timeoutOrElse({ duration: timeoutMs ?? 60_000, orElse: () => Effect.fail(new PerfError({ message: `Request ${scenario.id} timed out` })) }),
+      );
+    });
+    const [target, ...companions] = yield* Effect.all([invoke(run.request), ...(run.request.companions ?? []).map(request => invoke(request))], { concurrency: 'unbounded' });
+    for (const companion of companions) {
+      if (companion.exitCode !== 0) return yield* new PerfError({ message: `Competing request failed: ${companion.stdout}` });
+      yield* io('Decode competing request', () => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ ok: Schema.Literal(true), value: Schema.Json })), { onExcessProperty: 'error' })(companion.stdout));
+    }
+    result = target!;
   } else {
-    const argv = 'scan' in run ? [process.execPath, (existsSync(installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker')) ? installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker') : join(dirname(context.artifact.entry), 'query-scan-worker.js')), context.consumer.root, JSON.stringify(run.scan)]
+    const argv = 'scan' in run ? [process.execPath, ((yield* fs.exists(installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker'))) ? installationResources(installationRootForBin(context.artifact.entry)).worker('query-scan-worker') : join(dirname(context.artifact.entry), 'query-scan-worker.js')), context.consumer.root, JSON.stringify(run.scan)]
       : cliCommand(context.artifact, context.consumer.root, runArguments(run));
     const count = 'argv' in run ? run.concurrency : 1;
     const results = yield* Effect.all(Array.from({ length: count }, () => timedRun(argv, { cwd: context.consumer.root, outputDir: context.outputDir,

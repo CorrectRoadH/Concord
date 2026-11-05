@@ -5,11 +5,36 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { Effect, Schema } from 'effect';
+import { NodeServices } from '@effect/platform-node';
+import { Effect, FileSystem, Schema } from 'effect';
 import { packConcord } from '../../scripts/release-package.js';
 import { packageBin } from '../../scripts/package-location.js';
 import { builtConcord } from '../support/installed-package.js';
 import { tmpdir } from '../support/temporary.js';
+
+// @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
+test('release packing preserves source identity bytes and tar contents without a build', () => Effect.runPromise(Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const root = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-release-identity-' });
+  const repository = join(root, 'source'), destination = join(root, 'archives'), extracted = join(root, 'extracted');
+  yield* fs.makeDirectory(repository);
+  yield* fs.makeDirectory(extracted);
+  const files = {
+    'package.json': `${JSON.stringify({ name: 'concord-pack-fixture', version: '1.2.3', files: ['payload.txt'] }, null, 2)}\n`,
+    'pnpm-lock.yaml': 'lockfileVersion: \'9.0\'\n',
+    'pnpm-workspace.yaml': 'packages: []\n',
+    'payload.txt': 'release fixture bytes\n',
+  };
+  for (const [name, bytes] of Object.entries(files)) yield* fs.writeFileString(join(repository, name), bytes);
+  const artifact = yield* packConcord(destination, repository);
+  assert.equal(artifact.name, 'concord-pack-fixture');
+  assert.equal(artifact.version, '1.2.3');
+  assert.equal(artifact.filename, join(destination, 'concord-pack-fixture-1.2.3.tgz'));
+  assert.deepEqual(artifact.files.map(file => file.path).sort(), Object.keys(files).sort());
+  // The returned archive must remain usable after packConcord's scratch scope closes.
+  execFileSync('tar', ['-xzf', artifact.filename, '-C', extracted]);
+  for (const [name, bytes] of Object.entries(files)) assert.equal(yield* fs.readFileString(join(extracted, 'package', name)), bytes);
+}).pipe(Effect.scoped, Effect.provide(NodeServices.layer))));
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
 test('one release archive contains the declared distribution and starts from its installed bin', () => Effect.runPromise(Effect.tryPromise(async () => {
@@ -19,7 +44,7 @@ test('one release archive contains the declared distribution and starts from its
     const build = spawnSync('pnpm', ['exec', 'vp', 'build', '--outDir', output], { encoding: 'utf8', timeout: 180_000, env: { ...process.env, NODE_OPTIONS: '' } });
     assert.equal(build.status, 0, `${build.stdout}\n${build.stderr}`);
     const beforePack = performance.now();
-    const artifact = packConcord(root, output);
+    const artifact = await Effect.runPromise(packConcord(root, output).pipe(Effect.provide(NodeServices.layer)));
     const packMs = performance.now() - beforePack;
     assert.deepEqual(artifact.files.map(file => file.path).sort(), builtConcord(output).files.map(file => file.path).sort());
     const consumer = join(root, 'consumer'); mkdirSync(consumer);

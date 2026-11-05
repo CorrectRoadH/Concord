@@ -1,7 +1,8 @@
-import { spawn, execFile } from 'node:child_process';
-import { closeSync, openSync, readFileSync } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { closeSync, openSync } from 'node:fs';
 import { join } from 'node:path';
-import { Effect, Schema } from 'effect';
+import { Effect, FileSystem, Schema, Stream } from 'effect';
+import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 
 export class PerfError extends Schema.TaggedError<PerfError>()('PerfError', { message: Schema.String }) {}
 
@@ -14,7 +15,11 @@ export interface TimedRun {
 }
 let sequence = 0;
 
-/** Redirect directly to file descriptors; output reading is outside the timed interval. */
+/**
+ * rc.112 ChildProcess.CommandOutput accepts a pipe or Sink, not a numeric fd.
+ * A Sink adds parent-side piping to the measured process. Keep only spawn and
+ * fd ownership here so the clock remains immediately-before-spawn to exit.
+ */
 export const timedRun = Effect.fn('perf.timedRun')(function*(argv: readonly string[], options: {
   readonly cwd: string; readonly outputDir: string; readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number; readonly processGroup?: boolean;
 }) {
@@ -23,65 +28,85 @@ export const timedRun = Effect.fn('perf.timedRun')(function*(argv: readonly stri
   const stdoutPath = join(options.outputDir, `${id}.stdout`), stderrPath = join(options.outputDir, `${id}.stderr`);
   const out = yield* Effect.acquireRelease(io('Open stdout', () => openSync(stdoutPath, 'w')), fd => Effect.sync(() => closeSync(fd)));
   const err = yield* Effect.acquireRelease(io('Open stderr', () => openSync(stderrPath, 'w')), fd => Effect.sync(() => closeSync(fd)));
-  const result = yield* Effect.callback<{ ms: number; startedAtMs: number; endedAtMs: number; exitCode: number | null; signal: string | null }, PerfError>(resume => {
-    const started = performance.now();
-    let child: ReturnType<typeof spawn>;
-    try {
-      child = spawn(argv[0]!, argv.slice(1), {
-        cwd: options.cwd, stdio: ['ignore', out, err], env: { ...process.env, ...options.env }, detached: options.processGroup ?? false,
-        ...(options.timeoutMs === undefined ? {} : { timeout: Math.ceil(options.timeoutMs), killSignal: 'SIGKILL' as const }),
-      });
-    } catch (cause) {
-      resume(Effect.fail(new PerfError({ message: `Spawn ${argv[0]}: ${String(cause)}` })));
-      return;
-    }
-    child.once('error', cause => resume(Effect.fail(new PerfError({ message: `${argv[0]}: ${cause.message}` }))));
-    child.once('exit', (exitCode, signal) => { const endedAtMs = performance.now(); resume(Effect.succeed({ ms: endedAtMs - started, startedAtMs: started, endedAtMs, exitCode, signal })); });
-    // Scope interruption must not leave a foreground process running.
-    return Effect.sync(() => {
-      if (options.processGroup && child.pid !== undefined) {
-        try { process.kill(-child.pid, 'SIGKILL'); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw cause; }
-      } else if (child.exitCode === null && child.signalCode === null) child.kill('SIGKILL');
+  const owned = yield* Effect.acquireRelease(io('Spawn measured process', () => {
+    const startedAtMs = performance.now();
+    const child = spawn(argv[0]!, argv.slice(1), {
+      cwd: options.cwd, stdio: ['ignore', out, err], env: { ...process.env, ...options.env }, detached: options.processGroup ?? false,
     });
-  });
-  const output = yield* io('Read process output', () => ({ stdout: readFileSync(stdoutPath, 'utf8'), stderr: readFileSync(stderrPath, 'utf8') }));
+    const exited = new Promise<Omit<TimedRun, 'stdout' | 'stderr'>>((resolve, reject) => {
+      child.once('error', reject);
+      child.once('exit', (exitCode, signal) => {
+        const endedAtMs = performance.now();
+        resolve({ ms: endedAtMs - startedAtMs, startedAtMs, endedAtMs, exitCode, signal });
+      });
+    });
+    return { child, exited };
+  }), ({ child, exited }) => Effect.gen(function*() {
+    // Scope interruption waits for exit before closing the inherited descriptors.
+    yield* io('Stop measured process', () => {
+      if (child.exitCode === null && child.signalCode === null) {
+        if (options.processGroup && child.pid !== undefined) {
+          try { process.kill(-child.pid, 'SIGKILL'); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw cause; }
+        } else child.kill('SIGKILL');
+      }
+    }).pipe(Effect.orDie);
+    yield* Effect.promise(() => exited.then(() => undefined, () => undefined));
+  }));
+  const wait = Effect.tryPromise({ try: () => owned.exited, catch: cause => new PerfError({ message: `${argv[0]}: ${String(cause)}` }) });
+  const result = yield* wait.pipe(Effect.timeoutOrElse({
+    duration: options.timeoutMs ?? Infinity,
+    // Keep a timeout as an observed SIGKILL exit, preserving sample diagnostics.
+    orElse: () => io('Stop timed out sample', () => { owned.child.kill('SIGKILL'); }).pipe(Effect.andThen(wait)),
+  }));
+  const fs = yield* FileSystem.FileSystem;
+  const output = yield* Effect.all({ stdout: fs.readFileString(stdoutPath), stderr: fs.readFileString(stderrPath) }).pipe(
+    Effect.mapError(cause => new PerfError({ message: `Read process output: ${String(cause)}` })),
+  );
   return { ...result, ...output } satisfies TimedRun;
 }, Effect.scoped);
 
 export const mustRun = Effect.fn('perf.mustRun')(function*(argv: readonly string[], options: {
-  readonly cwd: string; readonly outputDir: string; readonly env?: NodeJS.ProcessEnv;
+  readonly cwd: string; readonly outputDir: string; readonly env?: NodeJS.ProcessEnv; readonly timeoutMs?: number;
 }) {
-  const run = yield* timedRun(argv, options);
-  if (run.exitCode !== 0) return yield* new PerfError({ message: `${argv.join(' ')} exited ${run.exitCode ?? run.signal}: ${(run.stderr || run.stdout).slice(0, 2000)}` });
+  if (argv.length === 0) return yield* new PerfError({ message: 'Empty process argv' });
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const run = yield* Effect.scoped(Effect.gen(function*() {
+    const child = yield* spawner.spawn(ChildProcess.make(argv[0]!, argv.slice(1), {
+      cwd: options.cwd, env: options.env, extendEnv: true, stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',
+      killSignal: 'SIGKILL',
+    }));
+    return yield* Effect.all({ exitCode: child.exitCode, stdout: Stream.mkString(Stream.decodeText(child.stdout)), stderr: Stream.mkString(Stream.decodeText(child.stderr)) }, { concurrency: 'unbounded' });
+  }).pipe(Effect.timeout(options.timeoutMs ?? Infinity))).pipe(
+    Effect.mapError(cause => new PerfError({ message: `${argv.join(' ')}: ${String(cause)}` })),
+  );
+  if (run.exitCode !== 0) return yield* new PerfError({ message: `${argv.join(' ')} exited ${run.exitCode}: ${(run.stderr || run.stdout).slice(0, 2000)}` });
   return run;
 });
 
 /** Identify only public CLI refresh children belonging to this exact consumer root. */
-export const refreshPids = (root: string): Effect.Effect<readonly number[], PerfError> => Effect.tryPromise({
-  try: () => new Promise<string>((accept, reject) => execFile('ps', ['-axo', 'pid=,command='], { encoding: 'utf8' }, (error, stdout) => error ? reject(error) : accept(stdout))),
-  catch: cause => new PerfError({ message: `List refresh processes: ${String(cause)}` }),
-}).pipe(Effect.map(output => output.split('\n').filter(line => line.includes(`/query-refresh-worker.js ${root} `))
+export const refreshPids = (root: string) => mustRun(['ps', '-axo', 'pid=,command='], { cwd: process.cwd(), outputDir: '' }).pipe(Effect.map(({ stdout }) => stdout.split('\n').filter(line => line.includes(`/query-refresh-worker.js ${root} `))
   .map(line => Number(line.trim().split(/\s/u)[0])).filter(pid => Number.isSafeInteger(pid) && pid > 0)));
 
 /** Let owned detached refreshes publish and exit before deleting the frozen consumer. */
 export const settleRefreshes = Effect.fn('perf.settleRefreshes')(function*(root: string, preexisting: readonly number[] = []) {
-  const started = performance.now();
-  for (;;) {
-    const pids = (yield* refreshPids(root)).filter(pid => !preexisting.includes(pid));
-    if (pids.length === 0) return;
-    if (performance.now() - started > 150_000) {
-      yield* io('Stop owned refresh processes', () => {
-        for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw cause; } }
-      });
-      yield* Effect.sleep('1 second');
-      const remaining = (yield* refreshPids(root)).filter(pid => !preexisting.includes(pid));
-      yield* io('Kill owned refresh processes', () => {
-        for (const pid of remaining) { try { process.kill(pid, 'SIGKILL'); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw cause; } }
-      });
-      yield* Effect.sleep('100 millis');
-      if ((yield* refreshPids(root)).some(pid => !preexisting.includes(pid))) return yield* new PerfError({ message: `Refresh cleanup unconfirmed for ${root}` });
-      return;
+  const settled = yield* Effect.gen(function*() {
+    for (;;) {
+      const pids = (yield* refreshPids(root)).filter(pid => !preexisting.includes(pid));
+      if (pids.length === 0) return;
+      yield* Effect.sleep('250 millis');
     }
-    yield* Effect.sleep('250 millis');
+  }).pipe(Effect.timeoutOption('150 seconds'));
+  if (settled._tag === 'None') {
+    const pids = (yield* refreshPids(root)).filter(pid => !preexisting.includes(pid));
+    yield* io('Stop owned refresh processes', () => {
+      for (const pid of pids) { try { process.kill(pid, 'SIGTERM'); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw cause; } }
+    });
+    yield* Effect.sleep('1 second');
+    const remaining = (yield* refreshPids(root)).filter(pid => !preexisting.includes(pid));
+    yield* io('Kill owned refresh processes', () => {
+      for (const pid of remaining) { try { process.kill(pid, 'SIGKILL'); } catch (cause) { if ((cause as NodeJS.ErrnoException).code !== 'ESRCH') throw cause; } }
+    });
+    yield* Effect.sleep('100 millis');
+    if ((yield* refreshPids(root)).some(pid => !preexisting.includes(pid))) return yield* new PerfError({ message: `Refresh cleanup unconfirmed for ${root}` });
   }
 });

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import test from 'node:test';
+import { NodeServices } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
 import { WorkspaceResponse } from '../../bench/fixtures/view.js';
 import { loadBudgets, missingOwner, parseBudgetTable } from '../../scripts/perf/budgets.js';
@@ -20,7 +21,7 @@ test('budget discovery scans Feature owners and preserves scenario identities', 
   }
   assert.deepEqual(parseBudgetTable('## 性能预算\n| 场景 | 内容 | p50 |\n| --- | --- | ---: |\n| `local-sdlc/help`、`local-sdlc/skill` | 启动 | 350ms |', '性能预算'), [{ scenarios: ['local-sdlc/help', 'local-sdlc/skill'], limitMs: 350 }]);
   for (const text of ['## 性能预算\nNo table.', '## 性能预算\n| 场景 | p50 |\n| --- | ---: |\n| `concord check` | 1ms |', '## 性能预算\n| 场景 | p50 |\n| --- | ---: |\n| `local-sdlc/help` | 0ms |']) assert.throws(() => parseBudgetTable(text, '性能预算'));
-})));
+}).pipe(Effect.provide(NodeServices.layer))));
 
 // @feature docs/feature/local-sdlc/README.md
 test('missing command owners are detected for paths and Feature identifiers', () => Effect.runPromise(Effect.sync(() => {

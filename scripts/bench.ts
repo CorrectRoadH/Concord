@@ -1,9 +1,8 @@
 import { packageBin } from './package-location.js';
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
-import { NodeRuntime } from '@effect/platform-node';
-import { Effect, Schema } from 'effect';
+import { NodeRuntime, NodeServices } from '@effect/platform-node';
+import { Effect, FileSystem, Schema } from 'effect';
 import { environment, loadArtifact, verifyArtifact } from './perf/artifact.js';
 import { loadBudgets, missingOwner } from './perf/budgets.js';
 import { prepareBaseline } from './perf/baseline.js';
@@ -27,6 +26,7 @@ function optionalRevisions(argv: readonly string[]): string[] {
   return result;
 }
 const main = Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
   const { values, positionals } = yield* io('Parse bench arguments', () => parseArgs({ args: optionalRevisions(process.argv.slice(2)), allowPositionals: true, options: {
     consumer: { type: 'string' }, commit: { type: 'string', default: 'HEAD' }, scale: { type: 'string' },
     changed: { type: 'string' }, compare: { type: 'string' }, quick: { type: 'boolean', default: false },
@@ -38,7 +38,7 @@ const main = Effect.gen(function*() {
   const scale = yield* io('Parse scale', () => parseScale(values.scale));
   const root = resolve('.');
   const workDir = yield* workDirectory('concord-bench-', values.keep), outputDir = join(workDir, 'runs');
-  yield* io('Create run directory', () => mkdirSync(outputDir));
+  yield* fs.makeDirectory(outputDir);
   const candidatePackage = yield* buildForMeasurement(root, outputDir);
   const candidate = yield* loadArtifact('candidate', root, packageBin(candidatePackage));
   const base = values.changed !== undefined || values.compare !== undefined ? (values.changed !== undefined ? values.changed || (yield* defaultBase(root, outputDir)) : values.compare || (yield* defaultBase(root, outputDir))) : undefined;
@@ -64,7 +64,7 @@ const main = Effect.gen(function*() {
       if (!context) {
         const frozen = frozenConsumers.get(condition);
         const consumerDir = join(workDir, `consumer-${contexts.size}`);
-        yield* io('Create consumer directory', () => mkdirSync(consumerDir));
+        yield* fs.makeDirectory(consumerDir);
         let consumer = frozen;
         if (!consumer) {
           consumer = yield* prepareConsumer(kind, { repository: root, commit: values.commit, entry: candidate.entry, scale, workDir: consumerDir });
@@ -73,7 +73,7 @@ const main = Effect.gen(function*() {
         if (values.compare !== undefined) {
           const frozen = frozenConsumers.get(condition)!;
           const cloneDir = join(consumerDir, 'artifact');
-          yield* io('Create isolated artifact directory', () => mkdirSync(cloneDir));
+          yield* fs.makeDirectory(cloneDir);
           const clone = yield* prepareConsumer('self', { repository: frozen.root, commit: frozen.commit, entry: artifact.entry, scale, workDir: cloneDir });
           consumer = { ...frozen, root: clone.root, cache: 'ready' };
         }
@@ -82,7 +82,17 @@ const main = Effect.gen(function*() {
       perArtifact.push(context);
     }
     const context = perArtifact[0]!;
-    const absent = perArtifact.map(c => missingOwner(runArguments(scenario.run), path => existsSync(join(c.consumer.root, path)))).find(Boolean);
+    const absent = (yield* Effect.forEach(perArtifact, c => Effect.gen(function*() {
+      const paths = new Map<string, boolean>();
+      for (const arg of runArguments(scenario.run)) {
+        if (arg.startsWith('docs/')) paths.set(arg, yield* fs.exists(join(c.consumer.root, arg)));
+        else if (!arg.startsWith('--')) {
+          const owner = `docs/feature/${arg}/README.md`;
+          paths.set(owner, yield* fs.exists(join(c.consumer.root, owner)));
+        }
+      }
+      return missingOwner(runArguments(scenario.run), path => paths.get(path) ?? false);
+    }))).find(Boolean);
     if (absent) { verdicts.push({ ...skippedVerdict(scenario.id, context.consumer.kind, absent), scenario: scenario.id }); continue; }
     let preparationFailed = false;
     // Both artifacts use the same frozen sources with independent caches and services.
@@ -148,6 +158,8 @@ const main = Effect.gen(function*() {
     measuredAt: new Date().toISOString(), environment: environment(), reference: values.reference, samples, artifacts,
     consumers: Object.fromEntries([...contexts].map(([key, c]) => [key, c.consumer])), cold, snapshots, verdicts, pass, acceptance: acceptanceGaps.length === 0,
     ...(acceptanceGaps.length ? { acceptanceGaps } : {}) };
-  yield* io('Write bench record', () => { const text = `${JSON.stringify(record, null, 2)}\n`; if (values.out) writeFileSync(resolve(values.out), text); process.stdout.write(text); if (!pass) process.exitCode = 1; });
+  const text = `${JSON.stringify(record, null, 2)}\n`;
+  if (values.out) yield* fs.writeFileString(resolve(values.out), text);
+  yield* io('Write bench record', () => { process.stdout.write(text); if (!pass) process.exitCode = 1; });
 }).pipe(Effect.scoped);
-NodeRuntime.runMain(main);
+main.pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);

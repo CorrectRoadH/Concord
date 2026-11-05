@@ -11,6 +11,7 @@ import test, { after, before } from 'node:test';
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import { pathToFileURL } from 'node:url';
+import { NodeServices } from '@effect/platform-node';
 import { Effect, Schema } from 'effect';
 import { chromium, expect, type Browser } from '@playwright/test';
 import { pollUntil, readProjectConfig, writeProjectConfig, waitForWorkspaceProjection, fetchFresh } from './support.js';
@@ -49,7 +50,7 @@ before(() => Effect.runPromise(Effect.sync(()=>{
  assert.equal(execFileSync(process.execPath,[cli,'--version'],{encoding:'utf8'}).trim(),`concord v${published.version}`);
 })));
 after(() => Effect.runPromise(Effect.gen(function*() {
- yield* settleRefreshes(join(scratch, 'async-query'));
+ yield* settleRefreshes(join(scratch, 'async-query')).pipe(Effect.provide(NodeServices.layer));
  yield* Effect.sync(() => rmSync(scratch, { recursive: true, force: true }));
 })));
 
