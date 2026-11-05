@@ -41,11 +41,13 @@ test('packed CLI creates and resolves Unicode Use Cases and supporting pages', (
  assert.deepEqual(call(root, ['--dry-run', ...useCase], paths).changedPaths, [expectedPath]);
  assert.equal(existsSync(join(root, expectedPath)), false);
  call(root, useCase, Ack);
+ write(root, 'docs/feature/角色目录/architecture/README.md', '# NPC 内部机制\n\n- [认知与执行](认知与执行.md)\n- [常识与上下文](常识与上下文.md)\n');
  for (const page of ['认知与执行', '常识与上下文']) {
-   write(root, `docs/feature/角色目录/${page}.md`, `# ${page}\n`);
-   const before = readPage(root, `docs/feature/角色目录/${page}.md`);
-   savePage(root, `docs/feature/角色目录/${page}.md`, `# ${page}\n\n中文正文。\n`, before.digest);
-   assert.match(readPage(root, `docs/feature/角色目录/${page}.md`).body, /中文正文/u);
+   const pagePath = `docs/feature/角色目录/architecture/${page}.md`;
+   write(root, pagePath, `# ${page}\n`);
+   const before = readPage(root, pagePath);
+   savePage(root, pagePath, `# ${page}\n\n中文正文。\n`, before.digest);
+   assert.match(readPage(root, pagePath).body, /中文正文/u);
  }
  const shown = call(root, ['show', '扩展NPC动作'], Schema.Struct({ document: Schema.Struct({ path: Schema.String }) }));
  assert.equal(shown.document.path, expectedPath);
