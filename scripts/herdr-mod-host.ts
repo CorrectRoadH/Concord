@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/architecture.md
+// @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 // Only the external Herdr/GPUI boundary is replaced; this loads the source mod
 // and executes the public CLI. It does not measure native drawing.
 import { registerHooks } from 'node:module';
@@ -43,9 +44,6 @@ const main = Effect.scoped(Effect.gen(function*() {
   const fibers = new Set<Fiber.Fiber<unknown, unknown>>();
   const scope = yield* Effect.scope;
   yield* Effect.addFinalizer(() => Effect.forEach(fibers, Fiber.interrupt, { concurrency: 'unbounded', discard: true }));
-  const readFile = (path: string, _encoding: 'utf8') => Effect.runPromise(fs.readFileString(path));
-  const writeFile = (path: string, text: string) => Effect.runPromise(fs.writeFileString(path, text));
-  const rename = (from: string, to: string) => Effect.runPromise(fs.rename(from, to));
   return yield* Effect.tryPromise({ try: async signal => {
   const [entry, root, mode] = process.argv.slice(2);
   if (!entry || !root || !['first-screen', 'push', 'workflow'].includes(mode ?? '')) throw new Error('Expected installed CLI, consumer root, and first-screen|push|workflow');
@@ -99,7 +97,9 @@ const main = Effect.scoped(Effect.gen(function*() {
     readTextFile: (path: string) => Effect.runPromise(fs.readFileString(path).pipe(Effect.catch(error => error.reason._tag === 'NotFound' ? Effect.succeed(null) : Effect.fail(error)))),
     writeTextFile: async (path: string, text: string, expected: string | null) => {
       if (await host.readTextFile(path) !== expected) throw new Error('File changed');
-      const temporary = `${path}.herdr-host-tmp`; await writeFile(temporary, text); await rename(temporary, path); return null;
+      const temporary = `${path}.herdr-host-tmp`;
+      await Effect.runPromise(fs.writeFileString(temporary, text).pipe(Effect.andThen(fs.rename(temporary, path))));
+      return null;
     },
     watchFolder: async (path: string): Promise<string[]> => {
       let state = fileWatchers.get(path);
@@ -153,13 +153,14 @@ const main = Effect.scoped(Effect.gen(function*() {
       const editor = output!.find('document-editor')!.state!;
       editor.set_value(`${editor.value()}\nSAVED_FROM_NATIVE_MOD\n`); click('save');
       await waitFor(() => output?.find('document-editor') === undefined && output?.text().includes('check:') === true);
-      if (!(await readFile(sourcePath, 'utf8')).includes('SAVED_FROM_NATIVE_MOD')) throw new Error('Native save did not write its draft');
+      if (!(await Effect.runPromise(fs.readFileString(sourcePath))).includes('SAVED_FROM_NATIVE_MOD')) throw new Error('Native save did not write its draft');
       click('edit'); output!.find('document-editor')!.state!.set_value('# MY_CONFLICTING_DRAFT\n');
-      const disk = `${await readFile(sourcePath, 'utf8')}\nAGENT_CHANGE\n`;
-      const temporary = `${sourcePath}.agent.tmp`; await writeFile(temporary, disk); await rename(temporary, sourcePath);
+      const disk = `${await Effect.runPromise(fs.readFileString(sourcePath))}\nAGENT_CHANGE\n`;
+      const temporary = `${sourcePath}.agent.tmp`;
+      await Effect.runPromise(fs.writeFileString(temporary, disk).pipe(Effect.andThen(fs.rename(temporary, sourcePath))));
       click('save');
       await waitFor(() => output?.find('merge') !== undefined);
-      if (output!.find('document-editor')!.state!.value() !== '# MY_CONFLICTING_DRAFT\n' || await readFile(sourcePath, 'utf8') !== disk) throw new Error('Conflict replaced the disk or draft');
+      if (output!.find('document-editor')!.state!.value() !== '# MY_CONFLICTING_DRAFT\n' || await Effect.runPromise(fs.readFileString(sourcePath)) !== disk) throw new Error('Conflict replaced the disk or draft');
       click('discard');
       await waitFor(() => output?.find(`concord-body-docs/feature/measured/README.md`)?.text().includes('AGENT_CHANGE') === true);
       process.stdout.write(JSON.stringify({ boundary: 'actual mod and public CLI; external Herdr UI only', text: output?.text(), calls, workflow: 'initialized, created, edited, saved, checked, preserved conflict, discarded' }) + '\n');
@@ -171,10 +172,10 @@ const main = Effect.scoped(Effect.gen(function*() {
       await waitFor(() => fileWatchers.size > 0);
       output!.find('page-docs/feature/measured/README.md')!.click!(undefined, context());
       await waitFor(() => output?.find('concord-body-docs/feature/measured/README.md') !== undefined);
-      original = await readFile(sourcePath, 'utf8');
+      original = await Effect.runPromise(fs.readFileString(sourcePath));
       const marker = `MOD_PUSH_${crypto.randomUUID()}`;
       const temporary = join(dirname(sourcePath), '.herdr-mod-benchmark.tmp');
-      await writeFile(temporary, `${original}\n${marker}\n`); await rename(temporary, sourcePath);
+      await Effect.runPromise(fs.writeFileString(temporary, `${original}\n${marker}\n`).pipe(Effect.andThen(fs.rename(temporary, sourcePath))));
       started = performance.now();
       ended = await waitFor(() => output?.find('concord-body-docs/feature/measured/README.md')?.text().includes(marker) === true);
     }
@@ -183,7 +184,10 @@ const main = Effect.scoped(Effect.gen(function*() {
     view?.close(context()); closed = true;
     for (const task of tasks) task.cancel();
     await Effect.runPromise(Effect.forEach(fibers, Fiber.interrupt, { concurrency: 'unbounded', discard: true }));
-    if (original !== undefined) { const temporary = `${sourcePath}.restore.tmp`; await writeFile(temporary, original); await rename(temporary, sourcePath); }
+    if (original !== undefined) {
+      const temporary = `${sourcePath}.restore.tmp`;
+      await Effect.runPromise(fs.writeFileString(temporary, original).pipe(Effect.andThen(fs.rename(temporary, sourcePath))));
+    }
     hooks.deregister(); delete global.__concordHerdrBoundary;
   }
 }, catch: error => new HostFailure({ message: error instanceof Error ? error.message : String(error) }) });

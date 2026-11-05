@@ -1,3 +1,5 @@
+// @concord-file
+// @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { Duration, Effect, FileSystem, Schema } from 'effect';
@@ -32,7 +34,7 @@ const main = Effect.scoped(Effect.gen(function* () {
     } }),
     catch: cause => new TestArgumentsInvalid({ detail: String(cause) }),
   });
-  if (!['all', 'node', 'e2e', 'agent', 'source', 'packed'].includes(values.suite)) return yield* new TestArgumentsInvalid({ detail: `Unknown suite: ${values.suite}` });
+  if (!['all', 'node', 'e2e', 'agent'].includes(values.suite)) return yield* new TestArgumentsInvalid({ detail: `Unknown suite: ${values.suite}` });
   const browserOnly = values.suite === 'e2e' || values.suite === 'agent';
   const shard = yield* Effect.try({ try: () => {
     if (values['test-shard'] === undefined) return undefined;
@@ -49,18 +51,13 @@ const main = Effect.scoped(Effect.gen(function* () {
       return yield* new TestArgumentsInvalid({ detail: `File does not belong to ${values.suite}: ${file}` });
     }
   }
-  const sourceFile = (file: string) => /^test\/(?:model|domain)\//u.test(file) || file === 'test/architecture.test.ts';
-  const files = positionals.filter(file => values.suite === 'source' ? sourceFile(file) : values.suite === 'packed' ? !sourceFile(file) : true);
-  const nodeFiles = files.filter(file => file.endsWith('.test.ts'));
-  const browserFiles = files.filter(file => file.endsWith('.e2e.ts'));
+  const nodeFiles = positionals.filter(file => file.endsWith('.test.ts'));
+  const browserFiles = positionals.filter(file => file.endsWith('.e2e.ts'));
   if (values['node-worker']) {
     const output = process.env.CONCORD_NODE_OUTPUT;
     if (output === undefined) return yield* new TestArgumentsInvalid({ detail: 'Node worker requires CONCORD_NODE_OUTPUT' });
-    const globPatterns = values.suite === 'source'
-      ? ['test/{model,domain}/**/*.test.ts', 'test/architecture.test.ts']
-      : values.suite === 'packed' ? ['test/!(model|domain)/**/*.test.ts', 'test/!(architecture).test.ts'] : ['test/**/*.test.ts'];
     const failed = yield* runNodeTests({
-      ...(positionals.length ? { files: nodeFiles.map(file => resolve(file)) } : { globPatterns }),
+      ...(positionals.length ? { files: nodeFiles.map(file => resolve(file)) } : { globPatterns: ['test/**/*.test.ts'] }),
       isolation: 'process', concurrency, shard,
       testNamePatterns: values['test-name-pattern'],
       timeout: Duration.toMillis(Duration.minutes(5)),
@@ -105,7 +102,7 @@ const main = Effect.scoped(Effect.gen(function* () {
   const nodeTests = !browserOnly && (positionals.length === 0 || nodeFiles.length > 0)
     ? suite('Node', process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(import.meta.url), '--node-worker', ...process.argv.slice(2)])
     : Effect.succeed(false);
-  const browserTests = values.suite !== 'node' && values.suite !== 'source' && (positionals.length === 0 || browserFiles.length > 0)
+  const browserTests = values.suite !== 'node' && (positionals.length === 0 || browserFiles.length > 0)
     ? suite('Browser', 'pnpm', ['exec', 'e2e', 'run', '--config', values.suite === 'agent' ? 'e2e.agent.config.ts' : 'e2e.config.ts', '--no-cache', '--workers', String(browserConcurrency),
       ...(values.suite === 'agent' ? ['--tag', 'journey'] : []),
       ...(values['test-name-pattern'] === undefined ? [] : ['--grep', values['test-name-pattern']]),

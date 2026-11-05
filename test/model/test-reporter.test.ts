@@ -30,6 +30,66 @@ const run = Effect.fn('test.runner.integration')(function*(args: string[], env: 
 const Counts = Schema.Struct({ tests: Schema.Number, failed: Schema.Number, cancelled: Schema.Number });
 const Timing = Schema.Struct({ scope: Schema.String, counts: Counts });
 
+// @feature docs/engineering/build/architecture.md#脚本只写项目特有的规则
+runnerTest('cancelling check reaps static task groups that ignore SIGTERM and releases its cache', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.String }));
+  const fakePnpm = join(root, 'pnpm.ts');
+  yield* fs.writeFileString(fakePnpm, `#!/usr/bin/env -S node --import ${import.meta.resolve('tsx')}
+import { writeFileSync } from 'node:fs';
+process.on('SIGTERM', () => {});
+writeFileSync(${JSON.stringify(root)} + '/' + process.argv[5] + '.json', JSON.stringify({pid: process.pid, cache: process.env.CONCORD_TEST_COMPILE_CACHE}));
+console.log('TASK_READY');
+setInterval(() => {}, 1000);
+`);
+  yield* fs.chmod(fakePnpm, 0o755);
+  yield* fs.symlink(fakePnpm, join(root, 'pnpm'));
+  // Keep a failed cleanup regression from leaking the deliberately stubborn boundary.
+  yield* Effect.addFinalizer(() => Effect.gen(function*() {
+    for (const file of (yield* fs.readDirectory(root)).filter(file => file.endsWith('.json'))) {
+      const { pid, cache } = Schema.decodeUnknownSync(record)(yield* fs.readFileString(join(root, file)));
+      yield* Effect.sync(() => { try { process.kill(-pid, 'SIGKILL'); } catch {} });
+      yield* fs.remove(cache, { recursive: true, force: true });
+    }
+  }).pipe(Effect.orDie));
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/check.ts')], {
+    env: { ...process.env, PATH: `${root}:${process.env.PATH}` },
+    stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
+  }));
+  const ready = yield* Deferred.make<void>();
+  let output = '';
+  const drain = yield* Stream.runForEach(Stream.decodeText(child.all), text => Effect.gen(function*() {
+    output += text;
+    if (output.split('TASK_READY').length === 7) yield* Deferred.succeed(ready, undefined);
+  })).pipe(Effect.forkScoped);
+  yield* Deferred.await(ready).pipe(Effect.timeout(Duration.seconds(20)));
+  const processes = yield* Effect.forEach((yield* fs.readDirectory(root)).filter(file => file.endsWith('.json')), file => fs.readFileString(join(root, file)).pipe(Effect.map(Schema.decodeUnknownSync(record))));
+  assert.equal(processes.length, 6);
+  yield* child.kill({ killSignal: 'SIGTERM', forceKillAfter: Duration.seconds(10) });
+  yield* Fiber.join(drain).pipe(Effect.timeout(Duration.seconds(1)), Effect.ignore);
+  for (const { pid, cache } of processes) {
+    assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }, `leaked task PID ${pid}\n${output}`);
+    assert.equal(yield* fs.exists(cache), false, `leaked compile cache ${cache}`);
+  }
+}));
+
+// @feature docs/engineering/testing/cli.md#完整门禁
+runnerTest('official file diagnostics sort durations and count isolated file processes once', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
+  const first = join(root, 'first.test.ts'), second = join(root, 'second.test.ts');
+  // A case may legally have the same title as its file wrapper.
+  yield* fs.writeFileString(first, `import test from 'node:test'; test(${JSON.stringify(first)}, () => {});\n`);
+  yield* fs.writeFileString(second, `import test from 'node:test'; test('another file', () => {});\n`);
+  const result = yield* run(['--suite=node', first, second], { CONCORD_TEST_CONCURRENCY: '1' });
+  assert.equal(result.code, 0, result.text);
+  const timings = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Struct({ file: Schema.String, duration_ms: Schema.Number }))))(yield* fs.readFileString(join(result.output, 'file-timings.json')));
+  assert.deepEqual(timings.map(timing => timing.file).sort(), [first, second].sort());
+  assert.deepEqual(timings.map(timing => timing.duration_ms), timings.map(timing => timing.duration_ms).sort((left, right) => right - left));
+  const summaries = (yield* fs.readFileString(join(result.output, 'node-timings.jsonl'))).trim().split('\n').map(line => Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ scope: Schema.String, fileProcessStarts: Schema.optional(Schema.Number) })))(line));
+  assert.equal(summaries.find(summary => summary.scope === 'run')?.fileProcessStarts, 2);
+}));
+
 runnerTest('official TAP retains circular failure diagnostics and reaches its run summary', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const file = join(root, 'circular.test.ts');

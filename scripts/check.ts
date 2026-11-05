@@ -1,5 +1,7 @@
+// @concord-file
+// @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
-import { Effect, FileSystem, Schema } from 'effect';
+import { Duration, Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join } from 'node:path';
 import { checkoutRoot } from './build-output.js';
@@ -8,7 +10,9 @@ class DistInCheckout extends Schema.TaggedError<DistInCheckout>()('DistInCheckou
 
 const task = Effect.fn('check.task')(function* (name: string, args: readonly string[] = []) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const code = yield* spawner.exitCode(ChildProcess.make('pnpm', ['exec', 'vp', 'run', name, ...args], { stdout: 'inherit', stderr: 'inherit' }));
+  const code = yield* spawner.exitCode(ChildProcess.make('pnpm', ['exec', 'vp', 'run', name, ...args], {
+    stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', forceKillAfter: Duration.seconds(5),
+  }));
   return Number(code);
 }, Effect.catch(cause => Effect.sync(() => { console.error(String(cause)); return 1; })));
 

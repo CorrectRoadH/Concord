@@ -1,3 +1,5 @@
+// @concord-file
+// @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { run, type RunOptions } from 'node:test';
 import { tap } from 'node:test/reporters';
@@ -21,7 +23,8 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
     () => Effect.sync(() => controller.abort()),
   );
   let success = false;
-  const fileTimings: { file: string; duration_ms: number; success: boolean }[] = [];
+  const fileTimings = new Map<string, { file: string; duration_ms: number; success: boolean }>();
+  const fileProcesses = new Set<string>();
   const diagnose = Effect.fn('test.node.diagnostic')(function*(event: TestEvent) {
     const data = event.data;
     const file = data !== undefined && 'file' in data ? data.file : undefined;
@@ -36,14 +39,17 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
       yield* fs.writeFileString(join(output, 'node-failures.jsonl'), `${JSON.stringify({ file, name: event.data.name, error })}\n`, { flag: 'a' });
     }
     if (event.type === 'test:summary') {
-      const timing = { ...event.data, scope: file === undefined ? 'run' : 'file' };
+      const timing = { ...event.data, scope: file === undefined ? 'run' : 'file',
+        // Only the official runner's isolated file processes, never case descendants.
+        ...(file === undefined ? { fileProcessStarts: fileProcesses.size } : {}) };
       yield* fs.writeFileString(process.env.CONCORD_TEST_TIMINGS ?? join(output, 'node-timings.jsonl'), `${JSON.stringify(timing)}\n`, { flag: 'a' });
       if (file === undefined) success = event.data.success;
     }
-    // File wrapper names are paths, whereas individual case names are titles.
+    if (event.type === 'test:dequeue' && options.isolation !== 'none' && file !== undefined && resolve(event.data.name) === file) fileProcesses.add(file);
+    // A case can share its file's title; the wrapper completes last and owns its timing.
     if (event.type === 'test:complete' && file !== undefined && resolve(event.data.name) === file) {
       const timing = { file, duration_ms: event.data.details.duration_ms, success: event.data.details.passed };
-      fileTimings.push(timing);
+      fileTimings.set(file, timing);
       yield* Effect.sync(() => console.error(`# Node file: ${file}; ${(timing.duration_ms / 1000).toFixed(3)}s; success=${timing.success}; logs=${logs}`));
     }
   });
@@ -56,6 +62,7 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
   yield* Stream.fromAsyncIterable(tap(measured()), cause => new TestRunnerFailed({ cause })).pipe(
     Stream.runForEach(text => Effect.sync(() => { process.stdout.write(text); })),
   );
-  yield* fs.writeFileString(join(output, 'file-timings.json'), `${JSON.stringify(fileTimings, null, 2)}\n`);
+  const sortedTimings = [...fileTimings.values()].sort((left, right) => right.duration_ms - left.duration_ms);
+  yield* fs.writeFileString(join(output, 'file-timings.json'), `${JSON.stringify(sortedTimings, null, 2)}\n`);
   return !success;
 });
