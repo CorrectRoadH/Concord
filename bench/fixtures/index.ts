@@ -22,9 +22,9 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
     mkdirSync(join(root, 'src'), { recursive: true }); mkdirSync(join(root, 'test'), { recursive: true });
     for (let i = 0; i < sources; i++) writeFileSync(join(root, `src/file-${i}.ts`), `// @concord-file\n// @concord-implements docs/feature/measured/README.md\nexport const value${i} = ${i};\n`);
     writeFileSync(join(root, 'test/read.test.ts'), "// @use-case docs/feature/local-sdlc/use-case/read.md\nimport test from 'node:test';\ntest('read', () => {});\n");
-    const pageDir = name.startsWith('writing') || name === 'smoke' ? 'docs/feature/measured/pages' : 'docs/feature/measured';
+    const pageDir = 'docs/feature/measured/format';
     mkdirSync(join(root, pageDir), { recursive: true });
-    if (name === 'smoke') writeFileSync(join(root, 'docs/feature/measured/page-0.md'), '# Page 0\n\nMeasured content.\n');
+    writeFileSync(join(root, pageDir, 'README.md'), '# Measured formats\n');
     let pageBytes = 0;
     for (let i = 0; i < pages; i++) {
       const prose = name === 'writing-scale' ? Array.from({ length: 100 }, (_, paragraph) =>
@@ -36,7 +36,7 @@ export const fixtureConsumer = Effect.fn('bench.fixtureConsumer')(function*(name
 
   });
   if (name.startsWith('writing') || name === 'smoke') {
-    yield* io('Write Markdown rules', () => writeFileSync(join(root, 'docs/writing.md'), '# Writing rules\n\n句子不超过 300 个字符，段落不超过 320 个字符。\n\n## 检查范围\n\n- docs/feature/measured/pages\n'));
+    yield* io('Write Markdown rules', () => writeFileSync(join(root, 'docs/writing.md'), '# Writing rules\n\n句子不超过 300 个字符，段落不超过 320 个字符。\n\n## 检查范围\n\n- docs/feature/measured/format\n'));
   }
   yield* git('add', '.');
   yield* git('-c', 'user.name=Concord bench', '-c', 'user.email=bench@example.invalid', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Frozen benchmark fixture');
