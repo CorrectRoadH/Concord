@@ -42,6 +42,7 @@ import { MermaidDiagram } from './mermaid-diagram';
 interface Props {
   readonly initial: ViewFile;
   readonly source?: boolean;
+  readonly raw?: boolean;
   readonly title?: string;
   readonly sourceLocation?: { readonly line: number; readonly endLine: number };
   readonly hideSourceHeading?: boolean;
@@ -126,12 +127,12 @@ function markdownLinkUrls(markdown: string): readonly string[] {
   return urls;
 }
 
-export function MarkdownEditor({ initial, source = false, title, sourceLocation, hideSourceHeading = false, onSaved, toolbarTarget, onFollowLink }: Props) {
+export function MarkdownEditor({ initial, source = false, raw = false, title, sourceLocation, hideSourceHeading = false, onSaved, toolbarTarget, onFollowLink }: Props) {
   const theme = useTheme();
   const { api, requestRefresh, notify, snapshot, projection, busy } = useWorkspace();
   const [file, setFile] = useState(initial);
   const [draft, setDraft] = useState(initial.body);
-  const mathDocument = useMemo(() => !source && hasMarkdownMath(file.body), [source, file.body]);
+  const mathDocument = useMemo(() => !source && !raw && hasMarkdownMath(file.body), [source, raw, file.body]);
   const [dirty, setLocalDirty] = useState(false);
   const baseline = useRef(initial);
   const currentDraft = useRef(initial.body);
@@ -286,7 +287,7 @@ export function MarkdownEditor({ initial, source = false, title, sourceLocation,
     {source ? <SourceEditor value={draft} path={file.path} readOnly={busy} extensions={codeMirrorExtensions} location={sourceLocation} onChange={changeDraft} /> : mathDocument ? <div className="math-document-editor" data-testid="math-document-editor">
       <details className="math-document-source"><summary>编辑原文</summary>{rawEditor}</details>
       <MarkdownPreview markdown={draft} documentPath={file.path} onFollowLink={onFollowLink} />
-    </div> : hasFrontmatter || unsupported ? rawEditor : <MarkdownErrorBoundary
+    </div> : raw || hasFrontmatter || unsupported ? rawEditor : <MarkdownErrorBoundary
       fallback={rawEditor}
       onError={error => setUnsupported(error.message)}
     >

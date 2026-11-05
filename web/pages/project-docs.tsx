@@ -74,7 +74,7 @@ export function ProjectDocsPage() {
     <section data-testid="project-doc-preview" aria-label={selectedPath}>
       {error && <div className="form-error" role="alert">{error} <Button size="sm" variant="outline" onClick={() => setAttempt(value => value + 1)}>重试</Button></div>}
       {selected?.path === selectedPath
-        ? <MarkdownEditor key={selected.path} initial={selected} title={title} onSaved={setSelected} toolbarTarget={toolbar} onFollowLink={follow} />
+        ? <MarkdownEditor key={selected.path} initial={selected} raw={selected.path === 'docs/taste.md'} title={title} onSaved={setSelected} toolbarTarget={toolbar} onFollowLink={follow} />
         : !error && <p role="status">正在载入…</p>}
     </section>
   </>;

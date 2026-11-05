@@ -10,14 +10,14 @@ export async function sourceWebServer() {
     build: { write: false, minify: false }, configLoader: 'native' });
   const files = outputs(result);
   return {
-    serve: async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    serve: async (request: IncomingMessage, response: ServerResponse, send: (bytes: Buffer) => void): Promise<void> => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
       const file = files.get(path) ?? (!path.startsWith('assets/') ? files.get('index.html') : undefined);
       if (file === undefined) { response.statusCode = 404; response.end(); return; }
       const type = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.woff2') ? 'font/woff2' : path.endsWith('.woff') ? 'font/woff' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
       response.setHeader('Content-Type', type);
-      response.setHeader('Content-Length', file.length);
-      response.end(file);
+      if (path.startsWith('assets/')) response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      send(file);
     },
     close: async () => { files.clear(); },
   };

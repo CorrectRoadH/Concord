@@ -179,7 +179,8 @@ test('workbench compresses workspace data and caches fingerprinted assets only',
     assert.equal((await workspace.json() as { ok: boolean }).ok, true);
     const uncompressed = await fetchFresh(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip;q=0' } });
     assert.equal(uncompressed.headers.get('content-encoding'), null);
-    const asset = readdirSync(join(installationResources(dirname(dirname(dirname(dirname(installedConcordCli()))))).web, 'assets')).find(name => /^index-.+\.js$/u.test(name));
+    const html = await (await fetchFresh(base)).text();
+    const asset = /src="\/assets\/([^"]+\.js)"/u.exec(html)?.[1];
     assert.ok(asset);
     const script = await fetchFresh(`${base}/assets/${asset}`, { headers: { 'Accept-Encoding': 'gzip' } });
     assert.equal(script.status, 200);

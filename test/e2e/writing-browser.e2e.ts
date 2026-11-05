@@ -140,10 +140,11 @@ test('real browser displays invalid policy bytes and requires an explicit repair
     await page.getByRole('button', { name: '修复规则' }).click();
     await expect(page.getByText('{ broken policy')).toBeVisible();
     assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), '{ broken policy');
-    const saved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/action');
+    const saved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/action' && (response.request().postDataJSON() as { action?: string }).action === 'document.set' && (response.request().postDataJSON() as { path?: string }).path === 'docs/writing.md');
     await page.getByRole('button', { name: '保存规则' }).click();
     assert.equal((await saved).status(), 200);
-    await expect.poll(() => parseWritingPolicy(readFileSync(join(root, 'docs/writing.md'), 'utf8')).bannedTerms.length).toBe(defaultWritingPolicy.bannedTerms.length);
+    await expect.poll(() => readFileSync(join(root, 'docs/writing.md'), 'utf8')).not.toBe('{ broken policy');
+    assert.equal(parseWritingPolicy(readFileSync(join(root, 'docs/writing.md'), 'utf8')).bannedTerms.length, defaultWritingPolicy.bannedTerms.length);
     await expect(page.getByText('{ broken policy')).toHaveCount(0);
   } finally { await server?.close(); rmSync(root, { recursive: true, force: true }); }
 });

@@ -203,7 +203,15 @@ test('navigation polling preserves drafts and a completed write reads after an o
     holdRead = true;
     await page.clock.runFor(4000);
     await expect.poll(() => activeReads).toBe(1);
+    const saved = page.waitForResponse(response => new URL(response.url()).pathname === '/api/action' && (response.request().postDataJSON() as { action?: string }).action === 'document.set');
+    const readback = page.waitForResponse(response => new URL(response.url()).pathname === '/api/file' && new URL(response.url()).searchParams.get('path') === 'docs/feature/watch/README.md');
     releaseSave?.();
+    const receipt = await saved;
+    assert.equal(receipt.status(), 200, await receipt.text());
+    const file = await readback;
+    assert.equal(file.status(), 200, await file.text());
+    assert.equal(await file.finished(), null);
+    await page.clock.runFor(1);
     await expect(page.locator('.editor-shell')).toHaveAttribute('data-dirty', 'false');
     await expect.poll(() => refreshRequests).toBe(1);
     await expect(page.getByLabel('工作区投影状态')).toContainText('导航更新中');

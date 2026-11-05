@@ -1,7 +1,7 @@
 import { startViewServer } from '../e2e/server.js';
 import { waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
 import { execFileSync } from 'node:child_process';
-import { installationResources } from "../../src/base/installation/index.js";
+import { installationResources } from "../support/source-resources.js";
 import { relative } from "node:path";
 import { packageBin } from '../../scripts/package-location.js';
 import { hawdbTarget } from "../../src/base/installation/index.js";
@@ -53,8 +53,7 @@ test('parallel consumers share the build while damage stays in a private copy', 
       const shared = packageBin(join(consumers[0]!, 'node_modules/concord-sdlc'));
       const privateFile = packageBin(join(privateRoot, 'node_modules/concord-sdlc'));
       assert.notEqual(statSync(shared).ino, statSync(privateFile).ino);
-      const nativeFile = join('node_modules/concord-sdlc', relative(join(consumers[0]!, 'node_modules/concord-sdlc'), installationResources(join(consumers[0]!, 'node_modules/concord-sdlc')).native), hawdbTarget(), 'hawdb.node');
-      assert.notEqual(statSync(join(consumers[0]!, nativeFile)).ino, statSync(join(privateRoot, nativeFile)).ino,
+      assert.notEqual(statSync(join(installationResources(join(consumers[0]!, 'node_modules/concord-sdlc')).native, hawdbTarget(), 'hawdb.node')).ino, statSync(join(installationResources(join(privateRoot, 'node_modules/concord-sdlc')).native, hawdbTarget(), 'hawdb.node')).ino,
         'native damage fixtures cannot share the mapped library inode with read-only consumers');
       const before = readFileSync(shared);
       writeFileSync(privateFile, 'damaged private installation');

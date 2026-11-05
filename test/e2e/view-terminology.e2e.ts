@@ -29,7 +29,7 @@ test('terminology tab discards a previous document response and shows scoped JSO
     } finally { repo.close(); }
     writeFileSync(join(root, 'docs/concepts.md'), "# Terms\n\n## Shared {#shared}\n\nShared definition\n");
     writeFileSync(join(root, 'docs/feature/alpha/concepts.md'), "# Terms\n\n## Alpha {#alpha}\n\nAlpha definition\n");
-    writeFileSync(join(root, 'docs/feature/beta/concepts.md'), "---\nimports:\n  - docs/concepts.md#missing\n---\n\n# Terms\n\n## Beta {#beta}\n\nBeta definition\n");
+    writeFileSync(join(root, 'docs/feature/beta/concepts.md'), "# Terms\n\n## Beta {#beta}\n\nBeta definition\n\n## Shared {#duplicate-shared}\n\nA conflicting scoped definition.\n");
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
 
 
@@ -54,7 +54,7 @@ test('terminology tab discards a previous document response and shows scoped JSO
     await page.getByRole('tab', { name: '术语', exact: true }).click();
     await expect(page.getByText('docs/concepts.md#shared', { exact: true })).toBeVisible();
     await expect(page.getByText('docs/feature/beta/concepts.md#beta', { exact: true })).toBeVisible();
-    await expect(page.getByText(/DanglingConceptImport/u)).toBeVisible();
+    await expect(page.getByText(/AmbiguousConceptName/u)).toBeVisible();
     const oldResponse = page.waitForResponse(response => response.url().endsWith('/api/action') && (response.request().postDataJSON() as { action?: string; path?: string }).path === 'docs/feature/alpha/concepts.md');
     releaseAlpha();
     await oldResponse;

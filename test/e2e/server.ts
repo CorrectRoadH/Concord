@@ -6,6 +6,7 @@ import { Schema } from 'effect';
 import { installationResources, installationRootForBin } from '../../src/base/installation/index.js';
 import { tmpdir } from '../support/temporary.js';
 import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.js';
+import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly webRoot?: string; readonly installedBin?: string }
 export interface ViewServerHandle {
@@ -19,6 +20,7 @@ const Ready = Schema.Struct({ operation: Schema.Literal('view'), root: Schema.St
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-browser-server-'));
   let child: ChildProcess | undefined;
+  let entry: string | undefined;
   try {
     let resources: ReturnType<typeof installationResources>;
     if (options.installedBin !== undefined) resources = installationResources(installationRootForBin(options.installedBin));
@@ -32,6 +34,7 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       rmSync(resources.web, { recursive: true, force: true });
       cpSync(options.webRoot, resources.web, { recursive: true });
     }
+    entry = resources.bin;
     child = spawn(process.execPath, [resources.bin, '--root', options.root, '--json', 'view', '--in-process', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
     const processHandle = child;
     let diagnostics = '';
@@ -63,13 +66,16 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
           })]);
         } catch (cause) {
           processHandle.kill('SIGKILL'); await stopped;
+          stopWorkspaceServer(options.root, resources.bin);
           rmSync(scratch, { recursive: true, force: true }); throw cause;
         } finally { if (deadline !== undefined) clearTimeout(deadline); }
       }
+      stopWorkspaceServer(options.root, resources.bin);
       rmSync(scratch, { recursive: true, force: true });
     })() };
   } catch (cause) {
     if (child && child.exitCode === null && child.signalCode === null) { const stopped = once(child, 'exit'); child.kill('SIGTERM'); await stopped; }
+    if (entry) stopWorkspaceServer(options.root, entry);
     rmSync(scratch, { recursive: true, force: true }); throw cause;
   }
 }

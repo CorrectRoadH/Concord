@@ -2,7 +2,7 @@ import { createDocument, initialize } from '../support/operations.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from '../support/temporary.js';
 import { join } from 'node:path';
 import { test } from './fixtures.js';
@@ -38,24 +38,24 @@ test('file reads and navigation remain available with live or dead publication o
     const repo = new LocalRepository(root, { initialize: true });
     try {
       initialize(repo, false, { testRoots: [] });
-      createDocument(repo, 'design', { id: 'lease', title: 'Lease', pages: ['architecture'], body: '# Lease content' });
+      createDocument(repo, 'feature', { id: 'lease', title: 'Lease', pages: ['architecture'], body: '# Lease content' });
     } finally { repo.close(); }
+    mkdirSync(join(root, 'docs/feature/lease/pages'), { recursive: true });
+    writeFileSync(join(root, 'docs/feature/lease/pages/nested.md'), '# Nested supporting page\n');
     server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
 
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto(`http://127.0.0.1:${server.port}/design/lease`);
+    await page.goto(`http://127.0.0.1:${server.port}/features/lease`);
     const tree = page.getByTestId('document-file-tree');
     await expect(tree).toBeVisible();
     const disclosure = tree.getByRole('button', { name: '文件', exact: true });
     if (await disclosure.isVisible()) await disclosure.click();
-    await tree.getByRole('button', { name: '展开 plans', exact: true }).click();
-    await tree.getByRole('button', { name: '展开 plans/first', exact: true }).click();
     const readme = tree.getByRole('button', { name: 'README.md', exact: true });
-    const architecture = tree.getByRole('button', { name: 'plans/first/architecture.md', exact: true });
+    const architecture = tree.getByRole('button', { name: 'architecture.md', exact: true });
     await expect(architecture).toBeVisible();
     await expect(page.locator('[contenteditable="true"]').first()).toContainText('Lease content');
-    const folder = tree.getByRole('button', { name: 'plans', exact: true });
+    const folder = tree.getByRole('button', { name: 'pages', exact: true });
     const [folderIcon, fileIcon, folderLabel, fileLabel] = await Promise.all([
       folder.locator('svg').boundingBox(), readme.locator('svg').boundingBox(),
       folder.locator('span').last().boundingBox(), readme.locator('span').last().boundingBox(),

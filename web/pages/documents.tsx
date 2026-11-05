@@ -71,7 +71,7 @@ const descriptions: Record<string, string> = {
   feature: "当前交付目标；Use Case 只在所属 Feature 内维护。",
   engineering: "测试、构建与维护机制的工程 Spec。",
   roadmap: "尚未采用的方向与演进计划。",
-  design: "备选方案、约束和已作出的技术裁决。",
+  design: "需要决定的取舍、候选做法及其代价。",
   memory: "Decision、Insight 与 Note 的工程记忆。",
   issue: "仅本地的观察草稿，不代表远端 Issue 状态。",
 }
@@ -641,7 +641,7 @@ function DocumentFiles({
     setExpanded(new Set([...manualExpansion.current.paths, ...treeDirectoryPaths(selectedPath, ownerDirectory)]))
     setFileListOpen(false)
   }, [ownerDirectory, selectedPath])
-  const allowed = ["feature", "roadmap", "design", "engineering"].includes(
+  const allowed = ["feature", "roadmap", "engineering"].includes(
     document.metadata.kind
   )
   const showPathList = allowed || pages.length > 0

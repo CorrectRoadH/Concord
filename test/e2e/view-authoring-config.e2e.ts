@@ -70,7 +70,8 @@ test('browser preserves project configuration conflicts and navigates test evide
     await page.getByRole('tab',{name:'高级 JSON',exact:true}).click();
     await expect(page.getByRole('dialog',{name:'离开并丢弃未保存内容？'})).toBeVisible();
     await page.getByRole('button',{name:'丢弃并离开',exact:true}).click();
-    // 丢弃冲突草稿后等待当前配置回读，避免在旧投影即将被替换时开始另一份草稿。
+    // 丢弃草稿与从磁盘重新载入是两个动作；显式读取外部配置后再编辑。
+    await page.getByRole('button', { name: '重新载入', exact: true }).click();
     await waitForWorkspaceProjection(`http://127.0.0.1:${server.port}`);
     await expect(page.getByLabel('高级项目配置 JSON',{exact:true})).toHaveValue(/"timeoutMs": 54321/u, { timeout: 65_000 });
     await page.getByLabel('高级项目配置 JSON',{exact:true}).fill('{"testRoots":false}');

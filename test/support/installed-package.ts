@@ -8,12 +8,10 @@ import { nativeArtifactRoot, nativeSourceFiles } from '../../src/base/installati
 export const distributionRoot = fileURLToPath(new URL('../..', import.meta.url));
 const Manifest = Schema.fromJsonString(Schema.Struct({ name: Schema.String, version: Schema.String, files: Schema.Array(Schema.String) }));
 export interface BuiltConcord { readonly name: string; readonly version: string; readonly filename: string; readonly files: readonly { readonly path: string }[] }
-let distribution: BuiltConcord | undefined;
 
 /** Describe the current build. This never creates a tarball or installs a package. */
 export function builtConcord(destination: string): BuiltConcord {
   return Effect.runSync(Effect.sync(() => {
-    if (destination === undefined && distribution !== undefined) return distribution;
     const root = destination;
     const manifest = Schema.decodeUnknownSync(Manifest)(readFileSync(join(root, 'package.json'), 'utf8'));
     const visit = (path: string): { path: string }[] => {
@@ -25,7 +23,6 @@ export function builtConcord(destination: string): BuiltConcord {
     for (const name of readdirSync(root)) if (/^README(?:\..+)?\.md$/u.test(name) && !files.some(file => file.path === name)) files.push({ path: name });
     for (const path of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) if (!files.some(file => file.path === path)) files.push({ path });
     const result = { name: manifest.name, version: manifest.version, filename: root, files };
-    if (destination === undefined) distribution = result;
     return result;
   }));
 }

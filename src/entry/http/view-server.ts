@@ -454,7 +454,7 @@ async function startViewServer(options: ViewServerOptions, scans: ProjectionPort
           await api(request, response, url, root, jobs, scans, runAction, timing, hosted);
         } else if (request.method === 'GET') {
           if (sourceWeb === undefined) timing.sync('http.static', () => serveStatic(request, response, url.pathname, webRoot));
-          else { securityHeaders(response); await timing.async('http.static', () => sourceWeb.serve(request, response)); }
+          else { securityHeaders(response); await timing.async('http.static', () => sourceWeb.serve(request, response, bytes => sendCompressible(request, response, bytes))); }
         } else {
           throw new ConcordError('MethodNotAllowed', 'Only GET is available for the static application');
         }

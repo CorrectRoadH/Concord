@@ -39,7 +39,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
       });
       for (let index = 0; index < 24; index += 1) createDocument(repo, 'feature', { id: `fixture-${index}`, title: `Navigation fixture ${index}` });
     } finally { repo.close(); }
-    writeFileSync(join(root, 'docs/concepts.md'), "---\ndeprecated:\n  direct-access:\n    - 旧访问\n---\n\n# Terms\n\n## 直接访问 {#direct-access}\n\n浏览器直接打开工作台\n");
+    writeFileSync(join(root, 'docs/concepts.md'), "# Terms\n\n## 直接访问 {#direct-access}\n\n浏览器直接打开工作台\n\n旧写法：`旧访问`\n");
     writeFileSync(join(root, 'docs/feature/web/concepts.md'), "# Terms\n\n## Workbench {#workbench}\n\nWeb Feature 所属定义\n");
     writeFileSync(join(root, 'docs/feature/html/concepts.md'), "# Terms\n\n## HTML Only {#html-only}\n\n相邻 Feature 定义\n");
     mkdirSync(join(root, 'src'));
