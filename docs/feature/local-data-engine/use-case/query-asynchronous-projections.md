@@ -35,7 +35,7 @@ consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap
 
 投影不复用于不同的 worktree、命令参数、配置字节或安装；扫描期间这些身份变化时丢弃结果并按新身份刷新，不记为失败。恢复待处理、配置无效、路径安全失败和无法形成结构的扫描不发布投影。缓存严格解码失败报告 `QueryCacheInvalid`，数据库占用时报告暂不可用；两者都不在查询进程执行全量扫描。前台缓存读取暂不可用时最多重试 500ms，每次重新执行完整路径和 Schema 核验，仍不可读则具名报告；该等待不取得发布租约，也不执行来源扫描。
 
-后台刷新合并同键请求，只合并开始于请求之后的扫描；等待同键刷新与来源扫描共用[刷新上限](#刷新上限)，超时不声明刷新成功。成功以事务替换完整结果，失败保留上一代，数据库可写时记录具名错误。进程在终端退出后可继续完成刷新，不持有文档发布租约。发布阶段的数据库占用最多重试三秒，进程终止后的清理以清理宽限为界，二者不计入刷新上限。扫描消息输出上限为 4MiB。
+后台刷新合并同键请求，只合并开始于请求之后的扫描；等待同键刷新与来源扫描共用[刷新上限](../performance.md#刷新上限)，超时不声明刷新成功。成功以事务替换完整结果，失败保留上一代，数据库可写时记录具名错误。进程在终端退出后可继续完成刷新，不持有文档发布租约。发布阶段的数据库占用最多重试三秒，进程终止后的清理以清理宽限为界，二者不计入刷新上限。扫描消息输出上限为 4MiB。
 
 投影不保存 owner 正文与远端 Issue 正文。trace show 与 review 在服务时读取当前正文（单文件上限 32MiB）。摘要与投影记录一致时，输出排除 `projection` 与 `cache` 后与同源 `--fresh --dry-run` 逐字节相同。摘要变化时省略该正文并在 `projection.bodyChanged` 列出路径，读取失败时列入 `projection.bodyUnavailable` 并附错误码。review 中变化的品味片段输出 `(taste changed since projection; use --fresh)`。
 
@@ -56,21 +56,6 @@ consistent: false 的投影退出码为 0，但 gap 列表可能偏大，零 gap
 - 同一 worktree 的工作区投影与 trace gaps 投影在同一编辑下构建：`consistent`、`complete`、`changedPaths`、`unknownRelations`、`lastAttempt` 与替换结果一致，`builtAt` 不参与比较。
 - 投影建成后修改 owner 正文：持久 payload 不含 owner 正文与远端正文字节；摘要未变时输出与同源 `--fresh --dry-run` 相同，摘要变化时出现在 `bodyChanged`。
 
-## 性能预算
+## 性能
 
-按[性能验收](../../../engineering/concord-self-hosting/performance.md)的参照消费者、环境及七次新进程采样，已有可读投影的读取命令满足以下 warm p50 预算。冷缓存报告构建状态，不把后台扫描耗时计为前台成功结果。当前来源模式另外执行原有命令预算和同机交错对照。
-
-| 场景 | 测量内容 | p50 预算 |
-| --- | --- | ---: |
-| `local-data-engine/trace-gaps-warm`、`local-data-engine/trace-show-warm`、`local-data-engine/review-warm` | 已有诊断投影的历史读取 | 600ms |
-| `local-data-engine/cache-status` | 缓存状态 | 670ms |
-
-## 刷新上限
-
-后台刷新进程通过内部扫描入口执行下表场景的当前来源扫描，三类查询各有一行；测量对象是该内部入口。从刷新进程开始等待同键刷新到扫描子进程退出的总时间不得超过上限；超出即终止扫描，结果不发布，此时没有上一代投影的仓库持续返回 QueryPending。上限按最大值在任何机器判定，测量规模包括[性能验收](../../../engineering/concord-self-hosting/performance.md#消费者)的 `scale` 消费者。
-
-| 场景 | 测量内容 | 上限 |
-| --- | --- | ---: |
-| `local-data-engine/trace-gaps-refresh` | 关系缺口来源扫描 | 120000ms |
-| `local-data-engine/trace-show-refresh` | 单个 Feature 关系扫描 | 120000ms |
-| `local-data-engine/review-refresh` | 审阅材料来源扫描 | 120000ms |
+高频操作的性能预算见[统一的本地缓存与检索引擎的性能预算](../performance.md)。

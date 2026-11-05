@@ -1,6 +1,6 @@
 # 文档目录与完整发现
 
-维护者在 Concord 中看到消费仓库的全部文档：Feature、Engineering、Roadmap、Design 与 Issue。文档的身份由路径决定，名称取自正文唯一的一级标题（[领域与数据所有权](../local-sdlc/library.md#owner)）；无法读取的文档产生诊断，并把结果标为不完整，原文件保持不动。
+维护者在 Concord 中看到消费仓库的全部文档：Feature、Engineering、Roadmap、Design 与 Issue。文档的身份由路径决定，名称取自正文唯一的一级标题（[领域与数据所有权](../local-sdlc/format.md#owner)）；无法读取的文档产生诊断，并把结果标为不完整，原文件保持不动。
 
 ## 你可以做什么
 

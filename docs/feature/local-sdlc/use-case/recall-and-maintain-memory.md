@@ -48,7 +48,7 @@ Memory 只保存可复用的经验，Issue 只保存还要处理的问题，Spec
 
 4. 修改正文与 frontmatter。 {#edit}
 
-   直接编辑 `memory/sku-merge.md`。字段与取值见[领域与数据所有权](../library.md#memory)。
+   直接编辑 `memory/sku-merge.md`。字段与取值见[领域与数据所有权](../format.md#memory)。
 
 5. 经验过时就改写或删除。 {#lifecycle}
 
@@ -79,4 +79,4 @@ Memory 只保存可复用的经验，Issue 只保存还要处理的问题，Spec
 ## Spec 来源
 
 - 读取范围与失败边界：[架构](../architecture.md#操作依赖)
-- Memory 的字段：[领域与数据所有权](../library.md#memory)
+- Memory 的字段：[领域与数据所有权](../format.md#memory)

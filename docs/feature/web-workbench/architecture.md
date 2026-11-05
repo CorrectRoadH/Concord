@@ -2,7 +2,7 @@
 
 React Router 管理人用导航，安装包内带有 Vite 编译结果；从源码运行时由 Vite 即时编译 `web/`。HTTP 由该 Git 工作区的[工作区服务](../local-data-engine/architecture.md#工作区服务)托管，见[服务托管](#服务托管)。HTTP 只接受严格解码的领域操作，CLI `action --input` 使用相同入口。浏览器不直接写 HawDB、journal、证据或关系注册表。
 
-工作台根地址进入 `/git`，总览位于 `/overview`。Git 页默认列出全部未提交文件，文档与测试作为筛选；Git 读取失败独立显示错误和重试入口，不伪装为空列表。PR 静态产物的比较身份与发布边界见[变更预览](change-preview.md)。
+工作台根地址进入 `/git`，总览位于 `/overview`。Git 页默认列出全部未提交文件，文档与测试作为筛选；Git 读取失败独立显示错误和重试入口，不伪装为空列表。PR 静态产物的比较身份与发布边界见 [PR 静态导出](#pr-静态导出)。
 
 反馈列表使用 `/feedback`，详情使用 `/feedback/:id`。页面链接直接使用当前路由，不维护版本兼容别名。
 
@@ -10,7 +10,7 @@ React Router 管理人用导航，安装包内带有 Vite 编译结果；从源�
 
 `docs/` 下不属于 Feature、Roadmap、Design、Engineering 或 Issue 的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/taste.md` 与其它文档一样直接编辑。阅读不是合规证据。
 
-`docs/` 与 `memory/` 下的 Markdown 经 `document.set` 以整文件摘要写入。`document.set` 解析目标的当前原文与候选原文，按[自动保存](README.md#自动保存)列出的字段与规则比较二者，命中时在发布前拒绝；其它差异不做语义判断。术语编辑器经 `concepts.set` 写入，写入前校验 catalog。`source.set` 只写配置范围内的既有 JS/TS 文件，其余路径只读。单文件读取仍不枚举全仓库。
+`docs/` 与 `memory/` 下的 Markdown 经 `document.set` 以整文件摘要写入。`document.set` 解析目标的当前原文与候选原文，按[自动保存](ui.md#自动保存)列出的字段与规则比较二者，命中时在发布前拒绝；其它差异不做语义判断。术语编辑器经 `concepts.set` 写入，写入前校验 catalog。`source.set` 只写配置范围内的既有 JS/TS 文件，其余路径只读。单文件读取仍不枚举全仓库。
 
 只读 Markdown 按 [MDXEditor 官方建议](https://mdxeditor.dev/editor/docs/overview) 使用独立阅读渲染器。复用 react-markdown，通过 remark-frontmatter 识别元数据；rehype-raw 后接 rehype-sanitize，不使用未经净化的 HTML。保留净化器的 DOM clobbering 前缀，由阅读导航映射源锚点，不能为保留锚点关闭净化。正文和原文／元数据详情来自同一读取结果；预览不产生写入或自动归一化。可编辑正文继续使用 MDXEditor 及原文回退，错误不得清空草稿。
 
@@ -110,6 +110,95 @@ CSS 与静态资源进入当前图块的编译结果。项目配置的 `p5.libra
 扫描计时区分测试注释、文档关系、品味、代码来源读取、缓存与解析、来源复核。日志分别记录测试和代码缓存的状态及命中数，不可用原因只输出允许的错误码。`cache status` 的 ready 不作为请求命中证据。公共扫描与缓存批处理见[架构流程图](../../architecture.md#存储-spec)；Web 复用该流程，不拥有另一套解析缓存。
 
 处理耗时从 HTTP handler 接纳请求开始；事件循环延迟为进程采样观察，不能作为该请求的精确排队时间。嵌套阶段时间包含子阶段，不能相加。客户端全程耗时应由独立进程测量。HTTP 200 只表示响应成功，列表须读取 `projection.consistent`、complete 和 findings；缓存不可用、扫描期间来源变化与孤立标注分别诊断。
+
+## Web 组件组合
+
+通用组件只负责展示：`ContentSidebar` 统一桌面侧栏与移动抽屉，`DetailDrawer` 统一右侧详情，`RecordList`、`RecordLink` 与 `PanelEmpty` 统一记录和空状态。领域页面负责查询数据、生成导航模型、解释 URL 和关闭行为；通用组件不读取 Workspace，也不识别 Feature 或 Use Case。布局与交互规则见[工作台界面](ui.md)，URL 与草稿保护见 [URL 与导航状态](#url-与导航状态)。
+
+Git 页由 `GitPage` 组合页头、分类 tab、桌面双栏和移动文件导航。`useGitReview` 拥有 URL 选择、tab 内选择、阅读位置记忆及 diff 请求；`model` 派生目录树和暂存区域；`FileTree` 呈现可折叠树和测试声明入口；`DiffReading` 呈现并恢复 diff 阅读位置。
+
+差异阅读区样式由本地 StyleX 定义，第三方 diff 基础样式由库提供。`data-git-diff` 与 `data-testid="git-diff-scroll"` 是浏览器回归的稳定定位点。
+
+正文、源码、元数据和项目设置共用 `useAutoSave` 实现[自动保存](ui.md#自动保存)。包内文件树把包目录与种类目录都绑定到其 `README.md`，与目录名同一行点击打开。
+
+### 共享组件
+
+业务页面只提供字段、状态和操作，不另写同用途的列表、侧栏、间距与空状态样式。
+
+| 组件 | 用于 | 页面提供 |
+| --- | --- | --- |
+| `ContentSidebar` / `SidebarItem` | 文档、写作、术语、反馈、Git 的内容导航，桌面侧栏与手机抽屉 | 分组、条目、筛选文本、链接或选择回调 |
+| `PanelHeader` | 页签标题与操作，固定最小高度 | 标题、操作 |
+| `ContentSection` | 分组标题与统计 | 标题、摘要 |
+| `RecordList` / `RecordItem` | 含独立控件的记录 | 条目正文与操作 |
+| `RecordLink` | 整行跳转的记录 | 目标链接、主次信息 |
+| `RecordDetails` | 折叠的低频细节 | 细节内容 |
+| `PanelEmpty` | 空集合、无匹配、对象不存在 | 具体说明 |
+| `Surface` / `Card` | 独立面板，`Card` 复用 `Surface` | 内容 |
+| `DetailDrawer` | 右侧详情 | 标题、受控开关、内容 |
+
+共享实现位于 `web/components/content-layout.tsx`、`content-sidebar.tsx` 和 `detail-drawer.tsx`。`RecordLink` 自身是完整点击目标，不嵌套可点击父容器；含编辑框、删除或运行按钮的条目使用 `RecordItem`。空状态左对齐一行文字，不使用大虚线框、搜索失败图标或固定高度占位。共享组件只负责展示，不读取 Workspace，也不执行领域写入。
+
+### 主题变量
+
+颜色全部来自 `web/styles.css` 的主题变量，组件不写死色值。界面上的颜色规则见[颜色](ui.md#颜色)。
+
+| 用途 | 变量 | 规则 |
+| --- | --- | --- |
+| 页面背景 | `--background` | 不加包围整个内容区的边框 |
+| 独立面板 | `--card` | 与背景只有轻微差异，最多一层 |
+| 分隔线 | `--border` | 深色起点 `#344144`，浅色起点 `#d8d8cf`；不得使用正文色或近白色 |
+| 当前项、悬停 | `--accent` | 导航、文件树、记录列表共用 |
+| 次级文字 | `--muted-foreground` | 路径、时间、统计 |
+| 焦点 | `--ring` | 焦点环不随装饰边框一起减弱 |
+| 错误 | `--destructive` | 解析失败、保存冲突、加载失败 |
+
+黄色只表示告警、待处理或需要注意，不作为分类装饰。普通权限说明和保存方式说明使用次级文字，不使用常驻告警卡片。
+
+## 依赖选型
+
+基础行为优先采用库。Concord 自身负责领域关联、能力边界、保存冲突、任务所有权和仓库恢复。
+
+- MDXEditor：Markdown 富文本、源码与编辑差异，使用实际解析错误回退原文。
+- react-markdown 与 remark-gfm：审阅和模板的阅读预览，不执行文档中的 HTML/脚本。
+- shadcn/ui 与 Radix：侧栏、表单、弹窗、选择器和可访问交互。
+- React Router：Feature 内 Use Case 路由及浏览器导航。
+- Vite 与 Tailwind：静态构建、样式与开发集成；Vite 构建的静态资源随 CLI 包分发。
+- react-diff-view：Git patch 解析及统一、分栏展示。
+- Effect：领域执行与外部输入 Schema；严格版本与 CLI 一致。
+- pele 1.13.0：把 Mermaid 代码块渲染为 SVG，按图类型按需加载，没有运行时依赖；颜色与字体取自工作台主题的 CSS 变量，阅读页首屏不加载它。
+- KaTeX：渲染行内与独立数学公式，随包提供。
+- Fontsource Noto Sans SC：随安装包提供中文字体，不依赖外部 CDN。
+- p5.js 2.3.4：完整核心运行库，仅在运行图解时加载，支持实例与全局模式。
+- p5.sound 0.4.1：显式声明后离线加载，提供声音播放、合成和分析；音频启动仍要求沙箱内的用户手势，麦克风权限不开放。
+- p5.brush 2.2.3：显式声明后离线加载，提供笔刷、自然填充和排线；按扩展要求使用 WebGL 画布。项目启用后每个图块都会加载该库，作者须统一满足它的画布要求。
+- TypeScript 与 esbuild 0.28.2：检查并编译 p5 输入，不执行消费者构建配置或安装脚本。第三方库的 JS 产物与许可证由固定依赖随包提供。
+
+## PR 静态导出
+
+PR 预览是静态产物而非托管服务，避免向读者暴露仓库写入与执行能力；它与本地工作台共用文件树和 diff 组件。调用与上限见 [PR 静态预览导出](cli.md#pr-静态预览导出)，产物见 [PR 预览产物格式](format.md)。
+
+### 比较身份
+
+base 与 head 作为独立 argv 经 `rev-parse --verify --end-of-options <ref>^{commit}` 解析为完整 commit ID，此后只用 ID。拒绝 shallow 仓库。`merge-base --all` 必须恰好返回一个祖先；比较它与 head。
+
+随后在 Scope 管理的私有 0700 临时目录建空 bare 仓库，以 alternate object directory 只读访问来源对象，不复制 config、refs、index、info/attributes 或工作树，HEAD 不指向来源提交。
+
+Git 子进程清除继承的 GIT 环境，禁用 global/system config、system attributes、replace refs、lazy fetch、提示与可选锁；提交中的 `.gitattributes` 只是被审阅文件。
+
+差异使用 literal pathspec、`--no-ext-diff`、`--no-textconv`、`--ignore-submodules=none`、`--submodule=short`、50% rename 阈值与 2000 rename limit，不检测 copies。NUL 分隔的 raw diff 给出状态、完整对象 ID、模式与 UTF-8 路径；patch 由该 entry 的两个 blob 生成。被比较 blob 读取前用 `cat-file` 预检大小。
+
+超限、超时或取消先终止 Git 子进程并等待 close（必要时 SIGKILL），再释放临时目录。
+
+### 输出生命周期
+
+输出目录的祖先属于调用者信任的文件系统；本命令不防御同权限恶意进程，祖先检查不是原子路径锁。目标以独占 mkdir 创建，支持与正常 Git 编辑及其它导出并发。
+
+读取、Schema 与预算检查完成后才非递归 mkdir 0700，登记祖先与目标的 dev/ino 并在每次创建文件前及完成后核对；文件以 `wx` 创建，`index.html` 最后写。失败时不删除不完整输出，以免误删被替换的同名文件。临时 Git 目录与输出分属不同所有权，由 Scope 回收。
+
+### 静态阅读器
+
+阅读器只读 `changes.json`，用[随包解码器](library.md)解码，不调用 `/api`，不依赖工作区、扫描、HawDB 或服务进程。文本经 React 转义；Markdown 用独立 react-markdown 入口而非本地渲染器：跳过原始 HTML，不渲染图片，不加载远程资源，链接只保留 https、http 与 mailto。
 
 ## URL 与导航状态
 

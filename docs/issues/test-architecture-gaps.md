@@ -2,7 +2,7 @@
 
 ## 现象
 
-[测试架构](../engineering/concord-self-hosting/test-architecture.md)规定了分层、fixture 与成本上限，当前测试集与之有差距。2026-10-30 最近一次完整运行（`.test-results/run-3NTz53`）：96 个 Node 测试文件的单文件耗时合计约 6644 秒，按 8 路并发约 14 分钟，上限为单机 5 分钟。
+[测试架构](../engineering/testing/README.md)规定了分层、fixture 与成本上限，当前测试集与之有差距。2026-10-30 最近一次完整运行（`.test-results/run-3NTz53`）：96 个 Node 测试文件的单文件耗时合计约 6644 秒，按 8 路并发约 14 分钟，上限为单机 5 分钟。
 
 ## 差距
 

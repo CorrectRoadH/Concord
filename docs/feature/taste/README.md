@@ -59,14 +59,9 @@ T-1 读得懂胜过写得全
 - [命令](cli.md)：`concord taste` 的输出与错误码。
 - [文件格式](format.md)：条目的写法与 ID 规则。
 
-## 性能预算
+## 性能
 
-按[性能验收](../../engineering/concord-self-hosting/performance.md)的方法，在 warm 状态下判定 p50。
-
-| 场景 | 测量内容 | p50 预算 |
-| --- | --- | ---: |
-| `taste/list` | 列出品味条目与依据它们的页面 | 880ms |
-| `taste/list-server` | 经由运行中的工作区服务列出品味条目与依据位置 | 880ms |
+高频操作的性能预算见[写下项目的品味的性能预算](performance.md)。
 
 ## 依据的品味
 

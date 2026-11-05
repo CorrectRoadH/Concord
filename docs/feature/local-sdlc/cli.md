@@ -125,7 +125,7 @@ concord --json new use-case add-item --feature cart --title "加入商品"
 {"operation":"new","dryRun":false,"changedPaths":["docs/feature/cart/use-case/add-item.md"]}
 ```
 
-路径已存在时返回 `DocumentExists`，退出 1，不改文件。短选择器在同一类别中匹配多个文档时返回具名错误，需要写出路径。路径、类别与名称的规则见[领域与数据所有权](library.md#owner)。
+路径已存在时返回 `DocumentExists`，退出 1，不改文件。短选择器在同一类别中匹配多个文档时返回具名错误，需要写出路径。路径、类别与名称的规则见[领域与数据所有权](format.md#owner)。
 
 ### 查看一个文档包
 
@@ -212,7 +212,7 @@ codeDeclarations: 1
 }
 ```
 
-适用范围与规则见[聚合门禁](../documentation-quality/gate.md)。
+适用范围与规则见[聚合门禁](../documentation-quality/cli.md#合并检查)。
 
 `ok` 为 false 表示发现违规。`complete` 为 false 表示有必需输入没能读取，结论不完整。`advisories` 是提示，不影响退出码。
 
@@ -323,10 +323,27 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 
 服务只读，不提供 formatting、codeAction、executeCommand 或 willRenameFiles；未知编辑执行请求返回 EditorMethodNotSupported（-32601）。不启动 language server、collector 或 runner，不监听网络，不持久化 overlay。关闭、EOF 或 SIGINT 终结任务与句柄。预算与完整生命周期见[编辑器 Use Case](use-case/use-editor-service.md)。
 
+## 观察与相关性
+
+原生清单、依赖分析与相关性判定返回同一观察结构：`value`、`inputs`（全部实际输入的摘要，含实现与版本）、`complete`、`gaps`（`complete` 为 false 时的具名原因）、`observedAt` 与 `current`（输入摘要与当前源码一致）。
+
+- 只有 `test discover`、`code analyze` 与 `test run` 的执行前收集产生观察；其它命令与编辑器服务只读取。
+- 观察可丢弃。`check` 的退出码、finding 与 `complete` 不读取观察，冷缓存、热缓存、缓存损坏与清空后结论相同。
+- `current` 为 false 的观察只作历史展示，带来源与时间，不用于选择执行或相关性判定。
+
+相关性判定只报告观察到的正向交集，不输出“无关”结论：
+
+| 结果 | 含义 |
+| --- | --- |
+| `observed` | 测试依赖中观察到声明实现目标的代码，带 `level`：`step`、`use-case` 或 `feature`；文件范围的结果同时带 `FileScope` |
+| `not-observed` | 未观察到这样的代码，总带 `gaps`，例如 `FileScope`、`DepthLimit`、`NoSourceImports`、`SubprocessBoundary`、`NoAnalyzer`、`SnapshotNotCurrent` |
+
+`not-observed` 不表示测试与 Spec 无关；CLI、review 与工作台写作“未观察到交集”并列出原因。只观察到其它 Feature 或同 Feature 另一 Use Case 的实现也不推出无关。判定不产生 finding，不改变退出码，关联与观察都不证明执行、断言正确或覆盖率，不用于修复核验。文件级 import 只能证明文件中的声明交集，不证明该文件每个 case 都调用了实现。
+
 ## 机器可读输出
 
 agent 和脚本只依赖机器可读输出。
 
 1. `--json` 输出结构、具名错误码与退出码是 agent 和脚本依赖的公开 Spec，由对应 Feature 的 CLI 页面或 Use Case 声明。
-2. 删除或改变已声明字段、错误码与退出码含义属于破坏消费者兼容，须先经过[独立设计挑战](../../engineering/concord-self-hosting/README.md#协作与授权)；新增字段不改变既有字段语义。
+2. 删除或改变已声明字段、错误码与退出码含义属于破坏消费者兼容，须先经过[独立设计挑战](../../engineering/self-hosting/README.md#协作与授权)；新增字段不改变既有字段语义。
 3. 人读输出不是 Spec，消费者不解析人读输出。

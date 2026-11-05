@@ -24,7 +24,7 @@ system 时间占比约 55%，推测文件系统调用次数是主要成本，尚
 
 ## 后续
 
-- 用 `pnpm profile refresh --consumer scale` 或冻结的 rpg-game 副本定位耗时来源（测量路径见 docs/engineering/concord-self-hosting/performance.md）。
+- 用 `pnpm profile refresh --consumer scale` 或冻结的 rpg-game 副本定位耗时来源（测量路径见[测量命令](../engineering/performance/cli.md)）。
 - 用 `pnpm bench query --consumer scale` 检查刷新上限（Spec 见 query-asynchronous-projections 的“刷新上限”表）。
 - 超时需要具名错误并记录耗时。
 

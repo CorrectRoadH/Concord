@@ -25,7 +25,7 @@
 
 ## 验收
 
-- 测试关联只由源码标记拥有（[关联身份与观察](../library.md#关联身份与观察)）；原生清单、标签与选择不改变 case 集合、case ID 或 `check` 结论。cold、warm、损坏与清空观察缓存时结论一致。
+- 测试关联只由源码标记拥有（[关联身份与观察](../format.md#关联身份与观察)）；原生清单、标签与选择不改变 case 集合、case ID 或 `check` 结论。cold、warm、损坏与清空观察缓存时结论一致。
 - 带范围的参数组由一个标记绑定整个展开组；缺少范围时要求 `@native` 或按文件执行。精确选择两项时实际只执行这两项，父 suite 初始化不冒充 leaf。标记处于父 suite 与子 leaf 之间、重复全名或组范围重叠时按[绑定规则](../architecture.md#原生-adapter)唯一绑定，歧义为执行失败。
 - 部分缺失、跳过、待办、未运行、重复或额外 ID 为 invalid；fixture、parser 与基础设施失败不是 red。重试同一项、JUnit 名称碰撞或只有退出码时不压缩成单次 passed。
 - Go 列举只作顶层发现，动态子项需要真实运行观察，执行使用 `-count=1`。跨 Cargo binary 或测试项目的参数组拆成多个 Invocation，ID 含 package、target 与 binary。

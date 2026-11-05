@@ -4,7 +4,7 @@
 
 ## 原生边界
 
-Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [技术栈](../../engineering/concord-self-hosting/README.md#技术栈)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放，复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。关系缓存使用参数化 SQL。现有子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据。
+Node 通过窄 N-API 桥接调用 HawDB 公开 facade，原生例外的范围遵守 [技术栈](../../engineering/build/README.md#技术栈)。原生另提供[工作区服务](#工作区服务)服务锁的取得、校验与释放，复用协调锁的文件检查与非阻塞加锁，属于目录所有权职责。引擎固定为 v0.13.0，revision `91aec4960ed27516962cf1dc918307f57faef15d`；桥接 ABI 为 `concord-hawdb-1`，缓存表 schema 为 1。引擎默认 features 关闭，不启用后台维护、向量或全文检索。关系缓存使用参数化 SQL。现有子串查询与排序不称为 BM25 或语义检索。HawDB 不替代事实 owner、发布恢复日志或命令证据。
 
 桥接识别 typed `HawDBError::BranchBusy` 与固定版本的旧目录锁争用，该分类贯穿 schema 与事务准入；事务获取失败保留具名错误，真正的 schema 形状错误为 `HawdbIncompatible`。
 
@@ -285,7 +285,7 @@ type QueryCacheEnvelope = {
 
 ## 缓存与原生边界的约束
 
-缓存只加速，原生引擎只承担桥接（[一件事只写一次，其余推导](../../taste.md#t-3)、[技术栈](../../engineering/concord-self-hosting/README.md#技术栈)）。
+缓存只加速，原生引擎只承担桥接（[一件事只写一次，其余推导](../../taste.md#t-3)、[技术栈](../../engineering/build/README.md#技术栈)）。
 
 1. HawDB 只保存可重建投影与可丢弃缓存，短期解析使用同一引擎的内存实例。文件 owner、证据与发布日志不进入缓存。
 2. 桥接、引擎、Rust toolchain 与依赖精确固定。持久句柄由明确的唯一所有者管理，来源快照不拥有跨请求句柄；客户端的逻辑会话、事务、快照与清理的生命周期分别声明，内存句柄按进程管理。缓存不参与来源发布或证据裁决。发行包携带目标平台产物，消费者不需要 Rust、全局 HawDB 或数据库服务。锁协议与上游 revision 绑定，升级必须重新验证互斥与清理。

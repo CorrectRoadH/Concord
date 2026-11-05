@@ -4,7 +4,7 @@
 
 Concord 让 Spec 成为软件的唯一事实来源，并为人与 coding agent 提供同一套工作方法：人审阅 Spec 的变化，agent 按 Spec 实现并用测试证明，Concord 检查三者是否一致（[为什么需要 Concord](../README.md)）。它是可安装到任意 Git 仓库的本地 CLI。
 
-文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](taste.md)，Web 界面设计见[工作台视觉规范](feature/web-workbench/visual-design.md)。
+文档的分组、位置与字段见[文档模型](document-model.md)：身份与名称由路径和一级标题推导，只有推导不出的语义写在 frontmatter。全部文件都可以直接编辑；Concord 从文件派生索引与反向关系，`concord check` 检查它们是否一致。HawDB 只保存可重建缓存，事务恢复材料与缓存分开。跨功能规则见[品味](taste.md)，Web 界面设计见[工作台视觉规范](feature/web-workbench/ui.md)。
 
 ## 运行形态
 
@@ -72,7 +72,7 @@ CI 可以使用 `concord --server=command check`：服务属于本次命令，�
 
 ## 代码结构
 
-代码由 Effect 服务组成（[技术栈](engineering/concord-self-hosting/README.md#技术栈)）。领域逻辑只依赖端口，文件、进程、时间、网络与缓存等副作用由基础服务提供；每种进程用一组 Layer 组合出自己被允许的能力。固定版本 Effect 已等价提供的能力直接使用，不重复实现；库未提供的保证（例如进程组清理确认、字节预算）由 Concord 的适配层补齐。
+代码由 Effect 服务组成（[技术栈](engineering/build/README.md#技术栈)）。领域逻辑只依赖端口，文件、进程、时间、网络与缓存等副作用由基础服务提供；每种进程用一组 Layer 组合出自己被允许的能力。固定版本 Effect 已等价提供的能力直接使用，不重复实现；库未提供的保证（例如进程组清理确认、字节预算）由 Concord 的适配层补齐。
 
 ### 分层
 
@@ -90,7 +90,7 @@ CI 可以使用 `concord --server=command check`：服务属于本次命令，�
 
 直接调用 Node API 只用于入口读取启动参数、环境与信号，以及 Effect 缺少所需保证的基础适配，例如防符号链接的描述符读取、文件身份复核、IPC 和进程组清理确认。适配在所属基础服务内封装，并说明缺少的保证、失败语义和资源释放方式；放进 `base` 本身不构成保留理由。
 
-模型保持纯计算；摘要计算的 `node:crypto` 例外见下表。架构规则约束能力与所有权，具体 AST 检查方式由[架构守护](engineering/concord-self-hosting/test-architecture.md#架构守护)维护（[规则少而硬](taste.md#t-8)）。
+模型保持纯计算；摘要计算的 `node:crypto` 例外见下表。架构规则约束能力与所有权，具体 AST 检查方式由[架构守护](engineering/testing/architecture.md#架构守护)维护（[规则少而硬](taste.md#t-8)）。
 
 ### 模块布局
 
@@ -162,7 +162,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 ### 测试布局
 
-测试分层与目录职责由[测试架构](engineering/concord-self-hosting/test-architecture.md)定义；运行入口、构建产物使用与检查顺序由[构建与检查入口](engineering/concord-self-hosting/README.md#构建与检查入口)定义。
+测试分层与目录职责由[测试架构](engineering/testing/README.md)定义；运行入口、构建产物使用与检查顺序由[构建与检查入口](engineering/testing/README.md#检查入口)定义。
 
 ### 基础服务
 
@@ -244,7 +244,7 @@ Memory 固定位于项目目录的 `memory/`。`docs/taste.md` 存在即生效�
 
 ## 存储 Spec
 
-文档的位置、身份与字段由[文档模型](document-model.md)与[领域与数据所有权](feature/local-sdlc/library.md#owner)拥有。模板随工具包安装，由严格 manifest 校验；`new` 与 init 用模板创建文件，模板是作者提示，不是完成状态或验收证据。init 生成布局、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md` 与 `docs/architecture.md`；根 `AGENTS.md` 保留既有正文，追加或刷新一个带边界的托管区块。
+文档的位置、身份与字段由[文档模型](document-model.md)与[领域与数据所有权](feature/local-sdlc/format.md#owner)拥有。模板随工具包安装，由严格 manifest 校验；`new` 与 init 用模板创建文件，模板是作者提示，不是完成状态或验收证据。init 生成布局、`docs/concord.md`、`docs/_template/` 参考模板，以及缺失的 `docs/README.md`、`docs/concepts.md` 与 `docs/architecture.md`；根 `AGENTS.md` 保留既有正文，追加或刷新一个带边界的托管区块。
 
 测试关联是测试源码中的 Concord 标记：`@feature <path>` 或 `@use-case <path>`，可附 `@issue <path>`、`@status retired` 与 `@name`。测试身份由文件和标记派生为 `neref_...`，反向关系由当前源码派生，不写回 Spec。标记语法与发现范围见[发现测试](feature/local-sdlc/use-case/discover-annotated-tests.md)。
 
@@ -337,9 +337,9 @@ Design 是一页还没定下来的取舍，见[记下一个还没定的取舍](f
 
 ## 测试执行与修复核验
 
-项目配置中的 runner 命令是用户声明的验收单元。Concord 报告命令的退出结果与可观察到的执行数量，不声称收集或证明 runner 的每个子 case，不构成正式 E2E、可靠性证书或覆盖证明（[证据的范围](feature/local-sdlc/scope.md#证据的范围)）。runner 在消费者 cwd 下以 shell=false 执行，有 timeout；取消或超时清理进程组，信号或启动失败不记为通过。命令由项目作者信任与维护。
+项目配置中的 runner 命令是用户声明的验收单元。Concord 报告命令的退出结果与可观察到的执行数量，不声称收集或证明 runner 的每个子 case，不构成正式 E2E、可靠性证书或覆盖证明（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。runner 在消费者 cwd 下以 shell=false 执行，有 timeout；取消或超时清理进程组，信号或启动失败不记为通过。命令由项目作者信任与维护。
 
-Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷候选上以非零结果结束、在被接受的快照上通过，结论写入 Issue，可在声明的输入与环境下重放（[证据的范围](feature/local-sdlc/scope.md#证据的范围)）。
+Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷候选上以非零结果结束、在被接受的快照上通过，结论写入 Issue，可在声明的输入与环境下重放（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。
 
 ## 测试标记与缓存身份
 
@@ -375,13 +375,13 @@ node 白名单为有 body 的函数声明与方法、类声明，以及单 ident
 
 ## 测试接入边界
 
-测试执行归项目：Concord 只通过配置的 runner 与可选 adapter 运行测试并做修复核验，所有权见[治理边界](feature/neutral-project-governance/architecture.md)，接入边界见[项目测试接入边界](feature/local-sdlc/test-boundary.md)。消费者拥有 runner、执行副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
+测试执行归项目：Concord 只通过配置的 runner 与可选 adapter 运行测试并做修复核验，所有权见[治理边界](feature/neutral-project-governance/architecture.md)，接入边界见[项目测试接入边界](feature/local-sdlc/README.md#测试的边界)。消费者拥有 runner、执行副本与清理，以及产品构建、Preview、Examples、部署与 PR 组合。静态 trace 与 Web 不加载 host，不要求 lanes 或 executor。
 
 ## Web 工作台与 Herdr mod
 
 `concord view` 提供随包分发的 React 工作台，是工作区服务的客户端。[Herdr mod](feature/herdr-mod/README.md) 在 Herdr 中提供完整的阅读、初始化与编辑，通过公开 CLI 查询结构化数据，正文读写与文件监听由 mod 负责。
 
-Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见[工作台视觉规范](feature/web-workbench/visual-design.md)。
+Web API 与 CLI 结构化 action 共用完整应用校验；Web 保存以整文件摘要防止覆盖并发的外部编辑。行为、信任边界与工作区导航投影见 [Web 工作台 Spec](feature/web-workbench/README.md)与[工作台架构](feature/web-workbench/architecture.md)，界面设计见[工作台视觉规范](feature/web-workbench/ui.md)。
 
 ## 文档写作检查
 
@@ -399,7 +399,7 @@ Memory 与 Issue 的索引、检索与更新由[记忆工具 Spec](feature/local
 
 构建脚本使用 Effect FileSystem 和 ChildProcessSpawner；测试通过 Node test adapter 执行 Effect，用 tsx 加载 TS，并纳入 typecheck。发行 tgz 携带 Linux x64/glibc 与 macOS arm64 原生产物，绑定源码、ABI、revision 和摘要；平台构建完成后统一打包，在目标平台安装同一份包验收。
 
-交付通过 `pnpm check`，检查流程由[构建与检查入口](engineering/concord-self-hosting/README.md#构建与检查入口)定义。性能预算由 `pnpm bench` 按[性能验收](engineering/concord-self-hosting/performance.md)的测量路径单独判定，不进入 `pnpm check`。
+交付通过 `pnpm check`，检查流程由[构建与检查入口](engineering/testing/README.md#检查入口)定义。性能预算由 `pnpm bench` 按[性能验收](engineering/performance/README.md)的测量路径单独判定，不进入 `pnpm check`。
 
 ## 当前格式
 

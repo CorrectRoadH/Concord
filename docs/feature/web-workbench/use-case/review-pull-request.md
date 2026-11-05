@@ -9,6 +9,15 @@
 3. 消费者将输出目录接入既有静态 Preview，并从 PR 链接到该页面。
 4. 审阅者看到目标分支、base、head 与 merge-base 身份，选择文件并阅读差异。文档同时提供变更前后正文；所有内容来自已冻结提交。
 
+## 消费者接入
+
+消费者拥有 PR 身份、Git 历史与托管，须满足：
+
+- PR head 等于构建提交与 checkout HEAD，merge checkout 拒绝；构建前与发布前各查询一次 PR，base ref、base SHA 或 head SHA 变化即失败。
+- 补全 shallow 历史与缺失对象后再导出。
+- 发布前用[随包解码器](../library.md)核对 `changes.json` 的 base、head、baseLabel，并独立计算 merge-base 比对。
+- 以 lockfile integrity 固定的打包 tarball 安装 Concord，不依赖相邻源码或未发布版本，不手改 tarball。
+
 ## 验收
 
 - 比较为 `merge-base(base, head)` 到 head；目标分支独有的后续提交不出现在 PR 差异中。
@@ -19,3 +28,4 @@
 - 导出由固定安装包独立完成，不需要相邻源码、全局安装或 Rust 编译器。
 - 输出包含所比较的已提交内容，发布范围由消费者审阅；Concord 不获取远端凭据、不 fetch、不部署、不写 PR 评论。
 - 页面不把 diff 或测试声明当作执行证据。
+- 隔离 Git 消费者经已安装 CLI 与公共解码器覆盖以上各项，另含脏 attributes、replace refs、子模块忽略配置、非 UTF-8 路径、大对象小 patch，以及未初始化、无效配置与子目录启动；取消回收 Git 子进程与临时目录。部署与远端链接只由已授权的真实部署证明。

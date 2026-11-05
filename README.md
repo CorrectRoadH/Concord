@@ -258,9 +258,9 @@ Use `concord <command> --help` for exact arguments, `--json` for structured resu
 | Run tests and verify fixes | [Test guide](skills/concord/references/test.md) |
 | Record reusable knowledge | [Memory guide](skills/concord/references/memory.md) |
 | Read GitHub and Linear feedback alongside local Issues | [Feedback commands](docs/feature/feedback/cli.md) |
-| Decide what your project owns in testing | [Project test boundary](docs/feature/local-sdlc/test-boundary.md) |
+| Decide what your project owns in testing | [Project test boundary](docs/feature/local-sdlc/README.md#测试的边界) |
 | Explore the product specs | [Documentation](docs/README.md) |
 
 The linked guides and specs are primarily in Chinese. These two README files cover the same introduction and getting-started workflow.
 
-To work on Concord itself, see the [engineering guide](docs/engineering/concord-self-hosting/README.md).
+To work on Concord itself, see the [engineering guide](docs/engineering/self-hosting/README.md).

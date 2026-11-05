@@ -1,10 +1,10 @@
 # 本地 SDLC 的性能预算
 
-本页声明 local-sdlc 高频命令的性能预算，测量方法见[性能验收](../../engineering/concord-self-hosting/performance.md)。
+本页声明 local-sdlc 高频命令的性能预算，测量方法见[性能测量](../../engineering/performance/README.md#测量方法)。
 
 ## 性能预算
 
-高频只读命令与检查命令的当前来源模式在[性能验收](../../engineering/concord-self-hosting/performance.md)规定的方法下满足以下 warm p50 预算。
+高频只读命令与检查命令的当前来源模式在[性能测量](../../engineering/performance/README.md#测量方法)规定的方法下满足以下 warm p50 预算。
 
 - 参照消费者：本仓库 commit `6346f4cf78bc3553448a0119443f8f2ec681f5d5` 的独立 clone，含 61 份文档 owner、6 条 Memory、232 个测试标记与 97 个代码声明。
 - 参照环境：AMD Ryzen 7 5800X，Linux x64，Node v24.19.0。
@@ -28,4 +28,4 @@
 
 帮助预算按静态输出的实测确定（禁用编译缓存时 p50 约 47 ms）；代码、测试、模板与作者正文四行的参照消费者为本仓库 `d267e06` 的独立 clone。
 
-异步投影的历史读取预算与后台刷新上限由[读取异步刷新的诊断投影](../local-data-engine/use-case/query-asynchronous-projections.md#性能预算)拥有，本表不重复声明。规模增长导致超出预算时，先按性能验收方法定位瓶颈，再调整实现或经修订调整预算，不跳过校验。`vp run bench local-sdlc` 通过场景 ID 读取本表测量，表格保持[预算表格式](../../engineering/concord-self-hosting/performance.md#预算表格式)。
+异步投影的历史读取预算与后台刷新上限由[本地数据引擎的性能预算](../local-data-engine/performance.md)拥有，本表不重复声明。规模增长导致超出预算时，先按性能验收方法定位瓶颈，再调整实现或经修订调整预算，不跳过校验。`vp run bench local-sdlc` 通过场景 ID 读取本表测量，表格保持[预算表格式](../../engineering/performance/format.md#预算表)。

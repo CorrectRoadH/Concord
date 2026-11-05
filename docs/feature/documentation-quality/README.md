@@ -96,7 +96,7 @@ export default function (p: P5) {
 
 ## 合并检查
 
-`concord check` 把写作检查和关系检查合成一次结果，作为交付前的检查；有问题时退出码为 1。JSON 结果与退出码见[合并检查](gate.md)。
+`concord check` 把写作检查和关系检查合成一次结果，作为交付前的检查；有问题时退出码为 1。JSON 结果、页面种类检查与退出码见[检查命令](cli.md)。
 
 ## 用户路径
 
@@ -107,7 +107,8 @@ export default function (p: P5) {
 ## 细节
 
 - [文件格式](format.md)：`concepts.md` 与 `writing.md` 的写法、生效范围与匹配方式。
-- [合并检查](gate.md)：`concord check` 的结果与退出码。
+- [检查命令](cli.md)：`concord check` 与 `docs check` 的结果、finding 与退出码。
+- [性能预算](performance.md)
 - [实现](architecture.md)
 
 ## 依据的品味

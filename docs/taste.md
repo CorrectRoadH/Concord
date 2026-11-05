@@ -1,6 +1,6 @@
 # Concord 的品味
 
-品味是这个项目判断“什么是好的”的共同标准：规则写不到的地方按品味选择，审阅时按品味判断好坏，可以链接某条品味指出变化哪里不合品味。产品必须满足的行为写在 Feature，仓库自身的工程规则写在[工程页](engineering/concord-self-hosting/README.md)，页面职责由[文档模型](document-model.md)拥有。
+品味是这个项目判断“什么是好的”的共同标准：规则写不到的地方按品味选择，审阅时按品味判断好坏，可以链接某条品味指出变化哪里不合品味。产品必须满足的行为写在 Feature，仓库自身的工程规则写在[工程页](engineering/self-hosting/README.md)，页面职责由[文档模型](document-model.md)拥有。
 
 ## 总则 {#general}
 

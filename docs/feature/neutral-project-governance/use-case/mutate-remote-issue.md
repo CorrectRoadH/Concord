@@ -36,7 +36,7 @@ concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 
 ## 授权
 
-`--authorize` 是调用方声明的当次授权，不是凭据，Concord 不保存授权记录，也不证明授权真实存在。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传入，不得因 plan 成功、工具可用或权限宽松而推断授权（[协作与授权](../../../engineering/concord-self-hosting/README.md#协作与授权)）。
+`--authorize` 是调用方声明的当次授权，不是凭据，Concord 不保存授权记录，也不证明授权真实存在。Agent 只有在用户就该授权串或其中的动作、目标与 payload 明确同意后才能传入，不得因 plan 成功、工具可用或权限宽松而推断授权（[协作与授权](../../../engineering/self-hosting/README.md#协作与授权)）。
 
 ## execute
 
@@ -70,5 +70,5 @@ concord issue remote apply <receipt-id> --connection <id> --authorize <target>
 
 ## Spec 来源
 
-- [Feedback CLI 接入设计](../../feedback/cli-integration.md)
-- [品味 C-007](../../../engineering/concord-self-hosting/README.md#协作与授权)
+- [Feedback CLI 接入设计](../../feedback/architecture.md#gh-读取适配)
+- [品味 C-007](../../../engineering/self-hosting/README.md#协作与授权)

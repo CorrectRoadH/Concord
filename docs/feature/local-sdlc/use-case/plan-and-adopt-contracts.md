@@ -68,7 +68,7 @@ Design 只允许一次裁决，裁决方式见[逐项比较方案并明确裁决
 
 ## 路径与身份
 
-- 路径、类别与短选择器的规则见[领域与数据所有权](../library.md#owner)。
+- 路径、类别与短选择器的规则见[领域与数据所有权](../format.md#owner)。
 - Feature、Roadmap、Design 与 Engineering 位于各自分类下的单层目录，入口是 `README.md`。Use Case 位于所属 Feature 的 `use-case/` 目录。Issue 是 `docs/issues/` 下的 `.md` 文件，Memory 是 `memory/` 下的 `.md` 文件。Research 可以嵌套主题。
 - 采用、关系与修复核验都使用实际路径，发布和恢复不会按名称重新猜路径（[文档身份](../architecture.md#文档身份)）。
 - 附页可以按精确路径或 anchor 归到所属 Feature，相邻目录不会因目录名前缀相似而混入。

@@ -172,4 +172,4 @@ Herdr 通过公开 CLI 接入，不要求宿主提供 socket 或 stdin。产品�
 
 验收使用真实 CLI、HTTP 与 RPC 入口，在提交边界切断连接和杀进程。fake 只模拟外部 provider 或 runner。Herdr 要通过宿主加载、真实编辑和关闭路径，不能用类型检查替代实机验收。
 
-实现采用这份 Roadmap 时，高频命令、冷启动、跨客户端变化可见性与取消须同步拥有 Feature 预算和 benchmark 场景，并满足[性能验收](../../engineering/concord-self-hosting/performance.md)；设计审查不证明性能达标。
+实现采用这份 Roadmap 时，高频命令、冷启动、跨客户端变化可见性与取消须同步拥有 Feature 预算和 benchmark 场景，并满足[性能验收](../../engineering/performance/README.md)；设计审查不证明性能达标。

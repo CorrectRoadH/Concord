@@ -1,21 +1,21 @@
-# 库与组件
+# 库接口
 
-- MDXEditor：Markdown 富文本、源码与编辑差异，使用实际解析错误回退原文。
-- react-markdown 与 remark-gfm：审阅和模板的阅读预览，不执行文档中的 HTML/脚本。
-- shadcn/ui 与 Radix：侧栏、表单、弹窗、选择器和可访问交互。
-- React Router：Feature 内 Use Case 路由及浏览器导航。
-- Vite 与 Tailwind：静态构建、样式与开发集成。
-- react-diff-view：Git patch 解析及统一、分栏展示。
-- Effect：领域执行与外部输入 Schema；严格版本与 CLI 一致。
-- pele 1.13.0：把 Mermaid 代码块渲染为 SVG，按图类型按需加载，没有运行时依赖；颜色与字体取自工作台主题的 CSS 变量，阅读页首屏不加载它。
-- Fontsource Noto Sans SC：随安装包提供中文字体，不依赖外部 CDN。
-- p5.js 2.3.4：完整核心运行库，仅在运行图解时加载，支持实例与全局模式。
-- p5.sound 0.4.1：显式声明后离线加载，提供声音播放、合成和分析；音频启动仍要求沙箱内的用户手势，麦克风权限不开放。
-- p5.brush 2.2.3：显式声明后离线加载，提供笔刷、自然填充和排线；按扩展要求使用 WebGL 画布。项目启用后每个图块都会加载该库，包含不调用笔刷 API 的图块，作者须统一满足它的画布要求。
-- TypeScript 与 esbuild 0.28.2：检查并编译 p5 输入，不执行消费者构建配置或安装脚本。第三方库的 JS 产物与许可证由固定依赖随包提供。
+PR 预览的消费者在发布前用随包解码器核对 `changes.json`，浏览器阅读器使用同一个解码器。字段见 [PR 预览产物格式](format.md#changesjson)。
 
-基础行为优先采用库。Concord 自身负责领域关联、能力边界、保存冲突、任务所有权和仓库恢复。
+```ts
+import { decodeChangePreview } from 'concord-sdlc/change-preview';
 
-## 浏览器验收环境
+const preview = decodeChangePreview(JSON.parse(text));
+console.log(preview.comparison.base, preview.comparison.head, preview.comparison.baseLabel);
+```
 
-`pnpm check` 包含真实 Chromium 的界面验收。开发环境可先运行 `pnpm exec playwright install chromium`；已有浏览器时通过 `CONCORD_BROWSER_PATH` 指定可执行文件。NixOS 本机默认识别 `/run/current-system/sw/bin/chromium`。测试只启动隔离 Git 消费者，不在真实项目内运行示例测试命令。
+| 导出 | 签名与返回值 |
+| --- | --- |
+| `ChangePreviewSchema` | `concord.change-preview/v1` 的严格 Schema |
+| `ChangePreviewEntrySchema` | 单个条目的严格 Schema |
+| `decodeChangePreview(input: unknown): ChangePreview` | 严格解码并返回预览数据；未知字段、未知版本或违反约束时抛出解码失败，失败带字段路径 |
+| `ChangePreview`、`ChangePreviewEntry`、`PreviewSide` | 解码结果的类型 |
+| `PREVIEW_ENTRY_LIMIT` | 条目数上限，2000 |
+| `PREVIEW_DATA_LIMIT` | `changes.json` 的字节上限，8 MiB |
+
+消费者核对时还需独立计算 merge-base，与 `comparison.mergeBase` 比对，见[在 PR 预览中审阅变更](use-case/review-pull-request.md#消费者接入)。

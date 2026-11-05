@@ -250,9 +250,9 @@ concord --skill memory
 | 运行测试与核验修复 | [测试指引](skills/concord/references/test.md) |
 | 记录可复用的知识 | [Memory 指引](skills/concord/references/memory.md) |
 | 将 GitHub、Linear 反馈与本地 Issue 一起查看 | [反馈命令](docs/feature/feedback/cli.md) |
-| 确定项目在测试上自己负责什么 | [项目测试接入边界](docs/feature/local-sdlc/test-boundary.md) |
+| 确定项目在测试上自己负责什么 | [项目测试接入边界](docs/feature/local-sdlc/README.md#测试的边界) |
 | 浏览产品 Spec | [文档目录](docs/README.md) |
 
 链接中的详细指引与 Spec 以中文为主。两份 README 提供内容对应的产品介绍和入门流程。
 
-参与开发 Concord 本身，见[工程指南](docs/engineering/concord-self-hosting/README.md)。
+参与开发 Concord 本身，见[工程指南](docs/engineering/self-hosting/README.md)。

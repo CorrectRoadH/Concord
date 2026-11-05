@@ -19,7 +19,7 @@
 | 检查与恢复 | `check`、`doctor`、`cache`、`recover` | 检查与设置 |
 | 审阅 | `review` | 审阅 |
 
-结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新执行同一领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。`document.set` 拒绝的内容见[自动保存](README.md#自动保存)。
+结构化 `action` 请求用 `action` 字段选择操作，例如 `document.set`、`source.set`、`config.set`。所有更新执行同一领域校验；摘要冲突需要重新读取并合并，不提供强制覆盖选项。`document.set` 拒绝的内容见[自动保存](ui.md#自动保存)。
 
 ## 工作区投影
 
@@ -39,16 +39,17 @@
 | `lastAttempt` | 可选，保留上一份一致结果时最近尝试的时间、完整性与变化路径 |
 | `lastError` | 可选，`failedAt`、具名 `code` 与至多 4096 字符的 `message` |
 
-| 错误 | 条件 | 退出码 / HTTP |
-| --- | --- | --- |
-| `WorkspaceProjectionPending` | 当前身份尚无可读结果 | 1 / 202 |
-| `RecoveryRequired` | 尚无结果且最近刷新被中断发布阻断 | 1 / 503 |
-| `WorkspaceProjectionUnavailable` | 原生模块缺失、缓存损坏或无法安全读取、记录超过 8 MiB、身份无法计算；`details.reason` 给出原因码，如 `HawdbBusy`、`WorkspaceProjectionOutputLimit` | 1 / 503 |
-| `CleanupFailed` | 仅 HTTP：尚无结果且 View 无法确认刷新进程清理 | — / 409 |
+| 错误 | 条件 |
+| --- | --- |
+| `WorkspaceProjectionPending` | 当前身份尚无可读结果 |
+| `RecoveryRequired` | 尚无结果且最近刷新被中断发布阻断 |
+| `WorkspaceProjectionUnavailable` | 原生模块缺失、缓存损坏或无法安全读取、记录超过 8 MiB、身份无法计算；`details.reason` 给出原因码，如 `HawdbBusy`、`WorkspaceProjectionOutputLimit` |
+
+这些错误退出 1。HTTP 入口的状态码映射见[工作区 HTTP 接口](api.md#工作区投影)。
 
 worktree、配置原文或安装产物变化后旧结果不再展示，先报告 Pending。
 
-`GET /api/workspace`（无查询参数）返回同一 `{ snapshot, projection }`，`ETag` 为响应摘要，匹配时 304；HTTP 由工作区服务托管，读取不与其它进程争用缓存。`workspace projection` 在有同安装身份的服务时向服务读取，否则直接读取持久行，遇 `HawdbBusy` 在 500 ms 内重试，仍占用则不可用。GET 不申请刷新。`POST /api/workspace` 只接受 `{}`，沿用 Host/Origin 与 JSON 检查，申请一次刷新后返回 HTTP 202 `{ ok: true, value: { status: 'requested' } }`，不等待扫描、不读来源，原生不可用或清理失败时返回对应错误。
+`workspace projection` 在有同安装身份的服务时向服务读取，否则直接读取持久行，遇 `HawdbBusy` 在 500 ms 内重试，仍占用则不可用。
 
 ## PR 静态预览导出
 
@@ -56,7 +57,31 @@ worktree、配置原文或安装产物变化后旧结果不再展示，先报告
 concord view export --base <ref> [--head <ref>] [--base-label <label>] --out <new-directory> [--json]
 ```
 
-`--head` 默认 `HEAD`，`--base-label` 默认等于 `--base`。成功输出 `{ operation: 'view-export', output, comparison, files }`，`files` 为条目数；比较与产物见[变更审阅](change-preview.md)。
+`--head` 默认 `HEAD`，`--base-label` 默认等于 `--base`。成功输出 `{ operation: 'view-export', output, comparison, files }`，`files` 为条目数。输出目录的内容见 [PR 预览产物格式](format.md)，比较与发布的实现见[PR 静态导出](architecture.md#pr-静态导出)。
+
+比较为 `merge-base(base, head)` 到 head，产物保留原始 base。导出不要求项目配置有效，不加载消费者配置或源码，不建立持久缓存，不联网。
+
+`--out` 必须是父目录已存在的新目录，不能是仓库根、Git-private 路径或有 symlink 祖先。同一目标的并发导出只有一份成功。失败或取消保留不完整输出并在 `details.output` 报告路径，不删除、不覆盖。
+
+### 导出上限
+
+| 对象 | 上限 |
+| --- | --- |
+| entries | 2000 |
+| 枚举 stdout | 2 MiB |
+| 单个被比较 blob | 4 MiB |
+| 两侧累计 blob 读取 | 64 MiB |
+| 单个 patch | 2 MiB |
+| Markdown 每侧 | 1 MiB |
+| `changes.json` | 8 MiB |
+| 每个 Git 进程 | stderr 64 KiB，10 秒 |
+| 整个导出 | 120 秒 |
+| 静态资源 | 单文件 10 MiB，总量 64 MiB，连同 `changes.json` 不超过 256 个文件 |
+
+大对象即使 patch 很小也拒绝。超限、超时或取消不发布部分结果。
+
+### 错误
+
 
 | 错误 | 条件 |
 | --- | --- |
@@ -64,7 +89,7 @@ concord view export --base <ref> [--head <ref>] [--base-label <label>] --out <ne
 | `PreviewGitFailed` | ref 无法解析、对象缺失或 Git 失败 |
 | `PreviewMergeBaseAmbiguous` | 没有或有多个最佳共同祖先 |
 | `GitPathEncodingUnsupported` | 变更路径不是有效 UTF-8 |
-| `PreviewBudgetExceeded` | 超出任一[导出预算](change-preview.md#预算) |
+| `PreviewBudgetExceeded` | 超出任一[导出上限](#导出上限) |
 | `PreviewGitTimeout` | 单个 Git 进程超过 10 秒 |
 | `PreviewGitInvalid` | Git 输出不完整或不可解析，或对象格式不受支持 |
 | `PreviewUnsafeOutput` | 输出为仓库根、Git-private 路径或祖先不是真实目录 |

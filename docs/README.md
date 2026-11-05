@@ -27,7 +27,7 @@
 ## 它是怎么搭起来的
 
 - [技术架构](architecture.md)：当前项目目录、CLI 与服务的关系、Web 连接、应用生命周期与代码分层。
-- [工程指南](engineering/concord-self-hosting/README.md)：开发、测试与发布 Concord 本身。
+- [工程指南](engineering/self-hosting/README.md)：开发、测试与发布 Concord 本身。
 - [来源与第三方声明](notices.md)：源码来源及随包许可证材料的位置。
 
 ## 还在路上的
