@@ -1,5 +1,6 @@
 import { verifyInstalledStartup } from '../support/installed-startup.js';
 import { verifyInstalledHerdrMod } from '../support/installed-herdr-mod.js';
+import { verifyInstalledBundles } from '../support/installed-bundles.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
@@ -55,6 +56,7 @@ test('one release archive contains the declared distribution and starts from its
     execFileSync('tar', ['-xzf', artifact.filename, '-C', consumer]);
     const unpackMs = performance.now() - beforeUnpack;
     const installed = join(consumer, 'package');
+    await Effect.runPromise(verifyInstalledBundles(installed).pipe(Effect.provide(NodeServices.layer)));
     const notices = readFileSync(join(installed, 'dist/web/.vite/license.md'), 'utf8');
     assert.match(notices, /## pele - [^\n]+ \(MIT\)/u);
     assert.match(notices, /MIT/u);
