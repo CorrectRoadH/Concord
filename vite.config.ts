@@ -22,7 +22,14 @@ export default defineConfig(({ command }) => {
   const index = process.argv.findIndex(value => value === '--outDir');
   const output = command === 'build' ? externalBuildOutput(index < 0 ? undefined : process.argv[index + 1]) : undefined;
   return ({
-  run: { cache: false },
+  run: { cache: false, tasks: {
+    'check:source': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit', cache: false },
+    'check:tests': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.test.json --noEmit', cache: false },
+    'check:scripts': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.scripts.json --noEmit', cache: false },
+    'check:web': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.web.json --noEmit', cache: false },
+    'check:selfhost': { command: 'node --import tsx src/entry/cli/entry.ts --json --dry-run check', cache: false },
+    'test:source': { command: 'node --import tsx scripts/test-built.ts', cache: false },
+  } },
   root: 'web',
   plugins: [...(output === undefined ? [] : [distribution(output)]), stylex.vite({ dev: command === 'serve', runtimeInjection: false }), react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./web', import.meta.url)) } },
