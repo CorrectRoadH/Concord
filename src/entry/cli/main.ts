@@ -83,7 +83,10 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
 const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceRecord')(function*(privateDir: string, installation?: string) {
   const runtime = yield* ServerRuntime, client = yield* loadClient();
   const record = yield* Effect.try({ try: () => runtime.read(privateDir, false), catch: failure });
-  if (!record) return false;
+  if (!record) {
+    yield* Effect.try({ try: serverSourceDigest, catch: failure });
+    return false;
+  }
   if (record.installation === (installation ?? (yield* installationIdentity(runtime))) && record.protocol === client.PROTOCOL) {
     const sourceDigest = yield* Effect.try({ try: serverSourceDigest, catch: failure });
     if (sourceDigest !== undefined && record.sourceDigest !== sourceDigest && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) {

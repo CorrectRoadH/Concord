@@ -16,6 +16,7 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
   const backend = yield* PersistentCache;
   let scope: Scope.Closeable | undefined;
   let database: HawdbDatabase | undefined;
+  let openError: HawdbFailure | undefined;
   const snapshots = new Map<HawdbNamespace, readonly HawdbEntry[]>();
   let validatedAt = -Infinity, validationError: HawdbFailure | undefined;
   const verify = Effect.gen(function*() {
@@ -34,14 +35,15 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
   });
   const open = Effect.gen(function*() {
     yield* close;
+    openError = undefined;
     yield* verify;
     scope = yield* Scope.make();
     database = yield* backend.open(privateDir).pipe(Effect.provideService(Scope.Scope, scope));
     if (!database) return yield* Effect.fail(new HawdbFailure('HawdbBusy', 'Persistent cache is owned by another command'));
-  });
+  }).pipe(Effect.tapError(error => Effect.sync(() => { openError = error; })));
   yield* Effect.addFinalizer(() => close);
   const use = <A>(run: (database: HawdbDatabase) => A) => verify.pipe(Effect.andThen(Effect.try({ try: () => {
-    if (!database) throw new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');
+    if (!database) throw openError ?? new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');
     return run(database);
   }, catch: cause => cause instanceof HawdbFailure || cause instanceof ConcordError ? cause : new HawdbFailure('HawdbUnavailable', String(cause)) })));
   const service: PersistentCacheService = {
@@ -64,7 +66,7 @@ export const makePersistentCacheOwner = Effect.fn('makePersistentCacheOwner')(fu
     }
   });
   const status = Effect.sync(() => inspectCacheStatus(privateDir, true, () => {
-    if (!database) throw new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');
+    if (!database) throw openError ?? new HawdbFailure('HawdbUnavailable', 'Workspace persistent cache is unavailable');
     return database;
   }));
   return { open, close, verify, service, snapshot, mergeDerived, status,

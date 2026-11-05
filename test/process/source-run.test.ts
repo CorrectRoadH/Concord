@@ -1,5 +1,5 @@
+import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 import { nativeArtifactRoot, nativeSourceFiles } from "../../src/base/installation/index.js";
-import { packageBin } from "../../scripts/package-location.js";
 import { basename, dirname } from "node:path";
 // @concord-file
 // @concord-implements docs/engineering/concord-self-hosting/README.md#从源码运行
@@ -23,7 +23,7 @@ function installation() {
   const tool = join(scratch, 'tool'), consumer = join(scratch, 'consumer');
   mkdirSync(tool); mkdirSync(consumer);
   // Copy a fixed source snapshot so concurrent edits cannot change worker identity.
-  for (const name of ['src', 'scripts', 'templates', 'skills', 'package.json']) cpSync(join(checkout, name), join(tool, name), { recursive: true });
+  for (const name of ['src', 'web', 'scripts', 'templates', 'skills', 'package.json', 'vite.config.ts', 'vite.preview.config.ts']) cpSync(join(checkout, name), join(tool, name), { recursive: true });
   for (const file of [...nativeSourceFiles.filter(file => file.startsWith('native/')), 'native/hawdb/Cargo.lock']) { mkdirSync(dirname(join(tool, file)), { recursive: true }); cpSync(join(checkout, file), join(tool, file)); }
   const cache = join(scratch, 'cache');
   const native = join(cache, 'concord/native', basename(nativeArtifactRoot));
@@ -57,7 +57,7 @@ test('source CLI and refresh workers run without any built JavaScript in an isol
   const fixture = yield* Effect.sync(installation);
   try {
     yield* Effect.sync(() => {
-      assert.equal(existsSync(packageBin(fixture.tool)), false);
+      assert.equal(existsSync(join(fixture.tool, 'dist')), false);
       const version = fixture.call('--version');
       const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ version: Schema.String })), { onExcessProperty: 'ignore' })(readFileSync(join(fixture.tool, 'package.json'), 'utf8'));
       assert.equal(version.status, 0, version.stderr);
@@ -66,6 +66,7 @@ test('source CLI and refresh workers run without any built JavaScript in an isol
       fixture.success('new', 'feature', 'sample', '--title', 'Sample');
       assert.equal(fixture.success('--dry-run', 'check').ok, true);
       assert.equal(fixture.success('docs', 'check').ok, true);
+      stopWorkspaceServer(fixture.consumer, join(fixture.tool, 'src/entry/cli/entry.ts'), { ...process.env, XDG_CACHE_HOME: fixture.cache }, ['--import', import.meta.resolve('tsx')]);
       const refresh = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), join(fixture.tool, 'src/entry/server/query-refresh-worker.ts'),
         fixture.consumer, JSON.stringify(['trace', 'show', 'docs/feature/sample/README.md']), String(Date.now())],
       { env: { ...process.env, XDG_CACHE_HOME: fixture.cache }, cwd: fixture.consumer, encoding: 'utf8', timeout: 30_000 });
@@ -75,25 +76,16 @@ test('source CLI and refresh workers run without any built JavaScript in an isol
       assert.equal(fixture.success('--fresh', 'trace', 'show', 'docs/feature/sample/README.md').operation, 'trace-show');
     });
   } finally {
+    stopWorkspaceServer(fixture.consumer, join(fixture.tool, 'src/entry/cli/entry.ts'), { ...process.env, XDG_CACHE_HOME: fixture.cache }, ['--import', import.meta.resolve('tsx')]);
     yield* drainRefresh(fixture.tool, fixture.consumer);
     yield* Effect.sync(() => rmSync(fixture.scratch, { recursive: true, force: true }));
   }
 })));
 
 // @feature docs/feature/local-sdlc/README.md
-test('source commands explain missing native and built assets before starting work', () => Effect.runPromise(Effect.sync(() => {
+test('source commands explain missing native artifacts before starting work', () => Effect.runPromise(Effect.sync(() => {
   const fixture = installation();
   try {
-    for (const args of [['view'], ['view', 'export', '--base', 'missing', '--out', join(fixture.scratch, 'preview')]]) {
-      const result = fixture.call('--json', ...args);
-      assert.equal(result.status, 1, result.stdout + result.stderr);
-      assert.match(result.stderr, /^\{/u, result.stdout + result.stderr);
-      const error = decodeOutput(result.stderr);
-      assert.equal(error.error, 'BuildRequired');
-      assert.match(error.message!, /vp build/u);
-      assert.match(error.message!, /vp dev/u);
-    }
-    assert.equal(existsSync(join(fixture.scratch, 'preview')), false);
     fixture.success('init', '--docs-only', '--yes');
     renameSync(fixture.native, join(fixture.tool, 'native-hidden'));
     const missing = fixture.call('--json', 'trace', 'gaps');

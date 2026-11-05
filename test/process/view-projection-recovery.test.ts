@@ -1,11 +1,10 @@
+import { stopWorkspaceServer } from '../support/stop-workspace-server.js';
 import { readWorkspaceProjection, storeWorkspaceProjection } from '../support/operations.js';
 import { createDocument, initialize } from '../support/operations.js';
 import { Workspace } from '../../src/base/workspace/index.js';
 import { NodeServices } from '@effect/platform-node';
 import { runApplication } from '../support/repository.js';
 import { installedConcordCli, parseWorkspaceProjectionOutput } from '../support/support.js';
-import { installationResources } from "../../src/base/installation/index.js";
-import { packageBin } from '../../scripts/package-location.js';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -25,7 +24,6 @@ import { type WorkspaceProjection } from "../../src/model/index.js";
 import { makeWorkspaceProjectionCandidate, workspaceProjectionContext as identifyProjection } from "../../src/app/index.js";
 import { type ViewServerHandle } from '../e2e/server.js';
 import { startViewServer } from '../e2e/server.js';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.js';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.js';
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.js';
@@ -110,7 +108,11 @@ test('a busy native cache is explicitly unavailable and recovers after its handl
   const base = baseOf(server);
   try {
     try {
-      const response = await fetchFresh(`${base}/api/workspace`);
+      const response = await pollUntil(async () => {
+        const current = await fetchFresh(`${base}/api/workspace`);
+        if (current.status === 202) { await current.text(); return undefined; }
+        return current;
+      }, { description: 'native cache opening completes with its unavailable state' });
       assert.equal(response.status, 503);
       const body = await response.json() as { error: string; details: { reason: string }; value?: unknown };
       assert.equal(body.error, 'WorkspaceProjectionUnavailable');
@@ -151,15 +153,26 @@ test('an installation missing native artifacts reports unavailable instead of pe
   const root = fixture();
   const installation = mkdtempSync(join(tmpdir(), 'concord-projection-install-'));
   try {
-    writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
-    prepareSourceConsumer(installation, sourceConcord(), [], { private: true });
-    const installed = join(installation, 'node_modules/concord-sdlc');
-    rmSync(installationResources(installed).native, { recursive: true });
-    const result = spawnSync(process.execPath, [packageBin(installed), '--root', root, '--json', 'workspace', 'projection'], { encoding: 'utf8', timeout: 20_000 });
+    const result = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'workspace', 'projection'], { env: { ...process.env, XDG_CACHE_HOME: installation }, encoding: 'utf8', timeout: 20_000 });
     assert.equal(result.status, 1, result.stdout + result.stderr);
     assert.match(result.stderr, /^\{/u, result.stdout + result.stderr);
     const failure = JSON.parse(result.stderr) as { error: string; details: { reason: string } };
     assert.equal(failure.error, 'WorkspaceProjectionUnavailable', result.stderr);
     assert.equal(failure.details.reason, 'HawdbUnavailable');
   } finally { rmSync(root, { recursive: true, force: true }); rmSync(installation, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/README.md
+test('server stop returns only after persistent ownership and the instance record are released', () => {
+  const root = fixture();
+  try {
+    const started = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'server', 'start'], { encoding: 'utf8', timeout: 20_000 });
+    assert.equal(started.status, 0, started.stdout + started.stderr);
+    const ready = spawnSync(process.execPath, [installedConcordCli(), '--root', root, '--json', 'list'], { encoding: 'utf8', timeout: 20_000 });
+    assert.equal(ready.status, 0, ready.stdout + ready.stderr);
+    stopWorkspaceServer(root);
+    const database = openHawdb(cacheDatabasePath(genericPrivateDirectorySync(root)), { readOnly: false, create: false });
+    try { database.put('query_cache', [{ key: 'released-owner', payload: '{}' }]); }
+    finally { database.close(); }
+  } finally { stopWorkspaceServer(root); rmSync(root, { recursive: true, force: true }); }
 });
