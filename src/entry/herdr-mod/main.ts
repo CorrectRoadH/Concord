@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/README.md
+// @concord-implements docs/feature/herdr-mod/use-case/read-spec.md#open-feature
 import { Effect, Scheduler } from 'effect';
 import { View, div, type Context, type Element, type Task } from 'gpui-kit';
 import { h_flex, v_flex, TextView, Editor, EditorState, Input, InputState } from 'gpui-base';
@@ -135,6 +136,39 @@ export default class ConcordMod extends View {
     });
   }
 
+  private pageTree(pages: readonly { path: string; name: string }[], prefix: string): Element[] {
+    type Node = { name: string; path: string; page?: typeof pages[number]; children: Map<string, Node> };
+    const roots = new Map<string, Node>();
+    for (const page of pages) {
+      const relative = page.path.startsWith(prefix) ? page.path.slice(prefix.length) : page.path;
+      const segments = relative.split('/');
+      let children = roots;
+      let parent: Node | undefined;
+      for (const [index, name] of segments.entries()) {
+        const last = index === segments.length - 1;
+        if (last && name === 'README.md' && parent) { parent.page = page; break; }
+        let node = children.get(name);
+        if (!node) {
+          const path = page.path.slice(0, page.path.length - relative.length) + segments.slice(0, index + 1).join('/');
+          node = { name, path, children: new Map() };
+          children.set(name, node);
+        }
+        if (last) node.page = page;
+        parent = node;
+        children = node.children;
+      }
+    }
+    const render = (nodes: Map<string, Node>): Element[] => [...nodes.values()].sort((a, b) => a.path.localeCompare(b.path)).map(node => {
+      const directory = node.page?.path !== node.path;
+      const owner = this.session.documents.find(owner => owner.path === node.page?.path);
+      const label = directory ? owner?.title ?? node.name : node.page?.name ?? node.name;
+      const heading = node.page ? this.button(`page-${node.page.path}`, label, cx => this.open(node.page!.path, cx)) : text(label);
+      return directory ? v_flex().id(`directory-${node.path}`).gap(2).children([
+        heading, v_flex().px(8).gap(2).children(render(node.children)),
+      ]) : heading;
+    });
+    return render(roots);
+  }
   render(_cx: Context): Element {
     const session = this.session;
     const choose = (cx: Context) => {
@@ -148,15 +182,15 @@ export default class ConcordMod extends View {
     const status = session.error ? text(session.error.includes('Git') || /git repository/iu.test(session.error) ? '请先在 Git 仓库中打开。' : session.error).text_color(color('blocked')) : text(session.root || '请选择 Git 仓库');
     const roots = session.documents.map(owner => ({ path: owner.path, kind: owner.kind, name: owner.title }));
     const entries = [...new Map([...roots, ...session.pages].map(page => [page.path, page])).values()];
-    const categories: readonly [string, (page: typeof entries[number]) => boolean][] = [
-      ['Feature 与 Use Case', page => page.path.startsWith('docs/feature/')],
-      ['品味', page => page.path === 'docs/taste.md'],
-      ['术语', page => page.path.endsWith('/concepts.md')],
-      ['Issue', page => page.kind === 'issue'], ['Memory', page => page.kind === 'memory'],
-      ['其它文档', page => !page.path.startsWith('docs/feature/') && page.path !== 'docs/taste.md' && !page.path.endsWith('/concepts.md') && page.kind !== 'issue' && page.kind !== 'memory'],
+    const categories: readonly [string, string, (page: typeof entries[number]) => boolean][] = [
+      ['Feature 与 Use Case', 'docs/feature/', page => page.path.startsWith('docs/feature/')],
+      ['品味', 'docs/', page => page.path === 'docs/taste.md'],
+      ['术语', 'docs/', page => page.path.endsWith('/concepts.md')],
+      ['Issue', 'docs/issues/', page => page.kind === 'issue'], ['Memory', 'memory/', page => page.kind === 'memory'],
+      ['其它文档', 'docs/', page => !page.path.startsWith('docs/feature/') && page.path !== 'docs/taste.md' && !page.path.endsWith('/concepts.md') && page.kind !== 'issue' && page.kind !== 'memory'],
     ];
-    const navigation = v_flex().id('concord-tree').w(220).min_h(0).overflow_y_scroll().gap(4).children(categories.flatMap(([label, includes]) => [
-      text(label), ...entries.filter(includes).sort((a, b) => a.path.localeCompare(b.path)).map(page => this.button(`page-${page.path}`, page.name, cx => this.open(page.path, cx))),
+    const navigation = v_flex().id('concord-tree').w(220).min_h(0).overflow_y_scroll().gap(4).children(categories.flatMap(([label, prefix, includes]) => [
+      text(label), ...this.pageTree(entries.filter(includes), prefix),
     ]));
     const body: Element[] = [];
     if (!session.initialized && !session.error) body.push(text('这个仓库还没有初始化 Concord'), this.button('initialize', '在这里初始化 Concord', cx => this.run(cx, session.initialize(), current => this.watch(current))));

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, execFileSync } from 'node:child_process';
 import { registerHooks } from 'node:module';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -34,7 +34,7 @@ class Element {
 interface Mod { init(props: undefined, cx: Context): void; render(cx: Context): Element; close(cx: Context): void }
 
 // @use-case docs/feature/herdr-mod/use-case/init-from-herdr.md#guide
-test('built mod initializes through the real CLI, reads packaged Markdown and hides the guide after reopening', { timeout: 90_000 }, async () => {
+test('source mod initializes through the real CLI, reopens without the guide and navigates package directories', { timeout: 90_000 }, async () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-herdr-guide-'));
   const cli = installedConcordCli(), calls: string[][] = [], markdown: { id: string; source: string }[] = [];
   const tasks = new Set<Task>(), pending = new Set<Promise<unknown>>();
@@ -114,12 +114,36 @@ test('built mod initializes through the real CLI, reads packaged Markdown and hi
     assert.ok(markdown.some(item => item.id === 'concord-writing-guide' && item.source.trimEnd() === guide.trimEnd()));
     assert.ok(calls.some(args => JSON.stringify(args) === JSON.stringify(['--skill', 'docs-from-scratch'])));
     await close();
+    for (const kind of ['feature', 'engineering']) {
+      execFileSync(process.execPath, [cli, '--root', root, 'new', kind, 'cart', '--title', `${kind} Cart`], { encoding: 'utf8' });
+      const directory = join(root, `docs/${kind}/cart/architecture`);
+      mkdirSync(directory);
+      writeFileSync(join(directory, 'README.md'), `# ${kind} Cart architecture\n`);
+      writeFileSync(join(directory, 'storage.md'), `# ${kind} Cart storage\n`);
+    }
+    writeFileSync(join(root, 'docs/feature/cart/unclassified.md'), '# Unclassified page\n');
     view = new BuiltMod(); view.init(undefined, context); context.notify();
     await wait(() => output?.find('page-docs/taste.md') !== undefined);
     assert.equal(output!.find('initialize'), undefined);
     assert.equal(output!.find('read-guide'), undefined);
     assert.equal(output!.find('concord-writing-guide'), undefined);
     assert.doesNotMatch(output!.text(), /下一步：让 agent 读写作指南|新建了/u);
+    const clickPage = async (path: string, source: string) => {
+      const button = output!.find(`page-${path}`);
+      assert.ok(button?.click, `Missing page action ${path}`);
+      button.click(undefined, context);
+      await wait(() => output?.find(`concord-body-${path}`)?.text() === source);
+    };
+    for (const kind of ['feature', 'engineering']) {
+      const directory = `docs/${kind}/cart/architecture`;
+      await wait(() => output?.find(`page-${directory}/storage.md`) !== undefined);
+      const folder = output!.find(`directory-${directory}`);
+      assert.ok(folder, 'kind directory is a navigation node');
+      assert.ok(folder.find(`page-${directory}/storage.md`), 'kind directory contains its leaf page');
+      await clickPage(`${directory}/README.md`, `# ${kind} Cart architecture\n`);
+      await clickPage(`${directory}/storage.md`, `# ${kind} Cart storage\n`);
+    }
+    await clickPage('docs/feature/cart/unclassified.md', '# Unclassified page\n');
     assert.deepEqual(errors, []);
   } finally {
     await close();
