@@ -1,42 +1,61 @@
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { Effect, FileSystem, Schema, Stream } from 'effect';
+import { run, type RunOptions } from 'node:test';
 import { tap } from 'node:test/reporters';
-import { Effect, Schema } from 'effect';
-const Count = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
-export const TestCounts = Schema.Struct({
-  tests: Count, passed: Count, failed: Count, cancelled: Count,
-  skipped: Count, todo: Count, topLevel: Count, suites: Count,
-});
+import { createHash } from 'node:crypto';
+import { basename, join, resolve } from 'node:path';
 import { inspect } from 'node:util';
 
 type TestEvent = Parameters<typeof tap>[0] extends AsyncIterable<infer Event> ? Event : never;
+class TestRunnerFailed extends Schema.TaggedError<TestRunnerFailed>()('TestRunnerFailed', {
+  cause: Schema.Defect(),
+}) {}
 
-/** Preserve Node's TAP diagnostics and expose file wall times, including hooks. */
-export default async function* reporter(events: AsyncIterable<TestEvent>): AsyncGenerator<string, void> {
+/** Keep project diagnostics beside the unmodified official reporter stream. */
+export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions, output: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const logs = join(output, 'node');
+  yield* fs.makeDirectory(logs, { recursive: true });
+  const controller = new AbortController();
+  const events = yield* Effect.acquireRelease(
+    Effect.try({ try: () => run({ ...options, signal: controller.signal }), catch: cause => new TestRunnerFailed({ cause }) }),
+    () => Effect.sync(() => controller.abort()),
+  );
+  let success = false;
+  const fileTimings: { file: string; duration_ms: number; success: boolean }[] = [];
+  const diagnose = Effect.fn('test.node.diagnostic')(function*(event: TestEvent) {
+    const data = event.data;
+    const file = data !== undefined && 'file' in data ? data.file : undefined;
+    if (file !== undefined) {
+      const id = createHash('sha256').update(file).digest('hex');
+      const log = join(logs, `${basename(file)}-${id}.log`);
+      // inspect is bounded and accepts circular Errors; never serialize the raw event.
+      yield* fs.writeFileString(log, `${inspect(event, { depth: 8, maxStringLength: 100_000, maxArrayLength: 100 })}\n`, { flag: 'a' });
+    }
+    if (event.type === 'test:fail') {
+      const error = inspect(event.data.details.error, { depth: 8, maxStringLength: 100_000, maxArrayLength: 100 });
+      yield* fs.writeFileString(join(output, 'node-failures.jsonl'), `${JSON.stringify({ file, name: event.data.name, error })}\n`, { flag: 'a' });
+    }
+    if (event.type === 'test:summary') {
+      const timing = { ...event.data, scope: file === undefined ? 'run' : 'file' };
+      yield* fs.writeFileString(process.env.CONCORD_TEST_TIMINGS ?? join(output, 'node-timings.jsonl'), `${JSON.stringify(timing)}\n`, { flag: 'a' });
+      if (file === undefined) success = event.data.success;
+    }
+    // File wrapper names are paths, whereas individual case names are titles.
+    if (event.type === 'test:complete' && file !== undefined && resolve(event.data.name) === file) {
+      const timing = { file, duration_ms: event.data.details.duration_ms, success: event.data.details.passed };
+      fileTimings.push(timing);
+      yield* Effect.sync(() => console.error(`# Node file: ${file}; ${(timing.duration_ms / 1000).toFixed(3)}s; success=${timing.success}; logs=${logs}`));
+    }
+  });
   async function* measured(): AsyncGenerator<TestEvent, void> {
     for await (const event of events) {
-      if (event.type === 'test:fail') {
-        Effect.runSync(Effect.sync(() => {
-          const error = inspect(event.data.details.error, { depth: 8 });
-          if (process.env.CONCORD_TEST_FAILURES !== undefined) appendFileSync(process.env.CONCORD_TEST_FAILURES,
-            `${JSON.stringify({ ...event.data, details: { ...event.data.details, error }, error })}\n`);
-        }));
-      }
-      if (event.type === 'test:summary') {
-        const file = process.env.CONCORD_TEST_FILE;
-        // A file runner owns one OS process group. Keep one summary per file.
-        if (file !== undefined && event.data.file !== undefined) { yield event; continue; }
-        const timing = { ...event.data, ...(file === undefined ? {} : { file }), scope: file !== undefined || event.data.file !== undefined ? 'file' : 'run' };
-        Effect.runSync(Effect.sync(() => {
-          if (file !== undefined && process.env.CONCORD_TEST_SUMMARY !== undefined) {
-            const counts = Schema.decodeUnknownSync(TestCounts, { onExcessProperty: 'error' })(event.data.counts);
-            writeFileSync(process.env.CONCORD_TEST_SUMMARY, JSON.stringify(counts));
-          }
-          if (process.env.CONCORD_TEST_TIMINGS !== undefined) appendFileSync(process.env.CONCORD_TEST_TIMINGS, `${JSON.stringify(timing)}\n`);
-        }));
-        yield { type: 'test:diagnostic', data: { nesting: 0, level: 'info', message: `timing ${JSON.stringify(timing)}` } };
-      }
+      await Effect.runPromise(diagnose(event));
       yield event;
     }
   }
-  yield* tap(measured());
-}
+  yield* Stream.fromAsyncIterable(tap(measured()), cause => new TestRunnerFailed({ cause })).pipe(
+    Stream.runForEach(text => Effect.sync(() => { process.stdout.write(text); })),
+  );
+  yield* fs.writeFileString(join(output, 'file-timings.json'), `${JSON.stringify(fileTimings, null, 2)}\n`);
+  return !success;
+});

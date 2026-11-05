@@ -27,6 +27,7 @@ export default {
       "test/support/installed-package.ts",
       "test/support/repository.ts",
       "test/support/temporary.ts",
+      "test/support/source-runtime.ts",
       "test/support/cli-fixture.ts",
       "test/support/asynchronous-projections-fixture.ts",
       "test/support/lsp-analysis-fixture.ts",
