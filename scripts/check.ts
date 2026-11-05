@@ -23,7 +23,7 @@ const command = Effect.fn('check.command')(function* (name: string, executable: 
 
 const main = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
-  if (yield* fs.exists(join(checkoutRoot, 'dist'))) return yield* new DistInCheckout({ message: 'Delete dist/ from the checkout before running pnpm check. Tests run source; build packages with vp build --out <external-directory>.' });
+  if (yield* fs.exists(join(checkoutRoot, 'dist'))) return yield* new DistInCheckout({ message: 'Delete dist/ from the checkout before running pnpm check. Tests run source; build packages with vp build --outDir <external-directory>.' });
   const compileCache = yield* fs.makeTempDirectory({ directory: tmpdir(), prefix: 'concord-check-compile-' });
   yield* Effect.acquireRelease(Effect.sync(() => {
     const previous = { cache: process.env.NODE_COMPILE_CACHE, owner: process.env.CONCORD_TEST_COMPILE_CACHE };

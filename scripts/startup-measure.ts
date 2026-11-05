@@ -1,3 +1,4 @@
+import { packageBin } from './package-location.js';
 import { spawnSync } from 'node:child_process';
 import { closeSync, openSync, readFileSync, writeFileSync } from 'node:fs';
 import { loadavg, uptime } from 'node:os';
@@ -7,8 +8,8 @@ import { Effect } from 'effect';
 // Compare fresh processes against the preserved pre-change distribution. Both
 // variants use the same consumer, rendering environment and compile-cache mode.
 Effect.runSync(Effect.sync(() => {
-  const baseline = resolve('.test-results/startup-baseline/dist/entry.js');
-  const candidate = resolve('dist/entry/cli/entry.js');
+  const baseline = packageBin(resolve(process.argv[2] ?? ''));
+  const candidate = packageBin(resolve(process.argv[3] ?? ''));
   const consumer = resolve('.test-results/startup-consumer');
   const cached = process.argv.includes('--compile-cache');
   const environment: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', TERM: 'dumb', NODE_OPTIONS: '' };

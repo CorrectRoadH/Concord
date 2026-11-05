@@ -47,7 +47,7 @@ export function packConcord(destination: string, repository = sourceRoot): Packe
 // Importers reuse the same packaging implementation without executing the CLI.
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   Effect.runSync(Effect.sync(() => {
-    const { name, version, filename } = packConcord(process.argv[2] ?? 'release');
+    const { name, version, filename } = packConcord(process.argv[2] ?? 'release', process.argv[3] ?? sourceRoot);
     process.stdout.write(`${JSON.stringify({ name, version, filename })}\n`);
   }));
 }

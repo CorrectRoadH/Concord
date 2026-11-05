@@ -1,3 +1,4 @@
+import { packageBin } from './package-location.js';
 import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from './test-temporary.js';
 import { join, resolve } from 'node:path';
@@ -41,8 +42,8 @@ const main = Effect.gen(function*() {
   const workDir = yield* workDirectory('concord-profile-', values.keep);
   const runs = join(workDir, 'runs');
   yield* io('Create run directory', () => mkdirSync(runs));
-  yield* buildForMeasurement(resolve('.'), runs);
-  const candidate = yield* loadArtifact('candidate', '.');
+  const candidatePackage = yield* buildForMeasurement(resolve('.'), runs);
+  const candidate = yield* loadArtifact('candidate', '.', packageBin(candidatePackage));
   const consumer = yield* prepareConsumer(values.consumer ?? scenario?.consumer ?? 'self', { repository: candidate.dir, commit: values.commit, entry: candidate.entry, scale, workDir });
   // Output artifacts intentionally survive; only the work directory is disposable.
   const out = yield* io('Create profile output', () => {

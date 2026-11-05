@@ -2,7 +2,7 @@ import { NodeServices } from '@effect/platform-node';
 import { Effect, FileSystem, Schema } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
 import { decode, encode } from '@jridgewell/sourcemap-codec';
@@ -12,6 +12,8 @@ import { P5_LIBRARIES } from "../src/model/p5/index.js";
 import { captureBuildSource, writeBuildIdentity, type BuildIdentity } from './build-identity.js';
 
 let sourceIdentity: BuildIdentity | undefined;
+let outputRoot: string;
+const dist = (path = '') => join(outputRoot, 'dist', path);
 
 class BuildFailed extends Schema.TaggedError<BuildFailed>()('BuildFailed', {
   project: Schema.String,
@@ -97,56 +99,62 @@ const narrowGeneratedImports = Effect.fn('build.narrowGeneratedImports')(functio
           else if (entry.isFile() && /\.(?:[cm]?js)$/u.test(entry.name)) narrowNamespaceImports(api, file);
         }
       };
-      visit('dist');
+      visit(dist());
     } finally { api.close(); }
-  }, catch: cause => cause instanceof BuildOutputFailed ? cause : new BuildOutputFailed({ file: 'dist', message: cause instanceof Error ? cause.message : String(cause) }) });
+  }, catch: cause => cause instanceof BuildOutputFailed ? cause : new BuildOutputFailed({ file: dist(), message: cause instanceof Error ? cause.message : String(cause) }) });
 });
 
 const prepare = Effect.gen(function*() {
   sourceIdentity = yield* captureBuildSource();
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
-  yield* fs.remove('dist', { recursive: true, force: true });
-  const nativeArgs = ['--import', 'tsx', 'scripts/build-native.ts', '--output', 'dist/native', '--reuse'];
+  yield* fs.makeDirectory(outputRoot, { recursive: true });
+  yield* fs.remove(join(outputRoot, 'node_modules'), { recursive: true, force: true });
+  yield* fs.symlink(resolve('node_modules'), join(outputRoot, 'node_modules'));
+  yield* fs.remove(dist(), { recursive: true, force: true });
+  for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'templates', 'skills', 'docs', ...readdirSync('.').filter(name => /^README(?:\..+)?\.md$/u.test(name))]) yield* fs.copy(name, join(outputRoot, name), { overwrite: true });
+  const nativeArgs = ['--import', 'tsx', 'scripts/build-native.ts', '--output', dist('native'), '--reuse'];
   const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
   if (prebuilt !== undefined) nativeArgs.push('--prebuilt', prebuilt);
   if (process.env.CONCORD_REQUIRE_PORTABLE_NATIVE === '1') nativeArgs.push('--require-portable');
   const nativeExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, nativeArgs, { stdout: 'inherit', stderr: 'inherit' }));
   if (nativeExit !== 0) return yield* new BuildFailed({ project: 'hawdb-native', exitCode: nativeExit });
   yield* Effect.all(['tsconfig.json', 'tsconfig.web.json'].map(project => Effect.gen(function*() {
-    const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError'], { stdout: 'inherit', stderr: 'inherit' }));
+    const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError', ...(project === 'tsconfig.json' ? ['--outDir', dist()] : [])], { stdout: 'inherit', stderr: 'inherit' }));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
   })), { concurrency: 'unbounded' });
   yield* narrowGeneratedImports();
-  yield* buildStartup();
-  yield* Effect.tryPromise(() => bundle({ entryPoints: ['src/entry/herdr-mod/main.ts'], outfile: 'dist/herdr-mod/main.js', bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', external: ['gpui-kit', 'gpui-base', 'herdr'], minify: true }));
-  yield* fs.writeFileString('dist/herdr-mod/mod.json', JSON.stringify({ place: 'right', size: 760 }) + '\n');
-  yield* fs.writeFileString('dist/herdr-mod/NOTICE.txt', `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);
+  yield* buildStartup(dist(), outputRoot);
+  yield* Effect.tryPromise(() => bundle({ entryPoints: ['src/entry/herdr-mod/main.ts'], outfile: dist('herdr-mod/main.js'), bundle: true, format: 'esm', platform: 'neutral', target: 'es2022', external: ['gpui-kit', 'gpui-base', 'herdr'], minify: true }));
+  yield* fs.writeFileString(dist('herdr-mod/mod.json'), JSON.stringify({ place: 'right', size: 760 }) + '\n');
+  yield* fs.writeFileString(dist('herdr-mod/NOTICE.txt'), `Concord Herdr mod bundles Effect.\n\n${yield* fs.readFileString('node_modules/effect/LICENSE')}`);
 });
 
 const finish = Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   yield* Effect.tryPromise(async () => {
     const { build } = await import('vite-plus');
-    await build({ configFile: 'vite.preview.config.ts' });
+    await build({ configFile: 'vite.preview.config.ts', build: { outDir: dist('preview') } });
   });
-  yield* Effect.tryPromise(() => bundle({ entryPoints: ['web/p5/runtime.ts'], outfile: 'dist/web/p5-runtime.js', bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'linked', define: { IS_MINIFIED: 'true' } }));
-  yield* fs.copyFile('node_modules/p5/license.txt', 'dist/web/P5-LICENSE.txt');
-  yield* fs.copy('node_modules/p5/types', 'dist/p5-types');
-  yield* fs.makeDirectory('dist/web/p5-libraries', { recursive: true });
+  yield* Effect.tryPromise(() => bundle({ entryPoints: ['web/p5/runtime.ts'], outfile: dist('web/p5-runtime.js'), bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, legalComments: 'linked', define: { IS_MINIFIED: 'true' } }));
+  yield* fs.copyFile('node_modules/p5/license.txt', dist('web/P5-LICENSE.txt'));
+  yield* fs.copy('node_modules/p5/types', dist('p5-types'));
+  yield* fs.makeDirectory(dist('web/p5-libraries'), { recursive: true });
   for (const library of Object.values(P5_LIBRARIES)) {
-    yield* fs.copyFile(library.source, `dist/web/p5-libraries/${library.file}`);
-    yield* fs.copyFile(library.license, `dist/web/p5-libraries/${library.file}.LICENSE`);
+    yield* fs.copyFile(library.source, dist(`web/p5-libraries/${library.file}`));
+    yield* fs.copyFile(library.license, dist(`web/p5-libraries/${library.file}.LICENSE`));
   }
-  yield* fs.copyFile('node_modules/@fontsource-variable/noto-sans-sc/LICENSE', 'dist/web/FONT-LICENSE.txt');
+  yield* fs.copyFile('node_modules/@fontsource-variable/noto-sans-sc/LICENSE', dist('web/FONT-LICENSE.txt'));
   const fontLicense = yield* fs.readFileString('node_modules/@fontsource-variable/noto-sans-sc/LICENSE');
-  yield* fs.writeFileString('dist/preview/FONT-LICENSE.html', `<!doctype html><meta charset="utf-8"><title>Font license</title><pre>${fontLicense.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`);
-  yield* fs.chmod('dist/entry/cli/entry.js', 0o755);
-  yield* fs.chmod('dist/entry/cli/cli.js', 0o755);
+  yield* fs.writeFileString(dist('preview/FONT-LICENSE.html'), `<!doctype html><meta charset="utf-8"><title>Font license</title><pre>${fontLicense.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`);
+  yield* fs.chmod(dist('entry/cli/entry.js'), 0o755);
+  yield* fs.chmod(dist('entry/cli/cli.js'), 0o755);
 });
 
-export const prepareDistribution = () => Effect.runPromise(prepare.pipe(Effect.provide(NodeServices.layer)));
-export const finishDistribution = () => Effect.runPromise(Effect.gen(function*() {
+export const prepareDistribution = (output: string) => { outputRoot = output; return Effect.runPromise(prepare.pipe(Effect.provide(NodeServices.layer))); };
+export const finishDistribution = (output: string) => { outputRoot = output; return Effect.runPromise(Effect.gen(function*() {
   yield* finish;
-  if (sourceIdentity !== undefined) yield* writeBuildIdentity(sourceIdentity);
-}).pipe(Effect.provide(NodeServices.layer)));
+  if (sourceIdentity !== undefined) yield* writeBuildIdentity(sourceIdentity, dist());
+  const fs = yield* FileSystem.FileSystem;
+  yield* fs.remove(join(outputRoot, 'node_modules'));
+}).pipe(Effect.provide(NodeServices.layer))); };

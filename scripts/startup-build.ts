@@ -1,13 +1,16 @@
 import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Effect, Schema } from 'effect';
 import { build } from 'esbuild';
 import { API } from 'typescript/sync';
 import * as ts from 'typescript/ast';
 import { type StartupData } from "../src/model/index.js";
+
+let distribution: string;
+const dist = (path = '') => join(distribution, path);
 
 class StartupBuildFailed extends Schema.TaggedError<StartupBuildFailed>()('StartupBuildFailed', { message: Schema.String }) {}
 const Receipt = Schema.Struct({ stdout: Schema.String, stderr: Schema.String, status: Schema.Int });
@@ -24,7 +27,7 @@ delete environment.FORCE_COLOR;
 
 const capture = (args: readonly string[]) => Effect.tryPromise({
   try: () => new Promise<Schema.Schema.Type<typeof Receipt>>((accept, reject) => {
-    execFile(process.execPath, [resolve('dist/entry/cli/entry-full.js'), ...args], { env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+    execFile(process.execPath, [resolve(dist('entry/cli/entry-full.js')), ...args], { env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
       if (error && typeof error.code !== 'number') { reject(error); return; }
       accept(Schema.decodeUnknownSync(Receipt, { onExcessProperty: 'error' })({ stdout, stderr, status: error?.code ?? 0 }));
     });
@@ -33,9 +36,9 @@ const capture = (args: readonly string[]) => Effect.tryPromise({
 });
 
 /** Keep the source module's resource and identity owner after code splitting. */
-async function bundleCommands(entries: readonly string[], splitting = true, entryNames = '[name]', chunkNames = 'runtime-[hash]', write = true, directory = 'dist/entry/cli') {
-  const output = resolve(directory), model = resolve('dist/model');
-  const libraries = ['model', 'base', 'domain', 'app'].map(layer => resolve('dist', layer) + '/');
+async function bundleCommands(entries: readonly string[], splitting = true, entryNames = '[name]', chunkNames = 'runtime-[hash]', write = true, directory = dist('entry/cli')) {
+  const output = resolve(directory), model = resolve(dist('model'));
+  const libraries = ['model', 'base', 'domain', 'app'].map(layer => resolve(dist(), layer) + '/');
   const parser = resolve(model, 'markdown-parser.js');
   const api = new API({ runExternalCode: false });
   try {
@@ -53,7 +56,7 @@ async function bundleCommands(entries: readonly string[], splitting = true, entr
           if (libraries.some(directory => owner.startsWith(directory))) return { path: owner, sideEffects: false };
         });
         builder.onLoad({ filter: /\.js$/ }, args => {
-          if (!args.path.startsWith(resolve('dist') + '/')) return;
+          if (!args.path.startsWith(resolve(dist()) + '/')) return;
           const text = readFileSync(args.path, 'utf8');
           const retained = api.createSourceFile(args.path, text, { scriptKind: ts.ScriptKind.JS });
           const edits: { start: number; end: number }[] = [];
@@ -77,20 +80,21 @@ async function bundleCommands(entries: readonly string[], splitting = true, entr
   } finally { api.close(); }
 }
 
-export const buildStartup = Effect.fn('build.startup')(function*() {
+export const buildStartup = Effect.fn('build.startup')(function*(directory: string, packageRoot: string) {
+  distribution = resolve(directory);
   // Pure parser and terminal dependencies have no Effect service identities.
   // Keep their module boundaries for source execution and parser probes while
   // avoiding a module-resolution waterfall before the first terminal frame.
-  yield* Effect.tryPromise(() => build({ entryPoints: ['dist/model/markdown-dependencies.js'], outdir: 'dist', outbase: 'dist', bundle: true, packages: 'bundle', external: ['effect', 'effect/*', '@effect/*'], platform: 'node', format: 'esm', target: 'node24', allowOverwrite: true, sourcemap: true, legalComments: 'linked', banner: { js: "import { createRequire as createDependencyRequire } from 'node:module'; const require = createDependencyRequire(import.meta.url);" } }));
+  yield* Effect.tryPromise(() => build({ entryPoints: [dist('model/markdown-dependencies.js')], outdir: dist(), outbase: dist(), bundle: true, packages: 'bundle', external: ['effect', 'effect/*', '@effect/*'], platform: 'node', format: 'esm', target: 'node24', allowOverwrite: true, sourcemap: true, legalComments: 'linked', banner: { js: "import { createRequire as createDependencyRequire } from 'node:module'; const require = createDependencyRequire(import.meta.url);" } }));
   // Keep a self-contained application fallback, independent of command chunks.
   // Package dependencies remain external to preserve Effect service identity with
   // repository contributions and all public exports. Installation resources resolve their package owner independently of bundle depth.
-  const closure = yield* Effect.tryPromise(() => build({ entryPoints: ['dist/entry/cli/cli-fallback.js'], outfile: 'dist/entry/cli/cli-fallback-bundle.js', metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
-  yield* Effect.tryPromise(() => bundleCommands(['dist/entry/server/operation/main.js'], false, '[name]', 'runtime-[hash]', true, 'dist/entry/server/operation'));
-  const roots = ['dist/entry/cli/entry.js', 'dist/entry/cli/entry-full.js', 'dist/entry/cli/cli.js'];
-  const bootstrap = yield* Effect.tryPromise(() => build({ entryPoints: roots, outdir: 'dist/startup-graph', write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
+  const closure = yield* Effect.tryPromise(() => build({ entryPoints: [dist('entry/cli/cli-fallback.js')], outfile: dist('entry/cli/cli-fallback-bundle.js'), metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24', sourcemap: true }));
+  yield* Effect.tryPromise(() => bundleCommands([dist('entry/server/operation/main.js')], false, '[name]', 'runtime-[hash]', true, dist('entry/server/operation')));
+  const roots = [dist('entry/cli/entry.js'), dist('entry/cli/entry-full.js'), dist('entry/cli/cli.js')];
+  const bootstrap = yield* Effect.tryPromise(() => build({ entryPoints: roots, outdir: dist('startup-graph'), write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
   const definitions = yield* Effect.tryPromise(async () => {
-    const file = './dist/entry/cli/cli-full.js';
+    const file = dist('entry/cli/cli-full.js');
     const { fullCommand } = await import(pathToFileURL(resolve(file)).href) as { fullCommand: Definition };
     return { fullCommand };
   });
@@ -114,31 +118,31 @@ export const buildStartup = Effect.fn('build.startup')(function*() {
     return Effect.succeed([JSON.stringify(args), receipt] as const);
   }))), { concurrency: 4 });
   const commands = [...new Set(Object.values(bootstrap.metafile!.inputs).flatMap(input => input.imports)
-    .filter(item => item.kind === 'dynamic-import' && item.path.startsWith('dist/entry/cli/')).map(item => item.path))];
+    .filter(item => item.kind === 'dynamic-import' && resolve(item.path).startsWith(dist('entry/cli') + '/')).map(item => item.path))];
   yield* Effect.tryPromise({ try: async () => {
-    const skill = 'dist/entry/cli/skill.js';
+    const skill = dist('entry/cli/skill.js');
     await bundleCommands(commands.filter(file => file !== skill));
     await bundleCommands([skill], false);
   }, catch: cause => new StartupBuildFailed({ message: `Bundle command closure: ${String(cause)}` }) });
-  const production = yield* Effect.tryPromise(() => build({ entryPoints: [...roots, 'dist/entry/cli/cli-fallback-bundle.js'], outdir: 'dist/startup-graph', write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
+  const production = yield* Effect.tryPromise(() => build({ entryPoints: [...roots, dist('entry/cli/cli-fallback-bundle.js')], outdir: dist('startup-graph'), write: false, metafile: true, bundle: true, packages: 'external', platform: 'node', format: 'esm', target: 'node24' }));
   yield* Effect.sync(() => {
     // esbuild's input graph is the actual command-definition closure, including
     // ordinary imports and finite dynamic chunks, rather than a filename prefix.
-    const emitted = [...new Set([...Object.keys(closure.metafile!.inputs), ...Object.keys(bootstrap.metafile!.inputs), ...roots])].filter(file => file.startsWith('dist/') && file.endsWith('.js')).sort();
+    const emitted = [...new Set([...Object.keys(closure.metafile!.inputs), ...Object.keys(bootstrap.metafile!.inputs), ...roots])].filter(file => insideDist(file) && file.endsWith('.js')).sort();
     const modulePath = (file: string, root: string): string => {
       const path = relative(resolve(root, 'entry/cli'), resolve(file));
       return path.startsWith('.') ? path : `./${path}`;
     };
-    const productionFiles = Object.keys(production.metafile!.inputs).filter(file => file.startsWith('dist/') && file.endsWith('.js')).sort();
-    const files = Object.fromEntries(productionFiles.map(file => [modulePath(file, 'dist'), digest(file)]));
-    const sourceFiles = Object.fromEntries(emitted.map(file => file.replace(/^dist\//u, 'src/').replace(/\.js$/u, '.ts')).map(file => [modulePath(file, 'src'), digest(file)]));
+    const productionFiles = Object.keys(production.metafile!.inputs).filter(file => insideDist(file) && file.endsWith('.js')).sort();
+    const files = Object.fromEntries(productionFiles.map(file => [modulePath(file, distribution), digest(file)]));
+    const sourceFiles = Object.fromEntries(emitted.map(file => join('src', relative(distribution, resolve(file))).replace(/\.js$/u, '.ts')).map(file => [modulePath(file, 'src'), digest(file)]));
     const payload = {
-      format: 'concord.startup/v1', packageDigest: digest('package.json'), files, sourceFiles,
+      format: 'concord.startup/v1', packageDigest: digest(join(packageRoot, 'package.json')), files, sourceFiles,
       receipts: Object.fromEntries(receipts),
       groups: definitions.fullCommand.subcommands.flatMap(group => group.commands.map(command => ({ name: command.name, ...(command.description === undefined ? {} : { description: command.description }) }))),
     };
     const data: StartupData = Schema.decodeUnknownSync(Data, { onExcessProperty: 'error' })({ ...payload, dataDigest: createHash('sha256').update(JSON.stringify(payload)).digest('hex') });
-    writeFileSync('dist/startup-data.js', `// Generated from the complete CLI. Do not edit.\nexport default ${JSON.stringify(data)};\n`);
+    writeFileSync(dist('startup-data.js'), `// Generated from the complete CLI. Do not edit.\nexport default ${JSON.stringify(data)};\n`);
     console.error(`# Startup: recorded ${paths.length} help paths, version and no-argument output`);
   });
 });

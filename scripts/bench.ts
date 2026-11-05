@@ -1,3 +1,4 @@
+import { packageBin } from './package-location.js';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
@@ -38,8 +39,8 @@ const main = Effect.gen(function*() {
   const root = resolve('.');
   const workDir = yield* workDirectory('concord-bench-', values.keep), outputDir = join(workDir, 'runs');
   yield* io('Create run directory', () => mkdirSync(outputDir));
-  yield* buildForMeasurement(root, outputDir);
-  const candidate = yield* loadArtifact('candidate', root);
+  const candidatePackage = yield* buildForMeasurement(root, outputDir);
+  const candidate = yield* loadArtifact('candidate', root, packageBin(candidatePackage));
   const base = values.changed !== undefined || values.compare !== undefined ? (values.changed !== undefined ? values.changed || (yield* defaultBase(root, outputDir)) : values.compare || (yield* defaultBase(root, outputDir))) : undefined;
   const scenarios = yield* loadScenarios(root), budgets = yield* loadBudgets(root);
   const changed = values.changed === undefined ? undefined : yield* changedSelection(root, candidate.entry, base!, outputDir);

@@ -1,6 +1,6 @@
 import { packConcord } from '../release-package.js';
 import { tmpdir } from '../test-temporary.js';
-import { installationRootForBin } from '../../src/base/installation/index.js';
+import { workspaceInstallationIdentity, installationRootForBin } from '../../src/base/installation/index.js';
 import { execFile, execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -39,28 +39,29 @@ const installArtifact = Effect.fn('perf.installArtifact')(function*(repository: 
   return packageBin(join(scratch, 'node_modules/concord-sdlc'));
 });
 
-/** A built Concord checkout; the baseline is prepared before measuring, normally from the candidate's parent commit. */
+/** Identify the supplied installation; retain its source repository for consumer fixtures. */
 export const loadArtifact = Effect.fn('perf.loadArtifact')(function*(label: Artifact['label'], path: string, installedEntry?: string) {
   const dir = yield* io('Resolve artifact', () => realpathSync(resolve(path)));
   const built = packageBin(dir);
   const entry = installedEntry ?? (label === 'candidate' ? built : ((yield* io('Find distribution', () => existsSync(built))) ? yield* installArtifact(dir) : built));
   if (!(yield* io('Find artifact', () => existsSync(entry)))) return yield* new PerfError({ message: `${label} artifact has no build: ${entry}; run vp build there first` });
   const git = (...args: string[]) => Effect.tryPromise({ try: () => new Promise<string>((accept, reject) => execFile('git', ['-C', dir, ...args], { encoding: 'utf8' }, (error, stdout) => error ? reject(error) : accept(stdout.trim()))), catch: cause => new PerfError({ message: `Identify artifact: ${String(cause)}` }) });
-  const distribution = join(installedEntry === undefined ? dir : installationRootForBin(installedEntry), 'dist');
+  const source = entry.endsWith('.ts');
+  const distribution = join(installationRootForBin(entry), 'dist');
   const identity = yield* io('Read build identity', () => {
     const path = join(distribution, 'build-identity.json');
     return existsSync(path) ? Schema.decodeUnknownSync(Schema.fromJsonString(BuildIdentity), { onExcessProperty: 'error' })(readFileSync(path, 'utf8')) : undefined;
   });
   const commit = identity?.commit ?? (yield* git('rev-parse', 'HEAD'));
   const dirty = identity?.dirty ?? ((yield* git('status', '--porcelain')) !== '');
-  const digest = yield* io('Digest artifact', () => digestDist(distribution));
+  const digest = yield* io('Digest artifact', () => source ? workspaceInstallationIdentity() : digestDist(distribution));
   return { label, dir, entry, commit, dirty, digest } satisfies Artifact;
 });
 
-/** Concurrent source commits do not change an already built, locked artifact. */
+/** Concurrent source commits do not change an already built installation. */
 export const verifyArtifact = Effect.fn('perf.verifyArtifact')((artifact: Artifact) => io('Verify artifact bytes', () => {
   const distribution = join(installationRootForBin(artifact.entry), 'dist');
-  if (digestDist(distribution) !== artifact.digest || digestDist(join(artifact.dir, 'dist')) !== artifact.digest) {
+  if ((artifact.entry.endsWith('.ts') ? workspaceInstallationIdentity() : digestDist(distribution)) !== artifact.digest) {
     throw new PerfError({ message: `${artifact.label} artifact changed during measurement` });
   }
 }));
