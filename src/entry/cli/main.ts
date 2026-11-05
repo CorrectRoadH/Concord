@@ -90,8 +90,10 @@ const assertCompatibleWorkspaceRecord = Effect.fn('assertCompatibleWorkspaceReco
   if (record.installation === (installation ?? (yield* installationIdentity(runtime))) && record.protocol === client.PROTOCOL) {
     const sourceDigest = yield* Effect.try({ try: serverSourceDigest, catch: failure });
     if (sourceDigest !== undefined && record.sourceDigest !== sourceDigest && !(yield* runtime.released(privateDir).pipe(Effect.mapError(workspaceServerFailure)))) {
-      const connection = yield* client.connectWorkspaceSocket(record.socket.path, record.installation, record.token).pipe(Effect.mapError(workspaceServerFailure));
-      yield* connection.client.shutdown({ token: record.token }).pipe(Effect.mapError(workspaceServerFailure));
+      yield* Effect.scoped(Effect.gen(function*() {
+        const connection = yield* client.connectWorkspaceSocket(record.socket.path, record.installation, record.token).pipe(Effect.mapError(workspaceServerFailure));
+        yield* connection.client.shutdown({ token: record.token }).pipe(Effect.mapError(workspaceServerFailure));
+      }));
       yield* waitForWorkspaceStop(runtime, privateDir, record.token).pipe(Effect.mapError(workspaceServerFailure));
       return false;
     }
@@ -200,12 +202,14 @@ const waitForWorkspaceStop = (runtime: ServerRuntime['Service'], privateDir: str
 const stopWorkspaceServer = (root: string) => Effect.scoped(Effect.gen(function*() {
   const runtime = yield* ServerRuntime;
   const { privateDir } = yield* (yield* Workspace).locate(root, true);
-  const connection = yield* existingWorkspace(root);
-  if (connection) {
-    const token = connection.hello.token;
-    yield* connection.client.shutdown({ token });
-    yield* waitForWorkspaceStop(runtime, privateDir, token);
-  }
+  const token = yield* Effect.scoped(Effect.gen(function*() {
+    const connection = yield* existingWorkspace(root);
+    if (!connection) return undefined;
+    yield* connection.client.shutdown({ token: connection.hello.token });
+    return connection.hello.token;
+  }));
+  // Release the shutdown transport before waiting for the service's resources.
+  if (token !== undefined) yield* waitForWorkspaceStop(runtime, privateDir, token);
   return { operation: 'server-stop' };
 }).pipe(Effect.mapError(asServerError)));
 
