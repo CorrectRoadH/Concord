@@ -1,7 +1,6 @@
 import { join } from 'node:path';
 import { fromMarkdown } from 'mdast-util-from-markdown';
 import { Effect, FileSystem, Schema } from 'effect';
-import type { PlatformError } from 'effect/PlatformError';
 import { io, PerfError } from './process.js';
 export interface BudgetRow { readonly scenarios: readonly string[]; readonly limitMs: number }
 export interface OwnedBudget extends BudgetRow { readonly owner: string; readonly heading: string; readonly featureId: string; readonly limitKind: 'p50' | 'max' }
@@ -38,22 +37,19 @@ export function parseBudgetTable(markdown: string, heading: string): BudgetRow[]
 export const loadBudgets = Effect.fn('perf.loadBudgets')(function*(root: string) {
   const fs = yield* FileSystem.FileSystem;
   const rows: OwnedBudget[] = [];
-  const visit = Effect.fn('perf.loadBudgets.visit')(function*(folder: string): Effect.fn.Return<void, PlatformError | PerfError> {
-    for (const entry of (yield* fs.readDirectory(join(root, folder))).sort((a, b) => a.localeCompare(b))) {
-      const path = `${folder}/${entry}`, absolute = join(root, path);
-      if ((yield* Effect.result(fs.readLink(absolute)))._tag === 'Success') continue;
-      const info = yield* fs.stat(absolute);
-      if (info.type === 'Directory') yield* visit(path);
-      else if (info.type === 'File' && /\.mdx?$/u.test(entry)) {
-        const text = yield* fs.readFileString(absolute);
-        for (const heading of ['性能预算', '刷新上限']) if (headings(text).some(node => node.depth === 2 && headingText(node) === heading)) {
-          const featureId = path.split('/')[2]!;
-          for (const row of yield* io(`Parse budget ${path}`, () => parseBudgetTable(text, heading))) rows.push({ ...row, owner: path, heading, featureId, limitKind: heading === '刷新上限' ? 'max' : 'p50' });
-        }
-      }
+  for (const featureId of (yield* fs.readDirectory(join(root, 'docs/feature'))).sort((a, b) => a.localeCompare(b))) {
+    const folder = join(root, 'docs/feature', featureId);
+    if ((yield* Effect.result(fs.readLink(folder)))._tag === 'Success') continue;
+    if ((yield* fs.stat(folder)).type !== 'Directory') continue;
+    const path = `docs/feature/${featureId}/performance.md`, absolute = join(root, path);
+    if ((yield* Effect.result(fs.readLink(absolute)))._tag === 'Success') continue;
+    if (!(yield* fs.exists(absolute)) || (yield* fs.stat(absolute)).type !== 'File') continue;
+    const text = yield* fs.readFileString(absolute);
+    for (const heading of ['性能预算', '刷新上限']) if (headings(text).some(node => node.depth === 2 && headingText(node) === heading)) {
+      for (const row of yield* io(`Parse budget ${path}`, () => parseBudgetTable(text, heading))) rows.push({ ...row, owner: path, heading, featureId, limitKind: heading === '刷新上限' ? 'max' : 'p50' });
     }
-  });
-  yield* visit('docs/feature'); return rows;
+  }
+  return rows;
 });
 export function missingOwner(args: readonly string[], exists: (path: string) => boolean): string | undefined {
   for (const arg of args) if (arg.startsWith('docs/') && !exists(arg)) return `Missing owner: ${arg}`;
