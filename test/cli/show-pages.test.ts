@@ -19,13 +19,13 @@ test('show enumerates sorted package pages and their current headings before rel
     execFileSync('git', ['init', '-q', root]);
     const pages = [
       ['README.md', 'readme', 'Cart'], ['architecture.md', 'architecture', 'Mechanism'], ['cli.md', 'cli', 'Commands'],
-      ['library.md', 'library', 'Library'], ['notes.md', 'page', 'Notes'], ['use-case/add.md', 'use-case', 'Add item'],
+      ['library.md', 'library', 'Library'], ['notes.md', 'unknown', 'Notes'], ['use-case/add.md', 'use-case', 'Add item'],
     ];
     for (const [file, , name] of pages) write(`docs/feature/cart/${file}`, `# ${name}\n`);
     const result = JSON.parse(call('cart')) as { pages: { path: string; kind: string; name: string }[] };
     assert.deepEqual(result.pages, pages.map(([file, kind, name]) => ({ path: `docs/feature/cart/${file}`, kind, name })));
     write('docs/feature/cart/notes.md', '# Current notes\n');
-    assert.equal((JSON.parse(call('cart')) as typeof result).pages.find(page => page.kind === 'page')?.name, 'Current notes');
+    assert.equal((JSON.parse(call('cart')) as typeof result).pages.find(page => page.kind === 'unknown')?.name, 'Current notes');
     const human = call('cart', false); assert.ok(human.indexOf('Pages:') < human.indexOf('incoming:'));
     for (const kind of ['engineering', 'roadmap']) {
       write(`docs/${kind}/sample/README.md`, '# Sample\n'); write(`docs/${kind}/sample/cli.md`, '# Calls\n');

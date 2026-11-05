@@ -134,7 +134,7 @@ export interface DocumentRecord { readonly path: string; readonly metadata: Docu
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/discover-annotated-tests.md#标记规则
-export interface Finding { readonly code: string; readonly path: string; readonly message: string; readonly line?: number }
+export interface Finding { readonly code: string; readonly path: string; readonly message: string; readonly line?: number; readonly details?: Schema.Json }
 export const AnnotatedCaseSchema = Schema.Struct({
   id: Schema.String.check(Schema.isPattern(/^neref_[0-9a-f]{32}$/u)), file: Text, line: Schema.Int, name: Text,
   contract: Text, contractKind: Schema.Literals(['feature', 'use-case']), issues: Strings,

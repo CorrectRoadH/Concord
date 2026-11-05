@@ -17,6 +17,8 @@ import { parseReference } from "../../model/index.js";
 import { inspectDocumentProjections, projectionRecord } from "./document-projection.js";
 
 import { DOCUMENT_ROOTS, documentDisposition, documentPlacementError, matchingOwners } from "../../model/index.js";
+import { packagePageKind, pageKindSuggestions } from '../../model/index.js';
+import { packagePagePaths } from './package-pages.js';
 
 
 // @concord-code
@@ -219,6 +221,14 @@ function checkRef(
 export function checkDocuments(repo: Repository, documents: readonly DocumentRecord[]): Finding[] {
   return inRepositorySnapshot(repo, () => {
   const findings: Finding[] = [];
+  for (const owner of documents.filter(document => ['feature', 'engineering', 'roadmap'].includes(document.metadata.kind))) {
+    const root = owner.path.slice(0, -'README.md'.length);
+    const paths = packagePagePaths(repo, owner.path);
+    for (const path of paths) if (/\.mdx?$/u.test(path) && packagePageKind(owner.path, path, paths) === 'unknown') {
+      const relative = path.slice(root.length);
+      findings.push({ code: 'UnknownPageKind', path, message: `Page kind is unknown: ${relative}`, details: { suggestions: [...pageKindSuggestions(relative)] } });
+    }
+  }
   const identities = new Map<string, DocumentRecord[]>();
   for (const document of documents) {
     const key = document.path;

@@ -3,7 +3,8 @@ import { analysisView } from "./analysis-view.js";
 import type { AnalysisView } from "../model/index.js";
 import { findDocument } from "../domain/documents/index.js";
 import { ConcordError, documentTitle, type DocumentRecord, type Repository } from "../model/index.js";
-import { posix } from 'node:path';
+import { packagePageKind } from '../model/index.js';
+import { packagePagePaths } from '../domain/documents/index.js';
 import { TASTE_PATH, showTaste } from "../domain/taste/index.js";
 import { referenceResolver } from "../domain/documents/index.js";
 import { extractSteps } from "../domain/documents/index.js";
@@ -20,7 +21,7 @@ export function deriveTrace<A>(repo: Repository, cache: 'use' | 'off', strict: b
     const result = derive(trace, references);
     const rechecked = references.verify();
     trace.findings.push(...rechecked.filter(finding => !trace.findings.some(previous => previous.code === finding.code && previous.path === finding.path && previous.message === finding.message)));
-    trace.complete = trace.complete && trace.findings.length === 0;
+    trace.complete = trace.complete && trace.findings.every(finding => finding.code === 'UnknownPageKind');
     if (strict) requireValidTrace(trace);
     return result;
   };
@@ -143,11 +144,13 @@ export function traceGapsValue(repo: Repository, trace: ReturnType<typeof buildT
     });
     const cliPages = trace.documents.flatMap(document => {
       if (document.metadata.kind !== 'feature') return [];
-      const path = document.path.replace(/\/README\.md$/u, '/cli.md');
-      if (path === document.path || repo.read(path) === undefined) return [];
-      const counts = pageCounts.get(path) ?? { code: 0, test: 0 };
-      const missing = gap(counts);
-      return missing.length === 0 ? [] : [{ path, feature: document.path, title: document.metadata.title, missing, relationships: counts }];
+      const paths = packagePagePaths(repo, document.path);
+      return [...paths].sort().flatMap(path => {
+        if (packagePageKind(document.path, path, paths) !== 'cli') return [];
+        const counts = pageCounts.get(path) ?? { code: 0, test: 0 };
+        const missing = gap(counts);
+        return missing.length === 0 ? [] : [{ path, feature: document.path, title: document.metadata.title, missing, relationships: counts }];
+      });
     });
     const native = unlinkedTests(repo, trace.annotations.cases);
     return {
@@ -178,9 +181,10 @@ export function documentShow(repo: Repository, selector: string, kind: DocumentR
     const testIds = new Set(incoming.filter(edge => edge.from.startsWith('case:')).map(edge => edge.from.slice(5)));
     const codeIds = new Set(incoming.filter(edge => edge.from.startsWith('code:')).map(edge => edge.from.slice(5)));
     const outgoing = trace.edges.filter(edge => relatedPaths.has(edge.from) || (edge.relation === 'taste' && relatedPaths.has(pageOwner(references, edge.from) ?? '')));
-    const pages = ['feature', 'engineering', 'roadmap'].includes(kind) ? repo.files(posix.dirname(document.path)).filter(path => /\.mdx?$/u.test(path)).sort().map(path => ({
+    const paths = ['feature', 'engineering', 'roadmap'].includes(kind) ? packagePagePaths(repo, document.path) : new Set<string>();
+    const pages = ['feature', 'engineering', 'roadmap'].includes(kind) ? [...paths].filter(path => /\.mdx?$/u.test(path)).sort().map(path => ({
       path,
-      kind: trace.documents.some(candidate => candidate.path === path && candidate.metadata.kind === 'use-case') ? 'use-case' : posix.basename(path).toLowerCase() === 'readme.md' ? 'readme' : ['architecture.md', 'cli.md', 'library.md'].includes(posix.basename(path)) ? posix.basename(path).slice(0, -3) : 'page',
+      kind: packagePageKind(document.path, path, paths),
       name: documentTitle(path, repo.read(path) ?? ''),
     })) : undefined;
     return { trace, document, useCases, incoming, outgoing, testIds, codeIds, pages };

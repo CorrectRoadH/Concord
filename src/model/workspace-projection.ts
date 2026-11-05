@@ -20,7 +20,7 @@ const Metadata = Schema.Union([FeatureSchema, UseCaseSchema, DesignSchema, Roadm
 
 const Document = Schema.Struct({ path: Schema.String, digest: Schema.String, metadata: Metadata });
 
-const Finding = Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int) });
+const Finding = Schema.Struct({ code: Schema.String, path: Schema.String, message: Schema.String, line: Schema.optional(Schema.Int), details: Schema.optional(Schema.Json) });
 
 const ErrorFields = { code: Schema.String, message: Schema.String };
 

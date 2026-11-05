@@ -41,3 +41,4 @@ export { memory } from './documents.js';
 export { authorBody } from './documents.js';
 
 export { templateCatalog } from './templates.js';
+export { packagePagePaths } from './package-pages.js';

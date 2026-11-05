@@ -52,7 +52,7 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
   return {
     operation: 'check', ok: complete && findings.length === 0, complete, findings,
     checks: {
-      relations: { ok: trace.complete && conceptLinksComplete && conceptLinks.length === 0, complete: trace.complete && conceptLinksComplete },
+      relations: { ok: trace.complete && relationFindings.length === 0 && conceptLinksComplete && conceptLinks.length === 0, complete: trace.complete && conceptLinksComplete },
       writing: { ok: writingComplete && writingFindings.length === 0, complete: writingComplete },
     },
     advisories: trace.advisories, documents: trace.documents.length,

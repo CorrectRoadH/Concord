@@ -1,4 +1,6 @@
 export { DocsConflictError } from './repo-docs-errors.js';
+export { packagePageKind, pageKindSuggestions, PACKAGE_PAGE_KINDS, SPLIT_PAGE_KINDS } from './page-kinds.js';
+export type { PackagePageKind } from './page-kinds.js';
 export { DocsDecodeError } from './repo-docs-errors.js';
 export type { DocsDomainError } from './repo-docs-errors.js';
 export { docsDomainErrorDocument } from './repo-docs-errors.js';
