@@ -1,10 +1,11 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#agent-指引的边界
+// @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
 import { NodeServices } from "@effect/platform-node";
 import { Effect, FileSystem, Schema } from "effect";
 import { resourcePath } from "../../app/index.js";
 
-const TOPICS = ['init', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback'] as const;
+const TOPICS = ['init', 'docs-from-scratch', 'docs-from-code', 'document', 'code', 'test', 'memory', 'trace', 'recovery', 'view', 'feedback'] as const;
 const TopicSchema = Schema.Literals(TOPICS);
 const ArgvSchema = Schema.Array(Schema.String);
 const SkillContentSchema = Schema.String.check(
@@ -47,7 +48,7 @@ function parseRequest(input: unknown): Topic | 'main' | 'all' {
     throw new SkillArgumentsInvalid({ code: 'SkillArgumentsInvalid', message: 'concord --skill only accepts an optional topic' });
   }
   if (argv[0] !== '--skill' || argv.length > 2) {
-    throw new SkillArgumentsInvalid({ code: 'SkillArgumentsInvalid', message: 'Use concord --skill [init|document|code|test|memory|trace|recovery|view|feedback|all] without other commands or flags' });
+    throw new SkillArgumentsInvalid({ code: 'SkillArgumentsInvalid', message: `Use concord --skill [${[...TOPICS, 'all'].join('|')}] without other commands or flags` });
   }
   const requested = argv[1];
   if (requested === undefined) return 'main';

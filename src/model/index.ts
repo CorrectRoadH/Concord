@@ -392,3 +392,5 @@ export { parseWritingPolicy, renderWritingPolicy } from './writing-format.js';
 
 export { decodeWorkspaceProjectionCandidate } from './workspace-projection.js';
 export type { WorkspaceProjectionCandidate } from './workspace-projection.js';
+export { WritingGuideSchema, InitializationReceiptSchema } from './initialization.js';
+export type { WritingGuide, InitializationReceipt } from './initialization.js';

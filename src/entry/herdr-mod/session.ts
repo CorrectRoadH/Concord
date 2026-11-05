@@ -1,5 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/architecture.md#数据
+// @concord-implements docs/feature/herdr-mod/use-case/init-from-herdr.md#guide
+// @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
+// @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
 import { Effect, Hash, Schema } from 'effect';
 
 export interface ModHost {
@@ -19,6 +22,7 @@ const Show = Schema.Struct({ tests: Schema.optional(Schema.Array(Case)), codeDec
 const Doctor = Schema.Struct({ root: Schema.String, configuration: Schema.Struct({ sourceRoots: Schema.optional(Schema.Array(Schema.String)), testRoots: Schema.optional(Schema.Array(Schema.String)) }) });
 const Concepts = Schema.Struct({ concepts: Schema.Array(Schema.Struct({ reference: Schema.String, path: Path, concept: Schema.Struct({ id: Schema.String, term: Schema.String, definition: Schema.optional(Schema.String) }) })), catalogs: Schema.Array(Schema.Struct({ path: Path })) });
 const Check = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Struct({ path: Schema.String, line: Schema.optional(Schema.Int), message: Schema.String })) });
+const Initialization = Schema.Struct({ createdPaths: Schema.Array(Path), guide: Schema.Literals(['docs-from-scratch', 'docs-from-code']) });
 const ErrorReply = Schema.Struct({ error: Schema.String, message: Schema.String });
 export type ModPage = typeof Page.Type;
 export type ModCheck = typeof Check.Type;
@@ -43,6 +47,8 @@ export function markdownTarget(current: string, target: string): string | undefi
 export class ModSession {
   root: string;
   initialized = false;
+  initialization: typeof Initialization.Type | undefined;
+  guideSource: string | undefined;
   documents: readonly (typeof Owner.Type)[] = [];
   pages: readonly ModPage[] = [];
   concepts: readonly ModConcept[] = [];
@@ -153,8 +159,19 @@ export class ModSession {
   });
 
   initialize = Effect.fn('ModSession.initialize')(function*(this: ModSession) {
-    yield* this.command(['init'], Schema.Unknown);
+    const receipt = yield* this.command(['init'], Initialization);
+    if (this.closed) return;
+    this.initialization = receipt;
     yield* this.refresh();
+  });
+
+  readGuide = Effect.fn('ModSession.readGuide')(function*(this: ModSession) {
+    const guide = this.initialization?.guide;
+    if (!guide) return;
+    const reply = yield* io(() => this.host.exec('concord', ['--skill', guide], { cwd: this.root }));
+    if (reply.code !== 0) return yield* Effect.fail(new ModFailure({ message: reply.stderr || 'Concord command failed' }));
+    const source = yield* Schema.decodeUnknownEffect(Schema.NonEmptyString)(reply.stdout).pipe(Effect.mapError(failure));
+    if (!this.closed && this.initialization?.guide === guide) this.guideSource = source;
   });
 
   createFeature = Effect.fn('ModSession.createFeature')(function*(this: ModSession, name: string, title: string) {

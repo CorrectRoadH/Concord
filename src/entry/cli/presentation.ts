@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
+// @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
 import { Predicate } from "effect";
 
 const label = (key: string): string => key.replaceAll('-', ' ');
@@ -92,7 +93,7 @@ export function humanOutput(value: unknown): string {
     }
     if (Array.isArray(value.warnings) && value.warnings.length > 0) lines.push('', 'Warnings:', ...value.warnings.map(warning => `  ${String(warning)}`));
     if (value.recoveryRequired) lines.push('', 'Recovery required: run concord recover before another operation.');
-    if (value.operation === 'init') lines.push('', 'Start here: docs/concord.md', 'Next: concord new feature <name> --title "Your feature"', 'Inspect configuration: concord doctor');
+    if (value.operation === 'init') lines.push('', 'Start here: docs/concord.md', `Writing guide: concord --skill ${String(value.guide)}`, 'Inspect configuration: concord doctor');
     else if (!value.dryRun && value.changedPaths.length > 0) lines.push('', value.operation === 'new' ? 'Next: edit the pages, then run concord check.' : typeof value.operation === 'string' && value.operation.startsWith('create-') ? 'Next: edit the author prose, then run concord check.' : 'Next: concord check.');
     return lines.join('\n');
   }

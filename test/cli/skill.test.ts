@@ -17,7 +17,7 @@ before(() => Effect.runPromise(Effect.sync(() => {
   const packed = packConcord(scratch);
   const artifact = packed;
   assert.ok(artifact);
-  for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'skills/concord/references/feedback.md']) {
+  for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'skills/concord/references/feedback.md', 'skills/concord/references/docs-from-scratch.md', 'skills/concord/references/docs-from-code.md']) {
     assert.ok(artifact.files.some(file => file.path === path), `packed skill is missing ${path}`);
   }
   const install = join(scratch, 'tool');
@@ -29,7 +29,7 @@ before(() => Effect.runPromise(Effect.sync(() => {
 
 after(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));
 
-// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @use-case docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
 test('packed CLI exposes the skill entrypoint and selected topics outside a consumer', () => Effect.runPromise(Effect.sync(() => {
   const outside = join(scratch, 'outside');
   mkdirSync(outside);
@@ -55,6 +55,14 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   assert.equal(all.status, 0, all.stderr);
   assert.match(all.stdout, /# 初始化与模板/);
   assert.match(all.stdout, /# Issue 与多来源反馈/);
+  for (const guide of ['docs-from-scratch', 'docs-from-code']) {
+    assert.ok(main.stdout.includes(`concord --skill ${guide}`));
+    const reply = spawnSync(process.execPath, [cli, '--skill', guide], { cwd: outside, encoding: 'utf8' });
+    assert.equal(reply.status, 0, reply.stderr);
+    const source = readFileSync(join(scratch, `tool/node_modules/concord-sdlc/skills/concord/references/${guide}.md`), 'utf8');
+    assert.equal(reply.stdout.trimEnd(), source.trimEnd());
+    assert.ok(all.stdout.includes(source.trimEnd()));
+  }
   assert.equal(existsSync(join(outside, 'concord.config.ts')), false);
 
   const installedMain = join(scratch, 'tool/node_modules/concord-sdlc/skills/concord/SKILL.md');
@@ -73,7 +81,7 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
   }
 })));
 
-// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
+// @use-case docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
 test('skill routing rejects unknown and mixed mutation argv without loading the host or writing', () => Effect.runPromise(Effect.sync(() => {
   const hostile = join(scratch, 'hostile');
   mkdirSync(hostile);
@@ -87,6 +95,7 @@ test('skill routing rejects unknown and mixed mutation argv without loading the 
   const mixed = spawnSync(process.execPath, [cli, '--skill', 'init', '--dry-run'], { cwd: hostile, encoding: 'utf8' });
   assert.equal(mixed.status, 1);
   assert.equal(Schema.decodeUnknownSync(Schema.fromJsonString(ErrorOutput), { onExcessProperty: 'ignore' })(mixed.stderr).error, 'SkillArgumentsInvalid');
+  assert.match(mixed.stderr, /docs-from-scratch\|docs-from-code/u);
   assert.equal(existsSync(join(hostile, 'host-loaded')), false);
   assert.equal(existsSync(join(hostile, 'concord.config.ts')), false, 'fixture marker should remain the only repository-like input');
   assert.equal(readFileSync(join(hostile, 'concord.repository.json'), 'utf8'), JSON.stringify({ format: 'concord.repository/v1', host: 'host.mjs' }));

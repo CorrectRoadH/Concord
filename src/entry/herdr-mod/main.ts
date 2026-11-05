@@ -160,6 +160,18 @@ export default class ConcordMod extends View {
     ]));
     const body: Element[] = [];
     if (!session.initialized && !session.error) body.push(text('这个仓库还没有初始化 Concord'), this.button('initialize', '在这里初始化 Concord', cx => this.run(cx, session.initialize(), current => this.watch(current))));
+    // @concord-begin
+    // @concord-implements docs/feature/herdr-mod/use-case/init-from-herdr.md#guide
+    // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
+    // @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#read-guide
+    if (session.initialization) body.push(
+      text(`新建了 ${session.initialization.createdPaths.length} 个文件`),
+      text('下一步：让 agent 读写作指南'),
+      text(`concord --skill ${session.initialization.guide}`),
+      this.button('read-guide', '阅读指南', cx => this.run(cx, session.readGuide())),
+    );
+    if (session.guideSource !== undefined) body.push(TextView.markdown('concord-writing-guide', session.guideSource));
+    // @concord-end
     if (this.creating && this.name && this.title) body.push(Input.new(this.name).id('feature-name'), Input.new(this.title).id('feature-title'), this.button('create-feature', '创建 Feature', cx => this.run(cx, session.createFeature(this.name!.value(), this.title!.value()), current => { this.creating = false; this.edit(current); })));
     if (session.check) body.push(text(session.check.ok ? 'check: ok' : `check: ${session.check.findings.length} 个问题`), ...session.check.findings.map((finding, index) => this.button(`finding-${index}`, `${finding.path}:${finding.line ?? 1}  ${finding.message}`, cx => this.location(finding.path, finding.line ?? 1, cx))));
     if (session.selected) {

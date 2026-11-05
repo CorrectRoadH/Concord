@@ -1,6 +1,6 @@
 import { Effect } from 'effect';
 import { canonicalPath } from "../model/index.js";
-import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, decode, type Change, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.js";
+import { ConcordError, failure, inRepositorySnapshot, ProjectSchema, InitializationReceiptSchema, decode, type Change, type WritingGuide, type shared_ProjectConfig as ProjectConfig, type Repository } from "../model/index.js";
 import { renderTypeScriptConfig } from "../base/workspace/index.js";
 import { onboardingGuide } from "../domain/onboarding/index.js";
 import { projectTemplateFiles, templateCatalog } from "../domain/documents/index.js";
@@ -10,6 +10,7 @@ import { forbiddenSourcePart } from "../base/workspace/index.js";
 import { AGENT_RULE_BEGIN } from "../base/workspace/index.js";
 import { AGENT_RULE_END } from "../base/workspace/index.js";
 import { AGENT_RULE_CONTENT } from "../base/workspace/index.js";
+import { git } from "../base/workspace/index.js";
 
 
 export function withAgentInstructions(source: string): string {
@@ -24,13 +25,19 @@ export function withAgentInstructions(source: string): string {
   return `${source.replace(/\n*$/u, '')}\n\n${block}\n`;
 }
 export interface InitializeOptions { readonly testRoots?: readonly string[]; readonly sourceRoots?: readonly string[]; readonly runner?: ProjectConfig['runner'] }
-export interface InitializationReceipt extends MutationReceipt { readonly config: ProjectConfig; readonly createdPaths: readonly string[]; readonly preservedPaths: readonly string[] }
+export type InitializationReceipt = typeof InitializationReceiptSchema.Type;
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/onboard-from-template.md#完整路径
-export const initialize = Effect.fn('initialize')(function*(repo: Repository, dryRun = false, options: InitializeOptions = {}) {
+// @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#init
+// @concord-implements docs/feature/project-onboarding/use-case/start-writing-specs.md#guide
+export const initialize = Effect.fn('initialize')(function*(repo: Repository, dryRun = false, options: InitializeOptions = {}, initialGuide?: WritingGuide) {
   const catalog = yield* templateCatalog();
   return yield* Effect.try({ try: (): InitializationReceipt => inRepositorySnapshot(repo, () => {
+  const guide = initialGuide ?? (git(repo.root, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']).split('\0').some(path => {
+    if (!path || path.startsWith('.') || path.startsWith('docs/') || path.startsWith('memory/')) return false;
+    return path.includes('/') || !(path === 'AGENTS.md' || path === 'concord.config.ts' || path.startsWith('README') || path.startsWith('LICENSE'));
+  }) ? 'docs-from-code' : 'docs-from-scratch');
   const config = decode(ProjectSchema, { ...(options.testRoots === undefined ? {} : { testRoots: options.testRoots }), ...(options.sourceRoots === undefined ? {} : { sourceRoots: options.sourceRoots }), ...(options.runner === undefined ? {} : { runner: options.runner }) }, 'init configuration');
   for (const root of [...(config.testRoots ?? []), ...(config.sourceRoots ?? [])]) {
     canonicalPath(root);
@@ -61,7 +68,7 @@ export const initialize = Effect.fn('initialize')(function*(repo: Repository, dr
   const changes: Change[] = Object.entries(paths).map(([path, after]) => ({ path, before: null, after }));
   if (agentBefore !== agentAfter) changes.push({ path: 'AGENTS.md', before: agentBefore, after: agentAfter });
   const receipt = repo.publish('init', changes, dryRun);
-  return { ...receipt, config, createdPaths: receipt.changedPaths, preservedPaths };
+  return decode(InitializationReceiptSchema, { ...receipt, config, createdPaths: receipt.changedPaths, preservedPaths, guide }, 'init result');
   }), catch: failure });
 });
 // @concord-end
