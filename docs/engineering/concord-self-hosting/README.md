@@ -84,7 +84,7 @@ pnpm exec vp run check
 
 | 方面 | 规则 |
 | --- | --- |
-| 原生绑定 | 源码运行取自经身份校验的本机共享缓存，构建产物取自包根，校验规则相同。只有 `native/hawdb` 或其锁文件变化时才需要重建，命令为 `pnpm exec vp run build:native`；缺失时返回 `HawdbUnavailable` 并提示该命令 |
+| 原生绑定 | 源码运行取自经身份校验的本机共享缓存，构建产物取自包根，校验规则相同。只有 `native/hawdb` 或其锁文件变化时才需要重建，命令为 `pnpm exec vp run build:native`；缺失时以 `HawdbUnavailable` 报告并提示该命令；有自己错误契约的命令按契约包装，以它为原因码，例如工作区投影返回 `WorkspaceProjectionUnavailable`，`details.reason` 为 `HawdbUnavailable` |
 | 子进程 | 运行模式由一个模块统一判断。源码模式下，查询、扫描与编辑器子进程使用同一 loader 启动对应的 `.ts` 入口；安装包模式启动包内的 JavaScript 入口 |
 | 安装身份 | 源码模式的安装身份是检出位置，安装包模式使用产物摘要。源码模式的服务记录启动时的源码摘要；同一检出的调用发现运行中服务的源码摘要与当前不同时，先停止它并等待完全退出，再启动新服务，不报 `WorkspaceServerVersionConflict`。缓存身份包含源码摘要，源码变化后不复用旧缓存 |
 | Web 资源 | 源码模式下，工作区服务通过 Vite 从 `web/` 源码即时编译 Web 工作台与 PR 预览，不需要 `vp build`；安装包模式读取包内的编译结果 |
