@@ -25,7 +25,7 @@
 | `docs` | `docs check` 与 `docs work` |
 | `feedback` | 外部来源的同步与导入 |
 | `view` | Web 工作台 |
-| `server` | `start`、`run`、`status`、`stop`：管理项目目录的[工作区服务](../../concepts.md#workspace-server)，查询命令也会自动启动它 |
+| `server` | `start`、`run`、`status`、`stop`：管理项目目录的[工作区服务](../../concepts.md#workspace-server)，查询命令也会自动启动它；`server stop` 等目标实例回收子进程、关闭持久缓存、删除实例记录并释放服务锁后才返回 0，返回后其它命令可以立即打开持久缓存 |
 | `herdr` | `install`、`uninstall`：安装 [Herdr mod](../herdr-mod/README.md) |
 | `workspace`、`git` | 工作区的当前扫描与历史投影、只读 Git 状态与差异，见 [Web 工作台 CLI](../web-workbench/cli.md) |
 | `config`、`template` | 查看与替换配置；查看随包模板 |
