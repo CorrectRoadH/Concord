@@ -12,6 +12,7 @@ import { startViewServer } from '../e2e/server.ts';
 import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 import { sourceCli } from '../support/source-consumer.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';
+import { scopedServerLock } from '../../src/base/server-lock/index.ts';
 
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.ts';
 
@@ -52,6 +53,30 @@ test('a killed service releases persistent ownership and the next invocation can
     const restarted = await command(root, ['server', 'start']); assert.equal(restarted.status, 0, restarted.stderr);
     assert.notEqual(record(root).token, before.token);
   } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @feature docs/feature/local-data-engine/README.md
+test('server stop confirms a dead owner through its lock despite a stale record and socket', { timeout: 20_000 }, async () => {
+  const root = fixture();
+  let staleSocket: string | undefined;
+  try {
+    const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
+    const running = record(root);
+    process.kill(running.pid, 'SIGKILL');
+    staleSocket = running.socket.path;
+    await pollUntil(async () => {
+      const acquired = await Effect.runPromise(Effect.result(Effect.scoped(scopedServerLock(dirname(recordPath(root))))));
+      return acquired._tag === 'Success' ? true : undefined;
+    }, { description: 'the operating system releases the killed service lock', timeoutMs: 5000 });
+    assert.equal(record(root).token, running.token, 'the stale record is still present at the public stop boundary');
+    assert.equal(existsSync(running.socket.path), true);
+    const stopped = await command(root, ['server', 'stop']);
+    assert.equal(stopped.status, 0, stopped.stdout + stopped.stderr);
+  } finally {
+    if (staleSocket) rmSync(staleSocket, { force: true });
+    else await stop(root);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 
