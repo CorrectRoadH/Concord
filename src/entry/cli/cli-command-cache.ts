@@ -9,13 +9,14 @@ import { ConcordError } from "../../model/index.ts";
 import { scanCode } from "../../app/index.ts";
 import { sync, root, viewRoot, emit } from "./cli-base.ts";
 import { withRepo, withReadRepo } from "./cli-repository.ts";
+import { serverInstallation } from '../../base/server-lock/index.ts';
 
 const cache = Command.make('cache').pipe(Command.withDescription('Inspect, clear, or rebuild disposable HawDB projections.'),Command.withSubcommands([
   Command.make('status',{},()=>Effect.gen(function*() {
     const settings = yield* root;
     const remote = settings.dryRun ? undefined : yield* (yield* ServerLauncher).cache(viewRoot(settings), 'cache-status');
     if (remote !== undefined) return yield* Effect.sync(() => emit(remote, settings.json));
-    return yield* withReadRepo(repo=>sync(()=>cacheStatus(repo)));
+    return yield* withReadRepo(repo=>sync(()=>({ ...cacheStatus(repo), owner: 'process', pid: process.pid, installation: serverInstallation() })));
   })),
   Command.make('clear',{},()=>Effect.gen(function*() {
     const settings = yield* root;

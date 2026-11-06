@@ -438,7 +438,7 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
       'git-diff': request => result(request, service.execute({ kind: 'git-diff', path: request.path, area: request.area })),
       http: (request, options) => result(request, commandScope ? Effect.fail(new ConcordError('WorkspaceServerScoped', 'Command services cannot open HTTP listeners')) : request.action === 'open' ? hosted.open(request.host, request.port, subscribers.has(options.client.id), options.client.id) : request.lease ? hosted.close(request.lease) : Effect.fail(new ConcordError('InvalidInput', 'HTTP close requires a lease'))),
       'cache-clear': request => result(request, service.clear),
-      'cache-status': request => result(request, service.maintain(cache.status)),
+      'cache-status': request => result(request, service.maintain(cache.status).pipe(Effect.map(status => ({ ...status, owner: 'service', pid: process.pid, installation })))),
       'cache-rebuild': request => result(request, rebuildOwnedCache),
       'cache-snapshot': request => result(request, service.maintain(cacheSnapshot)),
       'cache-derived': (request, options) => result(request, derivations.apply(options.client.id, request, batches => service.maintain(cache.mergeDerived(batches)))),
