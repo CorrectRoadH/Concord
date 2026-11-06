@@ -72,7 +72,6 @@ test('ordinary pages show incomplete scans and refresh failures while keeping re
 test('cached workspace polls every four seconds with independent Git cadence and serialized pending retries', ({ page, workspace }) => Effect.runPromise(withWorkspaceBrowser(workspace, page, false, async (page, origin, actual) => {
   const now = new Date();
   await page.clock.install({ time: new Date(now.getTime() - 1000) });
-  await page.clock.pauseAt(now);
   await page.addInitScript(() => {
     const target = window as typeof window & { pollReads: { path: string; at: number }[] };
     target.pollReads = [];
@@ -102,6 +101,8 @@ test('cached workspace polls every four seconds with independent Git cadence and
   await page.goto(`${origin}/features/watch`);
   await expect(page.getByRole('heading', { name: 'Watch fixture', exact: true })).toBeVisible();
   await page.waitForLoadState('networkidle');
+  // Let lazy route rendering and initial API retries settle before freezing time.
+  await page.clock.pauseAt(new Date());
   assert.deepEqual([workspaceReads, gitReads, jobsReads], [1, 1, 1]);
   const tick = async (milliseconds: number, { jobs = false, git = false } = {}) => {
     // Workspace response delivery can precede its chained jobs/Git requests.
@@ -112,14 +113,17 @@ test('cached workspace polls every four seconds with independent Git cadence and
     await Promise.all(responses.map(async response => { await (await response).finished(); }));
     await page.waitForLoadState('networkidle');
   };
-  for (let cycle = 1; cycle <= 8; cycle += 1) {
-    await tick(4000, { jobs: true, git: cycle === 8 });
-    assert.deepEqual([workspaceReads, gitReads, jobsReads], [1 + cycle, cycle === 8 ? 2 : 1, 1 + cycle], JSON.stringify(await page.evaluate(() => (window as typeof window & { pollReads: { path: string; at: number }[] }).pollReads)));
+  for (let cycle = 1; cycle <= 16; cycle += 1) {
+    await tick(4000, { jobs: true, git: cycle % 8 === 0 });
+    assert.deepEqual([workspaceReads, gitReads, jobsReads], [1 + cycle, 1 + Math.floor(cycle / 8), 1 + cycle], JSON.stringify(await page.evaluate(() => (window as typeof window & { pollReads: { path: string; at: number }[] }).pollReads)));
   }
   const regularReads = await page.evaluate(() => (window as typeof window & { pollReads: { path: string; at: number }[] }).pollReads);
   for (const path of ['/api/workspace', '/api/jobs', '/api/git']) {
-    const times = regularReads.filter(read => read.path === path).map(read => read.at);
-    for (let index = 1; index < times.length; index += 1) assert.equal(times[index]! - times[index - 1]!, path === '/api/git' ? 32_000 : 4000, `${path} polling interval`);
+    // The mount and first controlled read bridge real initialization into a
+    // complete clock tick. Subsequent full cycles have no startup remainder.
+    const times = regularReads.filter(read => read.path === path).map(read => read.at).slice(path === '/api/git' ? 1 : 2);
+    assert.equal(times.length, path === '/api/git' ? 2 : 15, `${path} measured polling cycles`);
+    for (let index = 1; index < times.length; index += 1) assert.equal(times[index]! - times[index - 1]!, path === '/api/git' ? 32_000 : 4000, `${path} polling interval ${JSON.stringify(regularReads)}`);
   }
   pending = true;
   await tick(4000, { jobs: true });
@@ -129,7 +133,7 @@ test('cached workspace polls every four seconds with independent Git cadence and
   assert.equal(jobsReads, pendingJobs, 'pending retries do not double the jobs cadence');
   await tick(2000, { jobs: true });
   assert.equal(jobsReads, pendingJobs + 1);
-  assert.equal(gitReads, 2, 'pending retries do not accelerate Git reads');
+  assert.equal(gitReads, 3, 'pending retries do not accelerate Git reads');
   pending = false;
   await tick(2000);
   await expect(page.getByLabel('工作区投影状态')).not.toContainText('WorkspaceProjectionPending');
@@ -152,7 +156,6 @@ test('cached workspace polls every four seconds with independent Git cadence and
 test('navigation polling preserves drafts and a completed write reads after an older poll', ({ page, workspace }) => Effect.runPromise(withWorkspaceBrowser(workspace, page, false, async (page, origin, actual) => {
   const now = new Date();
   await page.clock.install({ time: new Date(now.getTime() - 1000) });
-  await page.clock.pauseAt(now);
   let served = actual;
   let releaseSave: (() => void) | undefined;
   let releaseRead: (() => void) | undefined;
@@ -181,6 +184,7 @@ test('navigation polling preserves drafts and a completed write reads after an o
     const editor = page.locator('[contenteditable="true"]').first();
     await expect(editor).toContainText('Original body.');
     await page.waitForLoadState('networkidle');
+    await page.clock.pauseAt(new Date());
     await editor.fill('Unsaved watch draft.');
     await expect(page.locator('.editor-shell')).toHaveAttribute('data-dirty', 'true');
     const document = actual.snapshot.documents.find(item => item.path === 'docs/feature/watch/README.md');
