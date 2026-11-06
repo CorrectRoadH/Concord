@@ -38,13 +38,13 @@ const loadApp = () => Effect.tryPromise(() => import('../../app/index.ts'));
 const executeQuery: typeof AppTypes.executeQuery = (...args) => loadApp().pipe(Effect.flatMap(app => app.executeQuery(...args)), Effect.mapError(failure));
 const mergeLocalFeedbackObservation: typeof AppTypes.mergeLocalFeedbackObservation = (...args) => loadApp().pipe(Effect.flatMap(app => app.mergeLocalFeedbackObservation(...args)), Effect.mapError(failure));
 const builtAssetRoot = (name: 'web') => loadApp().pipe(Effect.flatMap(app => Effect.try({ try: () => app.builtAssetRoot(name), catch: failure })), Effect.mapError(failure));
-const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string, scope?: string) {
+const existingWorkspace = /*#__PURE__*/ Effect.fn('existingWorkspace')(function*(root: string, installation?: string, identifiedPrivateDir?: string, scope?: string, countReuse = true) {
   const platform = yield* ServerRuntime;
   const privateDir = identifiedPrivateDir ?? (yield* (yield* Workspace).locate(root, true)).privateDir;
   const record = yield* Effect.try({ try: () => platform.read(privateDir), catch: failure });
   if (!record) return undefined;
   const { connectWorkspaceSocket } = yield* loadClient();
-  const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? (yield* installationIdentity(platform)), record.token, scope);
+  const connection = yield* connectWorkspaceSocket(record.socket.path, installation ?? (yield* installationIdentity(platform)), record.token, scope, countReuse);
   if (connection.hello.installation !== record.installation || connection.hello.protocol !== record.protocol) return yield* Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Handshake differs from the running record'));
   return connection;
 });
@@ -83,7 +83,7 @@ const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace
     const owner = yield* OwnedProcess, installed = yield* Installation;
     yield* Effect.forkScoped(Effect.scoped(owner.run([process.execPath, ...installed.worker('workspace-server'), root], { cwd: installed.cwd, stream: { ready: () => {}, stdout: () => {}, stderr: chunk => { process.stderr.write(chunk); } } })));
   } else yield* OwnedProcess.launch('workspace-server', [root], (yield* ServerRuntime).cwd);
-  const connection = yield* waitForServerHandshake(existingWorkspace(root, installation));
+  const connection = yield* waitForServerHandshake(existingWorkspace(root, installation, undefined, undefined, false));
   if (connection.hello.installation !== installation || connection.hello.protocol !== PROTOCOL) return yield* Effect.fail(new ConcordError('WorkspaceServerVersionConflict', 'A workspace server from another Concord installation is running for this project. Stop it with: concord server stop'));
   return connection;
 });
@@ -140,7 +140,7 @@ const connectQueryWorkspace = Effect.fn('connectQueryWorkspace')(function*(root:
     cwd: installed.cwd, env: { ...process.env, CONCORD_SERVER_SCOPE: JSON.stringify(scope) },
     ipc: { ready: () => {}, message: () => {} },
   })));
-  const connection = yield* client.waitForServerHandshake(existingWorkspace(root, installation, privateDir, scope.key)).pipe(
+  const connection = yield* client.waitForServerHandshake(existingWorkspace(root, installation, privateDir, scope.key, false)).pipe(
     Effect.raceFirst(Fiber.join(fiber).pipe(Effect.flatMap(() => Effect.fail(new ConcordError('WorkspaceServerUnavailable', 'Command service exited before completing startup'))))),
   );
   yield* Effect.addFinalizer(() => connection.client.shutdown({ token: connection.hello.token, scope: scope.key }).pipe(

@@ -12,6 +12,7 @@ import { LocalRepository } from './repository.ts';
 import { fetchFresh, parseWorkspaceProjection, pollUntil } from './support.ts';
 import { tmpdir } from './temporary.ts';
 import { stopWorkspaceServer } from './stop-workspace-server.ts';
+import { recordBrowserTiming } from '../../scripts/gate-timings.ts';
 
 /** Files are recovered from an immutable Git tree; .git and live handles stay owned by the worker. */
 export class FrozenBrowserRepository {
@@ -207,16 +208,18 @@ export const acquireBrowserSharedFixture = Effect.fn('acquireBrowserSharedFixtur
 
 let current: { readonly scope: Scope.Closeable; readonly fixture: BrowserSharedFixture } | undefined;
 
-export async function openBrowserWorker(signal?: AbortSignal): Promise<void> {
-  const scope = Effect.runSync(Scope.make());
-  try {
-    const fixture = await Effect.runPromise(acquireBrowserSharedFixture(signal).pipe(Scope.provide(scope)));
-    current = { scope, fixture };
-  } catch (cause) {
-    try { await Effect.runPromise(Scope.close(scope, Exit.void)); }
-    catch (cleanup) { throw new AggregateError([cause, cleanup], 'Browser worker startup and cleanup failed'); }
-    throw cause;
-  }
+export async function openBrowserWorker(signal?: AbortSignal, workerID?: string): Promise<void> {
+  return recordBrowserTiming('fixture-start', async () => {
+    const scope = Effect.runSync(Scope.make());
+    try {
+      const fixture = await Effect.runPromise(acquireBrowserSharedFixture(signal).pipe(Scope.provide(scope)));
+      current = { scope, fixture };
+    } catch (cause) {
+      try { await Effect.runPromise(Scope.close(scope, Exit.void)); }
+      catch (cleanup) { throw new AggregateError([cause, cleanup], 'Browser worker startup and cleanup failed'); }
+      throw cause;
+    }
+  }, workerID);
 }
 
 export function browserWorkerFixture(): BrowserSharedFixture {
@@ -228,11 +231,13 @@ export async function closeBrowserAttempt(): Promise<void> {
   await current?.fixture.closePrivate();
 }
 
-export async function closeBrowserWorker(): Promise<void> {
-  const owned = current;
-  current = undefined;
-  if (owned) {
-    try { await owned.fixture.closePrivate(); }
-    finally { await Effect.runPromise(Scope.close(owned.scope, Exit.void)); }
-  }
+export async function closeBrowserWorker(workerID?: string): Promise<void> {
+  return recordBrowserTiming('fixture-stop', async () => {
+    const owned = current;
+    current = undefined;
+    if (owned) {
+      try { await owned.fixture.closePrivate(); }
+      finally { await Effect.runPromise(Scope.close(owned.scope, Exit.void)); }
+    }
+  }, workerID);
 }

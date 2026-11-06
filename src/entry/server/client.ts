@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-data-engine/architecture.md#协议
+import { channel } from 'node:diagnostics_channel';
 import type * as ClientTypes from './client.ts';
 import { NodeSocket } from '@effect/platform-node';
 import { Deferred, Effect, Layer, Queue, Schema, Stream } from 'effect';
@@ -11,7 +12,7 @@ import { ConcordError, decodeWorkspaceRead } from '../../model/index.ts';
 import type { RemoteFeedback } from '../../model/index.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
 
-export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string, scope?: string) {
+export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(function*(path: string, installation: string, token: string, scope?: string, countReuse = true) {
   const opened = yield* Deferred.make<void, WorkspaceServerError>();
   const protocol = RpcClient.layerProtocolSocket({ retryTransientErrors: false }).pipe(
     Layer.provide(RpcSerialization.layerSchemaBinary({ maxFrameSize: FRAME_LIMIT })),
@@ -23,6 +24,10 @@ export const connectWorkspaceSocket = Effect.fn('connectWorkspaceSocket')(functi
   yield* Deferred.await(opened);
   const hello = yield* client.hello({ installation, protocol: PROTOCOL, ...(scope === undefined ? {} : { scope }) });
   if (hello.token !== token) return yield* Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerUnavailable', message: 'Instance token differs from the running record' }));
+  yield* Effect.sync(() => {
+    const events = channel('concord.test.process-event');
+    if (countReuse && events.hasSubscribers) events.publish({ kind: 'service-reuse' });
+  });
   return { client, hello, identity: () => ({ token, installation, ...(scope === undefined ? {} : { scope }), requestId: crypto.randomUUID(), deadline: Date.now() + 60_000 }) };
 }, Effect.timeout('1 second'));
 export type WorkspaceConnection = Effect.Success<ReturnType<typeof connectWorkspaceSocket>>;

@@ -1,6 +1,7 @@
 // @concord-file
 // @concord-implements docs/engineering/testing/README.md#分层
 import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { summarizeFileTimings, type FileTiming } from './gate-timings.ts';
 
 export const testLayers = ['model', 'domain', 'cli', 'process', 'e2e'] as const;
 export type TestLayer = typeof testLayers[number];
@@ -11,7 +12,7 @@ export interface TestLayerReport {
   readonly timedFiles: number;
   readonly cases: number;
   readonly countedFiles: number;
-  /** Sum of official file durations; concurrent files may overlap. */
+  /** Observed Node file elapsed or browser attempt sum; concurrent work may overlap. */
   readonly duration_ms: number;
 }
 
@@ -52,4 +53,13 @@ export function summarizeTestLayers(files: readonly string[], timings: readonly 
 /** Report the complete discovered inventory independently of execution selection. */
 export function auditTestLayers(files: readonly string[], root = process.cwd()): TestLayerReport[] {
   return summarizeTestLayers(files, [], root);
+}
+
+/** Keep legacy numeric observations while labeling their owner and completeness. */
+export function summarizeMeasuredTestLayers(files: readonly string[], timings: readonly FileTiming[], root = process.cwd()) {
+  return summarizeTestLayers(files, timings, root).map(row => {
+    const measurement = summarizeFileTimings(files.filter(file => classifyTestLayer(file, root) === row.layer), timings,
+      row.layer === 'e2e' ? 'browser-attempt-sum' : 'node-file-elapsed-sum', true, root);
+    return { ...row, metric: measurement.metric, state: measurement.state, complete_duration_ms: measurement.duration_ms };
+  });
 }

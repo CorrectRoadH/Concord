@@ -1,3 +1,4 @@
+import { installProcessEvents } from './process-events.ts';
 import { existsSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
@@ -12,3 +13,6 @@ for (;;) {
   if (parent === owner) break;
   owner = parent;
 }
+
+const eventContext = new URL(import.meta.url).searchParams;
+if (eventContext.has('eventRun') && eventContext.has('eventDirectory')) installProcessEvents({ run: eventContext.get('eventRun')!, directory: eventContext.get('eventDirectory')! });

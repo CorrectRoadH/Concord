@@ -22,7 +22,7 @@ import { Socket, SocketServer } from 'effect/unstable/socket';
 import { makeOwnedProcessService } from '../../app/index.ts';
 import { ServerRuntime } from '../../base/server-lock/index.ts';
 import { Git } from '../../base/git/index.ts';
-import { OwnedProcess, OwnedProcessLive } from '../../base/process/index.ts';
+import { recordProcessEvent, OwnedProcess, OwnedProcessLive } from '../../base/process/index.ts';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { executeQuery, workspaceSourceDigest, observeWorkspaceProjection, makeWorkspaceProjectionCandidate, getViewFile, getViewGitStatus, getGitDiff, compileP5, workspaceProjectionContext, readWorkspaceProjection, storeWorkspaceProjection } from '../../app/index.ts';
@@ -394,7 +394,13 @@ export const serveWorkspace = Effect.fn('serveWorkspace')(function*(input: strin
     watch = yield* sources.watch(root, () => { Effect.runFork(service.invalidate); }, error => { Effect.runFork(service.state.transition('running', { code: error.code, message: error.message })); });
     yield* watch.reconcile(null);
     yield* sources.watchPrivateHead(privateDir, () => { Effect.runFork(service.invalidate); });
-    yield* Effect.forkScoped(Stream.runForEach(SubscriptionRef.changes(service.state.value), event => runtime.publish(event.state).pipe(Effect.catch(() => service.stop))));
+    let countedReady = false;
+    yield* Effect.forkScoped(Stream.runForEach(SubscriptionRef.changes(service.state.value), event => runtime.publish(event.state).pipe(Effect.tap(() => Effect.sync(() => {
+      if (!countedReady && (event.state === 'running' || event.state === 'degraded')) {
+        countedReady = true;
+        recordProcessEvent({ kind: 'service-ready', role: 'service', instance: String(process.pid) });
+      }
+    })), Effect.catch(() => service.stop))));
     const authorizeScope = (scope?: string) => commandScope && scope !== commandScope.key
       ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerScoped', message: 'This service belongs to another command scope' }))
       : !commandScope && scope !== undefined ? Effect.fail(new WorkspaceServerError({ code: 'WorkspaceServerScopeExpired', message: 'The command service has ended' })) : Effect.void;

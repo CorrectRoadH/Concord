@@ -3,12 +3,27 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from '../support/temporary.ts';
 import { join } from 'node:path';
 import { Effect } from 'effect';
+import { NodeServices } from '@effect/platform-node';
 import type { BrowserProvider } from '@e2e-dev/web';
+import { recordBrowserTiming, writeTimingReport } from '../../scripts/gate-timings.ts';
+
+interface BrowserProcess {
+  readonly output: string | undefined;
+  readonly pid: number;
+  readonly workerID: string;
+  readonly startedAt: number;
+}
+
+const recordBrowserProcess = (id: string, identity: BrowserProcess, endedAt: number | null) => identity.output === undefined ? Promise.resolve() :
+  Effect.runPromise(writeTimingReport(join(identity.output, 'browser-processes'), `${id.split('/').at(-1)!}.json`, {
+    pid: identity.pid, ppid: process.pid, workerID: identity.workerID, startedAt: identity.startedAt, endedAt,
+  }).pipe(Effect.catchCause(() => Effect.void), Effect.provide(NodeServices.layer)));
 
 /** The runner owns the process; workers receive only its CDP address. */
 export function localBrowser(executable: string): BrowserProvider {
   const owned = new Map<string, ChildProcess>();
-  const close = (id: string) => Effect.runPromise(Effect.tryPromise(async () => {
+  const identities = new Map<string, BrowserProcess>();
+  const close = (id: string) => recordBrowserTiming('browser-stop', () => Effect.runPromise(Effect.tryPromise(async () => {
     const child = owned.get(id);
     try {
       if (child && child.exitCode === null && child.signalCode === null) {
@@ -21,12 +36,15 @@ export function localBrowser(executable: string): BrowserProvider {
       }
     } finally {
       owned.delete(id);
+      const identity = identities.get(id);
+      if (identity) await recordBrowserProcess(id, identity, Date.now());
+      identities.delete(id);
       await rm(id, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
-  }));
+  })), identities.get(id)?.workerID);
   return {
     name: 'Concord local Chromium',
-    acquire: ({ signal }) => Effect.runPromise(Effect.tryPromise(async () => {
+    acquire: ({ signal, runId, targetName, slot, env }) => recordBrowserTiming('browser-start', () => Effect.runPromise(Effect.tryPromise(async () => {
       signal.throwIfAborted();
       const id = await mkdtemp(join(tmpdir(), 'concord-e2e-browser-'));
       try {
@@ -35,6 +53,12 @@ export function localBrowser(executable: string): BrowserProvider {
           '--remote-debugging-port=0', `--user-data-dir=${id}`, 'about:blank'],
         { stdio: ['ignore', 'ignore', 'pipe'] });
         owned.set(id, child);
+        if (child.pid !== undefined) {
+          const identity: BrowserProcess = { output: env.CONCORD_E2E_OUTPUT, pid: child.pid,
+            workerID: `${runId}/${targetName}/${slot}`, startedAt: Date.now() };
+          identities.set(id, identity);
+          await recordBrowserProcess(id, identity, null);
+        }
         const cdpEndpoint = await new Promise<string>((resolve, reject) => {
           let output = '';
           const done = (error?: Error, endpoint?: string) => {
@@ -62,7 +86,7 @@ export function localBrowser(executable: string): BrowserProvider {
         });
         return { id, cdpEndpoint };
       } catch (cause) { await close(id); throw cause; }
-    })),
+    })), `${runId}/${targetName}/${slot}`),
     release: lease => close(lease.id),
     async sweep() {
       const ids = [...owned.keys()];

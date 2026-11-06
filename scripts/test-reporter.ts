@@ -4,7 +4,7 @@
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { run, type RunOptions } from 'node:test';
 import { tap } from 'node:test/reporters';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { basename, join, resolve } from 'node:path';
 import { inspect } from 'node:util';
 import { summarizeTestLayers } from './test-layers.ts';
@@ -20,8 +20,14 @@ export const runNodeTests = Effect.fn('test.node')(function*(options: RunOptions
   const logs = join(output, 'node');
   yield* fs.makeDirectory(logs, { recursive: true });
   const controller = new AbortController();
+  const eventDirectory = resolve(process.env.CONCORD_TEST_EVENT_DIRECTORY ?? join(output, 'process-events'));
+  const eventRun = process.env.CONCORD_TEST_FILE_ID === undefined ? process.env.CONCORD_TEST_RUN_ID ?? randomUUID() : randomUUID();
+  const preload = new URL('../test/support/source-runtime.ts', import.meta.url);
+  preload.searchParams.set('eventDirectory', eventDirectory);
+  preload.searchParams.set('eventRun', eventRun);
+  yield* fs.writeFileString(join(output, 'process-event-run.json'), `${JSON.stringify({ run: eventRun, directory: eventDirectory })}\n`);
   const events = yield* Effect.acquireRelease(
-    Effect.try({ try: () => run({ ...options, signal: controller.signal }), catch: cause => new TestRunnerFailed({ cause }) }),
+    Effect.try({ try: () => run({ ...options, execArgv: [...(options.execArgv ?? []), '--import', preload.href], signal: controller.signal }), catch: cause => new TestRunnerFailed({ cause }) }),
     () => Effect.sync(() => controller.abort()),
   );
   let success = false;

@@ -15,6 +15,7 @@ const Report = Schema.Struct({
   memoryPeakBytes: Schema.NullOr(Schema.Number), memorySwapPeakBytes: Schema.NullOr(Schema.Number),
   cgroup: Schema.NullOr(Schema.String), unit: Schema.NullOr(Schema.String), exitCode: Schema.NullOr(Schema.Number),
   slice: Schema.optional(Schema.NullOr(Schema.String)), memoryPeakCgroup: Schema.optional(Schema.NullOr(Schema.String)),
+  wallclockMs: Schema.NullOr(Schema.Number), observedWallclockMs: Schema.Number,
 });
 
 const resourceTest = (name: string, body: (root: string) => Effect.Effect<void, unknown, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | EffectTypes.Scope.Scope>) =>
@@ -62,6 +63,8 @@ resourceTest('a real gate scope is separate from its caller and records cgroup p
   const expectedScope = yield* hasSystemdScope;
   const result = yield* runFixture(root, 'Effect.sync(() => { const memory = Buffer.alloc(16 * 1024 * 1024, 1); console.log(memory[0]); })', GiB / 2);
   assert.equal(result.code, 0, result.text);
+  assert.equal(result.report.wallclockMs, result.report.observedWallclockMs);
+  assert.ok(Number.isFinite(result.report.wallclockMs));
   assert.equal(result.report.memoryIsolation, expectedScope ? 'systemd-scope' : 'unavailable', result.text);
   if (result.report.memoryIsolation === 'unavailable') {
     assert.equal(typeof result.report.reason, 'string');
@@ -91,6 +94,8 @@ resourceTest('scope OOM kills only the gate and leaves its peak report readable 
   assert.equal(result.report.memoryIsolation, expectedScope ? 'systemd-scope' : 'unavailable', result.text);
   if (result.report.memoryIsolation === 'unavailable') return;
   assert.notEqual(result.code, 0, result.text);
+  assert.equal(result.report.wallclockMs, null);
+  assert.ok(Number.isFinite(result.report.observedWallclockMs));
   assert.equal(result.report.memoryMaxBytes, memoryMax);
   assert.equal(result.report.memoryPeakBytes, memoryMax, result.text);
   assert.equal(result.report.memorySwapPeakBytes, 0);
@@ -110,9 +115,12 @@ resourceTest('unavailable systemd keeps the workload result and explicitly repor
   assert.equal(success.code, 0, success.text);
   assert.equal(success.report.memoryIsolation, 'unavailable');
   assert.equal(success.report.exitCode, 0);
+  assert.equal(success.report.wallclockMs, success.report.observedWallclockMs);
   assert.equal(typeof success.report.reason, 'string');
   const failed = yield* runFixture(failedRoot, "Effect.fail(new Error('intentional workload failure'))", GiB, true);
   assert.equal(failed.code, 1, failed.text);
   assert.equal(failed.report.exitCode, 1);
   assert.equal(failed.report.memoryIsolation, 'unavailable');
+  assert.equal(failed.report.wallclockMs, null);
+  assert.ok(Number.isFinite(failed.report.observedWallclockMs));
 }));

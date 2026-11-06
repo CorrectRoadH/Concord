@@ -68,6 +68,8 @@ const MemoryReport = Schema.Struct({
   nodeConcurrency: Schema.Number,
   browserWorkers: Schema.Number,
   exitCode: Schema.NullOr(Schema.Number),
+  wallclockMs: Schema.NullOr(Schema.Number),
+  observedWallclockMs: Schema.Number,
 });
 type MemoryReport = typeof MemoryReport.Type;
 
@@ -105,6 +107,7 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
   readonly memoryMaxBytes?: number;
   readonly reportRoot?: string;
 } = {}) => Effect.gen(function*() {
+  const started = performance.now();
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const memoryMaxBytes = options.memoryMaxBytes ?? currentGateMemoryMax();
@@ -124,6 +127,7 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
       memoryIsolation: 'systemd-scope', reason: null, memoryMaxBytes, memorySwapMaxBytes: 0,
       memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: directory, unit: inheritedUnit,
       nodeConcurrency: concurrency.node, browserWorkers: concurrency.browser, exitCode: null,
+      wallclockMs: null, observedWallclockMs: 0,
       slice: process.env.CONCORD_GATE_SLICE ?? null, memoryPeakCgroup: process.env.CONCORD_GATE_SLICE_CGROUP ?? null,
     };
     yield* writeReport(inheritedOutput, base);
@@ -150,13 +154,19 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
     memoryMaxBytes, memorySwapMaxBytes: unavailable === null ? 0 : null,
     memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: null, unit: unavailable === null ? unit : null,
     nodeConcurrency: concurrency.node, browserWorkers: concurrency.browser, exitCode: null,
+    wallclockMs: null, observedWallclockMs: 0,
     slice: null, memoryPeakCgroup: null,
   };
   yield* writeReport(output, base);
   const directly = (reason: string) => Effect.gen(function*() {
     yield* Effect.sync(() => { process.env.CONCORD_GATE_MEMORY_MAX = String(memoryMaxBytes); process.env.CONCORD_GATE_REPORT = output; });
-    yield* body.pipe(Effect.scoped, Effect.onExit(exit => writeReport(output, { ...base, memoryIsolation: 'unavailable', reason,
-      unit: null, memorySwapMaxBytes: null, exitCode: Exit.isFailure(exit) ? 1 : Number(process.exitCode ?? 0) }).pipe(Effect.orDie)));
+    yield* body.pipe(Effect.scoped, Effect.onExit(exit => {
+      const elapsed = performance.now() - started;
+      const code = Exit.isFailure(exit) ? 1 : Number(process.exitCode ?? 0);
+      return writeReport(output, { ...base, memoryIsolation: 'unavailable', reason,
+        unit: null, memorySwapMaxBytes: null, exitCode: code,
+        observedWallclockMs: elapsed, wallclockMs: code === 0 ? elapsed : null }).pipe(Effect.orDie);
+    }));
   });
   if (unavailable !== null) return yield* directly(unavailable);
 
@@ -206,7 +216,12 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
       memorySwapPeakBytes: (yield* peak('memory.swap.peak')) ?? report.memorySwapPeakBytes };
     yield* writeReport(output, report);
     yield* Effect.sync(() => console.error(`# Gate memory peak: ${report.memoryPeakBytes ?? 'unavailable'} bytes; swap peak: ${report.memorySwapPeakBytes ?? 'unavailable'} bytes; MemoryMax=${memoryMaxBytes}`));
-  }).pipe(Effect.ensuring(cleanup.pipe(Effect.orDie)));
+  }).pipe(Effect.ensuring(cleanup.pipe(Effect.orDie, Effect.onExit(exit => Effect.gen(function*() {
+    const report = Schema.decodeUnknownSync(Schema.fromJsonString(MemoryReport))(yield* fs.readFileString(join(output, 'resources.json')));
+    const elapsed = performance.now() - started;
+    yield* writeReport(output, { ...report, observedWallclockMs: elapsed,
+      wallclockMs: code === 0 && Exit.isSuccess(exit) ? elapsed : null });
+  }).pipe(Effect.orDie)))));
   yield* Effect.scoped(Effect.gen(function*() {
     const group = (yield* spawner.string(ChildProcess.make('systemctl', ['--user', 'show', slice, '--property=ControlGroup', '--value'], { stdin: 'ignore', stderr: 'ignore' }))).trim();
     if (!group.startsWith('/') || !group.endsWith(`/${slice}`)) return yield* new GateResourcesInvalid({ detail: `Gate slice has no owned cgroup: ${group}` });

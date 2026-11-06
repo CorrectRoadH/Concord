@@ -10,8 +10,10 @@ import { fileURLToPath } from 'node:url';
 import { initializeNodeCompileCache } from '../src/base/installation/startup/index.ts';
 import { runNodeTests } from './test-reporter.ts';
 import { currentGateMemoryMax, gateConcurrency } from './gate-resources.ts';
-import { auditTestLayers, summarizeTestLayers } from './test-layers.ts';
+import { auditTestLayers, summarizeMeasuredTestLayers } from './test-layers.ts';
+import { readBrowserLifecycle, readBrowserSelection, readFileTimings, summarizeBrowserLifecycle, summarizeFileTimings, timingMeasurement, writeTimingReport, type Measurement } from './gate-timings.ts';
 import { isPackagingTest, preparePackagingFixture, shardNodeFiles, waitForPackagePreparation } from './gate-package.ts';
+import { writeProcessEventReport } from './process-events.ts';
 
 const Concurrency = Schema.NumberFromString.pipe(Schema.check(Schema.isInt(), Schema.isGreaterThan(0)));
 class TestArgumentsInvalid extends Schema.TaggedError<TestArgumentsInvalid>()('TestArgumentsInvalid', {
@@ -92,6 +94,7 @@ const main = Effect.scoped(Effect.gen(function* () {
     CONCORD_E2E_OUTPUT: join(output, 'e2e'), E2E_TELEMETRY_DISABLED: '1',
     CONCORD_E2E_AGENT: values.suite === 'agent' ? '1' : '0' };
   yield* Effect.sync(() => console.error(`# Source tests prepared in ${(performance.now() - started).toFixed(0)}ms; Node concurrency=${concurrency}; e2e workers=${browserConcurrency}\n# Test diagnostics: ${output}\n# Machine load: ${loadavg().map(value => value.toFixed(2)).join(', ')}; CPUs=${availableParallelism()}`));
+  const phases: { name: string; measurement: Measurement }[] = [];
   const suite = Effect.fn('test.suite')(function*(name: string, executable: string, args: string[], suiteEnv: NodeJS.ProcessEnv = env) {
     const suiteStarted = performance.now();
     const code = yield* Effect.scoped(Effect.gen(function*() {
@@ -106,8 +109,10 @@ const main = Effect.scoped(Effect.gen(function* () {
         Effect.ignore,
       ));
       return yield* child.exitCode;
-    }));
-    yield* Effect.sync(() => console.error(`# ${name} tests: ${((performance.now() - suiteStarted) / 1000).toFixed(3)}s; exit=${code}`));
+    })).pipe(Effect.catch(cause => Effect.sync(() => { console.error(`# Test suite failed: ${String(cause)}`); return 1; })));
+    const elapsed = performance.now() - suiteStarted;
+    phases.push({ name, measurement: timingMeasurement(name === 'Packaging Node' ? 'serial-packaging-wallclock' : 'suite-wallclock', [{ duration_ms: elapsed, success: Number(code) === 0 }], 1) });
+    yield* Effect.sync(() => console.error(`# ${name} tests: ${(elapsed / 1000).toFixed(3)}s; exit=${code}`));
     return Number(code) !== 0;
   }, Effect.catch(cause => Effect.sync(() => { console.error(`# Test suite failed: ${String(cause)}`); return true; })));
   const nameFlags = [
@@ -155,21 +160,39 @@ const main = Effect.scoped(Effect.gen(function* () {
       ...(values['test-shard'] === undefined ? [] : ['--shard', values['test-shard']]), ...browserFiles])
     : Effect.succeed(false);
   const failures = yield* Effect.all([nodeTests, browserTests], { concurrency: 'unbounded' });
-  const Timing = Schema.Struct({ file: Schema.String, duration_ms: Schema.Number, success: Schema.Boolean, cases: Schema.optional(Schema.Number) });
   const nodeTimings = [];
   for (const directory of split ? [sourceOutput, packageOutput] : [output]) {
     const path = join(directory, 'file-timings.json');
-    if (yield* fs.exists(path)) nodeTimings.push(...yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Timing)))(yield* fs.readFileString(path)));
+    nodeTimings.push(...yield* readFileTimings(path));
   }
-  yield* fs.writeFileString(join(output, 'file-timings.json'), `${JSON.stringify(nodeTimings.sort((left, right) => right.duration_ms - left.duration_ms), null, 2)}\n`);
+  yield* fs.writeFileString(join(output, 'file-timings.json'), `${JSON.stringify(nodeTimings.map(row => ({ ...row, metric: 'node-file-elapsed-sum' })).sort((left, right) => right.duration_ms - left.duration_ms), null, 2)}\n`);
   const browserTiming = join(output, 'e2e', 'file-timings.json');
-  const browserTimings = (yield* fs.exists(browserTiming)) ? yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Array(Timing)))(yield* fs.readFileString(browserTiming)) : [];
+  const browserTimings = yield* readFileTimings(browserTiming);
   const timings = [...nodeTimings, ...browserTimings];
-  const layers = summarizeTestLayers(files, timings);
+  const requestedBrowser = values.suite === 'node' ? [] : browserFiles;
+  const reportedBrowser = yield* readBrowserSelection(join(output, 'e2e'));
+  // Browser shards select cases, so only the official report knows their file set.
+  const selectedBrowser = requestedBrowser.length === 0 ? [] : reportedBrowser?.length === 0 && failures[1] ? requestedBrowser : reportedBrowser ?? requestedBrowser;
+  const layers = summarizeMeasuredTestLayers([...selectedNode, ...selectedBrowser], timings);
   yield* fs.writeFileString(join(output, 'layer-timings.json'), `${JSON.stringify(layers, null, 2)}\n`);
   yield* Effect.sync(() => {
-    for (const row of layers) console.error(`# Gate layer ${row.layer}: files=${row.files}; timedFiles=${row.timedFiles}; cases=${row.cases}; countedFiles=${row.countedFiles}; ${(row.duration_ms / 1000).toFixed(3)}s (sum of file durations)`);
+    for (const row of layers) console.error(`# Gate layer ${row.layer}: files=${row.files}; timedFiles=${row.timedFiles}; cases=${row.cases}; countedFiles=${row.countedFiles}; observed=${(row.duration_ms / 1000).toFixed(3)}s; metric=${row.metric}; state=${row.state}`);
   });
+  const lifecycle = yield* readBrowserLifecycle(join(output, 'e2e'));
+  const report = {
+    selection: { files, nodeFiles: selectedNode, browserFiles: selectedBrowser, requestedBrowserFiles: requestedBrowser, suite: values.suite,
+      namePattern: values['test-name-pattern'] ?? null, shard: values['test-shard'] ?? null },
+    concurrency: { node: concurrency, browser: browserConcurrency, packaging: 1 as const },
+    node: summarizeFileTimings(selectedNode, nodeTimings, 'node-file-elapsed-sum', !failures[0]),
+    browser: summarizeFileTimings(selectedBrowser, browserTimings, 'browser-attempt-sum', !failures[1] && reportedBrowser !== null),
+    browserLifecycle: summarizeBrowserLifecycle(lifecycle, requestedBrowser.length > 0, !failures[1]),
+    phases: ['Source Node', 'Packaging Node', 'Browser'].map(name => ({ name,
+      ...(phases.find(phase => phase.name === name)?.measurement ?? timingMeasurement(name === 'Packaging Node' ? 'serial-packaging-wallclock' : 'suite-wallclock', [],
+        (name === 'Source Node' ? sourceFiles : name === 'Packaging Node' ? packageFiles : selectedBrowser).length > 0 ? 1 : 0)) })),
+    wallclock: timingMeasurement('test-runner-wallclock', [{ duration_ms: performance.now() - started, success: !failures.some(Boolean) }], 1),
+  };
+  yield* writeTimingReport(output, 'test-timings.json', report);
+  yield* writeProcessEventReport(output, [...selectedNode, ...selectedBrowser]);
   yield* Effect.sync(() => { process.exitCode = failures.some(Boolean) ? 1 : 0; });
 }));
 
