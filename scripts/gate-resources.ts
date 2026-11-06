@@ -63,6 +63,8 @@ const MemoryReport = Schema.Struct({
   memorySwapPeakBytes: Schema.NullOr(Schema.Number),
   cgroup: Schema.NullOr(Schema.String),
   unit: Schema.NullOr(Schema.String),
+  slice: Schema.NullOr(Schema.String),
+  memoryPeakCgroup: Schema.NullOr(Schema.String),
   nodeConcurrency: Schema.Number,
   browserWorkers: Schema.Number,
   exitCode: Schema.NullOr(Schema.Number),
@@ -122,11 +124,13 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
       memoryIsolation: 'systemd-scope', reason: null, memoryMaxBytes, memorySwapMaxBytes: 0,
       memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: directory, unit: inheritedUnit,
       nodeConcurrency: concurrency.node, browserWorkers: concurrency.browser, exitCode: null,
+      slice: process.env.CONCORD_GATE_SLICE ?? null, memoryPeakCgroup: process.env.CONCORD_GATE_SLICE_CGROUP ?? null,
     };
     yield* writeReport(inheritedOutput, base);
     const record = (failed: boolean) => Effect.gen(function*() {
-      const peak = Number((yield* fs.readFileString(join(directory, 'memory.peak'))).trim());
-      const swap = yield* fs.readFileString(join(directory, 'memory.swap.peak')).pipe(Effect.map(value => Number(value.trim())), Effect.catch(() => Effect.succeed(null)));
+      const peakDirectory = base.memoryPeakCgroup ?? directory;
+      const peak = Number((yield* fs.readFileString(join(peakDirectory, 'memory.peak'))).trim());
+      const swap = yield* fs.readFileString(join(peakDirectory, 'memory.swap.peak')).pipe(Effect.map(value => Number(value.trim())), Effect.catch(() => Effect.succeed(null)));
       yield* writeReport(inheritedOutput, { ...base, memoryPeakBytes: peak, memorySwapPeakBytes: swap, exitCode: failed ? 1 : Number(process.exitCode ?? 0) });
     });
     yield* body.pipe(Effect.scoped, Effect.onExit(exit => record(Exit.isFailure(exit)).pipe(Effect.orDie)));
@@ -139,11 +143,14 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
   yield* Effect.sync(() => console.error(`# Gate resource report: ${join(output, 'resources.json')}`));
   const unavailable = yield* scopeUnavailable;
   const unit = `concord-gate-${randomUUID()}.scope`;
+  const slice = `concordgate${randomUUID().replaceAll('-', '')}.slice`;
+  let sliceDirectory: string | null = null;
   const base: MemoryReport = {
     memoryIsolation: unavailable === null ? 'systemd-scope' : 'unavailable', reason: unavailable,
     memoryMaxBytes, memorySwapMaxBytes: unavailable === null ? 0 : null,
     memoryPeakBytes: null, memorySwapPeakBytes: null, cgroup: null, unit: unavailable === null ? unit : null,
     nodeConcurrency: concurrency.node, browserWorkers: concurrency.browser, exitCode: null,
+    slice: null, memoryPeakCgroup: null,
   };
   yield* writeReport(output, base);
   const directly = (reason: string) => Effect.gen(function*() {
@@ -153,40 +160,67 @@ export const withGateResources = <E, R>(body: Effect.Effect<void, E, R>, options
   });
   if (unavailable !== null) return yield* directly(unavailable);
 
+  // A transient slice stays alive after its OOM-killed scope, including on
+  // managers which discard the scope's memory accounting before we can read it.
+  const sliceCreated = yield* spawner.string(ChildProcess.make('busctl', [
+    '--user', 'call', 'org.freedesktop.systemd1', '/org/freedesktop/systemd1',
+    'org.freedesktop.systemd1.Manager', 'StartTransientUnit', 'ssa(sv)a(sa(sv))', slice, 'fail',
+    '3', 'MemoryMax', 't', String(memoryMaxBytes), 'MemorySwapMax', 't', '0', 'MemoryAccounting', 'b', 'true', '0',
+  ], { stdin: 'ignore', stderr: 'pipe' })).pipe(
+    Effect.match({ onFailure: cause => String(cause), onSuccess: () => null }),
+  );
+  if (sliceCreated !== null) {
+    yield* spawner.exitCode(ChildProcess.make('systemctl', ['--user', 'stop', slice], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })).pipe(Effect.ignore);
+    return yield* directly(`systemd could not create the gate slice: ${sliceCreated}`);
+  }
+
   let code: number | null = null;
   let scopeStarted = false;
-  const finalize = Effect.gen(function*() {
-    let report = yield* fs.readFileString(join(output, 'resources.json')).pipe(Effect.map(Schema.decodeUnknownSync(Schema.fromJsonString(MemoryReport))));
-    // systemd retains peaks for failed/OOM units even after removing their cgroup.
-    const properties = yield* spawner.string(ChildProcess.make('systemctl', ['--user', 'show', unit, '--property=MemoryPeak,MemorySwapPeak,Result,InvocationID'], {
-      stdin: 'ignore', stderr: 'ignore',
-    })).pipe(Effect.catch(() => Effect.succeed('')));
-    scopeStarted = /^InvocationID=[0-9a-f]+$/mu.test(properties);
-    const propertyPeak = (name: string): number | null => {
-      const raw = properties.split('\n').find(line => line.startsWith(`${name}=`))?.slice(name.length + 1);
-      return raw !== undefined && /^\d+$/u.test(raw) ? Number(raw) : null;
-    };
-    report = { ...report, exitCode: code,
-      memoryPeakBytes: propertyPeak('MemoryPeak') ?? report.memoryPeakBytes,
-      memorySwapPeakBytes: propertyPeak('MemorySwapPeak') ?? report.memorySwapPeakBytes };
-    yield* writeReport(output, report);
-    yield* Effect.sync(() => console.error(`# Gate memory peak: ${report.memoryPeakBytes ?? 'unavailable'} bytes; swap peak: ${report.memorySwapPeakBytes ?? 'unavailable'} bytes; MemoryMax=${memoryMaxBytes}`));
+  const cleanup = Effect.gen(function*() {
     // Killing systemd-run's process group alone cannot own an independent scope.
     yield* spawner.exitCode(ChildProcess.make('systemctl', ['--user', 'stop', unit], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })).pipe(Effect.ignore);
-    if (report.cgroup !== null && (yield* fs.exists(join(report.cgroup, 'cgroup.procs')))) {
-      const survivors = (yield* fs.readFileString(join(report.cgroup, 'cgroup.procs'))).trim();
-      if (survivors !== '') return yield* new GateResourcesInvalid({ detail: `Gate scope cleanup left processes: ${unit}: ${survivors}` });
+    yield* spawner.exitCode(ChildProcess.make('systemctl', ['--user', 'stop', slice], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })).pipe(Effect.ignore);
+    for (const directory of sliceDirectory === null ? [] : [join(sliceDirectory, unit), sliceDirectory]) {
+      if (yield* fs.exists(join(directory, 'cgroup.procs'))) {
+        const survivors = (yield* fs.readFileString(join(directory, 'cgroup.procs'))).trim();
+        if (survivors !== '') return yield* new GateResourcesInvalid({ detail: `Gate cleanup left processes: ${directory}: ${survivors}` });
+      }
     }
     // Only this invocation's unit; never reset other failed user units.
     yield* spawner.exitCode(ChildProcess.make('systemctl', ['--user', 'reset-failed', unit], { stdin: 'ignore', stdout: 'ignore', stderr: 'ignore' })).pipe(Effect.ignore);
   });
+  const finalize = Effect.gen(function*() {
+    let report = yield* fs.readFileString(join(output, 'resources.json')).pipe(Effect.map(Schema.decodeUnknownSync(Schema.fromJsonString(MemoryReport))));
+    // InvocationID distinguishes a failed workload from an unavailable scope.
+    const properties = yield* spawner.string(ChildProcess.make('systemctl', ['--user', 'show', unit, '--property=MemoryPeak,MemorySwapPeak,Result,InvocationID'], {
+      stdin: 'ignore', stderr: 'ignore',
+    })).pipe(Effect.catch(() => Effect.succeed('')));
+    scopeStarted = /^InvocationID=[0-9a-f]+$/mu.test(properties);
+    const peak = (name: string) => sliceDirectory === null ? Effect.succeed(null) : fs.readFileString(join(sliceDirectory, name)).pipe(
+      Effect.map(value => Schema.decodeUnknownSync(Schema.NumberFromString)(value.trim())),
+      Effect.catch(() => Effect.succeed(null)),
+    );
+    report = { ...report, exitCode: code,
+      slice, memoryPeakCgroup: sliceDirectory,
+      memoryPeakBytes: (yield* peak('memory.peak')) ?? report.memoryPeakBytes,
+      memorySwapPeakBytes: (yield* peak('memory.swap.peak')) ?? report.memorySwapPeakBytes };
+    yield* writeReport(output, report);
+    yield* Effect.sync(() => console.error(`# Gate memory peak: ${report.memoryPeakBytes ?? 'unavailable'} bytes; swap peak: ${report.memorySwapPeakBytes ?? 'unavailable'} bytes; MemoryMax=${memoryMaxBytes}`));
+  }).pipe(Effect.ensuring(cleanup.pipe(Effect.orDie)));
   yield* Effect.scoped(Effect.gen(function*() {
+    const group = (yield* spawner.string(ChildProcess.make('systemctl', ['--user', 'show', slice, '--property=ControlGroup', '--value'], { stdin: 'ignore', stderr: 'ignore' }))).trim();
+    if (!group.startsWith('/') || !group.endsWith(`/${slice}`)) return yield* new GateResourcesInvalid({ detail: `Gate slice has no owned cgroup: ${group}` });
+    sliceDirectory = join('/sys/fs/cgroup', group);
+    const sliceMax = (yield* fs.readFileString(join(sliceDirectory, 'memory.max'))).trim();
+    const sliceSwapMax = (yield* fs.readFileString(join(sliceDirectory, 'memory.swap.max'))).trim();
+    if (sliceMax !== String(memoryMaxBytes) || sliceSwapMax !== '0') return yield* new GateResourcesInvalid({ detail: `Gate slice does not own its requested memory boundary: ${group}` });
+    yield* writeReport(output, { ...base, slice, memoryPeakCgroup: sliceDirectory });
     const child = yield* spawner.spawn(ChildProcess.make('systemd-run', [
-      '--user', '--scope', '--quiet', `--unit=${unit}`, '--slice=app.slice',
+      '--user', '--scope', '--quiet', `--unit=${unit}`, `--slice=${slice}`,
       '-p', `MemoryMax=${memoryMaxBytes}`, '-p', 'MemorySwapMax=0', '-p', 'MemoryAccounting=yes', '-p', 'OOMPolicy=kill',
       '--', process.execPath, ...process.execArgv, ...process.argv.slice(1),
     ], {
-      env: { ...process.env, CONCORD_GATE_SCOPE: unit, CONCORD_GATE_REPORT: output, CONCORD_GATE_MEMORY_MAX: String(memoryMaxBytes) },
+      env: { ...process.env, CONCORD_GATE_SCOPE: unit, CONCORD_GATE_REPORT: output, CONCORD_GATE_MEMORY_MAX: String(memoryMaxBytes), CONCORD_GATE_SLICE: slice, CONCORD_GATE_SLICE_CGROUP: sliceDirectory },
       stdin: 'ignore', stdout: 'inherit', stderr: 'inherit', forceKillAfter: Duration.seconds(10),
     }));
     code = Number(yield* child.exitCode);
