@@ -7,7 +7,7 @@ import { runCli } from '../support/cli.ts';
 import { fixture, custom } from '../support/docs-work-fixture.ts';
 import { plan, report, item } from '../support/docs-work-domain-fixture.ts';
 
-// @use-case docs/feature/neutral-project-governance/use-case/coordinate-docs-work.md
+// @feature docs/feature/neutral-project-governance/cli.md
 test('docs work exposes named receipt, ownership and state failures with exit one', async () => {
   const root = fixture(custom);
   const rejected = async (args: readonly string[], code: string) => {

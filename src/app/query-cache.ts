@@ -74,8 +74,9 @@ export interface QueryContext { readonly root: string; readonly privateDir: stri
 // @concord-implements docs/feature/local-data-engine/use-case/query-asynchronous-projections.md
 export const queryContext = Effect.fn('queryContext')(function*(input: string | undefined, query: Query) {
   const workspace = yield* Workspace;
+  const runtime = yield* RuntimeEnvironment;
   const { root, privateDir, config } = yield* workspace.identify(input);
-  const installation = yield* Effect.try({ try: queryInstallationIdentity, catch: failure });
+  const installation = yield* Effect.try({ try: () => queryInstallationIdentity(runtime), catch: failure });
   const key = digest(JSON.stringify([root, privateDir, query, config, installation]));
   return { root, privateDir, key, query } satisfies QueryContext;
 });
