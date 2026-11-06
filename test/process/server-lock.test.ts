@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawn, type ChildProcess } from 'node:child_process';
+import fs from 'node:fs';
 import { chmodSync, linkSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { once } from 'node:events';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { Effect } from 'effect';
-import { acquireServerLock, scopedServerLock } from '../../src/base/server-lock/index.ts';
+import { acquireServerLock, readServerRecord, scopedServerLock, ServerRuntime } from '../../src/base/server-lock/index.ts';
 import { tmpdir } from '../support/temporary.ts';
 
 if (process.env.CONCORD_SERVER_LOCK_CHILD) {
@@ -39,6 +41,33 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
     if (child.exitCode !== null || child.signalCode !== null) return;
     const exited = once(child, 'exit'); child.kill(signal); await exited;
   }
+  // @feature docs/feature/local-data-engine/README.md
+  test('normal record removal during a read still requires real service lock release', context => Effect.runPromise(Effect.gen(function*() {
+    const f = fixture(), recordPath = join(f.server, 'current.json');
+    const held = yield* acquireServerLock(f.server);
+    const originalRead = fs.readFileSync;
+    let removed = false;
+    try {
+      writeFileSync(recordPath, '{}');
+      // Synchronize the real unlink with the read boundary, after lstat has
+      // observed the record. All file operations and the service lock are real.
+      context.mock.method(fs, 'readFileSync', (...args: Parameters<typeof fs.readFileSync>) => {
+        if (args[0] === recordPath) { fs.unlinkSync(recordPath); removed = true; }
+        return Reflect.apply(originalRead, fs, args);
+      });
+      syncBuiltinESMExports();
+      assert.equal(readServerRecord(f.root, false), undefined);
+      assert.equal(removed, true);
+      const released = Effect.flatMap(ServerRuntime, runtime => runtime.released(f.root)).pipe(Effect.provide(ServerRuntime.layer));
+      assert.equal(yield* released, false, 'record absence cannot authorize shutdown while the owner holds its lock');
+      yield* held.close;
+      assert.equal(yield* released, true, 'shutdown is confirmed only after the actual native lock is released');
+    } finally {
+      context.mock.restoreAll(); syncBuiltinESMExports();
+      yield* held.close;
+      f.cleanup();
+    }
+  })));
   // @feature docs/feature/local-data-engine/README.md
   test('two real processes contend; OS releases service lock after owner death', () => Effect.runPromise(Effect.tryPromise(async () => {
     const f = fixture(); let child: ChildProcess | undefined;
