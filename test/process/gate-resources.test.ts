@@ -14,6 +14,7 @@ const Report = Schema.Struct({
   memoryMaxBytes: Schema.Number, memorySwapMaxBytes: Schema.NullOr(Schema.Number),
   memoryPeakBytes: Schema.NullOr(Schema.Number), memorySwapPeakBytes: Schema.NullOr(Schema.Number),
   cgroup: Schema.NullOr(Schema.String), unit: Schema.NullOr(Schema.String), exitCode: Schema.NullOr(Schema.Number),
+  slice: Schema.optional(Schema.NullOr(Schema.String)), memoryPeakCgroup: Schema.optional(Schema.NullOr(Schema.String)),
 });
 
 const resourceTest = (name: string, body: (root: string) => Effect.Effect<void, unknown, FileSystem.FileSystem | ChildProcessSpawner.ChildProcessSpawner | EffectTypes.Scope.Scope>) =>
@@ -56,6 +57,7 @@ withGateResources(${body}, { memoryMaxBytes: ${memoryMaxBytes}, reportRoot: ${JS
 });
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
+// @issue docs/issues/gate-scope-oom-peak-lost.md
 resourceTest('a real gate scope is separate from its caller and records cgroup peaks before exit', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const expectedScope = yield* hasSystemdScope;
@@ -70,15 +72,21 @@ resourceTest('a real gate scope is separate from its caller and records cgroup p
   assert.equal(result.report.memorySwapMaxBytes, 0);
   assert.equal(result.report.memorySwapPeakBytes, 0);
   assert.equal(result.report.exitCode, 0);
+  assert.equal(typeof result.report.slice, 'string');
+  assert.ok(result.report.memoryPeakCgroup?.endsWith(`/${result.report.slice}`));
+  assert.equal(result.report.cgroup?.startsWith(`${result.report.memoryPeakCgroup}/`), true);
   assert.ok(result.report.cgroup?.endsWith(`/${result.report.unit}`));
   const parent = process.platform === 'linux' ? yield* fs.readFileString('/proc/self/cgroup') : '';
   assert.equal(parent.includes(result.report.unit!), false, 'gate entered its caller scope');
   assert.ok(result.report.memoryPeakBytes !== null && result.report.memoryPeakBytes >= 16 * 1024 * 1024 && result.report.memoryPeakBytes <= GiB / 2, result.text);
   assert.equal(yield* fs.exists(result.report.cgroup!), false, 'gate left its scope populated');
+  assert.equal(yield* fs.exists(result.report.memoryPeakCgroup!), false, 'gate left its slice populated');
 }));
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
+// @issue docs/issues/gate-scope-oom-peak-lost.md
 resourceTest('scope OOM kills only the gate and leaves its peak report readable to the surviving caller', root => Effect.gen(function*() {
+  const fs = yield* FileSystem.FileSystem;
   const expectedScope = yield* hasSystemdScope;
   const memoryMax = GiB / 8;
   const result = yield* runFixture(root, 'Effect.sync(() => { const memory: Buffer[] = []; for (let i = 0; i < 24; i++) memory.push(Buffer.alloc(16 * 1024 * 1024, 1)); })', memoryMax);
@@ -89,6 +97,9 @@ resourceTest('scope OOM kills only the gate and leaves its peak report readable 
   assert.equal(result.report.memoryPeakBytes, memoryMax, result.text);
   assert.equal(result.report.memorySwapPeakBytes, 0);
   assert.equal(result.report.exitCode, result.code);
+  assert.equal(typeof result.report.slice, 'string');
+  assert.ok(result.report.memoryPeakCgroup?.endsWith(`/${result.report.slice}`));
+  assert.equal(yield* fs.exists(result.report.memoryPeakCgroup!), false, 'OOM gate left its slice populated');
 }));
 
 // @feature docs/engineering/testing/README.md#共享资源与同步
