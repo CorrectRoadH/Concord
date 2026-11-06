@@ -51,3 +51,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     process.stdout.write(`${JSON.stringify({ name, version, filename })}\n`);
   }).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain);
 }
+
+// Archive and independent library entrypoints share the legacy tar API module.
+export { assembleArchive } from './archive.ts';
+export { packLibrary } from './release-library.ts';

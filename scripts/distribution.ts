@@ -9,6 +9,10 @@ import { packJavaScript, p5RuntimeNotice } from './pack-javascript.ts';
 import { buildStartup } from './startup-build.ts';
 import { P5_LIBRARIES } from "../src/model/p5/index.ts";
 import { captureBuildSource, writeBuildIdentity, type BuildIdentity } from './build-identity.ts';
+import { assembleArchive } from './archive.ts';
+import { cachedApplication } from './application-cache.ts';
+import { externalBuildOutput } from './build-output.ts';
+import { archiveTarget } from './archive-support.ts';
 import { modManifest } from '../src/model/herdr-mod/index.ts';
 
 let sourceIdentity: BuildIdentity | undefined;
@@ -111,21 +115,19 @@ const prepare = Effect.gen(function*() {
   sourceIdentity = yield* captureBuildSource();
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fs = yield* FileSystem.FileSystem;
+  yield* fs.remove(outputRoot, { recursive: true, force: true });
   yield* fs.makeDirectory(outputRoot, { recursive: true });
   yield* fs.remove(join(outputRoot, 'node_modules'), { recursive: true, force: true });
   yield* fs.symlink(resolve('node_modules'), join(outputRoot, 'node_modules'));
   yield* fs.remove(dist(), { recursive: true, force: true });
   for (const name of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', 'templates', 'skills', 'docs', ...(yield* fs.readDirectory('.')).filter(name => /^README(?:\..+)?\.md$/u.test(name))]) yield* fs.copy(name, join(outputRoot, name), { overwrite: true });
-  const nativeArgs = ['--import', 'tsx', 'scripts/build-native.ts', '--output', dist('native'), '--reuse'];
-  const prebuilt = process.env.CONCORD_NATIVE_ARTIFACTS;
-  if (prebuilt !== undefined) nativeArgs.push('--prebuilt', prebuilt);
-  if (process.env.CONCORD_REQUIRE_PORTABLE_NATIVE === '1') nativeArgs.push('--require-portable');
-  const nativeExit = yield* spawner.exitCode(ChildProcess.make(process.execPath, nativeArgs, { stdout: 'inherit', stderr: 'inherit' }));
-  if (nativeExit !== 0) return yield* new BuildFailed({ project: 'hawdb-native', exitCode: nativeExit });
   yield* Effect.all(['tsconfig.json', 'tsconfig.web.json'].map(project => Effect.gen(function*() {
     const exitCode = yield* spawner.exitCode(ChildProcess.make(process.execPath, ['node_modules/typescript/bin/tsc', '-p', project, '--noEmitOnError', ...(project === 'tsconfig.json' ? ['--noEmit', 'false', '--outDir', dist()] : [])], { stdout: 'inherit', stderr: 'inherit' }));
     if (exitCode !== 0) return yield* new BuildFailed({ project, exitCode });
   })), { concurrency: 'unbounded' });
+  // Startup receipts authenticate the final package bytes, including gitHead.
+  const appManifest = JSON.parse(yield* fs.readFileString(join(outputRoot, 'package.json'))) as Record<string, unknown>;
+  yield* fs.writeFileString(join(outputRoot, 'package.json'), JSON.stringify({ ...appManifest, gitHead: sourceIdentity!.commit }) + '\n');
   yield* narrowGeneratedImports();
   yield* buildStartup(dist(), outputRoot);
   yield* packJavaScript({ entry: { main: 'src/entry/herdr-mod/main.ts' }, outDir: dist('herdr-mod'), format: 'esm', platform: 'neutral', target: 'es2022', minify: true,
@@ -161,10 +163,30 @@ const finish = Effect.gen(function*() {
   yield* fs.chmod(dist('entry/cli/cli.js'), 0o755);
 });
 
-export const prepareDistribution = (output: string) => { outputRoot = output; return Effect.runPromise(prepare.pipe(Effect.provide(NodeServices.layer))); };
-export const finishDistribution = (output: string) => { outputRoot = output; return Effect.runPromise(Effect.gen(function*() {
+export const prepareApplication = (output: string) => Effect.runPromise(Effect.gen(function*() {
+  outputRoot = yield* externalBuildOutput(output);
+  yield* prepare;
+}).pipe(Effect.provide(NodeServices.layer)));
+export const finishApplication = (output: string) => { outputRoot = output; return Effect.runPromise(Effect.gen(function*() {
   yield* finish;
   if (sourceIdentity !== undefined) yield* writeBuildIdentity(sourceIdentity, dist());
   const fs = yield* FileSystem.FileSystem;
   yield* fs.remove(join(outputRoot, 'node_modules'));
 }).pipe(Effect.provide(NodeServices.layer))); };
+
+/** Build the target-independent JS, declarations and Web once. Release callers
+ * retain this directory and call assembleArchive for each target. */
+export const buildApplication = async (output: string): Promise<void> => {
+  await prepareApplication(output);
+  const { build } = await import('vite-plus');
+  await build({ configFile: 'vite.source.config.ts', build: { outDir: join(output, 'dist/web'), write: true, minify: true, license: true, emptyOutDir: true } });
+  await finishApplication(output);
+};
+
+export const buildDistribution = async (output: string): Promise<void> => {
+  const target = archiveTarget(); // Must precede even temporary output creation.
+  await Effect.runPromise(Effect.gen(function*() {
+    const applicationRoot = yield* cachedApplication(buildApplication);
+    yield* assembleArchive({ target, applicationRoot, outputRoot: output });
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)));
+};

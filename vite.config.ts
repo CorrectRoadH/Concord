@@ -12,31 +12,43 @@ import { NodeServices } from '@effect/platform-node';
 const distribution = (output: string): Plugin => ({
   name: 'concord-distribution',
   apply: 'build',
-  configResolved(config) {
-    config.build.outDir = resolve(output, 'dist/web');
-    if (config.environments.client) config.environments.client.build.outDir = resolve(output, 'dist/web');
-  },
-  async buildStart() { await (await import('./scripts/distribution.ts')).prepareDistribution(output); },
-  async writeBundle() { await (await import('./scripts/distribution.ts')).finishDistribution(output); },
+  async buildStart() { await (await import('./scripts/distribution.ts')).buildDistribution(output); },
 });
 
 export default defineConfig(async ({ command }) => {
+  const building = command === 'build' && process.argv[2] === 'build';
+  if (building) (await import('./scripts/archive-support.ts')).archiveTarget();
   const index = process.argv.findIndex(value => value === '--outDir');
-  const output = command === 'build' ? await Effect.runPromise(externalBuildOutput(index < 0 ? undefined : process.argv[index + 1]).pipe(Effect.provide(NodeServices.layer))) : undefined;
+  const output = building ? await Effect.runPromise(externalBuildOutput(index < 0 ? undefined : process.argv[index + 1]).pipe(Effect.provide(NodeServices.layer))) : undefined;
   return ({
+  lint: {
+    plugins: ['import', 'typescript', 'unicorn'],
+    categories: { correctness: 'off' },
+    rules: {
+      'unicorn/filename-case': ['error', { case: 'kebabCase' }],
+      'import/no-default-export': 'error',
+      'typescript/consistent-type-imports': ['error', { prefer: 'type-imports' }],
+    },
+    overrides: [{
+      files: ['src/entry/herdr-mod/main.ts', 'bench/*.bench.ts', '*.config.ts'],
+      rules: { 'import/no-default-export': 'off' },
+    }],
+  },
   run: { cache: false, tasks: {
+    'gate:lint': { command: 'vp lint src web test scripts bench *.config.ts', cache: false },
     'gate:source': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.json --noEmit', cache: false },
     'gate:tests': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.test.json --noEmit', cache: false },
     'gate:scripts': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.scripts.json --noEmit', cache: false },
     'gate:web': { command: 'node node_modules/typescript/bin/tsc -p tsconfig.web.json --noEmit', cache: false },
-    'gate:selfhost': { command: 'node --import tsx src/entry/cli/entry.ts --json --dry-run check', cache: false },
-    'test:source': { command: 'node --import tsx scripts/test-built.ts', cache: false },
+    'gate:selfhost': { command: 'node src/entry/cli/entry.ts --json --dry-run check', cache: false },
+    'test:source': { command: 'node scripts/test-built.ts', cache: false },
   } },
   root: 'web',
-  plugins: [...(output === undefined ? [] : [distribution(output)]), stylex.vite({ dev: command === 'serve', runtimeInjection: false }), react(), tailwindcss()],
+  plugins: output === undefined ? [stylex.vite({ dev: true, runtimeInjection: false }), react(), tailwindcss()] : [distribution(output)],
   resolve: { alias: { '@': fileURLToPath(new URL('./web', import.meta.url)) } },
   build: {
-    outDir: output === undefined ? undefined : resolve(output, 'dist/web'),
+    ...(output === undefined ? {} : { write: false, lib: { entry: resolve('scripts/archive-empty.ts'), formats: ['es'] as ['es'] } }),
+    outDir: output === undefined ? undefined : resolve(output, '.vite-no-output'),
     emptyOutDir: true,
     // Keep fonts same-origin files: the View CSP intentionally disallows data fonts.
     assetsInlineLimit: (filePath) => /\.(?:woff2?|ttf|otf)$/i.test(filePath) ? false : undefined,
