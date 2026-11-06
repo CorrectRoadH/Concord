@@ -58,7 +58,7 @@ export function humanOutput(value: unknown): string {
   if (value.operation === 'init-cancelled') return 'Initialization cancelled. No files or private state were written.';
   if (value.operation === 'skills-install') {
     const lines: string[] = [];
-    for (const [heading, paths] of [['Created', value.createdPaths], ['Updated', value.updatedPaths], ['Unchanged', value.unchangedPaths]] as const) {
+    for (const [heading, paths] of [['Created', value.createdPaths], ['Updated', value.updatedPaths], ['Removed', value.removedPaths], ['Unchanged', value.unchangedPaths]] as const) {
       if (Array.isArray(paths) && paths.length) lines.push(`${heading}:`, ...paths.map(path => `  ${String(path)}`));
     }
     if (value.recoveryRequired) lines.push('', 'Recovery required: run concord recover before another operation.');

@@ -12,7 +12,7 @@ import { release } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { Schema } from "effect";
 import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from "../publication/index.ts";
-import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.ts";
+import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, isObsoleteWorkflowSkillRemoval, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.ts";
 import { snapshot } from "./config.ts";
 import { closeRepositoryCache } from "../cache/index.ts";
 import { invalidateActiveRun } from "../publication/index.ts";
@@ -666,7 +666,7 @@ export class LocalRepository implements Repository {
     if (plannedConfigChange?.after !== null && plannedConfigChange?.after !== undefined) this.validateProjectConfig(authorizationConfig);
     const entries = changes.map(c => {
       this.absolute(c.path);
-      if (!this.allowedOwner(c.path, authorizationConfig) && !(operation === 'init' && c.path === 'docs/concepts.md')) throw new ConcordError('InvalidChange', `Not a Concord document owner: ${c.path}`);
+      if (!this.allowedOwner(c.path, authorizationConfig) && !isObsoleteWorkflowSkillRemoval(operation, c) && !(operation === 'init' && c.path === 'docs/concepts.md')) throw new ConcordError('InvalidChange', `Not a Concord document owner: ${c.path}`);
       const current = this.read(c.path) ?? null;
       if (current !== c.before) throw new ConcordError('FileChangedSinceRead', `${c.path} changed; read its current digest and retry`);
       if (c.before === null && c.after === null) throw new ConcordError('InvalidChange', 'An absent preimage cannot guard an absent target');
@@ -920,7 +920,7 @@ export class LocalRepository implements Repository {
       if (authorizationConfig === undefined) fail('Missing current TS authorization');
       for (const change of journal.changes) {
           const scoped = journal.operation === 'init' && change.path === 'docs/concepts.md';
-        if (!this.allowedOwner(change.path, authorizationConfig) && !scoped) fail(`Not a Concord document owner: ${change.path}`);
+        if (!this.allowedOwner(change.path, authorizationConfig) && !isObsoleteWorkflowSkillRemoval(journal.operation, change) && !scoped) fail(`Not a Concord document owner: ${change.path}`);
       }
       for (const dir of journal.directories) {
         this.absolute(dir);

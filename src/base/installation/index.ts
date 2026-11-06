@@ -12,6 +12,6 @@ export { sourceWebArtifact, sourceWebDigest, sourceWebCacheDirectory, SourceWebC
 export { sourceWebInputDigest, sourceWebRuntimeImports } from './source-web-inputs.ts';
 export type { TemplateResources } from './service.ts';
 export type { HerdrModReceipt } from './herdr-mod.ts';
-export { projectLibraryVersions } from './library-version.ts';
+export { projectLibraryVersions, installedConcordVersion } from './library-version.ts';
 export { installationUseMarker } from './use-marker.ts';
 export { applicationRoot, archiveRootForApplication, packagedRuntimeForApplication } from './archive-location.ts';

@@ -11,9 +11,13 @@ function version(path: string): string {
   return Schema.decodeUnknownSync(Version, { onExcessProperty: 'ignore' })(readFileSync(path, 'utf8')).version;
 }
 
+export function installedConcordVersion(): string {
+  return version(join(packageRoot, 'package.json'));
+}
+
 /** The optional project library is metadata, never an executable module. */
 export function projectLibraryVersions(root: string): { cli: string; library?: string } {
-  const cli = version(join(packageRoot, 'package.json'));
+  const cli = installedConcordVersion();
   try { return { cli, library: version(join(root, 'node_modules/concord-sdlc/package.json')) }; }
   catch (cause) {
     if (typeof cause === 'object' && cause !== null && 'code' in cause && cause.code === 'ENOENT') return { cli };

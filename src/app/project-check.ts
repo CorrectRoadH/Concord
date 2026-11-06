@@ -4,10 +4,12 @@ import { indexConcepts } from "../domain/concepts/index.ts";
 import { inlineLinks, markdownLinks, relativeMarkdownLink, relativeMarkdownLinkTarget } from "../domain/taste/index.ts";
 import { checkWriting } from "../domain/writing/index.ts";
 import { canonicalPath } from "../model/index.ts";
+import { inspectWorkflowSkills } from './workflow-skills.ts';
 
 // @concord-code
 // @concord-implements docs/feature/documentation-quality/use-case/inspect-writing.md#编辑期间的合并检查
 // @concord-implements docs/feature/local-sdlc/use-case/review-traceability.md#check
+// @concord-implements docs/feature/project-onboarding/use-case/run-workflow-from-agent.md#update
 export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' = 'use') {
   const trace = buildTrace(repo, cache);
   const unreadablePaths = new Set<string>();
@@ -55,7 +57,7 @@ export function checkProject(repo: Repository, cache: 'use' | 'off' | 'rebuild' 
       relations: { ok: trace.complete && relationFindings.length === 0 && conceptLinksComplete && conceptLinks.length === 0, complete: trace.complete && conceptLinksComplete },
       writing: { ok: writingComplete && writingFindings.length === 0, complete: writingComplete },
     },
-    advisories: trace.advisories, documents: trace.documents.length,
+    advisories: [...trace.advisories, ...inspectWorkflowSkills(repo).advisories], documents: trace.documents.length,
     cases: trace.annotations.cases.length, codeDeclarations: trace.codeDeclarations.length,
     cache: trace.annotations.cache, codeCache: trace.codeCache,
   };
