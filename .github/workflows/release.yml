@@ -100,7 +100,8 @@ jobs:
           mkdir release
           node --import tsx scripts/release-package.ts release "$RUNNER_TEMP/concord-package"
           test "$(find release -maxdepth 1 -type f -name 'concord-sdlc-*.tgz' | wc -l)" -eq 1
-          sha256sum release/concord-sdlc-*.tgz > release/SHA256SUMS
+          cp install.sh release/install.sh
+          sha256sum release/concord-sdlc-*.tgz release/install.sh > release/SHA256SUMS
       - name: Verify frozen production installation from the final archive
         run: |
           sudo apt-get update && sudo apt-get install -y ripgrep
@@ -119,6 +120,8 @@ jobs:
 
   publish:
     needs: [package, gate]
+    outputs:
+      source-published: ${{ steps.source-release.outcome == 'success' }}
     timeout-minutes: 3
     if: inputs.tag != ''
     runs-on: ubuntu-24.04
@@ -130,19 +133,23 @@ jobs:
           name: concord-release-package
           path: release
       - name: Publish the verified immutable asset
+        id: source-release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag }}
         run: |
           version="${RELEASE_TAG#concord-}"
           version="${version#v}"
-          digest="$(cut -d' ' -f1 release/SHA256SUMS)"
+          digest="$(awk -v name="release/concord-sdlc-$version.tgz" '$2 == name { print $1 }' release/SHA256SUMS)"
+          installer_digest="$(awk '$2 == "release/install.sh" { print $1 }' release/SHA256SUMS)"
+          test -n "$digest" && test -n "$installer_digest"
           if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > existing-release.json 2>/dev/null; then
             jq -e --arg name "concord-sdlc-$version.tgz" --arg digest "sha256:$digest" '.assets | any(.name == $name and .digest == $digest)' existing-release.json
+            jq -e --arg digest "sha256:$installer_digest" '.assets | any(.name == "install.sh" and .digest == $digest) and any(.name == "SHA256SUMS")' existing-release.json
             echo "Existing release has the same immutable package; continuing channel notification." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" \
+          gh release create "$RELEASE_TAG" "release/concord-sdlc-$version.tgz" "release/SHA256SUMS" "release/install.sh" \
             --repo "$GITHUB_REPOSITORY" --verify-tag --title "Concord $version" \
             --notes "Apple Silicon macOS 15+ (including macOS 27) and Linux x64/glibc. Built once with pinned native engines; package metadata and SHA-256 verified. The same tag commit passed the repository checks. macOS 27 is not directly covered by CI. Homebrew/Nix metadata synchronization is tracked at https://github.com/CorrectRoadH/homebrew-tap/actions/workflows/concord-release-sync.yml . Channel completion receipt: https://github.com/CorrectRoadH/homebrew-tap/releases/tag/$RELEASE_TAG . Package SHA-256: $digest."
       - name: Notify Homebrew tap of the published release
@@ -171,3 +178,55 @@ jobs:
           echo "::error::Homebrew tap notification failed for $RELEASE_TAG"
           echo "Homebrew tap notification failed for $RELEASE_TAG; scheduled sync remains available." >> "$GITHUB_STEP_SUMMARY"
           exit 1
+
+  herdr-mod:
+    needs: publish
+    if: ${{ always() && inputs.tag != '' && needs.publish.outputs.source-published == 'true' }}
+    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ format('refs/tags/{0}', inputs.tag) }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.19.0'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: concord-release-package
+          path: release
+      - name: Generate Herdr mirror from the verified release package
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          sha256sum --check release/SHA256SUMS
+          mkdir -p "$RUNNER_TEMP/herdr-package" "$RUNNER_TEMP/herdr-mirror"
+          tar -xzf release/concord-sdlc-*.tgz -C "$RUNNER_TEMP/herdr-package"
+          node --import tsx scripts/herdr-mod-release.ts "$RUNNER_TEMP/herdr-package/package" "$RUNNER_TEMP/herdr-mirror" "$RELEASE_TAG"
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ github.token }}
+          path: herdr-mirror
+      - name: Synchronize the generated Concord directory
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          rm -rf herdr-mirror/concord
+          cp -R "$RUNNER_TEMP/herdr-mirror/concord" herdr-mirror/concord
+          git -C herdr-mirror add -- concord
+          if git -C herdr-mirror diff --cached --quiet; then
+            echo "Herdr mod mirror already matches $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git -C herdr-mirror -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Concord Herdr mod $RELEASE_TAG" -- concord
+          git -C herdr-mirror push origin HEAD:master
+          echo "Herdr mod $RELEASE_TAG synchronized to $GITHUB_REPOSITORY/concord on master." >> "$GITHUB_STEP_SUMMARY"
