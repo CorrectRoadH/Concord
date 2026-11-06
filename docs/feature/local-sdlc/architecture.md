@@ -39,7 +39,7 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 ## 写入管线
 
-文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整 preimage，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配 preimage 也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由[差异门禁](#差异门禁)检查。
+文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整 preimage，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配 preimage 也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由 `concord check` 检查，`--since` 另读基线差异（[操作依赖](#操作依赖)）。
 
 新增配置、来源和写入口必须同时定义资源所有权与恢复授权，写入的可观察保证见[写入保护](use-case/recover-local-state.md#写入保护)。
 

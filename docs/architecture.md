@@ -339,7 +339,7 @@ Design 是一页还没定下来的取舍，见[记下一个还没定的取舍](f
 
 项目配置中的 runner 命令是用户声明的验收单元。Concord 报告命令的退出结果与可观察到的执行数量，不声称收集或证明 runner 的每个子 case，不构成正式 E2E、可靠性证书或覆盖证明（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。runner 在消费者 cwd 下以 shell=false 执行，有 timeout；取消或超时清理进程组，信号或启动失败不记为通过。命令由项目作者信任与维护。
 
-Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷候选上以非零结果结束、在被接受的快照上通过，结论写入 Issue，可在声明的输入与环境下重放（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。
+Issue 以 fixed 关闭前的修复核验见[核验修复并关闭缺陷](feature/local-sdlc/use-case/resolve-with-command-evidence.md)与 [local SDLC 架构](feature/local-sdlc/architecture.md#修复核验)：同一冻结命令在缺陷候选上以非零结果结束、在被接受的快照上通过；通过后删除 Issue，结论输出给提交说明，可在声明的输入与环境下重放（[证据的范围](feature/local-sdlc/README.md#证据的范围)）。
 
 ## 测试标记与缓存身份
 

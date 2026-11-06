@@ -214,7 +214,7 @@ export default function (p: P5) {
 证据只表达实际证明的范围（[只声称证明过的](../../taste.md#t-5)）。
 
 - 源码声明不等于执行，命令成功收据不等于逐 case 覆盖或正式 E2E 可靠性。Concord 不把修复核验描述成原生 runner 的逐 case 覆盖率或 formal E2E。
-- Issue 标记为 fixed 时，同一冻结命令必须在缺陷候选上以非零结果结束、在被接受的快照上通过，两者之间测试、runner 输入与所指 Spec 不变。核验结论写入 Issue，可在声明的输入与环境下重放；command 结果不证明逐 case 执行。完整路径见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
+- Issue 标记为 fixed 时，同一冻结命令必须在缺陷候选上以非零结果结束、在被接受的快照上通过，两者之间测试、runner 输入与所指 Spec 不变。通过后删除 Issue，结论输出给提交说明，可用 `test verify` 在声明的输入与环境下重放；command 结果不证明逐 case 执行。完整路径见[核验修复并关闭缺陷](use-case/resolve-with-command-evidence.md)。
 - 文档、品味结构或关系检查不得被展示为实现合规、功能完成或测试覆盖的证明。
 
 ### 测试的边界
