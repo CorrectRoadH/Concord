@@ -77,7 +77,7 @@ export const verifyInstalledNative = Effect.fn('native.verifyInstalled')(functio
     return { status, stdout, stderr };
   }, Effect.scoped, Effect.timeout('30 seconds'));
   const call = Effect.fn('native.verifyCall')(function*<A>(args: readonly string[], schema: Schema.ConstraintDecoder<A, never>) {
-    const result = yield* run(process.execPath, [cli, '--root', root, '--json', ...args]);
+    const result = yield* run(process.execPath, [cli, '--root', root, '--json', '--server=command', ...args]);
     return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(result.stdout);
   });
   const nativeFolder = join(installationResources(installed).native, hawdbTarget());
@@ -102,19 +102,19 @@ export const verifyInstalledNative = Effect.fn('native.verifyInstalled')(functio
 
   const body = join(scratch, 'memory-input.md');
   yield* fs.writeFileString(body, '# Cached knowledge\n\nold-native-projection-token\n');
-  yield* call(['new', 'memory', 'native-recall', '--title', 'Cached knowledge', '--type', 'note', '--body', body], Ack);
-  assert.equal((yield* call(['memory', 'recall', 'old-native-projection-token'], Recall)).documents.length, 1);
+  yield* call(['new', 'memory', 'native-recall', '--title', 'Cached knowledge', '--body', body], Ack);
+  assert.equal((yield* call(['memory', 'search', 'old-native-projection-token'], Recall)).documents.length, 1);
   const before = (yield* call(['show', 'native-recall'], Memory)).document.digest;
   const memoryPath = join(root, 'memory/native-recall.md');
   yield* fs.writeFileString(memoryPath, (yield* fs.readFileString(memoryPath)).replace('old-native-projection-token', 'current-native-projection-token'));
-  assert.equal((yield* call(['memory', 'recall', 'old-native-projection-token'], Recall)).documents.length, 0);
-  const current = yield* call(['memory', 'recall', 'current-native-projection-token'], Recall);
+  assert.equal((yield* call(['memory', 'search', 'old-native-projection-token'], Recall)).documents.length, 0);
+  const current = yield* call(['memory', 'search', 'current-native-projection-token'], Recall);
   assert.equal(current.documents.length, 1);
   const currentDigest = (yield* call(['show', 'native-recall'], Memory)).document.digest;
   assert.notEqual(currentDigest, before);
   yield* call(['cache', 'clear'], Ack);
   assert.equal((yield* call(['cache', 'status'], CacheStatus)).status, 'empty');
-  assert.equal((yield* call(['memory', 'recall', 'current-native-projection-token'], Recall)).documents.length, 1);
+  assert.equal((yield* call(['memory', 'search', 'current-native-projection-token'], Recall)).documents.length, 1);
   assert.equal((yield* call(['show', 'native-recall'], Memory)).document.digest, currentDigest);
   yield* call(['cache', 'clear'], Ack);
   assert.equal((yield* call(['cache', 'rebuild'], CacheResult)).cache.status, 'miss');

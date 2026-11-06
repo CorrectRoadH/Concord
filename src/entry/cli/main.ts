@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/local-sdlc/cli.md#通用约定
+// @concord-implements docs/feature/local-data-engine/architecture.md#cli-查询
 import { Installation } from '../../base/installation/index.js';
 import { LspLauncher, ViewLauncher, ServerLauncher, QueryServerMode } from "./launchers.js";
 import { Publication } from "../../base/publication/index.js";
@@ -13,7 +14,7 @@ import { OwnedProcess, OwnedProcessLive } from "../../base/process/index.js";
 import { Git } from '../../base/git/index.js';
 import { Workspace } from '../../base/workspace/index.js';
 import { Sources } from '../../base/sources/index.js';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter } from '../../base/cache/index.js';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, FeedbackCacheWriter, validateHawdbArtifact } from '../../base/cache/index.js';
 import { ServerRuntime } from '../../base/server-lock/index.js';
 const loadClient = () => Effect.tryPromise(() => import('../server/index.js')).pipe(Effect.mapError(failure));
 const requestWorkspace: typeof import('../server/index.js').requestWorkspace = (...args) => loadClient().pipe(Effect.flatMap(client => client.requestWorkspace(...args)));
@@ -25,6 +26,7 @@ const remoteFailure = (cause: unknown): ConcordError | undefined => {
 const workspaceServerFailure = (cause: unknown): ConcordError => remoteFailure(cause) ?? failure(cause);
 const asServerError = workspaceServerFailure;
 const installationIdentity = (runtime: ServerRuntime['Service']) => Effect.try({ try: () => runtime.installation(), catch: failure });
+const nativeAvailable = Effect.try({ try: validateHawdbArtifact, catch: cause => new ConcordError('HawdbUnavailable', cause instanceof Error ? cause.message : String(cause)) });
 
 const loadServerMain = () => Effect.tryPromise(() => import('../server/main.js'));
 const loadApp = () => Effect.tryPromise(() => import('../../app/index.js'));
@@ -58,6 +60,7 @@ const clearExistingWorkspaceCache = (root: string) => Effect.scoped(Effect.gen(f
   return yield* requestWorkspace(connection, 'cache-clear', {}).pipe(Effect.mapError(workspaceServerFailure));
 }));
 const connectOrStartWorkspace = /*#__PURE__*/ Effect.fn('connectOrStartWorkspace')(function*(root: string, foreground = false, identifiedPrivateDir?: string, capturedInstallation?: string) {
+  yield* nativeAvailable;
   const { PROTOCOL, waitForServerHandshake } = yield* loadClient();
   const platform = yield* ServerRuntime;
   const installation = capturedInstallation ?? (yield* installationIdentity(platform));
@@ -245,6 +248,17 @@ const querySelection = Layer.unwrap(Effect.gen(function*() {
   const processes = yield* OwnedProcess;
   return Queries.Remote((root, request, cache = 'use') => Effect.scoped(Effect.gen(function*() {
     if (cache === 'off' && process.env.CONCORD_SERVER_SCOPE === undefined) return yield* executeQuery(root, request, cache);
+    const native = yield* Effect.result(nativeAvailable);
+    if (native._tag === 'Failure') {
+      if (request.name === 'historical' || request.name === 'workspace.show') return yield* Effect.fail(native.failure);
+      const reply = yield* executeQuery(root, request, 'off');
+      const object = Schema.decodeUnknownExit(Schema.Record(Schema.String, Schema.Json))(reply.value);
+      if (object._tag === 'Success' && object.value.cache !== undefined) {
+        const observed = Schema.decodeUnknownExit(Schema.Record(Schema.String, Schema.Json))(object.value.cache);
+        if (observed._tag === 'Success') return { ...reply, value: { ...object.value, cache: { ...observed.value, status: 'unavailable', detail: native.failure.message } } };
+      }
+      return reply;
+    }
     const identified = yield* workspace.locate(root);
     const environment = Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined));
     delete environment.CONCORD_SERVER_SCOPE;
@@ -280,7 +294,7 @@ const launchers = Layer.mergeAll(
     const context = yield* Effect.context<ServerRuntime | Installation | Workspace | Sources | PersistentCache | NodeServices.NodeServices | OwnedProcess>();
     const workspace = yield* Workspace, runtime = yield* ServerRuntime, persistent = yield* PersistentCache;
     return ServerLauncher.of({
-      run: root => loadServerMain().pipe(Effect.flatMap(server => server.serveWorkspaceFromEnvironment(root)), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause)), Effect.provideContext(context)),
+      run: root => nativeAvailable.pipe(Effect.andThen(loadServerMain()), Effect.flatMap(server => server.serveWorkspaceFromEnvironment(root)), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause)), Effect.provideContext(context)),
       start: root => startWorkspaceServer(root).pipe(Effect.provideContext(context)),
       stop: root => stopWorkspaceServer(root).pipe(Effect.provideContext(context)),
       status: root => workspaceServerStatus(root).pipe(Effect.provideContext(context)),

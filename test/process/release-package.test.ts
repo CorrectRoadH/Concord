@@ -12,7 +12,6 @@ import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { packConcord } from '../../scripts/release-package.js';
 import { installedPackageRoot, packageBin } from '../support/installed-package.js';
-import { hawdbTarget, installationResources } from '../../src/base/installation/index.js';
 import { builtConcord } from '../support/installed-package.js';
 import { tmpdir } from '../support/temporary.js';
 
@@ -98,20 +97,6 @@ test('one release archive contains the declared distribution and starts from its
     await verifyInstalledStartup(installed, join(root, 'startup'));
     mkdirSync(join(root, 'herdr'));
     verifyInstalledHerdrMod(installed, join(root, 'herdr'));
-    const nativeBinary = join(installationResources(installed).native, hawdbTarget(), 'hawdb.node');
-    const nativeBytes = readFileSync(nativeBinary);
-    const native = spawnSync(process.execPath, [
-      '--import', import.meta.resolve('tsx'),
-      fileURLToPath(new URL('../../scripts/verify-installed-native.ts', import.meta.url)), installed,
-    ], { cwd: consumer, encoding: 'utf8', timeout: 180_000, env: { ...process.env, NODE_OPTIONS: '' } });
-    const nativeDiagnostics = `${native.stdout}\n${native.stderr}\n${String(native.error)}\nsignal=${native.signal}`;
-    assert.deepEqual(readFileSync(nativeBinary), nativeBytes, `Installed native verification must restore the binary\n${nativeDiagnostics}`);
-    assert.equal(native.status, 0, nativeDiagnostics);
-    Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({
-      engine: Schema.Literal('hawdb'), revision: Schema.String, abi: Schema.String, target: Schema.Literal(hawdbTarget()),
-      compilerOnPath: Schema.Literal(false), helperOnPath: Schema.Literal(false),
-      persistentHit: Schema.Literal(true), currentRecall: Schema.Literal(true), rebuilt: Schema.Literal(true),
-    })))(native.stdout);
     const templates = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ templates: Schema.Array(Schema.Struct({ name: Schema.String })) })))(execFileSync(process.execPath, [packageBin(installed), 'template', 'list', '--json'], { cwd: consumer, encoding: 'utf8', timeout: 30_000 }));
     assert.ok(templates.templates.some(template => template.name === 'feature'));
     console.error(`# Release packaging: pack=${(packMs / 1000).toFixed(3)}s; unpack=${(unpackMs / 1000).toFixed(3)}s; install=${(installMs / 1000).toFixed(3)}s`);
