@@ -23,7 +23,7 @@ const environment = Object.fromEntries(Object.entries(process.env).filter((item)
 const workerPid = (root: string) => pollUntil(async () => {
   for (const line of execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' }).split('\n')) {
     const row = /^\s*(\d+)\s+(\d+)\s+(.+)$/u.exec(line);
-    if (row && Number(row[2]) === record(root).pid && row[3]!.includes('compute-worker.js') && row[3]!.includes(root)) return Number(row[1]);
+    if (row && Number(row[2]) === record(root).pid && /\/entry\/server\/compute-worker\.ts(?:\s|$)/u.test(row[3]!) && row[3]!.includes(root)) return Number(row[1]);
   }
   return undefined;
 }, { description: 'installed service owns a real computation process', timeoutMs: 10_000 });
@@ -90,6 +90,26 @@ test('later computation generations reuse the idle process but never reuse a com
       assert.equal(yield* Effect.promise(() => workerPid(root)), pid);
       assert.notEqual(first.snapshot.sources.find(source => source.path === 'src/0.ts')?.digest, next.snapshot.sources.find(source => source.path === 'src/0.ts')?.digest);
       assert.equal(next.snapshot.sources.find(source => source.path === 'src/0.ts')?.digest, digest(changed));
+    })));
+  } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('a named read failure keeps the computation process available for the next request', { timeout: 30_000 }, async () => {
+  const root = fixture();
+  try {
+    const started = await command(root, ['server', 'start']); assert.equal(started.status, 0, started.stderr);
+    const running = record(root), rpc = await rpcModule();
+    await Effect.runPromise(Effect.scoped(Effect.gen(function*() {
+      const connection = yield* rpc.connectWorkspaceSocket(running.socket.path, running.installation, running.token);
+      yield* Effect.promise(() => projection(rpc, connection));
+      const pid = yield* Effect.promise(() => workerPid(root));
+      const missing = yield* Effect.result(rpc.requestWorkspace(connection, 'read', { path: 'docs/not-present.md' }));
+      assert.equal(missing._tag, 'Failure');
+      if (missing._tag === 'Failure') assert.equal(Schema.decodeUnknownSync(Schema.Struct({ code: Schema.String }))(missing.failure).code, 'FileNotFound');
+      const next = yield* rpc.requestWorkspace(connection, 'query', { name: 'code.list', input: {}, environment, cache: 'use' });
+      assert.equal(Schema.decodeUnknownSync(Schema.Struct({ exitCode: Schema.Int }))(next).exitCode, 0);
+      assert.equal(yield* Effect.promise(() => workerPid(root)), pid);
     })));
   } finally { await stop(root); rmSync(root, { recursive: true, force: true }); }
 });

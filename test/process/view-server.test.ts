@@ -121,10 +121,6 @@ test('view server keeps the application shell data-free and allows unauthenticat
       assert.deepEqual(parsed(await send(server, '/api/jobs')).value, []);
     }
 
-    const empty = await waitForWorkspace(server);
-    assert.deepEqual(empty.snapshot.project, { testRoots: [], sourceRoots: [] });
-    assert.equal(empty.snapshot.root, root);
-
     const excess = await send(server, '/api/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'init', docsOnly: true, extra: true }) });
     assert.equal(excess.status, 400);
     assert.equal(parsed(excess).error, 'InvalidData');
@@ -133,6 +129,9 @@ test('view server keeps the application shell data-free and allows unauthenticat
 
     const initialized = await send(server, '/api/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'init', docsOnly: true }) });
     assert.equal(initialized.status, 200, initialized.body);
+    const empty = await waitForWorkspace(server, 65_000, value => value.snapshot.project !== null);
+    assert.deepEqual(empty.snapshot.project, { testRoots: [], sourceRoots: [] });
+    assert.equal(empty.snapshot.root, root);
     const created = await send(server, '/api/action', { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ action: 'document.create', kind: 'feature', id: 'web', title: 'Web' }) });
     assert.equal(created.status, 200, created.body);
     assert.equal(existsSync(join(root, 'docs/feature/web/cli.md')), false);
@@ -209,8 +208,7 @@ test('view CLI propagates or rejects shared dry-run without cache or repository 
   const cli = installedConcordCli();
   try {
     const input = join(root, 'action.json');
-    writeFileSync(input, JSON.stringify({ action: 'init', docsOnly: true }));
-    const preview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 10_000 });
+    const preview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'init', '--docs-only'], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(preview.status, 0, preview.stderr);
     assert.equal((JSON.parse(preview.stdout) as { dryRun: boolean }).dryRun, true);
     assert.equal(existsSync(join(root, 'concord.config.ts')), false);
@@ -223,6 +221,12 @@ test('view CLI propagates or rejects shared dry-run without cache or repository 
     let repo = new LocalRepository(root, { initialize: true });
     initialize(repo, false, { testRoots: [] });
     repo.close();
+    writeFileSync(input, JSON.stringify({ action: 'document.create', kind: 'feature', id: 'dry-preview', title: 'Dry preview' }));
+    const actionPreview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 10_000 });
+    assert.equal(actionPreview.status, 0, actionPreview.stderr);
+    assert.equal((JSON.parse(actionPreview.stdout) as { dryRun: boolean }).dryRun, true);
+    assert.equal(existsSync(join(root, 'docs/feature/dry-preview')), false);
+    assert.equal(existsSync(join(root, '.git/concord/cache.hawdb')), false);
     writeFileSync(input, JSON.stringify({ action: 'recover' }));
     const unsafePreview = spawnSync(process.execPath, [cli, '--root', root, '--dry-run', '--json', 'action', '--input', input], { encoding: 'utf8', timeout: 10_000 });
     assert.equal(unsafePreview.status, 1);
@@ -248,6 +252,9 @@ test('workspace diagnostics never dereference unsafe configuration paths', async
   const outside = mkdtempSync(join(tmpdir(), 'concord-view-outside-'));
   let server: ViewServerHandle | undefined;
   try {
+    const repo = new LocalRepository(root, { initialize: true });
+    try { initialize(repo); }
+    finally { repo.close(); }
     const secret = 'must-not-cross-the-worktree-boundary';
     writeFileSync(join(outside, 'secret.json'), secret);
     symlinkSync(join(outside, 'secret.json'), join(root, 'concord.config.ts'));

@@ -28,7 +28,8 @@ import { startViewServer } from '../e2e/server.ts';
 import { parseWorkspaceHttpResponse, parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
 
 import { fixture, jsonHeaders, baseOf, interruptPublication, workspaceProjectionContext } from '../support/workspace-projection-fixture.ts';
-import { hawdbTarget, installationResources } from '../../src/base/installation/index.ts';
+import { hawdbTarget } from '../../src/base/installation/index.ts';
+import { installationResources } from '../support/source-resources.ts';
 import { sourceCli, prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 
 // @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md

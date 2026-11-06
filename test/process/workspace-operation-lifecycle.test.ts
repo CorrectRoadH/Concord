@@ -11,7 +11,7 @@ import { startViewServer } from '../e2e/server.ts';
 
 const children = (pid: number) => execFileSync('ps', ['-eo', 'pid=,ppid=,args='], { encoding: 'utf8' }).split('\n').flatMap(line => {
   const match = /^\s*(\d+)\s+(\d+)\s+(.+)$/u.exec(line);
-  return match && Number(match[2]) === pid && /\/entry\/server\/operation\/main\.js(?:\s|$)/u.test(match[3]!) ? [Number(match[1])] : [];
+  return match && Number(match[2]) === pid && /\/entry\/server\/operation\/main\.ts(?:\s|$)/u.test(match[3]!) ? [Number(match[1])] : [];
 });
 const gone = (pid: number) => { try { process.kill(pid, 0); return false; } catch { return true; } };
 const idle = (pid: number, excluded: readonly number[] = []) => pollUntil(async () => {
