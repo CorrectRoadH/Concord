@@ -88,3 +88,4 @@ export { Installation } from './service.ts';
 export { sourceWebServer, sourceP5Runtime, sourcePreviewFiles } from './source-web.ts';
 export type { TemplateResources } from './service.ts';
 export type { HerdrModReceipt } from './herdr-mod.ts';
+export { projectLibraryVersions } from './library-version.ts';
