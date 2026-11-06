@@ -41,13 +41,15 @@ sourceRoots 与 testRoots 分别控制实现和测试扫描。代码声明解析
 
 文档 mutation 在取得写入占用后校验 canonical relative path、每个 symlink 组件与完整 preimage，再把全部计划变更写入绑定 root 与 privateDir 的 journal。文件以同文件系统临时文件和原子 rename 逐个发布，全部提交后才刷新可重建缓存。读取发现未完成 journal 时要求显式 recover；内容既不匹配 preimage 也不匹配 planned digest 时拒绝覆盖外部编辑。命令助手与 Web 保存都走这条管线，Web 保存以整文件摘要作为前像；人与 agent 的直接编辑不经过它，由[差异门禁](#差异门禁)检查。
 
+新增配置、来源和写入口必须同时定义资源所有权与恢复授权，写入的可观察保证见[写入保护](use-case/recover-local-state.md#写入保护)。
+
 ## 步骤改写的发布
 
 `use-case format` 沿用正文编辑的前像与发布协议。`rename-step` 在唯一 journal 与发布租约下使用专用 `step-rename` 授权范围，不串联多次 `source.set` 或文档发布。该范围绑定项目、worktree、冻结配置、Use Case 路径、old-id、new-id、完整文件前后像、摘要与 mode，以及规划时观察的目录成员。
 
 `issue close` 同样使用专用的 `issue-close` 授权范围：在唯一 journal 与发布租约下删除 Issue 文件，并从回归测试源码中删除指向它的 `@issue` 行。规划在 `app` 中完成，由测试领域的标记解析器找出这些行；该范围绑定项目、worktree、冻结配置、测试成员集合、Issue 路径、每个被改文件的完整前后像、摘要与 mode。发布与恢复时经 `PublicationValidation` 以冻结输入重新规划，只接受与之完全相同的写集：每个测试文件的后像必须恰好等于前像删去这些 `@issue` 行，其余字节不变。重新规划结果不同、前像不符或无法解码时保留 journal 并阻断写入。
 
-规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[写入安全](README.md#写入安全)）。
+规划在同一次乐观快照中记录引用扫描所需的文件、目录成员和受管引用检查，受管引用经领域读取能力检查，不直接读取 owner 文件。提交取得短期独占租约，复核配置、全部观察与完整变更集，沿用 runner 失效和隔离检查。正常发布与恢复共用范围校验，从前像复算允许的改写并拒绝超出授权的后像；旧版本 CLI 不降级处理该范围（[写入保护](use-case/recover-local-state.md#写入保护)）。
 
 ## 代码声明引用
 
@@ -61,7 +63,7 @@ JS/TS 代码声明的 `id` 与 `code:<id>` 边为 `code-` 加 `JSON.stringify(["
 
 ## 路径安全
 
-仓库路径解析分两个入口。写入、建目录与删除、原子替换、journal、发布 preflight 与 apply、恢复、`discoverRoot`、`init` 及构造期的 privateDir 与 journal 检查使用完整检查：从文件系统根逐级核对 Darwin 字节拼写并 `lstat` 拒绝 symlink，不读取任何复用信息。只读快照内的文件读取与目录扫描使用读取检查，写入前像同样经读取检查取得（[写入安全](README.md#写入安全)）。
+仓库路径解析分两个入口。写入、建目录与删除、原子替换、journal、发布 preflight 与 apply、恢复、`discoverRoot`、`init` 及构造期的 privateDir 与 journal 检查使用完整检查：从文件系统根逐级核对 Darwin 字节拼写并 `lstat` 拒绝 symlink，不读取任何复用信息。只读快照内的文件读取与目录扫描使用读取检查，写入前像同样经读取检查取得（[写入保护](use-case/recover-local-state.md#写入保护)）。
 
 - 根锚点：仓库对象构造时对根做一次完整检查，记录从 `/` 到根每一级的 bigint `dev`/`ino`；快照深度 0→1 时打开根目录 fd 并与锚点比对，回到 0 时关闭。
 - 读取检查在读字节前完成：逐级 `lstat` 核对锚点 inode，不枚举仓库根之上的目录；仓库内组件先做拼写核对，再 `lstat` 拒绝 symlink。文件以不跟随 symlink 的方式打开：Darwin 用 `O_NOFOLLOW_ANY`（要求 macOS 11 及以上，否则构造以 `UnsupportedHost` 失败），Linux 用 `O_NOFOLLOW` 并以 `/proc/self/fd/<fd>` 比对期望路径，不可用时拒绝读取。打开后 `fstat` 须为普通文件；大小或 `dev`/`ino` 与最后一次 `lstat` 不一致时按来源变化报 `SourceChanged`，在投影刷新中是可重试漂移，不返回部分值。
@@ -126,6 +128,14 @@ Memory 没有生命周期状态，过时就改写或删除，历史在 Git。
 ### 退役与恢复
 
 测试关系用 `@concord-status retired` 明示退役。缓存可随时 clear/rebuild。未完成写入由 recover 根据 journal 恢复；未知编辑导致具名冲突，必须由维护者裁决。
+
+## 独立与本地
+
+核心流程不需要账号、模型 API 或云服务。
+
+- Concord 作为独立安装包工作，只需要本地 Git 仓库，不依赖其它仓库的 checkout、全局安装、provider 凭据或部署服务。
+- 可选外部接入必须有明确边界，不成为基础本地流程的前提。
+- 本地 Issue 不依赖外部服务。远端写入需单独授权，本地操作不自动投射为远端变更；Concord 不自动发布、push、调用付费模型或操作远端 Issue。
 
 ## 信任边界
 

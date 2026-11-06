@@ -257,6 +257,28 @@ codeDeclarations: 1
 
 `codeDeclarations` 为空表示没有代码直接声明实现这个 Use Case。示例中的代码声明指向 Feature README，在 Feature 的 `trace show` 中列出。`trace gaps --json` 列出缺少实现或测试关联的 Spec。`trace check` 只做关系检查。`review` 生成审阅材料。这些命令都不运行测试。
 
+## Use Case 步骤
+
+`use-case` 的三个子命令只处理单个 Use Case 的步骤，不处理文件移动或 Feature 改名。完整路径与输出示例见[把测试关联到 Use Case 步骤](use-case/link-tests-to-steps.md)，步骤的写法见[步骤语法](format.md#步骤语法)。
+
+`use-case steps <use-case>` 只读，列出步骤的 ID、ordinal、行号、测试与代码关联数，以及每个根有序列表的 ordinal、行范围与是否含 ID。
+
+`use-case format <use-case>` 只为已含步骤 ID 的根有序列表补齐缺失 ID：
+
+- 补齐值为 `step-N`，N 从已有 `step-N` 的最大值加 1 起逐项分配，没有时从 1 开始；跳过标题显式 ID、slug、别名、其它步骤与旧引用仍占用的值。序号不保证永久不复用；所需引用扫描不完整时拒绝。
+- 已有 ID 不修改、不重排。规范化后 ID 前恰好一个空格，位于第一段末尾；位置错误的语法只报告 `InvalidStepPosition`，不移动文本。连续运行第二次零写入。
+- 为完全未标记的列表建立步骤身份须同时给出 `--seed` 与 `--list <ordinal>`，显式选择一个根有序列表并受当前正文前像保护；选择缺失或无效时返回 `InvalidStepList`。其它未标记列表不变，工具不按章节名称猜测完整路径。
+
+`use-case rename-step <use-case> <old-id> <new-id>` 在一个变更集中改写正文的 `{#old-id}` 以及全部指向 `<use-case>#<old-id>` 的精确引用：
+
+- `new-id` 须符合步骤 ID 语法，且不与该文件的标题 anchor 或其它步骤冲突，冲突时返回 `DuplicateAnchor`。
+- 改写对象是 testRoots 中的 `@use-case` 标记、sourceRoots 中的 `@concord-implements`，以及 `docs/` 中解析后指向旧引用的 Markdown 链接。标记识别遵守[关联由源码声明拥有](format.md#关联由源码声明拥有)，JS/TS 字符串、模板、正则与 Markdown 代码示例中的相同文本不变；不解析测试声明，不启动 adapter 或 LSP。扫描不完整或无法可靠定位 token 时拒绝整次操作。
+- Issue 与 Memory 的 frontmatter 关系或正文链接中出现旧引用时返回 `ManagedReferenceBlocked`，零写入，由作者直接修改或用对应命令处理。
+- 没有 `@name` 的测试标记随目标改变测试引用，带 `@name` 的保持不变；`--json` 的 `affectedCases` 列出受影响的 case，每项含 `before`、`after`、`file` 与 `named`。
+- 只改写已识别的引用 token、步骤 ID 与链接目标，不创建、删除或移动文件，不改 frontmatter、Memory、Issue 与配置。提交前冲突零写入；发布开始后冲突或中断返回 `RecoveryRequired`，`recover` 回滚 prepared、保留 committed 结果，遇到未知编辑拒绝并保留现场。`--dry-run` 执行同一规划与校验，不发布。
+
+发布范围见[步骤改写的发布](architecture.md#步骤改写的发布)。
+
 ## 测试与修复核验
 
 `concord --json test list` 列出测试根中的标记。`cases[].id` 是 `test run` 使用的 case ID：
@@ -335,6 +357,30 @@ Arguments: ["node","--test","--test-reporter=tap","test/cart.test.js"]
 原生运行结果包含 requested、observed、Invocation 状态及输入摘要。green、red 与 invalid 表达逐项执行裁决；command scope 的 pass/fail 不表述为原生通过。缺少、重复、额外、skip、超时或清理未知均为 invalid，不能作为修复核验的任一端。能力与边界见[原生 adapter Use Case](use-case/run-native-test-adapters.md)。
 
 `inputScope` 展示仓库内输入成员、摘要、排除项和框架/运行时版本。系统库、工具链、外部服务和包缓存无法冻结时，观察标记 `ExternalInputUnknown`、`complete=false`；仍可按完整 provider 收集范围授权精确 native 选择。运行结果保留环境 gap 和版本，`complete` 仅表示逐项报告完整。
+
+### 超时与预算
+
+`collectTimeoutMs`、`runTimeoutMs` 与 `wallTimeoutMs` 只能缩小默认上限 60000、300000 与 600000 毫秒。`budgets` 可缩小响应、输出、原生项、调用数及报告文件预算，不扩大[协议硬上限](#adapter-协议)。
+
+### adapter 协议
+
+外部 adapter 使用 `concord.test-adapter/v1`；每次请求启动一个受管子进程，stdin/stdout 各一个 JSON，stderr 只用于诊断。Concord 拥有原生 Invocation 的执行、状态裁决和报告目录。协议的 Schema 由库子路径 `concord-sdlc/test-adapter-protocol` 导出，见[库接口](library.md)。
+
+`concord.test-adapter/v1` 的请求与响应都含 `format`、`op` 与 `requestId`，响应回显 `planId` 与 `inputs`；未知字段、重复键、非有限数与超限值拒绝，返回 `AdapterProtocolInvalid`。
+
+| op | 输入 | 输出 |
+| --- | --- | --- |
+| `collect-plan` | 文件与成员摘要 | 非空 Invocation 列表与 `planContext` |
+| `collect-parse` | 同一 context 与 `planContext`、全部调用状态、捕获输出与报告描述 | `cases`、`capabilities`、`completeness` |
+| `select-plan` | 去重 nativeIds 与当前清单身份 | 非空 Invocation 列表及各自负责的 requested 子集 |
+| `report-parse` | 同一计划、requested、状态与报告 | `observed`、`capabilities`、`completeness` |
+
+- Invocation 含 `invocationId`、不经 shell 的非空 `argv`、仓库相对 `cwd`、取自配置白名单的 `envNames` 与 Concord 分配目录内的相对 `reports`；响应不能携带秘密值。Concord 回传每个调用的退出码、信号、超时、取消、截断与清理状态，parser 的成功响应不能覆盖它们。
+- `capabilities` 分别声明真实收集、leaf 或参数组、精确选择、逐项报告、范围、标签与 skip 可见性，每项观察带 provenance。静态 AST 候选不能声明真实收集；范围缺失时不用单行位置伪造结束行。
+- 原生项含 `nativeId`、`project`、`file`、`kind`（leaf 或 suite）、`group`、`range`、`selection` 与 `tags`。`nativeId` 含 provider 命名空间；range 为以 1 起计、两端包含的行号加源码摘要。同一 group 共享声明范围与 project。`complete` 为 false 时 `gaps` 非空；为 true 只表示 provider 声明的收集范围完整。
+- 硬上限：响应 8 MiB，每调用 stdout 与 stderr 合计 16 MiB，原生项 100000，Invocation 128，报告文件 64 个、单个 8 MiB、合计 32 MiB。
+
+`collect-plan` 之前取得 run 所有权，见[原生 adapter](architecture.md#原生-adapter)。
 
 ## 编辑器服务
 

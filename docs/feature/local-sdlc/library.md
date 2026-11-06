@@ -20,7 +20,7 @@ pnpm、yarn 与 bun 用各自的添加开发依赖命令安装同一 URL。只�
 | --- | --- | --- |
 | `concord-sdlc/config` | `concord.config.ts` 的类型 `ProjectConfig`，不依赖 Effect | 项目配置获得类型检查；字段与校验错误见[维护项目配置](../project-onboarding/use-case/maintain-project-config.md) |
 | `concord-sdlc/model` | 文档 Schema 与模型类型 | 脚本严格解码 `--json` 输出中的文档与关系结构 |
-| `concord-sdlc/test-adapter-protocol` | 原生测试 adapter 的协议 Schema | 外部 adapter 解码请求并编码响应；消息与失败见[原生 adapter 协议](use-case/run-native-test-adapters.md#协议) |
+| `concord-sdlc/test-adapter-protocol` | 原生测试 adapter 的协议 Schema | 外部 adapter 解码请求并编码响应；消息与失败见[adapter 协议](cli.md#adapter-协议) |
 | `concord-sdlc/change-preview` | PR 静态预览产物的 Schema 与解码器 | 发布前核对 `changes.json`，见 [Web 工作台库接口](../web-workbench/library.md) |
 
 ```ts

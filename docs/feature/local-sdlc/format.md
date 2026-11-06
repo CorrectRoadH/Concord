@@ -46,11 +46,26 @@ relations:
 
 `@feature` 或 `@use-case` 用 canonical 路径指向对应 Spec，`@issue` 可重复指向回归测试守护的 Issue。每个标记块恰有一个 Spec 目标，同一 Spec 可有多个测试。执行引用由文件路径与测试名称自动派生，测试名称只描述行为，不携带机器 ID；不提供人工分配 ID 或先分配再关联的步骤。Spec 不反写测试列表，trace 每次从 owner 和源码重新编译反向关系。Issue 与 Memory 的正向关系只保存一次，反向关系派生。
 
+## 步骤语法
+
+步骤是 Use Case 完整路径里可以被测试和实现指向的一步，例如：
+
+```markdown
+1. 点“加入购物车”。 {#add}
+```
+
+- 步骤是 Use Case 正文中 Markdown 根节点直接拥有的有序列表项，第一段末尾带至少一个空格及 `{#id}`。解析不依据章节名称或正文语义；没有该语法的列表项不是步骤。ordinal 是合格项在文档中的展示顺序，从 1 计数，不采用作者所写的列表数字。
+- 作者只对完整路径的步骤使用该语法，起始状态、结果、验收与异常说明不得使用。合法位置上的该语法都按步骤解析，工具不发现误标；`use-case steps` 展示全部步骤供审阅。
+- `{#id}` 出现在无序列表项、嵌套列表项、Feature 或附页中时，`check` 报告 `InvalidStepPosition`。代码 fence、行内代码与 HTML 中的 `{#id}` 不是步骤。
+- ID 语法与文档名相同，按原始 Unicode 拼写精确匹配，不做大小写折叠、Unicode 归一化或 slug 转换，例如 `{#拒绝过期令牌}`、`{#reject-token}`。ID 与同文件标题 anchor 共用命名空间，与标题显式 ID、slug 或折叠连字符后的别名冲突时报告 `DuplicateAnchor`。
+- `@use-case <path>#<anchor>` 继续接受任意已存在的标题 anchor。删除步骤 ID 后悬空引用报告 `AnchorNotFound`，由作者修改标记，工具不猜测重定向。
+- 两条写作检查路径都剔除真实步骤末尾的 ID；步骤视图与相关性判定不写回 Spec 或源码。`check` 不要求每个根有序列表项都有 ID。
+
 ## 关联身份与观察
 
 | 身份 | 形式 | owner |
 | --- | --- | --- |
-| 步骤 | `<use-case path>#<step-id>`，见[步骤语法](use-case/link-tests-to-steps.md#步骤语法) | Use Case 正文 |
+| 步骤 | `<use-case path>#<step-id>`，见[步骤语法](#步骤语法) | Use Case 正文 |
 | 测试关联 | `concord.test-reference/v1`：文件加 `@name`，或文件加 Spec 目标与标记序号 | 测试源码标记 |
 | 代码关联 | JS/TS 为 `concord.code-reference/v1` 派生引用；其它语言为 canonical 文件路径加文件内标记块序号 | 代码声明 |
 | 原生选择 | adapter 观察到的原生 ID 集合 | 无，执行时观察 |
