@@ -134,7 +134,14 @@ Concord 让审阅从 Spec 开始。Spec 是仓库中的 Markdown，代码与测�
 
 ## 安装
 
-Linux 或 Apple Silicon macOS 可通过 Homebrew 安装：
+Linux x64 或 Apple Silicon macOS 可以用一条命令安装（需要 Node.js 24.15+ 与 Git，装在用户目录下）：
+
+```sh
+curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh
+concord --help
+```
+
+也可以通过 Homebrew 安装：
 
 ```sh
 brew install CorrectRoadH/tap/concord

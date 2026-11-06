@@ -142,6 +142,13 @@ A file's location and its single top-level heading give it identity, kind, and n
 
 ## Install
 
+With one command on Linux x64 or Apple Silicon macOS (needs Node.js 24.15+ and Git; installs into your home directory):
+
+```sh
+curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh
+concord --help
+```
+
 With Homebrew on Linux or Apple Silicon macOS:
 
 ```sh

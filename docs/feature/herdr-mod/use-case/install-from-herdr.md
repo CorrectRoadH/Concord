@@ -25,11 +25,11 @@ Herdr 用户在 herdr.dev/mods 看到 Concord，想在自己的 Herdr 里用它�
 
    ```text
    这个 mod 需要 Concord 命令行工具。
-   brew install CorrectRoadH/tap/concord
+   curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh
    安装后点“重新检测”。
    ```
 
-   安装命令与项目 README 的「Install」一节相同，Linux 上也可以用 Nix 安装。
+   这是[一行安装脚本](../../cross-platform-release/use-case/install-with-script.md)；也可以用项目 README「Install」一节中的 Homebrew 或 Nix。
 
 3. 安装 Concord 后点“重新检测”。 {#recheck}
 

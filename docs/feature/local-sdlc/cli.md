@@ -81,6 +81,8 @@ Inspect configuration: concord doctor
 | --- | --- |
 | `SkillPathOccupied` | 目标路径已有不带 `concord-managed` 标记的文件，或是目录、符号链接；`details.path` 给出路径，不写任何文件 |
 
+在还没有初始化的仓库里，需要项目的命令返回 `ProjectNotInitialized`（退出 1），`details.guide` 给出初始化后推荐的写作指南；哪些命令照常执行见[在还没初始化的仓库里打开 Concord](../project-onboarding/use-case/open-uninitialized-repo.md)。
+
 `concord doctor --json` 报告配置与接入缺口，不运行测试：
 
 ```json
