@@ -9,7 +9,7 @@
 
 ### 输出目录
 
-输出固定为 `index.html`、`changes.json` 与 `assets/`，资源从随包静态目录派生，不含 symlink。链接相对输出目录，页面可部署在子路径。
+输出固定为 `index.html`、`changes.json`、`assets/` 与字体许可证 `FONT-LICENSE.html`，资源从随包静态目录派生，不含 symlink。链接相对输出目录，页面可部署在子路径。
 
 页面地址的 hash query 拥有：
 

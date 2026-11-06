@@ -10,7 +10,7 @@ React Router 管理人用导航，安装包内带有 Vite 编译结果；从源�
 
 `docs/` 下不属于 Feature、Roadmap、Design、Engineering 或 Issue 的 Markdown 进入同一 inventory，由「文档」导航打开。`docs/taste.md` 与其它文档一样直接编辑。阅读不是合规证据。
 
-`docs/` 与 `memory/` 下的 Markdown 经 `document.set` 以整文件摘要写入。`document.set` 解析目标的当前原文与候选原文，按[自动保存](ui.md#自动保存)列出的字段与规则比较二者，命中时在发布前拒绝；其它差异不做语义判断。术语编辑器经 `concepts.set` 写入，写入前校验 catalog。`source.set` 只写配置范围内的既有 JS/TS 文件，其余路径只读。单文件读取仍不枚举全仓库。
+`docs/` 与 `memory/` 下的 Markdown 经 `document.set` 以整文件摘要写入。`document.set` 只写入受管文档与支持页面，以及新建 `writing.md`、`concepts.md`；整文件摘要与读取时不同即拒绝，不对内容差异做语义判断（[自动保存](ui.md#自动保存)）。术语编辑器经 `concepts.set` 写入，写入前校验 catalog。`source.set` 只写配置范围内的既有 JS/TS 文件，其余路径只读。单文件读取仍不枚举全仓库。
 
 只读 Markdown 按 [MDXEditor 官方建议](https://mdxeditor.dev/editor/docs/overview) 使用独立阅读渲染器。复用 react-markdown，通过 remark-frontmatter 识别元数据；rehype-raw 后接 rehype-sanitize，不使用未经净化的 HTML。保留净化器的 DOM clobbering 前缀，由阅读导航映射源锚点，不能为保留锚点关闭净化。正文和原文／元数据详情来自同一读取结果；预览不产生写入或自动归一化。可编辑正文继续使用 MDXEditor 及原文回退，错误不得清空草稿。
 
