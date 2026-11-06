@@ -5,18 +5,19 @@
 ## 完整门禁
 
 ```sh
-pnpm gate [--test-name-pattern=<表达式>] [--test-shard=<序号>/<总数>] [<测试文件>...]
+pnpm gate [--changed [<base>]] [--test-name-pattern=<表达式>] [--test-shard=<序号>/<总数>] [<测试文件>...]
 ```
 
 | 参数 | 作用 |
 | --- | --- |
 | 测试文件 | 只运行这些文件。省略时递归发现 `test/` 下的 `*.test.ts` 与 `test/e2e/` 下的 `*.e2e.ts` |
+| `--changed [<base>]` | 只运行受改动影响的测试。改动是 `<base>`（默认 `origin/master` 与 HEAD 的 merge-base）到工作区的全部差异；选中改动的测试文件，以及测试标记指向的 Spec 与改动有关的测试：改动的 Spec 页面，或改动的源码文件通过代码声明关联的 Spec。改动了 `test/support/`、`scripts/`、`package.json` 或锁文件时选中全部测试 |
 | `--test-name-pattern=<表达式>` | 只运行标题匹配的测试 |
 | `--test-shard=<序号>/<总数>` | 运行一个分片。分片分别作用于 Node 测试与浏览器测试，所有分片的并集覆盖完整集合，不保证与以往相同的分组 |
 
 退出 0 表示全部检查通过；非零表示违规、输入不完整或执行失败。Node 测试与浏览器测试互不阻止，任一失败使整体失败。给出文件或过滤条件时静态检查仍完整执行。
 
-CI 每个分片运行 `pnpm gate --test-shard=<序号>/4`。报告写入每次调用独立的 `.test-results/run-*`，其中有按耗时排序的测试文件与子进程启动次数；CI 按分片上传。
+本地交付运行 `pnpm gate --changed`；推送到 master 后，CI 的四个分片各运行 `pnpm gate --test-shard=<序号>/4`，并集是完整集合，失败由引入它的人立即修复。报告写入每次调用独立的 `.test-results/run-*`，其中有按耗时排序的测试文件与子进程启动次数；CI 按分片上传。
 
 `test/*.test.ts` 交给 Node test，`test/e2e/*.e2e.ts` 交给浏览器 runner。按文件执行与按标题过滤路由到相应 runner。
 
