@@ -34,6 +34,20 @@ const serviceLockReleased = Effect.fn('serviceLockReleased')(function*(privateDi
     Effect.as(true), Effect.catch(error => error._tag === 'ServerLockHeld' ? Effect.succeed(false) : Effect.fail(error)),
   ));
 });
+const serviceProcessExited = Effect.fn('ServerRuntime.processExited')(function*(pid: number) {
+  return yield* Effect.try({ try: () => {
+    try {
+      process.kill(pid, 0);
+      if (process.platform !== 'linux') return false;
+      const stat = readFileSync(`/proc/${pid}/stat`, 'utf8');
+      // Zombies have completed execution; only their parent can reap them.
+      return /^[ZX] /u.test(stat.slice(stat.lastIndexOf(')') + 2));
+    } catch (cause) {
+      if (['ESRCH', 'ENOENT'].includes((cause as NodeJS.ErrnoException).code ?? '')) return true;
+      throw cause;
+    }
+  }, catch: failure });
+});
 export function readServerRecord(privateDir: string, requireSocket = true): ServerRecord | undefined {
   const path = join(privateDir, 'server', 'current.json');
   const stat = lstatSync(path, { throwIfNoEntry: false });
@@ -123,7 +137,8 @@ export class ServerRuntime extends Context.Service<ServerRuntime, {
   readonly installation: typeof serverInstallation;
   readonly sourceDigest: typeof serverSourceDigest;
   readonly released: typeof serviceLockReleased;
+  readonly processExited: typeof serviceProcessExited;
   readonly cwd: string;
 }>()('concord/base/server-lock/ServerRuntime') {
-  static readonly layer = Layer.succeed(ServerRuntime, { acquire: acquireServerRuntime, read: readServerRecord, installation: serverInstallation, sourceDigest: serverSourceDigest, released: serviceLockReleased, cwd: serverCwd });
+  static readonly layer = Layer.succeed(ServerRuntime, { acquire: acquireServerRuntime, read: readServerRecord, installation: serverInstallation, sourceDigest: serverSourceDigest, released: serviceLockReleased, processExited: serviceProcessExited, cwd: serverCwd });
 }
