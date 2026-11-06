@@ -31,7 +31,7 @@ const Counts = Schema.Struct({ tests: Schema.Number, failed: Schema.Number, canc
 const Timing = Schema.Struct({ scope: Schema.String, counts: Counts });
 
 // @feature docs/engineering/build/architecture.md#脚本只写项目特有的规则
-runnerTest('cancelling check reaps static task groups that ignore SIGTERM and releases its cache', root => Effect.gen(function*() {
+runnerTest('cancelling gate reaps static task groups that ignore SIGTERM and releases its cache', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const record = Schema.fromJsonString(Schema.Struct({ pid: Schema.Number, cache: Schema.String }));
@@ -53,7 +53,7 @@ setInterval(() => {}, 1000);
       yield* fs.remove(cache, { recursive: true, force: true });
     }
   }).pipe(Effect.orDie));
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/check.ts')], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), resolve('scripts/gate.ts')], {
     env: { ...process.env, PATH: `${root}:${process.env.PATH}` },
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe', forceKillAfter: Duration.seconds(10),
   }));

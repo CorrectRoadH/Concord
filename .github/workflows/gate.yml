@@ -1,4 +1,4 @@
-name: Check
+name: Gate
 on:
   workflow_dispatch:
   workflow_call:
@@ -7,7 +7,7 @@ on:
         required: true
         type: string
 jobs:
-  check:
+  gate:
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -47,8 +47,8 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ripgrep
       - run: pnpm exec vp exec playwright install --with-deps chromium
       - run: pnpm exec vp run build:native
-      - name: Run the complete check for this shard
-        run: pnpm check --test-shard=${{ matrix.shard }}/4
+      - name: Run the complete gate for this shard
+        run: pnpm gate --test-shard=${{ matrix.shard }}/4
       - name: Preserve test failure diagnostics
         if: always()
         uses: actions/upload-artifact@v4

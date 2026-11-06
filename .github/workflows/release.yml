@@ -13,8 +13,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  check:
-    uses: ./.github/workflows/check.yml
+  gate:
+    uses: ./.github/workflows/gate.yml
     with:
       ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
 
@@ -118,7 +118,7 @@ jobs:
           retention-days: 7
 
   publish:
-    needs: [package, check]
+    needs: [package, gate]
     timeout-minutes: 3
     if: inputs.tag != ''
     runs-on: ubuntu-24.04

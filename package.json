@@ -21,7 +21,7 @@
   "packageManager": "pnpm@11.18.0",
   "scripts": {
     "build": "vp build",
-    "check": "node --import tsx scripts/check.ts",
+    "gate": "node --import tsx scripts/gate.ts",
     "concord": "node --import tsx src/entry/cli/entry.ts",
     "bench": "node --import tsx scripts/bench.ts",
     "bench:profile": "node --import tsx scripts/profile.ts",

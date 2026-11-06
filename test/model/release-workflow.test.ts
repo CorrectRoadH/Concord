@@ -32,10 +32,17 @@ const Job = Schema.Struct({
 });
 
 // @use-case docs/feature/cross-platform-release/use-case/release-from-tag.md
-test('release builds two native targets and gates publication on the same commit checks', async () => {
+test('release builds two native targets and gates publication on the same commit gate', async () => {
   await Effect.runPromise(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
-    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, check: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(
+    const manifest = yield* Schema.decodeUnknownEffect(Schema.Struct({ scripts: Schema.Record(Schema.String, Schema.String) }))(
+      JSON.parse(yield* fs.readFileString('package.json')),
+    );
+    assert.equal(manifest.scripts.gate, 'node --import tsx scripts/gate.ts');
+    assert.equal(Object.hasOwn(manifest.scripts, 'check'), false);
+    assert.equal(yield* fs.exists('scripts/gate.ts'), true);
+    assert.equal(yield* fs.exists('scripts/check.ts'), false);
+    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, gate: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(
       parse(yield* fs.readFileString('.github/workflows/release.yml')),
     );
     const { native, package: pack, publish } = graph.jobs;
@@ -43,9 +50,9 @@ test('release builds two native targets and gates publication on the same commit
     assert.deepEqual(native.strategy?.matrix.include?.find(target => target.target === 'darwin-arm64'), { os: 'macos-15', target: 'darwin-arm64' });
     assert.equal(native.strategy?.matrix.include?.length, 2);
     assert.equal(pack.needs, 'native');
-    assert.deepEqual(publish.needs, ['package', 'check']);
-    assert.equal(graph.jobs.check.uses, './.github/workflows/check.yml');
-    assert.match(graph.jobs.check.with.ref, /inputs.tag/);
+    assert.deepEqual(publish.needs, ['package', 'gate']);
+    assert.equal(graph.jobs.gate.uses, './.github/workflows/gate.yml');
+    assert.match(graph.jobs.gate.with.ref, /inputs.tag/);
     const build = 'pnpm exec vp build --outDir "$RUNNER_TEMP/concord-package" && pnpm exec vp exec tsc -p tsconfig.scripts.json';
     assert.ok(pack.steps.some(step => step.run === build));
     assert.ok(pack.steps.findIndex(step => step.run === 'node --import tsx scripts/prepare-release.ts') < pack.steps.findIndex(step => step.run === build));
@@ -55,12 +62,12 @@ test('release builds two native targets and gates publication on the same commit
     assert.ok(publish.steps.some(step => step.uses === 'actions/download-artifact@v4' && step.with?.name === 'concord-release-package'));
     assert.match(commands, /pnpm install --prod --frozen-lockfile --ignore-scripts/);
     assert.match(commands, /verify-installed-native.ts/);
-    const check = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Record(Schema.String, Schema.Unknown), jobs: Schema.Struct({ check: Job }) }))(
-      parse(yield* fs.readFileString('.github/workflows/check.yml')),
+    const gate = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Record(Schema.String, Schema.Unknown), jobs: Schema.Struct({ gate: Job }) }))(
+      parse(yield* fs.readFileString('.github/workflows/gate.yml')),
     );
-    assert.deepEqual(Object.keys(check.on), ['workflow_dispatch', 'workflow_call']);
-    assert.deepEqual(check.jobs.check.strategy?.matrix.shard, [1, 2, 3, 4]);
-    assert.ok(check.jobs.check.steps.some(step => step.run?.includes('pnpm check --test-shard=${{ matrix.shard }}/4')));
+    assert.deepEqual(Object.keys(gate.on), ['workflow_dispatch', 'workflow_call']);
+    assert.deepEqual(gate.jobs.gate.strategy?.matrix.shard, [1, 2, 3, 4]);
+    assert.ok(gate.jobs.gate.steps.some(step => step.run?.includes('pnpm gate --test-shard=${{ matrix.shard }}/4')));
   }).pipe(Effect.provide(NodeServices.layer)));
 });
 
@@ -69,7 +76,7 @@ test('publication retry reuses identical assets and refuses a different digest',
   await Effect.runPromise(Effect.gen(function*() {
     const fs = yield* FileSystem.FileSystem;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, check: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(
+    const graph = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, gate: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(
       parse(yield* fs.readFileString('.github/workflows/release.yml')),
     );
     const script = graph.jobs.publish?.steps.find(step => step.run?.includes('gh release create'))?.run;
@@ -146,7 +153,7 @@ test('channel notification fails visibly without credentials and resumes from an
  await Effect.runPromise(Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-  const workflow = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, check: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
+  const workflow = yield* Schema.decodeUnknownEffect(Schema.Struct({ jobs: Schema.Struct({ native: Job, package: Job, publish: Job, gate: Schema.Struct({ uses: Schema.String, with: Schema.Struct({ ref: Schema.String }) }) }) }))(parse(yield* fs.readFileString('.github/workflows/release.yml')));
   const script = workflow.jobs.publish?.steps.find(step => step.name === 'Notify Homebrew tap of the published release')?.run;
   assert(script);
   const root = yield* fs.makeTempDirectoryScoped({ prefix: 'concord-channel-notify-' });
