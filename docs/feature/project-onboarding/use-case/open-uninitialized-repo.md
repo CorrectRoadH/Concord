@@ -42,8 +42,9 @@
 | 命令或入口 | 在未初始化的仓库里 |
 | --- | --- |
 | `--help`、`--version`、`--skill`、`init`、`template`、`herdr install`、`herdr uninstall` | 照常执行 |
+| `server start`、`server run`、`server status`、`server stop` | 照常执行：它们只管理工作区服务的生命周期，`view` 的初始化页由服务提供 |
 | `doctor` | 退出 0，`findings` 包含 `ProjectNotInitialized`，`nextSteps` 第一项是 `concord init` |
-| `view` | 显示初始化页，见第 2 步 |
+| `view` | 显示初始化页，见第 2 步；`view export` 返回 `ProjectNotInitialized` |
 | 其它读取或写入项目的命令，例如 `check`、`list`、`show`、`trace`、`test`、`code`、`new`、`skills install` | 返回 `ProjectNotInitialized`，退出 1，不写文件、不创建私有状态 |
 | 不在 Git worktree 中 | 沿用已有的项目目录错误，提示进入仓库或用 `--root` |
 
