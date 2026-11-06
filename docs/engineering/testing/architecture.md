@@ -8,7 +8,7 @@
 
 同步测试体使用 `Effect.sync`，Node adapter 回调使用 `Effect.runPromise`；资源型测试使用 `Effect.scoped` 与 acquire/release。关联由 Concord 标记拥有，不由测试声明形状决定。
 
-`runner.sourceFiles` 列出测试运行依赖、修复核验期间不得改变的全部非产品文件：从全部测试文件沿相对导入可达、且不在 `src/` 下的文件（测试文件本身除外），加上 `e2e.config.ts` 与 runner 命令直接执行的脚本。列表留在 `concord.config.ts`，`test/model/runner-source-files.test.ts` 从导入图推导期望集合并与列表比较，缺项或多出的项都失败。owner 测试直接写出声明，不通过包装函数隐藏。Node 测试期由 Node 自带的类型擦除加载 TypeScript（[从源码运行](../build/architecture.md#从源码运行)）；`.node-version`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 共同进入 evidence definition digest。
+`runner.sourceFiles` 列出测试运行依赖、修复核验期间不得改变的全部非产品文件。推导从这些入口出发：全部测试文件、`e2e.config.ts`、runner 的 `argv` 与 `prepare` 直接执行的脚本。沿两类边求传递闭包：相对导入（含 `import type` 与字面 `import()`），以及以字面路径加载模块的位置，例如 `new URL('../x.ts', import.meta.url)` 作为 `--import` 或子进程入口。结果去掉 `src/` 下的文件、测试文件本身、依赖包与 `concord.config.ts`（runner 配置由修复核验单独冻结）；入口脚本本身计入。无法静态枚举的加载目标使推导失败，不静默跳过。列表留在 `concord.config.ts`，`test/model/runner-source-files.test.ts` 从导入图推导期望集合并与列表比较，缺项或多出的项都失败。owner 测试直接写出声明，不通过包装函数隐藏。Node 测试期由 Node 自带的类型擦除加载 TypeScript（[从源码运行](../build/architecture.md#从源码运行)）；`.node-version`、`package.json`、`pnpm-lock.yaml` 与 `tsconfig.test.json` 共同进入 evidence definition digest。
 
 ## 架构守护
 
