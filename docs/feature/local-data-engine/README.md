@@ -2,7 +2,7 @@
 
 每次运行 `concord check`、`trace gaps` 或检索 Memory，Concord 都要读取项目里的文档、测试和代码。本 Feature 把读取和解析的结果存进一份可以随时删除的本地[缓存](concepts.md#cache)，让连续的命令更快。
 
-Spec、Memory、Issue 和证据仍是仓库里的普通文件，删除缓存不会删除它们，也不改变任何检查结论或 fixed 判定。缓存引擎随 Concord 安装包发布，不需要另装数据库或服务。
+Spec、Memory、Issue 和证据仍是仓库里的普通文件，删除缓存不会删除它们，也不改变任何检查结论或 fixed 判定。缓存引擎随 Concord 安装包发版，不需要另装数据库或服务。
 
 ## 你可以做什么
 
@@ -11,7 +11,7 @@ Spec、Memory、Issue 和证据仍是仓库里的普通文件，删除缓存不�
 - 用 `trace gaps`、`trace show` 和 `review` 立即读取后台最近算好的诊断结果；需要当前结果时加 `--fresh`。
 - 在项目的任意子目录运行命令：Concord 自动启动或复用该项目的[工作区服务](../../concepts.md#workspace-server)，多个命令共享热的解析结果。
 - 在 CI 中用 `--server=command`，命令结束时回收本次启动的后台。
-- 在 Linux 与 macOS 上直接使用发布归档，不需要 Rust 编译器、全局程序或数据库服务。
+- 在 Linux 与 macOS 上直接使用发版归档，不需要 Rust 编译器、全局程序或数据库服务。
 
 ## 上手
 
@@ -84,7 +84,7 @@ state: absent
 
 `trace gaps`、`trace show` 与 `review` 默认读取后台构建的诊断[投影](../../concepts.md#projection)。它只回答构建时的诊断问题，标明构建时间与一致性，不授权 `check` 成功或证据裁决；`check`、检索和证据裁决总是使用当前来源。
 
-句柄与清理的所有权、资源预算、诊断投影的刷新协议见[架构](architecture.md)，发行产物见[跨平台发布架构](../cross-platform-release/architecture.md#身份与复用)。
+句柄与清理的所有权、资源预算、诊断投影的刷新协议见[架构](architecture.md)，发行产物见[跨平台标签发版架构](../cross-platform-release/architecture.md#身份与复用)。
 
 ## 用户路径
 

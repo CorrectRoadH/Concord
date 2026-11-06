@@ -5,7 +5,7 @@ Concord 管理的文档按回答的问题分组。身份、类别、所属关系
 | 分组 | 文档 | 位置 | frontmatter |
 | --- | --- | --- | --- |
 | Spec | Feature：使用者能用的一项功能，页面见[页面种类](#页面种类) | `docs/feature/<f>/` | 无 |
-| Spec | Engineering：维护者用来开发本项目的一项能力，例如构建、测试、性能测量与发布；页面种类同 Feature | `docs/engineering/<t>/` | 无 |
+| Spec | Engineering：维护者用来开发本项目的一项能力，例如构建、测试、性能测量与发版；页面种类同 Feature | `docs/engineering/<t>/` | 无 |
 | 提案 | Roadmap：还没开始实现的方向，结构同 Feature；实现与测试不指向它 | `docs/roadmap/<r>/` | 无 |
 | 项目规则 | 品味、术语、写作政策 | `docs/taste.md`、`docs/**/concepts.md`、`docs/**/writing.md` | 无 |
 | 待定的取舍 | Design：一个还没定下来的取舍，列出几种做法和各自的代价 | `docs/design/<d>.md` | 无 |

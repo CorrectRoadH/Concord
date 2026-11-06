@@ -1,6 +1,6 @@
 # 库接口
 
-库以独立的 npm 包 `concord-sdlc` 发布，供配置文件、测试 adapter 与 PR 预览的消费者导入。它只含库，没有 `concord` 命令；运行 CLI 不需要它，CLI 从[发布归档](../cross-platform-release/README.md)安装。文档与标记的写法见[文档与标记格式](format.md)。
+库以独立的 npm 包 `concord-sdlc` 发版，供配置文件、测试 adapter 与 PR 预览的消费者导入。它只含库，没有 `concord` 命令；运行 CLI 不需要它，CLI 从[发版归档](../cross-platform-release/README.md)安装。文档与标记的写法见[文档与标记格式](format.md)。
 
 ## 安装
 
@@ -36,7 +36,7 @@ export default {
 
 ## 版本
 
-库包的版本与同一 Release 的 CLI 版本相同，两者由同一个标签发布。项目应安装与所用 CLI 相同版本的库包。
+库包的版本与同一 Release 的 CLI 版本相同，两者由同一个标签发版。项目应安装与所用 CLI 相同版本的库包。
 
 `concord doctor` 从项目目录读取已安装的 `node_modules/concord-sdlc/package.json`。版本与 CLI 不同时，`findings` 包含一项 `LibraryVersionMismatch`，`nextSteps` 给出安装同版本库包的命令；没有安装库包时不报告。该 finding 不改变 `ok`。
 

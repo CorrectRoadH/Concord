@@ -41,4 +41,4 @@
 CONCORD_TARGET=darwin-arm64 vp build --outDir /tmp/concord-darwin-arm64
 ```
 
-该目标的原生产物取自共享缓存或按摘要的 Release，发布流程传入原生任务的产物；Ubuntu 上不编译 macOS 原生绑定。
+该目标的原生产物取自共享缓存或按摘要的 Release，发版流程传入原生任务的产物；Ubuntu 上不编译 macOS 原生绑定。

@@ -68,4 +68,4 @@ Homebrew、Nix 与安装脚本可以同时安装，各自的目录互不改写�
 
 ## Spec 来源
 
-[跨平台发布](../README.md)；发布步骤见[从标签发布](release-from-tag.md)。
+[跨平台标签发版](../README.md)；发版步骤见[从标签发版](release-from-tag.md)。

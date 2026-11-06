@@ -138,7 +138,7 @@ flowchart TB
 
 ### 打包测试
 
-安装包的内容与启动只由打包测试验证。它从[共享构建缓存](../build/architecture.md#共享构建缓存)取得本机目标的[发布归档](../../feature/cross-platform-release/cli.md#发布资产)，解压到临时目录。
+安装包的内容与启动只由打包测试验证。它从[共享构建缓存](../build/architecture.md#共享构建缓存)取得本机目标的[发版归档](../../feature/cross-platform-release/cli.md#发布资产)，解压到临时目录。
 
 它在只含系统基础命令与 Git 的 `PATH` 中运行 `bin/concord`：没有真实的 `node`、`pnpm` 与 `rg`，另放以非零退出的 `node` 与 `rg` 探针，确认应用不回退到 `PATH`。
 
@@ -155,7 +155,7 @@ flowchart TB
 | 帮助 | `concord --help` 以零退出 |
 | 项目闭环 | 在临时 Git 仓库中 `concord init` 与 `concord check` 成功，退出后没有残留的服务进程 |
 
-发布前另在每个目标的真实系统上验证候选归档，见[从标签发布](../../feature/cross-platform-release/use-case/release-from-tag.md#verify)。
+发版前另在每个目标的真实系统上验证候选归档，见[从标签发版](../../feature/cross-platform-release/use-case/release-from-tag.md#verify)。
 
 ## 质量标准
 

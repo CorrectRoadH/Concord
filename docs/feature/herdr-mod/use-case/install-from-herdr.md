@@ -43,8 +43,8 @@ Herdr 用户在 herdr.dev/mods 看到 Concord，想在自己的 Herdr 里用它�
 | 本机的 Concord 高于 mod 的版本 | 照常工作，并提示用 `concord herdr install` 换成同版本的 mod |
 | 用户已经装了 Concord | 也可以直接运行 `concord herdr install`，结果相同 |
 
-mod 要求的最低版本写在它的 `mod.json` 中，与发布它的 Concord 版本相同。
+mod 要求的最低版本写在它的 `mod.json` 中，与随它一起发版的 Concord 版本相同。
 
 ## Spec 来源
 
-[在 Herdr 里使用 Concord](../README.md)；mod 的发布见[从标签发布](../../cross-platform-release/use-case/release-from-tag.md)。
+[在 Herdr 里使用 Concord](../README.md)；mod 的发版见[从标签发版](../../cross-platform-release/use-case/release-from-tag.md)。

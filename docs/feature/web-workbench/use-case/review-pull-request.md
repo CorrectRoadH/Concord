@@ -19,7 +19,7 @@
 
    - PR head 等于构建提交与 checkout 的 HEAD，拒绝 merge checkout。构建前与发布前各查询一次 PR，base ref、base SHA 或 head SHA 变化即失败。
    - 补全 shallow 历史与缺失的对象后再导出，历史中要包含 base 与 head 的共同祖先。
-   - 用[安装脚本](../../cross-platform-release/use-case/install-with-script.md)加 `CONCORD_VERSION` 安装固定版本的 Concord 发布归档，按 Release 的 `SHA256SUMS` 校验。解码器取自同一版本的[库包](../../local-sdlc/library.md#安装)。不依赖相邻源码或未发布的版本，不手改归档。
+   - 用[安装脚本](../../cross-platform-release/use-case/install-with-script.md)加 `CONCORD_VERSION` 安装固定版本的 Concord 发版归档，按 Release 的 `SHA256SUMS` 校验。解码器取自同一版本的[库包](../../local-sdlc/library.md#安装)。不依赖相邻源码或未发版的版本，不手改归档。
 
 ### 导出与审阅
 
@@ -95,4 +95,4 @@
 | 二进制文件、子模块、符号链接 | 只显示对象，不读取外部目标 |
 | Markdown 含恶意 HTML 与链接 | 不执行脚本，不加载图片或远程资源，不产生 mutation 请求 |
 
-导出由固定版本的发布归档独立完成，不需要相邻源码、全局安装或 Rust 编译器。验收用隔离的 Git 消费者，经已安装的 CLI 与公共解码器覆盖以上各项，另含脏 attributes、replace refs、子模块忽略配置、非 UTF-8 路径、大对象小 patch，以及未初始化、配置无效与在子目录启动；取消时回收 Git 子进程与临时目录。部署与远端链接只由已授权的真实部署证明。
+导出由固定版本的发版归档独立完成，不需要相邻源码、全局安装或 Rust 编译器。验收用隔离的 Git 消费者，经已安装的 CLI 与公共解码器覆盖以上各项，另含脏 attributes、replace refs、子模块忽略配置、非 UTF-8 路径、大对象小 patch，以及未初始化、配置无效与在子目录启动；取消时回收 Git 子进程与临时目录。部署与远端链接只由已授权的真实部署证明。

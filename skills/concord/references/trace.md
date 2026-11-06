@@ -15,7 +15,7 @@ concord review
 
 `trace gaps` 列出没有显式 code/test 关系的 Feature、Use Case，以及没有直接关系的已建档 `docs/feature/*/cli.md`。Feature 汇总子 Use Case，CLI 页面则要求关系直接指向页面或 anchor。结果不是覆盖率，也无法发现从未建档的命令；这类 inventory 仍由产品拥有。
 
-`review` 只生成本地 Markdown 审阅材料，不写 GitHub、不发送消息。交接时报告实际修改、运行过的验证、具名 finding，以及仍需授权的提交、push、发布或部署。
+`review` 只生成本地 Markdown 审阅材料，不写 GitHub、不发送消息。交接时报告实际修改、运行过的验证、具名 finding，以及仍需授权的提交、push、发版或部署。
 
 不要把“无 finding”、命令成功或审阅材料表述成完整覆盖、native case passed 或原生 E2E 可靠性证明。
 

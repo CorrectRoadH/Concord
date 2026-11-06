@@ -18,7 +18,7 @@
 2. 本仓库 GitHub Release `native-<源码摘要前 16 位>` 中的 `concord-native-<target>.tar.gz`。下载后校验，写入共享缓存。
 3. 用固定 Rust 工具链编译，结果写入共享缓存。
 
-发布流程不使用前两项，始终从源码编译要发布的原生产物。按摘要的 Release 由手动触发的 `native` workflow 为每个 target 编译并发布；本地构建与 CI 只读取它。
+发版流程不使用前两项，始终从源码编译要发版的原生产物。按摘要的 Release 由手动触发的 `native` workflow 为每个 target 编译并上传；本地构建与 CI 只读取它。
 
 ### 故障注入产物
 
@@ -28,13 +28,13 @@
 
 ## 归档组装
 
-发布归档由一个 TypeScript 打包入口组装，`vp build`、打包测试与发布工作流都调用它。入口的输入是目标、应用构建输出与经身份校验的原生产物，输出为[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)所列的目录与 `concord-<version>-<target>.tar.gz`。各部分的来源与校验只由归档构成定义，本节只写组装顺序。目标由 [`CONCORD_TARGET`](cli.md#环境变量) 选择。
+发版归档由一个 TypeScript 打包入口组装，`vp build`、打包测试与发版工作流都调用它。入口的输入是目标、应用构建输出与经身份校验的原生产物，输出为[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)所列的目录与 `concord-<version>-<target>.tar.gz`。各部分的来源与校验只由归档构成定义，本节只写组装顺序。目标由 [`CONCORD_TARGET`](cli.md#环境变量) 选择。
 
 1. 应用 JavaScript、声明与 Web 产物只依赖与目标无关的输入，按这些输入构建一次，各目标共用；切换 `CONCORD_TARGET` 不重新构建应用。
 2. 每个目标用独立、干净的安装树装运行依赖：按 `pnpm-lock.yaml` 冻结、`--ignore-scripts`，保留可选依赖，用 pnpm 的 `--os`、`--cpu` 与 `--libc` 选择目标平台的包（`linux-x64` 为 glibc）。安装树中的符号链接不得指向归档之外。依赖必须在目标平台执行安装脚本或编译时组装失败，不静默漏包。
 3. 按归档构成取得并校验 `runtime/node`、`runtime/rg`、Linux 的 `runtime/lib/` 与许可证文本。
 4. Linux 目标按 [Linux 运行库](../../feature/cross-platform-release/architecture.md#linux-运行库)设置 RPATH 并检查全部 ELF，不满足即失败。macOS 目标的 HawDB 绑定与 `rg` 使用原生任务签名后的字节，不改写。
-5. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。发布时打包任务另打出[库包](../../feature/cross-platform-release/architecture.md#库包)。
+5. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。发版时打包任务另打出[库包](../../feature/cross-platform-release/architecture.md#库包)。
 
 下载的上游发行包按文件内容的 SHA-256 缓存在 `${XDG_CACHE_HOME:-~/.cache}/concord/runtime/`，先校验再使用，校验失败不进入缓存或归档。入口不读取 `PATH` 中的 `node` 或 `rg`。
 

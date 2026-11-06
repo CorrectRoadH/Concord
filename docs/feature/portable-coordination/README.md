@@ -59,7 +59,7 @@ Runner: absent
 
 ## 范围
 
-支持同一主机、同一 PID 命名空间内的 Linux 与 macOS 本地 worktree。Git 仍是仓库身份的前提。网络与多主机协调不在保证范围内，不认证任何存储设备。支持的平台由[跨平台标签发布](../cross-platform-release/README.md)拥有。
+支持同一主机、同一 PID 命名空间内的 Linux 与 macOS 本地 worktree。Git 仍是仓库身份的前提。网络与多主机协调不在保证范围内，不认证任何存储设备。支持的平台由[跨平台标签发版](../cross-platform-release/README.md)拥有。
 
 只支持当前协调协议：不迁移旧的锁格式，不协调混用的可执行版本。当前协议合法的加入过渡状态只在每个 owner 都确认 ESRCH 后回收。
 

@@ -1,4 +1,4 @@
-# 跨平台标签发布
+# 跨平台标签发版
 
 ## 实体所有权
 
@@ -8,28 +8,28 @@
 
 ## 数据流
 
-标签工作流从校验后的标签派生版本。原生任务在各自目标系统上构建 HawDB 引擎；一个打包任务只构建一次应用，再为每个目标组装候选归档并打出库包，核验版本、原生产物身份与摘要。验证任务在目标系统上运行同一份候选，全部通过后发布源码 Release。
+标签工作流从校验后的标签派生版本。原生任务在各自目标系统上构建 HawDB 引擎；一个打包任务只构建一次应用，再为每个目标组装候选归档并打出库包，核验版本、原生产物身份与摘要。验证任务在目标系统上运行同一份候选，全部通过后创建源码 Release。
 
-tap 定期或经通知发现更新的公开发布，核验标签、归档与资产身份，生成 Formula 与 Nix 候选。候选分别完成安装和运行检查后才提交并打 recipe 标签，创建同版本渠道完成记录。日常发现、验证与更新不依赖 LLM。
+tap 定期或经通知发现新的公开发版，核验标签、归档与资产身份，生成 Formula 与 Nix 候选。候选分别完成安装和运行检查后才提交并打 recipe 标签，创建同版本渠道完成记录。日常发现、验证与更新不依赖 LLM。
 
 ## 不变量
 
 - 普通运行时不探测文件系统名称，不调用外部锁或磁盘工具；支持的协调限于同一主机与 PID 命名空间。
 - Darwin 保留路径段的精确拼写，别名不能产生第二个 owner 身份。
 - 只有 ESRCH 证明所拥有的 POSIX 进程组已结束。清理不确定时不能产生 green 证据。
-- 发布与渠道同步共享精确的候选归档和 SHA-256；发布的字节就是验证过的候选。自动化成功不表示已完成渠道安装后的验收。
+- 发版与渠道同步共享精确的候选归档和 SHA-256；发版的字节就是验证过的候选。自动化成功不表示已完成渠道安装后的验收。
 - 版本不回退，已有身份不能被不同字节覆盖。
 - 应用只使用包内的 Node.js 运行时与 ripgrep，不读取 `PATH` 中的 `node` 或 `rg`；Linux 上的动态库解析不依赖 `LD_LIBRARY_PATH`。
 
 ## 错误
 
-不支持的主机、不可用的文件系统原语、不安全的别名与清理不确定都是具名运行时失败。源码发布失败归源码工作流，Formula 与 Nix 失败归 tap 同步。任何失败都不转换为发布成功的声明。
+不支持的主机、不可用的文件系统原语、不安全的别名与清理不确定都是具名运行时失败。源码发版失败归源码工作流，Formula 与 Nix 失败归 tap 同步。任何失败都不转换为发版成功的声明。
 
-## 发布产物与渠道
+## 发版产物与渠道 {#发布产物与渠道}
 
 ### 归档构成
 
-每个目标一个 `concord-<version>-<target>.tar.gz`，目录结构见 [CLI](cli.md#发布资产)。归档由同一个 TypeScript 打包入口组装，步骤见[归档组装](../../engineering/build/architecture.md#归档组装)；打包测试与发布调用同一入口，摘要只针对最终归档。本表是各部分来源与校验的唯一定义。
+每个目标一个 `concord-<version>-<target>.tar.gz`，目录结构见 [CLI](cli.md#发布资产)。归档由同一个 TypeScript 打包入口组装，步骤见[归档组装](../../engineering/build/architecture.md#归档组装)；打包测试与发版调用同一入口，摘要只针对最终归档。本表是各部分来源与校验的唯一定义。
 
 | 部分 | 来源 |
 | --- | --- |
@@ -48,7 +48,7 @@ tap 定期或经通知发现更新的公开发布，核验标签、归档与资�
 
 Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`libc`、`libm`、`libdl`、`libpthread`、`librt` 与解释器 `/lib64/ld-linux-x86-64.so.2`）和 `runtime/lib/` 中的库。组装时为每个动态链接的 ELF（`runtime/node`、HawDB `.node`、`runtime/rg`）把 RPATH 设为指向 `runtime/lib/` 的 `$ORIGIN` 相对路径，`runtime/lib/` 中的库之间同样如此；静态链接的 ELF 没有动态段，不设置。启动脚本不设置 `LD_LIBRARY_PATH`。
 
-组装后检查归档内全部 ELF：解释器、`DT_NEEDED` 全部可在 glibc 或 `runtime/lib/` 中解析、引用的 GLIBC 符号版本不高于 2.39、RPATH 不指向归档之外。任一不满足即组装失败。候选验证在 Ubuntu 24.04 上实际运行，见[从标签发布](use-case/release-from-tag.md#verify)。
+组装后检查归档内全部 ELF：解释器、`DT_NEEDED` 全部可在 glibc 或 `runtime/lib/` 中解析、引用的 GLIBC 符号版本不高于 2.39、RPATH 不指向归档之外。任一不满足即组装失败。候选验证在 Ubuntu 24.04 上实际运行，见[从标签发版](use-case/release-from-tag.md#verify)。
 
 ### macOS 签名
 
@@ -56,7 +56,7 @@ Linux 归档以 glibc 2.39 为基线：ELF 只能依赖 glibc 自身的库（`li
 
 ### 版本与身份
 
-发布版本只从规范标签写入。应用的 `app/package.json` 与库包的 `package.json` 写入相同的 `version`，并以 `gitHead` 记录标签 commit；两者都在同一个打包任务中从该 commit 构建。版本、源码标签 commit、各归档与库包的 SHA-256 和 recipe commit 构成发布映射，只有这些身份完全一致时，重跑才能继续中断的阶段。Repository 实现身份包含包内 JavaScript、包元数据、依赖锁与运行时版本。
+发版版本只从规范标签写入。应用的 `app/package.json` 与库包的 `package.json` 写入相同的 `version`，并以 `gitHead` 记录标签 commit；两者都在同一个打包任务中从该 commit 构建。版本、源码标签 commit、各归档与库包的 SHA-256 和 recipe commit 构成发版映射，只有这些身份完全一致时，重跑才能继续中断的阶段。Repository 实现身份包含包内 JavaScript、包元数据、依赖锁与运行时版本。
 
 ### 库包
 
@@ -70,7 +70,7 @@ macOS 上 Formula 保留原生字节：HawDB 动态库使用可重定位的 `@rp
 
 ### Nix
 
-Nix 只支持 `x86_64-linux`。原始发布身份与渠道安装身份分开：
+Nix 只支持 `x86_64-linux`。原始发版身份与渠道安装身份分开：
 
 1. 表达式用 `fetchurl` 按 Release 中的 SHA-256 取 `linux-x64` 归档，recipe 构建先核对原始 native manifest 与绑定字节一致。
 2. recipe 构建阶段用 `autoPatchelfHook` 修补归档内全部 ELF（`runtime/node`、HawDB `.node`、`runtime/rg` 与 `runtime/lib/` 中的库），运行库取自 flake.lock 固定的 nixpkgs，至少包含 glibc、GCC 运行库与 libatomic。有库无法解析时构建失败。修补只改 ELF 的解释器与运行库路径，不改应用 JavaScript、依赖与启动脚本。
@@ -93,7 +93,7 @@ Nix 只支持 `x86_64-linux`。原始发布身份与渠道安装身份分开：
 
 同步入口用受版本管理的 Formula/Nix 模板生成候选，模板与当前发行 recipe 分开。生成前核验标签、资产 SHA-256 与归档内的版本。完整安装与运行由依赖候选的 Homebrew 与 Nix CI job 验证；最终更新 job 同时依赖两者成功，元数据核验不能替代安装成功。
 
-渠道准备不改写当前可安装版本。新资产存在后同步候选，沿用 base SHA 与已有标签比较，原子更新 recipe 与渠道标签。失败保留当前 recipe 和不可变资产，不覆盖既有发布。
+渠道准备不改写当前可安装版本。新资产存在后同步候选，沿用 base SHA 与已有标签比较，原子更新 recipe 与渠道标签。失败保留当前 recipe 和不可变资产，不覆盖既有发版。
 
 ## 生命周期
 
@@ -111,7 +111,7 @@ Linux 与 macOS 原生任务分别在 Ubuntu 24.04 与 Apple Silicon macOS 15 �
 
 一个 Ubuntu 24.04 任务在原生任务之后运行：清理输出目录，构建并类型检查应用一次，收集完整且经核验的原生产物集合，为每个目标组装候选归档、打出库包并核验版本与摘要，把候选与摘要作为不可变产物上传。
 
-验证任务依赖打包任务，分别在 `ubuntu-24.04` 与 `macos-15` arm64 runner 上下载本目标的候选与摘要，校验后解压运行，不重新构建，核对项见[从标签发布](use-case/release-from-tag.md#verify)。验证的 `PATH` 只含系统基础命令与 Git，没有真实的 `node`、`pnpm` 与 `rg`；另放以非零退出的 `node` 与 `rg` 探针，确认应用不回退到 `PATH`。发布任务同时依赖两个验证任务与同一标签 commit 的完整检查。
+验证任务依赖打包任务，分别在 `ubuntu-24.04` 与 `macos-15` arm64 runner 上下载本目标的候选与摘要，校验后解压运行，不重新构建，核对项见[从标签发版](use-case/release-from-tag.md#verify)。验证的 `PATH` 只含系统基础命令与 Git，没有真实的 `node`、`pnpm` 与 `rg`；另放以非零退出的 `node` 与 `rg` 探针，确认应用不回退到 `PATH`。发版任务同时依赖两个验证任务与同一标签 commit 的完整检查。
 
 CI 在四个独立 runner 上分片运行同一完整套件，每个分片串行执行，避免其它测试进程干扰性能计时。手动可移植检查必须断言真实的 HawDB 缓存未命中后命中，只回源不算通过。
 

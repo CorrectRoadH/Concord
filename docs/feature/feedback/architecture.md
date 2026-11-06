@@ -101,5 +101,5 @@ API 模式继续验收拒绝重定向和网络响应预算；CLI 模式不声称
 
 - [GitHub CLI API](https://cli.github.com/manual/gh_api) 与 [认证状态](https://cli.github.com/manual/gh_auth_status)。
 - [schpet/linear-cli 认证](https://github.com/schpet/linear-cli/blob/main/docs/authentication.md)：workspace、系统凭据存储和环境变量优先级。
-- [Linear CLI 发布记录](https://github.com/schpet/linear-cli/releases)：v2 调整列表与 JSON 形状，并建议脚本使用原生 API 入口。
+- [Linear CLI 发版记录](https://github.com/schpet/linear-cli/releases)：v2 调整列表与 JSON 形状，并建议脚本使用原生 API 入口。
 - [Linear CLI API 实现](https://github.com/schpet/linear-cli/blob/main/src/commands/api.ts)：单页和自动分页行为是接入验证的一部分，不能仅依据帮助文本推断预算与重定向保证。

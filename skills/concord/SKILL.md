@@ -9,7 +9,7 @@ Concord 让 Markdown Spec 成为软件的唯一事实来源：Spec、源码与�
 
 `docs/` 与 `memory/` 下的全部文件都可以直接编辑，包括 Issue 与 Memory 的状态和关系。具名命令是执行需要运行的步骤的助手，例如修复核验与 Roadmap 采用，它们把结果写进同一份文件；`concord check` 检查结果是否一致。
 
-只在任务授权范围内修改文件或运行写命令。`check`、`trace` 无 finding 不等于测试覆盖率；提交、push、发布、部署和远端消息仍需独立授权。
+只在任务授权范围内修改文件或运行写命令。`check`、`trace` 无 finding 不等于测试覆盖率；提交、push、发版、部署和远端消息仍需独立授权。
 
 ## 按需读取
 

@@ -21,7 +21,7 @@ pnpm exec vp run gate
 
 ## 运行时版本
 
-开发、CI 与发布归档使用同一个 Node.js 26 LTS 精确版本，唯一记录在仓库根目录的 `.node-version` 中。版本管理工具与 CI 的 Node 安装都读取这个文件，发布构建按它下载归档内的 `runtime/node`；`package.json` 不声明 `engines`。
+开发、CI 与发版归档使用同一个 Node.js 26 LTS 精确版本，唯一记录在仓库根目录的 `.node-version` 中。版本管理工具与 CI 的 Node 安装都读取这个文件，发版构建按它下载归档内的 `runtime/node`；`package.json` 不声明 `engines`。
 
 产品代码可以使用该版本的全部 API，例如 `Temporal`。升级运行时只改 `.node-version`，交付前跑完整门禁与打包测试。
 
@@ -31,7 +31,7 @@ pnpm exec vp run gate
 
 `pnpm concord <参数>` 直接运行当前检出的源码 CLI，不需要构建，也不需要全局安装的 Concord。源码模式与安装包模式的差别见[从源码运行](architecture.md#从源码运行)。
 
-安装包是本机目标的[发布归档](../../feature/cross-platform-release/cli.md#发布资产)，只在检出之外构建。打包测试与性能对照使用共享构建缓存，同一份源码在同一台机器上只构建一次；发布流程为每个目标单独构建到自己的临时目录。命令与错误见[构建命令](cli.md)。
+安装包是本机目标的[发版归档](../../feature/cross-platform-release/cli.md#发布资产)，只在检出之外构建。打包测试与性能对照使用共享构建缓存，同一份源码在同一台机器上只构建一次；发版流程为每个目标单独构建到自己的临时目录。命令与错误见[构建命令](cli.md)。
 
 ## 技术栈
 
