@@ -71,11 +71,13 @@ Inspect configuration: concord doctor
 {"operation":"init","dryRun":false,"changedPaths":["docs/taste.md","..."],"config":{},"createdPaths":["docs/taste.md","..."],"preservedPaths":[],"guide":"docs-from-code"}
 ```
 
-`concord skills install` 创建或更新 `.agents/skills/concord-{spec,implement,review,fix}/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，全部是普通文件，在一次写入中提交；`init` 安装同一组文件。人读输出按 `Created`、`Updated`、`Unchanged` 分组列出路径。`--json` 返回：
+`concord skills install` 创建或更新 `.agents/skills/concord-{spec,implement,review,fix}/SKILL.md` 与内容相同的 `.claude/skills/concord-*/SKILL.md`，全部是普通文件，在一次写入中提交；`init` 安装同一组文件。当前版本不再提供、但带 `concord-managed` 标记的 `concord-*` skill 被删除。人读输出按 `Created`、`Updated`、`Removed`、`Unchanged` 分组列出路径。`--json` 返回：
 
 ```json
-{"operation":"skills-install","dryRun":false,"createdPaths":[".agents/skills/concord-spec/SKILL.md","..."],"updatedPaths":[],"unchangedPaths":[]}
+{"operation":"skills-install","dryRun":false,"createdPaths":[".agents/skills/concord-spec/SKILL.md","..."],"updatedPaths":[],"removedPaths":[],"unchangedPaths":[]}
 ```
+
+`check` 与 `doctor` 在 advisories 中给出 `WorkflowSkillsOutdated`，`details.paths` 列出需要重写或删除的文件，不影响退出码；判定见[更新 skill 文件](../project-onboarding/use-case/run-workflow-from-agent.md#update)。
 
 | 错误 | 触发条件 |
 | --- | --- |

@@ -49,7 +49,7 @@
 
 3. agent 读取当前版本的说明并执行。 {#follow}
 
-   每个 skill 只让 agent 运行对应的 `concord --skill <主题>`，说明来自已安装的 Concord，升级后不需要改写项目里的 skill 文件。
+   每个 skill 只让 agent 运行对应的 `concord --skill <主题>`；项目的 `AGENTS.md` 指定了其它运行方式（例如 `pnpm concord`）时按它运行。说明正文来自已安装的 Concord，升级后自动是新版本的说明。
 
 | skill | 读取的主题 | agent 做什么 |
 | --- | --- | --- |
@@ -57,6 +57,28 @@
 | `concord-implement` | `concord --skill implement` | 照着指定的 Spec 实现，给代码加代码声明、给测试加标记，运行检查；Spec 缺失或与事实冲突时停下，带着证据回到 Spec |
 | `concord-review` | `concord --skill review` | 对照 Spec 检查一组改动的 diff、关系缺口与实际运行，逐条给出不符合 Spec 的位置 |
 | `concord-fix` | `concord --skill fix` | 确认缺陷违反了哪条 Spec，提交失败的回归测试，再提交修复，用 `issue close --fixed` 核验 |
+
+4. Concord 升级后更新 skill 文件。 {#update}
+
+   新版本可能增删 skill 或改写 skill 的描述，这时项目里的 `SKILL.md` 需要重写。`concord check` 与 `concord doctor` 发现后给出提示，不使检查失败：
+
+   ```text
+   advisories:
+     WorkflowSkillsOutdated: .claude/skills/concord-fix/SKILL.md, .agents/skills/concord-fix/SKILL.md
+   Next: concord skills install
+   ```
+
+   运行 `concord skills install` 重写，然后提交。以下为预期输出：
+
+   ```text
+   Updated:
+     .agents/skills/concord-fix/SKILL.md
+     .claude/skills/concord-fix/SKILL.md
+   Unchanged:
+     …
+   ```
+
+   检查只读，不替你写文件。标记行记下生成它的 Concord 版本，例如 `<!-- concord-managed version=0.9.0 -->`；同一项目里有人用的 Concord 版本较旧时，他不会因为别人已经更新过文件而看到提示。
 
 ## 结果
 
@@ -67,9 +89,15 @@
 | skill 文件已由 Concord 生成 | 重写为当前内容，列在 `Updated` 或 `Unchanged` 下 |
 | 任一目标路径已有不带标记的文件，或是目录、符号链接 | 返回 `SkillPathOccupied`，不写任何文件 |
 | 加 `--dry-run` | 列出将要创建或更新的路径，不写文件 |
-| 维护者不想要某个 skill | 直接删除两处对应目录；`concord skills install` 会重新创建 |
+| 维护者不想要某个 skill | 直接删除两处对应目录，检查不会为缺少它提示；`concord skills install` 会重新创建 |
+| 带标记的文件由更旧的版本生成，内容与当前版本将写入的不同 | `check` 与 `doctor` 给出 `WorkflowSkillsOutdated`；`skills install` 重写，列在 `Updated` 下 |
+| 标记行没有版本 | 按更旧的版本处理 |
+| 带标记的文件由更新的版本生成 | 不提示；显式运行 `skills install` 时照常按当前版本重写 |
+| `.agents/` 与 `.claude/` 中同名 skill 内容不同 | 给出 `WorkflowSkillsOutdated` |
+| 当前版本已不提供某个带标记的 skill | 给出 `WorkflowSkillsOutdated`；`skills install` 删除它，列在 `Removed` 下 |
+| 项目里一个工作流 skill 都没有 | 不提示；`doctor` 的 `nextSteps` 建议运行 `concord skills install` |
 
-Concord 生成的 `SKILL.md` 带有 `concord-managed` 标记行，只有带标记的文件会被重写。
+Concord 生成的 `SKILL.md` 带有 `concord-managed` 标记行，只有带标记的文件会被重写或删除。每个 skill 目录只有这一个 `SKILL.md`，不放说明副本，避免它们随版本过期。
 
 ## Spec 来源
 
