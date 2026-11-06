@@ -1,5 +1,7 @@
 name: Gate
 on:
+  push:
+    branches: [master]
   workflow_dispatch:
   workflow_call:
     inputs:

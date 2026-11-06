@@ -65,7 +65,8 @@ test('release builds two native targets and gates publication on the same commit
     const gate = yield* Schema.decodeUnknownEffect(Schema.Struct({ on: Schema.Record(Schema.String, Schema.Unknown), jobs: Schema.Struct({ gate: Job }) }))(
       parse(yield* fs.readFileString('.github/workflows/gate.yml')),
     );
-    assert.deepEqual(Object.keys(gate.on), ['workflow_dispatch', 'workflow_call']);
+    assert.deepEqual(Object.keys(gate.on), ['push', 'workflow_dispatch', 'workflow_call']);
+    assert.deepEqual(gate.on.push, { branches: ['master'] });
     assert.deepEqual(gate.jobs.gate.strategy?.matrix.shard, [1, 2, 3, 4]);
     assert.ok(gate.jobs.gate.steps.some(step => step.run?.includes('pnpm gate --test-shard=${{ matrix.shard }}/4')));
   }).pipe(Effect.provide(NodeServices.layer)));
