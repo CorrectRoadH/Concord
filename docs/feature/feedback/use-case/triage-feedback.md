@@ -9,9 +9,7 @@
 - 项目已初始化，可以在 CLI 或 Web 工作台中操作。
 - API 读取方式需要凭据环境变量，例如 `GITHUB_TOKEN` 或 `LINEAR_API_KEY`；gh 读取方式需要运行 Concord 的机器上已完成 `gh auth login`。
 
-## 完整路径
-
-### 主流程
+## 完整路径 {#主流程}
 
 1. 保存连接。 {#connect}
 

@@ -9,7 +9,7 @@
 - 仓库里有 [把测试关联到 Use Case 步骤](link-tests-to-steps.md) 中的 `docs/feature/cart/use-case/add-item.md`，其中第 2 步的 ID 是 `add`。
 - Python 实现在 `src/py/cart.py`。项目用 pnpm 把 Pyright 安装到 `node_modules/pyright`，作为 Python 的 language server。
 
-## 主流程
+## 完整路径 {#主流程}
 
 1. 声明 language server。 {#configure}
 

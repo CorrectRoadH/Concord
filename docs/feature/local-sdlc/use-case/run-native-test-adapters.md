@@ -17,7 +17,7 @@
 
 - `concord.config.ts` 已配置 `testRoots: ['test']` 与 `runner`。
 
-## 主流程
+## 完整路径 {#主流程}
 
 1. 为测试目录声明 adapter。 {#configure}
 
