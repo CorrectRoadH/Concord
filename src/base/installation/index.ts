@@ -18,7 +18,8 @@ export const resourcePath = (path: string): string => join(packageRoot, path);
 export const helpManifestPath = join(distribution, 'startup-data.js');
 
 /** Resolve the loader at the installation, independently of a consumer's cwd. */
-export function workerEntryArgv(name: 'test-adapter-vitest' | 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'cache-maintenance-worker' | 'compute-worker' | 'workspace-server' | 'operation-worker', nodeOptions: readonly string[] = []): string[] {
+export function workerEntryArgv(name: 'test-adapter-vitest' | 'query-refresh-worker' | 'query-scan-worker' | 'editor-worker' | 'view-scan-worker' | 'cache-maintenance-worker' | 'compute-worker' | 'workspace-server' | 'operation-worker' | 'web-build', nodeOptions: readonly string[] = []): string[] {
+  if (name === 'web-build') return [...nodeOptions, ...runtimeLoader(), join(directory, 'entry/web-build', `main.${sourceInstallation ? 'ts' : 'js'}`)];
   if (name === 'workspace-server') return [...nodeOptions, ...runtimeLoader(), join(directory, 'entry/cli', `entry.${sourceInstallation ? 'ts' : 'js'}`), 'server', 'run', '--root'];
   if (name === 'operation-worker') return [...nodeOptions, ...runtimeLoader(), join(directory, 'entry/server/operation', `main.${sourceInstallation ? 'ts' : 'js'}`)];
   return [...nodeOptions, ...runtimeLoader(), join(directory, 'entry/server', `${name}.${sourceInstallation ? 'ts' : 'js'}`)];
@@ -30,7 +31,7 @@ export function builtAssetRoot(name: 'web' | 'preview' | 'p5-types'): string {
 }
 
 export function requireBuiltAssets(): void {
-  // Both runtime modes provide assets: Vite compiles source assets on demand.
+  // Source assets are supplied by the shared Web cache.
 }
 
 type InstallationFiles = string[][];
@@ -86,6 +87,10 @@ export { nativeSourceDigest, nativeCacheRoot, nativeSourceFiles, nativeLockDiges
 export { installationResources, installationRootForBin } from './resources.ts';
 export { Installation } from './service.ts';
 export { sourceWebServer, sourceP5Runtime, sourcePreviewFiles } from './source-web.ts';
+export { SourceWebBuilder, SourceWebBuilderLive, buildSourceWebArtifact } from './source-web-builder.ts';
+export { sourceWebArtifact, sourceWebDigest, sourceWebCacheDirectory, SourceWebCacheError, readWebReceipt, runSourceWeb } from './source-web-cache.ts';
+export { sourceWebInputDigest, sourceWebRuntimeImports } from './source-web-inputs.ts';
 export type { TemplateResources } from './service.ts';
 export type { HerdrModReceipt } from './herdr-mod.ts';
 export { projectLibraryVersions } from './library-version.ts';
+

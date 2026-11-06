@@ -1,45 +1,51 @@
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+// @concord-file
+// @concord-implements docs/engineering/build/architecture.md#从源码运行
+import { basename, join } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { packageRoot } from './location.ts';
+import { Effect, FileSystem } from 'effect';
+import { readWebReceipt, runSourceWeb, sourceWebArtifact, webFailure } from './source-web-cache.ts';
 
-/** Compile this server's source snapshot with Vite; no checkout build or HMR client. */
+/** Services hold paths only; compilation and its module graph belong to the builder process. */
 export async function sourceWebServer() {
-  const { build } = await import('vite-plus');
-  const result = await build({ configFile: join(packageRoot, 'vite.source.config.ts'), mode: 'production', logLevel: 'error',
-    build: { write: false, minify: false }, configLoader: 'native' });
-  const files = outputs(result);
+  const { directory, names } = await runSourceWeb(Effect.gen(function*() {
+    const directory = yield* sourceWebArtifact();
+    const receipt = yield* readWebReceipt(directory, basename(directory));
+    return { directory, names: new Set(receipt.files.filter(file => file.path.startsWith('web/')).map(file => file.path.slice(4))) };
+  }));
+  let closed = false;
   return {
     serve: async (request: IncomingMessage, response: ServerResponse, send: (bytes: Buffer) => void): Promise<void> => {
       const path = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
-      const file = files.get(path) ?? (!path.startsWith('assets/') ? files.get('index.html') : undefined);
+      const file = closed ? undefined : names.has(path) ? path : !path.startsWith('assets/') ? 'index.html' : undefined;
       if (file === undefined) { response.statusCode = 404; response.end(); return; }
       const type = path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : path.endsWith('.woff2') ? 'font/woff2' : path.endsWith('.woff') ? 'font/woff' : path.endsWith('.ttf') ? 'font/ttf' : path.endsWith('.svg') ? 'image/svg+xml' : 'text/html';
+      const bytes = await runSourceWeb(Effect.gen(function*() {
+        const fs = yield* FileSystem.FileSystem;
+        return yield* fs.readFile(join(directory, 'web', file));
+      }).pipe(Effect.mapError(webFailure('read'))));
       response.setHeader('Content-Type', type);
       if (path.startsWith('assets/')) response.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      send(file);
+      send(Buffer.from(bytes));
     },
-    close: async () => { files.clear(); },
+    close: async () => { closed = true; },
   };
 }
 
-function outputs(result: Awaited<ReturnType<typeof import('vite-plus')['build']>>): Map<string, Buffer> {
-  const output = (Array.isArray(result) ? result : [result]).flatMap(item => 'output' in item ? item.output : []);
-  return new Map(output.map(item => [item.fileName, Buffer.from(item.type === 'chunk' ? item.code : item.source)]));
-}
-
 export async function sourceP5Runtime(): Promise<string> {
-  const { build } = await import('esbuild');
-  const output = await build({ entryPoints: [join(packageRoot, 'web/p5/runtime.ts')], write: false, bundle: true, format: 'iife', platform: 'browser', target: 'es2022', minify: true, define: { IS_MINIFIED: 'true' } });
-  return output.outputFiles[0]!.text;
+  return runSourceWeb(Effect.gen(function*() {
+    const directory = yield* sourceWebArtifact();
+    const fs = yield* FileSystem.FileSystem;
+    return yield* fs.readFileString(join(directory, 'p5/runtime.js'));
+  }).pipe(Effect.mapError(webFailure('read'))));
 }
 
 export async function sourcePreviewFiles(): Promise<Map<string, Buffer>> {
-  const { build } = await import('vite-plus');
-  const result = await build({ configFile: join(packageRoot, 'vite.preview.config.ts'), build: { write: false } });
-  const outputs = (Array.isArray(result) ? result : [result]).flatMap(item => 'output' in item ? item.output : []);
-  const files = new Map(outputs.map(item => [item.fileName, Buffer.from(item.type === 'chunk' ? item.code : item.source)]));
-  const license = readFileSync(join(packageRoot, 'node_modules/@fontsource-variable/noto-sans-sc/LICENSE'), 'utf8');
-  files.set('FONT-LICENSE.html', Buffer.from(`<!doctype html><meta charset="utf-8"><title>Font license</title><pre>${license.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')}</pre>`));
-  return files;
+  return runSourceWeb(Effect.gen(function*() {
+    const directory = yield* sourceWebArtifact();
+    const receipt = yield* readWebReceipt(directory, basename(directory));
+    const fs = yield* FileSystem.FileSystem;
+    const files = new Map<string, Buffer>();
+    for (const file of receipt.files.filter(file => file.path.startsWith('preview/'))) files.set(file.path.slice(8), Buffer.from(yield* fs.readFile(join(directory, file.path))));
+    return files;
+  }).pipe(Effect.mapError(webFailure('read'))));
 }

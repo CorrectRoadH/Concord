@@ -5,6 +5,7 @@ import { unplugin as stylex } from '@stylexjs/unplugin';
 import { fileURLToPath } from 'node:url';
 
 export default defineConfig({
+  envDir: false,
   root: fileURLToPath(new URL('./web', import.meta.url)),
   plugins: [stylex.vite({ dev: false, runtimeInjection: false }), react(), tailwindcss()],
   resolve: { alias: { '@': fileURLToPath(new URL('./web', import.meta.url)) } },
