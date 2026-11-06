@@ -21,12 +21,14 @@ export class FrozenBrowserRepository {
   private readonly files = new Map<string, Buffer>();
   private readonly directories = new Set<string>();
 
-  constructor() {
-    this.root = mkdtempSync(join(tmpdir(), 'concord-browser-worker-'));
+  constructor(root?: string) {
+    this.root = root ?? mkdtempSync(join(tmpdir(), 'concord-browser-worker-'));
     try {
-      this.git(['init', '-q']);
-      const repo = new LocalRepository(this.root, { initialize: true });
-      try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+      if (root === undefined) {
+        this.git(['init', '-q']);
+        const repo = new LocalRepository(this.root, { initialize: true });
+        try { initialize(repo, false, { testRoots: [] }); } finally { repo.close(); }
+      }
       const captureDirectories = (directory: string, prefix = '') => {
         for (const entry of readdirSync(directory, { withFileTypes: true })) {
           if ((!prefix && entry.name === '.git') || !entry.isDirectory()) continue;
@@ -180,10 +182,10 @@ export class BrowserSharedFixture {
 }
 
 /** Scope order releases the service before deleting the worktree, including partial startup. */
-export const acquireBrowserSharedFixture = Effect.fn('acquireBrowserSharedFixture')(function*(signal?: AbortSignal) {
+export const acquireBrowserSharedFixture = Effect.fn('acquireBrowserSharedFixture')(function*(signal?: AbortSignal, createRepository: () => FrozenBrowserRepository = () => new FrozenBrowserRepository()) {
   let serviceStopped = true;
   const repository = yield* Effect.acquireRelease(
-    Effect.sync(() => new FrozenBrowserRepository()),
+    Effect.sync(() => createRepository()),
     repository => Effect.sync(() => {
       if (!serviceStopped) throw new Error(`Shared service cleanup is unconfirmed; retained root: ${repository.root}`);
       repository.close();

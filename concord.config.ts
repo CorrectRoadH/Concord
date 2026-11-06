@@ -146,6 +146,7 @@ export default {
       "test/support/publication-ownership-fixture.ts",
       "test/support/query-facts-fixture.ts",
       "test/support/repository.ts",
+      "test/support/shared-service.ts",
       "test/support/source-consumer.ts",
       "test/support/source-resources.ts",
       "test/support/source-runtime.ts",
