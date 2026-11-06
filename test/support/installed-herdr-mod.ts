@@ -3,12 +3,15 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Schema } from 'effect';
-import { packageBin } from './installed-package.ts';
+import { applicationRoot, packageBin } from './installed-package.ts';
+import { packageCommand } from '../../scripts/package-command.ts';
+import { archiveEnvironment } from './archive-environment.ts';
 
 /** Exercise the packaged CLI against private homes, replacing only the external Herdr command. */
 export function verifyInstalledHerdrMod(packageRoot: string, scratch: string): void {
   const home = join(scratch, 'herdr'), userHome = join(scratch, 'user'), bin = join(scratch, 'bin');
   mkdirSync(join(home, 'mods/other'), { recursive: true }); mkdirSync(bin);
+  const base = archiveEnvironment(join(scratch, 'base-bin'));
   mkdirSync(join(userHome, '.config/herdr-app/mods/concord'), { recursive: true });
   writeFileSync(join(userHome, '.config/herdr-app/mods/concord/main.js'), 'default home is not selected');
   writeFileSync(join(home, 'mods/other/main.js'), 'other mod');
@@ -25,9 +28,10 @@ else if (process.argv[2] === 'check') {
 } else { process.exitCode = 2; }
 `); chmodSync(executable, 0o755);
   const cli = packageBin(packageRoot);
-  const invoke = (args: string[], appHome = home, command = false, failCheck = false) => spawnSync(process.execPath, [cli, ...args], {
+  const [executableCommand, ...prefix] = packageCommand(cli);
+  const invoke = (args: string[], appHome = home, command = false, failCheck = false) => spawnSync(executableCommand, [...prefix, ...args], {
     cwd: scratch, env: { ...process.env, NODE_OPTIONS: '', HOME: userHome, HERDR_APP_HOME: appHome,
-      PATH: command ? bin : '', HERDR_TEST_CALLS: calls, HERDR_TEST_CHECK_FAIL: failCheck ? '1' : '0' },
+      PATH: command ? `${bin}:${scratch}/base-bin` : `${scratch}/base-bin`, HERDR_TEST_CALLS: calls, HERDR_TEST_CHECK_FAIL: failCheck ? '1' : '0' },
     encoding: 'utf8', timeout: 30_000,
   });
   const call = (args: string[], appHome = home, expected = 0, command = false, failCheck = false) => {
@@ -45,7 +49,8 @@ else if (process.argv[2] === 'check') {
     catch (cause) { throw new Error(`Installed Herdr mod check failed: ${name}`, { cause }); }
   };
   const target = join(home, 'mods/concord'), absent = join(scratch, 'absent');
-  const source = readFileSync(join(packageRoot, 'dist/herdr-mod/main.js'), 'utf8');
+  const app = applicationRoot(packageRoot);
+  const source = readFileSync(join(app, 'dist/herdr-mod/main.js'), 'utf8');
   // @use-case docs/feature/herdr-mod/use-case/install-with-cli.md#install
   step('missing command and selected config return the installer without writing', () => {
     const missing = call(['herdr', 'install'], absent, 1);
@@ -60,9 +65,9 @@ else if (process.argv[2] === 'check') {
     const installed = call(['herdr', 'install']);
     assert.equal(installed.operation, 'herdr-install'); assert.equal(installed.path, target);
     assert.equal(readFileSync(join(target, 'main.js'), 'utf8'), source);
-    assert.equal(readFileSync(join(target, 'mod.json'), 'utf8'), readFileSync(join(packageRoot, 'dist/herdr-mod/mod.json'), 'utf8'));
+    assert.equal(readFileSync(join(target, 'mod.json'), 'utf8'), readFileSync(join(app, 'dist/herdr-mod/mod.json'), 'utf8'));
     const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ minimumConcordVersion: Schema.String })))(readFileSync(join(target, 'mod.json'), 'utf8'));
-    const version = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ version: Schema.String })))(readFileSync(join(packageRoot, 'package.json'), 'utf8')).version;
+    const version = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ version: Schema.String })))(readFileSync(join(app, 'package.json'), 'utf8')).version;
     assert.equal(manifest.minimumConcordVersion, version);
     assert.equal(readFileSync(join(userHome, '.config/herdr-app/mods/concord/main.js'), 'utf8'), 'default home is not selected');
   });
@@ -111,4 +116,5 @@ else if (process.argv[2] === 'check') {
   step('removed panel command is rejected', () => {
     const rejected = invoke(['--json', 'panel']); assert.equal(rejected.status, 1);
   });
+  assert.equal(existsSync(base.marker), false, 'Herdr installation must not invoke PATH runtimes');
 }

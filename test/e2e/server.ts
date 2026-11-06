@@ -1,8 +1,9 @@
-import { spawn, type ChildProcess } from 'node:child_process';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { Schema } from 'effect';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import { sourceCli } from '../support/source-consumer.ts';
+import { packageCommand } from '../../scripts/package-command.ts';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly installedBin?: string; readonly signal?: AbortSignal }
 export interface ViewServerHandle {
@@ -33,7 +34,13 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
     entry = options.installedBin ?? sourceCli();
     options.signal?.throwIfAborted();
     // The fixture owns the service explicitly; the View client only owns its HTTP lease.
-    child = spawn(process.execPath, [...(entry.endsWith('.ts') ? ['--conditions=concord-source', '--import', new URL('../support/source-runtime.ts', import.meta.url).href] : []), entry, '--root', options.root, '--json', 'view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const [command, ...prefix] = options.installedBin ? packageCommand(entry) : [process.execPath, ...(entry.endsWith('.ts') ? ['--conditions=concord-source', '--import', new URL('../support/source-runtime.ts', import.meta.url).href] : []), entry];
+    child = spawn(command!, [...prefix, '--root', options.root, '--json', 'view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'], ...(options.installedBin ? { env: { ...process.env, NODE_OPTIONS: '', NODE_PATH: '' } } : {}) });
+    const stop = () => {
+      if (!options.installedBin) return stopWorkspaceServer(options.root, entry);
+      const reply = spawnSync(command!, [...prefix, '--root', options.root, '--json', 'server', 'stop'], { encoding: 'utf8', timeout: 20_000 });
+      if (reply.status !== 0) throw new Error(`Installed service cleanup failed: ${reply.stdout}${reply.stderr}`);
+    };
     const processHandle = child;
     let diagnostics = '';
     processHandle.stderr!.on('data', (chunk: Buffer) => { diagnostics += chunk.toString(); process.stderr.write(chunk); });
@@ -61,13 +68,19 @@ export async function startViewServer(options: ViewServerOptions): Promise<ViewS
       try {
         // Release the View client's HTTP lease and RPC transport before stopping its service.
         await terminate(processHandle);
-      } finally { stopWorkspaceServer(options.root, entry); }
+      } finally { stop(); }
     })().catch(cause => { closing = undefined; throw cause; }) };
   } catch (cause) {
     let cleanupFailure: unknown;
     try { if (child) await terminate(child); }
     catch (error) { cleanupFailure = error; }
-    try { if (entry) stopWorkspaceServer(options.root, entry); }
+    try {
+      if (entry && options.installedBin) {
+        const [command, ...prefix] = packageCommand(entry);
+        const reply = spawnSync(command, [...prefix, '--root', options.root, '--json', 'server', 'stop'], { encoding: 'utf8', timeout: 20_000 });
+        if (reply.status !== 0) throw new Error(`Installed service cleanup failed: ${reply.stdout}${reply.stderr}`);
+      } else if (entry) stopWorkspaceServer(options.root, entry);
+    }
     catch (error) { cleanupFailure = cleanupFailure ? new AggregateError([cleanupFailure, error]) : error; }
     throw new ViewServerStartupFailed(options.root, cleanupFailure === undefined,
       cleanupFailure ? new AggregateError([cause, cleanupFailure], 'View startup and cleanup failed') : cause);

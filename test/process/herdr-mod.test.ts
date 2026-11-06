@@ -6,15 +6,6 @@ import { join, resolve } from 'node:path';
 import test from 'node:test';
 import { installedConcordCli } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
-import { installedPackageRoot } from '../support/installed-package.ts';
-import { verifyInstalledHerdrMod } from '../support/installed-herdr-mod.ts';
-
-// @use-case docs/feature/herdr-mod/use-case/install-with-cli.md#install
-test('packaged CLI installs, updates and uninstalls against isolated Herdr homes and external commands', { timeout: 90_000 }, () => {
-  const root = mkdtempSync(join(tmpdir(), 'concord-herdr-install-cases-'));
-  try { verifyInstalledHerdrMod(installedPackageRoot(), root); }
-  finally { rmSync(root, { recursive: true, force: true }); }
-});
 
 // @use-case docs/feature/herdr-mod/use-case/follow-changes.md
 test('the native mod reads and refreshes through the public CLI and a shared workspace server', { timeout: 90_000 }, () => {

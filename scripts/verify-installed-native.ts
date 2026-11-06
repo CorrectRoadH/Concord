@@ -1,6 +1,7 @@
 import { installationResources, decodeNativeArtifact, hawdbTarget } from '../src/base/installation/index.ts';
 import assert from 'node:assert/strict';
 import { packageBin } from './package-location.ts';
+import { packageCommand } from './package-command.ts';
 import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +39,7 @@ export const verifyInstalledNative = Effect.fn('native.verifyInstalled')(functio
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const installed = yield* fs.realPath(resolve(packageRoot));
   const cli = yield* packageBin(installed);
+  const [cliCommand, ...cliPrefix] = packageCommand(cli);
   assert.ok(yield* fs.exists(cli), 'installed CLI is required');
   const scratch = yield* fs.makeTempDirectoryScoped({ directory: tmpdir(), prefix: 'concord-native-install-' });
   const bin = join(scratch, 'bin');
@@ -51,8 +53,18 @@ export const verifyInstalledNative = Effect.fn('native.verifyInstalled')(functio
   }
   assert.ok(git, 'Git is a public runtime dependency');
   yield* fs.symlink(resolve(git), join(bin, 'git'));
-  yield* fs.symlink(process.execPath, join(bin, 'node'));
-  const env: NodeJS.ProcessEnv = { ...process.env, PATH: bin };
+  for (const tool of ['dirname', 'readlink']) {
+    for (const path of (process.env.PATH ?? '').split(delimiter)) {
+      const candidate = join(path, tool);
+      if (yield* fs.exists(candidate)) { yield* fs.symlink(resolve(candidate), join(bin, tool)); break; }
+    }
+  }
+  const probe = join(scratch, 'unexpected-path-runtime');
+  for (const tool of ['node', 'rg', 'pnpm']) {
+    yield* fs.writeFileString(join(bin, tool), `#!/bin/sh\nprintf '%s\\n' '${tool}' >> '${probe}'\nexit 97\n`);
+    yield* fs.chmod(join(bin, tool), 0o755);
+  }
+  const env: NodeJS.ProcessEnv = { ...process.env, PATH: bin, NODE_PATH: '', LD_LIBRARY_PATH: '' };
   for (const key of Object.keys(env)) if (key.startsWith('GIT_') || key === 'NODE_OPTIONS') delete env[key];
   env.GIT_TERMINAL_PROMPT = '0';
   env.GIT_CONFIG_NOSYSTEM = '1';
@@ -77,7 +89,7 @@ export const verifyInstalledNative = Effect.fn('native.verifyInstalled')(functio
     return { status, stdout, stderr };
   }, Effect.scoped, Effect.timeout('30 seconds'));
   const call = Effect.fn('native.verifyCall')(function*<A>(args: readonly string[], schema: Schema.ConstraintDecoder<A, never>) {
-    const result = yield* run(process.execPath, [cli, '--root', root, '--json', '--server=command', ...args]);
+    const result = yield* run(cliCommand, [...cliPrefix, '--root', root, '--json', '--server=command', ...args]);
     return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema), { onExcessProperty: 'ignore' })(result.stdout);
   });
   const nativeFolder = join(installationResources(installed).native, hawdbTarget());
@@ -145,13 +157,14 @@ export const verifyInstalledNative = Effect.fn('native.verifyInstalled')(functio
     const blockedPreview = yield* call(['cache', 'clear', '--dry-run'], CachePreview);
     assert.equal(blockedPreview.native.status, 'unavailable');
     assert.equal(blockedPreview.native.detail, unavailable.detail);
-    const failedClear = yield* run(process.execPath, [cli, '--root', root, '--json', 'cache', 'clear'], null);
+    const failedClear = yield* run(cliCommand, [...cliPrefix, '--root', root, '--json', 'cache', 'clear'], null);
     assert.notEqual(failedClear.status, 0);
     assert.deepEqual((yield* fs.readDirectory(cachePath)).sort(), beforePreview);
     assert.deepEqual((yield* fs.stat(join(cachePath, 'owner.hawdb.lock'))).ino, lockInode);
     assert.equal((yield* call(['show', 'native-recall'], Memory)).document.digest, currentDigest);
   }).pipe(Effect.ensuring(replaceInstalledNativeBinary(nativeBinary, binaryBytes).pipe(Effect.orDie)));
   assert.equal((yield* call(['test', 'list'], CacheResult)).cache.status, 'hit');
+  assert.equal(yield* fs.exists(probe), false, 'Installed native commands must not invoke PATH runtimes');
   return { ...identity, compilerOnPath: false, helperOnPath: false, persistentHit: true, currentRecall: true, rebuilt: true };
 }, Effect.scoped, Effect.catchCause(cause => Effect.fail(new NativeVerificationFailed({ message: Cause.pretty(cause) }))));
 

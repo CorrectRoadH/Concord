@@ -2,18 +2,15 @@ import { chmodSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, sy
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Effect, Schema } from 'effect';
+import { packageCommand } from '../../scripts/package-command.ts';
+export const applicationRoot = (root: string): string => existsSync(join(root, 'app/package.json')) ? join(root, 'app') : root;
 export const packageBin = (root: string): string => Effect.runSync(Effect.sync(() => {
+  if (applicationRoot(root) !== root) return join(root, 'bin/concord');
   const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ bin: Schema.Struct({ concord: Schema.String }) })))(readFileSync(join(root, 'package.json'), 'utf8'));
   return join(root, manifest.bin.concord);
 }));
 
 export const distributionRoot = fileURLToPath(new URL('../..', import.meta.url));
-class TestPackageUnavailable extends Schema.TaggedError<TestPackageUnavailable>()('TestPackageUnavailable', { message: Schema.String }) {}
-export function installedPackageRoot(): string {
-  const root = process.env.CONCORD_TEST_PACKAGE_ROOT;
-  if (!root || !existsSync(join(root, 'package.json'))) throw new TestPackageUnavailable({ message: 'Tests require the current gate package in CONCORD_TEST_PACKAGE_ROOT. Run pnpm gate.' });
-  return root;
-}
 const Manifest = Schema.fromJsonString(Schema.Struct({ name: Schema.String, version: Schema.String, files: Schema.Array(Schema.String) }));
 export interface BuiltConcord { readonly name: string; readonly version: string; readonly filename: string; readonly files: readonly { readonly path: string }[] }
 
@@ -21,32 +18,26 @@ export interface BuiltConcord { readonly name: string; readonly version: string;
 export function builtConcord(destination: string): BuiltConcord {
   return Effect.runSync(Effect.sync(() => {
     const root = destination;
-    const manifest = Schema.decodeUnknownSync(Manifest)(readFileSync(join(root, 'package.json'), 'utf8'));
+    const manifest = Schema.decodeUnknownSync(Manifest)(readFileSync(join(applicationRoot(root), 'package.json'), 'utf8'));
     const visit = (path: string): { path: string }[] => {
       const entries = readdirSync(join(root, path), { withFileTypes: true });
       return entries.flatMap(entry => entry.isDirectory() ? visit(join(path, entry.name)) : [{ path: join(path, entry.name) }]);
     };
-    const files = manifest.files.flatMap(path => existsSync(join(root, path))
+    const files = applicationRoot(root) !== root ? visit('').filter(file => !/^(?:\.concord-build-cache\.json|concord-.+\.tar\.gz(?:\.sha256)?)$/u.test(file.path)) : manifest.files.flatMap(path => existsSync(join(root, path))
       ? /\.[a-z]+$/u.test(path) ? [{ path }] : visit(path) : []);
     for (const name of readdirSync(root)) if (/^README(?:\..+)?\.md$/u.test(name) && !files.some(file => file.path === name)) files.push({ path: name });
-    for (const path of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) if (!files.some(file => file.path === path)) files.push({ path });
+    if (applicationRoot(root) === root) for (const path of ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) if (!files.some(file => file.path === path)) files.push({ path });
     const result = { name: manifest.name, version: manifest.version, filename: root, files };
     return result;
   }));
 }
-
 /** Read-only consumers share this gate's package; damage fixtures own copied bytes. */
 export function prepareSourceConsumer(directory: string, artifact: BuiltConcord, dependencies: readonly string[] = [], options: { private?: boolean } = {}): void {
   Effect.runSync(Effect.sync(() => {
     const modules = join(directory, 'node_modules'); mkdirSync(modules, { recursive: true });
     const target = join(modules, artifact.name);
     if (options.private) {
-      mkdirSync(target);
-      for (const { path } of artifact.files) {
-        mkdirSync(dirname(join(target, path)), { recursive: true });
-        cpSync(join(artifact.filename, path), join(target, path), { recursive: true });
-      }
-      symlinkSync(join(distributionRoot, 'node_modules'), join(target, 'node_modules'), 'junction');
+      cpSync(artifact.filename, target, { recursive: true, verbatimSymlinks: true });
     } else symlinkSync(artifact.filename, target, 'junction');
     for (const dependency of dependencies) {
       const name = dependency.slice(0, dependency.lastIndexOf('@'));
@@ -58,15 +49,10 @@ export function prepareSourceConsumer(directory: string, artifact: BuiltConcord,
     const cli = packageBin(target);
     if (process.platform === 'win32') writeFileSync(join(modules, '.bin/concord.cmd'), `@"${process.execPath}" "${cli}" %*\r\n`);
     else {
-      writeFileSync(join(modules, '.bin/concord'), `#!/bin/sh\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(cli)} "$@"\n`);
+      writeFileSync(join(modules, '.bin/concord'), `#!/bin/sh\nexec ${packageCommand(cli).map(value => "'" + value.replaceAll("'", "'\\''") + "'").join(' ')} "$@"\n`);
       chmodSync(join(modules, '.bin/concord'), 0o755);
     }
     const manifest = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(readFileSync(join(directory, 'package.json'), 'utf8'));
     writeFileSync(join(directory, 'package.json'), `${JSON.stringify({ ...manifest, dependencies: { [artifact.name]: `file:${artifact.filename}`, ...Object.fromEntries(dependencies.map(dependency => [dependency.slice(0, dependency.lastIndexOf('@')), dependency.slice(dependency.lastIndexOf('@') + 1)])) } }, null, 2)}\n`);
   }));
-}
-
-/** Describe the current gate's package without building another copy. */
-export function sourceConcord(): BuiltConcord {
-  return builtConcord(installedPackageRoot());
 }

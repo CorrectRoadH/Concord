@@ -1,6 +1,8 @@
 import { installationResources } from "../../src/base/installation/index.ts";
-import { packageBin } from './installed-package.ts';
+import { applicationRoot, packageBin } from './installed-package.ts';
+import { packageCommand } from '../../scripts/package-command.ts';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { execFile, spawnSync } from 'node:child_process';
 import { readFileSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -12,11 +14,14 @@ const environment: NodeJS.ProcessEnv = { ...process.env, NO_COLOR: '1', TERM: 'd
 delete environment.FORCE_COLOR;
 export async function verifyInstalledStartup(packageRoot: string, scratch: string): Promise<void> {
 const entry = packageBin(packageRoot);
+const [command, ...prefix] = packageCommand(entry);
+const applicationEntry = join(applicationRoot(packageRoot), 'dist/entry/cli/entry.js');
+const runtime = join(packageRoot, 'runtime/node');
 const replace = (path: string, bytes: string | Buffer) => { writeFileSync(`${path}.pending`, bytes); renameSync(`${path}.pending`, path); };
 const checks: { name: string; run: () => void | Promise<void> }[] = [];
 const test = (name: string, run: () => void | Promise<void>) => { checks.push({ name, run }); };
 const invoke = (args: readonly string[]) => Effect.tryPromise(() => new Promise<{ stdout: string; stderr: string; status: number }>((accept, reject) => {
-  execFile(process.execPath, [entry, ...args], { cwd: scratch, env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
+  execFile(command, [...prefix, ...args], { cwd: scratch, env: environment, encoding: 'utf8', timeout: 30_000, maxBuffer: 16 * 1024 * 1024 }, (error, stdout, stderr) => {
     if (error && typeof error.code !== 'number') { reject(error); return; }
     accept({ stdout, stderr, status: typeof error?.code === 'number' ? error.code : 0 });
   });
@@ -28,6 +33,16 @@ const helpCalls: readonly string[][] = (() => {
   visit(fullCommand as unknown as Definition, []); return [[], ['--version'], ...paths];
 })();
 
+
+// @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
+test('installed startup data authenticates the final package manifest including gitHead', () => {
+  const manifest = readFileSync(join(applicationRoot(packageRoot), 'package.json'));
+  const generated = readFileSync(installationResources(packageRoot).help, 'utf8');
+  const start = generated.indexOf('export default ') + 'export default '.length;
+  const payload = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ packageDigest: Schema.String })), { onExcessProperty: 'ignore' })(generated.slice(start).trim().replace(/;$/u, ''));
+  const actual = createHash('sha256').update(manifest).digest('hex');
+  assert.equal(payload.packageDigest, actual, JSON.stringify({ expectedPackageDigest: payload.packageDigest, actualManifestDigest: actual }));
+});
 
 // @use-case docs/feature/local-sdlc/use-case/onboard-from-template.md
 test('installed static help enumerates the actual commands and matches the public fallback bin byte for byte', () => Effect.runPromise(Effect.gen(function* () {
@@ -52,10 +67,10 @@ test('installed static help enumerates the actual commands and matches the publi
 test('installed help and version load the generated data without Effect, commands or native modules', () => {
   for (const args of [[], ['--version'], ['--help'], ['memory', 'search', '--help'], ['test', 'verify', '--help'], ['check', '--help']]) {
     const path = join(scratch, 'loaded.json');
-    const result = spawnSync(process.execPath, ['--import', resolve('test/support/cli-load-probe.ts'), entry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
+    const result = spawnSync(runtime, ['--import', resolve('test/support/cli-load-probe.ts'), applicationEntry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.status, args.length === 0 ? 1 : 0, JSON.stringify({ args, stdout: result.stdout, stderr: result.stderr }));
     const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(readFileSync(path, 'utf8'));
-    assert.ok(loaded.includes(pathToFileURL(realpathSync(entry)).href), JSON.stringify(loaded));
+    assert.ok(loaded.includes(pathToFileURL(realpathSync(applicationEntry)).href), JSON.stringify(loaded));
     assert.ok(loaded.some(url => url === pathToFileURL(realpathSync(installationResources(packageRoot).help)).href));
     for (const url of loaded) {
       assert.doesNotMatch(url, /\/(?:effect|@effect\/platform-node)(?:\/|@)/u);
@@ -70,11 +85,12 @@ test('installed help and version load the generated data without Effect, command
 test('installed ordinary commands load only their selected command group', () => {
   for (const [group, args] of [['memory', ['--json', '--root', scratch, 'memory', 'search', 'cache']], ['template', ['template', 'list', '--json']]] as const) {
     const path = join(scratch, 'loaded.json');
-    const result = spawnSync(process.execPath, ['--import', resolve('test/support/cli-load-probe.ts'), entry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
+    const result = spawnSync(runtime, ['--import', resolve('test/support/cli-load-probe.ts'), applicationEntry, ...args], { env: { ...environment, CONCORD_TEST_LOADED_MODULES: path }, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.error, undefined);
     const loaded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.String)))(readFileSync(path, 'utf8'));
     assert.ok(loaded.some(url => url === pathToFileURL(realpathSync(installationResources(packageRoot).command(group))).href));
     assert.ok(!loaded.some(url => url === pathToFileURL(realpathSync(installationResources(packageRoot).fallback)).href));
+    assert.ok(!loaded.some(url => /\/entry-full\.js$/u.test(url)), JSON.stringify({ group, loaded }));
     for (const url of loaded.filter(url => /\/cli-command-/u.test(url))) assert.ok(url.endsWith(`/cli-command-${group}.js`), url);
   }
 });
@@ -117,9 +133,9 @@ test('help preserves terminal rendering and rejects mismatched generated data', 
   const original = readFileSync(manifest, 'utf8');
   const shellQuote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
   const run = (args: readonly string[], env: NodeJS.ProcessEnv, tty: boolean) => {
-    const command = [process.execPath, entry, ...args];
-    const result = spawnSync(tty ? 'script' : process.execPath,
-      tty ? process.platform === 'darwin' ? ['-q', '/dev/null', ...command] : ['-q', '-e', '-c', command.map(shellQuote).join(' '), '/dev/null'] : [entry, ...args],
+    const invocation = [command, ...prefix, ...args];
+    const result = spawnSync(tty ? 'script' : command,
+      tty ? process.platform === 'darwin' ? ['-q', '/dev/null', ...invocation] : ['-q', '-e', '-c', invocation.map(shellQuote).join(' '), '/dev/null'] : [...prefix, ...args],
       { env, encoding: 'utf8', timeout: 30_000 });
     assert.equal(result.error, undefined);
     return { stdout: result.stdout, stderr: result.stderr, status: result.status };
@@ -154,7 +170,9 @@ test('help preserves terminal rendering and rejects mismatched generated data', 
 });
 
 for (const check of checks) {
+  const started = performance.now();
   try { await check.run(); }
   catch (cause) { throw new Error(`Installed startup check failed: ${check.name}`, { cause }); }
+  console.error(`# Installed startup: ${check.name}: ${((performance.now() - started) / 1000).toFixed(3)}s`);
 }
 }
