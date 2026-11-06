@@ -1,4 +1,5 @@
 // @concord-file
+// @concord-implements docs/feature/cross-platform-release/cli.md
 // @concord-implements docs/feature/cross-platform-release/use-case/release-from-tag.md
 import { NodeRuntime, NodeServices } from '@effect/platform-node';
 import { tmpdir } from 'node:os';

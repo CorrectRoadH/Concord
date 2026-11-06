@@ -24,6 +24,7 @@ export interface CreateDocumentInput {
 
 // @concord-begin
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#create
+// @concord-implements docs/feature/local-sdlc/use-case/compare-design-plans.md
 // @concord-implements docs/feature/local-sdlc/use-case/plan-and-adopt-contracts.md#roadmap
 // @concord-implements docs/feature/local-sdlc/use-case/recall-and-maintain-memory.md#add
 export const createDocument = Effect.fn('createDocument')(function*(repo: Repository, kind: DocumentKind, input: CreateDocumentInput) {

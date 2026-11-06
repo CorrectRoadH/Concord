@@ -8,7 +8,7 @@ import { expect } from '@playwright/test';
 import { LocalRepository } from '../support/repository.ts';
 import { waitForWorkspaceProjection } from '../support/support.ts';
 
-// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+// @use-case docs/engineering/testing/use-case/write-browser-test.md
 // @name dismissible-workspace-health-navigation
 test('incomplete workspace notice opens health diagnostics and dismisses without hiding findings', { tags: ['journey'] }, async fixtures => {
   const { page, workspace } = fixtures;

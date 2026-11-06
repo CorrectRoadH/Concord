@@ -1,0 +1,144 @@
+import { createDocument, initialize } from '../support/operations.ts';
+import { runApplication } from '../support/repository.ts';
+import { installationResources } from "../../src/base/installation/index.ts";
+import { installedConcordCli } from "../support/support.ts";
+import { dirname } from "node:path";
+import assert from 'node:assert/strict';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { tmpdir } from '../support/temporary.ts';
+import { join } from 'node:path';
+import test from 'node:test';
+import { Effect } from 'effect';
+import { getWorkspaceSnapshot } from "../../src/app/index.ts";
+import { recoverPublicationLeaseSync } from "../../src/base/publication/index.ts";
+
+import { inspectDocumentFile, inspectDocuments, readSource, setMarkdown } from "../../src/app/index.ts";
+import { LocalRepository } from "../support/repository.ts";
+import { openHawdb } from '../../src/base/cache/index.ts';
+
+import { startViewServer } from '../e2e/server.ts';
+import { parseWorkspaceProjection, pollUntil, waitForWorkspaceNotModified, waitForWorkspaceProjection, fetchFresh } from '../support/support.ts';
+
+function fixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'concord-view-performance-'));
+  execFileSync('git', ['init', '-q', root]);
+  const repo = new LocalRepository(root, { initialize: true });
+  try {
+    initialize(repo, false, { testRoots: [], sourceRoots: ['src'] });
+    createDocument(repo, 'feature', { id: 'cached', title: 'Cached', pages: ['architecture'] });
+  } finally { repo.close(); }
+  mkdirSync(join(root, 'src'));
+  writeFileSync(join(root, 'src/main.ts'), '// @concord-code\n// @concord-implements docs/feature/cached/README.md\nexport function cachedCode() { return true; }\n');
+  return root;
+}
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('workbench compresses workspace data and caches fingerprinted assets only', async () => {
+  const root = fixture();
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  try {
+    const base = `http://127.0.0.1:${server.port}`;
+    await waitForWorkspaceProjection(base);
+    const workspace = await fetchFresh(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip' } });
+    assert.equal(workspace.status, 200);
+    assert.equal(workspace.headers.get('content-encoding'), 'gzip');
+    assert.equal(workspace.headers.get('vary'), 'Accept-Encoding');
+    assert.equal(workspace.headers.get('cache-control'), 'no-store');
+    assert.equal((await workspace.json() as { ok: boolean }).ok, true);
+    const uncompressed = await fetchFresh(`${base}/api/workspace`, { headers: { 'Accept-Encoding': 'gzip;q=0' } });
+    assert.equal(uncompressed.headers.get('content-encoding'), null);
+    const html = await (await fetchFresh(base)).text();
+    const asset = /src="\/assets\/([^"]+\.js)"/u.exec(html)?.[1];
+    assert.ok(asset);
+    const script = await fetchFresh(`${base}/assets/${asset}`, { headers: { 'Accept-Encoding': 'gzip' } });
+    assert.equal(script.status, 200);
+    assert.equal(script.headers.get('content-encoding'), 'gzip');
+    assert.equal(script.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+    const index = await fetchFresh(base);
+    assert.equal(index.headers.get('cache-control'), 'no-store');
+  } finally { await server.close(); rmSync(root, { recursive: true, force: true }); }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('independent readers share a lease while publication still requires exclusivity', async () => {
+  const root = fixture();
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease=acquireTraceLeaseSync(process.argv[1], 'shared', 'read-test'); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'read-test'));", root], { stdio: ['pipe', 'pipe', 'pipe'] });
+  try {
+    await once(child.stdout!, 'data');
+    const file = await fetchFresh(`http://127.0.0.1:${server.port}/api/file?path=docs%2Ffeature%2Fcached%2FREADME.md`);
+    assert.equal(file.status, 200);
+    assert.match(await file.text(), /Cached/);
+    const workspace = await fetchFresh(`http://127.0.0.1:${server.port}/api/workspace`);
+    assert.ok([200, 202].includes(workspace.status), await workspace.text());
+    assert.throws(() => new LocalRepository(root), { code: 'RepositoryBusy' });
+  } finally {
+    const closed = once(child, 'close');
+    child.stdin!.end();
+    await closed;
+    await server.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// @use-case docs/feature/portable-coordination/use-case/coordinate-local-publications.md
+test('recovery removes dead owners while optimistic readers remain unregistered', async () => {
+  const root = fixture();
+  const reader = new LocalRepository(root, { dryRun: true });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync } from './src/base/publication/index.ts'; acquireTraceLeaseSync(process.argv[1], 'shared', 'dead-reader'); process.stdout.write('held'); process.stdin.resume();", root], { stdio: ['pipe', 'pipe', 'pipe'] });
+  try {
+    reader.beginSnapshot();
+    await once(child.stdout!, 'data');
+    const closed = once(child, 'close');
+    child.kill('SIGKILL');
+    await closed;
+    assert.equal(recoverPublicationLeaseSync(root).length, 1);
+    reader.endSnapshot();
+    recoverPublicationLeaseSync(root);
+    const writer = new LocalRepository(root);
+    writer.snapshot(() => assert.ok(writer.read('concord.config.ts')));
+    writer.close();
+  } finally {
+    reader.close();
+    if (child.exitCode === null) child.kill('SIGKILL');
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('supporting-page saves avoid inventory scans and preserve conflict checks', () => runApplication(Effect.sync(() => {
+  const root = fixture();
+  const repo = new LocalRepository(root);
+  try {
+    for (let index = 0; index < 120; index += 1) writeFileSync(join(root, `docs/feature/other-${index}.md`), '# Unrelated\n');
+    const path = 'docs/feature/cached/architecture.md';
+    const page = inspectDocumentFile(repo, path)!;
+    let walks = 0;
+    const files = repo.files.bind(repo);
+    repo.files = path => { walks += 1; return files(path); };
+    setMarkdown(repo, path, '# Saved\n', page.digest);
+    assert.equal(readFileSync(join(root, path), 'utf8'), '# Saved\n');
+    assert.equal(walks, 0, 'saving one supporting page must not enumerate unrelated documents');
+    assert.throws(() => setMarkdown(repo, path, '# Stale\n', page.digest), { code: 'FileChangedSinceRead' });
+  } finally { repo.close(); rmSync(root, { recursive: true, force: true }); }
+})));
+
+// @use-case docs/feature/web-workbench/use-case/use-web-workbench.md
+test('HTTP Git status does not scan workspace documents or source declarations', async () => {
+  const root = fixture();
+  const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
+  const files = LocalRepository.prototype.files;
+  let walks = 0;
+  LocalRepository.prototype.files = function(path) { walks += 1; return files.call(this, path); };
+  try {
+    const response = await fetchFresh(`http://127.0.0.1:${server.port}/api/git`);
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /src\/main.ts/);
+    assert.equal(walks, 0, 'Git refresh must not compile the entire workspace');
+  } finally {
+    LocalRepository.prototype.files = files;
+    await server.close(); rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -184,7 +184,7 @@ setInterval(() => {}, 1000);
   }
 }));
 
-// @feature docs/engineering/testing/cli.md#完整门禁
+// @use-case docs/engineering/testing/use-case/split-slow-test.md#find
 runnerTest('official file diagnostics sort durations and count isolated file processes once', root => Effect.gen(function*() {
   const fs = yield* FileSystem.FileSystem;
   const directory = join(root, 'test/model');

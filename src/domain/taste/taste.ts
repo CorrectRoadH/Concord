@@ -236,6 +236,8 @@ export function showTaste(repo: Repository): TasteRecord {
 
 // @concord-code
 // @concord-implements docs/feature/taste/use-case/cite-taste.md
+// @concord-implements docs/feature/taste/use-case/change-taste.md
+// @concord-implements docs/feature/taste/cli.md
 export function tasteShow(repo: Repository) {
   const taste = showTaste(repo);
   const scan = scanTasteLinks(repo, entryIndex(taste.entries));

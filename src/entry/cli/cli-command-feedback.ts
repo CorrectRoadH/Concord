@@ -1,4 +1,5 @@
 // @concord-file
+// @concord-implements docs/feature/feedback/cli.md
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";

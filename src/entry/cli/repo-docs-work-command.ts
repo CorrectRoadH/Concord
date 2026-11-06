@@ -1,3 +1,5 @@
+// @concord-file
+// @concord-implements docs/feature/neutral-project-governance/cli.md
 import { Effect, Option } from "effect";
 import { Argument, Command, Flag } from "effect/unstable/cli";
 import type { TerminalDeliverySink } from "./delivery.ts";

@@ -1,6 +1,8 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/README.md
 // @concord-implements docs/feature/herdr-mod/use-case/read-spec.md#open-feature
+// @concord-implements docs/feature/herdr-mod/use-case/edit-and-check.md
+// @concord-implements docs/feature/herdr-mod/use-case/follow-changes.md
 import { Effect, Scheduler, Schema } from 'effect';
 import { View, div, type AsyncContext, type Context, type Element, type Task } from 'gpui-kit';
 import { h_flex, v_flex, TextView, Editor, EditorState, Input, InputState } from 'gpui-base';

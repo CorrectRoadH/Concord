@@ -1,3 +1,5 @@
+// @concord-file
+// @concord-implements docs/engineering/testing/use-case/extend-fixtures.md
 import { initialize } from './operations.ts';
 import { execFileSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';

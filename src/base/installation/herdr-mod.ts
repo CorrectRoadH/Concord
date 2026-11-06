@@ -1,5 +1,6 @@
 // @concord-file
 // @concord-implements docs/feature/herdr-mod/cli.md#安装与卸载
+// @concord-implements docs/feature/herdr-mod/use-case/install-with-cli.md
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 import { join } from 'node:path';

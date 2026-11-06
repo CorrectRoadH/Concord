@@ -1,4 +1,5 @@
 // @concord-file
+// @concord-implements docs/engineering/testing/use-case/split-slow-test.md
 // @concord-implements docs/engineering/build/architecture.md#脚本只写项目特有的规则
 import { Effect, FileSystem, Schema, Stream } from 'effect';
 import { run, type RunOptions } from 'node:test';
