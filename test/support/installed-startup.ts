@@ -92,6 +92,7 @@ test('installed ordinary commands load only their selected command group', () =>
     assert.ok(!loaded.some(url => url === pathToFileURL(realpathSync(installationResources(packageRoot).fallback)).href));
     assert.ok(!loaded.some(url => /\/entry-full\.js$/u.test(url)), JSON.stringify({ group, loaded }));
     for (const url of loaded.filter(url => /\/cli-command-/u.test(url))) assert.ok(url.endsWith(`/cli-command-${group}.js`), url);
+    for (const url of loaded) assert.doesNotMatch(url, /\/(?:effect|@effect\/platform-node)\/dist\/index\.js$/u, 'ordinary startup loads only the required public submodules');
   }
 });
 
