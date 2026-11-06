@@ -168,7 +168,7 @@ native/hawdb/   HawDB 的 N-API 绑定
 
 | 服务 | 职责 |
 | --- | --- |
-| RuntimeEnvironment | `base/environment` 的只读端口：一次调用或一个进程的绝对 cwd 与完整环境变量快照，不含 argv、标准流与退出码。`makeRuntimeEnvironment(cwd, env)` 要求绝对 cwd 并冻结副本，`RuntimeEnvironment.layer(snapshot)` 只提供值、不读取宿主。每个入口的组合根提供它：CLI 的 `entry.ts`、工作区服务、计算、操作、刷新与读写进程、LSP、库与测试；相对路径、Git、临时目录、runner、LSP、OwnedProcess、安装资源与缓存路径都从它派生，缺少的变量不回落到宿主进程。`ConfigProvider` 绑定同一快照。模块只依赖 Effect 与平台的纯路径查询，不依赖其它 base 模块 |
+| RuntimeEnvironment | `base/environment` 的只读端口：一次调用或一个进程的绝对 cwd 与完整环境变量快照，不含 argv、标准流与退出码。`makeRuntimeEnvironment(cwd, env)` 要求绝对 cwd 并冻结副本，`RuntimeEnvironment.layer(snapshot)` 只提供值、不读取宿主。每个入口的组合根提供它：CLI 的 `entry.ts`、工作区服务、计算、操作、刷新与读写进程、LSP、库与测试；相对路径、Git、临时目录、runner、LSP、OwnedProcess、安装资源与缓存路径都从它派生，缺少的变量不回落到宿主进程。`ConfigProvider` 绑定同一快照。同步的领域代码经 model 的 Repository 端口取得环境：`environment()` 返回构造仓库时冻结的完整快照，`environment(names)` 只返回列出的变量，两者都不读宿主；领域代码用 `repo.root` 与 `environment()` 构造 RuntimeEnvironment，交给同步扫描与缓存实例，model 的 Repository 类型不引用 base。只解析源文本的函数显式接收快照。模块只依赖 Effect 与平台的纯路径查询，不依赖其它 base 模块 |
 | Installation | 安装目录根、源码运行时的根、原生产物的定位（源码运行取自经身份校验的共享缓存，安装后取自安装目录）、模板与 skill 资源、工作进程入口，以及安装身份。安装身份是安装目录全部 JS 与原生产物的内容摘要，按各文件的 device、inode、大小、mtime、ctime 与目录成员组成的元数据指纹缓存在用户缓存目录；指纹任一变化时重新计算内容摘要，因此产物被替换时仍能发现 |
 | Workspace | 项目目录、对应的 Git-private 目录与安装身份；配置快照在每次操作与刷新时重新读取与核验，不作为进程期事实缓存 |
 | Sources | 路径安全的读取、来源快照与返回前核验 |
