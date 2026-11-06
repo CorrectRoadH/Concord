@@ -270,10 +270,10 @@ export function WritingPage() {
   return <div className="writing-page">
     {navigationHost && createPortal(<ContentSidebar model={{
       label: view === 'terms' ? '术语' : '写作', title: view === 'terms' ? '术语' : '写作',
-      filter: view === 'terms' ? { label: '筛选术语', placeholder: '搜索名称、定义或目录…', value: aggregateQuery, onChange: setAggregateQuery } : { label: '筛选适用范围', placeholder: '按适用范围筛选…' },
-      groups: [{ id: 'scopes', label: '适用范围列表', heading: '适用范围', filterable: view !== 'terms',
+      filter: view === 'terms' ? { label: '筛选术语', placeholder: '搜索名称、定义或目录…', value: aggregateQuery, onChange: setAggregateQuery } : { label: '筛选生效范围', placeholder: '按生效范围筛选…' },
+      groups: [{ id: 'scopes', label: '生效范围列表', heading: '生效范围', filterable: view !== 'terms',
         items: [...new Set(['docs', ...scopes.map(item => item.scope), scope])].map(path => ({ id: path, path, title: path === 'docs' ? '整个项目' : path.replace(/^docs\//u, ''), active: scope === path, icon: <Folder size={16} />, onSelect: () => switchScope(path) })),
-        footer: (close: () => void) => <form className="writing-directory-add" onSubmit={event => { event.preventDefault(); close(); switchScope(scopeInput.trim()); }}><Input aria-label="新适用范围" value={scopeInput} onChange={event => setScopeInput(event.target.value)} placeholder="其他目录，如 docs/feature/example" /><Button type="submit" variant="outline" disabled={!scopeInput.trim()}>打开范围</Button></form>,
+        footer: (close: () => void) => <form className="writing-directory-add" onSubmit={event => { event.preventDefault(); close(); switchScope(scopeInput.trim()); }}><Input aria-label="新生效范围" value={scopeInput} onChange={event => setScopeInput(event.target.value)} placeholder="其他目录，如 docs/feature/example" /><Button type="submit" variant="outline" disabled={!scopeInput.trim()}>打开范围</Button></form>,
       }, ...(view === 'terms' ? [{ id: 'terms', label: '术语列表', heading: '术语',
         actions: (close: () => void) => <div className="terminology-actions"><Button variant="outline" disabled={catalog.loading || catalog.saving || catalog.remote?.state === 'invalid' || !!structure.error} onClick={() => { addConcept(); close(); }}>新增术语</Button><Button variant="ghost" onClick={() => void loadAggregate()}>刷新列表</Button></div>,
         items: shownConcepts.map(item => ({ id: `${item.path}:${item.index}`, path: item.path, title: conceptTitle(item.concept) || '新术语', searchText: `${item.concept.id} ${item.concept.definition} ${item.scope} ${item.concept.term}`, active: scope === item.scope && selectedIndex === item.index, icon: <BookOpen size={16} />, onSelect: () => switchScope(item.scope, item.index, item.concept.id) })),
@@ -314,7 +314,7 @@ export function WritingPage() {
           </div>
           <details className="writing-rule-scope"><summary>范围与例外<span>{ban.roots?.length ? `${ban.roots.length} 个目录` : '当前范围'}{ban.allowIn?.length ? ` · ${ban.allowIn.length} 个允许长词` : ''}</span></summary>
             <div className="writing-options">
-              <label>适用范围（每行一项）<Textarea aria-label={`适用范围 ${index + 1}`} value={listed(ban.roots)} onChange={event => { const values = lines(event.target.value); banField(index, 'roots', values.length ? values : undefined); }} /></label>
+              <label>生效范围（每行一项）<Textarea aria-label={`生效范围 ${index + 1}`} value={listed(ban.roots)} onChange={event => { const values = lines(event.target.value); banField(index, 'roots', values.length ? values : undefined); }} /></label>
               <label>允许的长词（每行一项）<Textarea aria-label={`允许的长词 ${index + 1}`} value={listed(ban.allowIn)} onChange={event => banField(index, 'allowIn', lines(event.target.value))} /></label>
             </div>
           </details>

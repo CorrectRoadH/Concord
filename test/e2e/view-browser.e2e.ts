@@ -101,6 +101,8 @@ test('browser opens and refreshes a deep link without credentials and retries in
   const contentNavigation = page.getByRole('navigation', { name: '内容导航', exact: true });
   assert.equal(await contentNavigation.evaluate(element => element.parentElement!.scrollHeight > element.parentElement!.clientHeight), true);
   assert.equal(await contentNavigation.evaluate(element => getComputedStyle(element.parentElement!).scrollbarWidth), 'none');
+  // The lazy header action changes the sidebar height and its scroll anchor.
+  await expect(contentNavigation.getByRole('button', { name: '新建 Feature', exact: true })).toBeVisible();
   const pagePane = page.locator('.document-workspace > .page');
   await contentNavigation.evaluate(element => { element.parentElement!.scrollTop = 160; });
   assert.equal(await contentNavigation.evaluate(element => element.parentElement!.scrollTop), 160);
@@ -121,7 +123,7 @@ test('browser opens and refreshes a deep link without credentials and retries in
   await expect(page.getByText('docs/concepts.md#direct-access', { exact: true })).toBeVisible();
   await expect(page.getByText('docs/feature/web/concepts.md#workbench', { exact: true })).toBeVisible();
   await expect(page.getByText('直接访问', { exact: true })).toBeVisible();
-  await expect(page.getByText(/弃用名称：旧访问/u)).toBeVisible();
+  await expect(page.getByText(/旧写法：旧访问/u)).toBeVisible();
   await expect(page.getByText('浏览器直接打开工作台', { exact: true })).toBeVisible();
   await expect(page.getByRole('link', { name: '打开术语' })).toHaveAttribute('href', '/terms');
   await expect(page.getByText('docs/feature/html/concepts.md#html-only', { exact: true })).toHaveCount(0);

@@ -47,7 +47,7 @@ export function TerminologyPanel({ document }: { readonly document: WorkspaceDoc
             <strong>{item.concept.term}</strong>
             <p className="mb-0 mt-2">{item.concept.definition}</p>
             <code className="text-xs text-muted-foreground">{item.reference}</code>
-            {item.concept.deprecated.length > 0 && <p>弃用名称：{item.concept.deprecated.join('、')}</p>}
+            {item.concept.deprecated.length > 0 && <p>旧写法：{item.concept.deprecated.join('、')}</p>}
           </RecordItem>)}</RecordList>}
       </>}
   </>;

@@ -56,13 +56,13 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
   await expect(page.getByRole('complementary', { name: '术语 侧栏' })).toBeVisible();
   const terms = page.getByRole('list', { name: '术语列表' });
   const source = page.getByLabel('源码原文', { exact: true });
-  await expect(page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true })).toBeVisible();
-  await expect(page.getByLabel('新适用范围')).toBeVisible();
+  await expect(page.getByRole('list', { name: '生效范围列表' }).getByRole('button', { name: 'feature/beta', exact: true })).toBeVisible();
+  await expect(page.getByLabel('新生效范围')).toBeVisible();
   await expect(page.getByRole('button', { name: '管理术语', exact: true })).toHaveCount(0);
   await expect(page.getByRole('button', { name: '编辑术语', exact: true })).toHaveCount(0);
   await expect(page.getByRole('textbox', { name: '源码原文' })).toBeVisible();
   const betaLoaded = catalogResponse(`${b}/concepts.md`);
-  await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
+  await page.getByRole('list', { name: '生效范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
   await confirmCatalog(await betaLoaded);
   await expect(source).toContainText('Beta definition');
   await page.getByLabel('筛选术语').fill('Global');
@@ -80,7 +80,7 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
   await terms.getByRole('button', { name: /Global/ }).click();
   await expect(source).toContainText('Unsaved global');
   assert.match(readFileSync(join(root, 'docs/concepts.md'), 'utf8'), /Global definition/u);
-  await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
+  await page.getByRole('list', { name: '生效范围列表' }).getByRole('button', { name: 'feature/beta', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
   const betaReloaded = catalogResponse(`${b}/concepts.md`);
   await page.getByRole('button', { name: '丢弃并切换' }).click();
@@ -107,11 +107,11 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
   });
   await page.getByRole('link', { name: '写作', exact: true }).click();
   const stalePolicy = browserActionReceipt(page, 'writing.show', input => input.path === `${a}/writing.md`);
-  await page.getByLabel('新适用范围').fill(a);
+  await page.getByLabel('新生效范围').fill(a);
   await page.getByRole('button', { name: '打开范围' }).click();
   await heldA;
   const betaPolicy = browserActionReceipt(page, 'writing.show', input => input.path === `${b}/writing.md`);
-  await page.getByLabel('新适用范围').fill(b);
+  await page.getByLabel('新生效范围').fill(b);
   await page.getByRole('button', { name: '打开范围' }).click();
   await betaPolicy;
   await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta');
@@ -126,7 +126,7 @@ test('real browser isolates scope responses and drafts, keeps partial save confl
   await page.getByLabel('替换建议 1').fill('Beta saved');
   await page.getByRole('link', { name: '术语', exact: true }).click();
   await source.fill(readFileSync(join(root, b, 'concepts.md'), 'utf8').replace('Beta definition', 'Beta draft'));
-  await page.getByRole('list', { name: '适用范围列表' }).getByRole('button', { name: 'feature/alpha', exact: true }).click();
+  await page.getByRole('list', { name: '生效范围列表' }).getByRole('button', { name: 'feature/alpha', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '切换范围并丢弃未保存内容？' })).toBeVisible();
   await page.getByRole('button', { name: '留在当前范围' }).click();
   await expect(page.getByLabel('替换建议 1')).toHaveValue('Beta saved');
@@ -256,7 +256,7 @@ test('real browser creates a local Markdown catalog, diagnoses structure and sav
 
   await page.setViewportSize({ width: 1440, height: 950 });
   await page.goto(`http://127.0.0.1:${server.port}/terms`);
-  await page.getByLabel('新适用范围').fill(scope);
+  await page.getByLabel('新生效范围').fill(scope);
   await page.getByRole('button', { name: '打开范围' }).click();
   await page.getByRole('button', { name: '创建本目录术语表' }).click();
   const source = page.getByRole('textbox', { name: '源码原文' });

@@ -51,7 +51,7 @@ test('a late successful concepts index preserves the newer writing report', ({ p
       await held;
       await route.fulfill({ response });
     });
-    await page.getByLabel('新适用范围').fill(scope);
+    await page.getByLabel('新生效范围').fill(scope);
     await page.getByRole('button', { name: '打开范围', exact: true }).click();
     await capture;
     await page.getByRole('button', { name: '检查已保存文档', exact: true }).click();

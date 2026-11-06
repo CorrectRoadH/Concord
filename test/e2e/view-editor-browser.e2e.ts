@@ -35,7 +35,10 @@ test('long documents remain reachable and code blocks follow theme without chang
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(`http://127.0.0.1:${server.port}/features/long`);
   await expect(page.getByText('已切换为原文编辑', { exact: true })).toHaveCount(0);
-  await expect(page.getByRole('img', { name: 'Architecture diagram', exact: true })).toHaveAttribute('title', 'System architecture');
+  const diagram = page.getByRole('img', { name: 'Architecture diagram', exact: true });
+  // The image plugin suspends until the source has loaded or failed.
+  await diagram.evaluate(element => (element as HTMLImageElement).decode());
+  await expect(diagram).toHaveAttribute('title', 'System architecture');
   const architectureLink = page.getByRole('link', { name: 'Read architecture', exact: true });
   await expect(architectureLink).toHaveCSS('cursor', 'pointer');
   await architectureLink.click();

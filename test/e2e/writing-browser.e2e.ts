@@ -1,6 +1,6 @@
 import { browserActionReceipt } from '../support/browser-save.ts';
 import assert from 'node:assert/strict';
-import { parseWritingPolicy, defaultWritingPolicy } from '../../src/model/index.ts';
+import { parseWritingPolicy, renderWritingPolicy, defaultWritingPolicy } from '../../src/model/index.ts';
 import { writeWritingFile } from '../support/writing-files.ts';
 
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -137,11 +137,31 @@ test('real browser displays invalid policy bytes and requires an explicit repair
   await page.getByRole('button', { name: '修复规则' }).click();
   await expect(page.getByText('{ broken policy')).toBeVisible();
   assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), '{ broken policy');
-  const saved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/action' && (response.request().postDataJSON() as { action?: string }).action === 'document.set' && (response.request().postDataJSON() as { path?: string }).path === 'docs/writing.md');
+  let releaseSave!: () => void;
+  let saveIntercepted!: () => void;
+  const saveHeld = new Promise<void>(resolve => { releaseSave = resolve; });
+  const interceptedSave = new Promise<void>(resolve => { saveIntercepted = resolve; });
+  await page.route('**/api/action', async route => {
+    const input = route.request().postDataJSON() as { action?: string; path?: string };
+    if (input.action === 'document.set' && input.path === 'docs/writing.md') {
+      saveIntercepted();
+      await saveHeld;
+    }
+    await route.continue();
+  });
+  const repairedSource = renderWritingPolicy(defaultWritingPolicy);
+  const saved = browserActionReceipt(page, 'document.set', input => input.path === 'docs/writing.md' && input.body === repairedSource);
+  const reloaded = browserActionReceipt(page, 'writing.show', input => input.path === 'docs/writing.md');
   await page.getByRole('button', { name: '保存规则' }).click();
-  assert.equal((await saved).status(), 200);
-  await expect.poll(() => readFileSync(join(root, 'docs/writing.md'), 'utf8')).not.toBe('{ broken policy');
+  await interceptedSave;
+  try {
+    assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), '{ broken policy');
+  } finally { releaseSave(); }
+  await saved;
+  await reloaded;
+  assert.equal(readFileSync(join(root, 'docs/writing.md'), 'utf8'), repairedSource);
   assert.equal(parseWritingPolicy(readFileSync(join(root, 'docs/writing.md'), 'utf8')).bannedTerms.length, defaultWritingPolicy.bannedTerms.length);
+  await expect(page.getByRole('region', { name: '写作规则编辑' }).getByRole('status')).toHaveText('写作规则已保存。');
   await expect(page.getByText('{ broken policy')).toHaveCount(0);
 
 });
