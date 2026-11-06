@@ -47,11 +47,11 @@ test('source native hooks require explicit matching identity and preserve digest
       const db = createMemoryHawdb();
       try {
         process.env.CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST = '1';
-        assert.throws(() => db.put('code_cache', [{ key: 'first', payload: '1' }, { key: 'second', payload: '2' }]), error => error.code === 'HawdbUnavailable');
+        assert.throws(() => db.put('document_parse', [{ key: 'first', payload: '1' }, { key: 'second', payload: '2' }]), error => error.code === 'HawdbUnavailable');
         delete process.env.CONCORD_HAWDB_TEST_FAIL_AFTER_FIRST;
-        assert.deepEqual(db.scan('code_cache'), []);
-        db.put('code_cache', [{ key: 'committed', payload: 'value' }]);
-        assert.deepEqual(db.scan('code_cache'), [{ key: 'committed', payload: 'value' }]);
+        assert.deepEqual(db.scan('document_parse'), []);
+        db.put('document_parse', [{ key: 'committed', payload: 'value' }]);
+        assert.deepEqual(db.scan('document_parse'), [{ key: 'committed', payload: 'value' }]);
       } finally { db.close(); }
     `);
     assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
