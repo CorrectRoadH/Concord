@@ -13,7 +13,11 @@ concord herdr uninstall
 
 | 错误 | 什么时候出现 |
 | --- | --- |
-| `HerdrNotFound` | 找不到 Herdr 的配置目录 |
+| `HerdrNotFound` | 没有 `herdr-app` 命令，也没有 Herdr 的配置目录；消息给出安装 Herdr 的命令 |
+| `HerdrModPathOccupied` | `mods/concord/` 已存在且不是 Concord 的 mod |
+| `HerdrModCheckFailed` | 安装后 `herdr-app check` 失败；`details.output` 是 Herdr 的输出 |
+
+各情形的结果见[用 Concord 命令安装 mod](use-case/install-with-cli.md)。
 
 ## mod 调用的命令
 
