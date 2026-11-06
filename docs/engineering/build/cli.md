@@ -19,6 +19,7 @@
 | --- | --- |
 | `CONCORD_NATIVE_OFFLINE=1` | `build:native` 跳过下载，只用共享缓存或从源码编译 |
 | `XDG_CACHE_HOME` | 原生产物共享缓存的根目录，省略时为 `~/.cache` |
+| `CONCORD_NATIVE_TEST_HOOKS=1` | 源码模式只加载带测试钩子的原生产物（[故障注入产物](architecture.md#故障注入产物)） |
 | `CONCORD_TARGET` | `vp build` 组装的目标：`linux-x64` 或 `darwin-arm64`。省略时取本机目标；本机不是这两者之一时，省略也返回 `UnsupportedTarget` |
 
 ## 错误

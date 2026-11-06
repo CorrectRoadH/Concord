@@ -20,6 +20,12 @@
 
 发布流程不使用前两项，始终从源码编译要发布的原生产物。按摘要的 Release 由手动触发的 `native` workflow 为每个 target 编译并发布；本地构建与 CI 只读取它。
 
+### 故障注入产物
+
+验证事务失败与崩溃恢复的测试需要带测试钩子的原生产物。`node scripts/build-native.ts --test-hooks` 从源码编译它，产物身份记录 `testHooks: true`，只写入调用方用 `XDG_CACHE_HOME` 指定的私有缓存；它不参与上面的复用顺序，不能复用、下载或打包进归档。
+
+源码模式加载原生产物时，`CONCORD_NATIVE_TEST_HOOKS=1` 表示要求带钩子的产物，省略表示要求不带钩子的产物；产物的 `testHooks` 与要求不一致时返回 `HawdbIncompatible`。其余身份项照常全部校验。安装包始终拒绝带钩子的产物。
+
 ## 归档组装
 
 发布归档由一个 TypeScript 打包入口组装，`vp build`、打包测试与发布工作流都调用它。入口的输入是目标、应用构建输出与经身份校验的原生产物，输出为[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)所列的目录与 `concord-<version>-<target>.tar.gz`。各部分的来源与校验只由归档构成定义，本节只写组装顺序。目标由 [`CONCORD_TARGET`](cli.md#环境变量) 选择。
