@@ -28,24 +28,28 @@ test('write deadline produces uncertain outcome and a fresh close observes appli
   const processes = { ...realProcesses, environment: { ...realProcesses.environment, env: { ...realProcesses.environment.env, PATH: `${bin}:${process.env.PATH ?? ''}`, GH_DEBUG: 'api', GH_REPO: 'attacker/other' } } };
   try {
     await runApplication(Effect.scoped(Effect.gen(function*() {
-      const clock = yield* TestClock.make(); yield* clock.setTime(Date.now());
-      const run = makeNodeIssueCommandRunner(root);
+      const clock = yield* TestClock.make();
+      const runner = makeNodeIssueCommandRunner(root);
+      const run: typeof runner = (id, execute, operation) => runner(id, execute, operation).pipe(Effect.provideService(Clock.Clock, clock));
       const receipt = yield* run(connection.id, false, planRemoteIssue(connection.id, 12, { operation: 'close' }));
-      const execution = yield* run(connection.id, true, executeRemoteIssue(connection.id, receipt.receiptId, receipt.authorize)).pipe(Effect.result, Effect.provideService(Clock.Clock, clock), Effect.forkChild);
+      const execution = yield* run(connection.id, true, executeRemoteIssue(connection.id, receipt.receiptId, receipt.authorize)).pipe(Effect.result, Effect.forkChild);
       yield* Effect.tryPromise(() => pollUntil(async () => {
         const calls = readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as { args: string[] });
         const writes = calls.filter(call => call.args.includes('--method') && call.args[call.args.indexOf('--method') + 1] !== 'GET');
         return writes.length === 1 && (JSON.parse(readFileSync(scenarioFile, 'utf8')) as { issue: { state: string } }).issue.state === 'closed' ? writes : undefined;
       }));
-      yield* clock.adjust('121 seconds');
+      // Stop at the write deadline; OS exit events must settle before cleanup time advances.
+      yield* clock.adjust('120 seconds');
       const outcome = yield* Fiber.join(execution);
       assert.ok(Result.isFailure(outcome)); assert.ok(outcome.failure instanceof IssueMutationUncertain);
       const calls = readFileSync(callsFile, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line) as { args: string[] });
       assert.equal(calls.filter(call => call.args.includes('--method') && call.args[call.args.indexOf('--method') + 1] !== 'GET').length, 1);
       const fresh = yield* run(connection.id, false, planRemoteIssue(connection.id, 12, { operation: 'close' })).pipe(Effect.result);
-      assert.ok(Result.isFailure(fresh)); assert.ok(fresh.failure instanceof IssueNoChange);
+      assert.ok(Result.isFailure(fresh)); assert.ok(fresh.failure instanceof IssueNoChange, JSON.stringify(fresh.failure));
       assert.equal(yield* processes.activeCount, 0);
-      assert.ok((yield* processes.cleanupResults).every(result => !result.processGroupOwned || result.groupCleanup.gone === true));
+      const cleanupResults = yield* processes.cleanupResults;
+      assert.deepEqual(cleanupResults.filter(result => result.timedOut).map(result => result.groupCleanup.signalsSent), [['SIGTERM']]);
+      assert.ok(cleanupResults.every(result => !result.processGroupOwned || result.groupCleanup.gone === true), JSON.stringify(cleanupResults));
     })).pipe(Effect.provideService(OwnedProcess, processes)));
   } finally { rmSync(root, { recursive: true, force: true }); rmSync(scratch, { recursive: true, force: true }); }
 });
