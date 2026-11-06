@@ -13,9 +13,9 @@
 5. 构建、身份核验与完整检查通过后发布源码 GitHub Release 与 tgz。
 6. macOS Homebrew 安装必须保留原生产物字节。动态库使用可重定位的 `@rpath` 标识，Formula 声明 `preserve_rpath`；安装时压缩原生 addon，待 Homebrew 链接处理结束后在 post-install 解压还原原始字节。公开 tap 自动发现发布，核验版本、标签、资产与哈希，准备 Formula 与 Linux Nix 元数据。候选必须通过 Homebrew 与 Linux Nix 安装运行检查；通过后提交、打 recipe 标签并创建渠道完成记录。
 7. 用户通过 `brew install CorrectRoadH/tap/concord` 或文档中的 Nix flake 安装，看到对应标签的版本。
-8. 源码 Release 成功后发布同版本的 Herdr mod：把安装包中构建好的 mod、`RECIPE.md` 与真实 Herdr 主机上的截图 `preview.png` 推到公开仓库 `CorrectRoadH/concord-herdr-mod` 的 `concord/` 目录，结构为 `concord/RECIPE.md`、`concord/preview.png` 与 `concord/mods/concord/`（`main.js`、`mod.json`）。herdr.dev 按 GitHub 账号与目录名把它列为 `herdr.dev/mods/CorrectRoadH/concord`；`mod.json` 写明要求的最低 Concord 版本，即本次发布的版本。
+8. 源码 Release 成功后发布同版本的 Herdr mod：发布 workflow 把安装包中构建好的 mod、`RECIPE.md` 与真实 Herdr 主机上的截图 `preview.png` 写到本仓库顶层的 `concord/` 目录，结构为 `concord/RECIPE.md`、`concord/preview.png` 与 `concord/mods/concord/`（`main.js`、`mod.json`），以一个提交推到 master。本仓库带 GitHub topic `herdr-mod`，herdr.dev 按账号与目录名把它列为 `herdr.dev/mods/CorrectRoadH/concord`；`mod.json` 写明要求的最低 Concord 版本，即本次发布的版本。
 
-发布 Herdr mod 需要一次性准备：创建公开仓库 `CorrectRoadH/concord-herdr-mod`，加上 GitHub topic `herdr-mod`，并给发布 workflow 一个只能写这个仓库的凭据。没有凭据时第 8 步失败并报告，不影响源码 Release 与 Homebrew、Nix 渠道。
+`concord/` 是唯一提交到仓库的构建产物，只由发布 workflow 写入，人与 agent 不手改；它不属于源码、测试或 Spec，不参与类型检查、`concord check` 与测试选择。workflow 使用自带的 `GITHUB_TOKEN` 写入，第 8 步失败时报告，不影响源码 Release 与 Homebrew、Nix 渠道。
 
 ## 结果
 
