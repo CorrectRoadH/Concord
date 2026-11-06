@@ -34,7 +34,7 @@ test("generic and Trace operations share one portable publication lease", (t) =>
 
 test("the shared lease also excludes a separate Node process", async (t) => {
   const root = isolatedRepository(t);
-  const child = spawn(process.execPath, ["--import", "tsx", "--eval", `import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease = acquireTraceLeaseSync(process.argv[1], 'exclusive', 'child-hold', true); console.log('ready'); process.stdin.once('data', () => { if (lease) releaseTraceLeaseSync(lease, 'child-release'); });`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
+  const child = spawn(process.execPath, ["--eval", `import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease = acquireTraceLeaseSync(process.argv[1], 'exclusive', 'child-hold', true); console.log('ready'); process.stdin.once('data', () => { if (lease) releaseTraceLeaseSync(lease, 'child-release'); });`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
   t.after(() => { if (child.exitCode === null) child.kill("SIGTERM"); });
   try {
     await new Promise<void>((resolve, reject) => {
@@ -214,14 +214,14 @@ test("invalid generated mode or oversized bytes are rejected before a journal is
 
 test("source reads remain available while generic and Trace writers hold ownership", async (t) => {
   const root = isolatedRepository(t);
-  const genericChild = spawn(process.execPath, ["--import", "tsx", "--eval", `import { LocalRepository } from './test/support/repository.ts'; const repository = new LocalRepository(process.argv[1]); repository.beginSnapshot(); console.log('ready'); process.stdin.once('data', () => repository.close());`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
+  const genericChild = spawn(process.execPath, ["--eval", `import { LocalRepository } from './test/support/repository.ts'; const repository = new LocalRepository(process.argv[1]); repository.beginSnapshot(); console.log('ready'); process.stdin.once('data', () => repository.close());`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
   t.after(() => { if (genericChild.exitCode === null) genericChild.kill("SIGTERM"); });
   try {
     await new Promise<void>((resolve, reject) => { genericChild.stdout.once("data", (data) => data.toString().includes("ready") ? resolve() : reject(new Error("generic child did not become ready"))); genericChild.once("error", reject); });
     assert.equal(await Effect.runPromise(Effect.sync(() => { const reader = new LocalRepository(root, { access: 'read' }); reader.close(); return true; })), true);
   } finally { genericChild.stdin.end("done"); await new Promise<void>((resolve) => genericChild.once("exit", () => resolve())); }
 
-  const profileChild = spawn(process.execPath, ["--import", "tsx", "--eval", `import { Effect } from 'effect'; import { mutateTraceFiles } from './src/base/publication/index.ts'; await Effect.runPromise(mutateTraceFiles({ root: process.argv[1], operation: 'hold-profile', prepareUnderLease: Effect.promise(() => { console.log('ready'); return new Promise((resolve) => process.stdin.once('data', () => resolve([{ path: 'held.md', bytes: 'held\\n' }]))); }) }));`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
+  const profileChild = spawn(process.execPath, ["--eval", `import { Effect } from 'effect'; import { mutateTraceFiles } from './src/base/publication/index.ts'; await Effect.runPromise(mutateTraceFiles({ root: process.argv[1], operation: 'hold-profile', prepareUnderLease: Effect.promise(() => { console.log('ready'); return new Promise((resolve) => process.stdin.once('data', () => resolve([{ path: 'held.md', bytes: 'held\\n' }]))); }) }));`, root], { cwd: process.cwd(), stdio: ["pipe", "pipe", "pipe"] });
   t.after(() => { if (profileChild.exitCode === null) profileChild.kill("SIGTERM"); });
   try {
     await new Promise<void>((resolve, reject) => { profileChild.stdout.once("data", (data) => data.toString().includes("ready") ? resolve() : reject(new Error("profile child did not become ready"))); profileChild.once("error", reject); });

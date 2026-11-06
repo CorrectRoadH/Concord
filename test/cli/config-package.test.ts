@@ -1,6 +1,6 @@
 import { initialize } from '../support/operations.ts';
-import { packageBin } from '../support/installed-package.ts';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { sourceCli } from '../support/source-consumer.ts';
+import { sourceRoot, prepareSourceConsumer } from '../support/source-consumer.ts';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -20,12 +20,12 @@ test('source config has usable type hints and rejects misspelled fields', () => 
   const consumer = join(scratch, 'initialized');
   let cli: string | undefined;
   try {
-    const packed = sourceConcord();
+
     const project = join(scratch, 'consumer'); mkdirSync(project);
     writeFileSync(join(project, 'package.json'), JSON.stringify({ private: true, type: 'module' }));
-    prepareSourceConsumer(project, packed, ['typescript@7.1.0-beta', '@types/node@24.13.3']);
+    prepareSourceConsumer(project, ['typescript@7.1.0-beta', '@types/node@24.13.3']);
     execFileSync('git', ['init', '-q', consumer]);
-    cli = packageBin(join(project, 'node_modules/concord-sdlc'));
+    cli = sourceCli();
     execFileSync(process.execPath, [cli, '--root', consumer, 'init', '--docs-only'], { encoding: 'utf8', timeout: 30_000 });
     const preset = JSON.parse(execFileSync(process.execPath, [cli, '--root', consumer, 'writing', 'show', '--json'], { encoding: 'utf8', timeout: 30_000 }));
     assert.equal(preset.state, 'valid');

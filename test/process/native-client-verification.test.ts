@@ -5,7 +5,7 @@ import test from 'node:test';
 // @feature docs/feature/local-data-engine/architecture.md#cli-查询
 test('client artifact verification does not load a native engine owned by the service', () => {
   const module = new URL('../../src/base/cache/hawdb-native.ts', import.meta.url).href;
-  const result = spawnSync(process.execPath, ['--no-addons', '--import', 'tsx', '--input-type=module', '-e', `
+  const result = spawnSync(process.execPath, ['--no-addons', '--input-type=module', '-e', `
     import assert from 'node:assert/strict';
     import { verifyHawdbArtifact, validateHawdbArtifact } from ${JSON.stringify(module)};
     verifyHawdbArtifact();

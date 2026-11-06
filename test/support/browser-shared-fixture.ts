@@ -5,7 +5,8 @@ import { execFileSync } from 'node:child_process';
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { Effect, Exit, Scope } from 'effect';
-import { installedBrowserBin, startViewServer, ViewServerStartupFailed, type ViewServerHandle, type ViewServerOptions } from '../e2e/server.ts';
+import { startViewServer, ViewServerStartupFailed, type ViewServerHandle, type ViewServerOptions } from '../e2e/server.ts';
+import { sourceCli } from './source-consumer.ts';
 import { initialize } from './operations.ts';
 import { LocalRepository } from './repository.ts';
 import { fetchFresh, parseWorkspaceProjection, pollUntil } from './support.ts';
@@ -135,7 +136,7 @@ export class BrowserSharedFixture {
       this.privateServers.delete(server);
     }));
     const startupCleanup = await Promise.allSettled([...this.privateStartupFailures.keys()].map(async root => {
-      stopWorkspaceServer(root, installedBrowserBin());
+      stopWorkspaceServer(root, sourceCli());
       this.privateStartupFailures.delete(root);
     }));
     for (const root of this.privateRoots) {

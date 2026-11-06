@@ -16,7 +16,7 @@ import { ChildProcess, ChildProcessSpawner } from 'effect/unstable/process';
 const target = hawdbTarget();
 const original = join(nativeArtifactRoot, target);
 const identity = Effect.runSync(Effect.sync(() => decodeNativeArtifact(JSON.parse(readFileSync(join(original, 'artifact.json'), 'utf8')))));
-const args = (root: string) => ['--import', 'tsx', 'scripts/build-native.ts', '--reuse', '--output', join(root, 'output')];
+const args = (root: string) => ['scripts/build-native.ts', '--reuse', '--output', join(root, 'output')];
 const cachePath = (root: string) => join(root, 'cache/concord/native', `${identity.sourceDigest}-${identity.cargoLockDigest}`, target);
 const setup = () => {
   const root = mkdtempSync(join(tmpdir(), 'concord-native-build-'));

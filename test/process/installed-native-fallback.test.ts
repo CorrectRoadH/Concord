@@ -3,21 +3,20 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import test from 'node:test';
-import { hawdbTarget, installationResources } from '../../src/base/installation/index.ts';
-import { packageBin, prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
+import { hawdbTarget } from '../../src/base/installation/index.ts';
+import { installationResources } from '../support/source-resources.ts';
+import { privateSourceInstallation } from '../support/private-source.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { Schema } from 'effect';
 
 // @feature docs/feature/local-data-engine/architecture.md#cli-查询
-test('broken installed native artifacts keep current queries local and reject server startup', () => {
+test('broken source native artifacts keep current queries local and reject server startup', () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-native-fallback-'));
   try {
-    writeFileSync(join(scratch, 'package.json'), '{"private":true}');
-    prepareSourceConsumer(scratch, sourceConcord(), [], { private: true });
-    const installed = join(scratch, 'node_modules/concord-sdlc');
-    const cli = packageBin(installed), root = join(scratch, 'consumer');
+    const installed = join(scratch, 'source');
+    const cli = privateSourceInstallation(installed), root = join(scratch, 'consumer');
     mkdirSync(root); execFileSync('git', ['init', '-q', root]);
-    const invoke = (...args: string[]) => spawnSync(process.execPath, [cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20_000, env: { ...process.env, NODE_OPTIONS: '' } });
+    const invoke = (...args: string[]) => spawnSync(process.execPath, ['--conditions=concord-source', '--import', new URL('../support/source-runtime.ts', import.meta.url).href, cli, '--root', root, '--json', ...args], { encoding: 'utf8', timeout: 20_000, env: { ...process.env, NODE_OPTIONS: '' } });
     const initialized = invoke('init', '--docs-only');
     assert.equal(initialized.status, 0, initialized.stdout + initialized.stderr);
     const binary = join(installationResources(installed).native, hawdbTarget(), 'hawdb.node');

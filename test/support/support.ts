@@ -1,7 +1,7 @@
 import { tmpdir } from './temporary.ts';
 import { after as nodeAfter, before as nodeBefore } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { installedPackageRoot, packageBin } from './installed-package.ts';
+import { sourceCli } from './source-consumer.ts';
 import { existsSync, readFileSync, writeFileSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { request as httpRequest } from 'node:http';
 import { join } from 'node:path';
@@ -195,7 +195,7 @@ export const waitForWorkspaceNotModified = async (base: string, options: PollOpt
   return etag!;
 };
 
-/** Every product subprocess uses this gate's installed public bin. */
+/** Product subprocesses run the checkout's source CLI. */
 export function installedConcordCli(): string {
-  return packageBin(installedPackageRoot());
+  return sourceCli();
 }

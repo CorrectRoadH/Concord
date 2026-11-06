@@ -1,5 +1,5 @@
 import { createDocument } from './operations.ts';
-import { packageBin } from './installed-package.ts';
+import { sourceCli } from './source-consumer.ts';
 
 import { createConsumer } from './consumer.ts';
 import { installedConcordCli } from './support.ts';
@@ -25,7 +25,7 @@ import { observeOwnedProcessGroup } from "../../src/base/process/index.ts";
 import { hydrateQueryValue } from "../../src/app/index.ts";
 import { TraceShowValue } from "../../src/model/index.ts";
 import { pollUntil, readProjectConfig, writeProjectConfig } from './support.ts';
-import { sourceConcord } from './installed-package.ts';
+import { sourceRoot } from './source-consumer.ts';
 
 export const cli = installedConcordCli();
 export { target, source, write, server, consumer } from './lsp-analysis-source-fixture.ts';
@@ -41,7 +41,7 @@ export const analysis = Schema.Struct({ observations: Schema.Array(AnalysisObser
 export const codeList = Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema), analysis: AnalysisViewSchema });
 export const projectCheck = Schema.Struct({ ok: Schema.Boolean, findings: Schema.Array(Schema.Unknown), complete: Schema.optional(Schema.Boolean) });
 
-export { packageBin };
+export { sourceCli };
 export { createDocument };
 export { createConsumer };
 export { installedConcordCli };
@@ -87,4 +87,4 @@ export { TraceShowValue };
 export { pollUntil };
 export { readProjectConfig };
 export { writeProjectConfig };
-export { sourceConcord };
+export { sourceRoot };

@@ -1,9 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
-import { readFileSync } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
 import { Schema } from 'effect';
 import { stopWorkspaceServer } from '../support/stop-workspace-server.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 
 export interface ViewServerOptions { readonly root: string; readonly host?: string; readonly port?: number; readonly installedBin?: string; readonly signal?: AbortSignal }
 export interface ViewServerHandle {
@@ -14,21 +13,6 @@ export interface ViewServerHandle {
   close(): Promise<void>;
 }
 const Ready = Schema.Struct({ operation: Schema.Literal('view'), root: Schema.String, host: Schema.String, port: Schema.Number, address: Schema.String });
-
-const Manifest = Schema.fromJsonString(Schema.Struct({ bin: Schema.Union([Schema.String, Schema.Record(Schema.String, Schema.String)]) }));
-
-/** Resolve only the package's published bin, without depending on its layout. */
-export function installedBrowserBin(packageRoot = process.env.CONCORD_TEST_PACKAGE_ROOT): string {
-  if (!packageRoot) throw new Error('CONCORD_TEST_PACKAGE_ROOT must name the gate-built installation');
-  const root = resolve(packageRoot);
-  const manifest = Schema.decodeUnknownSync(Manifest)(readFileSync(join(root, 'package.json'), 'utf8'));
-  const bin = typeof manifest.bin === 'string' ? manifest.bin : manifest.bin.concord;
-  if (!bin) throw new Error('The gate-built package does not declare the concord bin');
-  const entry = resolve(root, bin);
-  const path = relative(root, entry);
-  if (isAbsolute(bin) || path === '..' || path.startsWith('../')) throw new Error('Package bin escapes its installation');
-  return entry;
-}
 
 export class ViewServerStartupFailed extends Error {
   readonly root: string;
@@ -41,15 +25,15 @@ export class ViewServerStartupFailed extends Error {
   }
 }
 
-/** Browser consumers start the gate-built package through its published CLI. */
+/** Browser consumers start the source workspace service through its CLI. */
 export async function startViewServer(options: ViewServerOptions): Promise<ViewServerHandle> {
   let child: ChildProcess | undefined;
   let entry: string | undefined;
   try {
-    entry = options.installedBin ?? installedBrowserBin();
+    entry = options.installedBin ?? sourceCli();
     options.signal?.throwIfAborted();
     // The fixture owns the service explicitly; the View client only owns its HTTP lease.
-    child = spawn(process.execPath, [entry, '--root', options.root, '--json', 'view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
+    child = spawn(process.execPath, [...(entry.endsWith('.ts') ? ['--conditions=concord-source', '--import', new URL('../support/source-runtime.ts', import.meta.url).href] : []), entry, '--root', options.root, '--json', 'view', '--host', options.host ?? '127.0.0.1', '--port', String(options.port ?? 0)], { stdio: ['ignore', 'pipe', 'pipe'] });
     const processHandle = child;
     let diagnostics = '';
     processHandle.stderr!.on('data', (chunk: Buffer) => { diagnostics += chunk.toString(); process.stderr.write(chunk); });

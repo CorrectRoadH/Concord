@@ -1,7 +1,7 @@
 import { initialize } from './operations.ts';
 import { writeGhFixture } from './gh-fixture.ts';
-import { packageBin } from './installed-package.ts';
-import { sourceConcord, prepareSourceConsumer } from './installed-package.ts';
+import { sourceCli } from './source-consumer.ts';
+import { sourceRoot, prepareSourceConsumer } from './source-consumer.ts';
 // @concord-file
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -31,10 +31,8 @@ export const callsFile = join(scratch, 'calls.ndjson');
 writeGhFixture(bin, scenarioFile, callsFile);
 export let packedCli: string;
 test.before(() => Effect.runPromise(Effect.sync(() => {
-  const packed = sourceConcord();
-  const tool = join(scratch, 'tool'); mkdirSync(tool); writeFileSync(join(tool, 'package.json'), '{"private":true}');
-  prepareSourceConsumer(tool, packed);
-  packedCli = packageBin(join(tool, 'node_modules/concord-sdlc'));
+
+  packedCli = sourceCli();
 })));
 test.after(() => { rmSync(scratch, { recursive: true, force: true }); });
 export function consumer(name: string, selected: unknown = connection): string {
@@ -85,8 +83,8 @@ export function alterReceipt(root: string, receipt: Receipt, patch: Readonly<Rec
   writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, 'utf8')) as object, ...patch }));
 }
 
-export { packageBin };
-export { sourceConcord };
+export { sourceCli };
+export { sourceRoot };
 export { prepareSourceConsumer };
 export { assert };
 export { execFileSync };

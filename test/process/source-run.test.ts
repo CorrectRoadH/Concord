@@ -23,7 +23,7 @@ function installation() {
   const tool = join(scratch, 'tool'), consumer = join(scratch, 'consumer');
   mkdirSync(tool); mkdirSync(consumer);
   // Copy a fixed source snapshot so concurrent edits cannot change worker identity.
-  for (const name of ['src', 'web', 'scripts', 'templates', 'skills', 'package.json', 'vite.config.ts', 'vite.preview.config.ts']) cpSync(join(checkout, name), join(tool, name), { recursive: true });
+  for (const name of ['src', 'web', 'scripts', 'templates', 'skills', 'package.json', 'vite.config.ts', 'vite.source.config.ts', 'vite.preview.config.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']) cpSync(join(checkout, name), join(tool, name), { recursive: true });
   for (const file of [...nativeSourceFiles.filter(file => file.startsWith('native/')), 'native/hawdb/Cargo.lock']) { mkdirSync(dirname(join(tool, file)), { recursive: true }); cpSync(join(checkout, file), join(tool, file)); }
   const cache = join(scratch, 'cache');
   const native = join(cache, 'concord/native', basename(nativeArtifactRoot));
@@ -31,7 +31,7 @@ function installation() {
   symlinkSync(join(checkout, 'node_modules'), join(tool, 'node_modules'), 'dir');
   execFileSync('git', ['init', '-q', consumer]);
   const call = (...args: string[]) => spawnSync(process.execPath,
-    ['--import', import.meta.resolve('tsx'), join(tool, 'src/entry/cli/entry.ts'), '--root', consumer, ...args],
+    [join(tool, 'src/entry/cli/entry.ts'), '--root', consumer, ...args],
     { env: { ...process.env, XDG_CACHE_HOME: cache }, cwd: consumer, encoding: 'utf8', timeout: 30_000 });
   const success = (...args: string[]) => {
     const result = call('--json', ...args);
@@ -66,8 +66,8 @@ test('source CLI and refresh workers run without any built JavaScript in an isol
       fixture.success('new', 'feature', 'sample', '--title', 'Sample');
       assert.equal(fixture.success('--dry-run', 'check').ok, true);
       assert.equal(fixture.success('docs', 'check').ok, true);
-      stopWorkspaceServer(fixture.consumer, join(fixture.tool, 'src/entry/cli/entry.ts'), { ...process.env, XDG_CACHE_HOME: fixture.cache }, ['--import', import.meta.resolve('tsx')]);
-      const refresh = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), join(fixture.tool, 'src/entry/server/query-refresh-worker.ts'),
+      stopWorkspaceServer(fixture.consumer, join(fixture.tool, 'src/entry/cli/entry.ts'), { ...process.env, XDG_CACHE_HOME: fixture.cache }, []);
+      const refresh = spawnSync(process.execPath, [join(fixture.tool, 'src/entry/server/query-refresh-worker.ts'),
         fixture.consumer, JSON.stringify(['trace', 'show', 'docs/feature/sample/README.md']), String(Date.now())],
       { env: { ...process.env, XDG_CACHE_HOME: fixture.cache }, cwd: fixture.consumer, encoding: 'utf8', timeout: 30_000 });
       assert.equal(refresh.status, 0, refresh.stdout + refresh.stderr);
@@ -76,7 +76,7 @@ test('source CLI and refresh workers run without any built JavaScript in an isol
       assert.equal(fixture.success('--fresh', 'trace', 'show', 'docs/feature/sample/README.md').operation, 'trace-show');
     });
   } finally {
-    stopWorkspaceServer(fixture.consumer, join(fixture.tool, 'src/entry/cli/entry.ts'), { ...process.env, XDG_CACHE_HOME: fixture.cache }, ['--import', import.meta.resolve('tsx')]);
+    stopWorkspaceServer(fixture.consumer, join(fixture.tool, 'src/entry/cli/entry.ts'), { ...process.env, XDG_CACHE_HOME: fixture.cache }, []);
     yield* drainRefresh(fixture.tool, fixture.consumer);
     yield* Effect.sync(() => rmSync(fixture.scratch, { recursive: true, force: true }));
   }

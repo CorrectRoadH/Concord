@@ -54,7 +54,7 @@ if (childRole) {
     });
   }
   async function child(role: 'guard' | 'database' | 'raw-database', path: string): Promise<ChildProcess> {
-    const proc = spawn(process.execPath, ['--import', 'tsx', fileURLToPath(import.meta.url)], {
+    const proc = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
       cwd: process.cwd(), env: { ...process.env, CONCORD_HAWDB_CHILD_ROLE: role, CONCORD_HAWDB_CHILD_PATH: path }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     await new Promise<void>((resolve, reject) => {
@@ -295,7 +295,7 @@ if (childRole) {
       const db = openHawdb(f.db, { readOnly: false, create: true }); db.close();
       const ready = join(f.dir, 'before-commit.ready');
       const release = join(f.dir, 'never-release');
-      proc = spawn(process.execPath, ['--import', 'tsx', fileURLToPath(import.meta.url)], {
+      proc = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
         cwd: process.cwd(),
         env: { ...process.env, CONCORD_HAWDB_CHILD_ROLE: 'kill-batch', CONCORD_HAWDB_CHILD_PATH: f.db, CONCORD_HAWDB_TEST_READY: ready, CONCORD_HAWDB_TEST_RELEASE: release },
         stdio: ['ignore', 'pipe', 'pipe'],
@@ -339,7 +339,7 @@ if (childRole) {
         await delay(1100);
         console.log(JSON.stringify({ failedReads, failures, engine: hawdbIdentity().engine }));
       `;
-      const result = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', script, new URL('../../src/base/cache/index.ts', import.meta.url).href, binary, original], { env: { ...process.env, XDG_CACHE_HOME: cache }, encoding: 'utf8', timeout: 30_000 });
+      const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, new URL('../../src/base/cache/index.ts', import.meta.url).href, binary, original], { env: { ...process.env, XDG_CACHE_HOME: cache }, encoding: 'utf8', timeout: 30_000 });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.deepEqual(JSON.parse(result.stdout), { failedReads: 1, failures: 100, engine: 'hawdb' });
     } finally { rmSync(root, { recursive: true, force: true }); }

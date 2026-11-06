@@ -42,7 +42,7 @@ import { Effect } from ${JSON.stringify(import.meta.resolve('effect'))};
 import { withGateResources } from ${JSON.stringify(pathToFileURL(resolve('scripts/gate-resources.ts')).href)};
 withGateResources(${body}, { memoryMaxBytes: ${memoryMaxBytes}, reportRoot: ${JSON.stringify(reportRoot)} }).pipe(Effect.scoped, Effect.provide(NodeServices.layer), NodeRuntime.runMain);
 `);
-  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, ['--import', import.meta.resolve('tsx'), fixture], {
+  const child = yield* spawner.spawn(ChildProcess.make(process.execPath, [fixture], {
     env: { ...process.env, CONCORD_GATE_SCOPE: undefined, CONCORD_GATE_REPORT: undefined,
       ...(noSystemd ? { PATH: join(root, 'no-systemd') } : {}) },
     stdin: 'ignore', stdout: 'pipe', stderr: 'pipe',

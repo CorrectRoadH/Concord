@@ -9,7 +9,7 @@ import { makeOwnedProcessService } from '../../src/base/process/index.ts';
 import { installationResources, installationRootForBin } from '../../src/base/installation/index.ts';
 import { classifyQueryRefresh, persist } from '../../src/app/index.ts';
 import { pathToFileURL } from 'node:url';
-import { packageBin } from './installed-package.ts';
+import { sourceCli } from './source-consumer.ts';
 import { createConsumer } from './consumer.ts';
 import { genericPrivateDirectorySync } from "../../src/base/publication/index.ts";
 import { refreshQuery } from "../../src/app/index.ts";
@@ -24,7 +24,7 @@ import { tmpdir } from './temporary.ts';
 import { join, resolve } from 'node:path';
 import test, { before, after } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { sourceConcord, prepareSourceConsumer } from './installed-package.ts';
+import { sourceRoot, prepareSourceConsumer } from './source-consumer.ts';
 import { cacheDatabasePath } from "../../src/base/cache/index.ts";
 import { openHawdb } from "../../src/base/cache/index.ts";
 import { readProjectConfig, writeProjectConfig } from './support.ts';
@@ -74,11 +74,8 @@ export async function waitForRefreshExit(root: string): Promise<void> {
 export let packageScratch = '', installedCli = '';
 before(() => Effect.runPromise(Effect.sync(() => {
   packageScratch = mkdtempSync(join(tmpdir(), 'concord-drift-installed-'));
-  const packed = sourceConcord();
-  const tool = join(packageScratch, 'tool'); mkdirSync(tool);
-  writeFileSync(join(tool, 'package.json'), JSON.stringify({ private: true }));
-  prepareSourceConsumer(tool, packed);
-  installedCli = packageBin(join(tool, 'node_modules/concord-sdlc'));
+
+  installedCli = sourceCli();
 })));
 after(() => Effect.runPromise(Effect.sync(() => { if (packageScratch) rmSync(packageScratch, { recursive: true, force: true }); })));
 export const installedCall = (root: string, ...args: string[]) => spawnSync(process.execPath, [installedCli, '--root', root, ...args], { encoding: 'utf8', timeout: 30_000 });
@@ -137,7 +134,7 @@ export async function refreshInstalled(root: string, query: readonly string[]) {
 export async function editing(root: string, relative: string) {
   // Keep inode and size stable so C1/C2 exercise decoded-content drift. Opening
   // an atomically replaced file can correctly abort before a candidate exists.
-  const child = spawn(process.execPath, ['--import', 'tsx', resolve('test/fixtures/projection-drift-writer.ts'), join(root, relative)], { stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [resolve('test/fixtures/projection-drift-writer.ts'), join(root, relative)], { stdio: ['ignore', 'pipe', 'pipe'] });
   await new Promise<void>((resolveReady, reject) => { child.stdout.once('data', () => resolveReady()); child.once('error', reject); child.once('exit', code => reject(new Error(`Writer exited before ready: ${code}`))); });
   return async () => { const exited = new Promise<void>(resolveExit => child.once('close', () => resolveExit())); child.kill('SIGTERM'); await exited; };
 }
@@ -148,7 +145,7 @@ export { installationRootForBin };
 export { classifyQueryRefresh };
 export { persist };
 export { pathToFileURL };
-export { packageBin };
+export { sourceCli };
 export { createConsumer };
 export { genericPrivateDirectorySync };
 export { refreshQuery };
@@ -175,7 +172,7 @@ export { before };
 export { after };
 export { Effect };
 export { Schema };
-export { sourceConcord };
+export { sourceRoot };
 export { prepareSourceConsumer };
 export { cacheDatabasePath };
 export { openHawdb };

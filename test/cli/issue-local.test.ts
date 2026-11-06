@@ -1,5 +1,4 @@
-import { packageBin } from '../support/installed-package.ts';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 import { createConsumer } from '../support/consumer.ts';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -12,8 +11,7 @@ import { decodeDocumentSource } from "../../src/domain/documents/index.ts";
 const packedRoot = mkdtempSync(join(tmpdir(), 'concord-issue-packed-'));
 let cli: string;
 before(() => {
-  const install = join(packedRoot, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  prepareSourceConsumer(install, sourceConcord()); cli = packageBin(join(install, 'node_modules/concord-sdlc'));
+  cli = sourceCli();
 });
 after(() => rmSync(packedRoot, { recursive: true, force: true }));
 function call(root: string, args: string[], status = 0): Record<string, unknown> {

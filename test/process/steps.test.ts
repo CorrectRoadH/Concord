@@ -1,5 +1,5 @@
 import { createDocument, initialize } from '../support/operations.ts';
-import { packageBin } from '../support/installed-package.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import fs, { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
@@ -7,7 +7,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from '../support/temporary.ts';
 import { join, resolve } from 'node:path';
 import test, { before, after } from 'node:test';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
+import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 import { Effect, Schema } from 'effect';
 import { extractSteps } from "../../src/domain/documents/index.ts";
 import { formatUseCase, renameUseCaseStep, useCaseSteps } from "../../src/app/index.ts";
@@ -29,7 +29,7 @@ import { OwnedProcess, type OwnedProcessResult } from "../../src/base/process/in
 const path = 'docs/feature/sample/use-case/flow.md';
 const packedRoot = mkdtempSync(join(tmpdir(), 'concord-steps-packed-'));
 let entry: string;
-before(() => { const install = join(packedRoot, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true })); prepareSourceConsumer(install, sourceConcord()); entry = packageBin(join(install, 'node_modules/concord-sdlc')); });
+before(() => { entry = sourceCli(); });
 after(() => rmSync(packedRoot, { recursive: true, force: true }));
 function document(body: string, kind: 'use-case' | 'feature' = 'use-case') {
   return renderDocument(kind === 'use-case' ? { format: 'concord.document/v1', kind, id: 'flow', title: 'Flow', feature: 'docs/feature/sample/README.md' } : { format: 'concord.document/v1', kind, id: 'sample', title: 'Sample' }, body);
@@ -62,7 +62,7 @@ test('steps C19 second CLI blocks interrupted work and recovers prepared and com
     write(root, 'test/flow.ts', `// @use-case ${path}#old\n`);
     const before = repo.read(path)!;
     repo.close();
-    const child = spawnSync(process.execPath, ['--import', 'tsx', '--import', resolve('test/support/step-interruption.ts'), entry, '--root', root, '--json', 'use-case', 'rename-step', path, 'old', 'new'], { encoding: 'utf8', timeout: 20000, env: { ...process.env, STEP_ROOT: root, STEP_INTERRUPT: phase === 'committed' ? 'committed' : 'prepared' } });
+    const child = spawnSync(process.execPath, ['--import', resolve('test/support/step-interruption.ts'), entry, '--root', root, '--json', 'use-case', 'rename-step', path, 'old', 'new'], { encoding: 'utf8', timeout: 20000, env: { ...process.env, STEP_ROOT: root, STEP_INTERRUPT: phase === 'committed' ? 'committed' : 'prepared' } });
     assert.equal(child.signal, 'SIGKILL', child.stdout + child.stderr);
     const journal = join(genericPrivateDirectorySync(root), 'journal.json');
     assert.ok(existsSync(journal));

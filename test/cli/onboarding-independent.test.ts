@@ -1,4 +1,4 @@
-import { packageBin } from '../support/installed-package.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,16 +8,13 @@ import { join } from 'node:path';
 import test, { before, after } from 'node:test';
 import { Effect, Schema } from 'effect';
 import { InitializationReceiptSchema } from '../../src/model/index.ts';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-public-onboarding-'));
 const consumers: string[] = [];
 let cli: string;
 before(() => Effect.runPromise(Effect.sync(() => {
-  const install = join(scratch, 'tool'); mkdirSync(install);
-  writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  prepareSourceConsumer(install, sourceConcord());
-  cli = packageBin(join(install, 'node_modules/concord-sdlc'));
+
+  cli = sourceCli();
 })));
 after(() => Effect.runPromise(Effect.sync(() => {
   try { for (const root of consumers) stopWorkspaceServer(root, cli); }

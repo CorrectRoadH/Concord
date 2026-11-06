@@ -1,5 +1,6 @@
-import { packageBin } from '../support/installed-package.ts';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { existsSync } from 'node:fs';
+import { sourceCli } from '../support/source-consumer.ts';
+import { sourceRoot, prepareSourceConsumer } from '../support/source-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -16,18 +17,18 @@ import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts
 test('the shipped README quick start executes through the built bin and traces its exact snippets', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-code-cli-'));
   try {
-    const packed = sourceConcord();
-    assert.ok(packed);
+
+    assert.ok(existsSync(sourceCli()));
     const install = join(scratch, 'tool'); mkdirSync(install);
     writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-    prepareSourceConsumer(install, packed);
-    const cli = packageBin(join(install, 'node_modules/concord-sdlc'));
+    prepareSourceConsumer(install);
+    const cli = sourceCli();
     const codes = Schema.Struct({ codes: Schema.Array(CodeDeclarationSchema) });
     const skill = spawnSync(process.execPath, [cli, '--skill', 'code'], { cwd: scratch, encoding: 'utf8', timeout: 10000 });
     assert.equal(skill.status, 0, skill.stderr); assert.match(skill.stdout, /code at/);
 
     // Execute the shipped quick start itself; copied examples cannot prove the README works.
-    const readme = readFileSync(join(install, 'node_modules/concord-sdlc/README.md'), 'utf8');
+    const readme = readFileSync(join(sourceRoot, 'README.md'), 'utf8');
     const quickStart = readme.split('## Quick start\n')[1]?.split('\n## ')[0];
     const script = quickStart === undefined ? undefined : /```sh\n([\s\S]*?)\n```/u.exec(quickStart)?.[1];
     assert.ok(script, 'README must contain a runnable quick start');

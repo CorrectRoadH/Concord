@@ -4,9 +4,9 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { join } from 'node:path';
 import test from 'node:test';
 import { tmpdir } from '../support/temporary.ts';
-import { installedPackageRoot, packageBin } from '../support/installed-package.ts';
+import { sourceRoot, sourceCli } from '../support/source-consumer.ts';
 
-const cli = packageBin(installedPackageRoot());
+const cli = sourceCli();
 const requiredCommands = [
   ['check'], ['list'], ['show', 'missing'], ['trace', 'gaps'], ['test', 'list'], ['code', 'list'], ['code', 'analyze'],
   ['new', 'feature', 'example'], ['use-case', 'steps', 'missing'], ['roadmap', 'start', 'missing'],

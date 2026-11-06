@@ -1,4 +1,4 @@
-import { packageBin } from './installed-package.ts';
+import { sourceCli } from './source-consumer.ts';
 import assert from 'node:assert/strict';
 import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,9 +12,8 @@ import { renderTypeScriptConfig, parseTypeScriptConfig } from "../../src/base/wo
 import { type test_adapter_config_TestAdapter as TestAdapter } from "../../src/model/index.ts";
 import { LocalRepository } from "./repository.ts";
 import { closeRepositoryCache, PersistentCache, type RepositoryCache } from "../../src/base/cache/index.ts";
-import { prepareSourceConsumer, sourceConcord } from './installed-package.ts';
+import { prepareSourceConsumer, sourceRoot } from './source-consumer.ts';
 
-export const sourceRoot = fileURLToPath(new URL('../..', import.meta.url));
 export const text = (root: string, path: string, value: string) => { mkdirSync(join(root, path, ".."), { recursive: true }); writeFileSync(join(root, path), value); };
 export const scratch = Effect.acquireRelease(Effect.sync(() => mkdtempSync(join(tmpdir(), 'concord-adapter-packed-'))), root => Effect.sync(() => rmSync(root, { recursive: true, force: true })));
 export const command = (argv: readonly string[], cwd: string) => runOwnedProcess(argv, { cwd, timeoutMs: 120_000, outputLimitBytes: 8 * 1024 * 1024 }).pipe(Effect.scoped, Effect.mapError(error => new Error(error.detail)));
@@ -26,7 +25,7 @@ export const CaseList = Schema.Struct({ cases: Schema.Array(Schema.Struct({ id: 
 export const Receipt = Schema.Struct({ scope: Schema.String, commandOutcome: Schema.String, definitionDigest: Schema.optional(Schema.String), requested: Schema.optional(Schema.Array(Schema.String)), gaps: Schema.optional(Schema.Array(Schema.String)), commandExecutionCount: Schema.optional(Schema.Int), versions: Schema.optional(Schema.Struct({ framework: Schema.String, runtime: Schema.String })) });
 export const setup = Effect.fn('adapterTest.pack')(function* (root: string, needsEffect = false) {
   return yield* Effect.sync(() => {
-    const packed = sourceConcord(); const tool = join(root, 'tool');
+    const tool = join(root, 'tool');
     mkdirSync(tool); text(tool, 'package.json', JSON.stringify({ private: true, type: 'module' }));
     const fixtureDependencies: string[] = [];
     if (needsEffect) {
@@ -34,8 +33,8 @@ export const setup = Effect.fn('adapterTest.pack')(function* (root: string, need
       // Only the external fixture imports Effect; framework consumers use package dependencies.
       fixtureDependencies.push(`effect@${dependencies.effect}`);
     }
-    prepareSourceConsumer(tool, packed, ['vitest@4.1.11', ...fixtureDependencies]);
-    return { cli: packageBin(join(tool, 'node_modules/concord-sdlc')), tool };
+    prepareSourceConsumer(tool, ['vitest@4.1.11', ...fixtureDependencies]);
+    return { cli: sourceCli(), tool };
   });
 });
 export const prepare = Effect.fn('adapterTest.consumer')(function* (scratch: string, name: string, cli: string, tool: string) {
@@ -65,7 +64,7 @@ export const idFor = Effect.fn('adapterTest.id')(function* (root: string, cli: s
 export const environment = ['NODE_OPTIONS', 'PATH', 'HOME', 'UV_CACHE_DIR', 'UV_PYTHON_INSTALL_DIR', 'GOCACHE', 'GOPATH', 'CARGO_HOME', 'RUSTUP_HOME', 'RUSTUP_TOOLCHAIN', 'RUSTUP_AUTO_INSTALL', 'RUSTFLAGS', 'NIX_LD', 'NIX_LD_LIBRARY_PATH'];
 export const builtin = (id: string, include: string, name: TestAdapter['builtin'], version: string, inputRoots: readonly string[] = []): TestAdapter => ({ id, include: [include], builtin: name, frameworkVersion: version, implementationFiles: [], inputRoots, lockFiles: [], envNames: environment });
 
-export { packageBin };
+export { sourceCli };
 export { assert };
 export { existsSync };
 export { copyFileSync };
@@ -92,4 +91,4 @@ export { LocalRepository };
 export { closeRepositoryCache };
 export const withPersistentCache = <A>(repo: import('../../src/model/index.ts').Repository, _writable: boolean, use: (cache: RepositoryCache) => A): A => use(PersistentCache.repository(repo));
 export { prepareSourceConsumer };
-export { sourceConcord };
+export { sourceRoot };

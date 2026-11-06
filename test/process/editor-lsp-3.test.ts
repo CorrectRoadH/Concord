@@ -3,7 +3,7 @@ import { assert, execFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync,
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('editor retains cleanup failure after cancellation and rejects shutdown and EOF success', { skip: process.platform === 'win32', timeout: 60000 }, () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = consumer();
-  const c = new Client(root, ['--import', fileURLToPath(import.meta.resolve('tsx')), fileURLToPath(new URL('../fixtures/editor-cleanup-failure.ts', import.meta.url)), root]);
+  const c = new Client(root, [fileURLToPath(new URL('../fixtures/editor-cleanup-failure.ts', import.meta.url)), root]);
   try {
     await c.initialize();
     c.open('test/flow.ts', testText(reference));
@@ -60,7 +60,7 @@ test('packed editor repeatedly cancels real compiler jobs without leaving editor
 // @use-case docs/feature/local-sdlc/use-case/use-editor-service.md
 test('editor EOF retains a cleanup failure first observed after the transport ended', { skip: process.platform === 'win32', timeout: 60000 }, () => Effect.runPromise(Effect.tryPromise(async () => {
   const root = consumer();
-  const c = new Client(root, ['--import', fileURLToPath(import.meta.resolve('tsx')), fileURLToPath(new URL('../fixtures/editor-cleanup-failure.ts', import.meta.url)), root]);
+  const c = new Client(root, [fileURLToPath(new URL('../fixtures/editor-cleanup-failure.ts', import.meta.url)), root]);
   try {
     await c.initialize();
     c.open('src/flow.ts', codeText(reference) + 'const value = 1;\n'.repeat(80000));

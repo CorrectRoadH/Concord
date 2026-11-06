@@ -1,3 +1,4 @@
+import { privateSourceInstallation } from '../support/private-source.ts';
 import { installationResources } from '../support/source-resources.ts';
 import assert from 'node:assert/strict';
 import { mkdtempSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -5,7 +6,7 @@ import { join } from 'node:path';
 import { readdirSync } from 'node:fs';
 import test from 'node:test';
 import { Effect, Schema, Stream } from 'effect';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
+import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
 import { pollUntil } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { command, fixture, record, rpcModule, stop } from '../support/workspace-server-fixture.ts';
@@ -15,9 +16,8 @@ test('runtime native validation degrades the locked service and a repaired artif
   const root = fixture(), install = mkdtempSync(join(tmpdir(), 'concord-server-native-'));
   let metadata = '', hidden = '';
   try {
-    writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-    prepareSourceConsumer(install, sourceConcord(), [], { private: true });
-    const packageRoot = join(install, 'node_modules/concord-sdlc');
+    privateSourceInstallation(install);
+    const packageRoot = install;
     const entry = installationResources(packageRoot).bin;
     const native = installationResources(packageRoot).native;
     metadata = join(native, readdirSync(native)[0]!, 'artifact.json'); hidden = `${metadata}.hidden`;

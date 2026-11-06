@@ -2,7 +2,7 @@ import { runApplication } from '../support/repository.ts';
 import { PersistentCache } from '../../src/base/cache/index.ts';
 import { initialize } from '../support/operations.ts';
 import { installedConcordCli } from '../support/support.ts';
-import { packageBin } from '../support/installed-package.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 import { publicationService } from '../support/repository.ts';
 import { workerEntryArgv, CACHE_MAINTENANCE_THRESHOLD_BYTES, CACHE_PHYSICAL_LIMIT_BYTES } from "../../src/base/installation/index.ts";
 import assert from 'node:assert/strict';
@@ -21,7 +21,7 @@ import { openHawdb, createMemoryHawdb, HawdbFailure } from "../../src/base/cache
 import { maintainCache } from "../../src/app/index.ts";
 
 
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { sourceRoot, prepareSourceConsumer } from '../support/source-consumer.ts';
 import { pollUntil } from '../support/support.ts';
 
 function fixture() {
@@ -158,7 +158,7 @@ test('maintenance competing with another process holding and writing a handle ex
   let holder: ChildProcess | undefined;
   try {
     pad(f.padding, CACHE_PHYSICAL_LIMIT_BYTES + 1);
-    holder = spawn(process.execPath, ['--import', import.meta.resolve('tsx'), fileURLToPath(new URL('../support/cache-maintenance-holder.ts', import.meta.url)), f.path], { stdio: ['pipe', 'pipe', 'pipe'] });
+    holder = spawn(process.execPath, [fileURLToPath(new URL('../support/cache-maintenance-holder.ts', import.meta.url)), f.path], { stdio: ['pipe', 'pipe', 'pipe'] });
     const wait = (word: string) => new Promise<void>((resolve, reject) => {
       const proc = holder!;
       let seen = '';
@@ -189,8 +189,7 @@ test('a query service maintains an oversized cache while retaining ownership and
   try {
     mkdirSync(install);
     writeFileSync(join(install, 'package.json'), JSON.stringify({ name: 'maintenance-consumer', private: true, type: 'module' }));
-    prepareSourceConsumer(install, sourceConcord());
-    const entry = packageBin(join(install, 'node_modules/concord-sdlc'));
+    const entry = sourceCli();
     installedEntry = entry;
     const command = (...args: string[]) => spawnSync(process.execPath, [entry, '--root', f.root, '--json', ...args], { cwd: install, encoding: 'utf8', timeout: 30_000 });
     const rebuild = () => {

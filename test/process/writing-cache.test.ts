@@ -75,7 +75,7 @@ test('public CLI uses current prose without cache and reuses service-owned writi
   const modules = (dryRun = false) => {
     let output = ''; writeFileSync(counts, '');
     try {
-      output = execFileSync(process.execPath, ['--import', fileURLToPath(import.meta.resolve('tsx')), '--import', fileURLToPath(new URL('../support/cli-load-probe.ts', import.meta.url)), '--import', fileURLToPath(new URL('../support/parse-count-probe.ts', import.meta.url)), installedConcordCli(), '--root', root, ...(dryRun ? ['--dry-run'] : []), 'docs', 'check', '--json'], {
+      output = execFileSync(process.execPath, ['--import', fileURLToPath(new URL('../support/cli-load-probe.ts', import.meta.url)), '--import', fileURLToPath(new URL('../support/parse-count-probe.ts', import.meta.url)), installedConcordCli(), '--root', root, ...(dryRun ? ['--dry-run'] : []), 'docs', 'check', '--json'], {
         encoding: 'utf8', env: { ...process.env, CONCORD_TEST_LOADED_MODULES: loaded, CONCORD_TEST_PARSE_COUNTS: counts }, stdio: 'pipe',
       });
     } catch (cause) {

@@ -1,4 +1,4 @@
-import { packageBin } from '../support/installed-package.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,13 +8,11 @@ import { before, after, test } from 'node:test';
 import { Schema } from 'effect';
 import { decode, FixVerificationSchema } from "../../src/model/index.ts";
 import { createFixConsumer, gitCommand, gitCommit } from '../support/fix-consumer.ts';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
 
 const scratch = mkdtempSync(join(tmpdir(), 'concord-fix-cli-'));
 let cli: string;
 before(() => {
-  const install = join(scratch, 'install'); mkdirSync(install); writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  prepareSourceConsumer(install, sourceConcord()); cli = packageBin(join(install, 'node_modules/concord-sdlc'));
+  cli = sourceCli();
 });
 after(() => rmSync(scratch, { recursive: true, force: true }));
 const ObjectSchema = Schema.Record(Schema.String, Schema.Unknown);

@@ -1,10 +1,10 @@
+import { existsSync } from 'node:fs';
 import { createDocument } from '../support/operations.ts';
 import { createConsumer } from '../support/consumer.ts';
 import { LocalRepository } from '../support/repository.ts';
 import type { DocumentKind } from '../../src/model/index.ts';
 import type { CreateDocumentInput } from '../../src/app/index.ts';
-import { packageBin } from '../support/installed-package.ts';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -21,12 +21,9 @@ import { caseDiscriminator, deriveTestReference } from "../../src/model/index.ts
 test('code findings preserve real red and green test execution and original reference validation', () => Effect.runPromise(Effect.sync(() => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-code-cli-'));
   try {
-    const packed = sourceConcord();
-    assert.ok(packed);
-    const install = join(scratch, 'tool'); mkdirSync(install);
-    writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-    prepareSourceConsumer(install, packed);
-    const cli = packageBin(join(install, 'node_modules/concord-sdlc'));
+
+    assert.ok(existsSync(sourceCli()));
+    const cli = sourceCli();
     const root = createConsumer();
     writeProjectConfig(root, { sourceRoots: ['src', 'test'], testRoots: [] });
     const repo = new LocalRepository(root);

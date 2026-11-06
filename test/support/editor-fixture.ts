@@ -1,7 +1,7 @@
 import { LocalRepository } from './repository.ts';
 import { createConsumer } from './consumer.ts';
 import { createDocument } from './operations.ts';
-import { packageBin } from './installed-package.ts';
+import { sourceCli } from './source-consumer.ts';
 import { renderOwnerFixture } from '../support/owner-fixture.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
@@ -11,7 +11,7 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { after, before, test } from 'node:test';
 import { Effect, Schema } from 'effect';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { sourceRoot, prepareSourceConsumer } from '../support/source-consumer.ts';
 import { readProjectConfig, writeProjectConfig } from '../support/support.ts';
 
 const Position = Schema.Struct({ line: Schema.Int, character: Schema.Int });
@@ -30,10 +30,8 @@ const codeText = (ref: string) => `// @concord-file\n// @concord-implements ${re
 let scratch: string, entry: string;
 before(() => Effect.runPromise(Effect.sync(() => {
   scratch = mkdtempSync(join(tmpdir(), 'concord-editor-packed-'));
-  const artifact = sourceConcord();
-  const tool = join(scratch, 'tool'); mkdirSync(tool); writeFileSync(join(tool, 'package.json'), '{"private":true}');
-  prepareSourceConsumer(tool, artifact);
-  entry = packageBin(join(tool, 'node_modules/concord-sdlc'));
+
+  entry = sourceCli();
 })));
 after(() => Effect.runPromise(Effect.sync(() => { if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true }); })));
 
@@ -120,7 +118,7 @@ class Client {
   async eof() { this.child.stdin.end(); assert.equal(await Promise.race([this.closed, new Promise<number>((_, reject) => setTimeout(() => reject(new Error('EOF cleanup timeout')), 6000).unref())]), 0, this.stderr); }
 }
 const run = (body: (client: Client, root: string) => Promise<void>, gateWorkers = false) => Effect.runPromise(Effect.tryPromise({ try: async () => {
-  const root = consumer(), client = gateWorkers ? new Client(root, undefined, { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${import.meta.resolve('tsx')} --import=${new URL('../fixtures/editor-job-gate.ts', import.meta.url).href}` }) : new Client(root);
+  const root = consumer(), client = gateWorkers ? new Client(root, undefined, { ...process.env, NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ''} --import=${new URL('../fixtures/editor-job-gate.ts', import.meta.url).href}` }) : new Client(root);
   let failed = false;
   try { await client.initialize(); await body(client, root); }
   catch (cause) { failed = true; throw cause; }

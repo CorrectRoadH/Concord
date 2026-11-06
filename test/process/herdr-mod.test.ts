@@ -28,7 +28,7 @@ test('the native mod reads and refreshes through the public CLI and a shared wor
     }
     const path = join(root, 'docs/feature/measured/README.md'), original = readFileSync(path, 'utf8');
     for (const mode of ['first-screen', 'push']) {
-      const reply = spawnSync(process.execPath, ['--import', 'tsx', resolve('scripts/herdr-mod-host.ts'), cli, root, mode], { encoding: 'utf8', timeout: 40_000 });
+      const reply = spawnSync(process.execPath, [resolve('scripts/herdr-mod-host.ts'), cli, root, mode], { encoding: 'utf8', timeout: 40_000 });
       assert.equal(reply.status, 0, reply.stdout + reply.stderr);
       const result = JSON.parse(reply.stdout) as { ms: number; text: string; boundary: string; calls: string[][] };
       assert.ok(result.ms > 0); assert.match(result.text, /measured/u);
@@ -46,7 +46,7 @@ test('native mod controls initialize, create, edit, check and retain a stale-sav
   const root = mkdtempSync(join(tmpdir(), 'concord-herdr-workflow-'));
   try {
     execFileSync('git', ['init', '-q', root]);
-    const reply = spawnSync(process.execPath, ['--import', 'tsx', resolve('scripts/herdr-mod-host.ts'), installedConcordCli(), root, 'workflow'], { encoding: 'utf8', timeout: 70_000 });
+    const reply = spawnSync(process.execPath, [resolve('scripts/herdr-mod-host.ts'), installedConcordCli(), root, 'workflow'], { encoding: 'utf8', timeout: 70_000 });
     assert.equal(reply.status, 0, reply.stdout + reply.stderr);
     const result = JSON.parse(reply.stdout) as { workflow: string; calls: string[][] };
     assert.match(result.workflow, /preserved conflict/u);

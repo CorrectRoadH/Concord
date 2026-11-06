@@ -11,7 +11,7 @@ import { fixture } from '../support/document-cache-fixture.ts';
 test('metadata stays lazy and one tree serves repeated and duplicate requests without persistent document state', () => Effect.runPromise(Effect.sync(() => {
   const root = fixture(), counts = join(root, 'parse-counts.jsonl');
   const probe = (mode?: 'off' | 'metadata') => {
-    const child = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), '--import', fileURLToPath(new URL('../support/parse-count-probe.ts', import.meta.url)), fileURLToPath(new URL('../support/parse-cache-source-probe.ts', import.meta.url)), root, ...(mode === undefined ? [] : [mode])], {
+    const child = spawnSync(process.execPath, ['--import', fileURLToPath(new URL('../support/parse-count-probe.ts', import.meta.url)), fileURLToPath(new URL('../support/parse-cache-source-probe.ts', import.meta.url)), root, ...(mode === undefined ? [] : [mode])], {
       encoding: 'utf8', timeout: 60_000, env: { ...process.env, CONCORD_TEST_PARSE_COUNTS: counts },
     });
     assert.equal(child.status, 0, child.stdout + child.stderr);

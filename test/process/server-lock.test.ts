@@ -21,7 +21,7 @@ if (process.env.CONCORD_SERVER_LOCK_CHILD) {
     return { root, server, cleanup: () => rmSync(root, { recursive: true, force: true }) };
   }
   async function owner(server: string): Promise<ChildProcess> {
-    const child = spawn(process.execPath, ['--import', 'tsx', fileURLToPath(import.meta.url)], {
+    const child = spawn(process.execPath, [fileURLToPath(import.meta.url)], {
       env: { ...process.env, CONCORD_SERVER_LOCK_CHILD: server }, stdio: ['ignore', 'pipe', 'pipe'],
     });
     try {

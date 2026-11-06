@@ -195,7 +195,7 @@ test('workbench compresses workspace data and caches fingerprinted assets only',
 test('independent readers share a lease while publication still requires exclusivity', async () => {
   const root = fixture();
   const server = await startViewServer({ root, host: '127.0.0.1', port: 0 });
-  const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease=acquireTraceLeaseSync(process.argv[1], 'shared', 'read-test'); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'read-test'));", root], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease=acquireTraceLeaseSync(process.argv[1], 'shared', 'read-test'); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'read-test'));", root], { stdio: ['pipe', 'pipe', 'pipe'] });
   try {
     await once(child.stdout!, 'data');
     const file = await fetchFresh(`http://127.0.0.1:${server.port}/api/file?path=docs%2Ffeature%2Fcached%2FREADME.md`);
@@ -217,7 +217,7 @@ test('independent readers share a lease while publication still requires exclusi
 test('recovery removes dead owners while optimistic readers remain unregistered', async () => {
   const root = fixture();
   const reader = new LocalRepository(root, { dryRun: true });
-  const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', "import { acquireTraceLeaseSync } from './src/base/publication/index.ts'; acquireTraceLeaseSync(process.argv[1], 'shared', 'dead-reader'); process.stdout.write('held'); process.stdin.resume();", root], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync } from './src/base/publication/index.ts'; acquireTraceLeaseSync(process.argv[1], 'shared', 'dead-reader'); process.stdout.write('held'); process.stdin.resume();", root], { stdio: ['pipe', 'pipe', 'pipe'] });
   try {
     reader.beginSnapshot();
     await once(child.stdout!, 'data');

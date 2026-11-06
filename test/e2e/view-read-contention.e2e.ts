@@ -12,7 +12,7 @@ import { waitForWorkspaceProjection } from '../support/support.ts';
 
 async function hold(root: string): Promise<ChildProcess> {
   // A real independent process owns the portable lease until stdin closes.
-  const child = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease=acquireTraceLeaseSync(process.argv[1], 'exclusive', 'contention'); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'contention'));", root], { stdio: ['pipe', 'pipe', 'inherit'] });
+  const child = spawn(process.execPath, ['--input-type=module', '-e', "import { acquireTraceLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts'; const lease=acquireTraceLeaseSync(process.argv[1], 'exclusive', 'contention'); process.stdout.write('held'); process.stdin.resume(); process.stdin.once('end',()=>releaseTraceLeaseSync(lease,'contention'));", root], { stdio: ['pipe', 'pipe', 'inherit'] });
   await once(child.stdout!, 'data');
   return child;
 }

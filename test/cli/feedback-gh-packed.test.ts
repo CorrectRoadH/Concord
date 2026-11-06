@@ -1,6 +1,5 @@
 import { initialize } from '../support/operations.ts';
-import { packageBin } from '../support/installed-package.ts';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 // @concord-file
 // @concord-implements docs/feature/feedback/use-case/triage-feedback.md
 import assert from 'node:assert/strict';
@@ -17,12 +16,8 @@ import { LocalRepository } from "../support/repository.ts";
 test('packed public CLI adds gh connection, checks scope, and executes shared feedback action offline', { skip: process.platform === 'win32' }, () => {
   const scratch = mkdtempSync(join(tmpdir(), 'concord-gh-packed-'));
   try {
-    const pack = sourceConcord();
-    const tool = join(scratch, 'tool');
-    mkdirSync(tool);
-    writeFileSync(join(tool, 'package.json'), JSON.stringify({ private: true }));
-    prepareSourceConsumer(tool, pack);
-    const entry = packageBin(join(tool, 'node_modules/concord-sdlc'));
+
+    const entry = sourceCli();
     const consumer = join(scratch, 'consumer');
     mkdirSync(consumer);
     execFileSync('git', ['init', '-q', consumer]);

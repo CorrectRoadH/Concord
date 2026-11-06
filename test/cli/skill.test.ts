@@ -1,5 +1,5 @@
-import { packageBin } from '../support/installed-package.ts';
-import { sourceConcord, prepareSourceConsumer } from '../support/installed-package.ts';
+import { privateSourceInstallation } from '../support/private-source.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -14,17 +14,11 @@ const scratch = mkdtempSync(join(tmpdir(), 'concord-skill-'));
 let cli: string;
 
 before(() => Effect.runPromise(Effect.sync(() => {
-  const packed = sourceConcord();
-  const artifact = packed;
-  assert.ok(artifact);
+  const owner = join(scratch, 'source');
+  cli = privateSourceInstallation(owner);
   for (const path of ['skills/concord/SKILL.md', 'skills/concord/references/test.md', 'skills/concord/references/feedback.md', 'skills/concord/references/docs-from-scratch.md', 'skills/concord/references/docs-from-code.md', 'skills/concord/references/spec.md', 'skills/concord/references/implement.md', 'skills/concord/references/review.md', 'skills/concord/references/fix.md']) {
-    assert.ok(artifact.files.some(file => file.path === path), `packed skill is missing ${path}`);
+    assert.ok(existsSync(join(owner, path)), `source skill is missing ${path}`);
   }
-  const install = join(scratch, 'tool');
-  mkdirSync(install);
-  writeFileSync(join(install, 'package.json'), JSON.stringify({ private: true }));
-  prepareSourceConsumer(install, packed, [], { private: true });
-  cli = packageBin(join(install, 'node_modules/concord-sdlc'));
 })));
 
 after(() => Effect.runPromise(Effect.sync(() => rmSync(scratch, { recursive: true, force: true }))));
@@ -59,13 +53,13 @@ test('packed CLI exposes the skill entrypoint and selected topics outside a cons
     assert.ok(main.stdout.includes(`concord --skill ${guide}`));
     const reply = spawnSync(process.execPath, [cli, '--skill', guide], { cwd: outside, encoding: 'utf8' });
     assert.equal(reply.status, 0, reply.stderr);
-    const source = readFileSync(join(scratch, `tool/node_modules/concord-sdlc/skills/concord/references/${guide}.md`), 'utf8');
+    const source = readFileSync(join(scratch, `source/skills/concord/references/${guide}.md`), 'utf8');
     assert.equal(reply.stdout.trimEnd(), source.trimEnd());
     assert.ok(all.stdout.includes(source.trimEnd()));
   }
   assert.equal(existsSync(join(outside, 'concord.config.ts')), false);
 
-  const installedMain = join(scratch, 'tool/node_modules/concord-sdlc/skills/concord/SKILL.md');
+  const installedMain = join(scratch, 'source/skills/concord/SKILL.md');
   const original = readFileSync(installedMain, 'utf8');
   try {
     rmSync(installedMain);

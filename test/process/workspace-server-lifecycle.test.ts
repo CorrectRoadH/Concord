@@ -9,8 +9,8 @@ import { installationRootForBin } from '../../src/base/installation/index.ts';
 import { installedConcordCli, pollUntil } from '../support/support.ts';
 import { tmpdir } from '../support/temporary.ts';
 import { startViewServer } from '../e2e/server.ts';
-import { prepareSourceConsumer, sourceConcord } from '../support/installed-package.ts';
-import { packageBin } from '../support/installed-package.ts';
+import { prepareSourceConsumer, sourceRoot } from '../support/source-consumer.ts';
+import { sourceCli } from '../support/source-consumer.ts';
 import { privateSourceInstallation } from '../support/private-source.ts';
 
 import { recordPath, record, fixture, command, rpcModule, stop } from '../support/workspace-server-fixture.ts';
@@ -76,11 +76,10 @@ test('C23 another installation reports a version conflict and preserves the exis
   const root = fixture(), installation = mkdtempSync(join(tmpdir(), 'concord-server-handoff-'));
   const old = await startViewServer({ root, host: '127.0.0.1', port: 0 });
   try {
-    writeFileSync(join(installation, 'package.json'), JSON.stringify({ private: true }));
-    prepareSourceConsumer(installation, sourceConcord(), [], { private: true });
-    const installed = join(installation, 'node_modules/concord-sdlc');
-    const entry = packageBin(installed);
-    writeFileSync(join(dirname(entry), 'handoff-identity-fixture.js'), 'export {};\n');
+    privateSourceInstallation(installation);
+    const installed = installation;
+    const entry = sourceCli(installed);
+    writeFileSync(join(dirname(entry), 'handoff-identity-fixture.ts'), 'export {};\n');
     const before = record(root);
     for (const args of [['server', 'start'], ['check']]) {
       const rejected = await command(root, args, entry);

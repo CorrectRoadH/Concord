@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module';
-import { packageBin } from './installed-package.ts';
+import { sourceCli } from './source-consumer.ts';
 import { createConsumer } from './consumer.ts';
-import { sourceConcord, prepareSourceConsumer } from './installed-package.ts';
+import { sourceRoot, prepareSourceConsumer } from './source-consumer.ts';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync, symlinkSync, cpSync, readdirSync, renameSync } from 'node:fs';
@@ -36,18 +36,11 @@ export const StateOutput = Schema.Struct({ document: Schema.Struct({ metadata: S
 export const TemplatesOutput = Schema.Struct({ templates: Schema.Array(Schema.Struct({ name: Schema.String })) });
 export const scratch=mkdtempSync(join(tmpdir(),'concord-installed-'));
 export let cli: string;
-before(() => Effect.runPromise(Effect.sync(()=>{
- const packed = sourceConcord();
- assert.ok(packed);
- assert.ok(packed.files.some(file=>file.path==='pnpm-lock.yaml'), 'package must carry its runtime dependency lock');
- const install=join(scratch,'tool');mkdirSync(install);writeFileSync(join(install,'package.json'),JSON.stringify({private:true}));
- prepareSourceConsumer(install, packed);
- const packageRoot=join(install,'node_modules/concord-sdlc');
- const manifest=Schema.Struct({version:Schema.String,dependencies:Schema.Record(Schema.String,Schema.String),devDependencies:Schema.Record(Schema.String,Schema.String)});
- const published=Schema.decodeUnknownSync(Schema.fromJsonString(manifest))(readFileSync(join(packageRoot,'package.json'),'utf8'));
- for (const name of ['pnpm-lock.yaml','pnpm-workspace.yaml']) assert.equal(readFileSync(join(packageRoot,name),'utf8'),readFileSync(new URL('../../'+name,import.meta.url),'utf8'));
- cli=packageBin(join(install, 'node_modules/concord-sdlc'));
- assert.equal(execFileSync(process.execPath,[cli,'--version'],{encoding:'utf8'}).trim(),`concord v${published.version}`);
+before(() => Effect.runPromise(Effect.sync(() => {
+ cli = sourceCli();
+ const manifest = Schema.Struct({ version: Schema.String });
+ const source = Schema.decodeUnknownSync(Schema.fromJsonString(manifest))(readFileSync(join(sourceRoot, 'package.json'), 'utf8'));
+ assert.equal(execFileSync(process.execPath, [cli, '--version'], { encoding: 'utf8' }).trim(), `concord v${source.version}`);
 })));
 after(() => Effect.runPromise(Effect.gen(function*() {
  yield* settleRefreshes(join(scratch, 'async-query')).pipe(Effect.provide(NodeServices.layer));
@@ -75,9 +68,9 @@ export function consumer(name: string){
 export function write(root: string,path: string,source: string){mkdirSync(join(root,path,".."),{recursive:true});writeFileSync(join(root,path),source);}
 
 export { createRequire };
-export { packageBin };
+export { sourceCli };
 export { createConsumer };
-export { sourceConcord };
+export { sourceRoot };
 export { prepareSourceConsumer };
 export { assert };
 export { execFileSync };

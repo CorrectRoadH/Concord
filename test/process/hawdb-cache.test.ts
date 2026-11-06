@@ -71,7 +71,7 @@ test('fresh dry-run and cache-off processes never touch an existing complete cac
       assert.deepEqual(cacheDiskSnapshot(path), before, args.join(' '));
     }
     for (const mode of ['workspace', 'config-preview', 'feedback']) {
-      const result = spawnSync(process.execPath, ['--import', 'tsx', 'test/support/cache-off-probe.ts', root, mode], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 });
+      const result = spawnSync(process.execPath, ['test/support/cache-off-probe.ts', root, mode], { cwd: process.cwd(), encoding: 'utf8', timeout: 30_000 });
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.deepEqual(cacheDiskSnapshot(path), before, mode);
     }
@@ -203,7 +203,7 @@ test('cache-enabled workspace recovers an interrupted WAL without clearing commi
     const repo = new LocalRepository(root, { initialize: true });
     const path = join(repo.privateDir, 'cache.hawdb');
     try { initialize(repo, false, { testRoots: [] }); PersistentCache.repository(repo).prepareWrite({ create: true }); scanAnnotations(repo); } finally { repo.close(); }
-    const child = spawnSync(process.execPath, ['--import', import.meta.resolve('tsx'), 'test/fixtures/hawdb-interrupted.ts', path], { encoding: 'utf8', timeout: 15000 });
+    const child = spawnSync(process.execPath, ['test/fixtures/hawdb-interrupted.ts', path], { encoding: 'utf8', timeout: 15000 });
     assert.equal(child.signal, 'SIGKILL', child.stderr);
     const interrupted = cacheDiskSnapshot(path);
     await runApplication(getWorkspaceSnapshot(root, 'off'));

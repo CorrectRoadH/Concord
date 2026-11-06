@@ -43,7 +43,7 @@ async function line(child: ChildProcess): Promise<string> {
 
 function holder(root: string, recover = false): ChildProcess {
   // Real subprocess using the source coordination API.
-  return spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
+  return spawn(process.execPath, ['--input-type=module', '-e', `
     import { acquireTraceLeaseSync, recoverPublicationLeaseSync, releaseTraceLeaseSync } from './src/base/publication/index.ts';
     try {
       if (process.argv[2] === 'recover') recoverPublicationLeaseSync(process.argv[1]);
@@ -73,7 +73,7 @@ test('acquisition waiting does not reclaim an owner that arrived after its first
     original(target, options);
     if (target === path && token === '') {
       token = 'starting';
-      const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
+      const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
         import { acquireTraceLeaseSync } from './src/base/publication/index.ts';
         console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'new-dead-owner').owner.token);
       `, root], { cwd: process.cwd(), encoding: 'utf8', timeout: 15000 });
@@ -165,7 +165,7 @@ test('recover reclaims a real reader killed after linking beside a dead writer',
   const original = acquireTraceLeaseSync(root, 'shared', 'original')!;
   // A source consumer pauses only at the filesystem boundary;
   // production lease code creates and validates every owner record.
-  const reader = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
+  const reader = spawn(process.execPath, ['--input-type=module', '-e', `
     import fs from 'node:fs';
     import { syncBuiltinESMExports } from 'node:module';
     import { acquireTraceLeaseSync } from './src/base/publication/index.ts';
@@ -272,7 +272,7 @@ test('recovery preserves a new dead owner between dispatch and either recovery e
         token = 'starting';
         // The dispatcher has released its owner. A real process acquires the
         // resource and exits without releasing before the selected engine runs.
-        const child = spawnSync(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', `
+        const child = spawnSync(process.execPath, ['--input-type=module', '-e', `
           import { acquireTraceLeaseSync } from './src/base/publication/index.ts';
           console.log(acquireTraceLeaseSync(process.argv[1], 'exclusive', 'interstage-owner').owner.token);
         `, root], { cwd: process.cwd(), encoding: 'utf8', timeout: 15000 });
