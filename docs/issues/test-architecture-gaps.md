@@ -2,13 +2,15 @@
 
 ## 现象
 
-[测试架构](../engineering/testing/README.md)按可观察的边界分层：进程层只保留[跨进程保证](../engineering/testing/README.md#跨进程保证)，CLI 层使用[进程内 CLI](../engineering/testing/architecture.md#进程内-cli)，只读的服务用例使用[共享服务](../engineering/testing/architecture.md#共享服务)。当前测试集与之有差距。2026-11-06 最后一次完整门禁 run-j4BlDg 墙钟 590 秒，上限 300 秒；各层文件耗时之和：纯函数 63 秒、仓库内 302 秒、CLI 846 秒、进程 3021 秒（123 个文件、274 个用例）、浏览器 561 秒（`/tmp/concord-closure/lead5-final-gate-evidence.json`）。
+[测试架构](../engineering/testing/README.md)按可观察的边界分层：进程层只保留[跨进程保证](../engineering/testing/README.md#跨进程保证)，CLI 层使用[进程内 CLI](../engineering/testing/architecture.md#进程内-cli)，只读的服务用例使用[共享服务](../engineering/testing/architecture.md#共享服务)。三者的基础设施已经建成，但测试还没有全部迁过去。
+
+2026-11-07 完整门禁 run-SnO3yY 全部通过，墙钟 500 秒，上限 300 秒。各层文件耗时之和（括号内为维护预算）：纯函数 90 秒（60）、仓库内 401 秒（300）、CLI 411 秒（60）、进程 2384 秒（500）、浏览器 485 秒（400）。浏览器只有一个 worker，从开始跑到结束，是墙钟的关键路径；在 15 GiB 的参照机上，增加浏览器 worker 会挤占 Node 并发，墙钟反而变长（`/tmp/concord-closure/lead6-critical-path.md`）。CI 每片 390 到 480 秒，上限 120 秒。
 
 ## 差距
 
-- CLI 层每个用例启动一个源码 CLI 子进程（空闲时约 600 ms），没有进程内入口。
-- 进程层用真实进程枚举输入组合与错误矩阵，每个用例各自冷启动工作区服务（空闲时约 3.5 s）；各文件的跨进程保证与可下沉候选见 `/tmp/concord-closure/lead5-process-cost-top30.md`。
-- 门禁报告没有按新口径分列计时与 Concord 子进程计数。
+- 浏览器测试 42 个用例约 485 秒，要降到 300 秒以内才能缩短墙钟。
+- CLI 层仍有测试启动子进程或冷启动服务，耗时之和远超预算。
+- 进程层仍在枚举输入组合；`shared-service` 单个文件 66 秒，超过 60 秒的单文件上限。
 
 ## 期望
 
