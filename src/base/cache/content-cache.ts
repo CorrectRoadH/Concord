@@ -6,6 +6,7 @@ import { makeRuntimeEnvironment, type RuntimeEnvironmentSnapshot } from '../envi
 import { packageRoot } from '../installation/index.ts';
 import { canonical, decode, digest, objectDigest } from "../../model/index.ts";
 import { readCachePayloads, writeCachePayloads } from "./cache-query.ts";
+import { ownedContentCache } from './content-cache-owner.ts';
 
 export type ContentResult<A> = { readonly ok: true; readonly value: A } | { readonly ok: false; readonly cause: unknown };
 
@@ -29,7 +30,10 @@ export class ContentCache<A> {
   }
 
   private engine(): HawdbDatabase | undefined {
-    try { return this.database ?? (this.database = createMemoryHawdb(this.runtime)); }
+    try {
+      const borrowed = ownedContentCache(this.runtime, JSON.stringify([this.namespace, this.parser, this.limits]));
+      return borrowed.owned ? borrowed.database : this.database ?? (this.database = createMemoryHawdb(this.runtime));
+    }
     catch { return undefined; }
   }
 

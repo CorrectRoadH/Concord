@@ -5,6 +5,7 @@ import type { Publication } from '../publication/index.ts';
 import type { LocalRepository, ReadRepositoryOptions, RepositoryOptions } from './storage.ts';
 import type { inspectConfiguration } from './config-inspection.ts';
 import { identifyWorkspace, locateWorkspace } from './identity.ts';
+import { inheritContentCacheOwner } from '../cache/index.ts';
 
 const repository = () => Effect.tryPromise(() => import('./repository-service.ts')).pipe(Effect.mapError(failure));
 
@@ -21,7 +22,7 @@ export class Workspace extends Context.Service<Workspace, WorkspaceService>()('c
   static layerWithEnvironment(environment?: Readonly<Record<string, string | undefined>>) {
     return Layer.effect(Workspace, Effect.gen(function*() {
       const current = yield* RuntimeEnvironment;
-      const runtime = environment === undefined ? current : makeRuntimeEnvironment(current.cwd, environment);
+      const runtime = environment === undefined ? current : inheritContentCacheOwner(makeRuntimeEnvironment(current.cwd, environment), current);
       const openRead: WorkspaceService['openRead'] = (root, options) => repository().pipe(Effect.flatMap(module => module.openRead(root, { ...options, runtime, environment: runtime.env })));
       const openWrite: WorkspaceService['openWrite'] = (root, options) => repository().pipe(Effect.flatMap(module => module.openWrite(root, { ...options, runtime, environment: runtime.env })));
       return Workspace.of({ openRead, openWrite, inspectConfiguration: (...args) => Effect.tryPromise(() => import('./config-inspection.ts')).pipe(Effect.flatMap(module => module.inspectConfiguration(...args, runtime)), Effect.mapError(failure)), identify: (input, allowUninitialized, strictFile) => identifyWorkspace(input, allowUninitialized, strictFile, runtime), locate: (input, allowUninitialized) => locateWorkspace(input, allowUninitialized, runtime) });

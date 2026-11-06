@@ -16,7 +16,7 @@ import { Schema } from "effect";
 import { acquireTraceLeaseSync, CoordinationError, genericPrivateDirectorySync, recoverPublicationLeaseSync, releaseTraceLeaseSync, tracePrivateDirectorySync, PUBLICATION_LEASE, type TraceLease } from "../publication/index.ts";
 import { ConcordError, Text, canonical, decode, digest, isWorkflowSkillPath, isObsoleteWorkflowSkillRemoval, type Change, type ConfigSnapshot, type MutationReceipt, type shared_ProjectConfig as ProjectConfig, type ResolvedProjectConfig, type Repository } from "../../model/index.ts";
 import { snapshot, makeConfigContentCache } from "./config.ts";
-import { closeRepositoryCache } from "../cache/index.ts";
+import { closeRepositoryCache, inheritContentCacheOwner } from "../cache/index.ts";
 import { invalidateActiveRun } from "../publication/index.ts";
 import { acquireFileLease, acquireRecoverablePublicationLease } from "../publication/index.ts";
 
@@ -273,7 +273,7 @@ export class LocalRepository implements Repository {
     this.validation = validation;
     const environment = Object.freeze({ ...(options.environment ?? options.runtime?.env ?? {}) });
     this.root = discoverRoot(input, options.initialize, options.runtime === undefined ? undefined : { cwd: options.runtime.cwd, env: environment });
-    this.runtime = makeRuntimeEnvironment(options.runtime?.cwd ?? this.root, environment);
+    this.runtime = inheritContentCacheOwner(makeRuntimeEnvironment(options.runtime?.cwd ?? this.root, environment), options.runtime, this.root);
     bindRepositoryRuntime(this, this.runtime);
     this.executionEnvironment = this.runtime.env;
     this.configContentCache = makeConfigContentCache(this.runtime);

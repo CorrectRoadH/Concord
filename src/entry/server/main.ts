@@ -12,7 +12,7 @@ import { Publication } from "../../base/publication/index.ts";
 import { PublicationValidationLive } from "../../app/index.ts";
 import { Workspace } from '../../base/workspace/index.ts';
 import { Sources, type SourceWatch } from '../../base/sources/index.ts';
-import { Cache, CacheSnapshot, CacheDerivations, PersistentCache } from '../../base/cache/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, PersistentCache, ContentCacheOwner, withContentCacheOwner } from '../../base/cache/index.ts';
 import type { ReadonlyCacheSnapshot } from '../../base/cache/index.ts';
 import type { CacheDerivationBatch } from '../../model/index.ts';
 import type { ChildProcessSpawner } from 'effect/unstable/process';
@@ -186,6 +186,7 @@ const compute = Effect.fn('workspace.compute')(function*(root: string, operation
 export const runComputeMain = (root: string | undefined): void => {
   const program = Effect.scoped(Effect.gen(function*() {
   const execution = yield* RuntimeEnvironment;
+  const parseCache = yield* Effect.acquireRelease(Effect.sync(() => new ContentCacheOwner()), owner => Effect.sync(() => owner.close()));
   let snapshot: typeof Snapshot.Type = {}, snapshotId: string | undefined;
   let pendingId: string | undefined, size = 0, chunks: Uint8Array[] = [];
   const handlers = ComputeRpcs.toLayer({
@@ -204,7 +205,7 @@ export const runComputeMain = (root: string | undefined): void => {
       if (request.snapshotId !== snapshotId) return yield* Effect.fail(new ConcordError('WorkspaceServerProtocol', 'Snapshot is incomplete'));
       if (root === undefined) return yield* Effect.fail(new ConcordError('InvalidInput', 'Missing compute root'));
       const derived = CacheDerivations.make();
-      const requestRuntime = operation.kind === 'query' || operation.kind === 'query-scan' ? makeRuntimeEnvironment(operation.cwd, operation.environment) : execution;
+      const requestRuntime = parseCache.bind(operation.kind === 'query' || operation.kind === 'query-scan' ? makeRuntimeEnvironment(operation.cwd, operation.environment) : execution, root);
       const requestContext = yield* Layer.build(computationLayer).pipe(Effect.provideService(RuntimeEnvironment, requestRuntime), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(requestRuntime.env))));
       const context = Context.add(requestContext, RuntimeEnvironment, requestRuntime);
       const value = yield* compute(root, operation).pipe(Effect.provide(CacheSnapshot.layer(operation.kind === 'query' && operation.cache === 'off' ? {} : snapshot)), Effect.provideService(CacheDerivations, derived), Effect.provideService(QueryRefreshRequest, { request: () => Effect.void }), Effect.provideContext(context), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(requestRuntime.env))));
@@ -489,7 +490,7 @@ export const serveWorkspaceFromEnvironment = Effect.fn('serveWorkspaceFromEnviro
   const scope = environment.CONCORD_SERVER_SCOPE === undefined ? undefined : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CommandScope), { onExcessProperty: 'error' })(environment.CONCORD_SERVER_SCOPE).pipe(Effect.mapError(() => new ConcordError('WorkspaceServerScopeMismatch', 'Invalid command service scope')));
   return yield* serveWorkspace(root, Effect.void, scope);
 });
-export const runWorkspaceMain = (root: string) => NodeRuntime.runMain(serveWorkspaceFromEnvironment(root).pipe(Effect.provide(serverServices), Effect.provide(startupEnvironment()), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause))));
+export const runWorkspaceMain = (root: string) => NodeRuntime.runMain(withContentCacheOwner(serveWorkspaceFromEnvironment(root).pipe(Effect.provide(serverServices))).pipe(Effect.provide(startupEnvironment()), Effect.catch(cause => cause instanceof Object && '_tag' in cause && cause._tag === 'ServerLockHeld' ? Effect.void : Effect.fail(cause))));
 
 export const existingWorkspace = Effect.fn('existingWorkspace')(function*(root: string) {
   const platform = yield* ServerRuntime;
@@ -513,18 +514,18 @@ export const feedbackWriterLayer = Layer.effect(FeedbackCacheWriter, Effect.gen(
 }));
 export const refreshLayer = Layer.merge(Workspace.layer, PersistentCache.layer).pipe(Layer.provideMerge(NodeServices.layer));
 export const runRefreshMain = <A, E>(operation: Effect.Effect<A, E, ChildProcessSpawner.ChildProcessSpawner | Workspace | PersistentCache | RuntimeEnvironment>): void => {
-  NodeRuntime.runMain(operation.pipe(Effect.provide(refreshLayer), Effect.provide(startupEnvironment())));
+  NodeRuntime.runMain(withContentCacheOwner(operation.pipe(Effect.provide(refreshLayer))).pipe(Effect.provide(startupEnvironment())));
 };
 
 export const readerLayer = Layer.mergeAll(Installation.layer, Workspace.layer, Sources.layer, Cache.layer, CacheSnapshot.layer()).pipe(Layer.provide(NodeServices.layer));
 export const runReaderMain = <A, E>(operation: Effect.Effect<A, E, Installation | Workspace | Sources | Cache | CacheSnapshot | RuntimeEnvironment>, cwd?: string): void => {
-  NodeRuntime.runMain(operation.pipe(Effect.provide(readerLayer), Effect.provide(startupEnvironment(cwd))));
+  NodeRuntime.runMain(withContentCacheOwner(operation.pipe(Effect.provide(readerLayer))).pipe(Effect.provide(startupEnvironment(cwd))));
 };
 
 /** Computation entries don't call this writer composition root. */
 export const writerLayer = Layer.mergeAll(Publication.layer.pipe(Layer.provide(PublicationValidationLive)), PersistentCache.layer).pipe(Layer.provideMerge(readerLayer));
 export const runWriterMain = <A, E>(operation: Effect.Effect<A, E, Publication | PersistentCache | Installation | Workspace | Sources | Cache | CacheSnapshot | PersistentCache | RuntimeEnvironment>): void => {
-  NodeRuntime.runMain(operation.pipe(Effect.provide(writerLayer), Effect.provide(startupEnvironment())));
+  NodeRuntime.runMain(withContentCacheOwner(operation.pipe(Effect.provide(writerLayer))).pipe(Effect.provide(startupEnvironment())));
 };
 
 /** Only real process entry adapters capture the host. */

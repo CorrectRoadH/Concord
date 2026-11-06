@@ -17,6 +17,7 @@ export { closeRepositoryCache } from './cache-store.ts';
 export { readCodePayloads } from './code-cache.ts';
 export { writeCodePayloads } from './code-cache.ts';
 export { ContentCache } from './content-cache.ts';
+export { ContentCacheOwner, inheritContentCacheOwner, withContentCacheOwner } from './content-cache-owner.ts';
 export type { ContentResult } from './content-cache.ts';
 export type { FeedbackCacheSnapshot } from './feedback-cache.ts';
 export { mergeFeedbackCache } from './feedback-cache.ts';

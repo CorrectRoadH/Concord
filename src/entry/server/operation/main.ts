@@ -8,7 +8,7 @@ import { Installation } from '../../../base/installation/index.ts';
 import { Workspace } from '../../../base/workspace/index.ts';
 import { Sources } from '../../../base/sources/index.ts';
 import { Git } from '../../../base/git/index.ts';
-import { Cache, CacheSnapshot, CacheDerivations, FeedbackCacheWriter } from '../../../base/cache/index.ts';
+import { Cache, CacheSnapshot, CacheDerivations, FeedbackCacheWriter, ContentCacheOwner } from '../../../base/cache/index.ts';
 import { Publication } from '../../../base/publication/index.ts';
 import { OwnedProcessLive, ProcessEventsLive } from '../../../base/process/index.ts';
 import { ServerRuntime } from '../../../base/server-lock/index.ts';
@@ -42,7 +42,8 @@ export const runOperationMain = (): void => {
     }
     return Schema.decodeUnknownSync(Schema.fromJsonString(OperationRequest), { onExcessProperty: 'error' })(new TextDecoder('utf8', { fatal: true }).decode(Buffer.concat(chunks)));
   }, catch: failure });
-  const runtime = makeRuntimeEnvironment(request.cwd, request.environment);
+  const parseCache = yield* Effect.acquireRelease(Effect.sync(() => new ContentCacheOwner()), owner => Effect.sync(() => owner.close()));
+  const runtime = parseCache.bind(makeRuntimeEnvironment(request.cwd, request.environment), request.root);
   const context = yield* Layer.build(feedbackWriter.pipe(Layer.provideMerge(operationLayer()))).pipe(Effect.provideService(RuntimeEnvironment, runtime), Effect.provide(ConfigProvider.layer(ConfigProvider.fromEnvRecord(runtime.env))));
   const derived = CacheDerivations.make();
   const operation = request.kind === 'action' ? executeViewAction(request.root, request.input) : runWorkspaceTest(request.root, request.caseId);
