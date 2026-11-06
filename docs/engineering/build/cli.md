@@ -7,7 +7,7 @@
 | `pnpm install --frozen-lockfile` | 首次安装依赖与项目固定版本的 `vp` |
 | `vp install` | 之后的依赖安装 |
 | `pnpm concord <参数>` | 运行当前检出的源码 CLI，等价于 `node --import tsx src/entry/cli/entry.ts` |
-| `vp build --outDir <目录>` | 把完整安装包（原生绑定、CLI、Web、PR 预览与随包资源）构建到检出之外的目录 |
+| `vp build --outDir <目录>` | 把本机目标的完整归档（启动脚本、Node.js 运行时、ripgrep、CLI、原生绑定、Web、PR 预览与随包资源）构建到检出之外的目录 |
 | `vp run build:native` | 准备原生绑定，按[原生绑定复用](architecture.md#原生绑定复用)的顺序取得 |
 | `vp dev` | 只启动 Web 开发服务器，不运行发行准备 |
 

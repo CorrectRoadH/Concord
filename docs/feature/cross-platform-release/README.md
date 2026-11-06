@@ -2,35 +2,53 @@
 
 ## 问题
 
-Concord 的 Node 运行时与 POSIX 进程所有权支持 Linux 与 macOS。一个版本标签必须对应一份身份明确的发布，构建、打包、上传、计算哈希与更新 tap 都由自动化完成。
+使用者想装上 Concord 就能用，不想先准备某个版本的 Node.js、pnpm 或 ripgrep。维护者想推一个版本标签，就得到身份明确、各渠道字节相同的发布。
 
 ## 核心模型
 
-Concord 仓库拥有源码、版本与源码标签。标签工作流构建一份不可变的包，核验版本与摘要后发布源码资产。同一标签 commit 的完整检查通过后才允许发布。
+Concord 发布自带运行时的 CLI：每个目标平台一个归档，里面有启动脚本、固定版本的 Node.js 运行时、构建好的应用、该平台的 HawDB 原生绑定、随包资源与固定版本的 ripgrep。使用者的机器只需要 Git。
 
-公开的 Homebrew tap 发现该发布，核验身份，更新 Formula 与仅限 Linux 的 Nix 输入，生成候选 recipe，再记录自己的 recipe 标签。两个标签共享版本号，但指向不同的 commit。
+Concord 仓库拥有源码、版本与源码标签。标签工作流为每个目标构建一个不可变归档，核验版本与摘要，同一标签 commit 的完整检查通过后发布 GitHub Release。
 
-该工作流同样采用 Concord 驱动开发：先更新 Spec 与设计，再改运行时或发布自动化。平台检查、显式实现关联与测试只证明各自的实际范围。
+公开的 Homebrew tap 发现该发布，核验身份，用同一归档生成 Formula 与仅限 Linux 的 Nix 候选，安装运行检查通过后记录自己的 recipe 标签。两个标签共享版本号，指向不同的 commit。
+
+## 上手示例
+
+维护者在已推送的 commit 上打标签：
+
+```sh
+git tag -a v0.9.0 -m 'Concord 0.9.0'
+git push origin v0.9.0
+```
+
+使用者在 Linux x64 或 Apple Silicon macOS 上安装：
+
+```sh
+curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh
+concord --version
+```
 
 ## 范围
 
-唯一的 tgz 发布产物内含 Ubuntu 24.04 与 macOS 15 分别编译的目标原生引擎，在一台 Ubuntu 24.04 runner 上构建、类型检查并合包。发布检查运行构建、类型检查和隔离消费者测试。
+| 目标 | 平台 | 渠道 |
+| --- | --- | --- |
+| `linux-x64` | x86_64 Linux，glibc | 安装脚本、Homebrew、Nix |
+| `darwin-arm64` | Apple Silicon macOS 15 及以上 | 安装脚本、Homebrew |
 
-macOS 最低支持版本为 15，仅支持 Apple Silicon。macOS 27 在允许安装范围内，但不声明已完成其 CI 实测。渠道同步核验包身份、摘要并生成候选；Homebrew 与 Nix 安装运行检查通过后才更新渠道。同一包供所有渠道使用。源码发布成功与渠道同步成功分别报告，tap 同版本 Release 是渠道完成记录。
+macOS 27 在允许安装范围内，但不声明已完成其 CI 实测。不支持 Intel macOS、Windows 与其它架构，不保证网络多机协调。HawDB 是可丢弃缓存，不支持不同锁协议的程序同时运行。
 
-安装时由 pnpm 按冻结锁选择目标平台的依赖。运行时协调在本地 Linux 与 macOS 工作树上使用 Node 文件 API，不依赖 flock 或磁盘检查工具。依赖为 Node.js 24.15+、Git 与 Repository 工具使用的 ripgrep。Nix 只支持 x86_64 Linux。
+所有渠道安装同一个归档，不在使用者机器上运行 pnpm、编译 Rust 或下载依赖。源码发布成功与渠道同步成功分别报告，tap 同版本 Release 是渠道完成记录。
 
-不保证 Windows 执行与网络多机协调。HawDB 是可丢弃缓存。不支持不同锁协议的程序同时运行。
+## Use Case
 
-## 入口
+- [从标签发布](use-case/release-from-tag.md)：维护者推送标签，得到 GitHub Release 与同步的 Homebrew、Nix 渠道。
+- [用一行命令安装](use-case/install-with-script.md)：使用者用 `curl` 安装或升级。
 
-- [CLI](cli.md)
-- [架构](architecture.md)
-- [生命周期](architecture.md)
+发布资产与错误见 [CLI](cli.md)，归档构成与渠道实现见[架构](architecture.md)。
 
-包内含同一固定源码与 Cargo lock 构建的 linux-x64-glibc 与 darwin-arm64 HawDB N-API 引擎，macOS 部署目标为 15.0。原生目标任务先于唯一的打包任务；ABI、源码身份、上游 revision 或摘要缺失或不一致都会阻止发布。
+## 验收
 
-消费者以 `--ignore-scripts` 安装，不需要 Rust 或 HawDB 服务。仅在本机构建的 Nix 产物只用于本地验证。
+各渠道得到相同的归档字节与 `concord --version`。归档在没有系统 Node.js 的 `PATH` 中运行，打包测试见[检查入口](../../engineering/testing/README.md#检查入口)。
 
 ## 依据的品味
 

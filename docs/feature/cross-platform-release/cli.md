@@ -1,22 +1,38 @@
-# Cross-platform tagged releases
+# 跨平台标签发布命令
 
-## Command
+## 命令
 
-Maintainers release by creating and pushing an annotated `v<version>` tag on an already pushed commit. The workflow uses the tag as the release version and rejects an invalid tag or an existing tag/release with different identity.
+维护者在已推送的 commit 上创建并推送附注标签 `v<version>` 来发布，工作流以标签中的版本作为发布版本。工作流同样接受 `concord-v<version>`。无效标签，或已有身份不同的同名标签与 Release，都会被拒绝。
 
-The workflow updates the package version in its runner before building; the CLI reads its installed package version. Manifest dependency specifiers and workspace overrides must match the pnpm lock before this update. The workflow also accepts `concord-v<version>` for compatibility. Manual dispatch without a tag validates only and does not publish.
-
-## Output
-
-The Concord release contains exactly one `concord-sdlc-<version>.tgz` with a recorded SHA-256. The tap later contains the matching Formula version/hash and Linux Nix hashes. `concord --version` must print that version from the installed candidate.
-
-## Errors
-
-Any build, package identity, digest or channel metadata generation failure prevents the corresponding publication step. Source publication requires checks for the same tag commit; channel updates require successful candidate Homebrew and Nix installations. Reruns may reuse only identical tags and bytes.
-
-## Minimal Example
+工作流在自己的 runner 中把版本写入应用的包元数据，安装后的 CLI 从包内元数据读取版本。手动触发且不带标签时只做校验，不发布。
 
 ```sh
-git tag -a v0.7.4 -m 'Concord 0.7.4'
-git push origin v0.7.4
+git tag -a v0.9.0 -m 'Concord 0.9.0'
+git push origin v0.9.0
 ```
+
+## 发布资产
+
+一个 GitHub Release 恰好附带以下资产：
+
+| 资产 | 内容 |
+| --- | --- |
+| `concord-<version>-linux-x64.tar.gz` | x86_64 Linux（glibc）归档 |
+| `concord-<version>-darwin-arm64.tar.gz` | Apple Silicon macOS 归档 |
+| `SHA256SUMS` | 两个归档的 SHA-256，每行 `<sha256>  <文件名>` |
+| `install.sh` | [一行安装脚本](use-case/install-with-script.md) |
+
+归档解压后的根目录：
+
+| 路径 | 内容 |
+| --- | --- |
+| `bin/concord` | POSIX 启动脚本，解析符号链接后相对自身定位，用 `runtime/node` 启动应用入口 |
+| `runtime/node` | 固定版本的官方 Node.js 运行时 |
+| `runtime/rg` | 固定版本的 ripgrep |
+| `app/` | 构建好的应用、运行依赖、该目标的 HawDB 原生绑定与随包资源（Web、Preview、skills、templates） |
+
+tap 随后包含同版本的 Formula 与 Linux Nix 表达式，引用相同归档与 SHA-256。从任一渠道安装后，`concord --version` 输出标签中的版本。
+
+## 错误
+
+构建、归档身份、摘要或渠道元数据生成失败，都会阻止对应的发布步骤。源码发布要求同一标签 commit 的检查通过；渠道更新要求 Homebrew 与 Nix 候选的安装运行检查通过。重跑只能复用标签与字节完全相同的产物。

@@ -142,7 +142,7 @@ A file's location and its single top-level heading give it identity, kind, and n
 
 ## Install
 
-With one command on Linux x64 or Apple Silicon macOS (needs Node.js 24.15+ and Git; installs into your home directory):
+With one command on Linux x64 or Apple Silicon macOS (needs only Git; installs into your home directory):
 
 ```sh
 curl -fsSL https://github.com/CorrectRoadH/Concord/releases/latest/download/install.sh | sh
@@ -163,7 +163,7 @@ nix profile install 'git+https://github.com/CorrectRoadH/homebrew-tap?ref=main#c
 concord --help
 ```
 
-Concord needs Node.js 24.15+ and Git, and runs on Linux x64 and Apple Silicon macOS. Windows is not supported.
+Concord ships with its own Node.js runtime and ripgrep, so it needs only Git. It runs on Linux x64 and Apple Silicon macOS; Windows is not supported.
 
 ## Quick start
 

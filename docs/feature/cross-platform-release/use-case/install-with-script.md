@@ -2,12 +2,12 @@
 
 ## 用户目标
 
-使用者想像安装 Herdr 一样，用一条 `curl` 命令装好或升级 Concord，不需要 Homebrew 或 Nix，也不需要 sudo。
+使用者想像安装 Herdr 一样，用一条 `curl` 命令装好或升级 Concord，不需要 Homebrew、Nix 或 sudo，也不需要先装 Node.js。
 
 ## 起始状态
 
 - Linux x64（glibc）或 Apple Silicon macOS。
-- 已有 Node.js 24.15+ 与 Git。
+- 已有 Git。
 
 ## 完整路径
 
@@ -25,7 +25,7 @@
    Run: concord --help
    ```
 
-   脚本检查平台、Node.js 与 Git，从同一个 GitHub Release 下载安装包并按 Release 中的 `SHA256SUMS` 校验，解压到 `~/.local/share/concord/<版本>/`，用安装包锁定的 pnpm 版本按冻结锁只安装运行依赖，最后把 `~/.local/bin/concord` 指向这个版本。全部写在用户目录下。
+   脚本检查平台与 Git，从同一个 GitHub Release 下载本平台的[归档](../cli.md#发布资产)，按 Release 中的 `SHA256SUMS` 校验。校验通过后解压到 `~/.local/share/concord/<版本>/`，再把 `~/.local/bin/concord` 指向其中的 `bin/concord`。全部写在用户目录下。
 
 2. 确认版本。 {#verify}
 
@@ -43,10 +43,10 @@
 | 设置了 `CONCORD_VERSION=0.8.1` | 安装这个版本 |
 | 设置了 `CONCORD_INSTALL_DIR` | 把 `concord` 链接放到这个目录，不写 `~/.local/bin` |
 | Intel macOS、Windows 或其它架构 | 以非零退出，说明支持的平台与 Homebrew、Nix 的替代方式，不写文件 |
-| 没有 Node.js 24.15+ 或 Git | 以非零退出，说明缺少什么与安装方式，不写文件 |
+| 没有 Git | 以非零退出，说明缺少 Git 与安装方式，不写文件 |
 | 下载失败或校验不符 | 以非零退出，不写安装目录，原有版本不受影响 |
 
-脚本不修改 shell 配置、不需要 sudo、不安装 Node.js；Homebrew 与 Nix 安装的 Concord 不受影响，`PATH` 中排在前面的那个生效。
+归档自带 Node.js 运行时与 ripgrep，系统中有没有、是哪个版本的 Node.js 都不影响 Concord。脚本不修改 shell 配置、不需要 sudo。Homebrew 与 Nix 安装的 Concord 不受影响，`PATH` 中排在前面的那个生效。
 
 ## Spec 来源
 

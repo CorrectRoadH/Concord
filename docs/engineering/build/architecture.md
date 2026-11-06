@@ -8,7 +8,7 @@
 
 为保持启动性能，构建只改写生成的 JS：把 Effect namespace import 改为窄化导入，每处替换保持原换行数。sourcemap 先解码为绝对坐标，删除被改写行的映射后重新编码，保留其余映射。不改写源文件，不跳过声明检查。
 
-`vp build` 的生产构建钩子准备完整发行产物，每次清空输出目录。
+`vp build` 的生产构建钩子准备本机目标的完整归档内容，每次清空输出目录。
 
 ## 原生绑定复用
 
@@ -20,13 +20,25 @@
 
 发布流程不使用前两项，始终从源码编译要发布的原生产物。按摘要的 Release 由手动触发的 `native` workflow 为每个 target 编译并发布；本地构建与 CI 只读取它。
 
+## 归档组装
+
+发布归档由一个 TypeScript 打包入口组装，`vp build`、打包测试与发布工作流都调用它。入口的输入是目标、应用构建输出与经身份校验的原生产物，输出为[归档构成](../../feature/cross-platform-release/architecture.md#归档构成)所列的目录与 `concord-<version>-<target>.tar.gz`。
+
+1. 应用 JavaScript 只构建一次，各目标共用。
+2. 运行依赖按 `pnpm-lock.yaml` 冻结、`--ignore-scripts` 安装到 `app/`，平台相关的可选依赖按目标选择。
+3. `runtime/node` 按[运行时版本](README.md#运行时版本)从 nodejs.org 下载该目标的官方发行包，核对 `SHASUMS256.txt` 后只取出 `node` 可执行文件。
+4. `runtime/rg` 取自固定版本的官方 ripgrep 发行包，核对构建配置记录的 SHA-256。
+5. 生成 `bin/concord`，写入版本，打成归档并计算 SHA-256。
+
+下载的发行包按摘要缓存在 `${XDG_CACHE_HOME:-~/.cache}/concord/runtime/`，校验失败不进入归档。入口不读取 `PATH` 中的 `node` 或 `rg`。
+
 ## 共享构建缓存
 
-打包测试与性能对照使用的完整安装包按构建输入的摘要保存在 `${XDG_CACHE_HOME:-~/.cache}/concord/build/<摘要>/`。构建输入是工作区中参与 `vp build` 的源码、依赖锁、构建配置与原生产物身份，包括未提交的改动。
+打包测试与性能对照使用的本机目标归档按构建输入的摘要保存在 `${XDG_CACHE_HOME:-~/.cache}/concord/build/<摘要>/`。构建输入是工作区中参与 `vp build` 的源码、依赖锁、构建配置、`.node-version`、ripgrep 版本与原生产物身份，包括未提交的改动。
 
 1. 使用者先计算摘要。同摘要的目录已发布时直接只读使用，不再构建。
 2. 不存在时构建到同一缓存下的临时目录，校验后以原子 rename 发布；同一摘要同时只有一个构建者，其余使用者等待它的结果。构建失败不发布任何目录。
-3. 使用中的安装包不被替换或删除：源码变化得到新摘要和新目录。缓存只保留最近 4 个摘要，删除时跳过仍在使用的目录。
+3. 使用中的归档目录不被替换或删除：源码变化得到新摘要和新目录。缓存只保留最近 4 个摘要，删除时跳过仍在使用的目录。
 4. 缓存可以随时整体删除，下次使用时重新构建。检出中从不出现构建产物。
 
 ## 从源码运行
@@ -35,7 +47,7 @@
 | --- | --- |
 | 原生绑定 | 源码运行取自经身份校验的本机共享缓存，构建产物取自包根，校验规则相同 |
 | 源码约束 | 相对导入写 `.ts` 扩展名；只使用可擦除的 TypeScript 语法，类型检查开启 `erasableSyntaxOnly`；构建安装包时由 TypeScript 的 `rewriteRelativeImportExtensions` 改写为 `.js` |
-| 子进程 | 运行模式由一个模块统一判断。源码模式用 Node 自带的类型擦除直接运行 `.ts` 入口，不经转译工具；V8 编译缓存放在 `${XDG_CACHE_HOME:-~/.cache}/concord/node-compile/`，按文件复用，改一个文件只重新编译这个文件。安装包模式启动包内的 JavaScript 入口 |
+| 子进程 | 运行模式由一个模块统一判断。源码模式用 Node 自带的类型擦除直接运行 `.ts` 入口，不经转译工具；V8 编译缓存放在 `${XDG_CACHE_HOME:-~/.cache}/concord/node-compile/`，按文件复用，改一个文件只重新编译这个文件。安装包模式用包内的 `runtime/node` 启动包内的 JavaScript 入口 |
 | 安装身份 | 源码模式的安装身份是检出位置，安装包模式使用产物摘要。源码模式的服务记录启动时的源码摘要 |
 | 服务替换 | 同一检出的调用发现运行中服务的源码摘要与当前不同时，先停止它并等待完全退出，再启动新服务，不报 `WorkspaceServerVersionConflict` |
 | 缓存身份 | 缓存身份包含源码摘要，源码变化后不复用旧缓存 |
@@ -51,6 +63,6 @@
 | 浏览器测试的 worker 与分片 | e2e 工具自带的 worker、分片与 reporter | 与 Node 测试的结果汇总 |
 | 静态检查与任务编排 | `vp run` 任务 | 一个检查失败时其余检查继续运行并汇总结果 |
 | 子进程、文件、临时目录与超时 | Effect 的 ChildProcess、FileSystem、Scope 与 Duration | 进程组回收的确认 |
-| JS 打包 | `vp pack` | native 产物的身份校验与安装包组装 |
+| JS 打包 | `vp pack` | native 产物的身份校验与归档组装 |
 
 没有调用者的脚本直接删除。性能测量脚本的计时与采样见[性能测量实现](../performance/architecture.md)。
