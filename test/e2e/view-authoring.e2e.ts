@@ -111,7 +111,15 @@ test('browser creates a Feature, edits Markdown, preserves conflicts and opens G
     if (action.action === 'document.set' && action.path === 'docs/feature/browser-feature/README.md') writeFileSync(path,disk);
     await route.continue();
   });
+  const conflictReceipt = page.waitForResponse(response => {
+    if (response.request().method() !== 'POST' || new URL(response.url()).pathname !== '/api/action') return false;
+    const input = response.request().postDataJSON() as { action?: string; path?: string; body?: string };
+    return input.action === 'document.set' && input.path === 'docs/feature/browser-feature/README.md' && Boolean(input.body?.includes('Unsaved browser draft.'));
+  });
   await editor.locator('p').first().fill('Unsaved browser draft.');
+  const conflictResponse = await conflictReceipt;
+  assert.equal(conflictResponse.status(), 409, await conflictResponse.text());
+  assert.equal(await conflictResponse.finished(), null);
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(page.getByRole('dialog')).toContainText('Unsaved browser draft.');
   assert.equal(readFileSync(path,'utf8'),disk,'conflict must preserve the external edit');
